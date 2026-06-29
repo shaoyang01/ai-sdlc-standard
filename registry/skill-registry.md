@@ -36,6 +36,8 @@ blocking_conditions:
   - artifact node cannot be inferred
   - requirement_id cannot be safely generated
   - Lark/Feishu authorization is missing or expired
+  - required schema sections would be omitted
+  - Lark/Feishu update mode is unspecified
 ```
 
 ### html-doc-style

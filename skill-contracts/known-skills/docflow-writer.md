@@ -38,6 +38,7 @@ blocking_conditions:
   - requirement_id cannot be safely generated
   - Lark/Feishu authorization is missing or expired
   - required schema sections would be omitted
+  - Lark/Feishu update mode is unspecified
 ```
 
 ## Responsibilities
@@ -69,4 +70,3 @@ blocking_conditions:
 This Skill supersedes the routing role of `html-doc-style`.
 
 `html-doc-style` may remain as a legacy HTML rendering reference, but DocFlow artifacts should be routed through `docflow-writer`.
-

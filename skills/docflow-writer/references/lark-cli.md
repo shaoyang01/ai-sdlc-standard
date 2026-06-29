@@ -64,6 +64,8 @@ If the user asks only for Lark/Feishu:
 
 - Do not force a complete local backup.
 - Still update `manifest.md` when possible.
+- Do not create a local Gate artifact unless the user asks for a local backup.
+- If temporary local content is needed to prepare the Lark/Feishu body, do not record it as a completed DocFlow artifact unless publication succeeds.
 
 ## Failure Report
 

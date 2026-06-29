@@ -25,6 +25,7 @@ skills:
     references:
       - skills/docflow-writer/references/routing-rules.md
       - skills/docflow-writer/references/output-targets.md
+      - skills/docflow-writer/references/execution-scenarios.md
       - skills/docflow-writer/references/lark-cli.md
       - skills/docflow-writer/references/legacy-html-style.md
 portability:

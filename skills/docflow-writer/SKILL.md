@@ -37,6 +37,8 @@ Load these references as needed:
 - `references/lark-cli.md` for Lark/Feishu output rules.
 - `references/legacy-html-style.md` for compatibility with the old `html-doc-style` visual constraints.
 
+Load `references/execution-scenarios.md` before any write or publish operation.
+
 Use repository standard files as authoritative rules:
 
 - `../../ai-sdlc/artifact-storage.md`
@@ -90,7 +92,20 @@ For Lark/Feishu output:
 2. Record the online document URL in `library/{requirement_id}/manifest.md` when local filesystem access is available.
 3. If the user requests local backup, also write Markdown or HTML to the standard node directory.
 
-### 4. Generate Content
+### 4. Dry-Run Before Output
+
+Before changing files or publishing documents, report the dry-run result from `references/execution-scenarios.md`:
+
+- Artifact node and node directory
+- Output format
+- Requirement ID
+- Target local path or Lark/Feishu document target
+- Whether the artifact is new, next-version, or an update
+- Blocking questions, if any
+
+Stop before writing or publishing if any blocking question remains.
+
+### 5. Generate Content
 
 Use the schema matching the artifact node:
 
@@ -103,7 +118,9 @@ Use the schema matching the artifact node:
 
 Do not invent business rules. Mark missing or uncertain information explicitly.
 
-### 5. Write or Publish
+Do not omit required schema sections. If source material is missing, keep the section and mark the missing information explicitly.
+
+### 6. Write or Publish
 
 For Markdown:
 
@@ -120,7 +137,7 @@ For Lark/Feishu:
 - Stop if authorization is missing or expired.
 - Report the document URL after success.
 
-### 6. Report Result
+### 7. Report Result
 
 Always report:
 
@@ -147,4 +164,3 @@ Not allowed:
 - Modify `.specify/business_domain/**`
 - Commit or push git changes
 - Treat Lark/Feishu publication as complete when authorization failed
-

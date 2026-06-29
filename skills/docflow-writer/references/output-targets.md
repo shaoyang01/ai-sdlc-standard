@@ -56,7 +56,9 @@ Maintain:
 library/{requirement_id}/manifest.md
 ```
 
-If it does not exist, create it from `../../templates/artifact-manifest-template.md` when possible.
+Resolve standard-package paths from the repository root that contains `manifest.yaml`.
+
+If `manifest.md` does not exist, create it from `templates/artifact-manifest-template.md` when possible.
 
 Update manifest after successful local write or Lark/Feishu publication:
 
@@ -74,4 +76,3 @@ The old `html-doc-style` paths such as `library/技术方案/` and `library/代�
 Do not use them as the primary DocFlow path.
 
 If a user explicitly asks to keep the old summary path, write the DocFlow standard path first, then optionally create a secondary copy in the legacy path.
-
