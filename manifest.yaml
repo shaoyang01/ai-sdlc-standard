@@ -7,6 +7,7 @@ agent_bound: false
 runtime_dependencies: []
 entrypoints:
   overview: README.md
+  roadmap: ROADMAP.md
   lifecycle: ai-sdlc/lifecycle.md
   gates: ai-sdlc/phase-gates.md
   artifact_flow: ai-sdlc/artifact-flow.md
