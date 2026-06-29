@@ -24,7 +24,8 @@ ai-sdlc-standard/
 ├── ai-sdlc/
 │   ├── lifecycle.md
 │   ├── phase-gates.md
-│   └── artifact-flow.md
+│   ├── artifact-flow.md
+│   └── artifact-storage.md
 ├── ess/
 │   ├── specification-schema.md
 │   ├── review-schema.md
@@ -46,6 +47,7 @@ ai-sdlc-standard/
 ├── templates/
 │   ├── gate-result-template.md
 │   ├── technical-specification-template.md
+│   ├── artifact-manifest-template.md
 │   └── skill-registry-entry-template.md
 └── registry/
     └── skill-registry.md
@@ -56,7 +58,19 @@ ai-sdlc-standard/
 1. 需求或方案进入下一阶段前，先查看 `ai-sdlc/phase-gates.md`。
 2. 生成技术方案时，遵循 `ess/specification-schema.md` 和 `templates/technical-specification-template.md`。
 3. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
-4. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
+4. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
+5. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
+
+## 文档门禁
+
+当工作流暂时无法自动化时，节点推进依赖文档门禁：
+
+- 每个需求使用独立目录：`library/{requirement_id}/`。
+- 同一需求的不同节点产物放入不同子目录，例如 `01-技术方案/`、`02-方案审核/`、`04-代码审核/`。
+- 文件名必须符合 `{requirement_id}__{artifact_type}__v{version}.{ext}`。
+- Gate 文档必须包含 `PASS`、`FAIL` 或 `PASS_WITH_RISK`。
+- 只有 `PASS` 或带风险接受说明的 `PASS_WITH_RISK` 可以进入下一节点。
+- `library/{requirement_id}/` 是人工交接与门禁视图；`specs/**` 仍是 SpecKit 机器事实源。
 
 ## 迁移原则
 
@@ -72,4 +86,3 @@ ai-sdlc-standard/
 3. 让文档生成 Skill 遵循 ESS 输出。
 4. 让工作流 Skill 在阶段之间输出 Gate Result。
 5. 将测试发现的规格遗漏沉淀到 Checklist 和 Schema。
-

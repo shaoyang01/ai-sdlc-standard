@@ -35,6 +35,27 @@
 2. Skill 引用本标准包中的 Schema、Checklist、Contract。
 3. 标准变更时，只更新标准包。
 
+## 业务仓库落地建议
+
+在业务代码库中，推荐将每个需求的过程产物写入独立目录：
+
+```text
+{repo_root}/library/{requirement_id}/
+```
+
+并在需求目录内按节点分文件夹：
+
+```text
+library/{requirement_id}/00-需求资料/
+library/{requirement_id}/01-技术方案/
+library/{requirement_id}/02-方案审核/
+library/{requirement_id}/03-实现记录/
+library/{requirement_id}/04-代码审核/
+library/{requirement_id}/05-测试验收/
+```
+
+具体路径和命名规则见 `ai-sdlc/artifact-storage.md`。
+
 ## 迁移步骤
 
 ### 1. 复制标准包
@@ -78,6 +99,10 @@ engineering-standard/ess/specification-schema.md
 
 迁移初期不需要自动化。只要每个阶段按 `templates/gate-result-template.md` 输出结论即可。
 
+### 6. 建立需求文档目录
+
+在业务仓库中为每个需求建立 `library/{requirement_id}/`。该目录通常应被业务仓库 `.gitignore` 忽略。
+
 ## 版本策略
 
 - Patch：修正文案、示例、排版，不改变规则。
@@ -90,4 +115,3 @@ engineering-standard/ess/specification-schema.md
 - 不要在标准包中写死本机路径。
 - 不要让标准包直接执行命令。
 - 不要把业务仓库的临时事实写成本标准的通用规则。
-

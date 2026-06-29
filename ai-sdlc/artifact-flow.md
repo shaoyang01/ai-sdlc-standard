@@ -28,6 +28,8 @@ Raw Requirement
 
 ## 产物要求
 
+所有跨 Agent 人工交接产物落盘时必须遵循 `ai-sdlc/artifact-storage.md`。同一需求的人工产物放在 `library/{requirement_id}/` 下，不同节点放入不同子目录。`specs/**` 仍是 SpecKit 机器事实源，不由 `library` 目录替代。
+
 ### Requirement Understanding
 
 必须说明：
@@ -80,4 +82,3 @@ Raw Requirement
 ### Test Report
 
 必须遵循 `ess/test-feedback-schema.md`。
-

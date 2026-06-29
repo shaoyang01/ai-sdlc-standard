@@ -15,6 +15,8 @@ required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
   - ess/code-review-schema.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
 side_effects:
   - write document file
 can_modify_code: false
@@ -24,6 +26,7 @@ can_execute_commands: true
 blocking_conditions:
   - missing required schema sections
   - rendering would remove semantic content
+  - target requirement directory cannot be determined
 ```
 
 ### karpathy-guidelines
@@ -86,4 +89,3 @@ blocking_conditions:
 - speckit-implement
 - speckit-sync
 - speckit-code-doc-reconcile
-
