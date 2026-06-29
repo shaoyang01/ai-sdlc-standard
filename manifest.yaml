@@ -1,0 +1,36 @@
+name: ai-sdlc-standard
+version: 0.1.0
+status: draft
+type: portable-standard-package
+language: zh-CN
+agent_bound: false
+runtime_dependencies: []
+entrypoints:
+  overview: README.md
+  lifecycle: ai-sdlc/lifecycle.md
+  gates: ai-sdlc/phase-gates.md
+  artifact_flow: ai-sdlc/artifact-flow.md
+  specification_schema: ess/specification-schema.md
+  review_schema: ess/review-schema.md
+  code_review_schema: ess/code-review-schema.md
+  test_feedback_schema: ess/test-feedback-schema.md
+  skill_contract_template: skill-contracts/skill-contract-template.md
+  registry: registry/skill-registry.md
+portability:
+  may_be_copied_to:
+    - repository_root
+    - shared_docs_repository
+    - shared_drive
+    - internal_knowledge_base
+  must_not_require:
+    - codex_config_directory
+    - claude_config_directory
+    - zcode_config_directory
+    - local_absolute_user_path
+consumers:
+  - human_workflow
+  - codex_skill
+  - zcode_deepseek_prompt
+  - code_review_prompt
+  - document_renderer
+
