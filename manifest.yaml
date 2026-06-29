@@ -12,6 +12,7 @@ entrypoints:
   gates: ai-sdlc/phase-gates.md
   artifact_flow: ai-sdlc/artifact-flow.md
   artifact_storage: ai-sdlc/artifact-storage.md
+  change_control: ai-sdlc/change-control.md
   specification_schema: ess/specification-schema.md
   review_schema: ess/review-schema.md
   code_review_schema: ess/code-review-schema.md

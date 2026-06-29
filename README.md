@@ -26,7 +26,8 @@ ai-sdlc-standard/
 │   ├── lifecycle.md
 │   ├── phase-gates.md
 │   ├── artifact-flow.md
-│   └── artifact-storage.md
+│   ├── artifact-storage.md
+│   └── change-control.md
 ├── ess/
 │   ├── specification-schema.md
 │   ├── review-schema.md
@@ -66,9 +67,10 @@ ai-sdlc-standard/
 2. 需要判断标准包下一步改造顺序时，先查看 `ROADMAP.md`。
 3. 生成技术方案时，遵循 `ess/specification-schema.md` 和 `templates/technical-specification-template.md`。
 4. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
-5. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
-6. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
-7. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
+5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
+6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
+7. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
+8. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
 
 ## 文档门禁
 

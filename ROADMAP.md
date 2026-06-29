@@ -20,7 +20,7 @@
 | `docflow-writer` | 已完成 | 负责生成 Markdown、HTML、飞书文档，并更新 manifest。 |
 | 安装边界 | 已完成 | 安装 Skill 只是复制可执行副本，必须由用户明确触发。 |
 | 完整路线图 | 进行中 | 本文件作为后续 Skill 改造总入口。 |
-| 需求变更流程 | 待补 | 需要定义中途变更、返工、误解需求后的重走 Gate 规则。 |
+| 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
 | Manifest 活动日志 | 待补 | 需要让 manifest 支持当前状态、今日活动、变更历史。 |
 | 方案审阅 Skill | 待新建 | 需要真正审阅技术方案并输出 `02-方案审核` Gate 产物。 |
 | Speckit 生命周期 Skill | 待改造 | 需要补合同、收紧 Gate、必要时重写执行体。 |
@@ -35,6 +35,42 @@
 - 所有 Gate 必须能落到 `library/{requirement_id}/manifest.md` 和对应节点产物。
 - 需求变化不删除历史产物，通过版本、superseded 标记和 re-Gate 记录处理。
 - 在修改或重写 Skill 前，必须先模拟输入状态和边界数据，再编码或写合同。
+- 已建立的标准文件不做推翻式大改。后续以增量补充、合同接入、示例验证为主。
+
+## 推进方式
+
+后续推进分成三类任务，避免把标准、Skill 实现和下游产品混在一起：
+
+| 任务类型 | 做什么 | 不做什么 |
+| --- | --- | --- |
+| 标准补齐 | 补缺失流程、补 manifest 字段、补 change-control、补 Gate 映射。 | 不重写已稳定的 ESS、Gate、生命周期正文。 |
+| Skill 接入 | 为 Skill 补合同、登记 registry、明确输入输出副作用。 | 不把所有外部 Skill 复制进本仓库。 |
+| 执行体改造 | 在目标 Agent Skill 目录或对应产品仓库重写/适配可执行 Skill。 | 不在标准包里直接改业务代码或产品代码。 |
+
+每个后续任务都应按这个顺序执行：
+
+1. 模拟输入数据和当前状态。
+2. 判断属于标准补齐、Skill 接入还是执行体改造。
+3. 如果是 Skill，先补合同，再决定是否写或改执行体。
+4. 如果会影响 Gate，先明确 manifest 和 DocFlow 产物如何表达。
+5. 提交前检查 registry、contract、README/manifest 入口是否一致。
+
+## 流程补齐清单
+
+这些是后续需要逐步补齐的流程能力，不要求一次完成。
+
+| 流程能力 | 当前情况 | 后续动作 |
+| --- | --- | --- |
+| 需求归一化 | 目前依赖用户输入和 SpecKit 入口。 | 规划 `requirement-normalizer` 合同，定义飞书、HTML、Markdown、纯文本需求如何进入 `00-需求资料`。 |
+| 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | 明确 `specification-writer` 是否独立存在，或并入 `speckit-specify` 合同。 |
+| 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为 Specification Completeness Auditor / 方案审阅 Skill。 |
+| Gate 执行 | 有 Gate 模板，但缺统一 Gate 执行 Skill。 | 规划 `gate-runner` 或强化 `gate-auditor`，统一 PASS / FAIL / PASS_WITH_RISK。 |
+| 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
+| Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
+| Code Review 归一化 | 有 code review schema，但缺报告归一化 Skill。 | 规划 `code-review-normalizer`，统一 DeepSeek/Codex/人工 Review 输出。 |
+| 测试反馈反向沉淀 | 有 test feedback schema，但 sync 动作不完整。 | 规划 `test-feedback-sync`，把规格遗漏回写 Checklist/Schema/Skill 规则。 |
+| 知识同步 | 已明确交给 `speckit-sync`。 | 补 `speckit-sync` 合同，定义哪些事实能沉淀，哪些只留在 DocFlow。 |
+| 日报数据源 | 已规划 work-journal 远期互斥模式。 | 等 manifest 活动模型稳定后，再定义产品侧实现契约。 |
 
 ## 路线图阶段
 
@@ -97,7 +133,7 @@
 
 交付物：
 
-- 新增 `ai-sdlc/change-control.md`
+- 新增 `ai-sdlc/change-control.md`（已完成基础版）
 - 更新 `templates/artifact-manifest-template.md`
 - 必要时更新 `ai-sdlc/artifact-storage.md`
 
@@ -379,12 +415,11 @@ roots = [
 ## 近期执行顺序
 
 1. 完成本路线图。
-2. 新增 `ai-sdlc/change-control.md`。
-3. 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
-4. 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
-5. 新建 `solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
-6. 再改 `speckit-pipeline-confirmed-single` 合同。
-7. 继续推进 Speckit 生命周期 Skill 合同。
+2. 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
+3. 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
+4. 新建 `solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
+5. 再改 `speckit-pipeline-confirmed-single` 合同。
+6. 继续推进 Speckit 生命周期 Skill 合同。
 
 ## 阶段验收标准
 
