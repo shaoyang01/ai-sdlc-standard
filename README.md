@@ -66,7 +66,7 @@ ai-sdlc-standard/
 3. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
 4. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
 5. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
-6. 安装可执行 Skill 时，从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
+6. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
 
 ## 文档门禁
 
