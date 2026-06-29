@@ -103,6 +103,18 @@ engineering-standard/ess/specification-schema.md
 
 在业务仓库中为每个需求建立 `library/{requirement_id}/`。该目录通常应被业务仓库 `.gitignore` 忽略。
 
+### 7. 安装 Skill
+
+可执行 Skill 放在标准包的 `skills/` 目录下。
+
+例如将 `skills/docflow-writer/` 同步到目标 Agent 的 Skill 目录：
+
+```text
+skills/docflow-writer/
+```
+
+安装后的副本可以被 Agent 使用，但 GitHub 标准仓库仍是主源。
+
 ## 版本策略
 
 - Patch：修正文案、示例、排版，不改变规则。

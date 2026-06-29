@@ -18,6 +18,15 @@ entrypoints:
   skill_contract_template: skill-contracts/skill-contract-template.md
   artifact_manifest_template: templates/artifact-manifest-template.md
   registry: registry/skill-registry.md
+skills:
+  docflow_writer:
+    path: skills/docflow-writer/SKILL.md
+    contract: skill-contracts/known-skills/docflow-writer.md
+    references:
+      - skills/docflow-writer/references/routing-rules.md
+      - skills/docflow-writer/references/output-targets.md
+      - skills/docflow-writer/references/lark-cli.md
+      - skills/docflow-writer/references/legacy-html-style.md
 portability:
   may_be_copied_to:
     - repository_root

@@ -43,7 +43,13 @@ ai-sdlc-standard/
 │   ├── auditor-skill-contract.md
 │   ├── renderer-skill-contract.md
 │   ├── executor-skill-contract.md
-│   └── sync-skill-contract.md
+│   ├── sync-skill-contract.md
+│   └── known-skills/
+│       └── docflow-writer.md
+├── skills/
+│   └── docflow-writer/
+│       ├── SKILL.md
+│       └── references/
 ├── templates/
 │   ├── gate-result-template.md
 │   ├── technical-specification-template.md
@@ -60,6 +66,7 @@ ai-sdlc-standard/
 3. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
 4. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
 5. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
+6. 安装可执行 Skill 时，从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
 
 ## 文档门禁
 
@@ -82,7 +89,7 @@ ai-sdlc-standard/
 ## 推荐落地顺序
 
 1. 建立本标准包。
-2. 给常用 Skill 补充 Skill Contract。
-3. 让文档生成 Skill 遵循 ESS 输出。
+2. 使用 `skills/docflow-writer/` 生成 Markdown、HTML 或飞书文档。
+3. 给其他常用 Skill 补充 Skill Contract。
 4. 让工作流 Skill 在阶段之间输出 Gate Result。
 5. 将测试发现的规格遗漏沉淀到 Checklist 和 Schema。

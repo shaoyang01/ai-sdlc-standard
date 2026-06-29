@@ -4,13 +4,47 @@
 
 ## Registered Skills
 
+### docflow-writer
+
+```yaml
+name: docflow-writer
+category: Producer Skill / Renderer Skill / Publisher Skill
+stage: DocFlow artifact generation
+status: active
+skill_path:
+  - skills/docflow-writer/SKILL.md
+contract:
+  - skill-contracts/known-skills/docflow-writer.md
+required_schema:
+  - ess/specification-schema.md
+  - ess/review-schema.md
+  - ess/code-review-schema.md
+  - ess/test-feedback-schema.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+side_effects:
+  - create library/{requirement_id}/ directories
+  - write Markdown or HTML files
+  - update manifest.md
+  - create or update Lark/Feishu documents through lark-cli
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - output format cannot be inferred
+  - artifact node cannot be inferred
+  - requirement_id cannot be safely generated
+  - Lark/Feishu authorization is missing or expired
+```
+
 ### html-doc-style
 
 ```yaml
 name: html-doc-style
 category: Renderer Skill
 stage: Specification Writing / Report Rendering
-status: proposed
+status: legacy
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -27,6 +61,9 @@ blocking_conditions:
   - missing required schema sections
   - rendering would remove semantic content
   - target requirement directory cannot be determined
+notes:
+  - superseded by docflow-writer for DocFlow artifact routing
+  - may remain as a legacy HTML visual style reference
 ```
 
 ### karpathy-guidelines
