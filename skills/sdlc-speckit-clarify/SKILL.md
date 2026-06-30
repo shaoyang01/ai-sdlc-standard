@@ -24,16 +24,30 @@ Validate residual clarification after `sdlc-speckit-specify`. Treat this as a na
 11. Recommend manifest Activity Log or Re-Gate updates.
 12. Proceed to `sdlc-speckit-plan` only when no core ambiguity remains.
 
+## Standard Package Resolution
+
+Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
+
+1. Environment variable `AI_SDLC_STANDARD_HOME` when it points to a directory containing `manifest.yaml`.
+2. Target repository `.specify/project-governance-profile.yaml` `standard_package.source.location` when it points to a local standard package.
+3. Current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
+4. Installed Skill development fallback only when this Skill still lives inside the standard repository.
+
+After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
+
+Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+
 ## Required Standard Files
 
-Use these repository standard files as authoritative rules:
+Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-speckit-clarify.md`
-- `../../ess/specification-schema.md`
-- `../../checklists/specification-checklist.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-speckit-clarify.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

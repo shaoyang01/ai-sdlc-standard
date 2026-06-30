@@ -29,7 +29,10 @@ ai-sdlc-standard/
 │   ├── artifact-storage.md
 │   ├── change-control.md
 │   ├── complexity-routing.md
-│   └── governance-portability.md
+│   ├── standard-package-resolution.md
+│   ├── speckit-document-split.md
+│   ├── speckit-document-governance.md
+│   └── speckit-project-bootstrap.md
 ├── ess/
 │   ├── specification-schema.md
 │   ├── review-schema.md
@@ -140,6 +143,8 @@ ai-sdlc-standard/
 │   ├── entry-coverage-profile-template.yaml
 │   └── business-domain-bootstrap-template.yaml
 ├── scripts/
+│   ├── init-standard-home.sh
+│   ├── bootstrap-speckit-project.sh
 │   └── validate-skill-contracts.rb
 └── registry/
     └── skill-registry.md
@@ -160,10 +165,42 @@ ai-sdlc-standard/
 5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
 6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
 7. 判断直接实现还是进入完整 SDD 时，遵循 `ai-sdlc/complexity-routing.md`。
-8. 迁移 `.specify` 文档治理骨架时，遵循 `ai-sdlc/governance-portability.md`；共享规则使用标准包，目标仓库只生成 profile 和后续 bootstrap 配置。
-9. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
-10. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
-11. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
+8. 下载或更新标准包后，执行 `scripts/init-standard-home.sh`，把标准库路径写入 `AI_SDLC_STANDARD_HOME`。
+9. 安装后的 Skill 读取共享标准文件时，先按 `ai-sdlc/standard-package-resolution.md` 解析 `AI_SDLC_STANDARD_HOME`。
+10. 将 Speckit 文档治理投放到某个项目时，遵循 `ai-sdlc/speckit-project-bootstrap.md`；混合旧文档拆分规则遵循 `ai-sdlc/speckit-document-split.md`。
+11. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
+12. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
+13. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
+
+## 标准库路径初始化
+
+标准包下载到本地后，先执行：
+
+```bash
+scripts/init-standard-home.sh
+```
+
+该脚本会向当前 shell profile 写入受控块：
+
+```bash
+export AI_SDLC_STANDARD_HOME='<path-to-ai-sdlc-standard>'
+```
+
+常用模式：
+
+```bash
+scripts/init-standard-home.sh --dry-run
+scripts/init-standard-home.sh --print
+scripts/init-standard-home.sh --profile ~/.zshrc --force
+```
+
+项目投放时执行：
+
+```bash
+scripts/bootstrap-speckit-project.sh <target-project-path>
+```
+
+该脚本会创建 `.specify` profile、`.specify/project-context/**`、`.specify/reports/`、`library/`，并向目标项目 `.gitignore` 写入 `/library/`。`specs/**` 不由初始化脚本创建，而由后续 Speckit feature 阶段生成。
 
 ## Skill 命名规则
 
@@ -184,7 +221,7 @@ ai-sdlc-standard/
 - 只有 `PASS` 或带风险接受说明的 `PASS_WITH_RISK` 可以进入下一节点。
 - `library/{requirement_id}/` 是人工交接与门禁视图；`specs/**` 仍是 SpecKit 机器事实源。
 
-## 迁移原则
+## 投放原则
 
 - 不依赖 `.codex`、`.claude`、`.agents`、`.config` 等任何 Agent 配置目录。
 - 不写死本机路径、仓库路径或工具路径。

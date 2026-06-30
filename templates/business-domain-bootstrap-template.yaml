@@ -5,18 +5,18 @@
 #
 # Purpose:
 #   Describe how a target repository should regenerate .specify/business_domain/**
-#   after governance migration.
+#   after Speckit project bootstrap.
 #
 # Important:
-#   business_domain content is not migrated from another repository.
+#   business_domain content is not copied from another repository.
 #   It is generated from the target repository's code, existing local docs,
 #   and user-approved business boundaries.
 
 schema_version: 0.1.0
 
 generation_scope:
-  migration_includes_business_domain_content: false
-  generate_after_migration: true
+  project_bootstrap_includes_business_domain_content: false
+  generate_after_project_bootstrap: true
   output_root: ".specify/business_domain"
   required_root_documents:
     - "00BusinessLandscape.md"

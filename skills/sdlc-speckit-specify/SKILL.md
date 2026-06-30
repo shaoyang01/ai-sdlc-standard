@@ -23,17 +23,32 @@ Sync an approved DocFlow technical specification into SpecKit `specs/{feature}/s
 10. Require Development Path Decision `SPECKIT_PIPELINE_REQUIRED` unless the user explicitly asks for full SDD.
 11. Preserve links back to `01-技术方案`, `02-方案审核`, and `manifest.md`.
 12. Stop and return to DocFlow when sync would require inventing business rules.
+13. Do not overwrite an existing `specs/{feature}/spec.md` unless it belongs to the same requirement and current DocFlow source artifacts.
+
+## Standard Package Resolution
+
+Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
+
+1. Environment variable `AI_SDLC_STANDARD_HOME` when it points to a directory containing `manifest.yaml`.
+2. Target repository `.specify/project-governance-profile.yaml` `standard_package.source.location` when it points to a local standard package.
+3. Current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
+4. Installed Skill development fallback only when this Skill still lives inside the standard repository.
+
+After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
+
+Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
 
 ## Required Standard Files
 
-Use these repository standard files as authoritative rules:
+Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-speckit-specify.md`
-- `../../ess/specification-schema.md`
-- `../../checklists/specification-checklist.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-speckit-specify.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 
@@ -52,6 +67,7 @@ Identify:
 
 - Requirement ID
 - Target feature name or `specs/{feature}` directory
+- Existing `specs/{feature}/spec.md`, if present
 - `01-技术方案` current version
 - `02-方案审核` current version
 - `manifest.md`
@@ -73,6 +89,7 @@ Continue only when:
 - Development path is `SPECKIT_PIPELINE_REQUIRED`, or full SDD is explicitly requested.
 - Core Scope, behavior, failure strategy, and acceptance criteria are stable.
 - Current artifacts are not superseded.
+- Existing target `specs/{feature}/spec.md`, if present, belongs to the same requirement and current DocFlow source artifacts.
 
 ### 3. Sync Specification
 
@@ -83,6 +100,14 @@ Create or update:
 ```text
 specs/{feature}/spec.md
 ```
+
+Update an existing target only when:
+
+- It is linked to the same requirement ID, or the manifest maps it to the same requirement.
+- Its source DocFlow artifacts are the same current `01-技术方案` and `02-方案审核`, or the update is a valid Re-Gate replacement.
+- The change does not erase previous process evidence; superseded content remains traceable through manifest or Re-Gate records.
+
+Stop instead of overwriting when the target spec belongs to another requirement, has unknown provenance, or contains unresolved local edits.
 
 Preserve:
 
@@ -134,3 +159,4 @@ Stop instead of writing or recommending a `specs/spec.md` update when:
 - Technical specification has unresolved core ambiguity.
 - Sync would require new business rules.
 - `01-技术方案` and `02-方案审核` conflict.
+- Existing `specs/{feature}/spec.md` belongs to another requirement, unknown source, or stale DocFlow version.

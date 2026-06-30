@@ -14,7 +14,10 @@ entrypoints:
   artifact_storage: ai-sdlc/artifact-storage.md
   change_control: ai-sdlc/change-control.md
   complexity_routing: ai-sdlc/complexity-routing.md
-  governance_portability: ai-sdlc/governance-portability.md
+  standard_package_resolution: ai-sdlc/standard-package-resolution.md
+  speckit_document_split: ai-sdlc/speckit-document-split.md
+  speckit_document_governance: ai-sdlc/speckit-document-governance.md
+  speckit_project_bootstrap: ai-sdlc/speckit-project-bootstrap.md
   specification_schema: ess/specification-schema.md
   review_schema: ess/review-schema.md
   code_review_schema: ess/code-review-schema.md
@@ -22,6 +25,8 @@ entrypoints:
   skill_category_guide: skill-contracts/skill-category-guide.md
   skill_contract_template: skill-contracts/skill-contract-template.md
   skill_contract_validator: scripts/validate-skill-contracts.rb
+  standard_home_initializer: scripts/init-standard-home.sh
+  speckit_project_bootstrap_script: scripts/bootstrap-speckit-project.sh
   artifact_manifest_template: templates/artifact-manifest-template.md
   project_governance_profile_template: templates/project-governance-profile-template.yaml
   entry_coverage_profile_template: templates/entry-coverage-profile-template.yaml

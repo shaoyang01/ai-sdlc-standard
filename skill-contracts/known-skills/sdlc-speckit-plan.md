@@ -40,6 +40,12 @@ blocking_conditions:
   - plan cannot support acceptance criteria
 ```
 
+## Standard Path Resolution
+
+本合同中 `required_schema`、`required_checklist`、`required_storage`、`skill_path` 与 `references` 里的共享标准路径，均相对 `AI_SDLC_STANDARD_HOME` 解析。
+
+执行 Skill 前必须先读取 `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`，确认标准包根目录有效。目标项目不需要、也不应该复制共享 `ai-sdlc/**`、`ess/**`、`checklists/**`、`templates/**` 或 `skill-contracts/**` 文件。
+
 ## Responsibilities
 
 `sdlc-speckit-plan` 是 Speckit Plan 阶段的标准 Skill。

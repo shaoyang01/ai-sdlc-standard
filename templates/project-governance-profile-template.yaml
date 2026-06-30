@@ -20,7 +20,9 @@ standard_package:
     - ai-sdlc/artifact-storage.md
     - ai-sdlc/change-control.md
     - ai-sdlc/complexity-routing.md
-    - ai-sdlc/governance-portability.md
+    - ai-sdlc/standard-package-resolution.md
+    - ai-sdlc/speckit-document-governance.md
+    - ai-sdlc/speckit-project-bootstrap.md
 
 project:
   name: "<project-name>"
@@ -49,21 +51,54 @@ local_files:
     - ".specify/entry-coverage-profile.yaml"
     - ".specify/business-domain-bootstrap.yaml"
   optional:
-    - ".specify/coding_guide/ProjectCodingGuide.md"
-    - ".specify/project-overrides.md"
+    - ".specify/project-context/ProjectCodingGuide.md"
+    - ".specify/project-context/RepositoryStructure.md"
+    - ".specify/project-context/ProjectGovernanceOverrides.md"
   legacy:
     memory_files_authoritative: false
     workflow_files_authoritative: false
     notes: "Legacy .specify/memory or .specify/workflow files are project overrides only when explicitly listed below."
 
+project_private_documents:
+  coding_guides:
+    - path: ".specify/project-context/ProjectCodingGuide.md"
+      required: false
+      purpose: "Project-specific coding rules, framework adapters, utility classes, and naming exceptions."
+  architecture_guides:
+    - path: ".specify/project-context/RepositoryStructure.md"
+      required: false
+      purpose: "Project-specific module boundaries, layering, deployment shape, and integration topology."
+  repository_structure:
+    - path: ".specify/project-context/RepositoryStructure.md"
+      required: false
+      purpose: "Project-specific module list, source roots, generated-code locations, and excluded paths."
+  governance_overrides:
+    - path: ".specify/project-context/ProjectGovernanceOverrides.md"
+      required: false
+      purpose: "Explicit local override for a shared standard rule."
+  legacy_inputs:
+    - path: ".specify/memory/**"
+      required: false
+      purpose: "Legacy local input only; not authoritative unless listed under project_overrides."
+    - path: ".specify/workflow/**"
+      required: false
+      purpose: "Legacy local input only; not authoritative unless listed under project_overrides."
+
 project_overrides:
   enabled: false
-  files: []
-  rules: []
+  files:
+    - path: "<override-doc-path>"
+      overrides_standard_rule: "<standard-rule-id-or-path>"
+      reason: "<why this project needs a local exception>"
+      owner: "<owner>"
+  rules:
+    - id: "<project-override-id>"
+      standard_rule: "<standard-rule-id-or-path>"
+      local_rule: "<project-specific rule>"
+      reason: "<why this override is valid>"
 
 business_domain:
-  migration_scope: "excluded"
-  generation_timing: "post_migration_bootstrap"
+  generation_timing: "post_project_bootstrap"
   structure: "physical_l2_logical_l4"
   root_docs:
     business_landscape: ".specify/business_domain/00BusinessLandscape.md"
@@ -88,6 +123,20 @@ knowledge_routing:
       - "reserve L4 id"
       - "create L4 skeleton after user or owner approval"
 
+read_order:
+  before_speckit_stage:
+    - "${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md"
+    - "standard package shared rules"
+    - ".specify/project-governance-profile.yaml"
+    - ".specify/project-context/** documents required for the current stage"
+    - ".specify/business_domain root documents when generated"
+    - "matched L1/L2/L4 business-domain documents"
+  conflict_policy:
+    default_precedence: "standard_package"
+    project_override_requires_profile_entry: true
+    stop_on_undeclared_conflict: true
+    business_facts_precedence: "target_repository_business_domain"
+
 sync_policy:
   sync_required_for_complexity:
     - COMPLEX
@@ -97,22 +146,25 @@ sync_policy:
   allow_shared_rule_updates_from_project: false
 
 generated_documents:
-  migration_must_generate:
+  project_bootstrap_generates:
     - ".specify/project-governance-profile.yaml"
     - ".specify/entry-coverage-profile.yaml"
     - ".specify/business-domain-bootstrap.yaml"
-  post_migration_bootstrap_generates:
+    - ".specify/project-context/ProjectCodingGuide.md"
+    - ".specify/project-context/RepositoryStructure.md"
+    - ".specify/project-context/ProjectGovernanceOverrides.md"
+  business_domain_bootstrap_generates:
     - ".specify/business_domain/00BusinessLandscape.md"
     - ".specify/business_domain/00UbiquitousLanguage.md"
     - ".specify/business_domain/01DomainCatalog.md"
   generate_only_if_needed:
-    - ".specify/coding_guide/ProjectCodingGuide.md"
-    - ".specify/project-overrides.md"
+    - ".specify/coding_guide/** legacy documents remain untouched"
+    - ".specify/memory/** legacy documents remain untouched"
+    - ".specify/workflow/** legacy documents remain untouched"
 
-migration_status:
+bootstrap_status:
   state: "draft"
-  migrated_from_legacy_specify: false
+  generated_by: "ai-sdlc-standard"
   legacy_files_reviewed: []
-  shared_rule_duplicates_removed: []
   project_facts_preserved: []
   unresolved_questions: []

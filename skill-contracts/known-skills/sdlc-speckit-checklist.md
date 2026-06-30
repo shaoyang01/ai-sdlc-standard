@@ -49,6 +49,12 @@ blocking_conditions:
   - checklist generation would replace Gate, Analyze, Review, or Test Acceptance
 ```
 
+## Standard Path Resolution
+
+本合同中 `required_schema`、`required_checklist`、`required_storage`、`skill_path` 与 `references` 里的共享标准路径，均相对 `AI_SDLC_STANDARD_HOME` 解析。
+
+执行 Skill 前必须先读取 `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`，确认标准包根目录有效。目标项目不需要、也不应该复制共享 `ai-sdlc/**`、`ess/**`、`checklists/**`、`templates/**` 或 `skill-contracts/**` 文件。
+
 ## Responsibilities
 
 `sdlc-speckit-checklist` 是 Speckit 生命周期中的需求专用 Checklist 生成和校验 Skill。

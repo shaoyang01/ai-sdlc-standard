@@ -24,18 +24,32 @@ Create or validate requirement-specific checklists for the Speckit lifecycle. Tr
 11. Route reusable checklist improvements discovered from test or review feedback to `sdlc-test-feedback-sync` or `sdlc-speckit-sync`.
 12. Recommend manifest Activity Log and Re-Gate updates.
 
+## Standard Package Resolution
+
+Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
+
+1. Environment variable `AI_SDLC_STANDARD_HOME` when it points to a directory containing `manifest.yaml`.
+2. Target repository `.specify/project-governance-profile.yaml` `standard_package.source.location` when it points to a local standard package.
+3. Current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
+4. Installed Skill development fallback only when this Skill still lives inside the standard repository.
+
+After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
+
+Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+
 ## Required Standard Files
 
-Use these repository standard files as authoritative rules:
+Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-speckit-checklist.md`
-- `../../checklists/specification-checklist.md`
-- `../../checklists/plan-checklist.md`
-- `../../checklists/task-checklist.md`
-- `../../checklists/implementation-checklist.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-speckit-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/plan-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/task-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/implementation-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

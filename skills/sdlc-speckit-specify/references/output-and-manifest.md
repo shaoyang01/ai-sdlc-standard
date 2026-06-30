@@ -8,6 +8,8 @@ Target:
 specs/{feature}/spec.md
 ```
 
+If the target file already exists, update it only when it is traceable to the same requirement and current DocFlow source artifacts. Otherwise stop and request a new feature id, Re-Gate, or explicit user decision.
+
 Optional:
 
 ```text

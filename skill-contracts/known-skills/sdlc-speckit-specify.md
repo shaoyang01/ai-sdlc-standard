@@ -36,7 +36,14 @@ blocking_conditions:
   - development path is not SPECKIT_PIPELINE_REQUIRED and user did not explicitly request full SDD
   - technical specification has unresolved core ambiguity
   - sync to specs/spec.md would require reinterpreting business scope
+  - existing specs/{feature}/spec.md belongs to another requirement or unknown source
 ```
+
+## Standard Path Resolution
+
+本合同中 `required_schema`、`required_checklist`、`required_storage`、`skill_path` 与 `references` 里的共享标准路径，均相对 `AI_SDLC_STANDARD_HOME` 解析。
+
+执行 Skill 前必须先读取 `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`，确认标准包根目录有效。目标项目不需要、也不应该复制共享 `ai-sdlc/**`、`ess/**`、`checklists/**`、`templates/**` 或 `skill-contracts/**` 文件。
 
 ## Responsibilities
 
@@ -49,6 +56,7 @@ blocking_conditions:
 - 保持 `specs/spec.md` 与已通过方案的 Scope、行为约束、测试要求一致。
 - 将方案审核中的 Required Actions、风险接受或开发路径决策映射到 SpecKit 规格中。
 - 记录与 DocFlow 产物的引用关系，便于后续 plan/tasks/implement 追溯。
+- 在目标 `specs/{feature}/spec.md` 已存在时，确认它属于同一需求与当前 DocFlow 来源后再更新。
 
 它不负责：
 
@@ -57,6 +65,7 @@ blocking_conditions:
 - 重新解释已审阅通过的需求。
 - 绕过方案审核直接创建实现计划。
 - 在存在核心未决问题时用 assumptions 继续推进。
+- 覆盖来源不明或属于其他需求的 `specs/{feature}/spec.md`。
 
 ## Input Contract
 

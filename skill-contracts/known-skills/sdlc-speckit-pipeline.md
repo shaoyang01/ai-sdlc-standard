@@ -58,6 +58,12 @@ blocking_conditions:
   - any stage has unresolved Critical issue
 ```
 
+## Standard Path Resolution
+
+本合同中 `required_schema`、`required_checklist`、`required_storage`、`skill_path` 与 `references` 里的共享标准路径，均相对 `AI_SDLC_STANDARD_HOME` 解析。
+
+执行 Skill 前必须先读取 `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`，确认标准包根目录有效。目标项目不需要、也不应该复制共享 `ai-sdlc/**`、`ess/**`、`checklists/**`、`templates/**` 或 `skill-contracts/**` 文件。
+
 ## Responsibilities
 
 `sdlc-speckit-pipeline` 是方案审阅后的可选完整 SDD 路径。
@@ -117,7 +123,8 @@ blocking_conditions:
 
 - 缺少方案或方案审核时停止。
 - 缺少 manifest 时可以创建或建议创建，但必须记录 Activity Log。
-- 缺少业务知识库时，先执行 Preflight 或 doc-bootstrap，不能跳过治理检查。
+- 缺少项目 profile 时，先执行 Speckit project bootstrap。
+- 缺少业务知识库时，先执行 business-domain bootstrap，不能跳过治理检查。
 
 ## Flow Contract
 

@@ -26,18 +26,34 @@ Orchestrate the optional full Speckit SDD path after solution review. Treat this
 13. Do not let Reconcile rewrite documents to legitimize code drift.
 14. Recommend manifest Activity Log, Gate, Re-Gate, Sync, and Reconcile updates after every stage.
 
+## Standard Package Resolution
+
+Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
+
+1. Environment variable `AI_SDLC_STANDARD_HOME` when it points to a directory containing `manifest.yaml`.
+2. Target repository `.specify/project-governance-profile.yaml` `standard_package.source.location` when it points to a local standard package.
+3. Current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
+4. Installed Skill development fallback only when this Skill still lives inside the standard repository.
+
+After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
+
+Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+
 ## Required Standard Files
 
-Use these repository standard files as authoritative rules:
+Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-speckit-pipeline.md`
-- `../../ai-sdlc/lifecycle.md`
-- `../../ai-sdlc/phase-gates.md`
-- `../../ai-sdlc/artifact-flow.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../ai-sdlc/governance-portability.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-speckit-pipeline.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/lifecycle.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/phase-gates.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-flow.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-split.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-governance.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-bootstrap.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 
@@ -66,6 +82,7 @@ Identify:
 - `.specify/project-governance-profile.yaml`
 - `.specify/entry-coverage-profile.yaml`
 - `.specify/business-domain-bootstrap.yaml`, when business_domain is missing
+- Project private documents declared in `.specify/project-governance-profile.yaml`
 - `manifest.md`, if available
 
 Stop when the review result is failed, blocked, missing, or recommends direct implementation without explicit full SDD confirmation.
@@ -81,10 +98,12 @@ Verify:
 
 - `.specify/project-governance-profile.yaml` exists when the target project uses Speckit.
 - Shared governance rules are read from this standard package, not copied from target `.specify/memory` or `.specify/workflow`.
+- Project private documents required by the profile are present and are read after standard package rules.
+- Project overrides are explicit when local private documents conflict with shared standard rules.
 - Domain route is known: existing-change, new-flow, integration-change, data-change, or unknown.
 - Required business knowledge inputs are present, or `.specify/business-domain-bootstrap.yaml` exists so they can be generated before knowledge routing.
 
-Stop when project profile, bootstrap configuration, or domain route cannot be determined.
+Stop when project profile, bootstrap configuration, required private documents, explicit overrides, or domain route cannot be determined.
 
 ### 3. Execute Speckit Authoring Gates
 

@@ -24,17 +24,31 @@ Create or validate SpecKit implementation tasks after `sdlc-speckit-plan`. Treat
 11. Require Task Gate readiness before implementation.
 12. Recommend manifest Activity Log updates.
 
+## Standard Package Resolution
+
+Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
+
+1. Environment variable `AI_SDLC_STANDARD_HOME` when it points to a directory containing `manifest.yaml`.
+2. Target repository `.specify/project-governance-profile.yaml` `standard_package.source.location` when it points to a local standard package.
+3. Current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
+4. Installed Skill development fallback only when this Skill still lives inside the standard repository.
+
+After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
+
+Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+
 ## Required Standard Files
 
-Use these repository standard files as authoritative rules:
+Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-speckit-tasks.md`
-- `../../checklists/task-checklist.md`
-- `../../checklists/plan-checklist.md`
-- `../../ess/specification-schema.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-speckit-tasks.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/task-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/plan-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 
