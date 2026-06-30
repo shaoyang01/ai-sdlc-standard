@@ -47,50 +47,50 @@ ai-sdlc-standard/
 │   ├── executor-skill-contract.md
 │   ├── sync-skill-contract.md
 │   └── known-skills/
-│       ├── code-review-normalizer.md
-│       ├── docflow-writer.md
-│       ├── gate-runner.md
-│       ├── implementation-recorder.md
-│       ├── requirement-normalizer.md
-│       ├── specification-writer.md
-│       ├── solution-reviewer.md
-│       ├── speckit-clarify.md
-│       ├── speckit-specify.md
-│       ├── speckit-pipeline-confirmed-single.md
-│       ├── test-feedback-classifier.md
-│       └── test-feedback-sync.md
+│       ├── sdlc-code-review-normalizer.md
+│       ├── sdlc-docflow-writer.md
+│       ├── sdlc-gate-runner.md
+│       ├── sdlc-implementation-recorder.md
+│       ├── sdlc-requirement-normalizer.md
+│       ├── sdlc-specification-writer.md
+│       ├── sdlc-solution-reviewer.md
+│       ├── sdlc-speckit-clarify.md
+│       ├── sdlc-speckit-specify.md
+│       ├── sdlc-speckit-pipeline.md
+│       ├── sdlc-test-feedback-classifier.md
+│       └── sdlc-test-feedback-sync.md
 ├── skills/
-│   ├── code-review-normalizer/
+│   ├── sdlc-code-review-normalizer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── docflow-writer/
+│   ├── sdlc-docflow-writer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── gate-runner/
+│   ├── sdlc-gate-runner/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── implementation-recorder/
+│   ├── sdlc-implementation-recorder/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── requirement-normalizer/
+│   ├── sdlc-requirement-normalizer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── specification-writer/
+│   ├── sdlc-specification-writer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── solution-reviewer/
+│   ├── sdlc-solution-reviewer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── speckit-clarify/
+│   ├── sdlc-speckit-clarify/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── speckit-specify/
+│   ├── sdlc-speckit-specify/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   ├── test-feedback-classifier/
+│   ├── sdlc-test-feedback-classifier/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   └── test-feedback-sync/
+│   └── sdlc-test-feedback-sync/
 │       ├── SKILL.md
 │       └── references/
 ├── templates/
@@ -102,6 +102,12 @@ ai-sdlc-standard/
     └── skill-registry.md
 ```
 
+说明：
+
+- 上面的 `sdlc-*` 是标准包新增或重写后的安装目标。
+- 仓库中未加 `sdlc-` 前缀的既有 Skill 目录或合同可以保留原样，用于历史对照或迁移过渡，但不属于标准包安装清单。
+- 安装或同步到 Agent Skill 目录时，只同步 `skills/sdlc-*`，不要整包同步 `skills/`。
+
 ## 使用方式
 
 1. 需求或方案进入下一阶段前，先查看 `ai-sdlc/phase-gates.md`。
@@ -111,7 +117,15 @@ ai-sdlc-standard/
 5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
 6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
 7. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
-8. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/` 目录同步到目标 Agent 的 Skill 目录。
+8. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
+
+## Skill 命名规则
+
+- 标准包内新增或重写的可安装 Skill 一律使用 `sdlc-*` 命名。
+- 对已有外部 Skill 的标准化改造也视为新增 Skill，只新增 `sdlc-*` 版本，不修改、不覆盖、不迁移原 Skill 本体。
+- `skills/` 下的目录名、`SKILL.md` frontmatter `name`、`skill-contracts/known-skills/` 文件名和 `registry/skill-registry.md` 登记名必须一致。
+- 仅有合同、执行体尚未实现的 Skill 只登记合同，不在 `skills/` 目录中占位。
+- 原有外部 Skill 或未加前缀的历史目录可保留原样，但不能作为本标准包的安装目标名称。
 
 ## 文档门禁
 
@@ -134,7 +148,7 @@ ai-sdlc-standard/
 ## 推荐落地顺序
 
 1. 建立本标准包。
-2. 使用 `skills/docflow-writer/` 生成 Markdown、HTML 或飞书文档。
+2. 使用 `skills/sdlc-docflow-writer/` 生成 Markdown、HTML 或飞书文档。
 3. 给其他常用 Skill 补充 Skill Contract。
 4. 让工作流 Skill 在阶段之间输出 Gate Result。
 5. 将测试发现的规格遗漏沉淀到 Checklist 和 Schema。

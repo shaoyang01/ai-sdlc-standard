@@ -17,12 +17,12 @@
 | --- | --- | --- |
 | 可迁移标准包 | 已完成 | 标准文件放在本仓库，不放在任何 Agent 配置目录。 |
 | DocFlow 产物目录 | 已完成 | `library/{requirement_id}/` 是人工交接与 Gate 视图。 |
-| `docflow-writer` | 已完成 | 负责生成 Markdown、HTML、飞书文档，并更新 manifest。 |
+| `sdlc-docflow-writer` | 已完成 | 负责生成 Markdown、HTML、飞书文档，并更新 manifest。 |
 | 安装边界 | 已完成 | 安装 Skill 只是复制可执行副本，必须由用户明确触发。 |
 | 完整路线图 | 进行中 | 本文件作为后续 Skill 改造总入口，并吸收外部 v1.0 文档暴露的路线图缺口。 |
 | 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
-| 方案审阅 Skill | 已实现初版 | `skills/solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
+| 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
 | Speckit 生命周期 Skill | 待改造 | 需要补合同、收紧 Gate、必要时重写执行体。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
@@ -31,16 +31,16 @@
 
 - 标准仓库是事实源；Agent Skill 目录只是安装副本。
 - 每个 Skill 先定义合同，再决定是否重写执行体。
-- `docflow-writer` 负责写文档，不负责判断文档是否合格。
+- `sdlc-docflow-writer` 负责写文档，不负责判断文档是否合格。
 - 审阅、实现、同步、日报这类能力必须分层，不混在一个 Skill 里。
 - 所有 Gate 必须能落到 `library/{requirement_id}/manifest.md` 和对应节点产物。
 - 需求变化不删除历史产物，通过版本、superseded 标记和 re-Gate 记录处理。
 - 在修改或重写 Skill 前，必须先模拟输入状态和边界数据，再编码或写合同。
 - 已建立的标准文件不做推翻式大改。后续以增量补充、合同接入、示例验证为主。
 - 外部 v1.0 文档只作为缺口校准来源，不按其目录结构照搬，也不覆盖本仓库已稳定的标准结构。
-- Specification Audit 是所有需求的通用 Gate，不归属于某一条 SpecKit pipeline；DeepSeek 或人工产出技术方案后，Codex 应先通过 `solution-reviewer` 审阅方案。
-- `solution-reviewer` 不只判断方案是否可实现，还要给出开发路径建议：直接实现，或唤醒 `speckit-pipeline-confirmed-single` 进入完整 SDD 流程。
-- 在新流程中，`specification-writer` 与 `solution-reviewer` 会前置承担大部分 Specify / Clarify 责任；进入 Speckit 时，通常不应再出现需要重新澄清的核心需求问题。
+- Specification Audit 是所有需求的通用 Gate，不归属于某一条 SpecKit pipeline；DeepSeek 或人工产出技术方案后，Codex 应先通过 `sdlc-solution-reviewer` 审阅方案。
+- `sdlc-solution-reviewer` 不只判断方案是否可实现，还要给出开发路径建议：直接实现，或唤醒 `sdlc-speckit-pipeline` 进入完整 SDD 流程。
+- 在新流程中，`sdlc-specification-writer` 与 `sdlc-solution-reviewer` 会前置承担大部分 Specify / Clarify 责任；进入 Speckit 时，通常不应再出现需要重新澄清的核心需求问题。
 - 如果需求使用 Speckit pipeline，pipeline 消费的是已审阅通过的方案和路由建议；方案审阅不是 Speckit 内部阶段。
 - Renderer 只能改变展示形式，不能承担需求理解、业务语义补全或规格内容生成。
 
@@ -52,7 +52,7 @@
 | --- | --- | --- |
 | 标准补齐 | 补缺失流程、补 manifest 字段、补 change-control、补 Gate 映射。 | 不重写已稳定的 ESS、Gate、生命周期正文。 |
 | Skill 接入 | 为 Skill 补合同、登记 registry、明确输入输出副作用。 | 不把所有外部 Skill 复制进本仓库。 |
-| 执行体改造 | 在目标 Agent Skill 目录或对应产品仓库重写/适配可执行 Skill。 | 不在标准包里直接改业务代码或产品代码。 |
+| 执行体改造 | 在目标 Agent Skill 目录或对应产品仓库新增 `sdlc-*` 可执行 Skill。 | 不修改、不覆盖原有外部 Skill；不在标准包里直接改业务代码或产品代码。 |
 
 每个后续任务都应按这个顺序执行：
 
@@ -68,13 +68,13 @@
 
 | 问题 | 当前路线图处理 |
 | --- | --- |
-| 开发前缺 Specification Audit | 将 `solution-reviewer` 明确为所有需求通用的 Specification Completeness Auditor，并要求它在选择开发路径前完成。 |
+| 开发前缺 Specification Audit | 将 `sdlc-solution-reviewer` 明确为所有需求通用的 Specification Completeness Auditor，并要求它在选择开发路径前完成。 |
 | Skill 缺统一分类 | 增加 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 分类治理。 |
-| Renderer 与 Producer 容易混淆 | 明确 `specification-writer` 负责语义规格，`html-doc-style` 和 `docflow-writer` 不负责补业务内容。 |
-| Speckit Specify / Clarify 职责漂移 | 明确 `specification-writer` 产物可作为轻量需求的规格事实；进入 Speckit 时，`speckit-specify` / `speckit-clarify` 以复用和校验前置产物为主。 |
-| Gate 输出需要统一 | 已实现 `gate-runner` 初版，后续用真实 manifest 样例迭代 PASS / FAIL / PASS_WITH_RISK 与 Re-Gate 检查细节。 |
-| Review 报告不可执行 | 已实现 `code-review-normalizer` 初版，把多来源 Review 归一到 Code Review Schema；后续用真实 Review 样例迭代。 |
-| 测试问题没有反向沉淀 | 已实现 `test-feedback-sync` 初版，把 Specification Missing / Requirement Change 等分类转成 Checklist、Schema、manifest 或 change-control 建议。 |
+| Renderer 与 Producer 容易混淆 | 明确 `sdlc-specification-writer` 负责语义规格，`html-doc-style` 和 `sdlc-docflow-writer` 不负责补业务内容。 |
+| Speckit Specify / Clarify 职责漂移 | 明确 `sdlc-specification-writer` 产物可作为轻量需求的规格事实；进入 Speckit 时，`sdlc-speckit-specify` / `sdlc-speckit-clarify` 以复用和校验前置产物为主。 |
+| Gate 输出需要统一 | 已实现 `sdlc-gate-runner` 初版，后续用真实 manifest 样例迭代 PASS / FAIL / PASS_WITH_RISK 与 Re-Gate 检查细节。 |
+| Review 报告不可执行 | 已实现 `sdlc-code-review-normalizer` 初版，把多来源 Review 归一到 Code Review Schema；后续用真实 Review 样例迭代。 |
+| 测试问题没有反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版，把 Specification Missing / Requirement Change 等分类转成 Checklist、Schema、manifest 或 change-control 建议。 |
 | MVP 顺序需要收敛 | 不再从零创建目录；当前 MVP 聚焦 Manifest 活动模型、方案审计 Skill、pipeline Gate 顺序。 |
 
 ## Skill 职责分类
@@ -97,15 +97,15 @@
 
 | 流程能力 | 当前情况 | 后续动作 |
 | --- | --- | --- |
-| 需求归一化 | 已实现 `requirement-normalizer` 初版。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
-| 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | `specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
-| 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
-| Gate 执行 | 已实现 `gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
+| 需求归一化 | 已实现 `sdlc-requirement-normalizer` 初版。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
+| 规格编写 | `sdlc-docflow-writer` 能写文档，但不等于规格生成器。 | `sdlc-specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
+| 规格完整性审计 | 已规划 `sdlc-solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `sdlc-solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
+| Gate 执行 | 已实现 `sdlc-gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
 | 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
 | Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
-| Code Review 归一化 | 已实现 `code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
-| 测试反馈反向沉淀 | 已实现 `test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
-| 知识同步 | 已明确交给 `speckit-sync`。 | 补 `speckit-sync` 合同，定义哪些事实能沉淀，哪些只留在 DocFlow。 |
+| Code Review 归一化 | 已实现 `sdlc-code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
+| 测试反馈反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
+| 知识同步 | 已明确交给 `sdlc-speckit-sync`。 | 补 `sdlc-speckit-sync` 合同，定义哪些事实能沉淀，哪些只留在 DocFlow。 |
 | 日报数据源 | 已规划 work-journal 远期互斥模式。 | 等 manifest 活动模型稳定后，再定义产品侧实现契约。 |
 
 ## 路线图阶段
@@ -148,9 +148,9 @@
 
 已完成：
 
-- `skills/docflow-writer/`
-- `skill-contracts/known-skills/docflow-writer.md`
-- `skills/docflow-writer/references/execution-scenarios.md`
+- `skills/sdlc-docflow-writer/`
+- `skill-contracts/known-skills/sdlc-docflow-writer.md`
+- `skills/sdlc-docflow-writer/references/execution-scenarios.md`
 - `PORTABILITY.md` 安装边界补充
 
 后续只做：
@@ -192,22 +192,22 @@
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner`、`implementation-recorder`、`code-review-normalizer`、`test-feedback-classifier`、`test-feedback-sync` 已实现初版；其他核心 Skill 待新建或待补合同。
+状态：`sdlc-requirement-normalizer`、`sdlc-specification-writer`、`sdlc-solution-reviewer`、`sdlc-gate-runner`、`sdlc-implementation-recorder`、`sdlc-code-review-normalizer`、`sdlc-test-feedback-classifier`、`sdlc-test-feedback-sync` 已实现初版；其他核心 Skill 待新增或待补合同。
 
-这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
+这些 Skill 都作为 `sdlc-*` 新 Skill 落地。即使能力来自既有 Skill 的标准化重做，也不修改、不覆盖原有外部 Skill。其中 `sdlc-solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
 | Skill | 优先级 | 类型 | 责任 | 主要输出 |
 | --- | --- | --- | --- | --- |
-| `requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
-| `specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
-| `solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
-| `implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
-| `test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
-| `gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
-| `code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
-| `test-feedback-sync` | 中 | 已实现初版 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
+| `sdlc-requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
+| `sdlc-specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
+| `sdlc-solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
+| `sdlc-implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
+| `sdlc-test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
+| `sdlc-gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
+| `sdlc-code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
+| `sdlc-test-feedback-sync` | 中 | 已实现初版 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
-#### `solution-reviewer` / Specification Completeness Auditor
+#### `sdlc-solution-reviewer` / Specification Completeness Auditor
 
 这是当前最先落地的全局 Gate Skill。
 
@@ -216,29 +216,29 @@
 ```text
 DeepSeek / 人工产出技术方案
         ↓
-Codex 使用 solution-reviewer 审阅方案
+Codex 使用 sdlc-solution-reviewer 审阅方案
         ↓
 输出 02-方案审核 + 开发路径建议
         ↓
-直接开发 或 唤醒 speckit-pipeline-confirmed-single
+直接开发 或 唤醒 sdlc-speckit-pipeline
 ```
 
 定位：
 
-- 它属于 DocFlow 通用 Gate，不归属于 `speckit-pipeline-confirmed-single`。
+- 它属于 DocFlow 通用 Gate，不归属于 `sdlc-speckit-pipeline`。
 - 每个需求只要存在 `01-技术方案`，都必须产生对应 `02-方案审核`。
 - 它在开发路径选择前执行：不使用 Speckit 的需求，审阅通过后可以直接进入实现；需要完整 SDD 的需求，审阅通过后再唤醒 Speckit pipeline。
-- 当 `solution-reviewer` 发现仍有核心待确认问题时，应输出 `BLOCKED_NEEDS_REVISION`，回到方案修订，而不是先进入 Speckit 再依赖 `speckit-clarify` 追问。
+- 当 `sdlc-solution-reviewer` 发现仍有核心待确认问题时，应输出 `BLOCKED_NEEDS_REVISION`，回到方案修订，而不是先进入 Speckit 再依赖 `sdlc-speckit-clarify` 追问。
 
 边界：
 
 - 它负责审方案，不负责写技术方案。
-- 它可以调用 `docflow-writer` 的产物路径规则，但不能替代 `docflow-writer`。
+- 它可以调用 `sdlc-docflow-writer` 的产物路径规则，但不能替代 `sdlc-docflow-writer`。
 - 它必须输出 Gate Result。
 - 它必须按问题严重级别列出 Critical / High / Medium / Low。
 - 它必须判断是否可以进入实现。
 - 它必须输出开发路径建议：`DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` / `BLOCKED_NEEDS_REVISION`。
-- 它的 Gate 结论必须早于任何实现动作，也必须早于是否唤醒 `speckit-pipeline-confirmed-single` 的决策。
+- 它的 Gate 结论必须早于任何实现动作，也必须早于是否唤醒 `sdlc-speckit-pipeline` 的决策。
 
 输入：
 
@@ -272,35 +272,35 @@ Codex 使用 solution-reviewer 审阅方案
 - 把 SpecKit 机器事实源和 DocFlow 人工 Gate 视图连接起来。
 - 每个阶段都有明确输入、输出、副作用和阻塞条件。
 - pipeline Skill 不再靠隐式习惯推进，而是读取通用 Gate 产物与 manifest。
-- `solution-reviewer` 不放在 Speckit 专属流程里；只有当方案审阅建议为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD 流程时，才唤醒 `speckit-pipeline-confirmed-single`。
-- `speckit-specify` 和 `speckit-clarify` 在新流程中的作用会减弱：它们不再负责从零理解需求，而是复用 `01-技术方案` 和 `02-方案审核`，生成/校验 `specs/**` 机器事实源。
+- `sdlc-solution-reviewer` 不放在 Speckit 专属流程里；只有当方案审阅建议为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD 流程时，才唤醒 `sdlc-speckit-pipeline`。
+- `sdlc-speckit-specify` 和 `sdlc-speckit-clarify` 在新流程中的作用会减弱：它们不再负责从零理解需求，而是复用 `01-技术方案` 和 `02-方案审核`，生成/校验 `specs/**` 机器事实源。
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `speckit-specify` | 高 | 补合同 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/spec.md`，避免重新解释需求。 |
-| `speckit-clarify` | 高 | 补合同 | 默认校验无未决问题；若发现新核心问题，应阻塞并回到方案修订 / 方案审核，而不是在 pipeline 内扩大范围。 |
-| `speckit-plan` | 高 | 补合同 | 定义技术计划、约束、风险和 Plan Gate。 |
-| `speckit-tasks` | 高 | 补合同 | 定义任务拆解、任务 Gate、实现前准入。 |
-| `speckit-analyze` | 中 | 补合同 | 定义跨 spec / plan / tasks / DocFlow 的一致性审计。 |
-| `speckit-pipeline-confirmed-single` | 高 | 补合同，可能重写执行体 | 串联单需求全流程，必须严格执行 Gate。 |
-| `speckit-pipeline-confirmed` | 中 | 补合同 | 多需求或批量流程，在 single 稳定后处理。 |
-| `speckit-checklist` | 中 | 补合同 | 定义 Checklist 生成边界，不替代 Gate。 |
-| `speckit-taskstoissues` | 低 | 补合同 | GitHub Issue 导出是可选集成，不作为主流程必需项。 |
+| `sdlc-speckit-specify` | 高 | 补合同 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/spec.md`，避免重新解释需求。 |
+| `sdlc-speckit-clarify` | 高 | 补合同 | 默认校验无未决问题；若发现新核心问题，应阻塞并回到方案修订 / 方案审核，而不是在 pipeline 内扩大范围。 |
+| `sdlc-speckit-plan` | 高 | 补合同 | 定义技术计划、约束、风险和 Plan Gate。 |
+| `sdlc-speckit-tasks` | 高 | 补合同 | 定义任务拆解、任务 Gate、实现前准入。 |
+| `sdlc-speckit-analyze` | 中 | 补合同 | 定义跨 spec / plan / tasks / DocFlow 的一致性审计。 |
+| `sdlc-speckit-pipeline` | 高 | 补合同，可能重写执行体 | 串联单需求全流程，必须严格执行 Gate。 |
+| `sdlc-speckit-pipeline-batch` | 中 | 补合同 | 多需求或批量流程，在 single 稳定后处理。 |
+| `sdlc-speckit-checklist` | 中 | 补合同 | 定义 Checklist 生成边界，不替代 Gate。 |
+| `sdlc-speckit-taskstoissues` | 低 | 补合同 | GitHub Issue 导出是可选集成，不作为主流程必需项。 |
 
 推荐顺序：
 
-1. 完成全局 `solution-reviewer` 合同，明确开发路径建议字段。
-2. 更新 `speckit-pipeline-confirmed-single` 合同，让它只在方案审阅建议或用户明确要求时启动。
-3. `speckit-specify`，明确复用 `specification-writer` 的方案产物。
-4. `speckit-clarify`，明确只做未决问题校验和阻塞，不重新承担需求澄清主流程。
-5. `speckit-plan`
-6. `speckit-tasks`
-7. `speckit-analyze`
-8. `speckit-pipeline-confirmed`
+1. 完成全局 `sdlc-solution-reviewer` 合同，明确开发路径建议字段。
+2. 更新 `sdlc-speckit-pipeline` 合同，让它只在方案审阅建议或用户明确要求时启动。
+3. `sdlc-speckit-specify`，明确复用 `sdlc-specification-writer` 的方案产物。
+4. `sdlc-speckit-clarify`，明确只做未决问题校验和阻塞，不重新承担需求澄清主流程。
+5. `sdlc-speckit-plan`
+6. `sdlc-speckit-tasks`
+7. `sdlc-speckit-analyze`
+8. `sdlc-speckit-pipeline-batch`
 
 说明：
 
-这里不是把 `solution-reviewer` 归入 Speckit，而是把它作为 Speckit 的前置路由 Gate。`speckit-pipeline-confirmed-single` 启动后仍按自己的 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile` 顺序执行，但 `Specify` 应消费已审阅方案，`Clarify` 应只做残余未决问题校验。若仍存在核心澄清问题，应回到 `01-技术方案` / `02-方案审核` 重新 Gate。
+这里不是把 `sdlc-solution-reviewer` 归入 Speckit，而是把它作为 Speckit 的前置路由 Gate。`sdlc-speckit-pipeline` 启动后仍按自己的 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile` 顺序执行，但 `Specify` 应消费已审阅方案，`Clarify` 应只做残余未决问题校验。若仍存在核心澄清问题，应回到 `01-技术方案` / `02-方案审核` 重新 Gate。
 
 ### Wave 6: 实现、同步与代码文档一致性
 
@@ -315,19 +315,19 @@ Codex 使用 solution-reviewer 审阅方案
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `speckit-implement` | 高 | 重写或大改 | 明确生产代码副作用、验证、回滚兼容、实现记录。 |
-| `speckit-sync` | 高 | 补合同，后续可能改执行体 | 明确哪些事实进入 `.specify/business_domain/**`。 |
-| `speckit-code-doc-reconcile` | 中 | 补合同 | 审计代码、spec、DocFlow、business_domain 是否一致。 |
+| `sdlc-speckit-implement` | 高 | 重写或大改 | 明确生产代码副作用、验证、回滚兼容、实现记录。 |
+| `sdlc-speckit-sync` | 高 | 补合同，后续可能改执行体 | 明确哪些事实进入 `.specify/business_domain/**`。 |
+| `sdlc-speckit-code-doc-reconcile` | 中 | 补合同 | 审计代码、spec、DocFlow、business_domain 是否一致。 |
 
-`speckit-implement` 必须覆盖：
+`sdlc-speckit-implement` 必须覆盖：
 
 - 不得实现方案外行为。
 - 不得补造未确认业务规则。
 - 代码改动必须有验证记录。
 - 涉及旧流程必须说明 rollback compatibility。
-- 实现完成必须更新 `03-实现记录` 或触发 `implementation-recorder`。
+- 实现完成必须更新 `03-实现记录` 或触发 `sdlc-implementation-recorder`。
 
-`speckit-sync` 必须覆盖：
+`sdlc-speckit-sync` 必须覆盖：
 
 - Sync 输入来自 specs、实现结果、审核结论，而不是聊天片段。
 - Sync 输出路径和结果写入 manifest。
@@ -345,10 +345,10 @@ Codex 使用 solution-reviewer 审阅方案
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `code-review-excellence` | 中 | 补合同或适配 | 对齐 `ess/code-review-schema.md` 和 `04-代码审核`。 |
+| `sdlc-code-review-excellence` | 中 | 补合同或新增 Skill | 对齐 `ess/code-review-schema.md` 和 `04-代码审核`。 |
 | `html-doc-style` | 低 | legacy | 只作为视觉参考，不能再做 DocFlow 路由。 |
-| Lark/Feishu 文档 Skills | 中 | 下游适配 | 保持工具执行细节外置，标准包只定义 DocFlow 输出边界。 |
-| `docflow-writer` | 已完成 | 维护 | 继续作为文档写入和发布入口。 |
+| Lark/Feishu 文档 Skills | 中 | 下游边界定义 | 保持工具执行细节外置，标准包只定义 DocFlow 输出边界。 |
+| `sdlc-docflow-writer` | 已完成 | 维护 | 继续作为文档写入和发布入口。 |
 
 后续可能新增：
 
@@ -356,9 +356,9 @@ Codex 使用 solution-reviewer 审阅方案
 - `review-report-writer`
 - `test-acceptance-writer`
 
-是否新建取决于现有 `code-review-excellence` 和 `docflow-writer` 的职责边界是否足够清楚。
+是否新建取决于现有 `sdlc-code-review-excellence` 和 `sdlc-docflow-writer` 的职责边界是否足够清楚。
 
-### Wave 8: 领域 Skill 适配
+### Wave 8: 领域 Skill 标准化新增
 
 状态：待规划。
 
@@ -378,7 +378,7 @@ Codex 使用 solution-reviewer 审阅方案
 处理方式：
 
 - 不逐个重写为大 Skill。
-- 先定义一份 `domain-skill-adapter` 合同或指南。
+- 先定义一份 `sdlc-domain-skill-guide` 合同或指南。
 - 领域 Skill 只声明：
   - 适用业务域
   - 输入参数
@@ -453,31 +453,31 @@ roots = [
 
 | 名称 | 当前状态 | 目标状态 | 优先级 | Wave |
 | --- | --- | --- | --- | --- |
-| `docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
-| `requirement-normalizer` | 已实现初版 | 维护并按实际需求入口反馈迭代；作为需求归一化入口 | 高 | 4 |
-| `specification-writer` | 已实现初版 | 维护并按实际规格生成反馈迭代；产物可被 `speckit-specify` 复用 | 高 | 4/5 |
-| `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
-| `implementation-recorder` | 已实现初版 | 维护并按真实实现记录样例迭代 | 中 | 4 |
-| `test-feedback-classifier` | 已实现初版 | 维护并按真实测试反馈样例迭代 | 中 | 4 |
-| `gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
-| `code-review-normalizer` | 已实现初版 | 维护并按真实代码审查样例迭代 | 中 | 7 |
-| `test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
-| `speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
-| `speckit-clarify` | 已实现初版 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
-| `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
-| `speckit-tasks` | 待改造 | 合同明确 | 高 | 5 |
-| `speckit-analyze` | 待改造 | 合同明确 | 中 | 5 |
-| `speckit-pipeline-confirmed-single` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待适配 | 高 | 5 |
-| `speckit-pipeline-confirmed` | 待改造 | 合同明确 | 中 | 5 |
-| `speckit-implement` | 待改造 | 重写或大改 | 高 | 6 |
-| `speckit-sync` | 待改造 | 合同明确 | 高 | 6 |
-| `speckit-code-doc-reconcile` | 待改造 | 合同明确 | 中 | 6 |
-| `speckit-checklist` | 待改造 | 合同明确 | 中 | 5 |
-| `speckit-taskstoissues` | 待改造 | 可选下游 | 低 | 9 |
-| `code-review-excellence` | 待适配 | 代码审核合同明确 | 中 | 7 |
+| `sdlc-docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
+| `sdlc-requirement-normalizer` | 已实现初版 | 维护并按实际需求入口反馈迭代；作为需求归一化入口 | 高 | 4 |
+| `sdlc-specification-writer` | 已实现初版 | 维护并按实际规格生成反馈迭代；产物可被 `sdlc-speckit-specify` 复用 | 高 | 4/5 |
+| `sdlc-solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
+| `sdlc-implementation-recorder` | 已实现初版 | 维护并按真实实现记录样例迭代 | 中 | 4 |
+| `sdlc-test-feedback-classifier` | 已实现初版 | 维护并按真实测试反馈样例迭代 | 中 | 4 |
+| `sdlc-gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
+| `sdlc-code-review-normalizer` | 已实现初版 | 维护并按真实代码审查样例迭代 | 中 | 7 |
+| `sdlc-test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
+| `sdlc-speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待改造 | 高 | 5 |
+| `sdlc-speckit-clarify` | 已实现初版 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待改造 | 高 | 5 |
+| `sdlc-speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
+| `sdlc-speckit-tasks` | 待改造 | 合同明确 | 高 | 5 |
+| `sdlc-speckit-analyze` | 待改造 | 合同明确 | 中 | 5 |
+| `sdlc-speckit-pipeline` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待改造 | 高 | 5 |
+| `sdlc-speckit-pipeline-batch` | 待改造 | 合同明确 | 中 | 5 |
+| `sdlc-speckit-implement` | 待改造 | 重写或大改 | 高 | 6 |
+| `sdlc-speckit-sync` | 待改造 | 合同明确 | 高 | 6 |
+| `sdlc-speckit-code-doc-reconcile` | 待改造 | 合同明确 | 中 | 6 |
+| `sdlc-speckit-checklist` | 待改造 | 合同明确 | 中 | 5 |
+| `sdlc-speckit-taskstoissues` | 待改造 | 可选下游 | 低 | 9 |
+| `sdlc-code-review-excellence` | 待改造 | 代码审核合同明确 | 中 | 7 |
 | `html-doc-style` | legacy | 退到视觉参考 | 低 | 7 |
-| Lark/Feishu Skills | 外部工具 Skill | 输出边界适配 | 中 | 7 |
-| WMS 领域 Skills | 外部领域 Skill | 薄适配 | 中 | 8 |
+| Lark/Feishu Skills | 外部工具 Skill | 输出边界定义 | 中 | 7 |
+| WMS 领域 Skills | 外部领域 Skill | 新增薄封装 `sdlc-*` Skill | 中 | 8 |
 | `work-journal-agent` | 产品仓库 | 远期互斥数据源模式 | 中 | 9 |
 
 ## 近期执行顺序
@@ -485,18 +485,18 @@ roots = [
 1. [x] 完成本路线图，并吸收外部 v1.0 文档暴露的路线图缺口。
 2. [x] 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
 3. [x] 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
-4. [x] 新建全局 `solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
-5. [x] 在 `solution-reviewer` 合同中定义开发路径建议：直接实现 / 唤醒 Speckit / 阻塞返修。
-6. [x] 调整 `speckit-pipeline-confirmed-single` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
-7. [x] 登记 `specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
-8. [x] 调整 `speckit-specify` / `speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
-9. [x] 登记并实现 `requirement-normalizer` 初版。
-10. [x] 登记并实现 `gate-runner` 初版，覆盖通用 Gate、风险接受、superseded artifact 和 Re-Gate 检查。
-11. [x] 登记并实现 `implementation-recorder` 初版，覆盖 diff、验证、未完成项、方案偏离和实现阻塞记录。
-12. [x] 登记并实现 `test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
-13. [x] 登记并实现 `code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。
-14. [x] 登记并实现 `test-feedback-sync` 初版，覆盖测试反馈到 Checklist / Schema / manifest / 后续知识同步建议。
-15. [x] 登记并实现 `speckit-specify` / `speckit-clarify` 适配初版，明确复用前置 DocFlow 产物并阻塞核心澄清回退。
+4. [x] 新建全局 `sdlc-solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
+5. [x] 在 `sdlc-solution-reviewer` 合同中定义开发路径建议：直接实现 / 唤醒 Speckit / 阻塞返修。
+6. [x] 调整 `sdlc-speckit-pipeline` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
+7. [x] 登记 `sdlc-specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
+8. [x] 调整 `sdlc-speckit-specify` / `sdlc-speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
+9. [x] 登记并实现 `sdlc-requirement-normalizer` 初版。
+10. [x] 登记并实现 `sdlc-gate-runner` 初版，覆盖通用 Gate、风险接受、superseded artifact 和 Re-Gate 检查。
+11. [x] 登记并实现 `sdlc-implementation-recorder` 初版，覆盖 diff、验证、未完成项、方案偏离和实现阻塞记录。
+12. [x] 登记并实现 `sdlc-test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
+13. [x] 登记并实现 `sdlc-code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。
+14. [x] 登记并实现 `sdlc-test-feedback-sync` 初版，覆盖测试反馈到 Checklist / Schema / manifest / 后续知识同步建议。
+15. [x] 登记并实现 `sdlc-speckit-specify` / `sdlc-speckit-clarify` 标准 Skill 初版，明确复用前置 DocFlow 产物并阻塞核心澄清回退。
 
 ## 阶段验收标准
 

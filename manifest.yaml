@@ -21,95 +21,95 @@ entrypoints:
   artifact_manifest_template: templates/artifact-manifest-template.md
   registry: registry/skill-registry.md
 skills:
-  code_review_normalizer:
-    path: skills/code-review-normalizer/SKILL.md
-    contract: skill-contracts/known-skills/code-review-normalizer.md
+  sdlc_code_review_normalizer:
+    path: skills/sdlc-code-review-normalizer/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-code-review-normalizer.md
     references:
-      - skills/code-review-normalizer/references/normalization-workflow.md
-      - skills/code-review-normalizer/references/finding-mapping.md
-      - skills/code-review-normalizer/references/blocking-and-scope.md
-      - skills/code-review-normalizer/references/output-artifact.md
-  docflow_writer:
-    path: skills/docflow-writer/SKILL.md
-    contract: skill-contracts/known-skills/docflow-writer.md
+      - skills/sdlc-code-review-normalizer/references/normalization-workflow.md
+      - skills/sdlc-code-review-normalizer/references/finding-mapping.md
+      - skills/sdlc-code-review-normalizer/references/blocking-and-scope.md
+      - skills/sdlc-code-review-normalizer/references/output-artifact.md
+  sdlc_docflow_writer:
+    path: skills/sdlc-docflow-writer/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-docflow-writer.md
     references:
-      - skills/docflow-writer/references/routing-rules.md
-      - skills/docflow-writer/references/output-targets.md
-      - skills/docflow-writer/references/execution-scenarios.md
-      - skills/docflow-writer/references/lark-cli.md
-      - skills/docflow-writer/references/legacy-html-style.md
-  gate_runner:
-    path: skills/gate-runner/SKILL.md
-    contract: skill-contracts/known-skills/gate-runner.md
+      - skills/sdlc-docflow-writer/references/routing-rules.md
+      - skills/sdlc-docflow-writer/references/output-targets.md
+      - skills/sdlc-docflow-writer/references/execution-scenarios.md
+      - skills/sdlc-docflow-writer/references/lark-cli.md
+      - skills/sdlc-docflow-writer/references/legacy-html-style.md
+  sdlc_gate_runner:
+    path: skills/sdlc-gate-runner/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-gate-runner.md
     references:
-      - skills/gate-runner/references/gate-workflow.md
-      - skills/gate-runner/references/gate-matrix.md
-      - skills/gate-runner/references/risk-and-regate.md
-      - skills/gate-runner/references/output-report.md
-  implementation_recorder:
-    path: skills/implementation-recorder/SKILL.md
-    contract: skill-contracts/known-skills/implementation-recorder.md
+      - skills/sdlc-gate-runner/references/gate-workflow.md
+      - skills/sdlc-gate-runner/references/gate-matrix.md
+      - skills/sdlc-gate-runner/references/risk-and-regate.md
+      - skills/sdlc-gate-runner/references/output-report.md
+  sdlc_implementation_recorder:
+    path: skills/sdlc-implementation-recorder/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-implementation-recorder.md
     references:
-      - skills/implementation-recorder/references/recording-workflow.md
-      - skills/implementation-recorder/references/evidence-sources.md
-      - skills/implementation-recorder/references/deviation-and-blocking.md
-      - skills/implementation-recorder/references/output-artifact.md
-  requirement_normalizer:
-    path: skills/requirement-normalizer/SKILL.md
-    contract: skill-contracts/known-skills/requirement-normalizer.md
+      - skills/sdlc-implementation-recorder/references/recording-workflow.md
+      - skills/sdlc-implementation-recorder/references/evidence-sources.md
+      - skills/sdlc-implementation-recorder/references/deviation-and-blocking.md
+      - skills/sdlc-implementation-recorder/references/output-artifact.md
+  sdlc_requirement_normalizer:
+    path: skills/sdlc-requirement-normalizer/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-requirement-normalizer.md
     references:
-      - skills/requirement-normalizer/references/intake-workflow.md
-      - skills/requirement-normalizer/references/source-handling.md
-      - skills/requirement-normalizer/references/conflict-and-blocking.md
-      - skills/requirement-normalizer/references/output-artifact.md
-  solution_reviewer:
-    path: skills/solution-reviewer/SKILL.md
-    contract: skill-contracts/known-skills/solution-reviewer.md
+      - skills/sdlc-requirement-normalizer/references/intake-workflow.md
+      - skills/sdlc-requirement-normalizer/references/source-handling.md
+      - skills/sdlc-requirement-normalizer/references/conflict-and-blocking.md
+      - skills/sdlc-requirement-normalizer/references/output-artifact.md
+  sdlc_solution_reviewer:
+    path: skills/sdlc-solution-reviewer/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-solution-reviewer.md
     references:
-      - skills/solution-reviewer/references/review-workflow.md
-      - skills/solution-reviewer/references/development-path-decision.md
-      - skills/solution-reviewer/references/checklist.md
-      - skills/solution-reviewer/references/output-report.md
-  specification_writer:
-    path: skills/specification-writer/SKILL.md
-    contract: skill-contracts/known-skills/specification-writer.md
+      - skills/sdlc-solution-reviewer/references/review-workflow.md
+      - skills/sdlc-solution-reviewer/references/development-path-decision.md
+      - skills/sdlc-solution-reviewer/references/checklist.md
+      - skills/sdlc-solution-reviewer/references/output-report.md
+  sdlc_specification_writer:
+    path: skills/sdlc-specification-writer/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-specification-writer.md
     references:
-      - skills/specification-writer/references/writing-workflow.md
-      - skills/specification-writer/references/schema-mapping.md
-      - skills/specification-writer/references/blocking-rules.md
-      - skills/specification-writer/references/output-artifact.md
-  speckit_clarify:
-    path: skills/speckit-clarify/SKILL.md
-    contract: skill-contracts/known-skills/speckit-clarify.md
+      - skills/sdlc-specification-writer/references/writing-workflow.md
+      - skills/sdlc-specification-writer/references/schema-mapping.md
+      - skills/sdlc-specification-writer/references/blocking-rules.md
+      - skills/sdlc-specification-writer/references/output-artifact.md
+  sdlc_speckit_clarify:
+    path: skills/sdlc-speckit-clarify/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-clarify.md
     references:
-      - skills/speckit-clarify/references/clarification-scope.md
-      - skills/speckit-clarify/references/coverage-check.md
-      - skills/speckit-clarify/references/regate-routing.md
-      - skills/speckit-clarify/references/output-and-manifest.md
-  speckit_specify:
-    path: skills/speckit-specify/SKILL.md
-    contract: skill-contracts/known-skills/speckit-specify.md
+      - skills/sdlc-speckit-clarify/references/clarification-scope.md
+      - skills/sdlc-speckit-clarify/references/coverage-check.md
+      - skills/sdlc-speckit-clarify/references/regate-routing.md
+      - skills/sdlc-speckit-clarify/references/output-and-manifest.md
+  sdlc_speckit_specify:
+    path: skills/sdlc-speckit-specify/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-specify.md
     references:
-      - skills/speckit-specify/references/docflow-inputs.md
-      - skills/speckit-specify/references/spec-sync-mapping.md
-      - skills/speckit-specify/references/blocking-and-regate.md
-      - skills/speckit-specify/references/output-and-manifest.md
-  test_feedback_classifier:
-    path: skills/test-feedback-classifier/SKILL.md
-    contract: skill-contracts/known-skills/test-feedback-classifier.md
+      - skills/sdlc-speckit-specify/references/docflow-inputs.md
+      - skills/sdlc-speckit-specify/references/spec-sync-mapping.md
+      - skills/sdlc-speckit-specify/references/blocking-and-regate.md
+      - skills/sdlc-speckit-specify/references/output-and-manifest.md
+  sdlc_test_feedback_classifier:
+    path: skills/sdlc-test-feedback-classifier/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-test-feedback-classifier.md
     references:
-      - skills/test-feedback-classifier/references/classification-workflow.md
-      - skills/test-feedback-classifier/references/classification-rules.md
-      - skills/test-feedback-classifier/references/evidence-and-blocking.md
-      - skills/test-feedback-classifier/references/output-artifact.md
-  test_feedback_sync:
-    path: skills/test-feedback-sync/SKILL.md
-    contract: skill-contracts/known-skills/test-feedback-sync.md
+      - skills/sdlc-test-feedback-classifier/references/classification-workflow.md
+      - skills/sdlc-test-feedback-classifier/references/classification-rules.md
+      - skills/sdlc-test-feedback-classifier/references/evidence-and-blocking.md
+      - skills/sdlc-test-feedback-classifier/references/output-artifact.md
+  sdlc_test_feedback_sync:
+    path: skills/sdlc-test-feedback-sync/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-test-feedback-sync.md
     references:
-      - skills/test-feedback-sync/references/sync-workflow.md
-      - skills/test-feedback-sync/references/classification-routing.md
-      - skills/test-feedback-sync/references/sync-boundaries.md
-      - skills/test-feedback-sync/references/output-report.md
+      - skills/sdlc-test-feedback-sync/references/sync-workflow.md
+      - skills/sdlc-test-feedback-sync/references/classification-routing.md
+      - skills/sdlc-test-feedback-sync/references/sync-boundaries.md
+      - skills/sdlc-test-feedback-sync/references/output-report.md
 portability:
   may_be_copied_to:
     - repository_root

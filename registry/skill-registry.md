@@ -4,17 +4,17 @@
 
 ## Registered Skills
 
-### docflow-writer
+### sdlc-docflow-writer
 
 ```yaml
-name: docflow-writer
+name: sdlc-docflow-writer
 category: Producer Skill / Renderer Skill / Publisher Skill
 stage: DocFlow artifact generation
 status: active
 skill_path:
-  - skills/docflow-writer/SKILL.md
+  - skills/sdlc-docflow-writer/SKILL.md
 contract:
-  - skill-contracts/known-skills/docflow-writer.md
+  - skill-contracts/known-skills/sdlc-docflow-writer.md
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -40,22 +40,22 @@ blocking_conditions:
   - Lark/Feishu update mode is unspecified
 ```
 
-### requirement-normalizer
+### sdlc-requirement-normalizer
 
 ```yaml
-name: requirement-normalizer
+name: sdlc-requirement-normalizer
 category: Intake Skill / Producer Skill
 stage: Requirement Intake / Requirement Normalization
 status: active
 skill_path:
-  - skills/requirement-normalizer/SKILL.md
+  - skills/sdlc-requirement-normalizer/SKILL.md
 contract:
-  - skill-contracts/known-skills/requirement-normalizer.md
+  - skill-contracts/known-skills/sdlc-requirement-normalizer.md
 references:
-  - skills/requirement-normalizer/references/intake-workflow.md
-  - skills/requirement-normalizer/references/source-handling.md
-  - skills/requirement-normalizer/references/conflict-and-blocking.md
-  - skills/requirement-normalizer/references/output-artifact.md
+  - skills/sdlc-requirement-normalizer/references/intake-workflow.md
+  - skills/sdlc-requirement-normalizer/references/source-handling.md
+  - skills/sdlc-requirement-normalizer/references/conflict-and-blocking.md
+  - skills/sdlc-requirement-normalizer/references/output-artifact.md
 required_schema:
   - ai-sdlc/artifact-flow.md
 required_storage:
@@ -74,26 +74,26 @@ blocking_conditions:
   - conflicting sources have no priority
   - required attachment or context is missing
 notes:
-  - first stable input for specification-writer
+  - first stable input for sdlc-specification-writer
   - does not write technical specifications
 ```
 
-### solution-reviewer
+### sdlc-solution-reviewer
 
 ```yaml
-name: solution-reviewer
+name: sdlc-solution-reviewer
 category: Auditor Skill
 stage: Specification Audit / Development Path Routing
 status: active
 skill_path:
-  - skills/solution-reviewer/SKILL.md
+  - skills/sdlc-solution-reviewer/SKILL.md
 contract:
-  - skill-contracts/known-skills/solution-reviewer.md
+  - skill-contracts/known-skills/sdlc-solution-reviewer.md
 references:
-  - skills/solution-reviewer/references/review-workflow.md
-  - skills/solution-reviewer/references/development-path-decision.md
-  - skills/solution-reviewer/references/checklist.md
-  - skills/solution-reviewer/references/output-report.md
+  - skills/sdlc-solution-reviewer/references/review-workflow.md
+  - skills/sdlc-solution-reviewer/references/development-path-decision.md
+  - skills/sdlc-solution-reviewer/references/checklist.md
+  - skills/sdlc-solution-reviewer/references/output-report.md
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -107,7 +107,7 @@ required_storage:
 side_effects:
   - write library/{requirement_id}/02-方案审核 review artifact when requested
   - recommend manifest.md updates
-  - optionally call docflow-writer for output routing when explicitly requested
+  - optionally call sdlc-docflow-writer for output routing when explicitly requested
 can_modify_code: false
 can_modify_docs: true
 can_modify_knowledge_base: false
@@ -124,25 +124,25 @@ development_path_recommendations:
   - BLOCKED_NEEDS_REVISION
 notes:
   - global DocFlow gate before implementation path selection
-  - not owned by speckit-pipeline-confirmed-single
+  - not owned by sdlc-speckit-pipeline
 ```
 
-### specification-writer
+### sdlc-specification-writer
 
 ```yaml
-name: specification-writer
+name: sdlc-specification-writer
 category: Producer Skill
 stage: Specification Writing
 status: active
 skill_path:
-  - skills/specification-writer/SKILL.md
+  - skills/sdlc-specification-writer/SKILL.md
 contract:
-  - skill-contracts/known-skills/specification-writer.md
+  - skill-contracts/known-skills/sdlc-specification-writer.md
 references:
-  - skills/specification-writer/references/writing-workflow.md
-  - skills/specification-writer/references/schema-mapping.md
-  - skills/specification-writer/references/blocking-rules.md
-  - skills/specification-writer/references/output-artifact.md
+  - skills/sdlc-specification-writer/references/writing-workflow.md
+  - skills/sdlc-specification-writer/references/schema-mapping.md
+  - skills/sdlc-specification-writer/references/blocking-rules.md
+  - skills/sdlc-specification-writer/references/output-artifact.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:
@@ -155,7 +155,7 @@ required_storage:
 side_effects:
   - write library/{requirement_id}/01-技术方案 technical specification when requested
   - recommend manifest.md updates
-  - optionally call docflow-writer for output routing when explicitly requested
+  - optionally call sdlc-docflow-writer for output routing when explicitly requested
 can_modify_code: false
 can_modify_docs: true
 can_modify_knowledge_base: false
@@ -169,25 +169,25 @@ blocking_conditions:
 notes:
   - general specification producer outside Speckit
   - output can be specification fact for lightweight requirements
-  - output can be reused by speckit-specify when full SDD is required
+  - output can be reused by sdlc-speckit-specify when full SDD is required
 ```
 
-### gate-runner
+### sdlc-gate-runner
 
 ```yaml
-name: gate-runner
+name: sdlc-gate-runner
 category: Auditor Skill
 stage: All Gates
 status: active
 skill_path:
-  - skills/gate-runner/SKILL.md
+  - skills/sdlc-gate-runner/SKILL.md
 contract:
-  - skill-contracts/known-skills/gate-runner.md
+  - skill-contracts/known-skills/sdlc-gate-runner.md
 references:
-  - skills/gate-runner/references/gate-workflow.md
-  - skills/gate-runner/references/gate-matrix.md
-  - skills/gate-runner/references/risk-and-regate.md
-  - skills/gate-runner/references/output-report.md
+  - skills/sdlc-gate-runner/references/gate-workflow.md
+  - skills/sdlc-gate-runner/references/gate-matrix.md
+  - skills/sdlc-gate-runner/references/risk-and-regate.md
+  - skills/sdlc-gate-runner/references/output-report.md
 required_schema:
   - templates/gate-result-template.md
 required_storage:
@@ -208,25 +208,25 @@ blocking_conditions:
   - PASS_WITH_RISK lacks risk acceptance
 notes:
   - generic gate checker
-  - does not replace specialized reviewers such as solution-reviewer
+  - does not replace specialized reviewers such as sdlc-solution-reviewer
 ```
 
-### implementation-recorder
+### sdlc-implementation-recorder
 
 ```yaml
-name: implementation-recorder
+name: sdlc-implementation-recorder
 category: Producer Skill
 stage: Implementation Recording
 status: active
 skill_path:
-  - skills/implementation-recorder/SKILL.md
+  - skills/sdlc-implementation-recorder/SKILL.md
 contract:
-  - skill-contracts/known-skills/implementation-recorder.md
+  - skill-contracts/known-skills/sdlc-implementation-recorder.md
 references:
-  - skills/implementation-recorder/references/recording-workflow.md
-  - skills/implementation-recorder/references/evidence-sources.md
-  - skills/implementation-recorder/references/deviation-and-blocking.md
-  - skills/implementation-recorder/references/output-artifact.md
+  - skills/sdlc-implementation-recorder/references/recording-workflow.md
+  - skills/sdlc-implementation-recorder/references/evidence-sources.md
+  - skills/sdlc-implementation-recorder/references/deviation-and-blocking.md
+  - skills/sdlc-implementation-recorder/references/output-artifact.md
 required_schema:
   - ai-sdlc/artifact-flow.md
 required_checklist:
@@ -249,25 +249,25 @@ blocking_conditions:
 notes:
   - factual handoff from implementation to code review
   - does not modify production code
-  - does not replace code-review-normalizer
+  - does not replace sdlc-code-review-normalizer
 ```
 
-### test-feedback-classifier
+### sdlc-test-feedback-classifier
 
 ```yaml
-name: test-feedback-classifier
+name: sdlc-test-feedback-classifier
 category: Reviewer Skill / Producer Skill
 stage: Test Feedback Classification
 status: active
 skill_path:
-  - skills/test-feedback-classifier/SKILL.md
+  - skills/sdlc-test-feedback-classifier/SKILL.md
 contract:
-  - skill-contracts/known-skills/test-feedback-classifier.md
+  - skill-contracts/known-skills/sdlc-test-feedback-classifier.md
 references:
-  - skills/test-feedback-classifier/references/classification-workflow.md
-  - skills/test-feedback-classifier/references/classification-rules.md
-  - skills/test-feedback-classifier/references/evidence-and-blocking.md
-  - skills/test-feedback-classifier/references/output-artifact.md
+  - skills/sdlc-test-feedback-classifier/references/classification-workflow.md
+  - skills/sdlc-test-feedback-classifier/references/classification-rules.md
+  - skills/sdlc-test-feedback-classifier/references/evidence-and-blocking.md
+  - skills/sdlc-test-feedback-classifier/references/output-artifact.md
 required_schema:
   - ess/test-feedback-schema.md
 required_storage:
@@ -288,25 +288,25 @@ blocking_conditions:
 notes:
   - classifies feedback before fixes or sync
   - does not modify code
-  - test-feedback-sync handles later checklist/schema/knowledge sync
+  - sdlc-test-feedback-sync handles later checklist/schema/knowledge sync
 ```
 
-### code-review-normalizer
+### sdlc-code-review-normalizer
 
 ```yaml
-name: code-review-normalizer
+name: sdlc-code-review-normalizer
 category: Reviewer Skill / Producer Skill
 stage: Code Review Normalization
 status: active
 skill_path:
-  - skills/code-review-normalizer/SKILL.md
+  - skills/sdlc-code-review-normalizer/SKILL.md
 contract:
-  - skill-contracts/known-skills/code-review-normalizer.md
+  - skill-contracts/known-skills/sdlc-code-review-normalizer.md
 references:
-  - skills/code-review-normalizer/references/normalization-workflow.md
-  - skills/code-review-normalizer/references/finding-mapping.md
-  - skills/code-review-normalizer/references/blocking-and-scope.md
-  - skills/code-review-normalizer/references/output-artifact.md
+  - skills/sdlc-code-review-normalizer/references/normalization-workflow.md
+  - skills/sdlc-code-review-normalizer/references/finding-mapping.md
+  - skills/sdlc-code-review-normalizer/references/blocking-and-scope.md
+  - skills/sdlc-code-review-normalizer/references/output-artifact.md
 required_schema:
   - ess/code-review-schema.md
 required_checklist:
@@ -331,22 +331,22 @@ notes:
   - does not fix code
 ```
 
-### test-feedback-sync
+### sdlc-test-feedback-sync
 
 ```yaml
-name: test-feedback-sync
+name: sdlc-test-feedback-sync
 category: Sync Skill / Producer Skill
 stage: Test Feedback Sync / Knowledge Sync
 status: active
 skill_path:
-  - skills/test-feedback-sync/SKILL.md
+  - skills/sdlc-test-feedback-sync/SKILL.md
 contract:
-  - skill-contracts/known-skills/test-feedback-sync.md
+  - skill-contracts/known-skills/sdlc-test-feedback-sync.md
 references:
-  - skills/test-feedback-sync/references/sync-workflow.md
-  - skills/test-feedback-sync/references/classification-routing.md
-  - skills/test-feedback-sync/references/sync-boundaries.md
-  - skills/test-feedback-sync/references/output-report.md
+  - skills/sdlc-test-feedback-sync/references/sync-workflow.md
+  - skills/sdlc-test-feedback-sync/references/classification-routing.md
+  - skills/sdlc-test-feedback-sync/references/sync-boundaries.md
+  - skills/sdlc-test-feedback-sync/references/output-report.md
 required_schema:
   - ess/test-feedback-schema.md
 required_storage:
@@ -364,7 +364,7 @@ blocking_conditions:
   - specification missing is detected but no re-gate path is recorded
   - requirement change is detected but no change-control decision exists
 notes:
-  - consumes test-feedback-classifier output
+  - consumes sdlc-test-feedback-classifier output
   - handles checklist, schema, manifest, and later sync recommendations
   - routes specification missing and requirement change back to upstream gates
 ```
@@ -393,8 +393,8 @@ blocking_conditions:
   - rendering would remove semantic content
   - target requirement directory cannot be determined
 notes:
-  - superseded by docflow-writer for DocFlow artifact routing
-  - may remain as a legacy HTML visual style reference
+  - DocFlow artifact routing uses sdlc-docflow-writer
+  - this entry remains only as a legacy HTML visual style reference
 ```
 
 ### karpathy-guidelines
@@ -417,17 +417,19 @@ blocking_conditions:
   - multiple reasonable interpretations without user confirmation
 ```
 
-### speckit-pipeline-confirmed-single
+### sdlc-speckit-pipeline
 
 ```yaml
-name: speckit-pipeline-confirmed-single
+name: sdlc-speckit-pipeline
 category: Workflow Skill
 stage: Full lifecycle
 status: proposed
-skill_reference:
-  - speckit-pipeline-confirmed-single
 contract:
-  - skill-contracts/known-skills/speckit-pipeline-confirmed-single.md
+  - skill-contracts/known-skills/sdlc-speckit-pipeline.md
+planned_skill_name:
+  - sdlc-speckit-pipeline
+planned_skill_path:
+  - skills/sdlc-speckit-pipeline/SKILL.md
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -453,26 +455,26 @@ blocking_conditions:
   - user refuses phase transition
   - implementation requires undefined business behavior
 notes:
-  - optional full SDD path after solution-reviewer
+  - optional full SDD path after sdlc-solution-reviewer
   - not the default path for every requirement
 ```
 
-### speckit-specify
+### sdlc-speckit-specify
 
 ```yaml
-name: speckit-specify
+name: sdlc-speckit-specify
 category: Producer Skill
 stage: Speckit Specify / Spec Sync
 status: active
 skill_path:
-  - skills/speckit-specify/SKILL.md
+  - skills/sdlc-speckit-specify/SKILL.md
 contract:
-  - skill-contracts/known-skills/speckit-specify.md
+  - skill-contracts/known-skills/sdlc-speckit-specify.md
 references:
-  - skills/speckit-specify/references/docflow-inputs.md
-  - skills/speckit-specify/references/spec-sync-mapping.md
-  - skills/speckit-specify/references/blocking-and-regate.md
-  - skills/speckit-specify/references/output-and-manifest.md
+  - skills/sdlc-speckit-specify/references/docflow-inputs.md
+  - skills/sdlc-speckit-specify/references/spec-sync-mapping.md
+  - skills/sdlc-speckit-specify/references/blocking-and-regate.md
+  - skills/sdlc-speckit-specify/references/output-and-manifest.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:
@@ -482,7 +484,7 @@ required_storage:
   - ai-sdlc/change-control.md
 side_effects:
   - create or update specs/**
-  - optionally create feature branch when executing the underlying Speckit script
+  - optionally create feature branch when executing the SDD workflow script
   - recommend manifest.md Activity Log updates
 can_modify_code: false
 can_modify_docs: true
@@ -494,27 +496,27 @@ blocking_conditions:
   - technical specification has unresolved core ambiguity
   - sync to specs/spec.md would require reinterpreting business scope
 notes:
-  - consumes specification-writer output
+  - consumes sdlc-specification-writer output
   - syncs reviewed DocFlow specification into specs/spec.md
   - does not reinterpret approved requirements
 ```
 
-### speckit-clarify
+### sdlc-speckit-clarify
 
 ```yaml
-name: speckit-clarify
+name: sdlc-speckit-clarify
 category: Auditor Skill / Producer Skill
 stage: Residual Clarification Validation
 status: active
 skill_path:
-  - skills/speckit-clarify/SKILL.md
+  - skills/sdlc-speckit-clarify/SKILL.md
 contract:
-  - skill-contracts/known-skills/speckit-clarify.md
+  - skill-contracts/known-skills/sdlc-speckit-clarify.md
 references:
-  - skills/speckit-clarify/references/clarification-scope.md
-  - skills/speckit-clarify/references/coverage-check.md
-  - skills/speckit-clarify/references/regate-routing.md
-  - skills/speckit-clarify/references/output-and-manifest.md
+  - skills/sdlc-speckit-clarify/references/clarification-scope.md
+  - skills/sdlc-speckit-clarify/references/coverage-check.md
+  - skills/sdlc-speckit-clarify/references/regate-routing.md
+  - skills/sdlc-speckit-clarify/references/output-and-manifest.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:
@@ -542,9 +544,9 @@ notes:
 
 ## Pending Detailed Contracts
 
-- speckit-plan
-- speckit-tasks
-- speckit-analyze
-- speckit-implement
-- speckit-sync
-- speckit-code-doc-reconcile
+- sdlc-speckit-plan
+- sdlc-speckit-tasks
+- sdlc-speckit-analyze
+- sdlc-speckit-implement
+- sdlc-speckit-sync
+- sdlc-speckit-code-doc-reconcile
