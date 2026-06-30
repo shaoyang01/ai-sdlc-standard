@@ -1,0 +1,103 @@
+# Business Domain Bootstrap Profile
+#
+# Store as:
+#   .specify/business-domain-bootstrap.yaml
+#
+# Purpose:
+#   Describe how a target repository should regenerate .specify/business_domain/**
+#   after governance migration.
+#
+# Important:
+#   business_domain content is not migrated from another repository.
+#   It is generated from the target repository's code, existing local docs,
+#   and user-approved business boundaries.
+
+schema_version: 0.1.0
+
+generation_scope:
+  migration_includes_business_domain_content: false
+  generate_after_migration: true
+  output_root: ".specify/business_domain"
+  required_root_documents:
+    - "00BusinessLandscape.md"
+    - "00UbiquitousLanguage.md"
+    - "01DomainCatalog.md"
+
+inputs:
+  code:
+    source_roots:
+      - "<source-root-or-module-glob>"
+    include_patterns:
+      - "<code-path-pattern>"
+    exclude_patterns:
+      - "<test-or-generated-path-pattern>"
+  existing_docs:
+    include:
+      - "<optional-existing-project-doc-path>"
+    exclude:
+      - ".specify/memory/**"
+      - ".specify/workflow/**"
+  user_supplied_context:
+    required_when_business_domain_cannot_be_inferred: true
+    examples:
+      - "business domain names"
+      - "main lifecycle or capability split"
+      - "domain owners"
+
+domain_discovery:
+  strategy: "<business-lifecycle|business-capability|bounded-context|user-provided>"
+  must_not_use_package_names_only: true
+  require_human_confirmation_before_creating_new_l1_l2: true
+  root_document_expectations:
+    business_landscape:
+      includes:
+        - "repository business purpose"
+        - "fact-source layering"
+        - "routing principle"
+        - "main business domains"
+        - "code anchors"
+    ubiquitous_language:
+      includes:
+        - "domain terms"
+        - "status vocabulary"
+        - "entity names"
+        - "cross-team wording rules"
+    domain_catalog:
+      includes:
+        - "L1/L2 domain index"
+        - "main document paths"
+        - "planned L4 count or maturity"
+        - "routing notes"
+
+skeleton_rules:
+  structure: "physical_l2_logical_l4"
+  l1_l2_directory_naming: "{two_digit_number}{EnglishName}"
+  l2_main_document_naming: "{L2Number}{EnglishName}({ChineseName}).md"
+  l4_document_naming: "{L1Number}{L2Number}{L4Number}{EnglishName}({ChineseName}).md"
+  entry_coverage_document_suffix: "EntryCoverage"
+  create_l4_only_when:
+    - "observed from code and confirmed by routing"
+    - "approved by user or domain owner"
+
+outputs:
+  required:
+    - ".specify/business_domain/00BusinessLandscape.md"
+    - ".specify/business_domain/00UbiquitousLanguage.md"
+    - ".specify/business_domain/01DomainCatalog.md"
+  optional:
+    - "L1/L2 directories"
+    - "L2 main documents"
+    - "L4 skeleton documents"
+    - "EntryCoverage documents"
+
+validation:
+  must_check:
+    - "root documents exist"
+    - "domain catalog links point to existing documents"
+    - "new L1/L2/L4 names follow naming rules"
+    - "business domains are based on code evidence or user-approved boundaries"
+    - "no business_domain content was copied from another repository"
+  stop_when:
+    - "domain split cannot be inferred"
+    - "code evidence conflicts with user-provided business boundary"
+    - "generation would require guessing business meaning"

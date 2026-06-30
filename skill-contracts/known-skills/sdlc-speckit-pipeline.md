@@ -107,9 +107,11 @@ blocking_conditions:
 建议输入：
 
 - `specs/**`
-- `.specify/business_domain/00BusinessLandscape.md`
-- `.specify/business_domain/00UbiquitousLanguage.md`
-- 相关 L1 / L2 / L4 业务知识文档
+- `.specify/project-governance-profile.yaml`
+- `.specify/entry-coverage-profile.yaml`
+- `.specify/business-domain-bootstrap.yaml`
+- 目标仓库已生成的 `.specify/business_domain/**`
+- 相关 L1 / L2 / L4 业务知识文档，仅当它们已经由目标仓库 bootstrap 生成
 
 缺失输入处理：
 

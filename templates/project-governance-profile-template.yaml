@@ -1,0 +1,118 @@
+# Project Governance Profile
+#
+# Store as:
+#   .specify/project-governance-profile.yaml
+#
+# Purpose:
+#   Describe repository-specific facts required by AI SDLC Standard.
+#   Do not copy shared standard-package rules into this file.
+
+schema_version: 0.1.0
+
+standard_package:
+  name: ai-sdlc-standard
+  version: 0.1.0
+  source:
+    type: local_or_git
+    location: "<path-or-git-url-to-ai-sdlc-standard>"
+  shared_rules:
+    - ai-sdlc/lifecycle.md
+    - ai-sdlc/artifact-storage.md
+    - ai-sdlc/change-control.md
+    - ai-sdlc/complexity-routing.md
+    - ai-sdlc/governance-portability.md
+
+project:
+  name: "<project-name>"
+  repository: "<git-url-or-repo-name>"
+  primary_language: "<java|typescript|python|go|mixed|other>"
+  application_type: "<backend|frontend|fullstack|batch|library|mixed|other>"
+  owners:
+    business: []
+    engineering: []
+    qa: []
+
+paths:
+  specify_root: ".specify"
+  specs_root: "specs"
+  library_root: "library"
+  business_domain_root: ".specify/business_domain"
+  reports_root: ".specify/reports"
+  source_roots:
+    - "<module-or-source-root>"
+  module_globs:
+    - "<module-glob>"
+
+local_files:
+  required:
+    - ".specify/project-governance-profile.yaml"
+    - ".specify/entry-coverage-profile.yaml"
+    - ".specify/business-domain-bootstrap.yaml"
+  optional:
+    - ".specify/coding_guide/ProjectCodingGuide.md"
+    - ".specify/project-overrides.md"
+  legacy:
+    memory_files_authoritative: false
+    workflow_files_authoritative: false
+    notes: "Legacy .specify/memory or .specify/workflow files are project overrides only when explicitly listed below."
+
+project_overrides:
+  enabled: false
+  files: []
+  rules: []
+
+business_domain:
+  migration_scope: "excluded"
+  generation_timing: "post_migration_bootstrap"
+  structure: "physical_l2_logical_l4"
+  root_docs:
+    business_landscape: ".specify/business_domain/00BusinessLandscape.md"
+    ubiquitous_language: ".specify/business_domain/00UbiquitousLanguage.md"
+    domain_catalog: ".specify/business_domain/01DomainCatalog.md"
+  routing_principle: "<business-lifecycle|business-capability|bounded-context|other>"
+  l1_l2_naming: "{two_digit_number}{EnglishName}"
+  l4_naming: "{L1}{L2}{L4}{EnglishName}({ChineseName}).md"
+  entry_coverage_doc_suffix: "EntryCoverage"
+
+knowledge_routing:
+  existing_change:
+    read:
+      - "00BusinessLandscape.md"
+      - "00UbiquitousLanguage.md"
+      - "01DomainCatalog.md"
+      - "matched L2 main document"
+      - "matched L4 documents"
+  new_flow:
+    required_before_write:
+      - "choose L1/L2"
+      - "reserve L4 id"
+      - "create L4 skeleton after user or owner approval"
+
+sync_policy:
+  sync_required_for_complexity:
+    - COMPLEX
+  sync_targets:
+    - ".specify/business_domain/**"
+  sync_requires_entry_coverage: true
+  allow_shared_rule_updates_from_project: false
+
+generated_documents:
+  migration_must_generate:
+    - ".specify/project-governance-profile.yaml"
+    - ".specify/entry-coverage-profile.yaml"
+    - ".specify/business-domain-bootstrap.yaml"
+  post_migration_bootstrap_generates:
+    - ".specify/business_domain/00BusinessLandscape.md"
+    - ".specify/business_domain/00UbiquitousLanguage.md"
+    - ".specify/business_domain/01DomainCatalog.md"
+  generate_only_if_needed:
+    - ".specify/coding_guide/ProjectCodingGuide.md"
+    - ".specify/project-overrides.md"
+
+migration_status:
+  state: "draft"
+  migrated_from_legacy_specify: false
+  legacy_files_reviewed: []
+  shared_rule_duplicates_removed: []
+  project_facts_preserved: []
+  unresolved_questions: []

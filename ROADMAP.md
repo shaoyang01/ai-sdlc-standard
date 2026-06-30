@@ -106,6 +106,7 @@
 | Code Review 归一化 | 已实现 `sdlc-code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
 | 测试反馈反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
 | 知识同步 | 已实现 `sdlc-speckit-sync` 初版。 | 后续通过真实实现记录、代码审核和测试反馈样例迭代可同步事实、目标路径和冲突处理。 |
+| `.specify` 治理骨架迁移 | 已补基础标准 | 共享治理规则留在标准包；目标仓库只生成 project profile、entry coverage profile、business-domain bootstrap 配置，`business_domain/**` 迁移后由脚本按代码库重新生成。 |
 | 日报数据源 | 已规划 work-journal 远期互斥模式。 | 等 manifest 活动模型稳定后，再定义产品侧实现契约。 |
 
 ## 路线图阶段
@@ -506,6 +507,7 @@ roots = [
 25. [x] 补充 `skill-contracts/skill-category-guide.md`，明确 Skill 分类、复合分类、默认副作用和合同检查清单。
 26. [x] 新增 `scripts/validate-skill-contracts.rb`，校验 `sdlc-*` Skill 合同分类、副作用权限、阻塞条件和 manifest 覆盖。
 27. [x] 新增 `ai-sdlc/complexity-routing.md`，明确复杂度分级、开发路径路由、完整 SDD override 和 `sdlc-solution-reviewer` 接入规则。
+28. [x] 新增 `ai-sdlc/governance-portability.md` 与项目 profile 模板，明确 `.specify` 只迁移治理骨架，`business_domain/**` 由目标仓库 bootstrap 重新生成。
 
 ## 阶段验收标准
 

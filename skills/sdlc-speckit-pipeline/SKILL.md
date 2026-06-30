@@ -36,6 +36,7 @@ Use these repository standard files as authoritative rules:
 - `../../ai-sdlc/artifact-flow.md`
 - `../../ai-sdlc/artifact-storage.md`
 - `../../ai-sdlc/change-control.md`
+- `../../ai-sdlc/governance-portability.md`
 - `../../templates/artifact-manifest-template.md`
 
 ## Reference Files
@@ -62,6 +63,9 @@ Identify:
 - Solution review result and Development Path Decision
 - User confirmation for full SDD, if needed
 - Existing `specs/**`, if available
+- `.specify/project-governance-profile.yaml`
+- `.specify/entry-coverage-profile.yaml`
+- `.specify/business-domain-bootstrap.yaml`, when business_domain is missing
 - `manifest.md`, if available
 
 Stop when the review result is failed, blocked, missing, or recommends direct implementation without explicit full SDD confirmation.
@@ -75,11 +79,12 @@ Read:
 
 Verify:
 
-- `.specify` baseline or equivalent governance entry exists when the target project uses Speckit.
+- `.specify/project-governance-profile.yaml` exists when the target project uses Speckit.
+- Shared governance rules are read from this standard package, not copied from target `.specify/memory` or `.specify/workflow`.
 - Domain route is known: existing-change, new-flow, integration-change, data-change, or unknown.
-- Required business knowledge inputs are present or recorded as gaps.
+- Required business knowledge inputs are present, or `.specify/business-domain-bootstrap.yaml` exists so they can be generated before knowledge routing.
 
-Stop when governance baseline or domain route cannot be determined.
+Stop when project profile, bootstrap configuration, or domain route cannot be determined.
 
 ### 3. Execute Speckit Authoring Gates
 

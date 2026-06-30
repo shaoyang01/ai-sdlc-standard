@@ -25,6 +25,9 @@ Collect:
 - `library/{requirement_id}/02-方案审核/*`.
 - Development Path Decision.
 - Gate result: `PASS` or accepted `PASS_WITH_RISK`.
+- `.specify/project-governance-profile.yaml` when target repository uses Speckit governance.
+- `.specify/entry-coverage-profile.yaml` when entry coverage or sync is required.
+- `.specify/business-domain-bootstrap.yaml` when `.specify/business_domain/**` has not been generated yet.
 - `library/{requirement_id}/manifest.md`, if available.
 
 ## Recommended Inputs
@@ -34,8 +37,10 @@ Use when available:
 - Existing `specs/{feature}/spec.md`, `plan.md`, `tasks.md`.
 - Re-Gate Records.
 - Superseded Artifacts.
-- Existing `.specify/business_domain/**` documents.
+- Existing `.specify/business_domain/**` documents generated in the target repository.
 - Previous code review, test feedback, or implementation records.
+
+Do not require target repositories to store shared `.specify/memory/**` or `.specify/workflow/**` copies. Shared governance rules come from the standard package.
 
 ## Path Decision Handling
 

@@ -1,0 +1,92 @@
+# Entry Coverage Profile
+#
+# Store as:
+#   .specify/entry-coverage-profile.yaml
+#
+# Purpose:
+#   Describe repository-specific entry discovery and evidence-chain rules.
+#   Shared audit behavior belongs to the standard package; these values belong
+#   to the target repository.
+
+schema_version: 0.1.0
+
+scope:
+  source_roots:
+    - "<module-or-source-root>"
+  module_globs:
+    - "<module-glob>"
+  include_file_patterns:
+    - "<include-pattern>"
+  exclude_file_patterns:
+    - "<exclude-pattern>"
+  document_scope: ".specify/business_domain"
+  report_dir: ".specify/reports/entry_coverage"
+
+entry_types:
+  - name: "<entry-type-name>"
+    description: "<what this entry type means in this repository>"
+    path_patterns:
+      - "<regex-or-glob>"
+    class_name_patterns:
+      - "<regex-or-suffix-rule>"
+    exclude_when:
+      - "<optional-exclusion-rule>"
+    evidence_mode: "business_chain"
+
+layers:
+  entry:
+    class_name_patterns:
+      - "<EntryClassPattern>"
+  service:
+    path_patterns:
+      - "<service-path-pattern>"
+    class_name_patterns:
+      - "<ServiceClassPattern>"
+  manager:
+    path_patterns:
+      - "<manager-path-pattern>"
+    class_name_patterns:
+      - "<ManagerClassPattern>"
+  persistence:
+    path_patterns:
+      - "<mapper-or-dao-path-pattern>"
+    class_name_patterns:
+      - "<MapperOrDaoClassPattern>"
+
+evidence_chain:
+  business_chain:
+    required_layers:
+      - entry
+      - service
+      - manager
+      - persistence
+    allow_missing_layers_with_reason: false
+  technical_bridge:
+    allowed: true
+    markers:
+      - "<technical-bridge-marker>"
+    required_reason: true
+
+domain_matching:
+  l4_document_pattern: ".specify/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md"
+  entry_match_rule: "entry class name appears in an L4 evidence table"
+  allow_entry_in_multiple_l2_domains: false
+
+strict_outputs:
+  entry_inventory: "entry_inventory.tsv"
+  service_inventory: "service_inventory.tsv"
+  entry_chain_evidence: "entry_chain_evidence.md"
+  unarchived_entries: "unarchived_entries.md"
+  unarchived_services: "unarchived_services.md"
+  cross_domain_conflicts: "cross_domain_conflicts.md"
+  summary_report: "entry_coverage_report.md"
+
+strict_blocking_conditions:
+  - "entry has no L4 match"
+  - "entry has no required evidence chain and is not an accepted technical bridge"
+  - "core service is not hit by an archived entry"
+  - "entry is mapped to multiple L2 domains without explicit conflict handling"
+
+notes:
+  - "Do not put shared governance rules in this profile."
+  - "Do not copy values from another repository unless they match this repository's code structure."
