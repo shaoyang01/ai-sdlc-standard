@@ -94,6 +94,14 @@ skills:
       - skills/sdlc-speckit-plan/references/planning-scope.md
       - skills/sdlc-speckit-plan/references/plan-gate-check.md
       - skills/sdlc-speckit-plan/references/output-and-manifest.md
+  sdlc_speckit_tasks:
+    path: skills/sdlc-speckit-tasks/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-tasks.md
+    references:
+      - skills/sdlc-speckit-tasks/references/task-inputs.md
+      - skills/sdlc-speckit-tasks/references/task-scope.md
+      - skills/sdlc-speckit-tasks/references/task-gate-check.md
+      - skills/sdlc-speckit-tasks/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md

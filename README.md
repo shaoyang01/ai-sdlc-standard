@@ -57,6 +57,7 @@ ai-sdlc-standard/
 │       ├── sdlc-speckit-clarify.md
 │       ├── sdlc-speckit-plan.md
 │       ├── sdlc-speckit-specify.md
+│       ├── sdlc-speckit-tasks.md
 │       ├── sdlc-speckit-pipeline.md
 │       ├── sdlc-test-feedback-classifier.md
 │       └── sdlc-test-feedback-sync.md
@@ -89,6 +90,9 @@ ai-sdlc-standard/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-specify/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── sdlc-speckit-tasks/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-test-feedback-classifier/

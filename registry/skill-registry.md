@@ -583,9 +583,50 @@ notes:
   - does not generate tasks or modify code
 ```
 
+### sdlc-speckit-tasks
+
+```yaml
+name: sdlc-speckit-tasks
+category: Producer Skill / Auditor Skill
+stage: Speckit Tasks / Task Gate
+status: active
+skill_path:
+  - skills/sdlc-speckit-tasks/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-tasks.md
+references:
+  - skills/sdlc-speckit-tasks/references/task-inputs.md
+  - skills/sdlc-speckit-tasks/references/task-scope.md
+  - skills/sdlc-speckit-tasks/references/task-gate-check.md
+  - skills/sdlc-speckit-tasks/references/output-and-manifest.md
+required_schema:
+  - ess/specification-schema.md
+required_checklist:
+  - checklists/task-checklist.md
+  - checklists/plan-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - create or update specs/{feature}/tasks.md
+  - recommend manifest.md Activity Log or Re-Gate updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - sdlc-speckit-plan has unresolved blocking item
+  - tasks would change approved scope, plan, or behavior
+  - tasks require undefined business or technical behavior
+  - tasks cannot support acceptance criteria or verification
+notes:
+  - consumes sdlc-speckit-plan output
+  - creates or validates specs tasks.md only
+  - does not modify plan or production code
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-tasks
 - sdlc-speckit-analyze
 - sdlc-speckit-implement
 - sdlc-speckit-sync
