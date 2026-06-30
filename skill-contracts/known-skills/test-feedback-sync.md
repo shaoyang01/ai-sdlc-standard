@@ -6,17 +6,16 @@
 name: test-feedback-sync
 version: 0.1.0
 category: Sync Skill / Producer Skill
-stage: Test Feedback Classification / Knowledge Sync
+stage: Test Feedback Sync / Knowledge Sync
 standard_package: ai-sdlc-standard
 status: proposed
 input_artifacts:
-  - raw test feedback
+  - library/{requirement_id}/05-测试验收/*
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*
   - optional library/{requirement_id}/03-实现记录/*
   - optional library/{requirement_id}/04-代码审核/*
 output_artifacts:
-  - library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
   - checklist or schema update recommendation
   - manifest.md change or re-gate update recommendation
 required_schema:
@@ -25,41 +24,36 @@ required_storage:
   - ai-sdlc/artifact-storage.md
   - ai-sdlc/change-control.md
 side_effects:
-  - write structured test feedback artifact when explicitly requested
   - recommend checklist, schema, or manifest updates
 can_modify_code: false
 can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
-  - raw feedback is missing
-  - failure cannot be classified
+  - classified test feedback artifact is missing
+  - feedback classification is unresolved
   - specification missing is detected but no re-gate path is recorded
   - requirement change is detected but no change-control decision exists
 ```
 
 ## Responsibilities
 
-`test-feedback-sync` 将测试、验收、线上验证反馈结构化，并判断是否需要回写方案、Checklist、Schema 或变更流程。
+`test-feedback-sync` 消费已结构化的测试验收产物，判断是否需要回写 Checklist、Schema、manifest 或后续知识同步。
 
 它负责：
 
-- 将测试反馈转换为 `ess/test-feedback-schema.md`。
-- 对失败项分类：
-  - Implementation Bug
-  - Specification Missing
-  - Review Missing
-  - Requirement Change
-  - Test Case Issue
+- 读取 `test-feedback-classifier` 生成的 `05-测试验收` 产物。
 - 判断是否需要回到 `01-技术方案` / `02-方案审核` Re-Gate。
 - 建议更新 Specification Checklist、Code Review Checklist、Test Feedback Schema 或 manifest。
-- 生成 `05-测试验收` 产物。
+- 为后续知识同步提供稳定的更新建议。
 
 它不负责：
 
 - 修改业务代码。
 - 直接修复测试失败。
 - 直接修改长期业务知识库。
+- 重新分类原始测试反馈。
+- 覆盖 `05-测试验收` 分类结果。
 - 把测试反馈中的新诉求直接塞回当前需求。
 - 跳过 change-control 处理需求变化。
 
@@ -67,7 +61,7 @@ blocking_conditions:
 
 必需输入：
 
-- 原始测试反馈、验收反馈或线上验证反馈。
+- `library/{requirement_id}/05-测试验收/*`
 - `library/{requirement_id}/01-技术方案/*`
 - `library/{requirement_id}/02-方案审核/*`
 
@@ -75,35 +69,21 @@ blocking_conditions:
 
 - `library/{requirement_id}/03-实现记录/*`
 - `library/{requirement_id}/04-代码审核/*`
-- 复现步骤、截图、日志、环境、数据样本。
 - `ai-sdlc/change-control.md`
 
 缺失输入处理：
 
-- 缺少原始反馈时停止。
+- 缺少已分类测试验收产物时停止。
 - 缺少方案或方案审核时，可以记录反馈，但必须标记 Missing Artifacts。
-- 无法判断失败分类时，输出 `FAIL` 并要求补充复现、日志或业务口径。
+- 反馈分类未决时，返回 `test-feedback-classifier` 补充分类。
 
 ## Output Contract
 
 默认输出：
 
-```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
-```
-
-输出必须符合 `ess/test-feedback-schema.md`，包含：
-
-- Conclusion
-- Test Scope
-- Passed Cases
-- Failed Cases
-- Failure Classification
-- Specification Updates Required
-- Checklist Updates Required
-- Code Fixes Required
-- Review Gaps
-- Next Step
+- Checklist / Schema 更新建议。
+- manifest Change History / Re-Gate Records / Blocking Issues 更新建议。
+- 后续 Sync 目标和残余风险。
 
 分类处理规则：
 
@@ -128,7 +108,6 @@ library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
 
 允许：
 
-- 写入 `05-测试验收` 结构化反馈。
 - 输出 Checklist / Schema / manifest 更新建议。
 - 建议 Re-Gate。
 
@@ -141,6 +120,7 @@ library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
 
 - 修改业务代码。
 - 直接修改技术方案或代码审核报告。
+- 覆盖 `05-测试验收` 分类结果。
 - 未经确认修改长期知识库。
 - 将 Requirement Change 当作 Implementation Bug 直接修。
 
@@ -148,18 +128,20 @@ library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
 
 必须停止或阻塞的情况：
 
-- 反馈缺少复现或现象，无法分类。
+- 已分类反馈证据不足，无法判断是否需要 Sync 或 Re-Gate。
+- 已分类测试验收产物缺失。
 - 核心路径失败。
 - 原流程被破坏。
 - Specification Missing 但未记录 Re-Gate。
 - Requirement Change 但未进入 change-control。
-- 测试结果无法复现且缺少环境/数据说明。
+- 测试结果无法复现且 `05-测试验收` 缺少环境/数据说明。
 
 ## Gate Requirements
 
 前置 Gate：
 
 - 已有可验证实现或测试反馈。
+- `test-feedback-classifier` 已产出 `05-测试验收`，或用户提供等价结构化分类。
 - 方案和方案审核应存在。
 
 后置 Gate：

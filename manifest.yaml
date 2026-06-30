@@ -70,6 +70,14 @@ skills:
       - skills/specification-writer/references/schema-mapping.md
       - skills/specification-writer/references/blocking-rules.md
       - skills/specification-writer/references/output-artifact.md
+  test_feedback_classifier:
+    path: skills/test-feedback-classifier/SKILL.md
+    contract: skill-contracts/known-skills/test-feedback-classifier.md
+    references:
+      - skills/test-feedback-classifier/references/classification-workflow.md
+      - skills/test-feedback-classifier/references/classification-rules.md
+      - skills/test-feedback-classifier/references/evidence-and-blocking.md
+      - skills/test-feedback-classifier/references/output-artifact.md
 portability:
   may_be_copied_to:
     - repository_root

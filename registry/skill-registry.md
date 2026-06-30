@@ -252,6 +252,45 @@ notes:
   - does not replace code-review-normalizer
 ```
 
+### test-feedback-classifier
+
+```yaml
+name: test-feedback-classifier
+category: Reviewer Skill / Producer Skill
+stage: Test Feedback Classification
+status: active
+skill_path:
+  - skills/test-feedback-classifier/SKILL.md
+contract:
+  - skill-contracts/known-skills/test-feedback-classifier.md
+references:
+  - skills/test-feedback-classifier/references/classification-workflow.md
+  - skills/test-feedback-classifier/references/classification-rules.md
+  - skills/test-feedback-classifier/references/evidence-and-blocking.md
+  - skills/test-feedback-classifier/references/output-artifact.md
+required_schema:
+  - ess/test-feedback-schema.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - write library/{requirement_id}/05-测试验收 classified feedback artifact when requested
+  - recommend manifest.md updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - raw feedback is missing
+  - reproduction or observed behavior is missing for failed cases
+  - failure cannot be classified
+  - requirement change has no change-control decision
+notes:
+  - classifies feedback before fixes or sync
+  - does not modify code
+  - test-feedback-sync handles later checklist/schema/knowledge sync
+```
+
 ### code-review-normalizer
 
 ```yaml
@@ -292,7 +331,7 @@ notes:
 ```yaml
 name: test-feedback-sync
 category: Sync Skill / Producer Skill
-stage: Test Feedback Classification / Knowledge Sync
+stage: Test Feedback Sync / Knowledge Sync
 status: proposed
 planned_skill_path:
   - skills/test-feedback-sync/SKILL.md
@@ -304,19 +343,19 @@ required_storage:
   - ai-sdlc/artifact-storage.md
   - ai-sdlc/change-control.md
 side_effects:
-  - write library/{requirement_id}/05-测试验收 structured feedback artifact when requested
   - recommend checklist, schema, or manifest updates
 can_modify_code: false
 can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
-  - raw feedback is missing
-  - failure cannot be classified
+  - classified test feedback artifact is missing
+  - feedback classification is unresolved
   - specification missing is detected but no re-gate path is recorded
   - requirement change is detected but no change-control decision exists
 notes:
-  - classifies test and acceptance feedback
+  - consumes test-feedback-classifier output
+  - handles checklist, schema, manifest, and later sync recommendations
   - routes specification missing and requirement change back to upstream gates
 ```
 

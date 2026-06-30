@@ -192,7 +192,7 @@
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner`、`implementation-recorder` 已实现初版；其他核心 Skill 待新建或待补合同。
+状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner`、`implementation-recorder`、`test-feedback-classifier` 已实现初版；其他核心 Skill 待新建或待补合同。
 
 这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
@@ -202,7 +202,7 @@
 | `specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
 | `solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
 | `implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
-| `test-feedback-classifier` | 中 | 新建或并入测试验收流程 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
+| `test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
 | `gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
 | `code-review-normalizer` | 中 | 新建或并入代码审查流程 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
 | `test-feedback-sync` | 中 | 新建或并入 Sync 流程 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
@@ -458,10 +458,10 @@ roots = [
 | `specification-writer` | 已实现初版 | 维护并按实际规格生成反馈迭代；产物可被 `speckit-specify` 复用 | 高 | 4/5 |
 | `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
 | `implementation-recorder` | 已实现初版 | 维护并按真实实现记录样例迭代 | 中 | 4 |
-| `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
+| `test-feedback-classifier` | 已实现初版 | 维护并按真实测试反馈样例迭代 | 中 | 4 |
 | `gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
 | `code-review-normalizer` | 合同已补 | 新建执行 Skill 或接入现有代码审查流程 | 中 | 7 |
-| `test-feedback-sync` | 合同已补 | 新建执行 Skill 或接入测试验收 / Sync 流程 | 中 | 6/7 |
+| `test-feedback-sync` | 合同已补 | 新建执行 Skill；消费 `test-feedback-classifier` 产物并处理 Checklist / Schema / Sync 建议 | 中 | 6/7 |
 | `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
 | `speckit-clarify` | 合同已补 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
 | `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
@@ -493,7 +493,8 @@ roots = [
 9. [x] 登记并实现 `requirement-normalizer` 初版。
 10. [x] 登记并实现 `gate-runner` 初版，覆盖通用 Gate、风险接受、superseded artifact 和 Re-Gate 检查。
 11. [x] 登记并实现 `implementation-recorder` 初版，覆盖 diff、验证、未完成项、方案偏离和实现阻塞记录。
-12. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
+12. [x] 登记并实现 `test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
+13. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
 
 ## 阶段验收标准
 

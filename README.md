@@ -57,6 +57,7 @@ ai-sdlc-standard/
 │       ├── speckit-clarify.md
 │       ├── speckit-specify.md
 │       ├── speckit-pipeline-confirmed-single.md
+│       ├── test-feedback-classifier.md
 │       └── test-feedback-sync.md
 ├── skills/
 │   ├── docflow-writer/
@@ -74,7 +75,10 @@ ai-sdlc-standard/
 │   ├── specification-writer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   └── solution-reviewer/
+│   ├── solution-reviewer/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   └── test-feedback-classifier/
 │       ├── SKILL.md
 │       └── references/
 ├── templates/
