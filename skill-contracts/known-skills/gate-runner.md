@@ -8,7 +8,7 @@ version: 0.1.0
 category: Auditor Skill
 stage: All Gates
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/manifest.md
   - current node artifact

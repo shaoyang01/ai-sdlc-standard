@@ -178,11 +178,16 @@ notes:
 name: gate-runner
 category: Auditor Skill
 stage: All Gates
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/gate-runner/SKILL.md
 contract:
   - skill-contracts/known-skills/gate-runner.md
+references:
+  - skills/gate-runner/references/gate-workflow.md
+  - skills/gate-runner/references/gate-matrix.md
+  - skills/gate-runner/references/risk-and-regate.md
+  - skills/gate-runner/references/output-report.md
 required_schema:
   - templates/gate-result-template.md
 required_storage:

@@ -30,6 +30,14 @@ skills:
       - skills/docflow-writer/references/execution-scenarios.md
       - skills/docflow-writer/references/lark-cli.md
       - skills/docflow-writer/references/legacy-html-style.md
+  gate_runner:
+    path: skills/gate-runner/SKILL.md
+    contract: skill-contracts/known-skills/gate-runner.md
+    references:
+      - skills/gate-runner/references/gate-workflow.md
+      - skills/gate-runner/references/gate-matrix.md
+      - skills/gate-runner/references/risk-and-regate.md
+      - skills/gate-runner/references/output-report.md
   requirement_normalizer:
     path: skills/requirement-normalizer/SKILL.md
     contract: skill-contracts/known-skills/requirement-normalizer.md

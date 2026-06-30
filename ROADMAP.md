@@ -72,7 +72,7 @@
 | Skill 缺统一分类 | 增加 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 分类治理。 |
 | Renderer 与 Producer 容易混淆 | 明确 `specification-writer` 负责语义规格，`html-doc-style` 和 `docflow-writer` 不负责补业务内容。 |
 | Speckit Specify / Clarify 职责漂移 | 明确 `specification-writer` 产物可作为轻量需求的规格事实；进入 Speckit 时，`speckit-specify` / `speckit-clarify` 以复用和校验前置产物为主。 |
-| Gate 输出需要统一 | 沿用既有 `templates/gate-result-template.md`，后续新增 `gate-runner` 合同。 |
+| Gate 输出需要统一 | 已实现 `gate-runner` 初版，后续用真实 manifest 样例迭代 PASS / FAIL / PASS_WITH_RISK 与 Re-Gate 检查细节。 |
 | Review 报告不可执行 | 规划 `code-review-normalizer`，把多来源 Review 归一到 Code Review Schema。 |
 | 测试问题没有反向沉淀 | 规划 `test-feedback-sync`，把 Specification Missing / Requirement Change 等分类回写 Checklist、Schema 或 change-control。 |
 | MVP 顺序需要收敛 | 不再从零创建目录；当前 MVP 聚焦 Manifest 活动模型、方案审计 Skill、pipeline Gate 顺序。 |
@@ -100,7 +100,7 @@
 | 需求归一化 | 已实现 `requirement-normalizer` 初版。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
 | 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | `specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
 | 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
-| Gate 执行 | 有 Gate 模板，但缺统一 Gate 执行 Skill。 | 规划 `gate-runner`，统一 PASS / FAIL / PASS_WITH_RISK；`gate-auditor` 仅作为历史别名处理。 |
+| Gate 执行 | 已实现 `gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
 | 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
 | Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
 | Code Review 归一化 | 有 code review schema，但缺报告归一化 Skill。 | 规划 `code-review-normalizer`，统一 DeepSeek/Codex/人工 Review 输出。 |
@@ -192,7 +192,7 @@
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer` 已实现初版；其他核心 Skill 待新建或待补合同。
+状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner` 已实现初版；其他核心 Skill 待新建或待补合同。
 
 这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
@@ -203,7 +203,7 @@
 | `solution-reviewer` | 高 | 新建 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
 | `implementation-recorder` | 中 | 新建或并入实现 Skill 合同 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
 | `test-feedback-classifier` | 中 | 新建或并入测试验收流程 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
-| `gate-runner` | 中 | 新建 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
+| `gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
 | `code-review-normalizer` | 中 | 新建或并入代码审查流程 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
 | `test-feedback-sync` | 中 | 新建或并入 Sync 流程 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
@@ -459,7 +459,7 @@ roots = [
 | `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
 | `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
-| `gate-runner` | 合同已补 | 新建执行 Skill；作为通用 Gate 检查器 | 中 | 4 |
+| `gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
 | `code-review-normalizer` | 合同已补 | 新建执行 Skill 或接入现有代码审查流程 | 中 | 7 |
 | `test-feedback-sync` | 合同已补 | 新建执行 Skill 或接入测试验收 / Sync 流程 | 中 | 6/7 |
 | `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
@@ -490,8 +490,9 @@ roots = [
 6. [x] 调整 `speckit-pipeline-confirmed-single` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
 7. [x] 登记 `specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
 8. [x] 调整 `speckit-specify` / `speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
-9. [x] 登记并实现 `requirement-normalizer` 初版，同时登记 `gate-runner` 的 proposed 合同边界。
-10. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
+9. [x] 登记并实现 `requirement-normalizer` 初版。
+10. [x] 登记并实现 `gate-runner` 初版，覆盖通用 Gate、风险接受、superseded artifact 和 Re-Gate 检查。
+11. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
 
 ## 阶段验收标准
 
