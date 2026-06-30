@@ -504,6 +504,7 @@ roots = [
 23. [x] 登记并实现 `sdlc-speckit-checklist` 初版，覆盖需求专用 checklist 生成、过期校验、可追溯检查项和 Re-Gate 路由。
 24. [x] 登记并实现 `sdlc-code-review-excellence` 初版，覆盖标准化代码审查执行、阻塞判断、Re-Gate 和 normalizer 交接边界。
 25. [x] 补充 `skill-contracts/skill-category-guide.md`，明确 Skill 分类、复合分类、默认副作用和合同检查清单。
+26. [x] 新增 `scripts/validate-skill-contracts.rb`，校验 `sdlc-*` Skill 合同分类、副作用权限、阻塞条件和 manifest 覆盖。
 
 ## 阶段验收标准
 
@@ -518,6 +519,7 @@ roots = [
 - 每个 active 或 proposed 核心 Skill 都有 `skill-contracts/known-skills/*.md`。
 - Registry 与合同一致。
 - Skill 合同明确输入、输出、副作用、阻塞条件、Gate 要求。
+- `ruby scripts/validate-skill-contracts.rb` 通过。
 - 新建 Skill 与现有 Skill 职责不重叠。
 
 ### DocFlow 层验收

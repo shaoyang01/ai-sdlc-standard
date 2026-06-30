@@ -134,6 +134,8 @@ ai-sdlc-standard/
 │   ├── technical-specification-template.md
 │   ├── artifact-manifest-template.md
 │   └── skill-registry-entry-template.md
+├── scripts/
+│   └── validate-skill-contracts.rb
 └── registry/
     └── skill-registry.md
 ```
@@ -153,7 +155,8 @@ ai-sdlc-standard/
 5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
 6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
 7. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
-8. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
+8. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
+9. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
 
 ## Skill 命名规则
 
