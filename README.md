@@ -81,6 +81,12 @@ ai-sdlc-standard/
 │   ├── solution-reviewer/
 │   │   ├── SKILL.md
 │   │   └── references/
+│   ├── speckit-clarify/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── speckit-specify/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── test-feedback-classifier/
 │   │   ├── SKILL.md
 │   │   └── references/

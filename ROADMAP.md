@@ -462,8 +462,8 @@ roots = [
 | `gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
 | `code-review-normalizer` | 已实现初版 | 维护并按真实代码审查样例迭代 | 中 | 7 |
 | `test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
-| `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
-| `speckit-clarify` | 合同已补 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
+| `speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
+| `speckit-clarify` | 已实现初版 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
 | `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
 | `speckit-tasks` | 待改造 | 合同明确 | 高 | 5 |
 | `speckit-analyze` | 待改造 | 合同明确 | 中 | 5 |
@@ -496,6 +496,7 @@ roots = [
 12. [x] 登记并实现 `test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
 13. [x] 登记并实现 `code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。
 14. [x] 登记并实现 `test-feedback-sync` 初版，覆盖测试反馈到 Checklist / Schema / manifest / 后续知识同步建议。
+15. [x] 登记并实现 `speckit-specify` / `speckit-clarify` 适配初版，明确复用前置 DocFlow 产物并阻塞核心澄清回退。
 
 ## 阶段验收标准
 

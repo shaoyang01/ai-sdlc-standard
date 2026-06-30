@@ -463,11 +463,16 @@ notes:
 name: speckit-specify
 category: Producer Skill
 stage: Speckit Specify / Spec Sync
-status: proposed
-skill_reference:
-  - speckit-specify
+status: active
+skill_path:
+  - skills/speckit-specify/SKILL.md
 contract:
   - skill-contracts/known-skills/speckit-specify.md
+references:
+  - skills/speckit-specify/references/docflow-inputs.md
+  - skills/speckit-specify/references/spec-sync-mapping.md
+  - skills/speckit-specify/references/blocking-and-regate.md
+  - skills/speckit-specify/references/output-and-manifest.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:
@@ -500,11 +505,16 @@ notes:
 name: speckit-clarify
 category: Auditor Skill / Producer Skill
 stage: Residual Clarification Validation
-status: proposed
-skill_reference:
-  - speckit-clarify
+status: active
+skill_path:
+  - skills/speckit-clarify/SKILL.md
 contract:
   - skill-contracts/known-skills/speckit-clarify.md
+references:
+  - skills/speckit-clarify/references/clarification-scope.md
+  - skills/speckit-clarify/references/coverage-check.md
+  - skills/speckit-clarify/references/regate-routing.md
+  - skills/speckit-clarify/references/output-and-manifest.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:

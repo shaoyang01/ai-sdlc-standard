@@ -8,7 +8,7 @@ version: 0.1.0
 category: Producer Skill
 stage: Speckit Specify / Spec Sync
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*

@@ -78,6 +78,22 @@ skills:
       - skills/specification-writer/references/schema-mapping.md
       - skills/specification-writer/references/blocking-rules.md
       - skills/specification-writer/references/output-artifact.md
+  speckit_clarify:
+    path: skills/speckit-clarify/SKILL.md
+    contract: skill-contracts/known-skills/speckit-clarify.md
+    references:
+      - skills/speckit-clarify/references/clarification-scope.md
+      - skills/speckit-clarify/references/coverage-check.md
+      - skills/speckit-clarify/references/regate-routing.md
+      - skills/speckit-clarify/references/output-and-manifest.md
+  speckit_specify:
+    path: skills/speckit-specify/SKILL.md
+    contract: skill-contracts/known-skills/speckit-specify.md
+    references:
+      - skills/speckit-specify/references/docflow-inputs.md
+      - skills/speckit-specify/references/spec-sync-mapping.md
+      - skills/speckit-specify/references/blocking-and-regate.md
+      - skills/speckit-specify/references/output-and-manifest.md
   test_feedback_classifier:
     path: skills/test-feedback-classifier/SKILL.md
     contract: skill-contracts/known-skills/test-feedback-classifier.md

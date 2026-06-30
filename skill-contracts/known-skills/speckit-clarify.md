@@ -8,7 +8,7 @@ version: 0.1.0
 category: Auditor Skill / Producer Skill
 stage: Residual Clarification Validation
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - specs/{feature}/spec.md
   - library/{requirement_id}/01-技术方案/*
