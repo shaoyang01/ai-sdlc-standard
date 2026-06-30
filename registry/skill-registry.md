@@ -464,6 +464,51 @@ notes:
   - orchestrates child sdlc-speckit-* skills without replacing their contracts
 ```
 
+### sdlc-speckit-checklist
+
+```yaml
+name: sdlc-speckit-checklist
+category: Producer Skill / Auditor Skill
+stage: Speckit Checklist / Stage-Specific Inspection
+status: active
+skill_path:
+  - skills/sdlc-speckit-checklist/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-checklist.md
+references:
+  - skills/sdlc-speckit-checklist/references/checklist-inputs.md
+  - skills/sdlc-speckit-checklist/references/item-generation-rules.md
+  - skills/sdlc-speckit-checklist/references/staleness-and-regate.md
+  - skills/sdlc-speckit-checklist/references/output-targets.md
+  - skills/sdlc-speckit-checklist/references/output-and-manifest.md
+required_checklist:
+  - checklists/specification-checklist.md
+  - checklists/plan-checklist.md
+  - checklists/task-checklist.md
+  - checklists/implementation-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - create or update requirement-specific checklist when requested
+  - validate existing checklist
+  - recommend manifest.md Activity Log or Re-Gate updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - target checklist stage is unclear
+  - required source artifacts are missing or superseded
+  - checklist item would introduce new business behavior
+  - existing checklist conflicts with current approved artifacts
+  - checklist generation would replace Gate, Analyze, Review, or Test Acceptance
+notes:
+  - produces requirement-specific checklist material
+  - does not decide Gate pass or fail
+  - does not directly modify shared checklists
+```
+
 ### sdlc-speckit-specify
 
 ```yaml
