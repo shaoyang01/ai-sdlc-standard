@@ -102,7 +102,7 @@
 | 规格完整性审计 | 已规划 `sdlc-solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `sdlc-solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
 | Gate 执行 | 已实现 `sdlc-gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
 | 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
-| Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
+| 上线准入阶段总结 | 当前标准包有 Test/Code Review，发布执行动作不进入工作流。 | 后续只补测试后的阶段性总结规则；该结论不是 Gate，不阻塞节点流转，不代表需求结束。 |
 | Code Review 归一化 | 已实现 `sdlc-code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
 | 测试反馈反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
 | 知识同步 | 已实现 `sdlc-speckit-sync` 初版。 | 后续通过真实实现记录、代码审核和测试反馈样例迭代可同步事实、目标路径和冲突处理。 |
@@ -334,14 +334,16 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 - Sync 失败不能被视为完成知识沉淀。
 - `library/{requirement_id}/` 不是长期知识库。
 
-### Wave 7: 审查、报告与发布链路
+### Wave 7: 审查、报告与阶段总结
 
 状态：待改造。
 
 目标：
 
-- 代码审查、方案审阅、测试反馈、报告渲染都遵循 ESS 和 DocFlow。
+- 代码审查、方案审阅、测试反馈、上线准入阶段总结、报告渲染都遵循 ESS 和 DocFlow。
 - 在线文档发布有清晰身份、失败、备份和 manifest 记录边界。
+- 上线、灰度、投产等发布执行动作不进入本工作流。
+- 上线准入结论只是测试后的阶段性总结，不作为任何节点 Gate，不阻塞后续知识同步、日报沉淀或其他收尾工作，也不代表需求已结束。
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |

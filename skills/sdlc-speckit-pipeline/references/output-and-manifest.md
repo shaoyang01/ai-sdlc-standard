@@ -103,4 +103,4 @@ When the pipeline stops, record:
 - Stop reason.
 - Earliest affected node.
 - Whether implementation is blocked.
-- Whether release is blocked.
+- Whether the online admission summary needs a risk note.

@@ -78,6 +78,16 @@
 - Feedback Classification:
 - Required Action:
 
+## Stage Summaries
+
+### 上线准入结论
+
+- Status Summary:
+- Evidence:
+- Risk Notes:
+- Follow-up:
+- Notes: This is not a Gate, does not set `Can Continue`, does not block later workflow steps, and does not mark the requirement completed.
+
 ## Speckit Sync
 
 - Sync Required: yes/no

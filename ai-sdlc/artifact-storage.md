@@ -86,6 +86,7 @@ library/{requirement_id}/
 - Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、测试口径等变化事件。
 - Superseded Artifacts：被新版本替代但必须保留的旧产物。
 - Re-Gate Records：变更后从哪个节点重新 Gate、结果是什么、下一步是什么。
+- Stage Summaries：记录不作为 Gate 的阶段性总结，例如测试后的上线准入结论。
 - Speckit Sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。
 
 Activity Log 应记录工作流动作，而不是聊天全文。
@@ -98,6 +99,16 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 ```
 
 Development Path Decision 只记录当前有效决策。历史决策变化必须同时写入 Activity Log 和 Change History。
+
+Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
+
+上线准入结论属于 Stage Summaries：
+
+- 可引用测试验收、代码审核、当前有效 Gate 和 manifest 状态。
+- 只能说明当前证据下是否具备上线条件。
+- 不作为进入任何节点的门槛。
+- 不代表需求已结束。
+- 不编排上线、灰度、投产、回滚执行或外部发布动作。
 
 ## 文件命名
 

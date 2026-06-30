@@ -9,9 +9,8 @@
 | Planning Gate | Task breakdown or implementation | Plan artifact or Speckit `plan.md` | Plan changes approved specification, missing rollback or failure strategy |
 | Task Gate | Implementation | Task artifact or Speckit `tasks.md` | Tasks not traceable to specification or plan, missing verification tasks |
 | Implementation Gate | Code review or test | `03-实现记录`, diff summary, verification result | Out-of-scope implementation, missing verification, undefined behavior discovered |
-| Code Review Gate | Test or release preparation | `04-代码审核` | Review FAIL, blocking issue not resolved, risk acceptance incomplete |
-| Test Gate | Release or sync | `05-测试验收` | Test FAIL, Specification Missing without upstream Re-Gate |
-| Release Gate | Release | Current Gate Decisions, Blocking Issues, Test Gate | Open blockers, unresolved risks, invalid current artifact versions |
+| Code Review Gate | Test | `04-代码审核` | Review FAIL, blocking issue not resolved, risk acceptance incomplete |
+| Test Gate | Knowledge sync or follow-up summary | `05-测试验收` | Test FAIL, Specification Missing without upstream Re-Gate |
 | Knowledge Sync Gate | Speckit Sync or knowledge update | Sync decision and source artifacts | Syncing superseded or failed artifacts, missing residual risk note |
 
 ## Severity Mapping
@@ -77,7 +76,6 @@ Use these directories when writing a Gate report:
 | Implementation Gate | `03-实现记录/` |
 | Code Review Gate | `04-代码审核/` |
 | Test Gate | `05-测试验收/` |
-| Release Gate | `05-测试验收/` |
 | Knowledge Sync Gate | `05-测试验收/` |
 
 When the node cannot be determined, return the report in the response and recommend a path instead of writing a file.

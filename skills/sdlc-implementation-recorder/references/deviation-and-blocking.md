@@ -8,7 +8,7 @@
 | Specification Missing | Code needed behavior not defined by the specification. | Return to `01-技术方案` and rerun solution review. |
 | Requirement Change | User goal or scope changed during implementation. | Return to `00-需求资料` or `01-技术方案` and Re-Gate. |
 | Documentation Correction | Record wording or path correction only. | Update record or manifest activity; no Re-Gate if behavior unchanged. |
-| Environment / Data Issue | Verification blocked by env, data, config, or permission. | Record blocker and whether release is blocked. |
+| Environment / Data Issue | Verification blocked by env, data, config, or permission. | Record blocker and whether the online admission summary needs a risk note. |
 
 ## Blocking Conditions
 

@@ -142,7 +142,6 @@ templates/gate-result-template.md
 - Implementation Gate
 - Code Review Gate
 - Test Gate
-- Release Gate
 - Knowledge Sync Gate
 
 规则：

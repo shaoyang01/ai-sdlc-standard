@@ -39,7 +39,6 @@ Use the current phase and target next phase to classify the Gate:
 - Implementation Gate
 - Code Review Gate
 - Test Gate
-- Release Gate
 - Knowledge Sync Gate
 
 If the Gate type cannot be inferred from the manifest or user request, ask for the target phase.

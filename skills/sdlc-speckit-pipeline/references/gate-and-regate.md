@@ -50,4 +50,4 @@ Recommend a Re-Gate record containing:
 - Earliest affected node.
 - Superseded artifacts.
 - Required new artifacts.
-- Whether implementation or release is blocked.
+- Whether implementation is blocked and whether the online admission summary needs a risk note.
