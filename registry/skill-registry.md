@@ -297,11 +297,16 @@ notes:
 name: code-review-normalizer
 category: Reviewer Skill / Producer Skill
 stage: Code Review Normalization
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/code-review-normalizer/SKILL.md
 contract:
   - skill-contracts/known-skills/code-review-normalizer.md
+references:
+  - skills/code-review-normalizer/references/normalization-workflow.md
+  - skills/code-review-normalizer/references/finding-mapping.md
+  - skills/code-review-normalizer/references/blocking-and-scope.md
+  - skills/code-review-normalizer/references/output-artifact.md
 required_schema:
   - ess/code-review-schema.md
 required_checklist:

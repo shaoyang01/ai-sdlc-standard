@@ -8,7 +8,7 @@ version: 0.1.0
 category: Reviewer Skill / Producer Skill
 stage: Code Review Normalization
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - raw code review report
   - code diff or changed file list

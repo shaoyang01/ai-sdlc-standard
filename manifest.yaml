@@ -21,6 +21,14 @@ entrypoints:
   artifact_manifest_template: templates/artifact-manifest-template.md
   registry: registry/skill-registry.md
 skills:
+  code_review_normalizer:
+    path: skills/code-review-normalizer/SKILL.md
+    contract: skill-contracts/known-skills/code-review-normalizer.md
+    references:
+      - skills/code-review-normalizer/references/normalization-workflow.md
+      - skills/code-review-normalizer/references/finding-mapping.md
+      - skills/code-review-normalizer/references/blocking-and-scope.md
+      - skills/code-review-normalizer/references/output-artifact.md
   docflow_writer:
     path: skills/docflow-writer/SKILL.md
     contract: skill-contracts/known-skills/docflow-writer.md

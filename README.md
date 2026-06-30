@@ -60,6 +60,9 @@ ai-sdlc-standard/
 │       ├── test-feedback-classifier.md
 │       └── test-feedback-sync.md
 ├── skills/
+│   ├── code-review-normalizer/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── docflow-writer/
 │   │   ├── SKILL.md
 │   │   └── references/
