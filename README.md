@@ -56,6 +56,7 @@ ai-sdlc-standard/
 │       ├── sdlc-solution-reviewer.md
 │       ├── sdlc-speckit-analyze.md
 │       ├── sdlc-speckit-clarify.md
+│       ├── sdlc-speckit-implement.md
 │       ├── sdlc-speckit-plan.md
 │       ├── sdlc-speckit-specify.md
 │       ├── sdlc-speckit-tasks.md
@@ -88,6 +89,9 @@ ai-sdlc-standard/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-clarify/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── sdlc-speckit-implement/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-plan/

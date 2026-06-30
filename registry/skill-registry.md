@@ -668,8 +668,51 @@ notes:
   - does not modify artifacts or production code
 ```
 
+### sdlc-speckit-implement
+
+```yaml
+name: sdlc-speckit-implement
+category: Executor Skill / Producer Skill
+stage: Speckit Implement / Implementation Execution
+status: active
+skill_path:
+  - skills/sdlc-speckit-implement/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-implement.md
+references:
+  - skills/sdlc-speckit-implement/references/implementation-inputs.md
+  - skills/sdlc-speckit-implement/references/execution-boundaries.md
+  - skills/sdlc-speckit-implement/references/verification-and-recording.md
+  - skills/sdlc-speckit-implement/references/blocking-and-regate.md
+  - skills/sdlc-speckit-implement/references/output-and-manifest.md
+required_checklist:
+  - checklists/implementation-checklist.md
+  - checklists/task-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - modify production code for approved tasks
+  - add or update tests for approved tasks
+  - update specs/{feature}/tasks.md status when verified
+  - produce or recommend implementation record
+  - recommend manifest.md Activity Log or Re-Gate updates
+can_modify_code: true
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - sdlc-speckit-analyze has unresolved blocking item
+  - implementation would exceed approved tasks
+  - implementation requires undefined business behavior
+  - verification fails or cannot be defined
+notes:
+  - consumes sdlc-speckit-analyze output
+  - modifies code only for approved tasks
+  - hands implementation evidence to sdlc-implementation-recorder
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-implement
 - sdlc-speckit-sync
 - sdlc-speckit-code-doc-reconcile

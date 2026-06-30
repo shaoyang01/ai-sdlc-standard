@@ -110,6 +110,15 @@ skills:
       - skills/sdlc-speckit-analyze/references/consistency-scope.md
       - skills/sdlc-speckit-analyze/references/analyze-gate-check.md
       - skills/sdlc-speckit-analyze/references/output-and-manifest.md
+  sdlc_speckit_implement:
+    path: skills/sdlc-speckit-implement/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-implement.md
+    references:
+      - skills/sdlc-speckit-implement/references/implementation-inputs.md
+      - skills/sdlc-speckit-implement/references/execution-boundaries.md
+      - skills/sdlc-speckit-implement/references/verification-and-recording.md
+      - skills/sdlc-speckit-implement/references/blocking-and-regate.md
+      - skills/sdlc-speckit-implement/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md

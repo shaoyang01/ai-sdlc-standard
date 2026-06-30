@@ -24,7 +24,7 @@
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
-| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` / `sdlc-speckit-tasks` / `sdlc-speckit-analyze` 已有初版；后续继续补 Implement、Sync。 |
+| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` / `sdlc-speckit-tasks` / `sdlc-speckit-analyze` / `sdlc-speckit-implement` 已有初版；后续继续补 Sync。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
 ## 核心原则
@@ -304,7 +304,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 ### Wave 6: 实现、同步与代码文档一致性
 
-状态：待改造，部分可能需要重写。
+状态：进行中，`sdlc-speckit-implement` 已实现初版，后续继续补 Sync 和 Reconcile。
 
 目标：
 
@@ -315,7 +315,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `sdlc-speckit-implement` | 高 | 重写或大改 | 明确生产代码副作用、验证、回滚兼容、实现记录。 |
+| `sdlc-speckit-implement` | 高 | 已实现初版 | 明确生产代码副作用、验证、回滚兼容、实现记录。 |
 | `sdlc-speckit-sync` | 高 | 补合同，后续可能改执行体 | 明确哪些事实进入 `.specify/business_domain/**`。 |
 | `sdlc-speckit-code-doc-reconcile` | 中 | 补合同 | 审计代码、spec、DocFlow、business_domain 是否一致。 |
 
@@ -469,7 +469,7 @@ roots = [
 | `sdlc-speckit-analyze` | 已实现初版 | 审计 DocFlow / spec / plan / tasks 一致性；无阻塞后才进入实现 | 中 | 5 |
 | `sdlc-speckit-pipeline` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待改造 | 高 | 5 |
 | `sdlc-speckit-pipeline-batch` | 待改造 | 合同明确 | 中 | 5 |
-| `sdlc-speckit-implement` | 待改造 | 重写或大改 | 高 | 6 |
+| `sdlc-speckit-implement` | 已实现初版 | 按 Analyze Gate 通过后的 tasks 执行代码改动；验证失败或方案外行为则阻塞回退 | 高 | 6 |
 | `sdlc-speckit-sync` | 待改造 | 合同明确 | 高 | 6 |
 | `sdlc-speckit-code-doc-reconcile` | 待改造 | 合同明确 | 中 | 6 |
 | `sdlc-speckit-checklist` | 待改造 | 合同明确 | 中 | 5 |
@@ -500,6 +500,7 @@ roots = [
 16. [x] 登记并实现 `sdlc-speckit-plan` 初版，覆盖 Plan Gate、技术计划边界和回退规则。
 17. [x] 登记并实现 `sdlc-speckit-tasks` 初版，覆盖 Task Gate、可追踪任务拆解和实现前准入。
 18. [x] 登记并实现 `sdlc-speckit-analyze` 初版，覆盖实现前跨产物一致性审计和 Re-Gate 路由。
+19. [x] 登记并实现 `sdlc-speckit-implement` 初版，覆盖生产代码副作用、验证、任务状态和实现记录边界。
 
 ## 阶段验收标准
 
