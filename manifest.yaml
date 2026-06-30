@@ -128,6 +128,15 @@ skills:
       - skills/sdlc-speckit-sync/references/fact-eligibility.md
       - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
       - skills/sdlc-speckit-sync/references/output-and-manifest.md
+  sdlc_speckit_code_doc_reconcile:
+    path: skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+    references:
+      - skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md
+      - skills/sdlc-speckit-code-doc-reconcile/references/drift-categories.md
+      - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+      - skills/sdlc-speckit-code-doc-reconcile/references/apply-boundaries.md
+      - skills/sdlc-speckit-code-doc-reconcile/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md

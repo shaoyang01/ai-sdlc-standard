@@ -753,6 +753,50 @@ notes:
   - does not use chat fragments as long-term facts
 ```
 
+### sdlc-speckit-code-doc-reconcile
+
+```yaml
+name: sdlc-speckit-code-doc-reconcile
+category: Auditor Skill / Sync Skill
+stage: Speckit Reconcile / Code Documentation Consistency
+status: active
+skill_path:
+  - skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+references:
+  - skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/drift-categories.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/apply-boundaries.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/output-and-manifest.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+required_contract:
+  - skill-contracts/auditor-skill-contract.md
+  - skill-contracts/sync-skill-contract.md
+side_effects:
+  - produce reconciliation report
+  - recommend manifest, Re-Gate, sync, or record updates
+  - optionally prepare authorized documentation or knowledge update proposals
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: true
+can_execute_commands: true
+blocking_conditions:
+  - requirement or feature scope is unclear
+  - required artifacts are missing or superseded
+  - current source of truth conflicts across approved artifacts
+  - code behavior cannot be inspected
+  - drift correction would require production code changes
+  - user did not authorize document or knowledge writes
+notes:
+  - default behavior is read-only reconciliation
+  - routes code drift to sdlc-speckit-implement
+  - routes knowledge drift to sdlc-speckit-sync
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-code-doc-reconcile
+- none

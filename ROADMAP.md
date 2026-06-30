@@ -24,7 +24,7 @@
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
-| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` / `sdlc-speckit-tasks` / `sdlc-speckit-analyze` / `sdlc-speckit-implement` / `sdlc-speckit-sync` 已有初版；后续继续补 Reconcile。 |
+| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` / `sdlc-speckit-tasks` / `sdlc-speckit-analyze` / `sdlc-speckit-implement` / `sdlc-speckit-sync` / `sdlc-speckit-code-doc-reconcile` 已有初版；后续继续补 Pipeline、Checklist 等周边能力。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
 ## 核心原则
@@ -304,7 +304,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 ### Wave 6: 实现、同步与代码文档一致性
 
-状态：进行中，`sdlc-speckit-implement` / `sdlc-speckit-sync` 已实现初版，后续继续补 Reconcile。
+状态：进行中，`sdlc-speckit-implement` / `sdlc-speckit-sync` / `sdlc-speckit-code-doc-reconcile` 已实现初版，后续通过真实需求样例继续校正边界。
 
 目标：
 
@@ -317,7 +317,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 | --- | --- | --- | --- |
 | `sdlc-speckit-implement` | 高 | 已实现初版 | 明确生产代码副作用、验证、回滚兼容、实现记录。 |
 | `sdlc-speckit-sync` | 高 | 已实现初版 | 明确哪些事实进入 `.specify/business_domain/**`。 |
-| `sdlc-speckit-code-doc-reconcile` | 中 | 补合同 | 审计代码、spec、DocFlow、business_domain 是否一致。 |
+| `sdlc-speckit-code-doc-reconcile` | 中 | 已实现初版 | 审计代码、spec、DocFlow、business_domain、manifest 是否一致。 |
 
 `sdlc-speckit-implement` 必须覆盖：
 
@@ -471,7 +471,7 @@ roots = [
 | `sdlc-speckit-pipeline-batch` | 待改造 | 合同明确 | 中 | 5 |
 | `sdlc-speckit-implement` | 已实现初版 | 按 Analyze Gate 通过后的 tasks 执行代码改动；验证失败或方案外行为则阻塞回退 | 高 | 6 |
 | `sdlc-speckit-sync` | 已实现初版 | 只同步已验证、稳定、可复用事实；禁止把聊天片段或临时需求说明沉淀为长期事实 | 高 | 6 |
-| `sdlc-speckit-code-doc-reconcile` | 待改造 | 合同明确 | 中 | 6 |
+| `sdlc-speckit-code-doc-reconcile` | 已实现初版 | 审计代码、spec、DocFlow、business_domain、manifest 一致性；默认只读，需授权才输出可应用更新 | 中 | 6 |
 | `sdlc-speckit-checklist` | 待改造 | 合同明确 | 中 | 5 |
 | `sdlc-speckit-taskstoissues` | 待改造 | 可选下游 | 低 | 9 |
 | `sdlc-code-review-excellence` | 待改造 | 代码审核合同明确 | 中 | 7 |
@@ -502,6 +502,7 @@ roots = [
 18. [x] 登记并实现 `sdlc-speckit-analyze` 初版，覆盖实现前跨产物一致性审计和 Re-Gate 路由。
 19. [x] 登记并实现 `sdlc-speckit-implement` 初版，覆盖生产代码副作用、验证、任务状态和实现记录边界。
 20. [x] 登记并实现 `sdlc-speckit-sync` 初版，覆盖稳定事实同步、目标授权、冲突处理和 manifest Sync 记录。
+21. [x] 登记并实现 `sdlc-speckit-code-doc-reconcile` 初版，覆盖代码、规格、DocFlow、知识库和 manifest 漂移审计与 Re-Gate 路由。
 
 ## 阶段验收标准
 
