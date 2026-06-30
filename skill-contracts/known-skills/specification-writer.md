@@ -8,7 +8,7 @@ version: 0.1.0
 category: Producer Skill
 stage: Specification Writing
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/00-需求资料/*
   - optional existing draft specification

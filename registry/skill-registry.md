@@ -128,11 +128,16 @@ notes:
 name: specification-writer
 category: Producer Skill
 stage: Specification Writing
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/specification-writer/SKILL.md
 contract:
   - skill-contracts/known-skills/specification-writer.md
+references:
+  - skills/specification-writer/references/writing-workflow.md
+  - skills/specification-writer/references/schema-mapping.md
+  - skills/specification-writer/references/blocking-rules.md
+  - skills/specification-writer/references/output-artifact.md
 required_schema:
   - ess/specification-schema.md
 required_checklist:

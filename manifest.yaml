@@ -38,6 +38,14 @@ skills:
       - skills/solution-reviewer/references/development-path-decision.md
       - skills/solution-reviewer/references/checklist.md
       - skills/solution-reviewer/references/output-report.md
+  specification_writer:
+    path: skills/specification-writer/SKILL.md
+    contract: skill-contracts/known-skills/specification-writer.md
+    references:
+      - skills/specification-writer/references/writing-workflow.md
+      - skills/specification-writer/references/schema-mapping.md
+      - skills/specification-writer/references/blocking-rules.md
+      - skills/specification-writer/references/output-artifact.md
 portability:
   may_be_copied_to:
     - repository_root

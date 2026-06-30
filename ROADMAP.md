@@ -455,7 +455,7 @@ roots = [
 | --- | --- | --- | --- | --- |
 | `docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
 | `requirement-normalizer` | 合同已补 | 新建执行 Skill 或入口适配；作为需求归一化入口 | 高 | 4 |
-| `specification-writer` | 合同已补 | 新建执行 Skill；作为 Speckit 之外的通用规格生成入口，产物可被 `speckit-specify` 复用 | 高 | 4/5 |
+| `specification-writer` | 已实现初版 | 维护并按实际规格生成反馈迭代；产物可被 `speckit-specify` 复用 | 高 | 4/5 |
 | `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
 | `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
