@@ -24,7 +24,7 @@
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
-| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` / `sdlc-speckit-tasks` / `sdlc-speckit-analyze` / `sdlc-speckit-implement` / `sdlc-speckit-sync` / `sdlc-speckit-code-doc-reconcile` 已有初版；后续继续补 Pipeline、Checklist 等周边能力。 |
+| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-pipeline` 及 specify / clarify / plan / tasks / analyze / implement / sync / reconcile 已有初版；后续继续补 Checklist、Batch 等周边能力。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
 ## 核心原则
@@ -282,7 +282,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 | `sdlc-speckit-plan` | 高 | 已实现初版 | 定义技术计划、约束、风险和 Plan Gate。 |
 | `sdlc-speckit-tasks` | 高 | 已实现初版 | 定义任务拆解、任务 Gate、实现前准入。 |
 | `sdlc-speckit-analyze` | 中 | 已实现初版 | 定义跨 spec / plan / tasks / DocFlow 的一致性审计。 |
-| `sdlc-speckit-pipeline` | 高 | 补合同，可能重写执行体 | 串联单需求全流程，必须严格执行 Gate。 |
+| `sdlc-speckit-pipeline` | 高 | 已实现初版 | 串联单需求全流程，必须严格执行 Gate。 |
 | `sdlc-speckit-pipeline-batch` | 中 | 补合同 | 多需求或批量流程，在 single 稳定后处理。 |
 | `sdlc-speckit-checklist` | 中 | 补合同 | 定义 Checklist 生成边界，不替代 Gate。 |
 | `sdlc-speckit-taskstoissues` | 低 | 补合同 | GitHub Issue 导出是可选集成，不作为主流程必需项。 |
@@ -467,7 +467,7 @@ roots = [
 | `sdlc-speckit-plan` | 已实现初版 | 生成 / 校验 `specs/plan.md`；发现核心缺口则回退方案 Gate | 高 | 5 |
 | `sdlc-speckit-tasks` | 已实现初版 | 生成 / 校验 `specs/tasks.md`；发现任务拆解需要补新行为则回退上游 Gate | 高 | 5 |
 | `sdlc-speckit-analyze` | 已实现初版 | 审计 DocFlow / spec / plan / tasks 一致性；无阻塞后才进入实现 | 中 | 5 |
-| `sdlc-speckit-pipeline` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待改造 | 高 | 5 |
+| `sdlc-speckit-pipeline` | 已实现初版 | 作为方案审阅后的可选完整 SDD 路径；只做阶段编排、Gate 停顿和 Re-Gate 路由 | 高 | 5 |
 | `sdlc-speckit-pipeline-batch` | 待改造 | 合同明确 | 中 | 5 |
 | `sdlc-speckit-implement` | 已实现初版 | 按 Analyze Gate 通过后的 tasks 执行代码改动；验证失败或方案外行为则阻塞回退 | 高 | 6 |
 | `sdlc-speckit-sync` | 已实现初版 | 只同步已验证、稳定、可复用事实；禁止把聊天片段或临时需求说明沉淀为长期事实 | 高 | 6 |
@@ -503,6 +503,7 @@ roots = [
 19. [x] 登记并实现 `sdlc-speckit-implement` 初版，覆盖生产代码副作用、验证、任务状态和实现记录边界。
 20. [x] 登记并实现 `sdlc-speckit-sync` 初版，覆盖稳定事实同步、目标授权、冲突处理和 manifest Sync 记录。
 21. [x] 登记并实现 `sdlc-speckit-code-doc-reconcile` 初版，覆盖代码、规格、DocFlow、知识库和 manifest 漂移审计与 Re-Gate 路由。
+22. [x] 登记并实现 `sdlc-speckit-pipeline` 初版，覆盖完整 SDD 激活条件、阶段编排、用户确认边界和阻塞回退。
 
 ## 阶段验收标准
 

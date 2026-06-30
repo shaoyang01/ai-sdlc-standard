@@ -8,7 +8,7 @@ version: 0.1.0
 category: Workflow Skill / Executor Skill / Sync Skill
 stage: Optional full SDD path after solution review
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*
@@ -31,6 +31,14 @@ required_checklist:
 required_storage:
   - ai-sdlc/artifact-storage.md
   - ai-sdlc/change-control.md
+skill_path:
+  - skills/sdlc-speckit-pipeline/SKILL.md
+references:
+  - skills/sdlc-speckit-pipeline/references/activation-and-inputs.md
+  - skills/sdlc-speckit-pipeline/references/stage-sequence.md
+  - skills/sdlc-speckit-pipeline/references/gate-and-regate.md
+  - skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md
+  - skills/sdlc-speckit-pipeline/references/output-and-manifest.md
 side_effects:
   - create or update specs/**
   - modify code during implement stage
@@ -56,11 +64,11 @@ blocking_conditions:
 
 它负责：
 
-- 在用户确认后串行执行 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile`。
+- 在激活条件满足后串行执行 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile`。
 - 复用已审阅的 `01-技术方案` 和 `02-方案审核`，避免重新解释需求。
 - 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/spec.md`。
 - 在实现完成后将稳定业务事实回写到 `.specify/business_domain/**`。
-- 在 DocFlow 中形成实现记录和 Sync 状态。
+- 在 DocFlow 和 manifest 中形成阶段结果、实现记录、Sync 状态和 Reconcile 结论建议。
 
 它不负责：
 
@@ -69,6 +77,7 @@ blocking_conditions:
 - 从零重新澄清已经审阅过的需求。
 - 在 `sdlc-speckit-clarify` 中扩大需求范围。
 - 自动绕过用户确认进入实现。
+- 直接替代子 Skill 的合同、Gate 或停止条件。
 
 ## Activation Contract
 
@@ -200,4 +209,5 @@ Preflight
 - 每一阶段都必须输出结论、风险和下一步确认。
 - 实现完成后必须更新或建议更新 `03-实现记录`。
 - Sync 完成后必须更新或建议更新 manifest 的 Speckit Sync 区块。
+- Reconcile 完成后必须更新或建议更新 manifest 的 Reconcile 结论。
 - 如果任一阶段发现规格遗漏，必须回到 `01-技术方案` / `02-方案审核` 重新 Gate。

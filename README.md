@@ -99,6 +99,9 @@ ai-sdlc-standard/
 │   ├── sdlc-speckit-implement/
 │   │   ├── SKILL.md
 │   │   └── references/
+│   ├── sdlc-speckit-pipeline/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── sdlc-speckit-plan/
 │   │   ├── SKILL.md
 │   │   └── references/

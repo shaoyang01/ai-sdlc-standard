@@ -423,13 +423,17 @@ blocking_conditions:
 name: sdlc-speckit-pipeline
 category: Workflow Skill
 stage: Full lifecycle
-status: proposed
+status: active
+skill_path:
+  - skills/sdlc-speckit-pipeline/SKILL.md
 contract:
   - skill-contracts/known-skills/sdlc-speckit-pipeline.md
-planned_skill_name:
-  - sdlc-speckit-pipeline
-planned_skill_path:
-  - skills/sdlc-speckit-pipeline/SKILL.md
+references:
+  - skills/sdlc-speckit-pipeline/references/activation-and-inputs.md
+  - skills/sdlc-speckit-pipeline/references/stage-sequence.md
+  - skills/sdlc-speckit-pipeline/references/gate-and-regate.md
+  - skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md
+  - skills/sdlc-speckit-pipeline/references/output-and-manifest.md
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -457,6 +461,7 @@ blocking_conditions:
 notes:
   - optional full SDD path after sdlc-solution-reviewer
   - not the default path for every requirement
+  - orchestrates child sdlc-speckit-* skills without replacing their contracts
 ```
 
 ### sdlc-speckit-specify
