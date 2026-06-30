@@ -102,6 +102,14 @@ skills:
       - skills/sdlc-speckit-tasks/references/task-scope.md
       - skills/sdlc-speckit-tasks/references/task-gate-check.md
       - skills/sdlc-speckit-tasks/references/output-and-manifest.md
+  sdlc_speckit_analyze:
+    path: skills/sdlc-speckit-analyze/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-analyze.md
+    references:
+      - skills/sdlc-speckit-analyze/references/analyze-inputs.md
+      - skills/sdlc-speckit-analyze/references/consistency-scope.md
+      - skills/sdlc-speckit-analyze/references/analyze-gate-check.md
+      - skills/sdlc-speckit-analyze/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md

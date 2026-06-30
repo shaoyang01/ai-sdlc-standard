@@ -54,6 +54,7 @@ ai-sdlc-standard/
 │       ├── sdlc-requirement-normalizer.md
 │       ├── sdlc-specification-writer.md
 │       ├── sdlc-solution-reviewer.md
+│       ├── sdlc-speckit-analyze.md
 │       ├── sdlc-speckit-clarify.md
 │       ├── sdlc-speckit-plan.md
 │       ├── sdlc-speckit-specify.md
@@ -81,6 +82,9 @@ ai-sdlc-standard/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-solution-reviewer/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── sdlc-speckit-analyze/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-clarify/

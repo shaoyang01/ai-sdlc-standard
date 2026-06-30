@@ -625,9 +625,51 @@ notes:
   - does not modify plan or production code
 ```
 
+### sdlc-speckit-analyze
+
+```yaml
+name: sdlc-speckit-analyze
+category: Auditor Skill
+stage: Speckit Analyze / Implementation Readiness Gate
+status: active
+skill_path:
+  - skills/sdlc-speckit-analyze/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-analyze.md
+references:
+  - skills/sdlc-speckit-analyze/references/analyze-inputs.md
+  - skills/sdlc-speckit-analyze/references/consistency-scope.md
+  - skills/sdlc-speckit-analyze/references/analyze-gate-check.md
+  - skills/sdlc-speckit-analyze/references/output-and-manifest.md
+required_schema:
+  - ess/specification-schema.md
+required_checklist:
+  - checklists/specification-checklist.md
+  - checklists/plan-checklist.md
+  - checklists/task-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - produce consistency report
+  - recommend manifest.md Activity Log or Re-Gate updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - spec, plan, tasks, or DocFlow artifacts conflict
+  - required artifact is missing or superseded
+  - task requires undefined business or technical behavior
+  - implementation readiness cannot be established
+notes:
+  - consumes sdlc-speckit-tasks output
+  - audits DocFlow, spec, plan, and tasks consistency
+  - does not modify artifacts or production code
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-analyze
 - sdlc-speckit-implement
 - sdlc-speckit-sync
 - sdlc-speckit-code-doc-reconcile
