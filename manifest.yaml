@@ -17,6 +17,7 @@ entrypoints:
   review_schema: ess/review-schema.md
   code_review_schema: ess/code-review-schema.md
   test_feedback_schema: ess/test-feedback-schema.md
+  skill_category_guide: skill-contracts/skill-category-guide.md
   skill_contract_template: skill-contracts/skill-contract-template.md
   artifact_manifest_template: templates/artifact-manifest-template.md
   registry: registry/skill-registry.md

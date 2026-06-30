@@ -41,6 +41,7 @@ ai-sdlc-standard/
 │   └── code-review-checklist.md
 ├── skill-contracts/
 │   ├── skill-contract-template.md
+│   ├── skill-category-guide.md
 │   ├── producer-skill-contract.md
 │   ├── auditor-skill-contract.md
 │   ├── renderer-skill-contract.md
@@ -151,7 +152,7 @@ ai-sdlc-standard/
 4. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
 5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
 6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
-7. 改造或新增 Skill 时，先在 `registry/skill-registry.md` 中登记，再补充对应 `skill-contracts/`。
+7. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
 8. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
 
 ## Skill 命名规则

@@ -23,7 +23,7 @@
 | 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
-| Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
+| Skill 分类治理 | 已补 | `skill-contracts/skill-category-guide.md` 已定义 Intake / Producer / Auditor / Reviewer / Executor / Renderer / Publisher / Sync / Workflow 的分类和副作用边界。 |
 | Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-pipeline` 及 specify / clarify / plan / tasks / analyze / checklist / implement / sync / reconcile 已有初版；不再规划多 Agent 版本 pipeline。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
@@ -501,6 +501,7 @@ roots = [
 22. [x] 登记并实现 `sdlc-speckit-pipeline` 初版，覆盖完整 SDD 激活条件、阶段编排、用户确认边界和阻塞回退。
 23. [x] 登记并实现 `sdlc-speckit-checklist` 初版，覆盖需求专用 checklist 生成、过期校验、可追溯检查项和 Re-Gate 路由。
 24. [x] 登记并实现 `sdlc-code-review-excellence` 初版，覆盖标准化代码审查执行、阻塞判断、Re-Gate 和 normalizer 交接边界。
+25. [x] 补充 `skill-contracts/skill-category-guide.md`，明确 Skill 分类、复合分类、默认副作用和合同检查清单。
 
 ## 阶段验收标准
 
