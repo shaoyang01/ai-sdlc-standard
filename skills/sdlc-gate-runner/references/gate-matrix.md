@@ -58,10 +58,12 @@ Use Low when:
 
 Before implementation, verify Development Path Decision:
 
+- Complexity must be present and must be `SIMPLE`, `MEDIUM`, `COMPLEX`, or `BLOCKED_UNKNOWN`.
 - `DIRECT_IMPLEMENTATION` can continue only when Specification Gate is `PASS` or valid `PASS_WITH_RISK`.
 - `SPECKIT_PIPELINE_REQUIRED` should route to `sdlc-speckit-pipeline`, not direct implementation.
 - `BLOCKED_NEEDS_REVISION` must not continue to implementation.
 - `undecided` blocks implementation unless the user explicitly asks only for planning or draft work.
+- `BLOCKED_UNKNOWN` blocks implementation and requires solution revision.
 
 ## Node Directory Mapping
 

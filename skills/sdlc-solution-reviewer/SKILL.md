@@ -37,6 +37,7 @@ Use these repository standard files as authoritative rules:
 - `../../templates/artifact-manifest-template.md`
 - `../../ai-sdlc/artifact-storage.md`
 - `../../ai-sdlc/change-control.md`
+- `../../ai-sdlc/complexity-routing.md`
 
 ## Reference Files
 
@@ -108,6 +109,15 @@ Do not produce `PASS_WITH_RISK` unless accepted risk, accepted by, reason, and f
 
 ### 5. Decide Development Path
 
+Classify complexity first:
+
+- `SIMPLE`
+- `MEDIUM`
+- `COMPLEX`
+- `BLOCKED_UNKNOWN`
+
+Use `../../ai-sdlc/complexity-routing.md` as the routing rule.
+
 Output exactly one recommendation:
 
 - `DIRECT_IMPLEMENTATION`
@@ -116,9 +126,9 @@ Output exactly one recommendation:
 
 Use `BLOCKED_NEEDS_REVISION` whenever the Gate Result is `FAIL`.
 
-Use `SPECKIT_PIPELINE_REQUIRED` for complex changes involving multi-module flow, state machine changes, DB/MQ/schedule/listener/process changes, complex rollback, or knowledge sync needs.
+Use `SPECKIT_PIPELINE_REQUIRED` for `COMPLEX` changes involving multi-module flow, state machine changes, DB/MQ/schedule/listener/process changes, complex rollback, knowledge sync needs, or explicit user request for full SDD.
 
-Use `DIRECT_IMPLEMENTATION` only when the specification is complete and the implementation can proceed without a full SDD pipeline.
+Use `DIRECT_IMPLEMENTATION` only when the specification is complete, Complexity is `SIMPLE` or `MEDIUM`, and implementation can proceed without a full SDD pipeline.
 
 ### 6. Output or Write Report
 

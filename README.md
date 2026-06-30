@@ -27,7 +27,8 @@ ai-sdlc-standard/
 │   ├── phase-gates.md
 │   ├── artifact-flow.md
 │   ├── artifact-storage.md
-│   └── change-control.md
+│   ├── change-control.md
+│   └── complexity-routing.md
 ├── ess/
 │   ├── specification-schema.md
 │   ├── review-schema.md
@@ -154,9 +155,10 @@ ai-sdlc-standard/
 4. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
 5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
 6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
-7. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
-8. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
-9. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
+7. 判断直接实现还是进入完整 SDD 时，遵循 `ai-sdlc/complexity-routing.md`。
+8. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
+9. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
+10. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
 
 ## Skill 命名规则
 

@@ -132,10 +132,15 @@
 
 简单需求可以裁剪阶段，但必须说明裁剪原因。
 
+裁剪原因必须遵循 `ai-sdlc/complexity-routing.md`：
+
+- `SIMPLE` 和 `MEDIUM` 默认可以走直接实现路径。
+- `COMPLEX` 默认进入完整 SDD / Speckit pipeline。
+- `BLOCKED_UNKNOWN` 必须回到技术方案补齐事实，不能靠猜测裁剪。
+
 不可裁剪的内容：
 - Scope / Out of Scope
 - 行为保持
 - 失败策略
 - 测试方式
 - 副作用边界
-

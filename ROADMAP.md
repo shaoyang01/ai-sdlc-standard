@@ -101,7 +101,7 @@
 | 规格编写 | `sdlc-docflow-writer` 能写文档，但不等于规格生成器。 | `sdlc-specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
 | 规格完整性审计 | 已规划 `sdlc-solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `sdlc-solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
 | Gate 执行 | 已实现 `sdlc-gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
-| 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
+| 复杂度分级 | 已补基础标准 | `ai-sdlc/complexity-routing.md` 定义 SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN，并接入开发路径决策。 |
 | 上线准入阶段总结 | 当前标准包有 Test/Code Review，发布执行动作不进入工作流。 | 后续只补测试后的阶段性总结规则；该结论不是 Gate，不阻塞节点流转，不代表需求结束。 |
 | Code Review 归一化 | 已实现 `sdlc-code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
 | 测试反馈反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
@@ -505,6 +505,7 @@ roots = [
 24. [x] 登记并实现 `sdlc-code-review-excellence` 初版，覆盖标准化代码审查执行、阻塞判断、Re-Gate 和 normalizer 交接边界。
 25. [x] 补充 `skill-contracts/skill-category-guide.md`，明确 Skill 分类、复合分类、默认副作用和合同检查清单。
 26. [x] 新增 `scripts/validate-skill-contracts.rb`，校验 `sdlc-*` Skill 合同分类、副作用权限、阻塞条件和 manifest 覆盖。
+27. [x] 新增 `ai-sdlc/complexity-routing.md`，明确复杂度分级、开发路径路由、完整 SDD override 和 `sdlc-solution-reviewer` 接入规则。
 
 ## 阶段验收标准
 

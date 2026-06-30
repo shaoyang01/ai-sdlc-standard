@@ -16,6 +16,9 @@
 ## Development Path Decision
 
 - Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION / undecided
+- Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
+- Complexity Triggers:
+- Full SDD Override: none / user_requested / later_gate_required
 - Decided By:
 - Decision Source: sdlc-solution-reviewer / user / sdlc-gate-runner / other
 - Decision Artifact:

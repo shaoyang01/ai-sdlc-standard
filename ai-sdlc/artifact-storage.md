@@ -80,7 +80,7 @@ library/{requirement_id}/
 推荐使用 `templates/artifact-manifest-template.md`，至少维护以下信息：
 
 - Metadata：需求 ID、仓库、当前阶段、当前状态、关联 `specs/**` 和分支。
-- Development Path Decision：方案审阅后决定直接实现、唤醒 Speckit pipeline，或阻塞返修。
+- Development Path Decision：方案审阅后基于复杂度和风险决定直接实现、唤醒 Speckit pipeline，或阻塞返修。
 - Artifact Index：当前有效产物路径、版本、Gate 结果和更新时间。
 - Activity Log：当天发生的关键动作，供人工追踪和后续日报读取。
 - Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、测试口径等变化事件。
@@ -98,7 +98,7 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ...__方案审核__v1.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
 ```
 
-Development Path Decision 只记录当前有效决策。历史决策变化必须同时写入 Activity Log 和 Change History。
+Development Path Decision 只记录当前有效决策。它必须包含 Complexity、Complexity Triggers 和 Full SDD Override，并遵循 `ai-sdlc/complexity-routing.md`。历史决策变化必须同时写入 Activity Log 和 Change History。
 
 Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 

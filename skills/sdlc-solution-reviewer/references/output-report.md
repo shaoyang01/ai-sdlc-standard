@@ -14,6 +14,9 @@ Use this structure for response output and Markdown artifacts.
 - Reviewed Artifact:
 - Reviewer:
 - Date:
+- Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
+- Complexity Triggers:
+- Full SDD Override: none / user_requested / later_gate_required
 - Development Path Recommendation: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION
 - Recommendation Reason:
 
@@ -65,6 +68,9 @@ Use this structure for response output and Markdown artifacts.
 - Artifact Index:
 - Gate Decisions:
 - Development Path Decision:
+  - Complexity:
+  - Complexity Triggers:
+  - Full SDD Override:
 - Activity Log:
 - Blocking Issues:
 - Next Step:
@@ -86,6 +92,8 @@ For `DIRECT_IMPLEMENTATION`:
 
 ```text
 Development Path Decision: DIRECT_IMPLEMENTATION
+Complexity: SIMPLE or MEDIUM
+Full SDD Override: none
 Next Step: enter implementation and write 03-实现记录 after code changes
 ```
 
@@ -93,6 +101,8 @@ For `SPECKIT_PIPELINE_REQUIRED`:
 
 ```text
 Development Path Decision: SPECKIT_PIPELINE_REQUIRED
+Complexity: COMPLEX, or SIMPLE/MEDIUM with explicit full SDD override
+Full SDD Override: none / user_requested / later_gate_required
 Next Step: ask user to confirm entering sdlc-speckit-pipeline
 ```
 
@@ -102,6 +112,7 @@ For `BLOCKED_NEEDS_REVISION`:
 Current Status: blocked
 Current Stage: 01-技术方案
 Development Path Decision: BLOCKED_NEEDS_REVISION
+Complexity: BLOCKED_UNKNOWN when complexity cannot be classified
 Next Step: revise technical specification and re-run sdlc-solution-reviewer
 ```
 

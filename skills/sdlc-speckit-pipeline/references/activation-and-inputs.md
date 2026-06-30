@@ -10,6 +10,12 @@ Allow Pipeline activation only in these cases:
 
 Do not activate by default for small requirements.
 
+Use `../../../ai-sdlc/complexity-routing.md` to interpret the route:
+
+- `COMPLEX` normally maps to `SPECKIT_PIPELINE_REQUIRED`.
+- `SIMPLE` or `MEDIUM` should not activate the pipeline unless Full SDD Override is `user_requested` or `later_gate_required`.
+- `BLOCKED_UNKNOWN` must return to solution revision before pipeline activation.
+
 ## Required Inputs
 
 Collect:

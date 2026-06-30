@@ -26,6 +26,7 @@ required_checklist:
 required_storage:
   - ai-sdlc/artifact-storage.md
   - ai-sdlc/change-control.md
+  - ai-sdlc/complexity-routing.md
 side_effects:
   - write review artifact when explicitly asked to produce output
   - recommend manifest.md updates
@@ -54,6 +55,11 @@ blocking_conditions:
   - `DIRECT_IMPLEMENTATION`
   - `SPECKIT_PIPELINE_REQUIRED`
   - `BLOCKED_NEEDS_REVISION`
+- 输出复杂度分级：
+  - `SIMPLE`
+  - `MEDIUM`
+  - `COMPLEX`
+  - `BLOCKED_UNKNOWN`
 - 说明是否需要更新 `manifest.md` 的 Gate Decisions、Development Path Decision、Activity Log 或 Blocking Issues。
 
 它不负责：
@@ -121,9 +127,9 @@ library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
 
 | Recommendation | 使用条件 | 后续动作 |
 | --- | --- | --- |
-| `DIRECT_IMPLEMENTATION` | 方案完整、边界清楚、改动范围小或中等、无必须完整 SDD 的复杂协作。 | 进入实现，仍需遵守实现记录和代码审核 Gate。 |
-| `SPECKIT_PIPELINE_REQUIRED` | 涉及多模块协作、状态流转、DB/MQ/定时任务、复杂回滚、知识沉淀或用户明确要求完整 SDD。 | 唤醒 `sdlc-speckit-pipeline`。 |
-| `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束。 | 回到 `01-技术方案` 生成新版本并重新审核。 |
+| `DIRECT_IMPLEMENTATION` | Complexity 为 `SIMPLE` 或 `MEDIUM`，方案完整、边界清楚、无必须完整 SDD 的复杂协作。 | 进入实现，仍需遵守实现记录和代码审核 Gate。 |
+| `SPECKIT_PIPELINE_REQUIRED` | Complexity 为 `COMPLEX`，或用户明确要求完整 SDD，或后续 Gate 判定直接实现过于冒险。 | 唤醒 `sdlc-speckit-pipeline`。 |
+| `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束 / Complexity 为 `BLOCKED_UNKNOWN`。 | 回到 `01-技术方案` 生成新版本并重新审核。 |
 
 ## Side Effects
 

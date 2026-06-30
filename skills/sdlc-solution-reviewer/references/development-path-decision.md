@@ -8,6 +8,15 @@ Output exactly one value:
 - `SPECKIT_PIPELINE_REQUIRED`
 - `BLOCKED_NEEDS_REVISION`
 
+Before choosing the recommendation, classify Complexity using `../../../ai-sdlc/complexity-routing.md`:
+
+- `SIMPLE`
+- `MEDIUM`
+- `COMPLEX`
+- `BLOCKED_UNKNOWN`
+
+Record Complexity Triggers and Full SDD Override in the review output and manifest recommendation.
+
 ## BLOCKED_NEEDS_REVISION
 
 Use when:
@@ -20,6 +29,7 @@ Use when:
 - Compatibility with the original flow is undefined.
 - Failure, timeout, exception, idempotency, transaction, or state handling is undefined.
 - Test strategy cannot validate the core requirement.
+- Complexity is `BLOCKED_UNKNOWN`.
 
 Next step:
 
@@ -44,6 +54,11 @@ Typical triggers:
 - Need to update `.specify/business_domain/**`.
 - User explicitly requests full SDD.
 
+Complexity:
+
+- Default for `COMPLEX`.
+- Allowed for `SIMPLE` or `MEDIUM` only when the user explicitly requests full SDD or a later Gate requires switching paths.
+
 Allowed Gate Results:
 
 - `PASS`
@@ -60,6 +75,7 @@ Ask for user confirmation, then invoke sdlc-speckit-pipeline.
 Use when:
 
 - Gate Result is `PASS` or accepted `PASS_WITH_RISK`.
+- Complexity is `SIMPLE` or `MEDIUM`.
 - Scope is narrow and well bounded.
 - Technical specification fully defines behavior.
 - No full SDD route is needed.
@@ -86,3 +102,4 @@ When uncertain between direct implementation and Speckit:
 - Prefer `SPECKIT_PIPELINE_REQUIRED` if the change touches state, data consistency, MQ, DB, scheduler, or multiple modules.
 - Prefer `BLOCKED_NEEDS_REVISION` if uncertainty is about business behavior.
 - Prefer `DIRECT_IMPLEMENTATION` only if uncertainty is non-core and documented as a residual risk.
+- Prefer `BLOCKED_NEEDS_REVISION` if complexity cannot be classified from current evidence.
