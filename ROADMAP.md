@@ -460,8 +460,8 @@ roots = [
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
 | `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
 | `gate-runner` | 合同已补 | 新建执行 Skill；作为通用 Gate 检查器 | 中 | 4 |
-| `code-review-normalizer` | 缺失 | 新建或合并 | 中 | 7 |
-| `test-feedback-sync` | 缺失 | 新建或合并 | 中 | 6/7 |
+| `code-review-normalizer` | 合同已补 | 新建执行 Skill 或接入现有代码审查流程 | 中 | 7 |
+| `test-feedback-sync` | 合同已补 | 新建执行 Skill 或接入测试验收 / Sync 流程 | 中 | 6/7 |
 | `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
 | `speckit-clarify` | 合同已补 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
 | `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
@@ -491,7 +491,7 @@ roots = [
 7. [x] 登记 `specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
 8. [x] 调整 `speckit-specify` / `speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
 9. [x] 登记 `requirement-normalizer`、`gate-runner` 的 proposed 合同边界。
-10. [ ] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
+10. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
 
 ## 阶段验收标准
 

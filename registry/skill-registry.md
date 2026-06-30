@@ -191,6 +191,74 @@ notes:
   - does not replace specialized reviewers such as solution-reviewer
 ```
 
+### code-review-normalizer
+
+```yaml
+name: code-review-normalizer
+category: Reviewer Skill / Producer Skill
+stage: Code Review Normalization
+status: proposed
+planned_skill_path:
+  - skills/code-review-normalizer/SKILL.md
+contract:
+  - skill-contracts/known-skills/code-review-normalizer.md
+required_schema:
+  - ess/code-review-schema.md
+required_checklist:
+  - checklists/code-review-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - write library/{requirement_id}/04-代码审核 normalized review artifact when requested
+  - recommend manifest.md updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - review report is missing
+  - code diff or changed file list is missing
+  - behavioral finding lacks specification basis
+  - finding cannot be mapped to file, line, or symbol
+notes:
+  - normalizes DeepSeek, Codex, human, or other review reports
+  - does not fix code
+```
+
+### test-feedback-sync
+
+```yaml
+name: test-feedback-sync
+category: Sync Skill / Producer Skill
+stage: Test Feedback Classification / Knowledge Sync
+status: proposed
+planned_skill_path:
+  - skills/test-feedback-sync/SKILL.md
+contract:
+  - skill-contracts/known-skills/test-feedback-sync.md
+required_schema:
+  - ess/test-feedback-schema.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - write library/{requirement_id}/05-测试验收 structured feedback artifact when requested
+  - recommend checklist, schema, or manifest updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - raw feedback is missing
+  - failure cannot be classified
+  - specification missing is detected but no re-gate path is recorded
+  - requirement change is detected but no change-control decision exists
+notes:
+  - classifies test and acceptance feedback
+  - routes specification missing and requirement change back to upstream gates
+```
+
 ### html-doc-style
 
 ```yaml
