@@ -93,7 +93,7 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 示例：
 
 ```text
-2026-06-30 | Codex / solution-reviewer | 方案审核 | 02-方案审核 | ...__方案审核__v1.md | PASS | 建议 DIRECT_IMPLEMENTATION
+2026-06-30 | Codex / sdlc-solution-reviewer | 方案审核 | 02-方案审核 | ...__方案审核__v1.md | PASS | 建议 DIRECT_IMPLEMENTATION
 2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ...__方案审核__v1.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
 ```
 

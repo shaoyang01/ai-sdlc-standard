@@ -109,7 +109,7 @@ ai-sdlc-standard/
 说明：
 
 - 上面的 `sdlc-*` 是标准包新增或重写后的安装目标。
-- 仓库中未加 `sdlc-` 前缀的既有 Skill 目录或合同可以保留原样，用于历史对照或迁移过渡，但不属于标准包安装清单。
+- 标准仓库中的可安装 Skill 目录和已登记合同必须统一使用 `sdlc-*` 命名。
 - 安装或同步到 Agent Skill 目录时，只同步 `skills/sdlc-*`，不要整包同步 `skills/`。
 
 ## 使用方式
@@ -126,10 +126,10 @@ ai-sdlc-standard/
 ## Skill 命名规则
 
 - 标准包内新增或重写的可安装 Skill 一律使用 `sdlc-*` 命名。
-- 对已有外部 Skill 的标准化改造也视为新增 Skill，只新增 `sdlc-*` 版本，不修改、不覆盖、不迁移原 Skill 本体。
+- 对已有外部 Skill 的标准化改造也视为新增 Skill，只在标准包内新增 `sdlc-*` 版本，不修改、不覆盖、不迁移外部 Skill 本体。
 - `skills/` 下的目录名、`SKILL.md` frontmatter `name`、`skill-contracts/known-skills/` 文件名和 `registry/skill-registry.md` 登记名必须一致。
 - 仅有合同、执行体尚未实现的 Skill 只登记合同，不在 `skills/` 目录中占位。
-- 原有外部 Skill 或未加前缀的历史目录可保留原样，但不能作为本标准包的安装目标名称。
+- 原有外部 Skill 可以继续保留在各自 Agent 的 Skill 目录中，但不能进入本标准仓库的安装目标清单。
 
 ## 文档门禁
 

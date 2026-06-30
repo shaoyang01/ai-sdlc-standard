@@ -17,7 +17,7 @@
 
 - Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION / undecided
 - Decided By:
-- Decision Source: solution-reviewer / user / gate-runner / other
+- Decision Source: sdlc-solution-reviewer / user / sdlc-gate-runner / other
 - Decision Artifact:
 - Reason:
 - Follow-up:

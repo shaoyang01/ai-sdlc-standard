@@ -111,10 +111,10 @@ engineering-standard/ess/specification-schema.md
 
 只有当用户明确要求安装或同步时，才执行安装动作。普通“生成文档”“审阅方案”“输出报告”请求只使用标准包规则，不自动写入任何全局 Skill 目录。
 
-例如将 `skills/docflow-writer/` 同步到目标 Agent 的 Skill 目录：
+例如将 `skills/sdlc-docflow-writer/` 同步到目标 Agent 的 Skill 目录：
 
 ```text
-skills/docflow-writer/
+skills/sdlc-docflow-writer/
 ```
 
 安装后的副本可以被 Agent 使用，但 GitHub 标准仓库仍是主源。
