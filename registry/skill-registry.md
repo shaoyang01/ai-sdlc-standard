@@ -712,7 +712,47 @@ notes:
   - hands implementation evidence to sdlc-implementation-recorder
 ```
 
+### sdlc-speckit-sync
+
+```yaml
+name: sdlc-speckit-sync
+category: Sync Skill / Producer Skill
+stage: Speckit Sync / Knowledge Sync
+status: active
+skill_path:
+  - skills/sdlc-speckit-sync/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+references:
+  - skills/sdlc-speckit-sync/references/sync-inputs.md
+  - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/fact-eligibility.md
+  - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+  - skills/sdlc-speckit-sync/references/output-and-manifest.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+required_contract:
+  - skill-contracts/sync-skill-contract.md
+side_effects:
+  - update authorized knowledge targets
+  - recommend checklist, schema, or manifest updates
+  - recommend Re-Gate or reconcile actions
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: true
+can_execute_commands: true
+blocking_conditions:
+  - implementation is unverified
+  - target path or ownership is unclear
+  - user did not authorize writing to target
+  - proposed fact is unstable, one-off, or contradicted
+notes:
+  - consumes verified implementation evidence
+  - syncs only stable reusable facts
+  - does not use chat fragments as long-term facts
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-sync
 - sdlc-speckit-code-doc-reconcile

@@ -119,6 +119,15 @@ skills:
       - skills/sdlc-speckit-implement/references/verification-and-recording.md
       - skills/sdlc-speckit-implement/references/blocking-and-regate.md
       - skills/sdlc-speckit-implement/references/output-and-manifest.md
+  sdlc_speckit_sync:
+    path: skills/sdlc-speckit-sync/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-sync.md
+    references:
+      - skills/sdlc-speckit-sync/references/sync-inputs.md
+      - skills/sdlc-speckit-sync/references/sync-targets.md
+      - skills/sdlc-speckit-sync/references/fact-eligibility.md
+      - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+      - skills/sdlc-speckit-sync/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md
