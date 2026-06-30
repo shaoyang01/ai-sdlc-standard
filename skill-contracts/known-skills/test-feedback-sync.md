@@ -8,7 +8,7 @@ version: 0.1.0
 category: Sync Skill / Producer Skill
 stage: Test Feedback Sync / Knowledge Sync
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/05-测试验收/*
   - library/{requirement_id}/01-技术方案/*

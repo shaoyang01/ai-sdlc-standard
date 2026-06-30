@@ -86,6 +86,14 @@ skills:
       - skills/test-feedback-classifier/references/classification-rules.md
       - skills/test-feedback-classifier/references/evidence-and-blocking.md
       - skills/test-feedback-classifier/references/output-artifact.md
+  test_feedback_sync:
+    path: skills/test-feedback-sync/SKILL.md
+    contract: skill-contracts/known-skills/test-feedback-sync.md
+    references:
+      - skills/test-feedback-sync/references/sync-workflow.md
+      - skills/test-feedback-sync/references/classification-routing.md
+      - skills/test-feedback-sync/references/sync-boundaries.md
+      - skills/test-feedback-sync/references/output-report.md
 portability:
   may_be_copied_to:
     - repository_root

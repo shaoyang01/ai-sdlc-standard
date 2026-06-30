@@ -337,11 +337,16 @@ notes:
 name: test-feedback-sync
 category: Sync Skill / Producer Skill
 stage: Test Feedback Sync / Knowledge Sync
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/test-feedback-sync/SKILL.md
 contract:
   - skill-contracts/known-skills/test-feedback-sync.md
+references:
+  - skills/test-feedback-sync/references/sync-workflow.md
+  - skills/test-feedback-sync/references/classification-routing.md
+  - skills/test-feedback-sync/references/sync-boundaries.md
+  - skills/test-feedback-sync/references/output-report.md
 required_schema:
   - ess/test-feedback-schema.md
 required_storage:

@@ -81,7 +81,10 @@ ai-sdlc-standard/
 │   ├── solution-reviewer/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   └── test-feedback-classifier/
+│   ├── test-feedback-classifier/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   └── test-feedback-sync/
 │       ├── SKILL.md
 │       └── references/
 ├── templates/

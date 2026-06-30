@@ -74,7 +74,7 @@
 | Speckit Specify / Clarify 职责漂移 | 明确 `specification-writer` 产物可作为轻量需求的规格事实；进入 Speckit 时，`speckit-specify` / `speckit-clarify` 以复用和校验前置产物为主。 |
 | Gate 输出需要统一 | 已实现 `gate-runner` 初版，后续用真实 manifest 样例迭代 PASS / FAIL / PASS_WITH_RISK 与 Re-Gate 检查细节。 |
 | Review 报告不可执行 | 已实现 `code-review-normalizer` 初版，把多来源 Review 归一到 Code Review Schema；后续用真实 Review 样例迭代。 |
-| 测试问题没有反向沉淀 | 规划 `test-feedback-sync`，把 Specification Missing / Requirement Change 等分类回写 Checklist、Schema 或 change-control。 |
+| 测试问题没有反向沉淀 | 已实现 `test-feedback-sync` 初版，把 Specification Missing / Requirement Change 等分类转成 Checklist、Schema、manifest 或 change-control 建议。 |
 | MVP 顺序需要收敛 | 不再从零创建目录；当前 MVP 聚焦 Manifest 活动模型、方案审计 Skill、pipeline Gate 顺序。 |
 
 ## Skill 职责分类
@@ -104,7 +104,7 @@
 | 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
 | Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
 | Code Review 归一化 | 已实现 `code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
-| 测试反馈反向沉淀 | 有 test feedback schema，但 sync 动作不完整。 | 规划 `test-feedback-sync`，把规格遗漏回写 Checklist/Schema/Skill 规则。 |
+| 测试反馈反向沉淀 | 已实现 `test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
 | 知识同步 | 已明确交给 `speckit-sync`。 | 补 `speckit-sync` 合同，定义哪些事实能沉淀，哪些只留在 DocFlow。 |
 | 日报数据源 | 已规划 work-journal 远期互斥模式。 | 等 manifest 活动模型稳定后，再定义产品侧实现契约。 |
 
@@ -192,7 +192,7 @@
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner`、`implementation-recorder`、`code-review-normalizer`、`test-feedback-classifier` 已实现初版；其他核心 Skill 待新建或待补合同。
+状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer`、`gate-runner`、`implementation-recorder`、`code-review-normalizer`、`test-feedback-classifier`、`test-feedback-sync` 已实现初版；其他核心 Skill 待新建或待补合同。
 
 这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
@@ -205,7 +205,7 @@
 | `test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
 | `gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
 | `code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
-| `test-feedback-sync` | 中 | 新建或并入 Sync 流程 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
+| `test-feedback-sync` | 中 | 已实现初版 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
 #### `solution-reviewer` / Specification Completeness Auditor
 
@@ -461,7 +461,7 @@ roots = [
 | `test-feedback-classifier` | 已实现初版 | 维护并按真实测试反馈样例迭代 | 中 | 4 |
 | `gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；作为通用 Gate 检查器 | 中 | 4 |
 | `code-review-normalizer` | 已实现初版 | 维护并按真实代码审查样例迭代 | 中 | 7 |
-| `test-feedback-sync` | 合同已补 | 新建执行 Skill；消费 `test-feedback-classifier` 产物并处理 Checklist / Schema / Sync 建议 | 中 | 6/7 |
+| `test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
 | `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
 | `speckit-clarify` | 合同已补 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
 | `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
@@ -495,7 +495,7 @@ roots = [
 11. [x] 登记并实现 `implementation-recorder` 初版，覆盖 diff、验证、未完成项、方案偏离和实现阻塞记录。
 12. [x] 登记并实现 `test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
 13. [x] 登记并实现 `code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。
-14. [x] 继续推进 `test-feedback-sync` 等后续 Skill 合同。
+14. [x] 登记并实现 `test-feedback-sync` 初版，覆盖测试反馈到 Checklist / Schema / manifest / 后续知识同步建议。
 
 ## 阶段验收标准
 
