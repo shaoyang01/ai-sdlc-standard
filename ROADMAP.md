@@ -22,7 +22,7 @@
 | 完整路线图 | 进行中 | 本文件作为后续 Skill 改造总入口，并吸收外部 v1.0 文档暴露的路线图缺口。 |
 | 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
-| 方案审阅 Skill | 合同已补，执行 Skill 待建 | `skill-contracts/known-skills/solution-reviewer.md` 已定义全局 DocFlow Gate、开发路径建议和阻塞条件。 |
+| 方案审阅 Skill | 已实现初版 | `skills/solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
 | Speckit 生命周期 Skill | 待改造 | 需要补合同、收紧 Gate、必要时重写执行体。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
@@ -456,7 +456,7 @@ roots = [
 | `docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
 | `requirement-normalizer` | 合同已补 | 新建执行 Skill 或入口适配；作为需求归一化入口 | 高 | 4 |
 | `specification-writer` | 合同已补 | 新建执行 Skill；作为 Speckit 之外的通用规格生成入口，产物可被 `speckit-specify` 复用 | 高 | 4/5 |
-| `solution-reviewer` | 合同已补 | 新建执行 Skill，承担全局 DocFlow 方案审阅 Gate / Specification Completeness Auditor 角色 | 高 | 4 |
+| `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
 | `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
 | `gate-runner` | 合同已补 | 新建执行 Skill；作为通用 Gate 检查器 | 中 | 4 |

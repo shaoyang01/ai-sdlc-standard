@@ -8,7 +8,7 @@ version: 0.1.0
 category: Auditor Skill
 stage: Specification Audit / Development Path Routing
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - library/{requirement_id}/01-技术方案/*
   - optional specs/**

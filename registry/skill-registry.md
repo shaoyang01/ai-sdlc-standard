@@ -79,11 +79,16 @@ notes:
 name: solution-reviewer
 category: Auditor Skill
 stage: Specification Audit / Development Path Routing
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/solution-reviewer/SKILL.md
 contract:
   - skill-contracts/known-skills/solution-reviewer.md
+references:
+  - skills/solution-reviewer/references/review-workflow.md
+  - skills/solution-reviewer/references/development-path-decision.md
+  - skills/solution-reviewer/references/checklist.md
+  - skills/solution-reviewer/references/output-report.md
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
