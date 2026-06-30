@@ -86,6 +86,14 @@ skills:
       - skills/sdlc-speckit-clarify/references/coverage-check.md
       - skills/sdlc-speckit-clarify/references/regate-routing.md
       - skills/sdlc-speckit-clarify/references/output-and-manifest.md
+  sdlc_speckit_plan:
+    path: skills/sdlc-speckit-plan/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-speckit-plan.md
+    references:
+      - skills/sdlc-speckit-plan/references/plan-inputs.md
+      - skills/sdlc-speckit-plan/references/planning-scope.md
+      - skills/sdlc-speckit-plan/references/plan-gate-check.md
+      - skills/sdlc-speckit-plan/references/output-and-manifest.md
   sdlc_speckit_specify:
     path: skills/sdlc-speckit-specify/SKILL.md
     contract: skill-contracts/known-skills/sdlc-speckit-specify.md

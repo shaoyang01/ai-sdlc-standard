@@ -542,9 +542,49 @@ notes:
   - does not expand scope inside the Speckit pipeline
 ```
 
+### sdlc-speckit-plan
+
+```yaml
+name: sdlc-speckit-plan
+category: Producer Skill / Auditor Skill
+stage: Speckit Plan / Plan Gate
+status: active
+skill_path:
+  - skills/sdlc-speckit-plan/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-speckit-plan.md
+references:
+  - skills/sdlc-speckit-plan/references/plan-inputs.md
+  - skills/sdlc-speckit-plan/references/planning-scope.md
+  - skills/sdlc-speckit-plan/references/plan-gate-check.md
+  - skills/sdlc-speckit-plan/references/output-and-manifest.md
+required_schema:
+  - ess/specification-schema.md
+required_checklist:
+  - checklists/plan-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - create or update specs/{feature}/plan.md
+  - recommend manifest.md Activity Log or Re-Gate updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - sdlc-speckit-clarify has unresolved blocking ambiguity
+  - plan would change approved scope or behavior
+  - plan requires undefined business behavior
+  - plan cannot support acceptance criteria
+notes:
+  - consumes sdlc-speckit-clarify output
+  - creates or validates specs plan.md only
+  - does not generate tasks or modify code
+```
+
 ## Pending Detailed Contracts
 
-- sdlc-speckit-plan
 - sdlc-speckit-tasks
 - sdlc-speckit-analyze
 - sdlc-speckit-implement

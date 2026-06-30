@@ -55,6 +55,7 @@ ai-sdlc-standard/
 │       ├── sdlc-specification-writer.md
 │       ├── sdlc-solution-reviewer.md
 │       ├── sdlc-speckit-clarify.md
+│       ├── sdlc-speckit-plan.md
 │       ├── sdlc-speckit-specify.md
 │       ├── sdlc-speckit-pipeline.md
 │       ├── sdlc-test-feedback-classifier.md
@@ -82,6 +83,9 @@ ai-sdlc-standard/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-clarify/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── sdlc-speckit-plan/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── sdlc-speckit-specify/

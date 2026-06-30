@@ -24,7 +24,7 @@
 | Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
-| Speckit 生命周期 Skill | 待改造 | 需要补合同、收紧 Gate、必要时重写执行体。 |
+| Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-specify` / `sdlc-speckit-clarify` / `sdlc-speckit-plan` 已有初版；后续继续补 Tasks、Analyze、Implement、Sync。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
 ## 核心原则
@@ -265,7 +265,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 ### Wave 5: Speckit 生命周期合同
 
-状态：待改造。
+状态：进行中。
 
 目标：
 
@@ -279,7 +279,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 | --- | --- | --- | --- |
 | `sdlc-speckit-specify` | 高 | 补合同 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/spec.md`，避免重新解释需求。 |
 | `sdlc-speckit-clarify` | 高 | 补合同 | 默认校验无未决问题；若发现新核心问题，应阻塞并回到方案修订 / 方案审核，而不是在 pipeline 内扩大范围。 |
-| `sdlc-speckit-plan` | 高 | 补合同 | 定义技术计划、约束、风险和 Plan Gate。 |
+| `sdlc-speckit-plan` | 高 | 已实现初版 | 定义技术计划、约束、风险和 Plan Gate。 |
 | `sdlc-speckit-tasks` | 高 | 补合同 | 定义任务拆解、任务 Gate、实现前准入。 |
 | `sdlc-speckit-analyze` | 中 | 补合同 | 定义跨 spec / plan / tasks / DocFlow 的一致性审计。 |
 | `sdlc-speckit-pipeline` | 高 | 补合同，可能重写执行体 | 串联单需求全流程，必须严格执行 Gate。 |
@@ -464,7 +464,7 @@ roots = [
 | `sdlc-test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
 | `sdlc-speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待改造 | 高 | 5 |
 | `sdlc-speckit-clarify` | 已实现初版 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待改造 | 高 | 5 |
-| `sdlc-speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
+| `sdlc-speckit-plan` | 已实现初版 | 生成 / 校验 `specs/plan.md`；发现核心缺口则回退方案 Gate | 高 | 5 |
 | `sdlc-speckit-tasks` | 待改造 | 合同明确 | 高 | 5 |
 | `sdlc-speckit-analyze` | 待改造 | 合同明确 | 中 | 5 |
 | `sdlc-speckit-pipeline` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待改造 | 高 | 5 |
@@ -497,6 +497,7 @@ roots = [
 13. [x] 登记并实现 `sdlc-code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。
 14. [x] 登记并实现 `sdlc-test-feedback-sync` 初版，覆盖测试反馈到 Checklist / Schema / manifest / 后续知识同步建议。
 15. [x] 登记并实现 `sdlc-speckit-specify` / `sdlc-speckit-clarify` 标准 Skill 初版，明确复用前置 DocFlow 产物并阻塞核心澄清回退。
+16. [x] 登记并实现 `sdlc-speckit-plan` 初版，覆盖 Plan Gate、技术计划边界和回退规则。
 
 ## 阶段验收标准
 
