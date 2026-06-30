@@ -46,11 +46,16 @@ blocking_conditions:
 name: requirement-normalizer
 category: Intake Skill / Producer Skill
 stage: Requirement Intake / Requirement Normalization
-status: proposed
-planned_skill_path:
+status: active
+skill_path:
   - skills/requirement-normalizer/SKILL.md
 contract:
   - skill-contracts/known-skills/requirement-normalizer.md
+references:
+  - skills/requirement-normalizer/references/intake-workflow.md
+  - skills/requirement-normalizer/references/source-handling.md
+  - skills/requirement-normalizer/references/conflict-and-blocking.md
+  - skills/requirement-normalizer/references/output-artifact.md
 required_schema:
   - ai-sdlc/artifact-flow.md
 required_storage:

@@ -97,7 +97,7 @@
 
 | 流程能力 | 当前情况 | 后续动作 |
 | --- | --- | --- |
-| 需求归一化 | 目前依赖用户输入和 SpecKit 入口。 | 规划 `requirement-normalizer` 合同，定义飞书、HTML、Markdown、纯文本需求如何进入 `00-需求资料`。 |
+| 需求归一化 | 已实现 `requirement-normalizer` 初版。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
 | 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | `specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
 | 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
 | Gate 执行 | 有 Gate 模板，但缺统一 Gate 执行 Skill。 | 规划 `gate-runner`，统一 PASS / FAIL / PASS_WITH_RISK；`gate-auditor` 仅作为历史别名处理。 |
@@ -192,13 +192,13 @@
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：`solution-reviewer` 合同已补；其他核心 Skill 待新建或待补合同。
+状态：`requirement-normalizer`、`specification-writer`、`solution-reviewer` 已实现初版；其他核心 Skill 待新建或待补合同。
 
 这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
 | Skill | 优先级 | 类型 | 责任 | 主要输出 |
 | --- | --- | --- | --- | --- |
-| `requirement-normalizer` | 高 | 新建或并入入口 Skill 合同 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
+| `requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
 | `specification-writer` | 高 | 新建 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
 | `solution-reviewer` | 高 | 新建 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
 | `implementation-recorder` | 中 | 新建或并入实现 Skill 合同 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
@@ -454,7 +454,7 @@ roots = [
 | 名称 | 当前状态 | 目标状态 | 优先级 | Wave |
 | --- | --- | --- | --- | --- |
 | `docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
-| `requirement-normalizer` | 合同已补 | 新建执行 Skill 或入口适配；作为需求归一化入口 | 高 | 4 |
+| `requirement-normalizer` | 已实现初版 | 维护并按实际需求入口反馈迭代；作为需求归一化入口 | 高 | 4 |
 | `specification-writer` | 已实现初版 | 维护并按实际规格生成反馈迭代；产物可被 `speckit-specify` 复用 | 高 | 4/5 |
 | `solution-reviewer` | 已实现初版 | 维护并按实际方案审阅反馈迭代 | 高 | 4 |
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
@@ -490,7 +490,7 @@ roots = [
 6. [x] 调整 `speckit-pipeline-confirmed-single` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
 7. [x] 登记 `specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
 8. [x] 调整 `speckit-specify` / `speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
-9. [x] 登记 `requirement-normalizer`、`gate-runner` 的 proposed 合同边界。
+9. [x] 登记并实现 `requirement-normalizer` 初版，同时登记 `gate-runner` 的 proposed 合同边界。
 10. [x] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
 
 ## 阶段验收标准

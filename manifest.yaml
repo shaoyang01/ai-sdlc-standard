@@ -30,6 +30,14 @@ skills:
       - skills/docflow-writer/references/execution-scenarios.md
       - skills/docflow-writer/references/lark-cli.md
       - skills/docflow-writer/references/legacy-html-style.md
+  requirement_normalizer:
+    path: skills/requirement-normalizer/SKILL.md
+    contract: skill-contracts/known-skills/requirement-normalizer.md
+    references:
+      - skills/requirement-normalizer/references/intake-workflow.md
+      - skills/requirement-normalizer/references/source-handling.md
+      - skills/requirement-normalizer/references/conflict-and-blocking.md
+      - skills/requirement-normalizer/references/output-artifact.md
   solution_reviewer:
     path: skills/solution-reviewer/SKILL.md
     contract: skill-contracts/known-skills/solution-reviewer.md

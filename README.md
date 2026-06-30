@@ -61,6 +61,9 @@ ai-sdlc-standard/
 │   ├── docflow-writer/
 │   │   ├── SKILL.md
 │   │   └── references/
+│   ├── requirement-normalizer/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── specification-writer/
 │   │   ├── SKILL.md
 │   │   └── references/

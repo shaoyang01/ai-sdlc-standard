@@ -8,7 +8,7 @@ version: 0.1.0
 category: Intake Skill / Producer Skill
 stage: Requirement Intake / Requirement Normalization
 standard_package: ai-sdlc-standard
-status: proposed
+status: active
 input_artifacts:
   - raw requirement text
   - optional Lark/Feishu document
