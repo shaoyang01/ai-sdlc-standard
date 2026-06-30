@@ -50,6 +50,7 @@ ai-sdlc-standard/
 │       ├── code-review-normalizer.md
 │       ├── docflow-writer.md
 │       ├── gate-runner.md
+│       ├── implementation-recorder.md
 │       ├── requirement-normalizer.md
 │       ├── specification-writer.md
 │       ├── solution-reviewer.md
@@ -62,6 +63,9 @@ ai-sdlc-standard/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── gate-runner/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── implementation-recorder/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   ├── requirement-normalizer/

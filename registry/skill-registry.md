@@ -211,6 +211,47 @@ notes:
   - does not replace specialized reviewers such as solution-reviewer
 ```
 
+### implementation-recorder
+
+```yaml
+name: implementation-recorder
+category: Producer Skill
+stage: Implementation Recording
+status: active
+skill_path:
+  - skills/implementation-recorder/SKILL.md
+contract:
+  - skill-contracts/known-skills/implementation-recorder.md
+references:
+  - skills/implementation-recorder/references/recording-workflow.md
+  - skills/implementation-recorder/references/evidence-sources.md
+  - skills/implementation-recorder/references/deviation-and-blocking.md
+  - skills/implementation-recorder/references/output-artifact.md
+required_schema:
+  - ai-sdlc/artifact-flow.md
+required_checklist:
+  - checklists/implementation-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - write library/{requirement_id}/03-实现记录 implementation record when requested
+  - recommend manifest.md updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - changed file list or diff is missing
+  - specification basis is missing for behavior-changing implementation
+  - implementation includes undefined business behavior
+  - required verification is missing or failed
+notes:
+  - factual handoff from implementation to code review
+  - does not modify production code
+  - does not replace code-review-normalizer
+```
+
 ### code-review-normalizer
 
 ```yaml

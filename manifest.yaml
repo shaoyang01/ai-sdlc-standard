@@ -38,6 +38,14 @@ skills:
       - skills/gate-runner/references/gate-matrix.md
       - skills/gate-runner/references/risk-and-regate.md
       - skills/gate-runner/references/output-report.md
+  implementation_recorder:
+    path: skills/implementation-recorder/SKILL.md
+    contract: skill-contracts/known-skills/implementation-recorder.md
+    references:
+      - skills/implementation-recorder/references/recording-workflow.md
+      - skills/implementation-recorder/references/evidence-sources.md
+      - skills/implementation-recorder/references/deviation-and-blocking.md
+      - skills/implementation-recorder/references/output-artifact.md
   requirement_normalizer:
     path: skills/requirement-normalizer/SKILL.md
     contract: skill-contracts/known-skills/requirement-normalizer.md
