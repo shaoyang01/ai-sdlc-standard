@@ -19,10 +19,11 @@
 | DocFlow 产物目录 | 已完成 | `library/{requirement_id}/` 是人工交接与 Gate 视图。 |
 | `docflow-writer` | 已完成 | 负责生成 Markdown、HTML、飞书文档，并更新 manifest。 |
 | 安装边界 | 已完成 | 安装 Skill 只是复制可执行副本，必须由用户明确触发。 |
-| 完整路线图 | 进行中 | 本文件作为后续 Skill 改造总入口。 |
+| 完整路线图 | 进行中 | 本文件作为后续 Skill 改造总入口，并吸收外部 v1.0 文档暴露的路线图缺口。 |
 | 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
-| Manifest 活动日志 | 待补 | 需要让 manifest 支持当前状态、今日活动、变更历史。 |
-| 方案审阅 Skill | 待新建 | 需要真正审阅技术方案并输出 `02-方案审核` Gate 产物。 |
+| Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
+| 方案审阅 Skill | 合同已补，执行 Skill 待建 | `skill-contracts/known-skills/solution-reviewer.md` 已定义全局 DocFlow Gate、开发路径建议和阻塞条件。 |
+| Skill 分类治理 | 待补 | 需要把 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 写成接入规则。 |
 | Speckit 生命周期 Skill | 待改造 | 需要补合同、收紧 Gate、必要时重写执行体。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
@@ -36,6 +37,12 @@
 - 需求变化不删除历史产物，通过版本、superseded 标记和 re-Gate 记录处理。
 - 在修改或重写 Skill 前，必须先模拟输入状态和边界数据，再编码或写合同。
 - 已建立的标准文件不做推翻式大改。后续以增量补充、合同接入、示例验证为主。
+- 外部 v1.0 文档只作为缺口校准来源，不按其目录结构照搬，也不覆盖本仓库已稳定的标准结构。
+- Specification Audit 是所有需求的通用 Gate，不归属于某一条 SpecKit pipeline；DeepSeek 或人工产出技术方案后，Codex 应先通过 `solution-reviewer` 审阅方案。
+- `solution-reviewer` 不只判断方案是否可实现，还要给出开发路径建议：直接实现，或唤醒 `speckit-pipeline-confirmed-single` 进入完整 SDD 流程。
+- 在新流程中，`specification-writer` 与 `solution-reviewer` 会前置承担大部分 Specify / Clarify 责任；进入 Speckit 时，通常不应再出现需要重新澄清的核心需求问题。
+- 如果需求使用 Speckit pipeline，pipeline 消费的是已审阅通过的方案和路由建议；方案审阅不是 Speckit 内部阶段。
+- Renderer 只能改变展示形式，不能承担需求理解、业务语义补全或规格内容生成。
 
 ## 推进方式
 
@@ -55,6 +62,35 @@
 4. 如果会影响 Gate，先明确 manifest 和 DocFlow 产物如何表达。
 5. 提交前检查 registry、contract、README/manifest 入口是否一致。
 
+## 外部 v1.0 文档吸收策略
+
+`AI_SDLC_Docs_v1.0 (1)` 中的三份文档提供的是流程校准，不是迁移目标。当前仓库已经有 `ai-sdlc/`、`ess/`、`templates/`、`registry/`、`skill-contracts/` 等结构，因此后续只吸收以下问题：
+
+| 问题 | 当前路线图处理 |
+| --- | --- |
+| 开发前缺 Specification Audit | 将 `solution-reviewer` 明确为所有需求通用的 Specification Completeness Auditor，并要求它在选择开发路径前完成。 |
+| Skill 缺统一分类 | 增加 Intake / Producer / Auditor / Renderer / Executor / Reviewer / Sync 分类治理。 |
+| Renderer 与 Producer 容易混淆 | 明确 `specification-writer` 负责语义规格，`html-doc-style` 和 `docflow-writer` 不负责补业务内容。 |
+| Speckit Specify / Clarify 职责漂移 | 明确 `specification-writer` 产物可作为轻量需求的规格事实；进入 Speckit 时，`speckit-specify` / `speckit-clarify` 以复用和校验前置产物为主。 |
+| Gate 输出需要统一 | 沿用既有 `templates/gate-result-template.md`，后续新增 `gate-runner` 合同。 |
+| Review 报告不可执行 | 规划 `code-review-normalizer`，把多来源 Review 归一到 Code Review Schema。 |
+| 测试问题没有反向沉淀 | 规划 `test-feedback-sync`，把 Specification Missing / Requirement Change 等分类回写 Checklist、Schema 或 change-control。 |
+| MVP 顺序需要收敛 | 不再从零创建目录；当前 MVP 聚焦 Manifest 活动模型、方案审计 Skill、pipeline Gate 顺序。 |
+
+## Skill 职责分类
+
+所有接入本标准的 Skill 必须至少声明一个主类别，不允许以“万能 Skill”身份同时承担语义生成、审计、渲染、实现和同步。
+
+| 类别 | 职责 | 不允许做 |
+| --- | --- | --- |
+| Intake | 接收、解析、归一化原始需求，保留来源信息。 | 不生成技术方案，不判断实现方式。 |
+| Producer | 生成标准研发产物，例如规格、计划、任务、报告。 | 不绕过 Gate 直接实现代码。 |
+| Auditor | 审计产物完整性、风险和缺口。 | 不直接改代码，不重写完整方案。 |
+| Renderer | 把已确认的标准产物渲染成 Markdown、HTML、PDF 或在线文档。 | 不改变语义，不删除必填章节，不补造业务逻辑。 |
+| Executor | 按已通过 Gate 的任务执行代码或命令。 | 不自行补未定义业务规则。 |
+| Reviewer | 审查代码或实现是否符合规格、计划和任务。 | 不输出无法定位、无法修复的泛泛建议。 |
+| Sync | 将稳定事实沉淀到知识库、Checklist、Schema 或 Workflow。 | 不把聊天片段当作长期事实源。 |
+
 ## 流程补齐清单
 
 这些是后续需要逐步补齐的流程能力，不要求一次完成。
@@ -62,9 +98,9 @@
 | 流程能力 | 当前情况 | 后续动作 |
 | --- | --- | --- |
 | 需求归一化 | 目前依赖用户输入和 SpecKit 入口。 | 规划 `requirement-normalizer` 合同，定义飞书、HTML、Markdown、纯文本需求如何进入 `00-需求资料`。 |
-| 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | 明确 `specification-writer` 是否独立存在，或并入 `speckit-specify` 合同。 |
-| 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为 Specification Completeness Auditor / 方案审阅 Skill。 |
-| Gate 执行 | 有 Gate 模板，但缺统一 Gate 执行 Skill。 | 规划 `gate-runner` 或强化 `gate-auditor`，统一 PASS / FAIL / PASS_WITH_RISK。 |
+| 规格编写 | `docflow-writer` 能写文档，但不等于规格生成器。 | `specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
+| 规格完整性审计 | 已规划 `solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
+| Gate 执行 | 有 Gate 模板，但缺统一 Gate 执行 Skill。 | 规划 `gate-runner`，统一 PASS / FAIL / PASS_WITH_RISK；`gate-auditor` 仅作为历史别名处理。 |
 | 复杂度分级 | 当前路线未区分 Simple / Medium / Complex。 | 补充复杂度分级策略，用于决定是否走完整 SpecKit pipeline。 |
 | Release Gate | 当前标准包有 Test/Code Review，但 release 链路弱。 | 后续补 release checklist / release gate / release-review 规划。 |
 | Code Review 归一化 | 有 code review schema，但缺报告归一化 Skill。 | 规划 `code-review-normalizer`，统一 DeepSeek/Codex/人工 Review 输出。 |
@@ -125,7 +161,7 @@
 
 ### Wave 3: 变更控制与 Manifest 活动模型
 
-状态：下一阶段优先。
+状态：基础版已补，后续随 Skill 合同继续细化。
 
 为什么先做：
 
@@ -134,8 +170,8 @@
 交付物：
 
 - 新增 `ai-sdlc/change-control.md`（已完成基础版）
-- 更新 `templates/artifact-manifest-template.md`
-- 必要时更新 `ai-sdlc/artifact-storage.md`
+- 更新 `templates/artifact-manifest-template.md`（已完成）
+- 必要时更新 `ai-sdlc/artifact-storage.md`（已完成）
 
 必须覆盖：
 
@@ -154,22 +190,45 @@
 - 从最早受影响节点重新 Gate。
 - 只有目标变成独立需求、独立排期或显著不同业务目标时，才新建流程。
 
-### Wave 4: 核心新建 Skill
+### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
-状态：待新建或待补合同。
+状态：`solution-reviewer` 合同已补；其他核心 Skill 待新建或待补合同。
 
-这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。
+这些 Skill 不是简单“改造旧 Skill”，而是当前标准落地缺失的核心能力。其中 `solution-reviewer` 是全局方案审阅 Gate，所有需求都应经过它；它先于开发路径选择发生，并决定本需求适合直接开发还是进入 Speckit pipeline。
 
 | Skill | 优先级 | 类型 | 责任 | 主要输出 |
 | --- | --- | --- | --- | --- |
-| `solution-reviewer` | 高 | 新建 | 审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
+| `requirement-normalizer` | 高 | 新建或并入入口 Skill 合同 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
+| `specification-writer` | 高 | 新建 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
+| `solution-reviewer` | 高 | 新建 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
 | `implementation-recorder` | 中 | 新建或并入实现 Skill 合同 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
 | `test-feedback-classifier` | 中 | 新建或并入测试验收流程 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
-| `gate-auditor` | 中 | 新建 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
+| `gate-runner` | 中 | 新建 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
+| `code-review-normalizer` | 中 | 新建或并入代码审查流程 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
+| `test-feedback-sync` | 中 | 新建或并入 Sync 流程 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
-#### `solution-reviewer`
+#### `solution-reviewer` / Specification Completeness Auditor
 
 这是当前最明确缺失的 Skill。
+
+标准入口流：
+
+```text
+DeepSeek / 人工产出技术方案
+        ↓
+Codex 使用 solution-reviewer 审阅方案
+        ↓
+输出 02-方案审核 + 开发路径建议
+        ↓
+直接开发 或 唤醒 speckit-pipeline-confirmed-single
+```
+
+定位：
+
+- 它属于 DocFlow 通用 Gate，不归属于 `speckit-pipeline-confirmed-single`。
+- 每个需求只要存在 `01-技术方案`，都必须产生对应 `02-方案审核`。
+- 它在开发路径选择前执行：不使用 Speckit 的需求，审阅通过后可以直接进入实现；需要完整 SDD 的需求，审阅通过后再唤醒 Speckit pipeline。
+- 当 `solution-reviewer` 发现仍有核心待确认问题时，应输出 `BLOCKED_NEEDS_REVISION`，回到方案修订，而不是先进入 Speckit 再依赖 `speckit-clarify` 追问。
 
 边界：
 
@@ -178,6 +237,8 @@
 - 它必须输出 Gate Result。
 - 它必须按问题严重级别列出 Critical / High / Medium / Low。
 - 它必须判断是否可以进入实现。
+- 它必须输出开发路径建议：`DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` / `BLOCKED_NEEDS_REVISION`。
+- 它的 Gate 结论必须早于任何实现动作，也必须早于是否唤醒 `speckit-pipeline-confirmed-single` 的决策。
 
 输入：
 
@@ -192,6 +253,7 @@
 
 - `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.html|md`
 - `manifest.md` 中方案审核节点状态
+- 开发路径建议与理由
 
 阻塞条件：
 
@@ -209,12 +271,14 @@
 
 - 把 SpecKit 机器事实源和 DocFlow 人工 Gate 视图连接起来。
 - 每个阶段都有明确输入、输出、副作用和阻塞条件。
-- pipeline Skill 不再靠隐式习惯推进，而是读取 Gate 产物与 manifest。
+- pipeline Skill 不再靠隐式习惯推进，而是读取通用 Gate 产物与 manifest。
+- `solution-reviewer` 不放在 Speckit 专属流程里；只有当方案审阅建议为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD 流程时，才唤醒 `speckit-pipeline-confirmed-single`。
+- `speckit-specify` 和 `speckit-clarify` 在新流程中的作用会减弱：它们不再负责从零理解需求，而是复用 `01-技术方案` 和 `02-方案审核`，生成/校验 `specs/**` 机器事实源。
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `speckit-specify` | 高 | 补合同 | 定义原始需求如何进入 `specs/spec.md` 与 `00-需求资料`。 |
-| `speckit-clarify` | 高 | 补合同 | 定义待确认问题如何阻塞后续阶段。 |
+| `speckit-specify` | 高 | 补合同 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/spec.md`，避免重新解释需求。 |
+| `speckit-clarify` | 高 | 补合同 | 默认校验无未决问题；若发现新核心问题，应阻塞并回到方案修订 / 方案审核，而不是在 pipeline 内扩大范围。 |
 | `speckit-plan` | 高 | 补合同 | 定义技术计划、约束、风险和 Plan Gate。 |
 | `speckit-tasks` | 高 | 补合同 | 定义任务拆解、任务 Gate、实现前准入。 |
 | `speckit-analyze` | 中 | 补合同 | 定义跨 spec / plan / tasks / DocFlow 的一致性审计。 |
@@ -225,18 +289,18 @@
 
 推荐顺序：
 
-1. `speckit-specify`
-2. `speckit-clarify`
-3. `speckit-plan`
-4. `speckit-tasks`
-5. `solution-reviewer`
-6. `speckit-pipeline-confirmed-single`
+1. 完成全局 `solution-reviewer` 合同，明确开发路径建议字段。
+2. 更新 `speckit-pipeline-confirmed-single` 合同，让它只在方案审阅建议或用户明确要求时启动。
+3. `speckit-specify`，明确复用 `specification-writer` 的方案产物。
+4. `speckit-clarify`，明确只做未决问题校验和阻塞，不重新承担需求澄清主流程。
+5. `speckit-plan`
+6. `speckit-tasks`
 7. `speckit-analyze`
 8. `speckit-pipeline-confirmed`
 
 说明：
 
-`solution-reviewer` 放在 pipeline single 前，是因为 pipeline 必须知道方案审核 Gate 的真实输入和输出。
+这里不是把 `solution-reviewer` 归入 Speckit，而是把它作为 Speckit 的前置路由 Gate。`speckit-pipeline-confirmed-single` 启动后仍按自己的 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile` 顺序执行，但 `Specify` 应消费已审阅方案，`Clarify` 应只做残余未决问题校验。若仍存在核心澄清问题，应回到 `01-技术方案` / `02-方案审核` 重新 Gate。
 
 ### Wave 6: 实现、同步与代码文档一致性
 
@@ -390,16 +454,20 @@ roots = [
 | 名称 | 当前状态 | 目标状态 | 优先级 | Wave |
 | --- | --- | --- | --- | --- |
 | `docflow-writer` | 已实现 | 维护 | 已完成 | 2 |
-| `solution-reviewer` | 缺失 | 新建 | 高 | 4 |
+| `requirement-normalizer` | 合同已补 | 新建执行 Skill 或入口适配；作为需求归一化入口 | 高 | 4 |
+| `specification-writer` | 合同已补 | 新建执行 Skill；作为 Speckit 之外的通用规格生成入口，产物可被 `speckit-specify` 复用 | 高 | 4/5 |
+| `solution-reviewer` | 合同已补 | 新建执行 Skill，承担全局 DocFlow 方案审阅 Gate / Specification Completeness Auditor 角色 | 高 | 4 |
 | `implementation-recorder` | 缺失 | 新建或合并 | 中 | 4 |
 | `test-feedback-classifier` | 缺失 | 新建或合并 | 中 | 4 |
-| `gate-auditor` | 缺失 | 新建 | 中 | 4 |
-| `speckit-specify` | 待改造 | 合同明确 | 高 | 5 |
-| `speckit-clarify` | 待改造 | 合同明确 | 高 | 5 |
+| `gate-runner` | 合同已补 | 新建执行 Skill；作为通用 Gate 检查器 | 中 | 4 |
+| `code-review-normalizer` | 缺失 | 新建或合并 | 中 | 7 |
+| `test-feedback-sync` | 缺失 | 新建或合并 | 中 | 6/7 |
+| `speckit-specify` | 合同已补 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待适配 | 高 | 5 |
+| `speckit-clarify` | 合同已补 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待适配 | 高 | 5 |
 | `speckit-plan` | 待改造 | 合同明确 | 高 | 5 |
 | `speckit-tasks` | 待改造 | 合同明确 | 高 | 5 |
 | `speckit-analyze` | 待改造 | 合同明确 | 中 | 5 |
-| `speckit-pipeline-confirmed-single` | proposed | 合同明确，执行体可重写 | 高 | 5 |
+| `speckit-pipeline-confirmed-single` | 合同已补 | 作为方案审阅后的可选完整 SDD 路径；执行体待适配 | 高 | 5 |
 | `speckit-pipeline-confirmed` | 待改造 | 合同明确 | 中 | 5 |
 | `speckit-implement` | 待改造 | 重写或大改 | 高 | 6 |
 | `speckit-sync` | 待改造 | 合同明确 | 高 | 6 |
@@ -414,12 +482,16 @@ roots = [
 
 ## 近期执行顺序
 
-1. 完成本路线图。
-2. 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
-3. 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
-4. 新建 `solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
-5. 再改 `speckit-pipeline-confirmed-single` 合同。
-6. 继续推进 Speckit 生命周期 Skill 合同。
+1. [x] 完成本路线图，并吸收外部 v1.0 文档暴露的路线图缺口。
+2. [x] 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
+3. [x] 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
+4. [x] 新建全局 `solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
+5. [x] 在 `solution-reviewer` 合同中定义开发路径建议：直接实现 / 唤醒 Speckit / 阻塞返修。
+6. [x] 调整 `speckit-pipeline-confirmed-single` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
+7. [x] 登记 `specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
+8. [x] 调整 `speckit-specify` / `speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
+9. [x] 登记 `requirement-normalizer`、`gate-runner` 的 proposed 合同边界。
+10. [ ] 继续推进 `code-review-normalizer`、`test-feedback-sync` 等后续 Skill 合同。
 
 ## 阶段验收标准
 

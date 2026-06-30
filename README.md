@@ -47,7 +47,14 @@ ai-sdlc-standard/
 │   ├── executor-skill-contract.md
 │   ├── sync-skill-contract.md
 │   └── known-skills/
-│       └── docflow-writer.md
+│       ├── docflow-writer.md
+│       ├── gate-runner.md
+│       ├── requirement-normalizer.md
+│       ├── specification-writer.md
+│       ├── solution-reviewer.md
+│       ├── speckit-clarify.md
+│       ├── speckit-specify.md
+│       └── speckit-pipeline-confirmed-single.md
 ├── skills/
 │   └── docflow-writer/
 │       ├── SKILL.md

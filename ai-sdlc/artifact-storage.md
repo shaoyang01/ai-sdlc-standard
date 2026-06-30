@@ -73,6 +73,32 @@ library/{requirement_id}/
 | `05-测试验收/` | 按需必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
 | `manifest.md` | 建议 | 保存该需求的产物索引、当前状态和下一步。 |
 
+## Manifest 记录规则
+
+`manifest.md` 是需求目录的索引和状态视图，不替代任何节点产物。
+
+推荐使用 `templates/artifact-manifest-template.md`，至少维护以下信息：
+
+- Metadata：需求 ID、仓库、当前阶段、当前状态、关联 `specs/**` 和分支。
+- Development Path Decision：方案审阅后决定直接实现、唤醒 Speckit pipeline，或阻塞返修。
+- Artifact Index：当前有效产物路径、版本、Gate 结果和更新时间。
+- Activity Log：当天发生的关键动作，供人工追踪和后续日报读取。
+- Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、测试口径等变化事件。
+- Superseded Artifacts：被新版本替代但必须保留的旧产物。
+- Re-Gate Records：变更后从哪个节点重新 Gate、结果是什么、下一步是什么。
+- Speckit Sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。
+
+Activity Log 应记录工作流动作，而不是聊天全文。
+
+示例：
+
+```text
+2026-06-30 | Codex / solution-reviewer | 方案审核 | 02-方案审核 | ...__方案审核__v1.md | PASS | 建议 DIRECT_IMPLEMENTATION
+2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ...__方案审核__v1.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
+```
+
+Development Path Decision 只记录当前有效决策。历史决策变化必须同时写入 Activity Log 和 Change History。
+
 ## 文件命名
 
 标准格式：
@@ -97,6 +123,49 @@ library/{requirement_id}/
 - `artifact_type`：产物类型，建议与目录名保持一致。
 - `version`：同一节点多次修订时递增。
 - `ext`：文档默认 HTML；实现记录或 manifest 可使用 Markdown。
+
+## 版本与 Superseded 规则
+
+同一节点产生新版本时，不覆盖旧文件。
+
+新版本适用场景：
+
+- 用户补充需求边界。
+- 方案审阅发现 Specification Missing。
+- 实现阶段发现原方案理解错误。
+- Code Review 或测试反馈导致方案、实现记录、测试验收需要更新。
+- 风险接受内容发生变化。
+
+被替代的旧版本必须保留，并在 `manifest.md` 的 Superseded Artifacts 中记录：
+
+```text
+Artifact: 01-技术方案/...__技术方案__v1.html
+Superseded By: 01-技术方案/...__技术方案__v2.html
+Reason: Specification Missing - 未定义失败降级策略
+Date: 2026-06-30
+Recorded By: Codex
+```
+
+当前有效版本以 Artifact Index 中记录的版本为准。
+
+## Re-Gate 规则
+
+发生变更时，从最早受影响节点重新 Gate。
+
+常见判断：
+
+| 变化 | 最早受影响节点 | 必需动作 |
+| --- | --- | --- |
+| 需求目标、范围或成功标准变化 | `00-需求资料` | 更新需求资料，重新生成或修订技术方案。 |
+| 行为约束、异常处理、兼容性、数据来源、状态流转变化 | `01-技术方案` | 新增技术方案版本，重新方案审核。 |
+| 开发路径建议变化 | `02-方案审核` | 新增方案审核或 Gate 记录，更新 Development Path Decision。 |
+| 实现偏离方案 | `03-实现记录` 或 `01-技术方案` | 判断是 Implementation Bug 还是 Specification Missing，再决定回退节点。 |
+| 代码审核发现阻塞项 | `04-代码审核` | 修复后更新实现记录，必要时重新代码审核。 |
+| 测试反馈暴露规格遗漏 | `05-测试验收` 和 `01-技术方案` | 记录测试反馈，回到技术方案并重新方案审核。 |
+
+每次 Re-Gate 必须在 `manifest.md` 的 Re-Gate Records 中记录触发原因、回退节点、Gate 产物、结果和下一步。
+
+新 Gate 通过前，不得继续使用已被 superseded 的旧 Gate 作为进入后续阶段的依据。
 
 ## 示例
 
@@ -221,4 +290,3 @@ specs/** + 实现结果
 - AI SDLC 过程产物优先写入 `library/{requirement_id}/{节点目录}/`。
 - 如果团队仍需要 `library/技术方案/` 或 `library/代码审核/` 汇总目录，可额外复制最终版文档，但不得替代需求目录内的门禁产物。
 - 下一个节点判断是否可进入时，只认 `library/{requirement_id}/` 下的标准产物。
-
