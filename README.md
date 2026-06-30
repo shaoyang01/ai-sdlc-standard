@@ -47,6 +47,7 @@ ai-sdlc-standard/
 │   ├── executor-skill-contract.md
 │   ├── sync-skill-contract.md
 │   └── known-skills/
+│       ├── sdlc-code-review-excellence.md
 │       ├── sdlc-code-review-normalizer.md
 │       ├── sdlc-docflow-writer.md
 │       ├── sdlc-gate-runner.md
@@ -67,6 +68,9 @@ ai-sdlc-standard/
 │       ├── sdlc-test-feedback-classifier.md
 │       └── sdlc-test-feedback-sync.md
 ├── skills/
+│   ├── sdlc-code-review-excellence/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── sdlc-code-review-normalizer/
 │   │   ├── SKILL.md
 │   │   └── references/

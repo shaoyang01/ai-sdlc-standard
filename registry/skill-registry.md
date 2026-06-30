@@ -291,6 +291,49 @@ notes:
   - sdlc-test-feedback-sync handles later checklist/schema/knowledge sync
 ```
 
+### sdlc-code-review-excellence
+
+```yaml
+name: sdlc-code-review-excellence
+category: Reviewer Skill / Auditor Skill
+stage: Code Review Execution
+status: active
+skill_path:
+  - skills/sdlc-code-review-excellence/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-code-review-excellence.md
+references:
+  - skills/sdlc-code-review-excellence/references/review-inputs.md
+  - skills/sdlc-code-review-excellence/references/review-workflow.md
+  - skills/sdlc-code-review-excellence/references/finding-standards.md
+  - skills/sdlc-code-review-excellence/references/blocking-and-regate.md
+  - skills/sdlc-code-review-excellence/references/output-and-handoff.md
+required_schema:
+  - ess/code-review-schema.md
+required_checklist:
+  - checklists/code-review-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/change-control.md
+side_effects:
+  - produce code review result
+  - recommend fixes, Re-Gate, normalization, and manifest updates
+can_modify_code: false
+can_modify_docs: true
+can_modify_knowledge_base: false
+can_execute_commands: true
+blocking_conditions:
+  - reviewed diff or changed file list is missing
+  - specification basis is missing for behavior-changing code
+  - implementation evidence contradicts code diff
+  - Critical or unaccepted High issue exists
+  - suggested fix would expand approved scope
+notes:
+  - executes standards-based code review
+  - hands formal report writing to sdlc-code-review-normalizer
+  - does not fix code
+```
+
 ### sdlc-code-review-normalizer
 
 ```yaml

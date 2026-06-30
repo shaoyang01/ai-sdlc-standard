@@ -21,6 +21,15 @@ entrypoints:
   artifact_manifest_template: templates/artifact-manifest-template.md
   registry: registry/skill-registry.md
 skills:
+  sdlc_code_review_excellence:
+    path: skills/sdlc-code-review-excellence/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-code-review-excellence.md
+    references:
+      - skills/sdlc-code-review-excellence/references/review-inputs.md
+      - skills/sdlc-code-review-excellence/references/review-workflow.md
+      - skills/sdlc-code-review-excellence/references/finding-standards.md
+      - skills/sdlc-code-review-excellence/references/blocking-and-regate.md
+      - skills/sdlc-code-review-excellence/references/output-and-handoff.md
   sdlc_code_review_normalizer:
     path: skills/sdlc-code-review-normalizer/SKILL.md
     contract: skill-contracts/known-skills/sdlc-code-review-normalizer.md

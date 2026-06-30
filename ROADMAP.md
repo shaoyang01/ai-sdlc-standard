@@ -345,7 +345,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `sdlc-code-review-excellence` | 中 | 补合同或新增 Skill | 对齐 `ess/code-review-schema.md` 和 `04-代码审核`。 |
+| `sdlc-code-review-excellence` | 中 | 已实现初版 | 执行标准化代码审查；正式报告归一化交给 `sdlc-code-review-normalizer`。 |
 | `html-doc-style` | 低 | legacy | 只作为视觉参考，不能再做 DocFlow 路由。 |
 | Lark/Feishu 文档 Skills | 中 | 下游边界定义 | 保持工具执行细节外置，标准包只定义 DocFlow 输出边界。 |
 | `sdlc-docflow-writer` | 已完成 | 维护 | 继续作为文档写入和发布入口。 |
@@ -356,7 +356,7 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 - `review-report-writer`
 - `test-acceptance-writer`
 
-是否新建取决于现有 `sdlc-code-review-excellence` 和 `sdlc-docflow-writer` 的职责边界是否足够清楚。
+`sdlc-code-review-excellence` 已新增为代码审查执行 Skill，`sdlc-code-review-normalizer` 继续负责把审查结果归一成 `04-代码审核` DocFlow artifact。
 
 ### Wave 8: 领域 Skill 标准化新增
 
@@ -474,7 +474,7 @@ roots = [
 | `sdlc-speckit-code-doc-reconcile` | 已实现初版 | 审计代码、spec、DocFlow、business_domain、manifest 一致性；默认只读，需授权才输出可应用更新 | 中 | 6 |
 | `sdlc-speckit-checklist` | 已实现初版 | 生成或校验需求专用 checklist；检查项必须可追溯，不替代 Gate、Analyze、Review 或测试验收 | 中 | 5 |
 | `sdlc-speckit-taskstoissues` | 待改造 | 可选下游 | 低 | 9 |
-| `sdlc-code-review-excellence` | 待改造 | 代码审核合同明确 | 中 | 7 |
+| `sdlc-code-review-excellence` | 已实现初版 | 基于 diff、规格依据、实现记录和验证证据执行代码审查；不修代码，正式报告交给 normalizer | 中 | 7 |
 | `html-doc-style` | legacy | 退到视觉参考 | 低 | 7 |
 | Lark/Feishu Skills | 外部工具 Skill | 输出边界定义 | 中 | 7 |
 | WMS 领域 Skills | 外部领域 Skill | 新增薄封装 `sdlc-*` Skill | 中 | 8 |
@@ -505,6 +505,7 @@ roots = [
 21. [x] 登记并实现 `sdlc-speckit-code-doc-reconcile` 初版，覆盖代码、规格、DocFlow、知识库和 manifest 漂移审计与 Re-Gate 路由。
 22. [x] 登记并实现 `sdlc-speckit-pipeline` 初版，覆盖完整 SDD 激活条件、阶段编排、用户确认边界和阻塞回退。
 23. [x] 登记并实现 `sdlc-speckit-checklist` 初版，覆盖需求专用 checklist 生成、过期校验、可追溯检查项和 Re-Gate 路由。
+24. [x] 登记并实现 `sdlc-code-review-excellence` 初版，覆盖标准化代码审查执行、阻塞判断、Re-Gate 和 normalizer 交接边界。
 
 ## 阶段验收标准
 
