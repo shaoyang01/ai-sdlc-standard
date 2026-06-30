@@ -358,34 +358,29 @@ Codex 使用 sdlc-solution-reviewer 审阅方案
 
 `sdlc-code-review-excellence` 已新增为代码审查执行 Skill，`sdlc-code-review-normalizer` 继续负责把审查结果归一成 `04-代码审核` DocFlow artifact。
 
-### Wave 8: 领域 Skill 标准化新增
+### Wave 8: 专业 Skill 边界
 
-状态：待规划。
+状态：不纳入本标准包改造范围。
 
 目标：
 
-- 领域 Skill 保持薄。
-- 不复制本标准的大段规则。
-- 当领域 Skill 参与需求开发时，必须写 DocFlow 产物和 manifest 活动。
+- 明确 WMS 等专业 Skill 是领域执行能力，不是 AI SDLC 工作流节点。
+- 本标准包不改造、不包装、不覆盖专业 Skill。
+- 专业 Skill 被需求开发引用时，其输出只作为实现证据、附件或人工上下文；是否写 DocFlow / manifest 由当前需求工作流负责，不要求专业 Skill 自身承担。
 
 范围：
 
-- WMS 模块配置类 Skill
-- WMS 节点配置类 Skill
-- WMS 鉴权版配置 Skill
-- 其他业务域重复配置 / 初始化 / 开仓 / 策略类 Skill
+- WMS 模块配置类 Skill。
+- WMS 节点配置类 Skill。
+- WMS 鉴权版配置 Skill。
+- 其他业务域重复配置、初始化、开仓、策略类专业 Skill。
 
 处理方式：
 
-- 不逐个重写为大 Skill。
-- 先定义一份 `sdlc-domain-skill-guide` 合同或指南。
-- 领域 Skill 只声明：
-  - 适用业务域
-  - 输入参数
-  - 产物节点
-  - 副作用
-  - 回滚或兼容边界
-  - 如何引用本标准包
+- 不新增 `sdlc-domain-skill-guide`。
+- 不新增 WMS 相关 `sdlc-*` 包装 Skill。
+- 不要求专业 Skill 引用本标准包。
+- 如果某个需求的研发流程使用了专业 Skill，仍由当前需求的 `sdlc-implementation-recorder`、`sdlc-code-review-excellence`、`sdlc-docflow-writer` 等工作流 Skill 记录证据和 Gate 状态。
 
 ### Wave 9: Tooling 与产品集成
 
@@ -477,7 +472,7 @@ roots = [
 | `sdlc-code-review-excellence` | 已实现初版 | 基于 diff、规格依据、实现记录和验证证据执行代码审查；不修代码，正式报告交给 normalizer | 中 | 7 |
 | `html-doc-style` | legacy | 退到视觉参考 | 低 | 7 |
 | Lark/Feishu Skills | 外部工具 Skill | 输出边界定义 | 中 | 7 |
-| WMS 领域 Skills | 外部领域 Skill | 新增薄封装 `sdlc-*` Skill | 中 | 8 |
+| WMS / 业务专业 Skills | 外部专业 Skill | 不纳入本标准包改造；不新增 `sdlc-*` 包装 Skill | - | - |
 | `work-journal-agent` | 产品仓库 | 远期互斥数据源模式 | 中 | 9 |
 
 ## 近期执行顺序
@@ -539,6 +534,6 @@ roots = [
 
 - 不在本仓库实现 `work-journal-agent` 代码。
 - 不把所有外部 Skill 复制进本仓库。
-- 不把 WMS 领域 Skill 重写成厚 Skill。
+- 不改造、不包装 WMS 等专业 Skill。
 - 不把 `library/{requirement_id}/` 当长期知识库。
 - 不用路线图替代 Gate 或 Skill Contract。
