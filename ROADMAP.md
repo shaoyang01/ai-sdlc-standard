@@ -31,7 +31,7 @@
 | Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-pipeline` 及 specify / clarify / plan / tasks / analyze / checklist / implement / sync / reconcile 已有初版；不再规划多 Agent 版本 pipeline。 |
 | Speckit 项目投放 | tooling ready | `scripts/bootstrap-speckit-project.sh` 已具备 dry-run、profile、project-context、reports、双轨隔离和 code evidence 生成能力。 |
 | 方案审核分流与文档治理收口 | 下一阶段大方向 | 需要把方案审核后的开发路径建议、Direct Implementation、Speckit Pipeline、business_domain 文档治理尾段统一成标准流程。 |
-| 多代码库需求 | 后续优化方向 | 需要补充全局需求主流程、每仓子流程和 Cross-Repo Gate。 |
+| 多代码库需求 | 后续优化方向 | 需要补充全局需求主流程、每仓子流程、Cross-Repo Gate 和 artifact placement policy。 |
 | work-journal 集成 | 远期规划 | 未来读取标准产物，不再依赖聊天碎片；必须与现有事件源互斥。 |
 
 ## 核心原则
@@ -51,6 +51,7 @@
 - 如果需求使用 Speckit pipeline，pipeline 消费的是已审阅通过的方案和路由建议；方案审阅不是 Speckit 内部阶段。
 - 如果需求走直接实现，也不能完全绕开文档治理；实现后仍需要进入轻量文档治理尾段，至少完成实现记录、代码审查、测试反馈、必要的 business_domain sync 和 code-doc reconcile。
 - business_domain 文档治理不是完整 Speckit SDD 的专属能力；它应该被抽象成所有实现路径都可能使用的收口阶段。
+- 单代码库需求的 DocFlow 产物默认跟随目标代码库；多代码库需求的全局产物必须放在统一 global artifact workspace，仓库局部产物仍留在各自代码库，通过 manifest 互相引用。
 - Renderer 只能改变展示形式，不能承担需求理解、业务语义补全或规格内容生成。
 
 ## 推进方式
@@ -71,7 +72,8 @@
 3. 如果是 Skill，先补合同，再决定是否写或改执行体。
 4. 如果会影响 Gate，先明确 manifest 和 DocFlow 产物如何表达。
 5. 如果会影响 direct / Speckit 分流，先明确方案审核输出字段和后续收口路径。
-6. 提交前检查 registry、contract、README/docs、manifest 入口是否一致。
+6. 如果会影响多代码库需求，先明确全局产物与仓库局部产物的放置边界。
+7. 提交前检查 registry、contract、README/docs、manifest 入口是否一致。
 
 ## 外部 v1.0 文档吸收策略
 
@@ -88,6 +90,7 @@
 | 测试问题没有反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版，把 Specification Missing / Requirement Change 等分类转成 Checklist、Schema、manifest 或 change-control 建议。 |
 | 直接实现缺少文档治理收口 | 新增下一阶段方向：Direct Implementation 完成后仍进入轻量 documentation governance tail。 |
 | 多代码库需求缺跨仓 Gate | 作为下一阶段后续优化方向，补全 global requirement flow、repo subflow 和 Cross-Repo Gate。 |
+| 多代码库产物放置边界不清 | 作为下一阶段后续优化方向，补全 artifact placement policy：单仓跟代码库，多仓全局产物进统一 workspace，局部产物留在各仓库。 |
 
 ## Skill 职责分类
 
@@ -119,6 +122,7 @@
 | 直接实现后的文档治理尾段 | 下一阶段重点 | Direct Implementation 完成后仍需执行实现记录、代码审核、测试反馈、必要的 sync 与 reconcile。 |
 | business_domain 文档治理 | 已由 Speckit 相关 Skill 承担初版 | 从完整 Speckit pipeline 中抽象出可复用的 documentation governance tail，供 Direct Implementation 和 Speckit 路径共用。 |
 | 多代码库需求 | 后续优化方向 | 新增 multi-repository flow 和 Cross-Repo Gate，处理全局需求主流程与各仓子流程。 |
+| 产物放置策略 | 后续优化方向 | 单仓需求产物跟目标代码库走；多仓需求全局产物进统一 artifact workspace，局部产物留在各代码库，并通过 manifest 双向引用。 |
 | 上线准入阶段总结 | 当前标准包有 Test/Code Review，发布执行动作不进入工作流。 | 后续只补测试后的阶段性总结规则；该结论不是 Gate，不阻塞节点流转，不代表需求结束。 |
 | Code Review 归一化 | `sdlc-code-review-normalizer` 为 `prompt_skill_ready`。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
 | 测试反馈反向沉淀 | `sdlc-test-feedback-sync` 为 `prompt_skill_ready`。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
@@ -460,13 +464,220 @@ Documentation Governance Tail
 - 至少用一条真实小需求验证 Direct Implementation + Documentation Governance Tail。
 - 至少用一条复杂需求验证 Speckit Pipeline + Documentation Governance Tail。
 
-### Wave 6.6: 多代码库需求与 Cross-Repo Gate
+### Wave 6.6: 多代码库需求、产物放置策略与 Cross-Repo Gate
 
 状态：下一阶段后续优化方向。
 
 为什么要做：
 
-当一个需求涉及多个代码库时，如果每个仓库各自独立跑完整流程，容易丢失端到端业务一致性；如果只做一份全局方案，又容易忽略每个仓库的局部实现风险。
+当一个需求涉及多个代码库时，如果每个仓库各自独立跑完整流程，容易丢失端到端业务一致性；如果只做一份全局方案，又容易忽略每个仓库的局部实现风险。如果把全部产物放进某一个业务代码库，会让该代码库被迫承担全局需求仓库职责；如果把全部局部产物放进全局仓库，又会让全局仓库变成实现细节大杂烩，并逐渐脱离代码事实。
+
+因此多代码库需求需要先明确 artifact placement policy。
+
+#### Artifact Placement Policy
+
+核心原则：
+
+```text
+单代码库需求：
+  产物跟代码库走。
+
+多代码库需求：
+  全局产物进入统一 global artifact workspace。
+  仓库局部产物留在各自代码库。
+  全局 manifest 引用局部产物。
+  本地 manifest 反向引用全局 requirement。
+```
+
+三类仓库/位置必须分清：
+
+| 位置 | 作用 | 不应承担 |
+| --- | --- | --- |
+| `ai-sdlc-standard` | 标准包，只放规则、模板、Skill、脚本。 | 不存放具体需求产物。 |
+| `global artifact workspace` | 多代码库需求的全局产物、端到端方案、跨仓 Gate、联调、发布、回滚计划。 | 不沉淀每个仓库的全部局部实现细节。 |
+| 业务代码库 | 本仓库相关方案、实现记录、代码审核、测试反馈、project-context、business_domain。 | 不承担跨仓全局主控仓库职责。 |
+
+#### 单代码库需求
+
+如果一个需求只涉及一个代码库，默认所有 DocFlow 产物都放在该代码库中：
+
+```text
+repo-a/
+├── library/{requirement_id}/
+│   ├── 00-需求资料/
+│   ├── 01-技术方案/
+│   ├── 02-方案审核/
+│   ├── 03-实现记录/
+│   ├── 04-代码审核/
+│   ├── 05-测试验收/
+│   └── manifest.md
+└── .specify/
+    ├── project-governance-profile.yaml
+    ├── project-context/
+    └── business_domain/
+```
+
+默认不需要 global artifact workspace，除非组织管理上明确要求纳入某个项目集。
+
+#### 多代码库需求
+
+如果一个需求涉及多个代码库，应使用统一 global artifact workspace 存放全局产物：
+
+```text
+global-artifact-repo/
+└── library/{requirement_id}/
+    ├── 00-需求资料/
+    ├── 01-技术方案/
+    │   └── {requirement_id}__端到端技术方案__v1.md
+    ├── 02-方案审核/
+    │   ├── {requirement_id}__端到端方案审核__v1.md
+    │   └── {requirement_id}__cross-repo-gate__v1.md
+    ├── 03-实现记录/
+    │   └── {requirement_id}__跨仓实现汇总__v1.md
+    ├── 04-代码审核/
+    │   └── {requirement_id}__跨仓代码审核汇总__v1.md
+    ├── 05-测试验收/
+    │   └── {requirement_id}__端到端测试验收__v1.md
+    ├── repos/
+    │   ├── repo-a.md
+    │   ├── repo-b.md
+    │   └── repo-c.md
+    └── manifest.md
+```
+
+每个业务代码库只保存本仓相关产物：
+
+```text
+repo-a/
+└── library/{requirement_id}/
+    ├── 01-技术方案/
+    │   └── {requirement_id}__repo-a技术方案__v1.md
+    ├── 02-方案审核/
+    │   └── {requirement_id}__repo-a方案审核__v1.md
+    ├── 03-实现记录/
+    │   └── {requirement_id}__repo-a实现记录__v1.md
+    ├── 04-代码审核/
+    │   └── {requirement_id}__repo-a代码审核__v1.md
+    ├── 05-测试验收/
+    │   └── {requirement_id}__repo-a测试验收__v1.md
+    └── manifest.md
+```
+
+#### 全局产物范围
+
+global artifact workspace 存放：
+
+- 端到端业务目标。
+- 涉及代码库清单。
+- 跨仓接口契约。
+- 跨仓数据流。
+- 跨仓状态流。
+- 跨仓发布顺序。
+- 跨仓回滚顺序。
+- 联调计划。
+- 端到端测试结果。
+- Cross-Repo Gate。
+- 各仓库局部产物引用。
+
+#### 局部产物范围
+
+业务代码库存放：
+
+- 本仓入口。
+- 本仓接口。
+- 本仓 DB / MQ / RPC / Cache。
+- 本仓兼容策略。
+- 本仓测试。
+- 本仓实现记录。
+- 本仓代码审核。
+- 本仓业务域事实。
+- 本仓 `.specify/business_domain/**`。
+
+#### business_domain 放置规则
+
+本仓业务事实应放在各自代码库：
+
+```text
+repo-a/.specify/business_domain/**
+repo-b/.specify/business_domain/**
+```
+
+原因：
+
+```text
+business_domain 应由目标代码库的代码事实、实现记录、测试反馈和稳定业务事实驱动。
+```
+
+跨仓业务视图可以放在 global artifact workspace，但不应替代各代码库自己的 `.specify/business_domain/**`：
+
+```text
+global-artifact-repo/library/{requirement_id}/01-技术方案/cross-repo-domain-view.md
+```
+
+该文档用于表达跨仓业务流程、状态流、术语映射、上下游契约和领域边界关系。
+
+#### Manifest 引用关系
+
+全局 manifest 应记录：
+
+```yaml
+requirement_id: <id>
+scope: multi_repository
+
+affected_repositories:
+  - name: repo-a
+    role: upstream_provider
+    local_library: repo-a/library/<id>
+    gate_status: PASS
+    implementation_status: completed
+    pr: <repo-a-pr-url>
+
+cross_repo_gate:
+  status: PASS
+  artifact: 02-方案审核/<id>__cross-repo-gate__v1.md
+
+integration_test:
+  status: pending
+
+release_order:
+  - repo-a
+  - repo-b
+
+rollback_order:
+  - repo-b
+  - repo-a
+```
+
+本仓 manifest 应记录：
+
+```yaml
+requirement_id: <id>
+scope: repository_local
+repository: repo-a
+
+parent_requirement:
+  global_workspace: <global-artifact-repo>
+  global_manifest: library/<id>/manifest.md
+
+local_role:
+  role: upstream_provider
+  depends_on: []
+  downstream:
+    - repo-b
+
+local_gate:
+  solution_review: PASS
+
+local_implementation:
+  status: completed
+  pr: <repo-a-pr-url>
+
+doc_governance:
+  business_domain_sync: required
+  code_doc_reconcile: required
+```
+
+#### Cross-Repo Gate
 
 推荐模型：
 
@@ -482,40 +693,29 @@ Cross-Repo Gate
 Integration Test / Release / Rollback Coordination
 ```
 
-目标：
+Cross-Repo Gate 检查：
 
-- 建立一个全局 requirement_id。
-- 每个涉及仓库建立子流程或子产物。
-- 全局方案负责端到端业务目标、接口契约、数据流、发布顺序和回滚顺序。
-- 每个仓库子方案负责本仓具体实现、兼容、测试、回滚。
-- Cross-Repo Gate 检查仓库之间的契约、字段、状态、错误码、发布顺序、联调责任和风险接受。
+- 所有 affected repositories 是否都有子方案。
+- 所有子方案是否通过审核。
+- 接口契约是否一致。
+- 字段、状态、枚举、错误码是否一致。
+- 上下游兼容策略是否一致。
+- 发布顺序是否明确。
+- 回滚顺序是否明确。
+- 联调和测试责任是否明确。
+- 是否存在某个仓库未准备好但其他仓库已经实现的风险。
 
-建议目录形态：
-
-```text
-library/{requirement_id}/
-├── 00-需求资料/
-├── 01-技术方案/
-│   ├── {requirement_id}__端到端技术方案__v1.md
-│   └── repos/{repo_name}/...
-├── 02-方案审核/
-│   ├── {requirement_id}__端到端方案审核__v1.md
-│   ├── {requirement_id}__cross-repo-gate__v1.md
-│   └── repos/{repo_name}/...
-├── 03-实现记录/repos/{repo_name}/...
-├── 04-代码审核/repos/{repo_name}/...
-├── 05-测试验收/
-└── manifest.md
-```
-
-需要补的标准和模板：
+#### 需要补的标准和模板
 
 | 项目 | 处理方式 | 说明 |
 | --- | --- | --- |
+| `ai-sdlc/artifact-placement-policy.md` | 新增标准 | 定义单仓和多仓需求的产物放置规则。 |
 | `ai-sdlc/multi-repository-flow.md` | 新增标准 | 定义全局需求主流程、仓库子流程和跨仓 Gate。 |
+| `templates/global-requirement-manifest-template.md` | 新增模板 | 定义全局 manifest 字段。 |
+| `templates/repository-subflow-manifest-template.md` | 新增模板 | 定义本仓子流程 manifest 字段。 |
 | `templates/cross-repo-gate-template.md` | 新增模板 | 记录跨仓接口、字段、状态、发布、回滚、联调风险。 |
 | `templates/artifact-manifest-template.md` | 更新 | 增加 affected_repositories、repo_gate_status、cross_repo_gate_status、integration_test_status、release_order、rollback_order。 |
-| `docs/USAGE.md` | 更新 | 增加多代码库需求流程。 |
+| `docs/USAGE.md` | 更新 | 增加多代码库需求流程和产物放置策略。 |
 | `sdlc-solution-reviewer` | 后续更新 | 支持识别多仓需求并要求 Cross-Repo Gate。 |
 | `sdlc-gate-runner` | 后续更新 | 支持检查 repo subflow 与 cross-repo gate 状态。 |
 
@@ -687,7 +887,10 @@ roots = [
 34. [ ] 更新 `sdlc-gate-runner` 合同与 references，支持检查 direct implementation 和 doc governance tail 准入/收口。
 35. [ ] 更新 `sdlc-speckit-sync` / `sdlc-speckit-code-doc-reconcile` 说明，明确它们可作为 Documentation Governance Tail 的可复用能力。
 36. [ ] 在 `docs/USAGE.md` 中补充 Direct Implementation + Documentation Governance Tail 的流程。
-37. [ ] 新增 `ai-sdlc/multi-repository-flow.md` 和 `templates/cross-repo-gate-template.md`，作为多代码库需求的后续优化方向。
+37. [ ] 新增 `ai-sdlc/artifact-placement-policy.md`，定义单仓和多仓需求产物放置策略。
+38. [ ] 新增 `ai-sdlc/multi-repository-flow.md` 和 `templates/cross-repo-gate-template.md`，作为多代码库需求的后续优化方向。
+39. [ ] 新增 `templates/global-requirement-manifest-template.md` 和 `templates/repository-subflow-manifest-template.md`，表达全局 manifest 与本仓 manifest 的双向引用关系。
+40. [ ] 更新 `docs/USAGE.md`，补充多代码库需求流程和 artifact placement policy。
 
 ## 阶段验收标准
 
@@ -698,6 +901,7 @@ roots = [
 - 需求变更、返工、重新 Gate 有明确路径。
 - 方案审核必须输出开发路径建议。
 - Direct Implementation 和 Speckit Pipeline 都有明确文档治理收口规则。
+- 单仓和多仓需求有明确 artifact placement policy。
 
 ### Skill 层验收
 
@@ -715,12 +919,14 @@ roots = [
 - 旧版本产物不会丢失。
 - Gate 失败、风险通过、需求变更都能被追踪。
 - Manifest 能表达 direct / Speckit / blocked 开发路径，以及 Documentation Governance Tail 状态。
+- 多代码库需求中，全局 manifest 能引用各仓局部 manifest；各仓局部 manifest 能反向引用全局 requirement。
 
 ### 真实项目验收
 
 - 至少有一个真实项目完成 bootstrap dry-run。
 - 至少有一个小需求完成 Direct Implementation + Documentation Governance Tail。
 - 至少有一个复杂需求完成 Speckit Pipeline + Documentation Governance Tail，或明确记录为什么暂缓。
+- 至少有一个多代码库需求样例能验证 global artifact workspace + repository local artifacts 的放置策略。
 - 至少有一个测试反馈能反向沉淀到 Checklist / Schema / manifest / sync 建议。
 
 ### 下游工具验收
@@ -737,4 +943,6 @@ roots = [
 - 不把 `library/{requirement_id}/` 当长期知识库。
 - 不把路线图替代 Gate 或 Skill Contract。
 - 不因为需要 business_domain 文档治理而强制所有需求进入完整 Speckit SDD。
+- 不把多代码库需求的全局产物放进 `ai-sdlc-standard`。
+- 不把某一个业务代码库强制作为跨仓全局产物仓库。
 - 不在多代码库需求标准稳定前实现多 Agent pipeline。
