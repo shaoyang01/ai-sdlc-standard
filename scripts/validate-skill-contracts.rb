@@ -42,7 +42,7 @@ def relative(path)
   path.sub("#{ROOT}/", "")
 end
 
-LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:memory|workflow|coding_guide)(?:/\*\*)?}.freeze
+LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:memory|workflow|coding_guide)(?:/|\b)}.freeze
 LEGACY_SOURCE_DANGER_PATTERN = /
   required\s+inputs?|
   input_artifacts?|

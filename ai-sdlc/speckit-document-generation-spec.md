@@ -69,6 +69,8 @@ Use target code to record:
 - cache, lock, MQ, RPC, and config conventions
 - local implementation exceptions
 
+Detected evidence is a scaffold, not an authoritative project coding rule. A project owner or responsible engineer must review and confirm local rules before new `sdlc-*` Skills treat them as project-level coding standards.
+
 If evidence is insufficient, keep placeholders and record gaps in the generation report.
 
 ### RepositoryStructure.md
@@ -141,9 +143,10 @@ When same-project legacy output exists, compare legacy output and new output sem
 1. Preflight all write targets before writing.
 2. Refuse to overwrite generated profile files unless the user explicitly permits profile overwrite.
 3. Never silently overwrite `.specify/project-context/**`; write `.candidate` files when the target exists.
-4. Never write `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`.
-5. Never create `specs/**` during project bootstrap.
-6. Keep `library/` ignored through `/library/` in `.gitignore`.
+4. Never silently overwrite `.specify/reports/**`; write timestamped report files when a report already exists.
+5. Never write `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`.
+6. Never create `specs/**` during project bootstrap.
+7. Keep `library/` ignored through `/library/` in `.gitignore`.
 
 ## Blocking Conditions
 

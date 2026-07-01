@@ -94,6 +94,8 @@ If a project-context file already exists, bootstrap writes a `.candidate` file i
 
 `legacy_speckit_source_inventory.md` and `speckit_equivalence_report.pending.md` are generated only when same-project legacy Speckit files exist. They are not-ready parity evidence, not content sources or PASS artifacts. When no legacy files exist, bootstrap relies on the code evidence completeness check in `speckit_generation_report.md`.
 
+Bootstrap must not silently overwrite report history. On the first run it may write the canonical report name; on later runs, if that report already exists, it must write a timestamped report file such as `speckit_generation_report.20260701-103000.md`.
+
 ## Bootstrap Script
 
 Use:
@@ -131,7 +133,8 @@ The script should:
 15. Add `/library/` to the target repository `.gitignore` if it is not already present.
 16. Refuse to overwrite existing generated profile files unless `--force-profiles` is provided.
 17. Never silently overwrite project-context files.
-18. Never copy `.specify/business_domain/**` from another repository.
+18. Never silently overwrite report files; preserve repeated bootstrap runs as timestamped report history.
+19. Never copy `.specify/business_domain/**` from another repository.
 
 Use `--dry-run` to preview generated content without writing files.
 
