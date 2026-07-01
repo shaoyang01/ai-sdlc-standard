@@ -7,11 +7,49 @@ Stop when:
 - Implementation is not verified.
 - Source artifacts are missing or stale.
 - Target path is unclear.
+- L1/L2 are unconfirmed for a missing `.specify/business_domain/**` L4 target.
+- L4 id cannot be reserved for create-if-missing.
+- Target owner is unclear for an existing or new business-domain document.
 - User did not authorize writing to the target.
+- User did not explicitly authorize create-if-missing when the business-domain L4 target is missing.
 - Proposed fact conflicts with existing knowledge.
 - Proposed fact is not stable or reusable.
+- Proposed fact is only valid for a one-off requirement.
 - Proposed fact depends on unresolved review or test feedback.
 - Sync would require modifying production code, spec, plan, or tasks.
+- Standard entry coverage audit is `BLOCKED` when the sync target is `.specify/business_domain/**`.
+
+## Entry Coverage Blocking
+
+Before writing stable facts to `.specify/business_domain/**`, run the standard strict audit when `.specify/entry-coverage-profile.yaml` exists:
+
+```bash
+${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict
+```
+
+Block Sync when:
+
+- the runner exits non-zero;
+- `.specify/reports/entry_coverage/entry_coverage_report.md` status is `BLOCKED` or `PENDING`;
+- `unarchived_entries.md`, `unarchived_services.md`, or `cross_domain_conflicts.md` contains blocking rows relevant to the sync target.
+
+If business-domain documents are intentionally not initialized yet, route to business-domain bootstrap or owner confirmation before Sync writes long-term facts.
+
+## Create-If-Missing Blocking
+
+Block create-if-missing instead of creating or writing to `99PendingConfirmation` when:
+
+- confirmed L1/L2 route is missing;
+- target owner is unclear;
+- create-if-missing authorization is missing or only implied by generic write authorization;
+- L4 id reservation is ambiguous;
+- the L2 main document index cannot be updated;
+- `01DomainCatalog.md` cannot be updated;
+- candidate facts are proposed, unverified, one-off, or only requirement-specific;
+- existing business_domain facts conflict with the proposed document;
+- entry coverage audit cannot run or returns `BLOCKED` / `PENDING`.
+
+The blocked result must explain the earliest Re-Gate node: business-domain bootstrap, owner confirmation, Plan route correction, implementation evidence, test/review closure, or code-doc reconcile.
 
 ## Conflict Handling
 

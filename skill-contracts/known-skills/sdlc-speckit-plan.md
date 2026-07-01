@@ -17,6 +17,10 @@ input_artifacts:
   - optional library/{requirement_id}/manifest.md
 output_artifacts:
   - specs/{feature}/plan.md
+  - specs/{feature}/research.md or explicit skip record
+  - specs/{feature}/data-model.md or explicit skip record
+  - specs/{feature}/contracts/ or explicit skip record
+  - specs/{feature}/quickstart.md or explicit skip record
   - plan coverage summary
   - manifest.md Activity Log update recommendation
 required_schema:
@@ -29,6 +33,10 @@ required_storage:
   - ai-sdlc/change-control.md
 side_effects:
   - create or update specs/{feature}/plan.md
+  - create or explicitly skip specs/{feature}/research.md
+  - create or explicitly skip specs/{feature}/data-model.md
+  - create or explicitly skip specs/{feature}/contracts/
+  - create or explicitly skip specs/{feature}/quickstart.md
   - recommend manifest.md Activity Log or Re-Gate updates
 can_modify_code: false
 can_modify_docs: true
@@ -39,6 +47,8 @@ blocking_conditions:
   - plan would change approved scope or behavior
   - plan requires undefined business behavior
   - plan cannot support acceptance criteria
+  - companion artifacts are missing without complete skip records
+  - contracts/ does not cover affected backend/admin, frontend, or ETL contract surfaces
 ```
 
 ## Standard Path Resolution
@@ -58,6 +68,7 @@ blocking_conditions:
 - 明确技术实现路线、模块范围、数据与集成影响、异常和回滚策略。
 - 校验 Plan 是否忠实于已审阅方案和 SpecKit spec。
 - 输出 Plan Gate 结论和下一步建议。
+- 生成或显式跳过 Plan companion product set。
 
 它不负责：
 
@@ -120,6 +131,26 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 specs/{feature}/plan.md
 ```
 
+同时必须生成或显式跳过：
+
+```text
+specs/{feature}/research.md
+specs/{feature}/data-model.md
+specs/{feature}/contracts/
+specs/{feature}/quickstart.md
+```
+
+跳过任一 companion artifact 必须记录：
+
+```text
+Artifact:
+Skip Reason:
+Risk:
+Impact:
+Accepted By:
+Re-Gate Required:
+```
+
 输出必须覆盖：
 
 - 技术路线。
@@ -130,6 +161,13 @@ specs/{feature}/plan.md
 - 验证策略，并映射到验收标准。
 - 风险和缓解措施。
 - 与 `specs/spec.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
+- Companion artifact 状态和跳过记录。
+
+`contracts/` 必须按项目类型覆盖：
+
+- Backend/Admin: API/RPC/MQ contract、request/response shape、state transition、persistence side effects、transaction/rollback、operator-visible behavior。
+- Frontend: page/route behavior、component/state/API mapping、popup trigger and visibility、backend/mock boundary、visual verification notes。
+- ETL/data pipeline: input tables/topics/files、output tables/topics/reports、SQL/data lineage、partition/window/checkpoint、rerun/replay/idempotency、downstream consumer contract。
 
 最终输出必须包含：
 
@@ -145,6 +183,7 @@ specs/{feature}/plan.md
 允许：
 
 - 创建或更新 `specs/{feature}/plan.md`。
+- 创建或显式跳过 `research.md`、`data-model.md`、`contracts/`、`quickstart.md`。
 - 建议更新 manifest Activity Log。
 - 建议创建 Re-Gate Records。
 
@@ -168,6 +207,8 @@ specs/{feature}/plan.md
 - Plan 需要新增方案中没有定义的业务规则。
 - Plan 无法支撑验收标准。
 - 当前有效方案或审核产物已被 stale。
+- Companion artifact 缺失且没有完整跳过记录。
+- 受影响项目类型的 contract surface 未覆盖。
 
 ## Gate Requirements
 

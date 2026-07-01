@@ -86,6 +86,18 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 
 已有 profile 时，dry-run 应提示真实写入需要 `--force-profiles`，但不应直接失败。
 
+### project type profile 回归样例
+
+对标准包 profile 选择逻辑做结果检验时，可用以下已有仓库形态作为语义样例。该检查是标准包开发期 review，不是目标项目 runtime 必须执行的旧文档对比。
+
+| 样例仓库形态 | 期望 project type profiles | 期望 entry profile 重点 |
+| --- | --- | --- |
+| 纯后端业务服务，如 `logistics-center` | `backend-business-service` | `controller`、`rpc_provider`、`message_listener`、`scheduled_job`，不得因为普通 `package.json` 或静态资源误判为前端。 |
+| 后端管理/配置混合系统，如 `pfms` | `admin-mixed-workflow` + `backend-business-service` | `controller`、`worker`、`scheduled_job`、`mcq_consumer`、`oas_event`、`data_console`、`spi`、`rpc_provider`。 |
+| React Native / 纯前端应用，如 `pfms-rn` | `frontend-application` | `route`、`page`、`component`、`store_action`、`api_client`、`popup`、`navigation_guard`；Android/iOS native shell 不应触发 Java backend 风格入口。 |
+| Spark/Flink/ETL 计算项目，如 `tms-flink-finance` | `data-pipeline-etl` | `spark_job`、`spark_online_etl`、`flink_main`、`flink_process_function`、`mcq_connector`，不应退化成普通 Controller/Service 覆盖模型。 |
+| 传统 Java Web 混合项目，如 `wms-monitor` | `frontend-application` + `backend-business-service` | 同时生成 Controller/RPC/MQ/Schedule 入口和 JSP/page/component/API/popup/navigation 等 webapp 入口。 |
+
 ## bootstrap 正式写入前检查
 
 正式执行前确认：
@@ -124,6 +136,154 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 
 不应生成 legacy inventory 或 pending comparison report；旧版文档只应保留给 legacy rail。
 
+## entry coverage audit 校验
+
+标准 runner：
+
+```bash
+scripts/audit-entry-coverage.rb <target-project-path>
+```
+
+默认读取：
+
+```text
+.specify/entry-coverage-profile.yaml
+.specify/business_domain/**
+目标代码库
+```
+
+默认输出到：
+
+```text
+.specify/reports/entry_coverage/
+```
+
+必须生成：
+
+```text
+entry_inventory.tsv
+service_inventory.tsv
+entry_chain_evidence.md
+unarchived_entries.md
+unarchived_services.md
+cross_domain_conflicts.md
+entry_coverage_report.md
+```
+
+阻断式调用使用：
+
+```bash
+scripts/audit-entry-coverage.rb <target-project-path> --strict
+```
+
+检查点：
+
+```text
+1. 无 .specify/business_domain 或无 L4 文档时，仍生成全部报告，并在 summary 中标记 BLOCKED。
+2. 有 L4 文档时，entry_inventory.tsv 能区分 archived / unarchived。
+3. 同一 entry 命中多个 L2 时，cross_domain_conflicts.md 非空并阻断。
+4. 前端、传统 Java Web、后端、ETL、library 项目按 entry profile 的 entry_types 扫描，不按语言硬编码。
+5. --strict 在 BLOCKED / PENDING 状态返回非零，供 Sync / Reconcile gate 使用。
+```
+
+## Speckit sync create-if-missing 校验
+
+`sdlc-speckit-sync` 只有在 business_domain 路由已确认时，才允许用 create-if-missing 创建缺失 L4。
+
+必须记录：
+
+```text
+Target L1:
+Target L2:
+Target L4 Id:
+Target L4 Document:
+Target Owner:
+Create-If-Missing Authorization:
+Source Evidence:
+Entry Coverage Status:
+L2 Main Document Index Update:
+01DomainCatalog.md Update:
+Revision History Update:
+```
+
+检查点：
+
+```text
+1. 已存在 L4 时，只更新授权目标并保留 source evidence / revision history。
+2. 缺失 L4 时，必须确认 L1/L2、owner、create-if-missing 授权和 L4 id reservation。
+3. 创建 L4 skeleton 后必须同步更新 L2 main document index 和 01DomainCatalog.md。
+4. 前端、后端、ETL、integration、scheduled-job entry fact 都必须说明 entry coverage audit 结果。
+5. one-off、未验证、owner 不明确、只服务当前需求的事实不得 create-if-missing。
+6. L1/L2 未确认、L4 id 无法保留、business_domain 已有冲突事实或 entry coverage audit 失败时必须 BLOCKED。
+7. 不得把缺失目标写入 99PendingConfirmation 当作长期同步结果。
+```
+
+## Speckit specify 产品形状校验
+
+`sdlc-speckit-specify` 生成或更新 `specs/{feature}/spec.md` 时，必须保留以下 legacy-critical sections：
+
+```text
+## Domain Route / Scope Baseline
+## Requirement Type
+## Business Domain Targets
+## Entry Coverage Target
+## Sync Targets
+## Representative Data Simulation
+## Edge Cases
+## Functional Requirements
+## Key Entities / Data Contracts
+## Success Criteria
+## Source Artifact Traceability
+## Branch / Repository Boundary
+```
+
+检查点：
+
+```text
+1. Requirement Type 必须是 existing-change / new-flow / integration-change / data-change / unknown 之一。
+2. Business Domain Targets 必须说明目标 L1/L2/L4 或 pending/blocking 原因。
+3. Entry Coverage Target 必须来自 .specify/entry-coverage-profile.yaml 或明确说明缺失阻断。
+4. Sync Targets 必须列出后续可沉淀的稳定事实，不能直接写入 business_domain。
+5. Representative Data Simulation 至少覆盖 normal / empty / missing / exception 数据形态。
+6. Source Artifact Traceability 必须能追溯到 01-技术方案、02-方案审核、manifest.md。
+7. Branch / Repository Boundary 必须说明目标仓库、分支、模块和跨仓边界。
+8. 如果任一章节需要编造事实，Specify 必须 blocked 并回到 DocFlow / Gate。
+```
+
+## Speckit plan companion artifacts 校验
+
+`sdlc-speckit-plan` 必须生成或显式跳过：
+
+```text
+specs/{feature}/plan.md
+specs/{feature}/research.md
+specs/{feature}/data-model.md
+specs/{feature}/contracts/
+specs/{feature}/quickstart.md
+```
+
+跳过任一 companion artifact 必须记录：
+
+```text
+Artifact:
+Skip Reason:
+Risk:
+Impact:
+Accepted By:
+Re-Gate Required:
+```
+
+检查点：
+
+```text
+1. plan.md 中必须列出 companion artifact 状态。
+2. research.md 记录技术决策、替代方案、依赖约束和未决技术问题，或有完整 skip record。
+3. data-model.md 记录实体、状态、持久化副作用、前端 state 或 ETL schema，或有完整 skip record。
+4. contracts/ 不能在 API/RPC/MQ、前端 route/page/state/API、ETL input/output 变化时跳过。
+5. quickstart.md 记录验证命令、环境、种子数据、代表性用例、回滚检查和预期观察，或有完整 skip record。
+6. 缺 companion artifact 且无完整 skip record 时，Plan Gate 必须 BLOCKED。
+```
+
 ## business_domain bootstrap 校验
 
 对目标项目执行：
@@ -143,6 +303,33 @@ scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
 6. 已有 business_domain 文件是否写 .candidate，而不是覆盖。
 7. 是否不会读取旧版 .specify/memory、workflow、coding_guide。
 8. 是否不会生成 specs/**。
+```
+
+### confirmed-domain bootstrap 校验
+
+当 `.specify/business-domain-bootstrap.yaml` 含有用户确认的 `confirmed_domains` 时，执行：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --confirmed --dry-run
+```
+
+或：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify/business-domain-bootstrap.yaml --dry-run
+```
+
+检查点：
+
+```text
+1. 缺少 confirmed_domains 时必须失败，不得退化为猜测生成真实 L1/L2/L4。
+2. confirmed_domains 非空时，预览 00BusinessLandscape.md、00UbiquitousLanguage.md、01DomainCatalog.md。
+3. 预览 .specify/business_domain/{L1}/{L2}/{L2MainDocument}.md。
+4. 预览 .specify/business_domain/{L1}/{L2}/{L4Document}.md。
+5. 预览 .specify/business_domain/{L1}/{L2}/{EntryCoverageDocument}.md。
+6. 生成 report 时必须标记 Mode 为 confirmed，并记录 Domain Map。
+7. 已有文件默认写 .candidate，只有显式 --force 才覆盖。
+8. 不得读取 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 作为 domain map。
 ```
 
 ## 真实项目试跑检查项

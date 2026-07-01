@@ -20,6 +20,13 @@ generation_scope:
   generation_script: "${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-business-domain.sh"
   generate_after_project_bootstrap: true
   output_root: ".specify/business_domain"
+  modes:
+    pending:
+      command: "${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-business-domain.sh <target-project-path>"
+      description: "Generate pending code-evidence skeletons only."
+    confirmed:
+      command: "${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-business-domain.sh <target-project-path> --confirmed --domain-map .specify/business-domain-bootstrap.yaml"
+      description: "Generate confirmed routable L1/L2/L4 skeletons from confirmed_domains."
   required_root_documents:
     - "00BusinessLandscape.md"
     - "00UbiquitousLanguage.md"
@@ -50,6 +57,25 @@ inputs:
       - "business domain names"
       - "main lifecycle or capability split"
       - "domain owners"
+
+confirmed_domains: []
+# Example:
+# confirmed_domains:
+#   - l1_id: "01"
+#     l1_name_en: "SaleOrder"
+#     l1_name_cn: "销售订单"
+#     l2:
+#       - l2_id: "01"
+#         l2_name_en: "ReceiveAndFulfillment"
+#         l2_name_cn: "收货与履约"
+#         owner: "<domain-owner>"
+#         l4:
+#           - l4_id: "010101"
+#             l4_name_en: "StraightOrderOutboundReceipt"
+#             l4_name_cn: "直送出库回执"
+#             owner: "<owner>"
+#             evidence:
+#               - "src/main/java/..."
 
 domain_discovery:
   strategy: "<business-lifecycle|business-capability|bounded-context|user-provided>"
@@ -85,6 +111,11 @@ skeleton_rules:
   create_l4_only_when:
     - "observed from code and confirmed by routing"
     - "approved by user or domain owner"
+  confirmed_mode_requires:
+    - "confirmed_domains is non-empty"
+    - "each L1 has l1_id, l1_name_en, l1_name_cn, and l2"
+    - "each L2 has l2_id, l2_name_en, l2_name_cn, owner, and l4"
+    - "each L4 has l4_id, l4_name_en, l4_name_cn, and owner"
 
 outputs:
   required:
@@ -96,6 +127,10 @@ outputs:
     - "L2 main documents"
     - "L4 skeleton documents"
     - "EntryCoverage documents"
+  confirmed_mode:
+    - ".specify/business_domain/{L1}/{L2}/{L2MainDocument}.md"
+    - ".specify/business_domain/{L1}/{L2}/{L4Document}.md"
+    - ".specify/business_domain/{L1}/{L2}/{EntryCoverageDocument}.md"
 
 validation:
   must_check:
@@ -106,5 +141,6 @@ validation:
     - "no business_domain content was copied from another repository"
   stop_when:
     - "domain split cannot be inferred"
+    - "confirmed mode is requested without confirmed_domains"
     - "code evidence conflicts with user-provided business boundary"
     - "generation would require guessing business meaning"

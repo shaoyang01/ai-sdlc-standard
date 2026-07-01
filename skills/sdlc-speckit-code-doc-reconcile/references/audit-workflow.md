@@ -24,6 +24,22 @@ Create an inventory with:
 
 Mark missing artifacts as gaps. Do not infer absent artifacts from chat.
 
+When `.specify/entry-coverage-profile.yaml` exists, run or reuse the standard entry coverage audit:
+
+```bash
+${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
+```
+
+Include these generated files in the artifact inventory:
+
+- `.specify/reports/entry_coverage/entry_inventory.tsv`
+- `.specify/reports/entry_coverage/service_inventory.tsv`
+- `.specify/reports/entry_coverage/entry_chain_evidence.md`
+- `.specify/reports/entry_coverage/unarchived_entries.md`
+- `.specify/reports/entry_coverage/unarchived_services.md`
+- `.specify/reports/entry_coverage/cross_domain_conflicts.md`
+- `.specify/reports/entry_coverage/entry_coverage_report.md`
+
 ## 3. Compare By Behavior
 
 Compare artifacts at the behavior level, not only by file presence:
@@ -74,3 +90,10 @@ Route eligible missing facts to `sdlc-speckit-sync`.
 Produce one primary classification and any secondary classifications.
 
 Use `BLOCKED` when source-of-truth conflict prevents a safe decision.
+
+Use entry coverage reports to classify drift:
+
+- `unarchived_entries.md` non-empty: code entry exists without long-term knowledge coverage.
+- `unarchived_services.md` non-empty: core unit lacks archived entry or accepted technical reason.
+- `cross_domain_conflicts.md` non-empty: code/document routing conflict across L2 domains.
+- `entry_coverage_report.md` status `BLOCKED`: reconciliation cannot mark code and business-domain docs consistent.

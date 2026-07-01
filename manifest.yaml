@@ -37,9 +37,11 @@ entrypoints:
   skill_category_guide: skill-contracts/skill-category-guide.md
   skill_contract_template: skill-contracts/skill-contract-template.md
   skill_contract_validator: scripts/validate-skill-contracts.rb
+  entry_coverage_audit_runner: scripts/audit-entry-coverage.rb
   standard_home_initializer: scripts/init-standard-home.sh
   speckit_project_bootstrap_script: scripts/bootstrap-speckit-project.sh
   business_domain_bootstrap_script: scripts/bootstrap-business-domain.sh
+  business_domain_confirmed_bootstrap_mode: "scripts/bootstrap-business-domain.sh --confirmed --domain-map .specify/business-domain-bootstrap.yaml"
   artifact_manifest_template: templates/artifact-manifest-template.md
   project_governance_profile_template: templates/project-governance-profile-template.yaml
   entry_coverage_profile_template: templates/entry-coverage-profile-template.yaml

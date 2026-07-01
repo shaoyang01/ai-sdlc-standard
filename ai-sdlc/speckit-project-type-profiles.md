@@ -155,11 +155,23 @@ Bootstrap may infer an initial profile hint from code shape, but must keep it ed
 
 Runtime bootstrap must:
 
-1. Generate project-local entry types from detected code evidence and the selected profile hint.
-2. Keep unknown entry categories as unresolved questions rather than silently dropping them.
-3. Allow multiple profiles in one repository when modules have different execution shapes.
-4. Store repository-specific patterns only in `.specify/entry-coverage-profile.yaml`.
-5. Never require legacy Speckit documents to decide the runtime profile.
+1. Treat detected language as language evidence only, never as the execution model. Java, TypeScript, Python, or mixed language hints must not decide entry semantics by themselves.
+2. Generate project-local entry types from detected code evidence and the selected profile hint.
+3. Keep unknown entry categories as unresolved questions rather than silently dropping them.
+4. Allow multiple profiles in one repository when modules have different execution shapes.
+5. Store repository-specific patterns only in `.specify/entry-coverage-profile.yaml`.
+6. Never require legacy Speckit documents to decide the runtime profile.
+
+Profile selection uses strong execution-shape signals:
+
+| Rule | Required behavior |
+| --- | --- |
+| Frontend selection | Requires frontend framework dependency, frontend source shape such as `src/pages`, `src/views`, `src/screens`, `src/components`, `src/navigation`, `src/router`, `src/store`, or `src/api`, or server-rendered webapp shape such as `src/main/webapp/WEB-INF`, JSP/FTL/VM pages, and project-owned webapp JS. A plain `package.json` or unrelated static assets are not sufficient. |
+| React Native selection | Android/iOS native shell files do not make a React Native project backend-style when frontend/RN source roots exist. The generated entry profile must still include route/page/component/store/API/popup/navigation entries. |
+| Backend selection | Requires Java/service-oriented source evidence plus deployable or business-facing entries such as HTTP, RPC, MQ, schedule, or similar service operations. |
+| Admin mixed selection | Requires admin-specific workflow signals such as OAS event, data-console, SPI, approval/audit controller, config schedule processor, or month-copy processor code. Generic backend workers, schedules, import/export helpers, or controller presence alone are not enough. |
+| Data pipeline selection | Requires Spark/Flink/ETL/job/function/connector source evidence, not generic Java service evidence. |
+| Multiple profile selection | When multiple strong signals exist, all matching profiles may be selected; entry types must be generated from selected profiles, not from the primary language. |
 
 ## Shared Gate Semantics
 

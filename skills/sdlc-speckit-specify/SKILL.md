@@ -47,8 +47,11 @@ Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules
 - `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
 - `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-versioning.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md`
 - `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/technical-specification-template.md`
 
 ## Reference Files
 
@@ -73,6 +76,9 @@ Identify:
 - `manifest.md`
 - Development Path Decision
 - Risk acceptance, if `PASS_WITH_RISK`
+- `.specify/project-governance-profile.yaml`, when present
+- `.specify/entry-coverage-profile.yaml`, when present
+- `.specify/business_domain/00BusinessLandscape.md`, `00UbiquitousLanguage.md`, and `01DomainCatalog.md`, when generated
 
 Stop if the technical specification or solution review is missing.
 
@@ -121,6 +127,24 @@ Preserve:
 - Test strategy and acceptance criteria
 - Risks and accepted risks
 - DocFlow source links
+- Domain Route / Scope Baseline
+- Requirement Type
+- Business Domain Targets
+- Entry Coverage Target
+- Sync Targets
+- Representative Data Simulation
+- Edge Cases
+- Functional Requirements
+- Key Entities / Data Contracts
+- Success Criteria
+- Source Artifact Traceability
+- Branch / Repository Boundary
+
+Project-type requirements:
+
+- Backend / Admin: preserve entry -> service -> manager/repository evidence, state transition, idempotency, transaction, rollback/compensation, operator-visible behavior, and approval/audit/import/export/month-copy details when applicable.
+- Frontend: preserve route/page/component/store/API mapping, popup trigger, visibility rule, backend/mock boundary, visual verification note, and dependency pre-check.
+- ETL / Data Pipeline: preserve input/output contracts, SQL/data lineage, partition/window/checkpoint, rerun/replay/idempotency, downstream consumer contract, and normal/empty/missing/exception data cases.
 
 ### 4. Output And Manifest Recommendations
 
@@ -144,6 +168,7 @@ Every sync result must include:
 - Target SpecKit Feature
 - Sections Synced
 - Sections Not Synced
+- Required Spec Product Shape Checklist
 - Assumptions: must be empty unless explicitly approved
 - Blocking Items
 - Manifest Update Recommendation
@@ -160,3 +185,5 @@ Stop instead of writing or recommending a `specs/spec.md` update when:
 - Sync would require new business rules.
 - `01-技术方案` and `02-方案审核` conflict.
 - Existing `specs/{feature}/spec.md` belongs to another requirement, unknown source, or stale DocFlow version.
+- Required product-shape sections would be missing from `specs/{feature}/spec.md`.
+- Requirement type, business-domain route, entry coverage target, sync target, representative data simulation, edge cases, traceability, or repository boundary cannot be derived from reviewed artifacts.

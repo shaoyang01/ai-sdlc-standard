@@ -360,6 +360,29 @@ scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
 scripts/bootstrap-business-domain.sh <target-project-path>
 ```
 
+The default mode generates pending code-evidence skeletons only.
+
+When `.specify/business-domain-bootstrap.yaml` contains user-confirmed `confirmed_domains`, run confirmed mode:
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --confirmed --dry-run
+scripts/bootstrap-business-domain.sh <target-project-path> --confirmed
+```
+
+Or pass a domain map explicitly:
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify/business-domain-bootstrap.yaml --dry-run
+```
+
+Confirmed mode may generate routable L1/L2/L4 skeletons:
+
+- `.specify/business_domain/{L1}/{L2}/{L2MainDocument}.md`
+- `.specify/business_domain/{L1}/{L2}/{L4Document}.md`
+- `.specify/business_domain/{L1}/{L2}/{EntryCoverageDocument}.md`
+
+Do not run confirmed mode unless the domain map was explicitly supplied or confirmed by the user or domain owner. Absence of `confirmed_domains` is a blocking condition, not permission to infer business domains from package names.
+
 Generate:
 
 - `00BusinessLandscape.md`

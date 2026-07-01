@@ -54,6 +54,34 @@ specs/{feature}/checklists/requirements.md
 
 Do not use the optional checklist as a replacement for `02-方案审核`.
 
+## Spec Product Shape Checklist
+
+Before reporting success, verify `specs/{feature}/spec.md` contains:
+
+```text
+## Domain Route / Scope Baseline
+## Requirement Type
+## Business Domain Targets
+## Entry Coverage Target
+## Sync Targets
+## Representative Data Simulation
+## Edge Cases
+## Functional Requirements
+## Key Entities / Data Contracts
+## Success Criteria
+## Source Artifact Traceability
+## Branch / Repository Boundary
+```
+
+The sync result must classify each section as:
+
+- `synced`: source artifact supplied sufficient evidence;
+- `pending`: source artifact names the topic but needs owner confirmation;
+- `not applicable`: project type makes the section irrelevant, with reason;
+- `blocked`: source artifact lacks mandatory evidence or conflicts with review/manifest.
+
+Do not mark the Skill complete when any required section is missing from the target file. Use `blocked` when filling the section would require inventing facts.
+
 ## Report Template
 
 ```markdown
@@ -71,6 +99,21 @@ Do not use the optional checklist as a replacement for `02-方案审核`.
 - Spec Path:
 
 ## Sections Synced
+
+| Required Section | Status | Source Evidence | Notes |
+| --- | --- | --- | --- |
+| Domain Route / Scope Baseline |  |  |  |
+| Requirement Type |  |  |  |
+| Business Domain Targets |  |  |  |
+| Entry Coverage Target |  |  |  |
+| Sync Targets |  |  |  |
+| Representative Data Simulation |  |  |  |
+| Edge Cases |  |  |  |
+| Functional Requirements |  |  |  |
+| Key Entities / Data Contracts |  |  |  |
+| Success Criteria |  |  |  |
+| Source Artifact Traceability |  |  |  |
+| Branch / Repository Boundary |  |  |  |
 
 ## Sections Not Synced
 

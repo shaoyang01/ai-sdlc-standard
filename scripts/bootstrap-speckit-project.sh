@@ -118,12 +118,144 @@ git_remote() {
   git -C "${TARGET_PATH}" config --get remote.origin.url 2>/dev/null || true
 }
 
+has_java_source_signal() {
+  [[ -f "${TARGET_PATH}/pom.xml" ]] && return 0
+  find "${TARGET_PATH}" -maxdepth 6 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o -path '*/src/main/java' -type d -print -quit 2>/dev/null | grep -q .
+}
+
+has_package_frontend_dependency() {
+  [[ -f "${TARGET_PATH}/package.json" ]] || return 1
+  grep -Eq '"(react-native|react|vue|@angular/core|next|nuxt|vite|umi|dva|mobx|redux|@react-navigation/native)"' "${TARGET_PATH}/package.json"
+}
+
+has_frontend_source_signal() {
+  has_package_frontend_dependency && return 0
+  find "${TARGET_PATH}" -maxdepth 6 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o -type d \
+    \( \
+      -path "*/src/pages" -o \
+      -path "*/src/views" -o \
+      -path "*/src/screens" -o \
+      -path "*/src/components" -o \
+      -path "*/src/component" -o \
+      -path "*/src/navigation" -o \
+      -path "*/src/router" -o \
+      -path "*/src/routers" -o \
+      -path "*/src/routes" -o \
+      -path "*/src/store" -o \
+      -path "*/src/stores" -o \
+      -path "*/src/models" -o \
+      -path "*/src/actions" -o \
+      -path "*/src/api" -o \
+      -path "*/src/services" \
+    \) -print -quit 2>/dev/null | grep -q .
+}
+
+has_server_rendered_web_signal() {
+  find "${TARGET_PATH}" -maxdepth 7 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o \
+    \( \
+      -path "*/src/main/webapp/WEB-INF/*" -o \
+      -path "*/src/main/webapp/js/*" -o \
+      -path "*/src/main/webapp/static/*" -o \
+      -path "*/src/main/webapp/pages/*" -o \
+      -path "*/src/main/webapp/views/*" -o \
+      -name "*.jsp" -o \
+      -name "*.ftl" -o \
+      -name "*.vm" \
+    \) -print -quit 2>/dev/null | grep -q .
+}
+
+has_user_interface_signal() {
+  has_frontend_source_signal || has_server_rendered_web_signal
+}
+
+has_data_pipeline_source_signal() {
+  find "${TARGET_PATH}" -maxdepth 8 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o \
+    \( \
+      -path "*/finance-spark-service/*" -o \
+      -path "*/finance-flink-service/*" -o \
+      -path "*/src/main/java/*/etl/job/*" -o \
+      -path "*/src/main/java/*/online/*" -o \
+      -path "*/src/main/java/*/func/process/*" -o \
+      -path "*/src/main/java/*/connectors/mcq/*" -o \
+      -name "*Etl.java" -o \
+      -name "*Function.java" \
+    \) -print -quit 2>/dev/null | grep -q .
+}
+
 detect_language() {
   if [[ -n "${LANGUAGE}" ]]; then
     printf '%s\n' "${LANGUAGE}"
-  elif [[ -f "${TARGET_PATH}/pom.xml" ]] || find "${TARGET_PATH}" -maxdepth 6 -path '*/src/main/java' -type d 2>/dev/null | grep -q .; then
+  elif has_frontend_source_signal && [[ ! -f "${TARGET_PATH}/pom.xml" ]]; then
+    printf 'typescript\n'
+  elif has_frontend_source_signal && has_java_source_signal; then
+    printf 'mixed\n'
+  elif has_java_source_signal; then
     printf 'java\n'
-  elif [[ -f "${TARGET_PATH}/package.json" ]] || find "${TARGET_PATH}" -maxdepth 5 -name '*.ts' -type f 2>/dev/null | grep -q .; then
+  elif [[ -f "${TARGET_PATH}/package.json" ]] || find "${TARGET_PATH}" -maxdepth 5 \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -type f 2>/dev/null | grep -q .; then
     printf 'typescript\n'
   elif [[ -f "${TARGET_PATH}/go.mod" ]]; then
     printf 'go\n'
@@ -138,14 +270,16 @@ detect_application_type() {
   local detected_language="$1"
   if [[ -n "${APPLICATION_TYPE}" ]]; then
     printf '%s\n' "${APPLICATION_TYPE}"
+  elif has_data_pipeline_source_signal; then
+    printf 'batch\n'
+  elif has_frontend_source_signal; then
+    printf 'frontend\n'
+  elif has_server_rendered_web_signal && has_java_source_signal; then
+    printf 'fullstack\n'
+  elif has_server_rendered_web_signal; then
+    printf 'frontend\n'
   elif [[ "${detected_language}" == "java" ]]; then
     printf 'backend\n'
-  elif [[ -f "${TARGET_PATH}/package.json" ]]; then
-    if grep -Eq '"(react|vue|next|vite|angular)"' "${TARGET_PATH}/package.json"; then
-      printf 'frontend\n'
-    else
-      printf 'mixed\n'
-    fi
   else
     printf 'mixed\n'
   fi
@@ -238,6 +372,35 @@ detect_source_roots() {
       -path "*/.mvn" \
     \) -prune -o -path '*/src/main/java' -type d -print 2>/dev/null | sort)
 
+  if has_user_interface_signal; then
+    while IFS= read -r dir; do
+      dir="${dir#${TARGET_PATH}/}"
+      roots="${roots}${dir}"$'\n'
+    done < <(find "${TARGET_PATH}" -maxdepth 5 \
+      \( \
+        -path "*/.git" -o \
+        -path "*/target" -o \
+        -path "*/build" -o \
+        -path "*/dist" -o \
+        -path "*/node_modules" -o \
+        -path "*/.venv" -o \
+        -path "*/venv" -o \
+        -path "*/vendor" -o \
+        -path "${TARGET_PATH}/out" -o \
+        -path "*/coverage" -o \
+        -path "*/generated" -o \
+        -path "*/.idea" -o \
+        -path "*/.gradle" -o \
+        -path "*/.mvn" \
+      \) -prune -o -type d \
+      \( \
+        -path "*/src" -o \
+        -path "*/app" -o \
+        -path "*/lib" -o \
+        -path "*/src/main/webapp" \
+      \) -print 2>/dev/null | sort)
+  fi
+
   if [[ -z "${roots}" ]]; then
     while IFS= read -r dir; do
       dir="${dir#${TARGET_PATH}/}"
@@ -264,7 +427,7 @@ detect_source_roots() {
   if [[ -z "${roots}" ]]; then
     printf '.\n'
   else
-    printf '%s' "${roots}" | sed '/^$/d'
+    printf '%s' "${roots}" | sed '/^$/d' | sort -u
   fi
 }
 
@@ -563,46 +726,72 @@ has_project_path() {
   return 1
 }
 
+has_backend_execution_signal() {
+  [[ "${HTTP_ENTRY_COUNT}" -gt 0 || "${RPC_PROVIDER_COUNT}" -gt 0 || "${MESSAGE_ENTRY_COUNT}" -gt 0 || "${SCHEDULE_ENTRY_COUNT}" -gt 0 ]]
+}
+
+has_data_pipeline_execution_signal() {
+  has_project_path "finance-spark-service/*" ||
+  has_project_path "*/finance-spark-service/*" ||
+  has_project_path "finance-flink-service/*" ||
+  has_project_path "*/finance-flink-service/*" ||
+  has_project_path "src/main/java/*/etl/job/*" ||
+  has_project_path "*/src/main/java/*/etl/job/*" ||
+  has_project_path "src/main/java/*/online/*" ||
+  has_project_path "*/src/main/java/*/online/*" ||
+  has_project_path "src/main/java/*/func/process/*" ||
+  has_project_path "*/src/main/java/*/func/process/*" ||
+  has_project_path "src/main/java/*/connectors/mcq/*" ||
+  has_project_path "*/src/main/java/*/connectors/mcq/*" ||
+  has_project_path "*Etl.java" ||
+  has_project_path "*Function.java"
+}
+
+has_admin_mixed_execution_signal() {
+  has_project_path "src/main/java/*/data/console/*" ||
+  has_project_path "*/src/main/java/*/data/console/*" ||
+  has_project_path "src/main/java/*/oas/event/*" ||
+  has_project_path "*/src/main/java/*/oas/event/*" ||
+  has_project_path "src/main/java/*/spi/*" ||
+  has_project_path "*/src/main/java/*/spi/*" ||
+  has_project_path "*Approval*Controller.java" ||
+  has_project_path "*Audit*Controller.java" ||
+  has_project_path "*/src/main/java/*/config/schedule/*Processor.java" ||
+  has_project_path "*/src/main/java/*/worker/schedule/*Config*Processor.java" ||
+  has_project_path "*/src/main/java/*/worker/schedule/*Month*Processor.java"
+}
+
 detect_project_type_profiles() {
   local detected_any="false"
+  local selected_data_pipeline="false"
+  local selected_frontend="false"
 
-  if [[ "${DETECTED_LANGUAGE}" == "java" ]] && {
-    has_project_path "*/finance-spark-service/*" ||
-    has_project_path "*/finance-flink-service/*" ||
-    has_project_path "*/src/main/java/**/etl/job/*" ||
-    has_project_path "*/src/main/java/**/online/*" ||
-    has_project_path "*/src/main/java/**/func/process/*" ||
-    has_project_path "*/src/main/java/**/connectors/mcq/*" ||
-    has_project_path "*Etl.java" ||
-    has_project_path "*Function.java"
-  }; then
+  if has_data_pipeline_execution_signal; then
     printf 'data-pipeline-etl\n'
     detected_any="true"
+    selected_data_pipeline="true"
   fi
 
-  if [[ "${DETECTED_LANGUAGE}" == "typescript" ]] || [[ -f "${TARGET_PATH}/package.json" ]]; then
-    if [[ -f "${TARGET_PATH}/package.json" ]] || has_project_path "*.tsx" || has_project_path "*/pages/*" || has_project_path "*/views/*" || has_project_path "*/components/*"; then
-      printf 'frontend-application\n'
-      detected_any="true"
-    fi
+  if has_user_interface_signal; then
+    printf 'frontend-application\n'
+    detected_any="true"
+    selected_frontend="true"
   fi
 
-  if [[ "${DETECTED_LANGUAGE}" == "java" ]] && {
-    has_project_path "*/src/main/java/**/worker/*" ||
-    has_project_path "*/src/main/java/**/data/console/*" ||
-    has_project_path "*/src/main/java/**/oas/event/*" ||
-    has_project_path "*/src/main/java/**/spi/*"
-  }; then
+  if has_admin_mixed_execution_signal; then
     printf 'admin-mixed-workflow\n'
     detected_any="true"
   fi
 
-  if [[ "${DETECTED_LANGUAGE}" == "java" && ( "${HTTP_ENTRY_COUNT}" -gt 0 || "${RPC_PROVIDER_COUNT}" -gt 0 ) ]]; then
+  if has_java_source_signal && has_backend_execution_signal && {
+    { [[ "${selected_frontend}" != "true" && "${selected_data_pipeline}" != "true" ]]; } ||
+    [[ "${HTTP_ENTRY_COUNT}" -gt 0 || "${RPC_PROVIDER_COUNT}" -gt 0 ]]
+  }; then
     printf 'backend-business-service\n'
     detected_any="true"
   fi
 
-  if [[ "${DETECTED_LANGUAGE}" == "java" && "${detected_any}" == "false" ]]; then
+  if has_java_source_signal && [[ "${detected_any}" == "false" ]]; then
     printf 'backend-business-service\n'
     detected_any="true"
   fi
@@ -1045,6 +1234,7 @@ EOF
 
 generate_entry_profile() {
   local output="$1"
+  local emitted_entry_type="false"
   {
     cat <<'EOF'
 # Entry Coverage Profile
@@ -1092,8 +1282,7 @@ EOF
 
 entry_types:
 EOF
-    if [[ "${DETECTED_LANGUAGE}" == "java" ]]; then
-      if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'data-pipeline-etl'; then
+    if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'data-pipeline-etl'; then
         cat <<'EOF'
   - name: "spark_job"
     description: "Spark batch job entry."
@@ -1149,7 +1338,9 @@ EOF
     exclude_when: []
     evidence_mode: "data_pipeline_chain"
 EOF
-      elif printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'admin-mixed-workflow'; then
+      emitted_entry_type="true"
+    fi
+    if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'admin-mixed-workflow'; then
         cat <<'EOF'
   - name: "controller"
     description: "Admin HTTP or view controller entry."
@@ -1240,7 +1431,11 @@ EOF
     exclude_when: []
     evidence_mode: "admin_workflow_chain"
 EOF
-      else
+      emitted_entry_type="true"
+    fi
+    if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'backend-business-service' &&
+      ! printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'admin-mixed-workflow' &&
+      ! printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'data-pipeline-etl'; then
         cat <<'EOF'
   - name: "controller"
     description: "HTTP or view controller entry."
@@ -1289,17 +1484,35 @@ EOF
       - "framework base classes"
     evidence_mode: "business_chain"
 EOF
-      fi
-    elif printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'frontend-application'; then
+      emitted_entry_type="true"
+    fi
+    if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'frontend-application'; then
       cat <<'EOF'
   - name: "route"
-    description: "Frontend route or navigation entry."
+    description: "Frontend route entry."
     path_patterns:
       - "**/src/**/routes/**/*"
+      - "**/src/**/router/**/*"
+      - "**/src/**/routers/**/*"
+      - "**/src/main/webapp/WEB-INF/**/*.jsp"
+      - "**/src/main/webapp/pages/**/*"
+      - "**/src/main/webapp/views/**/*"
+    class_name_patterns:
+      - "<route-symbol>"
+    exclude_when:
+      - "pure route constants with no user-visible behavior may be marked as technical_bridge"
+    evidence_mode: "frontend_interaction_chain"
+  - name: "navigation_guard"
+    description: "Navigation guard, router bridge, or visibility gate entry."
+    path_patterns:
       - "**/src/**/navigation/**/*"
       - "**/src/**/router/**/*"
+      - "**/src/**/routers/**/*"
+      - "**/src/**/routes/**/*"
+      - "**/src/**/guards/**/*"
+      - "**/src/main/webapp/js/**/*"
     class_name_patterns:
-      - "<route-or-navigation-symbol>"
+      - "<navigation-or-guard-symbol>"
     exclude_when:
       - "pure route constants with no user-visible behavior may be marked as technical_bridge"
     evidence_mode: "frontend_interaction_chain"
@@ -1309,6 +1522,10 @@ EOF
       - "**/src/**/pages/**/*"
       - "**/src/**/views/**/*"
       - "**/src/**/screens/**/*"
+      - "**/src/main/webapp/WEB-INF/**/*.jsp"
+      - "**/src/main/webapp/**/*.html"
+      - "**/src/main/webapp/**/*.ftl"
+      - "**/src/main/webapp/**/*.vm"
     class_name_patterns:
       - "*Page"
       - "*View"
@@ -1316,14 +1533,36 @@ EOF
     exclude_when: []
     evidence_mode: "frontend_interaction_chain"
   - name: "component"
-    description: "Business component or popup entry."
+    description: "Business component entry."
     path_patterns:
       - "**/src/**/components/**/*"
-      - "**/src/**/popups/**/*"
+      - "**/src/main/webapp/js/component/**/*"
+      - "**/src/main/webapp/js/components/**/*"
+      - "**/src/main/webapp/static/js/component/**/*"
+      - "**/src/main/webapp/static/js/components/**/*"
     class_name_patterns:
       - "<component-symbol>"
     exclude_when:
       - "pure design-system atoms with no business behavior"
+    evidence_mode: "frontend_interaction_chain"
+  - name: "popup"
+    description: "Popup, modal, dialog, or sheet entry with user-visible behavior."
+    path_patterns:
+      - "**/src/**/popups/**/*"
+      - "**/src/**/popup/**/*"
+      - "**/src/**/modals/**/*"
+      - "**/src/**/modal/**/*"
+      - "**/src/**/dialogs/**/*"
+      - "**/src/**/dialog/**/*"
+      - "**/src/**/sheets/**/*"
+      - "**/src/main/webapp/**/*dialog*"
+      - "**/src/main/webapp/**/*Dialog*"
+      - "**/src/main/webapp/**/*modal*"
+      - "**/src/main/webapp/**/*Modal*"
+    class_name_patterns:
+      - "<popup-or-modal-symbol>"
+    exclude_when:
+      - "pure presentational wrapper with no trigger or state behavior"
     evidence_mode: "frontend_interaction_chain"
   - name: "store_action"
     description: "State store action, model action, or reducer with business side effects."
@@ -1342,12 +1581,79 @@ EOF
       - "**/src/**/api/**/*"
       - "**/src/**/services/**/*"
       - "**/src/**/request/**/*"
+      - "**/src/main/webapp/js/**/*api*"
+      - "**/src/main/webapp/js/**/*request*"
+      - "**/src/main/webapp/static/js/**/*api*"
+      - "**/src/main/webapp/static/js/**/*request*"
     class_name_patterns:
       - "<api-client-symbol>"
     exclude_when: []
     evidence_mode: "frontend_interaction_chain"
 EOF
-    else
+      emitted_entry_type="true"
+    fi
+    if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'library-shared-component'; then
+      cat <<'EOF'
+  - name: "public_api"
+    description: "Shared component public API entry."
+    path_patterns:
+      - "**/src/main/java/**/*Api.java"
+      - "**/src/main/java/**/*Client.java"
+      - "**/src/**/*.ts"
+    class_name_patterns:
+      - "*Api"
+      - "*Client"
+      - "<exported-symbol>"
+    exclude_when:
+      - "internal-only helper without consumer contract"
+    evidence_mode: "consumer_contract_chain"
+  - name: "client_method"
+    description: "Client or SDK method with consumer-visible behavior."
+    path_patterns:
+      - "**/src/main/java/**/*Client.java"
+      - "**/src/**/client/**/*"
+    class_name_patterns:
+      - "*Client"
+      - "<client-method-symbol>"
+    exclude_when: []
+    evidence_mode: "consumer_contract_chain"
+  - name: "adapter"
+    description: "Adapter or bridge entry exposed to consumers."
+    path_patterns:
+      - "**/src/main/java/**/*Adapter.java"
+      - "**/src/**/adapter/**/*"
+      - "**/src/**/adapters/**/*"
+    class_name_patterns:
+      - "*Adapter"
+    exclude_when: []
+    evidence_mode: "consumer_contract_chain"
+  - name: "extension_point"
+    description: "Extension point, SPI, or plugin contract entry."
+    path_patterns:
+      - "**/src/main/java/**/spi/**/*.java"
+      - "**/src/main/java/**/*Extension*.java"
+      - "**/src/**/extensions/**/*"
+    class_name_patterns:
+      - "*Extension*"
+      - "*Spi"
+      - "*SPI"
+    exclude_when: []
+    evidence_mode: "consumer_contract_chain"
+  - name: "configuration_hook"
+    description: "Configuration hook that changes shared component behavior."
+    path_patterns:
+      - "**/src/main/java/**/*Config.java"
+      - "**/src/main/java/**/*Configuration.java"
+      - "**/src/**/config/**/*"
+    class_name_patterns:
+      - "*Config"
+      - "*Configuration"
+    exclude_when: []
+    evidence_mode: "consumer_contract_chain"
+EOF
+      emitted_entry_type="true"
+    fi
+    if [[ "${emitted_entry_type}" != "true" ]]; then
       cat <<'EOF'
   - name: "<entry-type-name>"
     description: "<what this entry type means in this repository>"
@@ -1425,6 +1731,15 @@ evidence_chain:
       - connector_or_repository
       - idempotency_or_replay
       - partition_window_checkpoint
+    allow_missing_layers_with_reason: true
+  consumer_contract_chain:
+    required_layers:
+      - public_api
+      - consumer_contract
+    recommended_layers:
+      - compatibility_rule
+      - migration_or_deprecation_note
+      - test_evidence
     allow_missing_layers_with_reason: true
   technical_bridge:
     allowed: true

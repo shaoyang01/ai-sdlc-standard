@@ -112,6 +112,63 @@ GATE_REVIEW_REQUIRED_PATTERNS = {
   "Reviewed Artifact Version" => /Reviewed Artifact Version:/
 }.freeze
 
+SPECIFY_PRODUCT_SHAPE_REQUIRED_SECTIONS = [
+  "Domain Route / Scope Baseline",
+  "Requirement Type",
+  "Business Domain Targets",
+  "Entry Coverage Target",
+  "Sync Targets",
+  "Representative Data Simulation",
+  "Edge Cases",
+  "Functional Requirements",
+  "Key Entities / Data Contracts",
+  "Success Criteria",
+  "Source Artifact Traceability",
+  "Branch / Repository Boundary"
+].freeze
+
+PLAN_COMPANION_REQUIRED_TERMS = [
+  "specs/{feature}/plan.md",
+  "specs/{feature}/research.md",
+  "specs/{feature}/data-model.md",
+  "specs/{feature}/contracts/",
+  "specs/{feature}/quickstart.md",
+  "Artifact:",
+  "Skip Reason:",
+  "Risk:",
+  "Impact:",
+  "Accepted By:",
+  "Re-Gate Required:"
+].freeze
+
+PLAN_CONTRACT_SURFACE_REQUIRED_TERMS = [
+  "API/RPC/MQ",
+  "page/route behavior",
+  "input tables/topics/files",
+  "output tables/topics/reports",
+  "SQL/data lineage",
+  "rerun/replay/idempotency"
+].freeze
+
+CONFIRMED_DOMAIN_BOOTSTRAP_REQUIRED_TERMS = [
+  "--confirmed",
+  "--domain-map",
+  "confirmed_domains",
+  "L2MainDocument",
+  "L4Document",
+  "EntryCoverageDocument"
+].freeze
+
+SYNC_CREATE_IF_MISSING_REQUIRED_TERMS = [
+  "create-if-missing",
+  "L1/L2",
+  "owner",
+  "L4 id",
+  "01DomainCatalog.md",
+  "entry coverage audit",
+  "one-off"
+].freeze
+
 CORE_ARTIFACT_TEMPLATES = [
   "templates/technical-specification-template.md",
   "templates/gate-result-template.md",
@@ -385,6 +442,59 @@ if File.exist?(template_gate_path)
   end
 end
 
+specify_product_shape_paths = [
+  "templates/technical-specification-template.md",
+  "skills/sdlc-speckit-specify/references/spec-sync-mapping.md",
+  "skills/sdlc-speckit-specify/references/output-and-manifest.md",
+  "skill-contracts/known-skills/sdlc-speckit-specify.md"
+].freeze
+
+specify_product_shape_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    SPECIFY_PRODUCT_SHAPE_REQUIRED_SECTIONS.each do |section|
+      errors << "#{relative_path} missing required Speckit spec product section #{section}" unless text.include?(section)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+plan_companion_paths = [
+  "skills/sdlc-speckit-plan/SKILL.md",
+  "skills/sdlc-speckit-plan/references/output-and-manifest.md",
+  "skills/sdlc-speckit-plan/references/planning-scope.md",
+  "skill-contracts/known-skills/sdlc-speckit-plan.md"
+].freeze
+
+plan_companion_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    PLAN_COMPANION_REQUIRED_TERMS.each do |term|
+      errors << "#{relative_path} missing Plan companion artifact requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+plan_contract_paths = [
+  "skills/sdlc-speckit-plan/references/output-and-manifest.md",
+  "skill-contracts/known-skills/sdlc-speckit-plan.md"
+].freeze
+
+plan_contract_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  next unless File.exist?(path)
+
+  text = File.read(path)
+  PLAN_CONTRACT_SURFACE_REQUIRED_TERMS.each do |term|
+    errors << "#{relative_path} missing Plan contract surface requirement #{term}" unless text.include?(term)
+  end
+end
+
 output_reference_paths = Dir[File.join(ROOT, "skills", "sdlc-*", "references", "*.md")]
                          .select { |path| output_reference_path?(path) }
                          .uniq
@@ -410,6 +520,47 @@ if File.exist?(bootstrap_path)
   errors << "bootstrap script must not rely on single --force for profiles and context" if bootstrap.include?('FORCE="')
 else
   errors << "missing scripts/bootstrap-speckit-project.sh"
+end
+
+business_domain_bootstrap_paths = [
+  "scripts/bootstrap-business-domain.sh",
+  "templates/business-domain-bootstrap-template.yaml",
+  "docs/SPECKIT_BOOTSTRAP.md",
+  "docs/VALIDATION.md",
+  "ai-sdlc/speckit-project-bootstrap.md"
+].freeze
+
+business_domain_bootstrap_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    CONFIRMED_DOMAIN_BOOTSTRAP_REQUIRED_TERMS.each do |term|
+      errors << "#{relative_path} missing confirmed-domain bootstrap requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+sync_create_if_missing_paths = [
+  "skills/sdlc-speckit-sync/SKILL.md",
+  "skills/sdlc-speckit-sync/references/sync-targets.md",
+  "skills/sdlc-speckit-sync/references/fact-eligibility.md",
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md",
+  "skill-contracts/known-skills/sdlc-speckit-sync.md",
+  "docs/VALIDATION.md"
+].freeze
+
+sync_create_if_missing_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    SYNC_CREATE_IF_MISSING_REQUIRED_TERMS.each do |term|
+      errors << "#{relative_path} missing Sync create-if-missing requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
 end
 
 if errors.empty?

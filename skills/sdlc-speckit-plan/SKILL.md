@@ -23,6 +23,7 @@ Create or validate the SpecKit technical plan after `sdlc-speckit-clarify`. Trea
 10. Require Plan Gate readiness before `sdlc-speckit-tasks`.
 11. Recommend manifest Activity Log updates.
 12. Return core ambiguity to DocFlow Re-Gate.
+13. Produce the full Plan companion product set or explicitly skip each missing artifact with a complete skip record.
 
 ## Standard Package Resolution
 
@@ -71,6 +72,7 @@ Identify:
 - Source `02-方案审核`
 - `manifest.md`, if available
 - Existing `specs/{feature}/plan.md`, if any
+- Existing `specs/{feature}/research.md`, `data-model.md`, `contracts/`, and `quickstart.md`, if any
 
 Stop if the spec or approved DocFlow sources are missing.
 
@@ -98,6 +100,26 @@ Create or update:
 specs/{feature}/plan.md
 ```
 
+Also produce or explicitly skip with reason:
+
+```text
+specs/{feature}/research.md
+specs/{feature}/data-model.md
+specs/{feature}/contracts/
+specs/{feature}/quickstart.md
+```
+
+Skipping any companion artifact requires a record with:
+
+```text
+Artifact:
+Skip Reason:
+Risk:
+Impact:
+Accepted By:
+Re-Gate Required:
+```
+
 The plan must cover:
 
 - Technical approach
@@ -108,6 +130,7 @@ The plan must cover:
 - Verification strategy mapped to acceptance criteria
 - Risks and mitigations
 - Traceability to `specs/spec.md` and DocFlow sources
+- Companion artifact status and skip records
 
 ### 4. Run Plan Gate
 
@@ -119,6 +142,8 @@ Block when:
 - Plan cannot support acceptance criteria.
 - Core exception, rollback, compatibility, or verification strategy is missing.
 - Required technical decision would alter Scope or Gate conclusions.
+- Required companion artifact is missing without a complete skip record.
+- `contracts/` does not cover the project-type contract surface affected by the plan.
 
 ### 5. Output Recommendation
 
@@ -142,6 +167,7 @@ Every plan result must contain:
 - Source SpecKit Spec
 - Source DocFlow Artifacts
 - Target Plan
+- Companion Artifacts
 - Plan Coverage Summary
 - Plan Gate Result
 - Risks And Mitigations
@@ -160,3 +186,5 @@ Stop instead of writing or approving a plan when:
 - Plan contradicts `specs/spec.md`, `01-技术方案`, or `02-方案审核`.
 - Accepted risks are missing or contradicted.
 - Current artifacts are stale.
+- `research.md`, `data-model.md`, `contracts/`, or `quickstart.md` is missing without explicit skip record.
+- Required backend/admin, frontend, or ETL/data-pipeline contract coverage is missing.

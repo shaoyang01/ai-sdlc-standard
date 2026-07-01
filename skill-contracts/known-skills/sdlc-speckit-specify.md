@@ -24,6 +24,8 @@ required_storage:
   - ai-sdlc/artifact-storage.md
   - ai-sdlc/artifact-versioning.md
   - ai-sdlc/change-control.md
+  - ai-sdlc/speckit-project-type-profiles.md
+  - templates/technical-specification-template.md
 side_effects:
   - create or update specs/**
   - optionally create feature branch when executing the SDD workflow script
@@ -38,6 +40,7 @@ blocking_conditions:
   - technical specification has unresolved core ambiguity
   - sync to specs/spec.md would require reinterpreting business scope
   - existing specs/{feature}/spec.md belongs to another requirement or unknown source
+  - required spec product-shape sections cannot be populated from reviewed artifacts
 ```
 
 ## Standard Path Resolution
@@ -75,6 +78,9 @@ blocking_conditions:
 - `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.*`
 - `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.*`
 - `library/{requirement_id}/manifest.md`
+- `.specify/project-governance-profile.yaml` when present.
+- `.specify/entry-coverage-profile.yaml` when present.
+- `.specify/business_domain/00BusinessLandscape.md`, `00UbiquitousLanguage.md`, and `01DomainCatalog.md` when generated.
 
 前置条件：
 
@@ -123,6 +129,33 @@ specs/{feature}/spec.md
 - 风险和残余风险。
 - 与 DocFlow 方案和方案审核的引用。
 
+输出还必须包含以下 SpecKit 产品形状章节：
+
+```text
+## Domain Route / Scope Baseline
+## Requirement Type
+## Business Domain Targets
+## Entry Coverage Target
+## Sync Targets
+## Representative Data Simulation
+## Edge Cases
+## Functional Requirements
+## Key Entities / Data Contracts
+## Success Criteria
+## Source Artifact Traceability
+## Branch / Repository Boundary
+```
+
+这些章节必须承载：
+
+- 当前需求类型：`existing-change` / `new-flow` / `integration-change` / `data-change` / `unknown`。
+- 目标 business_domain 路由或 pending/blocking 原因。
+- 入口覆盖目标和证据链。
+- 未来需要 Sync 的稳定事实。
+- representative data simulation 与 edge cases。
+- 到 `01-技术方案`、`02-方案审核`、`manifest.md` 的可追溯关系。
+- 目标仓库、分支、模块和跨仓边界。
+
 允许生成：
 
 ```text
@@ -157,6 +190,7 @@ specs/{feature}/checklists/requirements.md
 - 技术方案仍有核心待确认事项。
 - `specs/spec.md` 需要加入未在方案中定义的新业务规则。
 - 方案审核与技术方案存在冲突。
+- 必需产品形状章节缺失，或需要编造 route、entry target、sync target、数据模拟、边界条件、traceability、仓库边界。
 
 ## Gate Requirements
 

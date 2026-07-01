@@ -9,6 +9,8 @@ Usage:
 
 Options:
   --project-name <name>   Project display name. Defaults to target directory name.
+  --confirmed             Generate confirmed routable L1/L2/L4 skeletons from a domain map.
+  --domain-map <path>     YAML domain map. Defaults to .specify/business-domain-bootstrap.yaml with --confirmed.
   --force                 Overwrite existing .specify/business_domain files.
   --dry-run               Print generated files without writing.
   -h, --help              Show this help.
@@ -25,6 +27,9 @@ Generated files:
 This script generates long-term business_domain skeletons from target repository
 code evidence and explicit placeholders. It does not read legacy .specify/memory,
 .specify/workflow, or .specify/coding_guide documents.
+
+Confirmed mode requires user-confirmed `confirmed_domains` in the domain map.
+Confirmed mode may generate {L1}/{L2}/{L2MainDocument}, {L4Document}, and {EntryCoverageDocument}.
 USAGE
 }
 
@@ -33,6 +38,8 @@ STANDARD_PACKAGE_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 TARGET_PATH=""
 PROJECT_NAME=""
+CONFIRMED="false"
+DOMAIN_MAP=""
 FORCE="false"
 DRY_RUN="false"
 RUN_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
@@ -42,6 +49,15 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-name)
       PROJECT_NAME="${2:-}"
+      shift 2
+      ;;
+    --confirmed)
+      CONFIRMED="true"
+      shift
+      ;;
+    --domain-map)
+      DOMAIN_MAP="${2:-}"
+      CONFIRMED="true"
       shift 2
       ;;
     --force)
@@ -88,6 +104,10 @@ SPECIFY_DIR="${TARGET_PATH}/.specify"
 BUSINESS_DOMAIN_DIR="${SPECIFY_DIR}/business_domain"
 REPORT_DIR="${SPECIFY_DIR}/reports"
 STANDARD_PACKAGE="${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE_DEFAULT}}"
+DOMAIN_MAP="${DOMAIN_MAP:-${SPECIFY_DIR}/business-domain-bootstrap.yaml}"
+if [[ -n "${DOMAIN_MAP}" && "${DOMAIN_MAP}" != /* ]]; then
+  DOMAIN_MAP="${TARGET_PATH}/${DOMAIN_MAP}"
+fi
 
 AUTHOR="$(git -C "${TARGET_PATH}" config --get user.name 2>/dev/null || true)"
 if [[ -z "${AUTHOR}" ]]; then
@@ -279,6 +299,291 @@ markdown_list_or_none() {
   while IFS= read -r line; do
     [[ -n "${line}" ]] && printf -- '- `%s`\n' "${line}"
   done <<< "${text}"
+}
+
+copy_confirmed_staged_file() {
+  local output="$1"
+  cp "${CONFIRMED_SOURCE_FILE}" "${output}"
+}
+
+generate_confirmed_staging() {
+  local staging_dir="$1"
+
+  if [[ ! -f "${DOMAIN_MAP}" ]]; then
+    echo "Confirmed domain map not found: ${DOMAIN_MAP}" >&2
+    exit 2
+  fi
+
+  ruby -ryaml -rfileutils -rtime - "${DOMAIN_MAP}" "${staging_dir}" "${PROJECT_NAME}" "${AUTHOR}" "${DOC_DATE}" "${STANDARD_PACKAGE}" "${TARGET_PATH}" <<'RUBY'
+domain_map_path, staging_dir, project_name, author, doc_date, standard_package, target_path = ARGV
+map = YAML.safe_load(File.read(domain_map_path), permitted_classes: [], aliases: false) || {}
+domains = map["confirmed_domains"]
+
+def fail_map(message)
+  warn "Invalid confirmed domain map: #{message}"
+  exit 2
+end
+
+fail_map("confirmed_domains must be a non-empty array") unless domains.is_a?(Array) && !domains.empty?
+
+def required!(hash, key, context)
+  value = hash[key]
+  fail_map("#{context}.#{key} is required") if value.nil? || value.to_s.strip.empty?
+  value.to_s.strip
+end
+
+def safe_name(value, context)
+  text = value.to_s.strip
+  fail_map("#{context} must not contain path separators") if text.include?("/") || text.include?("\\")
+  fail_map("#{context} must not contain '..'") if text.include?("..")
+  text
+end
+
+def l2_prefix(l1_id, l2_id)
+  l2_id.length > 2 && l2_id.start_with?(l1_id) ? l2_id : "#{l1_id}#{l2_id}"
+end
+
+def l4_full_id(l1_id, l2_id, l4_id)
+  prefix = l2_prefix(l1_id, l2_id)
+  l4_id.length > prefix.length && l4_id.start_with?(prefix) ? l4_id : "#{prefix}#{l4_id}"
+end
+
+def write_file(staging_dir, relative_path, content)
+  path = File.join(staging_dir, relative_path)
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, content)
+end
+
+def metadata(title, author, doc_date, status, summary)
+  <<~MD
+    # #{title}
+
+    > **Metadata**
+    > - **Version**: 0.1.0
+    > - **Date**: #{doc_date}
+    > - **Author**: #{author}
+    > - **Status**: #{status}
+    > - **Summary**: #{summary}
+
+  MD
+end
+
+catalog_rows = []
+l4_rows = []
+landscape_rows = []
+language_rows = []
+
+domains.each_with_index do |l1, l1_index|
+  context = "confirmed_domains[#{l1_index}]"
+  fail_map("#{context} must be a map") unless l1.is_a?(Hash)
+  l1_id = safe_name(required!(l1, "l1_id", context), "#{context}.l1_id")
+  l1_name_en = safe_name(required!(l1, "l1_name_en", context), "#{context}.l1_name_en")
+  l1_name_cn = safe_name(required!(l1, "l1_name_cn", context), "#{context}.l1_name_cn")
+  l1_dir = "#{l1_id}#{l1_name_en}"
+  l2_list = l1["l2"]
+  fail_map("#{context}.l2 must be a non-empty array") unless l2_list.is_a?(Array) && !l2_list.empty?
+
+  landscape_rows << "| #{l1_id}#{l1_name_en} | #{l1_name_cn} | Confirmed | user-confirmed domain map | |"
+  language_rows << "| #{l1_name_cn} | #{l1_name_en} domain boundary | Confirmed | user-confirmed domain map |"
+
+  l2_list.each_with_index do |l2, l2_index|
+    l2_context = "#{context}.l2[#{l2_index}]"
+    fail_map("#{l2_context} must be a map") unless l2.is_a?(Hash)
+    l2_id = safe_name(required!(l2, "l2_id", l2_context), "#{l2_context}.l2_id")
+    l2_name_en = safe_name(required!(l2, "l2_name_en", l2_context), "#{l2_context}.l2_name_en")
+    l2_name_cn = safe_name(required!(l2, "l2_name_cn", l2_context), "#{l2_context}.l2_name_cn")
+    l2_owner = required!(l2, "owner", l2_context)
+    l2_full = l2_prefix(l1_id, l2_id)
+    l2_dir = File.join(l1_dir, "#{l2_full}#{l2_name_en}")
+    l2_doc_name = "#{l2_full}#{l2_name_en}(#{l2_name_cn}).md"
+    entry_doc_name = "#{l2_full}#{l2_name_en}EntryCoverage(#{l2_name_cn}入口覆盖).md"
+    l4_list = l2["l4"]
+    fail_map("#{l2_context}.l4 must be a non-empty array") unless l4_list.is_a?(Array) && !l4_list.empty?
+
+    catalog_rows << "| #{l1_id}#{l1_name_en} | #{l2_full}#{l2_name_en} | [#{l2_doc_name}](<#{l2_dir}/#{l2_doc_name}>) | Confirmed | Owner: #{l2_owner} |"
+
+    l2_l4_rows = []
+    entry_rows = []
+
+    l4_list.each_with_index do |l4, l4_index|
+      l4_context = "#{l2_context}.l4[#{l4_index}]"
+      fail_map("#{l4_context} must be a map") unless l4.is_a?(Hash)
+      l4_id = safe_name(required!(l4, "l4_id", l4_context), "#{l4_context}.l4_id")
+      l4_name_en = safe_name(required!(l4, "l4_name_en", l4_context), "#{l4_context}.l4_name_en")
+      l4_name_cn = safe_name(required!(l4, "l4_name_cn", l4_context), "#{l4_context}.l4_name_cn")
+      l4_owner = required!(l4, "owner", l4_context)
+      evidence = Array(l4["evidence"]).map(&:to_s).map(&:strip).reject(&:empty?)
+      l4_full = l4_full_id(l1_id, l2_id, l4_id)
+      l4_doc_name = "#{l4_full}#{l4_name_en}(#{l4_name_cn}).md"
+      l4_relative = File.join(l2_dir, l4_doc_name)
+
+      l2_l4_rows << "| #{l4_full} | [#{l4_doc_name}](<#{l4_doc_name}>) | #{l4_name_cn} | Confirmed | #{l4_owner} |"
+      l4_rows << "| #{l4_full} | [#{l4_doc_name}](<#{l4_relative}>) | Confirmed | #{l1_name_cn} / #{l2_name_cn} |"
+      if evidence.empty?
+        entry_rows << "| #{l4_full} | #{l4_name_en} | <pending-code-anchor> | Confirmed domain; code evidence pending. |"
+      else
+        evidence.each do |item|
+          entry_rows << "| #{l4_full} | #{l4_name_en} | `#{item}` | user-confirmed evidence |"
+        end
+      end
+
+      write_file(staging_dir, l4_relative, metadata("#{l4_name_en}(#{l4_name_cn})", author, doc_date, "Confirmed", "Confirmed L4 skeleton for #{l4_name_cn}.") + <<~MD)
+        ## Business Scope
+
+        Confirmed domain route:
+
+        | Level | Value |
+        | --- | --- |
+        | L1 | #{l1_id}#{l1_name_en}(#{l1_name_cn}) |
+        | L2 | #{l2_full}#{l2_name_en}(#{l2_name_cn}) |
+        | L4 | #{l4_full}#{l4_name_en}(#{l4_name_cn}) |
+        | Owner | #{l4_owner} |
+
+        ## Entry / Code Evidence
+
+        #{evidence.empty? ? "- <pending-code-anchor>\n" : evidence.map { |item| "- `#{item}`" }.join("\n")}
+
+        ## Stable Facts
+
+        | Fact | Status | Source |
+        | --- | --- | --- |
+        | Domain boundary confirmed | Confirmed | user-confirmed domain map |
+
+        ## Sync Notes
+
+        Future `sdlc-speckit-sync` may add verified stable facts here after implementation, verification, and entry coverage checks.
+
+        ## Revision History
+
+        | Version | Date | Author | Changes |
+        | --- | --- | --- | --- |
+        | 0.1.0 | #{doc_date} | #{author} | Initial confirmed L4 skeleton. |
+      MD
+    end
+
+    write_file(staging_dir, File.join(l2_dir, l2_doc_name), metadata("#{l2_name_en}(#{l2_name_cn})", author, doc_date, "Confirmed", "Confirmed L2 skeleton for #{l2_name_cn}.") + <<~MD)
+      ## Scope
+
+      | Field | Value |
+      | --- | --- |
+      | L1 | #{l1_id}#{l1_name_en}(#{l1_name_cn}) |
+      | L2 | #{l2_full}#{l2_name_en}(#{l2_name_cn}) |
+      | Owner | #{l2_owner} |
+
+      ## Included L4 Documents
+
+      | L4 | Document | Business Name | Status | Owner |
+      | --- | --- | --- | --- | --- |
+      #{l2_l4_rows.join("\n")}
+
+      ## Routing Rule
+
+      Route requirements here only when their business behavior belongs to #{l2_name_cn} and the target L4 is listed above or explicitly reserved.
+
+      ## Revision History
+
+      | Version | Date | Author | Changes |
+      | --- | --- | --- | --- |
+      | 0.1.0 | #{doc_date} | #{author} | Initial confirmed L2 skeleton. |
+    MD
+
+    write_file(staging_dir, File.join(l2_dir, entry_doc_name), metadata("#{l2_name_en} Entry Coverage(#{l2_name_cn}入口覆盖)", author, doc_date, "Confirmed", "Entry coverage skeleton for #{l2_name_cn}.") + <<~MD)
+      ## Entry Coverage
+
+      | L4 | Entry Name | Code Anchor | Evidence |
+      | --- | --- | --- | --- |
+      #{entry_rows.join("\n")}
+
+      ## Strict Gate Note
+
+      Regenerate strict reports with `scripts/audit-entry-coverage.rb` after code or domain routing changes.
+
+      ## Revision History
+
+      | Version | Date | Author | Changes |
+      | --- | --- | --- | --- |
+      | 0.1.0 | #{doc_date} | #{author} | Initial confirmed entry coverage skeleton. |
+    MD
+  end
+end
+
+write_file(staging_dir, "00BusinessLandscape.md", metadata("Business Landscape", author, doc_date, "Confirmed", "#{project_name} confirmed business-domain landscape skeleton.") + <<~MD)
+  ## Purpose
+
+  This document is generated from a user-confirmed domain map for `#{project_name}`.
+
+  It is not copied from another repository and does not read legacy `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`.
+
+  ## Fact Source Layering
+
+  | Layer | Role | Runtime source |
+  | --- | --- | --- |
+  | Standard shared rules | Workflow, gate, artifact, sync, and document governance. | `#{standard_package}` |
+  | Confirmed domain map | Initial L1/L2/L4 routing. | `#{domain_map_path}` |
+  | Long-term code facts | Stable business facts and code anchors. | `.specify/business_domain/**` |
+
+  ## Business Domains
+
+  | L1 | Chinese Name | Status | Evidence | Owner confirmation |
+  | --- | --- | --- | --- | --- |
+  #{landscape_rows.join("\n")}
+
+  ## Routing Principle
+
+  Route new requirements to the confirmed L1/L2/L4 documents listed in `01DomainCatalog.md`.
+
+  ## Revision History
+
+  | Version | Date | Author | Changes |
+  | --- | --- | --- | --- |
+  | 0.1.0 | #{doc_date} | #{author} | Initial confirmed business-domain landscape. |
+MD
+
+write_file(staging_dir, "00UbiquitousLanguage.md", metadata("Ubiquitous Language", author, doc_date, "Confirmed", "#{project_name} confirmed glossary skeleton.") + <<~MD)
+  ## Terms
+
+  | Term | Meaning | Status | Source |
+  | --- | --- | --- | --- |
+  #{language_rows.join("\n")}
+
+  ## Wording Rules
+
+  - Add only stable confirmed business terms here.
+  - Keep temporary implementation names in `specs/**` until sync confirms they are reusable facts.
+
+  ## Revision History
+
+  | Version | Date | Author | Changes |
+  | --- | --- | --- | --- |
+  | 0.1.0 | #{doc_date} | #{author} | Initial confirmed glossary skeleton. |
+MD
+
+write_file(staging_dir, "01DomainCatalog.md", metadata("Domain Catalog", author, doc_date, "Confirmed", "#{project_name} confirmed domain catalog skeleton.") + <<~MD)
+  ## L1/L2 Index
+
+  | L1 | L2 | Main Document | Status | Notes |
+  | --- | --- | --- | --- | --- |
+  #{catalog_rows.join("\n")}
+
+  ## L4 Index
+
+  | L4 | Document | Status | Purpose |
+  | --- | --- | --- | --- |
+  #{l4_rows.join("\n")}
+
+  ## Routing Notes
+
+  - Route new work to confirmed domains first.
+  - Create new L4 documents only after user or domain-owner confirmation.
+  - Do not use legacy `.specify/memory/**` or `.specify/workflow/**` as a domain map.
+
+  ## Revision History
+
+  | Version | Date | Author | Changes |
+  | --- | --- | --- | --- |
+  | 0.1.0 | #{doc_date} | #{author} | Initial confirmed domain catalog. |
+MD
+RUBY
 }
 
 SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
@@ -634,6 +939,8 @@ generate_report() {
 | Item | Value |
 | --- | --- |
 | Business Domain Root | .specify/business_domain |
+| Mode | $([[ "${CONFIRMED}" == "true" ]] && printf 'confirmed' || printf 'pending') |
+| Domain Map | $([[ "${CONFIRMED}" == "true" ]] && printf '%s' "${DOMAIN_MAP}" || printf '<not used>') |
 | Force Overwrite | ${FORCE} |
 | Legacy Docs Read | false |
 | Source Roots | ${SOURCE_ROOT_COUNT} |
@@ -641,34 +948,54 @@ generate_report() {
 
 ## Generated Intent
 
-This run generates long-term business-domain skeletons only. It does not claim final business boundaries and does not copy business facts from another repository.
+This run generates long-term business-domain skeletons only. It does not copy business facts from another repository.
+
+$([[ "${CONFIRMED}" == "true" ]] && printf 'Confirmed mode used user-confirmed `confirmed_domains` to create routable L1/L2/L4 skeletons.' || printf 'Pending mode created only pending code-evidence skeletons because no confirmed domain map was supplied.')
 
 ## Next Steps
 
-- Review pending code evidence.
-- Confirm real L1/L2/L4 business boundaries with the project owner.
-- Promote confirmed facts from pending documents into real business-domain documents.
+- Review generated business-domain skeletons.
+- Confirm new L1/L2/L4 additions with the project owner before future changes.
 - Run entry coverage audit after real routing exists.
 EOF
   } > "${output}"
 }
 
-if [[ "${DRY_RUN}" != "true" ]]; then
-  mkdir -p "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence"
-  mkdir -p "${REPORT_DIR}"
-fi
+if [[ "${CONFIRMED}" == "true" ]]; then
+  CONFIRMED_STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/business-domain-confirmed.XXXXXX")"
+  generate_confirmed_staging "${CONFIRMED_STAGING_DIR}"
+  if [[ "${DRY_RUN}" != "true" ]]; then
+    mkdir -p "${BUSINESS_DOMAIN_DIR}"
+    mkdir -p "${REPORT_DIR}"
+  fi
+  while IFS= read -r relative_file; do
+    [[ -z "${relative_file}" ]] && continue
+    CONFIRMED_SOURCE_FILE="${CONFIRMED_STAGING_DIR}/${relative_file}"
+    write_or_preview "${BUSINESS_DOMAIN_DIR}/${relative_file}" copy_confirmed_staged_file
+  done < <(cd "${CONFIRMED_STAGING_DIR}" && find . -type f | sed 's#^\./##' | sort)
+  write_or_preview "$(report_history_path "${REPORT_DIR}/business_domain_bootstrap_report.md")" generate_report
+else
+  if [[ "${DRY_RUN}" != "true" ]]; then
+    mkdir -p "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence"
+    mkdir -p "${REPORT_DIR}"
+  fi
 
-write_or_preview "${BUSINESS_DOMAIN_DIR}/00BusinessLandscape.md" generate_landscape
-write_or_preview "${BUSINESS_DOMAIN_DIR}/00UbiquitousLanguage.md" generate_language
-write_or_preview "${BUSINESS_DOMAIN_DIR}/01DomainCatalog.md" generate_catalog
-write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/01CodeEvidence(待确认代码证据).md" generate_l2
-write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidate(待确认代码证据).md" generate_l4
-write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md" generate_entry_coverage
-write_or_preview "$(report_history_path "${REPORT_DIR}/business_domain_bootstrap_report.md")" generate_report
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/00BusinessLandscape.md" generate_landscape
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/00UbiquitousLanguage.md" generate_language
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/01DomainCatalog.md" generate_catalog
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/01CodeEvidence(待确认代码证据).md" generate_l2
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidate(待确认代码证据).md" generate_l4
+  write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md" generate_entry_coverage
+  write_or_preview "$(report_history_path "${REPORT_DIR}/business_domain_bootstrap_report.md")" generate_report
+fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   printf '\nDry run complete. No files were written.\n'
 else
   echo "Business domain bootstrap complete for ${PROJECT_NAME}."
-  echo "Next: confirm business boundaries before promoting pending evidence to stable domains."
+  if [[ "${CONFIRMED}" == "true" ]]; then
+    echo "Next: run entry coverage audit against confirmed business-domain routing."
+  else
+    echo "Next: confirm business boundaries before promoting pending evidence to stable domains."
+  fi
 fi

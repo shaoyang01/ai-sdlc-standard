@@ -14,6 +14,8 @@ Check the plan for:
 - Observability, logging, metrics, and alerts.
 - Verification strategy mapped to acceptance criteria.
 - Risks and mitigations.
+- Companion artifacts: `research.md`, `data-model.md`, `contracts/`, and `quickstart.md` are produced or explicitly skipped with a complete skip record.
+- Project-type contract coverage for backend/admin, frontend, ETL/data pipeline, or mixed projects.
 
 ## Status Values
 
@@ -35,6 +37,8 @@ Block when:
 - Plan cannot support acceptance criteria.
 - Plan requires changing API, DB, cache, MQ, schedule, listener, state, transaction, or data behavior not already approved.
 - Accepted risk is missing, contradicted, or not traceable.
+- Companion artifact is missing without `Artifact`, `Skip Reason`, `Risk`, `Impact`, `Accepted By`, and `Re-Gate Required`.
+- `contracts/` is skipped while the feature changes API/RPC/MQ, frontend route/page/state/API, or ETL input/output/data lineage.
 
 ## Output
 

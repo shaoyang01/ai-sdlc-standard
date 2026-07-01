@@ -99,6 +99,14 @@ bootstrap 不会：
 
 `.specify/business_domain/**` 比普通 profile 特殊：它是长期代码事实文档。首次建立时使用独立脚本生成骨架，后续只通过确认后的 Sync / Reconcile 沉淀稳定事实。
 
+entry coverage strict gate 使用独立 runner：
+
+```bash
+scripts/audit-entry-coverage.rb <target-project-path>
+```
+
+该 runner 读取 bootstrap 生成的 `.specify/entry-coverage-profile.yaml`、目标代码和 `.specify/business_domain/**`，输出 `.specify/reports/entry_coverage/**`。bootstrap 只生成 profile，不执行 strict 覆盖审计。
+
 ## 双轨隔离
 
 当前标准定义两条 rail：
@@ -170,6 +178,14 @@ tests
 
 项目类型语义见 `ai-sdlc/speckit-project-type-profiles.md`。如果一个仓库同时包含多种执行形态，`.specify/entry-coverage-profile.yaml` 可以保留多个 profile，并按模块列出各自入口。
 
+profile 选择遵循执行形态强信号，而不是只看语言或单个配置文件：
+
+- `primary_language` 只是语言提示，不等同于 backend / frontend / batch / library。
+- 普通 `package.json` 或无关静态资源不会单独触发 `frontend-application`；需要前端框架依赖、`src/pages`、`src/views`、`src/screens`、`src/components`、`src/navigation`、`src/router`、`src/store`、`src/api` 等前端源码结构，或 `src/main/webapp/WEB-INF`、JSP/FTL/VM、项目自有 webapp JS 等传统 Java Web 页面结构。
+- React Native 项目的 Android/iOS native shell 不会把项目入口生成成 Java backend 风格；只要存在 RN/前端强信号，entry profile 必须包含 route、page、component、store/action、api-client、popup、navigation 语义。
+- `admin-mixed-workflow` 需要 OAS event、data-console、SPI、approval/audit controller、config schedule processor、month-copy processor 等 admin-specific 强信号；普通 worker、schedule、import/export helper 或 Controller 单独存在不够。
+- Spark/Flink/ETL/job/function/connector 等数据计算形态优先生成 `data-pipeline-etl` 入口，不走普通 Controller/Service 覆盖模型。
+
 扫描结果会写入：
 
 ```text
@@ -236,8 +252,9 @@ bootstrap 完成后，下一步不是立刻跑复杂需求，而是：
 3. 确认 business domain 边界。
 4. 执行 `scripts/bootstrap-business-domain.sh <target-project-path> --dry-run`。
 5. 确认后执行 `scripts/bootstrap-business-domain.sh <target-project-path>` 生成长期事实骨架。
-6. 选择一条小需求跑 Direct Implementation 闭环。
-7. 最后再验证复杂需求 Speckit pipeline。
+6. 执行 `scripts/audit-entry-coverage.rb <target-project-path>` 生成 strict entry coverage reports。
+7. 选择一条小需求跑 Direct Implementation 闭环。
+8. 最后再验证复杂需求 Speckit pipeline。
 
 ## Business Domain Bootstrap
 
@@ -248,6 +265,23 @@ scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
 scripts/bootstrap-business-domain.sh <target-project-path>
 ```
 
+默认模式是 pending skeleton，只生成待确认代码证据，不生成真实 L1/L2/L4 业务域。
+
+如果 `.specify/business-domain-bootstrap.yaml` 中已经有用户或领域负责人确认的 `confirmed_domains`，可以使用 confirmed mode：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --confirmed --dry-run
+scripts/bootstrap-business-domain.sh <target-project-path> --confirmed
+```
+
+或显式指定 domain map：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify/business-domain-bootstrap.yaml --dry-run
+```
+
+confirmed mode 会从 `confirmed_domains` 生成可路由的 L1/L2/L4 skeleton 和 EntryCoverage skeleton。没有 confirmed domain map 时，不允许生成真实业务域。
+
 默认生成：
 
 ```text
@@ -256,6 +290,14 @@ scripts/bootstrap-business-domain.sh <target-project-path>
 .specify/business_domain/01DomainCatalog.md
 .specify/business_domain/99PendingConfirmation/01CodeEvidence/**
 .specify/reports/business_domain_bootstrap_report.md
+```
+
+confirmed mode 额外生成：
+
+```text
+.specify/business_domain/{L1}/{L2}/{L2MainDocument}.md
+.specify/business_domain/{L1}/{L2}/{L4Document}.md
+.specify/business_domain/{L1}/{L2}/{EntryCoverageDocument}.md
 ```
 
 规则：

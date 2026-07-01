@@ -15,6 +15,24 @@ Check for:
 - Failure, retry, idempotency, transaction, rollback, and compatibility consistency.
 - Manifest Development Path Decision and Activity Log consistency.
 - Implementation readiness.
+- Entry coverage reports when `.specify/entry-coverage-profile.yaml` exists.
+
+## Entry Coverage Audit
+
+When the target repository has `.specify/entry-coverage-profile.yaml`, run or require the standard runner before marking Analyze clear:
+
+```bash
+${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
+```
+
+Read:
+
+- `.specify/reports/entry_coverage/entry_coverage_report.md`
+- `.specify/reports/entry_coverage/unarchived_entries.md`
+- `.specify/reports/entry_coverage/unarchived_services.md`
+- `.specify/reports/entry_coverage/cross_domain_conflicts.md`
+
+Treat `BLOCKED`, non-empty unarchived reports, or non-empty conflict reports as Analyze Gate blocking unless the project profile records an explicit accepted exception.
 
 ## Status Values
 
