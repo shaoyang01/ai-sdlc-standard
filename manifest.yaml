@@ -8,6 +8,12 @@ runtime_dependencies: []
 entrypoints:
   overview: README.md
   roadmap: ROADMAP.md
+  usage_guide: docs/USAGE.md
+  configuration_guide: docs/CONFIGURATION.md
+  speckit_bootstrap_guide: docs/SPECKIT_BOOTSTRAP.md
+  skill_development_guide: docs/SKILL_DEVELOPMENT.md
+  validation_guide: docs/VALIDATION.md
+  roadmap_guide: docs/ROADMAP_GUIDE.md
   lifecycle: ai-sdlc/lifecycle.md
   gates: ai-sdlc/phase-gates.md
   artifact_flow: ai-sdlc/artifact-flow.md
