@@ -1,13 +1,23 @@
 # AI SDLC Standard
 
-> Version: v0.1.0
-> Status: portable standard package
+> Version: v0.1.0  
+> Status: portable standard package / draft  
+> Language: zh-CN
 
-## 定位
+## 项目定位
 
-本标准包用于约束人工唤醒 Skill 的研发协作流程。
+`ai-sdlc-standard` 是一套可迁移的 AI 辅助研发流程标准包，用于约束人工唤醒 Skill 时的研发协作流程。
 
-它不是某一个 Agent 的配置，也不是某一个 Skill 的实现，而是一套可迁移的公共标准。Codex、zcode、DeepSeek、其他 Agent 工具或人工流程都可以引用它。
+它不是某一个 Agent 的配置目录，也不是某一个 Skill 的单体实现。Codex、zcode、DeepSeek、其他 Agent 工具或人工流程都可以引用本标准包。
+
+本仓库当前提供：
+
+- AI SDLC 生命周期、Gate、变更控制、复杂度路由和产物存储标准。
+- ESS 技术方案、方案审核、代码审核、测试反馈 Schema。
+- `sdlc-*` Skill 合同、Prompt Skill 执行体和 Registry。
+- DocFlow 人工交接目录规范：`library/{requirement_id}/`。
+- Speckit 项目投放治理、双轨隔离和 bootstrap 脚本。
+- 标准包路径初始化、项目 bootstrap 和 Skill 合同校验脚本。
 
 ## 核心目标
 
@@ -16,228 +26,97 @@
 - 让 Gate 即使不能自动化，也可以人工检查并形成可传递结论。
 - 避免实现阶段补业务规则、猜测未定义行为或扩大范围。
 
-## 目录结构
+## 当前实现状态
 
-```text
-ai-sdlc-standard/
-├── README.md
-├── ROADMAP.md
-├── ai-sdlc/
-│   ├── lifecycle.md
-│   ├── phase-gates.md
-│   ├── artifact-flow.md
-│   ├── artifact-storage.md
-│   ├── change-control.md
-│   ├── complexity-routing.md
-│   ├── standard-package-resolution.md
-│   ├── speckit-generation-source-model.md
-│   ├── speckit-dual-rail-isolation.md
-│   ├── speckit-document-generation-spec.md
-│   ├── speckit-document-split.md
-│   ├── speckit-document-governance.md
-│   └── speckit-project-bootstrap.md
-├── ess/
-│   ├── specification-schema.md
-│   ├── review-schema.md
-│   ├── code-review-schema.md
-│   └── test-feedback-schema.md
-├── checklists/
-│   ├── specification-checklist.md
-│   ├── plan-checklist.md
-│   ├── task-checklist.md
-│   ├── implementation-checklist.md
-│   └── code-review-checklist.md
-├── skill-contracts/
-│   ├── skill-contract-template.md
-│   ├── skill-category-guide.md
-│   ├── producer-skill-contract.md
-│   ├── auditor-skill-contract.md
-│   ├── renderer-skill-contract.md
-│   ├── executor-skill-contract.md
-│   ├── sync-skill-contract.md
-│   └── known-skills/
-│       ├── sdlc-code-review-excellence.md
-│       ├── sdlc-code-review-normalizer.md
-│       ├── sdlc-docflow-writer.md
-│       ├── sdlc-gate-runner.md
-│       ├── sdlc-implementation-recorder.md
-│       ├── sdlc-requirement-normalizer.md
-│       ├── sdlc-specification-writer.md
-│       ├── sdlc-solution-reviewer.md
-│       ├── sdlc-speckit-analyze.md
-│       ├── sdlc-speckit-checklist.md
-│       ├── sdlc-speckit-clarify.md
-│       ├── sdlc-speckit-code-doc-reconcile.md
-│       ├── sdlc-speckit-implement.md
-│       ├── sdlc-speckit-plan.md
-│       ├── sdlc-speckit-specify.md
-│       ├── sdlc-speckit-sync.md
-│       ├── sdlc-speckit-tasks.md
-│       ├── sdlc-speckit-pipeline.md
-│       ├── sdlc-test-feedback-classifier.md
-│       └── sdlc-test-feedback-sync.md
-├── skills/
-│   ├── sdlc-code-review-excellence/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-code-review-normalizer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-docflow-writer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-gate-runner/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-implementation-recorder/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-requirement-normalizer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-specification-writer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-solution-reviewer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-analyze/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-checklist/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-clarify/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-code-doc-reconcile/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-implement/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-pipeline/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-plan/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-specify/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-sync/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-speckit-tasks/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── sdlc-test-feedback-classifier/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   └── sdlc-test-feedback-sync/
-│       ├── SKILL.md
-│       └── references/
-├── templates/
-│   ├── gate-result-template.md
-│   ├── technical-specification-template.md
-│   ├── artifact-manifest-template.md
-│   ├── skill-registry-entry-template.md
-│   ├── project-governance-profile-template.yaml
-│   ├── entry-coverage-profile-template.yaml
-│   ├── business-domain-bootstrap-template.yaml
-│   ├── speckit-generation-report-template.md
-│   └── speckit-equivalence-report-template.md
-├── scripts/
-│   ├── init-standard-home.sh
-│   ├── bootstrap-speckit-project.sh
-│   └── validate-skill-contracts.rb
-└── registry/
-    └── skill-registry.md
-```
+| 模块 | 当前状态 | 说明 |
+| --- | --- | --- |
+| 标准包结构 | 已建立 | `ai-sdlc/`、`ess/`、`checklists/`、`templates/`、`skill-contracts/`、`skills/`、`scripts/`、`registry/` 已存在。 |
+| DocFlow | 可用 | 使用 `library/{requirement_id}/` 作为人工交接和 Gate 视图。 |
+| `sdlc-*` Skill | prompt skill ready | 当前 `skills/sdlc-*` 是可安装 Prompt Skill，不等同于独立工具服务。 |
+| 标准包路径初始化 | tooling ready | `scripts/init-standard-home.sh` 可写入 `AI_SDLC_STANDARD_HOME`。 |
+| Speckit 项目投放 | tooling ready | `scripts/bootstrap-speckit-project.sh` 可生成 profile、project-context 和 reports。 |
+| 合同校验 | tooling ready | `scripts/validate-skill-contracts.rb` 校验 contract、manifest、registry、路径和双轨隔离风险。 |
+| 真实项目验证 | 待开展 | 需要通过真实 Java 后端项目 dry-run 和需求闭环继续验证。 |
 
-说明：
+## 快速开始
 
-- 上面的 `sdlc-*` 是标准包新增或重写后的安装目标。
-- 标准仓库中的可安装 Skill 目录和已登记合同必须统一使用 `sdlc-*` 命名。
-- 安装或同步到 Agent Skill 目录时，只同步 `skills/sdlc-*`，不要整包同步 `skills/`。
-
-## 使用方式
-
-1. 需求或方案进入下一阶段前，先查看 `ai-sdlc/phase-gates.md`。
-2. 需要判断标准包下一步改造顺序时，先查看 `ROADMAP.md`。
-3. 生成技术方案时，遵循 `ess/specification-schema.md` 和 `templates/technical-specification-template.md`。
-4. 审阅方案时，使用 `checklists/specification-checklist.md` 和 `templates/gate-result-template.md`。
-5. 需求中途变更、返工或理解错误时，遵循 `ai-sdlc/change-control.md`。
-6. 过程产物落盘时，遵循 `ai-sdlc/artifact-storage.md`。
-7. 判断直接实现还是进入完整 SDD 时，遵循 `ai-sdlc/complexity-routing.md`。
-8. 下载或更新标准包后，执行 `scripts/init-standard-home.sh`，把标准库路径写入 `AI_SDLC_STANDARD_HOME`。
-9. 安装后的 Skill 读取共享标准文件时，先按 `ai-sdlc/standard-package-resolution.md` 解析 `AI_SDLC_STANDARD_HOME`。
-10. 将 Speckit 文档治理投放到某个项目时，遵循 `ai-sdlc/speckit-project-bootstrap.md`、`ai-sdlc/speckit-generation-source-model.md` 和 `ai-sdlc/speckit-dual-rail-isolation.md`。
-11. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
-12. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
-13. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
-
-## 标准库路径初始化
-
-标准包下载到本地后，先执行：
+### 1. 初始化标准包路径
 
 ```bash
+scripts/init-standard-home.sh --dry-run
 scripts/init-standard-home.sh
 ```
 
-该脚本会向当前 shell profile 写入受控块：
+脚本会向 shell profile 写入受控块：
 
 ```bash
 export AI_SDLC_STANDARD_HOME='<path-to-ai-sdlc-standard>'
 ```
 
-常用模式：
+更多配置见：[配置指南](docs/CONFIGURATION.md)。
+
+### 2. 校验 Skill 合同和入口一致性
 
 ```bash
-scripts/init-standard-home.sh --dry-run
-scripts/init-standard-home.sh --print
-scripts/init-standard-home.sh --profile ~/.zshrc --force
+ruby scripts/validate-skill-contracts.rb
 ```
 
-项目投放时执行：
+更多校验规则见：[校验指南](docs/VALIDATION.md)。
+
+### 3. 对目标项目执行 Speckit bootstrap dry-run
 
 ```bash
-scripts/bootstrap-speckit-project.sh <target-project-path>
+scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 ```
 
-该脚本会创建 `.specify` profile、`.specify/project-context/**`、`.specify/reports/`、`library/`，并向目标项目 `.gitignore` 写入 `/library/`。`specs/**` 不由初始化脚本创建，而由后续 Speckit feature 阶段生成。旧版 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 只做可选同项目 inventory/parity reference，不作为新版内容来源。
+bootstrap 会预览将生成的 `.specify` profile、`.specify/project-context/**`、`.specify/reports/**`、`library/` 和 `.gitignore` 变更。它不会生成或复制 `.specify/business_domain/**`，也不会创建 `specs/**`。
 
-## Skill 命名规则
+更多投放规则见：[Speckit 投放指南](docs/SPECKIT_BOOTSTRAP.md)。
 
-- 标准包内新增或重写的可安装 Skill 一律使用 `sdlc-*` 命名。
-- 对已有外部 Skill 的标准化改造也视为新增 Skill，只在标准包内新增 `sdlc-*` 版本，不修改、不覆盖、不迁移外部 Skill 本体。
-- `skills/` 下的目录名、`SKILL.md` frontmatter `name`、`skill-contracts/known-skills/` 文件名和 `registry/skill-registry.md` 登记名必须一致。
-- 仅有合同、执行体尚未实现的 Skill 只登记合同，不在 `skills/` 目录中占位。
-- 原有外部 Skill 可以继续保留在各自 Agent 的 Skill 目录中，但不能进入本标准仓库的安装目标清单。
+## 文档导航
 
-## 文档门禁
+| 文档 | 用途 |
+| --- | --- |
+| [使用指南](docs/USAGE.md) | 说明普通需求、复杂需求、DocFlow、Gate 和 Speckit pipeline 的使用方式。 |
+| [配置指南](docs/CONFIGURATION.md) | 说明 `AI_SDLC_STANDARD_HOME`、初始化脚本、安装边界和标准包路径解析。 |
+| [Speckit 投放指南](docs/SPECKIT_BOOTSTRAP.md) | 说明 bootstrap、双轨隔离、project-context、reports 和 legacy inventory。 |
+| [Skill 开发指南](docs/SKILL_DEVELOPMENT.md) | 说明 `sdlc-*` 命名、合同、Registry、Manifest、副作用边界。 |
+| [校验指南](docs/VALIDATION.md) | 说明 `validate-skill-contracts.rb`、bootstrap dry-run 和真实项目验证检查项。 |
+| [路线图阅读指南](docs/ROADMAP_GUIDE.md) | 说明如何使用 `ROADMAP.md` 判断下一步改造方向。 |
+| [ROADMAP.md](ROADMAP.md) | 项目路线图和 Wave 级推进计划。 |
 
-当工作流暂时无法自动化时，节点推进依赖文档门禁：
+## 核心目录
 
-- 每个需求使用独立目录：`library/{requirement_id}/`。
-- 同一需求的不同节点产物放入不同子目录，例如 `01-技术方案/`、`02-方案审核/`、`04-代码审核/`。
-- 文件名必须符合 `{requirement_id}__{artifact_type}__v{version}.{ext}`。
-- Gate 文档必须包含 `PASS`、`FAIL` 或 `PASS_WITH_RISK`。
-- 只有 `PASS` 或带风险接受说明的 `PASS_WITH_RISK` 可以进入下一节点。
-- `library/{requirement_id}/` 是人工交接与门禁视图；`specs/**` 仍是 SpecKit 机器事实源。
+```text
+ai-sdlc/          AI SDLC 生命周期、Gate、Artifact、变更控制、Speckit 治理标准
+checklists/       各阶段人工或 Skill 审查清单
+ess/              技术方案、方案审核、代码审核、测试反馈 Schema
+skill-contracts/  Skill 分类、合同模板和已知 Skill 合同
+skills/           可安装的 sdlc-* Prompt Skill
+scripts/          标准包初始化、Speckit bootstrap、合同校验脚本
+templates/        DocFlow、Manifest、Project Profile、Speckit 报告模板
+registry/         Skill Registry
+```
 
-## 投放原则
+完整入口列表以 `manifest.yaml` 为准。
 
-- 不依赖 `.codex`、`.claude`、`.agents`、`.config` 等任何 Agent 配置目录。
-- 不写死本机路径、仓库路径或工具路径。
+## 重要边界
+
+- 标准包不依赖 `.codex`、`.claude`、`.agents`、`.config` 等 Agent 配置目录。
 - 标准包不会在未获用户明确触发时自动执行命令、修改代码或写入业务知识库。
-- 标准包可以提供脚本和可安装 Skill；所有写入、安装、投放、同步动作都必须由用户显式触发。
-- 各 Agent 的 Skill 只引用本标准包，不复制大段规则到各自配置中。
+- 安装或同步到 Agent Skill 目录时，只同步 `skills/sdlc-*`，不要整包同步 `skills/`。
+- 旧版 Speckit 文档 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 不作为新版内容来源。
+- `specs/**` 和 `.specify/business_domain/**` 是流程产物，不是项目 bootstrap 的迁移对象。
+- `sdlc-speckit-pipeline` 不是所有需求的默认流程；是否进入完整 SDD 由 `sdlc-solution-reviewer` 的方案审核和开发路径建议决定。
 
-## 推荐落地顺序
+## 推荐下一步
 
-1. 建立本标准包。
-2. 使用 `skills/sdlc-docflow-writer/` 生成 Markdown、HTML 或飞书文档。
-3. 给其他常用 Skill 补充 Skill Contract。
-4. 让工作流 Skill 在阶段之间输出 Gate Result。
-5. 将测试发现的规格遗漏沉淀到 Checklist 和 Schema。
+当前仓库已经完成标准包雏形和基础工具硬化。下一阶段建议以真实项目验证为主：
+
+1. 选择一个真实 Java 后端项目。
+2. 执行 `scripts/bootstrap-speckit-project.sh <target> --dry-run`。
+3. 检查 generation report、project-context candidate、legacy inventory 和双轨隔离。
+4. 选择一条小需求跑 Direct Implementation 闭环。
+5. 再选择一条复杂需求验证 Speckit pipeline。
+
+验证结果应反向沉淀到 Checklist、Schema、Skill 合同和脚本，而不是继续无依据扩展新能力。
