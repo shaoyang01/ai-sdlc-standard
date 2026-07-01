@@ -26,7 +26,7 @@ Generated files:
   .specify/project-context/ProjectGovernanceOverrides.md
   .specify/reports/speckit_generation_report.md
   .specify/reports/legacy_speckit_source_inventory.md when legacy files exist
-  .specify/reports/speckit_equivalence_report.md when legacy files exist
+  .specify/reports/speckit_equivalence_report.pending.md when legacy files exist but comparable outputs are not ready
   .specify/reports/
   library/
   .gitignore entry: /library/
@@ -110,6 +110,10 @@ fi
 TARGET_PATH="$(cd "${TARGET_PATH}" && pwd)"
 PROJECT_NAME="${PROJECT_NAME:-$(basename "${TARGET_PATH}")}"
 SPECIFY_DIR="${TARGET_PATH}/.specify"
+
+if [[ -d "${STANDARD_PACKAGE}" ]]; then
+  STANDARD_PACKAGE="$(cd "${STANDARD_PACKAGE}" && pwd)"
+fi
 
 git_remote() {
   git -C "${TARGET_PATH}" config --get remote.origin.url 2>/dev/null || true
@@ -237,6 +241,11 @@ detect_module_globs() {
 check_profile_target() {
   local file="$1"
   if [[ -e "${file}" && "${FORCE_PROFILES}" != "true" ]]; then
+    if [[ "${DRY_RUN}" == "true" ]]; then
+      echo "Existing profile detected: ${file}" >&2
+      echo "Would require --force-profiles to overwrite in write mode." >&2
+      return 0
+    fi
     echo "Refusing to overwrite existing file: ${file}" >&2
     echo "Use --force-profiles to overwrite profile files, or edit it manually." >&2
     exit 1
@@ -346,11 +355,23 @@ matches_kind() {
   local kind="$1"
   local name="$2"
   case "${kind}" in
-    entry)
-      [[ "${name}" == *Controller.java || "${name}" == *Listener.java || "${name}" == *Consumer.java || "${name}" == *Processor.java || "${name}" == *Schedule.java || "${name}" == *Job.java || "${name}" == *Worker.java ]]
+    http_entry)
+      [[ "${name}" == *Controller.java ]]
+      ;;
+    rpc_provider)
+      [[ "${name}" == *Impl.java || "${name}" == *Provider.java || "${name}" == *Facade.java ]]
+      ;;
+    message_entry)
+      [[ "${name}" == *Listener.java || "${name}" == *Consumer.java || "${name}" == *Processor.java ]]
+      ;;
+    schedule_entry)
+      [[ "${name}" == *Schedule.java || "${name}" == *Job.java || "${name}" == *Task.java || "${name}" == *Worker.java ]]
       ;;
     service)
-      [[ "${name}" == *Service.java || "${name}" == *ServiceImpl.java || "${name}" == *Manager.java || "${name}" == *ManagerImpl.java || "${name}" == *DomainService.java ]]
+      [[ "${name}" == *Service.java || "${name}" == *ServiceImpl.java ]]
+      ;;
+    manager)
+      [[ "${name}" == *Manager.java || "${name}" == *ManagerImpl.java || "${name}" == *DomainService.java ]]
       ;;
     persistence)
       [[ "${name}" == *Mapper.java || "${name}" == *Dao.java || "${name}" == *DAO.java || "${name}" == *Repository.java || "${name}" == *Mapper.xml ]]
@@ -364,6 +385,12 @@ matches_kind() {
     test)
       [[ "${name}" == *Test.java || "${name}" == *Tests.java || "${name}" == *.spec.ts || "${name}" == *.test.ts || "${name}" == test_*.py ]]
       ;;
+    config)
+      [[ "${name}" == *Config.java || "${name}" == *Configuration.java || "${name}" == *.yml || "${name}" == *.yaml || "${name}" == *.properties ]]
+      ;;
+    cache_lock)
+      [[ "${name}" == *Cache*.java || "${name}" == *Lock*.java || "${name}" == *Redis*.java ]]
+      ;;
     *)
       return 1
       ;;
@@ -373,8 +400,26 @@ matches_kind() {
 matching_files_for_kind() {
   local kind="$1"
   local path
-  find "${TARGET_PATH}" -type f \( -path "*/.git/*" -o -path "*/target/*" -o -path "*/build/*" -o -path "*/dist/*" \) -prune -o -type f -print 2>/dev/null | while IFS= read -r path; do
-    if matches_kind "${kind}" "$(basename "${path}")"; then
+  find "${TARGET_PATH}" \
+    \( \
+      -path "*/.git/*" -o \
+      -path "*/target/*" -o \
+      -path "*/build/*" -o \
+      -path "*/dist/*" -o \
+      -path "*/node_modules/*" -o \
+      -path "*/.venv/*" -o \
+      -path "*/venv/*" -o \
+      -path "*/vendor/*" -o \
+      -path "*/out/*" -o \
+      -path "*/coverage/*" -o \
+      -path "*/generated/*" -o \
+      -path "*/.idea/*" -o \
+      -path "*/.gradle/*" -o \
+      -path "*/.mvn/*" \
+    \) -prune -o -type f -print 2>/dev/null | while IFS= read -r path; do
+    if [[ "${kind}" == "rpc_provider" && "${path#${TARGET_PATH}/}" == *"/rpc/"* && "$(basename "${path}")" == *.java ]]; then
+      printf '%s\n' "${path#${TARGET_PATH}/}"
+    elif matches_kind "${kind}" "$(basename "${path}")"; then
       printf '%s\n' "${path#${TARGET_PATH}/}"
     fi
   done
@@ -390,30 +435,43 @@ sample_matching_files() {
 
 SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
 MODULE_COUNT="${#MODULE_GLOBS[@]}"
-ENTRY_COUNT="$(count_matching_files entry)"
+HTTP_ENTRY_COUNT="$(count_matching_files http_entry)"
+RPC_PROVIDER_COUNT="$(count_matching_files rpc_provider)"
+MESSAGE_ENTRY_COUNT="$(count_matching_files message_entry)"
+SCHEDULE_ENTRY_COUNT="$(count_matching_files schedule_entry)"
+TOTAL_ENTRY_COUNT=$((HTTP_ENTRY_COUNT + RPC_PROVIDER_COUNT + MESSAGE_ENTRY_COUNT + SCHEDULE_ENTRY_COUNT))
 SERVICE_COUNT="$(count_matching_files service)"
+MANAGER_COUNT="$(count_matching_files manager)"
 PERSISTENCE_COUNT="$(count_matching_files persistence)"
 MQ_COUNT="$(count_matching_files mq)"
 SCHEDULE_COUNT="$(count_matching_files schedule)"
 TEST_COUNT="$(count_matching_files test)"
+CONFIG_COUNT="$(count_matching_files config)"
+CACHE_LOCK_COUNT="$(count_matching_files cache_lock)"
 
-ENTRY_SAMPLES="$(sample_matching_files entry)"
+HTTP_ENTRY_SAMPLES="$(sample_matching_files http_entry)"
+RPC_PROVIDER_SAMPLES="$(sample_matching_files rpc_provider)"
+MESSAGE_ENTRY_SAMPLES="$(sample_matching_files message_entry)"
+SCHEDULE_ENTRY_SAMPLES="$(sample_matching_files schedule_entry)"
 SERVICE_SAMPLES="$(sample_matching_files service)"
+MANAGER_SAMPLES="$(sample_matching_files manager)"
 PERSISTENCE_SAMPLES="$(sample_matching_files persistence)"
 MQ_SAMPLES="$(sample_matching_files mq)"
 SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
 TEST_SAMPLES="$(sample_matching_files test)"
+CONFIG_SAMPLES="$(sample_matching_files config)"
+CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
 
 LEGACY_FILES_TEXT="$(find "${SPECIFY_DIR}" -type f \( -path "${SPECIFY_DIR}/memory/*" -o -path "${SPECIFY_DIR}/workflow/*" -o -path "${SPECIFY_DIR}/coding_guide/*" \) 2>/dev/null | sort | sed "s#^${TARGET_PATH}/##" || true)"
 if [[ -n "${LEGACY_FILES_TEXT}" ]]; then
   LEGACY_FOUND="true"
-  PARITY_CHECK_RESULT="pending"
+  PARITY_CHECK_RESULT="not-ready"
 else
   LEGACY_FOUND="false"
   PARITY_CHECK_RESULT="skipped"
 fi
 
-if [[ "${SOURCE_ROOT_COUNT}" -gt 0 && "${ENTRY_COUNT}" -gt 0 ]]; then
+if [[ "${SOURCE_ROOT_COUNT}" -gt 0 && "${TOTAL_ENTRY_COUNT}" -gt 0 ]]; then
   CODE_EVIDENCE_RESULT="passed"
 else
   CODE_EVIDENCE_RESULT="needs-user-confirmation"
@@ -643,6 +701,18 @@ Shared workflow, gate, checklist, and generic engineering rules live in \`${AI_S
 - Project-specific DTO/entity/model conversion rules:
 - Project-specific cache, lock, MQ, RPC, or config conventions:
 
+## Detected Technical Conventions
+
+| Type | Evidence | Notes |
+| --- | --- | --- |
+| MQ / Event | $(markdown_samples "${MQ_SAMPLES}") | Count: ${MQ_COUNT}; confirm whether each example is business-facing or technical plumbing. |
+| RPC | $(markdown_samples "${RPC_PROVIDER_SAMPLES}") | Count: ${RPC_PROVIDER_COUNT}; provider-like classes are evidence, not automatic business-domain boundaries. |
+| Schedule / Job | $(markdown_samples "${SCHEDULE_ENTRY_SAMPLES}") | Count: ${SCHEDULE_ENTRY_COUNT}; confirm scheduling ownership before documenting lifecycle rules. |
+| Cache / Lock | $(markdown_samples "${CACHE_LOCK_SAMPLES}") | Count: ${CACHE_LOCK_COUNT}; confirm runtime behavior before documenting consistency guarantees. |
+| Config | $(markdown_samples "${CONFIG_SAMPLES}") | Count: ${CONFIG_COUNT}; configuration files are evidence of conventions, not final environment policy. |
+| Tests | $(markdown_samples "${TEST_SAMPLES}") | Count: ${TEST_COUNT}; use as validation evidence only when tests match current behavior. |
+| Persistence | $(markdown_samples "${PERSISTENCE_SAMPLES}") | Count: ${PERSISTENCE_COUNT}; mapper/repository names are structural evidence, not business vocabulary by themselves. |
+
 ## Local Exceptions
 
 List only repository-specific implementation exceptions here.
@@ -685,6 +755,27 @@ EOF
 
 EOF
     emit_yaml_list "" "${MODULE_GLOBS[@]}"
+    cat <<EOF
+
+## Detected Entry Evidence
+
+| Type | Count | Examples |
+| --- | ---: | --- |
+| HTTP Controller | ${HTTP_ENTRY_COUNT} | $(markdown_samples "${HTTP_ENTRY_SAMPLES}") |
+| RPC Provider | ${RPC_PROVIDER_COUNT} | $(markdown_samples "${RPC_PROVIDER_SAMPLES}") |
+| Message Listener | ${MESSAGE_ENTRY_COUNT} | $(markdown_samples "${MESSAGE_ENTRY_SAMPLES}") |
+| Schedule / Job | ${SCHEDULE_ENTRY_COUNT} | $(markdown_samples "${SCHEDULE_ENTRY_SAMPLES}") |
+
+## Detected Layer Evidence
+
+| Layer | Count | Examples |
+| --- | ---: | --- |
+| Service | ${SERVICE_COUNT} | $(markdown_samples "${SERVICE_SAMPLES}") |
+| Manager / Domain Service | ${MANAGER_COUNT} | $(markdown_samples "${MANAGER_SAMPLES}") |
+| Persistence | ${PERSISTENCE_COUNT} | $(markdown_samples "${PERSISTENCE_SAMPLES}") |
+| Tests | ${TEST_COUNT} | $(markdown_samples "${TEST_SAMPLES}") |
+
+EOF
     cat <<'EOF'
 
 ## Module Boundaries
@@ -769,6 +860,16 @@ EOF
     - "**/build/**"
     - "**/dist/**"
     - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/.venv/**"
+    - "**/venv/**"
+    - "**/vendor/**"
+    - "**/out/**"
+    - "**/coverage/**"
+    - "**/generated/**"
+    - "**/.idea/**"
+    - "**/.gradle/**"
+    - "**/.mvn/**"
   document_scope: ".specify/business_domain"
   report_dir: ".specify/reports/entry_coverage"
 
@@ -944,6 +1045,16 @@ EOF
       - "**/build/**"
       - "**/dist/**"
       - "**/.git/**"
+      - "**/node_modules/**"
+      - "**/.venv/**"
+      - "**/venv/**"
+      - "**/vendor/**"
+      - "**/out/**"
+      - "**/coverage/**"
+      - "**/generated/**"
+      - "**/.idea/**"
+      - "**/.gradle/**"
+      - "**/.mvn/**"
   existing_docs:
     include:
       - "<optional-current-project-doc-path-confirmed-by-user>"
@@ -1064,11 +1175,18 @@ generate_generation_report() {
 | --- | ---: | --- |
 | Source roots | ${SOURCE_ROOT_COUNT} | $(markdown_samples "${SOURCE_ROOTS_TEXT}") |
 | Modules | ${MODULE_COUNT} | $(markdown_samples "${MODULE_GLOBS_TEXT}") |
-| Entries | ${ENTRY_COUNT} | $(markdown_samples "${ENTRY_SAMPLES}") |
+| HTTP controllers | ${HTTP_ENTRY_COUNT} | $(markdown_samples "${HTTP_ENTRY_SAMPLES}") |
+| RPC providers | ${RPC_PROVIDER_COUNT} | $(markdown_samples "${RPC_PROVIDER_SAMPLES}") |
+| Message listeners | ${MESSAGE_ENTRY_COUNT} | $(markdown_samples "${MESSAGE_ENTRY_SAMPLES}") |
+| Schedules / jobs | ${SCHEDULE_ENTRY_COUNT} | $(markdown_samples "${SCHEDULE_ENTRY_SAMPLES}") |
+| Total entries | ${TOTAL_ENTRY_COUNT} | Derived from HTTP + RPC + message + schedule evidence. |
 | Services | ${SERVICE_COUNT} | $(markdown_samples "${SERVICE_SAMPLES}") |
+| Managers / domain services | ${MANAGER_COUNT} | $(markdown_samples "${MANAGER_SAMPLES}") |
 | Persistence | ${PERSISTENCE_COUNT} | $(markdown_samples "${PERSISTENCE_SAMPLES}") |
 | MQ / events | ${MQ_COUNT} | $(markdown_samples "${MQ_SAMPLES}") |
-| Schedules / jobs | ${SCHEDULE_COUNT} | $(markdown_samples "${SCHEDULE_SAMPLES}") |
+| Schedule-like files | ${SCHEDULE_COUNT} | $(markdown_samples "${SCHEDULE_SAMPLES}") |
+| Cache / lock | ${CACHE_LOCK_COUNT} | $(markdown_samples "${CACHE_LOCK_SAMPLES}") |
+| Config | ${CONFIG_COUNT} | $(markdown_samples "${CONFIG_SAMPLES}") |
 | Tests | ${TEST_COUNT} | $(markdown_samples "${TEST_SAMPLES}") |
 
 ## User-Confirmed Facts
@@ -1090,8 +1208,8 @@ No user-confirmed project facts were supplied to this bootstrap run.
 | .specify/project-governance-profile.yaml | generated or preflighted | target path, git remote, detected code layout, standard template |
 | .specify/entry-coverage-profile.yaml | generated or preflighted | detected language and code layout |
 | .specify/business-domain-bootstrap.yaml | generated or preflighted | target code scan configuration |
-| .specify/project-context/ProjectCodingGuide.md | generated or candidate | target code evidence placeholders |
-| .specify/project-context/RepositoryStructure.md | generated or candidate | source roots and module globs |
+| .specify/project-context/ProjectCodingGuide.md | generated or candidate | target code technical convention evidence |
+| .specify/project-context/RepositoryStructure.md | generated or candidate | source roots, module globs, entry evidence, and layer evidence |
 | .specify/project-context/ProjectGovernanceOverrides.md | generated or candidate | empty unless explicit overrides exist |
 
 ## Legacy Reference
@@ -1112,7 +1230,7 @@ Legacy files, when present, are inventory or same-project parity references only
 
 - Review generated profiles and project-context files.
 - Confirm business domain boundaries before generating .specify/business_domain/**.
-- If legacy files exist, use the equivalence report only as a same-project parity reference.
+- If legacy files exist, treat the pending equivalence report as not-ready until comparable \`specs/**\` or \`.specify/business_domain/**\` outputs exist.
 EOF
   } > "${output}"
 }
@@ -1157,9 +1275,11 @@ generate_equivalence_report() {
 | --- | --- |
 | Legacy Output | legacy Speckit files detected |
 | New Output | project bootstrap profiles and context documents |
-| Semantic Equivalence | pending |
-| Structural Differences | pending |
-| Conclusion | pending |
+| Semantic Equivalence | not-ready |
+| Structural Differences | not-started |
+| Conclusion | not-started |
+
+This report is not a PASS artifact. Bootstrap only inventories legacy files and generated project-private context; semantic comparison requires comparable \`specs/**\` or \`.specify/business_domain/**\` outputs for the same scope.
 
 ## Legacy Output
 
@@ -1182,11 +1302,11 @@ EOF
 
 ## Semantic Comparison
 
-Semantic comparison must be completed after the new rail produces comparable `specs/**` or `.specify/business_domain/**` outputs for the same project and scope.
+Semantic comparison must be completed after the new rail produces comparable \`specs/**\` or \`.specify/business_domain/**\` outputs for the same project and scope.
 
 ## Conclusion
 
-Pending. Legacy files were inventoried only; no legacy content was copied into new generated files.
+Not started. Legacy files were inventoried only; no legacy content was copied into new generated files.
 EOF
   } > "${output}"
 }
@@ -1209,7 +1329,7 @@ write_or_preview "${SPECIFY_DIR}/reports/speckit_generation_report.md" generate_
 
 if [[ "${LEGACY_FOUND}" == "true" ]]; then
   write_or_preview "${SPECIFY_DIR}/reports/legacy_speckit_source_inventory.md" generate_legacy_inventory report
-  write_or_preview "${SPECIFY_DIR}/reports/speckit_equivalence_report.md" generate_equivalence_report report
+  write_or_preview "${SPECIFY_DIR}/reports/speckit_equivalence_report.pending.md" generate_equivalence_report report
 fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then

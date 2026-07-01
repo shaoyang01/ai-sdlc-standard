@@ -42,6 +42,58 @@ def relative(path)
   path.sub("#{ROOT}/", "")
 end
 
+LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:memory|workflow|coding_guide)(?:/\*\*)?}.freeze
+LEGACY_SOURCE_DANGER_PATTERN = /
+  required\s+inputs?|
+  input_artifacts?|
+  load(?:s|ed|ing)?|
+  read(?:s|ing)?|
+  source\s+from|
+  consume(?:s|d|ing)?|
+  use(?:s|d|ing)?|
+  normal\s+input|
+  authoritative|
+  workflow\s+rules?
+/ix.freeze
+LEGACY_SOURCE_ALLOWED_GUARD_PATTERN = /
+  do\s+not|
+  don't|
+  must\s+not|
+  never|
+  not\s+(?:read|resolve|authoritative|new-rail|copied)|
+  inventory(?:\s+only)?|
+  parity(?:[-\s]+reference)?(?:[-\s]+only)?|
+  legacy_reference_only|
+  reference\s+only|
+  exclude(?:d|s)?|
+  prohibit(?:ed|s)?|
+  forbidden|
+  remain\s+untouched|
+  legacy\s+rail\s+input
+/ix.freeze
+
+def unsafe_legacy_source_references(text)
+  lines = text.lines
+  unsafe = []
+
+  lines.each_with_index do |line, index|
+    next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
+
+    context = [
+      lines[index - 1],
+      line,
+      lines[index + 1]
+    ].compact.join(" ")
+
+    next if context.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
+    next unless context.match?(LEGACY_SOURCE_DANGER_PATTERN)
+
+    unsafe << [index + 1, line.strip]
+  end
+
+  unsafe
+end
+
 def contract_yaml(path)
   text = File.read(path)
   yaml = text[/```yaml\n(.*?)\n```/m, 1]
@@ -172,6 +224,10 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
   text = File.read(path)
   if text.match?(relative_standard_path_pattern)
     errors << "#{relative(path)} uses relative standard-package path; use AI_SDLC_STANDARD_HOME"
+  end
+
+  unsafe_legacy_source_references(text).each do |line_number, line|
+    errors << "#{relative(path)}:#{line_number} treats legacy .specify source as normal sdlc input: #{line}"
   end
 end
 

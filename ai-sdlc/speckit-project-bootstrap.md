@@ -6,7 +6,7 @@ This guide defines how AI SDLC Standard is applied to a target repository.
 
 The standard package is the source of shared Speckit governance rules, node artifact specifications, templates, generation specifications, and bootstrap scripts. A target repository stores only project-specific profile files, generated project-private documents, generated business-domain documents, runtime reports, and optional local overrides.
 
-This is not a repository-to-repository migration process and not a legacy cutover. Existing repositories can be used to abstract document structure and generation rules, but their business facts must not be copied into another repository.
+This is not a repository-to-repository migration process and not a legacy replacement event. Existing repositories can be used to abstract document structure and generation rules, but their business facts must not be copied into another repository.
 
 Project bootstrap is code-driven. The primary source for generated project content is the target repository code plus explicit user-confirmed project facts. Legacy Speckit documents are optional same-project parity references only.
 
@@ -78,7 +78,7 @@ The project bootstrap step creates only a governance skeleton and project profil
 └── reports/
     ├── speckit_generation_report.md
     ├── legacy_speckit_source_inventory.md
-    └── speckit_equivalence_report.md
+    └── speckit_equivalence_report.pending.md
 library/
 ```
 
@@ -92,7 +92,7 @@ library/
 
 If a project-context file already exists, bootstrap writes a `.candidate` file instead of silently overwriting the project-private facts.
 
-`legacy_speckit_source_inventory.md` and `speckit_equivalence_report.md` are generated only when same-project legacy Speckit files exist. They are parity evidence, not content sources. When no legacy files exist, bootstrap relies on the code evidence completeness check in `speckit_generation_report.md`.
+`legacy_speckit_source_inventory.md` and `speckit_equivalence_report.pending.md` are generated only when same-project legacy Speckit files exist. They are not-ready parity evidence, not content sources or PASS artifacts. When no legacy files exist, bootstrap relies on the code evidence completeness check in `speckit_generation_report.md`.
 
 ## Bootstrap Script
 
@@ -125,7 +125,7 @@ The script should:
 9. Create `.specify/project-context/ProjectGovernanceOverrides.md`, or `.candidate` when the target exists.
 10. Create `.specify/reports/speckit_generation_report.md`.
 11. Create `.specify/reports/legacy_speckit_source_inventory.md` when legacy files exist.
-12. Create `.specify/reports/speckit_equivalence_report.md` when legacy files exist.
+12. Create `.specify/reports/speckit_equivalence_report.pending.md` when legacy files exist.
 13. Create `.specify/reports/`.
 14. Create `library/`.
 15. Add `/library/` to the target repository `.gitignore` if it is not already present.

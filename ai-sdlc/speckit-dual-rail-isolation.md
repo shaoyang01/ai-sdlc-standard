@@ -4,7 +4,7 @@
 
 This guide defines the isolation model between legacy Speckit workflows and the new AI SDLC Speckit rail.
 
-The goal is not compatibility, migration, bridge behavior, or cutover. The goal is side-by-side isolation with equivalent workflow products when both rails operate on the same project and facts.
+The goal is fully isolated dual rails with equivalent workflow products when both rails operate on the same project and facts.
 
 ## Rails
 

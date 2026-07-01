@@ -18,7 +18,20 @@ scope:
   include_file_patterns:
     - "<include-pattern>"
   exclude_file_patterns:
-    - "<exclude-pattern>"
+    - "**/target/**"
+    - "**/build/**"
+    - "**/dist/**"
+    - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/.venv/**"
+    - "**/venv/**"
+    - "**/vendor/**"
+    - "**/out/**"
+    - "**/coverage/**"
+    - "**/generated/**"
+    - "**/.idea/**"
+    - "**/.gradle/**"
+    - "**/.mvn/**"
   document_scope: ".specify/business_domain"
   report_dir: ".specify/reports/entry_coverage"
 

@@ -23,11 +23,18 @@
 | --- | ---: | --- |
 | Source roots | <n> | <paths> |
 | Modules | <n> | <paths> |
-| Entries | <n> | <classes-or-files> |
+| HTTP controllers | <n> | <classes-or-files> |
+| RPC providers | <n> | <classes-or-files> |
+| Message listeners | <n> | <classes-or-files> |
+| Schedules / jobs | <n> | <classes-or-files> |
+| Total entries | <n> | <derived-total> |
 | Services | <n> | <classes-or-files> |
+| Managers / domain services | <n> | <classes-or-files> |
 | Persistence | <n> | <classes-or-files> |
 | MQ / events | <n> | <topics-or-files> |
-| Schedules / jobs | <n> | <classes-or-files> |
+| Schedule-like files | <n> | <classes-or-files> |
+| Cache / lock | <n> | <classes-or-files> |
+| Config | <n> | <files> |
 | Tests | <n> | <paths> |
 
 ## User-Confirmed Facts
