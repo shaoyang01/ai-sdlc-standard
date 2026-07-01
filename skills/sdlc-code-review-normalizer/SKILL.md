@@ -28,12 +28,12 @@ Normalize raw code review feedback into the DocFlow `04-代码审核` artifact. 
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-code-review-normalizer.md`
-- `../../ess/code-review-schema.md`
-- `../../checklists/code-review-checklist.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-code-review-normalizer.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/code-review-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 
@@ -103,7 +103,7 @@ Use:
 - `PASS_WITH_RISK` when High issues exist and risk acceptance is complete.
 - `PASS` when no Critical or unaccepted High issue exists.
 
-Do not use `PASS_WITH_RISK` without Accepted Risk, Accepted By, Reason, and Follow-up.
+Do not use `PASS_WITH_RISK` without Accepted Risk, Accepted By, Accepted At, Accepted Reason, Accepted Scope, Follow-up Required, and Follow-up Owner.
 
 ### 5. Output Or Write
 

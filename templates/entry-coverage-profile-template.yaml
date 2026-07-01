@@ -57,10 +57,11 @@ evidence_chain:
   business_chain:
     required_layers:
       - entry
+    recommended_layers:
       - service
       - manager
       - persistence
-    allow_missing_layers_with_reason: false
+    allow_missing_layers_with_reason: true
   technical_bridge:
     allowed: true
     markers:
@@ -83,10 +84,12 @@ strict_outputs:
 
 strict_blocking_conditions:
   - "entry has no L4 match"
-  - "entry has no required evidence chain and is not an accepted technical bridge"
-  - "core service is not hit by an archived entry"
+  - "entry layer is missing and the entry is not an accepted technical bridge"
+  - "recommended service, manager, or persistence evidence is missing without a reason"
+  - "core service is not hit by an archived entry and no project-specific reason is recorded"
   - "entry is mapped to multiple L2 domains without explicit conflict handling"
 
 notes:
   - "Do not put shared governance rules in this profile."
   - "Do not copy values from another repository unless they match this repository's code structure."
+  - "The entry -> service -> manager -> persistence chain is a recommended default, not a universal hard requirement."

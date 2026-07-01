@@ -66,7 +66,14 @@
 
 - Result:
 - Can Continue:
-- Risk Acceptance:
+- Risk Accepted: yes/no
+- Accepted Risk:
+- Accepted By:
+- Accepted At:
+- Accepted Reason:
+- Accepted Scope:
+- Follow-up Required: yes/no
+- Follow-up Owner:
 - Development Path Recommendation:
 
 ### 代码审核

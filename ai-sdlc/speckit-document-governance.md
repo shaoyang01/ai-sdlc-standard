@@ -78,16 +78,16 @@ Project private documents define:
 
 Project private documents must be generated under `.specify/project-context/**` and declared in `.specify/project-governance-profile.yaml` before they are treated as required workflow context.
 
-For legacy mixed documents, follow `speckit-document-split.md`: bootstrap or a one-time split task extracts the private half into `.specify/project-context/**`, while shared rules stay in the standard package.
+For legacy mixed documents, follow `speckit-dual-rail-isolation.md` and `speckit-generation-source-model.md`: bootstrap may inventory legacy files as optional same-project parity references, while shared rules stay in the standard package and new private facts come from target code or explicit user confirmation.
 
 If a local legacy document is not declared, new `sdlc-*` Skills must not read it as normal workflow context.
 
-New `sdlc-*` Skills should not classify legacy mixed documents during normal workflow execution. Classification happens only during project bootstrap or a one-time split task. After that, Skills use:
+New `sdlc-*` Skills should not classify legacy mixed documents during normal workflow execution. When legacy inventory or parity analysis is needed, it happens during bootstrap or a one-time analysis task. After that, Skills use:
 
 | Content type | Read from |
 | --- | --- |
 | Shared workflow, gate, schema, or generic checklist | `${AI_SDLC_STANDARD_HOME}` |
-| Project module paths, source roots, package naming, utility classes, framework adapters, deployment notes, and runtime constraints | `.specify/project-context/**` |
+| Project module paths, source roots, package naming, utility classes, framework adapters, deployment notes, and runtime constraints | `.specify/project-context/**` generated from target code or user-confirmed facts |
 | Business-domain terminology, statuses, lifecycle, and code anchors | `.specify/business_domain/**` |
 | Local exception to a shared standard rule | `.specify/project-context/ProjectGovernanceOverrides.md` plus `project_overrides` profile entries |
 | Runtime report or generated output | `.specify/reports/**`, regenerated locally |
@@ -287,7 +287,7 @@ Strict mode should block when:
 - an entry maps to multiple L2 domains without explicit conflict handling
 - required reports are missing
 
-Project-specific entry types, class suffixes, and path patterns belong in `.specify/entry-coverage-profile.yaml`.
+Project-specific entry types, class suffixes, and path patterns belong in `.specify/entry-coverage-profile.yaml`. The common `entry -> service -> manager -> persistence` chain is recommended evidence, not a universal hard requirement; project profiles may allow missing recommended layers with reasons.
 
 ## Governance Audit Checklist
 

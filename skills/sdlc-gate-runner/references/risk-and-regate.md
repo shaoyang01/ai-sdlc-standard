@@ -6,8 +6,11 @@
 
 - Accepted Risk
 - Accepted By
-- Reason
-- Follow-up
+- Accepted At
+- Accepted Reason
+- Accepted Scope
+- Follow-up Required
+- Follow-up Owner
 
 If any field is missing, downgrade the Gate check result to `FAIL`.
 

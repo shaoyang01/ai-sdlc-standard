@@ -15,6 +15,9 @@ entrypoints:
   change_control: ai-sdlc/change-control.md
   complexity_routing: ai-sdlc/complexity-routing.md
   standard_package_resolution: ai-sdlc/standard-package-resolution.md
+  speckit_generation_source_model: ai-sdlc/speckit-generation-source-model.md
+  speckit_dual_rail_isolation: ai-sdlc/speckit-dual-rail-isolation.md
+  speckit_document_generation_spec: ai-sdlc/speckit-document-generation-spec.md
   speckit_document_split: ai-sdlc/speckit-document-split.md
   speckit_document_governance: ai-sdlc/speckit-document-governance.md
   speckit_project_bootstrap: ai-sdlc/speckit-project-bootstrap.md
@@ -31,6 +34,8 @@ entrypoints:
   project_governance_profile_template: templates/project-governance-profile-template.yaml
   entry_coverage_profile_template: templates/entry-coverage-profile-template.yaml
   business_domain_bootstrap_template: templates/business-domain-bootstrap-template.yaml
+  speckit_generation_report_template: templates/speckit-generation-report-template.md
+  speckit_equivalence_report_template: templates/speckit-equivalence-report-template.md
   registry: registry/skill-registry.md
 skills:
   sdlc_code_review_excellence:

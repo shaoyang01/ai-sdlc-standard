@@ -7,6 +7,7 @@ ROOT = File.expand_path("..", __dir__)
 CONTRACT_DIR = File.join(ROOT, "skill-contracts", "known-skills")
 SKILL_DIR = File.join(ROOT, "skills")
 MANIFEST_PATH = File.join(ROOT, "manifest.yaml")
+REGISTRY_PATH = File.join(ROOT, "registry", "skill-registry.md")
 
 ALLOWED_CATEGORIES = [
   "Intake Skill",
@@ -49,6 +50,14 @@ def contract_yaml(path)
   YAML.safe_load(yaml, permitted_classes: [], aliases: false) || {}
 rescue Psych::SyntaxError => e
   raise "invalid yaml metadata: #{e.message}"
+end
+
+def fenced_yamls(path)
+  File.read(path).scan(/```yaml\n(.*?)\n```/m).flatten.map do |yaml|
+    YAML.safe_load(yaml, permitted_classes: [], aliases: false) || {}
+  rescue Psych::SyntaxError => e
+    { "__error__" => "invalid yaml metadata: #{e.message}" }
+  end
 end
 
 contract_paths = Dir[File.join(CONTRACT_DIR, "sdlc-*.md")].sort
@@ -95,6 +104,7 @@ end
 
 if File.exist?(MANIFEST_PATH)
   manifest = YAML.safe_load(File.read(MANIFEST_PATH), permitted_classes: [], aliases: false) || {}
+  manifest_skills_by_name = {}
   manifest.fetch("skills", {}).each do |key, skill|
     skill_path = skill["path"]
     contract_path = skill["contract"]
@@ -109,9 +119,69 @@ if File.exist?(MANIFEST_PATH)
 
     errors << "manifest skill #{key} path missing: #{skill_path}" unless File.exist?(path)
     errors << "manifest skill #{key} contract missing: #{contract_path}" unless File.exist?(contract)
+    manifest_skills_by_name[File.basename(File.dirname(path))] = {
+      "key" => key,
+      "path" => skill_path,
+      "contract" => contract_path
+    }
+  end
+
+  if File.exist?(REGISTRY_PATH)
+    registry_entries = fenced_yamls(REGISTRY_PATH)
+    registry_entries.each do |entry|
+      if entry["__error__"]
+        errors << "registry #{entry['__error__']}"
+        next
+      end
+
+      name = entry["name"]
+      next if name.to_s.empty?
+      next unless name.start_with?("sdlc-")
+
+      skill_path = Array(entry["skill_path"]).first
+      contract_path = Array(entry["contract"]).first
+      manifest_skill = manifest_skills_by_name[name]
+
+      if manifest_skill.nil?
+        errors << "registry skill #{name} missing from manifest.yaml"
+        next
+      end
+
+      if skill_path && manifest_skill["path"] != skill_path
+        errors << "registry skill #{name} path #{skill_path} does not match manifest #{manifest_skill['path']}"
+      end
+
+      if contract_path && manifest_skill["contract"] != contract_path
+        errors << "registry skill #{name} contract #{contract_path} does not match manifest #{manifest_skill['contract']}"
+      end
+    end
+
+    registry_names = registry_entries.map { |entry| entry["name"] }.compact
+    (manifest_skills_by_name.keys - registry_names).each do |name|
+      errors << "manifest skill #{name} missing from registry/skill-registry.md"
+    end
+  else
+    errors << "missing registry/skill-registry.md"
   end
 else
   errors << "missing manifest.yaml"
+end
+
+relative_standard_path_pattern = %r{\.\./\.\./(?:\.\./)?(?:ai-sdlc|ess|templates|skill-contracts)/}
+Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
+  text = File.read(path)
+  if text.match?(relative_standard_path_pattern)
+    errors << "#{relative(path)} uses relative standard-package path; use AI_SDLC_STANDARD_HOME"
+  end
+end
+
+bootstrap_path = File.join(ROOT, "scripts", "bootstrap-speckit-project.sh")
+if File.exist?(bootstrap_path)
+  bootstrap = File.read(bootstrap_path)
+  errors << "bootstrap script must write project-context candidates when files exist" unless bootstrap.include?("candidate_path")
+  errors << "bootstrap script must not rely on single --force for profiles and context" if bootstrap.include?('FORCE="')
+else
+  errors << "missing scripts/bootstrap-speckit-project.sh"
 end
 
 if errors.empty?

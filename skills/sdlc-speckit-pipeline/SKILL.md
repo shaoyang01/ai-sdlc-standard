@@ -11,7 +11,7 @@ Orchestrate the optional full Speckit SDD path after solution review. Treat this
 
 ## Core Rules
 
-1. Start only after `sdlc-solution-reviewer` passes or the user explicitly requests full SDD.
+1. Start only after `sdlc-solution-reviewer` passes. A user full SDD request can override `DIRECT_IMPLEMENTATION`, but cannot skip `01-技术方案` or `02-方案审核`.
 2. Do not treat Pipeline as the default path for every requirement.
 3. Require `SPECKIT_PIPELINE_REQUIRED`, explicit user choice, or a later Gate decision that direct implementation is too risky.
 4. Reuse approved `01-技术方案` and `02-方案审核`; do not reinterpret requirements from chat.
@@ -37,7 +37,7 @@ Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
 
 After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
 
-Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+Do not resolve shared standard files from the target repository `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
 
 ## Required Standard Files
 
@@ -50,7 +50,9 @@ Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-flow.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
-- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-split.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-generation-source-model.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-dual-rail-isolation.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-generation-spec.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-governance.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-bootstrap.md`
 - `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
@@ -118,6 +120,9 @@ Run or route to child skills in order:
 After each stage:
 
 - Capture result, output artifact, blocking items, and manifest recommendation.
+- Output stage conclusion, produced or reused artifacts, Gate result, accepted or unresolved risk, and recommended next step.
+- Ask whether to enter the next stage.
+- Stop until the user confirms the next stage. Fast mode must be explicitly requested, and it still cannot skip Implementation, Sync, or Reconcile Apply confirmation.
 - Stop on `FAIL`, `BLOCKED`, unresolved core ambiguity, unaccepted risk, or superseded artifact.
 - Route to the earliest affected upstream node.
 
@@ -178,7 +183,9 @@ Every pipeline result must contain:
 Stop instead of continuing when:
 
 - Solution review is missing, failed, or blocked.
+- User full SDD request exists but `01-技术方案` or `02-方案审核` is missing.
 - Development path is `DIRECT_IMPLEMENTATION` and the user did not explicitly choose full SDD.
+- A stage completed but the user has not confirmed entering the next stage.
 - A required artifact is missing or superseded.
 - A child skill returns `FAIL`, `BLOCKED`, or unresolved Critical issue.
 - A stage would reinterpret approved requirements.

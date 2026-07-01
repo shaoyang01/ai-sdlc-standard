@@ -75,7 +75,7 @@ Use:
 - `PASS_WITH_RISK` when non-blocking issues remain and risk acceptance is explicit.
 - `FAIL` when any failed case blocks acceptance, release, or next phase.
 
-Do not use `PASS_WITH_RISK` without Accepted Risk, Accepted By, Reason, and Follow-up.
+Do not use `PASS_WITH_RISK` without Accepted Risk, Accepted By, Accepted At, Accepted Reason, Accepted Scope, Follow-up Required, and Follow-up Owner.
 
 ## Step 6: Recommend Next Step
 

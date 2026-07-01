@@ -2,20 +2,21 @@
 
 ## Purpose
 
-This guide fixes the split model for legacy mixed Speckit documents.
+This guide records the historical split model for legacy mixed Speckit documents.
 
-Many existing project `.specify` documents contain both shared workflow rules and project-specific facts. New `sdlc-*` Skills must not read those mixed legacy documents as their primary source. Instead, shared content is owned by AI SDLC Standard, and private content is owned by generated project-context documents.
+Many existing project `.specify` documents contain both shared workflow rules and project-specific facts. New `sdlc-*` Skills must not read those mixed legacy documents as their primary source. Instead, shared content is owned by AI SDLC Standard, and private content is generated from target repository code or explicit user-confirmed facts.
 
 Old documents are not moved, renamed, deleted, or rewritten by the bootstrap process. They remain available for legacy workflows.
 
 ## Split Rule
 
-For every legacy mixed document:
+For every legacy mixed document used during a one-time analysis:
 
 ```text
 legacy mixed document
-  -> shared part: AI_SDLC_STANDARD_HOME/**
-  -> private part: target repository .specify/project-context/**
+  -> shared rule pattern: AI_SDLC_STANDARD_HOME/**
+  -> optional same-project parity reference: .specify/reports/**
+  -> private facts: regenerate from target code or explicit user confirmation
 ```
 
 New `sdlc-*` Skills must read:
@@ -25,7 +26,7 @@ New `sdlc-*` Skills must read:
 3. Project private documents from `.specify/project-context/**`.
 4. Business facts from `.specify/business_domain/**`.
 
-New `sdlc-*` Skills must not use legacy mixed documents as authoritative workflow rules.
+New `sdlc-*` Skills must not use legacy mixed documents as authoritative workflow rules or generated-content sources.
 
 ## Generated Private Documents
 
@@ -38,7 +39,7 @@ Project bootstrap creates these private documents:
 └── ProjectGovernanceOverrides.md
 ```
 
-These documents are the project-private counterparts to shared standard documents.
+These documents are the project-private counterparts to shared standard documents. They must be generated from target code and explicit user-confirmed facts, not copied from legacy documents.
 
 | New private document | Purpose |
 | --- | --- |
@@ -48,7 +49,7 @@ These documents are the project-private counterparts to shared standard document
 
 ## Legacy Split Mapping
 
-Use this mapping during project bootstrap or a one-time split task when an existing project already has legacy mixed files.
+Use this mapping only to understand legacy document roles during standard-package design, bootstrap inventory, or optional same-project parity analysis.
 
 | Legacy mixed document pattern | Shared standard source | New private source |
 | --- | --- | --- |
@@ -63,7 +64,7 @@ Use this mapping during project bootstrap or a one-time split task when an exist
 
 ## Skill Read Contract
 
-When a Skill previously needed a legacy mixed document, replace that dependency with two stable reads:
+When a Skill previously needed a legacy mixed document, replace that dependency with stable new-rail reads:
 
 ```text
 shared standard document from AI_SDLC_STANDARD_HOME
@@ -85,9 +86,9 @@ Examples:
 Project bootstrap must:
 
 - Generate new project-context documents when missing.
-- Refuse to overwrite existing project-context documents unless `--force` is used.
+- Write `.candidate` files instead of silently overwriting existing project-context documents.
 - Never modify legacy mixed documents.
-- Record legacy mixed document patterns as legacy input in `.specify/project-governance-profile.yaml`.
+- Record legacy mixed document patterns as inventory or parity-reference-only in reports.
 - Keep shared standard paths in the standard package, not in the target repository.
 - Keep new `sdlc-*` Skills pointed at `.specify/project-context/**`, not at legacy mixed documents.
 
@@ -97,10 +98,10 @@ Use this rule:
 
 ```text
 shared rule conflict -> standard package wins unless ProjectGovernanceOverrides.md and project_overrides declare an override
-project fact conflict -> project-context or business_domain wins depending on fact type
+project fact conflict -> target code, user confirmation, project-context, or business_domain wins depending on fact type
 unknown classification -> stop
 ```
 
 Do not silently merge old mixed documents into new project-context documents.
 
-New Skills do not perform this split repeatedly. If project-context documents are missing or incomplete, stop and ask for bootstrap/split update.
+New Skills do not perform this split repeatedly. If project-context documents are missing or incomplete, stop and ask for bootstrap update, target-code evidence, or explicit user confirmation.

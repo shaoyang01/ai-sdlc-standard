@@ -180,7 +180,7 @@ blocking_conditions:
 后置 Gate：
 
 - `PASS` 可进入测试验收或后续发布准备。
-- `PASS_WITH_RISK` 必须记录 Accepted Risk、Accepted By、Reason、Follow-up。
+- `PASS_WITH_RISK` 必须记录 Accepted Risk、Accepted By、Accepted At、Accepted Reason、Accepted Scope、Follow-up Required、Follow-up Owner。
 - `FAIL` 必须回到实现修复或最早受影响 Gate。
 - 正式 DocFlow 报告应交给 `sdlc-code-review-normalizer`。
 - Review Missing 或通用审查规则缺口应交给 `sdlc-test-feedback-sync` 或标准治理流程。

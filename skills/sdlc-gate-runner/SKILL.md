@@ -28,12 +28,12 @@ Run a generic DocFlow Gate check against a requirement manifest and related node
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-gate-runner.md`
-- `../../ai-sdlc/phase-gates.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/gate-result-template.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-gate-runner.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/phase-gates.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/gate-result-template.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 
@@ -87,7 +87,7 @@ Verify:
 - Required previous Gate result exists when the next phase depends on it.
 - Artifact Index points to the current effective artifact.
 - Gate Result is `PASS`, `FAIL`, or `PASS_WITH_RISK`.
-- `PASS_WITH_RISK` includes Accepted Risk, Accepted By, Reason, and Follow-up.
+- `PASS_WITH_RISK` includes Accepted Risk, Accepted By, Accepted At, Accepted Reason, Accepted Scope, Follow-up Required, and Follow-up Owner.
 - Superseded artifacts are not used as current effective Gate evidence.
 - Change History entries requiring Re-Gate are resolved or have valid Re-Gate Records.
 

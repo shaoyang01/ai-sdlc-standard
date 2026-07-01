@@ -145,7 +145,22 @@ fi
 
 touch "${PROFILE_PATH}"
 
-if grep -qF "${BEGIN_MARKER}" "${PROFILE_PATH}" && [[ "${FORCE}" != "true" ]]; then
+BEGIN_COUNT="$(grep -cF "${BEGIN_MARKER}" "${PROFILE_PATH}" || true)"
+END_COUNT="$(grep -cF "${END_MARKER}" "${PROFILE_PATH}" || true)"
+
+if [[ "${BEGIN_COUNT}" != "${END_COUNT}" ]]; then
+  echo "Malformed ai-sdlc-standard managed block in ${PROFILE_PATH}: begin/end markers are not paired." >&2
+  echo "Please fix the managed block manually before rerunning this script." >&2
+  exit 1
+fi
+
+if [[ "${BEGIN_COUNT}" -gt 1 ]]; then
+  echo "Malformed ai-sdlc-standard managed block in ${PROFILE_PATH}: multiple managed blocks found." >&2
+  echo "Please keep only one managed block before rerunning this script." >&2
+  exit 1
+fi
+
+if [[ "${BEGIN_COUNT}" -eq 1 && "${FORCE}" != "true" ]]; then
   echo "Existing ai-sdlc-standard managed block found in ${PROFILE_PATH}."
   echo "Use --force to replace it."
   exit 1

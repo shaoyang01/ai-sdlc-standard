@@ -97,16 +97,16 @@
 
 | 流程能力 | 当前情况 | 后续动作 |
 | --- | --- | --- |
-| 需求归一化 | 已实现 `sdlc-requirement-normalizer` 初版。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
+| 需求归一化 | `sdlc-requirement-normalizer` 为 `prompt_skill_ready`。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
 | 规格编写 | `sdlc-docflow-writer` 能写文档，但不等于规格生成器。 | `sdlc-specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
 | 规格完整性审计 | 已规划 `sdlc-solution-reviewer`，但需与 Specification Audit 对齐。 | 将 `sdlc-solution-reviewer` 定位为全局 DocFlow Gate，而不是 Speckit 专属阶段。 |
-| Gate 执行 | 已实现 `sdlc-gate-runner` 初版。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
+| Gate 执行 | `sdlc-gate-runner` 为 `prompt_skill_ready`。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact 和 Re-Gate 检查；`gate-auditor` 仅作为历史别名处理。 |
 | 复杂度分级 | 已补基础标准 | `ai-sdlc/complexity-routing.md` 定义 SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN，并接入开发路径决策。 |
 | 上线准入阶段总结 | 当前标准包有 Test/Code Review，发布执行动作不进入工作流。 | 后续只补测试后的阶段性总结规则；该结论不是 Gate，不阻塞节点流转，不代表需求结束。 |
-| Code Review 归一化 | 已实现 `sdlc-code-review-normalizer` 初版。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
-| 测试反馈反向沉淀 | 已实现 `sdlc-test-feedback-sync` 初版。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
-| 知识同步 | 已实现 `sdlc-speckit-sync` 初版。 | 后续通过真实实现记录、代码审核和测试反馈样例迭代可同步事实、目标路径和冲突处理。 |
-| Speckit 项目投放/初始化 | 已补基础标准 | 共享治理规则、文档治理和节点产物规格留在标准包；目标仓库通过脚本生成 project profile、entry coverage profile、business-domain bootstrap 配置，`business_domain/**` 由目标项目代码重新生成。 |
+| Code Review 归一化 | `sdlc-code-review-normalizer` 为 `prompt_skill_ready`。 | 后续统一 DeepSeek/Codex/人工 Review 输出的真实样例和边界规则。 |
+| 测试反馈反向沉淀 | `sdlc-test-feedback-sync` 为 `prompt_skill_ready`。 | 后续用真实测试反馈沉淀样例迭代 Checklist/Schema/Skill 规则建议。 |
+| 知识同步 | `sdlc-speckit-sync` 为 `prompt_skill_ready`。 | 后续通过真实实现记录、代码审核和测试反馈样例迭代可同步事实、目标路径和冲突处理。 |
+| Speckit 项目投放/初始化 | bootstrap 脚本为 `tooling_ready`，相关 Skill 为 `prompt_skill_ready`。 | 共享治理规则、文档治理和节点产物规格留在标准包；目标仓库通过脚本生成 project profile、entry coverage profile、business-domain bootstrap 配置，`business_domain/**` 由目标项目代码重新生成。 |
 | 日报数据源 | 已规划 work-journal 远期互斥模式。 | 等 manifest 活动模型稳定后，再定义产品侧实现契约。 |
 
 ## 路线图阶段
@@ -505,9 +505,10 @@ roots = [
 23. [x] 登记并实现 `sdlc-speckit-checklist` 初版，覆盖需求专用 checklist 生成、过期校验、可追溯检查项和 Re-Gate 路由。
 24. [x] 登记并实现 `sdlc-code-review-excellence` 初版，覆盖标准化代码审查执行、阻塞判断、Re-Gate 和 normalizer 交接边界。
 25. [x] 补充 `skill-contracts/skill-category-guide.md`，明确 Skill 分类、复合分类、默认副作用和合同检查清单。
-26. [x] 新增 `scripts/validate-skill-contracts.rb`，校验 `sdlc-*` Skill 合同分类、副作用权限、阻塞条件和 manifest 覆盖。
+26. [x] 新增 `scripts/validate-skill-contracts.rb`（`tooling_ready`），校验 `sdlc-*` Skill 合同分类、副作用权限、阻塞条件、manifest 覆盖和 registry 一致性。
 27. [x] 新增 `ai-sdlc/complexity-routing.md`，明确复杂度分级、开发路径路由、完整 SDD override 和 `sdlc-solution-reviewer` 接入规则。
 28. [x] 新增 `ai-sdlc/speckit-project-bootstrap.md`、`ai-sdlc/speckit-document-governance.md`、`ai-sdlc/standard-package-resolution.md` 与项目 profile 模板，明确标准库负责 Speckit 文档治理和投放初始化，`business_domain/**` 由目标仓库 bootstrap 重新生成。
+29. [x] 新增 Speckit 来源模型、双轨隔离、代码驱动生成规格和生成/等价校验报告模板，明确旧版文档只作抽象样本或同项目 parity reference。
 
 ## 阶段验收标准
 

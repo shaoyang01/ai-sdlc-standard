@@ -148,6 +148,7 @@
 - 可以覆盖 `SIMPLE` 或 `MEDIUM` 的默认直接实现路径。
 - Development Path Decision 可为 `SPECKIT_PIPELINE_REQUIRED`。
 - Full SDD Override 必须记录为 `user_requested`。
+- 只能覆盖开发路径选择，不能跳过 `01-技术方案`、`02-方案审核` 或 `sdlc-solution-reviewer` Gate。
 
 后续 Gate 发现直接实现过于冒险时：
 
@@ -158,6 +159,7 @@
 ## 禁止事项
 
 - 不得因为需求“看起来不大”而跳过 `sdlc-solution-reviewer`。
+- 不得因为用户要求完整 SDD 而跳过 `sdlc-solution-reviewer`。
 - 不得把 `COMPLEX` 当作方案缺失的替代结论。
 - 不得让 `sdlc-speckit-pipeline` 承担从零澄清核心业务规则的职责。
 - 不得用聊天记忆替代复杂度触发因素。

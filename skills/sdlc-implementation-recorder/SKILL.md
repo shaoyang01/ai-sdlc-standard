@@ -28,12 +28,12 @@ Generate the DocFlow `03-实现记录` artifact from implementation evidence. Tr
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-implementation-recorder.md`
-- `../../ai-sdlc/artifact-flow.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../checklists/implementation-checklist.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-implementation-recorder.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-flow.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/implementation-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

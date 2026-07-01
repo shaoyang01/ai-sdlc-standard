@@ -30,13 +30,13 @@ Perform standards-based code review for an implemented requirement. Treat the ap
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-code-review-excellence.md`
-- `../../ess/code-review-schema.md`
-- `../../checklists/code-review-checklist.md`
-- `../../ai-sdlc/phase-gates.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-code-review-excellence.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/code-review-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/phase-gates.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

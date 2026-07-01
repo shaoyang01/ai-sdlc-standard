@@ -29,15 +29,15 @@ Review a technical specification as the global DocFlow Specification Gate. Decid
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-solution-reviewer.md`
-- `../../ess/specification-schema.md`
-- `../../ess/review-schema.md`
-- `../../checklists/specification-checklist.md`
-- `../../templates/gate-result-template.md`
-- `../../templates/artifact-manifest-template.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../ai-sdlc/complexity-routing.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-solution-reviewer.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/review-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/gate-result-template.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md`
 
 ## Reference Files
 
@@ -116,7 +116,7 @@ Classify complexity first:
 - `COMPLEX`
 - `BLOCKED_UNKNOWN`
 
-Use `../../ai-sdlc/complexity-routing.md` as the routing rule.
+Use `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md` as the routing rule.
 
 Output exactly one recommendation:
 

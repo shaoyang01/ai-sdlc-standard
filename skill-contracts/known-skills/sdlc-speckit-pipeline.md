@@ -54,6 +54,7 @@ blocking_conditions:
   - solution review result is FAIL
   - development path recommendation is BLOCKED_NEEDS_REVISION
   - user has not confirmed entering full SDD path
+  - user requested full SDD but solution review is missing
   - implementation requires undefined business behavior
   - any stage has unresolved Critical issue
 ```
@@ -90,7 +91,7 @@ blocking_conditions:
 允许启动的条件：
 
 - `sdlc-solution-reviewer` 输出 `SPECKIT_PIPELINE_REQUIRED`。
-- 用户明确要求完整 SDD 流程。
+- 用户在 `sdlc-solution-reviewer` 已通过后明确要求完整 SDD 流程。
 - 后续 Gate 发现直接实现风险过高，并由用户确认切换到完整 SDD。
 
 禁止启动的条件：
@@ -100,7 +101,7 @@ blocking_conditions:
 - 缺少 `01-技术方案` 或 `02-方案审核`。
 - 缺少用户确认。
 
-当 `sdlc-solution-reviewer` 输出 `DIRECT_IMPLEMENTATION` 时，默认不启动本 Skill；除非用户明确要求完整 SDD。
+当 `sdlc-solution-reviewer` 输出 `DIRECT_IMPLEMENTATION` 时，默认不启动本 Skill；除非用户明确要求完整 SDD。Full SDD override 只能覆盖开发路径选择，不能覆盖 `01-技术方案`、`02-方案审核` 或 `sdlc-solution-reviewer` 前置 Gate。
 
 ## Input Contract
 

@@ -128,7 +128,7 @@ templates/gate-result-template.md
 - Gate 依赖的旧版本已被 superseded。
 - Critical 存在。
 - High 存在且没有风险接受。
-- `PASS_WITH_RISK` 缺少 Accepted By、Reason 或 Follow-up。
+- `PASS_WITH_RISK` 缺少 Accepted Risk、Accepted By、Accepted At、Accepted Reason、Accepted Scope、Follow-up Required 或 Follow-up Owner。
 - 变更后未重新 Gate。
 
 ## Gate Requirements

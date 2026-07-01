@@ -65,8 +65,11 @@ Use the next version number instead of overwriting an existing artifact.
 
 - Accepted Risk:
 - Accepted By:
-- Reason:
-- Follow-up:
+- Accepted At:
+- Accepted Reason:
+- Accepted Scope:
+- Follow-up Required: yes/no
+- Follow-up Owner:
 
 ## Missing Information
 

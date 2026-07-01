@@ -32,6 +32,9 @@ After resolving `AI_SDLC_STANDARD_HOME`, verify:
 
 - `${AI_SDLC_STANDARD_HOME}/manifest.yaml` exists.
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/lifecycle.md` exists.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-generation-source-model.md` exists.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-dual-rail-isolation.md` exists.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-generation-spec.md` exists.
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-document-governance.md` exists.
 - `${AI_SDLC_STANDARD_HOME}/skill-contracts/` exists.
 - `${AI_SDLC_STANDARD_HOME}/templates/` exists.

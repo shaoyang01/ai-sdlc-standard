@@ -15,12 +15,17 @@ standard_package:
   source:
     type: local_or_git
     location: "<path-or-git-url-to-ai-sdlc-standard>"
+    runtime_resolvable: false
+    local_resolution_required: true
   shared_rules:
     - ai-sdlc/lifecycle.md
     - ai-sdlc/artifact-storage.md
     - ai-sdlc/change-control.md
     - ai-sdlc/complexity-routing.md
     - ai-sdlc/standard-package-resolution.md
+    - ai-sdlc/speckit-generation-source-model.md
+    - ai-sdlc/speckit-dual-rail-isolation.md
+    - ai-sdlc/speckit-document-generation-spec.md
     - ai-sdlc/speckit-document-governance.md
     - ai-sdlc/speckit-project-bootstrap.md
 
@@ -58,6 +63,26 @@ local_files:
     memory_files_authoritative: false
     workflow_files_authoritative: false
     notes: "Legacy .specify/memory or .specify/workflow files are project overrides only when explicitly listed below."
+
+speckit_dual_rail:
+  enabled: true
+  legacy_rail:
+    preserved: true
+    mutable_by_sdlc: false
+    authoritative_for_legacy_skills: true
+    role_for_sdlc: "inventory_or_same_project_parity_reference_only"
+  sdlc_rail:
+    authoritative_for_sdlc_skills: true
+    shared_standard_source: "${AI_SDLC_STANDARD_HOME}"
+    private_project_sources:
+      - ".specify/project-context/ProjectCodingGuide.md"
+      - ".specify/project-context/RepositoryStructure.md"
+      - ".specify/project-context/ProjectGovernanceOverrides.md"
+    must_not_read_legacy_sources: true
+  product_artifacts:
+    specs_are_products: true
+    business_domain_is_product: true
+    require_output_equivalence_check_when_legacy_reference_exists: true
 
 project_private_documents:
   coding_guides:

@@ -60,8 +60,11 @@ Use this structure for response output and Markdown artifacts.
 
 - Accepted Risk:
 - Accepted By:
-- Reason:
-- Follow-up:
+- Accepted At:
+- Accepted Reason:
+- Accepted Scope:
+- Follow-up Required: yes/no
+- Follow-up Owner:
 
 ## Manifest Update Recommendation
 

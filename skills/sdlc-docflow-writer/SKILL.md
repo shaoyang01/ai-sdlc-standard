@@ -41,12 +41,12 @@ Load `references/execution-scenarios.md` before any write or publish operation.
 
 Use repository standard files as authoritative rules:
 
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ess/specification-schema.md`
-- `../../ess/review-schema.md`
-- `../../ess/code-review-schema.md`
-- `../../ess/test-feedback-schema.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/review-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/test-feedback-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Workflow
 
@@ -109,11 +109,11 @@ Stop before writing or publishing if any blocking question remains.
 
 Use the schema matching the artifact node:
 
-- 技术方案: `../../ess/specification-schema.md`
-- 方案审核: `../../ess/review-schema.md` and `../../templates/gate-result-template.md`
+- 技术方案: `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- 方案审核: `${AI_SDLC_STANDARD_HOME}/ess/review-schema.md` and `${AI_SDLC_STANDARD_HOME}/templates/gate-result-template.md`
 - 实现记录: include implementation summary, verification, unfinished items, and residual risks
-- 代码审核: `../../ess/code-review-schema.md`
-- 测试验收: `../../ess/test-feedback-schema.md`
+- 代码审核: `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
+- 测试验收: `${AI_SDLC_STANDARD_HOME}/ess/test-feedback-schema.md`
 - 需求资料: preserve source facts and clearly mark unresolved context
 
 Do not invent business rules. Mark missing or uncertain information explicitly.

@@ -162,5 +162,5 @@ library/{requirement_id}/04-代码审核/{requirement_id}__代码审核__vN.md
 后置 Gate：
 
 - Critical 必须修复后才能进入测试。
-- High 原则上必须修复；若风险接受，必须写明 Accepted By、Reason、Follow-up。
+- High 原则上必须修复；若风险接受，必须写明 Accepted By、Accepted At、Accepted Reason、Accepted Scope、Follow-up Required、Follow-up Owner。
 - Review Missing 应交给 `sdlc-test-feedback-sync` 或后续 Sync 流程沉淀到 Review Checklist。

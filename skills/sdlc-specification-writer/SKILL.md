@@ -26,13 +26,13 @@ Generate an ESS-compliant technical specification as the DocFlow `01-技术方�
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-specification-writer.md`
-- `../../ess/specification-schema.md`
-- `../../templates/technical-specification-template.md`
-- `../../checklists/specification-checklist.md`
-- `../../templates/artifact-manifest-template.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-specification-writer.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/technical-specification-template.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
 
 ## Reference Files
 
@@ -76,7 +76,7 @@ Read `references/output-artifact.md` before producing or writing the final artif
 
 ### 3. Build Specification
 
-Generate a technical specification using `../../templates/technical-specification-template.md`.
+Generate a technical specification using `${AI_SDLC_STANDARD_HOME}/templates/technical-specification-template.md`.
 
 Preserve all ESS sections:
 

@@ -30,6 +30,9 @@ ai-sdlc-standard/
 │   ├── change-control.md
 │   ├── complexity-routing.md
 │   ├── standard-package-resolution.md
+│   ├── speckit-generation-source-model.md
+│   ├── speckit-dual-rail-isolation.md
+│   ├── speckit-document-generation-spec.md
 │   ├── speckit-document-split.md
 │   ├── speckit-document-governance.md
 │   └── speckit-project-bootstrap.md
@@ -141,7 +144,9 @@ ai-sdlc-standard/
 │   ├── skill-registry-entry-template.md
 │   ├── project-governance-profile-template.yaml
 │   ├── entry-coverage-profile-template.yaml
-│   └── business-domain-bootstrap-template.yaml
+│   ├── business-domain-bootstrap-template.yaml
+│   ├── speckit-generation-report-template.md
+│   └── speckit-equivalence-report-template.md
 ├── scripts/
 │   ├── init-standard-home.sh
 │   ├── bootstrap-speckit-project.sh
@@ -167,7 +172,7 @@ ai-sdlc-standard/
 7. 判断直接实现还是进入完整 SDD 时，遵循 `ai-sdlc/complexity-routing.md`。
 8. 下载或更新标准包后，执行 `scripts/init-standard-home.sh`，把标准库路径写入 `AI_SDLC_STANDARD_HOME`。
 9. 安装后的 Skill 读取共享标准文件时，先按 `ai-sdlc/standard-package-resolution.md` 解析 `AI_SDLC_STANDARD_HOME`。
-10. 将 Speckit 文档治理投放到某个项目时，遵循 `ai-sdlc/speckit-project-bootstrap.md`；混合旧文档拆分规则遵循 `ai-sdlc/speckit-document-split.md`。
+10. 将 Speckit 文档治理投放到某个项目时，遵循 `ai-sdlc/speckit-project-bootstrap.md`、`ai-sdlc/speckit-generation-source-model.md` 和 `ai-sdlc/speckit-dual-rail-isolation.md`。
 11. 改造或新增 Skill 时，先查看 `skill-contracts/skill-category-guide.md`，再在 `registry/skill-registry.md` 中登记并补充对应 `skill-contracts/`。
 12. 修改 Skill 合同或新增 `skills/sdlc-*` 后，运行 `ruby scripts/validate-skill-contracts.rb` 检查分类、副作用和合同覆盖。
 13. 安装可执行 Skill 时，先阅读 `PORTABILITY.md` 的安装边界，再从 `skills/sdlc-*` 同步到目标 Agent 的 Skill 目录。
@@ -200,7 +205,7 @@ scripts/init-standard-home.sh --profile ~/.zshrc --force
 scripts/bootstrap-speckit-project.sh <target-project-path>
 ```
 
-该脚本会创建 `.specify` profile、`.specify/project-context/**`、`.specify/reports/`、`library/`，并向目标项目 `.gitignore` 写入 `/library/`。`specs/**` 不由初始化脚本创建，而由后续 Speckit feature 阶段生成。
+该脚本会创建 `.specify` profile、`.specify/project-context/**`、`.specify/reports/`、`library/`，并向目标项目 `.gitignore` 写入 `/library/`。`specs/**` 不由初始化脚本创建，而由后续 Speckit feature 阶段生成。旧版 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 只做可选同项目 inventory/parity reference，不作为新版内容来源。
 
 ## Skill 命名规则
 
@@ -225,7 +230,8 @@ scripts/bootstrap-speckit-project.sh <target-project-path>
 
 - 不依赖 `.codex`、`.claude`、`.agents`、`.config` 等任何 Agent 配置目录。
 - 不写死本机路径、仓库路径或工具路径。
-- 标准包本身不直接修改代码、不执行命令、不写入业务知识库。
+- 标准包不会在未获用户明确触发时自动执行命令、修改代码或写入业务知识库。
+- 标准包可以提供脚本和可安装 Skill；所有写入、安装、投放、同步动作都必须由用户显式触发。
 - 各 Agent 的 Skill 只引用本标准包，不复制大段规则到各自配置中。
 
 ## 推荐落地顺序

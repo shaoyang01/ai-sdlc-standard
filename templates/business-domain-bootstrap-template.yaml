@@ -9,8 +9,9 @@
 #
 # Important:
 #   business_domain content is not copied from another repository.
-#   It is generated from the target repository's code, existing local docs,
-#   and user-approved business boundaries.
+#   It is generated from the target repository's code and user-approved
+#   business boundaries. Legacy Speckit docs are optional same-project parity
+#   references only.
 
 schema_version: 0.1.0
 
@@ -33,10 +34,15 @@ inputs:
       - "<test-or-generated-path-pattern>"
   existing_docs:
     include:
-      - "<optional-existing-project-doc-path>"
+      - "<optional-current-project-doc-path-confirmed-by-user>"
     exclude:
       - ".specify/memory/**"
       - ".specify/workflow/**"
+      - ".specify/coding_guide/**"
+    legacy_reference_only:
+      - ".specify/memory/**"
+      - ".specify/workflow/**"
+      - ".specify/coding_guide/**"
   user_supplied_context:
     required_when_business_domain_cannot_be_inferred: true
     examples:

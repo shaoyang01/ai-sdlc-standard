@@ -28,11 +28,11 @@ Generate sync recommendations from classified DocFlow test feedback. Treat `05-æ
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-test-feedback-sync.md`
-- `../../ess/test-feedback-schema.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-test-feedback-sync.md`
+- `${AI_SDLC_STANDARD_HOME}/ess/test-feedback-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

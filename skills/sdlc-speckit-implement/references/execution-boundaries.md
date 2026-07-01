@@ -8,6 +8,7 @@ Allowed when traceable to approved tasks:
 - Add or update tests required by listed tasks.
 - Update configuration, migrations, scripts, or docs only when listed or required by plan.
 - Update `specs/{feature}/tasks.md` task status for completed and verified tasks.
+- Mark completed task checkboxes or status fields only after verification.
 - Generate or recommend `library/{requirement_id}/03-实现记录/*`.
 - Recommend manifest Activity Log updates.
 
@@ -16,6 +17,7 @@ Allowed when traceable to approved tasks:
 Stop and route upstream when implementation would:
 
 - Add behavior outside `tasks.md`.
+- Rewrite task descriptions, task scope, task ordering, or acceptance mapping in `tasks.md`.
 - Change Scope or acceptance criteria.
 - Change API, DB, cache, MQ, schedule, listener, state, transaction, rollback, or compatibility behavior beyond approved plan.
 - Replace required tests with assumptions.

@@ -21,7 +21,7 @@ Execute approved implementation tasks after `sdlc-speckit-analyze`. Treat `specs
 8. Stop when implementation requires undefined behavior, unapproved Scope change, or missing technical decision.
 9. Run the most relevant compile, test, lint, or validation commands available for the affected area.
 10. Record verification results, skipped checks, residual risk, and unfinished tasks.
-11. Update task status only for tasks actually completed and verified.
+11. Update task status only for tasks actually completed and verified; do not rewrite task descriptions, scope, or ordering.
 12. Do not perform knowledge sync; route stable fact sync to `sdlc-speckit-sync`.
 
 ## Standard Package Resolution
@@ -35,7 +35,7 @@ Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
 
 After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
 
-Do not resolve shared standard files from the target repository `.specify/memory/**` or `.specify/workflow/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+Do not resolve shared standard files from the target repository `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
 
 ## Required Standard Files
 
@@ -113,6 +113,7 @@ Implement only approved tasks:
 - Add or update tests when tasks or plan require verification.
 - Keep compatibility and rollback behavior explicit.
 - Update task status only after verification.
+- Do not modify task descriptions, task scope, task ordering, or acceptance mapping. If a task is wrong, stop and return to Task Gate or Re-Gate.
 
 ### 5. Verify And Record
 

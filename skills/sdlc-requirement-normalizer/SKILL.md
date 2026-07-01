@@ -28,11 +28,11 @@ Normalize raw requirement sources into the DocFlow `00-需求资料` artifact. T
 
 Use these repository standard files as authoritative rules:
 
-- `../../skill-contracts/known-skills/sdlc-requirement-normalizer.md`
-- `../../ai-sdlc/artifact-flow.md`
-- `../../ai-sdlc/artifact-storage.md`
-- `../../ai-sdlc/change-control.md`
-- `../../templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/skill-contracts/known-skills/sdlc-requirement-normalizer.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-flow.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
 
 ## Reference Files
 

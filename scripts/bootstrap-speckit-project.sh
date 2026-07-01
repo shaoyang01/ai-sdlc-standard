@@ -12,7 +12,8 @@ Options:
   --language <language>          java|typescript|python|go|mixed|other. Auto-detected when omitted.
   --application-type <type>      backend|frontend|fullstack|batch|library|mixed|other. Auto-detected when omitted.
   --standard-package <location>  Path or git URL for ai-sdlc-standard. Defaults to this repository path.
-  --force                        Overwrite generated profile files when they already exist.
+  --force-profiles               Overwrite generated profile files when they already exist.
+  --force-context                Overwrite project-context files. Defaults to writing .candidate files.
   --dry-run                      Print generated files without writing.
   -h, --help                     Show this help.
 
@@ -23,6 +24,9 @@ Generated files:
   .specify/project-context/ProjectCodingGuide.md
   .specify/project-context/RepositoryStructure.md
   .specify/project-context/ProjectGovernanceOverrides.md
+  .specify/reports/speckit_generation_report.md
+  .specify/reports/legacy_speckit_source_inventory.md when legacy files exist
+  .specify/reports/speckit_equivalence_report.md when legacy files exist
   .specify/reports/
   library/
   .gitignore entry: /library/
@@ -39,7 +43,8 @@ PROJECT_NAME=""
 LANGUAGE=""
 APPLICATION_TYPE=""
 STANDARD_PACKAGE="${STANDARD_PACKAGE_DEFAULT}"
-FORCE="false"
+FORCE_PROFILES="false"
+FORCE_CONTEXT="false"
 DRY_RUN="false"
 
 while [[ $# -gt 0 ]]; do
@@ -60,8 +65,12 @@ while [[ $# -gt 0 ]]; do
       STANDARD_PACKAGE="${2:-}"
       shift 2
       ;;
-    --force)
-      FORCE="true"
+    --force-profiles)
+      FORCE_PROFILES="true"
+      shift
+      ;;
+    --force-context)
+      FORCE_CONTEXT="true"
       shift
       ;;
     --dry-run)
@@ -143,6 +152,36 @@ yaml_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+is_git_url() {
+  case "$1" in
+    http://*|https://*|git@*|ssh://*|*.git)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+standard_package_runtime_resolvable() {
+  if [[ -d "${STANDARD_PACKAGE}" && -f "${STANDARD_PACKAGE}/manifest.yaml" ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
+candidate_path() {
+  local file="$1"
+  local candidate="${file}.candidate"
+  local index=1
+  while [[ -e "${candidate}" ]]; do
+    candidate="${file}.candidate.${index}"
+    index=$((index + 1))
+  done
+  printf '%s\n' "${candidate}"
+}
+
 emit_yaml_list() {
   local indent="$1"
   shift
@@ -195,11 +234,11 @@ detect_module_globs() {
   fi
 }
 
-check_writable_target() {
+check_profile_target() {
   local file="$1"
-  if [[ -e "${file}" && "${FORCE}" != "true" ]]; then
+  if [[ -e "${file}" && "${FORCE_PROFILES}" != "true" ]]; then
     echo "Refusing to overwrite existing file: ${file}" >&2
-    echo "Use --force to overwrite, or edit it manually." >&2
+    echo "Use --force-profiles to overwrite profile files, or edit it manually." >&2
     exit 1
   fi
 }
@@ -207,18 +246,38 @@ check_writable_target() {
 write_or_preview() {
   local file="$1"
   local generator="$2"
+  local mode="${3:-profile}"
+  local output_file="${file}"
+
+  if [[ "${mode}" == "context" && -e "${file}" && "${FORCE_CONTEXT}" != "true" ]]; then
+    output_file="$(candidate_path "${file}")"
+  fi
+
   if [[ "${DRY_RUN}" == "true" ]]; then
     local preview_file
     preview_file="$(mktemp "${TMPDIR:-/tmp}/speckit-bootstrap-preview.XXXXXX")"
     "${generator}" "${preview_file}"
-    printf '\n--- %s ---\n' "${file#${TARGET_PATH}/}"
+    if [[ "${output_file}" != "${file}" ]]; then
+      printf '\n--- %s (candidate for existing %s) ---\n' "${output_file#${TARGET_PATH}/}" "${file#${TARGET_PATH}/}"
+    else
+      printf '\n--- %s ---\n' "${file#${TARGET_PATH}/}"
+    fi
     cat "${preview_file}"
     rm -f "${preview_file}"
   else
-    check_writable_target "${file}"
-    "${generator}" "${file}"
-    echo "Generated ${file#${TARGET_PATH}/}"
+    "${generator}" "${output_file}"
+    if [[ "${output_file}" != "${file}" ]]; then
+      echo "Generated ${output_file#${TARGET_PATH}/} because ${file#${TARGET_PATH}/} already exists"
+    else
+      echo "Generated ${file#${TARGET_PATH}/}"
+    fi
   fi
+}
+
+preflight_profile_targets() {
+  check_profile_target "${SPECIFY_DIR}/project-governance-profile.yaml"
+  check_profile_target "${SPECIFY_DIR}/entry-coverage-profile.yaml"
+  check_profile_target "${SPECIFY_DIR}/business-domain-bootstrap.yaml"
 }
 
 ensure_gitignore_entry() {
@@ -276,6 +335,89 @@ done <<< "${SOURCE_ROOTS_TEXT}"
 while IFS= read -r line; do
   [[ -n "${line}" ]] && MODULE_GLOBS+=("${line}")
 done <<< "${MODULE_GLOBS_TEXT}"
+STANDARD_RUNTIME_RESOLVABLE="$(standard_package_runtime_resolvable)"
+if is_git_url "${STANDARD_PACKAGE}" || [[ "${STANDARD_RUNTIME_RESOLVABLE}" != "true" ]]; then
+  STANDARD_LOCAL_RESOLUTION_REQUIRED="true"
+else
+  STANDARD_LOCAL_RESOLUTION_REQUIRED="false"
+fi
+
+matches_kind() {
+  local kind="$1"
+  local name="$2"
+  case "${kind}" in
+    entry)
+      [[ "${name}" == *Controller.java || "${name}" == *Listener.java || "${name}" == *Consumer.java || "${name}" == *Processor.java || "${name}" == *Schedule.java || "${name}" == *Job.java || "${name}" == *Worker.java ]]
+      ;;
+    service)
+      [[ "${name}" == *Service.java || "${name}" == *ServiceImpl.java || "${name}" == *Manager.java || "${name}" == *ManagerImpl.java || "${name}" == *DomainService.java ]]
+      ;;
+    persistence)
+      [[ "${name}" == *Mapper.java || "${name}" == *Dao.java || "${name}" == *DAO.java || "${name}" == *Repository.java || "${name}" == *Mapper.xml ]]
+      ;;
+    mq)
+      [[ "${name}" == *Listener.java || "${name}" == *Consumer.java || "${name}" == *Producer.java || "${name}" == *Message*.java ]]
+      ;;
+    schedule)
+      [[ "${name}" == *Schedule.java || "${name}" == *Job.java || "${name}" == *Task.java || "${name}" == *Worker.java ]]
+      ;;
+    test)
+      [[ "${name}" == *Test.java || "${name}" == *Tests.java || "${name}" == *.spec.ts || "${name}" == *.test.ts || "${name}" == test_*.py ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+matching_files_for_kind() {
+  local kind="$1"
+  local path
+  find "${TARGET_PATH}" -type f \( -path "*/.git/*" -o -path "*/target/*" -o -path "*/build/*" -o -path "*/dist/*" \) -prune -o -type f -print 2>/dev/null | while IFS= read -r path; do
+    if matches_kind "${kind}" "$(basename "${path}")"; then
+      printf '%s\n' "${path#${TARGET_PATH}/}"
+    fi
+  done
+}
+
+count_matching_files() {
+  matching_files_for_kind "$1" | wc -l | tr -d ' '
+}
+
+sample_matching_files() {
+  matching_files_for_kind "$1" | sort | head -n 5
+}
+
+SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
+MODULE_COUNT="${#MODULE_GLOBS[@]}"
+ENTRY_COUNT="$(count_matching_files entry)"
+SERVICE_COUNT="$(count_matching_files service)"
+PERSISTENCE_COUNT="$(count_matching_files persistence)"
+MQ_COUNT="$(count_matching_files mq)"
+SCHEDULE_COUNT="$(count_matching_files schedule)"
+TEST_COUNT="$(count_matching_files test)"
+
+ENTRY_SAMPLES="$(sample_matching_files entry)"
+SERVICE_SAMPLES="$(sample_matching_files service)"
+PERSISTENCE_SAMPLES="$(sample_matching_files persistence)"
+MQ_SAMPLES="$(sample_matching_files mq)"
+SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
+TEST_SAMPLES="$(sample_matching_files test)"
+
+LEGACY_FILES_TEXT="$(find "${SPECIFY_DIR}" -type f \( -path "${SPECIFY_DIR}/memory/*" -o -path "${SPECIFY_DIR}/workflow/*" -o -path "${SPECIFY_DIR}/coding_guide/*" \) 2>/dev/null | sort | sed "s#^${TARGET_PATH}/##" || true)"
+if [[ -n "${LEGACY_FILES_TEXT}" ]]; then
+  LEGACY_FOUND="true"
+  PARITY_CHECK_RESULT="pending"
+else
+  LEGACY_FOUND="false"
+  PARITY_CHECK_RESULT="skipped"
+fi
+
+if [[ "${SOURCE_ROOT_COUNT}" -gt 0 && "${ENTRY_COUNT}" -gt 0 ]]; then
+  CODE_EVIDENCE_RESULT="passed"
+else
+  CODE_EVIDENCE_RESULT="needs-user-confirmation"
+fi
 
 generate_project_profile() {
   local output="$1"
@@ -292,12 +434,17 @@ standard_package:
   source:
     type: local_or_git
     location: "$(yaml_escape "${STANDARD_PACKAGE}")"
+    runtime_resolvable: ${STANDARD_RUNTIME_RESOLVABLE}
+    local_resolution_required: ${STANDARD_LOCAL_RESOLUTION_REQUIRED}
   shared_rules:
     - ai-sdlc/lifecycle.md
     - ai-sdlc/artifact-storage.md
     - ai-sdlc/change-control.md
     - ai-sdlc/complexity-routing.md
     - ai-sdlc/standard-package-resolution.md
+    - ai-sdlc/speckit-generation-source-model.md
+    - ai-sdlc/speckit-dual-rail-isolation.md
+    - ai-sdlc/speckit-document-generation-spec.md
     - ai-sdlc/speckit-document-governance.md
     - ai-sdlc/speckit-project-bootstrap.md
 
@@ -339,6 +486,26 @@ local_files:
     memory_files_authoritative: false
     workflow_files_authoritative: false
     notes: "Legacy .specify/memory or .specify/workflow files are project overrides only when explicitly listed below."
+
+speckit_dual_rail:
+  enabled: true
+  legacy_rail:
+    preserved: true
+    mutable_by_sdlc: false
+    authoritative_for_legacy_skills: true
+    role_for_sdlc: "inventory_or_same_project_parity_reference_only"
+  sdlc_rail:
+    authoritative_for_sdlc_skills: true
+    shared_standard_source: "${AI_SDLC_STANDARD_HOME}"
+    private_project_sources:
+      - ".specify/project-context/ProjectCodingGuide.md"
+      - ".specify/project-context/RepositoryStructure.md"
+      - ".specify/project-context/ProjectGovernanceOverrides.md"
+    must_not_read_legacy_sources: true
+  product_artifacts:
+    specs_are_products: true
+    business_domain_is_product: true
+    require_output_equivalence_check_when_legacy_reference_exists: true
 
 project_private_documents:
   coding_guides:
@@ -486,7 +653,7 @@ List only repository-specific implementation exceptions here.
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as \`.specify/memory/EngineeringStandard.md\` or \`.specify/coding_guide/*.md\`, extract only project-specific facts into this file during a one-time split task.
+If this project has legacy mixed documents such as \`.specify/memory/EngineeringStandard.md\` or \`.specify/coding_guide/*.md\`, treat them as inventory or same-project parity references only. Add facts here only when target code evidence or explicit user confirmation supports them.
 
 New \`sdlc-*\` Skills read this file instead of legacy mixed documents.
 EOF
@@ -540,7 +707,7 @@ EOF
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as `.specify/memory/DocumentationStandard.md` or `.specify/workflow/*.md`, extract only repository-specific structure facts into this file during a one-time split task.
+If this project has legacy mixed documents such as `.specify/memory/DocumentationStandard.md` or `.specify/workflow/*.md`, treat them as inventory or same-project parity references only. Add structure facts here only when target code evidence or explicit user confirmation supports them.
 
 New `sdlc-*` Skills read this file instead of legacy mixed documents.
 EOF
@@ -570,7 +737,7 @@ Keep this file empty unless the project intentionally needs a local exception. S
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as \`.specify/memory/AiGovernance.md\`, \`.specify/memory/InteractionProtocol.md\`, or \`.specify/workflow/*.md\`, extract only explicit project-specific overrides into this file during a one-time split task.
+If this project has legacy mixed documents such as \`.specify/memory/AiGovernance.md\`, \`.specify/memory/InteractionProtocol.md\`, or \`.specify/workflow/*.md\`, treat them as inventory or same-project parity references only. Add overrides here only when the project explicitly confirms a local exception.
 
 New \`sdlc-*\` Skills read this file instead of legacy mixed documents.
 EOF
@@ -701,10 +868,11 @@ evidence_chain:
   business_chain:
     required_layers:
       - entry
+    recommended_layers:
       - service
       - manager
       - persistence
-    allow_missing_layers_with_reason: false
+    allow_missing_layers_with_reason: true
   technical_bridge:
     allowed: true
     markers:
@@ -732,13 +900,15 @@ strict_outputs:
 
 strict_blocking_conditions:
   - "entry has no L4 match"
-  - "entry has no required evidence chain and is not an accepted technical bridge"
-  - "core service is not hit by an archived entry"
+  - "entry layer is missing and the entry is not an accepted technical bridge"
+  - "recommended service, manager, or persistence evidence is missing without a reason"
+  - "core service is not hit by an archived entry and no project-specific reason is recorded"
   - "entry is mapped to multiple L2 domains without explicit conflict handling"
 
 notes:
   - "Do not put shared governance rules in this profile."
   - "Do not copy values from another repository unless they match this repository's code structure."
+  - "The Java entry -> service -> manager -> persistence chain is a recommended default, not a universal hard requirement."
 EOF
   } > "${output}"
 }
@@ -776,10 +946,15 @@ EOF
       - "**/.git/**"
   existing_docs:
     include:
-      - "<optional-existing-project-doc-path>"
+      - "<optional-current-project-doc-path-confirmed-by-user>"
     exclude:
       - ".specify/memory/**"
       - ".specify/workflow/**"
+      - ".specify/coding_guide/**"
+    legacy_reference_only:
+      - ".specify/memory/**"
+      - ".specify/workflow/**"
+      - ".specify/coding_guide/**"
   user_supplied_context:
     required_when_business_domain_cannot_be_inferred: true
     examples:
@@ -848,18 +1023,194 @@ EOF
   } > "${output}"
 }
 
+markdown_samples() {
+  local text="$1"
+  if [[ -z "${text}" ]]; then
+    printf '<none>'
+    return 0
+  fi
+  printf '%s' "${text}" | paste -sd ', ' -
+}
+
+generate_generation_report() {
+  local output="$1"
+  local generated_at
+  generated_at="$(date '+%Y-%m-%d %H:%M:%S')"
+  {
+    cat <<EOF
+# Speckit Generation Report
+
+> **Project**: $(yaml_escape "${PROJECT_NAME}")
+> **Generated At**: ${generated_at}
+> **Generated By**: ai-sdlc-standard
+> **Target Repository**: ${TARGET_PATH}
+
+## Summary
+
+| Item | Value |
+| --- | --- |
+| Standard Package | $(yaml_escape "${STANDARD_PACKAGE}") |
+| Runtime Resolvable | ${STANDARD_RUNTIME_RESOLVABLE} |
+| Local Resolution Required | ${STANDARD_LOCAL_RESOLUTION_REQUIRED} |
+| Language | $(yaml_escape "${DETECTED_LANGUAGE}") |
+| Application Type | $(yaml_escape "${DETECTED_APPLICATION_TYPE}") |
+| Legacy Speckit Documents Found | ${LEGACY_FOUND} |
+| Parity Check | ${PARITY_CHECK_RESULT} |
+| Code Evidence Completeness Check | ${CODE_EVIDENCE_RESULT} |
+
+## Code Evidence
+
+| Evidence Type | Count | Examples |
+| --- | ---: | --- |
+| Source roots | ${SOURCE_ROOT_COUNT} | $(markdown_samples "${SOURCE_ROOTS_TEXT}") |
+| Modules | ${MODULE_COUNT} | $(markdown_samples "${MODULE_GLOBS_TEXT}") |
+| Entries | ${ENTRY_COUNT} | $(markdown_samples "${ENTRY_SAMPLES}") |
+| Services | ${SERVICE_COUNT} | $(markdown_samples "${SERVICE_SAMPLES}") |
+| Persistence | ${PERSISTENCE_COUNT} | $(markdown_samples "${PERSISTENCE_SAMPLES}") |
+| MQ / events | ${MQ_COUNT} | $(markdown_samples "${MQ_SAMPLES}") |
+| Schedules / jobs | ${SCHEDULE_COUNT} | $(markdown_samples "${SCHEDULE_SAMPLES}") |
+| Tests | ${TEST_COUNT} | $(markdown_samples "${TEST_SAMPLES}") |
+
+## User-Confirmed Facts
+
+No user-confirmed project facts were supplied to this bootstrap run.
+
+## Not Inferred From Code
+
+| Missing Fact | Why Code Is Insufficient | Required Confirmation |
+| --- | --- | --- |
+| Business domain names | Package and class names are evidence, not authoritative business boundaries. | Confirm L1/L2/L4 split before generating business_domain. |
+| Business-visible statuses | Code enums may include technical and legacy states. | Confirm visible status vocabulary before long-term sync. |
+| Whether legacy files are current | Legacy files are optional parity references only. | Confirm before treating them as same-project parity references. |
+
+## Generated Files
+
+| File | Action | Source Basis |
+| --- | --- | --- |
+| .specify/project-governance-profile.yaml | generated or preflighted | target path, git remote, detected code layout, standard template |
+| .specify/entry-coverage-profile.yaml | generated or preflighted | detected language and code layout |
+| .specify/business-domain-bootstrap.yaml | generated or preflighted | target code scan configuration |
+| .specify/project-context/ProjectCodingGuide.md | generated or candidate | target code evidence placeholders |
+| .specify/project-context/RepositoryStructure.md | generated or candidate | source roots and module globs |
+| .specify/project-context/ProjectGovernanceOverrides.md | generated or candidate | empty unless explicit overrides exist |
+
+## Legacy Reference
+
+Legacy files, when present, are inventory or same-project parity references only. They were not used as primary generated content.
+
+## Checks
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| No legacy primary source | pass | New project-private documents are generated from standard templates and target code scan metadata. |
+| No legacy files modified | pass | Bootstrap does not write .specify/memory, .specify/workflow, or .specify/coding_guide. |
+| Project-context overwrite avoided | pass | Existing project-context files are written as .candidate unless --force-context is explicit. |
+| Code evidence completeness | ${CODE_EVIDENCE_RESULT} | Business boundaries still require confirmation before business_domain generation. |
+| Runtime standard package resolution | ${STANDARD_RUNTIME_RESOLVABLE} | local_resolution_required=${STANDARD_LOCAL_RESOLUTION_REQUIRED}. |
+
+## Next Steps
+
+- Review generated profiles and project-context files.
+- Confirm business domain boundaries before generating .specify/business_domain/**.
+- If legacy files exist, use the equivalence report only as a same-project parity reference.
+EOF
+  } > "${output}"
+}
+
+generate_legacy_inventory() {
+  local output="$1"
+  {
+    cat <<EOF
+# Legacy Speckit Source Inventory
+
+> **Project**: $(yaml_escape "${PROJECT_NAME}")
+> **Role**: inventory and optional same-project parity reference only
+
+Legacy files are not primary content sources for the new AI SDLC Speckit rail.
+
+| Legacy Path | Role | Modified |
+| --- | --- | --- |
+EOF
+    if [[ -z "${LEGACY_FILES_TEXT}" ]]; then
+      printf '| <none> | not applicable | no |\n'
+    else
+      local legacy_file
+      while IFS= read -r legacy_file; do
+        [[ -n "${legacy_file}" ]] && printf '| %s | parity-reference-only | no |\n' "${legacy_file}"
+      done <<< "${LEGACY_FILES_TEXT}"
+    fi
+  } > "${output}"
+}
+
+generate_equivalence_report() {
+  local output="$1"
+  {
+    cat <<EOF
+# Speckit Equivalence Report
+
+> **Project**: $(yaml_escape "${PROJECT_NAME}")
+> **Scope**: Same-project legacy/new workflow product comparison
+
+## Summary
+
+| Item | Value |
+| --- | --- |
+| Legacy Output | legacy Speckit files detected |
+| New Output | project bootstrap profiles and context documents |
+| Semantic Equivalence | pending |
+| Structural Differences | pending |
+| Conclusion | pending |
+
+## Legacy Output
+
+| Path | Role | Notes |
+| --- | --- | --- |
+EOF
+    local legacy_file
+    while IFS= read -r legacy_file; do
+      [[ -n "${legacy_file}" ]] && printf '| %s | parity reference only | content not copied |\n' "${legacy_file}"
+    done <<< "${LEGACY_FILES_TEXT}"
+    cat <<'EOF'
+
+## New Output
+
+| Path | Source Basis | Notes |
+| --- | --- | --- |
+| .specify/project-governance-profile.yaml | target repository metadata and standard template | generated by bootstrap |
+| .specify/entry-coverage-profile.yaml | target code scan and standard defaults | generated by bootstrap |
+| .specify/project-context/** | target code scan and user-confirmed facts when supplied | generated or candidate |
+
+## Semantic Comparison
+
+Semantic comparison must be completed after the new rail produces comparable `specs/**` or `.specify/business_domain/**` outputs for the same project and scope.
+
+## Conclusion
+
+Pending. Legacy files were inventoried only; no legacy content was copied into new generated files.
+EOF
+  } > "${output}"
+}
+
+preflight_profile_targets
+
 if [[ "${DRY_RUN}" != "true" ]]; then
   mkdir -p "${SPECIFY_DIR}/reports"
   mkdir -p "${SPECIFY_DIR}/project-context"
   mkdir -p "${TARGET_PATH}/library"
 fi
 
-write_or_preview "${SPECIFY_DIR}/project-governance-profile.yaml" generate_project_profile
-write_or_preview "${SPECIFY_DIR}/entry-coverage-profile.yaml" generate_entry_profile
-write_or_preview "${SPECIFY_DIR}/business-domain-bootstrap.yaml" generate_business_domain_bootstrap
-write_or_preview "${SPECIFY_DIR}/project-context/ProjectCodingGuide.md" generate_project_coding_guide
-write_or_preview "${SPECIFY_DIR}/project-context/RepositoryStructure.md" generate_repository_structure
-write_or_preview "${SPECIFY_DIR}/project-context/ProjectGovernanceOverrides.md" generate_project_governance_overrides
+write_or_preview "${SPECIFY_DIR}/project-governance-profile.yaml" generate_project_profile profile
+write_or_preview "${SPECIFY_DIR}/entry-coverage-profile.yaml" generate_entry_profile profile
+write_or_preview "${SPECIFY_DIR}/business-domain-bootstrap.yaml" generate_business_domain_bootstrap profile
+write_or_preview "${SPECIFY_DIR}/project-context/ProjectCodingGuide.md" generate_project_coding_guide context
+write_or_preview "${SPECIFY_DIR}/project-context/RepositoryStructure.md" generate_repository_structure context
+write_or_preview "${SPECIFY_DIR}/project-context/ProjectGovernanceOverrides.md" generate_project_governance_overrides context
+write_or_preview "${SPECIFY_DIR}/reports/speckit_generation_report.md" generate_generation_report report
+
+if [[ "${LEGACY_FOUND}" == "true" ]]; then
+  write_or_preview "${SPECIFY_DIR}/reports/legacy_speckit_source_inventory.md" generate_legacy_inventory report
+  write_or_preview "${SPECIFY_DIR}/reports/speckit_equivalence_report.md" generate_equivalence_report report
+fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   printf '\n--- .specify/project-context/ ---\n'

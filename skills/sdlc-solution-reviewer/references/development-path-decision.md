@@ -8,7 +8,7 @@ Output exactly one value:
 - `SPECKIT_PIPELINE_REQUIRED`
 - `BLOCKED_NEEDS_REVISION`
 
-Before choosing the recommendation, classify Complexity using `../../../ai-sdlc/complexity-routing.md`:
+Before choosing the recommendation, classify Complexity using `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md`:
 
 - `SIMPLE`
 - `MEDIUM`
