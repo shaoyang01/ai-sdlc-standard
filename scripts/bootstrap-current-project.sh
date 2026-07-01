@@ -79,4 +79,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-exec "${CORE_SCRIPT}" "${TARGET_PATH}" "${FORWARDED_ARGS[@]}"
+if [[ ${#FORWARDED_ARGS[@]} -eq 0 ]]; then
+  exec "${CORE_SCRIPT}" "${TARGET_PATH}"
+else
+  exec "${CORE_SCRIPT}" "${TARGET_PATH}" "${FORWARDED_ARGS[@]}"
+fi
