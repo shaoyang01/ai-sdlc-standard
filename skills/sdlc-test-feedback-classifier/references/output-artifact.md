@@ -15,17 +15,27 @@ Update the stable artifact file and increment its internal Metadata Version inst
 ```markdown
 # Test Feedback Report: <Requirement ID>
 
-## Conclusion
+## Metadata
 
-- Result: PASS / FAIL / PASS_WITH_RISK
-- Can Release: yes/no
 - Requirement ID:
 - Requirement Name:
+- Artifact Type: 测试验收
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Reporter / Tester:
+- Classifier / Skill:
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
+- Result: PASS / FAIL / PASS_WITH_RISK
+- Can Release: yes/no
 - Repository:
 - Environment:
 - Feedback Source:
-- Reporter / Tester:
-- Date:
+
+## Conclusion
 
 ## Test Scope
 
@@ -75,7 +85,17 @@ Update the stable artifact file and increment its internal Metadata Version inst
 
 ## Manifest Update Recommendation
 
+- Manifest Stable Path:
+- Manifest Version:
+- Manifest Status:
+
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Reporter / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial test feedback report. | no |
 ```
 
 ## Manifest Update Recommendation

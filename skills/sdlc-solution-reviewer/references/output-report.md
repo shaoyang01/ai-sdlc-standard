@@ -7,18 +7,27 @@ Use this structure for response output and Markdown artifacts.
 ```markdown
 # Solution Review Report: <Requirement Name>
 
-## Conclusion
+## Metadata
 
+- Requirement ID:
+- Artifact Type: 方案审核
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Reviewer / Skill:
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
-- Reviewed Artifact:
-- Reviewer:
-- Date:
 - Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
 - Complexity Triggers:
 - Full SDD Override: none / user_requested / later_gate_required
 - Development Path Recommendation: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION
 - Recommendation Reason:
+
+## Conclusion
 
 ## Critical
 
@@ -69,6 +78,9 @@ Use this structure for response output and Markdown artifacts.
 ## Manifest Update Recommendation
 
 - Artifact Index:
+- Manifest Stable Path:
+- Manifest Version:
+- Manifest Status:
 - Gate Decisions:
 - Development Path Decision:
   - Complexity:
@@ -79,6 +91,12 @@ Use this structure for response output and Markdown artifacts.
 - Next Step:
 
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Reviewer / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial gate result. | no |
 ```
 
 ## Result Rules
@@ -128,3 +146,7 @@ library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version; preserve history in 修订记录 and Git history.
+
+The report body must contain only the current effective review conclusion. Do
+not create `__vN.md` files for revised reviews; update the stable path and mark
+downstream artifacts stale when the reviewed artifact version changes.

@@ -1,14 +1,21 @@
 # Gate Result: <Phase Name>
 
-## Conclusion
+## Metadata
 
-- Result: PASS / FAIL / PASS_WITH_RISK
-- Can Continue: yes/no
+- Requirement ID:
+- Artifact Type: 方案审核 / 代码审核 / 测试验收 / Gate Result
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Reviewer / Skill:
+- Created At:
+- Updated At:
 - Reviewed Artifact:
 - Reviewed Artifact Version:
 - Gate Artifact Version:
-- Reviewer:
-- Date:
+- Result: PASS / FAIL / PASS_WITH_RISK
+- Can Continue: yes/no
+
+## Conclusion
 
 ## Critical
 

@@ -10,20 +10,33 @@ When writing a local artifact, use:
 library/{requirement_id}/05-测试验收/{requirement_id}__测试反馈同步建议.md
 ```
 
-Do not overwrite an existing report.
+Update the stable artifact file and increment its internal Metadata Version
+instead of creating a versioned filename.
 
 ## Markdown Template
 
 ```markdown
 # Test Feedback Sync Recommendation: <Requirement ID>
 
-## Source Feedback Artifact
+## Metadata
 
 - Requirement ID:
+- Artifact Type: 测试反馈同步建议
+- Version: 1.0.0
+- Status: draft / active / stale / replaced
+- Author / Skill:
+- Created At:
+- Updated At:
 - Feedback Artifact:
+- Feedback Artifact Version:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 - Feedback Result:
 - Can Release:
 - Current Effective Version:
+
+## Source Feedback Artifact
 
 ## Classification Summary
 
@@ -47,6 +60,10 @@ Do not overwrite an existing report.
 
 ## Manifest Update Recommendation
 
+- Manifest Stable Path:
+- Manifest Version:
+- Manifest Status:
+
 ## Knowledge Sync Recommendation
 
 | Target | Recommendation | Source Artifact | Gate Dependency | Residual Risk |
@@ -60,6 +77,12 @@ Do not overwrite an existing report.
 ## Blocking Issues
 
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial test feedback sync recommendation. | no |
 ```
 
 ## Manifest Update Recommendation

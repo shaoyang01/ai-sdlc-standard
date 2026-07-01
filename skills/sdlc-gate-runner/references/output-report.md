@@ -1,5 +1,41 @@
 # Gate Runner Output Report
 
+## Artifact Versioning Requirements
+
+When this reference produces or updates a DocFlow requirement artifact under
+`library/{requirement_id}/`, it must use a stable path and update the same file.
+Do not create `__vN.md` or other filename-versioned artifacts.
+
+The artifact must include:
+
+```markdown
+## Metadata
+
+- Requirement ID:
+- Artifact Type:
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Author / Skill:
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial current artifact. | no |
+```
+
+For non-Gate artifacts, `Reviewed Artifact`, `Reviewed Artifact Version`, and
+`Gate Artifact Version` may be omitted when there is no reviewed upstream
+artifact. For Gate, review, sync, and reconcile artifacts, they are required.
+
+The body must contain only the current effective content. Historical changes
+belong in `## 修订记录`, manifest `Change History`, and Git history.
+
 ## Default Output
 
 By default, return the Gate report in the response.
@@ -10,23 +46,31 @@ When writing a local artifact, use the Gate-related node directory:
 library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查.md
 ```
 
-Do not overwrite an existing report.
+Update the stable Gate report file and increment its internal Metadata Version.
 
 ## Markdown Template
 
 ```markdown
 # Gate Result: <Gate Name>
 
-## Conclusion
+## Metadata
 
-- Result: PASS / FAIL / PASS_WITH_RISK
-- Can Continue: yes/no
 - Requirement ID:
+- Artifact Type: Gate Result
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Reviewer / Skill:
+- Created At:
+- Updated At:
 - Manifest Path:
 - Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 - Gate Basis:
-- Reviewer:
-- Date:
+- Result: PASS / FAIL / PASS_WITH_RISK
+- Can Continue: yes/no
+
+## Conclusion
 
 ## Critical
 
@@ -79,6 +123,12 @@ Do not overwrite an existing report.
 ## Manifest Update Recommendation
 
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Reviewer / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial Gate result. | no |
 ```
 
 ## Result Rules

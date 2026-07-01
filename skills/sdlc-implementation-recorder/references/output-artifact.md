@@ -1,5 +1,41 @@
 # Implementation Record Output Artifact
 
+## Artifact Versioning Requirements
+
+When this reference produces or updates a DocFlow requirement artifact under
+`library/{requirement_id}/`, it must use a stable path and update the same file.
+Do not create `__vN.md` or other filename-versioned artifacts.
+
+The artifact must include:
+
+```markdown
+## Metadata
+
+- Requirement ID:
+- Artifact Type:
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Author / Skill:
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial current artifact. | no |
+```
+
+For non-Gate artifacts, `Reviewed Artifact`, `Reviewed Artifact Version`, and
+`Gate Artifact Version` may be omitted when there is no reviewed upstream
+artifact. For Gate, review, sync, and reconcile artifacts, they are required.
+
+The body must contain only the current effective content. Historical changes
+belong in `## 修订记录`, manifest `Change History`, and Git history.
+
 ## Default Path
 
 When writing a local artifact, use:
@@ -15,15 +51,23 @@ Update the stable artifact file and increment its internal Metadata Version inst
 ```markdown
 # 实现记录: <Requirement ID>
 
-## 元信息
+## Metadata
 
 - Requirement ID:
 - Requirement Name:
+- Artifact Type: 实现记录
+- Version: 1.0.0
+- Status: draft / active / stale / replaced
 - Repository:
 - Branch:
 - Commit Range:
+- Author / Skill:
 - Created At:
-- Recorded By:
+- Updated At:
+- Specification Artifact:
+- Specification Artifact Version:
+- Solution Review Artifact:
+- Solution Review Artifact Version:
 - Ready for Code Review: yes/no
 
 ## 实现范围
@@ -79,7 +123,17 @@ Update the stable artifact file and increment its internal Metadata Version inst
 
 ## Manifest 更新建议
 
+- Manifest Stable Path:
+- Manifest Version:
+- Manifest Status:
+
 ## 建议下一步
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial implementation record. | no |
 ```
 
 ## Manifest Update Recommendation

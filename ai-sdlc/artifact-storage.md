@@ -165,10 +165,13 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 禁止作为正式路径：
 
 ```text
-20260629-ai-sdlc-standard__技术方案.html
+20260629-ai-sdlc-standard__技术方案__v1.html  # forbidden
+20260629-ai-sdlc-standard__技术方案__v2.html  # forbidden
+20260629-ai-sdlc-standard__方案审核__v1.md  # forbidden
+20260629-ai-sdlc-standard__方案审核__v2.md  # forbidden
 ```
 
-该形式只能出现在明确标注为禁止或历史迁移说明的上下文中。
+这些 filename-based versioning 形式只能出现在明确标注为禁止或历史迁移说明的上下文中。
 
 旧路径、拆分文件或从文件名版本模型迁移来的文件，才记录到 `manifest.md`
 的 Replaced Artifact Paths 中。正常版本升级只更新稳定文件的内部

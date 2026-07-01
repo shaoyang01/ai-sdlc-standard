@@ -15,16 +15,28 @@ Update the stable artifact file and increment its internal Metadata Version inst
 ```markdown
 # Code Review Report: <Requirement ID>
 
-## Conclusion
+## Metadata
 
+- Requirement ID:
+- Artifact Type: 代码审核
+- Version: 1.0.0
+- Status: draft / active / passed / failed / stale / replaced
+- Reviewer / Skill:
+- Normalized By:
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
-- Requirement ID:
 - Reviewed Diff:
 - Specification:
+- Specification Artifact Version:
 - Implementation Record:
-- Reviewer:
-- Date:
+- Implementation Record Version:
+
+## Conclusion
 
 ## Critical
 
@@ -80,7 +92,17 @@ Update the stable artifact file and increment its internal Metadata Version inst
 
 ## Manifest Update Recommendation
 
+- Manifest Stable Path:
+- Manifest Version:
+- Manifest Status:
+
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Reviewer / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial code review report. | no |
 ```
 
 ## Manifest Update Recommendation

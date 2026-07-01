@@ -25,6 +25,7 @@ required_checklist:
   - checklists/plan-checklist.md
 required_storage:
   - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
   - ai-sdlc/change-control.md
 side_effects:
   - create or update specs/{feature}/plan.md
@@ -98,6 +99,20 @@ blocking_conditions:
 - manifest 缺失时可以继续生成 plan，但必须建议创建或更新 Activity Log。
 
 ## Output Contract
+
+### Artifact Versioning Contract
+
+Any DocFlow requirement artifact produced or updated by this skill must follow
+`ai-sdlc/artifact-versioning.md`:
+
+- use the stable path recorded in manifest, not a filename-versioned path;
+- include Metadata `Version` and `Status`;
+- include `## 修订记录`;
+- keep the body to current effective content only;
+- recommend manifest updates with stable path, internal version, and status;
+- include `Reviewed Artifact` and `Reviewed Artifact Version` for Gate,
+  review, sync, and reconcile artifacts, plus `Gate Artifact Version` when
+  the artifact is itself a Gate result.
 
 输出到：
 

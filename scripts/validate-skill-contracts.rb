@@ -100,6 +100,41 @@ FILENAME_VERSION_ALLOWED_GUARD_PATTERN = /
   迁移
 /ix.freeze
 
+ARTIFACT_TEMPLATE_REQUIRED_PATTERNS = {
+  "## Metadata" => /## Metadata/,
+  "Version:" => /Version:/,
+  "Status:" => /Status:/,
+  "## 修订记录" => /## 修订记录/
+}.freeze
+
+GATE_REVIEW_REQUIRED_PATTERNS = {
+  "Reviewed Artifact" => /Reviewed Artifact:/,
+  "Reviewed Artifact Version" => /Reviewed Artifact Version:/
+}.freeze
+
+CORE_ARTIFACT_TEMPLATES = [
+  "templates/technical-specification-template.md",
+  "templates/gate-result-template.md",
+  "templates/artifact-manifest-template.md"
+].freeze
+
+GATE_REVIEW_TEMPLATE_PATH_PATTERNS = [
+  %r{templates/gate-result-template\.md\z},
+  %r{references/(?:output-report|output-artifact|output-and-manifest)\.md\z},
+  %r{references/.*output.*\.md\z}
+].freeze
+
+GATE_REVIEW_NAME_PATTERN = /
+  gate|
+  review|
+  审核|
+  审查|
+  验收|
+  feedback|
+  sync|
+  reconcile
+/ix.freeze
+
 def unsafe_legacy_source_references(text)
   lines = text.lines
   unsafe = []
@@ -108,6 +143,8 @@ def unsafe_legacy_source_references(text)
     next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
 
     context = [
+      lines[index - 4],
+      lines[index - 3],
       lines[index - 2],
       lines[index - 1],
       line,
@@ -132,6 +169,8 @@ def unsafe_filename_version_references(text)
     next unless line.match?(FILENAME_VERSION_PATTERN)
 
     context = [
+      lines[index - 4],
+      lines[index - 3],
       lines[index - 2],
       lines[index - 1],
       line,
@@ -145,6 +184,26 @@ def unsafe_filename_version_references(text)
   end
 
   unsafe
+end
+
+def missing_patterns(text, patterns)
+  patterns.each_with_object([]) do |(label, pattern), missing|
+    missing << label unless text.match?(pattern)
+  end
+end
+
+def output_reference_path?(path)
+  File.basename(path).match?(/output.*\.md\z/) ||
+    path.include?("#{File::SEPARATOR}references#{File::SEPARATOR}") &&
+      File.basename(path).include?("output")
+end
+
+def gate_or_review_template?(path)
+  relative_path = relative(path)
+  return true if relative_path.match?(GATE_REVIEW_NAME_PATTERN)
+
+  GATE_REVIEW_TEMPLATE_PATH_PATTERNS.any? { |pattern| relative_path.match?(pattern) } &&
+    File.read(path).match?(GATE_REVIEW_NAME_PATTERN)
 end
 
 def contract_yaml(path)
@@ -202,6 +261,12 @@ contract_paths.each do |path|
 
   if metadata["can_modify_docs"] == true && categories.empty?
     errors << "#{relative(path)} can_modify_docs=true requires an explicit category"
+  end
+
+  required_storage = Array(metadata["required_storage"])
+  if required_storage.include?("ai-sdlc/artifact-storage.md") &&
+     !required_storage.include?("ai-sdlc/artifact-versioning.md")
+    errors << "#{relative(path)} references artifact-storage but not ai-sdlc/artifact-versioning.md"
   end
 rescue StandardError => e
   errors << "#{relative(path)} #{e.message}"
@@ -298,6 +363,43 @@ versioning_scan_paths.each do |path|
   text = File.read(path)
   unsafe_filename_version_references(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} recommends filename-based artifact versioning: #{line}"
+  end
+end
+
+CORE_ARTIFACT_TEMPLATES.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    missing_patterns(text, ARTIFACT_TEMPLATE_REQUIRED_PATTERNS).each do |label|
+      errors << "#{relative_path} missing artifact versioning field #{label}"
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+template_gate_path = File.join(ROOT, "templates", "gate-result-template.md")
+if File.exist?(template_gate_path)
+  missing_patterns(File.read(template_gate_path), GATE_REVIEW_REQUIRED_PATTERNS).each do |label|
+    errors << "templates/gate-result-template.md missing gate/review field #{label}"
+  end
+end
+
+output_reference_paths = Dir[File.join(ROOT, "skills", "sdlc-*", "references", "*.md")]
+                         .select { |path| output_reference_path?(path) }
+                         .uniq
+                         .sort
+
+output_reference_paths.each do |path|
+  text = File.read(path)
+  missing_patterns(text, ARTIFACT_TEMPLATE_REQUIRED_PATTERNS).each do |label|
+    errors << "#{relative(path)} missing artifact versioning field #{label}"
+  end
+
+  next unless gate_or_review_template?(path)
+
+  missing_patterns(text, GATE_REVIEW_REQUIRED_PATTERNS).each do |label|
+    errors << "#{relative(path)} missing gate/review field #{label}"
   end
 end
 

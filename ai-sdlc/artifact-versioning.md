@@ -39,6 +39,17 @@ Forbidden official path pattern:
 That pattern is allowed only in documentation that explicitly labels it as a
 forbidden or legacy example.
 
+## Scope And Exceptions
+
+This versioning model applies to DocFlow requirement artifacts under
+`library/{requirement_id}/`, including stage artifacts, Gate reports, reviews,
+implementation records, test acceptance artifacts, and manifest files.
+
+Tool execution audit reports are different. Immutable audit history under
+`.specify/reports/**` may use timestamped filenames when the report is about a
+tool run rather than a requirement-stage artifact. Those reports must not be
+used as the current DocFlow artifact for a requirement stage.
+
 ## Internal Version
 
 Every stable artifact must contain a Metadata section with an internal semantic

@@ -24,6 +24,7 @@ required_schema:
   - ess/test-feedback-schema.md
 required_storage:
   - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
   - ai-sdlc/change-control.md
 side_effects:
   - write structured test feedback artifact when explicitly requested
@@ -90,6 +91,20 @@ blocking_conditions:
 - 无法区分 Bug、规格遗漏或需求变更时，不得猜测分类。
 
 ## Output Contract
+
+### Artifact Versioning Contract
+
+Any DocFlow requirement artifact produced or updated by this skill must follow
+`ai-sdlc/artifact-versioning.md`:
+
+- use the stable path recorded in manifest, not a filename-versioned path;
+- include Metadata `Version` and `Status`;
+- include `## 修订记录`;
+- keep the body to current effective content only;
+- recommend manifest updates with stable path, internal version, and status;
+- include `Reviewed Artifact` and `Reviewed Artifact Version` for Gate,
+  review, sync, and reconcile artifacts, plus `Gate Artifact Version` when
+  the artifact is itself a Gate result.
 
 默认输出：
 

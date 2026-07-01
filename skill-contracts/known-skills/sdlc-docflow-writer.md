@@ -23,6 +23,7 @@ required_schema:
   - ess/test-feedback-schema.md
 required_storage:
   - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
 side_effects:
   - create library/{requirement_id}/ directories
   - write Markdown or HTML files
@@ -64,6 +65,22 @@ blocking_conditions:
 - `02-方案审核` is a Gate artifact for entering code implementation.
 - `04-代码审核` can become a Gate artifact when Critical or High findings exist.
 - `05-测试验收` is a feedback classification artifact, not an automated testing requirement.
+
+## Output Contract
+
+### Artifact Versioning Contract
+
+Any DocFlow requirement artifact created, updated, rendered, or published by
+this skill must follow `ai-sdlc/artifact-versioning.md`:
+
+- use the stable path recorded in manifest, not a filename-versioned path;
+- include Metadata `Version` and `Status`;
+- include `## 修订记录`;
+- keep the body to current effective content only;
+- update or recommend manifest records with stable path, internal version, and status;
+- include `Reviewed Artifact` and `Reviewed Artifact Version` for Gate, review,
+  sync, and reconcile artifacts, plus `Gate Artifact Version` when the artifact
+  is itself a Gate result.
 
 ## Migration Notes
 

@@ -4,6 +4,8 @@
 
 - Requirement ID:
 - Requirement Name:
+- Version: 1.0.0
+- Status: active / blocked / completed / abandoned / stale / replaced
 - Repository:
 - Created At:
 - Current Stage:
@@ -116,3 +118,9 @@ Normal updates to the same stable file use `Version` and `Change History`.
 ## Blocking Issues
 
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial manifest. | no |
