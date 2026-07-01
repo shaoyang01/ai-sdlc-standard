@@ -25,8 +25,6 @@ Generated files:
   .specify/project-context/RepositoryStructure.md
   .specify/project-context/ProjectGovernanceOverrides.md
   .specify/reports/speckit_generation_report.md
-  .specify/reports/legacy_speckit_source_inventory.md when legacy files exist
-  .specify/reports/speckit_equivalence_report.pending.md when legacy files exist but comparable outputs are not ready
   .specify/reports/
   library/
   .gitignore entry: /library/
@@ -222,13 +220,45 @@ detect_source_roots() {
   while IFS= read -r dir; do
     dir="${dir#${TARGET_PATH}/}"
     roots="${roots}${dir}"$'\n'
-  done < <(find "${TARGET_PATH}" -maxdepth 6 -path '*/src/main/java' -type d 2>/dev/null | sort)
+  done < <(find "${TARGET_PATH}" -maxdepth 6 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o -path '*/src/main/java' -type d -print 2>/dev/null | sort)
 
   if [[ -z "${roots}" ]]; then
     while IFS= read -r dir; do
       dir="${dir#${TARGET_PATH}/}"
       roots="${roots}${dir}"$'\n'
-    done < <(find "${TARGET_PATH}" -maxdepth 3 -type d \( -name src -o -name app -o -name lib \) 2>/dev/null | sort)
+    done < <(find "${TARGET_PATH}" -maxdepth 3 \
+      \( \
+        -path "*/.git" -o \
+        -path "*/target" -o \
+        -path "*/build" -o \
+        -path "*/dist" -o \
+        -path "*/node_modules" -o \
+        -path "*/.venv" -o \
+        -path "*/venv" -o \
+        -path "*/vendor" -o \
+        -path "${TARGET_PATH}/out" -o \
+        -path "*/coverage" -o \
+        -path "*/generated" -o \
+        -path "*/.idea" -o \
+        -path "*/.gradle" -o \
+        -path "*/.mvn" \
+      \) -prune -o -type d \( -name src -o -name app -o -name lib \) -print 2>/dev/null | sort)
   fi
 
   if [[ -z "${roots}" ]]; then
@@ -247,7 +277,23 @@ detect_module_globs() {
       continue
     fi
     modules="${modules}${rel}"$'\n'
-  done < <(find "${TARGET_PATH}" -mindepth 2 -maxdepth 3 -path '*/src/main' -type d 2>/dev/null | sed 's#/src/main$##' | sort -u)
+  done < <(find "${TARGET_PATH}" -mindepth 2 -maxdepth 3 \
+    \( \
+      -path "*/.git" -o \
+      -path "*/target" -o \
+      -path "*/build" -o \
+      -path "*/dist" -o \
+      -path "*/node_modules" -o \
+      -path "*/.venv" -o \
+      -path "*/venv" -o \
+      -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage" -o \
+      -path "*/generated" -o \
+      -path "*/.idea" -o \
+      -path "*/.gradle" -o \
+      -path "*/.mvn" \
+    \) -prune -o -path '*/src/main' -type d -print 2>/dev/null | sed 's#/src/main$##' | sort -u)
 
   if [[ -z "${modules}" ]]; then
     printf '.\n'
@@ -424,29 +470,47 @@ matches_kind() {
 matching_files_for_kind() {
   local kind="$1"
   local path
-  find "${TARGET_PATH}" \
-    \( \
-      -path "*/.git/*" -o \
-      -path "*/target/*" -o \
-      -path "*/build/*" -o \
-      -path "*/dist/*" -o \
-      -path "*/node_modules/*" -o \
-      -path "*/.venv/*" -o \
-      -path "*/venv/*" -o \
-      -path "*/vendor/*" -o \
-      -path "*/out/*" -o \
-      -path "*/coverage/*" -o \
-      -path "*/generated/*" -o \
-      -path "*/.idea/*" -o \
-      -path "*/.gradle/*" -o \
-      -path "*/.mvn/*" \
-    \) -prune -o -type f -print 2>/dev/null | while IFS= read -r path; do
-    if [[ "${kind}" == "rpc_provider" && "${path#${TARGET_PATH}/}" == *"/rpc/"* && "$(basename "${path}")" == *.java ]]; then
-      printf '%s\n' "${path#${TARGET_PATH}/}"
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    if [[ "${kind}" == "rpc_provider" && "${path}" == *"/rpc/"* && "$(basename "${path}")" == *.java ]]; then
+      printf '%s\n' "${path}"
     elif matches_kind "${kind}" "$(basename "${path}")"; then
-      printf '%s\n' "${path#${TARGET_PATH}/}"
+      printf '%s\n' "${path}"
     fi
+  done <<< "${PROJECT_FILES_TEXT}"
+}
+
+collect_project_files() {
+  local roots=()
+  local root
+  for root in "${SOURCE_ROOTS[@]}"; do
+    if [[ "${root}" == "." ]]; then
+      roots=("${TARGET_PATH}")
+      break
+    fi
+    [[ -d "${TARGET_PATH}/${root}" ]] && roots+=("${TARGET_PATH}/${root}")
   done
+  if [[ "${#roots[@]}" -eq 0 ]]; then
+    roots=("${TARGET_PATH}")
+  fi
+
+  find "${roots[@]}" \
+    \( \
+      -path "*/.git/*" -o -path "*/.git" -o \
+      -path "*/target/*" -o -path "*/target" -o \
+      -path "*/build/*" -o -path "*/build" -o \
+      -path "*/dist/*" -o -path "*/dist" -o \
+      -path "*/node_modules/*" -o -path "*/node_modules" -o \
+      -path "*/.venv/*" -o -path "*/.venv" -o \
+      -path "*/venv/*" -o -path "*/venv" -o \
+      -path "*/vendor/*" -o -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out/*" -o -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage/*" -o -path "*/coverage" -o \
+      -path "*/generated/*" -o -path "*/generated" -o \
+      -path "*/.idea/*" -o -path "*/.idea" -o \
+      -path "*/.gradle/*" -o -path "*/.gradle" -o \
+      -path "*/.mvn/*" -o -path "*/.mvn" \
+    \) -prune -o -type f -print 2>/dev/null | sed "s#^${TARGET_PATH}/##"
 }
 
 count_matching_files() {
@@ -457,6 +521,7 @@ sample_matching_files() {
   matching_files_for_kind "$1" | sort | head -n 5
 }
 
+PROJECT_FILES_TEXT="$(collect_project_files)"
 SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
 MODULE_COUNT="${#MODULE_GLOBS[@]}"
 HTTP_ENTRY_COUNT="$(count_matching_files http_entry)"
@@ -486,13 +551,85 @@ TEST_SAMPLES="$(sample_matching_files test)"
 CONFIG_SAMPLES="$(sample_matching_files config)"
 CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
 
+has_project_path() {
+  local pattern="$1"
+  local path
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    if [[ "${path}" == ${pattern} || "${TARGET_PATH}/${path}" == ${pattern} ]]; then
+      return 0
+    fi
+  done <<< "${PROJECT_FILES_TEXT}"
+  return 1
+}
+
+detect_project_type_profiles() {
+  local detected_any="false"
+
+  if [[ "${DETECTED_LANGUAGE}" == "java" ]] && {
+    has_project_path "*/finance-spark-service/*" ||
+    has_project_path "*/finance-flink-service/*" ||
+    has_project_path "*/src/main/java/**/etl/job/*" ||
+    has_project_path "*/src/main/java/**/online/*" ||
+    has_project_path "*/src/main/java/**/func/process/*" ||
+    has_project_path "*/src/main/java/**/connectors/mcq/*" ||
+    has_project_path "*Etl.java" ||
+    has_project_path "*Function.java"
+  }; then
+    printf 'data-pipeline-etl\n'
+    detected_any="true"
+  fi
+
+  if [[ "${DETECTED_LANGUAGE}" == "typescript" ]] || [[ -f "${TARGET_PATH}/package.json" ]]; then
+    if [[ -f "${TARGET_PATH}/package.json" ]] || has_project_path "*.tsx" || has_project_path "*/pages/*" || has_project_path "*/views/*" || has_project_path "*/components/*"; then
+      printf 'frontend-application\n'
+      detected_any="true"
+    fi
+  fi
+
+  if [[ "${DETECTED_LANGUAGE}" == "java" ]] && {
+    has_project_path "*/src/main/java/**/worker/*" ||
+    has_project_path "*/src/main/java/**/data/console/*" ||
+    has_project_path "*/src/main/java/**/oas/event/*" ||
+    has_project_path "*/src/main/java/**/spi/*"
+  }; then
+    printf 'admin-mixed-workflow\n'
+    detected_any="true"
+  fi
+
+  if [[ "${DETECTED_LANGUAGE}" == "java" && ( "${HTTP_ENTRY_COUNT}" -gt 0 || "${RPC_PROVIDER_COUNT}" -gt 0 ) ]]; then
+    printf 'backend-business-service\n'
+    detected_any="true"
+  fi
+
+  if [[ "${DETECTED_LANGUAGE}" == "java" && "${detected_any}" == "false" ]]; then
+    printf 'backend-business-service\n'
+    detected_any="true"
+  fi
+
+  if [[ "${DETECTED_APPLICATION_TYPE}" == "library" && "${detected_any}" == "false" ]]; then
+    printf 'library-shared-component\n'
+    detected_any="true"
+  fi
+
+  if [[ "${detected_any}" == "false" ]]; then
+    printf 'mixed\n'
+  fi
+}
+
+PROJECT_TYPE_PROFILES_TEXT="$(detect_project_type_profiles | awk '!seen[$0]++')"
+PROJECT_TYPE_PROFILES=()
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && PROJECT_TYPE_PROFILES+=("${line}")
+done <<< "${PROJECT_TYPE_PROFILES_TEXT}"
+
 LEGACY_FILES_TEXT="$(find "${SPECIFY_DIR}" -type f \( -path "${SPECIFY_DIR}/memory/*" -o -path "${SPECIFY_DIR}/workflow/*" -o -path "${SPECIFY_DIR}/coding_guide/*" \) 2>/dev/null | sort | sed "s#^${TARGET_PATH}/##" || true)"
 if [[ -n "${LEGACY_FILES_TEXT}" ]]; then
   LEGACY_FOUND="true"
-  PARITY_CHECK_RESULT="not-ready"
+  LEGACY_BOOTSTRAP_ACTION="preserved_not_read"
 else
   LEGACY_FOUND="false"
-  PARITY_CHECK_RESULT="skipped"
+  LEGACY_BOOTSTRAP_ACTION="not_present"
 fi
 
 case "${DETECTED_APPLICATION_TYPE}" in
@@ -543,6 +680,8 @@ standard_package:
     - ai-sdlc/speckit-dual-rail-isolation.md
     - ai-sdlc/speckit-document-generation-spec.md
     - ai-sdlc/speckit-document-governance.md
+    - ai-sdlc/speckit-project-type-profiles.md
+    - ai-sdlc/speckit-skill-product-compatibility.md
     - ai-sdlc/speckit-project-bootstrap.md
 
 project:
@@ -550,6 +689,10 @@ project:
   repository: "$(yaml_escape "${REMOTE_URL}")"
   primary_language: "$(yaml_escape "${DETECTED_LANGUAGE}")"
   application_type: "$(yaml_escape "${DETECTED_APPLICATION_TYPE}")"
+  project_type_profiles:
+EOF
+    emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
+    cat <<'EOF'
   owners:
     business: []
     engineering: []
@@ -582,7 +725,7 @@ local_files:
   legacy:
     memory_files_authoritative: false
     workflow_files_authoritative: false
-    notes: "Legacy .specify/memory or .specify/workflow files are project overrides only when explicitly listed below."
+    notes: "Legacy .specify/memory, .specify/workflow, or .specify/coding_guide files are preserved for legacy workflows and are not runtime inputs for this bootstrap."
 
 speckit_dual_rail:
   enabled: true
@@ -590,7 +733,7 @@ speckit_dual_rail:
     preserved: true
     mutable_by_sdlc: false
     authoritative_for_legacy_skills: true
-    role_for_sdlc: "inventory_or_same_project_parity_reference_only"
+    role_for_sdlc: "preserved_not_runtime_input"
   sdlc_rail:
     authoritative_for_sdlc_skills: true
     shared_standard_source: "${AI_SDLC_STANDARD_HOME}"
@@ -602,7 +745,28 @@ speckit_dual_rail:
   product_artifacts:
     specs_are_products: true
     business_domain_is_product: true
-    require_output_equivalence_check_when_legacy_reference_exists: true
+    runtime_legacy_comparison: false
+
+speckit_semantic_profile:
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+  product_compatibility_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-skill-product-compatibility.md"
+  selected_profiles:
+EOF
+    emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
+    cat <<'EOF'
+  semantic_surface:
+    workflow_semantics: "stage order, context resolution, redlines, mandatory artifacts"
+    document_semantics: "metadata, revision, naming, splitting, L1/L2/L4, subdocument rules"
+    business_domain_semantics: "landscape, glossary, status vocabulary, lifecycle, owners, code anchors"
+    entry_coverage_semantics: "project-type entry discovery, evidence chains, strict reports, blockers"
+    coding_semantics: "project-type engineering rules, side effects, adapters, implementation redlines"
+    sync_semantics: "stable fact eligibility, implementation-to-business-domain sync, drift handling"
+    audit_semantics: "governance audit, gate checks, strict blockers, report interpretation"
+    artifact_boundary_semantics: "specs, library, project-context, business_domain, reports ownership"
+  runtime_source_policy:
+    standard_rules: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/**"
+    project_facts: "target code plus explicit user-confirmed facts"
+    legacy_files: "preserved_not_runtime_input"
 
 project_private_documents:
   coding_guides:
@@ -624,10 +788,10 @@ project_private_documents:
   legacy_inputs:
     - path: ".specify/memory/**"
       required: false
-      purpose: "Legacy local input only; not authoritative unless listed under project_overrides."
+      purpose: "Preserved for legacy workflows; not read by new-rail bootstrap or normal sdlc-* execution."
     - path: ".specify/workflow/**"
       required: false
-      purpose: "Legacy local input only; not authoritative unless listed under project_overrides."
+      purpose: "Preserved for legacy workflows; not read by new-rail bootstrap or normal sdlc-* execution."
 
 project_overrides:
   enabled: false
@@ -710,7 +874,7 @@ generated_documents:
 bootstrap_status:
   state: "draft"
   generated_by: "ai-sdlc-standard"
-  legacy_files_reviewed: []
+  legacy_runtime_action: "preserved_not_read"
   project_facts_preserved: []
   unresolved_questions: []
 EOF
@@ -767,7 +931,7 @@ List only repository-specific implementation exceptions here.
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as \`.specify/memory/EngineeringStandard.md\` or \`.specify/coding_guide/*.md\`, treat them as inventory or same-project parity references only. Add facts here only when target code evidence or explicit user confirmation supports them.
+If this project has legacy mixed documents such as \`.specify/memory/EngineeringStandard.md\` or \`.specify/coding_guide/*.md\`, keep them untouched for legacy workflows. Add facts here only when target code evidence or explicit user confirmation supports them.
 
 New \`sdlc-*\` Skills read this file instead of legacy mixed documents.
 EOF
@@ -842,7 +1006,7 @@ EOF
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as `.specify/memory/DocumentationStandard.md` or `.specify/workflow/*.md`, treat them as inventory or same-project parity references only. Add structure facts here only when target code evidence or explicit user confirmation supports them.
+If this project has legacy mixed documents such as `.specify/memory/DocumentationStandard.md` or `.specify/workflow/*.md`, keep them untouched for legacy workflows. Add structure facts here only when target code evidence or explicit user confirmation supports them.
 
 New `sdlc-*` Skills read this file instead of legacy mixed documents.
 EOF
@@ -872,7 +1036,7 @@ Keep this file empty unless the project intentionally needs a local exception. S
 
 ## Legacy Source Notes
 
-If this project has legacy mixed documents such as \`.specify/memory/AiGovernance.md\`, \`.specify/memory/InteractionProtocol.md\`, or \`.specify/workflow/*.md\`, treat them as inventory or same-project parity references only. Add overrides here only when the project explicitly confirms a local exception.
+If this project has legacy mixed documents such as \`.specify/memory/AiGovernance.md\`, \`.specify/memory/InteractionProtocol.md\`, or \`.specify/workflow/*.md\`, keep them untouched for legacy workflows. Add overrides here only when the project explicitly confirms a local exception.
 
 New \`sdlc-*\` Skills read this file instead of legacy mixed documents.
 EOF
@@ -887,6 +1051,15 @@ generate_entry_profile() {
 # Generated by ai-sdlc-standard scripts/bootstrap-speckit-project.sh
 
 schema_version: 0.1.0
+
+project_type_profiles:
+  selected:
+EOF
+    emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
+    cat <<'EOF'
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+  selection_basis:
+    - "Generated from target repository code shape; confirm and edit if project execution model differs."
 
 scope:
   source_roots:
@@ -908,7 +1081,7 @@ EOF
     - "**/.venv/**"
     - "**/venv/**"
     - "**/vendor/**"
-    - "**/out/**"
+    - "out/**"
     - "**/coverage/**"
     - "**/generated/**"
     - "**/.idea/**"
@@ -920,7 +1093,155 @@ EOF
 entry_types:
 EOF
     if [[ "${DETECTED_LANGUAGE}" == "java" ]]; then
-      cat <<'EOF'
+      if printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'data-pipeline-etl'; then
+        cat <<'EOF'
+  - name: "spark_job"
+    description: "Spark batch job entry."
+    path_patterns:
+      - "**/finance-spark-service/src/main/java/**/etl/job/**/*.java"
+      - "**/src/main/java/**/etl/job/**/*.java"
+    class_name_patterns:
+      - "*Job"
+    exclude_when:
+      - "abstract job base classes"
+    evidence_mode: "data_pipeline_chain"
+  - name: "spark_online_etl"
+    description: "Spark online ETL or calculation entry."
+    path_patterns:
+      - "**/finance-spark-service/src/main/java/**/online/**/*.java"
+      - "**/src/main/java/**/online/**/*.java"
+    class_name_patterns:
+      - "*Etl"
+    exclude_when: []
+    evidence_mode: "data_pipeline_chain"
+  - name: "flink_main"
+    description: "Flink pipeline main entry."
+    path_patterns:
+      - "**/finance-flink-service/src/main/java/**/main/**/*.java"
+      - "**/src/main/java/**/main/**/*.java"
+    class_name_patterns:
+      - "*Main"
+    exclude_when:
+      - "utility main methods with no pipeline side effect"
+    evidence_mode: "data_pipeline_chain"
+  - name: "flink_process_function"
+    description: "Flink process function or stream transformation entry."
+    path_patterns:
+      - "**/finance-flink-service/src/main/java/**/func/process/**/*.java"
+      - "**/src/main/java/**/func/process/**/*.java"
+    class_name_patterns:
+      - "*Function"
+      - "*ProcessFunction"
+    exclude_when:
+      - "abstract base functions"
+    evidence_mode: "data_pipeline_chain"
+  - name: "mcq_connector"
+    description: "Message connector, deserializer, listener, or stream source entry."
+    path_patterns:
+      - "**/finance-flink-service/src/main/java/**/connectors/mcq/**/*.java"
+      - "**/src/main/java/**/connectors/mcq/**/*.java"
+      - "**/src/main/java/**/*Consumer.java"
+      - "**/src/main/java/**/*Listener.java"
+    class_name_patterns:
+      - "*Consumer"
+      - "*Listener"
+      - "*DeserializationSchema"
+    exclude_when: []
+    evidence_mode: "data_pipeline_chain"
+EOF
+      elif printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'admin-mixed-workflow'; then
+        cat <<'EOF'
+  - name: "controller"
+    description: "Admin HTTP or view controller entry."
+    path_patterns:
+      - "**/src/main/java/**/*Controller.java"
+    class_name_patterns:
+      - "*Controller"
+    exclude_when:
+      - "view-only routes may be marked as technical_bridge with evidence"
+    evidence_mode: "admin_workflow_chain"
+  - name: "worker"
+    description: "Background worker entry outside scheduler-specific directories."
+    path_patterns:
+      - "**/src/main/java/**/worker/**/*.java"
+    class_name_patterns:
+      - "*Worker"
+      - "*Processor"
+    exclude_when:
+      - "worker/schedule entries should use scheduled_job"
+      - "abstract base classes"
+    evidence_mode: "admin_workflow_chain"
+  - name: "scheduled_job"
+    description: "Schedule, job, task, or scheduled worker entry."
+    path_patterns:
+      - "**/src/main/java/**/worker/schedule/**/*.java"
+      - "**/src/main/java/**/*Schedule.java"
+      - "**/src/main/java/**/*Job.java"
+      - "**/src/main/java/**/*Task.java"
+    class_name_patterns:
+      - "*Schedule"
+      - "*Job"
+      - "*Task"
+      - "*Worker"
+    exclude_when:
+      - "framework base classes"
+    evidence_mode: "admin_workflow_chain"
+  - name: "mcq_consumer"
+    description: "MCQ, MQ, event, or listener entry."
+    path_patterns:
+      - "**/src/main/java/**/*Listener.java"
+      - "**/src/main/java/**/*Consumer.java"
+      - "**/src/main/java/**/*Processor.java"
+    class_name_patterns:
+      - "*Listener"
+      - "*Consumer"
+      - "*Processor"
+    exclude_when:
+      - "abstract base classes"
+    evidence_mode: "admin_workflow_chain"
+  - name: "oas_event"
+    description: "OAS event entry."
+    path_patterns:
+      - "**/src/main/java/**/oas/event/**/*.java"
+    class_name_patterns:
+      - "*Event"
+      - "*Handler"
+      - "*Processor"
+    exclude_when: []
+    evidence_mode: "admin_workflow_chain"
+  - name: "data_console"
+    description: "Data console operation entry."
+    path_patterns:
+      - "**/src/main/java/**/data/console/**/*.java"
+    class_name_patterns:
+      - "*Console"
+      - "*Action"
+      - "*Processor"
+    exclude_when: []
+    evidence_mode: "admin_workflow_chain"
+  - name: "spi"
+    description: "SPI extension entry."
+    path_patterns:
+      - "**/src/main/java/**/spi/**/*.java"
+    class_name_patterns:
+      - "*Spi"
+      - "*SPI"
+      - "*Provider"
+    exclude_when: []
+    evidence_mode: "admin_workflow_chain"
+  - name: "rpc_provider"
+    description: "RPC or service-provider entry."
+    path_patterns:
+      - "**/src/main/java/**/rpc/**/*.java"
+      - "**/src/main/java/**/*Provider.java"
+    class_name_patterns:
+      - "*Provider"
+      - "*Impl"
+    exclude_when: []
+    evidence_mode: "admin_workflow_chain"
+EOF
+      else
+        cat <<'EOF'
   - name: "controller"
     description: "HTTP or view controller entry."
     path_patterns:
@@ -967,6 +1288,64 @@ EOF
     exclude_when:
       - "framework base classes"
     evidence_mode: "business_chain"
+EOF
+      fi
+    elif printf '%s\n' "${PROJECT_TYPE_PROFILES_TEXT}" | grep -qx 'frontend-application'; then
+      cat <<'EOF'
+  - name: "route"
+    description: "Frontend route or navigation entry."
+    path_patterns:
+      - "**/src/**/routes/**/*"
+      - "**/src/**/navigation/**/*"
+      - "**/src/**/router/**/*"
+    class_name_patterns:
+      - "<route-or-navigation-symbol>"
+    exclude_when:
+      - "pure route constants with no user-visible behavior may be marked as technical_bridge"
+    evidence_mode: "frontend_interaction_chain"
+  - name: "page"
+    description: "User-visible page or screen entry."
+    path_patterns:
+      - "**/src/**/pages/**/*"
+      - "**/src/**/views/**/*"
+      - "**/src/**/screens/**/*"
+    class_name_patterns:
+      - "*Page"
+      - "*View"
+      - "*Screen"
+    exclude_when: []
+    evidence_mode: "frontend_interaction_chain"
+  - name: "component"
+    description: "Business component or popup entry."
+    path_patterns:
+      - "**/src/**/components/**/*"
+      - "**/src/**/popups/**/*"
+    class_name_patterns:
+      - "<component-symbol>"
+    exclude_when:
+      - "pure design-system atoms with no business behavior"
+    evidence_mode: "frontend_interaction_chain"
+  - name: "store_action"
+    description: "State store action, model action, or reducer with business side effects."
+    path_patterns:
+      - "**/src/**/store/**/*"
+      - "**/src/**/stores/**/*"
+      - "**/src/**/models/**/*"
+      - "**/src/**/actions/**/*"
+    class_name_patterns:
+      - "<action-or-store-symbol>"
+    exclude_when: []
+    evidence_mode: "frontend_interaction_chain"
+  - name: "api_client"
+    description: "Frontend API client entry."
+    path_patterns:
+      - "**/src/**/api/**/*"
+      - "**/src/**/services/**/*"
+      - "**/src/**/request/**/*"
+    class_name_patterns:
+      - "<api-client-symbol>"
+    exclude_when: []
+    evidence_mode: "frontend_interaction_chain"
 EOF
     else
       cat <<'EOF'
@@ -1017,6 +1396,35 @@ evidence_chain:
       - service
       - manager
       - persistence
+    allow_missing_layers_with_reason: true
+  admin_workflow_chain:
+    required_layers:
+      - entry
+    recommended_layers:
+      - service
+      - manager
+      - persistence
+      - audit_or_approval
+    allow_missing_layers_with_reason: true
+  frontend_interaction_chain:
+    required_layers:
+      - route_or_page
+    recommended_layers:
+      - component
+      - store_or_action
+      - api_client
+      - backend_contract
+    allow_missing_layers_with_reason: true
+  data_pipeline_chain:
+    required_layers:
+      - entry
+      - input_contract
+      - output_contract
+    recommended_layers:
+      - transformation
+      - connector_or_repository
+      - idempotency_or_replay
+      - partition_window_checkpoint
     allow_missing_layers_with_reason: true
   technical_bridge:
     allowed: true
@@ -1069,6 +1477,7 @@ schema_version: 0.1.0
 
 generation_scope:
   project_bootstrap_includes_business_domain_content: false
+  generation_script: "${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-business-domain.sh"
   generate_after_project_bootstrap: true
   output_root: ".specify/business_domain"
   required_root_documents:
@@ -1106,7 +1515,7 @@ EOF
       - ".specify/memory/**"
       - ".specify/workflow/**"
       - ".specify/coding_guide/**"
-    legacy_reference_only:
+    preserved_legacy_not_runtime_input:
       - ".specify/memory/**"
       - ".specify/workflow/**"
       - ".specify/coding_guide/**"
@@ -1209,8 +1618,9 @@ generate_generation_report() {
 | Local Resolution Required | ${STANDARD_LOCAL_RESOLUTION_REQUIRED} |
 | Language | $(yaml_escape "${DETECTED_LANGUAGE}") |
 | Application Type | $(yaml_escape "${DETECTED_APPLICATION_TYPE}") |
+| Project Type Profiles | $(markdown_samples "${PROJECT_TYPE_PROFILES_TEXT}") |
 | Legacy Speckit Documents Found | ${LEGACY_FOUND} |
-| Parity Check | ${PARITY_CHECK_RESULT} |
+| Legacy Runtime Action | ${LEGACY_BOOTSTRAP_ACTION} |
 | Code Evidence Completeness Check | ${CODE_EVIDENCE_RESULT} |
 
 ## Code Evidence
@@ -1243,7 +1653,7 @@ No user-confirmed project facts were supplied to this bootstrap run.
 | --- | --- | --- |
 | Business domain names | Package and class names are evidence, not authoritative business boundaries. | Confirm L1/L2/L4 split before generating business_domain. |
 | Business-visible statuses | Code enums may include technical and legacy states. | Confirm visible status vocabulary before long-term sync. |
-| Whether legacy files are current | Legacy files are optional parity references only. | Confirm before treating them as same-project parity references. |
+| Whether preserved legacy files are current | Bootstrap does not read legacy files as runtime inputs. | Confirm only if a separate legacy-rail task needs them. |
 
 ## Generated Files
 
@@ -1256,9 +1666,9 @@ No user-confirmed project facts were supplied to this bootstrap run.
 | .specify/project-context/RepositoryStructure.md | generated or candidate | source roots, module globs, entry evidence, and layer evidence |
 | .specify/project-context/ProjectGovernanceOverrides.md | generated or candidate | empty unless explicit overrides exist |
 
-## Legacy Reference
+## Preserved Legacy Files
 
-Legacy files, when present, are inventory or same-project parity references only. They were not used as primary generated content.
+Legacy files, when present, were preserved for existing legacy workflows and were not read as runtime inputs for generated new-rail content.
 
 ## Checks
 
@@ -1274,83 +1684,6 @@ Legacy files, when present, are inventory or same-project parity references only
 
 - Review generated profiles and project-context files.
 - Confirm business domain boundaries before generating .specify/business_domain/**.
-- If legacy files exist, treat the pending equivalence report as not-ready until comparable \`specs/**\` or \`.specify/business_domain/**\` outputs exist.
-EOF
-  } > "${output}"
-}
-
-generate_legacy_inventory() {
-  local output="$1"
-  {
-    cat <<EOF
-# Legacy Speckit Source Inventory
-
-> **Project**: $(yaml_escape "${PROJECT_NAME}")
-> **Role**: inventory and optional same-project parity reference only
-
-Legacy files are not primary content sources for the new AI SDLC Speckit rail.
-
-| Legacy Path | Role | Modified |
-| --- | --- | --- |
-EOF
-    if [[ -z "${LEGACY_FILES_TEXT}" ]]; then
-      printf '| <none> | not applicable | no |\n'
-    else
-      local legacy_file
-      while IFS= read -r legacy_file; do
-        [[ -n "${legacy_file}" ]] && printf '| %s | parity-reference-only | no |\n' "${legacy_file}"
-      done <<< "${LEGACY_FILES_TEXT}"
-    fi
-  } > "${output}"
-}
-
-generate_equivalence_report() {
-  local output="$1"
-  {
-    cat <<EOF
-# Speckit Equivalence Report
-
-> **Project**: $(yaml_escape "${PROJECT_NAME}")
-> **Scope**: Same-project legacy/new workflow product comparison
-
-## Summary
-
-| Item | Value |
-| --- | --- |
-| Legacy Output | legacy Speckit files detected |
-| New Output | project bootstrap profiles and context documents |
-| Semantic Equivalence | not-ready |
-| Structural Differences | not-started |
-| Conclusion | not-started |
-
-This report is not a PASS artifact. Bootstrap only inventories legacy files and generated project-private context; semantic comparison requires comparable \`specs/**\` or \`.specify/business_domain/**\` outputs for the same scope.
-
-## Legacy Output
-
-| Path | Role | Notes |
-| --- | --- | --- |
-EOF
-    local legacy_file
-    while IFS= read -r legacy_file; do
-      [[ -n "${legacy_file}" ]] && printf '| %s | parity reference only | content not copied |\n' "${legacy_file}"
-    done <<< "${LEGACY_FILES_TEXT}"
-    cat <<'EOF'
-
-## New Output
-
-| Path | Source Basis | Notes |
-| --- | --- | --- |
-| .specify/project-governance-profile.yaml | target repository metadata and standard template | generated by bootstrap |
-| .specify/entry-coverage-profile.yaml | target code scan and standard defaults | generated by bootstrap |
-| .specify/project-context/** | target code scan and user-confirmed facts when supplied | generated or candidate |
-
-## Semantic Comparison
-
-Semantic comparison must be completed after the new rail produces comparable \`specs/**\` or \`.specify/business_domain/**\` outputs for the same project and scope.
-
-## Conclusion
-
-Not started. Legacy files were inventoried only; no legacy content was copied into new generated files.
 EOF
   } > "${output}"
 }
@@ -1370,11 +1703,6 @@ write_or_preview "${SPECIFY_DIR}/project-context/ProjectCodingGuide.md" generate
 write_or_preview "${SPECIFY_DIR}/project-context/RepositoryStructure.md" generate_repository_structure context
 write_or_preview "${SPECIFY_DIR}/project-context/ProjectGovernanceOverrides.md" generate_project_governance_overrides context
 write_or_preview "${SPECIFY_DIR}/reports/speckit_generation_report.md" generate_generation_report report
-
-if [[ "${LEGACY_FOUND}" == "true" ]]; then
-  write_or_preview "${SPECIFY_DIR}/reports/legacy_speckit_source_inventory.md" generate_legacy_inventory report
-  write_or_preview "${SPECIFY_DIR}/reports/speckit_equivalence_report.pending.md" generate_equivalence_report report
-fi
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   printf '\n--- .specify/project-context/ ---\n'

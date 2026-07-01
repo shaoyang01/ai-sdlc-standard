@@ -167,8 +167,6 @@ bash "$AI_SDLC_STANDARD_HOME/scripts/bootstrap-current-project.sh" --here
 .specify/project-context/RepositoryStructure.md
 .specify/project-context/ProjectGovernanceOverrides.md
 .specify/reports/speckit_generation_report.md
-.specify/reports/legacy_speckit_source_inventory.md        # 当发现 legacy 文件时
-.specify/reports/speckit_equivalence_report.pending.md     # 当发现 legacy 文件但还不能比较时
 library/
 .gitignore entry: /library/
 ```
@@ -181,6 +179,15 @@ specs/**
 业务代码修改
 git commit
 ```
+
+`business_domain` 是长期代码事实文档，使用独立脚本一次性生成骨架：
+
+```bash
+"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-business-domain.sh" <target-project-path> --dry-run
+"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-business-domain.sh" <target-project-path>
+```
+
+该脚本默认不覆盖已有长期事实文档，不读取旧版 Speckit 文档。
 
 ### 6.4 检查初始化结果
 
@@ -290,7 +297,7 @@ Requirement ID：
 2. 输出到：
    library/<requirement_id>/00-需求资料/<requirement_id>__需求摘要.md
 3. 如 manifest.md 不存在，请创建或给出创建建议。
-4. 文档必须使用稳定文件路径，不创建 __vN.md。
+4. 文档必须使用稳定文件路径，不创建带文件名版本号的副本。
 5. 文档 Metadata 必须包含 Version: 1.0.0、Status、Created At、Updated At。
 6. 文档底部必须包含 ## 修订记录。
 7. 正文只保留当前有效需求信息，不要堆聊天过程全文。
@@ -394,11 +401,7 @@ FAIL
 BLOCKED_NEEDS_REVISION
 ```
 
-不要创建：
-
-```text
-<requirement_id>__技术方案__v2.md
-```
+不要创建新的带文件名版本号副本。
 
 而是更新同一个稳定文件：
 
@@ -503,10 +506,8 @@ library/<requirement_id>/manifest.md
 不应出现：
 
 ```text
-__v1.md
-__v2.md
-__v1.html
-__v2.html
+带文件名版本号的 Markdown 副本
+带文件名版本号的 HTML 副本
 ```
 
 检查：

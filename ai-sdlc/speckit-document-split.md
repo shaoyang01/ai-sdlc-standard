@@ -2,20 +2,19 @@
 
 ## Purpose
 
-This guide records the historical split model for legacy mixed Speckit documents.
+This guide records how legacy mixed Speckit documents inform standard-package development.
 
 Many existing project `.specify` documents contain both shared workflow rules and project-specific facts. New `sdlc-*` Skills must not read those mixed legacy documents as their primary source. Instead, shared content is owned by AI SDLC Standard, and private content is generated from target repository code or explicit user-confirmed facts.
 
-Old documents are not moved, renamed, deleted, or rewritten by the bootstrap process. They remain available for legacy workflows.
+Old documents are not moved, renamed, deleted, rewritten, inventoried for runtime comparison, or compared by the bootstrap process. They remain available for legacy workflows.
 
 ## Split Rule
 
-For every legacy mixed document used during a one-time analysis:
+For every legacy mixed document used as a standard-development semantic fixture:
 
 ```text
 legacy mixed document
   -> shared rule pattern: AI_SDLC_STANDARD_HOME/**
-  -> optional same-project parity reference: .specify/reports/**
   -> private facts: regenerate from target code or explicit user confirmation
 ```
 
@@ -49,7 +48,7 @@ These documents are the project-private counterparts to shared standard document
 
 ## Legacy Split Mapping
 
-Use this mapping only to understand legacy document roles during standard-package design, bootstrap inventory, or optional same-project parity analysis.
+Use this mapping only to understand legacy document roles during standard-package development. Project bootstrap must not perform this mapping against the target repository at runtime.
 
 | Legacy mixed document pattern | Shared standard source | New private source |
 | --- | --- | --- |
@@ -88,7 +87,7 @@ Project bootstrap must:
 - Generate new project-context documents when missing.
 - Write `.candidate` files instead of silently overwriting existing project-context documents.
 - Never modify legacy mixed documents.
-- Record legacy mixed document patterns as inventory or parity-reference-only in reports.
+- Treat legacy mixed documents as preserved local files, not runtime inputs.
 - Keep shared standard paths in the standard package, not in the target repository.
 - Keep new `sdlc-*` Skills pointed at `.specify/project-context/**`, not at legacy mixed documents.
 

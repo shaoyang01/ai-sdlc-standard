@@ -22,6 +22,11 @@ business_domain 复制工具
 specs 生成器
 ```
 
+`project bootstrap` 与 `business_domain bootstrap` 是两个步骤：
+
+- `scripts/bootstrap-speckit-project.sh` 只生成新版 Skill 的 profile、project-context、report 和 `library/` 根目录。
+- `scripts/bootstrap-business-domain.sh` 按需一次性生成 `.specify/business_domain/**` 长期事实骨架。
+
 ## 推荐先执行 dry-run
 
 ```bash
@@ -62,8 +67,6 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 .specify/project-context/RepositoryStructure.md
 .specify/project-context/ProjectGovernanceOverrides.md
 .specify/reports/speckit_generation_report.md
-.specify/reports/legacy_speckit_source_inventory.md
-.specify/reports/speckit_equivalence_report.pending.md
 library/
 .gitignore entry: /library/
 ```
@@ -94,6 +97,8 @@ bootstrap 不会：
 
 `specs/**` 和 `.specify/business_domain/**` 是后续 workflow 产物，不是 project bootstrap 的迁移对象。
 
+`.specify/business_domain/**` 比普通 profile 特殊：它是长期代码事实文档。首次建立时使用独立脚本生成骨架，后续只通过确认后的 Sync / Reconcile 沉淀稳定事实。
+
 ## 双轨隔离
 
 当前标准定义两条 rail：
@@ -121,7 +126,7 @@ New AI SDLC Speckit Rail
 - 旧版 Skill 继续读取旧版文档。
 - 新版 `sdlc-*` Skill 正常运行时读取标准包共享文档和新 project-context。
 - 新版 Skill 不得把 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 当作正常输入。
-- 旧版文档只可作为 inventory 或同项目 parity reference。
+- 旧版文档在 runtime bootstrap 中只被保留给旧 rail，不参与新版生成、对比或迁移。
 
 ## 代码驱动生成
 
@@ -153,6 +158,18 @@ config
 tests
 ```
 
+脚本也会根据目标代码形态生成初始 project type semantic profile hint。它用于新版 Skill 判断项目执行形态，不是旧文档迁移结果：
+
+| profile | 适用入口 |
+| --- | --- |
+| `backend-business-service` | RPC、HTTP Controller、MQ、Schedule、Service 操作。 |
+| `admin-mixed-workflow` | Controller、worker、schedule、MCQ、OAS、data-console、SPI、RPC。 |
+| `frontend-application` | route、page/view、component、store/action、api-client、popup。 |
+| `data-pipeline-etl` | Spark Job、online ETL、Flink Main、Process Function、connector、SQL task。 |
+| `library-shared-component` | public API、client method、adapter、extension point。 |
+
+项目类型语义见 `ai-sdlc/speckit-project-type-profiles.md`。如果一个仓库同时包含多种执行形态，`.specify/entry-coverage-profile.yaml` 可以保留多个 profile，并按模块列出各自入口。
+
 扫描结果会写入：
 
 ```text
@@ -183,30 +200,13 @@ tests
 
 - 标准包路径和运行期可解析性。
 - 语言和应用类型。
+- project type semantic profile hint。
 - 代码证据统计。
 - 是否发现旧版 Speckit 文档。
-- parity check 状态。
+- 旧版文档 runtime 处理方式。
 - code evidence completeness 状态。
 - 已生成文件。
 - 待确认事实。
-
-### legacy_speckit_source_inventory
-
-仅当发现旧版文件时生成。
-
-用途：
-
-```text
-记录旧版文件存在，确认它们没有被修改。
-```
-
-它不是内容抽取报告。
-
-### speckit_equivalence_report.pending
-
-仅当发现旧版文件时生成 pending 报告。
-
-它不是 PASS artifact。只有当同一项目、同一 scope 下已有可比较的 legacy/new `specs/**` 或 `.specify/business_domain/**` 输出时，才能做真正语义等价比较。
 
 ## 正式投放建议
 
@@ -234,6 +234,34 @@ bootstrap 完成后，下一步不是立刻跑复杂需求，而是：
 1. 人工检查 generated profile。
 2. 人工检查 ProjectCodingGuide / RepositoryStructure evidence。
 3. 确认 business domain 边界。
-4. 后续再生成 `.specify/business_domain/**`。
-5. 选择一条小需求跑 Direct Implementation 闭环。
-6. 最后再验证复杂需求 Speckit pipeline。
+4. 执行 `scripts/bootstrap-business-domain.sh <target-project-path> --dry-run`。
+5. 确认后执行 `scripts/bootstrap-business-domain.sh <target-project-path>` 生成长期事实骨架。
+6. 选择一条小需求跑 Direct Implementation 闭环。
+7. 最后再验证复杂需求 Speckit pipeline。
+
+## Business Domain Bootstrap
+
+一次性生成命令：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
+scripts/bootstrap-business-domain.sh <target-project-path>
+```
+
+默认生成：
+
+```text
+.specify/business_domain/00BusinessLandscape.md
+.specify/business_domain/00UbiquitousLanguage.md
+.specify/business_domain/01DomainCatalog.md
+.specify/business_domain/99PendingConfirmation/01CodeEvidence/**
+.specify/reports/business_domain_bootstrap_report.md
+```
+
+规则：
+
+- 不读取旧版 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
+- 不生成 `specs/**`。
+- 不从其他仓库复制业务事实。
+- 不把包名、类名、页面名或 Job 名直接提升为业务事实。
+- 已有 `.specify/business_domain/**` 文件默认写 `.candidate`，只有显式 `--force` 才覆盖。

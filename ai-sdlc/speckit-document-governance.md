@@ -78,11 +78,11 @@ Project private documents define:
 
 Project private documents must be generated under `.specify/project-context/**` and declared in `.specify/project-governance-profile.yaml` before they are treated as required workflow context.
 
-For legacy mixed documents, follow `speckit-dual-rail-isolation.md` and `speckit-generation-source-model.md`: bootstrap may inventory legacy files as optional same-project parity references, while shared rules stay in the standard package and new private facts come from target code or explicit user confirmation.
+For legacy mixed documents, follow `speckit-dual-rail-isolation.md` and `speckit-generation-source-model.md`: existing repositories may be used as semantic fixtures while developing the standard package, but bootstrap runtime does not inventory, compare, or read legacy files as new-rail input. Shared rules stay in the standard package and new private facts come from target code or explicit user confirmation.
 
 If a local legacy document is not declared, new `sdlc-*` Skills must not read it as normal workflow context.
 
-New `sdlc-*` Skills should not classify legacy mixed documents during normal workflow execution. When legacy inventory or parity analysis is needed, it happens during bootstrap or a one-time analysis task. After that, Skills use:
+New `sdlc-*` Skills should not classify legacy mixed documents during normal workflow execution. Runtime bootstrap produces new-rail documents directly from the standard package, target code, and user-confirmed facts. Skills use:
 
 | Content type | Read from |
 | --- | --- |
@@ -303,9 +303,13 @@ Audit these areas:
 | Quality | Missing tests, unclear rollback, missing idempotency, missing contract update. |
 | Entry coverage | Missing inventory, missing evidence matrix, non-empty strict blocking reports. |
 
+## Project Type Entry Gate Profiles
+
+Project type Speckit semantic profiles are defined in `speckit-project-type-profiles.md`. Use those profiles to cover workflow, document governance, business-domain modeling, entry coverage, coding rules, sync behavior, audit gates, and artifact boundaries for backend services, admin mixed workflows, frontend applications, data pipeline/ETL projects, and shared libraries. Java/Spring backend is one profile, not the universal default.
+
 ## Java/Spring Backend Checklist
 
-This is an optional project-type standard. Use it for Java/Spring backend repositories, then override project-specific details in profiles.
+This checklist applies when the selected profile includes `backend-business-service` or a compatible Java backend module. Override project-specific details in profiles.
 
 General rules:
 

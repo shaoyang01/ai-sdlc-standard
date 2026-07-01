@@ -4,7 +4,7 @@
 
 This guide defines the isolation model between legacy Speckit workflows and the new AI SDLC Speckit rail.
 
-The goal is fully isolated dual rails with equivalent workflow products when both rails operate on the same project and facts.
+The goal is fully isolated dual rails. During standard-package development, legacy project files may be used as semantic fixtures. During project bootstrap runtime, the new rail is initialized from the standard package and target repository facts, not from a comparison with legacy documents.
 
 ## Rails
 
@@ -45,7 +45,7 @@ Rules:
 3. New Skills must not read legacy `.specify/memory/**` during normal workflow execution.
 4. New Skills must not read legacy `.specify/workflow/**` during normal workflow execution.
 5. New Skills must not read legacy `.specify/coding_guide/**` during normal workflow execution.
-6. Legacy files may be inventoried only for optional same-project equivalence checks.
+6. Legacy files are preserved for legacy workflows, but new bootstrap does not inventory or compare them.
 
 ## Shared Product Artifacts
 
@@ -57,13 +57,7 @@ Both rails may create workflow products:
 
 These outputs are products, not rail-owned shared rule sources.
 
-When both rails produce outputs for the same project and requirement, compare semantic equivalence:
-
-- same behavior and scope
-- same business facts
-- same acceptance criteria
-- compatible implementation evidence
-- explainable structural differences
+When both rails produce outputs for the same project and requirement, each rail's own gates validate its outputs. Project bootstrap is not a cutover or runtime comparison process.
 
 ## Isolation Checks
 
@@ -86,6 +80,7 @@ Do not:
 - use legacy documents as the primary source for new project-private docs
 - block new bootstrap because legacy docs are absent
 - treat `specs/**` or `.specify/business_domain/**` as migration objects
+- generate runtime legacy comparison reports during bootstrap
 - use a full SDD request to skip `sdlc-solution-reviewer`
 
 ## Blocking Conditions
@@ -95,4 +90,4 @@ Stop when:
 - new rail execution would depend on legacy `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`
 - a legacy file would be modified by new bootstrap
 - a project asks to cut over from legacy to new rail without an explicit project decision
-- semantic equivalence cannot be assessed and the process needs legacy output as evidence
+- the process needs legacy output as evidence for new-rail generation

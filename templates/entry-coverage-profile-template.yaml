@@ -10,6 +10,13 @@
 
 schema_version: 0.1.0
 
+project_type_profiles:
+  selected:
+    - "<backend-business-service|admin-mixed-workflow|frontend-application|data-pipeline-etl|library-shared-component|mixed>"
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+  selection_basis:
+    - "<code-evidence-or-user-confirmed-reason>"
+
 scope:
   source_roots:
     - "<module-or-source-root>"
@@ -26,7 +33,7 @@ scope:
     - "**/.venv/**"
     - "**/venv/**"
     - "**/vendor/**"
-    - "**/out/**"
+    - "out/**"
     - "**/coverage/**"
     - "**/generated/**"
     - "**/.idea/**"
@@ -75,6 +82,35 @@ evidence_chain:
       - manager
       - persistence
     allow_missing_layers_with_reason: true
+  admin_workflow_chain:
+    required_layers:
+      - entry
+    recommended_layers:
+      - service
+      - manager
+      - persistence
+      - audit_or_approval
+    allow_missing_layers_with_reason: true
+  frontend_interaction_chain:
+    required_layers:
+      - route_or_page
+    recommended_layers:
+      - component
+      - store_or_action
+      - api_client
+      - backend_contract
+    allow_missing_layers_with_reason: true
+  data_pipeline_chain:
+    required_layers:
+      - entry
+      - input_contract
+      - output_contract
+    recommended_layers:
+      - transformation
+      - connector_or_repository
+      - idempotency_or_replay
+      - partition_window_checkpoint
+    allow_missing_layers_with_reason: true
   technical_bridge:
     allowed: true
     markers:
@@ -105,4 +141,4 @@ strict_blocking_conditions:
 notes:
   - "Do not put shared governance rules in this profile."
   - "Do not copy values from another repository unless they match this repository's code structure."
-  - "The entry -> service -> manager -> persistence chain is a recommended default, not a universal hard requirement."
+  - "Use the selected project-type profile to decide the appropriate evidence chain; Java entry -> service -> manager -> persistence is only one profile."

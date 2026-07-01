@@ -53,9 +53,9 @@ use .specify/coding_guide/xxx.md as input
 
 ```text
 do not read .specify/memory/**
-inventory only
-parity reference only
-legacy_reference_only
+preserve only
+preserved_not_runtime_input
+preserved_not_read
 remain untouched
 ```
 
@@ -79,7 +79,7 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 5. 是否预览 .specify/project-context/RepositoryStructure.md。
 6. 是否预览 .specify/project-context/ProjectGovernanceOverrides.md。
 7. 是否预览 .specify/reports/speckit_generation_report.md。
-8. 如果存在旧版文档，是否预览 legacy inventory 和 pending equivalence report。
+8. generation report 是否说明旧版文档 runtime action 为 preserved_not_read 或 not_present。
 9. 是否不会写文件。
 10. 是否不会生成 specs/** 或 .specify/business_domain/**。
 ```
@@ -122,14 +122,28 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 .specify/reports/speckit_generation_report.md
 ```
 
-如果存在旧版 Speckit 文件，还应检查：
+不应生成 legacy inventory 或 pending comparison report；旧版文档只应保留给 legacy rail。
 
-```text
-.specify/reports/legacy_speckit_source_inventory.md
-.specify/reports/speckit_equivalence_report.pending.md
+## business_domain bootstrap 校验
+
+对目标项目执行：
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
 ```
 
-pending equivalence report 不是 PASS artifact。
+检查点：
+
+```text
+1. 是否预览 00BusinessLandscape.md。
+2. 是否预览 00UbiquitousLanguage.md。
+3. 是否预览 01DomainCatalog.md。
+4. 是否预览 99PendingConfirmation/01CodeEvidence/** 骨架。
+5. 是否预览 business_domain_bootstrap_report.md。
+6. 已有 business_domain 文件是否写 .candidate，而不是覆盖。
+7. 是否不会读取旧版 .specify/memory、workflow、coding_guide。
+8. 是否不会生成 specs/**。
+```
 
 ## 真实项目试跑检查项
 
@@ -141,7 +155,7 @@ pending equivalence report 不是 PASS artifact。
 3. 旧版 .specify/coding_guide/** 未被修改。
 4. 旧版 Skill 未被覆盖。
 5. 新 project-context 文件来自目标代码扫描和占位确认，不复制旧版文档内容。
-6. generation report 能说明代码证据和待确认事实。
+6. generation report 能说明代码证据、project type semantic profile hint、旧版 runtime action 和待确认事实。
 ```
 
 ### Direct Implementation 流程检查
@@ -189,7 +203,7 @@ pending equivalence report 不是 PASS artifact。
 1. ruby scripts/validate-skill-contracts.rb
 2. scripts/init-standard-home.sh --dry-run
 3. scripts/bootstrap-speckit-project.sh <target> --dry-run
-4. 人工检查 generation report / project-context / legacy inventory
+4. 人工检查 generation report / project-context / project type semantic profile
 5. 测试仓库正式 bootstrap
 6. Direct Implementation 小需求闭环
 7. Complex Speckit pipeline 闭环

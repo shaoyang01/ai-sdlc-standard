@@ -13,8 +13,9 @@
 | Runtime Resolvable | <yes/no> |
 | Language | <language> |
 | Application Type | <type> |
+| Project Type Profiles | <profile-ids> |
 | Legacy Speckit Documents Found | <yes/no> |
-| Parity Check | <passed/skipped/blocked> |
+| Legacy Runtime Action | <preserved_not_read|not_present> |
 | Code Evidence Completeness Check | <passed/needs-user-confirmation/blocked> |
 
 ## Code Evidence
@@ -55,11 +56,9 @@
 | --- | --- | --- |
 | <path> | <generated/candidate/skipped> | <code/user/template> |
 
-## Legacy Reference
+## Preserved Legacy Files
 
-| Legacy Path | Role | Modified |
-| --- | --- | --- |
-| <path> | inventory/parity-reference-only | no |
+Legacy files, when present, are preserved for existing legacy workflows and are not runtime inputs for generated new-rail content.
 
 ## Checks
 

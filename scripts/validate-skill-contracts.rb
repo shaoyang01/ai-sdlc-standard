@@ -61,9 +61,9 @@ LEGACY_SOURCE_ALLOWED_GUARD_PATTERN = /
   must\s+not|
   never|
   not\s+(?:read|resolve|authoritative|new-rail|copied)|
-  inventory(?:\s+only)?|
-  parity(?:[-\s]+reference)?(?:[-\s]+only)?|
-  legacy_reference_only|
+  preserve(?:d)?(?:\s+only|\s+not\s+read|\s+not\s+runtime\s+input)?|
+  preserved_not_runtime_input|
+  preserved_not_read|
   reference\s+only|
   exclude(?:d|s)?|
   prohibit(?:ed|s)?|

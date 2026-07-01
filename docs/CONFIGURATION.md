@@ -69,7 +69,7 @@ ${AI_SDLC_STANDARD_HOME}/skill-contracts/**
 .specify/coding_guide/**
 ```
 
-这些旧版路径只能作为 legacy rail 的输入，或在 bootstrap 中作为 inventory / parity reference。
+这些旧版路径只能作为 legacy rail 的输入。runtime bootstrap 保留它们但不读取、不迁移、不生成同项目对比报告。
 
 ## Skill 安装边界
 

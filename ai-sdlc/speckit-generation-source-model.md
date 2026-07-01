@@ -6,7 +6,7 @@ This guide defines the source model for the new AI SDLC Speckit rail.
 
 The new rail is code-driven. It must generate project-private documents and workflow products from the target repository, explicit user-confirmed facts, and shared generation rules from this standard package.
 
-Legacy Speckit documents are not migration content. They may be used only as abstract samples during standard-package design or as optional same-project parity references.
+Legacy Speckit documents are not migration content. They may be used only as abstract samples and semantic gold fixtures during standard-package development. Project bootstrap runtime does not compare against them.
 
 ## Source Layers
 
@@ -17,7 +17,7 @@ Legacy Speckit documents are not migration content. They may be used only as abs
 | User-confirmed facts | Explicit user or owner confirmation | Business boundary, domain split, ambiguity resolution, risk acceptance, and facts code cannot reliably infer. | Yes |
 | Generated project-private docs | `.specify/project-context/**` and `.specify/*.yaml` | Stable local inputs for new `sdlc-*` Skills. | Yes, if generated from target code or user-confirmed facts |
 | Workflow products | `specs/**`, `.specify/business_domain/**`, `library/**` | Outputs of a workflow stage. | Yes, as stage outputs |
-| Legacy Speckit docs | `.specify/memory/**`, `.specify/workflow/**`, `.specify/coding_guide/**` | Abstract samples or optional same-project parity references only. | No, not for new generated content |
+| Legacy Speckit docs | `.specify/memory/**`, `.specify/workflow/**`, `.specify/coding_guide/**` | Development-time semantic fixtures or preserved local legacy files. | No, not for new generated content |
 
 ## Allowed Inputs
 
@@ -41,13 +41,11 @@ New project-private documents must not use:
 
 ## Legacy Source Role
 
-Legacy documents may be read only in these contexts:
+Legacy documents may be read only in this context:
 
 | Context | Allowed Use |
 | --- | --- |
-| Standard-package design | Abstract document structure, field names, generation rules, and validation ideas. |
-| Same-project optional parity check | Compare legacy output and new output for semantic equivalence. |
-| Inventory report | Record that legacy files exist and were not modified. |
+| Standard-package development | Abstract document structure, field names, generation rules, validation ideas, and semantic coverage fixtures. |
 
 Legacy documents must not be used as the primary source for:
 
@@ -92,7 +90,7 @@ Confirmed facts must be recorded in the generation report with source, date, and
 
 They are not migration payloads and are not standard-package source files.
 
-Both legacy and new rails may generate these products. When same-project legacy output exists, compare semantic equivalence; when it does not exist, use code evidence completeness checks.
+Both legacy and new rails may generate these products, but project bootstrap is not a comparison or migration process. New-rail completeness is judged by standard-package rules, target-code evidence, user-confirmed facts, and generated validation reports.
 
 ## Blocking Conditions
 

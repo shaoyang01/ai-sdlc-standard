@@ -167,9 +167,9 @@ validator 会检查相对标准路径风险。
 ```text
 do not read
 must not read
-inventory only
-parity reference only
-legacy_reference_only
+preserve only
+preserved_not_runtime_input
+preserved_not_read
 remain untouched
 ```
 

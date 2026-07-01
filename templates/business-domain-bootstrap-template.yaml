@@ -10,13 +10,14 @@
 # Important:
 #   business_domain content is not copied from another repository.
 #   It is generated from the target repository's code and user-approved
-#   business boundaries. Legacy Speckit docs are optional same-project parity
-#   references only.
+#   business boundaries. Legacy Speckit docs are preserved for legacy workflows
+#   and are not runtime bootstrap inputs.
 
 schema_version: 0.1.0
 
 generation_scope:
   project_bootstrap_includes_business_domain_content: false
+  generation_script: "${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-business-domain.sh"
   generate_after_project_bootstrap: true
   output_root: ".specify/business_domain"
   required_root_documents:
@@ -39,7 +40,7 @@ inputs:
       - ".specify/memory/**"
       - ".specify/workflow/**"
       - ".specify/coding_guide/**"
-    legacy_reference_only:
+    preserved_legacy_not_runtime_input:
       - ".specify/memory/**"
       - ".specify/workflow/**"
       - ".specify/coding_guide/**"

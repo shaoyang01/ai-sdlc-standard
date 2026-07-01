@@ -72,6 +72,15 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 
 bootstrap 会预览将生成的 `.specify` profile、`.specify/project-context/**`、`.specify/reports/**`、`library/` 和 `.gitignore` 变更。它不会生成或复制 `.specify/business_domain/**`，也不会创建 `specs/**`。
 
+### 4. 按需一次性生成 business_domain 骨架
+
+```bash
+scripts/bootstrap-business-domain.sh <target-project-path> --dry-run
+scripts/bootstrap-business-domain.sh <target-project-path>
+```
+
+`business_domain` 是长期代码事实文档。该脚本只生成骨架和待确认代码证据，不读取旧版 Speckit 文档，不生成 `specs/**`，已有长期事实默认写 `.candidate`。
+
 更多投放规则见：[Speckit 投放指南](docs/SPECKIT_BOOTSTRAP.md)。
 
 ## 文档导航
@@ -80,7 +89,7 @@ bootstrap 会预览将生成的 `.specify` profile、`.specify/project-context/*
 | --- | --- |
 | [使用指南](docs/USAGE.md) | 说明普通需求、复杂需求、DocFlow、Gate 和 Speckit pipeline 的使用方式。 |
 | [配置指南](docs/CONFIGURATION.md) | 说明 `AI_SDLC_STANDARD_HOME`、初始化脚本、安装边界和标准包路径解析。 |
-| [Speckit 投放指南](docs/SPECKIT_BOOTSTRAP.md) | 说明 bootstrap、双轨隔离、project-context、reports 和 legacy inventory。 |
+| [Speckit 投放指南](docs/SPECKIT_BOOTSTRAP.md) | 说明 project bootstrap、business_domain bootstrap、双轨隔离和新版 Skill 输入边界。 |
 | [Skill 开发指南](docs/SKILL_DEVELOPMENT.md) | 说明 `sdlc-*` 命名、合同、Registry、Manifest、副作用边界。 |
 | [校验指南](docs/VALIDATION.md) | 说明 `validate-skill-contracts.rb`、bootstrap dry-run 和真实项目验证检查项。 |
 | [路线图阅读指南](docs/ROADMAP_GUIDE.md) | 说明如何使用 `ROADMAP.md` 判断下一步改造方向。 |
@@ -118,17 +127,19 @@ registry/         Skill Registry
 - 标准包不会在未获用户明确触发时自动执行命令、修改代码或写入业务知识库。
 - 安装或同步到 Agent Skill 目录时，只同步 `skills/sdlc-*`，不要整包同步 `skills/`。
 - 旧版 Speckit 文档 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 不作为新版内容来源。
-- `specs/**` 和 `.specify/business_domain/**` 是流程产物，不是项目 bootstrap 的迁移对象。
+- 既有项目旧文档只作为标准包开发时的语义样例；runtime bootstrap 不对比、不迁移、不生成 legacy inventory 或 comparison report。
+- `specs/**` 是 Skill 执行阶段的临时机器产物；`.specify/business_domain/**` 是长期代码事实文档，由独立脚本生成骨架并由后续 Sync 沉淀稳定事实。
 - `sdlc-speckit-pipeline` 不是所有需求的默认流程；是否进入完整 SDD 由 `sdlc-solution-reviewer` 的方案审核和开发路径建议决定。
 
 ## 推荐下一步
 
 当前仓库已经完成标准包雏形和基础工具硬化。下一阶段建议以真实项目验证为主：
 
-1. 选择一个真实 Java 后端项目。
+1. 选择不同类型的真实项目：后端、后台混合、前端、ETL。
 2. 执行 `scripts/bootstrap-speckit-project.sh <target> --dry-run`。
-3. 检查 generation report、project-context candidate、legacy inventory 和双轨隔离。
-4. 选择一条小需求跑 Direct Implementation 闭环。
-5. 再选择一条复杂需求验证 Speckit pipeline。
+3. 检查 generation report、project-context candidate 和双轨隔离。
+4. 执行 `scripts/bootstrap-business-domain.sh <target> --dry-run`，确认长期事实骨架不会覆盖已有内容。
+5. 选择一条小需求跑 Direct Implementation 闭环。
+6. 再选择一条复杂需求验证 Speckit pipeline。
 
 验证结果应反向沉淀到 Checklist、Schema、Skill 合同和脚本，而不是继续无依据扩展新能力。

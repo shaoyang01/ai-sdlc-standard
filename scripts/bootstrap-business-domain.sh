@@ -1,0 +1,674 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/bootstrap-business-domain.sh <target-project-path> [options]
+
+Options:
+  --project-name <name>   Project display name. Defaults to target directory name.
+  --force                 Overwrite existing .specify/business_domain files.
+  --dry-run               Print generated files without writing.
+  -h, --help              Show this help.
+
+Generated files:
+  .specify/business_domain/00BusinessLandscape.md
+  .specify/business_domain/00UbiquitousLanguage.md
+  .specify/business_domain/01DomainCatalog.md
+  .specify/business_domain/99PendingConfirmation/01CodeEvidence/01CodeEvidence(待确认代码证据).md
+  .specify/business_domain/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidate(待确认代码证据).md
+  .specify/business_domain/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md
+  .specify/reports/business_domain_bootstrap_report.md
+
+This script generates long-term business_domain skeletons from target repository
+code evidence and explicit placeholders. It does not read legacy .specify/memory,
+.specify/workflow, or .specify/coding_guide documents.
+USAGE
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STANDARD_PACKAGE_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+TARGET_PATH=""
+PROJECT_NAME=""
+FORCE="false"
+DRY_RUN="false"
+RUN_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
+DOC_DATE="$(date '+%Y-%m-%d')"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project-name)
+      PROJECT_NAME="${2:-}"
+      shift 2
+      ;;
+    --force)
+      FORCE="true"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN="true"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "${TARGET_PATH}" ]]; then
+        echo "Only one target project path is allowed." >&2
+        exit 2
+      fi
+      TARGET_PATH="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${TARGET_PATH}" ]]; then
+  usage >&2
+  exit 2
+fi
+
+if [[ ! -d "${TARGET_PATH}" ]]; then
+  echo "Target project path does not exist: ${TARGET_PATH}" >&2
+  exit 1
+fi
+
+TARGET_PATH="$(cd "${TARGET_PATH}" && pwd)"
+PROJECT_NAME="${PROJECT_NAME:-$(basename "${TARGET_PATH}")}"
+SPECIFY_DIR="${TARGET_PATH}/.specify"
+BUSINESS_DOMAIN_DIR="${SPECIFY_DIR}/business_domain"
+REPORT_DIR="${SPECIFY_DIR}/reports"
+STANDARD_PACKAGE="${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE_DEFAULT}}"
+
+AUTHOR="$(git -C "${TARGET_PATH}" config --get user.name 2>/dev/null || true)"
+if [[ -z "${AUTHOR}" ]]; then
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    AUTHOR="<git config user.name missing>"
+  else
+    echo "git config user.name is required before writing business_domain documents." >&2
+    exit 1
+  fi
+fi
+
+yaml_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+candidate_path() {
+  local file="$1"
+  local candidate="${file}.candidate"
+  local index=1
+  while [[ -e "${candidate}" ]]; do
+    candidate="${file}.candidate.${index}"
+    index=$((index + 1))
+  done
+  printf '%s\n' "${candidate}"
+}
+
+report_history_path() {
+  local file="$1"
+  local timestamped
+  timestamped="${file%.md}.${RUN_TIMESTAMP}.md"
+  if [[ -e "${timestamped}" ]]; then
+    candidate_path "${timestamped}"
+  else
+    printf '%s\n' "${timestamped}"
+  fi
+}
+
+write_or_preview() {
+  local file="$1"
+  local generator="$2"
+  local target="${file}"
+
+  if [[ -e "${file}" && "${FORCE}" != "true" ]]; then
+    target="$(candidate_path "${file}")"
+  fi
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    local preview_file
+    preview_file="$(mktemp "${TMPDIR:-/tmp}/business-domain-preview.XXXXXX")"
+    printf '\n--- %s ---\n' "${target#${TARGET_PATH}/}"
+    "${generator}" "${preview_file}"
+    cat "${preview_file}"
+    rm -f "${preview_file}"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "${target}")"
+  "${generator}" "${target}"
+  echo "Generated ${target#${TARGET_PATH}/}"
+}
+
+detect_source_roots() {
+  local roots=""
+  while IFS= read -r dir; do
+    dir="${dir#${TARGET_PATH}/}"
+    roots="${roots}${dir}"$'\n'
+  done < <(find "${TARGET_PATH}" -maxdepth 6 \
+    \( \
+      -path "*/.git/*" -o -path "*/.git" -o \
+      -path "*/target/*" -o -path "*/target" -o \
+      -path "*/build/*" -o -path "*/build" -o \
+      -path "*/dist/*" -o -path "*/dist" -o \
+      -path "*/node_modules/*" -o -path "*/node_modules" -o \
+      -path "*/.venv/*" -o -path "*/.venv" -o \
+      -path "*/venv/*" -o -path "*/venv" -o \
+      -path "*/vendor/*" -o -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out/*" -o -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage/*" -o -path "*/coverage" -o \
+      -path "*/generated/*" -o -path "*/generated" -o \
+      -path "*/.idea/*" -o -path "*/.idea" -o \
+      -path "*/.gradle/*" -o -path "*/.gradle" -o \
+      -path "*/.mvn/*" -o -path "*/.mvn" \
+    \) -prune -o -path '*/src/main/java' -type d -print 2>/dev/null | sort)
+
+  if [[ -z "${roots}" ]]; then
+    while IFS= read -r dir; do
+      dir="${dir#${TARGET_PATH}/}"
+      roots="${roots}${dir}"$'\n'
+    done < <(find "${TARGET_PATH}" -maxdepth 4 \
+      \( \
+        -path "*/.git/*" -o -path "*/.git" -o \
+        -path "*/target/*" -o -path "*/target" -o \
+        -path "*/build/*" -o -path "*/build" -o \
+        -path "*/dist/*" -o -path "*/dist" -o \
+        -path "*/node_modules/*" -o -path "*/node_modules" -o \
+        -path "*/.venv/*" -o -path "*/.venv" -o \
+        -path "*/venv/*" -o -path "*/venv" -o \
+        -path "*/vendor/*" -o -path "*/vendor" -o \
+        -path "${TARGET_PATH}/out/*" -o -path "${TARGET_PATH}/out" -o \
+        -path "*/coverage/*" -o -path "*/coverage" -o \
+        -path "*/generated/*" -o -path "*/generated" -o \
+        -path "*/.idea/*" -o -path "*/.idea" -o \
+        -path "*/.gradle/*" -o -path "*/.gradle" -o \
+        -path "*/.mvn/*" -o -path "*/.mvn" \
+      \) -prune -o -type d \( -name src -o -name app -o -name lib \) -print 2>/dev/null | sort)
+  fi
+
+  if [[ -z "${roots}" ]]; then
+    printf '.\n'
+  else
+    printf '%s' "${roots}" | sed '/^$/d'
+  fi
+}
+
+SOURCE_ROOTS_TEXT="$(detect_source_roots)"
+SOURCE_ROOTS=()
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && SOURCE_ROOTS+=("${line}")
+done <<< "${SOURCE_ROOTS_TEXT}"
+
+collect_project_files() {
+  local roots=()
+  local root
+  for root in "${SOURCE_ROOTS[@]}"; do
+    if [[ "${root}" == "." ]]; then
+      roots=("${TARGET_PATH}")
+      break
+    fi
+    [[ -d "${TARGET_PATH}/${root}" ]] && roots+=("${TARGET_PATH}/${root}")
+  done
+  if [[ "${#roots[@]}" -eq 0 ]]; then
+    roots=("${TARGET_PATH}")
+  fi
+
+  find "${roots[@]}" \
+    \( \
+      -path "*/.git/*" -o -path "*/.git" -o \
+      -path "*/target/*" -o -path "*/target" -o \
+      -path "*/build/*" -o -path "*/build" -o \
+      -path "*/dist/*" -o -path "*/dist" -o \
+      -path "*/node_modules/*" -o -path "*/node_modules" -o \
+      -path "*/.venv/*" -o -path "*/.venv" -o \
+      -path "*/venv/*" -o -path "*/venv" -o \
+      -path "*/vendor/*" -o -path "*/vendor" -o \
+      -path "${TARGET_PATH}/out/*" -o -path "${TARGET_PATH}/out" -o \
+      -path "*/coverage/*" -o -path "*/coverage" -o \
+      -path "*/generated/*" -o -path "*/generated" -o \
+      -path "*/.idea/*" -o -path "*/.idea" -o \
+      -path "*/.gradle/*" -o -path "*/.gradle" -o \
+      -path "*/.mvn/*" -o -path "*/.mvn" \
+    \) -prune -o -type f -print 2>/dev/null | sed "s#^${TARGET_PATH}/##"
+}
+
+PROJECT_FILES_TEXT="$(collect_project_files)"
+
+count_by_pattern() {
+  local pattern="$1"
+  local count=0
+  local file
+  while IFS= read -r file; do
+    [[ -z "${file}" ]] && continue
+    [[ "${file}" == ${pattern} ]] && count=$((count + 1))
+  done <<< "${PROJECT_FILES_TEXT}"
+  printf '%s\n' "${count}"
+}
+
+sample_by_patterns() {
+  local pattern
+  local file
+  local results=""
+  for pattern in "$@"; do
+    while IFS= read -r file; do
+      [[ -z "${file}" ]] && continue
+      [[ "${file}" == ${pattern} ]] && results="${results}${file}"$'\n'
+    done <<< "${PROJECT_FILES_TEXT}"
+  done
+  if [[ -n "${results}" ]]; then
+    printf '%s' "${results}" | sort -u | head -n 8
+  fi
+  return 0
+}
+
+markdown_list_or_none() {
+  local text="$1"
+  if [[ -z "${text}" ]]; then
+    printf -- '- <none>\n'
+    return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] && printf -- '- `%s`\n' "${line}"
+  done <<< "${text}"
+}
+
+SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
+CONTROLLER_COUNT="$(count_by_pattern '*Controller.java')"
+RPC_COUNT="$(sample_by_patterns '*/rpc/*.java' '*Provider.java' '*Facade.java' | wc -l | tr -d ' ')"
+MESSAGE_COUNT="$(sample_by_patterns '*Listener.java' '*Consumer.java' '*Processor.java' | wc -l | tr -d ' ')"
+SCHEDULE_COUNT="$(sample_by_patterns '*Schedule.java' '*Job.java' '*Task.java' '*Worker.java' | wc -l | tr -d ' ')"
+FRONTEND_PAGE_COUNT="$(sample_by_patterns '*/pages/*' '*/views/*' '*/screens/*' | wc -l | tr -d ' ')"
+FRONTEND_API_COUNT="$(sample_by_patterns '*/api/*' '*/services/*' '*/request/*' | wc -l | tr -d ' ')"
+ETL_COUNT="$(sample_by_patterns '*Job.java' '*Etl.java' '*Main.java' '*Function.java' '*DeserializationSchema.java' | wc -l | tr -d ' ')"
+
+CONTROLLER_SAMPLES="$(sample_by_patterns '*Controller.java')"
+RPC_SAMPLES="$(sample_by_patterns '*/rpc/*.java' '*Provider.java' '*Facade.java')"
+MESSAGE_SAMPLES="$(sample_by_patterns '*Listener.java' '*Consumer.java' '*Processor.java')"
+SCHEDULE_SAMPLES="$(sample_by_patterns '*Schedule.java' '*Job.java' '*Task.java' '*Worker.java')"
+FRONTEND_SAMPLES="$(sample_by_patterns '*/pages/*' '*/views/*' '*/screens/*' '*/components/*' '*/store/*' '*/stores/*' '*/api/*')"
+ETL_SAMPLES="$(sample_by_patterns '*Job.java' '*Etl.java' '*Main.java' '*Function.java' '*DeserializationSchema.java')"
+
+detect_profile_hint() {
+  local hints=()
+  if [[ "${ETL_COUNT}" -gt 0 ]]; then
+    hints+=("data-pipeline-etl")
+  fi
+  if [[ "${FRONTEND_PAGE_COUNT}" -gt 0 || "${FRONTEND_API_COUNT}" -gt 0 || -f "${TARGET_PATH}/package.json" ]]; then
+    hints+=("frontend-application")
+  fi
+  if [[ "${CONTROLLER_COUNT}" -gt 0 || "${RPC_COUNT}" -gt 0 || "${MESSAGE_COUNT}" -gt 0 || "${SCHEDULE_COUNT}" -gt 0 ]]; then
+    hints+=("backend-business-service")
+  fi
+  if [[ "${#hints[@]}" -eq 0 ]]; then
+    hints+=("mixed")
+  fi
+  printf '%s\n' "${hints[@]}" | awk '!seen[$0]++'
+}
+
+PROFILE_HINTS_TEXT="$(detect_profile_hint)"
+
+generate_landscape() {
+  local output="$1"
+  {
+    cat <<EOF
+# Business Landscape
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: Draft
+> - **Summary**: ${PROJECT_NAME} business-domain landscape skeleton generated from target repository code evidence.
+
+## Purpose
+
+This document is the long-term business-domain entry for \`${PROJECT_NAME}\`.
+
+It is generated by \`scripts/bootstrap-business-domain.sh\` from target repository code evidence and explicit placeholders. It is not copied from another repository and does not read legacy \`.specify/memory/**\`, \`.specify/workflow/**\`, or \`.specify/coding_guide/**\`.
+
+## Fact Source Layering
+
+| Layer | Role | Runtime source |
+| --- | --- | --- |
+| Standard shared rules | Workflow, gate, artifact, sync, and document governance. | \`${STANDARD_PACKAGE}\` |
+| Project private context | Repository structure, local coding guide, governance overrides. | \`.specify/project-context/**\` |
+| Short-term feature facts | Temporary Speckit machine artifacts. | \`specs/**\` |
+| Long-term code facts | Stable business facts and code anchors. | \`.specify/business_domain/**\` |
+| Legacy rail | Existing legacy Skill inputs only. | Preserved, not read by new \`sdlc-*\` Skills. |
+
+## Project Type Hints
+
+$(markdown_list_or_none "${PROFILE_HINTS_TEXT}")
+
+## Code Evidence Summary
+
+| Evidence | Count |
+| --- | ---: |
+| Source roots | ${SOURCE_ROOT_COUNT} |
+| HTTP controllers | ${CONTROLLER_COUNT} |
+| RPC/provider samples | ${RPC_COUNT} |
+| Message/listener samples | ${MESSAGE_COUNT} |
+| Schedule/job samples | ${SCHEDULE_COUNT} |
+| Frontend page/API samples | $((FRONTEND_PAGE_COUNT + FRONTEND_API_COUNT)) |
+| ETL/pipeline samples | ${ETL_COUNT} |
+
+## Business Domains
+
+| L1 | L2 | Status | Evidence | Owner confirmation |
+| --- | --- | --- | --- | --- |
+| 99PendingConfirmation | 01CodeEvidence | PendingConfirmation | Code evidence exists, business boundary not confirmed. | Required before promoting to a real domain. |
+
+## Routing Principle
+
+New requirements should route to confirmed L1/L2/L4 business-domain documents. If only pending code evidence exists, stop before long-term sync and ask for owner-confirmed business boundaries.
+
+## Code Anchors
+
+### Source Roots
+
+$(markdown_list_or_none "${SOURCE_ROOTS_TEXT}")
+
+### Representative Entry Evidence
+
+| Type | Examples |
+| --- | --- |
+| Controller | $(printf '%s' "${CONTROLLER_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| RPC / Provider | $(printf '%s' "${RPC_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Message / Listener | $(printf '%s' "${MESSAGE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Schedule / Job | $(printf '%s' "${SCHEDULE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Frontend | $(printf '%s' "${FRONTEND_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| ETL / Pipeline | $(printf '%s' "${ETL_SAMPLES:-<none>}" | paste -sd ', ' -) |
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial business-domain skeleton. |
+EOF
+  } > "${output}"
+}
+
+generate_language() {
+  local output="$1"
+  {
+    cat <<EOF
+# Ubiquitous Language
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: Draft
+> - **Summary**: ${PROJECT_NAME} glossary skeleton for long-term business facts.
+
+## Purpose
+
+This document records stable business vocabulary for \`${PROJECT_NAME}\`. Bootstrap does not infer final business terms from package names. Terms below are placeholders until confirmed by product, domain owner, or code-doc reconciliation.
+
+## Terms
+
+| Term | Meaning | Status | Source |
+| --- | --- | --- | --- |
+| Pending business domain | Business boundary not confirmed yet. | PendingConfirmation | bootstrap skeleton |
+
+## Status Vocabulary
+
+| Status | Meaning | Visible to business | Source |
+| --- | --- | --- | --- |
+| PendingConfirmation | Generated placeholder awaiting owner confirmation. | yes | bootstrap skeleton |
+
+## Code-Derived Names To Confirm
+
+| Name | Evidence | Decision |
+| --- | --- | --- |
+| ${PROJECT_NAME} | repository name | Confirm whether this is a business term, system name, or technical name. |
+
+## Wording Rules
+
+- Do not promote package names, class names, table names, route names, or job names into business vocabulary without confirmation.
+- Use this document for stable terms only.
+- Keep temporary implementation notes in \`specs/**\` or \`library/**\`, not here.
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial glossary skeleton. |
+EOF
+  } > "${output}"
+}
+
+generate_catalog() {
+  local output="$1"
+  {
+    cat <<EOF
+# Domain Catalog
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: Draft
+> - **Summary**: ${PROJECT_NAME} business-domain catalog skeleton.
+
+## Purpose
+
+This catalog is the routing index for long-term business-domain documents.
+
+## L1/L2 Index
+
+| L1 | L2 | Main Document | Status | Notes |
+| --- | --- | --- | --- | --- |
+| 99PendingConfirmation | 01CodeEvidence | [01CodeEvidence(待确认代码证据).md](<99PendingConfirmation/01CodeEvidence/01CodeEvidence(待确认代码证据).md>) | PendingConfirmation | Code evidence exists but business boundary is not confirmed. |
+
+## L4 Index
+
+| L4 | Document | Status | Purpose |
+| --- | --- | --- | --- |
+| 990101 | [990101CodeEvidenceCandidate(待确认代码证据).md](<99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidate(待确认代码证据).md>) | PendingConfirmation | Holds code evidence until owner confirms real business routing. |
+| 990101EntryCoverage | [990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md](<99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md>) | PendingConfirmation | Holds entry evidence coverage scaffold. |
+
+## Routing Notes
+
+- Route new work to confirmed domains first.
+- Do not sync stable facts into pending documents without owner confirmation.
+- Promote pending evidence to real L1/L2/L4 only after business boundary approval.
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial domain catalog skeleton. |
+EOF
+  } > "${output}"
+}
+
+generate_l2() {
+  local output="$1"
+  {
+    cat <<EOF
+# Code Evidence Pending Confirmation
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: PendingConfirmation
+> - **Summary**: L2 placeholder for unconfirmed code evidence.
+
+## Scope
+
+This document is a temporary routing bucket for code evidence that has not yet been confirmed as a business domain.
+
+## Included L4 Documents
+
+| L4 | Document | Status |
+| --- | --- | --- |
+| 990101 | [990101CodeEvidenceCandidate(待确认代码证据).md](<990101CodeEvidenceCandidate(待确认代码证据).md>) | PendingConfirmation |
+| 990101EntryCoverage | [990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md](<990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md>) | PendingConfirmation |
+
+## Promotion Rule
+
+Move facts out of this pending bucket only after the target repository owner confirms business boundaries, terms, and lifecycle.
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial pending L2 skeleton. |
+EOF
+  } > "${output}"
+}
+
+generate_l4() {
+  local output="$1"
+  {
+    cat <<EOF
+# Code Evidence Candidate
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: PendingConfirmation
+> - **Summary**: Candidate L4 skeleton generated from code evidence, awaiting business routing confirmation.
+
+## Business Scope
+
+Pending. Bootstrap does not infer business behavior from code names alone.
+
+## Code Evidence
+
+### Source Roots
+
+$(markdown_list_or_none "${SOURCE_ROOTS_TEXT}")
+
+### Entry Samples
+
+| Type | Examples |
+| --- | --- |
+| Controller | $(printf '%s' "${CONTROLLER_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| RPC / Provider | $(printf '%s' "${RPC_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Message / Listener | $(printf '%s' "${MESSAGE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Schedule / Job | $(printf '%s' "${SCHEDULE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Frontend | $(printf '%s' "${FRONTEND_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| ETL / Pipeline | $(printf '%s' "${ETL_SAMPLES:-<none>}" | paste -sd ', ' -) |
+
+## Required Confirmation
+
+| Question | Required before promotion |
+| --- | --- |
+| What business capability does this evidence represent? | yes |
+| Which owner confirms the domain boundary? | yes |
+| Which user-visible or data-visible behavior is stable? | yes |
+| Which facts should sync from future specs into long-term docs? | yes |
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial candidate L4 skeleton. |
+EOF
+  } > "${output}"
+}
+
+generate_entry_coverage() {
+  local output="$1"
+  {
+    cat <<EOF
+# Code Evidence Candidate Entry Coverage
+
+> **Metadata**
+> - **Version**: 0.1.0
+> - **Date**: ${DOC_DATE}
+> - **Author**: ${AUTHOR}
+> - **Status**: PendingConfirmation
+> - **Summary**: Entry coverage scaffold for unconfirmed code evidence.
+
+## Entry Coverage Summary
+
+| Entry Type | Count / Sample Count | Examples |
+| --- | ---: | --- |
+| Controller | ${CONTROLLER_COUNT} | $(printf '%s' "${CONTROLLER_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| RPC / Provider | ${RPC_COUNT} | $(printf '%s' "${RPC_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Message / Listener | ${MESSAGE_COUNT} | $(printf '%s' "${MESSAGE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Schedule / Job | ${SCHEDULE_COUNT} | $(printf '%s' "${SCHEDULE_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| Frontend | $((FRONTEND_PAGE_COUNT + FRONTEND_API_COUNT)) | $(printf '%s' "${FRONTEND_SAMPLES:-<none>}" | paste -sd ', ' -) |
+| ETL / Pipeline | ${ETL_COUNT} | $(printf '%s' "${ETL_SAMPLES:-<none>}" | paste -sd ', ' -) |
+
+## Strict Gate Note
+
+This document is only a scaffold. Strict entry coverage should be regenerated by the project entry coverage audit after real L1/L2/L4 routing is confirmed.
+
+## Revision History
+
+| Version | Date | Author | Changes |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial entry coverage scaffold. |
+EOF
+  } > "${output}"
+}
+
+generate_report() {
+  local output="$1"
+  {
+    cat <<EOF
+# Business Domain Bootstrap Report
+
+> **Project**: ${PROJECT_NAME}
+> **Generated At**: $(date '+%Y-%m-%d %H:%M:%S')
+> **Generated By**: ai-sdlc-standard
+> **Target Repository**: ${TARGET_PATH}
+
+## Summary
+
+| Item | Value |
+| --- | --- |
+| Business Domain Root | .specify/business_domain |
+| Force Overwrite | ${FORCE} |
+| Legacy Docs Read | false |
+| Source Roots | ${SOURCE_ROOT_COUNT} |
+| Project Type Hints | $(printf '%s' "${PROFILE_HINTS_TEXT}" | paste -sd ', ' -) |
+
+## Generated Intent
+
+This run generates long-term business-domain skeletons only. It does not claim final business boundaries and does not copy business facts from another repository.
+
+## Next Steps
+
+- Review pending code evidence.
+- Confirm real L1/L2/L4 business boundaries with the project owner.
+- Promote confirmed facts from pending documents into real business-domain documents.
+- Run entry coverage audit after real routing exists.
+EOF
+  } > "${output}"
+}
+
+if [[ "${DRY_RUN}" != "true" ]]; then
+  mkdir -p "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence"
+  mkdir -p "${REPORT_DIR}"
+fi
+
+write_or_preview "${BUSINESS_DOMAIN_DIR}/00BusinessLandscape.md" generate_landscape
+write_or_preview "${BUSINESS_DOMAIN_DIR}/00UbiquitousLanguage.md" generate_language
+write_or_preview "${BUSINESS_DOMAIN_DIR}/01DomainCatalog.md" generate_catalog
+write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/01CodeEvidence(待确认代码证据).md" generate_l2
+write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidate(待确认代码证据).md" generate_l4
+write_or_preview "${BUSINESS_DOMAIN_DIR}/99PendingConfirmation/01CodeEvidence/990101CodeEvidenceCandidateEntryCoverage(待确认入口覆盖).md" generate_entry_coverage
+write_or_preview "$(report_history_path "${REPORT_DIR}/business_domain_bootstrap_report.md")" generate_report
+
+if [[ "${DRY_RUN}" == "true" ]]; then
+  printf '\nDry run complete. No files were written.\n'
+else
+  echo "Business domain bootstrap complete for ${PROJECT_NAME}."
+  echo "Next: confirm business boundaries before promoting pending evidence to stable domains."
+fi
