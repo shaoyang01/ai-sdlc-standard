@@ -137,7 +137,7 @@ By default, return the review report in the response.
 When the user explicitly asks to generate an artifact, write:
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
+library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
 ```
 
 If the user asks for HTML or Lark/Feishu output, use `sdlc-docflow-writer` for routing and publishing. Keep this skill responsible for review content only.

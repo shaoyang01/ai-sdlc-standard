@@ -124,7 +124,7 @@ Next Step: revise technical specification and re-run sdlc-solution-reviewer
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
+library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
 ```
 
-Use the next version number. Do not overwrite old versions.
+Update the stable artifact file and increment its internal Metadata Version; preserve history in 修订记录 and Git history.

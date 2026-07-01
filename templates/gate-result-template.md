@@ -5,6 +5,8 @@
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
 - Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 - Reviewer:
 - Date:
 
@@ -44,4 +46,17 @@
 - Follow-up Required: yes/no
 - Follow-up Owner:
 
+## Re-Gate Check
+
+- Manifest Current Version:
+- Reviewed Version Matches Manifest: yes/no
+- Stale Because:
+- Required Re-Gate:
+
 ## Next Step
+
+## 修订记录
+
+| Version | Date | Reviewer / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial gate result. | no |

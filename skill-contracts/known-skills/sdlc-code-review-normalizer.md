@@ -15,7 +15,7 @@ input_artifacts:
   - library/{requirement_id}/01-技术方案/*
   - optional library/{requirement_id}/03-实现记录/*
 output_artifacts:
-  - library/{requirement_id}/04-代码审核/{requirement_id}__代码审核__vN.md
+  - library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.md
   - manifest.md gate decision update recommendation
 required_schema:
   - ess/code-review-schema.md
@@ -86,7 +86,7 @@ blocking_conditions:
 默认输出：
 
 ```text
-library/{requirement_id}/04-代码审核/{requirement_id}__代码审核__vN.md
+library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.md
 ```
 
 输出必须符合 `ess/code-review-schema.md`，包含：

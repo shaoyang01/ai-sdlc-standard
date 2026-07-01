@@ -71,8 +71,8 @@ blocking_conditions:
 
 必需输入：
 
-- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.*`
-- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.*`
+- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.*`
+- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.*`
 - `library/{requirement_id}/manifest.md`
 
 前置条件：

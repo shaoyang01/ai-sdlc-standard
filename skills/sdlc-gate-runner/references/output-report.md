@@ -7,7 +7,7 @@ By default, return the Gate report in the response.
 When writing a local artifact, use the Gate-related node directory:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查__vN.md
+library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查.md
 ```
 
 Do not overwrite an existing report.
@@ -68,9 +68,9 @@ Do not overwrite an existing report.
 - Result:
 - Status:
 
-## Superseded Artifact Check
+## Stale Artifact Check
 
-- Current Artifact Superseded: yes/no
+- Current Artifact Stale: yes/no
 - Evidence:
 - Required Action:
 
@@ -89,21 +89,21 @@ Use `PASS` when:
 - No Critical issue exists.
 - No unaccepted High issue exists.
 - No required Re-Gate is missing.
-- No current evidence is superseded.
+- No current evidence is stale.
 
 Use `PASS_WITH_RISK` when:
 
 - No Critical issue exists.
 - High issues exist.
 - Complete risk acceptance exists.
-- Re-Gate and superseded checks are valid.
+- Re-Gate and stale checks are valid.
 
 Use `FAIL` when:
 
 - Any Critical issue exists.
 - Any unaccepted High issue exists.
 - Required input is missing.
-- Current evidence is superseded.
+- Current evidence is stale.
 - Required Re-Gate is missing.
 - Existing required Gate result is `FAIL`.
 

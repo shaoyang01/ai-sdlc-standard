@@ -1,5 +1,15 @@
 # Technical Specification: <Title>
 
+## Metadata
+
+- Requirement ID:
+- Artifact Type: 技术方案
+- Version: 1.0.0
+- Status: draft / active / stale / replaced
+- Author / Skill:
+- Created At:
+- Updated At:
+
 ## 背景
 
 ## 目标
@@ -63,3 +73,8 @@
 
 ## 待确认事项
 
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 |  |  | initial | Initial current artifact. | no |

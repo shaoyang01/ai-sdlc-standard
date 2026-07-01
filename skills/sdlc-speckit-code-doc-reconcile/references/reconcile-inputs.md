@@ -22,7 +22,7 @@ Use these when present:
 - `library/{requirement_id}/05-测试验收/*`.
 - Sync result from `sdlc-speckit-sync`.
 - Current `.specify/business_domain/**` or other declared knowledge target.
-- Re-Gate Records and Superseded Artifacts.
+- Re-Gate Records and Replaced Artifact Paths.
 - Accepted risk records.
 
 ## Source Priority
@@ -42,7 +42,7 @@ When these sources conflict, classify the conflict and route to the earliest aff
 Continue only when:
 
 - The feature and requirement can be matched.
-- Current artifacts can be distinguished from superseded artifacts.
+- Current artifacts can be distinguished from stale or replaced artifacts.
 - The implementation scope can be inspected.
 - The audit target is explicit: code, specs, DocFlow, knowledge, manifest, or all.
 

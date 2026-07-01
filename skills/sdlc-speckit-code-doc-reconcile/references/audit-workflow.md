@@ -17,7 +17,7 @@ Create an inventory with:
 
 - Path.
 - Version or timestamp.
-- Current or superseded state.
+- Current or stale state.
 - Gate result.
 - Source owner.
 - Evidence available.

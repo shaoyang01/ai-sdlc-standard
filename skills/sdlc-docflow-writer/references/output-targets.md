@@ -26,27 +26,28 @@ library/{requirement_id}/
 Use:
 
 ```text
-{requirement_id}__{artifact_type}__v{version}.{ext}
+{requirement_id}__{artifact_type}.{ext}
 ```
 
 Examples:
 
 ```text
-20260629-ai-sdlc-standard__技术方案__v1.html
-20260629-ai-sdlc-standard__方案审核__v1.html
-20260629-ai-sdlc-standard__实现记录__v1.md
-20260629-ai-sdlc-standard__代码审核__v1.html
-20260629-ai-sdlc-standard__测试验收__v1.html
+20260629-ai-sdlc-standard__技术方案.html
+20260629-ai-sdlc-standard__方案审核.html
+20260629-ai-sdlc-standard__实现记录.md
+20260629-ai-sdlc-standard__代码审核.html
+20260629-ai-sdlc-standard__测试验收.html
 ```
 
-## Version Selection
+## Version And Update Mode
 
-When writing a new file:
+When writing a DocFlow artifact:
 
-1. Check existing files in the node directory.
-2. If no file exists, use `v1`.
-3. If existing versions exist, use the next integer version.
-4. Do not overwrite an existing version unless the user explicitly requests replacement.
+1. Use the stable file name `{requirement_id}__{artifact_type}.{ext}`.
+2. If the stable file does not exist, create it with Metadata `Version: 1.0.0`.
+3. If the stable file exists, update the same file and increment its internal Metadata `Version` according to `ai-sdlc/artifact-versioning.md`.
+4. Keep only the current valid body content in the artifact.
+5. Record historical changes in `## 修订记录`, `manifest.md`, and Git history.
 
 ## Manifest Behavior
 
@@ -65,6 +66,7 @@ Update manifest after successful local write or Lark/Feishu publication:
 - Node
 - Path or URL
 - Version
+- Status
 - Result, if the artifact is a Gate or review document
 - Updated time
 - Next step

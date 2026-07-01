@@ -17,7 +17,7 @@ Preflight
 -> Reconcile
 ```
 
-Do not skip a stage unless its current result already exists, is not superseded, and is valid for the active requirement version.
+Do not skip a stage unless its current result already exists, is not stale, and is valid for the active requirement version.
 
 ## Child Skill Mapping
 
@@ -52,7 +52,7 @@ Reuse existing artifacts only when:
 
 - Requirement ID matches.
 - Artifact version is current.
-- Manifest does not mark the artifact superseded.
+- Manifest does not mark the artifact stale.
 - Gate result is passable.
 - No accepted change-control record invalidates it.
 

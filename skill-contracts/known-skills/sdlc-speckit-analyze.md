@@ -39,7 +39,7 @@ can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
   - spec, plan, tasks, or DocFlow artifacts conflict
-  - required artifact is missing or superseded
+  - required artifact is missing or stale
   - task requires undefined business or technical behavior
   - implementation readiness cannot be established
 ```
@@ -87,7 +87,7 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - 已接受风险记录。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - `sdlc-speckit-plan` 的 Plan Gate 结论。
 - `sdlc-speckit-clarify` 的残余澄清结论。
 
@@ -152,7 +152,7 @@ blocking_conditions:
 
 - `sdlc-speckit-tasks` 仍有 Blocking Items。
 - 当前有效 DocFlow、spec、plan 或 tasks 冲突。
-- 任何必需产物缺失或已被 superseded。
+- 任何必需产物缺失或已被 stale。
 - Tasks 要求实现 spec 或 plan 以外的行为。
 - Plan 中影响实现的事项没有任务覆盖。
 - 验收标准没有验证路径。

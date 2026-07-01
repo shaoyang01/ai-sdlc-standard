@@ -87,7 +87,7 @@ Read:
 Continue only when:
 
 - Task Gate has no Blocking items.
-- Spec, plan, and tasks are current and not superseded.
+- Spec, plan, and tasks are current and not stale.
 - Solution Review, Plan Gate, and Task Gate results are passable.
 - Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
 
@@ -115,7 +115,7 @@ Block when:
 - Any implementation task lacks approved spec or plan basis.
 - A required behavior has no implementation or verification path.
 - A risk is unaccepted, stale, contradicted, or hidden in tasks.
-- A current artifact has been superseded.
+- A current artifact has been stale.
 
 ### 5. Output Recommendation
 
@@ -153,4 +153,4 @@ Stop instead of approving implementation readiness when:
 - A task requires new business or technical behavior.
 - A planned behavior has no task or verification path.
 - Risk acceptance is missing or contradicted.
-- Current artifacts are superseded.
+- Current artifacts are stale.

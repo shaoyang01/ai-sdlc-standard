@@ -24,7 +24,7 @@ Recommend:
 Do not:
 
 - Treat the missing behavior as implemented fact.
-- Sync the old superseded specification.
+- Sync the old stale specification.
 
 ## Review Missing
 

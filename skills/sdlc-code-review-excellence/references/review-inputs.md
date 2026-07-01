@@ -20,7 +20,7 @@ Use when present:
 - `specs/{feature}/tasks.md`.
 - `library/{requirement_id}/manifest.md`.
 - Re-Gate Records.
-- Superseded Artifacts.
+- Replaced Artifact Paths.
 - Accepted risks.
 - Existing `04-代码审核` report.
 
@@ -31,7 +31,7 @@ Continue only when:
 - Reviewed code scope is explicit.
 - The reviewed code maps to a requirement or implementation scope.
 - Specification basis exists for behavior-changing code.
-- Current artifacts are not superseded.
+- Current artifacts are not stale.
 
 Stop when the review would require guessing which requirement or artifact is current.
 

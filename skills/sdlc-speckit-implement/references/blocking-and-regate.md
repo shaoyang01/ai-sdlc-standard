@@ -5,7 +5,7 @@
 Stop when:
 
 - Analyze Gate has Blocking Items.
-- Required artifacts are missing or superseded.
+- Required artifacts are missing or stale.
 - Task target cannot be mapped to code safely.
 - Implementation requires undefined business behavior.
 - Existing code contradicts the approved spec, plan, or tasks.

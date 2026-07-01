@@ -25,7 +25,8 @@
 | 安装边界 | 已完成 | 安装 Skill 只是复制副本，必须由用户明确触发。 |
 | README / docs 拆分 | 已完成 | README 已变成入口文档，使用、配置、投放、Skill 开发、校验、路线图说明拆到 `docs/`。 |
 | 需求变更流程 | 已新增基础标准 | `ai-sdlc/change-control.md` 定义中途变更、返工、误解需求后的重走 Gate 规则。 |
-| Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Superseded、Re-Gate。 |
+| Stable Artifact Versioning | 已新增标准 | `ai-sdlc/artifact-versioning.md` 定义稳定文件路径、内部 Version、修订记录和 manifest 当前版本指针。 |
+| Manifest 活动日志 | 已补模板与存储规则 | `templates/artifact-manifest-template.md` 和 `ai-sdlc/artifact-storage.md` 已支持 Activity Log、Change History、Replaced Artifact Paths、Re-Gate。 |
 | 方案审阅 Skill | 已实现初版 | `skills/sdlc-solution-reviewer/` 已实现全局 DocFlow Gate、开发路径建议和阻塞条件。 |
 | Skill 分类治理 | 已补 | `skill-contracts/skill-category-guide.md` 已定义 Intake / Producer / Auditor / Reviewer / Executor / Renderer / Publisher / Sync / Workflow 的分类和副作用边界。 |
 | Speckit 生命周期 Skill | 进行中 | `sdlc-speckit-pipeline` 及 specify / clarify / plan / tasks / analyze / checklist / implement / sync / reconcile 已有初版；不再规划多 Agent 版本 pipeline。 |
@@ -41,7 +42,7 @@
 - `sdlc-docflow-writer` 负责写文档，不负责判断文档是否合格。
 - 审阅、实现、同步、日报这类能力必须分层，不混在一个 Skill 里。
 - 所有 Gate 必须能落到 `library/{requirement_id}/manifest.md` 和对应节点产物。
-- 需求变化不删除历史产物，通过版本、superseded 标记和 re-Gate 记录处理。
+- 需求变化不通过文件名堆版本，通过内部 Version、修订记录、Change History 和 Re-Gate 记录处理。
 - 在修改或重写 Skill 前，必须先模拟输入状态和边界数据，再编码或写合同。
 - 已建立的标准文件不做推翻式大改。后续以增量补充、合同接入、示例验证为主。
 - 外部 v1.0 文档只作为缺口校准来源，不按其目录结构照搬，也不覆盖本仓库已稳定的标准结构。
@@ -115,8 +116,8 @@
 | --- | --- | --- |
 | 需求归一化 | `sdlc-requirement-normalizer` 为 `prompt_skill_ready`。 | 后续通过真实需求样例迭代飞书、HTML、Markdown、纯文本等来源进入 `00-需求资料` 的细节。 |
 | 规格编写 | `sdlc-docflow-writer` 能写文档，但不等于规格生成器。 | `sdlc-specification-writer` 作为 Speckit 之外的通用规格生成入口；小需求可直接把其产物作为规格事实。 |
-| 规格完整性审计 | `sdlc-solution-reviewer` 已实现初版。 | 明确方案审核必须输出开发路径建议和后续文档治理收口建议。 |
-| Gate 执行 | `sdlc-gate-runner` 为 `prompt_skill_ready`。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、superseded artifact、Re-Gate、development path decision 和 doc governance tail 检查。 |
+| 规格完整性审计 | `sdlc-solution-reviewer` 已实现初版。 | 明确方案审核必须输出开发路径建议和后续文档治理收口建议，并保持全局 DocFlow Gate 定位。 |
+| Gate 执行 | `sdlc-gate-runner` 为 `prompt_skill_ready`。 | 统一 PASS / FAIL / PASS_WITH_RISK、风险接受、stale artifact、Re-Gate、development path decision 和 doc governance tail 检查。 |
 | 复杂度分级 | 已补基础标准 | `ai-sdlc/complexity-routing.md` 定义 SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN，并接入开发路径决策。 |
 | 开发路径分流 | 已有基础，但需强化 | 将 `DIRECT_IMPLEMENTATION`、`SPECKIT_PIPELINE_REQUIRED`、`BLOCKED_NEEDS_REVISION` 固化为方案审核后的必填决策，并记录到 manifest。 |
 | 直接实现后的文档治理尾段 | 下一阶段重点 | Direct Implementation 完成后仍需执行实现记录、代码审核、测试反馈、必要的 sync 与 reconcile。 |
@@ -205,11 +206,18 @@
 
 - 需求变更时是否沿用原 `requirement_id`。
 - 什么情况下必须新建 `requirement_id`。
-- 哪些旧产物要标记为 superseded。
-- 哪些节点必须重新生成。
+- 哪些稳定文件需要提升内部 Version。
+- 哪些下游 Gate 必须标记 stale 并重新执行。
 - 从哪个 Gate 重新开始。
-- `PASS_WITH_RISK` 的风险接受记录如何延续到新版本。
+- `PASS_WITH_RISK` 的风险接受记录如何延续到新内部版本。
 - 实现完成后发现方案理解错误时如何回退到方案阶段。
+
+初始规则方向：
+
+- 业务目标不变时，默认沿用原 `requirement_id`。
+- 通过稳定文件的内部 Version 推进，不通过文件名堆版本。
+- 从最早受影响节点重新 Gate。
+- 只有目标变成独立需求、独立排期或显著不同业务目标时，才新建流程。
 
 ### Wave 4: 通用 DocFlow Gate 与核心新建 Skill
 
@@ -219,13 +227,13 @@
 
 | Skill | 优先级 | 类型 | 责任 | 主要输出 |
 | --- | --- | --- | --- | --- |
-| `sdlc-requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要__vN.md` |
-| `sdlc-specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案__vN.md` |
-| `sdlc-solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求，并输出开发路径建议。 | `02-方案审核/{requirement_id}__方案审核__vN.html|md` |
-| `sdlc-implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录__vN.md` |
-| `sdlc-test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收__vN.html|md` |
+| `sdlc-requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要.md` |
+| `sdlc-specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案.md` |
+| `sdlc-solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求，并输出开发路径建议。 | `02-方案审核/{requirement_id}__方案审核.html|md` |
+| `sdlc-implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录.md` |
+| `sdlc-test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收.html|md` |
 | `sdlc-gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
-| `sdlc-code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核__vN.md` |
+| `sdlc-code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核.md` |
 | `sdlc-test-feedback-sync` | 中 | 已实现初版 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
 #### `sdlc-solution-reviewer` / Specification Completeness Auditor
@@ -244,6 +252,36 @@
 - 推荐理由。
 - 风险接受要求。
 - 后续文档治理建议：是否需要 business_domain sync、code-doc reconcile、entry coverage、manifest 更新。
+
+边界：
+
+- 它负责审方案，不负责写技术方案。
+- 它可以调用 `sdlc-docflow-writer` 的产物路径规则，但不能替代 `sdlc-docflow-writer`。
+- 它必须按问题严重级别列出 Critical / High / Medium / Low。
+- 它的 Gate 结论必须早于任何实现动作，也必须早于是否唤醒 `sdlc-speckit-pipeline` 的决策。
+
+输入：
+
+- `library/{requirement_id}/01-技术方案/*`
+- 可选 `specs/**`
+- 可选当前代码事实
+- `ess/specification-schema.md`
+- `checklists/specification-checklist.md`
+- `templates/gate-result-template.md`
+
+输出：
+
+- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.html|md`
+- `manifest.md` 中方案审核节点状态
+- 开发路径建议与理由
+
+阻塞条件：
+
+- 找不到技术方案。
+- 技术方案缺必填章节。
+- 行为约束、异常处理、兼容性、测试方案缺失。
+- 方案存在 Critical / High 且未修复。
+- `PASS_WITH_RISK` 缺少风险接受说明。
 
 ### Wave 5: Speckit 生命周期合同
 
@@ -528,16 +566,16 @@ global-artifact-repo/
 └── library/{requirement_id}/
     ├── 00-需求资料/
     ├── 01-技术方案/
-    │   └── {requirement_id}__端到端技术方案__v1.md
+    │   └── {requirement_id}__端到端技术方案.md
     ├── 02-方案审核/
-    │   ├── {requirement_id}__端到端方案审核__v1.md
-    │   └── {requirement_id}__cross-repo-gate__v1.md
+    │   ├── {requirement_id}__端到端方案审核.md
+    │   └── {requirement_id}__cross-repo-gate.md
     ├── 03-实现记录/
-    │   └── {requirement_id}__跨仓实现汇总__v1.md
+    │   └── {requirement_id}__跨仓实现汇总.md
     ├── 04-代码审核/
-    │   └── {requirement_id}__跨仓代码审核汇总__v1.md
+    │   └── {requirement_id}__跨仓代码审核汇总.md
     ├── 05-测试验收/
-    │   └── {requirement_id}__端到端测试验收__v1.md
+    │   └── {requirement_id}__端到端测试验收.md
     ├── repos/
     │   ├── repo-a.md
     │   ├── repo-b.md
@@ -551,15 +589,15 @@ global-artifact-repo/
 repo-a/
 └── library/{requirement_id}/
     ├── 01-技术方案/
-    │   └── {requirement_id}__repo-a技术方案__v1.md
+    │   └── {requirement_id}__repo-a技术方案.md
     ├── 02-方案审核/
-    │   └── {requirement_id}__repo-a方案审核__v1.md
+    │   └── {requirement_id}__repo-a方案审核.md
     ├── 03-实现记录/
-    │   └── {requirement_id}__repo-a实现记录__v1.md
+    │   └── {requirement_id}__repo-a实现记录.md
     ├── 04-代码审核/
-    │   └── {requirement_id}__repo-a代码审核__v1.md
+    │   └── {requirement_id}__repo-a代码审核.md
     ├── 05-测试验收/
-    │   └── {requirement_id}__repo-a测试验收__v1.md
+    │   └── {requirement_id}__repo-a测试验收.md
     └── manifest.md
 ```
 
@@ -634,7 +672,7 @@ affected_repositories:
 
 cross_repo_gate:
   status: PASS
-  artifact: 02-方案审核/<id>__cross-repo-gate__v1.md
+  artifact: 02-方案审核/<id>__cross-repo-gate.md
 
 integration_test:
   status: pending
@@ -853,14 +891,14 @@ roots = [
 
 1. [x] 完成本路线图，并吸收外部 v1.0 文档暴露的路线图缺口。
 2. [x] 更新 `templates/artifact-manifest-template.md`，加入 Activity Log 和 Change History。
-3. [x] 更新 `ai-sdlc/artifact-storage.md`，补充 superseded artifact 和 re-Gate 引用。
+3. [x] 更新 `ai-sdlc/artifact-storage.md`，补充稳定路径版本和 Re-Gate 引用。
 4. [x] 新建全局 `sdlc-solution-reviewer` 合同，并登记到 `registry/skill-registry.md`。
 5. [x] 在 `sdlc-solution-reviewer` 合同中定义开发路径建议：直接实现 / 唤醒 Speckit / 阻塞返修。
 6. [x] 调整 `sdlc-speckit-pipeline` 合同，明确它是方案审阅后的可选开发路径，不是默认必经路径。
 7. [x] 登记 `sdlc-specification-writer` 的通用规格生成合同，并明确其产物可作为轻量需求的规格事实和 Speckit specify 的输入。
 8. [x] 调整 `sdlc-speckit-specify` / `sdlc-speckit-clarify` 合同，弱化从零需求澄清职责，强化复用与阻塞回退规则。
 9. [x] 登记并实现 `sdlc-requirement-normalizer` 初版。
-10. [x] 登记并实现 `sdlc-gate-runner` 初版，覆盖通用 Gate、风险接受、superseded artifact 和 Re-Gate 检查。
+10. [x] 登记并实现 `sdlc-gate-runner` 初版，覆盖通用 Gate、风险接受、stale artifact 和 Re-Gate 检查。
 11. [x] 登记并实现 `sdlc-implementation-recorder` 初版，覆盖 diff、验证、未完成项、方案偏离和实现阻塞记录。
 12. [x] 登记并实现 `sdlc-test-feedback-classifier` 初版，覆盖测试反馈分类、Re-Gate 路由和 `05-测试验收` 输出。
 13. [x] 登记并实现 `sdlc-code-review-normalizer` 初版，覆盖 Review 归一化、严重级别、阻塞判断和修复路由。

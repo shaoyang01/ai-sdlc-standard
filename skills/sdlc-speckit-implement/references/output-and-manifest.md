@@ -11,7 +11,7 @@ implementation summary in response plus code changes in the target repository
 When requested or required by the workflow, also produce or recommend:
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录__vN.md
+library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
 ```
 
 ## Result Template

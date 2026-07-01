@@ -20,7 +20,7 @@ Recommended:
 - `library/{requirement_id}/manifest.md`
 - Accepted risk records
 - Re-Gate Records
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Existing target knowledge documents
 
 ## Readiness Checks
@@ -30,7 +30,7 @@ Continue only when:
 - Implementation status is `COMPLETED`, or sync scope is explicitly limited to verified completed tasks.
 - Verification results are present.
 - No Blocking Items remain for the facts being synced.
-- Current source artifacts are not superseded.
+- Current source artifacts are not stale.
 - Target knowledge path is explicit.
 - User authorized write access if applying changes.
 

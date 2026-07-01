@@ -72,6 +72,34 @@ LEGACY_SOURCE_ALLOWED_GUARD_PATTERN = /
   legacy\s+rail\s+input
 /ix.freeze
 
+FILENAME_VERSION_PATTERN = /
+  __v(?:N|\d+|\{version\})(?=\.)|
+  \{requirement_id\}__\{artifact_type\}__v|
+  v\{version\}\.md|
+  vN\.md
+/ix.freeze
+FILENAME_VERSION_ALLOWED_GUARD_PATTERN = /
+  forbidden|
+  prohibit(?:ed|s)?|
+  do\s+not|
+  don't|
+  must\s+not|
+  never|
+  legacy|
+  historical|
+  history|
+  migration|
+  example\s+only|
+  bad\s+example|
+  anti[-\s]?pattern|
+  禁止|
+  不推荐|
+  反例|
+  错误示例|
+  历史|
+  迁移
+/ix.freeze
+
 def unsafe_legacy_source_references(text)
   lines = text.lines
   unsafe = []
@@ -80,13 +108,38 @@ def unsafe_legacy_source_references(text)
     next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
 
     context = [
+      lines[index - 2],
       lines[index - 1],
       line,
-      lines[index + 1]
+      lines[index + 1],
+      lines[index + 2]
     ].compact.join(" ")
 
     next if context.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
     next unless context.match?(LEGACY_SOURCE_DANGER_PATTERN)
+
+    unsafe << [index + 1, line.strip]
+  end
+
+  unsafe
+end
+
+def unsafe_filename_version_references(text)
+  lines = text.lines
+  unsafe = []
+
+  lines.each_with_index do |line, index|
+    next unless line.match?(FILENAME_VERSION_PATTERN)
+
+    context = [
+      lines[index - 2],
+      lines[index - 1],
+      line,
+      lines[index + 1],
+      lines[index + 2]
+    ].compact.join(" ")
+
+    next if context.match?(FILENAME_VERSION_ALLOWED_GUARD_PATTERN)
 
     unsafe << [index + 1, line.strip]
   end
@@ -228,6 +281,23 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
 
   unsafe_legacy_source_references(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} treats legacy .specify source as normal sdlc input: #{line}"
+  end
+end
+
+versioning_scan_paths = [
+  Dir[File.join(ROOT, "ai-sdlc", "**", "*.md")],
+  Dir[File.join(ROOT, "docs", "**", "*.md")],
+  Dir[File.join(ROOT, "templates", "**", "*.md")],
+  Dir[File.join(ROOT, "skills", "sdlc-*", "**", "*.md")],
+  Dir[File.join(ROOT, "skill-contracts", "**", "*.md")],
+  Dir[File.join(ROOT, "registry", "**", "*.md")],
+  [File.join(ROOT, "README.md"), File.join(ROOT, "ROADMAP.md")]
+].flatten.select { |path| File.file?(path) }.uniq.sort
+
+versioning_scan_paths.each do |path|
+  text = File.read(path)
+  unsafe_filename_version_references(text).each do |line_number, line|
+    errors << "#{relative(path)}:#{line_number} recommends filename-based artifact versioning: #{line}"
   end
 end
 

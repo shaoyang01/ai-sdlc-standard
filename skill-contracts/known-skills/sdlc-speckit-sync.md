@@ -88,7 +88,7 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - 已接受风险记录。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 现有目标知识文档。
 
 前置条件：
@@ -150,7 +150,7 @@ blocking_conditions:
 必须停止的情况：
 
 - 实现未验证。
-- 来源产物缺失或 superseded。
+- 来源产物缺失或 stale。
 - 同步目标路径、归属或写入权限不明确。
 - 候选事实不稳定、不可复用或只服务当前一次需求。
 - 候选事实与既有知识冲突。

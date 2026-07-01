@@ -90,7 +90,7 @@ blocking_conditions:
 | Classification | 必需动作 |
 | --- | --- |
 | Implementation Bug | 进入 Fix，更新实现记录，必要时重新代码审核。 |
-| Specification Missing | 回到 `01-技术方案`，生成新版本并重新方案审核；如具复用价值，更新 Specification Checklist 或 Schema。 |
+| Specification Missing | 回到 `01-技术方案`，更新稳定文件版本并重新方案审核；如具复用价值，更新 Specification Checklist 或 Schema。 |
 | Review Missing | 记录 Review 缺口，建议更新 Code Review Checklist。 |
 | Requirement Change | 按 `ai-sdlc/change-control.md` 判断沿用当前 requirement_id 或新建需求。 |
 | Test Case Issue | 更新测试口径，不要求改方案或代码。 |

@@ -18,6 +18,7 @@ entrypoints:
   gates: ai-sdlc/phase-gates.md
   artifact_flow: ai-sdlc/artifact-flow.md
   artifact_storage: ai-sdlc/artifact-storage.md
+  artifact_versioning: ai-sdlc/artifact-versioning.md
   change_control: ai-sdlc/change-control.md
   complexity_routing: ai-sdlc/complexity-routing.md
   standard_package_resolution: ai-sdlc/standard-package-resolution.md

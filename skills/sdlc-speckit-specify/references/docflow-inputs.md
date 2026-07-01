@@ -13,7 +13,7 @@ Recommended:
 - `00-需求资料`
 - Development Path Decision
 - Re-Gate Records
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Accepted risk details
 
 ## Readiness Checks
@@ -23,7 +23,7 @@ Continue only when:
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - `PASS_WITH_RISK` includes Accepted Risk, Accepted By, Accepted At, Accepted Reason, Accepted Scope, Follow-up Required, and Follow-up Owner.
 - Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requests full SDD.
-- Current artifacts are not superseded.
+- Current artifacts are not stale.
 - No open Blocking Issues affect Scope, behavior, or acceptance.
 
 ## Missing Manifest

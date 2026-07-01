@@ -8,6 +8,7 @@
 - Created At:
 - Current Stage:
 - Current Status: active / blocked / completed / abandoned
+- Versioning Model: stable-path-internal-version
 - Related Specs Directory:
 - Related Branch:
 - Current Owner:
@@ -27,14 +28,14 @@
 
 ## Artifact Index
 
-| Node | Required | Directory | Path | Version | Result | Updated At |
-| --- | --- | --- | --- | --- | --- | --- |
-| 00 需求资料 | no | `00-需求资料/` |  |  |  |  |
-| 01 技术方案 | yes | `01-技术方案/` |  |  |  |  |
-| 02 方案审核 | yes | `02-方案审核/` |  |  | PASS / FAIL / PASS_WITH_RISK |  |
-| 03 实现记录 | recommended | `03-实现记录/` |  |  |  |  |
-| 04 代码审核 | conditional | `04-代码审核/` |  |  | PASS / FAIL / PASS_WITH_RISK |  |
-| 05 测试验收 | conditional | `05-测试验收/` |  |  | PASS / FAIL / PASS_WITH_RISK |  |
+| Node | Required | Directory | Stable Path | Version | Status | Result | Updated At |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 00 需求资料 | no | `00-需求资料/` |  |  | draft / active / stale / replaced |  |  |
+| 01 技术方案 | yes | `01-技术方案/` |  |  | draft / active / stale / replaced |  |  |
+| 02 方案审核 | yes | `02-方案审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
+| 03 实现记录 | recommended | `03-实现记录/` |  |  | draft / active / stale |  |  |
+| 04 代码审核 | conditional | `04-代码审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
+| 05 测试验收 | conditional | `05-测试验收/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
 
 ## Activity Log
 
@@ -44,21 +45,24 @@
 
 ## Change History
 
-| Change ID | Date | Source | Classification | Affected Node | Summary | New Version | Re-Gate Required | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  | Requirement Change / Specification Missing / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  |  |  |  | yes/no | open/resolved |
+| Change ID | Date | Source | Classification | Affected Node | Artifact | Previous Version | New Version | Summary | Re-Gate Required | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  | Requirement Change / Specification Missing / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  |  |  |  |  |  | yes/no | open/resolved |
 
-## Superseded Artifacts
+## Replaced Artifact Paths
 
-| Artifact | Superseded By | Reason | Date | Recorded By |
+Use this only when a legacy path, split artifact, or renamed file is replaced.
+Normal updates to the same stable file use `Version` and `Change History`.
+
+| Old Path | Replaced By | Reason | Date | Recorded By |
 | --- | --- | --- | --- | --- |
 |  |  |  |  |  |
 
 ## Re-Gate Records
 
-| Date | Trigger | From Node | Required Gate | Gate Artifact | Result | Next Step |
-| --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK |  |
+| Date | Trigger | From Node | Upstream Artifact | Upstream Version | Required Gate | Gate Artifact | Gate Artifact Version | Result | Next Step |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK |  |
 
 ## Gate Decisions
 

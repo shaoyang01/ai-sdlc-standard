@@ -160,7 +160,7 @@ Every reconciliation result must contain:
 Stop instead of continuing or writing updates when:
 
 - Requirement ID or feature scope is unclear.
-- Required current artifacts are missing or superseded.
+- Required current artifacts are missing or stale.
 - Code behavior cannot be inspected sufficiently.
 - The current source of truth conflicts across approved artifacts.
 - Drift would require changing production code.

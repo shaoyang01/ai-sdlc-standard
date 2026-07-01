@@ -85,7 +85,7 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - 已接受风险记录。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 既有 `specs/{feature}/tasks.md`。
 
 前置条件：
@@ -157,7 +157,7 @@ specs/{feature}/tasks.md
 - Tasks 改变状态流转、异常处理、兼容策略、数据写入或测试验收口径。
 - Tasks 需要新增方案或计划中没有定义的业务规则。
 - Tasks 无法覆盖验收标准或验证要求。
-- 当前有效方案、审核产物、spec 或 plan 已被 superseded。
+- 当前有效方案、审核产物、spec 或 plan 已被 stale。
 
 ## Gate Requirements
 

@@ -110,7 +110,7 @@ By default, return the structured feedback report in the response.
 When the user explicitly asks to generate a local artifact, write:
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
+library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
 ```
 
 Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested. Keep this skill responsible for classification content only.

@@ -112,7 +112,7 @@ By default, return the normalized review report in the response.
 When the user explicitly asks to generate a local artifact, write:
 
 ```text
-library/{requirement_id}/04-代码审核/{requirement_id}__代码审核__vN.md
+library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.md
 ```
 
 Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested. Keep this skill responsible for review report content only.

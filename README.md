@@ -12,7 +12,7 @@
 
 本仓库当前提供：
 
-- AI SDLC 生命周期、Gate、变更控制、复杂度路由和产物存储标准。
+- AI SDLC 生命周期、Gate、变更控制、复杂度路由、产物存储和产物版本管理标准。
 - ESS 技术方案、方案审核、代码审核、测试反馈 Schema。
 - `sdlc-*` Skill 合同、Prompt Skill 执行体和 Registry。
 - DocFlow 人工交接目录规范：`library/{requirement_id}/`。
@@ -32,6 +32,7 @@
 | --- | --- | --- |
 | 标准包结构 | 已建立 | `ai-sdlc/`、`ess/`、`checklists/`、`templates/`、`skill-contracts/`、`skills/`、`scripts/`、`registry/` 已存在。 |
 | DocFlow | 可用 | 使用 `library/{requirement_id}/` 作为人工交接和 Gate 视图。 |
+| 产物版本模型 | 已建立 | 使用稳定文件路径、Metadata `Version`、修订记录和 manifest 当前版本指针。 |
 | `sdlc-*` Skill | prompt skill ready | 当前 `skills/sdlc-*` 是可安装 Prompt Skill，不等同于独立工具服务。 |
 | 标准包路径初始化 | tooling ready | `scripts/init-standard-home.sh` 可写入 `AI_SDLC_STANDARD_HOME`。 |
 | Speckit 项目投放 | tooling ready | `scripts/bootstrap-speckit-project.sh` 可生成 profile、project-context 和 reports。 |
@@ -88,7 +89,7 @@ bootstrap 会预览将生成的 `.specify` profile、`.specify/project-context/*
 ## 核心目录
 
 ```text
-ai-sdlc/          AI SDLC 生命周期、Gate、Artifact、变更控制、Speckit 治理标准
+ai-sdlc/          AI SDLC 生命周期、Gate、Artifact、版本管理、变更控制、Speckit 治理标准
 checklists/       各阶段人工或 Skill 审查清单
 ess/              技术方案、方案审核、代码审核、测试反馈 Schema
 skill-contracts/  Skill 分类、合同模板和已知 Skill 合同
@@ -99,6 +100,17 @@ registry/         Skill Registry
 ```
 
 完整入口列表以 `manifest.yaml` 为准。
+
+## DocFlow 产物门禁
+
+- 每个需求使用独立目录：`library/{requirement_id}/`。
+- 同一需求的不同节点产物放入不同子目录，例如 `01-技术方案/`、`02-方案审核/`、`04-代码审核/`。
+- 文件名必须符合 `{requirement_id}__{artifact_type}.{ext}`，版本写入文档 Metadata 的 `Version` 字段。
+- 文档底部必须包含 `## 修订记录`。
+- Gate 文档必须包含 `PASS`、`FAIL` 或 `PASS_WITH_RISK`。
+- Gate 文档必须绑定 `Reviewed Artifact` 和 `Reviewed Artifact Version`。
+- 只有 `PASS` 或带风险接受说明的 `PASS_WITH_RISK` 可以进入下一节点。
+- `library/{requirement_id}/` 是人工交接与门禁视图；`specs/**` 仍是 SpecKit 机器事实源。
 
 ## 重要边界
 

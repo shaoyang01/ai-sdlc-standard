@@ -5,7 +5,7 @@
 Mark a checklist stale when:
 
 - Source artifact version changed.
-- Manifest marks the source artifact superseded.
+- Manifest marks the source artifact stale.
 - Change History changes scope, risk, or acceptance criteria.
 - A Re-Gate record exists after checklist creation.
 - `tasks.md` status or task list changed after checklist creation.
@@ -16,7 +16,7 @@ Mark a checklist stale when:
 Mark an item invalid when:
 
 - It has no current source artifact.
-- It depends on superseded scope.
+- It depends on stale scope.
 - It contradicts approved spec, plan, tasks, or DocFlow.
 - It requires new behavior.
 - It was copied from a generic checklist but does not apply to the requirement.

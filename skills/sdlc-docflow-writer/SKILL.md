@@ -83,7 +83,7 @@ If no requirement ID is provided:
 For local output, use:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__{artifact_type}__vN.{ext}
+library/{requirement_id}/{node_directory}/{requirement_id}__{artifact_type}.{ext}
 ```
 
 For Lark/Feishu output:
@@ -100,7 +100,7 @@ Before changing files or publishing documents, report the dry-run result from `r
 - Output format
 - Requirement ID
 - Target local path or Lark/Feishu document target
-- Whether the artifact is new, next-version, or an update
+- Whether this creates a new stable artifact file or updates the existing stable file, including the Metadata Version change
 - Blocking questions, if any
 
 Stop before writing or publishing if any blocking question remains.

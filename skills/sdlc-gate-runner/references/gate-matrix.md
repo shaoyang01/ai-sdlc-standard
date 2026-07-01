@@ -11,7 +11,7 @@
 | Implementation Gate | Code review or test | `03-实现记录`, diff summary, verification result | Out-of-scope implementation, missing verification, undefined behavior discovered |
 | Code Review Gate | Test | `04-代码审核` | Review FAIL, blocking issue not resolved, risk acceptance incomplete |
 | Test Gate | Knowledge sync or follow-up summary | `05-测试验收` | Test FAIL, Specification Missing without upstream Re-Gate |
-| Knowledge Sync Gate | Speckit Sync or knowledge update | Sync decision and source artifacts | Syncing superseded or failed artifacts, missing residual risk note |
+| Knowledge Sync Gate | Speckit Sync or knowledge update | Sync decision and source artifacts | Syncing stale or failed artifacts, missing residual risk note |
 
 ## Severity Mapping
 
@@ -22,7 +22,7 @@ Use Critical when:
 - Required artifact is missing.
 - Gate result is missing for a required Gate.
 - Existing Gate result is `FAIL`.
-- Current evidence references a superseded artifact.
+- Current evidence references a stale or replaced artifact.
 - Re-Gate is required but missing.
 - Continuing would rely on guessed business behavior.
 

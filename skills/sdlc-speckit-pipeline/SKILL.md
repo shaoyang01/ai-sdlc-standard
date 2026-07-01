@@ -123,7 +123,7 @@ After each stage:
 - Output stage conclusion, produced or reused artifacts, Gate result, accepted or unresolved risk, and recommended next step.
 - Ask whether to enter the next stage.
 - Stop until the user confirms the next stage. Fast mode must be explicitly requested, and it still cannot skip Implementation, Sync, or Reconcile Apply confirmation.
-- Stop on `FAIL`, `BLOCKED`, unresolved core ambiguity, unaccepted risk, or superseded artifact.
+- Stop on `FAIL`, `BLOCKED`, unresolved core ambiguity, unaccepted risk, or stale or replaced artifact.
 - Route to the earliest affected upstream node.
 
 ### 4. Execute Implementation Gate
@@ -186,7 +186,7 @@ Stop instead of continuing when:
 - User full SDD request exists but `01-技术方案` or `02-方案审核` is missing.
 - Development path is `DIRECT_IMPLEMENTATION` and the user did not explicitly choose full SDD.
 - A stage completed but the user has not confirmed entering the next stage.
-- A required artifact is missing or superseded.
+- A required artifact is missing or stale.
 - A child skill returns `FAIL`, `BLOCKED`, or unresolved Critical issue.
 - A stage would reinterpret approved requirements.
 - Implementation would require unapproved behavior.

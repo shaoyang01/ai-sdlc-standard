@@ -10,7 +10,7 @@ Stop when:
 - Development Path Decision is `BLOCKED_NEEDS_REVISION`.
 - Development Path Decision is `DIRECT_IMPLEMENTATION` and full SDD was not explicitly requested.
 - Technical specification has unresolved core ambiguity.
-- Current artifacts are superseded.
+- Current artifacts are stale.
 - Sync would require reinterpreting business scope.
 
 ## Re-Gate Required

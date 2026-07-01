@@ -65,6 +65,6 @@ Recommend an Activity Log entry containing:
 When blocked or stale, recommend:
 
 - Earliest affected node.
-- Superseded checklist path.
+- Stale checklist path.
 - Source artifacts requiring update.
 - Whether implementation is blocked.

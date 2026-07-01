@@ -24,20 +24,20 @@ Do not allow `PASS_WITH_RISK` for Critical issues.
 
 Medium and Low issues do not require risk acceptance, but must be recorded as TODO or follow-up notes.
 
-## Superseded Artifact Checks
+## Stale Artifact Checks
 
-Read `Superseded Artifacts` before accepting a Gate result.
+Read `Replaced Artifact Paths` before accepting a Gate result.
 
 Block continuation when:
 
-- Artifact Index points to a superseded artifact.
-- Gate Decisions refer to a superseded artifact.
+- Artifact Index points to a stale or replaced artifact.
+- Gate Decisions refer to a stale or replaced artifact.
 - The newest artifact has no corresponding required Gate.
 - The user wants to continue based on an older passed Gate after a newer version exists.
 
 Allow continuation when:
 
-- Superseded entries only describe older versions.
+- Stale entries only describe older versions.
 - Artifact Index points to the new effective artifact.
 - Required Re-Gate result exists and passes.
 

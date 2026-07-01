@@ -9,7 +9,7 @@ Stop Pipeline when any stage returns:
 - Unresolved Critical issue.
 - Unaccepted High risk.
 - Missing current artifact.
-- Superseded artifact.
+- Stale or replaced artifact.
 - Undefined business behavior.
 - Scope change without approval.
 
@@ -48,6 +48,6 @@ Recommend a Re-Gate record containing:
 - Triggering stage.
 - Blocking evidence.
 - Earliest affected node.
-- Superseded artifacts.
+- Stale or replaced artifacts.
 - Required new artifacts.
 - Whether implementation is blocked and whether the online admission summary needs a risk note.

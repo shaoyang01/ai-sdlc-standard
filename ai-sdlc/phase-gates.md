@@ -68,6 +68,9 @@ Gate 是阶段准入条件，不是建议。
 
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 
 ## Critical
 
@@ -94,6 +97,7 @@ Gate 是阶段准入条件，不是建议。
 - 新逻辑失败、超时、异常时是否影响原流程。
 - 是否改变返回值、状态、事务、日志、MQ、缓存或 DB 写入。
 - 状态流转、数据来源、异常处理、测试方案是否完整。
+- 下游审核必须记录被审阅技术方案的稳定路径和内部 Version。
 
 ### Plan Gate
 
@@ -128,6 +132,7 @@ Gate 是阶段准入条件，不是建议。
 - 是否保持原流程。
 - 异常处理、幂等、事务边界是否符合方案。
 - 是否引入兼容性、性能或安全风险。
+- 是否审阅了当前实现记录 Version。
 
 ### Test Gate
 
@@ -157,3 +162,10 @@ Specification Missing 必须回写 Checklist 或 Schema。
 - 不代表需求已经结束。
 
 上线、灰度、投产、回滚执行和外部发布动作不属于本工作流。
+
+## Re-Gate 与版本绑定
+
+Gate 产物必须绑定被审阅产物的稳定路径和内部 Version。
+
+当上游产物 Version 与 Gate 中记录的 Reviewed Artifact Version 不一致时，
+该 Gate 结论视为 stale，必须重新判断是否仍可放行。

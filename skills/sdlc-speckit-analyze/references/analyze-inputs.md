@@ -16,7 +16,7 @@ Recommended:
 - `library/{requirement_id}/manifest.md`
 - Accepted risk records
 - Re-Gate Records
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Plan Gate result from `sdlc-speckit-plan`
 - Clarification result from `sdlc-speckit-clarify`
 
@@ -25,7 +25,7 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-tasks` has no Blocking Items.
-- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not superseded.
+- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not stale.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Plan Gate result is passable.
 - Task Gate result is passable.

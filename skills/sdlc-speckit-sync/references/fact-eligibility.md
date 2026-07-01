@@ -31,7 +31,7 @@ Do not sync:
 - Failed experiments.
 - Open questions.
 - Risks that are not accepted or resolved.
-- Facts from superseded artifacts.
+- Facts from stale or replaced artifacts.
 - Requirement-specific delivery notes that do not generalize.
 
 ## Evidence Requirement

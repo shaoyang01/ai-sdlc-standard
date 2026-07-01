@@ -147,7 +147,7 @@ Every sync result must contain:
 Stop instead of syncing when:
 
 - Implementation is unverified.
-- Required source artifacts are missing or superseded.
+- Required source artifacts are missing or stale.
 - Target path or ownership is unclear.
 - User has not authorized writing to the target.
 - Proposed fact is only valid for a single temporary requirement.

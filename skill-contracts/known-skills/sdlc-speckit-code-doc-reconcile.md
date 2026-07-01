@@ -45,7 +45,7 @@ can_modify_knowledge_base: true
 can_execute_commands: true
 blocking_conditions:
   - requirement or feature scope is unclear
-  - required artifacts are missing or superseded
+  - required artifacts are missing or stale
   - current source of truth conflicts across approved artifacts
   - code behavior cannot be inspected
   - drift correction would require production code changes
@@ -100,13 +100,13 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - `.specify/business_domain/**` 或其他声明的知识目标。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 已接受风险记录。
 
 前置条件：
 
 - 审计范围明确。
-- 当前有效产物和 superseded 产物可以区分。
+- 当前有效产物和 stale 产物可以区分。
 - 代码行为或 diff 可以被检查。
 - 纠偏方式不需要在本 Skill 内修改生产代码。
 

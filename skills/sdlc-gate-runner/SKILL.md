@@ -16,12 +16,12 @@ Run a generic DocFlow Gate check against a requirement manifest and related node
 3. Do not modify production code.
 4. Do not modify `specs/**` or `.specify/business_domain/**`.
 5. Do not approve risk without explicit risk acceptance.
-6. Do not use superseded artifacts as a current Gate basis.
+6. Do not use stale or replaced artifacts as a current Gate basis.
 7. Do not let a failed or missing Gate enter the next phase.
 8. Use `PASS`, `FAIL`, or `PASS_WITH_RISK`.
 9. Use `templates/gate-result-template.md` as the output structure.
 10. Recommend manifest updates, but do not silently edit `manifest.md` unless explicitly requested.
-11. Apply `ai-sdlc/change-control.md` when Change History, Superseded Artifacts, or Re-Gate Records indicate a change or rework.
+11. Apply `ai-sdlc/change-control.md` when Change History, Replaced Artifact Paths, or Re-Gate Records indicate a change or rework.
 12. Route content-specific findings back to the specialized skill that owns them.
 
 ## Required Standard Files
@@ -41,7 +41,7 @@ Load these references as needed:
 
 - `references/gate-workflow.md` for the step-by-step Gate execution workflow.
 - `references/gate-matrix.md` for phase-specific inputs, blocking checks, and next steps.
-- `references/risk-and-regate.md` for `PASS_WITH_RISK`, superseded artifacts, and change-control checks.
+- `references/risk-and-regate.md` for `PASS_WITH_RISK`, stale or replaced artifacts, and change-control checks.
 - `references/output-report.md` for the Gate report structure and manifest update recommendations.
 
 ## Workflow
@@ -57,7 +57,7 @@ Identify:
 - Reviewed artifact path
 - Required upstream Gate artifact, if applicable
 - Current effective versions from Artifact Index
-- Change History, Superseded Artifacts, and Re-Gate Records
+- Change History, Replaced Artifact Paths, and Re-Gate Records
 
 Stop if `manifest.md` is missing or unreadable unless the user explicitly asks for a manifest creation recommendation.
 
@@ -71,7 +71,7 @@ Read:
 Read `references/risk-and-regate.md` whenever the manifest contains:
 
 - `PASS_WITH_RISK`
-- Superseded artifacts
+- Stale or replaced artifacts
 - Change History
 - Re-Gate Records
 - Blocking Issues
@@ -88,7 +88,7 @@ Verify:
 - Artifact Index points to the current effective artifact.
 - Gate Result is `PASS`, `FAIL`, or `PASS_WITH_RISK`.
 - `PASS_WITH_RISK` includes Accepted Risk, Accepted By, Accepted At, Accepted Reason, Accepted Scope, Follow-up Required, and Follow-up Owner.
-- Superseded artifacts are not used as current effective Gate evidence.
+- Stale or replaced artifacts are not used as current effective Gate evidence.
 - Change History entries requiring Re-Gate are resolved or have valid Re-Gate Records.
 
 ### 4. Decide Gate Result
@@ -97,7 +97,7 @@ Use these rules:
 
 - Missing manifest -> `FAIL`
 - Missing required artifact -> `FAIL`
-- Superseded current artifact -> `FAIL`
+- Stale current artifact -> `FAIL`
 - Required Re-Gate missing -> `FAIL`
 - Existing Gate result is `FAIL` -> `FAIL`
 - `PASS_WITH_RISK` without complete risk acceptance -> `FAIL`
@@ -113,7 +113,7 @@ By default, return the Gate report in the response.
 When the user explicitly asks to generate a local artifact, write a Markdown report under the Gate-related node:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查__vN.md
+library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查.md
 ```
 
 For HTML or Lark/Feishu output, use `sdlc-docflow-writer` for routing and publishing. Keep this skill responsible for Gate evaluation content only.
@@ -148,7 +148,7 @@ Every Gate report must contain:
 - Required Actions
 - Risk Acceptance
 - Re-Gate Check
-- Superseded Artifact Check
+- Stale Artifact Check
 - Manifest Update Recommendation
 - Next Step
 
@@ -161,4 +161,4 @@ Stop instead of producing a passing Gate result when:
 - Gate result cannot be determined.
 - `PASS_WITH_RISK` lacks complete risk acceptance.
 - Change-control evidence requires Re-Gate and no valid Re-Gate result exists.
-- The only available Gate evidence points to a superseded artifact.
+- The only available Gate evidence points to a stale or replaced artifact.

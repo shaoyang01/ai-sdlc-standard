@@ -82,7 +82,7 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - 已接受风险记录。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 
 前置条件：
 
@@ -152,7 +152,7 @@ specs/{feature}/plan.md
 - Plan 改变状态流转、异常处理、兼容策略、数据写入或测试验收口径。
 - Plan 需要新增方案中没有定义的业务规则。
 - Plan 无法支撑验收标准。
-- 当前有效方案或审核产物已被 superseded。
+- 当前有效方案或审核产物已被 stale。
 
 ## Gate Requirements
 

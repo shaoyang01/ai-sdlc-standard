@@ -40,7 +40,7 @@ Use when available:
 - Existing `specs/{feature}/spec.md`, `plan.md`, `tasks.md`.
 - Existing `specs/{feature}` provenance, when the target feature directory already exists.
 - Re-Gate Records.
-- Superseded Artifacts.
+- Replaced Artifact Paths.
 - Existing `.specify/business_domain/**` documents generated in the target repository.
 - Previous code review, test feedback, or implementation records.
 

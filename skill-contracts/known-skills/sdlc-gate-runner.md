@@ -68,14 +68,14 @@ blocking_conditions:
 
 - 上一个 Gate 结果。
 - Change History。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - Re-Gate Records。
 
 缺失输入处理：
 
 - manifest 缺失时，可以建议创建，但不能认定 Gate 通过。
 - 关键节点产物缺失时输出 `FAIL`。
-- 旧版本已 superseded 时，不得继续用旧 Gate 结果放行。
+- 旧版本已 stale 时，不得继续用旧 Gate 结果放行。
 
 ## Output Contract
 
@@ -125,7 +125,7 @@ templates/gate-result-template.md
 必须输出 `FAIL` 或阻塞的情况：
 
 - 必需产物缺失。
-- Gate 依赖的旧版本已被 superseded。
+- Gate 依赖的旧版本已被 stale。
 - Critical 存在。
 - High 存在且没有风险接受。
 - `PASS_WITH_RISK` 缺少 Accepted Risk、Accepted By、Accepted At、Accepted Reason、Accepted Scope、Follow-up Required 或 Follow-up Owner。

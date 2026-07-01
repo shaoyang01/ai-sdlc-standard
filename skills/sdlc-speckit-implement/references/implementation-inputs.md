@@ -16,7 +16,7 @@ Recommended:
 - `library/{requirement_id}/manifest.md`
 - Accepted risk records
 - Re-Gate Records
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Current repository status
 - Relevant existing tests and build commands
 - Prior implementation record, if continuing work
@@ -26,7 +26,7 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-analyze` has no Blocking Items.
-- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not superseded.
+- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not stale.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Task Gate and Analyze Gate are passable.
 - Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.

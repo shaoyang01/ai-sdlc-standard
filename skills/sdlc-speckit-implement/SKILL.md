@@ -75,7 +75,7 @@ Identify:
 - `manifest.md`, if available
 - Current repository status and existing local changes
 
-Stop if any current core artifact is missing or superseded.
+Stop if any current core artifact is missing or stale.
 
 ### 2. Verify Implementation Readiness
 
@@ -163,7 +163,7 @@ Every implementation result must contain:
 Stop instead of modifying or continuing code when:
 
 - `sdlc-speckit-analyze` has unresolved Blocking items.
-- Required artifacts are missing or superseded.
+- Required artifacts are missing or stale.
 - Implementation requires behavior outside tasks, plan, spec, or DocFlow approval.
 - Existing code contradicts approved assumptions.
 - Required verification cannot be defined.

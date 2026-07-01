@@ -52,7 +52,7 @@ Verify that the manifest has enough evidence:
 - Artifact Index
 - Activity Log
 - Change History
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Re-Gate Records
 - Gate Decisions
 - Missing Artifacts
@@ -69,7 +69,7 @@ For every required artifact:
 - Confirm the file exists or the source is otherwise readable.
 - Confirm the file belongs to the same `library/{requirement_id}/` directory.
 - Confirm the filename version matches the current effective version.
-- Confirm the artifact is not superseded.
+- Confirm the artifact is not stale.
 
 Missing required artifacts are Critical.
 
@@ -89,7 +89,7 @@ Do not reinterpret a specialized review as passing when it did not explicitly sa
 Inspect:
 
 - Change History
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Re-Gate Records
 - Blocking Issues
 

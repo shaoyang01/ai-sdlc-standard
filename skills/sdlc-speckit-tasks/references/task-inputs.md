@@ -15,7 +15,7 @@ Recommended:
 - `library/{requirement_id}/manifest.md`
 - Accepted risk records
 - Re-Gate Records
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Existing `specs/{feature}/tasks.md`
 
 ## Readiness Checks
@@ -23,7 +23,7 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-plan` has no Blocking Items.
-- `specs/plan.md` is current and not superseded.
+- `specs/plan.md` is current and not stale.
 - `specs/plan.md` is consistent with `specs/spec.md`.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.

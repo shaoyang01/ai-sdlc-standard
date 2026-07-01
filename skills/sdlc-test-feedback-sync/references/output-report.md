@@ -7,7 +7,7 @@ By default, return the sync recommendation report in the response.
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试反馈同步建议__vN.md
+library/{requirement_id}/05-测试验收/{requirement_id}__测试反馈同步建议.md
 ```
 
 Do not overwrite an existing report.

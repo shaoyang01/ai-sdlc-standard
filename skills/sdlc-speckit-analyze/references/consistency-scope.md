@@ -12,7 +12,7 @@ Audit these dimensions across DocFlow, spec, plan, and tasks:
 - Observability, logging, metrics, alerting, rollout, and release support.
 - Test strategy and verification task coverage.
 - Accepted risks, deferred items, and Re-Gate decisions.
-- Artifact currency and superseded status.
+- Artifact currency and stale status.
 
 ## Allowed Findings
 
@@ -24,7 +24,7 @@ Allowed findings include:
 - Task missing approved plan basis.
 - Acceptance criterion missing verification.
 - Risk accepted in solution review but absent from plan or tasks.
-- Superseded artifact still being used.
+- Stale or replaced artifact still being used.
 - Manifest state not matching current artifacts.
 
 ## Blocked Analysis Decisions

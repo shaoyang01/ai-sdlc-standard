@@ -43,7 +43,7 @@ can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
   - target checklist stage is unclear
-  - required source artifacts are missing or superseded
+  - required source artifacts are missing or stale
   - checklist item would introduce new business behavior
   - existing checklist conflicts with current approved artifacts
   - checklist generation would replace Gate, Analyze, Review, or Test Acceptance
@@ -93,7 +93,7 @@ blocking_conditions:
 - `library/{requirement_id}/02-方案审核/*`
 - `library/{requirement_id}/manifest.md`
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 已接受风险记录。
 - 实现、代码审核、测试反馈、Sync 或 Reconcile 结果。
 
@@ -164,7 +164,7 @@ specs/{feature}/checklists/{stage}-checklist.md
 必须停止的情况：
 
 - Checklist stage 不明确。
-- 当前 source artifacts 缺失或 superseded。
+- 当前 source artifacts 缺失或 stale。
 - Source artifacts 之间存在冲突。
 - 检查项需要新增业务规则或技术决策。
 - 已有 checklist 与当前有效产物冲突。

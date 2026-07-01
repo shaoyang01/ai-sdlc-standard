@@ -5,10 +5,10 @@
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要__vN.md
+library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
 ```
 
-Use the next version number instead of overwriting an existing artifact.
+Update the stable artifact file and increment its internal Metadata Version instead of creating a versioned filename.
 
 ## Markdown Template
 

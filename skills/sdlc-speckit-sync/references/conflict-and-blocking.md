@@ -5,7 +5,7 @@
 Stop when:
 
 - Implementation is not verified.
-- Source artifacts are missing or superseded.
+- Source artifacts are missing or stale.
 - Target path is unclear.
 - User did not authorize writing to the target.
 - Proposed fact conflicts with existing knowledge.

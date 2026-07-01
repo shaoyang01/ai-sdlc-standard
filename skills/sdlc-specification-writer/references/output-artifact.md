@@ -5,10 +5,10 @@
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.md
+library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
 ```
 
-Use the next version number. Do not overwrite old files.
+Update the stable artifact file and increment its internal Metadata Version; preserve history in 修订记录 and Git history.
 
 ## HTML or Lark/Feishu
 
@@ -25,8 +25,8 @@ Recommend:
 ```text
 Artifact Index:
   Node: 01 技术方案
-  Path: library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.md
-  Version: vN
+  Path: library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
+  Version: <semantic-version>
   Result: draft / ready-for-review
 
 Activity Log:

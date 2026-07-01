@@ -126,7 +126,7 @@ By default, return the normalized requirement summary in the response.
 When the user explicitly asks to generate a local artifact, write:
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要__vN.md
+library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
 ```
 
 Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested. Keep this skill responsible for requirement semantics only.

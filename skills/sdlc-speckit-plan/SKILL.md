@@ -86,7 +86,7 @@ Continue only when:
 - Clarification has no blocking core ambiguity.
 - `specs/spec.md` is consistent with approved DocFlow artifacts.
 - Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
-- Current artifacts are not superseded.
+- Current artifacts are not stale.
 
 ### 3. Create Or Validate Plan
 
@@ -159,4 +159,4 @@ Stop instead of writing or approving a plan when:
 - Planning requires new business rules.
 - Plan contradicts `specs/spec.md`, `01-技术方案`, or `02-方案审核`.
 - Accepted risks are missing or contradicted.
-- Current artifacts are superseded.
+- Current artifacts are stale.

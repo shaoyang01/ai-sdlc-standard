@@ -4,7 +4,7 @@
 
 Check for:
 
-- Current artifact set and superseded status.
+- Current artifact set and stale status.
 - Solution Review pass or accepted risk.
 - Spec to DocFlow consistency.
 - Plan to spec consistency.
@@ -30,14 +30,14 @@ Use:
 Block when:
 
 - Current artifacts conflict.
-- A required artifact is missing or superseded.
+- A required artifact is missing or stale.
 - `02-方案审核`, Plan Gate, or Task Gate is failed or unresolved.
 - `PASS_WITH_RISK` lacks accepted risk evidence.
 - A task requires behavior not in spec or plan.
 - A plan item has no task and affects implementation.
 - An acceptance criterion has no verification path.
 - Failure, rollback, compatibility, or data behavior differs across artifacts.
-- Manifest state points to stale or superseded artifacts.
+- Manifest state points to stale or stale or replaced artifacts.
 - Implementation would require guessing.
 
 ## Output

@@ -129,7 +129,7 @@ By default, return the specification content in the response.
 When the user explicitly asks to generate a local artifact, write:
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.md
+library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
 ```
 
 For HTML or Lark/Feishu output, use `sdlc-docflow-writer` for routing and publishing. Keep this skill responsible for specification content only.

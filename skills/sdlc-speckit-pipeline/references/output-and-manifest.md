@@ -60,7 +60,7 @@ Use this structure:
 
 - Required:
 - Earliest affected node:
-- Superseded artifacts:
+- Stale or replaced artifacts:
 
 ## Manifest Update Recommendation
 

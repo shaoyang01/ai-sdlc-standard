@@ -94,7 +94,7 @@ blocking_conditions:
 - `library/{requirement_id}/manifest.md`
 - 已接受风险记录。
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 当前仓库状态。
 - 相关测试、构建或验证命令。
 
@@ -159,7 +159,7 @@ blocking_conditions:
 必须停止的情况：
 
 - `sdlc-speckit-analyze` 仍有 Blocking Items。
-- 当前有效 DocFlow、spec、plan 或 tasks 缺失或 superseded。
+- 当前有效 DocFlow、spec、plan 或 tasks 缺失或 stale。
 - 实现需要任务外行为。
 - 实现需要未定义业务规则或技术决策。
 - 现有代码事实与已批准假设冲突。

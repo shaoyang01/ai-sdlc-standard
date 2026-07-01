@@ -43,7 +43,7 @@ An item is eligible for later knowledge sync only when:
 Do not sync:
 
 - Failed behavior as current fact.
-- Superseded specification.
+- Stale specification.
 - Unconfirmed requirement change.
 - Environment-specific data accident.
 - One-off test case mistake.

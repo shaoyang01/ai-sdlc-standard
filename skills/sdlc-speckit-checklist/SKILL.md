@@ -20,7 +20,7 @@ Create or validate requirement-specific checklists for the Speckit lifecycle. Tr
 7. Do not modify production code.
 8. Do not write knowledge targets.
 9. Stop when a checklist item would require changing approved scope, plan, tasks, or implementation behavior.
-10. Mark stale, superseded, or untraceable checklist items as invalid instead of silently carrying them forward.
+10. Mark stale, stale, or untraceable checklist items as invalid instead of silently carrying them forward.
 11. Route reusable checklist improvements discovered from test or review feedback to `sdlc-test-feedback-sync` or `sdlc-speckit-sync`.
 12. Recommend manifest Activity Log and Re-Gate updates.
 
@@ -87,7 +87,7 @@ Read:
 - `references/checklist-inputs.md`
 - `references/staleness-and-regate.md`
 
-Continue only when source artifacts are current, not superseded, and passable for the target stage.
+Continue only when source artifacts are current, not stale, and passable for the target stage.
 
 ### 3. Generate Or Validate Items
 
@@ -151,7 +151,7 @@ Every checklist result must contain:
 Stop instead of generating or approving checklist content when:
 
 - Target stage is unclear.
-- Required source artifacts are missing or superseded.
+- Required source artifacts are missing or stale.
 - A checklist item would introduce new business behavior or technical decisions.
 - Existing checklist conflicts with current spec, plan, tasks, or DocFlow.
 - Checklist generation would replace Gate, Analyze, Review, or Test Acceptance.

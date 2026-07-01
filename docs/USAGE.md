@@ -44,8 +44,10 @@ library/{requirement_id}/
 文件命名遵循：
 
 ```text
-{requirement_id}__{artifact_type}__vN.{ext}
+{requirement_id}__{artifact_type}.{ext}
 ```
+
+版本写入文档 Metadata 的 `Version` 字段，并在 `## 修订记录` 和 manifest 中追踪。
 
 `library/{requirement_id}/` 是人工交接和 Gate 视图。`specs/**` 是 Speckit 机器事实源；二者职责不同。
 
@@ -181,7 +183,7 @@ templates/artifact-manifest-template.md
 - Artifact Index
 - Activity Log
 - Change History
-- Superseded Artifacts
+- Replaced Artifact Paths
 - Re-Gate Records
 - Gate Decisions
 - Stage Summaries
@@ -202,10 +204,11 @@ ai-sdlc/change-control.md
 
 基本原则：
 
-- 业务目标未变时，默认沿用原 `requirement_id`，通过 `v2`、`v3` 产物推进。
+- 业务目标未变时，默认沿用原 `requirement_id`，通过稳定文件的内部 Metadata `Version` 推进。
 - 需求目标变成独立需求或独立排期时，新建 `requirement_id`。
 - 从最早受影响节点重新 Gate。
-- 不覆盖历史产物，使用 superseded 和 Re-Gate 记录。
+- 产物正文保持当前有效状态；历史通过 `## 修订记录`、manifest `Change History` 和 Git 追踪。
+- 只有旧路径、拆分产物或重命名迁移时，才使用 `Replaced Artifact Paths`。
 
 ## 推荐验证路径
 

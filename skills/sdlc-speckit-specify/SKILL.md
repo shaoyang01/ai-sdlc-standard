@@ -88,7 +88,7 @@ Continue only when:
 - Solution review is `PASS` or valid `PASS_WITH_RISK`.
 - Development path is `SPECKIT_PIPELINE_REQUIRED`, or full SDD is explicitly requested.
 - Core Scope, behavior, failure strategy, and acceptance criteria are stable.
-- Current artifacts are not superseded.
+- Current artifacts are not stale.
 - Existing target `specs/{feature}/spec.md`, if present, belongs to the same requirement and current DocFlow source artifacts.
 
 ### 3. Sync Specification
@@ -105,7 +105,7 @@ Update an existing target only when:
 
 - It is linked to the same requirement ID, or the manifest maps it to the same requirement.
 - Its source DocFlow artifacts are the same current `01-技术方案` and `02-方案审核`, or the update is a valid Re-Gate replacement.
-- The change does not erase previous process evidence; superseded content remains traceable through manifest or Re-Gate records.
+- The change does not erase previous process evidence; stale content remains traceable through manifest or Re-Gate records.
 
 Stop instead of overwriting when the target spec belongs to another requirement, has unknown provenance, or contains unresolved local edits.
 
@@ -153,7 +153,7 @@ Every sync result must include:
 
 Stop instead of writing or recommending a `specs/spec.md` update when:
 
-- Solution review is missing, failed, or superseded.
+- Solution review is missing, failed, or stale.
 - Development path is `BLOCKED_NEEDS_REVISION`.
 - Development path is `DIRECT_IMPLEMENTATION` and the user did not explicitly request full SDD.
 - Technical specification has unresolved core ambiguity.

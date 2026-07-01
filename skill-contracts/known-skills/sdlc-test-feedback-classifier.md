@@ -18,7 +18,7 @@ input_artifacts:
   - optional library/{requirement_id}/03-实现记录/*
   - optional library/{requirement_id}/04-代码审核/*
 output_artifacts:
-  - library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
+  - library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
   - manifest.md change or re-gate update recommendation
 required_schema:
   - ess/test-feedback-schema.md
@@ -94,7 +94,7 @@ blocking_conditions:
 默认输出：
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
+library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
 ```
 
 输出必须符合 `ess/test-feedback-schema.md`，包含：
@@ -117,7 +117,7 @@ library/{requirement_id}/05-测试验收/{requirement_id}__测试验收__vN.md
 | Classification | 必需动作 |
 | --- | --- |
 | Implementation Bug | 进入 Fix，更新实现记录，必要时重新代码审核。 |
-| Specification Missing | 回到 `01-技术方案`，生成新版本并重新方案审核。 |
+| Specification Missing | 回到 `01-技术方案`，更新稳定文件版本并重新方案审核。 |
 | Review Missing | 记录 Review 缺口，建议后续由 `sdlc-test-feedback-sync` 沉淀到 Review Checklist。 |
 | Requirement Change | 按 `ai-sdlc/change-control.md` 判断沿用当前 requirement_id 或新建需求。 |
 | Test Case Issue | 更新测试口径，不要求改方案或代码。 |

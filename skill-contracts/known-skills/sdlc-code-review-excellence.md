@@ -85,14 +85,14 @@ blocking_conditions:
 - 验证命令和结果。
 - `library/{requirement_id}/manifest.md`
 - Re-Gate Records。
-- Superseded Artifacts。
+- Replaced Artifact Paths。
 - 已接受风险记录。
 
 前置条件：
 
 - 实现已完成或已有可审查 diff。
 - 行为变更有规格依据。
-- 当前 source artifacts 未被 superseded。
+- 当前 source artifacts 未被 stale。
 - Review 范围明确。
 
 缺失输入处理：

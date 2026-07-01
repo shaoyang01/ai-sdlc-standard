@@ -78,7 +78,7 @@ When drift requires upstream correction, recommend:
 
 - Affected Gate.
 - Reason.
-- Superseded artifacts.
+- Stale or replaced artifacts.
 - Required new artifacts.
 - Blocking status until Re-Gate completes.
 

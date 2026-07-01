@@ -14,7 +14,7 @@ input_artifacts:
   - optional existing draft specification
   - optional repository context
 output_artifacts:
-  - library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.md
+  - library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
   - manifest.md artifact index update recommendation
 required_schema:
   - ess/specification-schema.md
@@ -92,7 +92,7 @@ blocking_conditions:
 默认输出：
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.md
+library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
 ```
 
 如果需要 HTML、飞书或其他发布格式：

@@ -18,7 +18,7 @@ Use when present:
 
 - `library/{requirement_id}/manifest.md`.
 - Re-Gate Records.
-- Superseded Artifacts.
+- Replaced Artifact Paths.
 - Code review findings.
 - Test feedback classifications.
 - Existing checklist under `specs/{feature}/checklists/`.

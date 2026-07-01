@@ -107,8 +107,8 @@ blocking_conditions:
 
 必需输入：
 
-- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案__vN.*`
-- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.*`
+- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.*`
+- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.*`
 - `library/{requirement_id}/manifest.md`
 
 建议输入：
@@ -165,7 +165,7 @@ Preflight
 - `specs/plan.md`、`research.md`、`data-model.md`、`contracts/`（按需）
 - `specs/tasks.md`
 - 实现摘要
-- `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录__vN.md`
+- `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
 - Sync 目标路径和结果
 - manifest Activity Log / Speckit Sync 更新建议
 

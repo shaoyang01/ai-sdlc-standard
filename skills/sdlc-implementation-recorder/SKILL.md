@@ -126,7 +126,7 @@ By default, return the implementation record in the response.
 When the user explicitly asks to generate a local artifact, write:
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录__vN.md
+library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
 ```
 
 Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested. Keep this skill responsible for implementation record content only.

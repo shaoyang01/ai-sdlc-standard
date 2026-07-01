@@ -46,7 +46,7 @@ Use when DocFlow artifacts or Gate records no longer reflect the active approved
 
 Examples:
 
-- `01-技术方案` was superseded but manifest still points to it as current.
+- `01-技术方案` was stale but manifest still points to it as current.
 - `02-方案审核` lacks the current risk acceptance.
 - A Re-Gate decision exists but the old Gate result remains presented as active.
 
@@ -78,7 +78,7 @@ Examples:
 
 - Activity Log lacks implementation, sync, or reconcile event.
 - Change History omits an accepted scope change.
-- Re-Gate Records do not point to superseded artifacts.
+- Re-Gate Records do not point to stale or replaced artifacts.
 - Sync status is missing target path or result.
 
 Routing:

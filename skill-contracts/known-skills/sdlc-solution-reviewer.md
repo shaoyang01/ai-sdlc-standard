@@ -14,7 +14,7 @@ input_artifacts:
   - optional specs/**
   - optional repository context
 output_artifacts:
-  - library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
+  - library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
   - manifest.md gate decision update recommendation
   - development path decision recommendation
 required_schema:
@@ -99,7 +99,7 @@ blocking_conditions:
 方案审核产物必须输出到：
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
+library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
 ```
 
 若用户要求 HTML 或飞书文档，`sdlc-solution-reviewer` 只负责审核内容，实际落盘或发布应交给 `sdlc-docflow-writer`。
@@ -129,7 +129,7 @@ library/{requirement_id}/02-方案审核/{requirement_id}__方案审核__vN.md
 | --- | --- | --- |
 | `DIRECT_IMPLEMENTATION` | Complexity 为 `SIMPLE` 或 `MEDIUM`，方案完整、边界清楚、无必须完整 SDD 的复杂协作。 | 进入实现，仍需遵守实现记录和代码审核 Gate。 |
 | `SPECKIT_PIPELINE_REQUIRED` | Complexity 为 `COMPLEX`，或用户明确要求完整 SDD，或后续 Gate 判定直接实现过于冒险。 | 唤醒 `sdlc-speckit-pipeline`。 |
-| `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束 / Complexity 为 `BLOCKED_UNKNOWN`。 | 回到 `01-技术方案` 生成新版本并重新审核。 |
+| `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束 / Complexity 为 `BLOCKED_UNKNOWN`。 | 回到 `01-技术方案` 更新稳定文件版本并重新审核。 |
 
 ## Side Effects
 

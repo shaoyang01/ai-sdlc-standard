@@ -88,7 +88,7 @@ Continue only when:
 - Plan Gate has no Blocking items.
 - `specs/plan.md` is consistent with `specs/spec.md` and approved DocFlow artifacts.
 - Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
-- Current artifacts are not superseded.
+- Current artifacts are not stale.
 
 ### 3. Create Or Validate Tasks
 
@@ -160,4 +160,4 @@ Stop instead of writing or approving tasks when:
 - Task breakdown requires new business rules.
 - Tasks contradict `specs/spec.md`, `specs/plan.md`, `01-技术方案`, or `02-方案审核`.
 - Required implementation or verification coverage cannot be derived from approved artifacts.
-- Current artifacts are superseded.
+- Current artifacts are stale.

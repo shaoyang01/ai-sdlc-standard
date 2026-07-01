@@ -265,7 +265,7 @@ Do not use composite categories to blur ownership. The contract must say which p
 Every category must stop when:
 
 - Required input is missing.
-- Current artifact is superseded.
+- Current artifact is stale.
 - Source-of-truth conflict cannot be resolved.
 - Continuing would require guessing business behavior.
 - Continuing would expand approved scope.

@@ -34,7 +34,7 @@ Read the technical specification completely.
 Read optional context only when needed:
 
 - `00-需求资料` for requirement intent.
-- `manifest.md` for current stage, old Gate result, superseded artifacts, and Re-Gate records.
+- `manifest.md` for current stage, old Gate result, stale or replaced artifacts, and Re-Gate records.
 - `specs/**` only when the user says the requirement already entered Speckit or references a specific spec path.
 - Code files only when the technical specification depends on actual code behavior.
 
