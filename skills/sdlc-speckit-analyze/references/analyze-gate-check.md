@@ -15,15 +15,35 @@ Check for:
 - Failure, retry, idempotency, transaction, rollback, and compatibility consistency.
 - Manifest Development Path Decision and Activity Log consistency.
 - Implementation readiness.
-- Entry coverage reports when `.specify/entry-coverage-profile.yaml` exists.
+- Entry coverage reports, which are mandatory before implementation readiness.
+- Project Type Profiles and route artifact consistency.
 
-## Entry Coverage Audit
+## Entry Coverage Gate
 
-When the target repository has `.specify/entry-coverage-profile.yaml`, run or require the standard runner before marking Analyze clear:
+Analyze Gate must run or require the standard runner before marking Analyze clear:
 
 ```bash
 ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
 ```
+
+If `.specify/entry-coverage-profile.yaml` is missing, Analyze Gate is
+`FAIL` / `BLOCKED`.
+
+If only `.specify/entry-coverage-profile.candidate.yaml` exists, Analyze Gate is
+`PENDING_CONFIRMATION` or `FAIL` until the candidate is reviewed and promoted to
+`.specify/entry-coverage-profile.yaml`.
+
+Required Action:
+
+```bash
+${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-entry-coverage-profile.sh --dry-run
+${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-entry-coverage-profile.sh
+```
+
+Full project bootstrap is also acceptable when the repository has not been
+initialized at all.
+
+Do not skip entry coverage audit because the profile is missing.
 
 Read:
 
@@ -35,26 +55,93 @@ Read:
 - `.specify/reports/entry_coverage/unarchived_services.md`
 - `.specify/reports/entry_coverage/cross_domain_conflicts.md`
 
+Decision source:
+
+- Parse `entry_inventory.tsv` and `service_inventory.tsv` as TSV using headers.
+- Required `entry_inventory.tsv` fields include `entry_type`,
+  `evidence_mode`, `symbol`, `path`, `archived`, `classification`,
+  `classification_reason`, `match_strength`, `match_reason`, and
+  `requirement_scope`.
+- Required `service_inventory.tsv` fields include `kind`, `symbol`, `path`,
+  `classification`, `match_strength`, `match_reason`,
+  `reverse_coverage_status`, and `requirement_scope`.
+- Use markdown reports only for human-readable context and details, not as the
+  primary blocker detector.
+- Do not grep whole markdown reports to infer blockers.
+
 The enhanced runner no longer relies only on full-text contains. It uses
 EntryCoverage table parsing, code anchor, path, method, route, topic, job,
 function, SQL, connector, sink, frontend API/client, and backend/mock boundary
 evidence.
 
 Inspect `classification`, `classification_reason`, `match_strength`,
-`match_reason`, and `reverse_coverage_status` before deciding blockers.
+`match_reason`, `requirement_scope`, and `reverse_coverage_status` before
+deciding blockers.
 
 Treat these as Analyze Gate blocking unless the project profile records an
 explicit accepted exception:
 
 - business entry unarchived;
 - core business unit unarchived;
-- Service / Manager / Mapper reverse coverage missing for a business unit;
-- cross-domain conflict;
+- Service / Manager / Mapper reverse coverage missing for a business unit, including `reverse_coverage_status=no_entry_reverse_coverage`;
+- cross-domain conflict that is not accepted by `specs/{feature}/route.md` or profile;
 - business_domain L4 missing.
 
-technical bridge, framework bridge, generated/vendor, frontend native shell,
-abstract/base, annotation/marker, and not-applicable rows must remain visible in
-the reports but do not by themselves block Analyze.
+The following non-blocking classifications must remain visible in the reports
+but do not by themselves block Analyze:
+
+- `technical_bridge`
+- `framework_bridge`
+- `generated_or_vendor`
+- `native_shell`
+- `abstract_or_base`
+- `annotation_or_marker`
+- `not_applicable`
+
+technical bridge, framework bridge, generated/vendor, and frontend native shell
+rows are visible audit evidence but not default blockers.
+
+`native_shell` blocks only when route, profile, or code evidence marks it as
+explicit user-visible business behavior.
+
+`business_entry` rows block when unarchived or missing L4 evidence.
+
+## Shared-Domain Duplication Decision
+
+Repeated L2 hits for shared/platform/scheduling/integration domains are
+Blocking by default when they create ownership ambiguity.
+
+Downgrade repeated shared/platform/scheduling/integration hits to Warning only
+when one of these sources explicitly accepts the shared boundary:
+
+- `specs/{feature}/route.md` accepted shared boundary;
+- `.specify/entry-coverage-profile.yaml` accepted shared boundary;
+- manifest Re-Gate or risk acceptance record tied to the current feature.
+
+The output must record the decision under `Shared-Domain Duplication Decision`
+with source, evidence, and owner.
+
+## Business-Domain L4 Missing
+
+If entry coverage reports indicate missing or empty business_domain L4
+documents, Analyze Gate is Blocking. Required Action must route to
+`sdlc-speckit-sync` create-if-missing or business-domain bootstrap, not to
+implementation.
+
+## Project Type Profile Checks
+
+Apply the checks in `project-type-checks.md` for:
+
+- `backend-business-service`
+- `admin-mixed-workflow`
+- `frontend-application`
+- `data-pipeline-etl`
+- `library-shared-component`
+
+## Required Speckit Inputs
+
+The gate covers `specs/{feature}/route.md`, `specs/{feature}/spec.md`,
+`specs/{feature}/plan.md`, and `specs/{feature}/tasks.md`.
 
 ## Status Values
 
@@ -83,5 +170,18 @@ Block when:
 ## Output
 
 Summarize coverage in a compact table with category, status, evidence, earliest affected node, and action.
+
+Analyze output must include:
+
+- Project Type Profile Checks
+- Entry Coverage Gate
+- Parsed Entry Inventory Summary
+- Parsed Service Inventory Summary
+- Shared-Domain Duplication Decision
+- Blocking Items
+- Earliest Affected Node
+- Re-Gate Recommendation
+- Manifest Update Recommendation
+- Next Step
 
 Recommend `sdlc-speckit-implement` only when there are no Blocking items.

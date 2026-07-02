@@ -534,6 +534,93 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
   "library-shared-component"
 ].freeze
 
+ANALYZE_GATE_STRENGTHENING_TERMS = [
+  "specs/{feature}/route.md",
+  "specs/{feature}/spec.md",
+  "specs/{feature}/plan.md",
+  "specs/{feature}/tasks.md",
+  ".specify/entry-coverage-profile.yaml",
+  ".specify/entry-coverage-profile.candidate.yaml",
+  ".specify/reports/entry_coverage/entry_coverage_report.md",
+  ".specify/reports/entry_coverage/entry_inventory.tsv",
+  ".specify/reports/entry_coverage/service_inventory.tsv",
+  ".specify/reports/entry_coverage/cross_domain_conflicts.md",
+  ".specify/reports/entry_coverage/unarchived_entries.md",
+  ".specify/reports/entry_coverage/unarchived_services.md",
+  "scripts/bootstrap-entry-coverage-profile.sh",
+  "TSV",
+  "classification",
+  "classification_reason",
+  "match_strength",
+  "match_reason",
+  "requirement_scope",
+  "reverse_coverage_status",
+  "no_entry_reverse_coverage",
+  "technical_bridge",
+  "framework_bridge",
+  "generated_or_vendor",
+  "native_shell",
+  "abstract_or_base",
+  "annotation_or_marker",
+  "not_applicable",
+  "business_entry",
+  "business_domain L4 missing",
+  "cross-domain conflict",
+  "accepted shared boundary",
+  "Project Type Profile Checks",
+  "Entry Coverage Gate",
+  "Parsed Entry Inventory Summary",
+  "Parsed Service Inventory Summary",
+  "Shared-Domain Duplication Decision",
+  "Blocking Items",
+  "Earliest Affected Node",
+  "Re-Gate Recommendation",
+  "Manifest Update Recommendation",
+  "Next Step",
+  "backend-business-service",
+  "admin-mixed-workflow",
+  "frontend-application",
+  "data-pipeline-etl",
+  "library-shared-component"
+].freeze
+
+ANALYZE_PROJECT_TYPE_CHECK_TERMS = [
+  "backend-business-service",
+  "entry -> service -> manager/repository/mapper coverage",
+  "transaction boundary",
+  "rollback path",
+  "idempotency",
+  "compensation",
+  "API/RPC/MQ/Schedule contract",
+  "admin-mixed-workflow",
+  "controller / worker / schedule / data-console / SPI / RPC",
+  "config lifecycle",
+  "approval/audit",
+  "import/export",
+  "read-only query contract",
+  "concurrency/rollback",
+  "frontend-application",
+  "route/page/component/store/API/popup/navigation",
+  "state and visibility",
+  "backend/mock boundary",
+  "visual verification",
+  "implementation/debug/observability process products",
+  "native shell technical bridge does not block",
+  "data-pipeline-etl",
+  "trigger/input/output",
+  "SQL lineage",
+  "partition/window/checkpoint",
+  "replay/idempotency",
+  "downstream consumer",
+  "function/connector/sink coverage",
+  "library-shared-component",
+  "public API",
+  "consumer scenario",
+  "compatibility",
+  "deprecation/migration",
+  "test evidence"
+].freeze
+
 BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "ProjectWorkflowGuide.md",
   "ProjectDocumentationGuide.md",
@@ -1289,6 +1376,31 @@ entry_coverage_profile_bootstrap_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing restricted entry coverage profile bootstrap requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+analyze_gate_strengthening_paths = {
+  "skills/sdlc-speckit-analyze/SKILL.md" => ANALYZE_GATE_STRENGTHENING_TERMS,
+  "skills/sdlc-speckit-analyze/references/analyze-gate-check.md" => ANALYZE_GATE_STRENGTHENING_TERMS,
+  "skills/sdlc-speckit-analyze/references/analyze-inputs.md" => ANALYZE_GATE_STRENGTHENING_TERMS.first(13) + [
+    "PENDING_CONFIRMATION",
+    "Do not approve Analyze readiness by treating a missing profile as \"not applicable\""
+  ],
+  "skills/sdlc-speckit-analyze/references/output-and-manifest.md" => ANALYZE_GATE_STRENGTHENING_TERMS.values_at(32, 33, 34, 35, 36, 37, 38, 39, 40),
+  "skills/sdlc-speckit-analyze/references/project-type-checks.md" => ANALYZE_PROJECT_TYPE_CHECK_TERMS,
+  "skill-contracts/known-skills/sdlc-speckit-analyze.md" => ANALYZE_GATE_STRENGTHENING_TERMS + ANALYZE_PROJECT_TYPE_CHECK_TERMS,
+  "docs/VALIDATION.md" => ANALYZE_GATE_STRENGTHENING_TERMS + ANALYZE_PROJECT_TYPE_CHECK_TERMS
+}.freeze
+
+analyze_gate_strengthening_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing Analyze Gate strengthening requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -57,10 +57,38 @@ Do not update `specs/{feature}/spec.md`, `plan.md`, or `tasks.md` in this skill.
 
 - Technical Specification:
 - Solution Review:
+- Domain Route:
 - SpecKit Spec:
 - SpecKit Plan:
 - SpecKit Tasks:
+- Entry Coverage Profile:
+- Entry Coverage Report:
 - Manifest:
+
+## Project Type Profile Checks
+
+| Project Type Profile | Check | Status | Evidence | Blocking Item | Earliest Affected Node |
+| --- | --- | --- | --- | --- | --- |
+
+## Entry Coverage Gate
+
+| Check | Status | Evidence | Action |
+| --- | --- | --- | --- |
+
+## Parsed Entry Inventory Summary
+
+| Classification | Entry Type | Count | Blocking Count | Notes |
+| --- | --- | ---: | ---: | --- |
+
+## Parsed Service Inventory Summary
+
+| Classification | Reverse Coverage Status | Count | Blocking Count | Notes |
+| --- | --- | ---: | ---: | --- |
+
+## Shared-Domain Duplication Decision
+
+| Domain / L2 | Status | Decision Source | Owner | Action |
+| --- | --- | --- | --- | --- |
 
 ## Consistency Matrix
 
@@ -72,6 +100,8 @@ Do not update `specs/{feature}/spec.md`, `plan.md`, or `tasks.md` in this skill.
 ## Blocking Items
 
 ## Deferred Non-Blocking Items
+
+## Earliest Affected Node
 
 ## Re-Gate Recommendation
 
@@ -99,6 +129,11 @@ Recommend updates for:
 - Artifact Index notes for spec, plan, and tasks
 - Re-Gate Records, if blocked
 - Blocking Issues, if any
+- Project Type Profile Checks
+- Entry Coverage Gate
+- Parsed Entry Inventory Summary
+- Parsed Service Inventory Summary
+- Shared-Domain Duplication Decision
 - Next Step: `sdlc-speckit-implement` or upstream Re-Gate
 
 Do not silently edit manifest unless explicitly requested.

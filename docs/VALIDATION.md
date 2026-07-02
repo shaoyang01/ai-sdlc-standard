@@ -516,6 +516,135 @@ library-shared-component:
 6. git diff --check 通过。
 ```
 
+## Analyze Gate Strengthening 校验
+
+`sdlc-speckit-analyze` 必须把 route artifact、project_type_profiles、
+entry coverage reports 和 process products 纳入实现前 Gate。
+
+必需输入：
+
+```text
+specs/{feature}/route.md
+specs/{feature}/spec.md
+specs/{feature}/plan.md
+specs/{feature}/tasks.md
+.specify/entry-coverage-profile.yaml
+.specify/reports/entry_coverage/entry_coverage_report.md
+.specify/reports/entry_coverage/entry_inventory.tsv
+.specify/reports/entry_coverage/service_inventory.tsv
+.specify/reports/entry_coverage/cross_domain_conflicts.md
+.specify/reports/entry_coverage/unarchived_entries.md
+.specify/reports/entry_coverage/unarchived_services.md
+```
+
+缺 `.specify/entry-coverage-profile.yaml` 时 Analyze Gate 必须 `BLOCKED`。
+如果只有 `.specify/entry-coverage-profile.candidate.yaml`，Analyze Gate 必须
+`PENDING_CONFIRMATION` 或 `BLOCKED`，Required Action 指向：
+
+```bash
+$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run
+$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh
+```
+
+Analyze 不允许因为缺 profile 而跳过 entry coverage audit。
+
+Analyze 必须解析 TSV 字段，不得 grep 整个 markdown 判断 blocker。必须读取：
+
+```text
+entry_inventory.tsv:
+  classification
+  classification_reason
+  match_strength
+  match_reason
+  requirement_scope
+
+service_inventory.tsv:
+  reverse_coverage_status
+```
+
+不单独阻断的 classifications：
+
+```text
+technical_bridge
+framework_bridge
+generated_or_vendor
+native_shell
+abstract_or_base
+annotation_or_marker
+not_applicable
+```
+
+必须阻断：
+
+```text
+business_entry 未归档
+core business unit 未归档
+reverse_coverage_status=no_entry_reverse_coverage
+未接受的 cross-domain conflict
+business_domain L4 missing
+```
+
+shared/platform/scheduling/integration L2 重复命中只有在 `specs/{feature}/route.md`
+或 `.specify/entry-coverage-profile.yaml` 明确 accepted shared boundary 时才能
+降级为 warning。
+
+项目类型检查：
+
+```text
+backend-business-service:
+  entry -> service -> manager/repository/mapper coverage
+  transaction boundary
+  rollback path
+  transaction / rollback / idempotency / compensation
+  API/RPC/MQ/Schedule contract
+
+admin-mixed-workflow:
+  controller / worker / schedule / data-console / SPI / RPC
+  config lifecycle
+  approval/audit
+  import/export
+  read-only query contract
+  concurrency/rollback
+
+frontend-application:
+  route/page/component/store/API/popup/navigation
+  state and visibility
+  backend/mock boundary
+  visual verification
+  implementation/debug/observability process products when applicable
+  native shell technical bridge does not block unless business behavior is explicit
+
+data-pipeline-etl:
+  trigger/input/output
+  SQL lineage
+  partition/window/checkpoint
+  replay/idempotency
+  downstream consumer
+  function/connector/sink coverage
+
+library-shared-component:
+  public API
+  consumer scenario
+  compatibility
+  deprecation/migration
+  test evidence
+```
+
+Analyze 输出必须包含：
+
+```text
+Project Type Profile Checks
+Entry Coverage Gate
+Parsed Entry Inventory Summary
+Parsed Service Inventory Summary
+Shared-Domain Duplication Decision
+Blocking Items
+Earliest Affected Node
+Re-Gate Recommendation
+Manifest Update Recommendation
+Next Step
+```
+
 ## Speckit plan companion artifacts 校验
 
 `sdlc-speckit-plan` 必须生成或显式跳过：

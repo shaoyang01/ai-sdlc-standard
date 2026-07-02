@@ -12,7 +12,7 @@ Audit cross-artifact consistency after `sdlc-speckit-tasks` and before implement
 ## Core Rules
 
 1. Consume Task Gate-passed `specs/{feature}/tasks.md` only.
-2. Require current `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, and approved DocFlow artifacts.
+2. Require current `specs/{feature}/route.md`, `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, and approved DocFlow artifacts.
 3. Preserve approved Scope, behavior, plan, task list, risks, and acceptance criteria.
 4. Do not modify `01-技术方案`, `02-方案审核`, `specs/{feature}/spec.md`, `plan.md`, or `tasks.md`.
 5. Do not modify production code.
@@ -23,6 +23,9 @@ Audit cross-artifact consistency after `sdlc-speckit-tasks` and before implement
 10. Require Analyze Gate readiness before `sdlc-speckit-implement`.
 11. Recommend manifest Activity Log and Re-Gate updates.
 12. Return each blocker to the earliest affected upstream node.
+13. Require `.specify/entry-coverage-profile.yaml`; missing profile blocks Analyze and must point to `scripts/bootstrap-entry-coverage-profile.sh` or full bootstrap.
+14. Parse entry coverage TSV fields for Gate decisions; do not grep markdown reports to infer blockers.
+15. Apply project-type-specific checks from Project Type Profiles before approving implementation readiness.
 
 ## Standard Package Resolution
 
@@ -36,6 +39,37 @@ Before loading shared files, resolve `AI_SDLC_STANDARD_HOME` using this order:
 After resolution, read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/standard-package-resolution.md` and validate required files before continuing.
 
 Do not resolve shared standard files from the target repository `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`. Target repositories store only project profiles, generated business-domain documents, reports, and explicit overrides.
+
+## Entry Coverage TSV Semantics
+
+Analyze must parse `entry_inventory.tsv` and `service_inventory.tsv` by TSV
+headers, including `classification`, `classification_reason`, `match_strength`,
+`match_reason`, `requirement_scope`, and `reverse_coverage_status`.
+
+Non-blocking classifications remain visible but do not block by themselves:
+`technical_bridge`, `framework_bridge`, `generated_or_vendor`, `native_shell`,
+`abstract_or_base`, `annotation_or_marker`, and `not_applicable`.
+
+Blocking entry coverage signals include `business_entry` unarchived,
+core business unit unarchived, `reverse_coverage_status=no_entry_reverse_coverage`,
+unaccepted cross-domain conflict, and business_domain L4 missing.
+
+Repeated shared/platform/scheduling/integration L2 hits require an accepted
+shared boundary in `specs/{feature}/route.md` or the entry coverage profile
+before they can be downgraded to warnings.
+
+The accepted shared boundary must name the shared domain, owner, evidence, and
+risk acceptance source.
+
+## Project Type Profiles
+
+Apply project-type-specific checks for every profile listed in route/profile:
+
+- `backend-business-service`
+- `admin-mixed-workflow`
+- `frontend-application`
+- `data-pipeline-etl`
+- `library-shared-component`
 
 ## Required Standard Files
 
@@ -58,6 +92,7 @@ Load these references as needed:
 - `references/analyze-inputs.md` for required inputs and readiness checks.
 - `references/consistency-scope.md` for cross-artifact consistency dimensions.
 - `references/analyze-gate-check.md` for Analyze Gate coverage and blocking rules.
+- `references/project-type-checks.md` for project_type_profiles-specific readiness checks.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
 
 ## Workflow
@@ -67,9 +102,18 @@ Load these references as needed:
 Identify:
 
 - Requirement ID
+- `specs/{feature}/route.md`
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
+- Project Type Profiles
+- `.specify/entry-coverage-profile.yaml`
+- `.specify/reports/entry_coverage/entry_coverage_report.md`
+- `.specify/reports/entry_coverage/entry_inventory.tsv`
+- `.specify/reports/entry_coverage/service_inventory.tsv`
+- `.specify/reports/entry_coverage/cross_domain_conflicts.md`
+- `.specify/reports/entry_coverage/unarchived_entries.md`
+- `.specify/reports/entry_coverage/unarchived_services.md`
 - Task Gate result
 - Source `01-技术方案`
 - Source `02-方案审核`
@@ -83,11 +127,14 @@ Read:
 
 - `references/analyze-inputs.md`
 - `references/analyze-gate-check.md`
+- `references/project-type-checks.md`
 
 Continue only when:
 
 - Task Gate has no Blocking items.
 - Spec, plan, and tasks are current and not stale.
+- Route artifact is current and Project Type Profiles are known.
+- Entry coverage profile and entry coverage reports are present and current.
 - Solution Review, Plan Gate, and Task Gate results are passable.
 - Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
 
@@ -111,6 +158,10 @@ Read `references/analyze-gate-check.md`.
 
 Block when:
 
+- `.specify/entry-coverage-profile.yaml` is missing.
+- Only `.specify/entry-coverage-profile.candidate.yaml` exists and has not been confirmed.
+- Entry coverage audit is missing or stale.
+- Parsed TSV fields show unarchived business entries, unarchived core business units, `reverse_coverage_status=no_entry_reverse_coverage`, unaccepted cross-domain conflicts, or missing business_domain L4.
 - Any artifact conflicts with another current artifact.
 - Any implementation task lacks approved spec or plan basis.
 - A required behavior has no implementation or verification path.
@@ -125,6 +176,11 @@ Report:
 
 - Source artifacts
 - Cross-artifact consistency summary
+- Project Type Profile Checks
+- Entry Coverage Gate
+- Parsed Entry Inventory Summary
+- Parsed Service Inventory Summary
+- Shared-Domain Duplication Decision
 - Analyze Gate result
 - Blocking or deferred items
 - Earliest affected upstream node
@@ -136,6 +192,11 @@ Report:
 Every analysis result must contain:
 
 - Source Artifacts
+- Project Type Profile Checks
+- Entry Coverage Gate
+- Parsed Entry Inventory Summary
+- Parsed Service Inventory Summary
+- Shared-Domain Duplication Decision
 - Consistency Matrix
 - Analyze Gate Result
 - Blocking Items
@@ -148,6 +209,10 @@ Every analysis result must contain:
 
 Stop instead of approving implementation readiness when:
 
+- `specs/{feature}/route.md` is missing or conflicts with spec, plan, or tasks.
+- `.specify/entry-coverage-profile.yaml` is missing.
+- `.specify/entry-coverage-profile.candidate.yaml` exists without confirmed stable profile.
+- Entry coverage reports are missing or were not parsed from TSV fields.
 - `sdlc-speckit-tasks` has unresolved Blocking items.
 - Spec, plan, tasks, or DocFlow artifacts conflict.
 - A task requires new business or technical behavior.
