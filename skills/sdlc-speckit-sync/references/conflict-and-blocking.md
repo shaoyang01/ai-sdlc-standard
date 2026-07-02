@@ -9,6 +9,7 @@ Stop when:
 - Target path is unclear.
 - L1/L2 are unconfirmed for a missing `.specify/business_domain/**` L4 target.
 - L4 id cannot be reserved for create-if-missing.
+- Project Type Profiles are missing or cannot select an L4 skeleton for create-if-missing.
 - Target owner is unclear for an existing or new business-domain document.
 - User did not authorize writing to the target.
 - User did not explicitly authorize create-if-missing when the business-domain L4 target is missing.
@@ -43,6 +44,8 @@ Block create-if-missing instead of creating or writing to `99PendingConfirmation
 - target owner is unclear;
 - create-if-missing authorization is missing or only implied by generic write authorization;
 - L4 id reservation is ambiguous;
+- Project Type Profiles from `specs/{feature}/route.md` or Pipeline Domain Route Summary are missing or conflict with the requested target;
+- `Selected L4 Template` is missing or the selected `templates/business-domain-l4/{profile}.md` skeleton is missing;
 - the L2 main document index cannot be updated;
 - `01DomainCatalog.md` cannot be updated;
 - candidate facts are proposed, unverified, one-off, or only requirement-specific;

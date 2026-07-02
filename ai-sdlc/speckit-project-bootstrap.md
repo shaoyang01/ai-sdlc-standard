@@ -400,6 +400,11 @@ Confirmed mode may generate routable L1/L2/L4 skeletons:
 - `.specify/business_domain/{L1}/{L2}/{L4Document}.md`
 - `.specify/business_domain/{L1}/{L2}/{EntryCoverageDocument}.md`
 
+Confirmed L4 skeletons must select project-type templates from
+`templates/business-domain-l4/` by reading domain-map `project_type_profiles` or
+`.specify/project-governance-profile.yaml` `project.project_type_profiles`.
+Do not use a generic L4 skeleton as the only default for every project type.
+
 Do not run confirmed mode unless the domain map was explicitly supplied or confirmed by the user or domain owner. Absence of `confirmed_domains` is a blocking condition, not permission to infer business domains from package names.
 
 Generate:

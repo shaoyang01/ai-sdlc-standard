@@ -105,6 +105,7 @@ BUSINESS_DOMAIN_DIR="${SPECIFY_DIR}/business_domain"
 REPORT_DIR="${SPECIFY_DIR}/reports"
 STANDARD_PACKAGE="${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE_DEFAULT}}"
 DOMAIN_MAP="${DOMAIN_MAP:-${SPECIFY_DIR}/business-domain-bootstrap.yaml}"
+PROJECT_PROFILE="${SPECIFY_DIR}/project-governance-profile.yaml"
 if [[ -n "${DOMAIN_MAP}" && "${DOMAIN_MAP}" != /* ]]; then
   DOMAIN_MAP="${TARGET_PATH}/${DOMAIN_MAP}"
 fi
@@ -314,8 +315,8 @@ generate_confirmed_staging() {
     exit 2
   fi
 
-  ruby -ryaml -rfileutils -rtime - "${DOMAIN_MAP}" "${staging_dir}" "${PROJECT_NAME}" "${AUTHOR}" "${DOC_DATE}" "${STANDARD_PACKAGE}" "${TARGET_PATH}" <<'RUBY'
-domain_map_path, staging_dir, project_name, author, doc_date, standard_package, target_path = ARGV
+  ruby -ryaml -rfileutils -rtime - "${DOMAIN_MAP}" "${staging_dir}" "${PROJECT_NAME}" "${AUTHOR}" "${DOC_DATE}" "${STANDARD_PACKAGE}" "${TARGET_PATH}" "${PROJECT_PROFILE}" "${STANDARD_PACKAGE}/templates/business-domain-l4" <<'RUBY'
+domain_map_path, staging_dir, project_name, author, doc_date, standard_package, target_path, project_profile_path, template_dir = ARGV
 map = YAML.safe_load(File.read(domain_map_path), permitted_classes: [], aliases: false) || {}
 domains = map["confirmed_domains"]
 
@@ -354,6 +355,57 @@ def write_file(staging_dir, relative_path, content)
   File.write(path, content)
 end
 
+L4_TEMPLATE_PRECEDENCE = [
+  "admin-mixed-workflow",
+  "data-pipeline-etl",
+  "frontend-application",
+  "library-shared-component",
+  "backend-business-service"
+].freeze
+
+def string_list(value)
+  Array(value).map(&:to_s).map(&:strip).reject(&:empty?)
+end
+
+def load_project_type_profiles(map, project_profile_path)
+  candidates = []
+  candidates.concat(string_list(map["project_type_profiles"]))
+  candidates.concat(string_list(map.dig("project", "project_type_profiles"))) if map["project"].is_a?(Hash)
+
+  if candidates.empty? && File.exist?(project_profile_path)
+    profile = YAML.safe_load(File.read(project_profile_path), permitted_classes: [], aliases: false) || {}
+    if profile["project"].is_a?(Hash)
+      candidates.concat(string_list(profile.dig("project", "project_type_profiles")))
+    end
+    candidates.concat(string_list(profile["project_type_profiles"]))
+  end
+
+  normalized = candidates.map { |item| item.delete("<>").strip }.reject(&:empty?)
+  recognized = normalized.select { |item| L4_TEMPLATE_PRECEDENCE.include?(item) }
+  recognized.empty? ? ["backend-business-service"] : recognized.uniq
+end
+
+def select_l4_template_profile(project_type_profiles)
+  L4_TEMPLATE_PRECEDENCE.find { |profile| project_type_profiles.include?(profile) } || "backend-business-service"
+end
+
+def evidence_cell(evidence, l4_name_en)
+  values = evidence.empty? ? ["<pending-code-anchor>"] : evidence
+  values.map { |item| item == "<pending-code-anchor>" ? item : "`#{item}`" }.join("<br>")
+end
+
+def render_l4_template(template_dir, profile, vars)
+  template_path = File.join(template_dir, "#{profile}.md")
+  fail_map("missing L4 template for #{profile}: #{template_path}") unless File.exist?(template_path)
+  content = File.read(template_path)
+  vars.each do |key, value|
+    content = content.gsub("{{#{key}}}", value.to_s)
+  end
+  unresolved = content.scan(/\{\{[A-Z0-9_]+\}\}/).uniq
+  fail_map("unresolved L4 template placeholders: #{unresolved.join(', ')}") unless unresolved.empty?
+  content
+end
+
 def metadata(title, author, doc_date, status, summary)
   <<~MD
     # #{title}
@@ -372,6 +424,8 @@ catalog_rows = []
 l4_rows = []
 landscape_rows = []
 language_rows = []
+project_type_profiles = load_project_type_profiles(map, project_profile_path)
+l4_template_profile = select_l4_template_profile(project_type_profiles)
 
 domains.each_with_index do |l1, l1_index|
   context = "confirmed_domains[#{l1_index}]"
@@ -427,38 +481,32 @@ domains.each_with_index do |l1, l1_index|
         end
       end
 
-      write_file(staging_dir, l4_relative, metadata("#{l4_name_en}(#{l4_name_cn})", author, doc_date, "Confirmed", "Confirmed L4 skeleton for #{l4_name_cn}.") + <<~MD)
-        ## Business Scope
-
-        Confirmed domain route:
-
-        | Level | Value |
-        | --- | --- |
-        | L1 | #{l1_id}#{l1_name_en}(#{l1_name_cn}) |
-        | L2 | #{l2_full}#{l2_name_en}(#{l2_name_cn}) |
-        | L4 | #{l4_full}#{l4_name_en}(#{l4_name_cn}) |
-        | Owner | #{l4_owner} |
-
-        ## Entry / Code Evidence
-
-        #{evidence.empty? ? "- <pending-code-anchor>\n" : evidence.map { |item| "- `#{item}`" }.join("\n")}
-
-        ## Stable Facts
-
-        | Fact | Status | Source |
-        | --- | --- | --- |
-        | Domain boundary confirmed | Confirmed | user-confirmed domain map |
-
-        ## Sync Notes
-
-        Future `sdlc-speckit-sync` may add verified stable facts here after implementation, verification, and entry coverage checks.
-
-        ## Revision History
-
-        | Version | Date | Author | Changes |
-        | --- | --- | --- | --- |
-        | 0.1.0 | #{doc_date} | #{author} | Initial confirmed L4 skeleton. |
-      MD
+      write_file(
+        staging_dir,
+        l4_relative,
+        render_l4_template(
+          template_dir,
+          l4_template_profile,
+          {
+            "PROJECT_NAME" => project_name,
+            "AUTHOR" => author,
+            "DOC_DATE" => doc_date,
+            "PROJECT_TYPE_PROFILE" => l4_template_profile,
+            "PROJECT_TYPE_PROFILES" => project_type_profiles.join(", "),
+            "L1_ID" => l1_id,
+            "L1_NAME_EN" => l1_name_en,
+            "L1_NAME_CN" => l1_name_cn,
+            "L2_ID" => l2_full,
+            "L2_NAME_EN" => l2_name_en,
+            "L2_NAME_CN" => l2_name_cn,
+            "L4_ID" => l4_full,
+            "L4_NAME_EN" => l4_name_en,
+            "L4_NAME_CN" => l4_name_cn,
+            "OWNER" => l4_owner,
+            "EVIDENCE_LIST" => evidence_cell(evidence, l4_name_en)
+          }
+        )
+      )
     end
 
     write_file(staging_dir, File.join(l2_dir, l2_doc_name), metadata("#{l2_name_en}(#{l2_name_cn})", author, doc_date, "Confirmed", "Confirmed L2 skeleton for #{l2_name_cn}.") + <<~MD)
@@ -520,6 +568,7 @@ write_file(staging_dir, "00BusinessLandscape.md", metadata("Business Landscape",
   | --- | --- | --- |
   | Standard shared rules | Workflow, gate, artifact, sync, and document governance. | `#{standard_package}` |
   | Confirmed domain map | Initial L1/L2/L4 routing. | `#{domain_map_path}` |
+  | Project type L4 template | L4 skeleton shape selected from project type profiles: #{project_type_profiles.join(", ")}. | `templates/business-domain-l4/#{l4_template_profile}.md` |
   | Long-term code facts | Stable business facts and code anchors. | `.specify/business_domain/**` |
 
   ## Business Domains

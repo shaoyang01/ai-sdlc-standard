@@ -24,7 +24,8 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 11. Route reusable checklist, schema, or review gaps to the appropriate Sync or standard update path.
 12. Do not modify production code.
 13. When a `.specify/business_domain/**` L4 target is missing, use create-if-missing only after L1/L2 are confirmed, target owner is explicit, create authorization is recorded, and the new L4 id can be reserved.
-14. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
+14. For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select the matching `templates/business-domain-l4/{profile}.md` skeleton; do not use a generic L4 skeleton as the only default for every project type.
+15. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
 
 ## Standard Package Resolution
 
@@ -51,6 +52,7 @@ Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-bootstrap.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md`
 - `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`
 
 ## Reference Files
 
@@ -70,6 +72,7 @@ Identify:
 
 - Requirement ID
 - `specs/{feature}/spec.md`
+- `specs/{feature}/route.md`, when materialized
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
 - Implementation result from `sdlc-speckit-implement`
@@ -78,6 +81,7 @@ Identify:
 - Target knowledge path
 - `.specify/business_domain/01DomainCatalog.md`, if syncing to business_domain
 - L1/L2/L4 route, owner, and create-if-missing authorization when target L4 is missing
+- Project Type Profiles from `specs/{feature}/route.md`, when target L4 is missing
 - `.specify/entry-coverage-profile.yaml`, if available
 - `manifest.md`, if available
 
@@ -113,13 +117,15 @@ Stop when target ownership or path is unclear.
 
 For `.specify/business_domain/**` targets:
 
-1. Resolve the L1/L2/L4 target from `specs/{feature}/spec.md` `Business Domain Targets` and `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
+1. Resolve the L1/L2/L4 target from `specs/{feature}/route.md` when available, `specs/{feature}/spec.md` `Business Domain Targets` and `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
 2. Verify target ownership and that the fact belongs to that bounded context.
 3. If the L4 document exists, prepare an update against the existing file.
 4. If the L4 document is missing, continue only when create-if-missing is explicitly authorized, L1/L2 are confirmed, owner is explicit, and a stable L4 id can be reserved.
-5. Create the L4 skeleton only after reserving the id; update the L2 main document index and `01DomainCatalog.md` in the same Sync change.
-6. Do not create or write missing domain facts under `99PendingConfirmation`.
-7. Run `${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict` before reporting final `SYNCED`.
+5. Read Project Type Profiles from `specs/{feature}/route.md` or the Pipeline Domain Route Summary and select the matching L4 template under `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`.
+   Record `Selected L4 Template` in the Create-If-Missing Decision.
+6. Create the project-type L4 skeleton only after reserving the id; update the L2 main document index and `01DomainCatalog.md` in the same Sync change.
+7. Do not create or write missing domain facts under `99PendingConfirmation`.
+8. Run `${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict` before reporting final `SYNCED`.
 
 ### 4. Prepare Or Apply Sync
 
@@ -170,6 +176,7 @@ Stop instead of syncing when:
 - Target path or ownership is unclear.
 - L1/L2 are unconfirmed for a missing business-domain L4 target.
 - L4 id cannot be reserved for an authorized create-if-missing target.
+- Project Type Profiles are missing or cannot select a matching L4 template for create-if-missing.
 - Target owner is unclear for an existing or new business-domain document.
 - User has not authorized writing to the target.
 - Proposed fact is one-off or only valid for a single temporary requirement.

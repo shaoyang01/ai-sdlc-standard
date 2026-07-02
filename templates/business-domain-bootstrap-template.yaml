@@ -107,6 +107,24 @@ skeleton_rules:
   l1_l2_directory_naming: "{two_digit_number}{EnglishName}"
   l2_main_document_naming: "{L2Number}{EnglishName}({ChineseName}).md"
   l4_document_naming: "{L1Number}{L2Number}{L4Number}{EnglishName}({ChineseName}).md"
+  l4_template_directory: "${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4"
+  l4_template_selection:
+    source_priority:
+      - "domain map project_type_profiles"
+      - ".specify/project-governance-profile.yaml project.project_type_profiles"
+      - "conservative backend-business-service fallback"
+    precedence:
+      - "admin-mixed-workflow"
+      - "data-pipeline-etl"
+      - "frontend-application"
+      - "library-shared-component"
+      - "backend-business-service"
+    templates:
+      backend-business-service: "templates/business-domain-l4/backend-business-service.md"
+      admin-mixed-workflow: "templates/business-domain-l4/admin-mixed-workflow.md"
+      frontend-application: "templates/business-domain-l4/frontend-application.md"
+      data-pipeline-etl: "templates/business-domain-l4/data-pipeline-etl.md"
+      library-shared-component: "templates/business-domain-l4/library-shared-component.md"
   entry_coverage_document_suffix: "EntryCoverage"
   create_l4_only_when:
     - "observed from code and confirmed by routing"
@@ -116,6 +134,7 @@ skeleton_rules:
     - "each L1 has l1_id, l1_name_en, l1_name_cn, and l2"
     - "each L2 has l2_id, l2_name_en, l2_name_cn, owner, and l4"
     - "each L4 has l4_id, l4_name_en, l4_name_cn, and owner"
+    - "confirmed L4 skeleton uses a project-type template selected from project_type_profiles"
 
 outputs:
   required:

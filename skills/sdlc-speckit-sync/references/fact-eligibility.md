@@ -48,6 +48,7 @@ Each synced fact must cite:
 - Target document.
 - Reason it is stable and reusable.
 - For create-if-missing, the confirmed L1/L2 route, reserved L4 id, target owner, create authorization, and entry coverage status.
+- For create-if-missing, Project Type Profiles from `specs/{feature}/route.md` or Pipeline Domain Route Summary, plus `Selected L4 Template` pointing to `templates/business-domain-l4/{profile}.md`.
 
 If evidence is missing, keep the item in a skipped list and recommend the needed verification.
 
@@ -62,6 +63,7 @@ A fact may create a missing L4 only when all conditions are true:
 - The target owner is explicit.
 - The L4 id can be reserved without colliding with existing documents.
 - The Sync output can update the L2 main document index and `01DomainCatalog.md`.
+- Project Type Profiles can select a project-type L4 skeleton, or a conservative backend-business-service fallback is explicitly recorded.
 - The standard entry coverage audit can run after the write.
 
 Block create-if-missing when the fact is proposed, speculative, temporary, one-off, ownerless, or conflicts with existing business_domain knowledge.

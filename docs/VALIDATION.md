@@ -223,6 +223,42 @@ Revision History Update:
 7. 不得把缺失目标写入 99PendingConfirmation 当作长期同步结果。
 ```
 
+## Project-Type L4 Templates 校验
+
+标准包必须提供项目类型化 L4 skeleton 模板：
+
+```text
+templates/business-domain-l4/backend-business-service.md
+templates/business-domain-l4/admin-mixed-workflow.md
+templates/business-domain-l4/frontend-application.md
+templates/business-domain-l4/data-pipeline-etl.md
+templates/business-domain-l4/library-shared-component.md
+```
+
+bootstrap confirmed mode 与 `sdlc-speckit-sync` create-if-missing 必须按 Project Type Profiles 选择模板：
+
+```text
+admin-mixed-workflow
+data-pipeline-etl
+frontend-application
+library-shared-component
+backend-business-service
+```
+
+检查点：
+
+```text
+1. backend-business-service L4 必须包含 Entry Chain、Transaction Boundary、Idempotency、Rollback And Compensation、Test Evidence。
+2. admin-mixed-workflow L4 必须包含 Configuration Lifecycle、Approval / Audit、Import / Export、Read-Only Query Contract、Concurrency And Rollback。
+3. frontend-application L4 必须包含 Route / Page / Component Surface、API And Backend Boundary、Popup / Interaction、State And Visibility、Visual Verification。
+4. data-pipeline-etl L4 必须包含 Trigger And Runtime、Input Contract、Output Contract、SQL Lineage、Partition / Window / Checkpoint、Replay And Idempotency、Downstream Consumer Contract。
+5. library-shared-component L4 必须包含 Public API、Consumer Scenario、Compatibility、Deprecation / Migration、Test Evidence。
+6. `scripts/bootstrap-business-domain.sh --confirmed` 必须从 domain map 或 `.specify/project-governance-profile.yaml` 的 `project_type_profiles` 选择 L4 模板。
+7. `sdlc-speckit-sync` create-if-missing 必须从 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary 读取 Project Type Profiles，并记录 Selected L4 Template。
+8. 通用 L4 skeleton 不得作为所有项目类型的唯一默认输出；只能在缺少 profile 时记录 conservative backend-business-service fallback。
+9. 不得引入 legacy Skill 或 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` runtime dependency。
+```
+
 ## Speckit specify 产品形状校验
 
 `sdlc-speckit-specify` 生成或更新 `specs/{feature}/spec.md` 时，必须保留以下 legacy-critical sections：

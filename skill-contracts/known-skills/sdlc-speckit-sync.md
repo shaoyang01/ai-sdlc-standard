@@ -10,6 +10,7 @@ stage: Speckit Sync / Knowledge Sync
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
+  - specs/{feature}/route.md
   - specs/{feature}/spec.md
   - specs/{feature}/plan.md
   - specs/{feature}/tasks.md
@@ -22,6 +23,7 @@ input_artifacts:
   - optional .specify/entry-coverage-profile.yaml
   - optional .specify/business_domain/01DomainCatalog.md
   - optional .specify/business_domain/** existing L1/L2/L4 documents
+  - templates/business-domain-l4/{profile}.md
 output_artifacts:
   - sync report
   - knowledge updates or proposed updates
@@ -38,6 +40,7 @@ required_contract:
 side_effects:
   - update authorized knowledge targets
   - create authorized missing L4 business-domain documents
+  - create authorized missing L4 business-domain documents from project-type L4 templates
   - update L2 main document index and 01DomainCatalog.md for created L4 documents
   - run standard entry coverage audit for business_domain sync
   - recommend checklist, schema, or manifest updates
@@ -51,6 +54,7 @@ blocking_conditions:
   - target path or ownership is unclear
   - user did not authorize writing to target
   - create-if-missing is missing authorization, confirmed L1/L2, owner, or reserved L4 id
+  - create-if-missing cannot resolve Project Type Profiles or selected L4 template
   - entry coverage audit fails for business_domain sync
   - proposed fact is unstable, one-off, or contradicted
 ```
@@ -71,6 +75,7 @@ blocking_conditions:
 - 判断哪些事实是稳定、可复用、适合长期沉淀的知识。
 - 将已授权的事实同步到 `.specify/business_domain/**` 或其他明确目标。
 - 在 L1/L2 已确认、owner 明确、create-if-missing 已授权且 L4 id 可保留时，创建缺失的 L4 骨架。
+- 创建缺失 L4 时读取 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary 的 Project Type Profiles，并记录 `Selected L4 Template`，选择 `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` 项目类型化模板。
 - 创建 L4 时同步维护 L2 main document index 与 `01DomainCatalog.md`。
 - 对 `.specify/business_domain/**` 同步运行 entry coverage audit，并在审计失败时阻断最终 Sync。
 - 对不适合同步的内容输出跳过原因。
@@ -111,6 +116,7 @@ blocking_conditions:
 - `.specify/business_domain/01DomainCatalog.md`。
 - business_domain L1/L2/L4 route、owner、entry coverage 状态。
 - 缺失 L4 时的 create-if-missing 授权与 L4 id reservation 依据。
+- 缺失 L4 时的 Project Type Profiles 与 Selected L4 Template。
 
 前置条件：
 
@@ -119,6 +125,7 @@ blocking_conditions:
 - 目标路径明确。
 - 写入目标已获得用户授权。
 - business_domain L1/L2 已确认；缺失 L4 时必须具备 create-if-missing 授权、owner、reserved L4 id。
+- 缺失 L4 时必须能从 route artifact 的 Project Type Profiles 选择项目类型化 L4 skeleton。
 
 缺失输入处理：
 
@@ -127,6 +134,7 @@ blocking_conditions:
 - 缺少目标路径时停止。
 - 缺少写入授权时只输出 proposal，不落盘。
 - 缺少 confirmed L1/L2、owner、L4 id reservation 或 create-if-missing 授权时停止。
+- 缺少 Project Type Profiles 或 selected L4 template 时停止；仅在明确记录 conservative backend-business-service fallback 时可继续。
 - entry coverage audit 无法运行或结果为 `BLOCKED` / `PENDING` 时停止。
 
 ## Output Contract
@@ -170,7 +178,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 允许：
 
 - 修改已授权知识目标。
-- 在 create-if-missing 已授权且 L1/L2 已确认时创建 L4 skeleton。
+- 在 create-if-missing 已授权且 L1/L2 已确认时，基于 Project Type Profiles 创建 L4 skeleton。
 - 更新 L2 main document index。
 - 更新 `01DomainCatalog.md`。
 - 运行 entry coverage audit。
@@ -184,6 +192,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改 spec、plan、tasks 来适配同步。
 - 写入未授权目标。
 - 创建缺少 confirmed L1/L2、owner、reserved L4 id 或 create-if-missing 授权的 L4 文档。
+- 使用通用 L4 skeleton 作为所有项目类型的唯一默认输出。
 - 写入 `99PendingConfirmation` 作为长期事实同步目标。
 - 沉淀未验证事实。
 - 沉淀一次性需求交付说明。
@@ -199,6 +208,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 同步目标路径、归属或写入权限不明确。
 - 缺失 L4 的 L1/L2 未确认。
 - 缺失 L4 无 create-if-missing 授权、owner 或 reserved L4 id。
+- 缺失 L4 无 Project Type Profiles 或 selected L4 template。
 - 候选事实不稳定、不可复用或只服务当前一次需求。
 - 候选事实与既有知识冲突。
 - 候选事实依赖未完成的代码审核或测试反馈。
@@ -212,7 +222,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - `sdlc-speckit-implement` 已完成相关任务并有验证证据。
 - 必要时 `sdlc-implementation-recorder` 已生成实现记录，或实现结果足以追溯。
 - 代码审核或测试反馈中没有阻止同步的未决项。
-- business_domain Sync 已确认目标 L1/L2/L4、owner、entry coverage 状态；缺失 L4 时已记录 create-if-missing 决策。
+- business_domain Sync 已确认目标 L1/L2/L4、owner、entry coverage 状态；缺失 L4 时已记录 create-if-missing 决策、Project Type Profiles 和 selected L4 template。
 
 后置 Gate：
 

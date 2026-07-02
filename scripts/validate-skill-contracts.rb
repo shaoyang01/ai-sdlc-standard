@@ -154,6 +154,8 @@ CONFIRMED_DOMAIN_BOOTSTRAP_REQUIRED_TERMS = [
   "--confirmed",
   "--domain-map",
   "confirmed_domains",
+  "project_type_profiles",
+  "templates/business-domain-l4",
   "L2MainDocument",
   "L4Document",
   "EntryCoverageDocument"
@@ -165,9 +167,62 @@ SYNC_CREATE_IF_MISSING_REQUIRED_TERMS = [
   "owner",
   "L4 id",
   "01DomainCatalog.md",
+  "Project Type Profiles",
+  "Selected L4 Template",
+  "templates/business-domain-l4",
   "entry coverage audit",
   "one-off"
 ].freeze
+
+BUSINESS_DOMAIN_L4_TEMPLATE_REQUIREMENTS = {
+  "templates/business-domain-l4/backend-business-service.md" => [
+    "Project Type Profile",
+    "backend-business-service",
+    "Entry Chain",
+    "Transaction Boundary",
+    "Idempotency",
+    "Rollback And Compensation",
+    "Test Evidence"
+  ],
+  "templates/business-domain-l4/admin-mixed-workflow.md" => [
+    "Project Type Profile",
+    "admin-mixed-workflow",
+    "Configuration Lifecycle",
+    "Approval / Audit",
+    "Import / Export",
+    "Read-Only Query Contract",
+    "Concurrency And Rollback"
+  ],
+  "templates/business-domain-l4/frontend-application.md" => [
+    "Project Type Profile",
+    "frontend-application",
+    "Route / Page / Component Surface",
+    "API And Backend Boundary",
+    "Popup / Interaction",
+    "State And Visibility",
+    "Visual Verification"
+  ],
+  "templates/business-domain-l4/data-pipeline-etl.md" => [
+    "Project Type Profile",
+    "data-pipeline-etl",
+    "Trigger And Runtime",
+    "Input Contract",
+    "Output Contract",
+    "SQL Lineage",
+    "Partition / Window / Checkpoint",
+    "Replay And Idempotency",
+    "Downstream Consumer Contract"
+  ],
+  "templates/business-domain-l4/library-shared-component.md" => [
+    "Project Type Profile",
+    "library-shared-component",
+    "Public API",
+    "Consumer Scenario",
+    "Compatibility",
+    "Deprecation / Migration",
+    "Test Evidence"
+  ]
+}.freeze
 
 NEW_RAIL_PIPELINE_REQUIRED_TERMS = [
   "New-Rail Enhanced",
@@ -715,6 +770,18 @@ business_domain_bootstrap_paths.each do |relative_path|
     text = File.read(path)
     CONFIRMED_DOMAIN_BOOTSTRAP_REQUIRED_TERMS.each do |term|
       errors << "#{relative_path} missing confirmed-domain bootstrap requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+BUSINESS_DOMAIN_L4_TEMPLATE_REQUIREMENTS.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing project-type L4 template requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

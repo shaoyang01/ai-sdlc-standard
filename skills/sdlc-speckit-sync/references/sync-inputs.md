@@ -5,6 +5,7 @@
 `sdlc-speckit-sync` requires:
 
 - `specs/{feature}/spec.md`
+- `specs/{feature}/route.md`, when materialized
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
 - Implementation result from `sdlc-speckit-implement`
@@ -22,6 +23,7 @@ Recommended:
 - Re-Gate Records
 - Replaced Artifact Paths
 - Existing target knowledge documents
+- Pipeline Domain Route Summary, when `specs/{feature}/route.md` has not been materialized
 
 ## Readiness Checks
 
@@ -49,8 +51,9 @@ Priority order:
 1. Verified implementation result and changed code facts.
 2. `03-实现记录`, if available.
 3. Current `specs/{feature}/spec.md`, `plan.md`, and `tasks.md`.
-4. Code review or test feedback after implementation.
-5. Current effective `01-技术方案` and `02-方案审核`.
-6. Existing target knowledge documents.
+4. Current `specs/{feature}/route.md` or Pipeline Domain Route Summary for business-domain route, Project Type Profiles, and create-if-missing decisions.
+5. Code review or test feedback after implementation.
+6. Current effective `01-技术方案` and `02-方案审核`.
+7. Existing target knowledge documents.
 
 Do not use raw chat as a source of long-term truth.

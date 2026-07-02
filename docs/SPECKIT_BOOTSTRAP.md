@@ -287,7 +287,7 @@ scripts/bootstrap-business-domain.sh <target-project-path> --confirmed
 scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify/business-domain-bootstrap.yaml --dry-run
 ```
 
-confirmed mode 会从 `confirmed_domains` 生成可路由的 L1/L2/L4 skeleton 和 EntryCoverage skeleton。没有 confirmed domain map 时，不允许生成真实业务域。
+confirmed mode 会从 `confirmed_domains` 生成可路由的 L1/L2/L4 skeleton 和 EntryCoverage skeleton。L4 skeleton 必须根据 domain map 或 `.specify/project-governance-profile.yaml` 的 `project_type_profiles` 选择 `templates/business-domain-l4/` 下的项目类型化模板。没有 confirmed domain map 时，不允许生成真实业务域。
 
 默认生成：
 
@@ -313,4 +313,5 @@ confirmed mode 额外生成：
 - 不生成 `specs/**`。
 - 不从其他仓库复制业务事实。
 - 不把包名、类名、页面名或 Job 名直接提升为业务事实。
+- 不把通用 L4 skeleton 作为所有项目类型的唯一默认输出；缺少 `project_type_profiles` 时只能记录 conservative `backend-business-service` fallback。
 - 已有 `.specify/business_domain/**` 文件默认写 `.candidate`，只有显式 `--force` 才覆盖。
