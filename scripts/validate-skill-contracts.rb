@@ -417,6 +417,86 @@ ENTRY_COVERAGE_PRECISION_DOC_TERMS = [
   "match_reason"
 ].freeze
 
+ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
+  "bootstrap-entry-coverage-profile.sh",
+  "--project-type-profile",
+  "--force-entry-coverage-profile",
+  ".specify/entry-coverage-profile.yaml",
+  ".specify/entry-coverage-profile.candidate.yaml",
+  ".specify/reports/entry_coverage_profile_bootstrap_report.md",
+  ".specify/business_domain/**",
+  "specs/**",
+  "library/**",
+  ".specify/memory/**",
+  ".specify/workflow/**",
+  ".specify/coding_guide/**",
+  "project-governance-profile.yaml",
+  "conservative-candidate",
+  "backend-business-service",
+  "admin-mixed-workflow",
+  "frontend-application",
+  "data-pipeline-etl",
+  "library-shared-component",
+  "version",
+  "project_type_profiles",
+  "source_roots",
+  "include_file_patterns",
+  "exclude_file_patterns",
+  "document_scope",
+  "report_dir",
+  "entry_types",
+  "layers",
+  "service",
+  "manager",
+  "persistence",
+  "controller",
+  "RPC",
+  "MQ",
+  "schedule",
+  "mapper",
+  "route",
+  "page",
+  "component",
+  "store",
+  "action",
+  "api_client",
+  "popup",
+  "native_shell",
+  "spark_job",
+  "flink_main",
+  "flink_process_function",
+  "connector",
+  "sink",
+  "publisher",
+  "sql",
+  "data_console",
+  "worker",
+  "import",
+  "export",
+  "SPI"
+].freeze
+
+ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
+  "Entry Coverage Profile Bootstrap",
+  "bootstrap-entry-coverage-profile.sh",
+  ".specify/entry-coverage-profile.yaml",
+  ".specify/entry-coverage-profile.candidate.yaml",
+  ".specify/reports/entry_coverage_profile_bootstrap_report.md",
+  "Restricted Write Boundary",
+  ".specify/business_domain/**",
+  "specs/**",
+  "library/**",
+  ".specify/memory/**",
+  ".specify/workflow/**",
+  ".specify/coding_guide/**",
+  "--force-entry-coverage-profile",
+  "backend-business-service",
+  "admin-mixed-workflow",
+  "frontend-application",
+  "data-pipeline-etl",
+  "library-shared-component"
+].freeze
+
 BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "ProjectWorkflowGuide.md",
   "ProjectDocumentationGuide.md",
@@ -1150,6 +1230,23 @@ entry_coverage_precision_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing entry coverage precision requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+entry_coverage_profile_bootstrap_paths = {
+  "scripts/bootstrap-entry-coverage-profile.sh" => ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS,
+  "docs/VALIDATION.md" => ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS
+}.freeze
+
+entry_coverage_profile_bootstrap_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing restricted entry coverage profile bootstrap requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

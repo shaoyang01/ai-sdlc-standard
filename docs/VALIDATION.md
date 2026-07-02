@@ -405,6 +405,98 @@ Manifest Recommendation
 8. Plan / Analyze / Sync / Reconcile 必须把 route.md 或 Pipeline Domain Route Summary 作为统一输入边界，不能各自重新解释 route。
 ```
 
+## Entry Coverage Profile Bootstrap 校验
+
+PR F-0 的 `scripts/bootstrap-entry-coverage-profile.sh` 是限制性 Entry Coverage Profile Bootstrap。它只用于让目标项目安全获得 entry coverage audit 的最小 profile，不是全量 Speckit bootstrap。
+
+允许写入的稳定路径只有：
+
+```text
+.specify/entry-coverage-profile.yaml
+.specify/reports/entry_coverage_profile_bootstrap_report.md
+```
+
+当 `.specify/entry-coverage-profile.yaml` 已存在且未提供 `--force-entry-coverage-profile` 时，只能写候选文件：
+
+```text
+.specify/entry-coverage-profile.candidate.yaml
+```
+
+Restricted Write Boundary 必须禁止写入：
+
+```text
+.specify/business_domain/**
+specs/**
+library/**
+.specify/memory/**
+.specify/workflow/**
+.specify/coding_guide/**
+```
+
+运行期隔离要求：
+
+```text
+1. 不调用 legacy `speckit-*` Skill。
+2. 不读取 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 作为 runtime 输入。
+3. 不创建 filename-versioned artifact。
+4. dry-run 只能预览 profile 和 `.specify/reports/entry_coverage_profile_bootstrap_report.md`。
+```
+
+`project_type_profiles` 来源优先级：
+
+```text
+1. .specify/project-governance-profile.yaml
+2. 用户参数 --project-type-profile
+3. 代码结构启发式检测
+4. backend-business-service conservative candidate，并在 report 中标记 pending confirmation
+```
+
+生成的 `.specify/entry-coverage-profile.yaml` 必须包含：
+
+```text
+version
+project_type_profiles
+scope.source_roots
+scope.include_file_patterns
+scope.exclude_file_patterns
+scope.document_scope
+scope.report_dir
+entry_types
+layers.service
+layers.manager
+layers.persistence
+```
+
+项目类型 entry_types 检查：
+
+```text
+backend-business-service:
+  controller / RPC / MQ / schedule / service / manager / mapper
+
+admin-mixed-workflow:
+  controller / data_console / worker / schedule / import / export / SPI / RPC
+
+frontend-application:
+  route / page / component / store / action / api_client / popup / native_shell
+
+data-pipeline-etl:
+  spark_job / flink_main / flink_process_function / connector / sink / publisher / sql
+
+library-shared-component:
+  public_api / consumer_scenario / adapter / extension_point
+```
+
+验收检查：
+
+```text
+1. 没有 profile 的目标项目，dry-run 能预览 profile。
+2. 正式执行只写 entry coverage profile 和 bootstrap report。
+3. 已有 profile 时默认不覆盖稳定路径。
+4. 生成 profile 能被 scripts/audit-entry-coverage.rb 读取。
+5. ruby scripts/validate-skill-contracts.rb 通过。
+6. git diff --check 通过。
+```
+
 ## Speckit plan companion artifacts 校验
 
 `sdlc-speckit-plan` 必须生成或显式跳过：
