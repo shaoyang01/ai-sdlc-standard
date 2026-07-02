@@ -99,12 +99,12 @@ blocking_conditions:
 前置条件：
 
 - `sdlc-speckit-clarify` 不存在 Blocking Items。
-- `specs/spec.md` 与当前有效 `01-技术方案`、`02-方案审核` 一致。
+- `specs/{feature}/spec.md` 与当前有效 `01-技术方案`、`02-方案审核` 一致。
 - Development Path Decision 为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD。
 
 缺失输入处理：
 
-- 缺少 `specs/spec.md` 时停止并回到 `sdlc-speckit-specify`。
+- 缺少 `specs/{feature}/spec.md` 时停止并回到 `sdlc-speckit-specify`。
 - 缺少澄清结果时停止并建议运行 `sdlc-speckit-clarify`。
 - 缺少技术方案或方案审核时停止。
 - manifest 缺失时可以继续生成 plan，但必须建议创建或更新 Activity Log。
@@ -160,7 +160,7 @@ Re-Gate Required:
 - 日志、监控、灰度、发布和回滚观察点。
 - 验证策略，并映射到验收标准。
 - 风险和缓解措施。
-- 与 `specs/spec.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
+- 与 `specs/{feature}/spec.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
 - Companion artifact 状态和跳过记录。
 
 `contracts/` 必须按项目类型覆盖：
@@ -201,7 +201,7 @@ Re-Gate Required:
 必须停止的情况：
 
 - `sdlc-speckit-clarify` 仍有 Blocking Items。
-- Plan 与 `specs/spec.md` 冲突。
+- Plan 与 `specs/{feature}/spec.md` 冲突。
 - Plan 改变已审核方案范围。
 - Plan 改变状态流转、异常处理、兼容策略、数据写入或测试验收口径。
 - Plan 需要新增方案中没有定义的业务规则。
@@ -214,7 +214,7 @@ Re-Gate Required:
 
 前置 Gate：
 
-- `sdlc-speckit-specify` 已生成或同步 `specs/spec.md`。
+- `sdlc-speckit-specify` 已生成或同步 `specs/{feature}/spec.md`。
 - `sdlc-speckit-clarify` 已校验无核心未决问题。
 - `sdlc-solution-reviewer` 已通过。
 

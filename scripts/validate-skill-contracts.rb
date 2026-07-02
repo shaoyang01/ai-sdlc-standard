@@ -315,6 +315,108 @@ FRONTEND_PROCESS_PRODUCT_RECONCILE_TERMS = [
   "manifest"
 ].freeze
 
+FEATURE_SCOPED_SPECKIT_PATH_TERMS = [
+  "specs/{feature}/spec.md",
+  "specs/{feature}/plan.md",
+  "specs/{feature}/tasks.md",
+  "specs/{feature}/route.md"
+].freeze
+
+IMPLEMENT_ROUTE_BOUNDARY_TERMS = [
+  "Implement does not reinterpret Route Type",
+  "Implement does not reinterpret Business Domain Targets",
+  "Analyze Gate",
+  "approved `specs/{feature}/tasks.md`",
+  "Domain Route",
+  "Re-Gate"
+].freeze
+
+FLAT_SPECKIT_RUNTIME_PATH_PATTERN = %r{specs/(?:spec|plan|tasks)\.md}.freeze
+FLAT_SPECKIT_ALLOWED_GUARD_PATTERN = /
+  not\s+(?:the\s+)?current\s+runtime\s+path|
+  historical|
+  history|
+  legacy|
+  example\s+only|
+  anti[-\s]?pattern|
+  bad\s+example|
+  不是当前\s*runtime\s*path|
+  历史|
+  反例
+/ix.freeze
+
+LEGACY_PROCESS_FILENAME_PATTERN = /
+  implementation-details\.md|
+  SDD_WORKFLOW_STATUS\.md|
+  API_DEBUG_GUIDE\.md|
+  QUICK_DEBUG_REFERENCE\.md|
+  LOGGING_IMPLEMENTATION\.md|
+  FINAL_SUMMARY\.md
+/x.freeze
+
+LEGACY_PROCESS_RUNTIME_OUTPUT_DANGER_PATTERN = /
+  output(?:s)?|
+  output_artifacts?|
+  write(?:s|ing)?|
+  produce(?:s|d|ing)?|
+  create(?:s|d|ing)?|
+  generate(?:s|d|ing)?|
+  compatibility\s+format|
+  runtime\s+output|
+  输出|
+  写入|
+  生成|
+  兼容格式
+/ix.freeze
+
+LEGACY_PROCESS_ALLOWED_GUARD_PATTERN = /
+  Legacy\s+Semantic\s+Mapping\s+Source\s+Only|
+  semantic\s+mapping\s+source|
+  development-time\s+semantic\s+mapping\s+source|
+  do\s+not|
+  must\s+not|
+  never|
+  not\s+(?:as\s+)?(?:runtime|output|input|compatibility)|
+  语义映射来源|
+  不得作为|
+  只能作为
+/ix.freeze
+
+ENTRY_COVERAGE_PRECISION_RUNNER_TERMS = [
+  "classification",
+  "classification_reason",
+  "match_strength",
+  "match_reason",
+  "reverse_coverage_status",
+  "parse_markdown_tables",
+  "TABLE_COLUMN_ALIASES",
+  "technical_bridge",
+  "framework_bridge",
+  "generated_or_vendor",
+  "native_shell",
+  "abstract_or_base",
+  "annotation_or_marker",
+  "not_applicable",
+  "doc_match_for_record",
+  "match_row_to_record",
+  "Service / Manager / Mapper",
+  "ETL coverage",
+  "Frontend coverage"
+].freeze
+
+ENTRY_COVERAGE_PRECISION_DOC_TERMS = [
+  "EntryCoverage table parsing",
+  "technical bridge",
+  "reverse coverage",
+  "frontend",
+  "ETL",
+  "Service / Manager / Mapper",
+  "native shell",
+  "generated/vendor",
+  "match_strength",
+  "match_reason"
+].freeze
+
 BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "ProjectWorkflowGuide.md",
   "ProjectDocumentationGuide.md",
@@ -391,6 +493,56 @@ def unsafe_filename_version_references(text)
     ].compact.join(" ")
 
     next if context.match?(FILENAME_VERSION_ALLOWED_GUARD_PATTERN)
+
+    unsafe << [index + 1, line.strip]
+  end
+
+  unsafe
+end
+
+def unsafe_flat_speckit_runtime_paths(text)
+  lines = text.lines
+  unsafe = []
+
+  lines.each_with_index do |line, index|
+    next unless line.match?(FLAT_SPECKIT_RUNTIME_PATH_PATTERN)
+
+    context = [
+      lines[index - 3],
+      lines[index - 2],
+      lines[index - 1],
+      line,
+      lines[index + 1],
+      lines[index + 2]
+    ].compact.join(" ")
+
+    next if context.match?(FLAT_SPECKIT_ALLOWED_GUARD_PATTERN)
+
+    unsafe << [index + 1, line.strip]
+  end
+
+  unsafe
+end
+
+def unsafe_legacy_process_runtime_outputs(text)
+  lines = text.lines
+  unsafe = []
+
+  lines.each_with_index do |line, index|
+    next unless line.match?(LEGACY_PROCESS_FILENAME_PATTERN)
+
+    context = [
+      lines[index - 4],
+      lines[index - 3],
+      lines[index - 2],
+      lines[index - 1],
+      line,
+      lines[index + 1],
+      lines[index + 2]
+    ].compact.join(" ")
+
+    next if context.match?(LEGACY_PROCESS_ALLOWED_GUARD_PATTERN)
+    next unless context.match?(LEGACY_PROCESS_RUNTIME_OUTPUT_DANGER_PATTERN)
 
     unsafe << [index + 1, line.strip]
   end
@@ -558,6 +710,10 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
 
   unsafe_legacy_source_references(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} treats legacy .specify source as normal sdlc input: #{line}"
+  end
+
+  unsafe_legacy_process_runtime_outputs(text).each do |line_number, line|
+    errors << "#{relative(path)}:#{line_number} treats legacy process filename as runtime output or compatibility format: #{line}"
   end
 end
 
@@ -889,6 +1045,111 @@ frontend_process_product_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing frontend process product requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+implement_feature_scoped_paths = {
+  "skill-contracts/known-skills/sdlc-speckit-implement.md" =>
+    FEATURE_SCOPED_SPECKIT_PATH_TERMS + IMPLEMENT_ROUTE_BOUNDARY_TERMS,
+  "skills/sdlc-speckit-implement/SKILL.md" =>
+    FEATURE_SCOPED_SPECKIT_PATH_TERMS + IMPLEMENT_ROUTE_BOUNDARY_TERMS,
+  "skills/sdlc-speckit-implement/references/implementation-inputs.md" =>
+    FEATURE_SCOPED_SPECKIT_PATH_TERMS + [
+      "Route Type",
+      "Business Domain Targets",
+      "Analyze /",
+      "Domain Route",
+      "Re-Gate"
+    ],
+  "skills/sdlc-speckit-implement/references/output-and-manifest.md" =>
+    FEATURE_SCOPED_SPECKIT_PATH_TERMS + IMPLEMENT_ROUTE_BOUNDARY_TERMS,
+  "skills/sdlc-speckit-implement/references/blocking-and-regate.md" => [
+    "specs/{feature}/route.md",
+    "Route Type",
+    "Business Domain Targets",
+    "Domain Route",
+    "Re-Gate"
+  ],
+  "docs/VALIDATION.md" =>
+    FEATURE_SCOPED_SPECKIT_PATH_TERMS + IMPLEMENT_ROUTE_BOUNDARY_TERMS + [
+      "Feature-Scoped Path Consistency",
+      "not current runtime path"
+    ]
+}.freeze
+
+implement_feature_scoped_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing feature-scoped implement requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+implement_flat_path_scan_paths = [
+  "skill-contracts/known-skills/sdlc-speckit-implement.md",
+  "skills/sdlc-speckit-implement/SKILL.md",
+  "skills/sdlc-speckit-implement/references/implementation-inputs.md",
+  "skills/sdlc-speckit-implement/references/output-and-manifest.md",
+  "skills/sdlc-speckit-implement/references/blocking-and-regate.md"
+].freeze
+
+implement_flat_path_scan_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  next unless File.exist?(path)
+
+  unsafe_flat_speckit_runtime_paths(File.read(path)).each do |line_number, line|
+    errors << "#{relative_path}:#{line_number} uses flat Speckit runtime path; use specs/{feature}/...: #{line}"
+  end
+end
+
+entry_coverage_precision_paths = {
+  "scripts/audit-entry-coverage.rb" => ENTRY_COVERAGE_PRECISION_RUNNER_TERMS,
+  "docs/VALIDATION.md" => ENTRY_COVERAGE_PRECISION_DOC_TERMS,
+  "skills/sdlc-speckit-analyze/references/analyze-gate-check.md" => [
+    "entry_inventory.tsv",
+    "service_inventory.tsv",
+    "classification",
+    "match_strength",
+    "reverse_coverage_status",
+    "technical bridge",
+    "generated/vendor",
+    "frontend native shell"
+  ],
+  "skills/sdlc-speckit-sync/references/sync-targets.md" => [
+    "business_entry",
+    "technical_bridge",
+    "generated_or_vendor",
+    "native_shell",
+    "reverse_coverage_status",
+    "create-if-missing",
+    "table/code anchor/path/method/route/topic/job/function/SQL/connector/sink"
+  ],
+  "ai-sdlc/speckit-project-type-profiles.md" => [
+    "EntryCoverage table parsing",
+    "Service -> Manager -> Mapper/Repository/Client reverse coverage",
+    "native shell",
+    "generated/vendor",
+    "spark_job",
+    "flink_process_function",
+    "api_client/request/service",
+    "current_requirement",
+    "historical_repository_residue"
+  ]
+}.freeze
+
+entry_coverage_precision_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing entry coverage precision requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

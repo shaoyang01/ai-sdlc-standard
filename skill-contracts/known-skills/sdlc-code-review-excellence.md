@@ -189,7 +189,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 前置 Gate：
 
 - 实现已完成，或用户明确要求审查当前 diff。
-- `01-技术方案` 或 `specs/spec.md` 应存在。
+- `01-技术方案` 或 `specs/{feature}/spec.md` 应存在。
 - `03-实现记录` 建议存在；缺失时必须标记。
 
 后置 Gate：

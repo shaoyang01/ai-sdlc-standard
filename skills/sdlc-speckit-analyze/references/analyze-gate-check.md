@@ -28,11 +28,33 @@ ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
 Read:
 
 - `.specify/reports/entry_coverage/entry_coverage_report.md`
+- `.specify/reports/entry_coverage/entry_inventory.tsv`
+- `.specify/reports/entry_coverage/service_inventory.tsv`
+- `.specify/reports/entry_coverage/entry_chain_evidence.md`
 - `.specify/reports/entry_coverage/unarchived_entries.md`
 - `.specify/reports/entry_coverage/unarchived_services.md`
 - `.specify/reports/entry_coverage/cross_domain_conflicts.md`
 
-Treat `BLOCKED`, non-empty unarchived reports, or non-empty conflict reports as Analyze Gate blocking unless the project profile records an explicit accepted exception.
+The enhanced runner no longer relies only on full-text contains. It uses
+EntryCoverage table parsing, code anchor, path, method, route, topic, job,
+function, SQL, connector, sink, frontend API/client, and backend/mock boundary
+evidence.
+
+Inspect `classification`, `classification_reason`, `match_strength`,
+`match_reason`, and `reverse_coverage_status` before deciding blockers.
+
+Treat these as Analyze Gate blocking unless the project profile records an
+explicit accepted exception:
+
+- business entry unarchived;
+- core business unit unarchived;
+- Service / Manager / Mapper reverse coverage missing for a business unit;
+- cross-domain conflict;
+- business_domain L4 missing.
+
+technical bridge, framework bridge, generated/vendor, frontend native shell,
+abstract/base, annotation/marker, and not-applicable rows must remain visible in
+the reports but do not by themselves block Analyze.
 
 ## Status Values
 

@@ -66,6 +66,22 @@ and observability process products when route, page, component, store, API,
 popup, state, visibility, backend/mock boundary, visual behavior, logging, or
 analytics are affected.
 
+## Route Boundary
+
+Implement uses `specs/{feature}/route.md`, Pipeline Domain Route Summary, or
+Analyze Gate route evidence as an inherited boundary.
+
+Implement does not reinterpret Route Type.
+Implement does not reinterpret Business Domain Targets.
+Implement only executes inside `specs/{feature}/route.md`, Analyze Gate, and
+approved `specs/{feature}/tasks.md` boundaries.
+The approved task boundary must remain traceable to `specs/{feature}/spec.md`
+and `specs/{feature}/plan.md`.
+
+If implementation discovers that the inherited route conflicts with actual code
+boundaries, stop and recommend Analyze / Domain Route / Re-Gate. Do not rewrite
+route from Implement to make the implementation fit.
+
 ## Result Template
 
 ```markdown
@@ -75,6 +91,7 @@ analytics are affected.
 
 - Technical Specification:
 - Solution Review:
+- Route Artifact:
 - SpecKit Spec:
 - SpecKit Plan:
 - SpecKit Tasks:

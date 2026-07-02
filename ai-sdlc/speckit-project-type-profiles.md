@@ -64,6 +64,7 @@ Use for Java or service-oriented repositories whose behavior is mainly exposed t
 | Required artifacts | Entry inventory, entry-chain evidence, unarchived entries, unarchived core services, cross-domain conflicts, summary report. |
 | Strict blocks | Entry has no L4 match; core service has no archived entry; business chain lacks required reason; entry maps to multiple L2 domains without conflict handling. |
 | Technical bridges | `Client`, `Template`, `Invoker`, `Adapter`, `Listener`, framework bootstrap classes with downstream evidence. |
+| Precision evidence | EntryCoverage table parsing, code anchor, path, method, route/topic/job/function evidence, and Service -> Manager -> Mapper/Repository/Client reverse coverage. |
 
 ### Admin Mixed Workflow
 
@@ -83,6 +84,7 @@ Use for repositories that mix admin pages, controllers, background workers, sche
 | Required artifacts | Entry inventory by entry type, UI/API contract table, background task matrix, write-path and read-path evidence, configuration lifecycle notes. |
 | Strict blocks | Controller-only coverage while workers or schedules exist; data-console or SPI entry missing domain ownership; write path lacks approval/audit/import/export/copy boundary; duplicated entry type without routing reason. |
 | Technical bridges | `PageAction`, `DataConsole`, `Processor`, `MonthCopy`, `ImportExport`, `ApprovalAdapter`, `SpiAdapter`. |
+| Precision evidence | Table/code-anchor matching must distinguish business admin workflow entries from framework bridge, config-only adapter, generated/vendor residue, and historical repository residue. |
 
 ### Frontend Application
 
@@ -102,6 +104,7 @@ Use for web, mobile, RN, or pure frontend repositories whose behavior is mainly 
 | Required artifacts | Core entry mapping, component/state/API mapping, popup and navigation map, visual/dependency self-check notes, API contract list. |
 | Strict blocks | User-visible route/page has no business-domain match; page has no state/API evidence; popup changes behavior without documented trigger; API client lacks backend contract or mock boundary; visual regression risk lacks verification note. |
 | Technical bridges | `RouteOnly`, `PureView`, `BridgeComponent`, `NavigationAdapter`, `MockAdapter`, `FeatureFlagGuard` with recorded reason. |
+| Precision evidence | Route, page, component, popup/dialog/modal/sheet, store/action/model/reducer, api_client/request/service, navigation_guard, backend/mock boundary, and visual evidence may all match L4 coverage. Android/iOS native shell, Pods, android/build, ios/build, MainActivity, AppDelegate, node_modules, generated/vendor paths must be classified and explained instead of treated as business entries by default. |
 
 ### Data Pipeline And ETL
 
@@ -121,6 +124,7 @@ Use for Spark, Flink, batch, streaming, or data-computation repositories whose b
 | Required artifacts | Pipeline entry inventory, input/output contract table, SQL/data lineage evidence, idempotency/retry/replay notes, partition/window/checkpoint notes, failure and compensation matrix. |
 | Strict blocks | Job or stream main has no L4 match; SQL/output table lacks owner or contract; input or output is undocumented; idempotency/replay semantics missing for rerunnable task; checkpoint/window/partition behavior omitted when relevant. |
 | Technical bridges | `SparkJobMain`, `FlinkPipelineMain`, `FunctionOnly`, `Connector`, `Sink`, `Client`, `Template`, `Invoker` with downstream evidence. |
+| Precision evidence | spark_job, spark_online_etl, flink_main, flink_process_function, mcq_connector, sink, publisher, downstream handler, SQL lineage, repository, calculator, trigger, input, output, partition/window/checkpoint, replay/idempotency, and downstream consumer evidence must participate in reverse coverage. |
 
 ### Library Or Shared Component
 
@@ -182,6 +186,9 @@ All project types share these gate semantics:
 3. Missing evidence must be explicit: `accepted technical bridge`, `not business-facing`, `generated code`, `deprecated`, or `requires owner confirmation`.
 4. A project profile may relax a recommended layer only with a recorded reason.
 5. Strict outputs must be regenerated locally from the target repository and current business-domain documents.
+6. Entry coverage audit must use Markdown table parsing and code-anchor matching before falling back to text contains.
+7. Technical bridge, framework bridge, generated/vendor, native shell, abstract/base, annotation/marker, and not-applicable rows must remain visible with a reason, but they do not block strict mode unless explicitly marked as business behavior.
+8. Current requirement scope must distinguish `current_requirement`, `historical_repository_residue`, `repository_wide`, and `unmatched`.
 
 ## Standard Development Fixture Coverage
 

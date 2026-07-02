@@ -86,7 +86,7 @@ Read:
 Continue only when:
 
 - Clarification has no blocking core ambiguity.
-- `specs/spec.md` is consistent with approved DocFlow artifacts.
+- `specs/{feature}/spec.md` is consistent with approved DocFlow artifacts.
 - Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
 - Current artifacts are not stale.
 
@@ -129,7 +129,7 @@ The plan must cover:
 - Observability, logging, metrics, and rollout notes
 - Verification strategy mapped to acceptance criteria
 - Risks and mitigations
-- Traceability to `specs/spec.md` and DocFlow sources
+- Traceability to `specs/{feature}/spec.md` and DocFlow sources
 - Companion artifact status and skip records
 
 ### 4. Run Plan Gate
@@ -183,7 +183,7 @@ Stop instead of writing or approving a plan when:
 - `sdlc-speckit-clarify` has unresolved blocking ambiguity.
 - Planning requires changing approved Scope or behavior.
 - Planning requires new business rules.
-- Plan contradicts `specs/spec.md`, `01-技术方案`, or `02-方案审核`.
+- Plan contradicts `specs/{feature}/spec.md`, `01-技术方案`, or `02-方案审核`.
 - Accepted risks are missing or contradicted.
 - Current artifacts are stale.
 - `research.md`, `data-model.md`, `contracts/`, or `quickstart.md` is missing without explicit skip record.

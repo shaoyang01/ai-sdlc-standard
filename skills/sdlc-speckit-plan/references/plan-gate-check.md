@@ -4,7 +4,7 @@
 
 Check the plan for:
 
-- Fidelity to `specs/spec.md`.
+- Fidelity to `specs/{feature}/spec.md`.
 - No approved Scope change.
 - Affected modules and files.
 - Data, state, DB, cache, MQ, API, schedule, and listener impact.
@@ -30,7 +30,7 @@ Use:
 
 Block when:
 
-- Plan conflicts with `specs/spec.md`.
+- Plan conflicts with `specs/{feature}/spec.md`.
 - Plan changes approved business behavior.
 - Plan introduces undefined business rule.
 - Plan omits core exception, rollback, compatibility, or verification strategy.

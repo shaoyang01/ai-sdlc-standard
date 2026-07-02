@@ -25,7 +25,7 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-tasks` has no Blocking Items.
-- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not stale.
+- `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, and `specs/{feature}/tasks.md` are current and not stale.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Plan Gate result is passable.
 - Task Gate result is passable.
@@ -36,7 +36,7 @@ Continue only when:
 
 If no Task Gate result exists:
 
-- Continue only when `specs/tasks.md` contains an explicit no-blocking Task Gate section and the user explicitly confirms it is current.
+- Continue only when `specs/{feature}/tasks.md` contains an explicit no-blocking Task Gate section and the user explicitly confirms it is current.
 - Recommend running `sdlc-speckit-tasks`.
 - Do not approve implementation readiness from raw tasks or unreviewed implementation notes.
 

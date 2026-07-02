@@ -13,6 +13,7 @@
 
 Recommended:
 
+- `specs/{feature}/route.md` or the Pipeline Domain Route Summary carried by Analyze Gate
 - `library/{requirement_id}/manifest.md`
 - Accepted risk records
 - Re-Gate Records
@@ -26,7 +27,8 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-analyze` has no Blocking Items.
-- `specs/spec.md`, `specs/plan.md`, and `specs/tasks.md` are current and not stale.
+- `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, and `specs/{feature}/tasks.md` are current and not stale.
+- Route source is known from `specs/{feature}/route.md`, Pipeline Domain Route Summary, or Analyze Gate evidence.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Task Gate and Analyze Gate are passable.
 - Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.
@@ -56,10 +58,15 @@ Priority order:
 
 1. Current `specs/{feature}/tasks.md`.
 2. Current Analyze Gate result.
-3. Current `specs/{feature}/plan.md`.
-4. Current `specs/{feature}/spec.md`.
-5. Current effective `02-方案审核`.
-6. Current effective `01-技术方案`.
-7. Current manifest Development Path Decision and Re-Gate Records.
+3. Current `specs/{feature}/route.md` or Analyze Gate route source.
+4. Current `specs/{feature}/plan.md`.
+5. Current `specs/{feature}/spec.md`.
+6. Current effective `02-方案审核`.
+7. Current effective `01-技术方案`.
+8. Current manifest Development Path Decision and Re-Gate Records.
+
+Implement does not reinterpret Route Type or Business Domain Targets. If the
+route source conflicts with actual code boundaries, stop and route to Analyze /
+Domain Route / Re-Gate instead of editing route in Implement.
 
 If user input changes approved behavior, plan, or task scope, stop and apply change-control.

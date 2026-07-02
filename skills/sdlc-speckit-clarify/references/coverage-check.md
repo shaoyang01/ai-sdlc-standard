@@ -2,7 +2,7 @@
 
 ## Coverage Categories
 
-Check `specs/spec.md` against approved DocFlow sources for:
+Check `specs/{feature}/spec.md` against approved DocFlow sources for:
 
 - Business goal
 - In Scope / Out of Scope
@@ -31,8 +31,8 @@ Use:
 
 Block when:
 
-- `specs/spec.md` omits a required behavior from `01-技术方案`.
-- `specs/spec.md` contradicts `02-方案审核`.
+- `specs/{feature}/spec.md` omits a required behavior from `01-技术方案`.
+- `specs/{feature}/spec.md` contradicts `02-方案审核`.
 - Accepted risk is missing from SpecKit spec.
 - Required Action from solution review is unresolved.
 - A clarification would require changing approved artifacts.

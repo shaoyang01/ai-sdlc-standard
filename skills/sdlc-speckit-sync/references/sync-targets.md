@@ -70,6 +70,25 @@ Use this flow when a stable fact belongs in `.specify/business_domain/**` but th
 11. Write only stable facts with source evidence; keep proposed or one-off facts in skipped items.
 12. Run the standard entry coverage audit before reporting final `SYNCED`.
 
+Use the enhanced entry coverage audit result, not raw path presence alone:
+
+- `entry_inventory.tsv` business_entry rows identify business entries that need
+  durable L4 coverage.
+- `service_inventory.tsv` reverse_coverage_status identifies Service / Manager /
+  Mapper / Repository / Client core units that still need business-domain
+  evidence.
+- technical_bridge, framework_bridge, generated_or_vendor, native_shell,
+  abstract_or_base, annotation_or_marker, and not_applicable rows are visible
+  evidence but must not drive create-if-missing by themselves.
+- table/code anchor/path/method/route/topic/job/function/SQL/connector/sink
+  match reason is stronger evidence than plain text contains.
+- frontend native shell and generated/vendor noise must be excluded from
+  business create-if-missing unless profile evidence explicitly marks it as
+  business behavior.
+- ETL job/function/connector/sink and SQL lineage evidence may justify
+  create-if-missing only when the route artifact confirms the L1/L2/L4 owner and
+  the fact is stable reusable knowledge.
+
 Template selection precedence:
 
 ```text

@@ -222,8 +222,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Domain Route Summary
 - `specs/{feature}/route.md` when feature id is known and full SDD proceeds
 - `specs/{feature}/spec.md`
-- `specs/plan.md`、`research.md`、`data-model.md`、`contracts/`（按需）
-- `specs/tasks.md`
+- `specs/{feature}/plan.md`、`specs/{feature}/research.md`、`specs/{feature}/data-model.md`、`specs/{feature}/contracts/`（按需）
+- `specs/{feature}/tasks.md`
 - 实现摘要
 - `specs/{feature}/implementation.md`
 - `specs/{feature}/workflow-status.md`

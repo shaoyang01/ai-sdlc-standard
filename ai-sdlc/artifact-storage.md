@@ -235,7 +235,7 @@ library/{requirement_id}/ = 人工交接与门禁视图
 
 具体规则：
 
-- `specs/spec.md`、`plan.md`、`tasks.md` 仍由 SpecKit 工作流维护。
+- `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 仍由 SpecKit 工作流维护；`specs/spec.md`、`specs/plan.md`、`specs/tasks.md` 只属于历史或反例表述，不是当前 runtime path。
 - `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、`specs/{feature}/debug-guide.md` 和 `specs/{feature}/observability.md` 记录新轨实现阶段过程事实；其中 `specs/{feature}/workflow-status.md` 只是机器侧快照，manifest 是状态权威源。
 - `library/{requirement_id}/01-技术方案/` 可以引用或渲染 `specs/**`，但不是 SpecKit 写入源。
 - `library/{requirement_id}/03-实现记录/` 可以引用 tasks 完成情况、代码 diff 和测试命令。

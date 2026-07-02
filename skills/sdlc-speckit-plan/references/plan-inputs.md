@@ -22,7 +22,7 @@ Recommended:
 Continue only when:
 
 - `sdlc-speckit-clarify` has no Blocking Items.
-- `specs/spec.md` is current and not stale.
+- `specs/{feature}/spec.md` is current and not stale.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.
 - No open Required Action affects Scope, data, state, failure behavior, or acceptance.
@@ -31,7 +31,7 @@ Continue only when:
 
 If no clarify result exists:
 
-- Continue only when `specs/spec.md` contains no open clarification and the user explicitly confirms no residual ambiguity.
+- Continue only when `specs/{feature}/spec.md` contains no open clarification and the user explicitly confirms no residual ambiguity.
 - Recommend running `sdlc-speckit-clarify`.
 - Do not create a plan from raw chat or unreviewed assumptions.
 

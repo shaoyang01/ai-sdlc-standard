@@ -52,8 +52,8 @@ blocking_conditions:
 
 它负责：
 
-- 检查 `specs/spec.md` 是否仍存在影响 Plan / Tasks / Test 的未决问题。
-- 将非核心、局部、可回答的残余澄清写入 `specs/spec.md`。
+- 检查 `specs/{feature}/spec.md` 是否仍存在影响 Plan / Tasks / Test 的未决问题。
+- 将非核心、局部、可回答的残余澄清写入 `specs/{feature}/spec.md`。
 - 输出覆盖性摘要，说明哪些类别 Clear / Resolved / Deferred / Blocking。
 - 在发现核心需求仍不清楚时阻塞流程，并要求回到 `01-技术方案` / `02-方案审核`。
 
@@ -81,7 +81,7 @@ blocking_conditions:
 
 缺失输入处理：
 
-- 缺少 `specs/spec.md` 时停止并回到 `sdlc-speckit-specify`。
+- 缺少 `specs/{feature}/spec.md` 时停止并回到 `sdlc-speckit-specify`。
 - 缺少方案或方案审核时停止。
 - 若 manifest 不存在，可以继续只读校验，但必须建议创建或更新 Activity Log。
 
@@ -169,14 +169,14 @@ specs/{feature}/spec.md
 - 澄清会改变已审核方案范围。
 - 澄清会改变状态流转、异常处理、兼容策略、数据写入或测试验收口径。
 - 用户无法回答核心问题。
-- `specs/spec.md` 与 `01-技术方案` 不一致。
-- `specs/spec.md` 与 `02-方案审核` 的 Required Actions 冲突。
+- `specs/{feature}/spec.md` 与 `01-技术方案` 不一致。
+- `specs/{feature}/spec.md` 与 `02-方案审核` 的 Required Actions 冲突。
 
 ## Gate Requirements
 
 前置 Gate：
 
-- `sdlc-speckit-specify` 已生成或同步 `specs/spec.md`。
+- `sdlc-speckit-specify` 已生成或同步 `specs/{feature}/spec.md`。
 - `sdlc-solution-reviewer` 已通过。
 
 后置 Gate：

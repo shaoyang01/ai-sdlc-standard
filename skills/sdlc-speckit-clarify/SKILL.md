@@ -1,7 +1,7 @@
 ---
 name: sdlc-speckit-clarify
 description: |
-  This skill should be used when the user asks to "执行 speckit clarify", "校验残余澄清", "检查 specs/spec.md 是否还有未决问题", "补 Clarifications", or asks to validate residual clarification after sdlc-speckit-specify has synced reviewed DocFlow artifacts.
+  This skill should be used when the user asks to "执行 speckit clarify", "校验残余澄清", "检查 specs/{feature}/spec.md 是否还有未决问题", "补 Clarifications", or asks to validate residual clarification after sdlc-speckit-specify has synced reviewed DocFlow artifacts.
 version: 0.1.0
 ---
 
@@ -71,7 +71,7 @@ Identify:
 - Pending confirmations
 - Required Actions from solution review
 
-Stop if `specs/spec.md` or approved DocFlow sources are missing.
+Stop if `specs/{feature}/spec.md` or approved DocFlow sources are missing.
 
 ### 2. Validate Clarification Scope
 
@@ -137,10 +137,10 @@ Every clarify result must contain:
 
 ## Stop Conditions
 
-Stop instead of updating `specs/spec.md` when:
+Stop instead of updating `specs/{feature}/spec.md` when:
 
 - Clarification changes approved scope.
 - Clarification changes state, data source, exception, compatibility, or acceptance.
 - Clarification requires unavailable business confirmation.
-- `specs/spec.md` conflicts with `01-技术方案`.
+- `specs/{feature}/spec.md` conflicts with `01-技术方案`.
 - Required Actions from `02-方案审核` are unresolved.

@@ -10,6 +10,7 @@ stage: Speckit Implement / Implementation Execution
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
+  - optional specs/{feature}/route.md
   - specs/{feature}/spec.md
   - specs/{feature}/plan.md
   - specs/{feature}/tasks.md
@@ -71,7 +72,9 @@ blocking_conditions:
 它负责：
 
 - 读取已通过 Analyze Gate 的 spec、plan、tasks 和 DocFlow 产物。
+- 读取或继承 `specs/{feature}/route.md` 或 Analyze Gate 中确认的 route source。
 - 只执行 `specs/{feature}/tasks.md` 中已批准、可追踪的任务。
+- 沿用 Route Type、Business Domain Targets 和 Entry Coverage Surface，不在 Implement 阶段重新解释 route。
 - 在修改代码前模拟正常、边界、失败和兼容数据场景。
 - 按仓库既有模式修改生产代码和测试。
 - 执行或记录必要验证。
@@ -79,14 +82,23 @@ blocking_conditions:
 - 只允许更新已完成且已验证任务的状态，不得改写任务描述、任务范围或任务顺序。
 - 输出实现摘要、验证证据、未完成项和下一步建议。
 - 为 frontend/RN 和通用实现阶段输出或建议输出新轨过程产物：
-  `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、
-  `observability.md`、`03-实现记录` 和 `04-交付总结`。
+  `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、
+  `specs/{feature}/debug-guide.md`、`specs/{feature}/observability.md`、
+  `03-实现记录` 和 `04-交付总结`。
+
+Route boundary:
+
+- Implement does not reinterpret Route Type.
+- Implement does not reinterpret Business Domain Targets.
+- Implement executes only inside `specs/{feature}/route.md`, Analyze Gate, and approved `specs/{feature}/tasks.md` boundaries.
+- Route conflict must return to Domain Route / Analyze / Re-Gate.
 
 它不负责：
 
 - 从零理解需求。
 - 修改 `01-技术方案` 或 `02-方案审核`。
 - 重新生成 spec、plan 或 tasks。
+- 重新判断 Route Type 或重新解释 Business Domain Targets。
 - 实现任务外行为。
 - 通过改写 `tasks.md` 任务描述、范围或顺序来适配实现。
 - 补造未定义业务规则。
@@ -106,8 +118,9 @@ blocking_conditions:
 
 建议输入：
 
+- `specs/{feature}/route.md` 或 Analyze Gate 中记录的 Pipeline Domain Route Summary。
 - `library/{requirement_id}/manifest.md`
-- 已存在的 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 或 `observability.md`
+- 已存在的 `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、`specs/{feature}/debug-guide.md` 或 `specs/{feature}/observability.md`
 - 已接受风险记录。
 - Re-Gate Records。
 - Replaced Artifact Paths。
@@ -117,13 +130,15 @@ blocking_conditions:
 前置条件：
 
 - `sdlc-speckit-analyze` 不存在 Blocking Items。
-- `specs/spec.md`、`specs/plan.md`、`specs/tasks.md` 均为当前有效版本。
+- `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 均为当前有效版本。
+- route source 已由 Domain Route / Analyze 确认；Implement 只沿用 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary。
 - `02-方案审核`、Plan Gate、Task Gate、Analyze Gate 均为 `PASS` 或有效 `PASS_WITH_RISK`。
 - Development Path Decision 为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD。
 
 缺失输入处理：
 
-- 缺少 `specs/tasks.md` 时停止并回到 `sdlc-speckit-tasks`。
+- 缺少 `specs/{feature}/tasks.md` 时停止并回到 `sdlc-speckit-tasks`。
+- 缺少 route source 时可继续执行已通过 Analyze Gate 的明确任务，但必须标记 route evidence gap；如果实现依赖 Route Type、Business Domain Targets 或 Entry Coverage Surface，必须停止并回到 Analyze / Domain Route / Re-Gate。
 - 缺少 Analyze Gate 结论时停止并建议运行 `sdlc-speckit-analyze`。
 - 缺少技术方案或方案审核时停止。
 - manifest 缺失时可以继续实现，但必须建议创建或更新 Activity Log。
@@ -173,7 +188,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改生产代码。
 - 新增或修改测试。
 - 更新任务状态。
-- 生成或建议生成 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md`。
+- 生成或建议生成 `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、`specs/{feature}/debug-guide.md` 和 `specs/{feature}/observability.md`。
 - 生成或建议生成 `03-实现记录`。
 - 生成或建议生成 `04-交付总结`。
 - 建议更新 manifest Activity Log。
@@ -185,7 +200,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改已审核方案或审核结论。
 - 用实现补造未定义业务规则。
 - 回写 `.specify/business_domain/**`。
-- 将 `workflow-status.md` 当作状态权威源；manifest is status authority。
+- 将 `specs/{feature}/workflow-status.md` 当作状态权威源；manifest is status authority。
 - 写入旧版过程产物文件名作为兼容格式。
 - 隐藏失败验证。
 - 覆盖或回退无关用户改动。
@@ -198,6 +213,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 当前有效 DocFlow、spec、plan 或 tasks 缺失或 stale。
 - 实现需要任务外行为。
 - 实现需要未定义业务规则或技术决策。
+- 实现发现 `specs/{feature}/route.md` 或 route source 与代码实际边界冲突。
 - 现有代码事实与已批准假设冲突。
 - 编译失败、核心测试失败或必要验证无法定义。
 - 无关本地改动导致无法安全修改目标文件。
@@ -209,7 +225,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 前置 Gate：
 
 - `sdlc-solution-reviewer` 已通过。
-- `sdlc-speckit-specify` 已生成或同步 `specs/spec.md`。
+- `sdlc-speckit-specify` 已生成或同步 `specs/{feature}/spec.md`。
+- Domain Route / Analyze 已确认 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary；Implement 不重新解释 route。
 - `sdlc-speckit-clarify` 已校验无核心未决问题。
 - `sdlc-speckit-plan` 已通过 Plan Gate。
 - `sdlc-speckit-tasks` 已通过 Task Gate。
@@ -220,7 +237,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 已完成任务必须有验证证据。
 - 实现完成后必须生成或建议生成 `03-实现记录`。
 - 实现完成后必须生成或建议生成 `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`。
-- frontend/RN 实现完成后必须生成或建议生成实现、debug、observability 过程产物，并在需要状态快照时生成或建议生成 `workflow-status.md`；manifest is status authority。
+- frontend/RN 实现完成后必须生成或建议生成实现、debug、observability 过程产物，并在需要状态快照时生成或建议生成 `specs/{feature}/workflow-status.md`；manifest is status authority。
 - 最终交付时必须生成或建议生成 `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`。
 - 无 Blocking Items 时，可进入 `sdlc-code-review-normalizer` 或后续 `sdlc-speckit-sync`。
 - 存在规格、计划或任务缺口时，必须回到最早受影响节点，并在 manifest Re-Gate Records 中记录。

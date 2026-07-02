@@ -1,7 +1,7 @@
 ---
 name: sdlc-speckit-specify
 description: |
-  This skill should be used when the user asks to "同步到 specs/spec.md", "执行 speckit specify", "把已审阅方案转成 SpecKit spec", "从 01-技术方案 生成 specs", or asks to reuse DocFlow specification and sdlc-solution-reviewer output as the SDD spec source.
+  This skill should be used when the user asks to "同步到 specs/{feature}/spec.md", "执行 speckit specify", "把已审阅方案转成 SpecKit spec", "从 01-技术方案 生成 specs", or asks to reuse DocFlow specification and sdlc-solution-reviewer output as the SDD spec source.
 version: 0.1.0
 ---
 

@@ -29,6 +29,7 @@ ruby scripts/validate-skill-contracts.rb
 10. bootstrap 脚本是否具备 project-context candidate 策略，且不再依赖单一 --force。
 11. New-Rail Enhanced Pipeline 是否声明 ProjectWorkflowGuide / ProjectDocumentationGuide、`sdlc-speckit-*` only、development-time fixture、Clarify 边界确认策略和 legacy path no-read/no-write 红线。
 12. Frontend Process Products 是否声明并接入 implement / pipeline / reconcile：`specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、`observability.md`、`03-实现记录`、`04-交付总结`，且 manifest is status authority。
+13. Feature-scoped path consistency 是否通过：当前 runtime 路径必须使用 `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md`、`specs/{feature}/route.md`；implement 只能沿用 route artifact，不重新解释 route。
 ```
 
 成功时输出：
@@ -190,6 +191,15 @@ scripts/audit-entry-coverage.rb <target-project-path> --strict
 3. 同一 entry 命中多个 L2 时，cross_domain_conflicts.md 非空并阻断。
 4. 前端、传统 Java Web、后端、ETL、library 项目按 entry profile 的 entry_types 扫描，不按语言硬编码。
 5. --strict 在 BLOCKED / PENDING 状态返回非零，供 Sync / Reconcile gate 使用。
+6. EntryCoverage table parsing 不再只依赖全文 contains，Markdown 表格中的 Entry Type、Entry Name、Code Anchor、Path、Method、Function、Route、API client、Topic、Job、SQL、Connector、Sink、L4、Status、Evidence、Technical Bridge、Not Applicable 都可作为 evidence。
+7. entry_inventory.tsv 必须包含 classification、classification_reason、match_strength、match_reason 或等价字段。
+8. service_inventory.tsv 必须包含 classification、classification_reason、reverse_coverage_status 或等价字段。
+9. technical bridge、framework bridge、generated/vendor、frontend native shell、abstract/base、annotation/marker、not applicable 必须保留在 inventory 并说明 reason，但不默认成为 blocking unarchived entry。
+10. Service / Manager / Mapper reverse coverage 必须检查 entry -> service -> manager -> mapper/repository/client 链路证据；多 L4 命中进入 cross-domain conflict 或 multi-domain warning。
+11. ETL core unit reverse coverage 必须支持 spark_job、spark_online_etl、flink_main、flink_process_function、mcq_connector、sink/publisher/downstream handler、SQL lineage、repository、calculator 等 evidence。
+12. frontend/RN entry coverage 必须支持 route、page、component、popup/dialog/modal/sheet、store/action/model/reducer、api_client/request/service、navigation_guard、backend/mock boundary。
+13. Pods、android/build、ios/build、MainActivity、AppDelegate、node_modules、generated/vendor 等噪声必须按 native_shell 或 generated_or_vendor 分类；只有 profile/evidence 明确纳入业务行为时才作为 business entry 阻断。
+14. --requirement-id 或 --feature 传入时，应区分 current_requirement、historical_repository_residue、repository_wide、unmatched scope。
 ```
 
 ## Speckit sync create-if-missing 校验
@@ -295,6 +305,32 @@ API_DEBUG_GUIDE.md
 QUICK_DEBUG_REFERENCE.md
 LOGGING_IMPLEMENTATION.md
 FINAL_SUMMARY.md
+```
+
+## Feature-Scoped Path Consistency 校验
+
+当前 new-rail runtime 必须使用 feature-scoped Speckit 路径：
+
+```text
+specs/{feature}/route.md
+specs/{feature}/spec.md
+specs/{feature}/plan.md
+specs/{feature}/tasks.md
+```
+
+检查点：
+
+```text
+1. runtime input、output、前置条件、阻断条件、校验规则不得把 specs/spec.md、specs/plan.md、specs/tasks.md 当作当前主路径。
+2. 历史说明、legacy 对比说明或明确反例中可以出现 specs/spec.md、specs/plan.md、specs/tasks.md，但必须说明不是当前 runtime path / not current runtime path。
+3. sdlc-speckit-implement 必须读取或继承 specs/{feature}/route.md 或 Analyze Gate route source。
+4. Implement 不重新判断 Route Type。
+5. Implement 不重新解释 Business Domain Targets。
+6. Implement 只沿用 specs/{feature}/route.md、Analyze Gate 和 approved specs/{feature}/tasks.md 的边界执行。
+7. 如果 implementation 发现 route 与代码实际边界冲突，必须停止并回到 Analyze / Domain Route / Re-Gate，不得自行改写 route。
+8. Validator anchor: Implement does not reinterpret Route Type.
+9. Validator anchor: Implement does not reinterpret Business Domain Targets.
+10. Validator anchor: Implement executes only inside specs/{feature}/route.md, Analyze Gate, and approved `specs/{feature}/tasks.md` boundaries.
 ```
 
 ## Speckit specify 产品形状校验

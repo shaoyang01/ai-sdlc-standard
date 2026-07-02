@@ -53,7 +53,7 @@ blocking_conditions:
 - 明确哪些内容是事实、哪些是待确认事项。
 - 为 `sdlc-solution-reviewer` 提供可审阅输入。
 - 在轻量需求中，让 `01-技术方案` 直接作为规格事实。
-- 在进入 Speckit 时，让 `01-技术方案` 成为 `sdlc-speckit-specify` 派生或同步 `specs/spec.md` 的输入。
+- 在进入 Speckit 时，让 `01-技术方案` 成为 `sdlc-speckit-specify` 派生或同步 `specs/{feature}/spec.md` 的输入。
 
 它不负责：
 
@@ -204,7 +204,7 @@ library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
 
 ### sdlc-speckit-specify
 
-当需求进入 `sdlc-speckit-pipeline` 时，`sdlc-speckit-specify` 应复用 `sdlc-specification-writer` 的已审阅产物，派生或同步 `specs/spec.md`。
+当需求进入 `sdlc-speckit-pipeline` 时，`sdlc-speckit-specify` 应复用 `sdlc-specification-writer` 的已审阅产物，派生或同步 `specs/{feature}/spec.md`。
 
 `sdlc-speckit-specify` 不应重新解释已经审阅通过的需求。
 

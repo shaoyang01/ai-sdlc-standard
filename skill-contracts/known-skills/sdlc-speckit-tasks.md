@@ -92,13 +92,13 @@ blocking_conditions:
 前置条件：
 
 - `sdlc-speckit-plan` 不存在 Blocking Items。
-- `specs/plan.md` 与当前有效 `specs/spec.md`、`01-技术方案`、`02-方案审核` 一致。
+- `specs/{feature}/plan.md` 与当前有效 `specs/{feature}/spec.md`、`01-技术方案`、`02-方案审核` 一致。
 - Development Path Decision 为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD。
 
 缺失输入处理：
 
-- 缺少 `specs/spec.md` 时停止并回到 `sdlc-speckit-specify`。
-- 缺少 `specs/plan.md` 时停止并建议运行 `sdlc-speckit-plan`。
+- 缺少 `specs/{feature}/spec.md` 时停止并回到 `sdlc-speckit-specify`。
+- 缺少 `specs/{feature}/plan.md` 时停止并建议运行 `sdlc-speckit-plan`。
 - 缺少 Plan Gate 结论时停止并建议补 Plan Gate。
 - 缺少技术方案或方案审核时停止。
 - manifest 缺失时可以继续生成 tasks，但必须建议创建或更新 Activity Log。
@@ -134,7 +134,7 @@ specs/{feature}/tasks.md
 - 日志、监控、灰度、发布和回滚观察任务。
 - 文档、配置、迁移、清理任务。
 - 任务依赖顺序和可并行性。
-- 与 `specs/spec.md`、`specs/plan.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
+- 与 `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
 
 最终输出必须包含：
 
@@ -167,7 +167,7 @@ specs/{feature}/tasks.md
 必须停止的情况：
 
 - `sdlc-speckit-plan` 仍有 Blocking Items。
-- Tasks 与 `specs/spec.md` 或 `specs/plan.md` 冲突。
+- Tasks 与 `specs/{feature}/spec.md` 或 `specs/{feature}/plan.md` 冲突。
 - Tasks 改变已审核方案范围。
 - Tasks 改变状态流转、异常处理、兼容策略、数据写入或测试验收口径。
 - Tasks 需要新增方案或计划中没有定义的业务规则。
@@ -178,7 +178,7 @@ specs/{feature}/tasks.md
 
 前置 Gate：
 
-- `sdlc-speckit-specify` 已生成或同步 `specs/spec.md`。
+- `sdlc-speckit-specify` 已生成或同步 `specs/{feature}/spec.md`。
 - `sdlc-speckit-clarify` 已校验无核心未决问题。
 - `sdlc-speckit-plan` 已通过 Plan Gate。
 - `sdlc-solution-reviewer` 已通过。

@@ -7,6 +7,8 @@ Stop when:
 - Analyze Gate has Blocking Items.
 - Required artifacts are missing or stale.
 - Task target cannot be mapped to code safely.
+- `specs/{feature}/route.md` or Analyze Gate route source conflicts with actual code boundaries.
+- Implementation would require reinterpreting Route Type or Business Domain Targets.
 - Implementation requires undefined business behavior.
 - Existing code contradicts the approved spec, plan, or tasks.
 - Required behavior would change original-flow compatibility.
@@ -26,6 +28,7 @@ Route blockers to the earliest affected node:
 - Technical plan gap -> `sdlc-speckit-plan`.
 - Missing or invalid task -> `sdlc-speckit-tasks`.
 - Cross-artifact inconsistency -> `sdlc-speckit-analyze`.
+- Route boundary mismatch -> Domain Route / `sdlc-speckit-analyze` / Re-Gate.
 - Implementation defect within approved scope -> continue implementation and re-verify.
 
 ## Requirement Change During Implementation

@@ -58,7 +58,7 @@ blocking_conditions:
 它负责：
 
 - 读取当前有效的 DocFlow、spec、plan、tasks 和 Gate 结果。
-- 审计 `01-技术方案`、`02-方案审核`、`specs/spec.md`、`plan.md`、`tasks.md` 是否一致。
+- 审计 `01-技术方案`、`02-方案审核`、`specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 是否一致。
 - 判断实现前是否存在未解决的范围、计划、任务、风险、验证或回滚缺口。
 - 输出 Analyze Gate 结论和下一步建议。
 - 将阻塞项路由到最早受影响节点。
@@ -95,15 +95,15 @@ blocking_conditions:
 前置条件：
 
 - `sdlc-speckit-tasks` 不存在 Blocking Items。
-- `specs/spec.md`、`specs/plan.md`、`specs/tasks.md` 均为当前有效版本。
+- `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 均为当前有效版本。
 - `02-方案审核`、Plan Gate、Task Gate 均为 `PASS` 或有效 `PASS_WITH_RISK`。
 - Development Path Decision 为 `SPECKIT_PIPELINE_REQUIRED`，或用户明确要求完整 SDD。
 
 缺失输入处理：
 
-- 缺少 `specs/spec.md` 时停止并回到 `sdlc-speckit-specify`。
-- 缺少 `specs/plan.md` 时停止并回到 `sdlc-speckit-plan`。
-- 缺少 `specs/tasks.md` 时停止并回到 `sdlc-speckit-tasks`。
+- 缺少 `specs/{feature}/spec.md` 时停止并回到 `sdlc-speckit-specify`。
+- 缺少 `specs/{feature}/plan.md` 时停止并回到 `sdlc-speckit-plan`。
+- 缺少 `specs/{feature}/tasks.md` 时停止并回到 `sdlc-speckit-tasks`。
 - 缺少技术方案或方案审核时停止。
 - manifest 缺失时可以继续审计，但必须建议创建或更新 Activity Log。
 
@@ -179,7 +179,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 前置 Gate：
 
 - `sdlc-solution-reviewer` 已通过。
-- `sdlc-speckit-specify` 已生成或同步 `specs/spec.md`。
+- `sdlc-speckit-specify` 已生成或同步 `specs/{feature}/spec.md`。
 - `sdlc-speckit-clarify` 已校验无核心未决问题。
 - `sdlc-speckit-plan` 已通过 Plan Gate。
 - `sdlc-speckit-tasks` 已通过 Task Gate。

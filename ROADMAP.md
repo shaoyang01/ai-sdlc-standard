@@ -297,7 +297,7 @@
 
 | Skill | 优先级 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `sdlc-speckit-specify` | 高 | 已实现初版 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/spec.md`，避免重新解释需求。 |
+| `sdlc-speckit-specify` | 高 | 已实现初版 | 从已审阅的 `01-技术方案` / `02-方案审核` 派生或同步 `specs/{feature}/spec.md`，避免重新解释需求。 |
 | `sdlc-speckit-clarify` | 高 | 已实现初版 | 默认校验无未决问题；若发现新核心问题，应阻塞并回到方案修订 / 方案审核，而不是在 pipeline 内扩大范围。 |
 | `sdlc-speckit-plan` | 高 | 已实现初版 | 定义技术计划、约束、风险和 Plan Gate。 |
 | `sdlc-speckit-tasks` | 高 | 已实现初版 | 定义任务拆解、任务 Gate、实现前准入。 |
@@ -399,7 +399,7 @@ Re-Gate Starting Point:
 - 技术方案完整。
 - 改动单仓或低耦合。
 - 不涉及复杂状态机、跨业务域、复杂数据迁移或高风险回滚。
-- 不需要完整 `specs/plan.md` / `specs/tasks.md` / `analyze` Gate。
+- 不需要完整 `specs/{feature}/plan.md` / `specs/{feature}/tasks.md` / `analyze` Gate。
 
 流程：
 
@@ -869,10 +869,10 @@ roots = [
 | `sdlc-gate-runner` | 已实现初版 | 维护并按真实 manifest 样例迭代；检查路径决策、治理尾段与 Re-Gate | 中 | 4/6.5 |
 | `sdlc-code-review-normalizer` | 已实现初版 | 维护并按真实代码审查样例迭代 | 中 | 7 |
 | `sdlc-test-feedback-sync` | 已实现初版 | 维护并按真实测试反馈沉淀样例迭代 | 中 | 6/7 |
-| `sdlc-speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/spec.md`；执行体待改造 | 高 | 5 |
+| `sdlc-speckit-specify` | 已实现初版 | 复用已审阅方案生成 / 同步 `specs/{feature}/spec.md`；执行体待改造 | 高 | 5 |
 | `sdlc-speckit-clarify` | 已实现初版 | 校验残余未决问题；发现核心问题则回退方案 Gate；执行体待改造 | 高 | 5 |
-| `sdlc-speckit-plan` | 已实现初版 | 生成 / 校验 `specs/plan.md`；发现核心缺口则回退方案 Gate | 高 | 5 |
-| `sdlc-speckit-tasks` | 已实现初版 | 生成 / 校验 `specs/tasks.md`；发现任务拆解需要补新行为则回退上游 Gate | 高 | 5 |
+| `sdlc-speckit-plan` | 已实现初版 | 生成 / 校验 `specs/{feature}/plan.md`；发现核心缺口则回退方案 Gate | 高 | 5 |
+| `sdlc-speckit-tasks` | 已实现初版 | 生成 / 校验 `specs/{feature}/tasks.md`；发现任务拆解需要补新行为则回退上游 Gate | 高 | 5 |
 | `sdlc-speckit-analyze` | 已实现初版 | 审计 DocFlow / spec / plan / tasks 一致性；无阻塞后才进入实现 | 中 | 5 |
 | `sdlc-speckit-pipeline` | 已实现初版 | 作为方案审阅后的可选完整 SDD 路径；只做阶段编排、Gate 停顿和 Re-Gate 路由 | 高 | 5 |
 | `sdlc-speckit-pipeline-batch` | 不规划 | 多 Agent 版本 pipeline 不再使用；保留单 Agent `sdlc-speckit-pipeline` 作为标准路径 | - | - |

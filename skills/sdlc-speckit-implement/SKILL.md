@@ -12,17 +12,18 @@ Execute approved implementation tasks after `sdlc-speckit-analyze`. Treat `specs
 ## Core Rules
 
 1. Consume Analyze Gate-passed artifacts only.
-2. Require current `specs/{feature}/tasks.md`, `plan.md`, `spec.md`, and approved DocFlow artifacts.
-3. Implement only tasks that are present in `tasks.md` and traceable to spec and plan.
-4. Before modifying code, model concrete normal, edge, and failure data cases for affected behavior and use them to guide implementation.
-5. Inspect existing code, tests, and local conventions before editing.
-6. Preserve approved Scope, behavior, rollback, compatibility, failure, retry, idempotency, transaction, and verification requirements.
-7. Protect unrelated user or local changes; do not revert or overwrite work outside approved tasks.
-8. Stop when implementation requires undefined behavior, unapproved Scope change, or missing technical decision.
-9. Run the most relevant compile, test, lint, or validation commands available for the affected area.
-10. Record verification results, skipped checks, residual risk, and unfinished tasks.
-11. Update task status only for tasks actually completed and verified; do not rewrite task descriptions, scope, or ordering.
-12. Do not perform knowledge sync; route stable fact sync to `sdlc-speckit-sync`.
+2. Require current `specs/{feature}/tasks.md`, `specs/{feature}/plan.md`, `specs/{feature}/spec.md`, and approved DocFlow artifacts.
+3. Read or inherit `specs/{feature}/route.md` or the Analyze Gate route source; Implement does not reinterpret Route Type or Business Domain Targets.
+4. Implement only tasks that are present in `specs/{feature}/tasks.md` and traceable to `specs/{feature}/spec.md` and `specs/{feature}/plan.md`.
+5. Before modifying code, model concrete normal, edge, and failure data cases for affected behavior and use them to guide implementation.
+6. Inspect existing code, tests, and local conventions before editing.
+7. Preserve approved Scope, behavior, rollback, compatibility, failure, retry, idempotency, transaction, and verification requirements.
+8. Protect unrelated user or local changes; do not revert or overwrite work outside approved tasks.
+9. Stop when implementation requires undefined behavior, unapproved Scope change, missing technical decision, or route/source-boundary conflict.
+10. Run the most relevant compile, test, lint, or validation commands available for the affected area.
+11. Record verification results, skipped checks, residual risk, and unfinished tasks.
+12. Update task status only for tasks actually completed and verified; do not rewrite task descriptions, scope, or ordering.
+13. Do not perform knowledge sync; route stable fact sync to `sdlc-speckit-sync`.
 
 ## Standard Package Resolution
 
@@ -67,6 +68,7 @@ Load these references as needed:
 Identify:
 
 - Requirement ID
+- `specs/{feature}/route.md` or Analyze Gate route source
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
@@ -74,7 +76,7 @@ Identify:
 - Source `01-技术方案`
 - Source `02-方案审核`
 - `manifest.md`, if available
-- Existing `specs/{feature}/implementation.md`, `workflow-status.md`, `debug-guide.md`, and `observability.md`, if available
+- Existing `specs/{feature}/implementation.md`, `specs/{feature}/workflow-status.md`, `specs/{feature}/debug-guide.md`, and `specs/{feature}/observability.md`, if available
 - Current repository status and existing local changes
 
 Stop if any current core artifact is missing or stale.
@@ -89,6 +91,11 @@ Read:
 Continue only when:
 
 - Analyze Gate has no Blocking items.
+- Route source has already been established by Domain Route / Analyze.
+- Implement does not reinterpret Route Type.
+- Implement does not reinterpret Business Domain Targets.
+- Implement executes only inside `specs/{feature}/route.md`, Analyze Gate, and
+  approved `specs/{feature}/tasks.md` boundaries.
 - Tasks are current, approved, and traceable.
 - Required risks are accepted.
 - Implementation can be performed without guessing behavior.
@@ -114,8 +121,13 @@ Implement only approved tasks:
 - Keep changes scoped to task targets.
 - Add or update tests when tasks or plan require verification.
 - Keep compatibility and rollback behavior explicit.
+- Keep implementation inside `specs/{feature}/route.md`, Analyze Gate, and
+  approved `specs/{feature}/tasks.md` boundaries.
 - Update task status only after verification.
 - Do not modify task descriptions, task scope, task ordering, or acceptance mapping. If a task is wrong, stop and return to Task Gate or Re-Gate.
+
+If route boundaries conflict with actual code boundaries, stop and return to
+Analyze / Domain Route / Re-Gate instead of editing route in Implement.
 
 ### 5. Verify And Record
 
@@ -182,6 +194,9 @@ Stop instead of modifying or continuing code when:
 - `sdlc-speckit-analyze` has unresolved Blocking items.
 - Required artifacts are missing or stale.
 - Implementation requires behavior outside tasks, plan, spec, or DocFlow approval.
+- Implementation requires reinterpreting Route Type or Business Domain Targets.
+- `specs/{feature}/route.md` or Analyze Gate route source conflicts with actual
+  code boundaries.
 - Existing code contradicts approved assumptions.
 - Required verification cannot be defined.
 - Local unrelated changes make safe edits impossible.

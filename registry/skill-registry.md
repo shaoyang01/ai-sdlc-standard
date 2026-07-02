@@ -587,10 +587,10 @@ blocking_conditions:
   - solution review is missing or failed
   - development path is not SPECKIT_PIPELINE_REQUIRED without explicit user request for full SDD
   - technical specification has unresolved core ambiguity
-  - sync to specs/spec.md would require reinterpreting business scope
+  - sync to specs/{feature}/spec.md would require reinterpreting business scope
 notes:
   - consumes sdlc-specification-writer output
-  - syncs reviewed DocFlow specification into specs/spec.md
+  - syncs reviewed DocFlow specification into specs/{feature}/spec.md
   - does not reinterpret approved requirements
 ```
 
