@@ -27,6 +27,7 @@ ruby scripts/validate-skill-contracts.rb
 8. skills/sdlc-* 下是否仍使用 ../../ai-sdlc、../../ess、../../templates、../../skill-contracts 等相对标准路径。
 9. 新版 sdlc-* Skill 是否把旧版 .specify/memory、.specify/workflow、.specify/coding_guide 当作正常输入。
 10. bootstrap 脚本是否具备 project-context candidate 策略，且不再依赖单一 --force。
+11. New-Rail Enhanced Pipeline 是否声明 ProjectWorkflowGuide / ProjectDocumentationGuide、`sdlc-speckit-*` only、development-time fixture、Clarify 边界确认策略和 legacy path no-read/no-write 红线。
 ```
 
 成功时输出：
@@ -75,13 +76,15 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 1. 是否预览 .specify/project-governance-profile.yaml。
 2. 是否预览 .specify/entry-coverage-profile.yaml。
 3. 是否预览 .specify/business-domain-bootstrap.yaml。
-4. 是否预览 .specify/project-context/ProjectCodingGuide.md。
-5. 是否预览 .specify/project-context/RepositoryStructure.md。
-6. 是否预览 .specify/project-context/ProjectGovernanceOverrides.md。
-7. 是否预览 .specify/reports/speckit_generation_report.md。
-8. generation report 是否说明旧版文档 runtime action 为 preserved_not_read 或 not_present。
-9. 是否不会写文件。
-10. 是否不会生成 specs/** 或 .specify/business_domain/**。
+4. 是否预览 .specify/project-context/ProjectWorkflowGuide.md。
+5. 是否预览 .specify/project-context/ProjectDocumentationGuide.md。
+6. 是否预览 .specify/project-context/ProjectCodingGuide.md。
+7. 是否预览 .specify/project-context/RepositoryStructure.md。
+8. 是否预览 .specify/project-context/ProjectGovernanceOverrides.md。
+9. 是否预览 .specify/reports/speckit_generation_report.md。
+10. generation report 是否说明旧版文档 runtime action 为 preserved_not_read 或 not_present。
+11. 是否不会写文件。
+12. 是否不会生成 specs/** 或 .specify/business_domain/**。
 ```
 
 已有 profile 时，dry-run 应提示真实写入需要 `--force-profiles`，但不应直接失败。
@@ -128,6 +131,8 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 .specify/project-governance-profile.yaml
 .specify/entry-coverage-profile.yaml
 .specify/business-domain-bootstrap.yaml
+.specify/project-context/ProjectWorkflowGuide.md
+.specify/project-context/ProjectDocumentationGuide.md
 .specify/project-context/ProjectCodingGuide.md
 .specify/project-context/RepositoryStructure.md
 .specify/project-context/ProjectGovernanceOverrides.md
@@ -368,6 +373,10 @@ scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify
 6. implement 是否按 approved tasks 执行。
 7. sync 是否只沉淀稳定事实。
 8. reconcile 是否能发现 drift。
+9. Clarify 之前是否按节点询问是否进入下一节点。
+10. Clarify 之后是否按 Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile 连续执行，不再询问是否进入下一节点。
+11. 是否输出 New-Rail Runtime Check 和 Domain Route Summary。
+12. 运行期是否没有调用 legacy `speckit-*` Skill，也没有读取或写入 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
 ```
 
 ## 当前校验能力边界
@@ -377,7 +386,7 @@ scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify
 ```text
 1. 每个 Skill 在真实需求中输出一定正确。
 2. business_domain 生成一定准确。
-3. ProjectCodingGuide 中 detected evidence 已经是权威规则。
+3. ProjectWorkflowGuide、ProjectDocumentationGuide 或 ProjectCodingGuide 中 detected evidence 已经是权威规则。
 4. 方案审核一定发现所有业务风险。
 5. 测试反馈沉淀一定能自动改进 Checklist。
 ```

@@ -60,6 +60,8 @@ local_files:
     - ".specify/entry-coverage-profile.yaml"
     - ".specify/business-domain-bootstrap.yaml"
   optional:
+    - ".specify/project-context/ProjectWorkflowGuide.md"
+    - ".specify/project-context/ProjectDocumentationGuide.md"
     - ".specify/project-context/ProjectCodingGuide.md"
     - ".specify/project-context/RepositoryStructure.md"
     - ".specify/project-context/ProjectGovernanceOverrides.md"
@@ -79,6 +81,8 @@ speckit_dual_rail:
     authoritative_for_sdlc_skills: true
     shared_standard_source: "${AI_SDLC_STANDARD_HOME}"
     private_project_sources:
+      - ".specify/project-context/ProjectWorkflowGuide.md"
+      - ".specify/project-context/ProjectDocumentationGuide.md"
       - ".specify/project-context/ProjectCodingGuide.md"
       - ".specify/project-context/RepositoryStructure.md"
       - ".specify/project-context/ProjectGovernanceOverrides.md"
@@ -108,6 +112,14 @@ speckit_semantic_profile:
     legacy_files: "preserved_not_runtime_input"
 
 project_private_documents:
+  workflow_guides:
+    - path: ".specify/project-context/ProjectWorkflowGuide.md"
+      required: false
+      purpose: "Project-specific new-rail pipeline workflow constraints, confirmation policy, release, branch, verification, and rollback rules."
+  documentation_guides:
+    - path: ".specify/project-context/ProjectDocumentationGuide.md"
+      required: false
+      purpose: "Project-specific business_domain, L4, EntryCoverage, document index, and documentation shape rules."
   coding_guides:
     - path: ".specify/project-context/ProjectCodingGuide.md"
       required: false
@@ -198,6 +210,8 @@ generated_documents:
     - ".specify/project-governance-profile.yaml"
     - ".specify/entry-coverage-profile.yaml"
     - ".specify/business-domain-bootstrap.yaml"
+    - ".specify/project-context/ProjectWorkflowGuide.md"
+    - ".specify/project-context/ProjectDocumentationGuide.md"
     - ".specify/project-context/ProjectCodingGuide.md"
     - ".specify/project-context/RepositoryStructure.md"
     - ".specify/project-context/ProjectGovernanceOverrides.md"

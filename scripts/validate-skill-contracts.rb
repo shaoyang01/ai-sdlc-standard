@@ -169,6 +169,30 @@ SYNC_CREATE_IF_MISSING_REQUIRED_TERMS = [
   "one-off"
 ].freeze
 
+NEW_RAIL_PIPELINE_REQUIRED_TERMS = [
+  "New-Rail Enhanced",
+  "ProjectWorkflowGuide.md",
+  "ProjectDocumentationGuide.md",
+  "sdlc-speckit-*",
+  "development-time fixture",
+  ".specify/memory/**",
+  ".specify/workflow/**",
+  ".specify/coding_guide/**",
+  "Clarify",
+  "continuous execution",
+  "Domain Route Summary",
+  "New-Rail Runtime Check"
+].freeze
+
+BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
+  "ProjectWorkflowGuide.md",
+  "ProjectDocumentationGuide.md",
+  "workflow_guides",
+  "documentation_guides",
+  "generate_project_workflow_guide",
+  "generate_project_documentation_guide"
+].freeze
+
 CORE_ARTIFACT_TEMPLATES = [
   "templates/technical-specification-template.md",
   "templates/gate-result-template.md",
@@ -518,8 +542,88 @@ if File.exist?(bootstrap_path)
   bootstrap = File.read(bootstrap_path)
   errors << "bootstrap script must write project-context candidates when files exist" unless bootstrap.include?("candidate_path")
   errors << "bootstrap script must not rely on single --force for profiles and context" if bootstrap.include?('FORCE="')
+  BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.each do |term|
+    errors << "bootstrap script missing project private context requirement #{term}" unless bootstrap.include?(term)
+  end
 else
   errors << "missing scripts/bootstrap-speckit-project.sh"
+end
+
+bootstrap_context_paths = {
+  "templates/project-governance-profile-template.yaml" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(4),
+  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2),
+  "ai-sdlc/speckit-project-bootstrap.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2)
+}.freeze
+
+bootstrap_context_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing project private context requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+new_rail_pipeline_paths = {
+  "ai-sdlc/speckit-skill-product-compatibility.md" => [
+    "New-Rail Enhanced",
+    "ProjectWorkflowGuide.md",
+    "ProjectDocumentationGuide.md",
+    "sdlc-speckit-*",
+    "development-time fixture",
+    "post-Clarify continuous execution"
+  ],
+  "skills/sdlc-speckit-pipeline/SKILL.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
+  "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
+  "skills/sdlc-speckit-pipeline/references/stage-sequence.md" => [
+    "sdlc-speckit-*",
+    "development-time fixtures",
+    "Clarify",
+    "continuous execution",
+    "Domain Route Summary",
+    "New-Rail Runtime Check"
+  ],
+  "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md" => [
+    "speckit-*",
+    ".specify/memory/**",
+    ".specify/workflow/**",
+    ".specify/coding_guide/**",
+    "Clarify",
+    "continuous segment"
+  ],
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md" => [
+    "New-Rail Runtime Check",
+    "Domain Route Summary",
+    "sdlc-speckit-*",
+    "Legacy rail paths touched"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
+  "docs/VALIDATION.md" => [
+    "ProjectWorkflowGuide",
+    "ProjectDocumentationGuide",
+    "sdlc-speckit-*",
+    "Clarify",
+    "New-Rail Runtime Check",
+    "Domain Route Summary",
+    ".specify/memory/**",
+    ".specify/workflow/**",
+    ".specify/coding_guide/**"
+  ]
+}.freeze
+
+new_rail_pipeline_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing New-Rail pipeline requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
 end
 
 business_domain_bootstrap_paths = [

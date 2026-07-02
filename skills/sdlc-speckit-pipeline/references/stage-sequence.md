@@ -23,8 +23,8 @@ Do not skip a stage unless its current result already exists, is not stale, and 
 
 | Stage | Primary Skill | Purpose |
 | --- | --- | --- |
-| Preflight | project governance or existing preflight command | Verify Speckit baseline and required business knowledge entry points. |
-| Domain Route | pipeline controller | Decide existing-change, new-flow, integration-change, data-change, or unknown. |
+| Preflight | `sdlc-speckit-pipeline` controller plus standard-package bootstrap/audit scripts | Verify Speckit baseline, new-rail runtime redlines, and required business knowledge entry points. |
+| Domain Route | `sdlc-speckit-pipeline` controller | Decide existing-change, new-flow, integration-change, data-change, or unknown. |
 | Specify | `sdlc-speckit-specify` | Sync approved DocFlow specification into `specs/spec.md`. |
 | Clarify | `sdlc-speckit-clarify` | Validate residual questions only. |
 | Plan | `sdlc-speckit-plan` | Produce or validate implementation plan. |
@@ -33,6 +33,20 @@ Do not skip a stage unless its current result already exists, is not stale, and 
 | Implement | `sdlc-speckit-implement` | Modify code for approved tasks. |
 | Sync | `sdlc-speckit-sync` | Persist stable reusable implementation facts. |
 | Reconcile | `sdlc-speckit-code-doc-reconcile` | Audit code, specs, DocFlow, knowledge, and manifest consistency. |
+
+Only `sdlc-speckit-*` child Skills may be invoked at runtime. Legacy `speckit-*` Skills are development-time fixtures for standard-package parity review, not pipeline dependencies.
+
+## Transition Confirmation
+
+Ask whether to enter the next stage only before the Clarify boundary:
+
+- Preflight -> Domain Route: ask.
+- Domain Route -> Specify: ask.
+- Specify -> Clarify: ask.
+
+Clarify is the last interrupting authoring Gate. When Clarify passes and required downstream authorization is already present, continue through Plan, Tasks, Analyze, Implement, Sync, and Reconcile in order without asking whether to enter each next stage.
+
+If implementation, Sync target/write, Reconcile apply, or accepted-risk owner authorization is missing, stop at the Clarify boundary and report the missing authorization before entering continuous execution.
 
 ## Handoff Rule
 
@@ -45,6 +59,15 @@ Each stage handoff must include:
 - Accepted risks.
 - Manifest recommendation.
 - Next stage eligibility.
+
+Preflight and Domain Route must also include a Domain Route Summary:
+
+- Route Type.
+- Project Type Profiles.
+- Entry Coverage Surface.
+- Business Knowledge Read Set.
+- Missing Knowledge.
+- New-Rail Runtime Check.
 
 ## Existing Artifact Reuse
 

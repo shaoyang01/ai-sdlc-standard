@@ -50,6 +50,8 @@ At runtime, new Skills must read:
 
 Runtime new Skills must not read legacy `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**` as normal inputs.
 
+`sdlc-speckit-pipeline` must run as the New-Rail Enhanced Speckit Pipeline: it uses only `sdlc-speckit-*` child Skills, shared standard docs, and project private documents such as `ProjectWorkflowGuide.md` and `ProjectDocumentationGuide.md`. Legacy Skills and legacy documents are development-time fixtures only.
+
 ## Product Compatibility Matrix
 
 | Legacy capability | New Skill product | Preserved semantics |
@@ -62,7 +64,7 @@ Runtime new Skills must not read legacy `.specify/memory/**`, `.specify/workflow
 | Checklist | `specs/{feature}/checklists/{stage}-checklist.md` | Context-specific checklist items, pass/fail evidence, blockers, and reusable rule improvement routing. |
 | Implement | code changes plus implementation summary / task status | Execute approved tasks only, record verification evidence, stop on undefined behavior or unresolved blockers. |
 | Sync | sync report and optional `.specify/business_domain/**` updates | Only stable, verified, authorized facts sync; skips and risks are explicit. |
-| Pipeline workflow | staged execution record | `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile` order and stop conditions. |
+| Pipeline workflow | staged execution record | `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile` order, New-Rail Runtime Check, Domain Route Summary, pre-Clarify transition prompts, and post-Clarify continuous execution. |
 | Code-doc reconcile | reconciliation report | Drift categories, evidence, ownership, and next responsible Skill without silent mutation. |
 | Doc bootstrap/governance | project profiles, project-context, generation report | Runtime direct generation from standards/code/user facts, preserve legacy rail, no migration/comparison. |
 

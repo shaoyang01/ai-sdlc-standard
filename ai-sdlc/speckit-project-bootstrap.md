@@ -72,6 +72,8 @@ The project bootstrap step creates only a governance skeleton and project profil
 ├── entry-coverage-profile.yaml
 ├── business-domain-bootstrap.yaml
 ├── project-context/
+│   ├── ProjectWorkflowGuide.md
+│   ├── ProjectDocumentationGuide.md
 │   ├── ProjectCodingGuide.md
 │   ├── RepositoryStructure.md
 │   └── ProjectGovernanceOverrides.md
@@ -118,17 +120,19 @@ The script should:
 4. Create `.specify/project-governance-profile.yaml`.
 5. Create `.specify/entry-coverage-profile.yaml`.
 6. Create `.specify/business-domain-bootstrap.yaml`.
-7. Create `.specify/project-context/ProjectCodingGuide.md`, or `.candidate` when the target exists.
-8. Create `.specify/project-context/RepositoryStructure.md`, or `.candidate` when the target exists.
-9. Create `.specify/project-context/ProjectGovernanceOverrides.md`, or `.candidate` when the target exists.
-10. Create `.specify/reports/speckit_generation_report.md`.
-11. Create `.specify/reports/`.
-12. Create `library/`.
-13. Add `/library/` to the target repository `.gitignore` if it is not already present.
-14. Refuse to overwrite existing generated profile files unless `--force-profiles` is provided.
-15. Never silently overwrite project-context files.
-16. Never silently overwrite report files; preserve repeated bootstrap runs as timestamped report history.
-17. Never copy `.specify/business_domain/**` from another repository.
+7. Create `.specify/project-context/ProjectWorkflowGuide.md`, or `.candidate` when the target exists.
+8. Create `.specify/project-context/ProjectDocumentationGuide.md`, or `.candidate` when the target exists.
+9. Create `.specify/project-context/ProjectCodingGuide.md`, or `.candidate` when the target exists.
+10. Create `.specify/project-context/RepositoryStructure.md`, or `.candidate` when the target exists.
+11. Create `.specify/project-context/ProjectGovernanceOverrides.md`, or `.candidate` when the target exists.
+12. Create `.specify/reports/speckit_generation_report.md`.
+13. Create `.specify/reports/`.
+14. Create `library/`.
+15. Add `/library/` to the target repository `.gitignore` if it is not already present.
+16. Refuse to overwrite existing generated profile files unless `--force-profiles` is provided.
+17. Never silently overwrite project-context files.
+18. Never silently overwrite report files; preserve repeated bootstrap runs as timestamped report history.
+19. Never copy `.specify/business_domain/**` from another repository.
 
 Use `--dry-run` to preview generated content without writing files.
 
@@ -144,7 +148,7 @@ It should describe:
 - standard package version and location
 - dual-rail isolation policy
 - runtime legacy action, which must be preserve-only and not a new-rail input
-- project private documents that must be read for coding, architecture, repository structure, or local governance context
+- project private documents that must be read for workflow, documentation, coding, architecture, repository structure, or local governance context
 - project-specific overlays and exceptions
 - required project-generated documents
 
@@ -157,6 +161,8 @@ Project private documents are repository-owned documents that are not part of th
 Examples:
 
 - `.specify/business_domain/**`
+- `.specify/project-context/ProjectWorkflowGuide.md`
+- `.specify/project-context/ProjectDocumentationGuide.md`
 - `.specify/project-context/ProjectCodingGuide.md`
 - `.specify/project-context/RepositoryStructure.md`
 - `.specify/project-context/ProjectGovernanceOverrides.md`
@@ -179,6 +185,17 @@ New `sdlc-*` Skills must not read legacy mixed documents for normal workflow con
 - shared rules from `${AI_SDLC_STANDARD_HOME}`
 - private project facts from `.specify/project-context/**`
 - business facts from `.specify/business_domain/**`
+
+`ProjectWorkflowGuide.md` is the default place for project-local pipeline workflow constraints, confirmation policy, branch, release, verification, and rollback rules.
+
+`ProjectDocumentationGuide.md` is the default place for project-local business_domain, L4, EntryCoverage, document index, and documentation shape rules.
+
+For `sdlc-speckit-pipeline`, the stage transition confirmation policy is:
+
+- Before Clarify: ask whether to enter the next stage after Preflight, Domain Route, and Specify.
+- At Clarify: stop on unresolved core questions.
+- After Clarify passes: execute Plan, Tasks, Analyze, Implement, Sync, and Reconcile in order without asking whether to enter each next stage.
+- Before entering the post-Clarify continuous segment, collect any missing authorization for implementation, Sync target/write, Reconcile apply, or accepted-risk ownership.
 
 If a required private fact exists only in a legacy mixed document, stop and ask for target-code evidence or explicit user confirmation before generating new-rail content.
 
@@ -335,12 +352,14 @@ Run the bootstrap script or manually fill templates:
 
 Profiles must be explicit enough that another agent can run `sdlc-speckit-pipeline` without reading shared rules from target-local `.specify/memory` or `.specify/workflow` copies.
 
-Profiles must also declare project private documents that affect Speckit execution, including coding guides, repository structure docs, architecture docs, integration docs, deployment notes, and explicit local governance overrides.
+Profiles must also declare project private documents that affect Speckit execution, including workflow guides, documentation guides, coding guides, repository structure docs, architecture docs, integration docs, deployment notes, and explicit local governance overrides.
 
 ### Step 3.1: Generate Project Context Documents
 
 Create when missing, or write `.candidate` files when the target file already exists:
 
+- `.specify/project-context/ProjectWorkflowGuide.md`
+- `.specify/project-context/ProjectDocumentationGuide.md`
 - `.specify/project-context/ProjectCodingGuide.md`
 - `.specify/project-context/RepositoryStructure.md`
 - `.specify/project-context/ProjectGovernanceOverrides.md`
@@ -349,7 +368,7 @@ These files are generated project-private documents defined by `ai-sdlc/speckit-
 
 Do not modify legacy `.specify/memory/**`, `.specify/workflow/**`, or existing `.specify/coding_guide/**` files.
 
-New `sdlc-*` Skills must read these generated project-context documents instead of legacy mixed documents.
+New `sdlc-*` Skills must read these generated project-context documents instead of legacy mixed documents. `sdlc-speckit-pipeline` must use only `sdlc-speckit-*` child Skills at runtime; legacy `speckit-*` Skills and legacy documents are development-time fixtures only.
 
 ### Step 4: Generate Business Domain Documents
 

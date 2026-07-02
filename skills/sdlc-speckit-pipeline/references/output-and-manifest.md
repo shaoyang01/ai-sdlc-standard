@@ -49,6 +49,23 @@ Use this structure:
 - Development Path Decision:
 - User confirmation:
 
+## New-Rail Runtime Check
+
+- Runtime child skills: `sdlc-speckit-*` only
+- Legacy Skill usage: none
+- Legacy document runtime input: none
+- Project private context read set:
+- Standard package:
+
+## Domain Route Summary
+
+- Route Type:
+- Project Type Profiles:
+- Entry Coverage Surface:
+- Business Knowledge Read Set:
+- Missing Knowledge:
+- Next route action:
+
 ## Source Artifacts
 
 - Requirement:
@@ -65,6 +82,7 @@ Use this structure:
 ## Gate Results
 
 - Preflight:
+- Domain Route:
 - Specify:
 - Clarify:
 - Plan:
@@ -87,6 +105,7 @@ Use this structure:
 - Docs:
 - Knowledge:
 - Commands:
+- Legacy rail paths touched: none
 
 ## Blocking Or Deferred Items
 
