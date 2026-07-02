@@ -109,8 +109,31 @@ scripts/bootstrap-speckit-project.sh <target-project-path> \
   --project-name "<project-name>" \
   --language java \
   --application-type backend \
-  --standard-package "<path-or-git-url-to-ai-sdlc-standard>"
+  --standard-package "<path-or-git-url-to-ai-sdlc-standard>" \
+  --scan-root service-a \
+  --scan-timeout 60 \
+  --max-samples 30
 ```
+
+Large repository scan control:
+
+```bash
+# From the standard package repository.
+scripts/bootstrap-speckit-project.sh /path/to/target --dry-run --scan-root service-a --scan-timeout 60 --max-samples 30
+
+# From the target repository directory.
+$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run --scan-root . --scan-timeout 60 --max-samples 30
+```
+
+`--scan-root` limits bootstrap scanning to a target-relative path and may be repeated. `--include-root` is a whitelist alias with the same scan boundary semantics. `--scan-timeout` limits scan duration; timeout must be reported as `TIMEOUT / PARTIAL`, not as a complete successful scan. `--max-samples` caps evidence and file inventory examples so dry-run output remains reviewable in large repositories.
+
+The bootstrap scan must build one bounded file inventory first. Project type detection, source roots detection, entry profile evidence, and report samples must reuse that inventory instead of repeatedly performing full repository scans. Inventory summaries should explain relative path, file type or extension, matched include root, and included/excluded reason where the report or profile exposes examples.
+
+Reports must show scan roots, include roots, scan duration, timeout, and partial scan status so reviewers can tell whether the output represents a complete scan or a bounded sample.
+
+Default excludes include `.git`, `target`, `build`, `dist`, `out`, `node_modules`, `vendor`, `coverage`, `generated`, `.idea`, `.gradle`, `.mvn`, `.venv`, `venv`, `Pods`, `ios/Pods`, `android/build`, `ios/build`, fixtures, snapshots, and mock data directories. React Native native shell, Pods, android/build, and ios/build must not pollute source_roots.
+
+When a scan times out, generated profile and context outputs are conservative evidence scaffolds only. The bootstrap must record affected outputs and recommended action, and should require pending confirmation before treating project_type_profiles, source_roots, or entry coverage profile facts as confirmed.
 
 The script should:
 

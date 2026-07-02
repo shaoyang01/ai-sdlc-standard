@@ -650,6 +650,43 @@ BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "generate_project_documentation_guide"
 ].freeze
 
+BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS = [
+  "--scan-root",
+  "--include-root",
+  "--scan-timeout",
+  "--max-samples",
+  "scan_duration_seconds",
+  "timeout_occurred",
+  "partial_scan",
+  "TIMEOUT / PARTIAL",
+  "scan_roots",
+  "include_roots",
+  "max_samples",
+  "android/build",
+  "ios/build",
+  "node_modules",
+  "large-fixtures",
+  "__snapshots__",
+  "mock-data"
+].freeze
+
+BOOTSTRAP_PERFORMANCE_DOC_TERMS = [
+  "Bootstrap Performance / Large Repo Scan Control",
+  "--scan-root",
+  "--include-root",
+  "--scan-timeout",
+  "--max-samples",
+  "scan duration",
+  "timeout",
+  "partial scan",
+  "TIMEOUT / PARTIAL",
+  "scan roots",
+  "exclude patterns",
+  "pfms",
+  "android/build",
+  "ios/build"
+].freeze
+
 CORE_ARTIFACT_TEMPLATES = [
   "templates/technical-specification-template.md",
   "templates/gate-result-template.md",
@@ -1061,8 +1098,23 @@ if File.exist?(bootstrap_path)
   BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.each do |term|
     errors << "bootstrap script missing project private context requirement #{term}" unless bootstrap.include?(term)
   end
+  BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS.each do |term|
+    errors << "bootstrap script missing large-repo scan control requirement #{term}" unless bootstrap.include?(term)
+  end
 else
   errors << "missing scripts/bootstrap-speckit-project.sh"
+end
+
+entry_bootstrap_path = File.join(ROOT, "scripts", "bootstrap-entry-coverage-profile.sh")
+if File.exist?(entry_bootstrap_path)
+  entry_bootstrap = File.read(entry_bootstrap_path)
+  BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS.each do |term|
+    errors << "entry coverage profile bootstrap missing large-repo scan control requirement #{term}" unless entry_bootstrap.include?(term)
+  end
+  errors << "entry coverage profile bootstrap must keep Dir.pwd fallback" unless entry_bootstrap.include?("Dir.pwd")
+  errors << "entry coverage profile bootstrap must keep standard package self-protection" unless entry_bootstrap.include?("standard_package_root?")
+else
+  errors << "missing scripts/bootstrap-entry-coverage-profile.sh"
 end
 
 bootstrap_context_paths = {
@@ -1077,6 +1129,24 @@ bootstrap_context_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing project private context requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+bootstrap_performance_paths = {
+  "docs/VALIDATION.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS,
+  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control"],
+  "ai-sdlc/speckit-project-bootstrap.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control", "pfms"]
+}.freeze
+
+bootstrap_performance_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing large-repo scan control requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

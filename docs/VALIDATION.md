@@ -538,6 +538,97 @@ library-shared-component:
 6. git diff --check 通过。
 ```
 
+## Bootstrap Performance / Large Repo Scan Control 校验
+
+PR G 要求 Speckit bootstrap 在大仓中可控、可限时、可采样、可解释。以下两个脚本都必须支持相同扫描控制参数：
+
+```bash
+scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run --scan-root service-a --include-root web-a --scan-timeout 60 --max-samples 30
+scripts/bootstrap-entry-coverage-profile.sh [target-project-path] --dry-run --scan-root service-a --include-root web-a --scan-timeout 60 --max-samples 30
+```
+
+扫描参数语义：
+
+```text
+--scan-root PATH
+  只扫描指定 target-relative 路径，可重复传入多个。
+
+--include-root PATH
+  scan-root 的白名单别名，可与 --scan-root 合并使用。
+
+--scan-timeout SECONDS
+  限制扫描阶段耗时。超时后必须报告 timeout / partial scan，不能声称完整成功。
+
+--max-samples N
+  限制每类 evidence / file inventory samples 的输出数量，默认值必须保守。
+```
+
+dry-run 和正式 report 必须输出 scan summary：
+
+```text
+scan started at
+scan ended at
+scan duration seconds
+scanned file count
+sampled file count
+skipped/excluded count
+timeout occurred
+partial scan
+scan roots
+include roots
+effective scan roots
+exclude patterns
+max samples
+scan timeout
+```
+
+timeout / partial scan 语义：
+
+```text
+1. Scan Status 必须是 COMPLETE 或 TIMEOUT / PARTIAL。
+2. TIMEOUT / PARTIAL 时不得把 profile、context、source_roots、project_type_profiles 当作 confirmed fact。
+3. 报告必须写明 Affected Outputs 和 Recommended Action。
+4. project bootstrap 可以继续生成 conservative evidence scaffold，但必须降级为 pending confirmation / needs-user-confirmation-partial-scan。
+5. entry coverage profile bootstrap 在 timeout 时默认写 candidate profile，除非显式 --force-entry-coverage-profile。
+```
+
+默认 exclude 目录必须覆盖：
+
+```text
+.git
+target
+build
+dist
+out
+node_modules
+vendor
+coverage
+generated
+.idea
+.gradle
+.mvn
+.venv
+venv
+Pods
+ios/Pods
+android/build
+ios/build
+fixtures / fixture / test-fixtures / test_fixtures / large-fixtures
+__snapshots__ / snapshots / mock-data / mock_data
+```
+
+检查点：
+
+```text
+1. 两个 bootstrap 都必须先生成一次 bounded file inventory，后续 project type detection、source roots detection、entry profile evidence、report sample 复用 inventory。
+2. inventory 至少能解释 relative path、file type / extension、matched include root、included / excluded reason；正式写入时只能落到允许的 .specify/reports/** 或 profile 摘要中。
+3. RN native shell、Pods、android/build、ios/build 不得污染 source_roots。
+4. pfms 这类大仓必须优先用 --scan-root 限定目标业务模块或服务目录；不知道模块名时不要硬编码，应由使用者选择目标目录。
+5. entry coverage profile bootstrap 仍支持从目标目录直接执行：`$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run --scan-root . --scan-timeout 60 --max-samples 30`。
+6. dry-run 不得写 target repo。
+7. 不读取或写入 legacy `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
+```
+
 ## Analyze Gate Strengthening 校验
 
 `sdlc-speckit-analyze` 必须把 route artifact、project_type_profiles、

@@ -12,6 +12,10 @@ Options:
   --language <language>          java|typescript|python|go|mixed|other. Auto-detected when omitted.
   --application-type <type>      backend|frontend|fullstack|batch|library|mixed|other. Auto-detected when omitted.
   --standard-package <location>  Path or git URL for ai-sdlc-standard. Defaults to this repository path.
+  --scan-root <path>             Limit code scan to a target-relative path. Repeatable.
+  --include-root <path>          Alias for --scan-root; target-relative scan whitelist root. Repeatable.
+  --scan-timeout <seconds>       Stop code scan after seconds and report timeout / partial scan.
+  --max-samples <n>              Limit evidence and file samples per report section.
   --force-profiles               Overwrite generated profile files when they already exist.
   --force-context                Overwrite project-context files. Defaults to writing .candidate files.
   --dry-run                      Print generated files without writing.
@@ -46,6 +50,40 @@ STANDARD_PACKAGE="${STANDARD_PACKAGE_DEFAULT}"
 FORCE_PROFILES="false"
 FORCE_CONTEXT="false"
 DRY_RUN="false"
+SCAN_TIMEOUT_SECONDS="60"
+MAX_SAMPLES="30"
+SCAN_ROOTS=()
+INCLUDE_ROOTS=()
+
+DEFAULT_EXCLUDE_PATTERNS=(
+  ".git"
+  "target"
+  "build"
+  "android/build"
+  "ios/build"
+  "dist"
+  "out"
+  "node_modules"
+  "vendor"
+  "coverage"
+  "generated"
+  ".idea"
+  ".gradle"
+  ".mvn"
+  ".venv"
+  "venv"
+  "Pods"
+  "ios/Pods"
+  "fixtures"
+  "fixture"
+  "test-fixtures"
+  "test_fixtures"
+  "large-fixtures"
+  "__snapshots__"
+  "snapshots"
+  "mock-data"
+  "mock_data"
+)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -63,6 +101,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --standard-package)
       STANDARD_PACKAGE="${2:-}"
+      shift 2
+      ;;
+    --scan-root)
+      SCAN_ROOTS+=("${2:-}")
+      shift 2
+      ;;
+    --include-root)
+      INCLUDE_ROOTS+=("${2:-}")
+      shift 2
+      ;;
+    --scan-timeout)
+      SCAN_TIMEOUT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --max-samples)
+      MAX_SAMPLES="${2:-}"
       shift 2
       ;;
     --force-profiles)
@@ -107,6 +161,16 @@ if [[ ! -d "${TARGET_PATH}" ]]; then
   exit 1
 fi
 
+if ! [[ "${SCAN_TIMEOUT_SECONDS}" =~ ^[0-9]+$ ]]; then
+  echo "--scan-timeout must be a non-negative integer." >&2
+  exit 2
+fi
+
+if ! [[ "${MAX_SAMPLES}" =~ ^[0-9]+$ ]] || [[ "${MAX_SAMPLES}" -lt 1 ]]; then
+  echo "--max-samples must be a positive integer." >&2
+  exit 2
+fi
+
 TARGET_PATH="$(cd "${TARGET_PATH}" && pwd)"
 PROJECT_NAME="${PROJECT_NAME:-$(basename "${TARGET_PATH}")}"
 SPECIFY_DIR="${TARGET_PATH}/.specify"
@@ -121,97 +185,75 @@ git_remote() {
 }
 
 has_java_source_signal() {
-  [[ -f "${TARGET_PATH}/pom.xml" ]] && return 0
-  find "${TARGET_PATH}" -maxdepth 6 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o -path '*/src/main/java' -type d -print -quit 2>/dev/null | grep -q .
+  has_project_path "pom.xml" ||
+  has_project_path "*/pom.xml" ||
+  has_project_path "src/main/java/*" ||
+  has_project_path "*/src/main/java/*"
 }
 
 has_package_frontend_dependency() {
-  [[ -f "${TARGET_PATH}/package.json" ]] || return 1
-  grep -Eq '"(react-native|react|vue|@angular/core|next|nuxt|vite|umi|dva|mobx|redux|@react-navigation/native)"' "${TARGET_PATH}/package.json"
+  local path
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    [[ "$(basename "${path}")" == "package.json" ]] || continue
+    if grep -Eq '"(react-native|react|vue|@angular/core|next|nuxt|vite|umi|dva|mobx|redux|@react-navigation/native)"' "${TARGET_PATH}/${path}"; then
+      return 0
+    fi
+  done <<< "${PROJECT_FILES_TEXT}"
+  return 1
 }
 
 has_frontend_source_signal() {
   has_package_frontend_dependency && return 0
-  find "${TARGET_PATH}" -maxdepth 6 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o -type d \
-    \( \
-      -path "*/src/pages" -o \
-      -path "*/src/views" -o \
-      -path "*/src/screens" -o \
-      -path "*/src/components" -o \
-      -path "*/src/component" -o \
-      -path "*/src/navigation" -o \
-      -path "*/src/router" -o \
-      -path "*/src/routers" -o \
-      -path "*/src/routes" -o \
-      -path "*/src/store" -o \
-      -path "*/src/stores" -o \
-      -path "*/src/models" -o \
-      -path "*/src/actions" -o \
-      -path "*/src/api" -o \
-      -path "*/src/services" \
-    \) -print -quit 2>/dev/null | grep -q .
+  has_project_path "src/pages/*" ||
+  has_project_path "*/src/pages/*" ||
+  has_project_path "src/views/*" ||
+  has_project_path "*/src/views/*" ||
+  has_project_path "src/screens/*" ||
+  has_project_path "*/src/screens/*" ||
+  has_project_path "src/components/*" ||
+  has_project_path "*/src/components/*" ||
+  has_project_path "src/component/*" ||
+  has_project_path "*/src/component/*" ||
+  has_project_path "src/navigation/*" ||
+  has_project_path "*/src/navigation/*" ||
+  has_project_path "src/router/*" ||
+  has_project_path "*/src/router/*" ||
+  has_project_path "src/routers/*" ||
+  has_project_path "*/src/routers/*" ||
+  has_project_path "src/routes/*" ||
+  has_project_path "*/src/routes/*" ||
+  has_project_path "src/store/*" ||
+  has_project_path "*/src/store/*" ||
+  has_project_path "src/stores/*" ||
+  has_project_path "*/src/stores/*" ||
+  has_project_path "src/models/*" ||
+  has_project_path "*/src/models/*" ||
+  has_project_path "src/actions/*" ||
+  has_project_path "*/src/actions/*" ||
+  has_project_path "src/api/*" ||
+  has_project_path "*/src/api/*" ||
+  has_project_path "src/services/*" ||
+  has_project_path "*/src/services/*"
 }
 
 has_server_rendered_web_signal() {
-  find "${TARGET_PATH}" -maxdepth 7 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o \
-    \( \
-      -path "*/src/main/webapp/WEB-INF/*" -o \
-      -path "*/src/main/webapp/js/*" -o \
-      -path "*/src/main/webapp/static/*" -o \
-      -path "*/src/main/webapp/pages/*" -o \
-      -path "*/src/main/webapp/views/*" -o \
-      -name "*.jsp" -o \
-      -name "*.ftl" -o \
-      -name "*.vm" \
-    \) -print -quit 2>/dev/null | grep -q .
+  has_project_path "src/main/webapp/WEB-INF/*" ||
+  has_project_path "*/src/main/webapp/WEB-INF/*" ||
+  has_project_path "src/main/webapp/js/*" ||
+  has_project_path "*/src/main/webapp/js/*" ||
+  has_project_path "src/main/webapp/static/*" ||
+  has_project_path "*/src/main/webapp/static/*" ||
+  has_project_path "src/main/webapp/pages/*" ||
+  has_project_path "*/src/main/webapp/pages/*" ||
+  has_project_path "src/main/webapp/views/*" ||
+  has_project_path "*/src/main/webapp/views/*" ||
+  has_project_path "*.jsp" ||
+  has_project_path "*/*.jsp" ||
+  has_project_path "*.ftl" ||
+  has_project_path "*/*.ftl" ||
+  has_project_path "*.vm" ||
+  has_project_path "*/*.vm"
 }
 
 has_user_interface_signal() {
@@ -219,33 +261,20 @@ has_user_interface_signal() {
 }
 
 has_data_pipeline_source_signal() {
-  find "${TARGET_PATH}" -maxdepth 8 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o \
-    \( \
-      -path "*/finance-spark-service/*" -o \
-      -path "*/finance-flink-service/*" -o \
-      -path "*/src/main/java/*/etl/job/*" -o \
-      -path "*/src/main/java/*/online/*" -o \
-      -path "*/src/main/java/*/func/process/*" -o \
-      -path "*/src/main/java/*/connectors/mcq/*" -o \
-      -name "*Etl.java" -o \
-      -name "*Function.java" \
-    \) -print -quit 2>/dev/null | grep -q .
+  has_project_path "finance-spark-service/*" ||
+  has_project_path "*/finance-spark-service/*" ||
+  has_project_path "finance-flink-service/*" ||
+  has_project_path "*/finance-flink-service/*" ||
+  has_project_path "src/main/java/*/etl/job/*" ||
+  has_project_path "*/src/main/java/*/etl/job/*" ||
+  has_project_path "src/main/java/*/online/*" ||
+  has_project_path "*/src/main/java/*/online/*" ||
+  has_project_path "src/main/java/*/func/process/*" ||
+  has_project_path "*/src/main/java/*/func/process/*" ||
+  has_project_path "src/main/java/*/connectors/mcq/*" ||
+  has_project_path "*/src/main/java/*/connectors/mcq/*" ||
+  has_project_path "*Etl.java" ||
+  has_project_path "*Function.java"
 }
 
 detect_language() {
@@ -257,7 +286,15 @@ detect_language() {
     printf 'mixed\n'
   elif has_java_source_signal; then
     printf 'java\n'
-  elif [[ -f "${TARGET_PATH}/package.json" ]] || find "${TARGET_PATH}" -maxdepth 5 \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -type f 2>/dev/null | grep -q .; then
+  elif has_project_path "package.json" ||
+    has_project_path "*.ts" ||
+    has_project_path "*/*.ts" ||
+    has_project_path "*.tsx" ||
+    has_project_path "*/*.tsx" ||
+    has_project_path "*.js" ||
+    has_project_path "*/*.js" ||
+    has_project_path "*.jsx" ||
+    has_project_path "*/*.jsx"; then
     printf 'typescript\n'
   elif [[ -f "${TARGET_PATH}/go.mod" ]]; then
     printf 'go\n'
@@ -353,78 +390,41 @@ emit_yaml_list() {
 
 detect_source_roots() {
   local roots=""
-  while IFS= read -r dir; do
-    dir="${dir#${TARGET_PATH}/}"
-    roots="${roots}${dir}"$'\n'
-  done < <(find "${TARGET_PATH}" -maxdepth 6 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o -path '*/src/main/java' -type d -print 2>/dev/null | sort)
-
-  if has_user_interface_signal; then
-    while IFS= read -r dir; do
-      dir="${dir#${TARGET_PATH}/}"
-      roots="${roots}${dir}"$'\n'
-    done < <(find "${TARGET_PATH}" -maxdepth 5 \
-      \( \
-        -path "*/.git" -o \
-        -path "*/target" -o \
-        -path "*/build" -o \
-        -path "*/dist" -o \
-        -path "*/node_modules" -o \
-        -path "*/.venv" -o \
-        -path "*/venv" -o \
-        -path "*/vendor" -o \
-        -path "${TARGET_PATH}/out" -o \
-        -path "*/coverage" -o \
-        -path "*/generated" -o \
-        -path "*/.idea" -o \
-        -path "*/.gradle" -o \
-        -path "*/.mvn" \
-      \) -prune -o -type d \
-      \( \
-        -path "*/src" -o \
-        -path "*/app" -o \
-        -path "*/lib" -o \
-        -path "*/src/main/webapp" \
-      \) -print 2>/dev/null | sort)
-  fi
-
-  if [[ -z "${roots}" ]]; then
-    while IFS= read -r dir; do
-      dir="${dir#${TARGET_PATH}/}"
-      roots="${roots}${dir}"$'\n'
-    done < <(find "${TARGET_PATH}" -maxdepth 3 \
-      \( \
-        -path "*/.git" -o \
-        -path "*/target" -o \
-        -path "*/build" -o \
-        -path "*/dist" -o \
-        -path "*/node_modules" -o \
-        -path "*/.venv" -o \
-        -path "*/venv" -o \
-        -path "*/vendor" -o \
-        -path "${TARGET_PATH}/out" -o \
-        -path "*/coverage" -o \
-        -path "*/generated" -o \
-        -path "*/.idea" -o \
-        -path "*/.gradle" -o \
-        -path "*/.mvn" \
-      \) -prune -o -type d \( -name src -o -name app -o -name lib \) -print 2>/dev/null | sort)
-  fi
+  local path prefix
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    case "${path}" in
+      src/main/java/*)
+        roots="${roots}src/main/java"$'\n'
+        ;;
+      */src/main/java/*)
+        prefix="${path%%/src/main/java/*}"
+        roots="${roots}${prefix}/src/main/java"$'\n'
+        ;;
+      src/main/webapp/*)
+        roots="${roots}src/main/webapp"$'\n'
+        ;;
+      */src/main/webapp/*)
+        prefix="${path%%/src/main/webapp/*}"
+        roots="${roots}${prefix}/src/main/webapp"$'\n'
+        ;;
+      src/*|app/*|lib/*|packages/*)
+        roots="${roots}${path%%/*}"$'\n'
+        ;;
+      */src/*)
+        prefix="${path%%/src/*}"
+        roots="${roots}${prefix}/src"$'\n'
+        ;;
+      */app/*)
+        prefix="${path%%/app/*}"
+        roots="${roots}${prefix}/app"$'\n'
+        ;;
+      */lib/*)
+        prefix="${path%%/lib/*}"
+        roots="${roots}${prefix}/lib"$'\n'
+        ;;
+    esac
+  done <<< "${PROJECT_FILES_TEXT}"
 
   if [[ -z "${roots}" ]]; then
     printf '.\n'
@@ -435,30 +435,22 @@ detect_source_roots() {
 
 detect_module_globs() {
   local modules=""
-  while IFS= read -r dir; do
-    local rel
-    rel="${dir#${TARGET_PATH}/}"
-    if [[ "${rel}" == "." || "${rel}" == "${dir}" ]]; then
-      continue
-    fi
-    modules="${modules}${rel}"$'\n'
-  done < <(find "${TARGET_PATH}" -mindepth 2 -maxdepth 3 \
-    \( \
-      -path "*/.git" -o \
-      -path "*/target" -o \
-      -path "*/build" -o \
-      -path "*/dist" -o \
-      -path "*/node_modules" -o \
-      -path "*/.venv" -o \
-      -path "*/venv" -o \
-      -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out" -o \
-      -path "*/coverage" -o \
-      -path "*/generated" -o \
-      -path "*/.idea" -o \
-      -path "*/.gradle" -o \
-      -path "*/.mvn" \
-    \) -prune -o -path '*/src/main' -type d -print 2>/dev/null | sed 's#/src/main$##' | sort -u)
+  local path module
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    case "${path}" in
+      */src/main/*)
+        module="${path%%/src/main/*}"
+        ;;
+      src/main/*)
+        module="."
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    modules="${modules}${module}"$'\n'
+  done <<< "${PROJECT_FILES_TEXT}"
 
   if [[ -z "${modules}" ]]; then
     printf '.\n'
@@ -565,27 +557,6 @@ preview_gitignore_entry() {
   fi
 }
 
-DETECTED_LANGUAGE="$(detect_language)"
-DETECTED_APPLICATION_TYPE="$(detect_application_type "${DETECTED_LANGUAGE}")"
-REMOTE_URL="$(git_remote)"
-REMOTE_URL="${REMOTE_URL:-<git-url-or-repo-name>}"
-SOURCE_ROOTS_TEXT="$(detect_source_roots)"
-MODULE_GLOBS_TEXT="$(detect_module_globs)"
-SOURCE_ROOTS=()
-MODULE_GLOBS=()
-while IFS= read -r line; do
-  [[ -n "${line}" ]] && SOURCE_ROOTS+=("${line}")
-done <<< "${SOURCE_ROOTS_TEXT}"
-while IFS= read -r line; do
-  [[ -n "${line}" ]] && MODULE_GLOBS+=("${line}")
-done <<< "${MODULE_GLOBS_TEXT}"
-STANDARD_RUNTIME_RESOLVABLE="$(standard_package_runtime_resolvable)"
-if is_git_url "${STANDARD_PACKAGE}" || [[ "${STANDARD_RUNTIME_RESOLVABLE}" != "true" ]]; then
-  STANDARD_LOCAL_RESOLUTION_REQUIRED="true"
-else
-  STANDARD_LOCAL_RESOLUTION_REQUIRED="false"
-fi
-
 matches_kind() {
   local kind="$1"
   local name="$2"
@@ -646,36 +617,125 @@ matching_files_for_kind() {
 }
 
 collect_project_files() {
+  local output_file="$1"
   local roots=()
+  local requested_roots=()
   local root
-  for root in "${SOURCE_ROOTS[@]}"; do
-    if [[ "${root}" == "." ]]; then
-      roots=("${TARGET_PATH}")
-      break
-    fi
-    [[ -d "${TARGET_PATH}/${root}" ]] && roots+=("${TARGET_PATH}/${root}")
-  done
-  if [[ "${#roots[@]}" -eq 0 ]]; then
-    roots=("${TARGET_PATH}")
+
+  if [[ "${#SCAN_ROOTS[@]}" -gt 0 ]]; then
+    requested_roots+=("${SCAN_ROOTS[@]}")
+  fi
+  if [[ "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
+    requested_roots+=("${INCLUDE_ROOTS[@]}")
   fi
 
-  find "${roots[@]}" \
+  SCAN_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  SCAN_STARTED_EPOCH="$(date +%s)"
+  SCAN_TIMEOUT_OCCURRED="false"
+  SCAN_PARTIAL="false"
+  SCAN_EXCLUDED_COUNT="not_counted_pruned"
+
+  if [[ "${#requested_roots[@]}" -eq 0 ]]; then
+    requested_roots=(".")
+  fi
+
+  if [[ "${#SCAN_ROOTS[@]}" -gt 0 ]]; then
+    SCAN_ROOTS_TEXT="$(printf '%s\n' "${SCAN_ROOTS[@]}" | sed '/^$/d' | sort -u | paste -sd ', ' -)"
+  elif [[ "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
+    SCAN_ROOTS_TEXT="<none>"
+  else
+    SCAN_ROOTS_TEXT="."
+  fi
+  if [[ "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
+    INCLUDE_ROOTS_TEXT="$(printf '%s\n' "${INCLUDE_ROOTS[@]}" | sed '/^$/d' | sort -u | paste -sd ', ' -)"
+  else
+    INCLUDE_ROOTS_TEXT="<none>"
+  fi
+
+  for root in "${requested_roots[@]}"; do
+    root="${root#./}"
+    [[ -n "${root}" ]] || root="."
+    local absolute_root
+    if [[ "${root}" == "." ]]; then
+      absolute_root="${TARGET_PATH}"
+    elif [[ -d "${TARGET_PATH}/${root}" ]]; then
+      absolute_root="$(cd "${TARGET_PATH}/${root}" && pwd)"
+    else
+      echo "Scan root does not exist or is not a directory: ${root}" >&2
+      exit 2
+    fi
+    case "${absolute_root}" in
+      "${TARGET_PATH}"|"${TARGET_PATH}"/*)
+        ;;
+      *)
+        echo "Scan root must stay inside target project: ${root}" >&2
+        exit 2
+        ;;
+    esac
+    roots+=("${absolute_root}")
+  done
+
+  EFFECTIVE_SCAN_ROOTS_TEXT="$(printf '%s\n' "${roots[@]}" | sed "s#^${TARGET_PATH}/##" | sed 's#^$#.#' | sort -u | paste -sd ', ' -)"
+  : > "${output_file}"
+
+  while IFS= read -r path; do
+    local now
+    now="$(date +%s)"
+    if [[ $((now - SCAN_STARTED_EPOCH)) -ge "${SCAN_TIMEOUT_SECONDS}" ]]; then
+      SCAN_TIMEOUT_OCCURRED="true"
+      SCAN_PARTIAL="true"
+      break
+    fi
+    printf '%s\n' "${path#${TARGET_PATH}/}" >> "${output_file}"
+  done < <(find "${roots[@]}" \
     \( \
       -path "*/.git/*" -o -path "*/.git" -o \
       -path "*/target/*" -o -path "*/target" -o \
       -path "*/build/*" -o -path "*/build" -o \
+      -path "*/android/build/*" -o -path "*/android/build" -o \
+      -path "*/ios/build/*" -o -path "*/ios/build" -o \
       -path "*/dist/*" -o -path "*/dist" -o \
+      -path "*/out/*" -o -path "*/out" -o \
       -path "*/node_modules/*" -o -path "*/node_modules" -o \
-      -path "*/.venv/*" -o -path "*/.venv" -o \
-      -path "*/venv/*" -o -path "*/venv" -o \
       -path "*/vendor/*" -o -path "*/vendor" -o \
-      -path "${TARGET_PATH}/out/*" -o -path "${TARGET_PATH}/out" -o \
       -path "*/coverage/*" -o -path "*/coverage" -o \
       -path "*/generated/*" -o -path "*/generated" -o \
       -path "*/.idea/*" -o -path "*/.idea" -o \
       -path "*/.gradle/*" -o -path "*/.gradle" -o \
-      -path "*/.mvn/*" -o -path "*/.mvn" \
-    \) -prune -o -type f -print 2>/dev/null | sed "s#^${TARGET_PATH}/##"
+      -path "*/.mvn/*" -o -path "*/.mvn" -o \
+      -path "*/.venv/*" -o -path "*/.venv" -o \
+      -path "*/venv/*" -o -path "*/venv" -o \
+      -path "*/Pods/*" -o -path "*/Pods" -o \
+      -path "*/ios/Pods/*" -o -path "*/ios/Pods" -o \
+      -path "*/fixtures/*" -o -path "*/fixtures" -o \
+      -path "*/fixture/*" -o -path "*/fixture" -o \
+      -path "*/test-fixtures/*" -o -path "*/test-fixtures" -o \
+      -path "*/test_fixtures/*" -o -path "*/test_fixtures" -o \
+      -path "*/large-fixtures/*" -o -path "*/large-fixtures" -o \
+      -path "*/__snapshots__/*" -o -path "*/__snapshots__" -o \
+      -path "*/snapshots/*" -o -path "*/snapshots" -o \
+      -path "*/mock-data/*" -o -path "*/mock-data" -o \
+      -path "*/mock_data/*" -o -path "*/mock_data" \
+    \) -prune -o -type f -print 2>/dev/null | sort -u)
+
+  SCAN_ENDED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  SCAN_ENDED_EPOCH="$(date +%s)"
+  SCAN_DURATION_SECONDS="$((SCAN_ENDED_EPOCH - SCAN_STARTED_EPOCH))"
+  SCAN_FILE_COUNT="$(wc -l < "${output_file}" | tr -d ' ')"
+  if [[ "${SCAN_FILE_COUNT}" -lt "${MAX_SAMPLES}" ]]; then
+    SCAN_SAMPLED_FILE_COUNT="${SCAN_FILE_COUNT}"
+  else
+    SCAN_SAMPLED_FILE_COUNT="${MAX_SAMPLES}"
+  fi
+  if [[ "${SCAN_TIMEOUT_OCCURRED}" == "true" ]]; then
+    SCAN_STATUS="TIMEOUT / PARTIAL"
+    SCAN_AFFECTED_OUTPUTS="project_type_profiles, source_roots, module_globs, code evidence samples, entry coverage profile"
+    SCAN_RECOMMENDED_ACTION="Re-run with narrower --scan-root / --include-root or a larger --scan-timeout before treating generated profiles as confirmed."
+  else
+    SCAN_STATUS="COMPLETE"
+    SCAN_AFFECTED_OUTPUTS="none"
+    SCAN_RECOMMENDED_ACTION="Review generated evidence scaffold before confirming project facts."
+  fi
 }
 
 count_matching_files() {
@@ -683,38 +743,8 @@ count_matching_files() {
 }
 
 sample_matching_files() {
-  matching_files_for_kind "$1" | sort | head -n 5
+  matching_files_for_kind "$1" | sort | head -n "${MAX_SAMPLES}"
 }
-
-PROJECT_FILES_TEXT="$(collect_project_files)"
-SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
-MODULE_COUNT="${#MODULE_GLOBS[@]}"
-HTTP_ENTRY_COUNT="$(count_matching_files http_entry)"
-RPC_PROVIDER_COUNT="$(count_matching_files rpc_provider)"
-MESSAGE_ENTRY_COUNT="$(count_matching_files message_entry)"
-SCHEDULE_ENTRY_COUNT="$(count_matching_files schedule_entry)"
-TOTAL_ENTRY_COUNT=$((HTTP_ENTRY_COUNT + RPC_PROVIDER_COUNT + MESSAGE_ENTRY_COUNT + SCHEDULE_ENTRY_COUNT))
-SERVICE_COUNT="$(count_matching_files service)"
-MANAGER_COUNT="$(count_matching_files manager)"
-PERSISTENCE_COUNT="$(count_matching_files persistence)"
-MQ_COUNT="$(count_matching_files mq)"
-SCHEDULE_COUNT="$(count_matching_files schedule)"
-TEST_COUNT="$(count_matching_files test)"
-CONFIG_COUNT="$(count_matching_files config)"
-CACHE_LOCK_COUNT="$(count_matching_files cache_lock)"
-
-HTTP_ENTRY_SAMPLES="$(sample_matching_files http_entry)"
-RPC_PROVIDER_SAMPLES="$(sample_matching_files rpc_provider)"
-MESSAGE_ENTRY_SAMPLES="$(sample_matching_files message_entry)"
-SCHEDULE_ENTRY_SAMPLES="$(sample_matching_files schedule_entry)"
-SERVICE_SAMPLES="$(sample_matching_files service)"
-MANAGER_SAMPLES="$(sample_matching_files manager)"
-PERSISTENCE_SAMPLES="$(sample_matching_files persistence)"
-MQ_SAMPLES="$(sample_matching_files mq)"
-SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
-TEST_SAMPLES="$(sample_matching_files test)"
-CONFIG_SAMPLES="$(sample_matching_files config)"
-CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
 
 has_project_path() {
   local pattern="$1"
@@ -808,6 +838,63 @@ detect_project_type_profiles() {
   fi
 }
 
+PROJECT_FILES_TMP="$(mktemp "${TMPDIR:-/tmp}/speckit-bootstrap-inventory.XXXXXX")"
+collect_project_files "${PROJECT_FILES_TMP}"
+PROJECT_FILES_TEXT="$(cat "${PROJECT_FILES_TMP}")"
+rm -f "${PROJECT_FILES_TMP}"
+
+REMOTE_URL="$(git_remote)"
+REMOTE_URL="${REMOTE_URL:-<git-url-or-repo-name>}"
+SOURCE_ROOTS_TEXT="$(detect_source_roots)"
+MODULE_GLOBS_TEXT="$(detect_module_globs)"
+SOURCE_ROOTS=()
+MODULE_GLOBS=()
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && SOURCE_ROOTS+=("${line}")
+done <<< "${SOURCE_ROOTS_TEXT}"
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && MODULE_GLOBS+=("${line}")
+done <<< "${MODULE_GLOBS_TEXT}"
+SOURCE_ROOT_COUNT="${#SOURCE_ROOTS[@]}"
+MODULE_COUNT="${#MODULE_GLOBS[@]}"
+
+DETECTED_LANGUAGE="$(detect_language)"
+DETECTED_APPLICATION_TYPE="$(detect_application_type "${DETECTED_LANGUAGE}")"
+STANDARD_RUNTIME_RESOLVABLE="$(standard_package_runtime_resolvable)"
+if is_git_url "${STANDARD_PACKAGE}" || [[ "${STANDARD_RUNTIME_RESOLVABLE}" != "true" ]]; then
+  STANDARD_LOCAL_RESOLUTION_REQUIRED="true"
+else
+  STANDARD_LOCAL_RESOLUTION_REQUIRED="false"
+fi
+
+HTTP_ENTRY_COUNT="$(count_matching_files http_entry)"
+RPC_PROVIDER_COUNT="$(count_matching_files rpc_provider)"
+MESSAGE_ENTRY_COUNT="$(count_matching_files message_entry)"
+SCHEDULE_ENTRY_COUNT="$(count_matching_files schedule_entry)"
+TOTAL_ENTRY_COUNT=$((HTTP_ENTRY_COUNT + RPC_PROVIDER_COUNT + MESSAGE_ENTRY_COUNT + SCHEDULE_ENTRY_COUNT))
+SERVICE_COUNT="$(count_matching_files service)"
+MANAGER_COUNT="$(count_matching_files manager)"
+PERSISTENCE_COUNT="$(count_matching_files persistence)"
+MQ_COUNT="$(count_matching_files mq)"
+SCHEDULE_COUNT="$(count_matching_files schedule)"
+TEST_COUNT="$(count_matching_files test)"
+CONFIG_COUNT="$(count_matching_files config)"
+CACHE_LOCK_COUNT="$(count_matching_files cache_lock)"
+
+HTTP_ENTRY_SAMPLES="$(sample_matching_files http_entry)"
+RPC_PROVIDER_SAMPLES="$(sample_matching_files rpc_provider)"
+MESSAGE_ENTRY_SAMPLES="$(sample_matching_files message_entry)"
+SCHEDULE_ENTRY_SAMPLES="$(sample_matching_files schedule_entry)"
+SERVICE_SAMPLES="$(sample_matching_files service)"
+MANAGER_SAMPLES="$(sample_matching_files manager)"
+PERSISTENCE_SAMPLES="$(sample_matching_files persistence)"
+MQ_SAMPLES="$(sample_matching_files mq)"
+SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
+TEST_SAMPLES="$(sample_matching_files test)"
+CONFIG_SAMPLES="$(sample_matching_files config)"
+CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
+INVENTORY_FILE_SAMPLES="$(printf '%s\n' "${PROJECT_FILES_TEXT}" | sed '/^$/d' | head -n "${MAX_SAMPLES}")"
+
 PROJECT_TYPE_PROFILES_TEXT="$(detect_project_type_profiles | awk '!seen[$0]++')"
 PROJECT_TYPE_PROFILES=()
 while IFS= read -r line; do
@@ -843,6 +930,10 @@ case "${DETECTED_APPLICATION_TYPE}" in
     CODE_EVIDENCE_RESULT="needs-user-confirmation"
     ;;
 esac
+
+if [[ "${SCAN_PARTIAL}" == "true" ]]; then
+  CODE_EVIDENCE_RESULT="needs-user-confirmation-partial-scan"
+fi
 
 generate_project_profile() {
   local output="$1"
@@ -883,6 +974,14 @@ project:
   project_type_profiles:
 EOF
     emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
+    cat <<EOF
+  detection_status:
+    scan_status: "$(yaml_escape "${SCAN_STATUS}")"
+    partial_scan: ${SCAN_PARTIAL}
+    pending_confirmation: $([[ "${SCAN_PARTIAL}" == "true" ]] && printf 'true' || printf 'false')
+    affected_outputs: "$(yaml_escape "${SCAN_AFFECTED_OUTPUTS}")"
+    recommended_action: "$(yaml_escape "${SCAN_RECOMMENDED_ACTION}")"
+EOF
     cat <<'EOF'
   owners:
     business: []
@@ -902,6 +1001,25 @@ EOF
   module_globs:
 EOF
     emit_yaml_list "    " "${MODULE_GLOBS[@]}"
+    cat <<EOF
+  scan_control:
+    scan_status: "$(yaml_escape "${SCAN_STATUS}")"
+    scan_started_at: "$(yaml_escape "${SCAN_STARTED_AT}")"
+    scan_ended_at: "$(yaml_escape "${SCAN_ENDED_AT}")"
+    scan_duration_seconds: ${SCAN_DURATION_SECONDS}
+    scanned_file_count: ${SCAN_FILE_COUNT}
+    sampled_file_count: ${SCAN_SAMPLED_FILE_COUNT}
+    skipped_excluded_count: "$(yaml_escape "${SCAN_EXCLUDED_COUNT}")"
+    timeout_occurred: ${SCAN_TIMEOUT_OCCURRED}
+    partial_scan: ${SCAN_PARTIAL}
+    scan_roots: "$(yaml_escape "${SCAN_ROOTS_TEXT}")"
+    include_roots: "$(yaml_escape "${INCLUDE_ROOTS_TEXT}")"
+    effective_scan_roots: "$(yaml_escape "${EFFECTIVE_SCAN_ROOTS_TEXT}")"
+    scan_timeout_seconds: ${SCAN_TIMEOUT_SECONDS}
+    max_samples: ${MAX_SAMPLES}
+    exclude_patterns:
+EOF
+    emit_yaml_list "      " "${DEFAULT_EXCLUDE_PATTERNS[@]}"
     cat <<'EOF'
 
 local_files:
@@ -1312,6 +1430,29 @@ EOF
     emit_yaml_list "" "${MODULE_GLOBS[@]}"
     cat <<EOF
 
+## Scan Summary
+
+| Item | Value |
+| --- | --- |
+| Scan Status | ${SCAN_STATUS} |
+| Scan Started At | ${SCAN_STARTED_AT} |
+| Scan Ended At | ${SCAN_ENDED_AT} |
+| Scan Duration Seconds | ${SCAN_DURATION_SECONDS} |
+| Scanned File Count | ${SCAN_FILE_COUNT} |
+| Sampled File Count | ${SCAN_SAMPLED_FILE_COUNT} |
+| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} |
+| Timeout Occurred | ${SCAN_TIMEOUT_OCCURRED} |
+| Partial Scan | ${SCAN_PARTIAL} |
+| Scan Roots | ${SCAN_ROOTS_TEXT} |
+| Include Roots | ${INCLUDE_ROOTS_TEXT} |
+| Effective Scan Roots | ${EFFECTIVE_SCAN_ROOTS_TEXT} |
+| Scan Timeout | ${SCAN_TIMEOUT_SECONDS} |
+| Max Samples | ${MAX_SAMPLES} |
+
+## File Inventory Samples
+
+$(markdown_samples "${INVENTORY_FILE_SAMPLES}")
+
 ## Detected Entry Evidence
 
 | Type | Count | Examples |
@@ -1417,7 +1558,7 @@ EOF
   module_globs:
 EOF
     emit_yaml_list "    " "${MODULE_GLOBS[@]}"
-    cat <<'EOF'
+    cat <<EOF
   include_file_patterns:
     - "**/*"
   exclude_file_patterns:
@@ -1437,6 +1578,24 @@ EOF
     - "**/.mvn/**"
   document_scope: ".specify/business_domain"
   report_dir: ".specify/reports/entry_coverage"
+
+scan_control:
+  scan_status: "$(yaml_escape "${SCAN_STATUS}")"
+  scan_started_at: "$(yaml_escape "${SCAN_STARTED_AT}")"
+  scan_ended_at: "$(yaml_escape "${SCAN_ENDED_AT}")"
+  scan_duration_seconds: ${SCAN_DURATION_SECONDS}
+  scanned_file_count: ${SCAN_FILE_COUNT}
+  sampled_file_count: ${SCAN_SAMPLED_FILE_COUNT}
+  skipped_excluded_count: "$(yaml_escape "${SCAN_EXCLUDED_COUNT}")"
+  timeout_occurred: ${SCAN_TIMEOUT_OCCURRED}
+  partial_scan: ${SCAN_PARTIAL}
+  scan_roots: "$(yaml_escape "${SCAN_ROOTS_TEXT}")"
+  include_roots: "$(yaml_escape "${INCLUDE_ROOTS_TEXT}")"
+  effective_scan_roots: "$(yaml_escape "${EFFECTIVE_SCAN_ROOTS_TEXT}")"
+  scan_timeout_seconds: ${SCAN_TIMEOUT_SECONDS}
+  max_samples: ${MAX_SAMPLES}
+  affected_outputs: "$(yaml_escape "${SCAN_AFFECTED_OUTPUTS}")"
+  recommended_action: "$(yaml_escape "${SCAN_RECOMMENDED_ACTION}")"
 
 entry_types:
 EOF
@@ -1963,7 +2122,7 @@ inputs:
     source_roots:
 EOF
     emit_yaml_list "      " "${SOURCE_ROOTS[@]}"
-    cat <<'EOF'
+    cat <<EOF
     include_patterns:
       - "**/*"
     exclude_patterns:
@@ -1981,6 +2140,23 @@ EOF
       - "**/.idea/**"
       - "**/.gradle/**"
       - "**/.mvn/**"
+    scan_control:
+      scan_status: "$(yaml_escape "${SCAN_STATUS}")"
+      scan_started_at: "$(yaml_escape "${SCAN_STARTED_AT}")"
+      scan_ended_at: "$(yaml_escape "${SCAN_ENDED_AT}")"
+      scan_duration_seconds: ${SCAN_DURATION_SECONDS}
+      scanned_file_count: ${SCAN_FILE_COUNT}
+      sampled_file_count: ${SCAN_SAMPLED_FILE_COUNT}
+      skipped_excluded_count: "$(yaml_escape "${SCAN_EXCLUDED_COUNT}")"
+      timeout_occurred: ${SCAN_TIMEOUT_OCCURRED}
+      partial_scan: ${SCAN_PARTIAL}
+      scan_roots: "$(yaml_escape "${SCAN_ROOTS_TEXT}")"
+      include_roots: "$(yaml_escape "${INCLUDE_ROOTS_TEXT}")"
+      effective_scan_roots: "$(yaml_escape "${EFFECTIVE_SCAN_ROOTS_TEXT}")"
+      scan_timeout_seconds: ${SCAN_TIMEOUT_SECONDS}
+      max_samples: ${MAX_SAMPLES}
+      affected_outputs: "$(yaml_escape "${SCAN_AFFECTED_OUTPUTS}")"
+      recommended_action: "$(yaml_escape "${SCAN_RECOMMENDED_ACTION}")"
   existing_docs:
     include:
       - "<optional-current-project-doc-path-confirmed-by-user>"
@@ -2095,6 +2271,39 @@ generate_generation_report() {
 | Legacy Speckit Documents Found | ${LEGACY_FOUND} |
 | Legacy Runtime Action | ${LEGACY_BOOTSTRAP_ACTION} |
 | Code Evidence Completeness Check | ${CODE_EVIDENCE_RESULT} |
+
+## Scan Summary
+
+| Item | Value |
+| --- | --- |
+| Scan Status | ${SCAN_STATUS} |
+| Scan Started At | ${SCAN_STARTED_AT} |
+| Scan Ended At | ${SCAN_ENDED_AT} |
+| Scan Duration Seconds | ${SCAN_DURATION_SECONDS} |
+| Scanned File Count | ${SCAN_FILE_COUNT} |
+| Sampled File Count | ${SCAN_SAMPLED_FILE_COUNT} |
+| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} |
+| Timeout Occurred | ${SCAN_TIMEOUT_OCCURRED} |
+| Partial Scan | ${SCAN_PARTIAL} |
+| Scan Roots | ${SCAN_ROOTS_TEXT} |
+| Include Roots | ${INCLUDE_ROOTS_TEXT} |
+| Effective Scan Roots | ${EFFECTIVE_SCAN_ROOTS_TEXT} |
+| Scan Timeout | ${SCAN_TIMEOUT_SECONDS} |
+| Max Samples | ${MAX_SAMPLES} |
+| Exclude Patterns | $(markdown_samples "$(printf '%s\n' "${DEFAULT_EXCLUDE_PATTERNS[@]}")") |
+
+## Scan Timeout / Partial Scan Semantics
+
+| Item | Value |
+| --- | --- |
+| Affected Outputs | ${SCAN_AFFECTED_OUTPUTS} |
+| Recommended Action | ${SCAN_RECOMMENDED_ACTION} |
+
+If Scan Status is \`TIMEOUT / PARTIAL\`, this bootstrap must not be treated as a complete repository scan. Generated profiles and context documents are conservative evidence scaffolds and require user or owner confirmation before they are used as confirmed project facts.
+
+## File Inventory Samples
+
+$(markdown_samples "${INVENTORY_FILE_SAMPLES}")
 
 ## Code Evidence
 

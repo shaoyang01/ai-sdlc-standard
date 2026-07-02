@@ -14,6 +14,8 @@ DEFAULT_PROFILE_PATH = ".specify/entry-coverage-profile.yaml"
 DEFAULT_CANDIDATE_PROFILE_PATH = ".specify/entry-coverage-profile.candidate.yaml"
 DEFAULT_REPORT_PATH = ".specify/reports/entry_coverage_profile_bootstrap_report.md"
 STANDARD_PACKAGE = File.expand_path("..", __dir__)
+DEFAULT_SCAN_TIMEOUT_SECONDS = 60
+DEFAULT_MAX_SAMPLES = 30
 
 FORBIDDEN_WRITE_PATHS = [
   ".specify/business_domain/**",
@@ -33,6 +35,8 @@ LEGACY_RUNTIME_INPUTS = [
 EXCLUDE_FILE_PATTERNS = [
   "**/target/**",
   "**/build/**",
+  "**/android/build/**",
+  "**/ios/build/**",
   "**/dist/**",
   "**/.git/**",
   ".specify/**",
@@ -48,7 +52,16 @@ EXCLUDE_FILE_PATTERNS = [
   "**/.gradle/**",
   "**/.mvn/**",
   "**/ios/Pods/**",
-  "**/Pods/**"
+  "**/Pods/**",
+  "**/fixtures/**",
+  "**/fixture/**",
+  "**/test-fixtures/**",
+  "**/test_fixtures/**",
+  "**/large-fixtures/**",
+  "**/__snapshots__/**",
+  "**/snapshots/**",
+  "**/mock-data/**",
+  "**/mock_data/**"
 ].freeze
 
 VALID_PROFILES = %w[
@@ -71,11 +84,27 @@ EntryType = Struct.new(:name, :description, :patterns, :class_patterns, :evidenc
 options = {
   dry_run: false,
   force: false,
-  project_type_profiles: []
+  project_type_profiles: [],
+  scan_roots: [],
+  include_roots: [],
+  scan_timeout_seconds: DEFAULT_SCAN_TIMEOUT_SECONDS,
+  max_samples: DEFAULT_MAX_SAMPLES
 }
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{SCRIPT_NAME} [target-project-path] [options]"
+  opts.on("--scan-root PATH", "Limit bootstrap scan to this target-relative path. Repeatable.") do |value|
+    options[:scan_roots] << value
+  end
+  opts.on("--include-root PATH", "Alias for --scan-root; target-relative scan whitelist root. Repeatable.") do |value|
+    options[:include_roots] << value
+  end
+  opts.on("--scan-timeout SECONDS", Integer, "Stop scan after SECONDS and mark timeout / partial scan.") do |value|
+    options[:scan_timeout_seconds] = value
+  end
+  opts.on("--max-samples N", Integer, "Maximum sample files to emit per scan report section.") do |value|
+    options[:max_samples] = value
+  end
   opts.on("--project-type-profile PROFILE", "Add project type profile. Repeatable.") do |value|
     options[:project_type_profiles] << value
   end
@@ -90,6 +119,16 @@ parser = OptionParser.new do |opts|
 end
 
 parser.parse!
+
+if options[:scan_timeout_seconds].negative?
+  warn "--scan-timeout must be greater than or equal to 0."
+  exit 2
+end
+
+if options[:max_samples] < 1
+  warn "--max-samples must be greater than or equal to 1."
+  exit 2
+end
 
 def standard_package_root?(path)
   File.file?(File.join(path, "manifest.yaml")) &&
@@ -132,24 +171,104 @@ def excluded?(relative_path)
   end
 end
 
-def project_files
-  files = []
-  Find.find(TARGET_ROOT) do |path|
-    rel = relative(path)
-    if File.directory?(path)
-      if rel != "." && excluded?(rel)
-        Find.prune
-      else
-        next
-      end
+def resolve_scan_roots(scan_roots, include_roots)
+  requested = (scan_roots + include_roots).map { |root| normalize_rel(root) }
+  requested = ["."] if requested.empty?
+
+  requested.uniq.map do |root|
+    absolute = File.expand_path(root, TARGET_ROOT)
+    unless absolute == TARGET_ROOT || absolute.start_with?("#{TARGET_ROOT}/")
+      warn "Scan root must stay inside target project: #{root}"
+      exit 2
     end
 
-    next unless File.file?(path)
-    next if excluded?(rel)
+    unless Dir.exist?(absolute)
+      warn "Scan root does not exist or is not a directory: #{root}"
+      exit 2
+    end
 
-    files << rel
+    { "relative" => root, "absolute" => absolute }
   end
-  files.sort
+end
+
+def build_file_inventory(options)
+  scan_started_at = Time.now
+  scan_roots = resolve_scan_roots(options[:scan_roots], options[:include_roots])
+  files = []
+  records = []
+  excluded_count = 0
+  timeout_occurred = false
+
+  catch(:scan_stopped) do
+    scan_roots.each do |root|
+      Find.find(root.fetch("absolute")) do |path|
+        if Time.now - scan_started_at >= options[:scan_timeout_seconds]
+          timeout_occurred = true
+          throw :scan_stopped
+        end
+
+        rel = relative(path)
+        if File.directory?(path)
+          if rel != "." && excluded?(rel)
+            excluded_count += 1
+            Find.prune
+          else
+            next
+          end
+        end
+
+        next unless File.file?(path)
+
+        if excluded?(rel)
+          excluded_count += 1
+          next
+        end
+
+        files << rel
+        records << {
+          "relative_path" => rel,
+          "file_type" => File.extname(rel).delete_prefix("."),
+          "matched_include_root" => root.fetch("relative"),
+          "included_reason" => "matched scan-root/include-root"
+        }
+      end
+    end
+  end
+
+  scan_ended_at = Time.now
+  files = files.uniq.sort
+  records = records.uniq { |record| record.fetch("relative_path") }
+  display_scan_roots = if options[:scan_roots].empty?
+                         options[:include_roots].empty? ? ["."] : []
+                       else
+                         options[:scan_roots].map { |root| normalize_rel(root) }
+                       end
+
+  {
+    "scan_started_at" => scan_started_at.iso8601,
+    "scan_ended_at" => scan_ended_at.iso8601,
+    "scan_duration_seconds" => (scan_ended_at - scan_started_at).round(3),
+    "scanned_file_count" => files.size,
+    "sampled_file_count" => [files.size, options[:max_samples]].min,
+    "skipped_excluded_count" => excluded_count,
+    "timeout_occurred" => timeout_occurred,
+    "partial_scan" => timeout_occurred,
+    "scan_status" => timeout_occurred ? "TIMEOUT / PARTIAL" : "COMPLETE",
+    "scan_roots" => display_scan_roots,
+    "include_roots" => options[:include_roots].map { |root| normalize_rel(root) },
+    "effective_scan_roots" => scan_roots.map { |root| root.fetch("relative") },
+    "exclude_patterns" => EXCLUDE_FILE_PATTERNS,
+    "max_samples" => options[:max_samples],
+    "scan_timeout_seconds" => options[:scan_timeout_seconds],
+    "affected_outputs" => timeout_occurred ? [
+      ".specify/entry-coverage-profile.yaml project_type_profiles",
+      ".specify/entry-coverage-profile.yaml scope.source_roots",
+      ".specify/entry-coverage-profile.yaml entry_types evidence hints"
+    ] : [],
+    "recommended_action" => timeout_occurred ? "Re-run with narrower --scan-root / --include-root or a larger --scan-timeout before confirming the stable profile." : "Review and confirm generated profile before Analyze Gate enforcement.",
+    "files" => files,
+    "inventory_samples" => records.first(options[:max_samples])
+  }
 end
 
 def source_roots(files)
@@ -325,7 +444,8 @@ def entry_types_for(profiles)
   entries.uniq { |entry| [entry.name, entry.evidence_mode] }
 end
 
-def profile_hash(profiles, files, source_roots, pending_confirmation, profile_source)
+def profile_hash(profiles, files, source_roots, pending_confirmation, profile_source, inventory)
+  profile_inventory = inventory.reject { |key, _value| key == "files" }
   {
     "version" => "0.1.0",
     "schema_version" => "0.1.0",
@@ -396,12 +516,14 @@ def profile_hash(profiles, files, source_roots, pending_confirmation, profile_so
     },
     "bootstrap_evidence" => {
       "scanned_file_count" => files.size,
-      "sample_files" => files.first(20)
+      "sample_files" => files.first(inventory.fetch("max_samples")),
+      "file_inventory" => profile_inventory
     }
   }
 end
 
 def report_text(profile_path, report_path, profile_hash, existing_profile, force, dry_run)
+  scan = profile_hash.dig("bootstrap_evidence", "file_inventory")
   <<~MD
     # Entry Coverage Profile Bootstrap Report
 
@@ -421,6 +543,37 @@ def report_text(profile_path, report_path, profile_hash, existing_profile, force
     | Project Type Profiles | #{profile_hash.fetch("project_type_profiles").fetch("selected").join(", ")} |
     | Project Type Source | #{profile_hash.fetch("project_type_profiles").fetch("source")} |
     | Pending Confirmation | #{profile_hash.fetch("project_type_profiles").fetch("pending_confirmation")} |
+
+    ## Scan Summary
+
+    | Item | Value |
+    | --- | --- |
+    | Scan Status | #{scan.fetch("scan_status")} |
+    | Scan Started At | #{scan.fetch("scan_started_at")} |
+    | Scan Ended At | #{scan.fetch("scan_ended_at")} |
+    | Scan Duration Seconds | #{scan.fetch("scan_duration_seconds")} |
+    | Scanned File Count | #{scan.fetch("scanned_file_count")} |
+    | Sampled File Count | #{scan.fetch("sampled_file_count")} |
+    | Skipped / Excluded Count | #{scan.fetch("skipped_excluded_count")} |
+    | Timeout Occurred | #{scan.fetch("timeout_occurred")} |
+    | Partial Scan | #{scan.fetch("partial_scan")} |
+    | Scan Roots | #{scan.fetch("scan_roots").empty? ? "<none>" : scan.fetch("scan_roots").join(", ")} |
+    | Include Roots | #{scan.fetch("include_roots").empty? ? "<none>" : scan.fetch("include_roots").join(", ")} |
+    | Effective Scan Roots | #{scan.fetch("effective_scan_roots").join(", ")} |
+    | Scan Timeout | #{scan.fetch("scan_timeout_seconds")} |
+    | Max Samples | #{scan.fetch("max_samples")} |
+
+    ## Scan Inventory Samples
+
+    | Relative Path | File Type | Matched Include Root | Included Reason |
+    | --- | --- | --- | --- |
+    #{scan.fetch("inventory_samples").map { |record| "| #{record.fetch("relative_path")} | #{record.fetch("file_type")} | #{record.fetch("matched_include_root")} | #{record.fetch("included_reason")} |" }.join("\n")}
+
+    ## Scan Timeout / Partial Scan Semantics
+
+    - Timeout / partial scan status: `#{scan.fetch("scan_status")}`.
+    - Affected Outputs: #{scan.fetch("affected_outputs").empty? ? "none" : scan.fetch("affected_outputs").join("; ")}.
+    - Recommended Action: #{scan.fetch("recommended_action")}.
 
     ## Restricted Write Boundary
 
@@ -477,14 +630,19 @@ def write_or_preview(path, content, dry_run)
   File.write(path, content)
 end
 
-files = project_files
+inventory = build_file_inventory(options)
+files = inventory.fetch("files")
 roots = source_roots(files)
 profiles, profile_source, pending_confirmation = select_profiles(files, options[:project_type_profiles])
-profile = profile_hash(profiles, files, roots, pending_confirmation, profile_source)
+if inventory.fetch("partial_scan")
+  pending_confirmation = true
+  profile_source = "#{profile_source}+partial-scan"
+end
+profile = profile_hash(profiles, files, roots, pending_confirmation, profile_source, inventory)
 
 stable_profile_path = File.join(TARGET_ROOT, DEFAULT_PROFILE_PATH)
 profile_exists = File.exist?(stable_profile_path)
-selected_profile_rel = if profile_exists && !options[:force]
+selected_profile_rel = if (profile_exists || inventory.fetch("partial_scan")) && !options[:force]
                          DEFAULT_CANDIDATE_PROFILE_PATH
                        else
                          DEFAULT_PROFILE_PATH

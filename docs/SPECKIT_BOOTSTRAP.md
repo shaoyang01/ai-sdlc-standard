@@ -48,12 +48,61 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 --language <language>          java|typescript|python|go|mixed|other. Auto-detected when omitted.
 --application-type <type>      backend|frontend|fullstack|batch|library|mixed|other. Auto-detected when omitted.
 --standard-package <location>  Path or git URL for ai-sdlc-standard. Defaults to this repository path.
+--scan-root <path>             只扫描目标项目内的指定相对路径，可重复。
+--include-root <path>          `--scan-root` 的白名单别名，可重复。
+--scan-timeout <seconds>       限制扫描阶段耗时，超时后 report 标记 timeout / partial scan。
+--max-samples <n>              限制每类 evidence / file samples 数量，避免大仓输出过大。
 --force-profiles               Overwrite generated profile files when they already exist.
 --force-context                Overwrite project-context files. Defaults to writing .candidate files.
 --dry-run                      Print generated files without writing.
 ```
 
 本地 `--standard-package` 路径会在写入 profile 前转换为绝对路径。若传入 git URL 或不可运行时解析的位置，profile 会标记 `local_resolution_required: true`。
+
+## 大仓扫描控制
+
+大仓建议先 dry-run，并限制 scan root：
+
+```bash
+scripts/bootstrap-speckit-project.sh /path/to/target --dry-run --scan-root service-a --scan-timeout 60 --max-samples 30
+```
+
+从目标项目目录直接初始化 entry coverage profile：
+
+```bash
+$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run --scan-root . --scan-timeout 60 --max-samples 30
+```
+
+如果目标仓类似 pfms，模块很多且不知道完整扫描是否能在 review window 内完成，应先选择当前需求相关的业务模块或服务目录：
+
+```bash
+scripts/bootstrap-speckit-project.sh /path/to/pfms --dry-run --scan-root <known-module-or-service-root> --scan-timeout 60 --max-samples 30
+scripts/bootstrap-entry-coverage-profile.sh /path/to/pfms --dry-run --scan-root <known-module-or-service-root> --scan-timeout 60 --max-samples 30
+```
+
+不要硬编码未知模块名。使用者应根据目标需求选择业务模块、web 模块、服务目录或 ETL 目录。
+
+bootstrap report 必须显示：
+
+```text
+scan started at
+scan ended at
+scan duration seconds
+scanned file count
+sampled file count
+skipped/excluded count
+timeout occurred
+partial scan
+scan roots
+include roots
+exclude patterns
+max samples
+scan timeout
+```
+
+如果 `Scan Status` 是 `TIMEOUT / PARTIAL`，本次输出只能作为 conservative evidence scaffold。不得把 project type、source roots、entry coverage profile 或 project-context 当成 confirmed project facts；应缩小 `--scan-root` 或提高 `--scan-timeout` 后重新 dry-run，再决定是否正式写入。
+
+默认排除 `.git`、`target`、`build`、`dist`、`out`、`node_modules`、`vendor`、`coverage`、`generated`、`.idea`、`.gradle`、`.mvn`、`.venv`、`venv`、`Pods`、`ios/Pods`、`android/build`、`ios/build`、fixtures、snapshots、mock data 等噪声目录。React Native 的 native shell、Pods、android/build、ios/build 不应污染 source_roots。
 
 ## bootstrap 会生成什么
 
