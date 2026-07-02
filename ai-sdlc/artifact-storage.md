@@ -97,8 +97,8 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 示例：
 
 ```text
-2026-06-30 | Codex / sdlc-solution-reviewer | 方案审核 | 02-方案审核 | ...__方案审核.md | PASS | Reviewed Version 1.0.0，建议 DIRECT_IMPLEMENTATION
-2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ...__方案审核.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
+2026-06-30 | Codex / sdlc-solution-reviewer | 方案审核 | 02-方案审核 | ..._方案审核.md | PASS | Reviewed Version 1.0.0，建议 DIRECT_IMPLEMENTATION
+2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ..._方案审核.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
 ```
 
 Development Path Decision 只记录当前有效决策。它必须包含 Complexity、Complexity Triggers 和 Full SDD Override，并遵循 `ai-sdlc/complexity-routing.md`。历史决策变化必须同时写入 Activity Log 和 Change History。
@@ -118,17 +118,17 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 标准格式：
 
 ```text
-{requirement_id}__{artifact_type}.{ext}
+{requirement_id}_{artifact_type}.{ext}
 ```
 
 示例：
 
 ```text
-20260629-ai-sdlc-standard__技术方案.html
-20260629-ai-sdlc-standard__方案审核.html
-20260629-ai-sdlc-standard__实现记录.md
-20260629-ai-sdlc-standard__代码审核.html
-20260629-ai-sdlc-standard__测试验收.html
+20260629-ai-sdlc-standard_技术方案.html
+20260629-ai-sdlc-standard_方案审核.html
+20260629-ai-sdlc-standard_实现记录.md
+20260629-ai-sdlc-standard_代码审核.html
+20260629-ai-sdlc-standard_测试验收.html
 ```
 
 字段说明：
@@ -168,10 +168,10 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 禁止作为正式路径：
 
 ```text
-20260629-ai-sdlc-standard__技术方案__v1.html  # forbidden
-20260629-ai-sdlc-standard__技术方案__v2.html  # forbidden
-20260629-ai-sdlc-standard__方案审核__v1.md  # forbidden
-20260629-ai-sdlc-standard__方案审核__v2.md  # forbidden
+20260629-ai-sdlc-standard_技术方案_v1.html  # forbidden
+20260629-ai-sdlc-standard_技术方案_v2.html  # forbidden
+20260629-ai-sdlc-standard_方案审核_v1.md  # forbidden
+20260629-ai-sdlc-standard_方案审核_v2.md  # forbidden
 ```
 
 这些 filename-based versioning 形式只能出现在明确标注为禁止或历史迁移说明的上下文中。
@@ -206,19 +206,19 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 ```text
 library/20260629-ai-sdlc-standard/
 ├── 00-需求资料/
-│   └── 20260629-ai-sdlc-standard__需求资料.md
+│   └── 20260629-ai-sdlc-standard_需求资料.md
 ├── 01-技术方案/
-│   └── 20260629-ai-sdlc-standard__技术方案.html
+│   └── 20260629-ai-sdlc-standard_技术方案.html
 ├── 02-方案审核/
-│   └── 20260629-ai-sdlc-standard__方案审核.html
+│   └── 20260629-ai-sdlc-standard_方案审核.html
 ├── 03-实现记录/
-│   └── 20260629-ai-sdlc-standard__实现记录.md
+│   └── 20260629-ai-sdlc-standard_实现记录.md
 ├── 04-交付总结/
-│   └── 20260629-ai-sdlc-standard__交付总结.md
+│   └── 20260629-ai-sdlc-standard_交付总结.md
 ├── 04-代码审核/
-│   └── 20260629-ai-sdlc-standard__代码审核.html
+│   └── 20260629-ai-sdlc-standard_代码审核.html
 ├── 05-测试验收/
-│   └── 20260629-ai-sdlc-standard__测试验收.html
+│   └── 20260629-ai-sdlc-standard_测试验收.html
 └── manifest.md
 ```
 
@@ -262,8 +262,8 @@ library/{requirement_id}/ = 人工交接与门禁视图
 必须存在：
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.html
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.html
+library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.html
+library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html
 ```
 
 且方案审核结论允许继续。
@@ -273,7 +273,7 @@ library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.html
 建议存在：
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
 ```
 
 实现记录用于说明 Codex 实际改了什么、跑过什么验证、还有哪些残余风险，便于 DeepSeek 或其他 Reviewer 审查。
@@ -283,7 +283,7 @@ library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
 最终交付前建议存在或建议生成：
 
 ```text
-library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md
 ```
 
 交付总结用于说明最终交付范围、验证结果、遗留风险、发布或回滚说明和下一责任人。
@@ -293,7 +293,7 @@ library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
 如果存在代码审核报告：
 
 ```text
-library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.html
+library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.html
 ```
 
 且其中存在 Critical 或 High，必须先修复。
@@ -303,7 +303,7 @@ library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.html
 当测试同事反馈 Bug、截图、复现步骤或验收问题时，写入：
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.html
+library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.html
 ```
 
 测试验收不是自动化测试报告，而是测试反馈结构化入口。它必须尽量判断反馈属于：

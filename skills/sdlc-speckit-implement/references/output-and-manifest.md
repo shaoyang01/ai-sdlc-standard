@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -51,8 +51,8 @@ specs/{feature}/implementation.md
 specs/{feature}/workflow-status.md
 specs/{feature}/debug-guide.md
 specs/{feature}/observability.md
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
-library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
+library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md
 ```
 
 `manifest.md` is the status authority. `specs/{feature}/workflow-status.md` is
@@ -129,8 +129,8 @@ route from Implement to make the implementation fit.
 | Workflow Status Snapshot | `specs/{feature}/workflow-status.md` | produced / update recommended / not applicable | manifest is status authority |
 | Debug Guide | `specs/{feature}/debug-guide.md` | produced / update recommended / not applicable |  |
 | Observability | `specs/{feature}/observability.md` | produced / update recommended / not applicable |  |
-| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md` | produced / update recommended / not applicable |  |
-| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` | produced / update recommended / not applicable |  |
+| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md` | produced / update recommended / not applicable |  |
+| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md` | produced / update recommended / not applicable |  |
 
 ## Implementation Record Recommendation
 

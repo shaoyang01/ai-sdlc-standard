@@ -5,7 +5,7 @@
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
+library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version instead of creating a versioned filename.

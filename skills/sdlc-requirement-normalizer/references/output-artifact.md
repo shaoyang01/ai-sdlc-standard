@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -41,7 +41,7 @@ belong in `## 修订记录`, manifest `Change History`, and Git history.
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
+library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version instead of creating a versioned filename.

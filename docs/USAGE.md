@@ -44,7 +44,7 @@ library/{requirement_id}/
 文件命名遵循：
 
 ```text
-{requirement_id}__{artifact_type}.{ext}
+{requirement_id}_{artifact_type}.{ext}
 ```
 
 版本写入文档 Metadata 的 `Version` 字段，并在 `## 修订记录` 和 manifest 中追踪。

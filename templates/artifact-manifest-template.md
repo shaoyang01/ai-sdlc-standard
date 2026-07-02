@@ -130,8 +130,8 @@ machine-side snapshot.
 
 | Artifact | Stable Path | Version | Status | Updated At | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md` |  | draft / active / stale |  |  |
-| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` |  | draft / active / stale |  |  |
+| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md` |  | draft / active / stale |  |  |
+| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md` |  | draft / active / stale |  |  |
 
 ## Missing Artifacts
 

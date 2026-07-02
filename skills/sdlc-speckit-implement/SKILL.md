@@ -149,8 +149,8 @@ Run relevant checks and record:
   `specs/{feature}/workflow-status.md`,
   `specs/{feature}/debug-guide.md`,
   `specs/{feature}/observability.md`,
-  `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`,
-  and `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`.
+  `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md`,
+  and `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md`.
   `manifest.md` is the status authority; manifest is status authority for
   pipeline status decisions.
 

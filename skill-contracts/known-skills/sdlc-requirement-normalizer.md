@@ -15,7 +15,7 @@ input_artifacts:
   - optional HTML or Markdown requirement document
   - optional screenshots or user conversation summary
 output_artifacts:
-  - library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
+  - library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
   - manifest.md metadata update recommendation
 required_schema:
   - ai-sdlc/artifact-flow.md
@@ -104,7 +104,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 默认输出：
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
+library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 ```
 
 输出必须包含：

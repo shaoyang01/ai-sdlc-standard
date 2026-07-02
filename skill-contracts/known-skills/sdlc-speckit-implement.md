@@ -236,8 +236,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 
 - 已完成任务必须有验证证据。
 - 实现完成后必须生成或建议生成 `03-实现记录`。
-- 实现完成后必须生成或建议生成 `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`。
+- 实现完成后必须生成或建议生成 `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md`。
 - frontend/RN 实现完成后必须生成或建议生成实现、debug、observability 过程产物，并在需要状态快照时生成或建议生成 `specs/{feature}/workflow-status.md`；manifest is status authority。
-- 最终交付时必须生成或建议生成 `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`。
+- 最终交付时必须生成或建议生成 `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md`。
 - 无 Blocking Items 时，可进入 `sdlc-code-review-normalizer` 或后续 `sdlc-speckit-sync`。
 - 存在规格、计划或任务缺口时，必须回到最早受影响节点，并在 manifest Re-Gate Records 中记录。

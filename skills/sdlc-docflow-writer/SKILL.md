@@ -83,7 +83,7 @@ If no requirement ID is provided:
 For local output, use:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__{artifact_type}.{ext}
+library/{requirement_id}/{node_directory}/{requirement_id}_{artifact_type}.{ext}
 ```
 
 For Lark/Feishu output:

@@ -275,7 +275,7 @@ Markdown / HTML / PDF 提取内容
 输出稳定文件：
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
+library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 ```
 
 提示词示例：
@@ -295,7 +295,7 @@ Requirement ID：
 要求：
 1. 只生成 00-需求资料，不生成技术方案，不修改代码。
 2. 输出到：
-   library/<requirement_id>/00-需求资料/<requirement_id>__需求摘要.md
+   library/<requirement_id>/00-需求资料/<requirement_id>_需求摘要.md
 3. 如 manifest.md 不存在，请创建或给出创建建议。
 4. 文档必须使用稳定文件路径，不创建带文件名版本号的副本。
 5. 文档 Metadata 必须包含 Version: 1.0.0、Status、Created At、Updated At。
@@ -316,14 +316,14 @@ sdlc-specification-writer
 输入：
 
 ```text
-library/{requirement_id}/00-需求资料/{requirement_id}__需求摘要.md
+library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 当前代码库事实
 ```
 
 输出稳定文件：
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
+library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 ```
 
 提示词示例：
@@ -332,10 +332,10 @@ library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
 请调用/遵循 sdlc-specification-writer，根据 00-需求资料 和当前代码库生成 01-技术方案。
 
 需求资料：
-library/<requirement_id>/00-需求资料/<requirement_id>__需求摘要.md
+library/<requirement_id>/00-需求资料/<requirement_id>_需求摘要.md
 
 输出路径：
-library/<requirement_id>/01-技术方案/<requirement_id>__技术方案.md
+library/<requirement_id>/01-技术方案/<requirement_id>_技术方案.md
 
 要求：
 1. 分析当前代码库，找出相关入口、类、方法、配置、调用链。
@@ -358,7 +358,7 @@ sdlc-solution-reviewer
 输出稳定文件：
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
+library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 ```
 
 提示词示例：
@@ -370,13 +370,13 @@ library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
 <target-project-path>
 
 技术方案：
-library/<requirement_id>/01-技术方案/<requirement_id>__技术方案.md
+library/<requirement_id>/01-技术方案/<requirement_id>_技术方案.md
 
 要求：
 1. 结合当前代码库审阅，不要只做文字审阅。
 2. 检查类、方法、调用链、数据结构、异常处理、幂等、事务、测试点是否合理。
 3. 输出到：
-   library/<requirement_id>/02-方案审核/<requirement_id>__方案审核.md
+   library/<requirement_id>/02-方案审核/<requirement_id>_方案审核.md
 4. Metadata 必须包含：
    - Version
    - Reviewed Artifact
@@ -406,7 +406,7 @@ BLOCKED_NEEDS_REVISION
 而是更新同一个稳定文件：
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
+library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 ```
 
 要求：
@@ -437,9 +437,9 @@ Development Path Recommendation: DIRECT_IMPLEMENTATION
 请严格按照当前通过审核的技术方案实现。
 
 依据：
-- 需求资料：library/<requirement_id>/00-需求资料/<requirement_id>__需求摘要.md
-- 技术方案：library/<requirement_id>/01-技术方案/<requirement_id>__技术方案.md
-- 方案审核：library/<requirement_id>/02-方案审核/<requirement_id>__方案审核.md
+- 需求资料：library/<requirement_id>/00-需求资料/<requirement_id>_需求摘要.md
+- 技术方案：library/<requirement_id>/01-技术方案/<requirement_id>_技术方案.md
+- 方案审核：library/<requirement_id>/02-方案审核/<requirement_id>_方案审核.md
 
 要求：
 1. 不要实现技术方案之外的功能。
@@ -456,7 +456,7 @@ sdlc-implementation-recorder
 输出：
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
 ```
 
 ### 13.3 生成 04-代码审核
@@ -468,7 +468,7 @@ sdlc-code-review-normalizer
 输出：
 
 ```text
-library/{requirement_id}/04-代码审核/{requirement_id}__代码审核.md
+library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.md
 ```
 
 DeepSeek、zcode、Codex、人工都可以提供原始 Review，但最终必须归一到这个稳定文件。
@@ -482,7 +482,7 @@ sdlc-test-feedback-classifier
 输出：
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
+library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.md
 ```
 
 ## 14. 第一轮验证检查
@@ -494,12 +494,12 @@ find library/<requirement_id> -maxdepth 3 -type f | sort
 期望类似：
 
 ```text
-library/<requirement_id>/00-需求资料/<requirement_id>__需求摘要.md
-library/<requirement_id>/01-技术方案/<requirement_id>__技术方案.md
-library/<requirement_id>/02-方案审核/<requirement_id>__方案审核.md
-library/<requirement_id>/03-实现记录/<requirement_id>__实现记录.md
-library/<requirement_id>/04-代码审核/<requirement_id>__代码审核.md
-library/<requirement_id>/05-测试验收/<requirement_id>__测试验收.md
+library/<requirement_id>/00-需求资料/<requirement_id>_需求摘要.md
+library/<requirement_id>/01-技术方案/<requirement_id>_技术方案.md
+library/<requirement_id>/02-方案审核/<requirement_id>_方案审核.md
+library/<requirement_id>/03-实现记录/<requirement_id>_实现记录.md
+library/<requirement_id>/04-代码审核/<requirement_id>_代码审核.md
+library/<requirement_id>/05-测试验收/<requirement_id>_测试验收.md
 library/<requirement_id>/manifest.md
 ```
 
@@ -513,7 +513,7 @@ library/<requirement_id>/manifest.md
 检查：
 
 ```bash
-grep -R "__v[0-9]" library/<requirement_id> || true
+grep -R "_v[0-9]" library/<requirement_id> || true
 grep -R "Version:" library/<requirement_id>
 grep -R "## 修订记录" library/<requirement_id>
 ```

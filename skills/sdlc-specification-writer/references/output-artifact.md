@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -41,7 +41,7 @@ belong in `## 修订记录`, manifest `Change History`, and Git history.
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
+library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version; preserve history in 修订记录 and Git history.
@@ -70,7 +70,7 @@ Every written specification artifact must include:
 ```
 
 The body must contain only the current effective specification. Do not create
-`__vN.md` files for revisions.
+`_vN.md` files for revisions.
 
 ## HTML or Lark/Feishu
 
@@ -87,7 +87,7 @@ Recommend:
 ```text
 Artifact Index:
   Node: 01 技术方案
-  Path: library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md
+  Path: library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
   Version: <semantic-version>
   Result: draft / ready-for-review
 

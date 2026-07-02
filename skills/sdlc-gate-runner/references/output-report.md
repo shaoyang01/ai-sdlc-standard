@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -43,7 +43,7 @@ By default, return the Gate report in the response.
 When writing a local artifact, use the Gate-related node directory:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查.md
+library/{requirement_id}/{node_directory}/{requirement_id}_门禁检查.md
 ```
 
 Update the stable Gate report file and increment its internal Metadata Version.

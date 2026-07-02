@@ -19,13 +19,13 @@ Each DocFlow stage owns one stable current artifact file for a requirement.
 
 | Stage | Stable file |
 | --- | --- |
-| 00 需求资料 | `{requirement_id}__需求摘要.md` |
-| 01 技术方案 | `{requirement_id}__技术方案.md` |
-| 02 方案审核 | `{requirement_id}__方案审核.md` |
-| 03 实现记录 | `{requirement_id}__实现记录.md` |
-| 04 代码审核 | `{requirement_id}__代码审核.md` |
-| 05 测试验收 | `{requirement_id}__测试验收.md` |
-| 测试反馈同步建议 | `{requirement_id}__测试反馈同步建议.md` |
+| 00 需求资料 | `{requirement_id}_需求摘要.md` |
+| 01 技术方案 | `{requirement_id}_技术方案.md` |
+| 02 方案审核 | `{requirement_id}_方案审核.md` |
+| 03 实现记录 | `{requirement_id}_实现记录.md` |
+| 04 代码审核 | `{requirement_id}_代码审核.md` |
+| 05 测试验收 | `{requirement_id}_测试验收.md` |
+| 测试反馈同步建议 | `{requirement_id}_测试反馈同步建议.md` |
 
 HTML, Lark, PDF, or other rendered outputs may use the same stable base name
 with the appropriate extension.
@@ -33,7 +33,7 @@ with the appropriate extension.
 Forbidden official path pattern:
 
 ```text
-{requirement_id}__{artifact_type}__vN.md  # forbidden
+{requirement_id}_{artifact_type}_vN.md  # forbidden
 ```
 
 That pattern is allowed only in documentation that explicitly labels it as a
@@ -105,7 +105,7 @@ internal version they reviewed.
 Required metadata fields:
 
 ```markdown
-- Reviewed Artifact: 01-技术方案/REQ-001__技术方案.md
+- Reviewed Artifact: 01-技术方案/REQ-001_技术方案.md
 - Reviewed Artifact Version: 1.2.0
 ```
 

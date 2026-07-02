@@ -15,8 +15,8 @@ specs/{feature}/implementation.md
 specs/{feature}/workflow-status.md
 specs/{feature}/debug-guide.md
 specs/{feature}/observability.md
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
-library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
+library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md
 ```
 
 `manifest.md` is the status authority. `workflow-status.md` is a machine-side
@@ -113,11 +113,11 @@ Required sections:
 
 ## DocFlow Human Handoff Products
 
-`library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md` is the
+`library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md` is the
 human handoff implementation record. It summarizes actual code changes,
 verification, unfinished items, and residual risk.
 
-`library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` is the final
+`library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md` is the final
 delivery summary. It must cover final scope, delivered artifacts, verification
 results, residual risk, release or rollback notes, and next owner.
 

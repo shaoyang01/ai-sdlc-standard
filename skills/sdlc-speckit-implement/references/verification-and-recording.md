@@ -75,7 +75,7 @@ Record logging, metrics, frontend analytics, error state observation, and debug
 logs in `specs/{feature}/observability.md` when observability behavior is part
 of implementation or support.
 
-Use `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` for the
+Use `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md` for the
 final human-facing delivery summary when final scope, verification result,
 residual risk, release note, rollback note, or next owner must be handed off.
 

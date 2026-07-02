@@ -4,7 +4,7 @@
 
 When this reference produces or updates a DocFlow requirement artifact under
 `library/{requirement_id}/`, it must use a stable path and update the same file.
-Do not create `__vN.md` or other filename-versioned artifacts.
+Do not create `_vN.md` or other filename-versioned artifacts.
 
 The artifact must include:
 
@@ -62,24 +62,24 @@ library/{requirement_id}/
 Use:
 
 ```text
-{requirement_id}__{artifact_type}.{ext}
+{requirement_id}_{artifact_type}.{ext}
 ```
 
 Examples:
 
 ```text
-20260629-ai-sdlc-standard__技术方案.html
-20260629-ai-sdlc-standard__方案审核.html
-20260629-ai-sdlc-standard__实现记录.md
-20260629-ai-sdlc-standard__代码审核.html
-20260629-ai-sdlc-standard__测试验收.html
+20260629-ai-sdlc-standard_技术方案.html
+20260629-ai-sdlc-standard_方案审核.html
+20260629-ai-sdlc-standard_实现记录.md
+20260629-ai-sdlc-standard_代码审核.html
+20260629-ai-sdlc-standard_测试验收.html
 ```
 
 ## Version And Update Mode
 
 When writing a DocFlow artifact:
 
-1. Use the stable file name `{requirement_id}__{artifact_type}.{ext}`.
+1. Use the stable file name `{requirement_id}_{artifact_type}.{ext}`.
 2. If the stable file does not exist, create it with Metadata `Version: 1.0.0`.
 3. If the stable file exists, update the same file and increment its internal Metadata `Version` according to `ai-sdlc/artifact-versioning.md`.
 4. Keep only the current valid body content in the artifact.

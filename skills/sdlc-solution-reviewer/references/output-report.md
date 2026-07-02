@@ -142,11 +142,11 @@ Next Step: revise technical specification and re-run sdlc-solution-reviewer
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
+library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version; preserve history in 修订记录 and Git history.
 
 The report body must contain only the current effective review conclusion. Do
-not create `__vN.md` files for revised reviews; update the stable path and mark
+not create `_vN.md` files for revised reviews; update the stable path and mark
 downstream artifacts stale when the reviewed artifact version changes.

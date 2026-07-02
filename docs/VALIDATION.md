@@ -281,8 +281,8 @@ specs/{feature}/implementation.md
 specs/{feature}/workflow-status.md
 specs/{feature}/debug-guide.md
 specs/{feature}/observability.md
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
-library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
+library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md
 manifest is status authority
 ```
 
@@ -408,6 +408,20 @@ Manifest Recommendation
 ## Entry Coverage Profile Bootstrap 校验
 
 PR F-0 的 `scripts/bootstrap-entry-coverage-profile.sh` 是限制性 Entry Coverage Profile Bootstrap。它只用于让目标项目安全获得 entry coverage audit 的最小 profile，不是全量 Speckit bootstrap。
+
+支持两种执行方式：
+
+```bash
+Usage: scripts/bootstrap-entry-coverage-profile.sh [target-project-path] [options]
+
+# 从标准包目录执行，显式传入目标项目路径
+scripts/bootstrap-entry-coverage-profile.sh <target-project-path> --dry-run
+
+# 从目标项目目录执行，未传 target-project-path 时默认使用 Dir.pwd
+$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run
+```
+
+如果当前目录看起来是 `ai-sdlc-standard` 标准包自身，例如同时存在 `manifest.yaml`、`ai-sdlc/`、`skills/`，且用户没有显式传入 `target-project-path`，脚本必须停止并提示显式传目标路径，避免误初始化标准包仓库。
 
 允许写入的稳定路径只有：
 

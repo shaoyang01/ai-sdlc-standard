@@ -73,8 +73,8 @@ LEGACY_SOURCE_ALLOWED_GUARD_PATTERN = /
 /ix.freeze
 
 FILENAME_VERSION_PATTERN = /
-  __v(?:N|\d+|\{version\})(?=\.)|
-  \{requirement_id\}__\{artifact_type\}__v|
+  _v(?:N|\d+|\{version\})(?=\.)|
+  \{requirement_id\}_\{artifact_type\}_v|
   v\{version\}\.md|
   vN\.md
 /ix.freeze
@@ -99,6 +99,14 @@ FILENAME_VERSION_ALLOWED_GUARD_PATTERN = /
   历史|
   迁移
 /ix.freeze
+
+DOCFLOW_DOUBLE_UNDERSCORE_PATH_PATTERN = /
+  library\/[^\s`|]*__[^\s`|]*|
+  \{requirement_id\}__[^\s`|]*|
+  <requirement_id>__[^\s`|]*|
+  REQ-\d+__[^\s`|]*|
+  20\d{6}[A-Za-z0-9._-]*__[^\s`|]*
+/x.freeze
 
 ARTIFACT_TEMPLATE_REQUIRED_PATTERNS = {
   "## Metadata" => /## Metadata/,
@@ -274,8 +282,8 @@ FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS = [
   "specs/{feature}/workflow-status.md",
   "specs/{feature}/debug-guide.md",
   "specs/{feature}/observability.md",
-  "library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md",
-  "library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md",
+  "library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md",
+  "library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md",
   "manifest is status authority"
 ].freeze
 
@@ -420,6 +428,12 @@ ENTRY_COVERAGE_PRECISION_DOC_TERMS = [
 ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
   "bootstrap-entry-coverage-profile.sh",
   "require \"date\"",
+  "[target-project-path]",
+  "Dir.pwd",
+  "standard_package_root?",
+  "manifest.yaml",
+  "ai-sdlc",
+  "skills",
   "--project-type-profile",
   "--force-entry-coverage-profile",
   ".specify/entry-coverage-profile.yaml",
@@ -488,6 +502,12 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
 ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
   "Entry Coverage Profile Bootstrap",
   "bootstrap-entry-coverage-profile.sh",
+  "[target-project-path]",
+  "Dir.pwd",
+  "$AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run",
+  "manifest.yaml",
+  "ai-sdlc/",
+  "skills/",
   ".specify/entry-coverage-profile.yaml",
   ".specify/entry-coverage-profile.candidate.yaml",
   ".specify/reports/entry_coverage_profile_bootstrap_report.md",
@@ -829,6 +849,11 @@ versioning_scan_paths.each do |path|
   unsafe_filename_version_references(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} recommends filename-based artifact versioning: #{line}"
   end
+  text.lines.each_with_index do |line, index|
+    next unless line.match?(DOCFLOW_DOUBLE_UNDERSCORE_PATH_PATTERN)
+
+    errors << "#{relative(path)}:#{index + 1} uses double underscore DocFlow runtime path: #{line.strip}"
+  end
 end
 
 CORE_ARTIFACT_TEMPLATES.each do |relative_path|
@@ -1083,7 +1108,7 @@ frontend_process_product_paths = {
   ],
   "skills/sdlc-speckit-implement/references/verification-and-recording.md" =>
     FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
-      "library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md",
+      "library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md",
       "manifest.md is the status authority"
     ],
   "skill-contracts/known-skills/sdlc-speckit-implement.md" =>

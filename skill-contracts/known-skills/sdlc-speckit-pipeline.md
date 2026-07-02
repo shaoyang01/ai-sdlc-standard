@@ -135,8 +135,8 @@ blocking_conditions:
 
 必需输入：
 
-- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.*`
-- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.*`
+- `library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.*`
+- `library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.*`
 - `library/{requirement_id}/manifest.md`
 
 建议输入：
@@ -229,8 +229,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - `specs/{feature}/workflow-status.md`
 - `specs/{feature}/debug-guide.md`
 - `specs/{feature}/observability.md`
-- `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
-- `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`
+- `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md`
+- `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md`
 - Sync 目标路径和结果
 - manifest Activity Log / Speckit Sync 更新建议
 

@@ -227,13 +227,13 @@
 
 | Skill | 优先级 | 类型 | 责任 | 主要输出 |
 | --- | --- | --- | --- | --- |
-| `sdlc-requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}__需求摘要.md` |
-| `sdlc-specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}__技术方案.md` |
-| `sdlc-solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求，并输出开发路径建议。 | `02-方案审核/{requirement_id}__方案审核.html|md` |
-| `sdlc-implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}__实现记录.md` |
-| `sdlc-test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}__测试验收.html|md` |
+| `sdlc-requirement-normalizer` | 高 | 已实现初版 | 归一化飞书、HTML、Markdown、纯文本等原始需求。 | `00-需求资料/{requirement_id}_需求摘要.md` |
+| `sdlc-specification-writer` | 高 | 已实现初版 | 作为 Speckit 之外的通用规格生成入口，按 ESS 生成可审计技术规格。 | `01-技术方案/{requirement_id}_技术方案.md` |
+| `sdlc-solution-reviewer` | 高 | 已实现初版 | 作为 Specification Completeness Auditor，审阅技术方案是否满足 ESS、Gate、兼容、异常、测试要求，并输出开发路径建议。 | `02-方案审核/{requirement_id}_方案审核.html|md` |
+| `sdlc-implementation-recorder` | 中 | 已实现初版 | 根据 diff、测试、未完成项生成实现记录。 | `03-实现记录/{requirement_id}_实现记录.md` |
+| `sdlc-test-feedback-classifier` | 中 | 已实现初版 | 结构化测试反馈并判断返工类型。 | `05-测试验收/{requirement_id}_测试验收.html|md` |
 | `sdlc-gate-runner` | 中 | 已实现初版 | 检查 manifest 与节点产物是否满足进入下一阶段条件。 | Gate 审计报告或 manifest 更新建议 |
-| `sdlc-code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}__代码审核.md` |
+| `sdlc-code-review-normalizer` | 中 | 已实现初版 | 将多来源代码审查结果统一成 Code Review Schema。 | `04-代码审核/{requirement_id}_代码审核.md` |
 | `sdlc-test-feedback-sync` | 中 | 已实现初版 | 将测试发现的规格遗漏、Checklist 缺口和需求变化反向沉淀。 | Checklist / Schema / Sync 记录 |
 
 #### `sdlc-solution-reviewer` / Specification Completeness Auditor
@@ -271,7 +271,7 @@
 
 输出：
 
-- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.html|md`
+- `library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html|md`
 - `manifest.md` 中方案审核节点状态
 - 开发路径建议与理由
 
@@ -566,16 +566,16 @@ global-artifact-repo/
 └── library/{requirement_id}/
     ├── 00-需求资料/
     ├── 01-技术方案/
-    │   └── {requirement_id}__端到端技术方案.md
+    │   └── {requirement_id}_端到端技术方案.md
     ├── 02-方案审核/
-    │   ├── {requirement_id}__端到端方案审核.md
-    │   └── {requirement_id}__cross-repo-gate.md
+    │   ├── {requirement_id}_端到端方案审核.md
+    │   └── {requirement_id}_cross-repo-gate.md
     ├── 03-实现记录/
-    │   └── {requirement_id}__跨仓实现汇总.md
+    │   └── {requirement_id}_跨仓实现汇总.md
     ├── 04-代码审核/
-    │   └── {requirement_id}__跨仓代码审核汇总.md
+    │   └── {requirement_id}_跨仓代码审核汇总.md
     ├── 05-测试验收/
-    │   └── {requirement_id}__端到端测试验收.md
+    │   └── {requirement_id}_端到端测试验收.md
     ├── repos/
     │   ├── repo-a.md
     │   ├── repo-b.md
@@ -589,15 +589,15 @@ global-artifact-repo/
 repo-a/
 └── library/{requirement_id}/
     ├── 01-技术方案/
-    │   └── {requirement_id}__repo-a技术方案.md
+    │   └── {requirement_id}_repo-a技术方案.md
     ├── 02-方案审核/
-    │   └── {requirement_id}__repo-a方案审核.md
+    │   └── {requirement_id}_repo-a方案审核.md
     ├── 03-实现记录/
-    │   └── {requirement_id}__repo-a实现记录.md
+    │   └── {requirement_id}_repo-a实现记录.md
     ├── 04-代码审核/
-    │   └── {requirement_id}__repo-a代码审核.md
+    │   └── {requirement_id}_repo-a代码审核.md
     ├── 05-测试验收/
-    │   └── {requirement_id}__repo-a测试验收.md
+    │   └── {requirement_id}_repo-a测试验收.md
     └── manifest.md
 ```
 
@@ -672,7 +672,7 @@ affected_repositories:
 
 cross_repo_gate:
   status: PASS
-  artifact: 02-方案审核/<id>__cross-repo-gate.md
+  artifact: 02-方案审核/<id>_cross-repo-gate.md
 
 integration_test:
   status: pending

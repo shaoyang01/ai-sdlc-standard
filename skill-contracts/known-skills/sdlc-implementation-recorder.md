@@ -17,7 +17,7 @@ input_artifacts:
   - optional specs/** plan or tasks artifacts
   - optional verification command output
 output_artifacts:
-  - library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+  - library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
   - manifest.md metadata update recommendation
 required_schema:
   - ai-sdlc/artifact-flow.md
@@ -105,7 +105,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 默认输出：
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
 ```
 
 输出必须包含：

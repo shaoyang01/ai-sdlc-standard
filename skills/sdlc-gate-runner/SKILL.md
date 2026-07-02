@@ -113,7 +113,7 @@ By default, return the Gate report in the response.
 When the user explicitly asks to generate a local artifact, write a Markdown report under the Gate-related node:
 
 ```text
-library/{requirement_id}/{node_directory}/{requirement_id}__门禁检查.md
+library/{requirement_id}/{node_directory}/{requirement_id}_门禁检查.md
 ```
 
 For HTML or Lark/Feishu output, use `sdlc-docflow-writer` for routing and publishing. Keep this skill responsible for Gate evaluation content only.

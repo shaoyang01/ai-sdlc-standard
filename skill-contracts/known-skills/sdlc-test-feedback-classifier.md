@@ -18,7 +18,7 @@ input_artifacts:
   - optional library/{requirement_id}/03-实现记录/*
   - optional library/{requirement_id}/04-代码审核/*
 output_artifacts:
-  - library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
+  - library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.md
   - manifest.md change or re-gate update recommendation
 required_schema:
   - ess/test-feedback-schema.md
@@ -109,7 +109,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 默认输出：
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}__测试验收.md
+library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.md
 ```
 
 输出必须符合 `ess/test-feedback-schema.md`，包含：

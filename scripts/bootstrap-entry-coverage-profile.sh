@@ -75,7 +75,7 @@ options = {
 }
 
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: #{SCRIPT_NAME} <target-project-path> [options]"
+  opts.banner = "Usage: #{SCRIPT_NAME} [target-project-path] [options]"
   opts.on("--project-type-profile PROFILE", "Add project type profile. Repeatable.") do |value|
     options[:project_type_profiles] << value
   end
@@ -91,13 +91,24 @@ end
 
 parser.parse!
 
+def standard_package_root?(path)
+  File.file?(File.join(path, "manifest.yaml")) &&
+    Dir.exist?(File.join(path, "ai-sdlc")) &&
+    Dir.exist?(File.join(path, "skills"))
+end
+
 target_arg = ARGV.shift
-unless target_arg
+explicit_target = !target_arg.nil?
+target_arg ||= Dir.pwd
+
+TARGET_ROOT = File.expand_path(target_arg)
+if !explicit_target && standard_package_root?(TARGET_ROOT)
+  warn "Refusing to initialize entry coverage profile in ai-sdlc-standard itself."
+  warn "Run this script from a target project directory, or pass an explicit target-project-path."
   warn parser.to_s
   exit 2
 end
 
-TARGET_ROOT = File.expand_path(target_arg)
 unless Dir.exist?(TARGET_ROOT)
   warn "Target project path does not exist: #{TARGET_ROOT}"
   exit 2

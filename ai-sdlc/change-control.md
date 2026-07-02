@@ -90,9 +90,9 @@
 示例：
 
 ```text
-library/20260629-order-rule/01-技术方案/20260629-order-rule__技术方案.html
+library/20260629-order-rule/01-技术方案/20260629-order-rule_技术方案.html
   Version: 1.1.0
-library/20260629-order-rule/02-方案审核/20260629-order-rule__方案审核.html
+library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.html
   Reviewed Artifact Version: 1.1.0
 ```
 

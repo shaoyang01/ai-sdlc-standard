@@ -79,8 +79,8 @@ blocking_conditions:
 
 必需输入：
 
-- `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.*`
-- `library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.*`
+- `library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.*`
+- `library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.*`
 - `library/{requirement_id}/manifest.md`
 - `.specify/project-governance-profile.yaml` when present.
 - `.specify/entry-coverage-profile.yaml` when present.

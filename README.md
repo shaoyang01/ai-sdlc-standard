@@ -114,7 +114,7 @@ registry/         Skill Registry
 
 - 每个需求使用独立目录：`library/{requirement_id}/`。
 - 同一需求的不同节点产物放入不同子目录，例如 `01-技术方案/`、`02-方案审核/`、`04-代码审核/`。
-- 文件名必须符合 `{requirement_id}__{artifact_type}.{ext}`，版本写入文档 Metadata 的 `Version` 字段。
+- 文件名必须符合 `{requirement_id}_{artifact_type}.{ext}`，版本写入文档 Metadata 的 `Version` 字段。
 - 文档底部必须包含 `## 修订记录`。
 - Gate 文档必须包含 `PASS`、`FAIL` 或 `PASS_WITH_RISK`。
 - Gate 文档必须绑定 `Reviewed Artifact` 和 `Reviewed Artifact Version`。

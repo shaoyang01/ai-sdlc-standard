@@ -14,7 +14,7 @@ input_artifacts:
   - optional specs/**
   - optional repository context
 output_artifacts:
-  - library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
+  - library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
   - manifest.md gate decision update recommendation
   - development path decision recommendation
 required_schema:
@@ -114,7 +114,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 方案审核产物必须输出到：
 
 ```text
-library/{requirement_id}/02-方案审核/{requirement_id}__方案审核.md
+library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 ```
 
 若用户要求 HTML 或飞书文档，`sdlc-solution-reviewer` 只负责审核内容，实际落盘或发布应交给 `sdlc-docflow-writer`。
