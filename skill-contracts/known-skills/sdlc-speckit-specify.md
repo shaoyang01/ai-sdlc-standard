@@ -13,6 +13,7 @@ input_artifacts:
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*
   - library/{requirement_id}/manifest.md
+  - specs/{feature}/route.md or Pipeline Domain Route Summary
 output_artifacts:
   - specs/{feature}/spec.md
   - optional specs/{feature}/checklists/requirements.md
@@ -38,9 +39,11 @@ blocking_conditions:
   - solution review is missing or failed
   - development path is not SPECKIT_PIPELINE_REQUIRED and user did not explicitly request full SDD
   - technical specification has unresolved core ambiguity
-  - sync to specs/spec.md would require reinterpreting business scope
+  - sync to specs/{feature}/spec.md would require reinterpreting business scope
   - existing specs/{feature}/spec.md belongs to another requirement or unknown source
   - required spec product-shape sections cannot be populated from reviewed artifacts
+  - route source is missing
+  - Route Type is unknown and explicit route confirmation is absent
 ```
 
 ## Standard Path Resolution
@@ -57,8 +60,9 @@ blocking_conditions:
 
 - 读取已审阅的 `01-技术方案` 和 `02-方案审核`。
 - 将 `sdlc-specification-writer` 的规格事实同步或派生为 `specs/{feature}/spec.md`。
-- 保持 `specs/spec.md` 与已通过方案的 Scope、行为约束、测试要求一致。
+- 保持 `specs/{feature}/spec.md` 与已通过方案的 Scope、行为约束、测试要求一致。
 - 将方案审核中的 Required Actions、风险接受或开发路径决策映射到 SpecKit 规格中。
+- 读取 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary，并在 `specs/{feature}/spec.md` 中引用该 route source。
 - 记录与 DocFlow 产物的引用关系，便于后续 plan/tasks/implement 追溯。
 - 在目标 `specs/{feature}/spec.md` 已存在时，确认它属于同一需求与当前 DocFlow 来源后再更新。
 
@@ -81,6 +85,7 @@ blocking_conditions:
 - `.specify/project-governance-profile.yaml` when present.
 - `.specify/entry-coverage-profile.yaml` when present.
 - `.specify/business_domain/00BusinessLandscape.md`, `00UbiquitousLanguage.md`, and `01DomainCatalog.md` when generated.
+- `specs/{feature}/route.md` when materialized, otherwise Pipeline Domain Route Summary.
 
 前置条件：
 
@@ -93,6 +98,7 @@ blocking_conditions:
 - 缺少技术方案或方案审核时停止。
 - 缺少 manifest 时可以建议创建，但必须记录 Activity Log。
 - 如果 `01-技术方案` 与 `02-方案审核` 冲突，应停止并回到 `sdlc-solution-reviewer` 或方案修订。
+- 如果 Route Type 为 `unknown` 且没有显式 route 确认，应停止并回到 Domain Route。
 
 ## Output Contract
 
@@ -128,6 +134,7 @@ specs/{feature}/spec.md
 - 测试方案和验收标准。
 - 风险和残余风险。
 - 与 DocFlow 方案和方案审核的引用。
+- 与 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary 的引用。
 
 输出还必须包含以下 SpecKit 产品形状章节：
 
@@ -188,9 +195,10 @@ specs/{feature}/checklists/requirements.md
 - 方案审核结果为 `FAIL`。
 - Development Path Decision 为 `BLOCKED_NEEDS_REVISION`。
 - 技术方案仍有核心待确认事项。
-- `specs/spec.md` 需要加入未在方案中定义的新业务规则。
+- `specs/{feature}/spec.md` 需要加入未在方案中定义的新业务规则。
 - 方案审核与技术方案存在冲突。
 - 必需产品形状章节缺失，或需要编造 route、entry target、sync target、数据模拟、边界条件、traceability、仓库边界。
+- route source 缺失，或 Route Type 为 `unknown` 且缺少显式 route 确认。
 
 ## Gate Requirements
 
@@ -201,6 +209,6 @@ specs/{feature}/checklists/requirements.md
 
 后置 Gate：
 
-- `specs/spec.md` 必须能追溯到 `01-技术方案` 和 `02-方案审核`。
+- `specs/{feature}/spec.md` 必须能追溯到 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary、`01-技术方案` 和 `02-方案审核`。
 - 若同步过程中发现规格遗漏，必须停止并回到 `01-技术方案` / `02-方案审核` 重新 Gate。
 - 完成后建议进入 `sdlc-speckit-clarify` 做残余未决问题校验。

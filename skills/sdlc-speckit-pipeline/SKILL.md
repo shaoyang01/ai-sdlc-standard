@@ -67,6 +67,7 @@ Load these references as needed:
 
 - `references/activation-and-inputs.md` for activation rules, inputs, and path selection.
 - `references/new-rail-enhanced-pipeline.md` for new-rail runtime identity, legacy isolation, project private context, Domain Route summary, and Clarify-boundary transition policy.
+- `references/domain-route-artifact.md` for the stable `specs/{feature}/route.md` schema, materialization rule, unknown-route blocking rule, Create-If-Missing Decision, Business Domain Targets, and Entry Coverage Surface.
 - `references/stage-sequence.md` for stage order, child skill mapping, and handoff rules.
 - `references/gate-and-regate.md` for Gate stops, Re-Gate routing, and confirmation boundaries.
 - `references/side-effect-boundaries.md` for code, docs, knowledge, and command side effects.
@@ -101,6 +102,7 @@ Stop when the review result is failed, blocked, missing, or recommends direct im
 Read:
 
 - `references/new-rail-enhanced-pipeline.md`
+- `references/domain-route-artifact.md`
 - `references/stage-sequence.md`
 - `references/gate-and-regate.md`
 
@@ -113,6 +115,8 @@ Verify:
 - Legacy Skills and legacy `.specify/memory/**`, `.specify/workflow/**`, `.specify/coding_guide/**` documents are treated only as development-time fixtures, never runtime inputs.
 - Project overrides are explicit when local private documents conflict with shared standard rules.
 - Domain route is known: existing-change, new-flow, integration-change, data-change, or unknown.
+- Route Type `unknown` blocks Specify unless the user explicitly confirms the route type, target business-domain documents, entry coverage surface, and risk owner.
+- When a feature id is known and full SDD proceeds, Domain Route is materialized as `specs/{feature}/route.md`; before that point the pipeline report `Domain Route Summary` is the route artifact source.
 - Required business knowledge inputs are present, or `.specify/business-domain-bootstrap.yaml` exists so they can be generated before knowledge routing.
 - Domain Route Summary and New-Rail Runtime Check can be reported before Specify starts.
 
@@ -189,6 +193,7 @@ Every pipeline result must contain:
 - Activation Basis
 - New-Rail Runtime Check
 - Domain Route Summary
+- Route Artifact: `specs/{feature}/route.md` when materialized, or Pipeline Domain Route Summary before feature id materialization
 - Source Artifacts
 - Stage Timeline
 - Gate Results
@@ -209,6 +214,8 @@ Stop instead of continuing when:
 - A pre-Clarify stage completed but the user has not confirmed entering the next stage.
 - Clarify passed but required downstream authorization for continuous execution is missing.
 - Runtime execution would require a forbidden legacy Skill or forbidden legacy `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**` input.
+- Route Type is `unknown` and explicit route confirmation is absent.
+- Create-If-Missing applies but L1, L2, L4 id, owner, authorization, or entry coverage status is missing.
 - A required artifact is missing or stale.
 - A child skill returns `FAIL`, `BLOCKED`, or unresolved Critical issue.
 - A stage would reinterpret approved requirements.

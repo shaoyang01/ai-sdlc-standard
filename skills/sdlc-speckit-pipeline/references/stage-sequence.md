@@ -25,7 +25,7 @@ Do not skip a stage unless its current result already exists, is not stale, and 
 | --- | --- | --- |
 | Preflight | `sdlc-speckit-pipeline` controller plus standard-package bootstrap/audit scripts | Verify Speckit baseline, new-rail runtime redlines, and required business knowledge entry points. |
 | Domain Route | `sdlc-speckit-pipeline` controller | Decide existing-change, new-flow, integration-change, data-change, or unknown. |
-| Specify | `sdlc-speckit-specify` | Sync approved DocFlow specification into `specs/spec.md`. |
+| Specify | `sdlc-speckit-specify` | Sync approved DocFlow specification into `specs/{feature}/spec.md`. |
 | Clarify | `sdlc-speckit-clarify` | Validate residual questions only. |
 | Plan | `sdlc-speckit-plan` | Produce or validate implementation plan. |
 | Tasks | `sdlc-speckit-tasks` | Produce or validate traceable implementation tasks. |
@@ -62,12 +62,21 @@ Each stage handoff must include:
 
 Preflight and Domain Route must also include a Domain Route Summary:
 
+- Requirement ID.
+- Feature ID, when known.
 - Route Type.
 - Project Type Profiles.
 - Entry Coverage Surface.
+- Business Domain Targets.
 - Business Knowledge Read Set.
 - Missing Knowledge.
+- Create-If-Missing Decision.
 - New-Rail Runtime Check.
+
+When a feature id is known and full SDD proceeds, materialize the Domain Route
+Summary as `specs/{feature}/route.md`. Hand off `route.md` to Specify, Plan,
+Analyze, Sync, and Reconcile. Before materialization, hand off the Pipeline
+Domain Route Summary instead.
 
 ## Existing Artifact Reuse
 

@@ -59,7 +59,7 @@ Before entering the Post-Clarify continuous execution segment, collect any requi
 
 If required authorization is absent, stop at the Clarify boundary and report the missing authorization. Do not continue into the continuous execution segment and then repeatedly ask between downstream stages.
 
-## Domain Route Summary
+## Domain Route Summary And Artifact
 
 Preflight and Domain Route must produce a compact route summary before Specify starts:
 
@@ -72,4 +72,25 @@ Preflight and Domain Route must produce a compact route summary before Specify s
 | Missing Knowledge | Business-domain or project-context facts that block safe execution. |
 | New-Rail Runtime Check | Confirmation that only `sdlc-speckit-*` Skills and new-rail documents are used. |
 
-If Route Type is `unknown`, stop before Specify unless the user explicitly confirms the route and target documents.
+The compact summary is the early route record. When the feature id is known and
+full SDD proceeds, materialize the route as `specs/{feature}/route.md` using
+`references/domain-route-artifact.md`.
+
+`specs/{feature}/route.md` must preserve:
+
+- Requirement ID and Feature ID.
+- Route Type.
+- Project Type Profiles.
+- Business Domain Targets with L1, L2, L4, target status, owner, and evidence.
+- Business Knowledge Read Set.
+- Entry Coverage Surface for backend, admin, frontend, ETL, and library/shared-component entries.
+- Sync Targets.
+- Create-If-Missing Decision with L1, L2, L4 id, owner, authorization, and entry coverage status.
+- Unresolved Questions and Blocking Items.
+- New-Rail Runtime Check, including `Legacy Skill usage: none`, `Legacy document runtime input: none`, and `Legacy document write target: none`.
+- Source Artifacts and Manifest Recommendation.
+
+If Route Type is `unknown`, stop before Specify unless the user explicitly
+confirms the route type, target business-domain documents, entry coverage
+surface, and risk owner. Record that confirmation in the route artifact or, if
+the feature id is not known yet, in the Pipeline Domain Route Summary.

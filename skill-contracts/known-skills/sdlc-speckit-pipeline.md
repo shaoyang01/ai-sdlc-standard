@@ -19,6 +19,7 @@ input_artifacts:
   - .specify/project-context/ProjectDocumentationGuide.md
   - optional specs/**
 output_artifacts:
+  - specs/{feature}/route.md
   - specs/** machine artifacts
   - implementation changes
   - library/{requirement_id}/03-实现记录/*
@@ -41,6 +42,7 @@ skill_path:
 references:
   - skills/sdlc-speckit-pipeline/references/activation-and-inputs.md
   - skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md
+  - skills/sdlc-speckit-pipeline/references/domain-route-artifact.md
   - skills/sdlc-speckit-pipeline/references/stage-sequence.md
   - skills/sdlc-speckit-pipeline/references/gate-and-regate.md
   - skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md
@@ -61,6 +63,8 @@ blocking_conditions:
   - solution review result is FAIL
   - development path recommendation is BLOCKED_NEEDS_REVISION
   - user has not confirmed entering full SDD path
+  - Route Type is unknown and explicit route confirmation is absent
+  - create-if-missing lacks L1, L2, L4 id, owner, authorization, or entry coverage status
   - user requested full SDD but solution review is missing
   - implementation requires undefined business behavior
   - runtime execution would require a legacy Skill or legacy .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** input
@@ -83,8 +87,9 @@ blocking_conditions:
 - 在激活条件满足后串行执行 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile`。
 - 在运行期只调度 `sdlc-speckit-*` 子 Skill，不调度 legacy `speckit-*` Skill。
 - 在 Clarify 之前按节点询问是否进入下一节点；Clarify 通过后连续执行 Plan / Tasks / Analyze / Implement / Sync / Reconcile。
+- 在 Domain Route 阶段输出 Pipeline Domain Route Summary，并在 feature id 已确定且进入 full SDD 时物化 `specs/{feature}/route.md`。
 - 复用已审阅的 `01-技术方案` 和 `02-方案审核`，避免重新解释需求。
-- 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/spec.md`。
+- 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/{feature}/spec.md`。
 - 在实现完成后将稳定业务事实回写到 `.specify/business_domain/**`。
 - 在 DocFlow 和 manifest 中形成阶段结果、实现记录、Sync 状态和 Reconcile 结论建议。
 
@@ -168,7 +173,8 @@ Preflight
 
 - `Preflight`：检查 `.specify` 基线、新轨运行期红线与关键入口文档。
 - `Domain Route`：基于已审阅方案判断 `existing-change` / `new-flow` / `integration-change` / `data-change` / `unknown`，并输出 Domain Route Summary。
-- `Specify`：复用 `01-技术方案` 和 `02-方案审核`，同步或派生 `specs/spec.md`。
+- Route Type 为 `unknown` 时，除非用户显式确认 route type、目标 business-domain 文档、entry coverage surface 和 risk owner，否则不得进入 Specify。
+- `Specify`：复用 `01-技术方案` 和 `02-方案审核`，同步或派生 `specs/{feature}/spec.md`。
 - `Clarify`：只校验残余未决问题；若发现核心问题，停止并回到方案修订 / 方案审核。Clarify 通过后进入连续执行区。
 - `Plan`：不得改变已通过方案的业务边界。
 - `Tasks`：任务必须追溯到已审阅方案、plan 或审核修复项。
@@ -204,13 +210,16 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 
 - New-Rail Runtime Check
 - Domain Route Summary
-- `specs/spec.md`
+- `specs/{feature}/route.md` when feature id is known and full SDD proceeds
+- `specs/{feature}/spec.md`
 - `specs/plan.md`、`research.md`、`data-model.md`、`contracts/`（按需）
 - `specs/tasks.md`
 - 实现摘要
 - `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
 - Sync 目标路径和结果
 - manifest Activity Log / Speckit Sync 更新建议
+
+`specs/{feature}/route.md` 必须包含 Requirement ID、Feature ID、Route Type、Project Type Profiles、Business Domain Targets、Business Knowledge Read Set、Entry Coverage Surface、Sync Targets、Create-If-Missing Decision、Unresolved Questions、Blocking Items、New-Rail Runtime Check、Source Artifacts 和 Manifest Recommendation。New-Rail Runtime Check 必须明确 `Runtime child skills: sdlc-speckit-* only`、`Legacy Skill usage: none`、`Legacy document runtime input: none`、`Legacy document write target: none`。
 
 ## Side Effects
 
@@ -252,6 +261,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Sync 目标文档无法判断。
 - 运行期需要 legacy Skill 或 legacy `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 输入。
 - Clarify 已通过但后续连续执行所需授权缺失。
+- Route Type 为 `unknown` 且缺少显式 route 确认。
+- create-if-missing 缺少 L1、L2、L4 id、owner、authorization 或 entry coverage status。
 
 ## Gate Requirements
 

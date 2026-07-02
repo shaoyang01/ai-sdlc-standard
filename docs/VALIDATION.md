@@ -255,6 +255,46 @@ Revision History Update:
 8. 如果任一章节需要编造事实，Specify 必须 blocked 并回到 DocFlow / Gate。
 ```
 
+## Speckit route artifact 校验
+
+`sdlc-speckit-pipeline` 在 Domain Route 阶段必须保留 Pipeline `Domain Route Summary`。当 feature id 已确定并进入 full SDD 时，必须物化：
+
+```text
+specs/{feature}/route.md
+```
+
+`route.md` 必须包含：
+
+```text
+Requirement ID
+Feature ID
+Route Type
+Project Type Profiles
+Business Domain Targets
+Business Knowledge Read Set
+Entry Coverage Surface
+Sync Targets
+Create-If-Missing Decision
+Unresolved Questions
+Blocking Items
+New-Rail Runtime Check
+Source Artifacts
+Manifest Recommendation
+```
+
+检查点：
+
+```text
+1. Route Type 必须是 existing-change / new-flow / integration-change / data-change / unknown 之一。
+2. Route Type = unknown 时必须阻断进入 Specify，除非用户显式确认 route type、目标 business-domain 文档、entry coverage surface 和 risk owner。
+3. Business Domain Targets 必须记录 L1 / L2 / L4、Target Status、Owner、Evidence。
+4. Entry Coverage Surface 必须覆盖 backend entries、admin entries、frontend entries、ETL entries、library/shared-component entries，不能按单一后端入口模型退化。
+5. Create-If-Missing Decision 必须记录 Target L1、Target L2、Target L4 Id、Owner、Authorization、Entry Coverage Status。
+6. New-Rail Runtime Check 必须明确 Runtime child skills: sdlc-speckit-* only、Legacy Skill usage: none、Legacy document runtime input: none、Legacy document write target: none。
+7. specs/{feature}/spec.md 必须引用 specs/{feature}/route.md；如果 route 尚未物化，则必须引用 Pipeline Domain Route Summary。
+8. Plan / Analyze / Sync / Reconcile 必须把 route.md 或 Pipeline Domain Route Summary 作为统一输入边界，不能各自重新解释 route。
+```
+
 ## Speckit plan companion artifacts 校验
 
 `sdlc-speckit-plan` 必须生成或显式跳过：

@@ -54,16 +54,25 @@ Use this structure:
 - Runtime child skills: `sdlc-speckit-*` only
 - Legacy Skill usage: none
 - Legacy document runtime input: none
+- Legacy document write target: none
 - Project private context read set:
 - Standard package:
 
 ## Domain Route Summary
 
-- Route Type:
+- Requirement ID:
+- Feature ID:
+- Route Type: existing-change / new-flow / integration-change / data-change / unknown
 - Project Type Profiles:
+- Business Domain Targets:
 - Entry Coverage Surface:
 - Business Knowledge Read Set:
+- Sync Targets:
+- Create-If-Missing Decision:
 - Missing Knowledge:
+- Unresolved Questions:
+- Blocking Items:
+- Route Artifact: `specs/{feature}/route.md` or Pipeline Domain Route Summary
 - Next route action:
 
 ## Source Artifacts
@@ -95,6 +104,7 @@ Use this structure:
 ## Produced Or Reused Artifacts
 
 - Specs:
+  - Route:
 - DocFlow:
 - Code:
 - Knowledge:
@@ -121,6 +131,7 @@ Use this structure:
 
 - Activity Log:
 - Gate Records:
+- Route Artifact:
 - Change History:
 - Speckit Sync:
 - Reconcile:

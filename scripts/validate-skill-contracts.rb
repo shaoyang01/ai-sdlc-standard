@@ -184,6 +184,36 @@ NEW_RAIL_PIPELINE_REQUIRED_TERMS = [
   "New-Rail Runtime Check"
 ].freeze
 
+ROUTE_ARTIFACT_REQUIRED_TERMS = [
+  "specs/{feature}/route.md",
+  "Route Type",
+  "existing-change",
+  "new-flow",
+  "integration-change",
+  "data-change",
+  "unknown",
+  "Create-If-Missing Decision",
+  "Entry Coverage Surface",
+  "Business Domain Targets",
+  "Legacy Skill usage: none",
+  "Legacy document runtime input: none",
+  "Legacy document write target: none",
+  "Pipeline Domain Route Summary"
+].freeze
+
+ROUTE_ARTIFACT_INTEGRATION_TERMS = [
+  "specs/{feature}/route.md",
+  "Route Type",
+  "unknown",
+  "Pipeline Domain Route Summary"
+].freeze
+
+ROUTE_ARTIFACT_RUNTIME_TERMS = [
+  "Legacy Skill usage: none",
+  "Legacy document runtime input: none",
+  "Legacy document write target: none"
+].freeze
+
 BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "ProjectWorkflowGuide.md",
   "ProjectDocumentationGuide.md",
@@ -578,6 +608,7 @@ new_rail_pipeline_paths = {
   ],
   "skills/sdlc-speckit-pipeline/SKILL.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
   "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
+  "skills/sdlc-speckit-pipeline/references/domain-route-artifact.md" => ROUTE_ARTIFACT_REQUIRED_TERMS,
   "skills/sdlc-speckit-pipeline/references/stage-sequence.md" => [
     "sdlc-speckit-*",
     "development-time fixtures",
@@ -597,6 +628,8 @@ new_rail_pipeline_paths = {
   "skills/sdlc-speckit-pipeline/references/output-and-manifest.md" => [
     "New-Rail Runtime Check",
     "Domain Route Summary",
+    "Route Artifact",
+    "Legacy document write target",
     "sdlc-speckit-*",
     "Legacy rail paths touched"
   ],
@@ -608,6 +641,7 @@ new_rail_pipeline_paths = {
     "Clarify",
     "New-Rail Runtime Check",
     "Domain Route Summary",
+    "specs/{feature}/route.md",
     ".specify/memory/**",
     ".specify/workflow/**",
     ".specify/coding_guide/**"
@@ -620,6 +654,47 @@ new_rail_pipeline_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing New-Rail pipeline requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+route_artifact_paths = {
+  "skills/sdlc-speckit-pipeline/SKILL.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS + [
+    "Create-If-Missing",
+    "Business Domain Targets",
+    "Entry Coverage"
+  ],
+  "skills/sdlc-speckit-pipeline/references/domain-route-artifact.md" => ROUTE_ARTIFACT_REQUIRED_TERMS,
+  "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md" => ROUTE_ARTIFACT_REQUIRED_TERMS,
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS + [
+    "Create-If-Missing Decision",
+    "Business Domain Targets",
+    "Entry Coverage Surface"
+  ],
+  "skills/sdlc-speckit-specify/SKILL.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS,
+  "skills/sdlc-speckit-specify/references/spec-sync-mapping.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS + [
+    "Business Domain Targets",
+    "Entry Coverage Target",
+    "Sync Targets"
+  ],
+  "skills/sdlc-speckit-specify/references/output-and-manifest.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS,
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS + ROUTE_ARTIFACT_RUNTIME_TERMS + [
+    "Create-If-Missing",
+    "Business Domain Targets",
+    "Entry Coverage"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-specify.md" => ROUTE_ARTIFACT_INTEGRATION_TERMS,
+  "docs/VALIDATION.md" => ROUTE_ARTIFACT_REQUIRED_TERMS
+}.freeze
+
+route_artifact_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing route artifact requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"

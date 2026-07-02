@@ -50,11 +50,11 @@ Do not collapse these sections into generic prose. If the source artifacts do no
 
 | Required SpecKit Section | Source / Derivation Rule |
 | --- | --- |
-| Domain Route / Scope Baseline | Use `00BusinessLandscape.md`, `00UbiquitousLanguage.md`, `01DomainCatalog.md`, `.specify/project-governance-profile.yaml`, `.specify/entry-coverage-profile.yaml`, and reviewed DocFlow scope. |
-| Requirement Type | Classify as `existing-change`, `new-flow`, `integration-change`, `data-change`, or `unknown`; `unknown` is blocking unless explicitly accepted for discovery. |
-| Business Domain Targets | List L1/L2/L4 targets or pending target reservation. Do not invent business-domain paths. |
-| Entry Coverage Target | List entry type, symbol/path, and expected evidence chain from `.specify/entry-coverage-profile.yaml`. |
-| Sync Targets | List stable facts expected to sync after implementation and verification. |
+| Domain Route / Scope Baseline | Use `specs/{feature}/route.md` when present, otherwise use the Pipeline Domain Route Summary. Also preserve relevant `00BusinessLandscape.md`, `00UbiquitousLanguage.md`, `01DomainCatalog.md`, `.specify/project-governance-profile.yaml`, `.specify/entry-coverage-profile.yaml`, and reviewed DocFlow scope evidence. |
+| Requirement Type | Copy Route Type from `specs/{feature}/route.md` or Pipeline Domain Route Summary. Valid values are `existing-change`, `new-flow`, `integration-change`, `data-change`, or `unknown`; `unknown` is blocking unless explicit route confirmation is recorded. |
+| Business Domain Targets | Copy L1/L2/L4 targets, target status, owner, and evidence from the route artifact. Do not invent business-domain paths. |
+| Entry Coverage Target | Copy backend/admin/frontend/ETL/library surface and expected evidence chain from the route artifact and `.specify/entry-coverage-profile.yaml`. |
+| Sync Targets | Copy stable fact targets and write timing from the route artifact; Sync authorization remains owned by Sync and Pipeline authorization checks. |
 | Representative Data Simulation | Include normal, empty, missing, exception, and project-specific boundary data cases. |
 | Edge Cases | Include compatibility, failure, retry, idempotency, transaction, visibility, and rollback edges where relevant. |
 | Functional Requirements | Map In Scope and behavior constraints into numbered FR rows without changing meaning. |
@@ -104,6 +104,7 @@ Do not collapse these sections into generic prose. If the source artifacts do no
 
 Every generated SpecKit section should reference:
 
+- Source `specs/{feature}/route.md` or Pipeline Domain Route Summary
 - Source `01-技术方案`
 - Source `02-方案审核`
 - Relevant Gate result

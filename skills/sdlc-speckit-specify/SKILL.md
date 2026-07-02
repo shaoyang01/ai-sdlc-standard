@@ -22,8 +22,9 @@ Sync an approved DocFlow technical specification into SpecKit `specs/{feature}/s
 9. Require `sdlc-solution-reviewer` result `PASS` or valid `PASS_WITH_RISK`.
 10. Require Development Path Decision `SPECKIT_PIPELINE_REQUIRED` unless the user explicitly asks for full SDD.
 11. Preserve links back to `01-技术方案`, `02-方案审核`, and `manifest.md`.
-12. Stop and return to DocFlow when sync would require inventing business rules.
-13. Do not overwrite an existing `specs/{feature}/spec.md` unless it belongs to the same requirement and current DocFlow source artifacts.
+12. Read `specs/{feature}/route.md` when it exists, or the Pipeline Domain Route Summary before route materialization, and reference that route source in `specs/{feature}/spec.md`.
+13. Stop and return to DocFlow when sync would require inventing business rules.
+14. Do not overwrite an existing `specs/{feature}/spec.md` unless it belongs to the same requirement and current DocFlow source artifacts.
 
 ## Standard Package Resolution
 
@@ -71,6 +72,7 @@ Identify:
 - Requirement ID
 - Target feature name or `specs/{feature}` directory
 - Existing `specs/{feature}/spec.md`, if present
+- Existing `specs/{feature}/route.md`, or Pipeline Domain Route Summary when route materialization has not happened yet
 - `01-技术方案` current version
 - `02-方案审核` current version
 - `manifest.md`
@@ -96,6 +98,8 @@ Continue only when:
 - Core Scope, behavior, failure strategy, and acceptance criteria are stable.
 - Current artifacts are not stale.
 - Existing target `specs/{feature}/spec.md`, if present, belongs to the same requirement and current DocFlow source artifacts.
+- Domain Route source exists as `specs/{feature}/route.md` or Pipeline Domain Route Summary.
+- Route Type is not `unknown`, unless the route artifact or Pipeline Domain Route Summary records explicit user confirmation for the route type, target business-domain documents, entry coverage surface, and risk owner.
 
 ### 3. Sync Specification
 
@@ -117,6 +121,7 @@ Stop instead of overwriting when the target spec belongs to another requirement,
 
 Preserve:
 
+- Route artifact reference: `specs/{feature}/route.md` or Pipeline Domain Route Summary
 - Business goal
 - In Scope / Out of Scope
 - Original flow and new flow
@@ -176,7 +181,7 @@ Every sync result must include:
 
 ## Stop Conditions
 
-Stop instead of writing or recommending a `specs/spec.md` update when:
+Stop instead of writing or recommending a `specs/{feature}/spec.md` update when:
 
 - Solution review is missing, failed, or stale.
 - Development path is `BLOCKED_NEEDS_REVISION`.
@@ -187,3 +192,4 @@ Stop instead of writing or recommending a `specs/spec.md` update when:
 - Existing `specs/{feature}/spec.md` belongs to another requirement, unknown source, or stale DocFlow version.
 - Required product-shape sections would be missing from `specs/{feature}/spec.md`.
 - Requirement type, business-domain route, entry coverage target, sync target, representative data simulation, edge cases, traceability, or repository boundary cannot be derived from reviewed artifacts.
+- Route Type is `unknown` without explicit route confirmation.

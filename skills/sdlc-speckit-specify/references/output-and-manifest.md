@@ -44,6 +44,16 @@ Target:
 specs/{feature}/spec.md
 ```
 
+Route source:
+
+```text
+specs/{feature}/route.md
+```
+
+If `route.md` has not been materialized yet, reference the Pipeline Domain Route
+Summary instead. Do not report Specify success unless `spec.md` references one
+of these route sources.
+
 If the target file already exists, update it only when it is traceable to the same requirement and current DocFlow source artifacts. Otherwise stop and request a new feature id, Re-Gate, or explicit user decision.
 
 Optional:
@@ -82,6 +92,13 @@ The sync result must classify each section as:
 
 Do not mark the Skill complete when any required section is missing from the target file. Use `blocked` when filling the section would require inventing facts.
 
+Also verify:
+
+- `## Domain Route / Scope Baseline` references `specs/{feature}/route.md` or Pipeline Domain Route Summary.
+- Route Type is copied from the route source.
+- Route Type `unknown` has explicit route confirmation, or Specify is blocked.
+- Create-if-missing values in `Business Domain Targets` and `Sync Targets` match the route source.
+
 ## Report Template
 
 ```markdown
@@ -91,6 +108,7 @@ Do not mark the Skill complete when any required section is missing from the tar
 
 - Technical Specification:
 - Solution Review:
+- Domain Route:
 - Manifest:
 
 ## Target
@@ -132,6 +150,7 @@ Recommend updates for:
 
 - Activity Log: `sdlc-speckit-specify`
 - Related Specs Directory
+- Artifact Index note linking `specs/{feature}/route.md` when materialized
 - Artifact Index note linking `specs/{feature}/spec.md`
 - Re-Gate Records, if blocked
 - Next Step: `sdlc-speckit-clarify`
