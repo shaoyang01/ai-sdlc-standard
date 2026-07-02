@@ -434,6 +434,8 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
   "manifest.yaml",
   "ai-sdlc",
   "skills",
+  "package.json is auxiliary evidence only",
+  "explicit frontend business files",
   "--project-type-profile",
   "--force-entry-coverage-profile",
   ".specify/entry-coverage-profile.yaml",
@@ -509,6 +511,23 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
   "ai-sdlc/",
   "skills/",
   "package.json-only",
+  "src/pages",
+  "src/views",
+  "src/screens",
+  "src/components",
+  "src/component",
+  "src/router",
+  "src/routers",
+  "src/routes",
+  "src/navigation",
+  "src/store",
+  "src/stores",
+  "src/models",
+  "src/actions",
+  "src/api",
+  "src/services",
+  "src/main/webapp",
+  "*.jsp / *.ftl / *.vm",
   ".specify/entry-coverage-profile.yaml",
   ".specify/entry-coverage-profile.candidate.yaml",
   ".specify/reports/entry_coverage_profile_bootstrap_report.md",
@@ -1411,8 +1430,17 @@ end
 bootstrap_entry_profile_script = File.join(ROOT, "scripts/bootstrap-entry-coverage-profile.sh")
 if File.exist?(bootstrap_entry_profile_script)
   text = File.read(bootstrap_entry_profile_script)
-  if text.match?(/rel\s*==\s*["']package\.json["']/)
-    errors << "scripts/bootstrap-entry-coverage-profile.sh must not let package.json-only trigger frontend-application"
+  package_json_frontend_heuristic_patterns = [
+    /rel\s*==\s*["']package\.json["']/,
+    /rel\.end_with\?\(["']package\.json["']\)/,
+    /files\.include\?\(["']package\.json["']\)[^\n]*frontend/,
+    /has_frontend\s*=.*package\.json/m,
+    /package\.json[^\n]*frontend-application/
+  ].freeze
+  package_json_frontend_heuristic_patterns.each do |pattern|
+    if text.match?(pattern)
+      errors << "scripts/bootstrap-entry-coverage-profile.sh must not let package.json-only trigger frontend-application"
+    end
   end
 end
 

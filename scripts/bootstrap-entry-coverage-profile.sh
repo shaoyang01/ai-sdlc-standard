@@ -184,6 +184,8 @@ rescue Psych::SyntaxError
 end
 
 def detect_profiles_from_code(files)
+  # package.json is auxiliary evidence only; explicit frontend business files
+  # or directories must be present before selecting frontend-application.
   has_frontend = files.any? do |rel|
     rel.match?(%r{\Asrc/(pages|views|screens|components|component|navigation|router|routers|routes|store|stores|models|actions|api|services)/}) ||
       rel.match?(%r{/src/(pages|views|screens|components|component|navigation|router|routers|routes|store|stores|models|actions|api|services)/}) ||

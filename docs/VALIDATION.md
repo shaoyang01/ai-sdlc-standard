@@ -103,6 +103,28 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 | Spark/Flink/ETL 计算项目，如 `tms-flink-finance` | `data-pipeline-etl` | `spark_job`、`spark_online_etl`、`flink_main`、`flink_process_function`、`mcq_connector`，不应退化成普通 Controller/Service 覆盖模型。 |
 | 传统 Java Web 混合项目，如 `wms-monitor` | `frontend-application` + `backend-business-service` | 同时生成 Controller/RPC/MQ/Schedule 入口和 JSP/page/component/API/popup/navigation 等 webapp 入口。 |
 
+Frontend heuristic 不得由 `package.json` 单独触发。只有出现明确前端业务目录或文件时才可选择 `frontend-application`：
+
+```text
+src/pages
+src/views
+src/screens
+src/components
+src/component
+src/router
+src/routers
+src/routes
+src/navigation
+src/store
+src/stores
+src/models
+src/actions
+src/api
+src/services
+src/main/webapp
+*.jsp / *.ftl / *.vm
+```
+
 ## bootstrap 正式写入前检查
 
 正式执行前确认：
