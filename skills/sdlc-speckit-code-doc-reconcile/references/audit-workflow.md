@@ -8,6 +8,11 @@ Define the exact scope before comparing:
 - Feature directory under `specs/**`.
 - Code modules, files, commits, or diff range.
 - DocFlow directories.
+- Process product paths:
+  `specs/{feature}/implementation.md`,
+  `specs/{feature}/workflow-status.md`,
+  `specs/{feature}/debug-guide.md`, and
+  `specs/{feature}/observability.md`.
 - Knowledge target paths.
 - Whether the audit is full lifecycle or focused on one suspected drift.
 
@@ -52,6 +57,10 @@ Compare artifacts at the behavior level, not only by file presence:
 - Idempotency, retry, and transaction behavior.
 - Rollback and compatibility.
 - Verification requirements.
+- Frontend route, page, component, store, API, popup, visibility, backend/mock
+  boundary, and visual verification behavior when applicable.
+- Debug, reproduction, mock/real data switching, logging, metrics, frontend
+  analytics, error state observation, and debug logs when applicable.
 
 ## 4. Trace Tasks To Code
 
@@ -69,10 +78,36 @@ For relevant code behavior:
 
 - Locate supporting spec, plan, task, or DocFlow statement.
 - Locate implementation record evidence.
+- Locate process product evidence from `implementation.md`, `debug-guide.md`,
+  and `observability.md`.
 - Locate test or verification evidence.
 - Locate synced knowledge fact, when applicable.
 
 Classify any behavior without approved basis.
+
+## 5.1 Trace Process Products To Code And Manifest
+
+Process Product Drift must be evaluated against approved artifacts, the actual
+code diff, and manifest.
+
+For each new-rail process product:
+
+- `specs/{feature}/implementation.md`: confirm file changes, technical
+  decisions, frontend state, interaction behavior, and backend/mock boundary
+  match the actual diff and approved tasks.
+- `specs/{feature}/workflow-status.md`: confirm it is only a machine-side
+  snapshot and that manifest is status authority. Any mismatch with manifest
+  Current Stage, Current Status, Activity Log, Gate Records, Re-Gate Records, or
+  Blocking Issues is `MANIFEST_DRIFT` or process product drift.
+- `specs/{feature}/debug-guide.md`: confirm API debug steps, quick references,
+  mock/real data switching, and reproduction steps still match the code and
+  environment assumptions.
+- `specs/{feature}/observability.md`: confirm logging, metrics, frontend
+  analytics, error state observation, and debug logs match the implemented code
+  or are explicitly not applicable.
+
+Missing required frontend/RN process evidence should be recorded as a
+documentation or process-product gap, not silently ignored.
 
 ## 6. Trace Knowledge To Evidence
 

@@ -20,9 +20,14 @@ input_artifacts:
   - optional specs/**
 output_artifacts:
   - specs/{feature}/route.md
+  - specs/{feature}/implementation.md
+  - specs/{feature}/workflow-status.md
+  - specs/{feature}/debug-guide.md
+  - specs/{feature}/observability.md
   - specs/** machine artifacts
   - implementation changes
   - library/{requirement_id}/03-实现记录/*
+  - library/{requirement_id}/04-交付总结/*
   - sync result for .specify/business_domain/**
 required_schema:
   - ess/specification-schema.md
@@ -51,8 +56,10 @@ side_effects:
   - create or update specs/**
   - modify code during implement stage
   - update task status
+  - recommend or write new-rail implementation process products
   - update .specify/business_domain/** during sync
   - recommend or write DocFlow implementation records
+  - recommend or write DocFlow delivery summaries
   - never read or write .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** during new-rail runtime
 can_modify_code: true
 can_modify_docs: true
@@ -91,7 +98,10 @@ blocking_conditions:
 - 复用已审阅的 `01-技术方案` 和 `02-方案审核`，避免重新解释需求。
 - 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/{feature}/spec.md`。
 - 在实现完成后将稳定业务事实回写到 `.specify/business_domain/**`。
-- 在 DocFlow 和 manifest 中形成阶段结果、实现记录、Sync 状态和 Reconcile 结论建议。
+- 在 DocFlow 和 manifest 中形成阶段结果、实现记录、交付总结、Sync 状态和 Reconcile 结论建议。
+- 在 Implement 阶段汇总 `specs/{feature}/implementation.md`、
+  `workflow-status.md`、`debug-guide.md` 和 `observability.md` 的产物状态；
+  manifest is status authority。
 
 它不负责：
 
@@ -215,7 +225,12 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - `specs/plan.md`、`research.md`、`data-model.md`、`contracts/`（按需）
 - `specs/tasks.md`
 - 实现摘要
+- `specs/{feature}/implementation.md`
+- `specs/{feature}/workflow-status.md`
+- `specs/{feature}/debug-guide.md`
+- `specs/{feature}/observability.md`
 - `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
+- `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`
 - Sync 目标路径和结果
 - manifest Activity Log / Speckit Sync 更新建议
 

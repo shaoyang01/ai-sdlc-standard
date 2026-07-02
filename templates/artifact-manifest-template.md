@@ -36,6 +36,7 @@
 | 01 技术方案 | yes | `01-技术方案/` |  |  | draft / active / stale / replaced |  |  |
 | 02 方案审核 | yes | `02-方案审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
 | 03 实现记录 | recommended | `03-实现记录/` |  |  | draft / active / stale |  |  |
+| 04 交付总结 | recommended | `04-交付总结/` |  |  | draft / active / stale |  |  |
 | 04 代码审核 | conditional | `04-代码审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
 | 05 测试验收 | conditional | `05-测试验收/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
 
@@ -112,6 +113,25 @@ Normal updates to the same stable file use `Version` and `Change History`.
 - Executed At:
 - Sync Artifact:
 - Residual Risks:
+
+## Speckit Process Products
+
+`manifest.md` is the status authority. `workflow-status.md` is only a
+machine-side snapshot.
+
+| Artifact | Stable Path | Version | Status | Updated At | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Implementation | `specs/{feature}/implementation.md` |  | draft / active / stale |  |  |
+| Workflow Status Snapshot | `specs/{feature}/workflow-status.md` |  | draft / active / stale |  | manifest is status authority |
+| Debug Guide | `specs/{feature}/debug-guide.md` |  | draft / active / stale |  |  |
+| Observability | `specs/{feature}/observability.md` |  | draft / active / stale |  |  |
+
+## DocFlow Handoff Products
+
+| Artifact | Stable Path | Version | Status | Updated At | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md` |  | draft / active / stale |  |  |
+| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` |  | draft / active / stale |  |  |
 
 ## Missing Artifacts
 

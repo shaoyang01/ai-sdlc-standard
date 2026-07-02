@@ -49,6 +49,7 @@ Use this structure:
 - Feature:
 - Code scope:
 - Specs:
+- Process products:
 - DocFlow:
 - Knowledge targets:
 - Manifest:
@@ -63,6 +64,18 @@ Use this structure:
 | Area | Evidence | Expected Basis | Actual State | Classification | Owner |
 | --- | --- | --- | --- | --- | --- |
 
+## Process Product Drift
+
+Use the actual code diff, current manifest, and approved artifacts as evidence
+for this table.
+
+| Artifact | Expected Basis | Actual Code / Manifest State | Drift | Owner |
+| --- | --- | --- | --- | --- |
+| `specs/{feature}/implementation.md` | approved tasks and implementation result |  | none / stale / missing / contradicted |  |
+| `specs/{feature}/workflow-status.md` | manifest is status authority |  | none / stale / manifest drift / contradicted |  |
+| `specs/{feature}/debug-guide.md` | API, mock/real switch, reproduction behavior |  | none / stale / missing / contradicted |  |
+| `specs/{feature}/observability.md` | logging, metrics, frontend analytics, error state, debug logs |  | none / stale / missing / contradicted |  |
+
 ## Result Classification
 
 - Primary:
@@ -72,6 +85,7 @@ Use this structure:
 
 - Code:
 - Specs:
+- Process products:
 - DocFlow:
 - Knowledge:
 - Manifest:

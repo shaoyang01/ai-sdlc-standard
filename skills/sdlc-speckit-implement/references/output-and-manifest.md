@@ -47,8 +47,24 @@ implementation summary in response plus code changes in the target repository
 When requested or required by the workflow, also produce or recommend:
 
 ```text
+specs/{feature}/implementation.md
+specs/{feature}/workflow-status.md
+specs/{feature}/debug-guide.md
+specs/{feature}/observability.md
 library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
 ```
+
+`manifest.md` is the status authority. `specs/{feature}/workflow-status.md` is
+only a machine-side status snapshot and must not override manifest Activity Log,
+Gate Records, Re-Gate Records, Current Stage, Current Status, or Blocking
+Issues.
+
+Use `references/process-products.md` to decide which process products are
+required. Frontend and React Native work normally needs implementation, debug,
+and observability process products when route, page, component, store, API,
+popup, state, visibility, backend/mock boundary, visual behavior, logging, or
+analytics are affected.
 
 ## Result Template
 
@@ -88,7 +104,20 @@ library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
 
 ## Re-Gate Recommendation
 
+## Process Products Produced Or Recommended
+
+| Artifact | Path | Action | Reason |
+| --- | --- | --- | --- |
+| Implementation Details | `specs/{feature}/implementation.md` | produced / update recommended / not applicable |  |
+| Workflow Status Snapshot | `specs/{feature}/workflow-status.md` | produced / update recommended / not applicable | manifest is status authority |
+| Debug Guide | `specs/{feature}/debug-guide.md` | produced / update recommended / not applicable |  |
+| Observability | `specs/{feature}/observability.md` | produced / update recommended / not applicable |  |
+| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md` | produced / update recommended / not applicable |  |
+| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md` | produced / update recommended / not applicable |  |
+
 ## Implementation Record Recommendation
+
+## Delivery Summary Recommendation
 
 ## Manifest Update Recommendation
 
@@ -101,6 +130,10 @@ Recommend updates for:
 
 - Activity Log: `sdlc-speckit-implement`
 - Artifact Index note for `03-实现记录`, if produced
+- Artifact Index note for `04-交付总结`, if produced
+- Process Products note for `specs/{feature}/implementation.md`,
+  `specs/{feature}/workflow-status.md`, `specs/{feature}/debug-guide.md`, and
+  `specs/{feature}/observability.md`, if produced or updated
 - Task status summary
 - Re-Gate Records, if blocked
 - Blocking Issues, if any

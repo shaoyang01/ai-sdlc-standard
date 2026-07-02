@@ -14,11 +14,16 @@ input_artifacts:
   - specs/{feature}/spec.md
   - specs/{feature}/plan.md
   - specs/{feature}/tasks.md
+  - optional specs/{feature}/implementation.md
+  - optional specs/{feature}/workflow-status.md
+  - optional specs/{feature}/debug-guide.md
+  - optional specs/{feature}/observability.md
   - implementation result from sdlc-speckit-implement
   - optional sync result from sdlc-speckit-sync
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*
   - optional library/{requirement_id}/03-实现记录/*
+  - optional library/{requirement_id}/04-交付总结/*
   - optional library/{requirement_id}/04-代码审核/*
   - optional library/{requirement_id}/05-测试验收/*
   - optional library/{requirement_id}/manifest.md
@@ -66,6 +71,7 @@ blocking_conditions:
 它负责：
 
 - 审计代码、`specs/**`、DocFlow、manifest 和长期知识目标之间的一致性。
+- 审计 `implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md` 等新轨过程产物与代码、manifest、DocFlow、验证证据之间的一致性。
 - 判断漂移属于代码、规格、DocFlow、知识库、manifest 还是未验证事实。
 - 输出 Drift Matrix、证据、阻塞项和下一步责任 Skill。
 - 发现代码偏离时回到 `sdlc-speckit-implement` 或更早 Gate。
@@ -88,6 +94,7 @@ blocking_conditions:
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
+- `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、`observability.md`（如已生成）
 - `sdlc-speckit-implement` 的实现结果。
 - `library/{requirement_id}/01-技术方案/*`
 - `library/{requirement_id}/02-方案审核/*`
@@ -96,6 +103,7 @@ blocking_conditions:
 
 - `sdlc-speckit-sync` 的同步结果。
 - `library/{requirement_id}/03-实现记录/*`
+- `library/{requirement_id}/04-交付总结/*`
 - `library/{requirement_id}/04-代码审核/*`
 - `library/{requirement_id}/05-测试验收/*`
 - `library/{requirement_id}/manifest.md`
@@ -140,6 +148,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Source Artifacts。
 - Audit Scope。
 - Drift Matrix。
+- Process Product Drift。
 - Result Classification。
 - Evidence。
 - Blocking Items。
@@ -163,6 +172,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 允许：
 
 - 读取代码、specs、DocFlow、manifest 和知识目标。
+- 读取新轨过程产物并检查其与代码、manifest 和验证事实是否漂移。
 - 执行非破坏性检查命令。
 - 输出 Reconciliation Report。
 - 建议更新 manifest、DocFlow、specs 或知识目标。
@@ -183,6 +193,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 
 - Requirement ID 或 feature scope 不明确。
 - 当前有效 DocFlow、specs 或实现范围缺失。
+- `workflow-status.md` 与 manifest 冲突且无法判定当前状态权威；manifest is status authority。
 - 源产物之间存在无法判定优先级的冲突。
 - 代码行为无法检查。
 - 发现的漂移需要生产代码修复。

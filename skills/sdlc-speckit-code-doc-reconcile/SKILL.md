@@ -70,6 +70,10 @@ Identify:
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
+- `specs/{feature}/implementation.md`, if available
+- `specs/{feature}/workflow-status.md`, if available
+- `specs/{feature}/debug-guide.md`, if available
+- `specs/{feature}/observability.md`, if available
 - Implementation result from `sdlc-speckit-implement`
 - Sync result from `sdlc-speckit-sync`, if available
 - DocFlow artifacts under `library/{requirement_id}/`
@@ -97,6 +101,11 @@ Read:
 Compare:
 
 - Code behavior versus `spec.md`, `plan.md`, and `tasks.md`
+- Implementation process product versus actual code diff and completed tasks
+- Workflow status snapshot versus manifest; manifest is status authority
+- Debug guide versus actual API, mock/real data switch, and reproduction behavior
+- Observability guide versus actual logging, metrics, frontend analytics, error
+  state observation, and debug logs
 - Code behavior versus approved DocFlow technical specification and review
 - Implementation record versus actual code diff
 - Sync result versus verified implementation facts
@@ -136,6 +145,8 @@ Report:
 - Audit scope
 - Drift matrix
 - Evidence and affected files or documents
+- Process product drift for `implementation.md`, `workflow-status.md`,
+  `debug-guide.md`, and `observability.md`
 - Required Re-Gate, sync, or recording action
 - Optional authorized document or knowledge update proposal
 - Manifest update recommendation
@@ -148,6 +159,7 @@ Every reconciliation result must contain:
 - Source Artifacts
 - Audit Scope
 - Drift Matrix
+- Process Product Drift
 - Result Classification
 - Evidence
 - Blocking Items
@@ -166,3 +178,4 @@ Stop instead of continuing or writing updates when:
 - Drift would require changing production code.
 - User did not authorize document or knowledge updates.
 - Reconciliation would rely on raw chat rather than approved artifacts.
+- `workflow-status.md` conflicts with manifest and the current status authority cannot be identified.

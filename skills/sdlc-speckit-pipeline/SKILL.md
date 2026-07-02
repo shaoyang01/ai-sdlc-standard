@@ -157,6 +157,21 @@ Before implementation:
 
 Then route to `sdlc-speckit-implement`.
 
+After implementation, collect produced or recommended process products:
+
+- `specs/{feature}/implementation.md`
+- `specs/{feature}/workflow-status.md`
+- `specs/{feature}/debug-guide.md`
+- `specs/{feature}/observability.md`
+- `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
+- `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`
+
+For frontend/RN work, require explicit produced, update recommended, or
+not-applicable decisions for implementation details, workflow status, debug,
+observability, implementation record, and delivery summary. `manifest.md` is the
+status authority; manifest is status authority for pipeline status decisions.
+`workflow-status.md` is only a machine-side status snapshot.
+
 Stop if implementation requires undefined behavior, hidden scope change, or unsafe local state.
 
 ### 5. Execute Sync And Reconcile
@@ -178,6 +193,9 @@ Report:
 - Activation basis
 - New-Rail Runtime Check
 - Domain Route Summary
+- Stage Timeline with process product outputs from Implement
+- Produced Or Reused Artifacts, including implementation, workflow-status,
+  debug, observability, implementation record, and delivery summary products
 - Stage timeline
 - Stage results
 - Artifacts produced or reused

@@ -56,6 +56,7 @@ Load these references as needed:
 - `references/implementation-inputs.md` for required inputs and readiness checks.
 - `references/execution-boundaries.md` for allowed code and documentation side effects.
 - `references/verification-and-recording.md` for validation, task status, and implementation evidence.
+- `references/process-products.md` for new-rail implementation, workflow-status, debug, observability, implementation record, and delivery summary products.
 - `references/blocking-and-regate.md` for stop conditions and upstream routing.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
 
@@ -73,6 +74,7 @@ Identify:
 - Source `01-技术方案`
 - Source `02-方案审核`
 - `manifest.md`, if available
+- Existing `specs/{feature}/implementation.md`, `workflow-status.md`, `debug-guide.md`, and `observability.md`, if available
 - Current repository status and existing local changes
 
 Stop if any current core artifact is missing or stale.
@@ -118,6 +120,9 @@ Implement only approved tasks:
 ### 5. Verify And Record
 
 Read `references/verification-and-recording.md`.
+Read `references/process-products.md` when frontend/RN behavior, debug flow,
+observability, pipeline status, implementation handoff, or delivery summary
+evidence is required.
 
 Run relevant checks and record:
 
@@ -127,6 +132,15 @@ Run relevant checks and record:
 - Unfinished tasks.
 - Residual risks.
 - Recommended `03-实现记录` or `sdlc-implementation-recorder` handoff.
+- Recommended or produced process products:
+  `specs/{feature}/implementation.md`,
+  `specs/{feature}/workflow-status.md`,
+  `specs/{feature}/debug-guide.md`,
+  `specs/{feature}/observability.md`,
+  `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`,
+  and `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`.
+  `manifest.md` is the status authority; manifest is status authority for
+  pipeline status decisions.
 
 ### 6. Output Recommendation
 
@@ -139,7 +153,8 @@ Report:
 - Verification results
 - Blocking items
 - Manifest Activity Log recommendation
-- Implementation record recommendation
+- Implementation record and delivery summary recommendation
+- Process product recommendation
 - Next step: `sdlc-implementation-recorder`, `sdlc-code-review-normalizer`, `sdlc-speckit-sync`, or upstream Re-Gate
 
 ## Output Requirements
@@ -154,7 +169,9 @@ Every implementation result must contain:
 - Verification Results
 - Blocking Or Unfinished Items
 - Re-Gate Recommendation
+- Process Products Produced Or Recommended
 - Implementation Record Recommendation
+- Delivery Summary Recommendation
 - Manifest Update Recommendation
 - Next Step
 
@@ -169,3 +186,5 @@ Stop instead of modifying or continuing code when:
 - Required verification cannot be defined.
 - Local unrelated changes make safe edits impossible.
 - Compile or core verification fails and cannot be fixed within approved tasks.
+- Required process product content would contradict manifest status authority.
+- The request requires writing legacy process filenames as compatibility outputs.

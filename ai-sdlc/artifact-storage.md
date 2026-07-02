@@ -56,6 +56,7 @@ library/{requirement_id}/
 ├── 01-技术方案/
 ├── 02-方案审核/
 ├── 03-实现记录/
+├── 04-交付总结/
 ├── 04-代码审核/
 ├── 05-测试验收/
 └── manifest.md
@@ -69,6 +70,7 @@ library/{requirement_id}/
 | `01-技术方案/` | 必需 | 保存面向人工阅读的技术方案，通常由 DeepSeek 或 html-doc-style 生成。 |
 | `02-方案审核/` | 必需 | 保存 Codex 对技术方案的审阅结论，作为开发前 Gate。 |
 | `03-实现记录/` | 建议 | 保存 Codex 实现摘要、涉及模块、验证情况、未完成项和残余风险。 |
+| `04-交付总结/` | 建议 | 保存最终交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人。 |
 | `04-代码审核/` | 按需必需 | 保存 DeepSeek 或其他 Reviewer 的代码审查报告。 |
 | `05-测试验收/` | 按需必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
 | `manifest.md` | 建议 | 保存该需求的产物索引、当前状态和下一步。 |
@@ -87,6 +89,7 @@ library/{requirement_id}/
 - Replaced Artifact Paths：仅记录旧路径、拆分文件或迁移文件被稳定路径替代的情况。
 - Re-Gate Records：变更后从哪个节点重新 Gate、结果是什么、下一步是什么。
 - Stage Summaries：记录不作为 Gate 的阶段性总结，例如测试后的上线准入结论。
+- Speckit Process Products：记录 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md` 的路径、状态和版本；manifest 是状态权威源。
 - Speckit Sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。
 
 Activity Log 应记录工作流动作，而不是聊天全文。
@@ -210,6 +213,8 @@ library/20260629-ai-sdlc-standard/
 │   └── 20260629-ai-sdlc-standard__方案审核.html
 ├── 03-实现记录/
 │   └── 20260629-ai-sdlc-standard__实现记录.md
+├── 04-交付总结/
+│   └── 20260629-ai-sdlc-standard__交付总结.md
 ├── 04-代码审核/
 │   └── 20260629-ai-sdlc-standard__代码审核.html
 ├── 05-测试验收/
@@ -231,8 +236,10 @@ library/{requirement_id}/ = 人工交接与门禁视图
 具体规则：
 
 - `specs/spec.md`、`plan.md`、`tasks.md` 仍由 SpecKit 工作流维护。
+- `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、`specs/{feature}/debug-guide.md` 和 `specs/{feature}/observability.md` 记录新轨实现阶段过程事实；其中 `specs/{feature}/workflow-status.md` 只是机器侧快照，manifest 是状态权威源。
 - `library/{requirement_id}/01-技术方案/` 可以引用或渲染 `specs/**`，但不是 SpecKit 写入源。
 - `library/{requirement_id}/03-实现记录/` 可以引用 tasks 完成情况、代码 diff 和测试命令。
+- `library/{requirement_id}/04-交付总结/` 汇总最终交付范围、验证结果、遗留风险、发布或回滚说明。
 - 如果 `library` 与 `specs/**` 不一致，必须以 `specs/**` 和当前代码事实为准，并在后续审核或实现记录中说明差异。
 
 ## 进入下一节点的判断规则
@@ -270,6 +277,16 @@ library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
 ```
 
 实现记录用于说明 Codex 实际改了什么、跑过什么验证、还有哪些残余风险，便于 DeepSeek 或其他 Reviewer 审查。
+
+### 进入交付总结
+
+最终交付前建议存在或建议生成：
+
+```text
+library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+```
+
+交付总结用于说明最终交付范围、验证结果、遗留风险、发布或回滚说明和下一责任人。
 
 ### 进入修复
 

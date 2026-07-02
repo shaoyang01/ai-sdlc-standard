@@ -105,7 +105,13 @@ Use this structure:
 
 - Specs:
   - Route:
+  - Implementation:
+  - Workflow Status Snapshot:
+  - Debug Guide:
+  - Observability:
 - DocFlow:
+  - Implementation Record:
+  - Delivery Summary:
 - Code:
 - Knowledge:
 
@@ -132,6 +138,7 @@ Use this structure:
 - Activity Log:
 - Gate Records:
 - Route Artifact:
+- Process Products:
 - Change History:
 - Speckit Sync:
 - Reconcile:
@@ -163,6 +170,20 @@ For each stage, recommend manifest updates with:
 - Gate result.
 - Blocking items.
 - Next action.
+
+For the Implement stage, include process product outputs or explicit
+not-applicable reasons for:
+
+- `specs/{feature}/implementation.md`
+- `specs/{feature}/workflow-status.md`
+- `specs/{feature}/debug-guide.md`
+- `specs/{feature}/observability.md`
+- `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`
+- `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`
+
+`manifest.md` is the status authority; manifest is status authority. A workflow status snapshot must be
+reported as a process product only; it must not override manifest Current Stage,
+Current Status, Activity Log, Gate Records, Re-Gate Records, or Blocking Issues.
 
 When the pipeline stops, record:
 

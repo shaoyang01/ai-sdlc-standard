@@ -13,6 +13,10 @@ input_artifacts:
   - specs/{feature}/spec.md
   - specs/{feature}/plan.md
   - specs/{feature}/tasks.md
+  - optional specs/{feature}/implementation.md
+  - optional specs/{feature}/workflow-status.md
+  - optional specs/{feature}/debug-guide.md
+  - optional specs/{feature}/observability.md
   - analyze gate result from sdlc-speckit-analyze
   - library/{requirement_id}/01-技术方案/*
   - library/{requirement_id}/02-方案审核/*
@@ -20,8 +24,13 @@ input_artifacts:
 output_artifacts:
   - production code changes
   - task status updates
+  - optional specs/{feature}/implementation.md
+  - optional specs/{feature}/workflow-status.md
+  - optional specs/{feature}/debug-guide.md
+  - optional specs/{feature}/observability.md
   - verification evidence
   - optional library/{requirement_id}/03-实现记录/*
+  - optional library/{requirement_id}/04-交付总结/*
   - manifest.md Activity Log or Re-Gate update recommendation
 required_checklist:
   - checklists/implementation-checklist.md
@@ -34,7 +43,9 @@ side_effects:
   - modify production code for approved tasks
   - add or update tests for approved tasks
   - update specs/{feature}/tasks.md status when verified
+  - produce or recommend implementation, workflow-status, debug, and observability process products
   - produce or recommend implementation record
+  - produce or recommend delivery summary
   - recommend manifest.md Activity Log or Re-Gate updates
 can_modify_code: true
 can_modify_docs: true
@@ -67,6 +78,9 @@ blocking_conditions:
 - 更新已完成任务状态。
 - 只允许更新已完成且已验证任务的状态，不得改写任务描述、任务范围或任务顺序。
 - 输出实现摘要、验证证据、未完成项和下一步建议。
+- 为 frontend/RN 和通用实现阶段输出或建议输出新轨过程产物：
+  `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、
+  `observability.md`、`03-实现记录` 和 `04-交付总结`。
 
 它不负责：
 
@@ -93,6 +107,7 @@ blocking_conditions:
 建议输入：
 
 - `library/{requirement_id}/manifest.md`
+- 已存在的 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 或 `observability.md`
 - 已接受风险记录。
 - Re-Gate Records。
 - Replaced Artifact Paths。
@@ -139,7 +154,9 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Verification Results。
 - Blocking Or Unfinished Items。
 - Re-Gate Recommendation。
+- Process Products Produced Or Recommended。
 - Implementation Record Recommendation。
+- Delivery Summary Recommendation。
 - Manifest Update Recommendation。
 - Next Step。
 
@@ -156,7 +173,9 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改生产代码。
 - 新增或修改测试。
 - 更新任务状态。
+- 生成或建议生成 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md`。
 - 生成或建议生成 `03-实现记录`。
+- 生成或建议生成 `04-交付总结`。
 - 建议更新 manifest Activity Log。
 - 建议创建 Re-Gate Records。
 
@@ -166,6 +185,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改已审核方案或审核结论。
 - 用实现补造未定义业务规则。
 - 回写 `.specify/business_domain/**`。
+- 将 `workflow-status.md` 当作状态权威源；manifest is status authority。
+- 写入旧版过程产物文件名作为兼容格式。
 - 隐藏失败验证。
 - 覆盖或回退无关用户改动。
 
@@ -180,6 +201,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 现有代码事实与已批准假设冲突。
 - 编译失败、核心测试失败或必要验证无法定义。
 - 无关本地改动导致无法安全修改目标文件。
+- 必需过程产物会与 manifest 状态权威记录冲突。
+- 用户要求把旧版过程产物文件名作为兼容输出。
 
 ## Gate Requirements
 
@@ -196,5 +219,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 
 - 已完成任务必须有验证证据。
 - 实现完成后必须生成或建议生成 `03-实现记录`。
+- 实现完成后必须生成或建议生成 `library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md`。
+- frontend/RN 实现完成后必须生成或建议生成实现、debug、observability 过程产物，并在需要状态快照时生成或建议生成 `workflow-status.md`；manifest is status authority。
+- 最终交付时必须生成或建议生成 `library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md`。
 - 无 Blocking Items 时，可进入 `sdlc-code-review-normalizer` 或后续 `sdlc-speckit-sync`。
 - 存在规格、计划或任务缺口时，必须回到最早受影响节点，并在 manifest Re-Gate Records 中记录。

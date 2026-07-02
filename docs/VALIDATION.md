@@ -28,6 +28,7 @@ ruby scripts/validate-skill-contracts.rb
 9. 新版 sdlc-* Skill 是否把旧版 .specify/memory、.specify/workflow、.specify/coding_guide 当作正常输入。
 10. bootstrap 脚本是否具备 project-context candidate 策略，且不再依赖单一 --force。
 11. New-Rail Enhanced Pipeline 是否声明 ProjectWorkflowGuide / ProjectDocumentationGuide、`sdlc-speckit-*` only、development-time fixture、Clarify 边界确认策略和 legacy path no-read/no-write 红线。
+12. Frontend Process Products 是否声明并接入 implement / pipeline / reconcile：`specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、`observability.md`、`03-实现记录`、`04-交付总结`，且 manifest is status authority。
 ```
 
 成功时输出：
@@ -257,6 +258,43 @@ backend-business-service
 7. `sdlc-speckit-sync` create-if-missing 必须从 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary 读取 Project Type Profiles，并记录 Selected L4 Template。
 8. 通用 L4 skeleton 不得作为所有项目类型的唯一默认输出；只能在缺少 profile 时记录 conservative backend-business-service fallback。
 9. 不得引入 legacy Skill 或 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` runtime dependency。
+```
+
+## Frontend Process Products 校验
+
+新轨实现阶段必须有明确过程产物落点，不恢复旧版文件名作为兼容格式。
+
+必须声明：
+
+```text
+specs/{feature}/implementation.md
+specs/{feature}/workflow-status.md
+specs/{feature}/debug-guide.md
+specs/{feature}/observability.md
+library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md
+library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md
+manifest is status authority
+```
+
+检查点：
+
+```text
+1. sdlc-speckit-implement 必须知道这些产物的输出边界、生成建议和 stop conditions。
+2. sdlc-speckit-pipeline 的 Stage Timeline、Produced Or Reused Artifacts 和 Manifest Recommendation 必须包含过程产物。
+3. sdlc-speckit-code-doc-reconcile 必须检查 implementation/workflow/debug/observability 与代码和 manifest 的 drift。
+4. workflow-status.md 只能作为机器侧状态快照；manifest 是状态权威源。
+5. 旧版文件名只能作为 Legacy Semantic Mapping Source Only 出现在说明中，不得作为 runtime input、output path 或兼容格式。
+```
+
+旧版语义映射来源：
+
+```text
+implementation-details.md
+SDD_WORKFLOW_STATUS.md
+API_DEBUG_GUIDE.md
+QUICK_DEBUG_REFERENCE.md
+LOGGING_IMPLEMENTATION.md
+FINAL_SUMMARY.md
 ```
 
 ## Speckit specify 产品形状校验

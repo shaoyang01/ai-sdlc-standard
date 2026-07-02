@@ -269,6 +269,52 @@ ROUTE_ARTIFACT_RUNTIME_TERMS = [
   "Legacy document write target: none"
 ].freeze
 
+FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS = [
+  "specs/{feature}/implementation.md",
+  "specs/{feature}/workflow-status.md",
+  "specs/{feature}/debug-guide.md",
+  "specs/{feature}/observability.md",
+  "library/{requirement_id}/03-实现记录/{requirement_id}__实现记录.md",
+  "library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md",
+  "manifest is status authority"
+].freeze
+
+FRONTEND_PROCESS_PRODUCT_LEGACY_MAPPING_TERMS = [
+  "Legacy Semantic Mapping Source Only",
+  "implementation-details.md",
+  "SDD_WORKFLOW_STATUS.md",
+  "API_DEBUG_GUIDE.md",
+  "QUICK_DEBUG_REFERENCE.md",
+  "LOGGING_IMPLEMENTATION.md",
+  "FINAL_SUMMARY.md"
+].freeze
+
+FRONTEND_PROCESS_PRODUCT_SCHEMA_TERMS = [
+  "File Changes",
+  "Key Technical Decisions",
+  "Frontend State And Interaction Implementation",
+  "Backend Or Mock Boundary",
+  "API Debug",
+  "Quick Debug Reference",
+  "Mock / Real Data Switching",
+  "Reproduction Steps",
+  "Logging",
+  "Metrics",
+  "Frontend Analytics",
+  "Error State Observation",
+  "Debug Logs"
+].freeze
+
+FRONTEND_PROCESS_PRODUCT_RECONCILE_TERMS = [
+  "Process Product Drift",
+  "implementation.md",
+  "workflow-status.md",
+  "debug-guide.md",
+  "observability.md",
+  "code diff",
+  "manifest"
+].freeze
+
 BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS = [
   "ProjectWorkflowGuide.md",
   "ProjectDocumentationGuide.md",
@@ -750,6 +796,99 @@ route_artifact_paths.each do |relative_path, required_terms|
     text = File.read(path)
     required_terms.each do |term|
       errors << "#{relative_path} missing route artifact requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+frontend_process_product_paths = {
+  "skills/sdlc-speckit-implement/references/process-products.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS +
+    FRONTEND_PROCESS_PRODUCT_LEGACY_MAPPING_TERMS +
+    FRONTEND_PROCESS_PRODUCT_SCHEMA_TERMS,
+  "skills/sdlc-speckit-implement/SKILL.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS + [
+      "process-products.md",
+      "Process Products Produced Or Recommended",
+      "Stop Conditions"
+    ],
+  "skills/sdlc-speckit-implement/references/output-and-manifest.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS + [
+      "Process Products Produced Or Recommended",
+      "Workflow Status Snapshot",
+      "Delivery Summary"
+    ],
+  "skills/sdlc-speckit-implement/references/execution-boundaries.md" => [
+    "specs/{feature}/implementation.md",
+    "specs/{feature}/workflow-status.md",
+    "specs/{feature}/debug-guide.md",
+    "specs/{feature}/observability.md",
+    "library/{requirement_id}/04-交付总结/*",
+    "manifest is status authority",
+    "legacy process filenames"
+  ],
+  "skills/sdlc-speckit-implement/references/verification-and-recording.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
+      "library/{requirement_id}/04-交付总结/{requirement_id}__交付总结.md",
+      "manifest.md is the status authority"
+    ],
+  "skill-contracts/known-skills/sdlc-speckit-implement.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS + [
+      "Process Products Produced Or Recommended",
+      "Delivery Summary Recommendation"
+    ],
+  "skills/sdlc-speckit-pipeline/SKILL.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS + [
+      "Stage Timeline",
+      "Produced Or Reused Artifacts"
+    ],
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS + [
+      "Stage Timeline",
+      "Produced Or Reused Artifacts",
+      "Process Products",
+      "Manifest Update Recommendation"
+    ],
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS,
+  "skills/sdlc-speckit-code-doc-reconcile/SKILL.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) +
+    FRONTEND_PROCESS_PRODUCT_RECONCILE_TERMS,
+  "skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
+      "library/{requirement_id}/04-交付总结/*",
+      "manifest.md is the status authority"
+    ],
+  "skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) +
+    FRONTEND_PROCESS_PRODUCT_RECONCILE_TERMS,
+  "skills/sdlc-speckit-code-doc-reconcile/references/output-and-manifest.md" =>
+    FRONTEND_PROCESS_PRODUCT_RECONCILE_TERMS,
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
+      "library/{requirement_id}/04-交付总结/*",
+      "Process Product Drift",
+      "manifest is status authority"
+    ],
+  "templates/artifact-manifest-template.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS,
+  "ai-sdlc/artifact-storage.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
+      "04-交付总结",
+      "manifest 是状态权威源"
+    ],
+  "docs/VALIDATION.md" =>
+    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS +
+    FRONTEND_PROCESS_PRODUCT_LEGACY_MAPPING_TERMS
+}.freeze
+
+frontend_process_product_paths.each do |relative_path, required_terms|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    required_terms.each do |term|
+      errors << "#{relative_path} missing frontend process product requirement #{term}" unless text.include?(term)
     end
   else
     errors << "missing #{relative_path}"
