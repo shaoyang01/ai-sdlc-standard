@@ -508,6 +508,7 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
   "manifest.yaml",
   "ai-sdlc/",
   "skills/",
+  "package.json-only",
   ".specify/entry-coverage-profile.yaml",
   ".specify/entry-coverage-profile.candidate.yaml",
   ".specify/reports/entry_coverage_profile_bootstrap_report.md",
@@ -1404,6 +1405,51 @@ analyze_gate_strengthening_paths.each do |relative_path, required_terms|
     end
   else
     errors << "missing #{relative_path}"
+  end
+end
+
+bootstrap_entry_profile_script = File.join(ROOT, "scripts/bootstrap-entry-coverage-profile.sh")
+if File.exist?(bootstrap_entry_profile_script)
+  text = File.read(bootstrap_entry_profile_script)
+  if text.match?(/rel\s*==\s*["']package\.json["']/)
+    errors << "scripts/bootstrap-entry-coverage-profile.sh must not let package.json-only trigger frontend-application"
+  end
+end
+
+analyze_inputs_path = File.join(ROOT, "skills/sdlc-speckit-analyze/references/analyze-inputs.md")
+if File.exist?(analyze_inputs_path)
+  text = File.read(analyze_inputs_path)
+  duplicate_sentence = 'Do not approve Analyze readiness by treating a missing profile as "not applicable".'
+  count = text.scan(duplicate_sentence).size
+  errors << "skills/sdlc-speckit-analyze/references/analyze-inputs.md repeats missing-profile not applicable sentence" unless count == 1
+end
+
+analyze_status_paths = [
+  "skills/sdlc-speckit-analyze/references/analyze-gate-check.md",
+  "skills/sdlc-speckit-analyze/references/analyze-inputs.md",
+  "skills/sdlc-speckit-analyze/references/output-and-manifest.md",
+  "skill-contracts/known-skills/sdlc-speckit-analyze.md",
+  "docs/VALIDATION.md"
+].freeze
+
+analyze_status_forbidden_patterns = [
+  /Analyze Gate is\s+`FAIL`\s*\/\s*`BLOCKED`/i,
+  /Analyze Gate is\s+`PENDING_CONFIRMATION`/i,
+  /Analyze Gate 必须\s*`BLOCKED`/,
+  /Analyze Gate 必须\s*`PENDING_CONFIRMATION`/,
+  /Analyze Gate 必须\s*\n`PENDING_CONFIRMATION`/,
+  /Analyze Gate 必须\s*\n`PENDING_CONFIRMATION` 或 `BLOCKED`/
+].freeze
+
+analyze_status_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  next unless File.exist?(path)
+
+  text = File.read(path)
+  analyze_status_forbidden_patterns.each do |pattern|
+    if text.match?(pattern)
+      errors << "#{relative_path} treats BLOCKED or PENDING_CONFIRMATION as final Analyze Gate Result"
+    end
   end
 end
 

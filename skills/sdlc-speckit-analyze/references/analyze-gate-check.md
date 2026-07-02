@@ -26,12 +26,12 @@ Analyze Gate must run or require the standard runner before marking Analyze clea
 ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
 ```
 
-If `.specify/entry-coverage-profile.yaml` is missing, Analyze Gate is
-`FAIL` / `BLOCKED`.
+If `.specify/entry-coverage-profile.yaml` is missing, Analyze Gate Result is
+`FAIL`; record the missing profile as a `BLOCKED` Blocking Item.
 
-If only `.specify/entry-coverage-profile.candidate.yaml` exists, Analyze Gate is
-`PENDING_CONFIRMATION` or `FAIL` until the candidate is reviewed and promoted to
-`.specify/entry-coverage-profile.yaml`.
+If only `.specify/entry-coverage-profile.candidate.yaml` exists, Analyze Gate
+Result is `FAIL`; record Required Action status as `PENDING_CONFIRMATION` until
+the candidate is reviewed and promoted to `.specify/entry-coverage-profile.yaml`.
 
 Required Action:
 
@@ -124,7 +124,7 @@ with source, evidence, and owner.
 ## Business-Domain L4 Missing
 
 If entry coverage reports indicate missing or empty business_domain L4
-documents, Analyze Gate is Blocking. Required Action must route to
+documents, Analyze Gate Result is `FAIL`; record a Blocking Item. Required Action must route to
 `sdlc-speckit-sync` create-if-missing or business-domain bootstrap, not to
 implementation.
 

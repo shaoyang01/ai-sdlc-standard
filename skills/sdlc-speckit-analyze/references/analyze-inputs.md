@@ -39,8 +39,9 @@ Analyze Gate must not skip entry coverage audit.
 Stop with `FAIL` when `.specify/entry-coverage-profile.yaml` is missing.
 
 If `.specify/entry-coverage-profile.candidate.yaml` exists but the stable
-`.specify/entry-coverage-profile.yaml` does not exist, stop with
-`PENDING_CONFIRMATION` or `FAIL` and require a human to confirm the candidate.
+`.specify/entry-coverage-profile.yaml` does not exist, stop with Analyze Gate
+Result `FAIL`, record Required Action status `PENDING_CONFIRMATION`, and require
+a human to confirm the candidate.
 
 Required Action must point to one of:
 
@@ -49,9 +50,6 @@ ${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-entry-coverage-profile.sh --dry-run
 ${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-entry-coverage-profile.sh
 ${AI_SDLC_STANDARD_HOME}/scripts/bootstrap-current-project.sh --here
 ```
-
-Do not approve Analyze readiness by treating a missing profile as "not
-applicable".
 
 Do not approve Analyze readiness by treating a missing profile as "not applicable".
 

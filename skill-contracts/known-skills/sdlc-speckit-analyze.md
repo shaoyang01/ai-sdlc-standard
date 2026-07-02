@@ -126,9 +126,9 @@ blocking_conditions:
 - `sdlc-speckit-tasks` 不存在 Blocking Items。
 - `specs/{feature}/route.md` 已存在且 Project Type Profiles 与 entry coverage profile 一致。
 - `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 均为当前有效版本。
-- `.specify/entry-coverage-profile.yaml` 已存在；缺失时 Analyze Gate 必须 `FAIL` / `BLOCKED`。
+- `.specify/entry-coverage-profile.yaml` 已存在；缺失时 Analyze Gate Result 必须为 `FAIL`，并记录 `BLOCKED` Blocking Item。
 - 不允许因为缺 profile 而跳过 entry coverage audit。
-- 如果只有 `.specify/entry-coverage-profile.candidate.yaml`，Analyze Gate 必须 `PENDING_CONFIRMATION` 或 `FAIL`，并要求人工确认 candidate。
+- 如果只有 `.specify/entry-coverage-profile.candidate.yaml`，Analyze Gate Result 必须为 `FAIL`，Required Action status 为 `PENDING_CONFIRMATION`，并要求人工确认 candidate。
 - Required Action 必须指向 `scripts/bootstrap-entry-coverage-profile.sh` 或 full bootstrap。
 - Entry coverage reports 必须存在，且必须解析 TSV 字段，不得 grep 整个 markdown 判断 blocker。
 - `entry_inventory.tsv` 必须按字段读取 `classification`、`classification_reason`、`match_strength`、`match_reason`、`requirement_scope`。

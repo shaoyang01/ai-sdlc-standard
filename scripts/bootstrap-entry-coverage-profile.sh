@@ -185,8 +185,7 @@ end
 
 def detect_profiles_from_code(files)
   has_frontend = files.any? do |rel|
-    rel == "package.json" ||
-      rel.match?(%r{\Asrc/(pages|views|screens|components|component|navigation|router|routers|routes|store|stores|models|actions|api|services)/}) ||
+    rel.match?(%r{\Asrc/(pages|views|screens|components|component|navigation|router|routers|routes|store|stores|models|actions|api|services)/}) ||
       rel.match?(%r{/src/(pages|views|screens|components|component|navigation|router|routers|routes|store|stores|models|actions|api|services)/}) ||
       rel.match?(%r{src/main/webapp/}) ||
       rel.end_with?(".jsp", ".ftl", ".vm")

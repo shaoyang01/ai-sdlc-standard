@@ -97,7 +97,7 @@ scripts/bootstrap-speckit-project.sh <target-project-path> --dry-run
 
 | 样例仓库形态 | 期望 project type profiles | 期望 entry profile 重点 |
 | --- | --- | --- |
-| 纯后端业务服务，如 `logistics-center` | `backend-business-service` | `controller`、`rpc_provider`、`message_listener`、`scheduled_job`，不得因为普通 `package.json` 或静态资源误判为前端。 |
+| 纯后端业务服务，如 `logistics-center` | `backend-business-service` | `controller`、`rpc_provider`、`message_listener`、`scheduled_job`，不得因为普通 `package.json` 或静态资源误判为前端；package.json-only 不能触发 frontend-application。 |
 | 后端管理/配置混合系统，如 `pfms` | `admin-mixed-workflow` + `backend-business-service` | `controller`、`worker`、`scheduled_job`、`mcq_consumer`、`oas_event`、`data_console`、`spi`、`rpc_provider`。 |
 | React Native / 纯前端应用，如 `pfms-rn` | `frontend-application` | `route`、`page`、`component`、`store_action`、`api_client`、`popup`、`navigation_guard`；Android/iOS native shell 不应触发 Java backend 风格入口。 |
 | Spark/Flink/ETL 计算项目，如 `tms-flink-finance` | `data-pipeline-etl` | `spark_job`、`spark_online_etl`、`flink_main`、`flink_process_function`、`mcq_connector`，不应退化成普通 Controller/Service 覆盖模型。 |
@@ -537,9 +537,10 @@ specs/{feature}/tasks.md
 .specify/reports/entry_coverage/unarchived_services.md
 ```
 
-缺 `.specify/entry-coverage-profile.yaml` 时 Analyze Gate 必须 `BLOCKED`。
-如果只有 `.specify/entry-coverage-profile.candidate.yaml`，Analyze Gate 必须
-`PENDING_CONFIRMATION` 或 `BLOCKED`，Required Action 指向：
+缺 `.specify/entry-coverage-profile.yaml` 时 Analyze Gate Result 必须为 `FAIL`，
+并记录 `BLOCKED` Blocking Item。
+如果只有 `.specify/entry-coverage-profile.candidate.yaml`，Analyze Gate Result
+必须为 `FAIL`，Required Action status 为 `PENDING_CONFIRMATION`，Required Action 指向：
 
 ```bash
 $AI_SDLC_STANDARD_HOME/scripts/bootstrap-entry-coverage-profile.sh --dry-run
