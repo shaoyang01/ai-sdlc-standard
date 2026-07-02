@@ -19,14 +19,50 @@
 ## Development Path Decision
 
 - Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION / undecided
+- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+- Parent Requirement ID:
+- Current Change Scope:
+- Original Requirement Context:
+- Aggregate Requirement Scope:
+- Original Implemented / Approved Scope:
+- Out of Delta Scope:
 - Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
+- Delta Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
+- Aggregate Complexity: reference only
 - Complexity Triggers:
+- Delta Complexity Triggers:
+- Ignored Aggregate Triggers:
 - Full SDD Override: none / user_requested / later_gate_required
 - Decided By:
 - Decision Source: sdlc-solution-reviewer / user / sdlc-gate-runner / other
+- Development Path Decision Source:
 - Decision Artifact:
 - Reason:
 - Follow-up:
+
+Manifest rule: when a Change Event exists, do not reuse an old Development Path
+Decision as the new delta route. Record a new Re-Gate Decision or Delta
+Development Path Decision based on Current Change Scope / Delta Scope.
+
+## Delta Development Path Decision
+
+- Change Event:
+- Parent Requirement ID:
+- Same Requirement Decision:
+- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+- Current Change Scope / Delta Scope:
+- Aggregate Requirement Scope:
+- Aggregate Complexity: reference only
+- Delta Complexity:
+- Delta Complexity Triggers:
+- Ignored Aggregate Triggers:
+- Re-Gate Source:
+- Earliest Affected Node:
+- Decision:
+- Decision Source:
+- Decision Artifact:
+- Required Re-Gate:
+- Status: open / passed / blocked / superseded
 
 ## Artifact Index
 
@@ -48,9 +84,9 @@
 
 ## Change History
 
-| Change ID | Date | Source | Classification | Affected Node | Artifact | Previous Version | New Version | Summary | Re-Gate Required | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  | Requirement Change / Specification Missing / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  |  |  |  |  |  | yes/no | open/resolved |
+| Change ID | Date | Source | Classification | Parent Requirement ID | Decision Scope | Current Change Scope | Affected Node | Artifact | Previous Version | New Version | Summary | Re-Gate Required | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  | yes/no | open/resolved |
 
 ## Replaced Artifact Paths
 
@@ -63,9 +99,9 @@ Normal updates to the same stable file use `Version` and `Change History`.
 
 ## Re-Gate Records
 
-| Date | Trigger | From Node | Upstream Artifact | Upstream Version | Required Gate | Gate Artifact | Gate Artifact Version | Result | Next Step |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK |  |
+| Date | Trigger | Parent Requirement ID | Decision Scope | Current Change Scope | From Node | Upstream Artifact | Upstream Version | Required Gate | Gate Artifact | Gate Artifact Version | Result | Development Path Decision Source | Next Step |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK |  |  |
 
 ## Gate Decisions
 

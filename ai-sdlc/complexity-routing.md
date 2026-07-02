@@ -22,6 +22,29 @@
 
 `BLOCKED_UNKNOWN` 表示缺少关键事实，不能可靠分级。它必须路由到 `BLOCKED_NEEDS_REVISION`，而不是在 `MEDIUM` 和 `COMPLEX` 之间猜测。
 
+## Decision Scope
+
+复杂度判断必须先确定 Decision Scope：
+
+```text
+Same Requirement Decision:
+Requirement Supplement:
+Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+```
+
+- `FULL_REQUIREMENT`：从完整需求范围判断复杂度。
+- `DELTA_CHANGE`：补充需求、Requirement Change、Rework、Specification Missing、测试或 Review 暴露规格遗漏时，只基于 Current Change Scope / Delta Scope 判断复杂度。
+
+当 Decision Scope = `DELTA_CHANGE`：
+
+- Aggregate Requirement Scope 只能作为上下文。
+- Aggregate Complexity 只能标记为 `reference only`。
+- 原需求中的 DB/MQ/schedule/多模块/长期知识库沉淀等复杂度触发因素必须进入 Ignored Aggregate Triggers，不能自动成为 Delta Complexity Triggers。
+- Development Path Decision must be based on Delta Scope.
+- Do not route by aggregate complexity for requirement supplements.
+- 只有 Delta Scope 自身触发强复杂度因素时，才能输出 `SPECKIT_PIPELINE_REQUIRED`。
+- 缺少 Delta Scope 或影响范围不清时，输出 `BLOCKED_UNKNOWN` 并路由到 `BLOCKED_NEEDS_REVISION`。
+
 ## SIMPLE
 
 用于范围窄、边界明确、风险低的需求。
@@ -128,8 +151,15 @@
 
 方案审核产物必须包含：
 
+- Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
 - Complexity: `SIMPLE` / `MEDIUM` / `COMPLEX` / `BLOCKED_UNKNOWN`
+- Delta Complexity: `SIMPLE` / `MEDIUM` / `COMPLEX` / `BLOCKED_UNKNOWN`
+- Aggregate Complexity: reference only
 - Complexity Triggers: 触发因素列表
+- Delta Complexity Triggers
+- Ignored Aggregate Triggers
+- Re-Gate Source
+- Earliest Affected Node
 - Development Path Decision: `DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` / `BLOCKED_NEEDS_REVISION`
 - Rationale: 为什么选择该路径
 - Full SDD Override: `none` / `user_requested` / `later_gate_required`
@@ -155,6 +185,17 @@
 - 可以从 `DIRECT_IMPLEMENTATION` 改为 `SPECKIT_PIPELINE_REQUIRED`。
 - Full SDD Override 必须记录为 `later_gate_required`。
 - 必须写入 Change History 或 Re-Gate Records。
+
+## Delta Change Mode
+
+补充需求的常见路由：
+
+| Delta Scope | Delta Complexity | Development Path Decision | 说明 |
+| --- | --- | --- | --- |
+| 遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件、局部兼容规则，且 01/02 已覆盖 | `SIMPLE` / `MEDIUM` | `DIRECT_IMPLEMENTATION` | 原需求复杂度只作为 context。 |
+| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、跨模块、状态机或长期知识库沉淀 | `COMPLEX` | `SPECKIT_PIPELINE_REQUIRED` | 理由必须来自 Delta Complexity Triggers。 |
+| Delta 影响行为但技术方案未更新 | `BLOCKED_UNKNOWN` | `BLOCKED_NEEDS_REVISION` | Earliest Affected Node = `01-技术方案`。 |
+| Delta 已写入方案但方案审核未覆盖 | `BLOCKED_UNKNOWN` | `BLOCKED_NEEDS_REVISION` | Required Re-Gate = `02-方案审核`。 |
 
 ## 禁止事项
 

@@ -56,6 +56,9 @@ blocking_conditions:
   - `DIRECT_IMPLEMENTATION`
   - `SPECKIT_PIPELINE_REQUIRED`
   - `BLOCKED_NEEDS_REVISION`
+- 支持 Delta Change Mode：对 Requirement Supplement、Requirement Change、Rework、Specification Missing 或 Feedback-Driven Change，Development Path Decision must be based on Delta Scope。
+- 输出 Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`。
+- 输出 Delta Complexity、Aggregate Complexity: reference only、Delta Complexity Triggers、Ignored Aggregate Triggers、Re-Gate Source、Earliest Affected Node。
 - 输出复杂度分级：
   - `SIMPLE`
   - `MEDIUM`
@@ -124,7 +127,20 @@ library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 - Reviewed Artifact
 - Result: `PASS` / `FAIL` / `PASS_WITH_RISK`
 - Can Continue: yes/no
+- Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
+- Parent Requirement ID
+- Same Requirement Decision
+- Aggregate Requirement Scope
+- Current Change Scope / Delta Scope
+- Original Implemented / Approved Scope
+- Out of Delta Scope
 - Development Path Recommendation
+- Delta Complexity
+- Aggregate Complexity: reference only
+- Delta Complexity Triggers
+- Ignored Aggregate Triggers
+- Re-Gate Source
+- Earliest Affected Node
 - Recommendation Reason
 - Critical / High / Medium / Low
 - Missing Constraint
@@ -145,6 +161,16 @@ library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 | `DIRECT_IMPLEMENTATION` | Complexity 为 `SIMPLE` 或 `MEDIUM`，方案完整、边界清楚、无必须完整 SDD 的复杂协作。 | 进入实现，仍需遵守实现记录和代码审核 Gate。 |
 | `SPECKIT_PIPELINE_REQUIRED` | Complexity 为 `COMPLEX`，或用户明确要求完整 SDD，或后续 Gate 判定直接实现过于冒险。 | 唤醒 `sdlc-speckit-pipeline`。 |
 | `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束 / Complexity 为 `BLOCKED_UNKNOWN`。 | 回到 `01-技术方案` 更新稳定文件版本并重新审核。 |
+
+Delta Change Mode 规则：
+
+- Do not route by aggregate complexity for requirement supplements.
+- Development Path Decision must be based on Delta Scope.
+- Aggregate Complexity: reference only。
+- 原需求中的 DB/MQ/schedule/多模块/长期知识库沉淀等复杂度触发因素必须进入 Ignored Aggregate Triggers，除非 Current Change Scope / Delta Scope 自身触发。
+- Delta Scope 简单/中等且方案审核覆盖后，可以 `DIRECT_IMPLEMENTATION`。
+- Delta Scope 自身复杂时，才可以 `SPECKIT_PIPELINE_REQUIRED`。
+- Delta Scope 缺失、影响范围不清、行为变化但技术方案未更新、或方案审核未覆盖新的 Delta Scope 时，必须 `BLOCKED_NEEDS_REVISION`。
 
 ## Side Effects
 
@@ -209,3 +235,14 @@ library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 
 - Development Path Decision: `SPECKIT_PIPELINE_REQUIRED`
 - Next Step: 唤醒 `sdlc-speckit-pipeline`
+
+如果结果来自 Delta Change Mode，必须建议 manifest 记录：
+
+- Change History
+- Re-Gate Records
+- Current Effective Version
+- Decision Scope
+- Current Change Scope
+- Parent Requirement ID
+- Original Requirement Context
+- Development Path Decision Source

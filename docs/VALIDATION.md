@@ -629,6 +629,77 @@ __snapshots__ / snapshots / mock-data / mock_data
 7. 不读取或写入 legacy `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
 ```
 
+## Delta Change Routing / Supplement Requirement Path 校验
+
+补充需求、规格遗漏、返工或反馈驱动变更不能按完整原需求重新判断 pipeline。
+
+必须识别的输入：
+
+```text
+Requirement Supplement
+Requirement Change
+Rework
+Specification Missing
+Feedback-Driven Change
+已实现后发现遗漏细节
+开发过程中发现方案缺口
+测试或 Review 暴露规格遗漏
+```
+
+同一 requirement_id 下必须区分：
+
+```text
+Parent Requirement ID
+Intake Classification
+Same Requirement Decision
+Change Event Type
+Aggregate Requirement Scope
+Original Implemented / Approved Scope
+Current Change Scope / Delta Scope
+Out of Delta Scope
+Affected Node
+Required Re-Gate
+Re-Gate Records
+Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+```
+
+路由规则：
+
+```text
+1. Aggregate Requirement Scope 只能作为上下文。
+2. Development Path Decision for delta must use Current Change Scope.
+3. 原需求复杂度触发因素只能作为 context，不能作为 delta route trigger。
+4. package / pipeline route should not use aggregate scope for supplements。
+5. 已实现后补充遗漏细节，应回到最早受影响节点 Re-Gate。
+6. Delta Scope 简单/中等且方案审核通过后，可以 DIRECT_IMPLEMENTATION after delta Re-Gate。
+7. Delta Scope 自身复杂时，才可以 SPECKIT_PIPELINE_REQUIRED。
+8. SPECKIT_PIPELINE_REQUIRED only when delta itself is complex。
+9. 缺少 Delta Scope 或影响范围不清时，必须 BLOCKED_NEEDS_REVISION。
+10. 不得因为原需求是 COMPLEX 就自动要求本次补充走 pipeline。
+```
+
+人工语义验收：
+
+```text
+场景 A:
+原需求很复杂且已经实现。用户说“少了一块细节，在原需求上补一下”。
+期望 Same Requirement: yes；Decision Scope: DELTA_CHANGE；Aggregate triggers only context；
+如果 delta 简单且方案审核通过，Development Path Decision = DIRECT_IMPLEMENTATION。
+
+场景 B:
+原需求已实现，补充内容本身新增 MQ consumer 或 DB schema。
+期望 Same Requirement: yes；Decision Scope: DELTA_CHANGE；Delta Complexity = COMPLEX；
+Development Path Decision = SPECKIT_PIPELINE_REQUIRED 或 BLOCKED_NEEDS_REVISION，理由来自 delta 本身。
+
+场景 C:
+补充内容影响行为但没有技术方案新版本。
+期望 BLOCKED_NEEDS_REVISION；Earliest Affected Node = 01-技术方案。
+
+场景 D:
+补充内容业务目标已经独立。
+期望 New Requirement Needed = yes，不把新需求 Gate 混入原 requirement_id。
+```
+
 ## Analyze Gate Strengthening 校验
 
 `sdlc-speckit-analyze` 必须把 route artifact、project_type_profiles、

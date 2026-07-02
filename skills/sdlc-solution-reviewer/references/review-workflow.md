@@ -24,6 +24,8 @@ Resolve these values:
 | Review output | Must target `02-方案审核`. |
 | Manifest | Optional input; recommend updates even if missing. |
 | Repository context | Optional; use when needed to validate implementation risk. |
+| Decision Scope | `FULL_REQUIREMENT` or `DELTA_CHANGE`; infer from Change Event and supplement routing fields. |
+| Same Requirement Decision | Required for Requirement Supplement or Specification Missing review. |
 
 Stop if no technical specification can be found.
 
@@ -39,6 +41,8 @@ Read optional context only when needed:
 - Code files only when the technical specification depends on actual code behavior.
 
 Do not treat chat history as a stable source unless the user explicitly confirms it as requirement input.
+
+For Requirement Supplement or Specification Missing reviews, read the technical specification's Change Event, Parent Requirement ID, Same Requirement Decision, Current Change Scope / Delta Scope, Aggregate Requirement Scope, Original Implemented / Approved Scope, Out of Delta Scope, Earliest Affected Node, Ignored Aggregate Triggers, Aggregate Complexity: reference only, and Re-Gate Records before judging complexity.
 
 ## Step 3: Schema Coverage
 
@@ -105,9 +109,12 @@ Testing gaps that prevent validating the core requirement are Critical or High.
 After issue classification:
 
 1. Decide Gate Result.
-2. Decide Development Path Recommendation.
-3. Explain why.
-4. List required fixes before the next stage.
-5. Recommend manifest updates.
+2. Decide Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`.
+3. If Decision Scope = `DELTA_CHANGE`, decide Delta Complexity from Current Change Scope / Delta Scope and keep Aggregate Complexity as reference only.
+4. Decide Development Path Recommendation.
+5. Explain why.
+6. List required fixes before the next stage.
+7. Recommend manifest updates.
 
 Never recommend direct implementation when Critical or unaccepted High issues exist.
+Do not route by aggregate complexity for requirement supplements; Development Path Decision must be based on Delta Scope.

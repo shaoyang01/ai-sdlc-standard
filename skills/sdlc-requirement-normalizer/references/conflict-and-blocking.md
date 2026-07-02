@@ -37,6 +37,12 @@ Continue with explicit notes when:
 
 Treat input as a change or rework when it mentions:
 
+- "补充一下"
+- "少了一块"
+- "刚刚实现完发现漏了"
+- "不是完整需求"
+- "在原需求上补一个细节"
+- "还是同一个需求"
 - "需求变了"
 - "不是这个意思"
 - "理解错了"
@@ -48,10 +54,13 @@ Treat input as a change or rework when it mentions:
 
 Also detect change or rework when new input contradicts an existing current artifact.
 
+Treat "已实现后发现遗漏细节", "开发过程中发现方案缺口", "测试或 Review 暴露规格遗漏", and any Specification Missing as Same Requirement candidates when the business goal is unchanged.
+
 ## Same Requirement Or New Requirement
 
 Default to the same `requirement_id` when:
 
+- Intake Classification is Requirement Supplement, Requirement Change, Rework, Specification Missing, or Feedback-Driven Change and the business goal is unchanged.
 - The business goal is unchanged.
 - The change only adds edge cases, compatibility rules, or acceptance details.
 - The implementation approach changes but the user-facing goal remains the same.
@@ -64,6 +73,26 @@ Recommend a new `requirement_id` when:
 - The original requirement is already completed and the input is a follow-up enhancement.
 - Keeping the change in the old flow would make Gate decisions unreadable.
 - The user explicitly asks to split it.
+
+For same-requirement supplements, always output:
+
+```text
+Same Requirement Decision:
+Same Requirement: yes
+Parent Requirement ID:
+New Requirement Needed: no
+Current Change Scope / Delta Scope:
+Aggregate Requirement Scope:
+Aggregate Scope Reference:
+Out of Delta Scope:
+Earliest Affected Node:
+Required Re-Gate:
+Decision Scope: DELTA_CHANGE
+Decision Scope Values: FULL_REQUIREMENT / DELTA_CHANGE
+Re-Gate Records:
+```
+
+Block instead of guessing when Current Change Scope / Delta Scope cannot be separated from Aggregate Requirement Scope, or when the supplement may be an independent business goal.
 
 ## Downstream Impact
 

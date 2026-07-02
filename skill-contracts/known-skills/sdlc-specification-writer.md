@@ -48,6 +48,8 @@ blocking_conditions:
 它负责：
 
 - 将已归一化需求、用户确认内容、现有草稿方案或代码上下文整理成 ESS 技术规格。
+- 对 Requirement Supplement、Requirement Change、Rework、Specification Missing、Feedback-Driven Change 保留 Change Event 和 Delta Scope 边界。
+- 在同一 Parent Requirement ID 下区分 Aggregate Requirement Scope、Original Scope Context、Original Implemented / Approved Scope、Current Change Scope / Delta Scope、Out of Delta Scope。
 - 生成 `01-技术方案` 节点产物。
 - 保留 In Scope / Out of Scope、行为约束、异常处理、兼容性、测试方案等关键章节。
 - 明确哪些内容是事实、哪些是待确认事项。
@@ -117,6 +119,21 @@ library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 
 输出必须遵循 `ess/specification-schema.md`，至少包含：
 
+- Change Event
+- Parent Requirement ID
+- Same Requirement Decision
+- Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
+- Aggregate Requirement Scope
+- Original Scope Context
+- Original Implemented / Approved Scope
+- Current Change Scope / Delta Scope
+- Delta Impact Analysis
+- Affected Artifacts
+- Affected Code / Module Surface
+- Re-Gate Required
+- Required Re-Gate
+- Out of Delta Scope
+- Earliest Affected Node
 - 背景
 - 目标
 - Scope / In Scope / Out of Scope
@@ -138,6 +155,8 @@ library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 - 测试方案
 - 风险
 - 待确认事项
+
+对于补充需求，正文可以更新为当前有效内容，但不得简单把新内容混入原方案正文后丢失边界；必须在 `## 修订记录`、manifest Change History 和 Re-Gate Records 中说明 Change Event、Current Change Scope 和 Required Re-Gate。
 
 输出还应建议更新：
 

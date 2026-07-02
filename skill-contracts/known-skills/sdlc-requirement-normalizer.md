@@ -46,6 +46,9 @@ blocking_conditions:
 
 - 接收飞书、HTML、Markdown、纯文本、截图说明或对话摘要等原始需求来源。
 - 提取业务目标、用户意图、当前问题、初步范围和不确定点。
+- 识别 Requirement Supplement、Requirement Change、Rework、Specification Missing、Feedback-Driven Change。
+- 对业务目标不变的补充需求输出 Same Requirement Decision，并保留 Parent Requirement ID。
+- 区分 Aggregate Requirement Scope 与 Current Change Scope / Delta Scope。
 - 记录来源元数据、来源优先级和冲突点。
 - 生成 `00-需求资料` 节点的标准需求摘要。
 - 为 `sdlc-specification-writer` 提供稳定输入。
@@ -111,6 +114,21 @@ library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 
 - 原始来源
 - 来源元数据
+- Intake Classification
+- Same Requirement Decision
+- Same Requirement: yes / no
+- Parent Requirement ID
+- New Requirement Needed: yes / no
+- Change Event Type
+- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+- Aggregate Requirement Scope
+- Original Implemented / Approved Scope
+- Current Change Scope / Delta Scope
+- Out of Delta Scope
+- Earliest Affected Node
+- Required Re-Gate
+- Re-Gate Records
+- Aggregate Scope Reference
 - 业务目标
 - 用户意图
 - 当前问题
@@ -121,6 +139,19 @@ library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 - 来源冲突
 - 待确认事项
 - 建议下一步
+
+当用户说“补充一下”“少了一块”“刚刚实现完发现漏了”“不是完整需求”“在原需求上补一个细节”“还是同一个需求”时，除非业务目标、交付边界或验收边界已经独立，否则默认：
+
+```text
+Intake Classification: Requirement Supplement
+Same Requirement Decision: yes
+Same Requirement: yes
+Parent Requirement ID: <original requirement_id>
+New Requirement Needed: no
+Decision Scope: DELTA_CHANGE
+```
+
+Aggregate Requirement Scope 只能作为上下文；Current Change Scope / Delta Scope 才是后续开发路径判断对象。
 
 建议更新：
 

@@ -23,6 +23,9 @@ Resolve:
 | Requirement source | Prefer `00-需求资料`; otherwise use user-confirmed requirement content. |
 | Existing draft | Preserve business meaning; normalize structure only. |
 | Output target | Default to Markdown under `01-技术方案`. |
+| Change Event | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change when the input updates an existing requirement. |
+| Parent Requirement ID | Reuse the original requirement_id for same-goal supplements. |
+| Decision Scope | `FULL_REQUIREMENT` for full new requirements, `DELTA_CHANGE` for supplements and specification missing changes. |
 
 Stop if no requirement source or draft exists.
 
@@ -40,6 +43,16 @@ Extract:
 - Pending questions.
 
 If business goal or Scope cannot be determined, stop and ask for clarification.
+
+For supplements or changes, separate:
+
+- Aggregate Requirement Scope: the full original requirement, used as context.
+- Original Scope Context: the original approved or implemented scope.
+- Original Implemented / Approved Scope: what has already passed Gate or been implemented.
+- Current Change Scope / Delta Scope: the only scope this change event is adding or correcting.
+- Out of Delta Scope: original behavior that must not be reimplemented or re-routed by this change.
+
+Do not collapse Current Change Scope into the full original scope.
 
 ## Step 3: Context Use
 
@@ -64,6 +77,26 @@ Keep sections even when details are missing:
 - Use `不涉及` for truly irrelevant sections.
 - Use `待确认` for relevant but unknown sections.
 - Use concise bullets for constraints and tests.
+
+When input is a Requirement Supplement, Requirement Change, Rework, Specification Missing, or Feedback-Driven Change, the technical specification must preserve or generate:
+
+- Change Event
+- Parent Requirement ID
+- Same Requirement Decision
+- Current Change Scope
+- Current Change Scope / Delta Scope
+- Original Scope Context
+- Aggregate Requirement Scope
+- Delta Impact Analysis
+- Affected Artifacts
+- Affected Code / Module Surface
+- Re-Gate Required
+- Required Re-Gate
+- Out of Delta Scope
+- Earliest Affected Node
+- Re-Gate Records
+
+The body may be updated to current effective content, but the revision record must explain this Change Event and the Delta Scope.
 
 ## Step 5: Self-Check
 

@@ -21,6 +21,7 @@ Rules:
 - Use lowercase ASCII words for `short-name`.
 - Keep the name short and business-readable.
 - Do not create a new ID for a supplement or rework when the business goal is unchanged.
+- When input says "补充一下", "少了一块", "刚刚实现完发现漏了", "不是完整需求", "在原需求上补一个细节", or "还是同一个需求", default to Same Requirement and reuse the Parent Requirement ID unless the business goal or acceptance boundary is independent.
 - When the same day and same name already exist, recommend `-01`, `-02`, and so on.
 
 ## Step 2: Identify The Intake Classification
@@ -35,6 +36,35 @@ Classify the request before writing the summary.
 | Rework | Implementation or review reveals a misunderstood requirement. | Earliest affected node |
 | Feedback-Driven Change | Test or review feedback exposes a specification gap. | `05-测试验收` plus affected upstream node |
 | Documentation Correction | Only wording, typo, path, or layout changes. | Activity Log only, unless Gate is affected |
+
+For Requirement Supplement, Requirement Change, Rework, Specification Missing, or Feedback-Driven Change, output the supplement routing fields:
+
+```text
+Intake Classification: Requirement Supplement / Requirement Change / Rework / Feedback-Driven Change
+Same Requirement: yes / no
+Same Requirement Decision:
+Parent Requirement ID:
+New Requirement Needed: yes / no
+Rationale:
+Change Event Type:
+Earliest Affected Node:
+Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+Aggregate Requirement Scope:
+Original Implemented / Approved Scope:
+Current Change Scope / Delta Scope:
+Out of Delta Scope:
+Aggregate Scope Reference:
+Required Re-Gate:
+Re-Gate Records:
+```
+
+Rules:
+
+- Aggregate Requirement Scope is context only.
+- Current Change Scope / Delta Scope is the current routing object for downstream Development Path Decision.
+- Do not merge a supplement into the original scope in a way that hides the Delta Scope boundary.
+- Do not create a new requirement when the business goal is unchanged.
+- New Requirement Needed = yes only when the business goal, delivery boundary, or acceptance boundary is independent.
 
 ## Step 3: Extract Stable Facts
 

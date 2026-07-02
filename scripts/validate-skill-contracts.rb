@@ -687,6 +687,51 @@ BOOTSTRAP_PERFORMANCE_DOC_TERMS = [
   "ios/build"
 ].freeze
 
+DELTA_CHANGE_COMMON_TERMS = [
+  "Delta Scope",
+  "Current Change Scope",
+  "Aggregate Requirement Scope",
+  "Decision Scope",
+  "DELTA_CHANGE",
+  "FULL_REQUIREMENT",
+  "Same Requirement Decision",
+  "Requirement Supplement",
+  "Specification Missing",
+  "Re-Gate Records",
+  "Earliest Affected Node"
+].freeze
+
+DELTA_CHANGE_SOLUTION_REVIEWER_TERMS = [
+  "Delta Complexity",
+  "Aggregate Complexity: reference only",
+  "Ignored Aggregate Triggers",
+  "Development Path Decision must be based on Delta Scope",
+  "Do not route by aggregate complexity for requirement supplements"
+].freeze
+
+DELTA_CHANGE_REQUIREMENT_NORMALIZER_TERMS = [
+  "Requirement Supplement",
+  "Same Requirement",
+  "Parent Requirement ID",
+  "Current Change Scope",
+  "New Requirement Needed"
+].freeze
+
+DELTA_CHANGE_SPECIFICATION_WRITER_TERMS = [
+  "Change Event",
+  "Current Change Scope",
+  "Original Scope Context",
+  "Delta Impact Analysis",
+  "Out of Delta Scope"
+].freeze
+
+DELTA_CHANGE_VALIDATION_TERMS = [
+  "Delta Change Routing",
+  "package / pipeline route should not use aggregate scope for supplements",
+  "DIRECT_IMPLEMENTATION after delta Re-Gate",
+  "SPECKIT_PIPELINE_REQUIRED only when delta itself is complex"
+].freeze
+
 CORE_ARTIFACT_TEMPLATES = [
   "templates/technical-specification-template.md",
   "templates/gate-result-template.md",
@@ -1602,6 +1647,90 @@ sync_create_if_missing_paths.each do |relative_path|
   else
     errors << "missing #{relative_path}"
   end
+end
+
+delta_change_common_paths = [
+  "ai-sdlc/change-control.md",
+  "ai-sdlc/complexity-routing.md",
+  "templates/artifact-manifest-template.md",
+  "docs/VALIDATION.md"
+].freeze
+
+delta_change_common_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    DELTA_CHANGE_COMMON_TERMS.each do |term|
+      errors << "#{relative_path} missing Delta Change Routing requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+delta_change_solution_reviewer_paths = [
+  "skills/sdlc-solution-reviewer/references/development-path-decision.md",
+  "skills/sdlc-solution-reviewer/references/review-workflow.md",
+  "skills/sdlc-solution-reviewer/references/output-report.md",
+  "skill-contracts/known-skills/sdlc-solution-reviewer.md"
+].freeze
+
+delta_change_solution_reviewer_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    (DELTA_CHANGE_COMMON_TERMS + DELTA_CHANGE_SOLUTION_REVIEWER_TERMS).each do |term|
+      errors << "#{relative_path} missing Delta solution reviewer requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+delta_change_requirement_normalizer_paths = [
+  "skills/sdlc-requirement-normalizer/references/intake-workflow.md",
+  "skills/sdlc-requirement-normalizer/references/conflict-and-blocking.md",
+  "skill-contracts/known-skills/sdlc-requirement-normalizer.md"
+].freeze
+
+delta_change_requirement_normalizer_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    (DELTA_CHANGE_COMMON_TERMS + DELTA_CHANGE_REQUIREMENT_NORMALIZER_TERMS).each do |term|
+      errors << "#{relative_path} missing Delta requirement normalizer requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+delta_change_specification_writer_paths = [
+  "skills/sdlc-specification-writer/references/writing-workflow.md",
+  "skills/sdlc-specification-writer/references/output-artifact.md",
+  "skill-contracts/known-skills/sdlc-specification-writer.md"
+].freeze
+
+delta_change_specification_writer_paths.each do |relative_path|
+  path = File.join(ROOT, relative_path)
+  if File.exist?(path)
+    text = File.read(path)
+    (DELTA_CHANGE_COMMON_TERMS + DELTA_CHANGE_SPECIFICATION_WRITER_TERMS).each do |term|
+      errors << "#{relative_path} missing Delta specification writer requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{relative_path}"
+  end
+end
+
+validation_path = File.join(ROOT, "docs/VALIDATION.md")
+if File.exist?(validation_path)
+  text = File.read(validation_path)
+  DELTA_CHANGE_VALIDATION_TERMS.each do |term|
+    errors << "docs/VALIDATION.md missing Delta validation requirement #{term}" unless text.include?(term)
+  end
+else
+  errors << "missing docs/VALIDATION.md"
 end
 
 if errors.empty?

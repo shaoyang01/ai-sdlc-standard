@@ -36,6 +36,43 @@ artifact. For Gate, review, sync, and reconcile artifacts, they are required.
 The body must contain only the current effective content. Historical changes
 belong in `## 修订记录`, manifest `Change History`, and Git history.
 
+For a Requirement Supplement, Requirement Change, Rework, Specification Missing,
+or Feedback-Driven Change, the artifact must also preserve the delta boundary:
+
+```markdown
+## Change Event
+
+- Parent Requirement ID:
+- Intake Classification:
+- Same Requirement Decision:
+- Change Event Type:
+- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+- Earliest Affected Node:
+- Required Re-Gate:
+
+## Original Scope Context
+
+- Aggregate Requirement Scope:
+- Original Implemented / Approved Scope:
+- Original Requirement Context:
+
+## Current Change Scope
+
+- Current Change Scope / Delta Scope:
+- Out of Delta Scope:
+
+## Delta Impact Analysis
+
+- Affected Artifacts:
+- Affected Code / Module Surface:
+- Behavior Impact:
+- Review Coverage Needed:
+```
+
+Do not hide a supplement by simply merging it into the original requirement body.
+The current effective body may be updated, but `## 修订记录`, manifest Change
+History, and Re-Gate Records must identify the Delta Scope.
+
 ## Local Path
 
 When writing a local artifact, use:
@@ -96,6 +133,12 @@ Activity Log:
   Action: generate technical specification
   Node: 01-技术方案
   Result: ready-for-solution-review
+
+Change History:
+  Parent Requirement ID: <id when this is a supplement>
+  Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+  Current Change Scope: <delta summary>
+  Required Re-Gate: <node/gate>
 
 Next Step:
   Run sdlc-solution-reviewer

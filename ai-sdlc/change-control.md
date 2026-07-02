@@ -35,6 +35,10 @@
 | Stale Gate | 被上游版本变化影响、需要重新确认的下游 Gate。 |
 | Same Requirement | 业务目标不变，仍属于同一个 `requirement_id`。 |
 | New Requirement | 业务目标、交付边界或排期已变成独立事项。 |
+| Aggregate Requirement Scope | 同一 `requirement_id` 下已经归档、已审核或已实现的完整原需求范围。只作为上下文。 |
+| Current Change Scope / Delta Scope | 本次补充、返工、测试反馈或 Review 暴露缺口真正要处理的当前变更范围。 |
+| Decision Scope | 开发路径判断对象：`FULL_REQUIREMENT` 或 `DELTA_CHANGE`。 |
+| Same Requirement Decision | 是否沿用原 `requirement_id` 的显式决策。 |
 
 ## 是否新建 requirement_id
 
@@ -42,6 +46,8 @@
 
 沿用原 `requirement_id` 的情况：
 
+- Requirement Supplement、Requirement Change、Rework、Specification Missing、开发过程中发现方案缺口、测试或 Review 暴露规格遗漏，且业务目标不变。
+- 用户明确表达“补充一下”“少了一块”“刚刚实现完发现漏了”“不是完整需求”“在原需求上补一个细节”“还是同一个需求”。
 - 业务目标不变，只补充边界、异常、兼容或测试口径。
 - 技术方案理解有误，但仍在解决同一个业务目标。
 - 实现中发现方案遗漏，需要补充方案后继续。
@@ -57,6 +63,29 @@
 - 用户明确要求拆成新需求。
 
 如果是否新建存在争议，先停在 Requirement Confirmation，不进入实现。
+
+## Delta Scope 变更路由
+
+当输入是补充需求、规格遗漏、返工或反馈驱动变更，并且业务目标不变时，必须输出 Same Requirement Decision：
+
+```text
+Same Requirement Decision: yes
+Parent Requirement ID: <original requirement_id>
+New Requirement Needed: no
+Change Event Type: Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change
+Decision Scope: DELTA_CHANGE
+```
+
+规则：
+
+- Aggregate Requirement Scope 只能作为上下文，用来理解原目标、原实现和原 Gate 状态。
+- Current Change Scope / Delta Scope 才是本次 Development Path Decision 的主要判断对象。
+- 原需求中的 DB/MQ/schedule/多模块/长期知识库沉淀等复杂度触发因素，不得自动继承为本次 Delta Scope 的复杂度触发因素。
+- Re-Gate 通过后，后续实现只执行 Delta Scope，不重新实现完整原需求。
+- 如果 Delta Scope 自身新增 DB schema、MQ consumer、schedule、关键数据写入、跨模块协作、状态机或长期知识库沉淀，才可以按 Delta Complexity 输出 `SPECKIT_PIPELINE_REQUIRED`。
+- 如果 Delta Scope 只是补充遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件或局部兼容规则，且 `01-技术方案` 与 `02-方案审核` 已覆盖该 Delta Scope，可继续 `DIRECT_IMPLEMENTATION`。
+- 如果补充内容影响行为但没有技术方案新版本，必须 `BLOCKED_NEEDS_REVISION`，Earliest Affected Node = `01-技术方案`。
+- 如果方案审核未覆盖新的 Delta Scope，必须重新 `02-方案审核` 或保持 `BLOCKED_NEEDS_REVISION`。
 
 ## 变更来源分类
 
@@ -189,6 +218,13 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 
 发生变更时，manifest 至少应记录：
 
+- Parent Requirement ID
+- Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
+- Aggregate Requirement Scope
+- Current Change Scope / Delta Scope
+- Original Implemented / Approved Scope
+- Out of Delta Scope
+- Development Path Decision Source
 - Change Date
 - Change Source
 - Change Type
@@ -199,6 +235,8 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 - Required Re-Gate
 - Current Effective Version
 - Next Step
+- Re-Gate Records
+- Delta Development Path Decision
 
 在 manifest 模板升级前，可以先记录在 `Blocking Issues`、`Next Step` 或新增临时小节中。
 

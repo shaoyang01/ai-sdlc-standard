@@ -17,6 +17,42 @@ Before choosing the recommendation, classify Complexity using `${AI_SDLC_STANDAR
 
 Record Complexity Triggers and Full SDD Override in the review output and manifest recommendation.
 
+## Delta Change Mode
+
+When the reviewed specification is a Requirement Supplement, Requirement Change,
+Rework, Specification Missing, or Feedback-Driven Change, first decide:
+
+```text
+Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
+```
+
+If Decision Scope = `DELTA_CHANGE`, output:
+
+- Same Requirement Decision
+- Delta Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
+- Aggregate Complexity: reference only
+- Delta Complexity Triggers
+- Ignored Aggregate Triggers
+- Re-Gate Source
+- Earliest Affected Node
+- Re-Gate Records
+- Current Change Scope / Delta Scope
+- Aggregate Requirement Scope
+- Original Implemented / Approved Scope
+- Out of Delta Scope
+
+Rules:
+
+- Development Path Decision must be based on Delta Scope.
+- Do not route by aggregate complexity for requirement supplements.
+- Aggregate Requirement Scope is context only.
+- Original DB/MQ/schedule/multi-module/business_domain triggers must be listed as Ignored Aggregate Triggers unless the Delta Scope itself changes them.
+- If Delta Scope itself adds DB schema, MQ, schedule, key data writes, cross-module work, state machine changes, or long-term knowledge sync, Delta Complexity may be COMPLEX.
+- If the Delta Scope is a missing judgment, field mapping, boundary rule, validation condition, copy text, local query condition, or local compatibility rule, and the 1.1.0 technical specification plus review covers it, default to DIRECT_IMPLEMENTATION.
+- If Delta Scope affects behavior but the technical specification has no updated version, use BLOCKED_NEEDS_REVISION and set Earliest Affected Node to `01-技术方案`.
+- If the solution review does not cover the new Delta Scope, use BLOCKED_NEEDS_REVISION or require a new `02-方案审核`.
+- Do not output SPECKIT_PIPELINE_REQUIRED just because the original full requirement was COMPLEX.
+
 ## BLOCKED_NEEDS_REVISION
 
 Use when:
@@ -54,6 +90,8 @@ Typical triggers:
 - Need to update `.specify/business_domain/**`.
 - User explicitly requests full SDD.
 
+For Decision Scope = `DELTA_CHANGE`, these triggers must come from Delta Complexity Triggers, not from Aggregate Complexity.
+
 Complexity:
 
 - Default for `COMPLEX`.
@@ -81,6 +119,7 @@ Use when:
 - No full SDD route is needed.
 - Implementation does not require new domain knowledge sync.
 - Tasks can be safely derived directly from the technical specification.
+- Decision Scope = `DELTA_CHANGE` and the Current Change Scope / Delta Scope is SIMPLE or MEDIUM, reviewed, and does not itself trigger full SDD.
 
 Typical examples:
 
