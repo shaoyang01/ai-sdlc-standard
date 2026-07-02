@@ -419,6 +419,7 @@ ENTRY_COVERAGE_PRECISION_DOC_TERMS = [
 
 ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
   "bootstrap-entry-coverage-profile.sh",
+  "require \"date\"",
   "--project-type-profile",
   "--force-entry-coverage-profile",
   ".specify/entry-coverage-profile.yaml",
@@ -473,7 +474,15 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_SCRIPT_TERMS = [
   "worker",
   "import",
   "export",
-  "SPI"
+  "SPI",
+  "composite_backend_admin",
+  "backend_controller",
+  "admin_controller",
+  "backend_RPC",
+  "admin_RPC",
+  "backend_schedule",
+  "admin_schedule",
+  "[entry.name, entry.evidence_mode]"
 ].freeze
 
 ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
@@ -492,6 +501,14 @@ ENTRY_COVERAGE_PROFILE_BOOTSTRAP_DOC_TERMS = [
   "--force-entry-coverage-profile",
   "backend-business-service",
   "admin-mixed-workflow",
+  "admin-mixed-workflow + backend-business-service",
+  "backend_controller",
+  "admin_controller",
+  "backend_RPC",
+  "admin_RPC",
+  "backend_schedule",
+  "admin_schedule",
+  "[name, evidence_mode]",
   "frontend-application",
   "data-pipeline-etl",
   "library-shared-component"

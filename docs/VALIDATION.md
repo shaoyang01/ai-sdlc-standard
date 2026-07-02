@@ -476,6 +476,11 @@ backend-business-service:
 admin-mixed-workflow:
   controller / data_console / worker / schedule / import / export / SPI / RPC
 
+admin-mixed-workflow + backend-business-service:
+  backend_controller / backend_RPC / backend_schedule / backend_service / backend_manager / backend_mapper
+  admin_controller / admin_RPC / admin_schedule / admin_data_console / admin_worker / admin_import / admin_export / admin_SPI
+  复合 profile 不得使用 name-only 去重吞掉 admin/backend 的同名 entry type 语义；至少必须按 [name, evidence_mode] 去重。
+
 frontend-application:
   route / page / component / store / action / api_client / popup / native_shell
 

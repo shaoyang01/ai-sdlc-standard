@@ -5,6 +5,7 @@ require "fileutils"
 require "find"
 require "optparse"
 require "set"
+require "date"
 require "time"
 require "yaml"
 
@@ -233,29 +234,45 @@ end
 
 def entry_types_for(profiles)
   entries = []
+  composite_backend_admin = profiles.include?("backend-business-service") && profiles.include?("admin-mixed-workflow")
+  backend_controller_name = composite_backend_admin ? "backend_controller" : "controller"
+  backend_rpc_name = composite_backend_admin ? "backend_RPC" : "RPC"
+  backend_mq_name = composite_backend_admin ? "backend_MQ" : "MQ"
+  backend_schedule_name = composite_backend_admin ? "backend_schedule" : "schedule"
+  backend_service_name = composite_backend_admin ? "backend_service" : "service"
+  backend_manager_name = composite_backend_admin ? "backend_manager" : "manager"
+  backend_mapper_name = composite_backend_admin ? "backend_mapper" : "mapper"
+  admin_controller_name = composite_backend_admin ? "admin_controller" : "controller"
+  admin_data_console_name = composite_backend_admin ? "admin_data_console" : "data_console"
+  admin_worker_name = composite_backend_admin ? "admin_worker" : "worker"
+  admin_schedule_name = composite_backend_admin ? "admin_schedule" : "schedule"
+  admin_import_name = composite_backend_admin ? "admin_import" : "import"
+  admin_export_name = composite_backend_admin ? "admin_export" : "export"
+  admin_spi_name = composite_backend_admin ? "admin_SPI" : "SPI"
+  admin_rpc_name = composite_backend_admin ? "admin_RPC" : "RPC"
 
   if profiles.include?("backend-business-service")
     entries.concat([
-      entry_type("controller", "Backend HTTP controller entry.", ["**/src/main/java/**/*Controller.java"], ["*Controller"], "business_chain"),
-      entry_type("RPC", "Backend RPC provider or facade entry.", ["**/src/main/java/**/rpc/**/*.java", "**/src/main/java/**/*Provider.java", "**/src/main/java/**/*Facade.java", "**/src/main/java/**/*RPCService.java", "**/src/main/java/**/*Impl.java"], ["*Provider", "*Facade", "*RPCService", "*Impl"], "business_chain"),
-      entry_type("MQ", "Backend MQ consumer, listener, or processor entry.", ["**/src/main/java/**/*Consumer.java", "**/src/main/java/**/*Listener.java", "**/src/main/java/**/*Processor.java"], ["*Consumer", "*Listener", "*Processor"], "business_chain", ["abstract base classes"]),
-      entry_type("schedule", "Backend schedule, job, task, or worker entry.", ["**/src/main/java/**/*Schedule.java", "**/src/main/java/**/*Job.java", "**/src/main/java/**/*Task.java", "**/src/main/java/**/*Worker.java"], ["*Schedule", "*Job", "*Task", "*Worker"], "business_chain", ["framework base classes"]),
-      entry_type("service", "Backend service entry when exposed as application boundary.", ["**/src/main/java/**/*Service.java", "**/src/main/java/**/*ServiceImpl.java"], ["*Service", "*ServiceImpl"], "business_chain"),
-      entry_type("manager", "Backend manager or domain service entry when directly orchestrating business behavior.", ["**/src/main/java/**/*Manager.java", "**/src/main/java/**/*ManagerImpl.java", "**/src/main/java/**/*DomainService.java"], ["*Manager", "*ManagerImpl", "*DomainService"], "business_chain"),
-      entry_type("mapper", "Backend mapper, repository, DAO, or persistence boundary.", ["**/src/main/java/**/*Mapper.java", "**/src/main/java/**/*Repository.java", "**/src/main/java/**/*Dao.java", "**/src/main/resources/**/*Mapper.xml"], ["*Mapper", "*Repository", "*Dao"], "business_chain")
+      entry_type(backend_controller_name, "Backend HTTP controller entry.", ["**/src/main/java/**/*Controller.java"], ["*Controller"], "business_chain"),
+      entry_type(backend_rpc_name, "Backend RPC provider or facade entry.", ["**/src/main/java/**/rpc/**/*.java", "**/src/main/java/**/*Provider.java", "**/src/main/java/**/*Facade.java", "**/src/main/java/**/*RPCService.java", "**/src/main/java/**/*Impl.java"], ["*Provider", "*Facade", "*RPCService", "*Impl"], "business_chain"),
+      entry_type(backend_mq_name, "Backend MQ consumer, listener, or processor entry.", ["**/src/main/java/**/*Consumer.java", "**/src/main/java/**/*Listener.java", "**/src/main/java/**/*Processor.java"], ["*Consumer", "*Listener", "*Processor"], "business_chain", ["abstract base classes"]),
+      entry_type(backend_schedule_name, "Backend schedule, job, task, or worker entry.", ["**/src/main/java/**/*Schedule.java", "**/src/main/java/**/*Job.java", "**/src/main/java/**/*Task.java", "**/src/main/java/**/*Worker.java"], ["*Schedule", "*Job", "*Task", "*Worker"], "business_chain", ["framework base classes"]),
+      entry_type(backend_service_name, "Backend service entry when exposed as application boundary.", ["**/src/main/java/**/*Service.java", "**/src/main/java/**/*ServiceImpl.java"], ["*Service", "*ServiceImpl"], "business_chain"),
+      entry_type(backend_manager_name, "Backend manager or domain service entry when directly orchestrating business behavior.", ["**/src/main/java/**/*Manager.java", "**/src/main/java/**/*ManagerImpl.java", "**/src/main/java/**/*DomainService.java"], ["*Manager", "*ManagerImpl", "*DomainService"], "business_chain"),
+      entry_type(backend_mapper_name, "Backend mapper, repository, DAO, or persistence boundary.", ["**/src/main/java/**/*Mapper.java", "**/src/main/java/**/*Repository.java", "**/src/main/java/**/*Dao.java", "**/src/main/resources/**/*Mapper.xml"], ["*Mapper", "*Repository", "*Dao"], "business_chain")
     ])
   end
 
   if profiles.include?("admin-mixed-workflow")
     entries.concat([
-      entry_type("controller", "Admin controller or view controller entry.", ["**/src/main/java/**/*Controller.java"], ["*Controller"], "admin_workflow_chain"),
-      entry_type("data_console", "Admin data console action entry.", ["**/src/main/java/**/console/**/*.java", "**/src/main/webapp/**/*"], ["*Console", "*Action", "*Controller"], "admin_workflow_chain"),
-      entry_type("worker", "Admin background worker entry.", ["**/src/main/java/**/worker/**/*.java", "**/src/main/java/**/*Worker.java"], ["*Worker", "*Processor"], "admin_workflow_chain"),
-      entry_type("schedule", "Admin schedule, job, or task entry.", ["**/src/main/java/**/*Schedule.java", "**/src/main/java/**/*Job.java", "**/src/main/java/**/*Task.java"], ["*Schedule", "*Job", "*Task"], "admin_workflow_chain"),
-      entry_type("import", "Admin import operation entry.", ["**/src/main/java/**/*Import*.java", "**/src/main/webapp/**/*import*"], ["*Import*"], "admin_workflow_chain"),
-      entry_type("export", "Admin export operation entry.", ["**/src/main/java/**/*Export*.java", "**/src/main/webapp/**/*export*"], ["*Export*"], "admin_workflow_chain"),
-      entry_type("SPI", "Admin SPI extension entry.", ["**/src/main/java/**/spi/**/*.java", "**/src/main/java/**/*Spi.java", "**/src/main/java/**/*SPI.java"], ["*Spi", "*SPI", "*Provider"], "admin_workflow_chain"),
-      entry_type("RPC", "Admin RPC provider or consumer entry.", ["**/src/main/java/**/rpc/**/*.java", "**/src/main/java/**/*Provider.java", "**/src/main/java/**/*Client.java"], ["*Provider", "*Client", "*Impl"], "admin_workflow_chain")
+      entry_type(admin_controller_name, "Admin controller or view controller entry.", ["**/src/main/java/**/*Controller.java"], ["*Controller"], "admin_workflow_chain"),
+      entry_type(admin_data_console_name, "Admin data console action entry.", ["**/src/main/java/**/console/**/*.java", "**/src/main/webapp/**/*"], ["*Console", "*Action", "*Controller"], "admin_workflow_chain"),
+      entry_type(admin_worker_name, "Admin background worker entry.", ["**/src/main/java/**/worker/**/*.java", "**/src/main/java/**/*Worker.java"], ["*Worker", "*Processor"], "admin_workflow_chain"),
+      entry_type(admin_schedule_name, "Admin schedule, job, or task entry.", ["**/src/main/java/**/*Schedule.java", "**/src/main/java/**/*Job.java", "**/src/main/java/**/*Task.java"], ["*Schedule", "*Job", "*Task"], "admin_workflow_chain"),
+      entry_type(admin_import_name, "Admin import operation entry.", ["**/src/main/java/**/*Import*.java", "**/src/main/webapp/**/*import*"], ["*Import*"], "admin_workflow_chain"),
+      entry_type(admin_export_name, "Admin export operation entry.", ["**/src/main/java/**/*Export*.java", "**/src/main/webapp/**/*export*"], ["*Export*"], "admin_workflow_chain"),
+      entry_type(admin_spi_name, "Admin SPI extension entry.", ["**/src/main/java/**/spi/**/*.java", "**/src/main/java/**/*Spi.java", "**/src/main/java/**/*SPI.java"], ["*Spi", "*SPI", "*Provider"], "admin_workflow_chain"),
+      entry_type(admin_rpc_name, "Admin RPC provider or consumer entry.", ["**/src/main/java/**/rpc/**/*.java", "**/src/main/java/**/*Provider.java", "**/src/main/java/**/*Client.java"], ["*Provider", "*Client", "*Impl"], "admin_workflow_chain")
     ])
   end
 
@@ -293,7 +310,7 @@ def entry_types_for(profiles)
     ])
   end
 
-  entries.uniq(&:name)
+  entries.uniq { |entry| [entry.name, entry.evidence_mode] }
 end
 
 def profile_hash(profiles, files, source_roots, pending_confirmation, profile_source)
