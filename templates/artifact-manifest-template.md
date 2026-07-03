@@ -86,7 +86,7 @@ Development Path Decision based on Current Change Scope / Delta Scope.
 
 | Change ID | Date | Source | Classification | Parent Requirement ID | Decision Scope | Current Change Scope | Affected Node | Artifact | Previous Version | New Version | Summary | Re-Gate Required | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  | yes/no | open/resolved |
+|  |  |  | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  | yes/no | open/resolved |
 
 ## Replaced Artifact Paths
 

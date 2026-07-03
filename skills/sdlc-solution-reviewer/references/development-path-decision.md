@@ -138,7 +138,8 @@ Proceed to implementation, then write 03-实现记录.
 
 When uncertain between direct implementation and Speckit:
 
-- Prefer `SPECKIT_PIPELINE_REQUIRED` if the change touches state, data consistency, MQ, DB, scheduler, or multiple modules.
+- For Decision Scope = `FULL_REQUIREMENT`, prefer `SPECKIT_PIPELINE_REQUIRED` if the change touches state, data consistency, MQ, DB, scheduler, or multiple modules.
+- For Decision Scope = `DELTA_CHANGE`, only the Current Change Scope / Delta Scope may trigger `SPECKIT_PIPELINE_REQUIRED`. Original Aggregate Requirement Scope DB/MQ/scheduler/multi-module evidence must be listed as Ignored Aggregate Triggers and must not alone trigger `SPECKIT_PIPELINE_REQUIRED`. Prefer `SPECKIT_PIPELINE_REQUIRED` only when the delta itself is complex (e.g., the delta adds DB schema, MQ, schedule, key data writes, cross-module work, or state machine changes).
 - Prefer `BLOCKED_NEEDS_REVISION` if uncertainty is about business behavior.
 - Prefer `DIRECT_IMPLEMENTATION` only if uncertainty is non-core and documented as a residual risk.
 - Prefer `BLOCKED_NEEDS_REVISION` if complexity cannot be classified from current evidence.

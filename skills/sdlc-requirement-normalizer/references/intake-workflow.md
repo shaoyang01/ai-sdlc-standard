@@ -34,13 +34,14 @@ Classify the request before writing the summary.
 | Requirement Supplement | The user adds boundary, rule, attachment, or context to the same goal. | `00-需求资料` |
 | Requirement Change | The goal, scope, rule, or success criteria changes during the flow. | `00-需求资料` or `01-技术方案` |
 | Rework | Implementation or review reveals a misunderstood requirement. | Earliest affected node |
+| Specification Missing | The original requirement goal is unchanged, but the technical specification misses behavior, exception, compatibility, data, interface, state, or acceptance details. | `01-技术方案` |
 | Feedback-Driven Change | Test or review feedback exposes a specification gap. | `05-测试验收` plus affected upstream node |
 | Documentation Correction | Only wording, typo, path, or layout changes. | Activity Log only, unless Gate is affected |
 
 For Requirement Supplement, Requirement Change, Rework, Specification Missing, or Feedback-Driven Change, output the supplement routing fields:
 
 ```text
-Intake Classification: Requirement Supplement / Requirement Change / Rework / Feedback-Driven Change
+Intake Classification: Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change
 Same Requirement: yes / no
 Same Requirement Decision:
 Parent Requirement ID:

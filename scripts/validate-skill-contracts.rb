@@ -1143,9 +1143,6 @@ if File.exist?(bootstrap_path)
   BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.each do |term|
     errors << "bootstrap script missing project private context requirement #{term}" unless bootstrap.include?(term)
   end
-  BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS.each do |term|
-    errors << "bootstrap script missing large-repo scan control requirement #{term}" unless bootstrap.include?(term)
-  end
 else
   errors << "missing scripts/bootstrap-speckit-project.sh"
 end
@@ -1153,9 +1150,6 @@ end
 entry_bootstrap_path = File.join(ROOT, "scripts", "bootstrap-entry-coverage-profile.sh")
 if File.exist?(entry_bootstrap_path)
   entry_bootstrap = File.read(entry_bootstrap_path)
-  BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS.each do |term|
-    errors << "entry coverage profile bootstrap missing large-repo scan control requirement #{term}" unless entry_bootstrap.include?(term)
-  end
   errors << "entry coverage profile bootstrap must keep Dir.pwd fallback" unless entry_bootstrap.include?("Dir.pwd")
   errors << "entry coverage profile bootstrap must keep standard package self-protection" unless entry_bootstrap.include?("standard_package_root?")
 else
@@ -1181,6 +1175,8 @@ bootstrap_context_paths.each do |relative_path, required_terms|
 end
 
 bootstrap_performance_paths = {
+  "scripts/bootstrap-speckit-project.sh" => BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS,
+  "scripts/bootstrap-entry-coverage-profile.sh" => BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS,
   "docs/VALIDATION.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS,
   "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control"],
   "ai-sdlc/speckit-project-bootstrap.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control", "pfms"]

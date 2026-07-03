@@ -676,6 +676,10 @@ collect_project_files() {
   done
 
   EFFECTIVE_SCAN_ROOTS_TEXT="$(printf '%s\n' "${roots[@]}" | sed "s#^${TARGET_PATH}/##" | sed 's#^$#.#' | sort -u | paste -sd ', ' -)"
+  EFFECTIVE_SCAN_ROOTS=()
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] && EFFECTIVE_SCAN_ROOTS+=("${line}")
+  done < <(printf '%s\n' "${roots[@]}" | sed "s#^${TARGET_PATH}/##" | sed 's#^$#.#' | sort -u)
   : > "${output_file}"
 
   while IFS= read -r path; do
@@ -716,7 +720,15 @@ collect_project_files() {
       -path "*/snapshots/*" -o -path "*/snapshots" -o \
       -path "*/mock-data/*" -o -path "*/mock-data" -o \
       -path "*/mock_data/*" -o -path "*/mock_data" \
-    \) -prune -o -type f -print 2>/dev/null | sort -u)
+    \) -prune -o -type f -print 2>/dev/null)
+
+  # Sort and deduplicate the bounded inventory AFTER collection (timeout-safe)
+  if [[ -s "${output_file}" ]]; then
+    local sorted_tmp
+    sorted_tmp="$(mktemp "${TMPDIR:-/tmp}/speckit-bootstrap-sorted.XXXXXX")"
+    sort -u "${output_file}" > "${sorted_tmp}"
+    mv "${sorted_tmp}" "${output_file}"
+  fi
 
   SCAN_ENDED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   SCAN_ENDED_EPOCH="$(date +%s)"
@@ -893,7 +905,7 @@ SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
 TEST_SAMPLES="$(sample_matching_files test)"
 CONFIG_SAMPLES="$(sample_matching_files config)"
 CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
-INVENTORY_FILE_SAMPLES="$(printf '%s\n' "${PROJECT_FILES_TEXT}" | sed '/^$/d' | head -n "${MAX_SAMPLES}")"
+INVENTORY_TABLE="$(generate_inventory_table "${MAX_SAMPLES}")"
 
 PROJECT_TYPE_PROFILES_TEXT="$(detect_project_type_profiles | awk '!seen[$0]++')"
 PROJECT_TYPE_PROFILES=()
@@ -1440,7 +1452,7 @@ EOF
 | Scan Duration Seconds | ${SCAN_DURATION_SECONDS} |
 | Scanned File Count | ${SCAN_FILE_COUNT} |
 | Sampled File Count | ${SCAN_SAMPLED_FILE_COUNT} |
-| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} |
+| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} (pruned estimate, not individually counted) |
 | Timeout Occurred | ${SCAN_TIMEOUT_OCCURRED} |
 | Partial Scan | ${SCAN_PARTIAL} |
 | Scan Roots | ${SCAN_ROOTS_TEXT} |
@@ -1451,7 +1463,9 @@ EOF
 
 ## File Inventory Samples
 
-$(markdown_samples "${INVENTORY_FILE_SAMPLES}")
+${INVENTORY_TABLE}
+
+> **Note**: Skipped / Excluded Count is `${SCAN_EXCLUDED_COUNT}` (pruned estimate; excluded files are pruned by `find -prune` and not individually counted).
 
 ## Detected Entry Evidence
 
@@ -2245,6 +2259,52 @@ markdown_samples() {
   printf '%s' "${text}" | paste -sd ', ' -
 }
 
+generate_inventory_table() {
+  local max_rows="${1:-${MAX_SAMPLES}}"
+  local path count=0
+
+  printf '| Relative Path | File Type | Matched Include Root | Included Reason |\n'
+  printf '| --- | --- | --- | --- |\n'
+
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    [[ "${count}" -ge "${max_rows}" ]] && break
+
+    local ext="${path##*.}"
+    [[ "${ext}" == "${path}" || -z "${ext}" ]] && ext="(none)"
+
+    local matched_root="."
+    local best_len=0
+    local root
+    for root in "${EFFECTIVE_SCAN_ROOTS[@]:-}"; do
+      if [[ "${root}" == "." ]]; then
+        if [[ "${best_len}" -eq 0 ]]; then
+          matched_root="."
+          best_len=1
+        fi
+        continue
+      fi
+      if [[ "${path}" == "${root}" || "${path}" == "${root}"/* ]]; then
+        local root_len="${#root}"
+        if [[ "${root_len}" -gt "${best_len}" ]]; then
+          matched_root="${root}"
+          best_len="${root_len}"
+        fi
+      fi
+    done
+
+    local reason="scanned"
+    if [[ "${#SCAN_ROOTS[@]}" -gt 0 || "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
+      reason="matched scan root: ${matched_root}"
+    else
+      reason="default scan (no --scan-root / --include-root)"
+    fi
+
+    printf '| `%s` | `%s` | `%s` | %s |\n' "${path}" "${ext}" "${matched_root}" "${reason}"
+    count=$((count + 1))
+  done <<< "${PROJECT_FILES_TEXT}"
+}
+
 generate_generation_report() {
   local output="$1"
   local generated_at
@@ -2282,7 +2342,7 @@ generate_generation_report() {
 | Scan Duration Seconds | ${SCAN_DURATION_SECONDS} |
 | Scanned File Count | ${SCAN_FILE_COUNT} |
 | Sampled File Count | ${SCAN_SAMPLED_FILE_COUNT} |
-| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} |
+| Skipped / Excluded Count | ${SCAN_EXCLUDED_COUNT} (pruned estimate, not individually counted) |
 | Timeout Occurred | ${SCAN_TIMEOUT_OCCURRED} |
 | Partial Scan | ${SCAN_PARTIAL} |
 | Scan Roots | ${SCAN_ROOTS_TEXT} |
@@ -2303,7 +2363,9 @@ If Scan Status is \`TIMEOUT / PARTIAL\`, this bootstrap must not be treated as a
 
 ## File Inventory Samples
 
-$(markdown_samples "${INVENTORY_FILE_SAMPLES}")
+${INVENTORY_TABLE}
+
+> **Note**: Skipped / Excluded Count is `${SCAN_EXCLUDED_COUNT}` (pruned estimate; excluded files are pruned by `find -prune` and not individually counted).
 
 ## Code Evidence
 
