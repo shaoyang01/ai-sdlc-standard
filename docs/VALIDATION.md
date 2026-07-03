@@ -1173,6 +1173,7 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Global Cleanup 2 validates sync contract responsibilities are mode-aware.
 - Global Cleanup 2 validates shared business-domain target resolution supports library artifacts / manifest.
 - Global Cleanup 2 validates Source Priority by Mode is authoritative.
+- Global Cleanup 2.1 validates sdlc-speckit-sync frontmatter description indentation and removes residual L4 skeleton wording.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

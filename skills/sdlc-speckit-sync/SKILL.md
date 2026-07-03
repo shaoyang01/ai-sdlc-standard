@@ -2,9 +2,9 @@
 name: sdlc-speckit-sync
 description: |
   This skill should be used when the user asks to "执行 speckit sync", "同步业务知识", "沉淀实现后的稳定事实", "更新 business_domain", or asks to sync verified implementation facts into `.specify/business_domain/**`:
-- after sdlc-speckit-implement in speckit_driven pipeline;
-- after Direct Implementation / library-only DocFlow when stable verified facts should be evaluated for business_domain sync;
-- library-driven sync evaluation.
+  - after sdlc-speckit-implement in speckit_driven pipeline;
+  - after Direct Implementation / library-only DocFlow when stable verified facts should be evaluated for business_domain sync;
+  - library-driven sync evaluation.
 version: 0.1.0
 ---
 

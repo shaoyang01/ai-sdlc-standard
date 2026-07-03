@@ -1996,7 +1996,8 @@ PR_K_FORBIDDEN_PATTERNS = {
     "create-if-missing cannot resolve Project Type Profiles or selected L4 template",
     "缺少 Project Type Profiles 或 selected L4 template 时停止",
     "create authorized missing L4 business-domain documents from project-type L4 templates",
-    "缺失 L4 时必须能从 route artifact 的 Project Type Profiles 选择项目类型化 L4 skeleton"
+    "缺失 L4 时必须能从 route artifact 的 Project Type Profiles 选择项目类型化 L4 skeleton",
+    "创建缺失的 L4 骨架"
   ],
   "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => [
     "缺少 `specs/**` 时停止并建议回到相应 Speckit 阶段"
@@ -2048,6 +2049,16 @@ PR_K_FALLBACK_TERMS.each do |rel_path, terms|
   text = File.read(path)
   terms.each do |term|
     errors << "#{rel_path} missing PR K cleanup fallback semantic #{term}" unless text.include?(term)
+  end
+end
+
+# Global Cleanup 2.1: frontmatter indentation + residual skeleton wording
+sync_skill_path = File.join(ROOT, "skills", "sdlc-speckit-sync", "SKILL.md")
+if File.exist?(sync_skill_path)
+  text = File.read(sync_skill_path)
+  # Check for unindented bullet lines after description: |
+  if text =~ /^description: \|/ && text =~ /^-(?: after| library-driven)/
+    errors << "skills/sdlc-speckit-sync/SKILL.md has unindented bullet in frontmatter description"
   end
 end
 

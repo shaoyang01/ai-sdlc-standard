@@ -98,7 +98,7 @@ blocking_conditions:
 - In hybrid mode, read both and use manifest current effective version, pipeline status, freshness, and gate result.
 - 判断哪些事实是稳定、可复用、适合长期沉淀的知识。
 - 将已授权的事实同步到 `.specify/business_domain/**` 或其他明确目标。
-- 在 L1/L2 已确认、owner 明确、create-if-missing 已授权且 L4 id 可保留时，创建缺失的 L4 骨架。
+- 在 L1/L2 已确认、owner 明确、create-if-missing 已授权且 L4 id 可保留时，创建缺失的 L4 文档（使用 project canonical naming 和 project shape）。
 - 创建缺失 L4 时优先解析 project canonical naming、project shape、naming_pattern_source、shape_profile_source、shape_confidence。
 - 只有当 no project shape exists + user confirms fallback + standard_template_fallback_allowed=true + no conflict 时，才允许读取 standard L4 template fallback。
 - Project Type Profiles 可以用于 fallback template selection，但不能作为已有项目 create-if-missing 主路径。
