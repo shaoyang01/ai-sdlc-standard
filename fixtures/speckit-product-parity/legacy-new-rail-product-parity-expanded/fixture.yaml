@@ -1,0 +1,108 @@
+name: legacy-new-rail-product-parity-expanded
+description: Comprehensive synthetic parity fixture covering PR J–O semantics for legacy/new-rail product parity validation.
+project_type_profiles: []
+required_standard_files:
+  - ai-sdlc/agents-rail-routing.md
+  - ai-sdlc/specs-run-lifecycle.md
+  - ai-sdlc/specs-run-metadata-and-archive.md
+  - ai-sdlc/business-domain-sync-source-modes.md
+  - ai-sdlc/shared-business-domain-governance.md
+  - ai-sdlc/business-domain-naming-and-shape.md
+  - ai-sdlc/business-domain-compatible-update.md
+  - ai-sdlc/library-driven-sync-runtime.md
+  - ai-sdlc/project-type-contract-artifact-matrix.md
+  - skills/sdlc-speckit-sync/SKILL.md
+  - skills/sdlc-speckit-sync/references/sync-inputs.md
+  - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+  - skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+  - skills/sdlc-speckit-plan/SKILL.md
+  - skills/sdlc-speckit-plan/references/plan-gate-check.md
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+  - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+  - skill-contracts/known-skills/sdlc-speckit-plan.md
+  - docs/VALIDATION.md
+required_terms:
+  - legacy_speckit
+  - new_rail_sdlc
+  - explicit activation
+  - run-level artifact
+  - specs_run_id
+  - requirement_id
+  - feature_id
+  - manifest is lifecycle authority
+  - workflow-status.md is machine snapshot
+  - business_domain_synced
+  - no filename-versioned artifacts
+  - speckit_driven
+  - library_driven
+  - hybrid
+  - sync_source_mode
+  - duplicate sync guard
+  - business_domain_sync
+  - shared long-term knowledge base
+  - project canonical naming
+  - project shape
+  - standard template fallback
+  - compatible update
+  - preserve existing shape
+  - safe insertion point
+  - update proposal
+  - reconcile proposal
+  - no whole-document rewrite
+  - no forced New-Rail section injection
+  - library_driven sync runtime
+  - Direct Implementation
+  - library-only DocFlow
+  - implementation evidence
+  - verification evidence
+  - Sync Need Classification
+  - SYNC_REQUIRED
+  - NOT_REQUIRED
+  - PROPOSAL_REQUIRED
+  - BLOCKED
+  - DUPLICATE_SYNC_BLOCKED
+  - supplemental sync
+  - source_of_truth
+  - Project-Type Contract Artifact Matrix
+  - project_type_profile
+  - Produced
+  - Reused
+  - Not Applicable
+  - Deferred
+  - Deferred without Accepted By
+  - Deferred without Verification Alternative
+  - Plan Gate BLOCKED
+  - project-type justification
+  - verification_alternative
+  - re_gate_required
+  - source_artifacts
+  - freshness
+forbidden_terms:
+  - legacy Skill fallback in New-Rail
+  - read .specify/memory as New-Rail runtime input
+  - read .specify/workflow as New-Rail runtime input
+  - read .specify/coding_guide as New-Rail runtime input
+  - library is long-term knowledge base
+  - specs is requirement-level artifact
+  - require specs in library_driven mode
+  - missing specs blocks library_driven
+  - direct write without verification evidence
+  - duplicate sync allowed by default
+  - rewrite existing L4 to New-Rail template
+  - inject Entry Chain into legacy-shaped doc by default
+  - overwrite conflicting business facts
+  - delete existing facts without explicit supersession
+  - cleanup deletes library/{requirement_id}
+  - cleanup deletes .specify/business_domain
+  - workflow-status is lifecycle authority
+  - skip required artifact silently
+  - Plan Gate PASS with missing required artifact
+  - Deferred without accepted_by is allowed
+  - Not Applicable without justification
+  - filename-versioned companion artifact
+  - use chat as source of truth
+expected_outputs:
+  - comprehensive rail routing, specs lifecycle, business-domain governance, library-driven runtime, project-type contract matrix parity validation
+notes: development-time fixture; not target project runtime input

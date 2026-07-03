@@ -1228,6 +1228,17 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - PR O cleanup validates output-and-manifest records contract_artifact_matrix.
 - PR O cleanup validates old project-type-contract-matrix reference is superseded/shim.
 - PR O cleanup validates PR O required terms and forbidden behavior.
+
+## PR P: Expanded Parity Fixture Validation
+
+- expanded parity fixture validation — covers PR J–O rail routing, specs lifecycle, business-domain governance, library-driven runtime, project-type contract matrix
+- PR J–O semantic coverage validation
+- rail routing parity validation (explicit activation, no legacy fallback)
+- business_domain governance parity validation (shared KB, compatible update, no whole-document rewrite)
+- specs lifecycle parity validation (run-level, manifest authority, archive/cleanup gate)
+- library_driven runtime parity validation (no specs, evidence required, duplicate sync guard)
+- project-type contract matrix parity validation (Produced/Reused/NA/Deferred, BLOCKED conditions)
+- forbidden behavior guard validation (no legacy input, no forced rewrite, no silent skip)
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 

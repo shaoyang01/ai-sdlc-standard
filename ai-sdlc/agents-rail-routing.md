@@ -47,7 +47,7 @@ The rail is determined by the first explicit command or phrase that unambiguousl
 
 1. If the user invokes `/speckit.*` or `$speckit-*`, the rail is `legacy_speckit`.
 2. If the user invokes `sdlc-*`, `sdlc-speckit-*`, or explicitly says `new rail` / `AI SDLC 标准库` / `使用新版 sdlc`, the rail is `new_rail_sdlc`.
-3. Once a rail is active for a session or requirement, do not switch mid-stream unless the user explicitly requests a different rail.
+3. Once a rail is active for a session or requirement, do not switch mid-stream unless the user explicitly requests a different rail. New-Rail must not fallback to legacy Skill runtime after explicit new_rail_sdlc activation.
 
 ## Ambiguous Rail Handling
 

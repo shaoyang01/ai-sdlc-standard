@@ -11,7 +11,7 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 `.specify/business_domain/**` is the single source of truth for stable business domain knowledge. It is:
 
 - **Long-term**: Not tied to any single requirement or pipeline run.
-- **Shared**: Both `legacy_speckit` and `new_rail_sdlc` may read and write it.
+- **Shared**: Both `legacy_speckit` and `new_rail_sdlc` may read and write it. Both rails may govern `.specify/business_domain/**`, but a single specs run must remain rail-consistent.
 - **Governed**: Writes must follow this governance protocol regardless of rail.
 
 ## Writing Rules

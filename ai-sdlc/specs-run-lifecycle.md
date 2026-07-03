@@ -60,3 +60,4 @@ Specs metadata, lifecycle states, archive policy, and cleanup policy are defined
 - Cleanup must not delete `library/{requirement_id}/**` or `.specify/business_domain/**`.
 - Library_driven may have no `specs_runs` entry. No archive/cleanup required when specs never existed.
 - No filename-versioned artifacts.
+- New-Rail may add enhanced artifacts, but must preserve baseline spec/plan/task/sync/reconcile traceability expected from legacy Speckit.

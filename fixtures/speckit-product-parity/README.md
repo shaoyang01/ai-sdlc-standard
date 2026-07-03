@@ -38,3 +38,4 @@ Each fixture directory contains:
 | `business-domain-compatible-update/` | Compatible update: preserve existing shape/facts, safe insertion point, update proposal, reconcile proposal, conflict types, revision traceability |
 | `specs-run-lifecycle/` | Specs run lifecycle: specs_run_id metadata, manifest lifecycle authority, archive/cleanup gate, library_driven no-specs handling |
 | `library-driven-sync-runtime/` | Library-driven sync runtime: runtime inputs, evidence classification, sync need classification, duplicate sync guard, supplemental sync, manifest recording |
+| `legacy-new-rail-product-parity-expanded/` | Comprehensive parity: covers PR J–O rail routing, specs lifecycle, business-domain governance, library-driven runtime, project-type contract matrix semantics |
