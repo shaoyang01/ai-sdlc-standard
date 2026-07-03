@@ -28,10 +28,11 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 
 ### When Target L4 Exists
 
-- **Update the existing document.** Do not create a parallel L4 document for the same domain concept.
-- Preserve the existing document structure and naming pattern.
-- Add new stable facts to the appropriate section.
-- Update the revision record with source artifacts and rail identifier.
+- **Compatible update only.** See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md` for the full compatible update protocol.
+- **Preserve existing shape** — title format, metadata style, section language, table style, revision history style.
+- **Preserve existing facts** — do not delete or overwrite without explicit supersession evidence.
+- **Safe insertion point required** for direct update. Unknown insertion point → update proposal.
+- **Conflict → reconcile proposal.** Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-reconcile-proposal-template.md`.
 
 ### When Target L4 Does Not Exist
 
@@ -51,6 +52,10 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 - Do not default to standard L4 skeleton (`templates/business-domain-l4/*.md`) in existing projects.
 - Do not rewrite existing L4 documents to New-Rail template shape.
 - Do not create duplicate L4 candidate for the same domain concept.
+- Do not inject New-Rail fixed sections into legacy-shaped docs by default.
+- Do not overwrite conflicting facts.
+- Do not delete existing facts without explicit supersession evidence.
+- Do not use chat as source of truth.
 
 ## Naming Convention
 

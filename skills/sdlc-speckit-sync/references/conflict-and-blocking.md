@@ -42,6 +42,20 @@ Stop when:
 - `01DomainCatalog.md` update missing.
 - Create-if-missing would use standard skeleton without project-shape confirmation.
 - Standard template fallback not allowed in existing projects without explicit conditions.
+- safe insertion point unknown for direct update
+- existing shape understood but section mapping low confidence
+- proposed update injects New-Rail fixed sections
+- proposed update rewrites whole document
+- proposed update deletes existing facts
+- semantic_conflict
+- code_drift
+- doc_drift
+- stale_fact
+- scope_conflict
+- duplicate_fact
+- source_priority_conflict
+- missing implementation evidence for direct update
+- missing verification evidence for direct update
 
 ## Entry Coverage Blocking
 

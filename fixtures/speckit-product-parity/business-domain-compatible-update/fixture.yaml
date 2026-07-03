@@ -1,0 +1,52 @@
+name: business-domain-compatible-update
+description: Synthetic business-domain compatible update and conflict proposal fixture.
+project_type_profiles: []
+required_standard_files:
+  - ai-sdlc/business-domain-compatible-update.md
+  - ai-sdlc/business-domain-naming-and-shape.md
+  - ai-sdlc/shared-business-domain-governance.md
+  - templates/business-domain-update-proposal-template.md
+  - templates/business-domain-reconcile-proposal-template.md
+  - skills/sdlc-speckit-sync/SKILL.md
+  - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+  - skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+  - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+required_terms:
+  - compatible update
+  - preserve existing shape
+  - preserve existing facts
+  - safe insertion point
+  - update proposal
+  - reconcile proposal
+  - semantic_conflict
+  - code_drift
+  - doc_drift
+  - stale_fact
+  - scope_conflict
+  - duplicate_fact
+  - source_priority_conflict
+  - no whole-document rewrite
+  - no forced New-Rail section injection
+  - revision and traceability
+  - DIRECT_UPDATE
+  - UPDATE_PROPOSAL
+  - RECONCILE_PROPOSAL
+  - BLOCKED
+  - implementation evidence
+  - verification evidence
+  - sync_source_mode
+  - library_driven
+forbidden_terms:
+  - rewrite existing L4 to New-Rail template
+  - inject Entry Chain into legacy-shaped doc by default
+  - overwrite conflicting business facts
+  - delete existing facts without explicit supersession
+  - use chat as source of truth
+expected_outputs:
+  - compatible update protocol
+  - update proposal template
+  - reconcile proposal template
+notes: development-time fixture; not target project runtime input

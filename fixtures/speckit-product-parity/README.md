@@ -35,3 +35,4 @@ Each fixture directory contains:
 | `project-type-contract-matrix/` | Plan contract matrix: companion artifact status table, project-type contract granularity, skip records, Plan Gate BLOCKED |
 | `rail-routing-business-domain-sync/` | Rail routing: legacy vs new-rail AGENTS.md split, specs run lifecycle, shared business-domain governance, sync source modes, duplicate sync guard |
 | `business-domain-naming-shape/` | Business-domain naming and shape: canonical naming gate, project shape gate, create-if-missing with project naming/shape, whole-document rewrite guard |
+| `business-domain-compatible-update/` | Compatible update: preserve existing shape/facts, safe insertion point, update proposal, reconcile proposal, conflict types, revision traceability |

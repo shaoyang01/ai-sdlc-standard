@@ -34,6 +34,7 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 18. Preserve existing shape when updating existing L4 documents. Unknown naming or unknown shape → proposal only.
 19. For create-if-missing, first resolve project canonical naming, project shape, naming_pattern_source, shape_profile_source, and shape_confidence. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only as explicit standard template fallback when no project shape exists, the user confirms fallback, `standard_template_fallback_allowed=true`, and fallback does not conflict with existing legacy/project shape.
 20. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
+21. Existing L4 updates must use compatible update per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`. Unknown safe insertion point → update proposal. Fact conflict → reconcile proposal. No whole-document rewrite. No forced New-Rail section injection. No direct update without implementation evidence and verification evidence.
 
 ## Standard Package Resolution
 
@@ -74,6 +75,9 @@ Load these references as needed:
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-sync-proposal-template.md` for sync proposal format.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-governance-profile-template.yaml` for governance profile.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/` — loaded only when standard template fallback is explicitly active.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md` for compatible update, proposal, and conflict rules.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-update-proposal-template.md` for update proposal format.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-reconcile-proposal-template.md` for reconcile proposal format.
 
 ## Workflow
 

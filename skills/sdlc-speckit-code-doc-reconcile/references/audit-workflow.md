@@ -172,3 +172,12 @@ Flag as drift:
 - **duplicate L4 drift**: Same domain concept covered by multiple L4 documents.
 - **catalog/index drift**: L2 index or `01DomainCatalog.md` missing new L4.
 - **source traceability drift**: Business_domain fact missing source artifact reference.
+- Detect unsafe compatible update attempts.
+- Detect whole-document rewrite drift.
+- Detect New-Rail fixed section injection into legacy-shaped docs.
+- Detect facts without source traceability.
+- Detect missing implementation/verification evidence behind business_domain updates.
+- Detect conflicting facts and classify conflict type (semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict).
+- Verify revision record includes rail/source/update section/evidence.
+- Verify update proposal / reconcile proposal was generated when direct update was unsafe.
+- In library_driven mode, trace business_domain facts to approved/current library evidence when specs are absent.

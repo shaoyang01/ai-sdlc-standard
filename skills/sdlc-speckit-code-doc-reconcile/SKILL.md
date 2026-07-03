@@ -25,6 +25,10 @@ Audit consistency between implemented code, Speckit artifacts, DocFlow artifacts
 12. Stop when the current source of truth cannot be identified.
 13. Detect naming drift, shape drift, duplicate L4 drift, catalog/index drift, and source traceability drift per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
 14. Do not treat New-Rail template shape as automatically correct in existing projects.
+15. Detect unsafe compatible update, whole-document rewrite drift, and forced New-Rail section injection per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`.
+16. Classify fact conflicts: semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict.
+17. Validate revision/source traceability, implementation evidence, and verification evidence behind business_domain updates.
+18. In library_driven mode, trace business_domain facts to approved/current library artifacts when specs are absent.
 
 ## Standard Package Resolution
 
@@ -61,6 +65,8 @@ Load these references as needed:
 - `references/apply-boundaries.md` for allowed side effects and write authorization.
 - `references/output-and-manifest.md` for report structure and manifest recommendations.
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming conventions and project shape rules.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md` for compatible update, proposal, and conflict rules.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-reconcile-proposal-template.md` for reconcile proposal format.
 
 ## Workflow
 

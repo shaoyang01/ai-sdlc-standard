@@ -135,6 +135,8 @@ Every create-if-missing must record in the document or associated manifest:
 
 ## Update Existing Rules
 
+Compatible update, proposal, conflict handling, and revision traceability rules are defined in `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`. Shape preservation is mandatory before applying any compatible update. Existing shape detection does not imply permission to rewrite. Safe insertion point must be resolved before direct write.
+
 ### Compatible Update Only
 
 When the target L4 already exists:

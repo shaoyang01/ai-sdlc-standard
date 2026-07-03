@@ -162,6 +162,8 @@ L2 Main Document Index Update:
 Revision History Update:
 ```
 
+For existing L4 documents, use compatible update protocol per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`. Required update decision fields: Existing Shape Summary, Safe Insertion Point, Section Mapping Rationale, Update Mode (DIRECT_UPDATE | UPDATE_PROPOSAL | RECONCILE_PROPOSAL | BLOCKED), Existing Facts Preserved, Conflict Type (when applicable), Implementation Evidence, Verification Evidence.
+
 Block instead of creating when:
 
 - L1/L2 are not confirmed.

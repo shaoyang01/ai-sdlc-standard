@@ -79,6 +79,13 @@ blocking_conditions:
   - does not depend on legacy memory/workflow/coding_guide
   - library_driven mode: sync blocked when readiness not met; output proposal instead
   - naming/shape gate not passed
+  - blocks whole-document rewrite
+  - blocks forced New-Rail section injection
+  - blocks overwrite of conflicting facts without reconcile proposal
+  - blocks deletion of existing facts without explicit supersession evidence
+  - direct update requires safe insertion point and implementation/verification evidence
+  - library_driven direct update requires approved/current library evidence
+  - supports compatible update mode, update proposal, and reconcile proposal
 ```
 
 ## Standard Path Resolution

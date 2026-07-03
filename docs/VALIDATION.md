@@ -1174,6 +1174,17 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Global Cleanup 2 validates shared business-domain target resolution supports library artifacts / manifest.
 - Global Cleanup 2 validates Source Priority by Mode is authoritative.
 - Global Cleanup 2.1 validates sdlc-speckit-sync frontmatter description indentation and removes residual L4 skeleton wording.
+
+## PR L: Compatible Update and Conflict Proposal 校验
+
+- compatible update validation: existing L4 update preserves shape, facts, and uses safe insertion point.
+- update proposal validation: unknown insertion point → proposal, not direct write.
+- reconcile proposal validation: fact conflict → reconcile proposal with conflict type classification.
+- no whole-document rewrite validation: existing L4 must not be fully replaced.
+- no forced New-Rail section injection validation: fixed English sections must not be injected into legacy-shaped L4 by default.
+- conflict classification validation: semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict.
+- revision/source traceability validation: every update records rail, sync_source_mode, source_artifacts, update_section, evidence.
+- implementation/verification evidence validation: no direct update without evidence.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语
