@@ -86,6 +86,11 @@ blocking_conditions:
   - direct update requires safe insertion point and implementation/verification evidence
   - library_driven direct update requires approved/current library evidence
   - supports compatible update mode, update proposal, and reconcile proposal
+  - outputs specs run metadata (specs_run_id, requirement_id, feature_id) when specs exist
+  - library_driven does not require specs_run_id
+  - recommends archive/cleanup only when specs-run-metadata-and-archive policy allows
+  - business_domain synced does not automatically allow cleanup
+  - must not delete library/{requirement_id}/** or .specify/business_domain/**
 ```
 
 ## Standard Path Resolution

@@ -29,6 +29,9 @@ Audit consistency between implemented code, Speckit artifacts, DocFlow artifacts
 16. Classify fact conflicts: semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict.
 17. Validate revision/source traceability, implementation evidence, and verification evidence behind business_domain updates.
 18. In library_driven mode, trace business_domain facts to approved/current library artifacts when specs are absent.
+19. Use manifest specs_runs metadata to distinguish current/stale/archived/cleaned specs. Do not treat archived/cleaned specs as missing if manifest retains traceability.
+20. workflow-status.md is not lifecycle authority. Manifest is.
+21. Library_driven may have no specs and must not be flagged as specs missing drift.
 
 ## Standard Package Resolution
 
@@ -67,6 +70,7 @@ Load these references as needed:
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming conventions and project shape rules.
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md` for compatible update, proposal, and conflict rules.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-reconcile-proposal-template.md` for reconcile proposal format.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/specs-run-metadata-and-archive.md` for specs run lifecycle and archive/cleanup.
 
 ## Workflow
 

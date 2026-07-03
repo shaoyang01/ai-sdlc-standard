@@ -1,0 +1,40 @@
+# Specs Run Metadata Template
+# Append specs_runs entries to manifest.md when specs runs are created or lifecycle changes.
+
+specs_runs:
+  - specs_run_id: "<id>"
+    requirement_id: "<req-id>"
+    feature_id: "<feature>"
+    rail: legacy_speckit | new_rail_sdlc
+    generated_by: "<skill-or-pipeline>"
+    source_mode: speckit_driven | library_driven | hybrid
+    lifecycle: created | active | business_domain_synced | archived | superseded | cleaned
+    current_status: current | stale | superseded | archived | cleaned
+    specs_path: "<path>"
+    source_artifacts:
+      - "<path>"
+    business_domain_sync_status: pending | synced | proposal | not_required | blocked
+    synced_business_domain_targets:
+      - "<path>"
+    archive_allowed: true / false
+    cleanup_allowed: true / false
+    archive_reason: "<reason>"
+    cleanup_reason: "<reason>"
+    created_at: "<timestamp>"
+    last_updated_at: "<timestamp>"
+
+business_domain_sync:
+  required: true / false
+  mode: none | speckit_driven | library_driven | hybrid
+  source_of_truth:
+    - "<source>"
+  pipeline_sync_executed: true / false
+  library_sync_executed: true / false
+  duplicate_sync_guard: active
+  current_sync_owner: sdlc-speckit-sync | library-driven-sync
+  result: synced | proposal | not_required | blocked
+  reason: "<reason>"
+
+# Manifest is the lifecycle authority. workflow-status.md is a machine-side
+# snapshot and is not status authority. Library_driven may omit specs_runs
+# when no specs exist.

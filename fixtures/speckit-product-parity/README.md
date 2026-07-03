@@ -36,3 +36,4 @@ Each fixture directory contains:
 | `rail-routing-business-domain-sync/` | Rail routing: legacy vs new-rail AGENTS.md split, specs run lifecycle, shared business-domain governance, sync source modes, duplicate sync guard |
 | `business-domain-naming-shape/` | Business-domain naming and shape: canonical naming gate, project shape gate, create-if-missing with project naming/shape, whole-document rewrite guard |
 | `business-domain-compatible-update/` | Compatible update: preserve existing shape/facts, safe insertion point, update proposal, reconcile proposal, conflict types, revision traceability |
+| `specs-run-lifecycle/` | Specs run lifecycle: specs_run_id metadata, manifest lifecycle authority, archive/cleanup gate, library_driven no-specs handling |

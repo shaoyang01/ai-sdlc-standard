@@ -72,6 +72,11 @@ blocking_conditions:
   - validates revision/source traceability for business_domain updates
   - validates implementation and verification evidence behind synced facts
   - expects update proposal or reconcile proposal when direct update was unsafe
+  - reads specs_runs metadata from manifest
+  - distinguishes active/stale/superseded/archived/cleaned specs
+  - library_driven no-specs is not drift
+  - workflow-status.md is snapshot, manifest is authority
+  - flags active specs cleanup / unsafe archive / missing traceability
 ```
 
 ## Standard Path Resolution

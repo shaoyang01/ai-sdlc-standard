@@ -2136,6 +2136,21 @@ PR_L_FORBIDDEN_CHECK_FILES.each do |rel_path|
   end
 end
 
+# PR M: Specs Run Lifecycle — required files and terms
+PR_M_REQUIRED_FILES = [
+  "ai-sdlc/specs-run-metadata-and-archive.md",
+  "templates/specs-run-metadata-template.yaml",
+  "templates/specs-archive-cleanup-proposal-template.md",
+  "fixtures/speckit-product-parity/specs-run-lifecycle/fixture.yaml",
+  "fixtures/speckit-product-parity/specs-run-lifecycle/expected.md"
+].freeze
+
+PR_M_REQUIRED_FILES.each { |f| errors << "missing #{f}" unless File.exist?(File.join(ROOT, f)) }
+
+# Also add fixture dir check
+fixture_dirs_14th = File.join(fixture_root, "specs-run-lifecycle")
+errors << "missing fixture specs-run-lifecycle" unless File.directory?(fixture_dirs_14th)
+
 if errors.empty?
   puts "skill contract validation ok"
 else

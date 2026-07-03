@@ -87,7 +87,7 @@ All sync source modes (`speckit_driven`, `library_driven`, `hybrid`) must observ
 - Naming pattern resolvable.
 - Shape profile resolvable (confidence `high` or `medium`, or `low` with user confirmation).
 
-Manifest must record business_domain sync status to prevent duplicate writes:
+Manifest must record business_domain sync status to prevent duplicate writes. `speckit_driven` / `hybrid` should record `specs_run_id` when specs exist. `library_driven` may omit `specs_run_id`. `business_domain_sync.source_of_truth` should reference `specs_run_id` or library artifacts as appropriate. `duplicate_sync_guard` should consider `specs_run_id` when multiple runs exist.
 
 ```yaml
 business_domain_sync:

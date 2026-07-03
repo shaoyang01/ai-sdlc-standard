@@ -1,0 +1,50 @@
+name: specs-run-lifecycle
+description: Synthetic specs run lifecycle metadata and archive/cleanup parity fixture.
+project_type_profiles: []
+required_standard_files:
+  - ai-sdlc/specs-run-lifecycle.md
+  - ai-sdlc/specs-run-metadata-and-archive.md
+  - ai-sdlc/business-domain-sync-source-modes.md
+  - templates/specs-run-metadata-template.yaml
+  - templates/specs-archive-cleanup-proposal-template.md
+  - skills/sdlc-speckit-sync/SKILL.md
+  - skills/sdlc-speckit-sync/references/output-and-manifest.md
+  - skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+  - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+required_terms:
+  - specs_run_id
+  - requirement_id
+  - feature_id
+  - run-level artifact
+  - rail consistency within run
+  - manifest is lifecycle authority
+  - workflow-status.md is machine snapshot
+  - business_domain_sync
+  - specs_runs
+  - business_domain_synced
+  - archived
+  - superseded
+  - cleaned
+  - archive_allowed
+  - cleanup_allowed
+  - synced_business_domain_targets
+  - source_artifacts
+  - library_driven may have no specs
+  - cleanup must not delete library
+  - cleanup must not delete business_domain
+  - no filename-versioned artifacts
+forbidden_terms:
+  - specs is requirement-level artifact
+  - cleanup deletes library/{requirement_id}
+  - cleanup deletes .specify/business_domain
+  - workflow-status is lifecycle authority
+  - archive active specs by default
+  - cleanup pending sync specs
+expected_outputs:
+  - specs run metadata
+  - manifest lifecycle authority
+  - archive/cleanup gate policy
+notes: development-time fixture; not target project runtime input

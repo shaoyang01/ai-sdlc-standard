@@ -1188,6 +1188,17 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - PR L cleanup validates conflict-and-blocking no longer treats Project Type Profiles / selected L4 template as create-if-missing primary blockers.
 - PR L cleanup validates compatible update required files and terms.
 - PR L cleanup validates no whole-document rewrite / no forced section injection / no overwrite conflict / no chat source-of-truth guards.
+
+## PR M: Specs Run Lifecycle Metadata and Archive/Cleanup 校验
+
+- specs_run_id / requirement_id / feature_id metadata validation
+- manifest lifecycle authority validation (workflow-status.md is snapshot only)
+- rail consistency within run validation
+- archive gate validation: lifecycle business_domain_synced or superseded, BD sync synced/not_required, not active
+- cleanup gate validation: archived/superseded, manifest traceability, owner confirmation
+- library_driven no-specs validation: no archive/cleanup required when specs never existed
+- no deletion of library/{requirement_id}/** or .specify/business_domain/**,{ validation
+- no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

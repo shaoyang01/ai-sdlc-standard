@@ -35,6 +35,8 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 19. For create-if-missing, first resolve project canonical naming, project shape, naming_pattern_source, shape_profile_source, and shape_confidence. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only as explicit standard template fallback when no project shape exists, the user confirms fallback, `standard_template_fallback_allowed=true`, and fallback does not conflict with existing legacy/project shape.
 20. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
 21. Existing L4 updates must use compatible update per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`. Unknown safe insertion point → update proposal. Fact conflict → reconcile proposal. No whole-document rewrite. No forced New-Rail section injection. No direct update without implementation evidence and verification evidence.
+22. When specs exist, record specs_run_id / feature_id / requirement_id in sync output. In library_driven mode without specs, do not require specs_run_id.
+23. Do not cleanup or archive specs in sync unless explicitly authorized and archive/cleanup gate passes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/specs-run-metadata-and-archive.md`. Business_domain synced does not automatically mean cleanup allowed.
 
 ## Standard Package Resolution
 
@@ -78,6 +80,9 @@ Load these references as needed:
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md` for compatible update, proposal, and conflict rules.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-update-proposal-template.md` for update proposal format.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-reconcile-proposal-template.md` for reconcile proposal format.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/specs-run-metadata-and-archive.md` for specs run lifecycle and archive/cleanup.
+- `${AI_SDLC_STANDARD_HOME}/templates/specs-run-metadata-template.yaml` for manifest specs_runs metadata.
+- `${AI_SDLC_STANDARD_HOME}/templates/specs-archive-cleanup-proposal-template.md` for archive/cleanup proposal.
 
 ## Workflow
 
