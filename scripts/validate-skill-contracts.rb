@@ -2287,6 +2287,24 @@ prp_files.reject { |f| f.include?("fixtures/") }.each do |f|
   end
 end
 
+# Final Audit Guard: manifest entrypoints + plan Deferred hardening
+manifest_text = File.read(File.join(ROOT, "manifest.yaml"))
+["ai-sdlc/agents-rail-routing.md", "ai-sdlc/business-domain-naming-and-shape.md",
+  "ai-sdlc/business-domain-compatible-update.md", "ai-sdlc/specs-run-metadata-and-archive.md",
+  "ai-sdlc/library-driven-sync-runtime.md", "ai-sdlc/project-type-contract-artifact-matrix.md",
+  "templates/library-driven-sync-decision-template.md",
+  "templates/project-type-contract-artifact-matrix-template.yaml"].each do |e|
+  errors << "manifest.yaml missing entry #{e}" unless manifest_text.include?(e)
+end
+plan_guard = File.read(File.join(ROOT, "skills/sdlc-speckit-plan/SKILL.md"))
+["Deferred without Accepted By", "Deferred without Verification Alternative"].each do |t|
+  errors << "plan SKILL missing #{t}" unless plan_guard.include?(t)
+end
+plan_contract_guard = File.read(File.join(ROOT, "skill-contracts/known-skills/sdlc-speckit-plan.md"))
+["accepted_by", "verification_alternative"].each do |t|
+  errors << "plan contract missing #{t}" unless plan_contract_guard.include?(t)
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

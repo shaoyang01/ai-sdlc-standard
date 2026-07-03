@@ -25,7 +25,7 @@ Create or validate the SpecKit technical plan after `sdlc-speckit-clarify`. Trea
 12. Return core ambiguity to DocFlow Re-Gate.
 13. Produce the full Plan companion product set or explicitly skip each missing artifact with a complete skip record.
 14. Determine project_type_profile before final Plan Gate. Apply Project-Type Contract Artifact Matrix per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md`.
-15. Required artifacts must be Produced/Reused or have valid Deferred/Not Applicable record. Deferred requires accepted_by and verification_alternative. Missing required artifact → Plan Gate BLOCKED.
+15. Required artifacts must be Produced/Reused or have valid Deferred/Not Applicable record. Deferred requires accepted_by and verification_alternative. Deferred without Accepted By → Plan Gate BLOCKED. Deferred without Verification Alternative → Plan Gate BLOCKED. Missing required artifact → Plan Gate BLOCKED.
 16. Do not create filename-versioned companion artifacts. workflow-status.md is snapshot, manifest is authority.
 
 ## Standard Package Resolution

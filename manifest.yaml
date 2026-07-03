@@ -43,11 +43,27 @@ entrypoints:
   speckit_project_bootstrap_script: scripts/bootstrap-speckit-project.sh
   business_domain_bootstrap_script: scripts/bootstrap-business-domain.sh
   business_domain_confirmed_bootstrap_mode: "scripts/bootstrap-business-domain.sh --confirmed --domain-map .specify/business-domain-bootstrap.yaml"
+  rail_routing_governance: ai-sdlc/agents-rail-routing.md
+  sync_source_modes: ai-sdlc/business-domain-sync-source-modes.md
+  shared_business_domain_governance: ai-sdlc/shared-business-domain-governance.md
+  business_domain_naming_and_shape: ai-sdlc/business-domain-naming-and-shape.md
+  business_domain_compatible_update: ai-sdlc/business-domain-compatible-update.md
+  specs_run_metadata_and_archive: ai-sdlc/specs-run-metadata-and-archive.md
+  library_driven_sync_runtime: ai-sdlc/library-driven-sync-runtime.md
+  project_type_contract_artifact_matrix: ai-sdlc/project-type-contract-artifact-matrix.md
   artifact_manifest_template: templates/artifact-manifest-template.md
   project_governance_profile_template: templates/project-governance-profile-template.yaml
   entry_coverage_profile_template: templates/entry-coverage-profile-template.yaml
   business_domain_bootstrap_template: templates/business-domain-bootstrap-template.yaml
   speckit_generation_report_template: templates/speckit-generation-report-template.md
+  agents_rail_routing_addendum: templates/agents-rail-routing-addendum.md
+  business_domain_sync_status_template: templates/business-domain-sync-status-template.yaml
+  business_domain_update_proposal_template: templates/business-domain-update-proposal-template.md
+  business_domain_reconcile_proposal_template: templates/business-domain-reconcile-proposal-template.md
+  specs_run_metadata_template: templates/specs-run-metadata-template.yaml
+  specs_archive_cleanup_proposal_template: templates/specs-archive-cleanup-proposal-template.md
+  library_driven_sync_decision_template: templates/library-driven-sync-decision-template.md
+  project_type_contract_artifact_matrix_template: templates/project-type-contract-artifact-matrix-template.yaml
   registry: registry/skill-registry.md
 skills:
   sdlc_code_review_excellence:
