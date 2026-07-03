@@ -142,7 +142,7 @@ Continue only when:
 
 - Sync source mode is explicit.
 - In speckit_driven mode: specs are present, implementation is completed or sync scope is limited to verified tasks, verification evidence exists.
-- In library_driven mode: specs are not required. Implementation evidence exists, verification evidence exists, library artifacts are current.
+- In library_driven mode: specs are not required. Implementation evidence exists, verification evidence exists, library artifacts are current. Readiness uses `${AI_SDLC_STANDARD_HOME}/ai-sdlc/library-driven-sync-runtime.md`. Classify sync need before applying changes. Duplicate sync guard must be checked before direct write. Pipeline_sync_executed=true and result=synced blocks library_driven direct write unless supplemental sync is explicitly authorized.
 - In hybrid mode: missing specs blocks only if manifest marks specs as current source-of-truth.
 - Incomplete evidence can only produce proposal/not_required/blocked, not confirmed write.
 

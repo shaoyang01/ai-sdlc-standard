@@ -2206,6 +2206,32 @@ end
 fixture_dirs_14th = File.join(fixture_root, "specs-run-lifecycle")
 errors << "missing fixture specs-run-lifecycle" unless File.directory?(fixture_dirs_14th)
 
+# PR N: Library-Driven Sync Runtime — required files and terms
+["ai-sdlc/library-driven-sync-runtime.md", "templates/library-driven-sync-decision-template.md",
+ "fixtures/speckit-product-parity/library-driven-sync-runtime/fixture.yaml",
+ "fixtures/speckit-product-parity/library-driven-sync-runtime/expected.md"].each do |f|
+  errors << "missing #{f}" unless File.exist?(File.join(ROOT, f))
+end
+
+prn_files = ["ai-sdlc/library-driven-sync-runtime.md", "skills/sdlc-speckit-sync/SKILL.md",
+  "skills/sdlc-speckit-sync/references/sync-inputs.md", "skills/sdlc-speckit-sync/references/output-and-manifest.md",
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md",
+  "skill-contracts/known-skills/sdlc-speckit-sync.md", "docs/VALIDATION.md"]
+prn_combined = prn_files.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(File.join(ROOT, f)) : "" }.join
+["DUPLICATE_SYNC_BLOCKED", "supplemental sync", "Sync Need Classification",
+ "library_driven sync runtime", "library-driven-sync-runtime"].each do |t|
+  errors << "missing PR N term #{t}" unless prn_combined.include?(t)
+end
+prn_forbidden = ["require specs in library_driven mode", "missing specs blocks library_driven",
+  "direct write without verification evidence", "duplicate sync allowed by default",
+  "library is long-term knowledge base", "use chat as source of truth"]
+prn_files.reject { |f| f.include?("fixtures/") }.each do |f|
+  path = File.join(ROOT, f)
+  next unless File.exist?(path)
+  text = File.read(path)
+  prn_forbidden.each { |p| errors << "#{f} contains forbidden PR N wording: #{p}" if text.include?(p) }
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

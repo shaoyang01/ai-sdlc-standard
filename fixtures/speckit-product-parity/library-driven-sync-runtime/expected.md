@@ -43,3 +43,10 @@ This is a **development-time fixture**, not target project runtime input.
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## PR N Cleanup: Wiring
+
+- sync-inputs references library-driven-sync-runtime.md (library-driven-sync-runtime).
+- output-and-manifest includes Library-Driven Manifest Recommendation with business_domain_sync (Library-Driven Manifest Recommendation, business_domain_sync, last_sync_source_mode, proposal_paths, blocked_reasons, Manifest business_domain_sync recommendation).
+- duplicate sync guard result must be recorded before direct write.
+- source_of_truth must come from current library artifacts or approved evidence.

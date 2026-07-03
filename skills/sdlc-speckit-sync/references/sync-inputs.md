@@ -102,6 +102,16 @@ Source candidates / recommended:
 
 Library_driven mode can run sync evaluation with incomplete evidence, but incomplete evidence can only produce `proposal`, `not_required`, or `blocked` — not direct confirmed write.
 
+Runtime inputs and readiness are defined by `${AI_SDLC_STANDARD_HOME}/ai-sdlc/library-driven-sync-runtime.md`. Key rules:
+- specs are not required. specs_run_id is not required. Missing specs is expected and must not block.
+- If specs exist, evaluate hybrid or explicitly authorized supplemental sync.
+- library_driven direct write requires implementation evidence and verification evidence.
+- insufficient evidence produces proposal/not_required/blocked only.
+- Sync Need Classification must be one of: SYNC_REQUIRED, NOT_REQUIRED, PROPOSAL_REQUIRED, BLOCKED, DUPLICATE_SYNC_BLOCKED.
+- duplicate sync guard must check pipeline_sync_executed, library_sync_executed, source_of_truth, synced_business_domain_targets.
+- pipeline_sync_executed=true and result=synced blocks library_driven direct write unless supplemental sync is explicitly authorized.
+- supplemental sync requires no duplicate fact and newer/missing stable fact evidence.
+
 ## Library-Driven Readiness
 
 Before writing confirmed business_domain facts in `library_driven` mode:

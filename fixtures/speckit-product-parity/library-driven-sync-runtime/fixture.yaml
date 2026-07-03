@@ -37,6 +37,15 @@ required_terms:
   - synced_business_domain_targets
   - no direct confirmed write without implementation evidence and verification evidence
   - source_of_truth
+  - library-driven-sync-runtime.md
+  - Library-Driven Manifest Recommendation
+  - business_domain_sync
+  - proposal_paths
+  - blocked_reasons
+  - last_sync_source_mode
+  - Duplicate Sync Guard Result
+  - Library Source Artifacts
+  - Manifest business_domain_sync recommendation
 forbidden_terms:
   - require specs in library_driven mode
   - missing specs blocks library_driven

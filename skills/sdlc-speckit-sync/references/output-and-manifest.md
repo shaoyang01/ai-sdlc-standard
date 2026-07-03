@@ -119,3 +119,38 @@ Also recommend Activity Log:
 - Result: `SYNCED`, `PROPOSED`, `PARTIAL`, or `BLOCKED`
 
 Do not silently edit manifest unless explicitly requested.
+
+## Library-Driven Manifest Recommendation
+
+For `library_driven` sync, recommend updating manifest `business_domain_sync`:
+
+```yaml
+business_domain_sync:
+  required: true / false
+  mode: library_driven
+  source_of_truth:
+    - library/{requirement_id}/01-技术方案/...
+    - library/{requirement_id}/02-方案审核/...
+    - library/{requirement_id}/03-实现记录/...
+    - library/{requirement_id}/05-测试验收/...
+  pipeline_sync_executed: true / false
+  library_sync_executed: true / false
+  duplicate_sync_guard: active
+  current_sync_owner: sdlc-speckit-sync
+  result: synced | proposal | not_required | blocked
+  reason: "<reason>"
+  stable_fact_candidates:
+    - "<fact>"
+  synced_business_domain_targets:
+    - "<path>"
+  blocked_reasons:
+    - "<reason>"
+  proposal_paths:
+    - "<path>"
+  last_sync_source_mode: library_driven
+```
+
+- no `specs_run_id` required in `library_driven` without specs.
+- manifest recommendation must not invent `source_of_truth`.
+- duplicate sync guard result must be recorded.
+- `source_of_truth` must reference current library artifacts or approved evidence.
