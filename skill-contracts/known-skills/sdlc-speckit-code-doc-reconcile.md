@@ -97,8 +97,11 @@ blocking_conditions:
 
 ## Input Contract
 
-必需输入：
+Reconcile supports three reconcile source modes: `speckit_driven`, `library_driven`, `hybrid`.
 
+### Required Inputs (speckit_driven)
+
+- requirement id and feature identifier
 - 当前代码状态、diff、commit range 或实现范围。
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
@@ -107,6 +110,26 @@ blocking_conditions:
 - `sdlc-speckit-implement` 的实现结果。
 - `library/{requirement_id}/01-技术方案/*`
 - `library/{requirement_id}/02-方案审核/*`
+- `library/{requirement_id}/manifest.md`（如可用）
+
+### Required Inputs (library_driven)
+
+- requirement id
+- 当前代码状态、diff、commit range 或实现范围。
+- `library/{requirement_id}/01-技术方案/*`
+- `library/{requirement_id}/02-方案审核/*`
+- 实现证据（如检查已实现行为）。
+- 验证证据（如检查 business_domain sync 完整性）。
+- `library/{requirement_id}/manifest.md`（如可用）。
+- `.specify/business_domain/**` 或其他声明的知识目标（如检查知识同步）。
+
+In library_driven mode, `specs/{feature}/**` is not required. Missing specs is expected and must not block.
+
+### Required Inputs (hybrid)
+
+- collect both specs and library when present
+- `manifest.md` current effective version and source freshness determine priority
+- missing specs blocks only when manifest marks specs as current source-of-truth
 
 建议输入：
 

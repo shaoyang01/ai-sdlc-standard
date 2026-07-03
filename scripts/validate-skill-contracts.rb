@@ -1985,7 +1985,11 @@ PR_K_FORBIDDEN_PATTERNS = {
   "skills/sdlc-speckit-sync/SKILL.md" => [
     "select the matching `templates/business-domain-l4/{profile}.md` skeleton",
     "select the matching templates/business-domain-l4",
-    "For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select"
+    "For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select",
+    "select the matching L4 template under",
+    "Record `Selected L4 Template` in the Create-If-Missing Decision",
+    "Create the project-type L4 skeleton",
+    "Project Type Profiles are missing or cannot select a matching L4 template for create-if-missing"
   ],
   "skill-contracts/known-skills/sdlc-speckit-sync.md" => [
     "create-if-missing cannot resolve Project Type Profiles or selected L4 template",
@@ -2011,10 +2015,10 @@ end
 
 # PR K Cleanup: verify fallback-only semantics exist
 PR_K_FALLBACK_TERMS = {
-  "skills/sdlc-speckit-sync/SKILL.md" => ["standard template fallback", "fallback-only", "project canonical naming", "project shape"],
+  "skills/sdlc-speckit-sync/SKILL.md" => ["standard template fallback", "fallback-only", "project canonical naming", "project shape", "naming_pattern_source", "shape_profile_source", "shape_confidence", "standard template fallback is explicitly active"],
   "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["standard template fallback", "project canonical naming", "project shape", "naming_pattern_source", "shape_profile_source"],
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => ["Required Inputs (speckit_driven)", "Required Inputs (library_driven)", "Required Inputs (hybrid)", "missing specs is expected", "must not block"],
   "skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md" => ["speckit_driven", "library_driven", "hybrid", "absence of specs is not a blocker"],
-  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => ["library_driven mode", "missing specs is expected", "must not block"],
   "docs/VALIDATION.md" => ["PR K cleanup", "standard L4 templates are fallback-only"]
 }.freeze
 

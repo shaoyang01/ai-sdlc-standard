@@ -1162,6 +1162,9 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - PR K cleanup validates standard L4 templates are fallback-only, not create-if-missing primary path.
 - `templates/business-domain-l4/` loaded only when standard template fallback is explicitly active.
 - Library-driven reconcile in `library_driven` mode: missing specs is expected and must not block.
+- Cleanup 2 validates sync SKILL workflow no longer routes create-if-missing through template-primary path.
+- Cleanup 2 validates reconcile contract has mode-specific required inputs (speckit_driven / library_driven / hybrid).
+- Cleanup 2 validates validator catches workflow-level stale template-primary rules.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

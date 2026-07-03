@@ -87,7 +87,6 @@ Identify:
 - Target knowledge path
 - `.specify/business_domain/01DomainCatalog.md`, if syncing to business_domain
 - L1/L2/L4 route, owner, and create-if-missing authorization when target L4 is missing
-- Project Type Profiles from `specs/{feature}/route.md`, when target L4 is missing
 - `.specify/entry-coverage-profile.yaml`, if available
 - `manifest.md`, if available
 
@@ -124,14 +123,24 @@ Stop when target ownership or path is unclear.
 For `.specify/business_domain/**` targets:
 
 1. Resolve the L1/L2/L4 target from `specs/{feature}/route.md` when available, `specs/{feature}/spec.md` `Business Domain Targets` and `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
-2. Verify target ownership and that the fact belongs to that bounded context.
-3. If the L4 document exists, prepare an update against the existing file.
-4. If the L4 document is missing, continue only when create-if-missing is explicitly authorized, L1/L2 are confirmed, owner is explicit, and a stable L4 id can be reserved.
-5. Read Project Type Profiles from `specs/{feature}/route.md` or the Pipeline Domain Route Summary and select the matching L4 template under `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`.
-   Record `Selected L4 Template` in the Create-If-Missing Decision.
-6. Create the project-type L4 skeleton only after reserving the id; update the L2 main document index and `01DomainCatalog.md` in the same Sync change.
-7. Do not create or write missing domain facts under `99PendingConfirmation`.
-8. Run `${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict` before reporting final `SYNCED`.
+2. Detect project canonical naming pattern and naming_pattern_source.
+3. Detect project shape profile and shape_profile_source.
+4. Determine shape_confidence.
+5. If the L4 document exists, prepare compatible update against the existing file and preserve existing shape.
+6. If the L4 document is missing:
+   - require create-if-missing authorization;
+   - require confirmed L1/L2, owner, and reserved L4 id;
+   - create using project canonical naming and project shape;
+   - update L2 main document index and `01DomainCatalog.md`;
+   - record naming_pattern_source, shape_profile_source, shape_confidence.
+7. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only when standard template fallback is explicitly active:
+   - no existing project shape exists;
+   - user confirms fallback;
+   - `standard_template_fallback_allowed=true`;
+   - fallback does not conflict with existing legacy/project shape.
+   - When fallback is active, Selected L4 Template is recorded for traceability.
+8. Do not write missing domain facts under `99PendingConfirmation`.
+9. Run `${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict` before reporting final `SYNCED`.
 
 ### 4. Prepare Or Apply Sync
 
@@ -182,7 +191,11 @@ Stop instead of syncing when:
 - Target path or ownership is unclear.
 - L1/L2 are unconfirmed for a missing business-domain L4 target.
 - L4 id cannot be reserved for an authorized create-if-missing target.
-- Project Type Profiles are missing or cannot select a matching L4 template for create-if-missing.
+- naming_pattern_source, shape_profile_source, or shape_confidence is missing for create-if-missing.
+- standard template fallback is attempted without explicit fallback conditions.
+- fallback is active but Project Type Profiles or selected fallback template cannot be resolved.
+- target document would be created under `99PendingConfirmation`.
+- L2 index or `01DomainCatalog.md` cannot be updated.
 - Target owner is unclear for an existing or new business-domain document.
 - User has not authorized writing to the target.
 - Proposed fact is one-off or only valid for a single temporary requirement.
