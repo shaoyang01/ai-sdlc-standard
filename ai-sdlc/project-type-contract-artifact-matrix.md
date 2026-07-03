@@ -130,4 +130,4 @@ contract_artifact_matrix:
 - route.md missing when business_domain sync target is materialized
 - workflow-status treated as manifest authority
 - filename-versioned artifacts used for companion artifacts
-- Plan Gate PASS with missing required artifact
+- Plan Gate PASS with missing required artifact (must not allow)

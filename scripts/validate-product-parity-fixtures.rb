@@ -85,15 +85,37 @@ fixture_dirs.each do |dir|
   end
 
   # Check forbidden_terms
-  guard_words = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /\bdo\s+not\b/i, /不得/, /禁止/, /不允许/, /不能/]
+  guard_words = [/must\s+not/i, /must\s+never/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /\bdo\s+not\b/i, /不得/, /禁止/, /不允许/, /不能/]
   Array(fixture["forbidden_terms"]).each do |term|
-    next unless expected_text.include?(term)
-    lines = expected_text.lines
-    lines.each_with_index do |line, index|
-      next unless line.include?(term)
-      context = [lines[index - 1], line, lines[index + 1]].compact.join(" ")
-      unless guard_words.any? { |gw| context.match?(gw) } || ALLOWED_FORBIDDEN_GUARD_PATTERNS.any? { |pat| context.match?(pat) }
-        errors << "#{relative(dir)}/#{relative(expected_path)}:#{index + 1} forbidden term without guard: #{term}"
+    # Check expected.md for forbidden terms (must have guard context)
+    if expected_text.include?(term)
+      lines = expected_text.lines
+      lines.each_with_index do |line, index|
+        next unless line.include?(term)
+        context = [lines[index - 1], line, lines[index + 1]].compact.join(" ")
+        unless guard_words.any? { |gw| context.match?(gw) } || ALLOWED_FORBIDDEN_GUARD_PATTERNS.any? { |pat| context.match?(pat) }
+          errors << "#{relative(dir)}/#{relative(expected_path)}:#{index + 1} forbidden term without guard: #{term}"
+        end
+      end
+    end
+
+    # Check required_standard_files for forbidden terms (guard context required)
+    # Only for the expanded parity fixture to avoid false positives from
+    # standard files that describe legacy rail behavior descriptively.
+    next unless fixture_name == "legacy-new-rail-product-parity-expanded"
+    Array(fixture["required_standard_files"]).each do |rel_path|
+      abs_path = File.join(ROOT, rel_path)
+      next unless File.exist?(abs_path)
+      next if rel_path.start_with?("scripts/") || rel_path.include?("fixtures/")
+      text = File.read(abs_path)
+      next unless text.include?(term)
+      lines = text.lines
+      lines.each_with_index do |line, index|
+        next unless line.include?(term)
+        context = [lines[index - 1], line, lines[index + 1]].compact.join(" ")
+        unless guard_words.any? { |gw| context.match?(gw) } || ALLOWED_FORBIDDEN_GUARD_PATTERNS.any? { |pat| context.match?(pat) }
+          errors << "#{relative(dir)}/#{rel_path}:#{index + 1} forbidden term in standard file without guard: #{term}"
+        end
       end
     end
   end
