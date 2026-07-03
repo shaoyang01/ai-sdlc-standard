@@ -71,3 +71,5 @@ Legacy document write target: none
 - expected.md may mention forbidden behavior only with guard context (must use must not / forbidden / prohibited / not allowed / no / cannot).
 - skill contracts preserve baseline traceability for sync/reconcile/plan (baseline traceability, spec/plan/task/sync/reconcile traceability).
 - New-Rail enhanced metadata cannot replace baseline traceability.
+- validate-product-parity-fixtures.rb enforces expanded fixture required files/terms/forbidden guard context.
+- validate-skill-contracts.rb enforces PR P static terms and forbidden behavior.

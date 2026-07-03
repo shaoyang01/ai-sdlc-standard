@@ -85,19 +85,14 @@ fixture_dirs.each do |dir|
   end
 
   # Check forbidden_terms
+  guard_words = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /不得/, /禁止/, /不允许/, /不能/]
   Array(fixture["forbidden_terms"]).each do |term|
     next unless expected_text.include?(term)
-
-    # Find the line containing the forbidden term
     lines = expected_text.lines
     lines.each_with_index do |line, index|
       next unless line.include?(term)
-
-      context_start = [0, index - 3].max
-      context_end = [lines.size - 1, index + 3].min
-      context = lines[context_start..context_end].join(" ")
-
-      unless ALLOWED_FORBIDDEN_GUARD_PATTERNS.any? { |pat| context.match?(pat) }
+      context = [lines[index - 1], line, lines[index + 1]].compact.join(" ")
+      unless guard_words.any? { |gw| context.match?(gw) } || ALLOWED_FORBIDDEN_GUARD_PATTERNS.any? { |pat| context.match?(pat) }
         errors << "#{relative(dir)}/#{relative(expected_path)}:#{index + 1} forbidden term without guard: #{term}"
       end
     end

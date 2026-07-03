@@ -2250,6 +2250,41 @@ if File.exist?(old_matrix_path)
   end
 end
 
+# PR P: expanded parity validator static checks
+prp_files = ["ai-sdlc/agents-rail-routing.md", "ai-sdlc/specs-run-lifecycle.md",
+  "ai-sdlc/shared-business-domain-governance.md",
+  "skill-contracts/known-skills/sdlc-speckit-sync.md",
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
+  "skill-contracts/known-skills/sdlc-speckit-plan.md", "docs/VALIDATION.md"]
+prp_combined = prp_files.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(File.join(ROOT, f)) : "" }.join
+["legacy_speckit", "new_rail_sdlc", "sync_source_mode", "project canonical naming",
+  "compatible update", "specs_run_id", "library_driven sync runtime",
+  "Project-Type Contract Artifact Matrix", "lifecycle authority",
+  "no filename-versioned artifacts", "baseline traceability"].each do |t|
+  errors << "missing PR P term #{t}" unless prp_combined.include?(t)
+end
+
+prp_forbidden = ["legacy Skill fallback in New-Rail", "read .specify/memory as New-Rail runtime input",
+  "specs is requirement-level artifact", "require specs in library_driven mode",
+  "workflow-status is lifecycle authority", "Plan Gate PASS with missing required artifact"]
+prp_guard = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /不得/, /禁止/, /不允许/, /不能/]
+prp_files.reject { |f| f.include?("fixtures/") }.each do |f|
+  path = File.join(ROOT, f)
+  next unless File.exist?(path)
+  text = File.read(path)
+  prp_forbidden.each do |p|
+    next unless text.include?(p)
+    lines = text.lines
+    lines.each_with_index do |line, i|
+      next unless line.include?(p)
+      ctx = [lines[i-1], line, lines[i+1]].compact.join(" ")
+      unless prp_guard.any? { |g| ctx.match?(g) }
+        errors << "#{f}:#{i+1} contains forbidden PR P wording without guard: #{p}"
+      end
+    end
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else
