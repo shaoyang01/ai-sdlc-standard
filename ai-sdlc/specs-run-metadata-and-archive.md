@@ -93,7 +93,7 @@ If manifest and `workflow-status.md` conflict, manifest wins and `MANIFEST_DRIFT
 | --- | --- |
 | `created` | Specs run generated, not yet confirmed as current implementation reference. |
 | `active` | Current implementation, review, and verification still reference this run. |
-| `business_domain_synced` | Stable facts synced or determined `not_required` / `proposal` / `blocked`. `result=synced` or `not_required` → archive/cleanup eligible. `result=proposal` or `blocked` → cleanup not allowed. |
+| `business_domain_synced` | Stable facts have been synced or explicitly determined `not_required`. This state is valid only when `business_domain_sync.result` is `synced` or `not_required`. If result is `pending`, `proposal`, or `blocked`, the specs run must remain `active`, `created`, or another non-cleanup-eligible state, and cleanup is not allowed. |
 | `archived` | No longer active implementation reference; traceability preserved. |
 | `superseded` | Replaced by another `specs_run_id` for same `requirement_id`. |
 | `cleaned` | Run files removed; manifest retains metadata and audit trace. |
@@ -177,3 +177,5 @@ Cleanup removes or moves run-level specs files only. It must not delete library,
 - cleanup would remove only copy of implementation/verification evidence
 - cleanup attempts to delete `library/{requirement_id}/**`
 - cleanup attempts to delete `.specify/business_domain/**`
+- lifecycle `business_domain_synced` with result `proposal` or `blocked` is invalid
+- lifecycle `business_domain_synced` with result `pending` is invalid

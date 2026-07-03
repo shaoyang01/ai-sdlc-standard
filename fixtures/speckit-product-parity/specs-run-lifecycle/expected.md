@@ -56,3 +56,9 @@ This is a **development-time fixture**, not target project runtime input.
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## PR M Cleanup: Lifecycle/Result Consistency
+
+- business_domain_synced is valid only when business_domain_sync.result is synced or not_required (business_domain_synced with synced or not_required).
+- pending, proposal, or blocked are not cleanup-eligible (pending/proposal/blocked — cleanup is not allowed).
+- lifecycle/result mismatch is invalid.

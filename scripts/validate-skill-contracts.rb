@@ -2145,7 +2145,62 @@ PR_M_REQUIRED_FILES = [
   "fixtures/speckit-product-parity/specs-run-lifecycle/expected.md"
 ].freeze
 
+PR_M_REQUIRED_TERMS = [
+  "specs_run_id", "requirement_id", "feature_id", "run-level artifact",
+  "rail consistency within run", "lifecycle authority",
+  "machine-side snapshot", "business_domain_sync",
+  "specs_runs", "business_domain_synced", "archived", "superseded",
+  "cleaned", "archive_allowed", "cleanup_allowed",
+  "synced_business_domain_targets", "source_artifacts",
+  "may have no specs", "must not delete library",
+  "no filename-versioned artifacts"
+].freeze
+
+PR_M_FORBIDDEN_PATTERNS = [
+  "specs is requirement-level artifact",
+  "cleanup deletes library/{requirement_id}",
+  "cleanup deletes .specify/business_domain",
+  "workflow-status is lifecycle authority",
+  "archive active specs by default",
+  "cleanup pending sync specs"
+].freeze
+
+PR_M_CHECK_FILES = [
+  "ai-sdlc/specs-run-metadata-and-archive.md",
+  "skills/sdlc-speckit-sync/SKILL.md",
+  "skills/sdlc-speckit-code-doc-reconcile/SKILL.md",
+  "skill-contracts/known-skills/sdlc-speckit-sync.md",
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
+  "docs/VALIDATION.md"
+].freeze
+
 PR_M_REQUIRED_FILES.each { |f| errors << "missing #{f}" unless File.exist?(File.join(ROOT, f)) }
+
+# PR M terms: each term must appear in at least one check file
+PR_M_CHECK_FILES.each do |rel_path|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  PR_M_FORBIDDEN_PATTERNS.each do |pattern|
+    if text.include?(pattern)
+      errors << "#{rel_path} contains forbidden PR M wording: #{pattern}"
+    end
+  end
+end
+
+combined_pr_m = PR_M_CHECK_FILES.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(File.join(ROOT, f)) : "" }.join
+PR_M_REQUIRED_TERMS.each do |term|
+  errors << "missing PR M term #{term} across checked files" unless combined_pr_m.include?(term)
+end
+
+# lifecycle/result consistency check
+metadata_path = File.join(ROOT, "ai-sdlc/specs-run-metadata-and-archive.md")
+if File.exist?(metadata_path)
+  meta_text = File.read(metadata_path)
+  ["synced` or `not_required", "pending", "proposal", "blocked", "cleanup is not allowed", "invalid"].each do |term|
+    errors << "specs-run-metadata-and-archive.md missing lifecycle/result term #{term}" unless meta_text.include?(term)
+  end
+end
 
 # Also add fixture dir check
 fixture_dirs_14th = File.join(fixture_root, "specs-run-lifecycle")

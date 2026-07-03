@@ -36,6 +36,13 @@ required_terms:
   - cleanup must not delete library
   - cleanup must not delete business_domain
   - no filename-versioned artifacts
+  - business_domain_synced
+  - synced or not_required
+  - pending
+  - proposal
+  - blocked
+  - cleanup is not allowed
+  - invalid
 forbidden_terms:
   - specs is requirement-level artifact
   - cleanup deletes library/{requirement_id}

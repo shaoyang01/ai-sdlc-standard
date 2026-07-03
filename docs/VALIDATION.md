@@ -1197,7 +1197,8 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - archive gate validation: lifecycle business_domain_synced or superseded, BD sync synced/not_required, not active
 - cleanup gate validation: archived/superseded, manifest traceability, owner confirmation
 - library_driven no-specs validation: no archive/cleanup required when specs never existed
-- no deletion of library/{requirement_id}/** or .specify/business_domain/**,{ validation
+- no deletion of library/{requirement_id}/** or .specify/business_domain/** validation
+- lifecycle/result consistency validation: business_domain_synced only with synced/not_required
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
