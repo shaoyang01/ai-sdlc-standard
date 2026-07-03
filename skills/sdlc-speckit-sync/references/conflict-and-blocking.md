@@ -9,7 +9,9 @@ Stop when:
 - Target path is unclear.
 - L1/L2 are unconfirmed for a missing `.specify/business_domain/**` L4 target.
 - L4 id cannot be reserved for create-if-missing.
-- Project Type Profiles are missing or cannot select an L4 skeleton for create-if-missing.
+- naming_pattern_source, shape_profile_source, or shape_confidence is missing for create-if-missing.
+- standard template fallback is attempted without explicit fallback conditions.
+- standard template fallback is explicitly active, but Project Type Profiles or selected fallback template cannot be resolved.
 - Target owner is unclear for an existing or new business-domain document.
 - User did not authorize writing to the target.
 - User did not explicitly authorize create-if-missing when the business-domain L4 target is missing.
@@ -81,8 +83,13 @@ Block create-if-missing instead of creating or writing to `99PendingConfirmation
 - target owner is unclear;
 - create-if-missing authorization is missing or only implied by generic write authorization;
 - L4 id reservation is ambiguous;
-- Project Type Profiles from `specs/{feature}/route.md` or Pipeline Domain Route Summary are missing or conflict with the requested target;
-- `Selected L4 Template` is missing or the selected `templates/business-domain-l4/{profile}.md` skeleton is missing;
+- project canonical naming cannot be resolved;
+- project shape profile cannot be resolved;
+- shape confidence is unknown or low without user confirmation;
+- standard template fallback is explicitly active, but Project Type Profiles or selected fallback template cannot be resolved;
+- standard template fallback is attempted without user confirmation or standard_template_fallback_allowed=true;
+- create-if-missing would use standard template shape in an existing project with detectable project shape;
+- Selected L4 Template and templates/business-domain-l4 are used only in standard template fallback mode;
 - the L2 main document index cannot be updated;
 - `01DomainCatalog.md` cannot be updated;
 - candidate facts are proposed, unverified, one-off, or only requirement-specific;

@@ -145,15 +145,21 @@ Read `references/sync-targets.md`.
 Determine whether each fact belongs in:
 
 - `.specify/business_domain/**`
-- Checklist or schema updates
-- Coding guide or workflow notes
+- Project checklist files
+- Standard package checklist/schema/process-guide proposals, never target project `.specify/workflow/**` or `.specify/coding_guide/**`
 - No long-term target
 
 Stop when target ownership or path is unclear.
 
 For `.specify/business_domain/**` targets:
 
-1. Resolve the L1/L2/L4 target from `specs/{feature}/route.md` when available, `specs/{feature}/spec.md` `Business Domain Targets` and `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
+1. Resolve L1/L2/L4 target from:
+   - specs route/spec when available and current;
+   - library artifacts / manifest in library_driven mode;
+   - existing `01DomainCatalog.md`;
+   - L2 main document index;
+   - current business-domain documents;
+   - explicit user confirmation.
 2. Detect project canonical naming pattern and naming_pattern_source.
 3. Detect project shape profile and shape_profile_source.
 4. Determine shape_confidence.
