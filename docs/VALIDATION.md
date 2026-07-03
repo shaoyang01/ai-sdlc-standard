@@ -1199,6 +1199,16 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - library_driven no-specs validation: no archive/cleanup required when specs never existed
 - no deletion of library/{requirement_id}/** or .specify/business_domain/** validation
 - lifecycle/result consistency validation: business_domain_synced only with synced/not_required
+
+## PR N: Library-Driven Sync Runtime Hardening 校验
+
+- library_driven runtime readiness validation
+- no specs required validation (specs, specs_run_id not required)
+- implementation/verification evidence validation (no direct write without both)
+- sync need classification validation (SYNC_REQUIRED/NOT_REQUIRED/PROPOSAL_REQUIRED/BLOCKED/DUPLICATE_SYNC_BLOCKED)
+- duplicate sync guard validation (pipeline_sync_executed + result=synced blocks library_driven)
+- supplemental sync validation (only when explicitly authorized, no duplicate facts)
+- manifest business_domain_sync library_driven validation (source_of_truth, stable_fact_candidates, synced targets)
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 

@@ -85,6 +85,12 @@ blocking_conditions:
   - blocks deletion of existing facts without explicit supersession evidence
   - direct update requires safe insertion point and implementation/verification evidence
   - library_driven direct update requires approved/current library evidence
+  - supports library_driven sync runtime per library-driven-sync-runtime.md
+  - requires requirement_id in library_driven; specs/specs_run_id not required
+  - sync need classification required (SYNC_REQUIRED/NOT_REQUIRED/PROPOSAL_REQUIRED/BLOCKED/DUPLICATE_SYNC_BLOCKED)
+  - duplicate sync guard required before direct write
+  - pipeline_sync_executed=true and result=synced blocks library_driven direct write unless supplemental sync authorized
+  - output includes library source artifacts and manifest business_domain_sync recommendation
   - supports compatible update mode, update proposal, and reconcile proposal
   - outputs specs run metadata (specs_run_id, requirement_id, feature_id) when specs exist
   - library_driven does not require specs_run_id

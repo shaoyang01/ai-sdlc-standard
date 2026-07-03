@@ -1,0 +1,51 @@
+name: library-driven-sync-runtime
+description: Synthetic library-driven sync runtime hardening fixture.
+project_type_profiles: []
+required_standard_files:
+  - ai-sdlc/library-driven-sync-runtime.md
+  - ai-sdlc/business-domain-sync-source-modes.md
+  - ai-sdlc/shared-business-domain-governance.md
+  - ai-sdlc/business-domain-compatible-update.md
+  - ai-sdlc/specs-run-metadata-and-archive.md
+  - templates/library-driven-sync-decision-template.md
+  - skills/sdlc-speckit-sync/SKILL.md
+  - skills/sdlc-speckit-sync/references/sync-inputs.md
+  - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/output-and-manifest.md
+  - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+required_terms:
+  - library_driven sync runtime
+  - Direct Implementation
+  - library-only DocFlow
+  - specs are not required
+  - specs_run_id is not required
+  - missing specs is expected and must not block
+  - implementation evidence
+  - verification evidence
+  - Sync Need Classification
+  - SYNC_REQUIRED
+  - NOT_REQUIRED
+  - PROPOSAL_REQUIRED
+  - BLOCKED
+  - DUPLICATE_SYNC_BLOCKED
+  - duplicate sync guard
+  - supplemental sync
+  - pipeline_sync_executed
+  - library_sync_executed
+  - stable_fact_candidates
+  - synced_business_domain_targets
+  - no direct confirmed write without implementation evidence and verification evidence
+  - source_of_truth
+forbidden_terms:
+  - require specs in library_driven mode
+  - missing specs blocks library_driven
+  - direct write without verification evidence
+  - duplicate sync allowed by default
+  - library is long-term knowledge base
+  - use chat as source of truth
+expected_outputs:
+  - library_driven sync runtime protocol
+  - sync need classification
+  - duplicate sync guard
+notes: development-time fixture; not target project runtime input

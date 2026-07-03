@@ -37,6 +37,7 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 21. Existing L4 updates must use compatible update per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-compatible-update.md`. Unknown safe insertion point → update proposal. Fact conflict → reconcile proposal. No whole-document rewrite. No forced New-Rail section injection. No direct update without implementation evidence and verification evidence.
 22. When specs exist, record specs_run_id / feature_id / requirement_id in sync output. In library_driven mode without specs, do not require specs_run_id.
 23. Do not cleanup or archive specs in sync unless explicitly authorized and archive/cleanup gate passes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/specs-run-metadata-and-archive.md`. Business_domain synced does not automatically mean cleanup allowed.
+24. In library_driven mode, follow `${AI_SDLC_STANDARD_HOME}/ai-sdlc/library-driven-sync-runtime.md`. Classify sync need as SYNC_REQUIRED / NOT_REQUIRED / PROPOSAL_REQUIRED / BLOCKED / DUPLICATE_SYNC_BLOCKED. No direct confirmed write without implementation evidence and verification evidence. Duplicate sync guard must be checked before direct write. Pipeline_sync_executed=true and result=synced blocks library_driven direct write unless supplemental sync is explicitly authorized.
 
 ## Standard Package Resolution
 
@@ -83,6 +84,8 @@ Load these references as needed:
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/specs-run-metadata-and-archive.md` for specs run lifecycle and archive/cleanup.
 - `${AI_SDLC_STANDARD_HOME}/templates/specs-run-metadata-template.yaml` for manifest specs_runs metadata.
 - `${AI_SDLC_STANDARD_HOME}/templates/specs-archive-cleanup-proposal-template.md` for archive/cleanup proposal.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/library-driven-sync-runtime.md` for library_driven sync runtime.
+- `${AI_SDLC_STANDARD_HOME}/templates/library-driven-sync-decision-template.md` for library_driven sync decision.
 
 ## Workflow
 

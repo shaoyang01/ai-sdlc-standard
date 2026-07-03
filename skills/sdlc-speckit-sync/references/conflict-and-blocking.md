@@ -58,6 +58,14 @@ Stop when:
 - source_priority_conflict
 - missing implementation evidence for direct update
 - missing verification evidence for direct update
+- duplicate sync guard unresolved
+- pipeline_sync_executed=true and result=synced without supplemental authorization
+- implementation evidence missing in library_driven mode
+- verification evidence missing in library_driven mode
+- 02-方案审核 missing / failed / blocked
+- manifest source freshness conflict
+- library artifact current effective version unknown
+- source_of_truth unclear in library_driven mode
 
 ## Entry Coverage Blocking
 
