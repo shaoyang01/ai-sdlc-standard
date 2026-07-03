@@ -260,7 +260,7 @@ Forbidden terms 可以出现在 expected.md 或 standard files 中，但必须�
 
 ## 11. Manifest and Standard Package Entrypoints
 
-`manifest.yaml` 是标准包的索引文件，包含所有 `ai-sdlc/` governance 文件、`templates/`、`scripts/` 的 entrypoint。标准包使用者应通过 `manifest.yaml` 发现和引用标准文件。
+`manifest.yaml` 是标准包的索引文件，包含 PR J–P 相关 governance docs、templates 及关键 scripts entrypoints。标准包使用者应通过 `manifest.yaml` 发现和引用标准文件。
 
 旧 reference `skills/sdlc-speckit-plan/references/project-type-contract-matrix.md` 已标记为 `superseded` / `not authoritative`。Authoritative matrix 位于 `ai-sdlc/project-type-contract-artifact-matrix.md`。
 
@@ -333,6 +333,6 @@ Forbidden terms 可以出现在 expected.md 或 standard files 中，但必须�
 ## 15. Next Recommended Work
 
 - **不再扩协议**。当前 PR J–P 已覆盖 New-Rail Enhanced Speckit Pipeline 的核心语义。
-- **选一个真实项目做 pilot**。建议从 `pfms` 或 `logistics-center` 开始。
+- **选一个真实项目做 pilot**。建议选择一个边界清晰、业务影响可控、business_domain 文档较完整的真实项目开始。
 - **输出 migration/adoption report**。观察 New-Rail 是否能在真实项目中完整跑通：plan → implement → sync → reconcile → archive/cleanup，以及 library_driven sync。
 - **pilot 后再决定**是否抽象更多 project type profile、是否实现 writer script、是否补充更多 fixture。
