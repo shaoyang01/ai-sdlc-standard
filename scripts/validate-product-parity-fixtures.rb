@@ -85,7 +85,7 @@ fixture_dirs.each do |dir|
   end
 
   # Check forbidden_terms
-  guard_words = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /不得/, /禁止/, /不允许/, /不能/]
+  guard_words = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /\bdo\s+not\b/i, /不得/, /禁止/, /不允许/, /不能/]
   Array(fixture["forbidden_terms"]).each do |term|
     next unless expected_text.include?(term)
     lines = expected_text.lines

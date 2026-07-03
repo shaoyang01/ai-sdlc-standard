@@ -1245,6 +1245,7 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - PR P cleanup validates skill contracts preserve baseline traceability.
 - PR P cleanup 2 validates expanded fixture required_standard_files, required_terms, and forbidden_terms with guard context.
 - PR P cleanup 2 validates PR P static terms and forbidden behavior in validate-skill-contracts.rb.
+- PR P cleanup 3 validates forbidden_terms guard context across expanded fixture required_standard_files, not only expected.md.
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 

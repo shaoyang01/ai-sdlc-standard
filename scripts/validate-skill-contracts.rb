@@ -2260,11 +2260,13 @@ prp_combined = prp_files.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(F
 ["legacy_speckit", "new_rail_sdlc", "sync_source_mode", "project canonical naming",
   "compatible update", "specs_run_id", "library_driven sync runtime",
   "Project-Type Contract Artifact Matrix", "lifecycle authority",
-  "no filename-versioned artifacts", "baseline traceability"].each do |t|
+  "no filename-versioned artifacts", "baseline traceability",
+  "spec/plan/task/sync/reconcile traceability"].each do |t|
   errors << "missing PR P term #{t}" unless prp_combined.include?(t)
 end
 
 prp_forbidden = ["legacy Skill fallback in New-Rail", "read .specify/memory as New-Rail runtime input",
+  "library is legacy protected directory",
   "specs is requirement-level artifact", "require specs in library_driven mode",
   "workflow-status is lifecycle authority", "Plan Gate PASS with missing required artifact"]
 prp_guard = [/must\s+not/i, /forbidden/i, /prohibited/i, /not\s+allowed/i, /\bno\b/i, /cannot/i, /不得/, /禁止/, /不允许/, /不能/]
