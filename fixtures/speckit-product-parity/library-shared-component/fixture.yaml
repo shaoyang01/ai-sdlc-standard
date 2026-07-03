@@ -1,0 +1,23 @@
+name: library-shared-component
+description: Synthetic library shared component parity fixture.
+project_type_profiles:
+  - library-shared-component
+required_standard_files:
+  - templates/business-domain-l4/library-shared-component.md
+  - skills/sdlc-speckit-analyze/references/project-type-checks.md
+required_terms:
+  - library-shared-component
+  - public API
+  - consumer scenario
+  - compatibility
+  - deprecation/migration
+  - test evidence
+forbidden_terms:
+  - .specify/memory/**
+  - .specify/workflow/**
+  - .specify/coding_guide/**
+  - filename-versioned artifacts
+expected_outputs:
+  - Project Type Profile Checks
+  - Entry Coverage Gate
+notes: development-time fixture; not target project runtime input

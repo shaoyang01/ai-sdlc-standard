@@ -979,3 +979,46 @@ scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify
 6. Direct Implementation 小需求闭环
 7. Complex Speckit pipeline 闭环
 ```
+
+## Fixture-Based Product Parity Validator 校验
+
+### 概述
+
+`validate-product-parity-fixtures.rb` 是标准包开发期回归校验器。它使用最小 synthetic fixtures 验证 New-Rail Enhanced Speckit Pipeline 的关键产品语义，防止后续修改破坏已完成能力。
+
+关键约束：
+
+- fixtures 是标准包开发期回归，不是目标项目 runtime 输入（not target project runtime input）。
+- 不复制真实项目代码或业务文档。
+- validator 不访问真实业务仓库。
+- validator 覆盖 route artifact、project-type L4、frontend process products、entry coverage analyze、bootstrap scan control、delta change routing。
+
+### 执行命令
+
+```bash
+ruby scripts/validate-product-parity-fixtures.rb
+```
+
+### 与 validate-skill-contracts.rb 的关系
+
+| 校验器 | 检查范围 |
+| --- | --- |
+| `scripts/validate-skill-contracts.rb` | 标准文件和规则锚点是否存在、是否一致 |
+| `scripts/validate-product-parity-fixtures.rb` | 跨 PR 语义组合是否仍然成立（development-time fixture） |
+
+`validate-skill-contracts.rb` 检查 contract YAML、manifest 登记、路径一致性、legacy source 红线等。
+`validate-product-parity-fixtures.rb` 检查 fixture 目录下的 `fixture.yaml` + `expected.md`，验证 required_standard_files 存在、required_terms 在标准文件中能找到、forbidden_terms 不会作为 runtime dependency 出现。
+
+### Fixture 覆盖
+
+| Fixture 目录 | 产品语义覆盖 |
+| --- | --- |
+| `backend-business-service/` | Project-type L4: entry→service→manager/mapper chain, transaction, rollback, idempotency, compensation |
+| `admin-mixed-workflow/` | Project-type L4: controller/worker/schedule/data-console/SPI/RPC, config lifecycle, approval/audit |
+| `frontend-application/` | Project-type L4 + frontend process products: route/page/component/store/API, implementation/debug/observability |
+| `data-pipeline-etl/` | Project-type L4: spark/flink entry, SQL lineage, replay/idempotency, connector/sink |
+| `library-shared-component/` | Project-type L4: public API, consumer scenario, compatibility, deprecation |
+| `route-artifact/` | Route artifact: route type, business domain targets, entry coverage, create-if-missing |
+| `entry-coverage-analyze/` | Entry coverage precision + Analyze Gate: TSV parsing, classification, technical bridge, reverse coverage |
+| `bootstrap-scan-control/` | Bootstrap performance: --scan-root, --scan-timeout, structured inventory, timeout/partial |
+| `delta-change-supplement/` | Delta change routing: Requirement Supplement, Specification Missing, Decision Scope, aggregate vs delta |

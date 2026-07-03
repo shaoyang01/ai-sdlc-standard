@@ -1,0 +1,28 @@
+name: frontend-application
+description: Synthetic frontend application parity fixture.
+project_type_profiles:
+  - frontend-application
+required_standard_files:
+  - templates/business-domain-l4/frontend-application.md
+  - skills/sdlc-speckit-analyze/references/project-type-checks.md
+  - skills/sdlc-speckit-implement/references/process-products.md
+required_terms:
+  - frontend-application
+  - route/page/component/store/API/popup/navigation
+  - state and visibility
+  - backend/mock boundary
+  - visual verification
+  - specs/{feature}/implementation.md
+  - specs/{feature}/workflow-status.md
+  - specs/{feature}/debug-guide.md
+  - specs/{feature}/observability.md
+  - native shell technical bridge does not block
+forbidden_terms:
+  - .specify/memory/**
+  - .specify/workflow/**
+  - .specify/coding_guide/**
+  - filename-versioned artifacts
+expected_outputs:
+  - Project Type Profile Checks
+  - Process Products Produced Or Recommended
+notes: development-time fixture; not target project runtime input

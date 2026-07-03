@@ -1,0 +1,24 @@
+name: backend-business-service
+description: Synthetic backend service parity fixture.
+project_type_profiles:
+  - backend-business-service
+required_standard_files:
+  - templates/business-domain-l4/backend-business-service.md
+  - skills/sdlc-speckit-analyze/references/project-type-checks.md
+required_terms:
+  - backend-business-service
+  - entry -> service -> manager/repository/mapper coverage
+  - transaction boundary
+  - rollback path
+  - idempotency
+  - compensation
+  - API/RPC/MQ/Schedule contract
+forbidden_terms:
+  - .specify/memory/**
+  - .specify/workflow/**
+  - .specify/coding_guide/**
+  - filename-versioned artifacts
+expected_outputs:
+  - Project Type Profile Checks
+  - Entry Coverage Gate
+notes: development-time fixture; not target project runtime input

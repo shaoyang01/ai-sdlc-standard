@@ -1,0 +1,42 @@
+name: entry-coverage-analyze
+description: Synthetic entry coverage precision + Analyze Gate parity fixture.
+project_type_profiles:
+  - backend-business-service
+required_standard_files:
+  - scripts/audit-entry-coverage.rb
+  - skills/sdlc-speckit-analyze/references/analyze-gate-check.md
+  - skills/sdlc-speckit-analyze/references/project-type-checks.md
+  - skills/sdlc-speckit-analyze/references/analyze-inputs.md
+required_terms:
+  - .specify/entry-coverage-profile.yaml
+  - entry_inventory.tsv
+  - service_inventory.tsv
+  - classification
+  - classification_reason
+  - match_strength
+  - match_reason
+  - reverse_coverage_status
+  - no_entry_reverse_coverage
+  - technical_bridge
+  - framework_bridge
+  - generated_or_vendor
+  - native_shell
+  - abstract_or_base
+  - annotation_or_marker
+  - not_applicable
+  - business_entry
+  - business_domain L4 missing
+  - Analyze Gate Result
+  - FAIL
+  - PENDING_CONFIRMATION
+  - Analyze must parse TSV fields
+  - Do not grep whole markdown reports
+forbidden_terms:
+  - .specify/memory/**
+  - .specify/workflow/**
+  - .specify/coding_guide/**
+  - filename-versioned artifacts
+expected_outputs:
+  - Analyzed Entry and Service Coverage
+  - Entry Coverage Gate
+notes: development-time fixture; not target project runtime input

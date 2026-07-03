@@ -1729,6 +1729,62 @@ else
   errors << "missing docs/VALIDATION.md"
 end
 
+# PR I: Fixture-Based Product Parity Validator
+PRODUCT_PARITY_FIXTURE_DIRS = [
+  "backend-business-service",
+  "admin-mixed-workflow",
+  "frontend-application",
+  "data-pipeline-etl",
+  "library-shared-component",
+  "route-artifact",
+  "entry-coverage-analyze",
+  "bootstrap-scan-control",
+  "delta-change-supplement"
+].freeze
+
+PRODUCT_PARITY_VALIDATION_DOC_TERMS = [
+  "Fixture-Based Product Parity Validator",
+  "validate-product-parity-fixtures.rb",
+  "development-time fixture",
+  "not target project runtime input",
+  "route artifact",
+  "project-type L4",
+  "frontend process products",
+  "entry coverage",
+  "bootstrap scan control",
+  "delta change routing"
+].freeze
+
+validator_path = File.join(ROOT, "scripts", "validate-product-parity-fixtures.rb")
+if File.exist?(validator_path)
+  errors << "validate-product-parity-fixtures.rb must be executable" unless File.executable?(validator_path)
+else
+  errors << "missing scripts/validate-product-parity-fixtures.rb"
+end
+
+fixture_root = File.join(ROOT, "fixtures", "speckit-product-parity")
+if File.directory?(fixture_root)
+  PRODUCT_PARITY_FIXTURE_DIRS.each do |dir|
+    full_dir = File.join(fixture_root, dir)
+    unless File.directory?(full_dir)
+      errors << "missing fixture directory fixtures/speckit-product-parity/#{dir}"
+    end
+    yaml_path = File.join(full_dir, "fixture.yaml")
+    expected_path = File.join(full_dir, "expected.md")
+    errors << "missing fixture file fixtures/speckit-product-parity/#{dir}/fixture.yaml" unless File.exist?(yaml_path)
+    errors << "missing fixture file fixtures/speckit-product-parity/#{dir}/expected.md" unless File.exist?(expected_path)
+  end
+else
+  errors << "missing fixtures/speckit-product-parity/"
+end
+
+if File.exist?(validation_path)
+  text = File.read(validation_path)
+  PRODUCT_PARITY_VALIDATION_DOC_TERMS.each do |term|
+    errors << "docs/VALIDATION.md missing product parity validator requirement #{term}" unless text.include?(term)
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else
