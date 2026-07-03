@@ -31,6 +31,11 @@ required_terms:
   - Sync Source Mode
   - sync proposal
   - New-Rail 不读取
+  - sync_source_mode
+  - Required Inputs (speckit_driven)
+  - Required Inputs (library_driven)
+  - Required Inputs (hybrid)
+  - Missing specs is expected and must not block
 forbidden_terms:
   - .specify/memory/**
   - .specify/workflow/**

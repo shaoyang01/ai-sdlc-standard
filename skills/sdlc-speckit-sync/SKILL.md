@@ -11,9 +11,11 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 
 ## Core Rules
 
-1. Consume verified implementation evidence only.
-2. Require current spec, plan, tasks, implementation result, and DocFlow artifacts.
-3. Sync only stable, reusable facts that belong in the selected knowledge target.
+1. Determine sync_source_mode before collecting required inputs: speckit_driven, library_driven, or hybrid. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`.
+2. In speckit_driven mode, require current specs/{feature}/spec.md, plan.md, tasks.md, implementation result, verification evidence, and relevant DocFlow artifacts.
+3. In library_driven mode, do not require specs/{feature}/**. Require requirement_id, current library artifacts, approved 01-技术方案, approved 02-方案审核, implementation evidence, verification evidence, and business_domain target. Missing specs is expected and must not block.
+4. In hybrid mode, collect both when present and use manifest current effective version, pipeline status, source freshness, and gate result to determine priority.
+5. Sync only stable, reusable facts that belong in the selected knowledge target.
 4. Do not treat `library/{requirement_id}/` as the long-term knowledge base.
 5. Do not sync raw chat, temporary debugging notes, speculative design, unverified test findings, or unresolved risks.
 6. Require explicit target path and write authorization before modifying `.specify/business_domain/**` or other knowledge assets.
@@ -72,25 +74,47 @@ Load these references as needed:
 
 ## Workflow
 
-### 1. Resolve Inputs
+### Sync Source Mode Resolution
 
-Identify:
+Determine sync_source_mode before collecting inputs:
 
-- Requirement ID
+- `speckit_driven`: selected when Speckit pipeline produced specs and pipeline Sync/Reconcile is the intended path.
+- `library_driven`: selected when Direct Implementation / library-only DocFlow did not produce specs.
+- `hybrid`: selected when both specs and library exist for the same requirement.
+- Stop when mode cannot be determined and business_domain write is requested.
+
+See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`.
+
+### 1. Resolve Inputs (per mode)
+
+**speckit_driven identify:**
+- Requirement ID, feature id
 - `specs/{feature}/spec.md`
 - `specs/{feature}/route.md`, when materialized
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
 - Implementation result from `sdlc-speckit-implement`
-- Implementation record or `03-实现记录`, if available
-- Code review and test feedback, if available
-- Target knowledge path
-- `.specify/business_domain/01DomainCatalog.md`, if syncing to business_domain
-- L1/L2/L4 route, owner, and create-if-missing authorization when target L4 is missing
-- `.specify/entry-coverage-profile.yaml`, if available
+- Verification evidence
+- `library/{requirement_id}/01-技术方案/*`, `02-方案审核/*`
+- Implementation record, code review, test feedback if available
 - `manifest.md`, if available
 
-Stop if implementation evidence is missing or unverified.
+**library_driven identify:**
+- Requirement ID
+- `library/{requirement_id}/manifest.md` OR at least one valid current library artifact
+- `library/{requirement_id}/01-技术方案/*`
+- `library/{requirement_id}/02-方案审核/*`
+- Implementation evidence: `03-实现记录` / implementation result / code diff with accepted implementation record
+- Verification evidence: `05-测试验收` / `04-交付总结` / test result / accepted review
+- Business domain target or user confirmation
+- `manifest.md`, if available
+
+**hybrid identify:**
+- Both specs and library when present
+- `manifest.md` current effective version
+- Pipeline status
+- Source freshness
+- Gate results
 
 ### 2. Verify Sync Readiness
 
@@ -101,11 +125,11 @@ Read:
 
 Continue only when:
 
-- Implementation is completed or the sync scope is limited to completed verified tasks.
-- Verification evidence exists.
-- Facts are stable and reusable.
-- Target path and authorization are explicit.
-- Business-domain target routes use confirmed L1/L2 and either an existing L4 or an authorized create-if-missing path.
+- Sync source mode is explicit.
+- In speckit_driven mode: specs are present, implementation is completed or sync scope is limited to verified tasks, verification evidence exists.
+- In library_driven mode: specs are not required. Implementation evidence exists, verification evidence exists, library artifacts are current.
+- In hybrid mode: missing specs blocks only if manifest marks specs as current source-of-truth.
+- Incomplete evidence can only produce proposal/not_required/blocked, not confirmed write.
 
 ### 3. Select Or Create Targets
 
@@ -202,3 +226,7 @@ Stop instead of syncing when:
 - Proposed fact conflicts with existing knowledge.
 - Standard entry coverage audit fails for `.specify/business_domain/**` Sync.
 - Sync would require changing spec, plan, tasks, or code.
+- Unknown sync_source_mode when business_domain write is requested.
+- Missing specs blocks only in speckit_driven or hybrid when specs are current source-of-truth.
+- Missing specs must not block library_driven mode.
+- In library_driven mode, missing implementation or verification evidence → proposal/not_required/blocked, not direct write.

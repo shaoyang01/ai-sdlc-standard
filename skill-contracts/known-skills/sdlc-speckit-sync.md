@@ -10,12 +10,19 @@ stage: Speckit Sync / Knowledge Sync
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
-  - specs/{feature}/route.md
-  - specs/{feature}/spec.md
-  - specs/{feature}/plan.md
-  - specs/{feature}/tasks.md
+  - (speckit_driven) specs/{feature}/route.md
+  - (speckit_driven) specs/{feature}/spec.md
+  - (speckit_driven) specs/{feature}/plan.md
+  - (speckit_driven) specs/{feature}/tasks.md
   - implementation result from sdlc-speckit-implement
   - verification evidence
+  - (library_driven) requirement_id
+  - (library_driven) library/{requirement_id}/manifest.md or valid current library artifact
+  - (library_driven) library/{requirement_id}/01-技术方案/*
+  - (library_driven) library/{requirement_id}/02-方案审核/*
+  - (library_driven) implementation evidence
+  - (library_driven) verification evidence
+  - (library_driven) business_domain target or user confirmation
   - optional library/{requirement_id}/03-实现记录/*
   - optional library/{requirement_id}/04-代码审核/*
   - optional library/{requirement_id}/05-测试验收/*
@@ -111,13 +118,40 @@ blocking_conditions:
 
 ## Input Contract
 
-必需输入：
+`sdlc-speckit-sync` supports sync_source_mode: `speckit_driven`, `library_driven`, `hybrid`.
 
+### Required Inputs (speckit_driven)
+
+- requirement id and feature id
+- `specs/{feature}/route.md` when materialized
 - `specs/{feature}/spec.md`
 - `specs/{feature}/plan.md`
 - `specs/{feature}/tasks.md`
 - `sdlc-speckit-implement` 的实现结果。
 - 已完成任务的验证证据。
+- `library/{requirement_id}/01-技术方案/*` 和 `02-方案审核/*`
+- `library/{requirement_id}/manifest.md`（如可用）
+- 已有目标知识文档（同步 business_domain 时需要）
+
+### Required Inputs (library_driven)
+
+- requirement id
+- `library/{requirement_id}/manifest.md` 或至少一个有效当前 library artifact
+- `library/{requirement_id}/01-技术方案/*`
+- `library/{requirement_id}/02-方案审核/*`（result 为 PASS / PASS_WITH_RISK 或等价审核结果）
+- 实现证据
+- 验证证据
+- business_domain target 可解析或用户确认
+- 已有目标知识文档（同步 business_domain 时需要）
+
+In library_driven mode, `specs/{feature}/**` is not required. Missing specs is expected and must not block. Without implementation and verification evidence, output proposal/not_required/blocked only.
+
+### Required Inputs (hybrid)
+
+- collect both specs and library when present
+- manifest current effective version, pipeline status, source freshness, and gate result decide priority
+- if pipeline reached Sync/Reconcile, prefer speckit_driven as primary
+- missing specs blocks only when specs are current source-of-truth
 
 建议输入：
 

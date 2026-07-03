@@ -1989,7 +1989,8 @@ PR_K_FORBIDDEN_PATTERNS = {
     "select the matching L4 template under",
     "Record `Selected L4 Template` in the Create-If-Missing Decision",
     "Create the project-type L4 skeleton",
-    "Project Type Profiles are missing or cannot select a matching L4 template for create-if-missing"
+    "Project Type Profiles are missing or cannot select a matching L4 template for create-if-missing",
+    "Require current spec, plan, tasks, implementation result, and DocFlow artifacts"
   ],
   "skill-contracts/known-skills/sdlc-speckit-sync.md" => [
     "create-if-missing cannot resolve Project Type Profiles or selected L4 template",
@@ -1999,8 +2000,26 @@ PR_K_FORBIDDEN_PATTERNS = {
   ],
   "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => [
     "缺少 `specs/**` 时停止并建议回到相应 Speckit 阶段"
+  ],
+  "skills/sdlc-speckit-sync/references/sync-targets.md" => [
+    "Coding guides or workflow notes"
   ]
 }.freeze
+
+# Global Cleanup 1: sync_source_mode consistency
+GLOBAL_SYNC_MODE_TERMS = {
+  "skills/sdlc-speckit-sync/SKILL.md" => ["sync_source_mode", "speckit_driven", "library_driven", "hybrid", "library_driven mode", "missing specs", "must not block", "proposal/not_required/blocked"],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["Required Inputs (speckit_driven)", "Required Inputs (library_driven)", "Required Inputs (hybrid)", "is not required", "Missing specs is expected and must not block", "Without implementation and verification evidence, output proposal/not_required/blocked only"]
+}.freeze
+
+GLOBAL_SYNC_MODE_TERMS.each do |rel_path, terms|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  terms.each do |term|
+    errors << "#{rel_path} missing global sync_source_mode consistency term #{term}" unless text.include?(term)
+  end
+end
 
 PR_K_FORBIDDEN_PATTERNS.each do |rel_path, patterns|
   path = File.join(ROOT, rel_path)

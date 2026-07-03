@@ -47,3 +47,10 @@ This is a **development-time fixture**, not target project runtime input.
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## Global Cleanup 1: Sync Source Mode Consistency
+
+- sdlc-speckit-sync supports speckit_driven / library_driven / hybrid sync_source_mode.
+- library_driven sync does not require specs.
+- Missing specs is expected and must not block in library_driven mode.
+- Sync contract required inputs are mode-specific (speckit_driven / library_driven / hybrid).

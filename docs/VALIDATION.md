@@ -1165,6 +1165,10 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Cleanup 2 validates sync SKILL workflow no longer routes create-if-missing through template-primary path.
 - Cleanup 2 validates reconcile contract has mode-specific required inputs (speckit_driven / library_driven / hybrid).
 - Cleanup 2 validates validator catches workflow-level stale template-primary rules.
+- Global Cleanup 1 validates sdlc-speckit-sync mode-specific input contract.
+- Global Cleanup 1 validates library_driven sync does not require specs.
+- Global Cleanup 1 validates missing specs only blocks speckit_driven or hybrid current source-of-truth.
+- Global Cleanup 1 validates target project workflow/coding_guide redline.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

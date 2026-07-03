@@ -10,8 +10,7 @@ Common targets include:
 - `.specify/business_domain/00UbiquitousLanguage.md`
 - `.specify/business_domain/**` domain, workflow, capability, or integration documents
 - Project checklist files
-- ESS or review schema files
-- Coding guides or workflow notes
+- Standard package checklist/schema/process-guide proposals (never target project `.specify/workflow/**` or `.specify/coding_guide/**`)
 
 Use only targets that exist or are explicitly approved for creation.
 
@@ -174,7 +173,7 @@ Block instead of creating when:
 - Duplicate L4 candidate exists.
 - Standard template fallback not allowed.
 - Using standard skeleton would conflict with existing project shape.
-- Project Type Profiles are missing and no conservative fallback is acceptable.
+- Standard template fallback is explicitly active, but Project Type Profiles or selected fallback template cannot be resolved.
 - Target owner is unclear.
 - Create-if-missing authorization is missing.
 - The fact is proposed, unverified, one-off, or valid only for the current requirement.
