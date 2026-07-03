@@ -50,3 +50,9 @@ library_driven can propose/update only from approved/current library evidence an
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## PR L Cleanup: Anti-Regression
+
+- create-if-missing blocking must use project canonical naming + project shape profile, not Project Type Profiles / Selected L4 Template as primary conditions.
+- Project Type Profiles / selected fallback template can block only when standard template fallback is explicitly active (standard template fallback is explicitly active).
+- Sync workflow target resolution includes library artifacts / manifest in library_driven mode (library artifacts / manifest in library_driven mode).

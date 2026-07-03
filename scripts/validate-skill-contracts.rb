@@ -2004,6 +2004,13 @@ PR_K_FORBIDDEN_PATTERNS = {
   ],
   "skills/sdlc-speckit-sync/references/sync-targets.md" => [
     "Coding guides or workflow notes"
+  ],
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md" => [
+    "Project Type Profiles are missing or cannot select an L4 skeleton for create-if-missing",
+    "Project Type Profiles from",
+    "Selected L4 Template is missing or the selected",
+    "selected templates/business-domain-l4/{profile}.md skeleton is missing",
+    "L4 skeleton for create-if-missing"
   ]
 }.freeze
 
@@ -2059,6 +2066,73 @@ if File.exist?(sync_skill_path)
   # Check for unindented bullet lines after description: |
   if text =~ /^description: \|/ && text =~ /^-(?: after| library-driven)/
     errors << "skills/sdlc-speckit-sync/SKILL.md has unindented bullet in frontmatter description"
+  end
+end
+
+# PR L: Compatible Update — required files, terms, and forbidden behavior
+PR_L_REQUIRED_FILES = [
+  "ai-sdlc/business-domain-compatible-update.md",
+  "templates/business-domain-update-proposal-template.md",
+  "templates/business-domain-reconcile-proposal-template.md",
+  "fixtures/speckit-product-parity/business-domain-compatible-update/fixture.yaml",
+  "fixtures/speckit-product-parity/business-domain-compatible-update/expected.md"
+].freeze
+
+PR_L_REQUIRED_TERMS = [
+  "compatible update", "preserve existing shape", "preserve existing facts",
+  "safe insertion point", "update proposal", "reconcile proposal",
+  "semantic_conflict", "code_drift", "doc_drift", "stale_fact",
+  "scope_conflict", "duplicate_fact", "source_priority_conflict",
+  "no whole-document rewrite", "no forced New-Rail section injection",
+  "DIRECT_UPDATE", "UPDATE_PROPOSAL", "RECONCILE_PROPOSAL", "BLOCKED",
+  "implementation evidence", "verification evidence", "sync_source_mode"
+].freeze
+
+PR_L_TERM_FILES = [
+  "ai-sdlc/business-domain-compatible-update.md",
+  "skills/sdlc-speckit-sync/SKILL.md",
+  "skills/sdlc-speckit-code-doc-reconcile/SKILL.md",
+  "skills/sdlc-speckit-sync/references/sync-targets.md",
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md",
+  "skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md",
+  "skill-contracts/known-skills/sdlc-speckit-sync.md",
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
+  "docs/VALIDATION.md"
+].freeze
+
+PR_L_FORBIDDEN_PATTERNS = [
+  "rewrite existing L4 to New-Rail template",
+  "inject Entry Chain into legacy-shaped doc by default",
+  "overwrite conflicting business facts",
+  "delete existing facts without explicit supersession",
+  "use chat as source of truth"
+].freeze
+
+PR_L_REQUIRED_FILES.each do |rel_path|
+  errors << "missing #{rel_path}" unless File.exist?(File.join(ROOT, rel_path))
+end
+
+PR_L_TERM_FILES.each do |rel_path|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  term_found = false
+  PR_L_REQUIRED_TERMS.each do |term|
+    term_found = true if text.include?(term)
+  end
+  errors << "#{rel_path} missing all PR L compatible update terms" unless term_found
+end
+
+# Forbidden behavior check (skip fixture dirs)
+PR_L_FORBIDDEN_CHECK_FILES = PR_L_TERM_FILES.reject { |f| f.include?("fixtures/") }
+PR_L_FORBIDDEN_CHECK_FILES.each do |rel_path|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  PR_L_FORBIDDEN_PATTERNS.each do |pattern|
+    if text.include?(pattern)
+      errors << "#{rel_path} contains forbidden permissive wording: #{pattern}"
+    end
   end
 end
 

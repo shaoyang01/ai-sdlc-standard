@@ -1185,6 +1185,9 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - conflict classification validation: semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict.
 - revision/source traceability validation: every update records rail, sync_source_mode, source_artifacts, update_section, evidence.
 - implementation/verification evidence validation: no direct update without evidence.
+- PR L cleanup validates conflict-and-blocking no longer treats Project Type Profiles / selected L4 template as create-if-missing primary blockers.
+- PR L cleanup validates compatible update required files and terms.
+- PR L cleanup validates no whole-document rewrite / no forced section injection / no overwrite conflict / no chat source-of-truth guards.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

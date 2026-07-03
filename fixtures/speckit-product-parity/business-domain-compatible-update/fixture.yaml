@@ -39,12 +39,20 @@ required_terms:
   - verification evidence
   - sync_source_mode
   - library_driven
+  - project canonical naming
+  - project shape profile
+  - standard template fallback is explicitly active
+  - selected fallback template
+  - library artifacts / manifest in library_driven mode
 forbidden_terms:
   - rewrite existing L4 to New-Rail template
   - inject Entry Chain into legacy-shaped doc by default
   - overwrite conflicting business facts
   - delete existing facts without explicit supersession
   - use chat as source of truth
+  - Project Type Profiles are missing or cannot select an L4 skeleton for create-if-missing
+  - Selected L4 Template is missing or the selected templates/business-domain-l4/{profile}.md skeleton is missing
+  - Coding guide or workflow notes
 expected_outputs:
   - compatible update protocol
   - update proposal template
