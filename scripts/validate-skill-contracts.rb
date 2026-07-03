@@ -1793,7 +1793,9 @@ end
 # PR J: Project-Type Contract Artifact Matrix
 PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS = [
   "project-type-contract-matrix",
-  "companion artifact status table",
+  "Companion Artifact Status",
+  "Project-Type Contract Matrix",
+  "Contract Skip Records",
   "Produced",
   "Reused",
   "Not Applicable",
@@ -1802,11 +1804,25 @@ PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS = [
   "Project Type Profile",
   "Accepted By",
   "Re-Gate Required",
+  "Verification Alternative",
+  "Deferred without Accepted By",
+  "Plan Gate BLOCKED",
   "backend-business-service",
   "admin-mixed-workflow",
   "frontend-application",
   "data-pipeline-etl",
-  "library-shared-component"
+  "library-shared-component",
+  "API contract",
+  "RPC contract",
+  "MQ producer / consumer contract",
+  "route / page contract",
+  "trigger contract",
+  "SQL lineage contract",
+  "public API contract",
+  "specs/{feature}/research.md",
+  "specs/{feature}/data-model.md",
+  "specs/{feature}/contracts/",
+  "specs/{feature}/quickstart.md"
 ].freeze
 
 PROJECT_TYPE_CONTRACT_MATRIX_DOC_TERMS = [
@@ -1818,7 +1834,10 @@ PROJECT_TYPE_CONTRACT_MATRIX_DOC_TERMS = [
   "Deferred",
   "Project Type Profile",
   "contract matrix",
-  "project-type-contract-matrix"
+  "project-type-contract-matrix",
+  "Verification Alternative",
+  "Deferred without Accepted By",
+  "Plan Gate BLOCKED"
 ].freeze
 
 contract_matrix_path = File.join(ROOT, "skills", "sdlc-speckit-plan", "references", "project-type-contract-matrix.md")
@@ -1832,7 +1851,9 @@ else
 end
 
 plan_refs = {
-  "skills/sdlc-speckit-plan/references/output-and-manifest.md" => PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS.first(7) + ["project-type-contract-matrix", "Produced / Reused / Not Applicable / Deferred"],
+  "skills/sdlc-speckit-plan/SKILL.md" => ["project-type-contract-matrix", "Project Type Profile", "Contract Type", "Verification Alternative", "Companion Artifact Status"],
+  "skills/sdlc-speckit-plan/references/plan-inputs.md" => ["project-type-contract-matrix", "Contract Matrix"],
+  "skills/sdlc-speckit-plan/references/output-and-manifest.md" => ["Companion Artifact Status", "Project-Type Contract Matrix", "Contract Skip Records", "project-type-contract-matrix", "Produced / Reused / Not Applicable / Deferred"],
   "skills/sdlc-speckit-plan/references/planning-scope.md" => ["Project Type Profile", "project-type-contract-matrix", "contract matrix"],
   "skills/sdlc-speckit-plan/references/plan-gate-check.md" => ["Project Type Profile", "project-type-contract-matrix", "Deferred", "contract matrix"],
   "skill-contracts/known-skills/sdlc-speckit-plan.md" => ["project-type-contract-matrix", "Project Type Profile"],

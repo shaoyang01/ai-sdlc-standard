@@ -46,3 +46,7 @@ Priority order:
 5. Explicit user confirmation that does not change approved behavior.
 
 If user input changes approved behavior, stop and apply change-control.
+
+## Contract Matrix Readiness
+
+Before producing contracts, resolve the project type profiles from `.specify/project-governance-profile.yaml` or `specs/{feature}/route.md`, then read `${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md` to identify the contract artifacts required for the current feature's project type profiles.

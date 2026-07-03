@@ -58,6 +58,7 @@ Load these references as needed:
 - `references/planning-scope.md` for allowed planning decisions and blocked changes.
 - `references/plan-gate-check.md` for Plan Gate coverage and blocking rules.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
+- `references/project-type-contract-matrix.md` for contract artifact matrix and companion artifact status table.
 
 ## Workflow
 
@@ -113,11 +114,14 @@ Skipping any companion artifact requires a record with:
 
 ```text
 Artifact:
+Project Type Profile:
+Contract Type:
 Skip Reason:
 Risk:
 Impact:
 Accepted By:
 Re-Gate Required:
+Verification Alternative:
 ```
 
 The plan must cover:
@@ -131,10 +135,11 @@ The plan must cover:
 - Risks and mitigations
 - Traceability to `specs/{feature}/spec.md` and DocFlow sources
 - Companion artifact status and skip records
+- Companion Artifact Status table and Project-Type Contract Matrix
 
 ### 4. Run Plan Gate
 
-Read `references/plan-gate-check.md`.
+Read `references/plan-gate-check.md` and `references/project-type-contract-matrix.md`.
 
 Block when:
 

@@ -210,13 +210,25 @@ Plan stage must output a companion artifact status table:
 
 ## Companion Artifact Status
 
-| Artifact | Status | Evidence | Skip Record |
-| --- | --- | --- | --- |
-| plan.md |  |  |  |
-| research.md |  |  |  |
-| data-model.md |  |  |  |
-| contracts/ |  |  |  |
-| quickstart.md |  |  |  |
+| Artifact | Status | Project Type Profile | Contract Type | Evidence | Skip Record | Blocking Item |
+| --- | --- | --- | --- | --- | --- | --- |
+| plan.md |  |  |  |  |  |  |
+| research.md |  |  |  |  |  |  |
+| data-model.md |  |  |  |  |  |  |
+| contracts/ |  |  |  |  |  |  |
+| quickstart.md |  |  |  |  |  |  |
+
+## Project-Type Contract Matrix
+
+| Project Type Profile | Contract Type | Required When | Artifact Target | Status | Evidence | Risk |
+| --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |  |
+
+## Contract Skip Records
+
+| Artifact | Project Type Profile | Contract Type | Status | Skip Reason | Risk | Impact | Accepted By | Re-Gate Required | Verification Alternative |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  | Not Applicable / Deferred |  |  |  |  |  |  |
 
 ## Risks And Mitigations
 

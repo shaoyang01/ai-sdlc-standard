@@ -1,5 +1,5 @@
 name: project-type-contract-matrix
-description: Synthetic project-type contract artifact matrix parity fixture.
+description: Synthetic project-type contract artifact matrix fixture.
 project_type_profiles:
   - backend-business-service
   - admin-mixed-workflow
@@ -8,55 +8,62 @@ project_type_profiles:
   - library-shared-component
 required_standard_files:
   - skills/sdlc-speckit-plan/references/project-type-contract-matrix.md
-  - skills/sdlc-speckit-plan/references/output-and-manifest.md
-  - skills/sdlc-speckit-plan/references/planning-scope.md
   - skills/sdlc-speckit-plan/references/plan-gate-check.md
+  - skills/sdlc-speckit-plan/references/output-and-manifest.md
   - skill-contracts/known-skills/sdlc-speckit-plan.md
+  - skills/sdlc-speckit-plan/SKILL.md
 required_terms:
-  - companion artifact status table
+  - Companion Artifact Status
+  - Project-Type Contract Matrix
+  - Contract Skip Records
+  - specs/{feature}/research.md
+  - specs/{feature}/data-model.md
+  - specs/{feature}/contracts/
+  - specs/{feature}/quickstart.md
   - Produced
   - Reused
-  - Not Applicable
-  - Deferred
-  - Skip Reason
-  - Project Type Profile
-  - Accepted By
-  - Re-Gate Required
-  - backend-business-service
-  - admin-mixed-workflow
-  - frontend-application
-  - data-pipeline-etl
-  - library-shared-component
+  - Not Applicable with reason
+  - Deferred with accepted risk
   - API contract
   - RPC contract
-  - MQ producer/consumer contract
+  - MQ producer / consumer contract
+  - Schedule / job contract
   - DB side-effect / migration contract
-  - failure/rollback/idempotency contract
   - configuration lifecycle contract
-  - approval/audit contract
-  - route/page contract
-  - component/state/store contract
-  - popup/dialog interaction contract
+  - approval / audit contract
+  - import / export contract
+  - read-only query contract
+  - route / page contract
+  - component / state / store contract
+  - backend / mock boundary contract
+  - visual verification contract
   - trigger contract
   - input contract
   - output contract
   - SQL lineage contract
-  - replay/idempotency contract
+  - partition / window / checkpoint contract
+  - replay / idempotency contract
   - downstream consumer contract
   - public API contract
-  - consumer scenario contract
   - compatibility contract
-  - deprecation/migration contract
+  - deprecation / migration contract
   - representative test contract
-  - Plan Gate is BLOCKED
-  - contract surface
+  - transaction boundary contract
+  - data console operation contract
+  - navigation / visibility contract
+  - connector / sink / publisher contract
+  - extension point / adapter contract
+  - Plan Gate BLOCKED
+  - Deferred without Accepted By
+  - Verification Alternative
 forbidden_terms:
   - .specify/memory/**
   - .specify/workflow/**
   - .specify/coding_guide/**
   - filename-versioned artifacts
+  - legacy speckit-* Skill as runtime dependency
 expected_outputs:
-  - Companion Artifact Status Table
+  - Companion Artifact Status
   - Project-Type Contract Matrix
-  - Plan Gate Result
+  - Contract Skip Records
 notes: development-time fixture; not target project runtime input

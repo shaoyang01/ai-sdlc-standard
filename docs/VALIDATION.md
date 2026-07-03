@@ -1061,6 +1061,24 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 
 ### BLOCKED Conditions
 
-- Companion artifact 缺失且无完整 skip record
+- `project_type_profiles` 未知或未识别
+- Companion artifact 缺失且无完整 skip record（含 Project Type Profile、Contract Type、Skip Reason、Risk、Impact、Accepted By、Re-Gate Required、Verification Alternative）
 - `contracts/` 被跳过但 feature 改变了 contract matrix 中列出的 contract surface
-- Deferred artifact 无 accepted risk 或无 Re-Gate Required
+- `Deferred` artifact 无 accepted risk 或无 Re-Gate Required → Plan Gate BLOCKED
+- `Deferred` without `Accepted By` → Plan Gate BLOCKED
+- Skip Reason 空泛（如 "not needed"）→ Plan Gate BLOCKED
+- Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
+
+### 关键术语
+
+- Companion Artifact Status
+- Project-Type Contract Matrix
+- Contract Skip Records
+- `specs/{feature}/research.md`
+- `specs/{feature}/data-model.md`
+- `specs/{feature}/contracts/`
+- `specs/{feature}/quickstart.md`
+- Produced / Reused / Not Applicable / Deferred
+- Verification Alternative
+- Deferred without Accepted By
+- Plan Gate BLOCKED
