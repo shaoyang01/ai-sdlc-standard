@@ -36,6 +36,12 @@ required_terms:
   - Required Inputs (library_driven)
   - Required Inputs (hybrid)
   - Missing specs is expected and must not block
+  - Direct Implementation
+  - library-only DocFlow
+  - library artifacts / manifest
+  - Implementation evidence may come from
+  - code diff with accepted implementation record
+  - selected sync_source_mode
 forbidden_terms:
   - .specify/memory/**
   - .specify/workflow/**

@@ -2008,8 +2008,9 @@ PR_K_FORBIDDEN_PATTERNS = {
 
 # Global Cleanup 1: sync_source_mode consistency
 GLOBAL_SYNC_MODE_TERMS = {
-  "skills/sdlc-speckit-sync/SKILL.md" => ["sync_source_mode", "speckit_driven", "library_driven", "hybrid", "library_driven mode", "missing specs", "must not block", "proposal/not_required/blocked"],
-  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["Required Inputs (speckit_driven)", "Required Inputs (library_driven)", "Required Inputs (hybrid)", "is not required", "Missing specs is expected and must not block", "Without implementation and verification evidence, output proposal/not_required/blocked only"]
+  "skills/sdlc-speckit-sync/SKILL.md" => ["sync_source_mode", "speckit_driven", "library_driven", "hybrid", "library_driven mode", "missing specs", "must not block", "proposal/not_required/blocked", "Direct Implementation", "library-only DocFlow", "Implementation evidence may come from", "code diff with accepted implementation record"],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["Required Inputs (speckit_driven)", "Required Inputs (library_driven)", "Required Inputs (hybrid)", "is not required", "Missing specs is expected and must not block", "Without implementation and verification evidence, output proposal/not_required/blocked only", "In speckit_driven mode, read specs", "In library_driven mode, read library", "implementation evidence and verification evidence exist for the selected sync_source_mode", "In library_driven mode, missing implementation evidence outputs proposal/not_required/blocked"],
+  "ai-sdlc/shared-business-domain-governance.md" => ["library artifacts / manifest", "01DomainCatalog.md", "L2 main document index", "In library_driven mode"]
 }.freeze
 
 GLOBAL_SYNC_MODE_TERMS.each do |rel_path, terms|

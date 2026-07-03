@@ -54,3 +54,7 @@ Legacy document write target: none
 - library_driven sync does not require specs.
 - Missing specs is expected and must not block in library_driven mode.
 - Sync contract required inputs are mode-specific (speckit_driven / library_driven / hybrid).
+- library-driven sync can be triggered after Direct Implementation / library-only DocFlow.
+- business_domain target can be resolved from library artifacts / manifest when specs are absent.
+- sync responsibilities are mode-aware (speckit_driven reads specs, library_driven reads library, hybrid reads both).
+- Implementation evidence may come from 03-实现记录, implementation result, code diff with accepted implementation record, or accepted review/test evidence.

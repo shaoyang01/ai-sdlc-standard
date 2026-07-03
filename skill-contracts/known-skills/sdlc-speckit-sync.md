@@ -93,7 +93,9 @@ blocking_conditions:
 
 它负责：
 
-- 读取已验证实现结果、spec、plan、tasks、实现记录、代码审核和测试反馈。
+- In speckit_driven mode, read specs route/spec/plan/tasks plus implementation and verification evidence.
+- In library_driven mode, read library manifest/current artifacts, 01-技术方案, 02-方案审核, implementation evidence, verification evidence, and target knowledge documents.
+- In hybrid mode, read both and use manifest current effective version, pipeline status, freshness, and gate result.
 - 判断哪些事实是稳定、可复用、适合长期沉淀的知识。
 - 将已授权的事实同步到 `.specify/business_domain/**` 或其他明确目标。
 - 在 L1/L2 已确认、owner 明确、create-if-missing 已授权且 L4 id 可保留时，创建缺失的 L4 骨架。
@@ -171,7 +173,10 @@ In library_driven mode, `specs/{feature}/**` is not required. Missing specs is e
 
 前置条件：
 
-- 实现状态为 `COMPLETED`，或同步范围明确限定为已验证完成任务。
+- implementation evidence and verification evidence exist for the selected sync_source_mode.
+- speckit_driven may use sdlc-speckit-implement result.
+- library_driven may use 03-实现记录, implementation result, code diff with accepted implementation record, test result, accepted review, or delivery summary as evidence.
+- no direct confirmed write without implementation and verification evidence.
 - 同步事实有可追溯来源和验证证据。
 - 目标路径明确。
 - 写入目标已获得用户授权。
@@ -180,7 +185,8 @@ In library_driven mode, `specs/{feature}/**` is not required. Missing specs is e
 
 缺失输入处理：
 
-- 缺少实现结果时停止并回到 `sdlc-speckit-implement`。
+- In speckit_driven mode, missing implementation result routes to sdlc-speckit-implement.
+- In library_driven mode, missing implementation evidence outputs proposal/not_required/blocked, not necessarily sdlc-speckit-implement.
 - 缺少实现记录时可以输出 proposal，但必须建议运行 `sdlc-implementation-recorder`。
 - 缺少目标路径时停止。
 - 缺少写入授权时只输出 proposal，不落盘。

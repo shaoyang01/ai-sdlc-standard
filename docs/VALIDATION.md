@@ -1169,6 +1169,10 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Global Cleanup 1 validates library_driven sync does not require specs.
 - Global Cleanup 1 validates missing specs only blocks speckit_driven or hybrid current source-of-truth.
 - Global Cleanup 1 validates target project workflow/coding_guide redline.
+- Global Cleanup 2 validates sync description includes library-driven / Direct Implementation.
+- Global Cleanup 2 validates sync contract responsibilities are mode-aware.
+- Global Cleanup 2 validates shared business-domain target resolution supports library artifacts / manifest.
+- Global Cleanup 2 validates Source Priority by Mode is authoritative.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

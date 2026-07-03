@@ -54,7 +54,9 @@ If `03-实现记录` is missing:
 - Recommend running `sdlc-implementation-recorder`.
 - Do not sync facts that cannot be traced to code changes and verification.
 
-## Source Priority
+## Source Priority (Legacy — superseded by Source Priority by Mode below)
+
+This legacy priority was the original speckit_driven source order. Use `## Source Priority (by Mode)` below as authoritative. This section is kept for reference only and must not be used for library_driven mode.
 
 Priority order:
 

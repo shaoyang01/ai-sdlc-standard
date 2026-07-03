@@ -18,7 +18,7 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 
 ### Before Writing
 
-1. Resolve target L1/L2/L4 from route artifact, spec, or explicit user confirmation.
+1. Resolve target L1/L2/L4 from route artifact, spec, library artifacts / manifest, existing 01DomainCatalog.md, L2 main document index, current business-domain documents, or explicit user confirmation. In library_driven mode, library artifacts and manifest are valid routing evidence only when approved/current and not stale. If library artifacts cannot resolve target L1/L2/L4, generate proposal or ask user.
 2. Verify L1/L2 are confirmed long-term domains, not temporary or pending.
 3. Verify L4 id can be assigned without ambiguity.
 4. Identify naming pattern source and determine the project's canonical naming convention per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.

@@ -1,7 +1,10 @@
 ---
 name: sdlc-speckit-sync
 description: |
-  This skill should be used when the user asks to "执行 speckit sync", "同步业务知识", "沉淀实现后的稳定事实", "更新 business_domain", or asks to sync verified implementation facts into `.specify/business_domain/**` after sdlc-speckit-implement.
+  This skill should be used when the user asks to "执行 speckit sync", "同步业务知识", "沉淀实现后的稳定事实", "更新 business_domain", or asks to sync verified implementation facts into `.specify/business_domain/**`:
+- after sdlc-speckit-implement in speckit_driven pipeline;
+- after Direct Implementation / library-only DocFlow when stable verified facts should be evaluated for business_domain sync;
+- library-driven sync evaluation.
 version: 0.1.0
 ---
 
@@ -13,24 +16,24 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 
 1. Determine sync_source_mode before collecting required inputs: speckit_driven, library_driven, or hybrid. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`.
 2. In speckit_driven mode, require current specs/{feature}/spec.md, plan.md, tasks.md, implementation result, verification evidence, and relevant DocFlow artifacts.
-3. In library_driven mode, do not require specs/{feature}/**. Require requirement_id, current library artifacts, approved 01-技术方案, approved 02-方案审核, implementation evidence, verification evidence, and business_domain target. Missing specs is expected and must not block.
+3. In library_driven mode, do not require specs/{feature}/**. Require requirement_id, current library artifacts, approved 01-技术方案, approved 02-方案审核, implementation evidence, verification evidence, and business_domain target. Missing specs is expected and must not block. Implementation evidence may come from 03-实现记录, implementation result, code diff with accepted implementation record, or accepted review/test evidence. Do not require sdlc-speckit-implement in library_driven mode.
 4. In hybrid mode, collect both when present and use manifest current effective version, pipeline status, source freshness, and gate result to determine priority.
 5. Sync only stable, reusable facts that belong in the selected knowledge target.
-4. Do not treat `library/{requirement_id}/` as the long-term knowledge base.
-5. Do not sync raw chat, temporary debugging notes, speculative design, unverified test findings, or unresolved risks.
-6. Require explicit target path and write authorization before modifying `.specify/business_domain/**` or other knowledge assets.
-7. Preserve existing knowledge structure, terminology, and ownership.
-8. Stop when the target document cannot be determined or the proposed update conflicts with existing facts.
-9. Record every sync target, source evidence, skipped item, and residual risk.
-10. Recommend manifest Speckit Sync updates.
-11. Route reusable checklist, schema, or review gaps to the appropriate Sync or standard update path.
-12. Do not modify production code.
-13. When a `.specify/business_domain/**` L4 target is missing, use create-if-missing only after L1/L2 are confirmed, target owner is explicit, create authorization is recorded, and the new L4 id can be reserved.
-14. Observe project naming and project shape before writing business_domain. Use project canonical naming and project shape for create-if-missing. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
-15. Do not default to standard L4 skeleton in existing projects. Standard templates are fallback-only for new projects or when no project shape exists and user confirms. Standard template fallback requires explicit user confirmation and `standard_template_fallback_allowed=true`.
-16. Preserve existing shape when updating existing L4 documents. Unknown naming or unknown shape → proposal only.
-17. For create-if-missing, first resolve project canonical naming, project shape, naming_pattern_source, shape_profile_source, and shape_confidence. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only as explicit standard template fallback when no project shape exists, the user confirms fallback, `standard_template_fallback_allowed=true`, and fallback does not conflict with existing legacy/project shape.
-18. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
+6. Do not treat `library/{requirement_id}/` as the long-term knowledge base.
+7. Do not sync raw chat, temporary debugging notes, speculative design, unverified test findings, or unresolved risks.
+8. Require explicit target path and write authorization before modifying `.specify/business_domain/**` or other knowledge assets.
+9. Preserve existing knowledge structure, terminology, and ownership.
+10. Stop when the target document cannot be determined or the proposed update conflicts with existing facts.
+11. Record every sync target, source evidence, skipped item, and residual risk.
+12. Recommend manifest Speckit Sync updates.
+13. Route reusable checklist, schema, or review gaps to the appropriate Sync or standard update path.
+14. Do not modify production code.
+15. When a `.specify/business_domain/**` L4 target is missing, use create-if-missing only after L1/L2 are confirmed, target owner is explicit, create authorization is recorded, and the new L4 id can be reserved.
+16. Observe project naming and project shape before writing business_domain. Use project canonical naming and project shape for create-if-missing. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+17. Do not default to standard L4 skeleton in existing projects. Standard templates are fallback-only for new projects or when no project shape exists and user confirms. Standard template fallback requires explicit user confirmation and `standard_template_fallback_allowed=true`.
+18. Preserve existing shape when updating existing L4 documents. Unknown naming or unknown shape → proposal only.
+19. For create-if-missing, first resolve project canonical naming, project shape, naming_pattern_source, shape_profile_source, and shape_confidence. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only as explicit standard template fallback when no project shape exists, the user confirms fallback, `standard_template_fallback_allowed=true`, and fallback does not conflict with existing legacy/project shape.
+20. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
 
 ## Standard Package Resolution
 
