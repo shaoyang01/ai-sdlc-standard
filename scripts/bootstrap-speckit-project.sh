@@ -905,6 +905,53 @@ SCHEDULE_SAMPLES="$(sample_matching_files schedule)"
 TEST_SAMPLES="$(sample_matching_files test)"
 CONFIG_SAMPLES="$(sample_matching_files config)"
 CACHE_LOCK_SAMPLES="$(sample_matching_files cache_lock)"
+
+generate_inventory_table() {
+  local max_rows="${1:-${MAX_SAMPLES}}"
+  local path count=0
+
+  printf '| Relative Path | File Type | Matched Include Root | Included Reason |\n'
+  printf '| --- | --- | --- | --- |\n'
+
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    [[ "${count}" -ge "${max_rows}" ]] && break
+
+    local ext="${path##*.}"
+    [[ "${ext}" == "${path}" || -z "${ext}" ]] && ext="(none)"
+
+    local matched_root="."
+    local best_len=0
+    local root
+    for root in "${EFFECTIVE_SCAN_ROOTS[@]:-}"; do
+      if [[ "${root}" == "." ]]; then
+        if [[ "${best_len}" -eq 0 ]]; then
+          matched_root="."
+          best_len=1
+        fi
+        continue
+      fi
+      if [[ "${path}" == "${root}" || "${path}" == "${root}"/* ]]; then
+        local root_len="${#root}"
+        if [[ "${root_len}" -gt "${best_len}" ]]; then
+          matched_root="${root}"
+          best_len="${root_len}"
+        fi
+      fi
+    done
+
+    local reason="scanned"
+    if [[ "${#SCAN_ROOTS[@]}" -gt 0 || "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
+      reason="matched scan root: ${matched_root}"
+    else
+      reason="default scan (no --scan-root / --include-root)"
+    fi
+
+    printf '| `%s` | `%s` | `%s` | %s |\n' "${path}" "${ext}" "${matched_root}" "${reason}"
+    count=$((count + 1))
+  done <<< "${PROJECT_FILES_TEXT}"
+}
+
 INVENTORY_TABLE="$(generate_inventory_table "${MAX_SAMPLES}")"
 
 PROJECT_TYPE_PROFILES_TEXT="$(detect_project_type_profiles | awk '!seen[$0]++')"
@@ -2257,52 +2304,6 @@ markdown_samples() {
     return 0
   fi
   printf '%s' "${text}" | paste -sd ', ' -
-}
-
-generate_inventory_table() {
-  local max_rows="${1:-${MAX_SAMPLES}}"
-  local path count=0
-
-  printf '| Relative Path | File Type | Matched Include Root | Included Reason |\n'
-  printf '| --- | --- | --- | --- |\n'
-
-  while IFS= read -r path; do
-    [[ -z "${path}" ]] && continue
-    [[ "${count}" -ge "${max_rows}" ]] && break
-
-    local ext="${path##*.}"
-    [[ "${ext}" == "${path}" || -z "${ext}" ]] && ext="(none)"
-
-    local matched_root="."
-    local best_len=0
-    local root
-    for root in "${EFFECTIVE_SCAN_ROOTS[@]:-}"; do
-      if [[ "${root}" == "." ]]; then
-        if [[ "${best_len}" -eq 0 ]]; then
-          matched_root="."
-          best_len=1
-        fi
-        continue
-      fi
-      if [[ "${path}" == "${root}" || "${path}" == "${root}"/* ]]; then
-        local root_len="${#root}"
-        if [[ "${root_len}" -gt "${best_len}" ]]; then
-          matched_root="${root}"
-          best_len="${root_len}"
-        fi
-      fi
-    done
-
-    local reason="scanned"
-    if [[ "${#SCAN_ROOTS[@]}" -gt 0 || "${#INCLUDE_ROOTS[@]}" -gt 0 ]]; then
-      reason="matched scan root: ${matched_root}"
-    else
-      reason="default scan (no --scan-root / --include-root)"
-    fi
-
-    printf '| `%s` | `%s` | `%s` | %s |\n' "${path}" "${ext}" "${matched_root}" "${reason}"
-    count=$((count + 1))
-  done <<< "${PROJECT_FILES_TEXT}"
 }
 
 generate_generation_report() {
