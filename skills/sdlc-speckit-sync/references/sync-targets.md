@@ -2,6 +2,8 @@
 
 ## Primary Targets
 
+`.specify/business_domain/**` is a shared long-term knowledge base governed by both `legacy_speckit` and `new_rail_sdlc` rails. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` for the full governance protocol.
+
 Common targets include:
 
 - `.specify/business_domain/00BusinessLandscape.md`
@@ -14,6 +16,28 @@ Common targets include:
 Use only targets that exist or are explicitly approved for creation.
 
 For `.specify/business_domain/**`, explicit approval for creation means create-if-missing authorization, not a generic write approval.
+
+## Library-Driven Target Resolution
+
+When `specs/{feature}/**` does not exist (library_driven mode):
+
+- Resolve Business Domain Targets from `library/{requirement_id}/01-技术方案/*` or manifest.
+- Resolve Sync Targets from `library/{requirement_id}/00-需求资料/*` or explicit user confirmation.
+- If targets cannot be resolved from library artifacts, generate a sync proposal or ask the user.
+- Do not automatically block library_driven sync because specs are missing.
+- If target L1/L2/L4 is ambiguous, generate a proposal only; do not guess.
+
+## Shared Governance Rules
+
+When writing to `.specify/business_domain/**`:
+
+- Target L4 exists → update existing document; do not create parallel L4.
+- Target L4 does not exist → create-if-missing with authorization.
+- Document naming must follow project current naming convention.
+- Do not create duplicate L4 for the same domain concept.
+- Record rail/source in revision record.
+- When naming convention is unclear → sync proposal only.
+- New-Rail must not read or write `.specify/memory/**`, `.specify/workflow/**`, `.specify/coding_guide/**`.
 
 ## Target Selection Rules
 

@@ -56,6 +56,10 @@ blocking_conditions:
   - code behavior cannot be inspected
   - drift correction would require production code changes
   - user did not authorize document or knowledge writes
+  - duplicate sync detected (same fact synced from both rails)
+  - business_domain fact cannot be traced to specs or library source artifacts
+  - library reviewed and verified stable facts are missing from business_domain
+  - library_driven mode: do not block because specs are absent
 ```
 
 ## Standard Path Resolution

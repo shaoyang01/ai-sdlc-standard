@@ -1,0 +1,30 @@
+# Business Domain Sync Status Template
+# Append this block to manifest.md when business_domain sync is configured.
+
+business_domain_sync:
+  required: true / false
+  mode: none | speckit_driven | library_driven | hybrid
+  source_of_truth:
+    - "<source-artifact-path>"
+    - "<source-artifact-path>"
+  pipeline_sync_executed: true / false
+  pipeline_sync_result: synced | proposal | not_required | blocked
+  pipeline_sync_reason: "<reason>"
+  library_sync_executed: true / false
+  library_sync_result: synced | proposal | not_required | blocked
+  library_sync_reason: "<reason>"
+  duplicate_sync_guard: active
+  current_sync_owner: sdlc-speckit-sync | library-driven-sync | none
+  result: synced | proposal | not_required | blocked
+  reason: "<reason>"
+  stable_fact_candidates:
+    - fact: "<fact-description>"
+      source: "<source-artifact-path>"
+      status: proposed | confirmed | synced
+  sync_proposals:
+    - target: "<L1/L2/L4-path>"
+      fact: "<fact-description>"
+      source: "<source-artifact-path>"
+      status: proposed
+  blocked_reasons:
+    - "<reason>"

@@ -28,6 +28,10 @@ Orchestrate the optional full Speckit SDD path after solution review. Treat this
 15. Do not let Sync persist chat fragments, unstable facts, or unauthorized targets.
 16. Do not let Reconcile rewrite documents to legitimize code drift.
 17. Recommend manifest Activity Log, Gate, Re-Gate, Sync, and Reconcile updates after every stage.
+18. Pipeline path defaults to speckit_driven sync for business_domain. After Sync/Reconcile, do not require library_driven sync unless pipeline sync was skipped, Reconcile found missing facts, or user explicitly requests supplemental sync.
+19. Observe rail routing per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/agents-rail-routing.md`. Pipeline always uses new_rail_sdlc.
+20. Observe shared business-domain governance per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` when writing to `.specify/business_domain/**`.
+21. Observe sync source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`. Pipeline Sync uses speckit_driven mode.
 
 ## Standard Package Resolution
 

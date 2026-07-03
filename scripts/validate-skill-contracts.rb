@@ -1744,7 +1744,8 @@ PRODUCT_PARITY_FIXTURE_DIRS = [
   "entry-coverage-analyze",
   "bootstrap-scan-control",
   "delta-change-supplement",
-  "project-type-contract-matrix"
+  "project-type-contract-matrix",
+  "rail-routing-business-domain-sync"
 ].freeze
 
 PRODUCT_PARITY_VALIDATION_DOC_TERMS = [
@@ -1869,6 +1870,64 @@ plan_refs.each do |rel_path, terms|
     end
   else
     errors << "missing #{rel_path}"
+  end
+end
+
+# PR J: Rail Routing and Business-Domain Sync Source Modes
+RAIL_ROUTING_REQUIRED_FILES = [
+  "ai-sdlc/agents-rail-routing.md",
+  "ai-sdlc/specs-run-lifecycle.md",
+  "ai-sdlc/shared-business-domain-governance.md",
+  "ai-sdlc/business-domain-sync-source-modes.md",
+  "templates/agents-rail-routing-addendum.md",
+  "templates/business-domain-sync-status-template.yaml"
+].freeze
+
+RAIL_ROUTING_REQUIRED_TERMS = [
+  "speckit_driven",
+  "library_driven",
+  "hybrid",
+  "duplicate sync guard",
+  "business_domain_sync",
+  "run-level artifact",
+  "shared long-term knowledge base",
+  "legacy_speckit",
+  "new_rail_sdlc",
+  "addendum",
+  "New-Rail 不读取",
+  "speckit_driven sync",
+  "library_driven sync",
+  "sync source mode"
+].freeze
+
+RAIL_ROUTING_FILE_TERMS = {
+  "ai-sdlc/agents-rail-routing.md" => ["legacy_speckit", "new_rail_sdlc", "addendum", "/speckit.*", "sdlc-speckit-*", "Ambiguous Rail", "Activation Rule"],
+  "ai-sdlc/specs-run-lifecycle.md" => ["run-level artifact", "requirement_id", "Rail consistency", "archive", "Specs Metadata"],
+  "ai-sdlc/shared-business-domain-governance.md" => ["shared long-term knowledge base", "existing document", "rail", "source", "Conflict Handling"],
+  "ai-sdlc/business-domain-sync-source-modes.md" => ["speckit_driven", "library_driven", "hybrid", "duplicate sync guard", "pipeline_sync_executed", "library_sync_executed"],
+  "templates/agents-rail-routing-addendum.md" => ["/speckit.*", "sdlc-*", "new rail", "shared long-term knowledge base", "run-level"],
+  "templates/business-domain-sync-status-template.yaml" => ["business_domain_sync", "speckit_driven", "library_driven", "hybrid", "duplicate_sync_guard"],
+  "skills/sdlc-speckit-pipeline/SKILL.md" => ["speckit_driven", "agents-rail-routing", "shared-business-domain-governance", "business-domain-sync-source-modes"],
+  "skills/sdlc-speckit-sync/references/sync-inputs.md" => ["Sync Source Mode", "speckit_driven", "library_driven", "hybrid", "Library-Driven Readiness"],
+  "skills/sdlc-speckit-sync/references/sync-targets.md" => ["shared long-term knowledge base", "library_driven mode", "existing document", "naming convention"],
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md" => ["Duplicate sync risk", "Unknown sync source mode", "Unknown business_domain naming pattern"],
+  "skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md" => ["library_driven", "Library-Driven Reconcile", "business_domain_sync", "duplicate_sync_guard"],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["duplicate sync risk", "sync source mode", "library_driven mode"],
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => ["duplicate sync", "library_driven"],
+  "docs/VALIDATION.md" => ["speckit_driven", "library_driven", "hybrid", "duplicate sync guard", "business_domain_sync", "run-level", "长期知识库", "legacy Speckit", "new rail", "addendum", "New-Rail 不读取", "sync source mode", "library_driven sync", "speckit_driven sync"]
+}.freeze
+
+RAIL_ROUTING_REQUIRED_FILES.each do |rel_path|
+  path = File.join(ROOT, rel_path)
+  errors << "missing #{rel_path}" unless File.exist?(path)
+end
+
+RAIL_ROUTING_FILE_TERMS.each do |rel_path, terms|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  terms.each do |term|
+    errors << "#{rel_path} missing rail routing / sync mode requirement #{term}" unless text.include?(term)
   end
 end
 

@@ -1067,6 +1067,53 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - `Deferred` artifact 无 accepted risk 或无 Re-Gate Required → Plan Gate BLOCKED
 - `Deferred` without `Accepted By` → Plan Gate BLOCKED
 - Skip Reason 空泛（如 "not needed"）→ Plan Gate BLOCKED
+
+## Rail Routing And Business-Domain Sync 校验
+
+### Rail Routing
+
+- `AGENTS.md` 中 `/speckit.*` 和 `$speckit-*` 仍然走 legacy Speckit rail。
+- `sdlc-*`、`sdlc-speckit-*`、`new rail`、`AI SDLC 标准库` 明确进入 new rail。
+- 未明确 rail 且涉及 `.specify/business_domain/` 写入时，必须先询问用户。
+- New-Rail 不读取/写入 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
+- AGENTS.md 不应被自动覆盖，只能生成 addendum 建议。
+
+### Specs Run Lifecycle
+
+- `specs/` 是 run-level artifact，不是 requirement-level artifact。
+- 一套 specs 内 rail 必须一致。
+- 同一 `requirement_id` 可以有多套 specs（不同 rail、不同迭代）。
+- specs 完成 business_domain sync 后可 archive / cleanup。
+
+### Shared Business-Domain Governance
+
+- `.specify/business_domain/` 是 legacy 和 new-rail 共同治理的长期知识库。
+- 写入前必须解析 L1/L2/L4。
+- 文件命名遵守项目当前 business_domain 命名方式。
+- 目标 L4 已存在时，必须 update existing document，不得创建同义重复 L4。
+- 每次写入必须记录 rail/source 和 revision record。
+
+### Sync Source Modes
+
+三种 sync source mode：`speckit_driven`、`library_driven`、`hybrid`。
+
+- **speckit_driven sync**: pipeline Sync/Reconcile 后为 authoritative path。
+- **library_driven sync**: 不要求 `specs/{feature}/**` 存在。无实现/验证证据时只输出 proposal。
+- **hybrid**: 以 manifest freshness 和 pipeline status 决定 source priority。
+- 同一事实不允许被两种 mode 重复写入（duplicate sync guard）。
+
+### Library-Driven Sync Validation
+
+- library-driven sync 可以在没有 specs 时运行。
+- 最小 readiness：requirement_id 明确、`01-技术方案` 存在、审核通过、实现证据存在、验证证据存在、target 可解析。
+- 无实现/验证证据 → 只能 proposal。
+- Simple requirement 无 pipeline → library-driven sync evaluation 仍是必选检查项。
+
+### Duplicate Sync Guard
+
+- manifest 记录 `business_domain_sync` 状态。
+- `pipeline_sync_executed=true` + `result=synced` → library sync 默认 blocked。
+- `library_sync_executed=true` → pipeline sync 必须读 manifest，避免重复写作。
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

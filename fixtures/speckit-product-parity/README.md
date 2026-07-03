@@ -33,3 +33,4 @@ Each fixture directory contains:
 | `bootstrap-scan-control/` | Bootstrap performance: --scan-root, --scan-timeout, structured inventory, timeout/partial semantics |
 | `delta-change-supplement/` | Delta change routing: Requirement Supplement, Specification Missing, Decision Scope, aggregate vs delta |
 | `project-type-contract-matrix/` | Plan contract matrix: companion artifact status table, project-type contract granularity, skip records, Plan Gate BLOCKED |
+| `rail-routing-business-domain-sync/` | Rail routing: legacy vs new-rail AGENTS.md split, specs run lifecycle, shared business-domain governance, sync source modes, duplicate sync guard |

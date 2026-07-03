@@ -5,16 +5,27 @@
 Define the exact scope before comparing:
 
 - Requirement ID.
-- Feature directory under `specs/**`.
+- Feature directory under `specs/**` (may be absent in library_driven mode).
 - Code modules, files, commits, or diff range.
-- DocFlow directories.
+- DocFlow directories (`library/{requirement_id}/**`).
 - Process product paths:
   `specs/{feature}/implementation.md`,
   `specs/{feature}/workflow-status.md`,
   `specs/{feature}/debug-guide.md`, and
   `specs/{feature}/observability.md`.
-- Knowledge target paths.
+- Knowledge target paths (`.specify/business_domain/**`).
 - Whether the audit is full lifecycle or focused on one suspected drift.
+- Sync source mode: `speckit_driven`, `library_driven`, or `hybrid`.
+
+### Library-Driven Reconcile
+
+When the requirement did not go through Speckit pipeline (no `specs/{feature}/**`):
+
+- Do not block because specs are missing.
+- Use `library/{requirement_id}/**` as the primary document evidence source.
+- Compare code ↔ library artifacts ↔ business_domain.
+- Missing specs is not a drift; it is expected in library_driven mode.
+- Check manifest `business_domain_sync` status for prior sync attempts.
 
 ## 2. Build Artifact Inventory
 
@@ -120,7 +131,18 @@ For each changed or missing knowledge fact:
 
 Route eligible missing facts to `sdlc-speckit-sync`.
 
-## 7. Decide Result
+## 7. Check Business-Domain Sync Status
+
+Read manifest `business_domain_sync` section when present:
+
+- Verify `duplicate_sync_guard`: if `pipeline_sync_executed=true` and `library_sync_executed=true`, flag potential duplicate sync.
+- Verify `result`: if `synced`, check that business_domain facts can be traced to specs or library source artifacts.
+- Verify `result`: if `not_required`, confirm the reason is still valid.
+- If `mode=library_driven` and library artifacts exist but business_domain facts are missing, flag as missing sync.
+- If `mode=speckit_driven` and specs exist but business_domain facts are missing, flag as missing sync.
+- If `mode=hybrid` and both sources exist but disagree, flag as conflict.
+
+## 8. Decide Result
 
 Produce one primary classification and any secondary classifications.
 

@@ -19,6 +19,17 @@ Stop when:
 - Proposed fact depends on unresolved review or test feedback.
 - Sync would require modifying production code, spec, plan, or tasks.
 - Standard entry coverage audit is `BLOCKED` when the sync target is `.specify/business_domain/**`.
+- Duplicate sync risk: pipeline sync already executed for the same facts.
+- Duplicate sync risk: library sync already executed for the same facts.
+- Same stable fact already synced to the target document.
+- Unknown rail (rail not identifiable from context or user confirmation).
+- Unknown sync source mode (mode not `speckit_driven`, `library_driven`, or `hybrid`).
+- Unknown business_domain naming pattern (cannot determine target document naming convention).
+- Target L4 ambiguous (multiple candidate L4 documents or none identifiable).
+- Target shape unknown (existing document structure not understood).
+- Conflicting existing fact in target document.
+- Missing implementation evidence for direct business_domain write.
+- Missing verification evidence for direct business_domain write.
 
 ## Entry Coverage Blocking
 

@@ -57,6 +57,13 @@ blocking_conditions:
   - create-if-missing cannot resolve Project Type Profiles or selected L4 template
   - entry coverage audit fails for business_domain sync
   - proposed fact is unstable, one-off, or contradicted
+  - duplicate sync risk (pipeline or library sync already executed for same facts)
+  - unknown rail or unknown sync source mode
+  - unknown business_domain naming pattern
+  - target L4 ambiguous or target shape unknown
+  - missing implementation or verification evidence for direct write
+  - does not depend on legacy memory/workflow/coding_guide
+  - library_driven mode: sync blocked when readiness not met; output proposal instead
 ```
 
 ## Standard Path Resolution

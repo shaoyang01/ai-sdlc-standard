@@ -1,4 +1,4 @@
-# New-Rail vs Legacy Speckit 全面差距分析
+`W  `   # New-Rail vs Legacy Speckit 全面差距分析
 
 > **Date**: 2026-07-03
 > **Purpose**: 对比新版 `sdlc-speckit-*` 技能与旧版 Speckit pipeline，分析语义覆盖、产物格式兼容性、双轨隔离完整性。
