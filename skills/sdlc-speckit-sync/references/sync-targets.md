@@ -120,7 +120,15 @@ Use the enhanced entry coverage audit result, not raw path presence alone:
   create-if-missing only when the route artifact confirms the L1/L2/L4 owner and
   the fact is stable reusable knowledge.
 
-Template selection precedence:
+Standard Template Fallback Selection
+
+This section applies only when standard template fallback is explicitly active:
+- no existing project shape exists;
+- user confirms standard template fallback;
+- `standard_template_fallback_allowed=true`;
+- fallback does not conflict with existing legacy/project shape.
+
+When fallback is active, template selection precedence:
 
 ```text
 admin-mixed-workflow

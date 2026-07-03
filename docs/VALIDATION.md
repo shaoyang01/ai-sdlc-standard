@@ -1154,6 +1154,14 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
   - 实现证据可来自 03、implementation result、或 code diff。
   - 验证证据可来自 05、04、test result、或 accepted review。
   - Incomplete evidence 只能产生 proposal/not_required/blocked，不能直接 confirmed write。
+
+## PR K Cleanup Validation
+
+- PR K cleanup validates stale template-primary create-if-missing rules are removed.
+- PR K cleanup validates `library_driven` reconcile does not require specs.
+- PR K cleanup validates standard L4 templates are fallback-only, not create-if-missing primary path.
+- `templates/business-domain-l4/` loaded only when standard template fallback is explicitly active.
+- Library-driven reconcile in `library_driven` mode: missing specs is expected and must not block.
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

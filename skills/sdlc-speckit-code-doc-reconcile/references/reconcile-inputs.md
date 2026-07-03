@@ -1,26 +1,49 @@
 # Reconcile Inputs
 
-## Required Inputs
+## Reconcile Source Mode
 
-Collect these inputs before starting reconciliation:
+Reconcile supports three source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`:
+
+- `speckit_driven`: Specs pipeline artifacts are required.
+- `library_driven`: Specs are not required; library artifacts are primary.
+- `hybrid`: Both specs and library considered; manifest freshness decides priority.
+
+## Required Inputs (speckit_driven)
 
 - Requirement ID and feature identifier.
 - Current repository status, relevant diff, commit range, or implementation scope.
 - `specs/{feature}/spec.md`.
 - `specs/{feature}/plan.md`.
 - `specs/{feature}/tasks.md`.
-- `specs/{feature}/implementation.md`, when implementation details were produced.
-- `specs/{feature}/workflow-status.md`, when a pipeline status snapshot was produced.
-- `specs/{feature}/debug-guide.md`, when debug or reproduction guidance was produced.
-- `specs/{feature}/observability.md`, when logging, metrics, analytics, error-state, or debug-log guidance was produced.
 - Implementation result from `sdlc-speckit-implement`.
 - Approved DocFlow artifacts from `library/{requirement_id}/01-技术方案` and `library/{requirement_id}/02-方案审核`.
 - `manifest.md`, when available.
+
+## Required Inputs (library_driven)
+
+- Requirement ID.
+- Current repository status, diff, commit range, or implementation scope.
+- Approved DocFlow artifacts from `library/{requirement_id}/01-技术方案` and `library/{requirement_id}/02-方案审核`.
+- Implementation evidence when auditing implemented behavior.
+- Verification evidence when auditing sync completeness.
+- `manifest.md` when available.
+- `.specify/business_domain/**` or declared knowledge target when auditing knowledge sync.
+
+In library_driven mode, absence of specs is not a blocker.
+
+## Required Inputs (hybrid)
+
+- Collect both specs and library when present.
+- Use `manifest.md` current effective version and source freshness to decide priority.
 
 ## Recommended Inputs
 
 Use these when present:
 
+- `specs/{feature}/implementation.md`, when implementation details were produced.
+- `specs/{feature}/workflow-status.md`, when a pipeline status snapshot was produced.
+- `specs/{feature}/debug-guide.md`, when debug or reproduction guidance was produced.
+- `specs/{feature}/observability.md`, when logging, metrics, analytics, error-state guidance was produced.
 - `library/{requirement_id}/03-实现记录/*`.
 - `library/{requirement_id}/04-交付总结/*`.
 - `library/{requirement_id}/04-代码审核/*`.
@@ -52,9 +75,11 @@ When these sources conflict, classify the conflict and route to the earliest aff
 
 Continue only when:
 
+- Reconcile source mode is explicit.
 - The feature and requirement can be matched.
 - Current artifacts can be distinguished from stale or replaced artifacts.
 - The implementation scope can be inspected.
 - The audit target is explicit: code, specs, DocFlow, knowledge, manifest, or all.
+- In `library_driven` mode, absence of specs is not a blocker.
 
 Stop when the audit would require guessing which artifact is current.

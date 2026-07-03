@@ -1980,6 +1980,53 @@ if File.directory?(fixture_root)
   end
 end
 
+# PR K Cleanup: anti-regression guard — forbid stale template-primary create-if-missing rules
+PR_K_FORBIDDEN_PATTERNS = {
+  "skills/sdlc-speckit-sync/SKILL.md" => [
+    "select the matching `templates/business-domain-l4/{profile}.md` skeleton",
+    "select the matching templates/business-domain-l4",
+    "For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => [
+    "create-if-missing cannot resolve Project Type Profiles or selected L4 template",
+    "缺少 Project Type Profiles 或 selected L4 template 时停止",
+    "create authorized missing L4 business-domain documents from project-type L4 templates",
+    "缺失 L4 时必须能从 route artifact 的 Project Type Profiles 选择项目类型化 L4 skeleton"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => [
+    "缺少 `specs/**` 时停止并建议回到相应 Speckit 阶段"
+  ]
+}.freeze
+
+PR_K_FORBIDDEN_PATTERNS.each do |rel_path, patterns|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  patterns.each do |pattern|
+    if text.include?(pattern)
+      errors << "#{rel_path} contains stale template-primary create-if-missing rule: #{pattern}"
+    end
+  end
+end
+
+# PR K Cleanup: verify fallback-only semantics exist
+PR_K_FALLBACK_TERMS = {
+  "skills/sdlc-speckit-sync/SKILL.md" => ["standard template fallback", "fallback-only", "project canonical naming", "project shape"],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["standard template fallback", "project canonical naming", "project shape", "naming_pattern_source", "shape_profile_source"],
+  "skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md" => ["speckit_driven", "library_driven", "hybrid", "absence of specs is not a blocker"],
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => ["library_driven mode", "missing specs is expected", "must not block"],
+  "docs/VALIDATION.md" => ["PR K cleanup", "standard L4 templates are fallback-only"]
+}.freeze
+
+PR_K_FALLBACK_TERMS.each do |rel_path, terms|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  terms.each do |term|
+    errors << "#{rel_path} missing PR K cleanup fallback semantic #{term}" unless text.include?(term)
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

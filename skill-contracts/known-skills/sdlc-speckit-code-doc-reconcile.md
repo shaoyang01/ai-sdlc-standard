@@ -131,10 +131,9 @@ blocking_conditions:
 缺失输入处理：
 
 - 缺少代码范围时停止。
-- 缺少 `specs/**` 时停止并建议回到相应 Speckit 阶段。
-- 缺少 DocFlow 技术方案或方案审核时停止并建议回到 `sdlc-specification-writer` 或 `sdlc-solution-reviewer`。
-- 缺少实现记录时可继续审计实际代码，但必须标记记录缺口并建议 `sdlc-implementation-recorder`。
-- 缺少知识目标时只审计代码、specs、DocFlow 和 manifest，不判断知识同步完整性。
+- In `speckit_driven` mode, missing required specs blocks and routes to the relevant Speckit stage.
+- In `library_driven` mode, missing specs is expected and must not block.
+- In `hybrid` mode, missing specs blocks only when manifest marks specs as current source-of-truth.
 
 ## Output Contract
 

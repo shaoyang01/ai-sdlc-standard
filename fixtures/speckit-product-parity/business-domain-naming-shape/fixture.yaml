@@ -28,6 +28,8 @@ required_terms:
   - 01DomainCatalog.md
   - L2 main document index
   - standard_template_fallback_allowed
+  - fallback-only
+  - missing specs is not a blocker
 forbidden_terms:
   - .specify/memory/**
   - .specify/workflow/**

@@ -52,3 +52,11 @@ This is a **development-time fixture**, not target project runtime input.
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## PR K Cleanup Semantics
+
+- Standard L4 templates are fallback-only, not the create-if-missing primary path.
+- Project Type Profiles may select fallback template only when fallback is explicitly active.
+- Reconcile in library_driven mode must not block only because specs are absent.
+- Missing specs is not a blocker in library_driven reconcile mode.
+- In library_driven mode, missing specs is expected and must not block (missing specs is not a blocker).

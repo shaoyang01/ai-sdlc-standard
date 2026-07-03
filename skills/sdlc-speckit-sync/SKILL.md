@@ -25,10 +25,10 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 12. Do not modify production code.
 13. When a `.specify/business_domain/**` L4 target is missing, use create-if-missing only after L1/L2 are confirmed, target owner is explicit, create authorization is recorded, and the new L4 id can be reserved.
 14. Observe project naming and project shape before writing business_domain. Use project canonical naming and project shape for create-if-missing. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
-15. Do not default to standard L4 skeleton in existing projects. Standard templates are fallback only for new projects or when no project shape exists and user confirms. Standard template fallback requires explicit user confirmation and `standard_template_fallback_allowed=true`.
+15. Do not default to standard L4 skeleton in existing projects. Standard templates are fallback-only for new projects or when no project shape exists and user confirms. Standard template fallback requires explicit user confirmation and `standard_template_fallback_allowed=true`.
 16. Preserve existing shape when updating existing L4 documents. Unknown naming or unknown shape → proposal only.
-14. For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select the matching `templates/business-domain-l4/{profile}.md` skeleton; do not use a generic L4 skeleton as the only default for every project type.
-15. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
+17. For create-if-missing, first resolve project canonical naming, project shape, naming_pattern_source, shape_profile_source, and shape_confidence. Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/{profile}.md` only as explicit standard template fallback when no project shape exists, the user confirms fallback, `standard_template_fallback_allowed=true`, and fallback does not conflict with existing legacy/project shape.
+18. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
 
 ## Standard Package Resolution
 
@@ -55,7 +55,6 @@ Use these files from the resolved `AI_SDLC_STANDARD_HOME` as authoritative rules
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-bootstrap.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md`
 - `${AI_SDLC_STANDARD_HOME}/templates/artifact-manifest-template.md`
-- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`
 
 ## Reference Files
 
@@ -69,6 +68,7 @@ Load these references as needed:
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming conventions and project shape rules.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-sync-proposal-template.md` for sync proposal format.
 - `${AI_SDLC_STANDARD_HOME}/templates/business-domain-governance-profile-template.yaml` for governance profile.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/` — loaded only when standard template fallback is explicitly active.
 
 ## Workflow
 
