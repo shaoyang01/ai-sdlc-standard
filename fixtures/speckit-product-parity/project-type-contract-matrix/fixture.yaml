@@ -1,69 +1,59 @@
 name: project-type-contract-matrix
-description: Synthetic project-type contract artifact matrix fixture.
+description: Synthetic project-type contract artifact matrix parity fixture.
 project_type_profiles:
   - backend-business-service
-  - admin-mixed-workflow
   - frontend-application
+  - admin-mixed-workflow
   - data-pipeline-etl
   - library-shared-component
 required_standard_files:
-  - skills/sdlc-speckit-plan/references/project-type-contract-matrix.md
+  - ai-sdlc/project-type-contract-artifact-matrix.md
+  - templates/project-type-contract-artifact-matrix-template.yaml
+  - skills/sdlc-speckit-plan/SKILL.md
+  - skills/sdlc-speckit-plan/references/planning-scope.md
+  - skills/sdlc-speckit-plan/references/plan-inputs.md
   - skills/sdlc-speckit-plan/references/plan-gate-check.md
   - skills/sdlc-speckit-plan/references/output-and-manifest.md
   - skill-contracts/known-skills/sdlc-speckit-plan.md
-  - skills/sdlc-speckit-plan/SKILL.md
 required_terms:
-  - Companion Artifact Status
-  - Project-Type Contract Matrix
-  - Contract Skip Records
-  - specs/{feature}/research.md
-  - specs/{feature}/data-model.md
-  - specs/{feature}/contracts/
-  - specs/{feature}/quickstart.md
+  - Project-Type Contract Artifact Matrix
+  - project_type_profile
+  - backend-business-service
+  - frontend-application
+  - admin-mixed-workflow
+  - data-pipeline-etl
+  - library-shared-component
   - Produced
   - Reused
-  - Not Applicable with reason
-  - Deferred with accepted risk
+  - Not Applicable
+  - Deferred
+  - Deferred without Accepted By
+  - Deferred without Verification Alternative
+  - Plan Gate BLOCKED
+  - project-type justification
+  - verification_alternative
+  - re_gate_required
+  - source_artifacts
+  - freshness
+  - no filename-versioned artifacts
   - API contract
   - RPC contract
   - MQ producer / consumer contract
-  - Schedule / job contract
-  - DB side-effect / migration contract
-  - configuration lifecycle contract
-  - approval / audit contract
-  - import / export contract
-  - read-only query contract
   - route / page contract
-  - component / state / store contract
-  - backend / mock boundary contract
-  - visual verification contract
-  - trigger contract
-  - input contract
-  - output contract
+  - workflow transition contract
   - SQL lineage contract
-  - partition / window / checkpoint contract
-  - replay / idempotency contract
-  - downstream consumer contract
   - public API contract
+  - exported interface contract
   - compatibility contract
-  - deprecation / migration contract
-  - representative test contract
-  - transaction boundary contract
-  - data console operation contract
-  - navigation / visibility contract
-  - connector / sink / publisher contract
-  - extension point / adapter contract
-  - Plan Gate BLOCKED
-  - Deferred without Accepted By
-  - Verification Alternative
+  - mock/real data boundary contract
 forbidden_terms:
-  - .specify/memory/**
-  - .specify/workflow/**
-  - .specify/coding_guide/**
-  - filename-versioned artifacts
-  - legacy speckit-* Skill as runtime dependency
+  - skip required artifact silently
+  - Plan Gate PASS with missing required artifact
+  - Deferred without accepted_by is allowed
+  - Not Applicable without justification
+  - workflow-status is manifest authority
+  - filename-versioned companion artifact
 expected_outputs:
-  - Companion Artifact Status
-  - Project-Type Contract Matrix
-  - Contract Skip Records
+  - project-type contract artifact matrix
+  - Plan Gate result
 notes: development-time fixture; not target project runtime input

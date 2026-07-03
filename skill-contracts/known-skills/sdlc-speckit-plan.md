@@ -49,6 +49,11 @@ blocking_conditions:
   - plan cannot support acceptance criteria
   - companion artifacts are missing without complete skip records
   - contracts/ does not cover contract surfaces defined in project-type-contract-matrix for the feature's project type profiles
+  - required artifact missing per Project-Type Contract Artifact Matrix
+  - Deferred without accepted_by or verification_alternative
+  - Not Applicable without project-type justification
+  - Reused without source_artifacts or freshness
+  - no filename-versioned companion artifacts
 ```
 
 ## Standard Path Resolution

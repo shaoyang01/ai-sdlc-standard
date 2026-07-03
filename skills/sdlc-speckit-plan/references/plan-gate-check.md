@@ -41,6 +41,24 @@ Block when:
 - `contracts/` is skipped while the feature changes a contract surface listed in the project-type contract matrix for the feature's project type profiles.
 - A contract artifact in the matrix is required by the feature but not covered by any contract file under `specs/{feature}/contracts/` and no skip record exists for that specific contract.
 - A Deferred artifact has no accepted risk or no Re-Gate Required flag.
+- Required artifact missing per Project-Type Contract Artifact Matrix (`${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md`).
+- Deferred without accepted_by.
+- Deferred without verification_alternative.
+- Not Applicable without project-type justification.
+- Reused without source_artifacts/freshness.
+- workflow-status treated as manifest authority.
+
+- Plan conflicts with `specs/{feature}/spec.md`.
+- Plan changes approved business behavior.
+- Plan introduces undefined business rule.
+- Plan omits core exception, rollback, compatibility, or verification strategy.
+- Plan cannot support acceptance criteria.
+- Plan requires changing API, DB, cache, MQ, schedule, listener, state, transaction, or data behavior not already approved.
+- Accepted risk is missing, contradicted, or not traceable.
+- Companion artifact is missing without `Artifact`, `Project Type Profile`, `Skip Reason`, `Risk`, `Impact`, `Accepted By`, and `Re-Gate Required`.
+- `contracts/` is skipped while the feature changes a contract surface listed in the project-type contract matrix for the feature's project type profiles.
+- A contract artifact in the matrix is required by the feature but not covered by any contract file under `specs/{feature}/contracts/` and no skip record exists for that specific contract.
+- A Deferred artifact has no accepted risk or no Re-Gate Required flag.
 
 ## Output
 

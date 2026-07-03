@@ -2232,6 +2232,15 @@ prn_files.reject { |f| f.include?("fixtures/") }.each do |f|
   prn_forbidden.each { |p| errors << "#{f} contains forbidden PR N wording: #{p}" if text.include?(p) }
 end
 
+# PR O: Project-Type Contract Artifact Matrix
+["ai-sdlc/project-type-contract-artifact-matrix.md", "templates/project-type-contract-artifact-matrix-template.yaml"].each do |f|
+  errors << "missing #{f}" unless File.exist?(File.join(ROOT, f))
+end
+pro_combined = ["ai-sdlc/project-type-contract-artifact-matrix.md", "skills/sdlc-speckit-plan/SKILL.md", "skill-contracts/known-skills/sdlc-speckit-plan.md"].map { |f| File.exist?(File.join(ROOT, f)) ? File.read(File.join(ROOT, f)) : "" }.join
+["Deferred without Accepted By", "Deferred without Verification Alternative", "project-type justification", "Project-Type Contract Artifact Matrix"].each do |t|
+  errors << "missing PR O term #{t}" unless pro_combined.include?(t)
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

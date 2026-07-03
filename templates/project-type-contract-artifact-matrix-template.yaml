@@ -1,0 +1,29 @@
+# Project-Type Contract Artifact Matrix Template
+# Append to plan output or manifest to record companion artifact contract.
+
+contract_artifact_matrix:
+  project_type_profile: "<profile>"
+  profile_source: "<source>"
+  status: complete | partial | blocked
+  artifacts:
+    - path: "<path>"
+      artifact_type: "<type>"
+      requirement_level: required | optional | conditional | not_applicable
+      status: Produced | Reused | Not Applicable | Deferred
+      reason: "<reason>"
+      accepted_by: "<owner>"
+      verification_alternative: "<alternative>"
+      re_gate_required: yes / no
+      source_artifacts:
+        - "<path>"
+      freshness: current | stale
+      owner: "<owner>"
+  blocking_items:
+    - "<item>"
+  plan_gate_result: PASS | PASS_WITH_RISK | BLOCKED
+
+# status must be Produced / Reused / Not Applicable / Deferred.
+# Deferred requires accepted_by and verification_alternative.
+# Not Applicable requires project-type justification.
+# Reused requires source_artifacts and freshness.
+# No filename-versioned artifacts. Stable paths only.

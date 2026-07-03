@@ -1213,6 +1213,16 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - PR N cleanup validates output-and-manifest records library_driven business_domain_sync.
 - PR N cleanup validates PR N required files/terms and forbidden behavior.
 - PR N cleanup validates duplicate sync guard before direct write.
+
+## PR O: Project-Type Contract Artifact Matrix 校验
+
+- project_type_profile matrix validation
+- required/optional/not_applicable/deferred validation
+- Deferred accepted_by validation
+- verification_alternative validation
+- Plan Gate BLOCKED validation (missing required, Deferred without fields, Not Applicable without justification)
+- no filename-versioned companion artifact validation
+- library_driven no-specs validation
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
