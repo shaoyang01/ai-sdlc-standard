@@ -64,3 +64,10 @@ This is a **development-time fixture**, not target project runtime input.
 Legacy Skill usage: none
 Legacy document runtime input: none
 Legacy document write target: none
+
+## PR P Cleanup: Validator and Contract Traceability
+
+- expanded fixture validates required_standard_files, required_terms, forbidden_terms, and guard context (guard context — must not, forbidden, prohibited, not allowed).
+- expected.md may mention forbidden behavior only with guard context (must use must not / forbidden / prohibited / not allowed / no / cannot).
+- skill contracts preserve baseline traceability for sync/reconcile/plan (baseline traceability, spec/plan/task/sync/reconcile traceability).
+- New-Rail enhanced metadata cannot replace baseline traceability.

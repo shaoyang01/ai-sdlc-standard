@@ -1239,6 +1239,10 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - library_driven runtime parity validation (no specs, evidence required, duplicate sync guard)
 - project-type contract matrix parity validation (Produced/Reused/NA/Deferred, BLOCKED conditions)
 - forbidden behavior guard validation (no legacy input, no forced rewrite, no silent skip)
+- PR P cleanup validates expanded fixture required_standard_files coverage.
+- PR P cleanup validates expanded fixture required_terms coverage.
+- PR P cleanup validates expected.md forbidden_terms guard context.
+- PR P cleanup validates skill contracts preserve baseline traceability.
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 

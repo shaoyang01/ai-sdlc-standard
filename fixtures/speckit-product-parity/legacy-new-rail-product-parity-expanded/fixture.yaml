@@ -11,17 +11,32 @@ required_standard_files:
   - ai-sdlc/business-domain-compatible-update.md
   - ai-sdlc/library-driven-sync-runtime.md
   - ai-sdlc/project-type-contract-artifact-matrix.md
+  - templates/agents-rail-routing-addendum.md
+  - templates/business-domain-sync-status-template.yaml
+  - templates/business-domain-update-proposal-template.md
+  - templates/business-domain-reconcile-proposal-template.md
+  - templates/specs-run-metadata-template.yaml
+  - templates/specs-archive-cleanup-proposal-template.md
+  - templates/library-driven-sync-decision-template.md
+  - templates/project-type-contract-artifact-matrix-template.yaml
   - skills/sdlc-speckit-sync/SKILL.md
   - skills/sdlc-speckit-sync/references/sync-inputs.md
   - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/output-and-manifest.md
   - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
   - skills/sdlc-speckit-code-doc-reconcile/SKILL.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/reconcile-inputs.md
   - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
   - skills/sdlc-speckit-plan/SKILL.md
+  - skills/sdlc-speckit-plan/references/planning-scope.md
+  - skills/sdlc-speckit-plan/references/plan-inputs.md
   - skills/sdlc-speckit-plan/references/plan-gate-check.md
+  - skills/sdlc-speckit-plan/references/output-and-manifest.md
   - skill-contracts/known-skills/sdlc-speckit-sync.md
   - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
   - skill-contracts/known-skills/sdlc-speckit-plan.md
+  - scripts/validate-skill-contracts.rb
+  - scripts/validate-product-parity-fixtures.rb
   - docs/VALIDATION.md
 required_terms:
   - legacy_speckit
@@ -79,6 +94,9 @@ required_terms:
   - re_gate_required
   - source_artifacts
   - freshness
+  - baseline traceability
+  - guard context
+  - must not
 forbidden_terms:
   - legacy Skill fallback in New-Rail
   - read .specify/memory as New-Rail runtime input
@@ -104,5 +122,5 @@ forbidden_terms:
   - filename-versioned companion artifact
   - use chat as source of truth
 expected_outputs:
-  - comprehensive rail routing, specs lifecycle, business-domain governance, library-driven runtime, project-type contract matrix parity validation
+  - comprehensive parity validation covering PR J–O semantics
 notes: development-time fixture; not target project runtime input

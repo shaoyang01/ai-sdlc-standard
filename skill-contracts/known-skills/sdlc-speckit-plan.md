@@ -54,6 +54,8 @@ blocking_conditions:
   - Not Applicable without project-type justification
   - Reused without source_artifacts or freshness
   - no filename-versioned companion artifacts
+  - Plan may add enhanced companion artifacts but must preserve baseline spec/plan/task traceability
+  - Project-Type Contract Artifact Matrix must not remove baseline plan traceability
 ```
 
 ## Standard Path Resolution

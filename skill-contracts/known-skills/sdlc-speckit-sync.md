@@ -91,6 +91,8 @@ blocking_conditions:
   - duplicate sync guard required before direct write
   - pipeline_sync_executed=true and result=synced blocks library_driven direct write unless supplemental sync authorized
   - output includes library source artifacts and manifest business_domain_sync recommendation
+  - New-Rail sync output must preserve baseline source traceability expected from legacy Speckit and may add enhanced metadata
+  - Sync must distinguish legacy_speckit / new_rail_sdlc source artifacts when both exist
   - supports compatible update mode, update proposal, and reconcile proposal
   - outputs specs run metadata (specs_run_id, requirement_id, feature_id) when specs exist
   - library_driven does not require specs_run_id

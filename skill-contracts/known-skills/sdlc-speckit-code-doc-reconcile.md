@@ -72,6 +72,8 @@ blocking_conditions:
   - validates revision/source traceability for business_domain updates
   - validates implementation and verification evidence behind synced facts
   - expects update proposal or reconcile proposal when direct update was unsafe
+  - Reconcile must distinguish legacy/new rail product sources and preserve baseline traceability
+  - Reconcile must not treat enhanced New-Rail metadata as a substitute for missing baseline source traceability
   - reads specs_runs metadata from manifest
   - distinguishes active/stale/superseded/archived/cleaned specs
   - library_driven no-specs is not drift
