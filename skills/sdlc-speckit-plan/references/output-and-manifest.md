@@ -254,3 +254,30 @@ Recommend updates for:
 - Next Step: `sdlc-speckit-tasks` or DocFlow Re-Gate
 
 Do not silently edit manifest unless explicitly requested.
+
+## Contract Artifact Matrix Manifest Recommendation
+
+```yaml
+contract_artifact_matrix:
+  project_type_profile: "<profile>"
+  profile_source: "<source>"
+  status: complete | partial | blocked
+  artifacts:
+    - path: "<path>"
+      artifact_type: "<type>"
+      requirement_level: required | optional | conditional | not_applicable
+      status: Produced | Reused | Not Applicable | Deferred
+      reason: "<reason>"
+      accepted_by: "<owner>"
+      verification_alternative: "<alternative>"
+      re_gate_required: yes / no
+      source_artifacts: ["<path>"]
+      freshness: current | stale
+      owner: "<owner>"
+  blocking_items:
+    - "<item>"
+  plan_gate_result: PASS | PASS_WITH_RISK | BLOCKED
+```
+
+- Manifest records matrix outcome. Stable paths only. No filename-versioned artifacts.
+- Plan Gate result must reflect matrix. Required missing/invalid defer/invalid not applicable → BLOCKED.

@@ -50,3 +50,20 @@ If user input changes approved behavior, stop and apply change-control.
 ## Contract Matrix Readiness
 
 Before producing contracts, resolve the project type profiles from `.specify/project-governance-profile.yaml` or `specs/{feature}/route.md`, then read `${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md` to identify the contract artifacts required for the current feature's project type profiles.
+
+## Project-Type Matrix Inputs
+
+Required inputs for Project-Type Contract Artifact Matrix:
+
+- project_type_profile
+- profile_source
+- existing reusable companion artifacts
+- source_artifacts
+- freshness
+- explicit user confirmation when profile unknown
+- accepted_by for Deferred
+- verification_alternative for Deferred
+- project-type justification for Not Applicable
+- no filename-versioned artifacts
+
+Rules: Reused requires source_artifacts and freshness. Deferred requires accepted_by and verification_alternative. Not Applicable requires project-type justification.

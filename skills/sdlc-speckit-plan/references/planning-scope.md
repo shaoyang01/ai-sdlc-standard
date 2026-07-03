@@ -85,3 +85,15 @@ Contract artifacts under `specs/{feature}/contracts/` must follow the project-ty
 `${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md`.
 
 Each contract artifact in the matrix that is relevant to the feature must be produced, reused, or explicitly skipped with a complete skip record. Plan Gate is BLOCKED when a contract surface listed in the matrix is changed by the feature but no contract file or skip record covers it.
+
+## Project-Type Contract Matrix Scope
+
+Project-Type Contract Artifact Matrix is defined in `${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md`. Key rules:
+
+- Determine project_type_profile before final Plan Gate.
+- profile_source can be project-governance-profile, route artifact, or explicit user confirmation.
+- Matrix applies to specs run-level Plan companion artifacts in speckit_driven / hybrid.
+- library_driven without specs does not require specs companion artifacts.
+- unknown profile → conservative baseline or BLOCKED; do not silently skip required artifacts.
+- workflow-status.md is machine snapshot; manifest is authority.
+- Project-Type Contract Matrix Scope: required artifacts must be Produced/Reused/Deferred with fields/Not Applicable with justification.

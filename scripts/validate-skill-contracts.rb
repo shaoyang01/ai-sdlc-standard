@@ -2241,6 +2241,15 @@ pro_combined = ["ai-sdlc/project-type-contract-artifact-matrix.md", "skills/sdlc
   errors << "missing PR O term #{t}" unless pro_combined.include?(t)
 end
 
+# PR O: old reference shim check
+old_matrix_path = File.join(ROOT, "skills/sdlc-speckit-plan/references/project-type-contract-matrix.md")
+if File.exist?(old_matrix_path)
+  old_text = File.read(old_matrix_path)
+  ["superseded", "project-type-contract-artifact-matrix.md", "not authoritative"].each do |t|
+    errors << "old project-type-contract-matrix.md missing shim term #{t}" unless old_text.include?(t)
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

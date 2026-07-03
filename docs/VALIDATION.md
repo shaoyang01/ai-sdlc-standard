@@ -1223,6 +1223,11 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Plan Gate BLOCKED validation (missing required, Deferred without fields, Not Applicable without justification)
 - no filename-versioned companion artifact validation
 - library_driven no-specs validation
+- PR O cleanup validates planning-scope references project-type matrix scope.
+- PR O cleanup validates plan-inputs records profile/source/reuse/defer/NA inputs.
+- PR O cleanup validates output-and-manifest records contract_artifact_matrix.
+- PR O cleanup validates old project-type-contract-matrix reference is superseded/shim.
+- PR O cleanup validates PR O required terms and forbidden behavior.
 - no filename-versioned artifacts validation
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 

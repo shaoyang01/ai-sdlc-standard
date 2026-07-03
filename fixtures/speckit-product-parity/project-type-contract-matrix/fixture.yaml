@@ -14,6 +14,7 @@ required_standard_files:
   - skills/sdlc-speckit-plan/references/plan-inputs.md
   - skills/sdlc-speckit-plan/references/plan-gate-check.md
   - skills/sdlc-speckit-plan/references/output-and-manifest.md
+  - skills/sdlc-speckit-plan/references/project-type-contract-matrix.md
   - skill-contracts/known-skills/sdlc-speckit-plan.md
 required_terms:
   - Project-Type Contract Artifact Matrix
@@ -46,6 +47,11 @@ required_terms:
   - exported interface contract
   - compatibility contract
   - mock/real data boundary contract
+  - Contract Artifact Matrix Manifest Recommendation
+  - Project-Type Matrix Inputs
+  - Project-Type Contract Matrix Scope
+  - superseded
+  - not authoritative
 forbidden_terms:
   - skip required artifact silently
   - Plan Gate PASS with missing required artifact
