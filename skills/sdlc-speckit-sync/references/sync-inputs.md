@@ -72,34 +72,51 @@ Do not use raw chat as a source of long-term truth.
 
 `sdlc-speckit-sync` in `library_driven` mode does not require `specs/{feature}/**`. Required inputs:
 
-- `library/{requirement_id}/manifest.md`
-- `library/{requirement_id}/00-需求资料/*`
+- `requirement_id`
+- `library/{requirement_id}/manifest.md` OR at least one valid current library artifact
 - `library/{requirement_id}/01-技术方案/*`
-- `library/{requirement_id}/02-方案审核/*`
+- `library/{requirement_id}/02-方案审核/*` with `PASS` / `PASS_WITH_RISK` or equivalent review decision
+- Implementation evidence, which may come from:
+  - `library/{requirement_id}/03-实现记录/*`
+  - Implementation result
+  - Code diff with accepted implementation record
+- Verification evidence, which may come from:
+  - `library/{requirement_id}/05-测试验收/*`
+  - `library/{requirement_id}/04-交付总结/*`
+  - Test result
+  - Accepted review evidence
+- Business domain target resolvable or user-confirmed
+
+Source candidates / recommended:
+
+- `library/{requirement_id}/00-需求资料/*`
 - `library/{requirement_id}/03-实现记录/*`
 - `library/{requirement_id}/04-交付总结/*`
 - `library/{requirement_id}/05-测试验收/*`
-
-Recommended:
-
 - Accepted risk records
 - Re-Gate Records
 - Existing target knowledge documents
 - `.specify/entry-coverage-profile.yaml`
+
+Library_driven mode can run sync evaluation with incomplete evidence, but incomplete evidence can only produce `proposal`, `not_required`, or `blocked` — not direct confirmed write.
 
 ## Library-Driven Readiness
 
 Before writing confirmed business_domain facts in `library_driven` mode:
 
 - `requirement_id` must be explicit.
-- Manifest or valid library artifacts must be explicit.
+- Manifest or at least one valid current library artifact must be explicit.
 - `01-技术方案` must exist.
 - `02-方案审核` result must be `PASS` or `PASS_WITH_RISK` (or equivalent review).
-- Implementation evidence must exist.
-- Verification evidence must exist.
+- Implementation evidence must exist (from `03-实现记录`, implementation result, or code diff).
+- Verification evidence must exist (from `05-测试验收`, `04-交付总结`, test result, or accepted review).
 - Business domain target (L1/L2/L4) must be resolvable or user-confirmed.
+- Naming pattern must be identifiable per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+- Shape profile must be identifiable with confidence `high`/`medium` (or `low` with user confirmation).
 
 Without implementation and verification evidence, generate a sync proposal only. Do not write confirmed business_domain facts. Record `Business Domain Sync: not_required` with reason when no stable, reusable, non-one-off business facts can be identified.
+
+Incomplete evidence can only produce `proposal`, `not_required`, or `blocked` — not direct confirmed write.
 
 ## Source Priority (by Mode)
 

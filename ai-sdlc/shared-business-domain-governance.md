@@ -21,8 +21,10 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 1. Resolve target L1/L2/L4 from route artifact, spec, or explicit user confirmation.
 2. Verify L1/L2 are confirmed long-term domains, not temporary or pending.
 3. Verify L4 id can be assigned without ambiguity.
-4. Verify the target document naming follows the project's current business_domain naming convention.
-5. Verify the fact is stable, reusable, and verified by implementation evidence.
+4. Identify naming pattern source and determine the project's canonical naming convention per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+5. Identify shape profile source and determine shape confidence per the same reference.
+6. Verify the target document naming follows the project's current business_domain naming convention.
+7. Verify the fact is stable, reusable, and verified by implementation evidence.
 
 ### When Target L4 Exists
 
@@ -33,8 +35,10 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 
 ### When Target L4 Does Not Exist
 
-- **Create-if-missing** with authorization. See `sync-targets.md` for the full create-if-missing flow.
+- **Create-if-missing** with authorization. See `sync-targets.md` for the full create-if-missing flow and `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming and shape rules.
 - Use the project's current naming convention for the new L4 document.
+- Use the project's current shape for the new L4 document.
+- Standard templates (`templates/business-domain-l4/*.md`) are fallback only when no project shape exists and user confirms.
 - Do not create a second L4 document that covers the same domain concept as an existing document (even if from a different rail).
 
 ### Prohibited
@@ -44,6 +48,9 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 - Do not overwrite existing facts without source evidence and revision record.
 - Do not create documents under `99PendingConfirmation` or similar unconfirmed paths.
 - New-Rail must not read or write `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**`.
+- Do not default to standard L4 skeleton (`templates/business-domain-l4/*.md`) in existing projects.
+- Do not rewrite existing L4 documents to New-Rail template shape.
+- Do not create duplicate L4 candidate for the same domain concept.
 
 ## Naming Convention
 
@@ -65,7 +72,10 @@ Every write to `.specify/business_domain/**` must record:
 | Field | Description |
 | --- | --- |
 | `rail` | `legacy_speckit` or `new_rail_sdlc` |
-| `source_artifacts` | Paths to source artifacts that support the fact (e.g., `specs/{feature}/spec.md`, `library/{req_id}/01-技术方案/...`) |
+| `source_artifacts` | Paths to source artifacts that support the fact |
+| `naming_pattern_source` | Where the naming pattern was resolved from |
+| `shape_profile_source` | Where the shape profile was resolved from |
+| `shape_confidence` | `high` / `medium` / `low` / `unknown` |
 | `revision_record` | Standard revision record entry (date, author/skill, change type, summary) |
 
 ## Conflict Handling

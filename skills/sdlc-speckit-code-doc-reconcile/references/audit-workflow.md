@@ -154,3 +154,21 @@ Use entry coverage reports to classify drift:
 - `unarchived_services.md` non-empty: core unit lacks archived entry or accepted technical reason.
 - `cross_domain_conflicts.md` non-empty: code/document routing conflict across L2 domains.
 - `entry_coverage_report.md` status `BLOCKED`: reconciliation cannot mark code and business-domain docs consistent.
+
+## 9. Check Business-Domain Naming And Shape
+
+Verify business_domain document naming and shape consistency per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`:
+
+- Document naming follows project current convention.
+- Business_domain facts can be traced to source artifacts.
+- New L4 documents record `naming_pattern_source` and `shape_profile_source`.
+- No duplicate L4 candidates exist.
+- Existing L4 shape was preserved (no whole-document rewrite without authorization).
+- L2 main document index and `01DomainCatalog.md` include new L4 documents.
+
+Flag as drift:
+- **naming drift**: Document naming does not follow project convention.
+- **shape drift**: Document shape differs from sibling L4 documents.
+- **duplicate L4 drift**: Same domain concept covered by multiple L4 documents.
+- **catalog/index drift**: L2 index or `01DomainCatalog.md` missing new L4.
+- **source traceability drift**: Business_domain fact missing source artifact reference.

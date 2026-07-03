@@ -23,6 +23,8 @@ Audit consistency between implemented code, Speckit artifacts, DocFlow artifacts
 10. Do not rewrite spec, plan, tasks, DocFlow, or knowledge documents to legitimize unapproved code behavior.
 11. Record source artifacts, drift category, recommended owner, and manifest update recommendations.
 12. Stop when the current source of truth cannot be identified.
+13. Detect naming drift, shape drift, duplicate L4 drift, catalog/index drift, and source traceability drift per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+14. Do not treat New-Rail template shape as automatically correct in existing projects.
 
 ## Standard Package Resolution
 
@@ -58,6 +60,7 @@ Load these references as needed:
 - `references/audit-workflow.md` for the audit sequence and comparison matrix.
 - `references/apply-boundaries.md` for allowed side effects and write authorization.
 - `references/output-and-manifest.md` for report structure and manifest recommendations.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming conventions and project shape rules.
 
 ## Workflow
 

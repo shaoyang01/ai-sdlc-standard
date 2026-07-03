@@ -30,6 +30,18 @@ Stop when:
 - Conflicting existing fact in target document.
 - Missing implementation evidence for direct business_domain write.
 - Missing verification evidence for direct business_domain write.
+- Canonical naming unknown.
+- naming_pattern_source missing.
+- shape_profile_source missing.
+- Shape confidence `low` without user confirmation.
+- Shape confidence `unknown`.
+- Standard template fallback attempted in existing project without explicit conditions.
+- Whole-document rewrite attempted on existing L4.
+- Duplicate semantic L4 candidate (same domain concept, different path or id).
+- L2 main document index update missing.
+- `01DomainCatalog.md` update missing.
+- Create-if-missing would use standard skeleton without project-shape confirmation.
+- Standard template fallback not allowed in existing projects without explicit conditions.
 
 ## Entry Coverage Blocking
 

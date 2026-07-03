@@ -60,6 +60,11 @@ blocking_conditions:
   - business_domain fact cannot be traced to specs or library source artifacts
   - library reviewed and verified stable facts are missing from business_domain
   - library_driven mode: do not block because specs are absent
+  - naming drift detected (document naming does not follow project convention)
+  - shape drift detected (document shape differs from sibling L4)
+  - duplicate L4 drift detected (same domain concept, multiple L4 documents)
+  - catalog/index drift detected (L2 index or 01DomainCatalog.md missing new L4)
+  - whole-document rewrite detected without explicit owner authorization
 ```
 
 ## Standard Path Resolution

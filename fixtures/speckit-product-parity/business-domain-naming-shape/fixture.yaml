@@ -1,0 +1,43 @@
+name: business-domain-naming-shape
+description: Synthetic business-domain naming and project-shape create-if-missing parity fixture.
+project_type_profiles: []
+required_standard_files:
+  - ai-sdlc/business-domain-naming-and-shape.md
+  - ai-sdlc/shared-business-domain-governance.md
+  - ai-sdlc/business-domain-sync-source-modes.md
+  - templates/business-domain-governance-profile-template.yaml
+  - templates/business-domain-sync-proposal-template.md
+  - skills/sdlc-speckit-sync/references/sync-targets.md
+  - skills/sdlc-speckit-sync/references/conflict-and-blocking.md
+  - skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md
+  - skill-contracts/known-skills/sdlc-speckit-sync.md
+  - skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md
+required_terms:
+  - canonical naming
+  - project current naming convention
+  - project shape
+  - preserve existing shape
+  - create-if-missing authorization
+  - naming_pattern_source
+  - shape_profile_source
+  - shape confidence
+  - sibling L4
+  - duplicate L4 candidate
+  - sync proposal
+  - whole-document rewrite
+  - 01DomainCatalog.md
+  - L2 main document index
+  - standard_template_fallback_allowed
+forbidden_terms:
+  - .specify/memory/**
+  - .specify/workflow/**
+  - .specify/coding_guide/**
+  - filename-versioned artifacts
+  - default to standard L4 skeleton for existing projects
+  - rewrite existing L4 to new template
+  - create duplicate L4
+expected_outputs:
+  - naming gate
+  - project shape gate
+  - create-if-missing with project naming and shape
+notes: development-time fixture; not target project runtime input

@@ -59,11 +59,16 @@ blocking_conditions:
   - proposed fact is unstable, one-off, or contradicted
   - duplicate sync risk (pipeline or library sync already executed for same facts)
   - unknown rail or unknown sync source mode
-  - unknown business_domain naming pattern
+  - unknown business_domain naming pattern or unknown canonical naming
+  - shape profile unknown or shape confidence low without user confirmation
+  - standard template fallback attempted in existing project without explicit conditions
+  - whole-document rewrite attempted on existing L4
+  - duplicate L4 candidate exists
   - target L4 ambiguous or target shape unknown
   - missing implementation or verification evidence for direct write
   - does not depend on legacy memory/workflow/coding_guide
   - library_driven mode: sync blocked when readiness not met; output proposal instead
+  - naming/shape gate not passed
 ```
 
 ## Standard Path Resolution

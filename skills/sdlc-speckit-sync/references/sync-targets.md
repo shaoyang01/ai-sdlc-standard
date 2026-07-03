@@ -83,16 +83,23 @@ Use this flow when a stable fact belongs in `.specify/business_domain/**` but th
 
 1. Resolve L1/L2/L4 target from `specs/{feature}/route.md` when available, `specs/{feature}/spec.md` `Business Domain Targets`, `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
 2. Verify L1/L2 are confirmed long-term domain folders, not `99PendingConfirmation`.
-3. Verify target ownership is explicit and the candidate fact belongs to that bounded context.
-4. Verify create-if-missing authorization is recorded separately from ordinary write authorization.
-5. Reserve L4 id using the L2 numbering convention; block when the id cannot be assigned without ambiguity.
-6. Read Project Type Profiles from `specs/{feature}/route.md` or Pipeline Domain Route Summary.
-7. Select the matching project-type L4 skeleton from `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`.
-8. Create an L4 skeleton with metadata, source traceability, entry coverage status, stable facts, skipped facts, revision history, and project-type required sections.
-9. Update the L2 main document index so the new L4 appears in the domain reading path.
-10. Update `01DomainCatalog.md` so the new L4 is discoverable from the domain catalog.
+3. Detect project canonical naming pattern from sibling L4 documents, `01DomainCatalog.md`, L2 main document index, governance profile, or user confirmation. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+4. Detect project shape profile from sibling L4 documents under the same L2, or other L2 directories in the same project. See the same reference.
+5. Determine shape confidence (`high`, `medium`, `low`, `unknown`).
+6. Verify target ownership is explicit and the candidate fact belongs to that bounded context.
+7. Verify create-if-missing authorization is recorded separately from ordinary write authorization.
+8. Reserve L4 id using the project numbering convention; block when the id cannot be assigned without ambiguity.
+9. If target L4 already exists, update existing document and preserve existing shape. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` Update Existing Rules.
+10. If target L4 is missing:
+    - Require create-if-missing authorization.
+    - Create target document using project canonical naming.
+    - Create target document using project shape.
+    - Use `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/*.md` only when: no existing project shape exists, user confirms standard template fallback, `standard_template_fallback_allowed=true`, and this will not conflict with existing legacy/project shape.
+    - Update L2 main document index so the new L4 appears in the domain reading path.
+    - Update `01DomainCatalog.md` so the new L4 is discoverable from the domain catalog.
 11. Write only stable facts with source evidence; keep proposed or one-off facts in skipped items.
-12. Run the standard entry coverage audit before reporting final `SYNCED`.
+12. Record rail, source_artifacts, naming_pattern_source, shape_profile_source, and shape_confidence in the revision record.
+13. Run the standard entry coverage audit before reporting final `SYNCED`.
 
 Use the enhanced entry coverage audit result, not raw path presence alone:
 
@@ -135,11 +142,14 @@ Target L2:
 Target L4 Id:
 Target L4 Document:
 Target Owner:
+Naming Pattern Source:
+Shape Profile Source:
+Shape Confidence:
 Create-If-Missing Authorization:
+Standard Template Fallback Allowed:
+Selected L4 Template: (only when standard template fallback is active)
 Source Evidence:
 Entry Coverage Status:
-Project Type Profiles:
-Selected L4 Template:
 L2 Main Document Index Update:
 01DomainCatalog.md Update:
 Revision History Update:
@@ -149,13 +159,19 @@ Block instead of creating when:
 
 - L1/L2 are not confirmed.
 - L4 id cannot be reserved.
+- Naming pattern unknown.
+- Shape profile unknown.
+- Shape confidence `low` without user confirmation.
+- Shape confidence `unknown`.
+- Duplicate L4 candidate exists.
+- Standard template fallback not allowed.
+- Using standard skeleton would conflict with existing project shape.
 - Project Type Profiles are missing and no conservative fallback is acceptable.
-- selected L4 template is missing from `${AI_SDLC_STANDARD_HOME}/templates/business-domain-l4/`.
-- target owner is unclear.
-- create-if-missing authorization is missing.
-- the fact is proposed, unverified, one-off, or valid only for the current requirement.
-- an existing business_domain fact conflicts with the proposed new document.
-- entry coverage audit is `BLOCKED` or `PENDING`.
+- Target owner is unclear.
+- Create-if-missing authorization is missing.
+- The fact is proposed, unverified, one-off, or valid only for the current requirement.
+- An existing business_domain fact conflicts with the proposed new document.
+- Entry coverage audit is `BLOCKED` or `PENDING`.
 
 ## Target Conflict Rules
 

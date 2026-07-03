@@ -1931,6 +1931,55 @@ RAIL_ROUTING_FILE_TERMS.each do |rel_path, terms|
   end
 end
 
+# PR K: Business-Domain Naming and Project-Shape Create-If-Missing
+PR_K_REQUIRED_FILES = [
+  "ai-sdlc/business-domain-naming-and-shape.md",
+  "templates/business-domain-governance-profile-template.yaml",
+  "templates/business-domain-sync-proposal-template.md",
+  "fixtures/speckit-product-parity/business-domain-naming-shape/fixture.yaml",
+  "fixtures/speckit-product-parity/business-domain-naming-shape/expected.md"
+].freeze
+
+PR_K_FILE_TERMS = {
+  "ai-sdlc/business-domain-naming-and-shape.md" => ["canonical naming", "current naming convention", "project shape", "preserve existing shape", "Create-if-missing authorization", "naming_pattern_source", "shape_profile_source", "shape confidence", "sibling L4", "duplicate L4 candidate", "whole-document rewrite", "standard template fallback", "Shape Confidence", "Update Existing Rules"],
+  "templates/business-domain-governance-profile-template.yaml" => ["canonical_naming", "shape_profile", "create_if_missing", "standard_template_fallback_allowed", "preserve_existing_shape", "whole_document_rewrite_allowed"],
+  "templates/business-domain-sync-proposal-template.md" => ["Sync Proposal", "Naming Pattern Source", "Shape Profile Source", "Shape Confidence", "Required User Confirmations"],
+  "skills/sdlc-speckit-sync/references/sync-inputs.md" => ["incomplete evidence can only produce", "Library-Driven Readiness", "Naming pattern must be identifiable"],
+  "skills/sdlc-speckit-sync/references/sync-targets.md" => ["Naming Pattern Source", "Shape Profile Source", "Shape Confidence", "Standard Template Fallback Allowed", "canonical naming", "project shape"],
+  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md" => ["Canonical naming unknown", "naming_pattern_source missing", "shape_profile_source missing", "Shape confidence", "Whole-document rewrite", "Duplicate semantic L4 candidate", "Standard template fallback"],
+  "skills/sdlc-speckit-code-doc-reconcile/references/audit-workflow.md" => ["naming drift", "shape drift", "duplicate L4 drift", "catalog/index drift", "source traceability drift"],
+  "skills/sdlc-speckit-sync/SKILL.md" => ["business-domain-naming-and-shape", "canonical naming", "project shape"],
+  "skills/sdlc-speckit-code-doc-reconcile/SKILL.md" => ["business-domain-naming-and-shape", "naming drift"],
+  "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["canonical naming", "shape confidence", "whole-document rewrite", "duplicate L4 candidate", "naming/shape gate"],
+  "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md" => ["naming drift", "shape drift", "duplicate L4 drift", "catalog/index drift", "whole-document rewrite"],
+  "docs/VALIDATION.md" => ["canonical naming", "project shape", "shape confidence", "Naming Gate", "Project Shape Gate", "whole-document rewrite", "Library-Driven Inputs Cleanup"]
+}.freeze
+
+PR_K_REQUIRED_FILES.each do |rel_path|
+  path = File.join(ROOT, rel_path)
+  errors << "missing #{rel_path}" unless File.exist?(path)
+end
+
+PR_K_FILE_TERMS.each do |rel_path, terms|
+  path = File.join(ROOT, rel_path)
+  next unless File.exist?(path)
+  text = File.read(path)
+  terms.each do |term|
+    errors << "#{rel_path} missing naming/shape requirement #{term}" unless text.include?(term)
+  end
+end
+
+# Also check fixture dirs updated
+if File.directory?(fixture_root)
+  fixture_dirs_list = PRODUCT_PARITY_FIXTURE_DIRS + ["business-domain-naming-shape"]
+  fixture_dirs_list.each do |dir|
+    full_dir = File.join(fixture_root, dir)
+    unless File.directory?(full_dir)
+      errors << "missing fixture directory fixtures/speckit-product-parity/#{dir}"
+    end
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

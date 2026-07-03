@@ -79,6 +79,14 @@ Before writing confirmed business_domain facts in `library_driven` mode, all of 
 
 ## Duplicate Sync Guard
 
+The duplicate sync guard does not replace the naming/shape gate. Before any direct business_domain write, naming pattern and shape profile must be confirmed per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+
+All sync source modes (`speckit_driven`, `library_driven`, `hybrid`) must observe business-domain naming and shape rules. Direct write readiness requires:
+- Implementation evidence.
+- Verification evidence.
+- Naming pattern resolvable.
+- Shape profile resolvable (confidence `high` or `medium`, or `low` with user confirmation).
+
 Manifest must record business_domain sync status to prevent duplicate writes:
 
 ```yaml

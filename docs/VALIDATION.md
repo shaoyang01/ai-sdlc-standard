@@ -1114,6 +1114,46 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - manifest 记录 `business_domain_sync` 状态。
 - `pipeline_sync_executed=true` + `result=synced` → library sync 默认 blocked。
 - `library_sync_executed=true` → pipeline sync 必须读 manifest，避免重复写作。
+
+## Business-Domain Naming and Project Shape 校验
+
+### Naming Gate
+
+- business_domain 文档命名必须遵守项目当前 canonical naming convention。
+- 常见模式：`{L4_ID}{L4_NAME_EN}({L4_NAME_CN}).md`、`{L4_ID}EntryCoverage({CN}入口覆盖对账).md` 等。
+- naming pattern 来源：sibling L4、01DomainCatalog.md、L2 index、governance profile、user confirmation。
+- naming pattern 未知 → proposal only，不得直接写。
+- create-if-missing 使用 project canonical naming，不使用标准库默认命名。
+
+### Project Shape Gate
+
+- document shape 是项目级不变量（标题格式、Metadata 字段、章节语言、表格结构、修订记录）。
+- Target L4 exists → preserve existing shape。不得整体重写为 New-Rail 模板。
+- Target L4 missing → 从同 L2 sibling L4 推断 project shape。
+- shape confidence：high / medium → 可直接 create-if-missing；low → 需用户确认；unknown → block/proposal。
+- 标准库 `templates/business-domain-l4/*.md` 只能作为 new project / no-shape fallback，不得覆盖已有项目 shape。
+
+### Create-If-Missing 规则
+
+- 需要单独授权（不等于 generic write authorization）。
+- 使用 project canonical naming + project shape。
+- 记录：rail/source_artifacts/naming_pattern_source/shape_profile_source/shape_confidence。
+- 必须更新 L2 index + 01DomainCatalog.md + revision record。
+- 不得创建同义重复 L4。
+
+### Whole-Document Rewrite 禁止（whole-document rewrite forbidden）
+
+- Update existing → compatible section update，不得整体重写。
+- 保留 title format、existing section names、table styles、revision history format。
+- 不得为适配 New-Rail 模板新增大段不符合项目 shape 的英文固定章节。
+
+### Library-Driven Inputs Cleanup
+
+- library_driven required inputs 从强制 00/01/02/03/04/05 全部存在改为 readiness gate：
+  - 01 + 02 必须存在。
+  - 实现证据可来自 03、implementation result、或 code diff。
+  - 验证证据可来自 05、04、test result、或 accepted review。
+  - Incomplete evidence 只能产生 proposal/not_required/blocked，不能直接 confirmed write。
 - Plan 用 contract artifact 反补未审阅业务规则 → Plan Gate BLOCKED
 
 ### 关键术语

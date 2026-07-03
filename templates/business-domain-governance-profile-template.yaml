@@ -1,0 +1,40 @@
+# Business-Domain Governance Profile Template
+# Append to .specify/project-governance-profile.yaml or use as standalone profile.
+
+business_domain_governance:
+  shared_between_rails: true
+  canonical_naming:
+    source: existing_business_domain | project_profile | user_confirmed | unknown
+    pattern: "{L4_ID}{L4_NAME_EN}({L4_NAME_CN}).md"
+    examples:
+      - "<example-document-path>"
+    confidence: high | medium | low | unknown
+  shape_profile:
+    source: sibling_l4 | same_project_l4 | project_profile | user_confirmed | standard_template | unknown
+    profile_name: legacy_speckit_zh | new_rail_structured | project_custom | unknown
+    confidence: high | medium | low | unknown
+    preserve_existing_shape: true
+  create_if_missing:
+    enabled: true
+    require_explicit_authorization: true
+    use_project_naming: true
+    use_project_shape: true
+    standard_template_fallback_allowed: false
+    require_l2_index_update: true
+    require_domain_catalog_update: true
+  update_existing:
+    preserve_existing_shape: true
+    whole_document_rewrite_allowed: false
+    compatible_section_update: true
+    proposal_when_insert_point_unknown: true
+  conflict_policy:
+    duplicate_l4_candidate: block
+    unknown_shape: proposal
+    semantic_conflict: reconcile_proposal
+    unknown_naming: proposal
+  revision:
+    required: true
+    record_rail: true
+    record_source_artifacts: true
+    record_shape_profile_source: true
+    record_naming_pattern_source: true

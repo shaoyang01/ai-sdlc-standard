@@ -24,6 +24,9 @@ Sync verified, reusable implementation facts into long-term knowledge targets af
 11. Route reusable checklist, schema, or review gaps to the appropriate Sync or standard update path.
 12. Do not modify production code.
 13. When a `.specify/business_domain/**` L4 target is missing, use create-if-missing only after L1/L2 are confirmed, target owner is explicit, create authorization is recorded, and the new L4 id can be reserved.
+14. Observe project naming and project shape before writing business_domain. Use project canonical naming and project shape for create-if-missing. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
+15. Do not default to standard L4 skeleton in existing projects. Standard templates are fallback only for new projects or when no project shape exists and user confirms. Standard template fallback requires explicit user confirmation and `standard_template_fallback_allowed=true`.
+16. Preserve existing shape when updating existing L4 documents. Unknown naming or unknown shape → proposal only.
 14. For create-if-missing, read `specs/{feature}/route.md` Project Type Profiles and select the matching `templates/business-domain-l4/{profile}.md` skeleton; do not use a generic L4 skeleton as the only default for every project type.
 15. After any business-domain write or authorized create-if-missing, run the standard entry coverage audit and block final Sync when it fails.
 
@@ -63,6 +66,9 @@ Load these references as needed:
 - `references/fact-eligibility.md` for what can and cannot be synced.
 - `references/conflict-and-blocking.md` for conflicts, uncertainty, and Re-Gate routing.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md` for naming conventions and project shape rules.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-sync-proposal-template.md` for sync proposal format.
+- `${AI_SDLC_STANDARD_HOME}/templates/business-domain-governance-profile-template.yaml` for governance profile.
 
 ## Workflow
 
