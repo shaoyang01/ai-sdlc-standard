@@ -48,7 +48,7 @@ blocking_conditions:
   - plan requires undefined business behavior
   - plan cannot support acceptance criteria
   - companion artifacts are missing without complete skip records
-  - contracts/ does not cover affected backend/admin, frontend, or ETL contract surfaces
+  - contracts/ does not cover contract surfaces defined in project-type-contract-matrix for the feature's project type profiles
 ```
 
 ## Standard Path Resolution
@@ -162,12 +162,9 @@ Re-Gate Required:
 - 风险和缓解措施。
 - 与 `specs/{feature}/spec.md`、`01-技术方案`、`02-方案审核` 的追溯关系。
 - Companion artifact 状态和跳过记录。
+- Companion artifact status table（Produced / Reused / Not Applicable / Deferred），缺失时包含 Project Type Profile 和完整 skip record。
 
-`contracts/` 必须按项目类型覆盖：
-
-- Backend/Admin: API/RPC/MQ contract、request/response shape、state transition、persistence side effects、transaction/rollback、operator-visible behavior。
-- Frontend: page/route behavior、component/state/API mapping、popup trigger and visibility、backend/mock boundary、visual verification notes。
-- ETL/data pipeline: input tables/topics/files、output tables/topics/reports、SQL/data lineage、partition/window/checkpoint、rerun/replay/idempotency、downstream consumer contract。
+  `contracts/` 必须按项目类型覆盖 `${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md` 中定义的 contract surface，包括 API contract、RPC contract、MQ producer/consumer contract、route/page contract、component/state/store contract、trigger contract、input contract、output contract、SQL lineage contract、replay/idempotency contract 等。
 
 最终输出必须包含：
 
@@ -208,7 +205,7 @@ Re-Gate Required:
 - Plan 无法支撑验收标准。
 - 当前有效方案或审核产物已被 stale。
 - Companion artifact 缺失且没有完整跳过记录。
-- 受影响项目类型的 contract surface 未覆盖。
+- 受影响项目类型的 contract surface 未覆盖 project-type-contract-matrix 中的合约。
 
 ## Gate Requirements
 

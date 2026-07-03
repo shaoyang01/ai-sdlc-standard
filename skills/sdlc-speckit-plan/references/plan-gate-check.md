@@ -14,8 +14,8 @@ Check the plan for:
 - Observability, logging, metrics, and alerts.
 - Verification strategy mapped to acceptance criteria.
 - Risks and mitigations.
-- Companion artifacts: `research.md`, `data-model.md`, `contracts/`, and `quickstart.md` are produced or explicitly skipped with a complete skip record.
-- Project-type contract coverage for backend/admin, frontend, ETL/data pipeline, or mixed projects.
+- Companion artifacts: `research.md`, `data-model.md`, `contracts/`, and `quickstart.md` are produced or explicitly skipped with a complete skip record (`Artifact`, `Project Type Profile`, `Skip Reason`, `Risk`, `Impact`, `Accepted By`, `Re-Gate Required`).
+- Project-type contract coverage: contracts under `specs/{feature}/contracts/` cover each relevant contract artifact defined in `${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md` for the feature's project type profiles.
 
 ## Status Values
 
@@ -37,8 +37,10 @@ Block when:
 - Plan cannot support acceptance criteria.
 - Plan requires changing API, DB, cache, MQ, schedule, listener, state, transaction, or data behavior not already approved.
 - Accepted risk is missing, contradicted, or not traceable.
-- Companion artifact is missing without `Artifact`, `Skip Reason`, `Risk`, `Impact`, `Accepted By`, and `Re-Gate Required`.
-- `contracts/` is skipped while the feature changes API/RPC/MQ, frontend route/page/state/API, or ETL input/output/data lineage.
+- Companion artifact is missing without `Artifact`, `Project Type Profile`, `Skip Reason`, `Risk`, `Impact`, `Accepted By`, and `Re-Gate Required`.
+- `contracts/` is skipped while the feature changes a contract surface listed in the project-type contract matrix for the feature's project type profiles.
+- A contract artifact in the matrix is required by the feature but not covered by any contract file under `specs/{feature}/contracts/` and no skip record exists for that specific contract.
+- A Deferred artifact has no accepted risk or no Re-Gate Required flag.
 
 ## Output
 

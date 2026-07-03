@@ -1022,3 +1022,45 @@ ruby scripts/validate-product-parity-fixtures.rb
 | `entry-coverage-analyze/` | Entry coverage precision + Analyze Gate: TSV parsing, classification, technical bridge, reverse coverage |
 | `bootstrap-scan-control/` | Bootstrap performance: --scan-root, --scan-timeout, structured inventory, timeout/partial |
 | `delta-change-supplement/` | Delta change routing: Requirement Supplement, Specification Missing, Decision Scope, aggregate vs delta |
+| `project-type-contract-matrix/` | Plan contract matrix: companion artifact status table, project-type contract granularity, BLOCKED on missing contracts |
+
+## Project-Type Contract Matrix 校验
+
+Plan 阶段必须按 `project_type_profiles` 输出 contract artifact matrix。Plan Gate 对缺少 companion / contract artifact 且无完整 skip record 的情况必须 BLOCKED。
+
+### Companion Artifact Status Table
+
+Plan 输出必须包含 companion artifact status table:
+
+| Artifact | Status | Path | Skip Reason | Risk | Impact | Accepted By | Re-Gate Required |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+
+Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
+
+### Contract Matrix 覆盖
+
+按项目类型定义的 contract matrix（`skills/sdlc-speckit-plan/references/project-type-contract-matrix.md`）:
+
+- **backend-business-service**: API, RPC, MQ, Schedule, DB migration, failure/rollback/idempotency
+- **admin-mixed-workflow**: config lifecycle, approval/audit, import/export, read-only query, concurrency/rollback, operator permission
+- **frontend-application**: route/page, component/state/store, API client, backend/mock boundary, popup/dialog, visual verification
+- **data-pipeline-etl**: trigger, input, output, SQL lineage, partition/window/checkpoint, replay/idempotency, downstream consumer
+- **library-shared-component**: public API, consumer scenario, compatibility, deprecation/migration, representative test
+
+### Skip Record
+
+缺少 artifact 时必须包含完整 skip record:
+
+- Artifact
+- Project Type Profile
+- Skip Reason
+- Risk
+- Impact
+- Accepted By
+- Re-Gate Required
+
+### BLOCKED Conditions
+
+- Companion artifact 缺失且无完整 skip record
+- `contracts/` 被跳过但 feature 改变了 contract matrix 中列出的 contract surface
+- Deferred artifact 无 accepted risk 或无 Re-Gate Required

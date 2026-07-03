@@ -62,6 +62,7 @@ If any companion artifact is not produced, record the skip in both `plan.md` and
 
 ```text
 Artifact:
+Project Type Profile:
 Skip Reason:
 Risk:
 Impact:
@@ -92,31 +93,44 @@ Capture entities, state transitions, persistence side effects, frontend state sh
 
 Create one or more contract files for changed or relied-on external surfaces.
 
-Backend/Admin contracts must cover:
+Contract coverage must follow the project-type contract matrix defined in
+`${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md`.
 
-- API/RPC/MQ contract;
-- request/response shape;
-- state transition;
-- persistence side effects;
-- transaction/rollback;
-- operator-visible behavior.
+**Backend/Admin contracts must cover:**
 
-Frontend contracts must cover:
+- API contract
+- RPC contract
+- MQ producer/consumer contract
+- Schedule/job contract
+- DB side-effect / migration contract
+- failure/rollback/idempotency contract
 
-- page/route behavior;
-- component/state/API mapping;
-- popup trigger and visibility;
-- backend/mock boundary;
-- visual verification notes.
+**Frontend contracts must cover:**
 
-ETL/data pipeline contracts must cover:
+- route/page contract
+- component/state/store contract
+- API client contract
+- backend/mock boundary contract
+- popup/dialog interaction contract
+- visual verification contract
 
-- input tables/topics/files;
-- output tables/topics/reports;
-- SQL/data lineage;
-- partition/window/checkpoint;
-- rerun/replay/idempotency;
-- downstream consumer contract.
+**ETL/data pipeline contracts must cover:**
+
+- trigger contract
+- input contract
+- output contract
+- SQL lineage contract
+- partition/window/checkpoint contract
+- replay/idempotency contract
+- downstream consumer contract
+
+**Library/shared-component contracts must cover:**
+
+- public API contract
+- consumer scenario contract
+- compatibility contract
+- deprecation/migration contract
+- representative test contract
 
 ### `quickstart.md`
 
@@ -139,13 +153,15 @@ Capture how to verify the planned behavior: commands, environment, seed data, re
 
 ## Companion Artifacts
 
+Plan stage must output a companion artifact status table:
+
 | Artifact | Status | Path | Skip Reason | Risk | Impact | Accepted By | Re-Gate Required |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| plan.md | produced | specs/{feature}/plan.md |  |  |  |  | no |
-| research.md | produced / skipped | specs/{feature}/research.md |  |  |  |  |  |
-| data-model.md | produced / skipped | specs/{feature}/data-model.md |  |  |  |  |  |
-| contracts/ | produced / skipped | specs/{feature}/contracts/ |  |  |  |  |  |
-| quickstart.md | produced / skipped | specs/{feature}/quickstart.md |  |  |  |  |  |
+| plan.md | Produced | specs/{feature}/plan.md |  |  |  |  | no |
+| research.md | Produced / Reused / Not Applicable / Deferred | specs/{feature}/research.md |  |  |  |  |  |
+| data-model.md | Produced / Reused / Not Applicable / Deferred | specs/{feature}/data-model.md |  |  |  |  |  |
+| contracts/ | Produced / Reused / Not Applicable / Deferred | specs/{feature}/contracts/ |  |  |  |  |  |
+| quickstart.md | Produced / Reused / Not Applicable / Deferred | specs/{feature}/quickstart.md |  |  |  |  |  |
 
 ## Affected Modules And Files
 

@@ -69,6 +69,7 @@ Skipping requires:
 
 ```text
 Artifact:
+Project Type Profile:
 Skip Reason:
 Risk:
 Impact:
@@ -77,3 +78,10 @@ Re-Gate Required:
 ```
 
 Missing companion artifacts without this record are blocking because tasks and analyze cannot prove implementation readiness.
+
+## Contract Matrix
+
+Contract artifacts under `specs/{feature}/contracts/` must follow the project-type contract matrix defined in
+`${AI_SDLC_STANDARD_HOME}/skills/sdlc-speckit-plan/references/project-type-contract-matrix.md`.
+
+Each contract artifact in the matrix that is relevant to the feature must be produced, reused, or explicitly skipped with a complete skip record. Plan Gate is BLOCKED when a contract surface listed in the matrix is changed by the feature but no contract file or skip record covers it.

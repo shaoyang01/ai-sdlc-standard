@@ -150,12 +150,16 @@ PLAN_COMPANION_REQUIRED_TERMS = [
 ].freeze
 
 PLAN_CONTRACT_SURFACE_REQUIRED_TERMS = [
-  "API/RPC/MQ",
-  "page/route behavior",
-  "input tables/topics/files",
-  "output tables/topics/reports",
-  "SQL/data lineage",
-  "rerun/replay/idempotency"
+  "API contract",
+  "RPC contract",
+  "MQ producer/consumer contract",
+  "route/page contract",
+  "component/state/store contract",
+  "trigger contract",
+  "input contract",
+  "output contract",
+  "SQL lineage contract",
+  "replay/idempotency contract"
 ].freeze
 
 CONFIRMED_DOMAIN_BOOTSTRAP_REQUIRED_TERMS = [
@@ -1739,7 +1743,8 @@ PRODUCT_PARITY_FIXTURE_DIRS = [
   "route-artifact",
   "entry-coverage-analyze",
   "bootstrap-scan-control",
-  "delta-change-supplement"
+  "delta-change-supplement",
+  "project-type-contract-matrix"
 ].freeze
 
 PRODUCT_PARITY_VALIDATION_DOC_TERMS = [
@@ -1782,6 +1787,67 @@ if File.exist?(validation_path)
   text = File.read(validation_path)
   PRODUCT_PARITY_VALIDATION_DOC_TERMS.each do |term|
     errors << "docs/VALIDATION.md missing product parity validator requirement #{term}" unless text.include?(term)
+  end
+end
+
+# PR J: Project-Type Contract Artifact Matrix
+PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS = [
+  "project-type-contract-matrix",
+  "companion artifact status table",
+  "Produced",
+  "Reused",
+  "Not Applicable",
+  "Deferred",
+  "Skip Reason",
+  "Project Type Profile",
+  "Accepted By",
+  "Re-Gate Required",
+  "backend-business-service",
+  "admin-mixed-workflow",
+  "frontend-application",
+  "data-pipeline-etl",
+  "library-shared-component"
+].freeze
+
+PROJECT_TYPE_CONTRACT_MATRIX_DOC_TERMS = [
+  "Project-Type Contract Matrix",
+  "companion artifact status table",
+  "Produced",
+  "Reused",
+  "Not Applicable",
+  "Deferred",
+  "Project Type Profile",
+  "contract matrix",
+  "project-type-contract-matrix"
+].freeze
+
+contract_matrix_path = File.join(ROOT, "skills", "sdlc-speckit-plan", "references", "project-type-contract-matrix.md")
+if File.exist?(contract_matrix_path)
+  matrix_text = File.read(contract_matrix_path)
+  PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS.each do |term|
+    errors << "project-type-contract-matrix.md missing required term #{term}" unless matrix_text.include?(term)
+  end
+else
+  errors << "missing skills/sdlc-speckit-plan/references/project-type-contract-matrix.md"
+end
+
+plan_refs = {
+  "skills/sdlc-speckit-plan/references/output-and-manifest.md" => PROJECT_TYPE_CONTRACT_MATRIX_SCRIPT_TERMS.first(7) + ["project-type-contract-matrix", "Produced / Reused / Not Applicable / Deferred"],
+  "skills/sdlc-speckit-plan/references/planning-scope.md" => ["Project Type Profile", "project-type-contract-matrix", "contract matrix"],
+  "skills/sdlc-speckit-plan/references/plan-gate-check.md" => ["Project Type Profile", "project-type-contract-matrix", "Deferred", "contract matrix"],
+  "skill-contracts/known-skills/sdlc-speckit-plan.md" => ["project-type-contract-matrix", "Project Type Profile"],
+  "docs/VALIDATION.md" => PROJECT_TYPE_CONTRACT_MATRIX_DOC_TERMS
+}.freeze
+
+plan_refs.each do |rel_path, terms|
+  path = File.join(ROOT, rel_path)
+  if File.exist?(path)
+    text = File.read(path)
+    terms.each do |term|
+      errors << "#{rel_path} missing project-type contract matrix requirement #{term}" unless text.include?(term)
+    end
+  else
+    errors << "missing #{rel_path}"
   end
 end
 
