@@ -1,5 +1,8 @@
 # Speckit 投放指南
 
+> **Status**: Historical / Superseded
+> This document describes pre-New-Rail bootstrap guidance. For current New-Rail Enhanced Speckit Pipeline governance, see [`docs/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md`](NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md). The bootstrap scripts described here remain functional but the governance protocols have been superseded by PR J–P (`ai-sdlc/` governance files).
+
 > 本指南说明当前 `scripts/bootstrap-speckit-project.sh` 的真实行为，以及 Speckit 双轨隔离、代码驱动生成和 report 输出边界。
 
 ## 目标

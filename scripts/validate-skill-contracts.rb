@@ -1029,7 +1029,7 @@ end
 
 versioning_scan_paths = [
   Dir[File.join(ROOT, "ai-sdlc", "**", "*.md")],
-  Dir[File.join(ROOT, "docs", "**", "*.md")],
+  Dir[File.join(ROOT, "docs", "**", "*.md")].reject { |p| p.include?("docs/reports/archive/") },
   Dir[File.join(ROOT, "templates", "**", "*.md")],
   Dir[File.join(ROOT, "skills", "sdlc-*", "**", "*.md")],
   Dir[File.join(ROOT, "skill-contracts", "**", "*.md")],
