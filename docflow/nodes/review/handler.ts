@@ -1,4 +1,9 @@
-// Review Node — produces PASS / FAIL / PASS_WITH_RISK result.
+// Review Node — PURE STATE MACHINE
+// ================================
+// Records review result. Does NOT decide what happens next.
+// PASS / FAIL / PASS_WITH_RISK are output values only.
+// The decision about whether to proceed belongs to LOOP.
+
 import { DocFlowNode, DocFlowContext, StageRecord, ReviewOutput } from "../../types/index";
 
 export class ReviewNode implements DocFlowNode {
@@ -6,16 +11,12 @@ export class ReviewNode implements DocFlowNode {
 
   async execute(context: DocFlowContext): Promise<DocFlowContext> {
     const startedAt = new Date().toISOString();
-    const design = context.artifacts["tech-design"] as Record<string, unknown> | undefined;
-
-    const issues = this.assessIssues(design);
-    const result = this.determineResult(issues);
 
     const output: ReviewOutput = {
       requirement_id: context.requirement_id,
-      result,
-      issues,
-      recommendations: this.buildRecommendations(issues, result),
+      result: (context.metadata?.review_result as ReviewOutput["result"]) || "PASS",
+      issues: (context.metadata?.review_issues as ReviewOutput["issues"]) || [],
+      recommendations: [],
       reviewed_at: startedAt,
     };
 
@@ -33,32 +34,5 @@ export class ReviewNode implements DocFlowNode {
     context.history.push(record);
     context.updated_at = record.completed_at!;
     return context;
-  }
-
-  private assessIssues(design?: Record<string, unknown>): ReviewOutput["issues"] {
-    const issues: ReviewOutput["issues"] = [];
-    if (!design) {
-      issues.push({ severity: "critical", category: "design", description: "No tech design available for review." });
-      return issues;
-    }
-    const risks = (design.risks as string[]) || [];
-    if (risks.some((r) => r.includes("Multi-repo"))) {
-      issues.push({ severity: "high", category: "cross-repo", description: "Multi-repo risk detected. Contract alignment required before execution." });
-    }
-    if (risks.some((r) => r.includes("High complexity"))) {
-      issues.push({ severity: "medium", category: "complexity", description: "High complexity. Consider breaking into smaller increments." });
-    }
-    return issues;
-  }
-
-  private determineResult(issues: ReviewOutput["issues"]): ReviewOutput["result"] {
-    if (issues.some((i) => i.severity === "critical")) return "FAIL";
-    if (issues.some((i) => i.severity === "high")) return "PASS_WITH_RISK";
-    return "PASS";
-  }
-
-  private buildRecommendations(issues: ReviewOutput["issues"], result: string): string[] {
-    if (result === "PASS") return ["Proceed to implementation."];
-    return issues.map((i) => `[${i.severity}] ${i.category}: ${i.description}`);
   }
 }

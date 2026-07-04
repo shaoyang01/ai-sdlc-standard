@@ -8,19 +8,16 @@ export interface RequirementSummaryOutput {
   multi_repo: boolean;
   main_repo: string;
   sub_requirements: SubRequirement[];
-  complexity_hint: ComplexityHint;
   raw_text: string;
   parsed_at: string;
 }
 
 export interface SubRequirement {
   repo: string;
-  dependency_type: DependencyType;
   description: string;
 }
 
-export type DependencyType = "api" | "data" | "event" | "unknown";
-export type ComplexityHint = "low" | "medium" | "high";
+// DocFlow node interface — PURE, no decision logic
 
 // DocFlow node interface
 export interface DocFlowNode {
@@ -78,6 +75,7 @@ export interface ReviewIssue {
 // Implementation output
 export interface ImplementationOutput {
   requirement_id: string;
+  implementation_mode: string;
   files_changed: string[];
   summary: string;
   verification_steps: string[];

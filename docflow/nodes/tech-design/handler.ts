@@ -1,6 +1,8 @@
-// Tech Design Node
-// ================
-// Generates a structured tech design from requirement summary.
+// Tech Design Node — PURE STATE MACHINE
+// ======================================
+// Records design metadata from requirement summary.
+// Does NOT make decisions, evaluate quality, or select strategy.
+// PURE data transformation.
 
 import { DocFlowNode, DocFlowContext, StageRecord, TechDesignOutput } from "../../types/index";
 
@@ -13,11 +15,11 @@ export class TechDesignNode implements DocFlowNode {
 
     const output: TechDesignOutput = {
       requirement_id: context.requirement_id,
-      approach: summary ? `Implement ${summary.main_repo || "unknown"} changes based on parsed requirement.` : "No requirement summary available.",
-      modules_affected: this.detectModules(summary),
-      data_changes: this.detectDataChanges(summary),
-      api_changes: this.detectApiChanges(summary),
-      risks: this.detectRisks(summary),
+      approach: summary ? `Design for ${summary.main_repo || "unknown"}.` : "No requirement summary available.",
+      modules_affected: summary ? this.listModules(summary) : [],
+      data_changes: summary ? this.listDataChanges(summary) : [],
+      api_changes: summary ? this.listApiChanges(summary) : [],
+      risks: [],
       created_at: startedAt,
     };
 
@@ -37,28 +39,16 @@ export class TechDesignNode implements DocFlowNode {
     return context;
   }
 
-  private detectModules(summary?: Record<string, unknown>): string[] {
-    if (!summary) return ["unknown"];
+  private listModules(summary: Record<string, unknown>): string[] {
     const subs = (summary.sub_requirements as Array<Record<string, unknown>>) || [];
-    return subs.length > 0 ? subs.map((s) => String(s.repo || "unknown")) : ["unknown"];
+    return subs.length > 0 ? subs.map((s) => String(s.repo || "unknown")) : [];
   }
 
-  private detectDataChanges(summary?: Record<string, unknown>): string[] {
-    if (!summary) return [];
-    const subs = (summary.sub_requirements as Array<Record<string, unknown>>) || [];
-    return subs.filter((s) => s.dependency_type === "data").map((s) => String(s.description || ""));
+  private listDataChanges(_summary: Record<string, unknown>): string[] {
+    return []; // No inference — data changes come from metadata, not DocFlow
   }
 
-  private detectApiChanges(summary?: Record<string, unknown>): string[] {
-    if (!summary) return [];
-    const subs = (summary.sub_requirements as Array<Record<string, unknown>>) || [];
-    return subs.filter((s) => s.dependency_type === "api").map((s) => String(s.description || ""));
-  }
-
-  private detectRisks(summary?: Record<string, unknown>): string[] {
-    const risks: string[] = [];
-    if (summary?.multi_repo) risks.push("Multi-repo execution risk: cross-repo contract alignment required.");
-    if (summary?.complexity_hint === "high") risks.push("High complexity: consider staged rollout.");
-    return risks.length > 0 ? risks : ["No significant risks identified at design stage."];
+  private listApiChanges(_summary: Record<string, unknown>): string[] {
+    return []; // No inference — API changes come from metadata, not DocFlow
   }
 }
