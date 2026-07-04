@@ -42,6 +42,13 @@ interface RequirementSummary {
 
 // ─── Static Maps (DocFlow + LOOP) ────────────────────
 
+// ═══ LEGACY Flow Table ═══════════════════════════════════
+// TODO(PR-2): Replace with sdlc_graph/transitions.ts.
+// NODE_FLOW and getNextNode() below are duplicated from the
+// Graph Kernel. They will be removed when runtime is wired
+// to the Graph Engine in PR-2.
+// ═══════════════════════════════════════════════════════════
+
 const NODE_FLOW: { current: DocFlowNode; next: DocFlowNode | null }[] = [
   { current: "requirement-summary", next: "tech-design" },
   { current: "tech-design",           next: "review" },
@@ -50,6 +57,7 @@ const NODE_FLOW: { current: DocFlowNode; next: DocFlowNode | null }[] = [
   { current: "validation",            next: null },
 ];
 
+// TODO(PR-2): Replace with sdlc_graph agent registry.
 const AGENT_MAP: Record<DocFlowNode, LoopAgent> = {
   "requirement-summary": "kimi",
   "tech-design":          "kimi",
@@ -166,6 +174,7 @@ function getAgent(node: DocFlowNode): LoopAgent {
   return AGENT_MAP[node] || "kimi";
 }
 
+// TODO(PR-2): Replace with sdlc_graph/transitions.ts#getNextNode.
 function getNextNode(node: DocFlowNode): DocFlowNode | null {
   const entry = NODE_FLOW.find((e) => e.current === node);
   return entry?.next ?? null;
