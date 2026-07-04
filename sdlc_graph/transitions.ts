@@ -1,7 +1,8 @@
-// SDLC Graph Transitions — Deterministic
-// =======================================
-// Pure deterministic lookup. NO condition logic.
-// getNextNode returns the next node or null (terminal).
+// SDLC Graph Transitions — Deterministic Decision Layer
+// ======================================================
+// Pure transition engine. Depends on graph DATA only (SDLC_EDGES).
+// NO runtime dependencies. NO context logic. NO execution.
+// This is the ONLY layer that decides "what comes next".
 
 import { NodeType } from "./types";
 import { SDLC_EDGES } from "./graph";
@@ -12,7 +13,12 @@ export function getNextNode(current: NodeType): NodeType | null {
   return edge?.to ?? null;
 }
 
-// Linear adjacency check — no cycles in SDLC graph
+// Terminal check — delegates to getNextNode (no direct graph access)
+export function isTerminal(node: NodeType): boolean {
+  return getNextNode(node) === null;
+}
+
+// Validates a single step is allowed by the graph
 export function isValidTransition(from: NodeType, to: NodeType): boolean {
   return getNextNode(from) === to;
 }

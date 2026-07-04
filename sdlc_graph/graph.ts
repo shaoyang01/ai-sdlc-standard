@@ -1,13 +1,12 @@
 // SDLC Graph Kernel — Pure Declarative Graph
 // ===========================================
-// Defines the static SDLC workflow graph.
-// Does NOT execute anything. Does NOT replace runtime.
-// Purely declarative — nodes, edges, transitions only.
+// PURE DATA ONLY. No execution logic. No flow decisions.
+// Nodes and edges are the single source of truth for graph structure.
+// Transition logic lives in transitions.ts (separate layer).
 
 import { NodeType, GraphNode, GraphEdge } from "./types";
-import { getNextNode } from "./transitions";
 
-// ─── Graph Definition ────────────────────────────────
+// ─── Graph Definition (DATA ONLY) ────────────────────
 
 export const SDLC_NODES: GraphNode[] = [
   { id: "requirement-summary", label: "Requirement Summary", order: 0 },
@@ -24,7 +23,7 @@ export const SDLC_EDGES: GraphEdge[] = [
   { from: "implementation",        to: "validation" },
 ];
 
-// ─── Graph Queries (read-only) ─────────────────────────
+// ─── Pure Data Getters (NO logic, NO decisions) ──────
 
 export function getNode(id: NodeType): GraphNode | undefined {
   return SDLC_NODES.find((n) => n.id === id);
@@ -36,8 +35,4 @@ export function getAllNodes(): GraphNode[] {
 
 export function getEdge(from: NodeType): GraphEdge | undefined {
   return SDLC_EDGES.find((e) => e.from === from);
-}
-
-export function isTerminal(node: NodeType): boolean {
-  return getNextNode(node) === null;
 }
