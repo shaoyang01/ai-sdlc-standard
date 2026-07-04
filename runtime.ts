@@ -1,18 +1,22 @@
-// SDLC Runtime — Minimal Deterministic Execution Engine
-// ======================================================
-// Integrates DocFlow, LOOP, Fanout, Speckit, and Agent Runtime.
-// Fully deterministic. No AI, no inference, no dynamic routing.
+// SDLC Runtime — Graph Interpreter
+// =================================
+// Wired to SDLC Graph Kernel as SINGLE source of truth.
+// No inline flow table. No duplicated transition logic.
+// Graph defines the path — Runtime executes it.
 //
 // Entry: run(requirement: string) → RuntimeResult
 
+import { NodeType, GraphNode } from "../sdlc_graph/types";
+import { getNextNode, isTerminal } from "../sdlc_graph/transitions";
+import { SDLC_NODES, SDLC_EDGES } from "../sdlc_graph/graph";
+
 // ─── Types ────────────────────────────────────────────
 
-type DocFlowNode = "requirement-summary" | "tech-design" | "review" | "implementation" | "validation";
 type LoopAgent = "kimi" | "codex" | "hermes";
 type ExecutionMode = "direct" | "speckit";
 
 interface ExecutionTraceEntry {
-  node: DocFlowNode;
+  node: NodeType;
   agent: LoopAgent;
   status: "success" | "failure";
   output: Record<string, unknown>;
@@ -40,25 +44,9 @@ interface RequirementSummary {
   sub_requirements: { repo: string; task: string }[];
 }
 
-// ─── Static Maps (DocFlow + LOOP) ────────────────────
+// ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
 
-// ═══ LEGACY Flow Table ═══════════════════════════════════
-// TODO(PR-2): Replace with sdlc_graph/transitions.ts.
-// NODE_FLOW and getNextNode() below are duplicated from the
-// Graph Kernel. They will be removed when runtime is wired
-// to the Graph Engine in PR-2.
-// ═══════════════════════════════════════════════════════════
-
-const NODE_FLOW: { current: DocFlowNode; next: DocFlowNode | null }[] = [
-  { current: "requirement-summary", next: "tech-design" },
-  { current: "tech-design",           next: "review" },
-  { current: "review",                next: "implementation" },
-  { current: "implementation",        next: "validation" },
-  { current: "validation",            next: null },
-];
-
-// TODO(PR-2): Replace with sdlc_graph agent registry.
-const AGENT_MAP: Record<DocFlowNode, LoopAgent> = {
+const AGENT_MAP: Record<NodeType, LoopAgent> = {
   "requirement-summary": "kimi",
   "tech-design":          "kimi",
   "review":               "codex",
@@ -66,10 +54,14 @@ const AGENT_MAP: Record<DocFlowNode, LoopAgent> = {
   "validation":           "hermes",
 };
 
-// ─── DocFlow: Deterministic Node Execution ────────────
+function getAgent(node: NodeType): LoopAgent {
+  return AGENT_MAP[node] || "kimi";
+}
+
+// ─── DocFlow Node Execution ──────────────────────────
 
 async function executeDocFlowNode(
-  node: DocFlowNode,
+  node: NodeType,
   context: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   switch (node) {
@@ -83,8 +75,6 @@ async function executeDocFlowNode(
       return executeImplementation(context);
     case "validation":
       return { node: "validation", result: "validated", all_checks_passed: true };
-    default:
-      return { error: "unknown_node" };
   }
 }
 
@@ -117,12 +107,10 @@ async function executeImplementation(context: Record<string, unknown>): Promise<
   const subReqs = summary.sub_requirements || [];
 
   if (multiRepo && subReqs.length > 0) {
-    // Multi-repo → Fanout parallel execution
     const result = await executeFanout(summary.requirement_id, subReqs);
     return { node: "implementation", mode: "fanout", fanout_result: result };
   }
 
-  // Single-repo → direct/Speckit execution
   const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
   if (mode === "speckit") {
     return executeSpeckitPipeline(summary.requirement_id);
@@ -168,32 +156,21 @@ async function executeSpeckitPipeline(requirementId: string): Promise<Record<str
   return { node: "implementation", mode: "speckit", speckit_stages: results, requirement_id: requirementId };
 }
 
-// ─── LOOP: Deterministic Dispatcher ───────────────────
-
-function getAgent(node: DocFlowNode): LoopAgent {
-  return AGENT_MAP[node] || "kimi";
-}
-
-// TODO(PR-2): Replace with sdlc_graph/transitions.ts#getNextNode.
-function getNextNode(node: DocFlowNode): DocFlowNode | null {
-  const entry = NODE_FLOW.find((e) => e.current === node);
-  return entry?.next ?? null;
-}
-
-// ─── MAIN RUNTIME ─────────────────────────────────────
+// ─── MAIN RUNTIME — GRAPH INTERPRETER ───────────────────
+// Graph Kernel is the SINGLE source of truth for transitions.
 
 export async function run(requirement: string): Promise<RuntimeResult> {
   const requirementId = `REQ-${Date.now()}`;
   const trace: ExecutionTraceEntry[] = [];
   const context: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
 
-  let currentNode: DocFlowNode | null = "requirement-summary";
+  let currentNode: NodeType | null = "requirement-summary";
 
+  // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
     const agent = getAgent(currentNode);
     const nodeOutput = await executeDocFlowNode(currentNode, context);
 
-    // Store node output in context for downstream nodes
     context[currentNode] = nodeOutput;
 
     trace.push({
@@ -204,7 +181,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
       timestamp: new Date().toISOString(),
     });
 
-    currentNode = getNextNode(currentNode);
+    currentNode = getNextNode(currentNode);  // ← Graph Kernel transition
   }
 
   const implementationOutput = context["implementation"] as Record<string, unknown> | undefined;
@@ -229,8 +206,8 @@ export async function run(requirement: string): Promise<RuntimeResult> {
 // ─── Quick Test ───────────────────────────────────────
 
 async function main() {
-  console.log("=== SDLC Runtime Test ===");
-  const result = await run("build payment system with order sync across inventory service and repo-A calls repo-B");
+  console.log("=== SDLC Graph Interpreter Test ===");
+  const result = await run("build payment system with order sync across inventory service");
   console.log(JSON.stringify(result, null, 2));
 }
 
