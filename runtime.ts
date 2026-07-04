@@ -58,24 +58,33 @@ function getAgent(node: NodeType): LoopAgent {
   return AGENT_MAP[node] || "kimi";
 }
 
-// ─── DocFlow Node Execution ──────────────────────────
+// ─── DocFlow Node Execution (PURE EXECUTORS) ──────────
+// Each executor is a STATELESS function: (context) → output.
+// No branching. No flow decisions. Graph Kernel controls transitions.
 
+type NodeExecutor = (context: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>;
+
+// Static executor map — no switch, no branching
+const EXECUTORS: Record<NodeType, NodeExecutor> = {
+  "requirement-summary": (ctx) =>
+    executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
+  "tech-design": (ctx) =>
+    ({ node: "tech-design", result: "design_completed", summary: ctx }),
+  "review": (_ctx) =>
+    ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }),
+  "implementation": (ctx) =>
+    executeImplementation(ctx),
+  "validation": (_ctx) =>
+    ({ node: "validation", result: "validated", all_checks_passed: true }),
+};
+
+// Pure dispatch — no control logic, just lookup + execute
 async function executeDocFlowNode(
   node: NodeType,
   context: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  switch (node) {
-    case "requirement-summary":
-      return executeRequirementSummary(context.raw_text as string, context.requirement_id as string);
-    case "tech-design":
-      return { node: "tech-design", result: "design_completed", summary: context };
-    case "review":
-      return { node: "review", result: "PASS", reviewed_at: new Date().toISOString() };
-    case "implementation":
-      return executeImplementation(context);
-    case "validation":
-      return { node: "validation", result: "validated", all_checks_passed: true };
-  }
+  const executor = EXECUTORS[node];
+  return executor(context);
 }
 
 function executeRequirementSummary(rawText: string, requirementId: string): Record<string, unknown> {
@@ -101,17 +110,16 @@ function extractSubRequirements(text: string): { repo: string; task: string }[] 
   return results;
 }
 
+// Pure implementation executor — mode from context, not inline decision
 async function executeImplementation(context: Record<string, unknown>): Promise<Record<string, unknown>> {
   const summary = (context["requirement-summary"] || context) as RequirementSummary;
-  const multiRepo = summary.multi_repo === true;
+  const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
   const subReqs = summary.sub_requirements || [];
 
-  if (multiRepo && subReqs.length > 0) {
+  if (subReqs.length > 0) {
     const result = await executeFanout(summary.requirement_id, subReqs);
     return { node: "implementation", mode: "fanout", fanout_result: result };
   }
-
-  const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
   if (mode === "speckit") {
     return executeSpeckitPipeline(summary.requirement_id);
   }
