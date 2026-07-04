@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docflow/schemas/docflow.schema.json",
+  "title": "DocFlow Engine Schema",
+  "description": "Schema for DocFlow engine configuration and context.",
+  "type": "object",
+  "properties": {
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "order"],
+        "properties": {
+          "name": { "type": "string", "enum": ["requirement-summary", "tech-design", "review", "implementation", "validation"] },
+          "order": { "type": "integer", "minimum": 0 },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "context": {
+      "$ref": "./types/index.ts#/DocFlowContext"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docflow/schemas/requirement.schema.json",
+  "title": "DocFlow Requirement Schema",
+  "description": "Structured requirement output from DocFlow requirement-summary node.",
+  "type": "object",
+  "required": ["requirement_id", "multi_repo", "main_repo", "sub_requirements", "complexity_hint"],
+  "properties": {
+    "requirement_id": {
+      "type": "string",
+      "description": "Unique requirement identifier. Format: REQ-YYYYMMDDHHMMSS"
+    },
+    "multi_repo": {
+      "type": "boolean",
+      "description": "Whether this requirement spans multiple repositories."
+    },
+    "main_repo": {
+      "type": "string",
+      "description": "Primary repository for this requirement."
+    },
+    "sub_requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repo", "dependency_type", "description"],
+        "properties": {
+          "repo": { "type": "string" },
+          "dependency_type": { "type": "string", "enum": ["api", "data", "event", "unknown"] },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "complexity_hint": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "raw_text": {
+      "type": "string"
+    },
+    "parsed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
