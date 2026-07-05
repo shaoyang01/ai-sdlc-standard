@@ -6,7 +6,7 @@
     "runtime_default": "shadow_first",
     "skill_flow_model": "implemented_metadata_plan_shadow_contract",
     "real_agent_execution": "codex_code_generation_feature_flag_only",
-    "runtime_skill_flow_integration": "implemented_feature_flagged_sidecar_only",
+    "runtime_skill_flow_integration": "implemented_feature_flagged_sidecar_with_audit",
     "real_skill_execution": "not_implemented"
   },
   "capabilities": [
@@ -279,6 +279,22 @@
         "execution/types.ts",
         "execution/skill-request-validation.ts"
       ]
+    },
+    {
+      "name": "Runtime Shadow Integration Audit Trail",
+      "status": "feature-flagged",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/skill-flow-runtime-integration-types.ts",
+        "core/skill-flow-runtime-integration.ts",
+        "runtime.ts",
+        "tests/runtime-skill-flow-shadow-integration.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -323,7 +339,7 @@
       "default": "disabled",
       "enabled_value": "shadow",
       "effect": "Enables shadow skill flow integration in contract helper",
-      "runtime_effect_today": "No — runtime.ts does not import it",
+      "runtime_effect_today": "Yes — when enabled, attaches sidecar-only shadow integration metadata and in-memory audit trail to RuntimeResult",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/skill-flow-runtime-integration-config.ts"

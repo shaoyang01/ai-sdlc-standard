@@ -114,6 +114,8 @@
     "skill_flow_runtime_shadow_integration_invokes_real_skills": false,
     "skill_flow_runtime_shadow_integration_audit_trail": "implemented_in_memory",
     "skill_flow_runtime_shadow_integration_audit_trail_persisted": false,
-    "skill_flow_runtime_shadow_integration_audit_affects_runtime": false
+    "skill_flow_runtime_shadow_integration_audit_affects_runtime": false,
+    "skill_flow_runtime_shadow_integration_audit_contains_raw_requirement": false,
+    "skill_flow_runtime_shadow_integration_audit_contains_full_artifacts": false
   }
 }

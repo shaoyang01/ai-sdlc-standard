@@ -40,7 +40,7 @@ async function test() {
   // ── Test 2: Overall status ──
   console.log("Test 2: Overall status");
   assert(review.overall_status.runtime_default === "shadow_first", "runtime default is shadow_first");
-  assert(review.overall_status.runtime_skill_flow_integration === "implemented_feature_flagged_sidecar_only", "integration is implemented_feature_flagged_sidecar_only");
+  assert(review.overall_status.runtime_skill_flow_integration === "implemented_feature_flagged_sidecar_with_audit", "integration is sidecar with audit");
   assert(review.overall_status.real_skill_execution === "not_implemented", "real skill execution is not_implemented");
   console.log("");
 
@@ -61,7 +61,15 @@ async function test() {
   assert(capNames.includes("Flow-stage Agent Skill Registry"), "has Flow-stage Agent Skill Registry");
   assert(capNames.includes("Skill Flow Orchestrator Contract"), "has Skill Flow Orchestrator Contract");
   assert(capNames.includes("Shadow Skill Flow Orchestrator"), "has Shadow Skill Flow Orchestrator");
-  assert(capNames.includes("Runtime Integration Contract"), "has Runtime Integration Contract");
+  assert(capNames.includes("Runtime Shadow Integration Audit Trail"), "has Runtime Shadow Integration Audit Trail");
+  const auditCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Runtime Shadow Integration Audit Trail");
+  assert(auditCap !== undefined, "audit trail capability exists");
+  assert(auditCap["runtime_active_by_default"] === false, "audit not active by default");
+  assert(auditCap["changes_routing"] === false, "audit no routing change");
+  assert(auditCap["changes_agent_selection"] === false, "audit no agent change");
+  assert(auditCap["invokes_real_agents"] === false, "audit no real agents");
+  assert(auditCap["invokes_real_skills"] === false, "audit no real skills");
+  assert(auditCap["writes_files"] === false, "audit no file writes");
   console.log("");
 
   // ── Test 5: Safety boundaries ──
