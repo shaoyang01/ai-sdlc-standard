@@ -98,20 +98,29 @@ async function test() {
   assert(bugfixArtifact!.content["patch"] === "shadow bugfix patch", "bugfix patch is shadow");
   console.log("");
 
-  // ── Test 3: Loop is bounded (max attempts check) ──
-  console.log("Test 3: Bounded retry loop");
-  // The loop has MAX_BUGFIX_ATTEMPTS=2, so at most 3 review attempts
-  // (initial + 2 retries after bugfix). The fail artifacts always fail,
-  // so we should see: review(FAIL) → bugfix(1) → review(FAIL) → bugfix(2) → review(FAIL) → exit
+  // ── Test 3: Loop is bounded (exact retry counts) ──
+  console.log("Test 3: Bounded retry loop (exact counts)");
+  // With MAX_BUGFIX_ATTEMPTS=2 and always-failing artifacts:
+  // review(0,FAIL) → bugfix(1) → review(1,FAIL) → bugfix(2) → review(2,FAIL) → exit
   const reviewCount = failResult.traceEntries.filter((t) => t.node === "code-review").length;
   const bugfixCount = failResult.traceEntries.filter((t) => t.node === "bugfix").length;
-  assert(reviewCount <= 3, `review count ${reviewCount} <= 3 (MAX_BUGFIX_ATTEMPTS + 1)`);
-  assert(bugfixCount <= 2, `bugfix count ${bugfixCount} <= 2 (MAX_BUGFIX_ATTEMPTS)`);
+  assert(reviewCount === 3, `review count is exactly 3 (got ${reviewCount})`);
+  assert(bugfixCount === 2, `bugfix count is exactly 2 (got ${bugfixCount})`);
   assert(failResult.finalReviewStatus === "FAIL", "exhausted loop returns FAIL");
+
+  // Exact trace order: code-review → bugfix → code-review → bugfix → code-review
+  const expectedOrder = ["code-review", "bugfix", "code-review", "bugfix", "code-review"];
+  const actualOrder = failResult.traceEntries.map((t) => t.node);
+  for (let i = 0; i < expectedOrder.length; i++) {
+    assert(
+      actualOrder[i] === expectedOrder[i],
+      `trace[${i}] is "${actualOrder[i]}" (expected "${expectedOrder[i]}")`
+    );
+  }
   console.log("");
 
   // ── Test 4: Failure path artifacts include code_review and bugfix_patch ──
-  console.log("Test 4: Failure path artifact types");
+  console.log("Test 4: Failure path artifact types + unique IDs");
   const failTypes = failResult.artifacts.map((a) => a.type);
   assert(failTypes.includes("code_review"), "failure path has code_review artifact");
   assert(failTypes.includes("bugfix_patch"), "failure path has bugfix_patch artifact");
@@ -120,23 +129,13 @@ async function test() {
     failResult.artifacts.every((a) => typeof a.id === "string" && a.id.length > 0),
     "all artifacts have valid ids"
   );
-  console.log("");
-
-  // ── Test 5: Failure path trace order ──
-  console.log("Test 5: Failure path trace order");
-  const nodes = failResult.traceEntries.map((t) => t.node);
-  // First entry should be code-review
-  assert(nodes[0] === "code-review", "first trace entry is code-review");
-  // The pattern should be: code-review, bugfix, code-review, bugfix, code-review
-  // (wait, actually with MAX_BUGFIX_ATTEMPTS=2, when all reviews fail:
-  //  review(FAIL, attempts=0, <=2 so bugfix) → bugfix(attempt=1) → review(FAIL, attempts=1, <=2 so bugfix) → bugfix(attempt=2) → review(FAIL, attempts=2, >2 so exit)
-  // But wait, my loop logic: while(attempts <= MAX_BUGFIX_ATTEMPTS) { review... if FAIL, attempts++; if attempts > MAX, exit; bugfix... }
-  // attempts starts at 0:
-  //   review → FAIL, attempts becomes 1, 1 <= 2 so bugfix runs
-  //   review → FAIL, attempts becomes 2, 2 <= 2 so bugfix runs
-  //   review → FAIL, attempts becomes 3, 3 > 2 so exit
-  // So: review, bugfix, review, bugfix, review = 3 reviews, 2 bugfixes
-  assert(nodes.length >= 3, `trace has at least 3 entries (got ${nodes.length})`);
+  // All artifact IDs must be unique
+  const artifactIds = failResult.artifacts.map((a) => a.id);
+  const uniqueIds = new Set(artifactIds);
+  assert(
+    uniqueIds.size === artifactIds.length,
+    `all artifact IDs are unique (${uniqueIds.size} unique out of ${artifactIds.length})`
+  );
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

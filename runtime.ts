@@ -18,11 +18,8 @@ import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
 import { executionGateway } from "./execution";
-import { executeCodeReview } from "./execution/code-review-adapter";
-import { executeBugfix } from "./execution/bugfix-adapter";
 import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
-import { CodeReviewFinding } from "./core/review-types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -213,11 +210,14 @@ export async function runCodeReviewBugfixLoop(input: {
   let attempts = 0;
 
   while (attempts <= MAX_BUGFIX_ATTEMPTS) {
-    // ── Code Review ──
-    const review = await executeCodeReview({
-      requirementId: input.requirementId,
-      artifacts: currentArtifacts,
+    // ── Code Review (via Execution Gateway) ──
+    const review = await executionGateway.execute({
+      type: "code_review",
+      node: "code-review",
       agent: input.agent,
+      requirementId: input.requirementId,
+      input: { artifacts: currentArtifacts },
+      metadata: { attempt: attempts },
     });
 
     collectedArtifacts.push(...(review.artifacts as Artifact[]));
@@ -246,14 +246,15 @@ export async function runCodeReviewBugfixLoop(input: {
       };
     }
 
-    // ── Bugfix ──
-    const findings = review.output["findings"] as CodeReviewFinding[];
-    const bugfix = await executeBugfix({
-      requirementId: input.requirementId,
-      artifacts: currentArtifacts,
-      findings: findings || [],
+    // ── Bugfix (via Execution Gateway) ──
+    const findings = review.output["findings"] as ReadonlyArray<{ severity: string; message: string; artifactId?: string; file?: string }>;
+    const bugfix = await executionGateway.execute({
+      type: "bugfix",
+      node: "bugfix",
       agent: input.agent,
-      attempt: attempts,
+      requirementId: input.requirementId,
+      input: { artifacts: currentArtifacts, findings: findings || [] },
+      metadata: { attempt: attempts },
     });
 
     collectedArtifacts.push(...(bugfix.artifacts as Artifact[]));

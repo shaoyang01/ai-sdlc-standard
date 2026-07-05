@@ -3,6 +3,7 @@
 // Shadow code review executor. Reviews artifacts and returns findings.
 // Default shadow review passes unless artifacts contain force_review_fail marker.
 // No external calls. No disk writes. No Git operations.
+// Accepts attempt from gateway metadata for unique artifact IDs on retry.
 
 import { Artifact, createArtifact } from "../core/artifact";
 import { AgentName, ExecutionResult } from "./types";
@@ -12,7 +13,10 @@ export async function executeCodeReview(input: {
   requirementId: string;
   artifacts: ReadonlyArray<Artifact>;
   agent: AgentName;
+  attempt?: number;
 }): Promise<ExecutionResult> {
+  const attempt = input.attempt ?? 0;
+
   // Scan artifacts for force_review_fail marker
   const findings: CodeReviewFinding[] = [];
 
@@ -39,10 +43,11 @@ export async function executeCodeReview(input: {
       status,
       findings,
       summary,
+      attempt,
     },
     agent: input.agent,
     source: "execution_gateway",
-    id: `${input.requirementId}:code-review:code_review:0`,
+    id: `${input.requirementId}:code-review:code_review:${attempt}`,
   });
 
   return {
@@ -54,6 +59,7 @@ export async function executeCodeReview(input: {
       result: status,
       findings,
       summary,
+      attempt,
     },
     artifacts: [reviewArtifact],
   };

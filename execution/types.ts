@@ -12,7 +12,9 @@ export type ExecutionRequestType =
   | "llm_task"
   | "code_generation"
   | "review"
-  | "validation";
+  | "validation"
+  | "code_review"
+  | "bugfix";
 
 export type ExecutionRequest = Readonly<{
   type: ExecutionRequestType;
