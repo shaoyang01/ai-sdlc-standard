@@ -102,6 +102,32 @@ async function test() {
   assert(caps.skills["real_adapter_enablement"] === false, "does not enable real adapters");
   console.log("");
 
+  // ── Real Agent Adapter Integration ──
+  console.log("Test 10: Real agent adapter integration metadata");
+  const realAdapters = caps.real_agent_adapter_integration as Record<string, unknown>;
+  assert(realAdapters !== undefined, "real_agent_adapter_integration exists");
+  assert(realAdapters["kimi_cli_adapter_contract_stub"] === "implemented_contract_only", "kimi CLI contract stub");
+  assert(realAdapters["hermes_cli_adapter_contract_stub"] === "implemented_contract_only", "hermes CLI contract stub");
+  assert(realAdapters["real_kimi_cli_adapter"] === "not_implemented", "real Kimi CLI not implemented");
+  assert(realAdapters["real_hermes_cli_adapter"] === "not_implemented", "real Hermes CLI not implemented");
+  assert(realAdapters["kimi_cli_adapter_dry_run_harness"] === "implemented_no_process_spawn", "kimi dry-run harness");
+  assert(realAdapters["kimi_cli_adapter_dry_run_invokes_cli"] === false, "kimi dry-run no CLI");
+  assert(realAdapters["kimi_cli_adapter_dry_run_spawns_process"] === false, "kimi dry-run no spawn");
+  assert(realAdapters["kimi_cli_adapter_dry_run_affects_gateway"] === false, "kimi dry-run no gateway");
+  assert(realAdapters["kimi_cli_adapter_dry_run_affects_runtime"] === false, "kimi dry-run no runtime");
+  assert(realAdapters["kimi_cli_adapter_dry_run_persists_audit"] === false, "kimi dry-run no persist");
+  assert(realAdapters["kimi_cli_adapter_dry_run_reads_api_keys"] === false, "kimi dry-run no API keys");
+  assert(realAdapters["hermes_cli_adapter_dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness");
+  assert(realAdapters["hermes_cli_adapter_dry_run_invokes_cli"] === false, "hermes dry-run no CLI");
+  assert(realAdapters["hermes_cli_adapter_dry_run_spawns_process"] === false, "hermes dry-run no spawn");
+  assert(realAdapters["hermes_cli_adapter_dry_run_affects_gateway"] === false, "hermes dry-run no gateway");
+  assert(realAdapters["hermes_cli_adapter_dry_run_affects_runtime"] === false, "hermes dry-run no runtime");
+  assert(realAdapters["hermes_cli_adapter_dry_run_persists_audit"] === false, "hermes dry-run no persist");
+  assert(realAdapters["hermes_cli_adapter_dry_run_reads_api_keys"] === false, "hermes dry-run no API keys");
+  assert(realAdapters["kimi_cli_adapter_reads_api_keys"] === false, "kimi adapter no API keys");
+  assert(realAdapters["hermes_cli_adapter_reads_api_keys"] === false, "hermes adapter no API keys");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
