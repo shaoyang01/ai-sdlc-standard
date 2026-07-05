@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Shadow Sidecar Runtime Attachment", "next PR is runtime attachment");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
   // Kimi Gateway Shadow Sidecar
   assert(capNames.includes("Kimi Gateway Shadow Sidecar"), "has Kimi Gateway Shadow Sidecar");
   const ssCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Shadow Sidecar");
@@ -150,7 +150,22 @@ async function test() {
   const raEvidence = raCap["evidence"] as string[];
   assert(raEvidence.includes("execution/kimi-runtime-attachment-contract.ts"), "runtime attachment evidence");
   assert(raEvidence.includes("tests/kimi-runtime-attachment-contract.test.ts"), "runtime attachment test");
-  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Shadow Sidecar Runtime Attachment", "next PR is runtime attachment");
+  // Kimi Runtime Shadow Attachment
+  assert(capNames.includes("Kimi Runtime Shadow Attachment"), "has Kimi Runtime Shadow Attachment");
+  const rsaCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Runtime Shadow Attachment");
+  assert(rsaCap !== undefined && rsaCap["status"] === "feature-flagged-runtime-sidecar", "runtime shadow status");
+  assert(rsaCap["runtime_active_by_default"] === false, "runtime shadow not active");
+  assert(rsaCap["changes_routing"] === false && rsaCap["changes_final_status"] === false, "runtime shadow no effects");
+  assert(rsaCap["primary_runtime_unchanged"] === true && rsaCap["primary_gateway_unchanged"] === true, "runtime shadow unchanged");
+  assert(rsaCap["invokes_real_agents"] === true, "runtime shadow real agents");
+  assert(rsaCap["invokes_real_skills"] === false && rsaCap["writes_files"] === false, "runtime shadow no skills/files");
+  const rsaFlags = rsaCap["requires_flags"] as string[];
+  assert(rsaFlags.length === 4, "runtime shadow 4 flags");
+  const rsaEvidence = rsaCap["evidence"] as string[];
+  assert(rsaEvidence.includes("core/kimi-runtime-shadow-attachment.ts"), "runtime shadow evidence");
+  assert(rsaEvidence.includes("tests/runtime-kimi-shadow-attachment.test.ts"), "runtime shadow integration test");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

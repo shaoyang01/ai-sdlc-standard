@@ -383,6 +383,31 @@
         "execution/kimi-runtime-attachment-contract.ts",
         "tests/kimi-runtime-attachment-contract.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Runtime Shadow Attachment",
+      "status": "feature-flagged-runtime-sidecar",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "changes_final_status": false,
+      "primary_runtime_unchanged": true,
+      "primary_gateway_unchanged": true,
+      "persists_audit": false,
+      "writes_files": false,
+      "invokes_real_agents": true,
+      "invokes_real_skills": false,
+      "requires_flags": [
+        "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled",
+        "SDLC_KIMI_GATEWAY_SHADOW=enabled",
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "evidence": [
+        "core/kimi-runtime-shadow-attachment.ts",
+        "tests/kimi-runtime-shadow-attachment.test.ts",
+        "tests/runtime-kimi-shadow-attachment.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -604,8 +629,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Kimi Shadow Sidecar Runtime Attachment",
-    "reason": "Wire the contract to RuntimeResult behind runtime attachment flag",
-    "safety_rationale": "Sidecar only, default off, no routing/final_status change"
+    "title": "Kimi Gateway Real Adapter Dispatch Contract",
+    "reason": "Define safe Gateway dispatch rules before real Kimi routing",
+    "safety_rationale": "Default off; shadow/sidecar proven; Gateway dispatch unchanged"
   }
 }

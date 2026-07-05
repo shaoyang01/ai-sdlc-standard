@@ -176,6 +176,18 @@ async function test() {
   assert(realAdapters["kimi_runtime_attachment_changes_agent_selection"] === false, "kimi runtime attachment no agent selection");
   assert(realAdapters["kimi_runtime_attachment_persists_audit"] === false, "kimi runtime attachment no persist");
   assert(realAdapters["kimi_runtime_attachment_writes_files"] === false, "kimi runtime attachment no files");
+  assert(realAdapters["kimi_runtime_shadow_attachment"] === "implemented_feature_flagged_runtime_sidecar", "kimi runtime shadow attachment");
+  assert(realAdapters["kimi_runtime_shadow_attachment_default_enabled"] === false, "kimi runtime shadow attachment default disabled");
+  const rsFlags = realAdapters["kimi_runtime_shadow_attachment_requires_flags"] as string[];
+  assert(Array.isArray(rsFlags) && rsFlags.includes("SDLC_KIMI_RUNTIME_ATTACHMENT=enabled"), "requires runtime attachment flag");
+  assert(rsFlags.includes("SDLC_KIMI_GATEWAY_SHADOW=enabled") && rsFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled") && rsFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "requires all 4 flags");
+  assert(realAdapters["kimi_runtime_shadow_attachment_changes_final_status"] === false, "runtime shadow no final status");
+  assert(realAdapters["kimi_runtime_shadow_attachment_changes_routing"] === false, "runtime shadow no routing");
+  assert(realAdapters["kimi_runtime_shadow_attachment_changes_agent_selection"] === false, "runtime shadow no agent");
+  assert(realAdapters["kimi_runtime_shadow_attachment_primary_runtime_unchanged"] === true, "runtime shadow primary unchanged");
+  assert(realAdapters["kimi_runtime_shadow_attachment_primary_gateway_unchanged"] === true, "runtime shadow gateway unchanged");
+  assert(realAdapters["kimi_runtime_shadow_attachment_persists_audit"] === false, "runtime shadow no persist");
+  assert(realAdapters["kimi_runtime_shadow_attachment_writes_files"] === false, "runtime shadow no files");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
