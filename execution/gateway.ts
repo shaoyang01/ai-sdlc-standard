@@ -4,6 +4,7 @@
 // Routes to shadow adapter by default.
 // Routes to Codex only when SDLC_EXECUTION_MODE=codex AND agent=codex.
 // Routes code_review and bugfix to their dedicated adapters.
+// Skill metadata is preserved but does not affect dispatch.
 
 import { ExecutionRequest, ExecutionResult } from "./types";
 import { executeShadowAgent } from "./shadow-agent-adapter";
@@ -13,41 +14,46 @@ import { executeBugfix } from "./bugfix-adapter";
 import { getExecutionMode } from "./config";
 import { Artifact } from "../core/artifact";
 import { CodeReviewFinding } from "../core/review-types";
+import { validateExecutionRequestSkill } from "./skill-request-validation";
 
 export class ExecutionGateway {
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+    // ── Skill Validation — metadata only, does not affect dispatch ──
+    const skillValidation = validateExecutionRequestSkill(request);
+    const enriched = { ...request, skillValidation };
+
     // ── Code Review Route ──
-    if (request.type === "code_review") {
-      const attempt = (request.metadata?.["attempt"] as number) ?? 0;
-      const artifacts = (request.input["artifacts"] as Artifact[]) ?? [];
+    if (enriched.type === "code_review") {
+      const attempt = (enriched.metadata?.["attempt"] as number) ?? 0;
+      const artifacts = (enriched.input["artifacts"] as Artifact[]) ?? [];
       return executeCodeReview({
-        requirementId: request.requirementId,
+        requirementId: enriched.requirementId,
         artifacts,
-        agent: request.agent,
+        agent: enriched.agent,
         attempt,
       });
     }
 
     // ── Bugfix Route ──
-    if (request.type === "bugfix") {
-      const attempt = (request.metadata?.["attempt"] as number) ?? 1;
-      const artifacts = (request.input["artifacts"] as Artifact[]) ?? [];
-      const findings = (request.input["findings"] as CodeReviewFinding[]) ?? [];
+    if (enriched.type === "bugfix") {
+      const attempt = (enriched.metadata?.["attempt"] as number) ?? 1;
+      const artifacts = (enriched.input["artifacts"] as Artifact[]) ?? [];
+      const findings = (enriched.input["findings"] as CodeReviewFinding[]) ?? [];
       return executeBugfix({
-        requirementId: request.requirementId,
+        requirementId: enriched.requirementId,
         artifacts,
         findings,
-        agent: request.agent,
+        agent: enriched.agent,
         attempt,
       });
     }
 
     // ── Default: shadow or codex ──
     const mode = getExecutionMode();
-    if (mode === "codex" && request.agent === "codex") {
-      return executeCodexAgent(request);
+    if (mode === "codex" && enriched.agent === "codex") {
+      return executeCodexAgent(enriched);
     }
-    return executeShadowAgent(request);
+    return executeShadowAgent(enriched);
   }
 }
 

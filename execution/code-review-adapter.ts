@@ -14,6 +14,12 @@ export async function executeCodeReview(input: {
   artifacts: ReadonlyArray<Artifact>;
   agent: AgentName;
   attempt?: number;
+  skill?: string;
+  skillValidation?: {
+    attempted: boolean;
+    valid: boolean;
+    reason: string;
+  };
 }): Promise<ExecutionResult> {
   const attempt = input.attempt ?? 0;
 
@@ -44,6 +50,8 @@ export async function executeCodeReview(input: {
       findings,
       summary,
       attempt,
+      skill: input.skill ?? null,
+      skill_validation: input.skillValidation ?? null,
     },
     agent: input.agent,
     source: "execution_gateway",

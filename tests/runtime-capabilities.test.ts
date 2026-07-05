@@ -96,6 +96,7 @@ async function test() {
   assert(caps.skills["skill_invocation_contract"] === "implemented_metadata_only", "skill invocation contract is metadata-only");
   assert(caps.skills["affects_runtime_routing"] === false, "registry does not affect runtime routing");
   assert(caps.skills["affects_agent_selection"] === false, "registry does not affect agent selection");
+  assert(caps.skills["affects_execution_dispatch"] === false, "registry does not affect execution dispatch");
   assert(caps.skills["real_adapter_enablement"] === false, "registry does not enable real adapters");
   console.log("");
 

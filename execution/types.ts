@@ -23,6 +23,12 @@ export type ExecutionRequest = Readonly<{
   requirementId: string;
   input: Record<string, unknown>;
   metadata?: Readonly<Record<string, unknown>>;
+  skill?: string;
+  skillValidation?: Readonly<{
+    attempted: boolean;
+    valid: boolean;
+    reason: string;
+  }>;
 }>;
 
 export type ExecutionArtifactType =

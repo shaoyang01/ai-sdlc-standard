@@ -325,3 +325,18 @@ export function getInventorySkillsMissingFromRegistry(
   const registrySet = new Set(AGENT_SKILL_REGISTRY.map((b) => b.skill));
   return inventorySkills.filter((s) => !registrySet.has(s));
 }
+
+export function inferSkillForExecution(input: {
+  agent: AgentName;
+  node: string;
+  requestType: string;
+}): AgentSkillBinding | undefined {
+  const matches = AGENT_SKILL_REGISTRY.filter(
+    (b) =>
+      b.agent === input.agent &&
+      b.expectedNodes.includes(input.node) &&
+      b.expectedRequestTypes.includes(input.requestType)
+  );
+  // Only return if exactly one unambiguous match
+  return matches.length === 1 ? matches[0] : undefined;
+}

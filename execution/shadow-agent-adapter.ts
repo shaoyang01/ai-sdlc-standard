@@ -16,6 +16,8 @@ export async function executeShadowAgent(
     content: {
       result: `${request.node}_by_${request.agent}`,
       input: request.input,
+      skill: request.skill ?? null,
+      skill_validation: request.skillValidation ?? null,
     },
     agent: request.agent,
     source: "execution_gateway",

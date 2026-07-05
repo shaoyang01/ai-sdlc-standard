@@ -14,6 +14,12 @@ export async function executeBugfix(input: {
   findings: ReadonlyArray<CodeReviewFinding>;
   agent: AgentName;
   attempt: number;
+  skill?: string;
+  skillValidation?: {
+    attempted: boolean;
+    valid: boolean;
+    reason: string;
+  };
 }): Promise<ExecutionResult> {
   const bugfixArtifact = createArtifact({
     requirementId: input.requirementId,
@@ -23,6 +29,8 @@ export async function executeBugfix(input: {
       attempt: input.attempt,
       findings: input.findings,
       patch: "shadow bugfix patch",
+      skill: input.skill ?? null,
+      skill_validation: input.skillValidation ?? null,
     },
     agent: input.agent,
     source: "execution_gateway",
