@@ -408,6 +408,34 @@
         "tests/kimi-runtime-shadow-attachment.test.ts",
         "tests/runtime-kimi-shadow-attachment.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Real Dispatch Contract",
+      "status": "contract-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "changes_final_status": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "supported_request_types": [
+        "llm_task"
+      ],
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "invokes_cli": false,
+      "spawns_process": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "requires_flags": [
+        "SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "evidence": [
+        "execution/kimi-gateway-real-dispatch-contract.ts",
+        "tests/kimi-gateway-real-dispatch-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -629,8 +657,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Adapter Dispatch Contract",
-    "reason": "Define safe Gateway dispatch rules before real Kimi routing",
-    "safety_rationale": "Default off; shadow/sidecar proven; Gateway dispatch unchanged"
+    "title": "Feature-flagged Kimi Gateway Real Dispatch",
+    "reason": "Wire real dispatch contract into Gateway dispatch behind flags",
+    "safety_rationale": "Default off; requires flags; llm_task only"
   }
 }

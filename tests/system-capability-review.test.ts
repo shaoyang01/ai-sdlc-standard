@@ -117,7 +117,20 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
+  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Gateway Real Dispatch", "next PR dispatch contract");
+  // Kimi Gateway Real Dispatch Contract
+  assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
+  const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
+  assert(rdCap !== undefined && rdCap["status"] === "contract-only", "real dispatch contract-only");
+  assert(rdCap["wired_to_gateway"] === false && rdCap["wired_to_runtime"] === false, "real dispatch not wired");
+  assert(rdCap["invokes_real_agents"] === false && rdCap["invokes_cli"] === false, "real dispatch no CLI/agents");
+  assert(rdCap["spawns_process"] === false && rdCap["writes_files"] === false, "real dispatch no spawn/files");
+  const rdTypes = rdCap["supported_request_types"] as string[];
+  assert(rdTypes.length === 1 && rdTypes[0] === "llm_task", "real dispatch llm_task only");
+  const rdFlags = rdCap["requires_flags"] as string[];
+  assert(rdFlags.length === 3, "real dispatch 3 flags");
+  const rdEvidence = rdCap["evidence"] as string[];
+  assert(rdEvidence.includes("execution/kimi-gateway-real-dispatch-contract.ts"), "real dispatch evidence");
   // Kimi Gateway Shadow Sidecar
   assert(capNames.includes("Kimi Gateway Shadow Sidecar"), "has Kimi Gateway Shadow Sidecar");
   const ssCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Shadow Sidecar");
