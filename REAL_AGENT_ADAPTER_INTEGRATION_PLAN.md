@@ -55,9 +55,9 @@ Recommended real adapters by request type:
 
 1. **Real adapters must stay behind ExecutionGateway.** Runtime must not call adapters directly.
 2. **No real model execution by default.** Default execution mode remains shadow.
-3. **No secrets committed.** API keys, base URLs, and model names come from environment variables only.
-4. **No secrets logged.** Adapters must not log API keys, full prompts, or full responses.
-5. **Bounded timeouts.** All real adapter calls must have configurable timeouts.
+3. **No secrets committed.** CLI command, args, working directory, and timeout come from environment variables. Runtime adapter contracts do not manage API keys, base URLs, or model config. The CLI tool handles auth/model configuration externally.
+4. **No sensitive output logged.** Future CLI adapters must not log full prompts, full stdout/stderr, or any CLI-managed auth details.
+5. **Bounded timeouts.** All real adapter calls must have configurable timeouts (default: 120s).
 6. **Structured failures.** Real adapter failures must return structured `ExecutionResult` with `success: false`.
 7. **Shadow fallback policy.** Unsupported request types, timeouts, and missing configs fall back to shadow by default.
 8. **No file writes.** Adapters must not write files to disk.
@@ -68,25 +68,28 @@ Recommended real adapters by request type:
 
 | Variable | Purpose | Required |
 |----------|---------|----------|
-| `KIMI_API_KEY` | Kimi API authentication | For Kimi adapter |
-| `KIMI_BASE_URL` | Kimi API endpoint | Optional |
-| `KIMI_MODEL` | Kimi model name | Optional |
-| `HERMES_API_KEY` | Hermes API authentication | For Hermes adapter |
-| `HERMES_BASE_URL` | Hermes API endpoint | Optional |
-| `HERMES_MODEL` | Hermes model name | Optional |
+| `SDLC_KIMI_CLI_ADAPTER` | Enable Kimi CLI adapter (`enabled`) | For Kimi CLI adapter |
+| `SDLC_KIMI_CLI_COMMAND` | Path to Kimi CLI binary | For Kimi CLI adapter |
+| `SDLC_KIMI_CLI_ARGS` | Additional Kimi CLI arguments | Optional |
+| `SDLC_KIMI_CLI_WORKING_DIR` | Working directory for Kimi CLI | Optional |
+| `SDLC_KIMI_CLI_TIMEOUT_MS` | Timeout for Kimi CLI (default 120000) | Optional |
+| `SDLC_HERMES_CLI_ADAPTER` | Enable Hermes CLI adapter (`enabled`) | For Hermes CLI adapter |
+| `SDLC_HERMES_CLI_COMMAND` | Path to Hermes CLI binary | For Hermes CLI adapter |
+| `SDLC_HERMES_CLI_ARGS` | Additional Hermes CLI arguments | Optional |
+| `SDLC_HERMES_CLI_WORKING_DIR` | Working directory for Hermes CLI | Optional |
+| `SDLC_HERMES_CLI_TIMEOUT_MS` | Timeout for Hermes CLI (default 120000) | Optional |
 
-**Not used in this PR.** Documented for planning only.
+**API keys are intentionally not part of the runtime adapter contract.** The CLI tool itself handles auth/model configuration externally. These env vars are documented for future CLI dry-run / real CLI execution PRs. They are not used to spawn processes in the current contract stub PR.
 
 ## 8. Error Handling and Fallback Rules
 
 | Error | Preferred Behavior |
 |-------|-------------------|
 | Adapter timeout | Return structured failure; shadow fallback |
-| Missing API key | Return structured failure; shadow fallback |
-| Invalid model config | Return structured failure; shadow fallback |
-| Rate limit | Return structured failure with retry-after info |
-| Network error | Return structured failure; shadow fallback |
-| Malformed response | Return structured failure; shadow fallback |
+| Missing CLI command | Return structured failure |
+| Non-zero exit code | Return structured failure with sanitized stderr summary |
+| Empty stdout | Return structured failure |
+| Malformed stdout | Return structured failure or parser fallback if safe |
 | Unsupported request type | Shadow fallback (current behavior, no change) |
 
 **No indefinite retries.** Timeout default: 120s, matching existing Codex adapter.
@@ -107,25 +110,25 @@ Real adapter integration must NOT:
 
 | Test Type | Purpose |
 |-----------|---------|
-| Contract stub tests | Verify adapter interface without network calls |
-| Shadow response parser tests | Verify response parsing with mock data |
+| Contract stub tests | Verify adapter interface without CLI execution |
+| CLI output parser tests | Verify stdout/stderr parsing with mock data |
 | Feature-flag tests | Verify adapter is disabled by default |
 | Fallback tests | Verify unsupported types → shadow |
-| Error handling tests | Verify timeout/missing key/network error → structured failure |
+| Error handling tests | Verify missing command/non-zero exit/empty stdout/timeout → structured failure |
 | Gateway routing tests | Verify Gateway routes to correct adapter by flag |
 
-Existing tests must continue to pass. No network calls in CI.
+Existing tests must continue to pass. No process spawn in CI.
 
 ## 11. Staged PR Roadmap
 
 1. **Real Agent Adapter Integration Plan** — current PR (planning only)
 2. **Adapter Capability Matrix + Static Validation** — current PR
-3. **Kimi Adapter Contract Stub** — no network calls, just interface
-4. **Hermes Adapter Contract Stub** — no network calls, just interface
-5. **Kimi Adapter Shadow Response Parser Tests** — unit tests for response shapes
-6. **Hermes Adapter Shadow Response Parser Tests** — unit tests for response shapes
-7. **Feature-flagged Kimi Adapter** — `SDLC_KIMI_ADAPTER=enabled` for requirement_summary / tech_design
-8. **Feature-flagged Hermes Adapter** — `SDLC_HERMES_ADAPTER=enabled` for validation
+3. **Kimi CLI Adapter Contract Stub** — ✅ Done (contract-only, no CLI execution)
+4. **Hermes CLI Adapter Contract Stub** — ✅ Done (contract-only, no CLI execution)
+5. **Feature-flagged Kimi CLI Adapter Dry-run Harness** — shadow CLI invocation behind flag
+6. **Feature-flagged Hermes CLI Adapter Dry-run Harness** — shadow CLI invocation behind flag
+7. **Feature-flagged Kimi CLI Adapter** — real CLI execution for llm_task/review
+8. **Feature-flagged Hermes CLI Adapter** — real CLI execution for validation
 9. **Feature-flagged Codex Review/Bugfix Expansion** — `SDLC_CODEX_REVIEW_ADAPTER=enabled`
 10. **Real Adapter Audit Trail** — observability metadata for real adapter calls
 11. **Controlled Real Adapter Rollout** — governance and monitoring
@@ -134,12 +137,12 @@ Existing tests must continue to pass. No network calls in CI.
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| Real adapter costs (API calls) | Medium | Feature flags keep them disabled by default; shadow is free |
-| API key exposure | High | Env vars only; no logging; no hardcoding |
-| Adapter response quality variance | Medium | Response parser tests; shadow fallback on malformed responses |
+| Real adapter costs (CLI execution) | Medium | Feature flags keep them disabled by default; shadow is free |
+| CLI command path exposure | Low | Env var only; no hardcoding |
+| Adapter response quality variance | Medium | Output parser tests; shadow fallback on malformed responses |
 | Timeout blocking pipeline | Medium | Bounded timeouts (120s); shadow fallback |
 | Gateway routing complexity | Low | Keep existing dispatch structure; add adapter selection by flag only |
-| Kimi/Hermes API stability | Medium | Contract stubs + parser tests before real integration |
+| Kimi/Hermes CLI availability | Medium | Contract stubs + parser tests before real integration |
 
 ## 13. Explicitly Out of Scope
 
