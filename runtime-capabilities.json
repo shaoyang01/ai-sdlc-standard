@@ -191,6 +191,13 @@
     "kimi_gateway_integration_requires_flags": ["SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
     "kimi_gateway_integration_invokes_cli": false,
     "kimi_gateway_integration_spawns_process": false,
-    "kimi_gateway_integration_changes_final_status": false
+    "kimi_gateway_integration_changes_final_status": false,
+    "kimi_gateway_shadow_sidecar": "implemented_feature_flagged_sidecar",
+    "kimi_gateway_shadow_sidecar_default_enabled": false,
+    "kimi_gateway_shadow_sidecar_requires_flags": ["SDLC_KIMI_GATEWAY_SHADOW=enabled","SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_gateway_shadow_sidecar_wired_to_runtime": false,
+    "kimi_gateway_shadow_sidecar_changes_final_status": false,
+    "kimi_gateway_shadow_sidecar_changes_routing": false,
+    "kimi_gateway_shadow_sidecar_primary_gateway_unchanged": true
   }
 }

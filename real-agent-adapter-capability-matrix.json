@@ -63,7 +63,9 @@
         "execution/kimi-cli-command-executor.ts",
         "tests/kimi-cli-command-executor.test.ts",
         "execution/kimi-gateway-integration-contract.ts",
-        "tests/kimi-gateway-integration-contract.test.ts"
+        "tests/kimi-gateway-integration-contract.test.ts",
+        "execution/kimi-gateway-shadow-sidecar.ts",
+        "tests/kimi-gateway-shadow-sidecar.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -77,7 +79,12 @@
       "gateway_integration_requires_flags": [
         "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
         "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
-      ]
+      ],
+      "gateway_shadow_sidecar": "implemented_feature_flagged_sidecar",
+      "gateway_shadow_sidecar_default_enabled": false,
+      "gateway_shadow_sidecar_wired_to_runtime": false,
+      "gateway_shadow_sidecar_changes_routing": false,
+      "gateway_shadow_sidecar_changes_final_status": false
     },
     {
       "adapter": "hermes",
@@ -316,8 +323,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Kimi Gateway Wiring Shadow Path",
-    "reason": "Shadow/sidecar first, default off",
-    "safety_rationale": "Two explicit flags required; shadow path before real Gateway routing"
+    "title": "Kimi Gateway Shadow Sidecar Runtime Attachment Contract",
+    "reason": "Decide whether/how sidecar metadata attaches to RuntimeResult",
+    "safety_rationale": "Still default-off; shadow/sidecar only"
   }
 }
