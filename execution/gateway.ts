@@ -16,8 +16,17 @@ import { Artifact } from "../core/artifact";
 import { CodeReviewFinding } from "../core/review-types";
 import { validateExecutionRequestSkill } from "./skill-request-validation";
 import { executeKimiGatewayRequest } from "./kimi-gateway-real-dispatch";
+import type { CliAdapterConfig } from "./cli-adapter-contract-types";
+import type { KimiCliProcessRunner } from "./kimi-cli-command-executor";
+
+export interface ExecutionGatewayOptions {
+  kimiConfig?: CliAdapterConfig;
+  kimiRunner?: KimiCliProcessRunner;
+}
 
 export class ExecutionGateway {
+  constructor(private readonly options: ExecutionGatewayOptions = {}) {}
+
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
     // ── Skill Validation — metadata only, does not affect dispatch ──
     const skillValidation = validateExecutionRequestSkill(request);
@@ -63,7 +72,11 @@ export class ExecutionGateway {
     };
 
     if (shouldAttemptKimi(enriched)) {
-      return executeKimiGatewayRequest(enriched);
+      return executeKimiGatewayRequest(
+        enriched,
+        this.options.kimiConfig,
+        this.options.kimiRunner,
+      );
     }
 
     // ── Default: shadow or codex ──

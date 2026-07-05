@@ -10,6 +10,7 @@ import { evaluateKimiGatewayRealDispatchContract, type KimiGatewayRealDispatchDe
 import { executeKimiCliCommand } from "./kimi-cli-command-executor";
 import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
 import { sanitizeErrorSummary } from "./cli-adapter-audit";
+import { createArtifact } from "../core/artifact";
 
 export type KimiGatewayRealDispatchResultStatus =
   | "disabled" | "unsupported" | "executed_success"

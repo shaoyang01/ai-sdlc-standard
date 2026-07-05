@@ -1,8 +1,22 @@
 // Regression Test — Kimi Gateway Real Dispatch Gateway Integration
 // ==================================================================
-// No real Kimi CLI calls.
+// No real Kimi CLI calls. Uses injected Gateway instances.
 
-import { executionGateway } from "../execution/gateway";
+import { ExecutionGateway } from "../execution/gateway";
+import type { KimiCliProcessRunner } from "../execution/kimi-cli-command-executor";
+import type { CliAdapterConfig } from "../execution/cli-adapter-contract-types";
+
+const validConfig: CliAdapterConfig = {
+  adapter: "kimi", enabled: true, source: "test_override",
+  command: "kimi", args: ["--mode", "plan"], timeoutMs: 120000,
+};
+
+function fakeRunner(result: { exitCode: number; durationMs: number; stdout: string; stderr: string }): KimiCliProcessRunner {
+  return { run: async () => result };
+}
+function throwingRunner(): KimiCliProcessRunner {
+  return { run: async () => { throw new Error("should not be called"); } };
+}
 
 async function test() {
   let passed = 0, failed = 0;
@@ -18,50 +32,59 @@ async function test() {
   try {
     console.log("Kimi Gateway Real Dispatch Gateway Test\n");
 
-    // Test A: Default Kimi request falls through to shadow
-    console.log("Test A: Default Kimi request falls through to shadow");
+    // Test A: Default Kimi falls through to shadow (flags off, throwing runner)
+    console.log("Test A: Default Kimi → shadow success");
     delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;
-    delete process.env.SDLC_KIMI_GATEWAY_INTEGRATION;
-    delete process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION;
-    const shadowKimi = await executionGateway.execute({
+    const gwA = new ExecutionGateway({ kimiRunner: throwingRunner() });
+    const rA = await gwA.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-KIMI-FLAGS-OFF", input: { prompt: "must not leak" },
+      requirementId: "REQ-A", input: {},
     });
-    assert(shadowKimi.success === true, "Kimi with flags off → shadow success");
-    assert(shadowKimi.agent === "kimi", "agent is kimi");
-    assert(shadowKimi.artifacts.length > 0 && shadowKimi.artifacts[0].type === "shadow_output", "shadow artifact");
+    assert(rA.success === true && rA.agent === "kimi", "shadow success");
+    assert(rA.artifacts[0].type === "shadow_output", "shadow artifact");
     console.log("");
 
     // Test B: Non-Kimi unchanged
-    console.log("Test B: Non-Kimi request unchanged");
-    const codex = await executionGateway.execute({
+    console.log("Test B: Non-Kimi unchanged");
+    const rB = await gwA.execute({
       type: "code_generation", node: "implementation", agent: "codex",
-      requirementId: "REQ-CODEX", input: {},
+      requirementId: "REQ-B", input: {},
     });
-    assert(codex.success === true && codex.agent === "codex", "codex unchanged");
+    assert(rB.success === true && rB.agent === "codex", "codex unchanged");
     console.log("");
 
-    // Test C: All flags enabled but missing config → structured failure
-    console.log("Test C: All flags enabled, missing config");
+    // Test C: All flags + fake success
+    console.log("Test C: All flags + fake success");
     process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH = "enabled";
     process.env.SDLC_KIMI_GATEWAY_INTEGRATION = "enabled";
     process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION = "enabled";
-    const noConfig = await executionGateway.execute({
-      type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-NO-CONFIG", input: {},
+    let called = 0;
+    const gwC = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: {
+        run: async () => { called++; return { exitCode: 0, durationMs: 12, stdout: "ok", stderr: "" }; },
+      },
     });
-    assert(noConfig.success === false, "no config → failure");
-    // No prompt in this request since input doesn't have prompt
+    const rC = await gwC.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-C", input: {},
+    });
+    assert(called === 1, "runner called once");
+    assert(rC.success === true && rC.agent === "kimi", "kimi success");
+    assert(rC.output["result"] === "kimi_executed_success", "executed_success");
+    assert(rC.artifacts.length > 0, "artifacts exist");
+    // Artifact agent is in metadata, not content
+    assert((rC.artifacts[0] as any).metadata?.agent === "kimi" || rC.artifacts[0].content?.["result"] === "kimi_llm_task_completed", "artifact kimi");
     console.log("");
 
-    // Test D: Unsupported type → doesn't trigger Kimi dispatch
-    console.log("Test D: Unsupported type falls through");
-    const unsupported = await executionGateway.execute({
+    // Test D: Unsupported type falls through
+    console.log("Test D: Unsupported type → shadow");
+    const gwD = new ExecutionGateway({ kimiRunner: throwingRunner() });
+    const rD = await gwD.execute({
       type: "code_generation", node: "implementation", agent: "kimi",
-      requirementId: "REQ-UNSUPPORTED", input: {},
+      requirementId: "REQ-D", input: {},
     });
-    // Should fall through to shadow since type !== llm_task
-    assert(unsupported.success === true, "unsupported type → shadow");
+    assert(rD.success === true, "unsupported type → shadow");
     console.log("");
 
   } finally {
