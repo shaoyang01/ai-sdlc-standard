@@ -4,13 +4,12 @@
 // Disabled by default. Append-only. Summary-only.
 // No full artifact content. No full trace output.
 // Uses better-sqlite3 for synchronous local storage.
+// No global connection cache — each function opens and closes its own DB.
 
 import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PolicyMemoryRecord } from "./policy-memory-types";
-
-let _db: Database.Database | null = null;
 
 function ensureDir(dbPath: string): void {
   const dir = path.dirname(dbPath);
@@ -19,20 +18,11 @@ function ensureDir(dbPath: string): void {
   }
 }
 
-function getDb(dbPath: string): Database.Database {
-  if (!_db) {
-    ensureDir(dbPath);
-    _db = new Database(dbPath);
-    _db.pragma("journal_mode = WAL");
-  }
-  return _db;
-}
-
-function closeDb(): void {
-  if (_db) {
-    _db.close();
-    _db = null;
-  }
+function openDb(dbPath: string): Database.Database {
+  ensureDir(dbPath);
+  const db = new Database(dbPath);
+  db.pragma("journal_mode = WAL");
+  return db;
 }
 
 function ensureSchema(db: Database.Database): void {
@@ -74,73 +64,79 @@ function ensureSchema(db: Database.Database): void {
 }
 
 export function initPolicyMemory(dbPath: string): void {
-  const db = getDb(dbPath);
-  ensureSchema(db);
-  closeDb();
+  const db = openDb(dbPath);
+  try {
+    ensureSchema(db);
+  } finally {
+    db.close();
+  }
 }
 
 export function appendPolicyMemoryRecord(
   dbPath: string,
   record: PolicyMemoryRecord
 ): void {
-  const db = getDb(dbPath);
-  ensureSchema(db);
+  const db = openDb(dbPath);
+  try {
+    ensureSchema(db);
 
-  const insertRun = db.prepare(`
-    INSERT OR REPLACE INTO runs (
-      run_id, requirement_id, final_status, artifact_types, trace_nodes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `);
+    const insertRun = db.prepare(`
+      INSERT OR REPLACE INTO runs (
+        run_id, requirement_id, final_status, artifact_types, trace_nodes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
 
-  const insertAgentScore = db.prepare(`
-    INSERT OR REPLACE INTO agent_scores (
-      id, run_id, agent, score, reason, signals
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `);
+    const insertAgentScore = db.prepare(`
+      INSERT OR REPLACE INTO agent_scores (
+        id, run_id, agent, score, reason, signals
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
 
-  const insertSuggestion = db.prepare(`
-    INSERT OR REPLACE INTO policy_suggestions (
-      id, run_id, type, node, agent, reason, confidence
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
+    const insertSuggestion = db.prepare(`
+      INSERT OR REPLACE INTO policy_suggestions (
+        id, run_id, type, node, agent, reason, confidence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
 
-  const transaction = db.transaction(() => {
-    insertRun.run(
-      record.runId,
-      record.requirementId,
-      record.finalStatus,
-      JSON.stringify(record.artifactTypes),
-      JSON.stringify(record.traceNodes),
-      record.createdAt
-    );
-
-    for (const score of record.feedback.agent_scores) {
-      insertAgentScore.run(
-        `${record.runId}:agent:${score.agent}`,
+    const transaction = db.transaction(() => {
+      insertRun.run(
         record.runId,
-        score.agent,
-        score.score,
-        score.reason,
-        JSON.stringify(score.signals)
+        record.requirementId,
+        record.finalStatus,
+        JSON.stringify(record.artifactTypes),
+        JSON.stringify(record.traceNodes),
+        record.createdAt
       );
-    }
 
-    for (let i = 0; i < record.feedback.policy_suggestions.length; i++) {
-      const s = record.feedback.policy_suggestions[i];
-      insertSuggestion.run(
-        `${record.runId}:suggestion:${i}`,
-        record.runId,
-        s.type,
-        s.node,
-        s.agent ?? null,
-        s.reason,
-        s.confidence
-      );
-    }
-  });
+      for (const score of record.feedback.agent_scores) {
+        insertAgentScore.run(
+          `${record.runId}:agent:${score.agent}`,
+          record.runId,
+          score.agent,
+          score.score,
+          score.reason,
+          JSON.stringify(score.signals)
+        );
+      }
 
-  transaction();
-  closeDb();
+      for (let i = 0; i < record.feedback.policy_suggestions.length; i++) {
+        const s = record.feedback.policy_suggestions[i];
+        insertSuggestion.run(
+          `${record.runId}:suggestion:${i}`,
+          record.runId,
+          s.type,
+          s.node,
+          s.agent ?? null,
+          s.reason,
+          s.confidence
+        );
+      }
+    });
+
+    transaction();
+  } finally {
+    db.close();
+  }
 }
 
 export function readPolicyMemorySummary(dbPath: string): {
@@ -148,13 +144,16 @@ export function readPolicyMemorySummary(dbPath: string): {
   agentScoreCount: number;
   policySuggestionCount: number;
 } {
-  const db = getDb(dbPath);
-  ensureSchema(db);
+  const db = openDb(dbPath);
+  try {
+    ensureSchema(db);
 
-  const runCount = (db.prepare("SELECT COUNT(*) as count FROM runs").get() as { count: number }).count;
-  const agentScoreCount = (db.prepare("SELECT COUNT(*) as count FROM agent_scores").get() as { count: number }).count;
-  const policySuggestionCount = (db.prepare("SELECT COUNT(*) as count FROM policy_suggestions").get() as { count: number }).count;
+    const runCount = (db.prepare("SELECT COUNT(*) as count FROM runs").get() as { count: number }).count;
+    const agentScoreCount = (db.prepare("SELECT COUNT(*) as count FROM agent_scores").get() as { count: number }).count;
+    const policySuggestionCount = (db.prepare("SELECT COUNT(*) as count FROM policy_suggestions").get() as { count: number }).count;
 
-  closeDb();
-  return { runCount, agentScoreCount, policySuggestionCount };
+    return { runCount, agentScoreCount, policySuggestionCount };
+  } finally {
+    db.close();
+  }
 }
