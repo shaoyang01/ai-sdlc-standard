@@ -76,8 +76,12 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
     executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
   "tech-design": (ctx, _execCtx) =>
     ({ node: "tech-design", result: "design_completed", summary: ctx }),
-  "review": (_ctx, _execCtx) =>
-    ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }),
+  "review": (ctx, execCtx) =>
+    ({
+      node: "review",
+      result: (ctx["review_result"] as string) || (execCtx?.metadata?.complexity === "high" ? "FAIL" : "PASS"),
+      reviewed_at: new Date().toISOString(),
+    }),
   "implementation": (ctx, execCtx) =>
     executeImplementation(ctx, execCtx),
   "validation": (_ctx, _execCtx) =>
@@ -188,6 +192,8 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   );
 
   let currentNode: NodeType | null = "requirement-summary";
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
 
   // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
@@ -209,12 +215,22 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     trace.push({
       node: currentNode,
       agent,
-      status: "success",
+      status: nodeOutput["result"] === "FAIL" ? "failure" : "success",
       output: nodeOutput,
       timestamp: new Date().toISOString(),
     });
 
-    currentNode = getNextNode(currentNode);  // ← Graph Kernel transition
+    // Track retries for review→tech-design feedback loop
+    if (currentNode === "review" && nodeOutput["result"] === "FAIL") {
+      retryCount++;
+    } else if (currentNode === "tech-design") {
+      // retryCount persists across re-design cycles
+    } else {
+      retryCount = 0; // reset on non-loop nodes
+    }
+
+    // Context-aware transition — review result drives PASS/FAIL routing
+    currentNode = getNextNode(currentNode, nodeOutput, retryCount);
   }
 
   const implementationOutput = legacyContext["implementation"] as Record<string, unknown> | undefined;

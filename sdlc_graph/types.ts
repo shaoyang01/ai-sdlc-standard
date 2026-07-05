@@ -18,6 +18,11 @@ export interface GraphNode {
 export interface GraphEdge {
   from: NodeType;
   to: NodeType;
+  condition?: "PASS" | "FAIL";  // optional: only for conditional edges
+}
+
+export interface ConditionalEdge extends GraphEdge {
+  condition: "PASS" | "FAIL";
 }
 
 export interface GraphContext {

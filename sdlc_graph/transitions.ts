@@ -1,34 +1,67 @@
-// SDLC Graph Transitions — Deterministic Decision Layer
-// ======================================================
-// Pure transition engine. Depends on graph DATA only (SDLC_EDGES).
-// NO runtime dependencies. NO context logic. NO execution.
-// This is the ONLY layer that decides "what comes next".
+// SDLC Graph Transitions — State Machine + Feedback Loop
+// =======================================================
+// Context-aware transition engine with conditional routing.
+// Supports review PASS/FAIL → re-route. Retry limit enforced.
+// Fully deterministic. Pure functions. No randomness.
 
 import { NodeType } from "./types";
 import { SDLC_EDGES } from "./graph";
 
-// Deterministic: same input → same output, every time
-export function getNextNode(current: NodeType): NodeType | null {
-  const edge = SDLC_EDGES.find((e) => e.from === current);
-  return edge?.to ?? null;
+const MAX_LOOP_DEPTH = 3;
+
+// Context-aware: accepts review result for conditional routing
+export function getNextNode(
+  current: NodeType,
+  nodeResult?: Record<string, unknown>,
+  retryCount: number = 0
+): NodeType | null {
+  // ─── Review: conditional PASS/FAIL routing ─────────────
+  if (current === "review" && nodeResult) {
+    const reviewResult = nodeResult["result"] as string | undefined;
+
+    if (reviewResult === "FAIL" && retryCount < MAX_LOOP_DEPTH) {
+      return "tech-design";  // feedback loop: re-design
+    }
+    if (reviewResult === "FAIL" && retryCount >= MAX_LOOP_DEPTH) {
+      return "validation";   // force terminal after max retries
+    }
+    // PASS → fall through to default
+  }
+
+  // ─── Default: linear forward lookup ────────────────────
+  const edges = SDLC_EDGES.filter((e) => e.from === current);
+
+  // Prefer unconditional edge (no condition field)
+  const unconditional = edges.find((e) => !e.condition);
+  if (unconditional) return unconditional.to;
+
+  // Use conditional PASS edge as default fallback
+  const passEdge = edges.find((e) => e.condition === "PASS");
+  if (passEdge) return passEdge.to;
+
+  return null; // terminal
 }
 
-// Terminal check — delegates to getNextNode (no direct graph access)
+// Terminal check — delegates to getNextNode
 export function isTerminal(node: NodeType): boolean {
   return getNextNode(node) === null;
 }
 
-// Validates a single step is allowed by the graph
-export function isValidTransition(from: NodeType, to: NodeType): boolean {
-  return getNextNode(from) === to;
+// Validates a single step
+export function isValidTransition(
+  from: NodeType,
+  to: NodeType,
+  result?: Record<string, unknown>
+): boolean {
+  return getNextNode(from, result) === to;
 }
 
-// Ordered node list — for sequential walkers
+// Ordered path for PASS-only flow
 export function getTransitionPath(): NodeType[] {
   const path: NodeType[] = ["requirement-summary"];
   let current: NodeType = "requirement-summary";
   while (true) {
-    const next = getNextNode(current);
+    const next = getNextNode(current, { result: "PASS" });
     if (!next) break;
     path.push(next);
     current = next;

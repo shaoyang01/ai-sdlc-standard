@@ -19,7 +19,9 @@ export const SDLC_NODES: GraphNode[] = [
 export const SDLC_EDGES: GraphEdge[] = [
   { from: "requirement-summary", to: "tech-design" },
   { from: "tech-design",           to: "review" },
-  { from: "review",                to: "implementation" },
+  // Review: PASS → implementation, FAIL → tech-design (feedback loop)
+  { from: "review",                to: "implementation",  condition: "PASS" },
+  { from: "review",                to: "tech-design",     condition: "FAIL" },
   { from: "implementation",        to: "validation" },
 ];
 
