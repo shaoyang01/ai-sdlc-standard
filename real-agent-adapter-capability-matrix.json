@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "source": "real-agent-adapter-integration-plan",
+  "default_execution_mode": "shadow",
+  "real_execution_default": false,
+  "adapters": [
+    {"adapter":"shadow","status":"implemented","default_enabled":true,"invokes_real_external_system":false,"supported_request_types":["requirement_summary","tech_design","solution_review","code_generation","code_review","bugfix","validation"],"unsupported_request_types":[],"fallback_behavior":"n/a (default)","evidence":["execution/shadow-agent-adapter.ts"]},
+    {"adapter":"codex","status":"feature_flagged_partial","default_enabled":false,"invokes_real_external_system":true,"supported_request_types":["code_generation"],"unsupported_request_types":["requirement_summary","tech_design","solution_review","code_review","bugfix","validation"],"fallback_behavior":"shadow for unsupported types","evidence":["execution/codex-adapter.ts","execution/config.ts"]},
+    {"adapter":"kimi","status":"not_implemented","default_enabled":false,"invokes_real_external_system":false,"supported_request_types":[],"unsupported_request_types":[],"fallback_behavior":"shadow (no adapter exists)","evidence":["execution/gateway.ts routes to shadow"]},
+    {"adapter":"hermes","status":"not_implemented","default_enabled":false,"invokes_real_external_system":false,"supported_request_types":[],"unsupported_request_types":[],"fallback_behavior":"shadow (no adapter exists)","evidence":["execution/gateway.ts routes to shadow"]}
+  ],
+  "request_types": [
+    {"request_type":"llm_task","shadow":"implemented","codex":"unsupported","kimi":"planned","hermes":"unsupported","recommended_real_adapter":"kimi","notes":"Requirement intake and specification writing"},
+    {"request_type":"code_generation","shadow":"implemented","codex":"feature_flagged","kimi":"planned","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Implementation code generation"},
+    {"request_type":"review","shadow":"implemented","codex":"planned","kimi":"planned","hermes":"planned","recommended_real_adapter":"codex","notes":"Solution review and specification audit"},
+    {"request_type":"validation","shadow":"implemented","codex":"unsupported","kimi":"unsupported","hermes":"planned","recommended_real_adapter":"hermes","notes":"Validation and test feedback"},
+    {"request_type":"code_review","shadow":"implemented","codex":"planned","kimi":"unsupported","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Code review execution and normalization"},
+    {"request_type":"bugfix","shadow":"implemented","codex":"planned","kimi":"unsupported","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Bugfix patch generation"}
+  ],
+  "feature_flags": [
+    {"flag":"SDLC_EXECUTION_MODE","status":"implemented","default":"shadow","enabled_value":"codex","purpose":"Enables real Codex for code_generation","changes_runtime_behavior_today":true,"invokes_real_external_system_today":true},
+    {"flag":"SDLC_KIMI_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Enables real Kimi adapter","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
+    {"flag":"SDLC_HERMES_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Enables real Hermes adapter","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
+    {"flag":"SDLC_CODEX_REVIEW_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Expands Codex to review/bugfix types","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
+    {"flag":"SDLC_REAL_ADAPTER_FALLBACK","status":"planned","default":"shadow","enabled_value":"shadow | fail_closed","purpose":"Controls fallback behavior for real adapter failures","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false}
+  ],
+  "safety_boundaries": [
+    {"name":"no_default_real_model_execution","status":"required","description":"Default execution mode remains shadow"},
+    {"name":"real_adapters_behind_execution_gateway","status":"required","description":"Runtime calls Gateway, not adapters directly"},
+    {"name":"no_runtime_direct_adapter_calls","status":"required","description":"runtime.ts only calls executionGateway.execute()"},
+    {"name":"no_real_sdlc_skill_invocation","status":"required","description":"Adapters execute requests; skills are invoked by future orchestrator"},
+    {"name":"no_file_writes_by_adapters","status":"required","description":"Adapters must not write files to disk"},
+    {"name":"no_git_operations_by_adapters","status":"required","description":"Adapters must not create commits, branches, or PRs"},
+    {"name":"no_secret_logging","status":"required","description":"API keys and full prompts/responses must not be logged"},
+    {"name":"bounded_timeouts","status":"required","description":"All real adapter calls must have configurable timeouts"},
+    {"name":"structured_failures","status":"required","description":"Real adapter failures return structured ExecutionResult"},
+    {"name":"shadow_fallback_policy_explicit","status":"required","description":"Fallback behavior must be explicit per adapter"}
+  ],
+  "staged_roadmap": [
+    "Real Agent Adapter Integration Plan",
+    "Kimi Adapter Contract Stub",
+    "Hermes Adapter Contract Stub",
+    "Kimi Adapter Shadow Response Parser Tests",
+    "Hermes Adapter Shadow Response Parser Tests",
+    "Feature-flagged Kimi Adapter",
+    "Feature-flagged Hermes Adapter",
+    "Feature-flagged Codex Review/Bugfix Expansion",
+    "Real Adapter Audit Trail",
+    "Controlled Real Adapter Rollout"
+  ],
+  "recommended_next_pr": {
+    "title": "Kimi Adapter Contract Stub",
+    "reason": "Define the Kimi adapter interface without network calls; establish pattern before Hermes",
+    "safety_rationale": "Contract stubs have no network calls, no secrets, no real execution"
+  }
+}

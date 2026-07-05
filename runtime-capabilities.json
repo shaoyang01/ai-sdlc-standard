@@ -117,5 +117,17 @@
     "skill_flow_runtime_shadow_integration_audit_affects_runtime": false,
     "skill_flow_runtime_shadow_integration_audit_contains_raw_requirement": false,
     "skill_flow_runtime_shadow_integration_audit_contains_full_artifacts": false
+  },
+  "real_agent_adapter_integration": {
+    "plan": "implemented",
+    "real_kimi_adapter": "not_implemented",
+    "real_hermes_adapter": "not_implemented",
+    "codex_adapter": "feature_flagged_code_generation_only",
+    "default_real_execution": false,
+    "real_adapters_behind_execution_gateway": true,
+    "runtime_direct_adapter_calls": false,
+    "adapter_secret_logging": false,
+    "adapter_git_operations": false,
+    "adapter_file_writes": false
   }
 }
