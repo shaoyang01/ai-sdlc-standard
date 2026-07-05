@@ -78,6 +78,17 @@ async function test() {
   assert(result.artifacts.every((a: { id: string }) => typeof a.id === "string"), "all artifacts have ids");
   console.log("");
 
+  // Test 5b: Code review trace and artifacts
+  console.log("Test 5b: Code review in default pipeline");
+  const traceNodes = result.execution_trace.map((t: { node: string }) => t.node);
+  assert(traceNodes.includes("code-review"), "execution_trace includes code-review node");
+  assert(!traceNodes.includes("bugfix"), "execution_trace does NOT include bugfix in default pass path");
+  assert(artifactTypes.includes("code_review"), "has code_review artifact");
+  const codeReviewArtifact = result.artifacts.find((a: { type: string }) => a.type === "code_review");
+  assert(codeReviewArtifact !== undefined, "code_review artifact exists");
+  assert(codeReviewArtifact!.content["status"] === "PASS", "default code review status is PASS");
+  console.log("");
+
   // Test 6: Multi-repo fanout produces fanout_result artifact
   console.log("Test 6: Fanout artifact");
   const fanoutRun = await run("sync inventory service with repo-A calls repo-B and integration event pipeline");

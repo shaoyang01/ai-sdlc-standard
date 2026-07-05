@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx demo.ts",
-    "test": "tsx tests/runtime-shadow-pipeline.test.ts && tsx tests/execution-gateway.test.ts && tsx tests/codex-adapter.test.ts",
+    "test": "tsx tests/runtime-shadow-pipeline.test.ts && tsx tests/execution-gateway.test.ts && tsx tests/codex-adapter.test.ts && tsx tests/code-review-bugfix-loop.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

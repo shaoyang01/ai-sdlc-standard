@@ -18,16 +18,22 @@ import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
 import { executionGateway } from "./execution";
+import { executeCodeReview } from "./execution/code-review-adapter";
+import { executeBugfix } from "./execution/bugfix-adapter";
 import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
+import { CodeReviewFinding } from "./core/review-types";
 
 // ─── Types ────────────────────────────────────────────
 
 type LoopAgent = "kimi" | "codex" | "hermes";
 type ExecutionMode = "direct" | "speckit";
 
+// RuntimeNode extends Graph Kernel NodeType with runtime-managed nodes
+type RuntimeNode = NodeType | "code-review" | "bugfix";
+
 interface ExecutionTraceEntry {
-  node: NodeType;
+  node: RuntimeNode;
   agent: LoopAgent;
   status: "success" | "failure";
   output: Record<string, unknown>;
@@ -183,6 +189,94 @@ async function executeSpeckitPipeline(requirementId: string, _ctx: ExecutionCont
   return { node: "implementation", mode: "speckit", speckit_stages: results, requirement_id: requirementId };
 }
 
+// ─── Code Review + Bugfix Loop ────────────────────────
+// Bounded retry loop: review → optional bugfix → re-review.
+// Runs after implementation, before validation.
+// Default shadow path passes on first review.
+
+const MAX_BUGFIX_ATTEMPTS = 2;
+
+interface ReviewLoopResult {
+  artifacts: Artifact[];
+  traceEntries: ExecutionTraceEntry[];
+  finalReviewStatus: "PASS" | "FAIL";
+}
+
+export async function runCodeReviewBugfixLoop(input: {
+  requirementId: string;
+  artifacts: Artifact[];
+  agent: LoopAgent;
+}): Promise<ReviewLoopResult> {
+  const collectedArtifacts: Artifact[] = [];
+  const traceEntries: ExecutionTraceEntry[] = [];
+  let currentArtifacts = input.artifacts;
+  let attempts = 0;
+
+  while (attempts <= MAX_BUGFIX_ATTEMPTS) {
+    // ── Code Review ──
+    const review = await executeCodeReview({
+      requirementId: input.requirementId,
+      artifacts: currentArtifacts,
+      agent: input.agent,
+    });
+
+    collectedArtifacts.push(...(review.artifacts as Artifact[]));
+    traceEntries.push({
+      node: "code-review",
+      agent: input.agent,
+      status: review.output["result"] === "PASS" ? "success" : "failure",
+      output: review.output,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (review.output["result"] === "PASS") {
+      return {
+        artifacts: collectedArtifacts,
+        traceEntries,
+        finalReviewStatus: "PASS",
+      };
+    }
+
+    attempts++;
+    if (attempts > MAX_BUGFIX_ATTEMPTS) {
+      return {
+        artifacts: collectedArtifacts,
+        traceEntries,
+        finalReviewStatus: "FAIL",
+      };
+    }
+
+    // ── Bugfix ──
+    const findings = review.output["findings"] as CodeReviewFinding[];
+    const bugfix = await executeBugfix({
+      requirementId: input.requirementId,
+      artifacts: currentArtifacts,
+      findings: findings || [],
+      agent: input.agent,
+      attempt: attempts,
+    });
+
+    collectedArtifacts.push(...(bugfix.artifacts as Artifact[]));
+    traceEntries.push({
+      node: "bugfix",
+      agent: input.agent,
+      status: "success",
+      output: bugfix.output,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Update current artifacts for re-review (append bugfix artifacts)
+    currentArtifacts = [...currentArtifacts, ...(bugfix.artifacts as Artifact[])];
+  }
+
+  // Should not reach here due to loop bounds, but satisfy exhaustiveness
+  return {
+    artifacts: collectedArtifacts,
+    traceEntries,
+    finalReviewStatus: "FAIL",
+  };
+}
+
 // ─── MAIN RUNTIME — GRAPH INTERPRETER ───────────────────
 // Graph Kernel is the SINGLE source of truth for transitions.
 
@@ -210,7 +304,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   while (currentNode && vmState.status === "running") {
     // Agent selection: policy engine → decision layer → AGENT_MAP fallback
     const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
-    const agent = policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode);
+    const agent = (policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode)) as LoopAgent;
 
     // Update ExecutionContext for current node
     execCtx.node = currentNode;
@@ -252,6 +346,17 @@ export async function run(requirement: string): Promise<RuntimeResult> {
       // retryCount persists across re-design cycles
     } else {
       retryCount = 0; // reset on non-loop nodes
+    }
+
+    // ─── Code Review + Bugfix Loop (after implementation, before validation) ───
+    if (currentNode === "implementation") {
+      const reviewResult = await runCodeReviewBugfixLoop({
+        requirementId,
+        artifacts: [...artifacts],
+        agent: "codex",
+      });
+      artifacts.push(...reviewResult.artifacts);
+      trace.push(...reviewResult.traceEntries);
     }
 
     // Context-aware transition — review result drives PASS/FAIL routing

@@ -29,6 +29,7 @@ export type ExecutionArtifactType =
   | "solution_review"
   | "code_patch"
   | "code_review"
+  | "bugfix_patch"
   | "validation_report"
   | "shadow_output";
 
