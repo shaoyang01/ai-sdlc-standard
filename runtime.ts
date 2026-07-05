@@ -214,13 +214,13 @@ async function executeFanout(
   _ctx: ExecutionContext
 ): Promise<FanoutResult> {
   const promises = subReqs.map(async (sub) => {
-    const result = await executionGateway.execute({
+    const result = await executionGateway.execute(buildSkillAwareExecutionRequest({
       type: "code_generation",
       node: "implementation",
       agent: "codex",
       requirementId,
-      input: { repo: sub.repo, task: sub.task },
-    });
+      execInput: { repo: sub.repo, task: sub.task },
+    }));
     return { repo: sub.repo, status: result.success ? "success" as const : "failed" as const, output: result.output || {} };
   });
   const repoResults = await Promise.all(promises);

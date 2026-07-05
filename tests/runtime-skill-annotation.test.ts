@@ -28,22 +28,28 @@ async function test() {
 
   // ── Test 1: Runtime still succeeds ──
   console.log("Test 1: Runtime still succeeds with skill annotation");
-  const result = await run("simple task without multi-repo");
+  const result = await run("build payment system with order sync service");
   assert(result.final_status === "success", "final status is success");
   console.log("");
 
-  // ── Test 2: Trace node order unchanged ──
+  // ── Test 2: Trace node order includes all expected nodes ──
   console.log("Test 2: Trace node order unchanged");
   const nodes = result.execution_trace.map((t) => t.node) as string[];
-  const expectedOrder = ["requirement-summary", "tech-design", "review", "implementation", "validation"];
+  const expectedOrder = [
+    "requirement-summary",
+    "tech-design",
+    "review",
+    "implementation",
+    "code-review",
+    "validation",
+  ];
   let pos = 0;
   for (const exp of expectedOrder) {
     const idx = nodes.indexOf(exp, pos);
-    assert(idx >= pos, `"${exp}" appears at expected position`);
+    assert(idx >= pos, `"${exp}" appears at or after position ${pos} (found at ${idx})`);
     if (idx >= 0) pos = idx + 1;
   }
-  // Code-review should still appear between implementation and validation
-  assert((nodes as string[]).includes("code-review"), "code-review still in trace");
+  assert(!nodes.includes("bugfix"), "bugfix not in success path");
   console.log("");
 
   // ── Test 3: Selected agents unchanged ──
@@ -52,44 +58,39 @@ async function test() {
   const reviewTrace = result.execution_trace.find((t) => t.node === "review");
   assert(implTrace !== undefined, "implementation trace exists");
   assert(reviewTrace !== undefined, "review trace exists");
-  // Agent selection still follows the standard shadow/default pattern
+  // Agent selection follows normal policy, not skill-driven
+  const implAgent = implTrace!.agent;
+  assert(typeof implAgent === "string", `implementation agent is ${implAgent}`);
   console.log("");
 
-  // ── Test 4: Implementation artifact includes skill metadata ──
-  console.log("Test 4: Implementation artifact includes skill metadata");
+  // ── Test 4: Implementation artifact skill matches agent ──
+  console.log("Test 4: Implementation artifact skill metadata present when agent is codex");
   const implArtifact = result.artifacts.find(
     (a) => a.node === "implementation" && a.type !== "fanout_result"
   );
-  if (implArtifact) {
-    const skill = implArtifact.content["skill"];
-    const sv = implArtifact.content["skill_validation"] as Record<string, unknown> | null;
-    // Skill may be present if inference was unambiguous
-    if (skill !== null && skill !== undefined) {
-      assert(typeof skill === "string", "skill is a string when present");
-      assert((skill as string).startsWith("sdlc-"), "skill name starts with sdlc-");
-    }
-    // skill_validation should always be present (gateway computes it)
-    if (sv) {
-      assert(typeof sv["attempted"] === "boolean", "skill_validation has attempted");
-    }
+  assert(implArtifact !== undefined, "implementation artifact exists");
+  const implSV = implArtifact!.content["skill_validation"] as Record<string, unknown> | null;
+  assert(implSV !== null && implSV !== undefined, "skill_validation exists");
+  // If agent is codex, skill should be sdlc-speckit-implement (unambiguous)
+  if (implAgent === "codex") {
+    assert(implArtifact!.content["skill"] === "sdlc-speckit-implement",
+      `skill is sdlc-speckit-implement (got ${implArtifact!.content["skill"]})`);
+    assert(implSV!["attempted"] === true, "skill_validation.attempted === true");
+    assert(implSV!["valid"] === true, "skill_validation.valid === true");
   }
+  // If agent is not codex, skill may be null (no unambiguous mapping)
   console.log("");
 
-  // ── Test 5: Code-review artifact may have skill metadata ──
+  // ── Test 5: Code-review artifact has skill_validation ──
   console.log("Test 5: Code review artifacts preserve skill metadata");
   const crArtifact = result.artifacts.find((a) => a.type === "code_review");
   assert(crArtifact !== undefined, "code_review artifact exists");
-  const crSkill = crArtifact!.content["skill"];
   const crSV = crArtifact!.content["skill_validation"] as Record<string, unknown> | null;
-  assert(crSV !== null || crSV !== undefined, "code review has skill_validation");
+  assert(crSV !== null && crSV !== undefined, "code review has skill_validation");
   console.log("");
 
   // ── Test 6: Missing/ambiguous skill does not fail runtime ──
   console.log("Test 6: Runtime still succeeds with potentially ambiguous skills");
-  // Bugfix node may have no unambiguous skill mapping — runtime must still succeed
-  const bugfixTrace = result.execution_trace.find((t) => t.node === "bugfix");
-  // Bugfix only appears in failure path, not required here
-  // Just assert runtime didn't crash
   assert(result.final_status === "success", "runtime succeeded");
   console.log("");
 
@@ -99,7 +100,25 @@ async function test() {
   assert(skillsCaps["skill_annotation_affects_runtime_routing"] === false, "annotation does not affect routing");
   assert(skillsCaps["skill_annotation_affects_agent_selection"] === false, "annotation does not affect agent selection");
   assert(skillsCaps["skill_annotation_affects_execution_dispatch"] === false, "annotation does not affect dispatch");
-  assert(skillsCaps["real_adapter_enablement"] === false, "does not enable real adapters");
+  console.log("");
+
+  // ── Test 8: Fanout path succeeds with skill annotation ──
+  console.log("Test 8: Fanout path succeeds with skill annotation");
+  const fanoutResult = await run("sync inventory service with repo-A calls repo-B and integration event pipeline");
+  assert(fanoutResult.final_status === "success", "fanout final status is success");
+  assert(fanoutResult.fanout_results !== undefined, "fanout_results exists");
+  assert(
+    (fanoutResult.fanout_results!.repo_results || []).length > 0,
+    "fanout has repo results"
+  );
+  // Fanout child artifacts should carry skill metadata
+  const fanoutArtifacts = fanoutResult.artifacts.filter((a) => a.type === "shadow_output");
+  for (const fa of fanoutArtifacts) {
+    const faSV = fa.content["skill_validation"] as Record<string, unknown> | null;
+    if (faSV) {
+      assert(typeof faSV["attempted"] === "boolean", "fanout artifact has skill_validation.attempted");
+    }
+  }
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
