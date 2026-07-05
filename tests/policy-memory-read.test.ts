@@ -179,10 +179,22 @@ async function test() {
     assert(traceNodes.includes("validation"), "normal routing: validation exists");
     assert(runtimeResult.final_status === "success", "normal routing: final status is success");
 
-    // Verify memory suggestions appear in feedback
-    const allSuggestionTypes = runtimeResult.feedback.policy_suggestions.map((s) => s.type);
-    // May include base prefer_agent + memory prefer_agent + memory avoid_agent
-    assert(allSuggestionTypes.length >= 1, "at least one policy suggestion present");
+    // Verify memory-derived suggestions appear in feedback
+    const suggestions = runtimeResult.feedback.policy_suggestions;
+
+    // Memory-derived prefer_agent for high-performing codex
+    const memPrefer = suggestions.find(
+      (s) => s.type === "prefer_agent" && s.agent === "codex" && s.reason.includes("Historical memory")
+    );
+    assert(memPrefer !== undefined, "memory-derived prefer_agent for codex exists in runtime feedback");
+    assert(memPrefer!.confidence === 0.65, "prefer_agent confidence is 0.65");
+
+    // Memory-derived avoid_agent for low-performing hermes
+    const memAvoid = suggestions.find(
+      (s) => s.type === "avoid_agent" && s.agent === "hermes" && s.reason.includes("Historical memory")
+    );
+    assert(memAvoid !== undefined, "memory-derived avoid_agent for hermes exists in runtime feedback");
+    assert(memAvoid!.confidence === 0.6, "avoid_agent confidence is 0.6");
 
     console.log("");
 
