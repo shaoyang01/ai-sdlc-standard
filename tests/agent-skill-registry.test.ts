@@ -131,8 +131,13 @@ async function test() {
   // ── Test 10: Subflow entry skills ──
   console.log("Test 10: Subflow entry skills");
   const subEntries = getSubflowEntrySkills();
-  // Currently no explicit subflow_entry skills, but the helper should work
   assert(Array.isArray(subEntries), "subflow entries is array");
+  assert(subEntries.some((b) => b.skill === "sdlc-code-review-normalizer"),
+    "includes code-review-normalizer (subflow_normalizer)");
+  assert(subEntries.some((b) => b.skill === "sdlc-speckit-pipeline"),
+    "includes speckit-pipeline (flow_controller)");
+  assert(!subEntries.some((b) => b.skill === "sdlc-requirement-normalizer"),
+    "does NOT include requirement-normalizer (global entry)");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

@@ -400,7 +400,9 @@ export function getGlobalEntrySkill(): SkillFlowBinding {
 }
 
 export function getSubflowEntrySkills(): ReadonlyArray<SkillFlowBinding> {
-  return SKILL_FLOW_REGISTRY.filter((b) => b.role === "subflow_entry");
+  return SKILL_FLOW_REGISTRY.filter(
+    (b) => b.role === "subflow_entry" || b.role === "subflow_normalizer" || b.role === "flow_controller"
+  );
 }
 
 export function getSkillsByRole(role: SkillFlowRole): ReadonlyArray<SkillFlowBinding> {

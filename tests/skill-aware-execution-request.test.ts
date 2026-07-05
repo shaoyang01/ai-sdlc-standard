@@ -178,6 +178,25 @@ async function test() {
   assert(ibfSV!["attempted"] === true, "skill validation was attempted");
   console.log("");
 
+  // ── Test 10: Truly unknown skill does not block but is flagged invalid ──
+  console.log("Test 10: Unknown skill flagged invalid but does not block");
+  const unknownResult = await executionGateway.execute({
+    type: "code_generation",
+    node: "implementation",
+    agent: "codex",
+    requirementId: "REQ-UNKNOWN-SKILL",
+    input: {},
+    skill: "unknown-skill",
+  });
+  assert(unknownResult.success === true, "unknown skill does not block execution");
+  const uArtifact = unknownResult.artifacts[0];
+  assert(uArtifact.content["skill"] === "unknown-skill", "artifact preserves unknown skill name");
+  const uSV = uArtifact.content["skill_validation"] as Record<string, unknown> | null;
+  assert(uSV !== null, "skill_validation is present");
+  assert(uSV!["attempted"] === true, "skill validation was attempted");
+  assert(uSV!["valid"] === false, "unknown skill is flagged invalid");
+  assert((uSV!["reason"] as string).includes("Unknown skill"), "reason mentions Unknown skill");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
