@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place. Real agent execution is limited to a feature-flagged Codex adapter for `code_generation` only. No Kimi or Hermes adapters exist. No real sdlc-* skill is invoked.
+The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place. Real agent execution is limited to a feature-flagged Codex adapter for `code_generation` only. Kimi/Hermes real CLI execution is not implemented. Kimi and Hermes CLI contract stubs exist, and a Kimi CLI dry-run harness exists (no process spawn, not wired into runtime). No real sdlc-* skill is invoked.
 
 ### Status Classification
 
@@ -48,7 +48,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | Runtime Integration Contract | Feature-flagged in `runtime.ts` since shadow integration PR; disabled by default |
 | Real sdlc-* skill invocation | No skill invocation exists in code |
 | Runtime auto skill annotation | Removed in PR deprecation |
-| Real Kimi/Hermes adapters | Never implemented |
+| Real Kimi/Hermes adapters | Never implemented (CLI contract stubs + Kimi dry-run harness exist) |
 
 ---
 
@@ -120,6 +120,9 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | Skill Flow Orchestrator Contract | `SkillFlowPlan`, `planFlowById()`, `planGlobalEntryFlow()`, `planSpeckitFlow()`, `planDirectImplementationPath()` | No agent calls, no skill invocation, no file writes | Future shadow/real orchestrator execution |
 | Skill Flow Runtime Integration Contract | `SkillFlowRuntimeIntegrationConfig`, `decideSkillFlowRuntimeIntegration()`, `previewSkillFlowRuntimeIntegration()` | No runtime.ts modification, no routing change | Feature-flagged runtime shadow integration |
 | ExecutionRequest skill metadata contract | Optional `skill?: string`, `skillValidation?: {...}` on `ExecutionRequest` | No auto-inference, no dispatch by skill | Future explicit skill invocation by orchestrator |
+| Kimi CLI Adapter Contract Stub | `getKimiCliAdapterConfig()`, `executeKimiCliAdapterContractOnly()` | No CLI execution, no process spawn | Future real Kimi CLI execution |
+| Hermes CLI Adapter Contract Stub | `getHermesCliAdapterConfig()`, `executeHermesCliAdapterContractOnly()` | No CLI execution, no process spawn | Future real Hermes CLI execution |
+| Kimi CLI Adapter Dry-run Harness | `dryRunKimiCliAdapter()`, `buildKimiCliCommandPreview()` | No process spawn, not wired to runtime or Gateway | Future real Kimi CLI dry-run verification |
 
 ---
 
@@ -138,8 +141,9 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 | Capability | Status |
 |-----------|--------|
-| Real Kimi adapter | Not implemented |
-| Real Hermes adapter | Not implemented |
+| Real Kimi CLI execution | Not implemented (contract stub + dry-run harness exist) |
+| Real Hermes CLI execution | Not implemented (contract stub exists) |
+| Hermes CLI dry-run harness | Not implemented |
 | Codex adapter for review / bugfix / code_review types | Not implemented (only `code_generation`) |
 | Real sdlc-* skill execution | Not implemented |
 | Runtime integration with Skill Flow Orchestrator | Contract only; not active |
@@ -204,13 +208,9 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ## 12. Recommended Next PR
 
-**Recommended: Feature-flagged Runtime Shadow Integration**
+**Recommended: Feature-flagged Hermes CLI Adapter Dry-run Harness**
 
-Wire `decideSkillFlowRuntimeIntegration()` behind `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow` in `runtime.ts`. When enabled, the runtime would shadow-execute the appropriate skill flow plan alongside the existing pipeline, producing comparison metadata.
-
-**Safety rationale:** This is a safer intermediate step before real adapter integration. Shadow execution produces no side effects. The feature flag keeps it disabled by default. Comparison with existing runtime behavior provides a drift guard.
-
-**Alternative if runtime integration is too risky:** Skill Flow Orchestrator Audit Trail — add structured audit logging to the shadow orchestrator without wiring it to runtime. This provides observability without changing runtime behavior.
+Mirror the Kimi dry-run pattern for Hermes. No process spawn, no CLI execution, no API keys, no Gateway/runtime behavior change.
 
 ---
 

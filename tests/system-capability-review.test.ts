@@ -70,6 +70,20 @@ async function test() {
   assert(auditCap["invokes_real_agents"] === false, "audit no real agents");
   assert(auditCap["invokes_real_skills"] === false, "audit no real skills");
   assert(auditCap["writes_files"] === false, "audit no file writes");
+  // Kimi dry-run harness
+  assert(capNames.includes("Kimi CLI Adapter Dry-run Harness"), "has Kimi CLI Adapter Dry-run Harness");
+  const dryRunCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi CLI Adapter Dry-run Harness");
+  assert(dryRunCap !== undefined, "dry-run capability exists");
+  assert(dryRunCap["status"] === "feature-flagged-dry-run", "dry-run status");
+  assert(dryRunCap["runtime_active_by_default"] === false, "dry-run not active by default");
+  assert(dryRunCap["changes_routing"] === false, "dry-run no routing");
+  assert(dryRunCap["changes_agent_selection"] === false, "dry-run no agent");
+  assert(dryRunCap["invokes_real_agents"] === false, "dry-run no real agents");
+  assert(dryRunCap["invokes_real_skills"] === false, "dry-run no real skills");
+  assert(dryRunCap["writes_files"] === false, "dry-run no files");
+  const dryRunEvidence = dryRunCap["evidence"] as string[];
+  assert(dryRunEvidence.includes("execution/kimi-cli-dry-run.ts"), "evidence includes kimi-cli-dry-run.ts");
+  assert(dryRunEvidence.includes("tests/kimi-cli-dry-run.test.ts"), "evidence includes test");
   console.log("");
 
   // ── Test 5: Safety boundaries ──
