@@ -32,6 +32,7 @@ async function test() {
     assert(defaultResult.final_status === "success", "final status is success");
     assert(defaultResult.skill_flow_shadow_integration === undefined,
       "no skill_flow_shadow_integration when disabled");
+    assert(!("skill_flow_shadow_integration" in defaultResult), "sidecar key absent when disabled");
     assert(defaultResult.execution_trace.length > 0, "execution_trace exists");
     assert(defaultResult.artifacts.length > 0, "artifacts exist");
     assert(defaultResult.feedback !== undefined, "feedback exists");
@@ -89,6 +90,7 @@ async function test() {
     assert(invalidResult.final_status === "success", "final status is success");
     assert(invalidResult.skill_flow_shadow_integration === undefined,
       "no sidecar for invalid flag value");
+    assert(!("skill_flow_shadow_integration" in invalidResult), "sidecar key absent for invalid flag");
     console.log("");
 
   } finally {

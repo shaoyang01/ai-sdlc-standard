@@ -496,6 +496,8 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     fanout_results: fanoutResult,
     final_status: finalStatus,
     completed_at: new Date().toISOString(),
-    skill_flow_shadow_integration: skillFlowShadowIntegration,
+    ...(skillFlowShadowIntegration
+      ? { skill_flow_shadow_integration: skillFlowShadowIntegration }
+      : {}),
   };
 }
