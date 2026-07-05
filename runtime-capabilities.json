@@ -198,6 +198,15 @@
     "kimi_gateway_shadow_sidecar_wired_to_runtime": false,
     "kimi_gateway_shadow_sidecar_changes_final_status": false,
     "kimi_gateway_shadow_sidecar_changes_routing": false,
-    "kimi_gateway_shadow_sidecar_primary_gateway_unchanged": true
+    "kimi_gateway_shadow_sidecar_primary_gateway_unchanged": true,
+    "kimi_runtime_attachment_contract": "implemented_contract_only",
+    "kimi_runtime_attachment_default_enabled": false,
+    "kimi_runtime_attachment_requires_flag": "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled",
+    "kimi_runtime_attachment_wired_to_runtime": false,
+    "kimi_runtime_attachment_changes_final_status": false,
+    "kimi_runtime_attachment_changes_routing": false,
+    "kimi_runtime_attachment_changes_agent_selection": false,
+    "kimi_runtime_attachment_persists_audit": false,
+    "kimi_runtime_attachment_writes_files": false
   }
 }

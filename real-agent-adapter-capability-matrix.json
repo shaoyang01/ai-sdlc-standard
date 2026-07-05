@@ -65,7 +65,9 @@
         "execution/kimi-gateway-integration-contract.ts",
         "tests/kimi-gateway-integration-contract.test.ts",
         "execution/kimi-gateway-shadow-sidecar.ts",
-        "tests/kimi-gateway-shadow-sidecar.test.ts"
+        "tests/kimi-gateway-shadow-sidecar.test.ts",
+        "execution/kimi-runtime-attachment-contract.ts",
+        "tests/kimi-runtime-attachment-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -84,7 +86,12 @@
       "gateway_shadow_sidecar_default_enabled": false,
       "gateway_shadow_sidecar_wired_to_runtime": false,
       "gateway_shadow_sidecar_changes_routing": false,
-      "gateway_shadow_sidecar_changes_final_status": false
+      "gateway_shadow_sidecar_changes_final_status": false,
+      "runtime_attachment_contract": "implemented_contract_only",
+      "runtime_attachment_default_enabled": false,
+      "runtime_attachment_wired_to_runtime": false,
+      "runtime_attachment_changes_routing": false,
+      "runtime_attachment_changes_final_status": false
     },
     {
       "adapter": "hermes",
@@ -323,8 +330,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Shadow Sidecar Runtime Attachment Contract",
-    "reason": "Decide whether/how sidecar metadata attaches to RuntimeResult",
-    "safety_rationale": "Still default-off; shadow/sidecar only"
+    "title": "Feature-flagged Kimi Shadow Sidecar Runtime Attachment",
+    "reason": "Wire the contract to RuntimeResult behind runtime attachment flag",
+    "safety_rationale": "Sidecar only, default off, no routing/final_status change"
   }
 }
