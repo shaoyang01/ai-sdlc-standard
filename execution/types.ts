@@ -4,6 +4,8 @@
 // No Git / PR / branch / commit fields.
 // No target repository write operations.
 
+import { Artifact } from "../core/artifact";
+
 export type AgentName = "kimi" | "codex" | "hermes";
 
 export type ExecutionRequestType =
@@ -30,12 +32,7 @@ export type ExecutionArtifactType =
   | "validation_report"
   | "shadow_output";
 
-export type ExecutionArtifact = Readonly<{
-  type: ExecutionArtifactType;
-  node: string;
-  content: Record<string, unknown>;
-  createdAt: string;
-}>;
+export type ExecutionArtifact = Artifact;
 
 export type ExecutionResult = Readonly<{
   success: boolean;

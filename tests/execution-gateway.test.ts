@@ -33,7 +33,11 @@ async function test() {
   console.log("Test 2: Artifacts");
   assert(Array.isArray(result.artifacts), "artifacts is array");
   assert(result.artifacts.length > 0, "artifacts emitted");
-  assert(result.artifacts[0].type === "shadow_output", "artifact type is shadow_output");
+  const art = result.artifacts[0];
+  assert(art.type === "shadow_output", "artifact type is shadow_output");
+  assert(typeof art.id === "string", "artifact has id");
+  assert(art.requirementId === "REQ-test", "artifact has correct requirementId");
+  assert(art.metadata.source === "execution_gateway", "artifact source is execution_gateway");
   console.log("");
 
   // Test 3: Gateway does not throw for different request types

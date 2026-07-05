@@ -1,22 +1,25 @@
 // Shadow Agent Adapter
 // =====================
 // Deterministic shadow execution. No external calls.
-// Preserves current mock behavior with ExecutionResult contract.
+// Uses standardized Artifact model from core/artifact.ts.
 
 import { ExecutionRequest, ExecutionResult, ExecutionArtifact } from "./types";
+import { createArtifact } from "../core/artifact";
 
 export async function executeShadowAgent(
   request: ExecutionRequest
 ): Promise<ExecutionResult> {
-  const artifact: ExecutionArtifact = {
-    type: "shadow_output",
+  const artifact: ExecutionArtifact = createArtifact({
+    requirementId: request.requirementId,
     node: request.node,
+    type: "shadow_output",
     content: {
       result: `${request.node}_by_${request.agent}`,
       input: request.input,
     },
-    createdAt: new Date().toISOString(),
-  };
+    agent: request.agent,
+    source: "execution_gateway",
+  });
 
   return {
     success: true,

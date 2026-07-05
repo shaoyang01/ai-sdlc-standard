@@ -61,6 +61,21 @@ async function test() {
   assert(result.final_status === "success", `final_status is "${result.final_status}" (expected "success")`);
   console.log("");
 
+  // Test 5: Artifacts collection
+  console.log("Test 5: Artifacts");
+  assert(Array.isArray(result.artifacts), "artifacts is array");
+  assert(result.artifacts.length > 0, "artifacts are emitted");
+  const artifactTypes = result.artifacts.map((a: { type: string }) => a.type);
+  assert(artifactTypes.includes("requirement_summary"), "has requirement_summary artifact");
+  assert(artifactTypes.includes("tech_design"), "has tech_design artifact");
+  assert(artifactTypes.includes("solution_review"), "has solution_review artifact");
+  assert(
+    artifactTypes.includes("shadow_output") || artifactTypes.includes("implementation_plan"),
+    "has implementation artifact"
+  );
+  assert(artifactTypes.includes("validation_report"), "has validation_report artifact");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

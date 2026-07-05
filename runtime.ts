@@ -18,6 +18,8 @@ import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
 import { executionGateway } from "./execution";
+import { Artifact } from "./core/artifact";
+import { artifactsFromNodeOutput } from "./core/node-artifacts";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -41,6 +43,7 @@ interface FanoutResult {
 interface RuntimeResult {
   requirement_id: string;
   execution_trace: ExecutionTraceEntry[];
+  artifacts: Artifact[];
   fanout_results?: FanoutResult;
   final_status: "success" | "partial" | "failed";
   completed_at: string;
@@ -201,6 +204,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   let currentNode: NodeType | null = "requirement-summary";
   let retryCount = 0;
   const MAX_RETRIES = 3;
+  const artifacts: Artifact[] = [];
 
   // State-driven execution loop — VM transitions, not node-driven
   while (currentNode && vmState.status === "running") {
@@ -219,6 +223,15 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     // Record trace via standard ExecutionTrace
     const traceItem = createTraceItem(currentNode, execCtx.input, nodeOutput, agent);
     execCtx.trace.push(traceItem);
+
+    // Collect standardized artifacts from node output
+    const nodeArtifacts = artifactsFromNodeOutput({
+      requirementId,
+      node: currentNode,
+      agent,
+      output: nodeOutput,
+    });
+    artifacts.push(...nodeArtifacts);
 
     // VM state transition — deterministic state update
     vmState = transition(vmState, currentNode, traceItem);
@@ -257,6 +270,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   return {
     requirement_id: requirementId,
     execution_trace: trace,
+    artifacts,
     fanout_results: fanoutResult,
     final_status: finalStatus,
     completed_at: new Date().toISOString(),
