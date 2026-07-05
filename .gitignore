@@ -4,4 +4,6 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+.sdlc-runtime/
+.sdlc-runtime-test/
 

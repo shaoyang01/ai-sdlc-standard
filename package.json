@@ -5,12 +5,16 @@
   "private": true,
   "scripts": {
     "dev": "tsx demo.ts",
-    "test": "tsx tests/runtime-shadow-pipeline.test.ts && tsx tests/execution-gateway.test.ts && tsx tests/codex-adapter.test.ts && tsx tests/code-review-bugfix-loop.test.ts && tsx tests/feedback-analyzer.test.ts",
+    "test": "tsx tests/runtime-shadow-pipeline.test.ts && tsx tests/execution-gateway.test.ts && tsx tests/codex-adapter.test.ts && tsx tests/code-review-bugfix-loop.test.ts && tsx tests/feedback-analyzer.test.ts && tsx tests/policy-memory.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
   }
 }

@@ -22,6 +22,9 @@ import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
 import { analyzeRuntimeFeedback } from "./core/feedback-analyzer";
 import { RuntimeFeedback } from "./core/feedback-types";
+import { isPolicyMemoryEnabled, getPolicyMemoryPath } from "./core/policy-memory-config";
+import { buildPolicyMemoryRecord } from "./core/policy-memory-builder";
+import { appendPolicyMemoryRecord } from "./core/policy-memory-store";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -384,6 +387,22 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     artifacts,
     finalStatus,
   });
+
+  // ─── Optional Policy Memory (disabled by default) ─────
+  if (isPolicyMemoryEnabled()) {
+    try {
+      const record = buildPolicyMemoryRecord({
+        requirementId,
+        finalStatus,
+        feedback,
+        artifacts,
+        executionTrace: trace,
+      });
+      appendPolicyMemoryRecord(getPolicyMemoryPath(), record);
+    } catch (error) {
+      console.warn("Policy memory write failed:", error);
+    }
+  }
 
   return {
     requirement_id: requirementId,
