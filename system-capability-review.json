@@ -436,6 +436,24 @@
         "execution/kimi-gateway-real-dispatch-contract.ts",
         "tests/kimi-gateway-real-dispatch-contract.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Real Dispatch Fallback Policy",
+      "status": "implemented",
+      "runtime_active_by_default": false,
+      "changes_routing_by_default": false,
+      "changes_final_status": false,
+      "expands_request_types": false,
+      "fallback_default_action": "fall_through_to_shadow",
+      "failure_returns_structured_error": true,
+      "timeout_returns_structured_error": true,
+      "errors_sanitized": true,
+      "writes_files": false,
+      "persists_audit": false,
+      "evidence": [
+        "execution/kimi-gateway-real-dispatch-fallback-policy.ts",
+        "tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -657,8 +675,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Kimi Gateway Real Dispatch",
-    "reason": "Wire real dispatch contract into Gateway dispatch behind flags",
-    "safety_rationale": "Default off; requires flags; llm_task only"
+    "title": "Kimi Gateway Real Dispatch Observability and Audit Metadata",
+    "reason": "Add structured observability before expanding request types",
+    "safety_rationale": "Observability has no side effects; safe before any expansion"
   }
 }

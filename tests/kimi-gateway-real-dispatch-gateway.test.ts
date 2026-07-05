@@ -138,6 +138,24 @@ async function test() {
     assert(rG.success === false, "timeout failure");
     assert(rG.output["fallback_action"] === "return_structured_timeout", "action timeout");
     assert(rG.output["fallback_reason"] === "cli_timeout", "reason cli_timeout");
+    console.log("");
+
+    // Test H: Command execution flag missing
+    console.log("Test H: Command execution flag missing");
+    process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION = "";
+    let hCalled = 0;
+    const gwH = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: { run: async () => { hCalled++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
+    });
+    const rH = await gwH.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-H", input: {},
+    });
+    assert(hCalled === 0, "runner not called when command flag missing");
+    assert(rH.success === false, "command disabled failure");
+    assert(rH.output["fallback_action"] === "return_structured_disabled", "action disabled");
+    assert(rH.output["fallback_reason"] === "command_execution_disabled", "reason command_execution_disabled");
 
   } finally {
     if (orig === undefined) delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;
