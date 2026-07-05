@@ -227,6 +227,11 @@ async function test() {
     );
     assert(policyAdj !== undefined, "policy_adjustment for hermes exists");
     assert(policyAdj!.applied === false, "evolution proposal is not applied");
+    assert(policyAdj!.source === "policy_memory", "proposal source is policy_memory");
+    assert(
+      policyAdj!.suggestedAction.includes("Review historical runs"),
+      "suggestedAction references reviewing historical runs"
+    );
     console.log("");
 
   } finally {

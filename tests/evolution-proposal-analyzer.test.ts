@@ -158,11 +158,23 @@ async function test() {
     "same input produces identical output"
   );
   assert(result1.length > 0, "deterministic proposals are not empty");
-  // All proposals have valid IDs
+  // All proposals have valid IDs and are not applied
   assert(
     result1.every((p) => p.id.startsWith("REQ-DET:evolution:")),
     "all proposal IDs follow expected format"
   );
+  assert(
+    result1.every((p) => p.applied === false),
+    "all proposals have applied=false"
+  );
+
+  // Safety: proposals must not contain patch/Git/PR mutation fields
+  const json = JSON.stringify(result1);
+  assert(!json.includes('"patch"'), "JSON does not contain 'patch' field");
+  assert(!json.includes('"branch"'), "JSON does not contain 'branch' field");
+  assert(!json.includes('"commit"'), "JSON does not contain 'commit' field");
+  assert(!json.includes('"pull_request"'), "JSON does not contain 'pull_request' field");
+  assert(!json.includes('"pr_url"'), "JSON does not contain 'pr_url' field");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
