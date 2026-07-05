@@ -161,6 +161,13 @@
     "cli_adapter_audit_trail_contains_raw_artifacts": false,
     "cli_adapter_audit_trail_contains_secrets": false,
     "cli_adapter_audit_trail_affects_gateway": false,
-    "cli_adapter_audit_trail_affects_runtime": false
+    "cli_adapter_audit_trail_affects_runtime": false,
+    "kimi_cli_executor_contract": "implemented_contract_only",
+    "kimi_cli_executor_contract_invokes_cli": false,
+    "kimi_cli_executor_contract_spawns_process": false,
+    "kimi_cli_executor_contract_affects_gateway": false,
+    "kimi_cli_executor_contract_affects_runtime": false,
+    "kimi_cli_executor_contract_persists_audit": false,
+    "kimi_cli_executor_contract_reads_api_keys": false
   }
 }
