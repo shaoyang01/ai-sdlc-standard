@@ -17,6 +17,7 @@ import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
+import { executionGateway } from "./execution";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -136,7 +137,15 @@ async function executeImplementation(context: Record<string, unknown>, _ctx: Exe
   if (mode === "speckit") {
     return executeSpeckitPipeline(summary.requirement_id, _ctx);
   }
-  return { node: "implementation", mode: "direct", result: "implementation_completed" };
+  // Direct path — route through Execution Gateway
+  const result = await executionGateway.execute({
+    type: "code_generation",
+    node: "implementation",
+    agent: "codex",
+    requirementId: summary.requirement_id,
+    input: { mode, context },
+  });
+  return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts };
 }
 
 // ─── Fanout: Parallel Multi-Repo Execution ────────────
@@ -147,7 +156,13 @@ async function executeFanout(
   _ctx: ExecutionContext
 ): Promise<FanoutResult> {
   const promises = subReqs.map(async (sub) => {
-    const result = await dispatchToAgent("implementation", "codex", { repo: sub.repo, task: sub.task });
+    const result = await executionGateway.execute({
+      type: "code_generation",
+      node: "implementation",
+      agent: "codex",
+      requirementId,
+      input: { repo: sub.repo, task: sub.task },
+    });
     return { repo: sub.repo, status: result.success ? "success" as const : "failed" as const, output: result.output || {} };
   });
   const repoResults = await Promise.all(promises);
