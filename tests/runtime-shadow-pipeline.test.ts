@@ -41,21 +41,24 @@ async function test() {
   assert(result.execution_trace.length > 0, "trace has entries");
   console.log("");
 
-  // Test 3: trace includes all 5 expected nodes in order
-  console.log("Test 3: Node coverage");
+  // Test 3: trace includes all 5 expected nodes IN ORDER
+  console.log("Test 3: Node order");
   const nodes = result.execution_trace.map((t: { node: string }) => t.node);
   const expected = ["requirement-summary", "tech-design", "review", "implementation", "validation"];
-  for (const node of expected) {
-    assert(nodes.includes(node), `includes ${node}`);
+  assert(nodes.length >= expected.length, `trace has at least ${expected.length} nodes (got ${nodes.length})`);
+
+  // Verify expected order: each expected node appears in sequence
+  let pos = 0;
+  for (const exp of expected) {
+    const idx = nodes.indexOf(exp, pos);
+    assert(idx >= pos, `"${exp}" appears at or after position ${pos} (found at ${idx})`);
+    if (idx >= 0) pos = idx + 1;
   }
   console.log("");
 
-  // Test 4: final status is valid
+  // Test 4: final status === "success" for shadow baseline
   console.log("Test 4: Final status");
-  assert(
-    ["success", "partial", "failed"].includes(result.final_status),
-    `final_status is "${result.final_status}" (valid)`
-  );
+  assert(result.final_status === "success", `final_status is "${result.final_status}" (expected "success")`);
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
