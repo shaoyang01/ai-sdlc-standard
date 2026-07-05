@@ -46,7 +46,10 @@ export function classifyKimiGatewayRealDispatchFallback(input: {
   dispatchStatus?: KimiGatewayRealDispatchResultStatus;
   error?: string;
 }): KimiGatewayRealDispatchFallbackPolicy {
-  const key = input.dispatchStatus ?? input.contractDecision;
+  // Prefer dispatch status for executed_* outcomes; contract decision for pre-execution
+  const key = (input.dispatchStatus && input.dispatchStatus.startsWith("executed"))
+    ? input.dispatchStatus
+    : (input.contractDecision ?? input.dispatchStatus);
   const entry = key ? FALLBACK_MAP[key] : undefined;
   const reason = entry?.reason ?? "unexpected_error";
   const action = entry?.action ?? "return_structured_failure";

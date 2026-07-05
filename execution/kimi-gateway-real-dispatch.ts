@@ -11,6 +11,7 @@ import { executeKimiCliCommand } from "./kimi-cli-command-executor";
 import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
 import { sanitizeErrorSummary } from "./cli-adapter-audit";
 import { createArtifact } from "../core/artifact";
+import { classifyKimiGatewayRealDispatchFallback } from "./kimi-gateway-real-dispatch-fallback-policy";
 
 export type KimiGatewayRealDispatchResultStatus =
   | "disabled" | "unsupported" | "executed_success"
@@ -119,9 +120,19 @@ export async function executeKimiGatewayRequest(
     return { success: true, node: request.node, agent: "kimi", output: { result: "kimi_executed_success", summary: dispatch.stdoutSummary }, artifacts: [artifact] };
   }
 
+  const fallback = classifyKimiGatewayRealDispatchFallback({
+    contractDecision: dispatch.contractDecision,
+    dispatchStatus: dispatch.status,
+    error: dispatch.error ?? dispatch.stderrSummary,
+  });
   return {
     success: false, node: request.node, agent: "kimi",
-    output: { error: dispatch.error ?? `Kimi dispatch: ${dispatch.status}` },
-    artifacts: [], error: dispatch.error ?? dispatch.status,
+    output: {
+      error: fallback.sanitizedMessage,
+      fallback_action: fallback.action,
+      fallback_reason: fallback.reason,
+    },
+    artifacts: [],
+    error: fallback.sanitizedMessage,
   };
 }

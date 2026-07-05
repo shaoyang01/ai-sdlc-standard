@@ -114,6 +114,11 @@ async function test() {
   const kimiRF = kimi["gateway_real_dispatch_requires_flags"] as string[];
   assert(kimiRF.includes("SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled"), "kimi real dispatch requires real flag");
   assert(kimiRF.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled") && kimiRF.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "kimi real dispatch 3 flags");
+  assert(kimi["gateway_real_dispatch_fallback_policy"] === "implemented", "kimi fallback policy");
+  assert(kimi["gateway_real_dispatch_errors_sanitized"] === true, "kimi errors sanitized");
+  assert(kimi["gateway_real_dispatch_expands_request_types"] === false, "kimi no expansion");
+  assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-fallback-policy.ts"), "kimi evidence fallback policy");
+  assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"), "kimi evidence fallback test");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");

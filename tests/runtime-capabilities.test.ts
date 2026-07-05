@@ -203,6 +203,12 @@ async function test() {
   assert(realAdapters["kimi_gateway_real_dispatch_changes_routing"] === false, "real dispatch no routing");
   assert(realAdapters["kimi_gateway_real_dispatch_writes_files"] === false, "real dispatch no files");
   assert(realAdapters["kimi_gateway_real_dispatch_persists_audit"] === false, "real dispatch no persist");
+  assert(realAdapters["kimi_gateway_real_dispatch_fallback_policy"] === "implemented", "kimi fallback policy");
+  assert(realAdapters["kimi_gateway_real_dispatch_fallback_default_action"] === "fall_through_to_shadow", "kimi fallback shadow");
+  assert(realAdapters["kimi_gateway_real_dispatch_failure_returns_structured_error"] === true, "kimi failure structured");
+  assert(realAdapters["kimi_gateway_real_dispatch_timeout_returns_structured_error"] === true, "kimi timeout structured");
+  assert(realAdapters["kimi_gateway_real_dispatch_errors_sanitized"] === true, "kimi errors sanitized");
+  assert(realAdapters["kimi_gateway_real_dispatch_expands_request_types"] === false, "kimi no request type expansion");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

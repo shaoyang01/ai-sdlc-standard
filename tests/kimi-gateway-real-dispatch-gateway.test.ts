@@ -87,6 +87,58 @@ async function test() {
     assert(rD.success === true, "unsupported type → shadow");
     console.log("");
 
+    // Test E: Missing integration flag → structured disabled
+    console.log("Test E: Missing integration flag");
+    process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH = "enabled";
+    delete process.env.SDLC_KIMI_GATEWAY_INTEGRATION;
+    delete process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION;
+    let eCalled = 0;
+    const gwE = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: { run: async () => { eCalled++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
+    });
+    const rE = await gwE.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-E", input: {},
+    });
+    assert(eCalled === 0, "runner not called when integration missing");
+    assert(rE.success === false, "structured disabled");
+    assert(rE.output["fallback_reason"] === "gateway_integration_disabled", "reason integration_disabled");
+    console.log("");
+
+    // Test F: All flags + fake failure
+    console.log("Test F: All flags + fake failure");
+    process.env.SDLC_KIMI_GATEWAY_INTEGRATION = "enabled";
+    process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION = "enabled";
+    const gwF = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: { run: async () => ({ exitCode: 1, durationMs: 5, stdout: "", stderr: "failed token=abc password=123 sk-test" }) },
+    });
+    const rF = await gwF.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-F", input: {},
+    });
+    assert(rF.success === false, "failure");
+    assert(rF.output["fallback_action"] === "return_structured_failure", "action failure");
+    assert(rF.output["fallback_reason"] === "cli_failure", "reason cli_failure");
+    const jF = JSON.stringify(rF);
+    assert(!jF.includes("abc") && !jF.includes("123") && !jF.includes("sk-test"), "sanitized");
+    console.log("");
+
+    // Test G: All flags + fake timeout
+    console.log("Test G: All flags + fake timeout");
+    const gwG = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: { run: async () => ({ timedOut: true, durationMs: 120000, stderr: "timeout" }) },
+    });
+    const rG = await gwG.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-G", input: {},
+    });
+    assert(rG.success === false, "timeout failure");
+    assert(rG.output["fallback_action"] === "return_structured_timeout", "action timeout");
+    assert(rG.output["fallback_reason"] === "cli_timeout", "reason cli_timeout");
+
   } finally {
     if (orig === undefined) delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;
     else process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH = orig;
