@@ -82,6 +82,17 @@ async function test() {
   assert(shadowResult.invokesRealAgents === false, "does not invoke real agents");
   assert(shadowResult.invokesRealSkills === false, "does not invoke real skills");
   assert(shadowResult.writesFiles === false, "does not write files");
+  // Audit trail
+  const audit = shadowResult.auditTrail;
+  assert(audit !== undefined, "audit trail exists");
+  assert(audit!.featureFlag === "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION", "audit feature flag");
+  assert(audit!.featureFlagValue === "shadow", "audit feature flag value");
+  assert(audit!.flowId === "main_docflow", "audit flowId");
+  assert(audit!.inputArtifactCount === 0, "audit input artifact count");
+  assert(audit!.affectsRuntimeRouting === false, "audit no routing");
+  assert(audit!.invokesRealAgents === false, "audit no real agents");
+  assert(audit!.invokesRealSkills === false, "audit no real skills");
+  assert(audit!.writesFiles === false, "audit no file writes");
   console.log("");
 
   // ── Test 4: Invalid mode blocked ──
@@ -135,6 +146,12 @@ async function test() {
   assert(unknownResult.invokesRealAgents === false, "does not invoke real agents");
   assert(unknownResult.invokesRealSkills === false, "does not invoke real skills");
   assert(unknownResult.writesFiles === false, "does not write files");
+  // Unknown flow audit
+  const uAudit = unknownResult.auditTrail;
+  assert(uAudit !== undefined, "unknown flow audit exists");
+  assert(uAudit!.shadowPlanCreated === false, "audit plan not created");
+  assert(uAudit!.shadowExecutionCreated === false, "audit execution not created");
+  assert(uAudit!.warnings.some((w: string) => w.includes("Unknown flow")), "audit warnings include Unknown flow");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

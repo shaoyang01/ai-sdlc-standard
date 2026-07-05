@@ -68,6 +68,7 @@ export function decideSkillFlowRuntimeIntegration(
     });
 
     const execution = executeSkillFlowShadow(plan);
+    const allWarnings = [...plan.warnings, ...execution.warnings];
 
     return {
       ...base,
@@ -81,7 +82,30 @@ export function decideSkillFlowRuntimeIntegration(
       shadowPlanStageCount: plan.stages.length,
       shadowExecutionStageCount: execution.stageResults.length,
       shadowArtifactCount: execution.artifacts.length,
-      warnings: [...plan.warnings, ...execution.warnings],
+      warnings: allWarnings,
+      auditTrail: {
+        auditMode: "runtime_sidecar_shadow",
+        evaluated: true,
+        enabled: true,
+        featureFlag: "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION",
+        featureFlagValue: "shadow",
+        triggerNode: request.triggerNode,
+        reason: request.reason,
+        flowId: request.flowId,
+        requirementId: request.requirementId,
+        inputArtifactCount: request.inputArtifacts.length,
+        shadowPlanCreated: plan.status === "planned",
+        shadowExecutionCreated: execution.status === "shadow_success",
+        affectsRuntimeRouting: false,
+        affectsAgentSelection: false,
+        affectsFinalStatus: false,
+        affectsRuntimeTrace: false,
+        mergesArtifactsIntoRuntime: false,
+        invokesRealAgents: false,
+        invokesRealSkills: false,
+        writesFiles: false,
+        warnings: allWarnings,
+      },
     };
   }
 

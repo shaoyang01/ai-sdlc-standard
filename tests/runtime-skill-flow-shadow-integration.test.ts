@@ -55,6 +55,27 @@ async function test() {
     assert(sfsi!.invokesRealAgents === false, "does not invoke real agents");
     assert(sfsi!.invokesRealSkills === false, "does not invoke real skills");
     assert(sfsi!.writesFiles === false, "does not write files");
+    // Audit trail
+    const audit = sfsi!.auditTrail;
+    assert(audit !== undefined, "audit trail exists");
+    assert(audit!.auditMode === "runtime_sidecar_shadow", "audit mode is runtime_sidecar_shadow");
+    assert(audit!.evaluated === true, "audit evaluated");
+    assert(audit!.enabled === true, "audit enabled");
+    assert(audit!.featureFlag === "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION", "feature flag captured");
+    assert(audit!.featureFlagValue === "shadow", "feature flag value captured");
+    assert(audit!.triggerNode === "runtime-completed", "trigger node captured");
+    assert(audit!.reason === "feature-flagged runtime shadow comparison", "reason captured");
+    assert(audit!.flowId === "main_docflow", "flowId captured");
+    assert(audit!.requirementId === enabledResult.requirement_id, "requirementId matches");
+    assert(audit!.inputArtifactCount === enabledResult.artifacts.length, "input artifact count matches");
+    assert(audit!.affectsRuntimeRouting === false, "audit: no routing");
+    assert(audit!.affectsAgentSelection === false, "audit: no agent selection");
+    assert(audit!.affectsFinalStatus === false, "audit: no final status effect");
+    assert(audit!.affectsRuntimeTrace === false, "audit: no trace effect");
+    assert(audit!.mergesArtifactsIntoRuntime === false, "audit: no merge");
+    assert(audit!.invokesRealAgents === false, "audit: no real agents");
+    assert(audit!.invokesRealSkills === false, "audit: no real skills");
+    assert(audit!.writesFiles === false, "audit: no file writes");
     console.log("");
 
     // ── Test 3: Final status unchanged ──
