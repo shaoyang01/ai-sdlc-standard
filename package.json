@@ -1,0 +1,15 @@
+{
+  "name": "ai-sdlc-runtime",
+  "version": "0.1.0",
+  "description": "AI SDLC Runtime — Deterministic Graph VM for SDLC Pipeline Execution",
+  "private": true,
+  "scripts": {
+    "dev": "tsx demo.ts",
+    "test": "tsx tests/runtime-shadow-pipeline.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

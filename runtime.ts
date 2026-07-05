@@ -6,17 +6,17 @@
 //
 // Entry: run(requirement: string) → RuntimeResult
 
-import { NodeType, GraphNode } from "../sdlc_graph/types";
-import { getNextNode, isTerminal } from "../sdlc_graph/transitions";
-import { SDLC_NODES, SDLC_EDGES } from "../sdlc_graph/graph";
-import { ExecutionContext } from "../core/execution-context";
-import { buildExecutionContext } from "../core/context-builder";
-import { createTraceItem } from "../core/execution-trace";
-import { selectAgent } from "../core/agent-decision";
-import { inferComplexity } from "../core/complexity-inference";
-import { resolveAgentByPolicy } from "../core/agent-policy-engine";
-import { createInitialState, updateState, ExecutionState } from "../core/execution-state";
-import { transition, replayExecution } from "../core/state-machine-vm";
+import { NodeType, GraphNode } from "./sdlc_graph/types";
+import { getNextNode, isTerminal } from "./sdlc_graph/transitions";
+import { SDLC_NODES, SDLC_EDGES } from "./sdlc_graph/graph";
+import { ExecutionContext } from "./core/execution-context";
+import { buildExecutionContext } from "./core/context-builder";
+import { createTraceItem } from "./core/execution-trace";
+import { selectAgent } from "./core/agent-decision";
+import { inferComplexity } from "./core/complexity-inference";
+import { resolveAgentByPolicy } from "./core/agent-policy-engine";
+import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
+import { transition, replayExecution } from "./core/state-machine-vm";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -260,13 +260,3 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     completed_at: new Date().toISOString(),
   };
 }
-
-// ─── Quick Test ───────────────────────────────────────
-
-async function main() {
-  console.log("=== SDLC Graph Interpreter Test ===");
-  const result = await run("build payment system with order sync across inventory service");
-  console.log(JSON.stringify(result, null, 2));
-}
-
-main();

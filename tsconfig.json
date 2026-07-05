@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "resolveJsonModule": true,
+    "declaration": true
+  },
+  "include": [
+    "runtime.ts",
+    "demo.ts",
+    "sdlc_graph/**/*.ts",
+    "core/**/*.ts",
+    "docflow/**/*.ts",
+    "loop/**/*.ts",
+    "fanout_engine/**/*.ts",
+    "fanout_feedback/**/*.ts",
+    "evolution/**/*.ts",
+    "adoption/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "skills",
+    "skill-contracts",
+    "scripts",
+    "docs",
+    "fixtures",
+    "ai-sdlc",
+    "templates",
+    "temp"
+  ]
+}
