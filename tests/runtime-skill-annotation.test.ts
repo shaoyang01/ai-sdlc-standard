@@ -28,7 +28,11 @@ async function test() {
 
   // ── Test 1: Runtime still succeeds ──
   console.log("Test 1: Runtime still succeeds with skill annotation");
-  const result = await run("create a user registration form with email validation");
+  const result = await run(
+    "create a user registration form with email validation password strength meter " +
+    "and phone number verification the form should include fields for first name last name " +
+    "email address phone number and password with client side validation"
+  );
   assert(result.final_status === "success", "final status is success");
   console.log("");
 
@@ -59,11 +63,10 @@ async function test() {
   assert(implTrace !== undefined, "implementation trace exists");
   assert(reviewTrace !== undefined, "review trace exists");
   // Agent selection follows normal policy, not skill-driven
-  const implAgent = implTrace!.agent;
-  assert(["kimi", "codex", "hermes"].includes(implAgent), `implementation agent is valid: ${implAgent}`);
+  assert(implTrace!.agent === "codex", "implementation agent remains codex");
   console.log("");
 
-  // ── Test 4: Implementation artifact skill when agent is codex ──
+  // ── Test 4: Implementation artifact has skill_validation (ambiguous skill) ──
   console.log("Test 4: Implementation artifact skill metadata");
   const implArtifact = result.artifacts.find(
     (a) => a.node === "implementation" && a.type !== "fanout_result"
@@ -71,12 +74,9 @@ async function test() {
   assert(implArtifact !== undefined, "implementation artifact exists");
   const implSV = implArtifact!.content["skill_validation"] as Record<string, unknown> | null;
   assert(implSV !== null && implSV !== undefined, "skill_validation exists");
-  if (implAgent === "codex") {
-    assert(implArtifact!.content["skill"] === "sdlc-speckit-implement",
-      `skill is sdlc-speckit-implement (codex agent)`);
-    assert(implSV!["attempted"] === true, "skill_validation.attempted === true");
-    assert(implSV!["valid"] === true, "skill_validation.valid === true");
-  }
+  // Skill may be null: implementation has 2 matching bindings
+  // (sdlc-speckit-implement + sdlc-implementation-recorder) → ambiguous → no inference
+  assert(implSV!["attempted"] === false, "skill_validation.attempted === false (ambiguous skill)");
   console.log("");
 
   // ── Test 5: Code-review artifact has skill_validation ──
