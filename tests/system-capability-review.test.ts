@@ -122,15 +122,25 @@ async function test() {
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
   assert(rdCap !== undefined && rdCap["status"] === "contract-only", "real dispatch contract-only");
+  assert(rdCap["runtime_active_by_default"] === false, "real dispatch not active by default");
+  assert(rdCap["changes_routing"] === false, "real dispatch no routing change");
+  assert(rdCap["changes_agent_selection"] === false, "real dispatch no agent selection change");
+  assert(rdCap["changes_final_status"] === false, "real dispatch no final_status change");
   assert(rdCap["wired_to_gateway"] === false && rdCap["wired_to_runtime"] === false, "real dispatch not wired");
-  assert(rdCap["invokes_real_agents"] === false && rdCap["invokes_cli"] === false, "real dispatch no CLI/agents");
+  assert(rdCap["invokes_real_agents"] === false && rdCap["invokes_real_skills"] === false, "real dispatch no real agents/skills");
+  assert(rdCap["invokes_cli"] === false, "real dispatch no CLI");
   assert(rdCap["spawns_process"] === false && rdCap["writes_files"] === false, "real dispatch no spawn/files");
+  assert(rdCap["persists_audit"] === false, "real dispatch persists no audit");
   const rdTypes = rdCap["supported_request_types"] as string[];
   assert(rdTypes.length === 1 && rdTypes[0] === "llm_task", "real dispatch llm_task only");
   const rdFlags = rdCap["requires_flags"] as string[];
   assert(rdFlags.length === 3, "real dispatch 3 flags");
+  assert(rdFlags.includes("SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled"), "real dispatch requires real dispatch flag");
+  assert(rdFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "real dispatch requires integration flag");
+  assert(rdFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "real dispatch requires command execution flag");
   const rdEvidence = rdCap["evidence"] as string[];
   assert(rdEvidence.includes("execution/kimi-gateway-real-dispatch-contract.ts"), "real dispatch evidence");
+  assert(rdEvidence.includes("tests/kimi-gateway-real-dispatch-contract.test.ts"), "real dispatch test evidence");
   // Kimi Gateway Shadow Sidecar
   assert(capNames.includes("Kimi Gateway Shadow Sidecar"), "has Kimi Gateway Shadow Sidecar");
   const ssCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Shadow Sidecar");
