@@ -2,6 +2,8 @@
 // ============================
 // Runs the full SDLC pipeline with a sample requirement.
 // Safe to execute: all agent calls are shadow-mode simulations.
+// By default this runs in shadow mode.
+// To opt into Codex adapter, set SDLC_EXECUTION_MODE=codex.
 
 import { run } from "./runtime";
 
