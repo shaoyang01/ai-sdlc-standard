@@ -175,6 +175,14 @@
     "hermes_cli_executor_contract_affects_gateway": false,
     "hermes_cli_executor_contract_affects_runtime": false,
     "hermes_cli_executor_contract_persists_audit": false,
-    "hermes_cli_executor_contract_reads_api_keys": false
+    "hermes_cli_executor_contract_reads_api_keys": false,
+    "kimi_cli_command_executor": "implemented_feature_flagged_isolated",
+    "kimi_cli_command_executor_default_enabled": false,
+    "kimi_cli_command_executor_requires_flag": "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled",
+    "kimi_cli_command_executor_wired_to_gateway": false,
+    "kimi_cli_command_executor_wired_to_runtime": false,
+    "kimi_cli_command_executor_persists_audit": false,
+    "kimi_cli_command_executor_reads_api_keys": false,
+    "kimi_cli_command_executor_invokes_cli_by_default": false
   }
 }

@@ -130,6 +130,6 @@ All evolution proposals have `applied: false` and require human review.
 5. **Skill Flow Orchestrator Runtime Integration Contract** — ✅ Done (disabled by default)
 6. **Feature-flagged Runtime Shadow Integration** — ✅ Done (sidecar-only, disabled by default)
 7. **Runtime Shadow Integration Audit Trail** — ✅ Done (in-memory, sidecar-only)
-8. **Real Agent Adapter Integration** — ✅ Plan + CLI stubs + dry-run + audit + Kimi/Hermes executor contracts done
+8. **Real Agent Adapter Integration** — ✅ Plan + CLI stubs + dry-run + audit + executor contracts + Kimi command executor done
 9. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
 10. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
