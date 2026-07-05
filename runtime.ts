@@ -28,6 +28,8 @@ import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core
 import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
 import { buildMemoryShadowRoutingDecisions } from "./core/memory-routing-shadow";
 import { buildEvolutionProposals } from "./core/evolution-proposal-analyzer";
+import { inferSkillForExecution } from "./core/agent-skill-registry";
+import { ExecutionRequest } from "./execution/types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -93,6 +95,34 @@ function buildCurrentAgentsByNode(
     }
   }
   return map;
+}
+
+// ─── Skill Annotation — metadata only, does not affect routing ──
+// Infers canonical sdlc-* skill when mapping is unambiguous.
+// Never throws. Never blocks execution.
+
+function buildSkillAwareExecutionRequest(input: {
+  type: ExecutionRequest["type"];
+  node: string;
+  agent: LoopAgent;
+  requirementId: string;
+  execInput: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}): ExecutionRequest {
+  const binding = inferSkillForExecution({
+    agent: input.agent,
+    node: input.node,
+    requestType: input.type,
+  });
+  return {
+    type: input.type,
+    node: input.node,
+    agent: input.agent,
+    requirementId: input.requirementId,
+    input: input.execInput,
+    metadata: input.metadata,
+    skill: binding?.skill,
+  };
 }
 
 // ─── DocFlow Node Execution (PURE EXECUTORS) ──────────
@@ -166,13 +196,13 @@ async function executeImplementation(context: Record<string, unknown>, _ctx: Exe
     return executeSpeckitPipeline(summary.requirement_id, _ctx);
   }
   // Direct path — route through Execution Gateway
-  const result = await executionGateway.execute({
+  const result = await executionGateway.execute(buildSkillAwareExecutionRequest({
     type: "code_generation",
     node: "implementation",
     agent: "codex",
     requirementId: summary.requirement_id,
-    input: { mode, context },
-  });
+    execInput: { mode, context },
+  }));
   return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts };
 }
 
@@ -233,14 +263,14 @@ export async function runCodeReviewBugfixLoop(input: {
 
   while (attempts <= MAX_BUGFIX_ATTEMPTS) {
     // ── Code Review (via Execution Gateway) ──
-    const review = await executionGateway.execute({
+    const review = await executionGateway.execute(buildSkillAwareExecutionRequest({
       type: "code_review",
       node: "code-review",
       agent: input.agent,
       requirementId: input.requirementId,
-      input: { artifacts: currentArtifacts },
+      execInput: { artifacts: currentArtifacts },
       metadata: { attempt: attempts },
-    });
+    }));
 
     collectedArtifacts.push(...(review.artifacts as Artifact[]));
     traceEntries.push({
@@ -270,14 +300,14 @@ export async function runCodeReviewBugfixLoop(input: {
 
     // ── Bugfix (via Execution Gateway) ──
     const findings = review.output["findings"] as ReadonlyArray<{ severity: string; message: string; artifactId?: string; file?: string }>;
-    const bugfix = await executionGateway.execute({
+    const bugfix = await executionGateway.execute(buildSkillAwareExecutionRequest({
       type: "bugfix",
       node: "bugfix",
       agent: input.agent,
       requirementId: input.requirementId,
-      input: { artifacts: currentArtifacts, findings: findings || [] },
+      execInput: { artifacts: currentArtifacts, findings: findings || [] },
       metadata: { attempt: attempts },
-    });
+    }));
 
     collectedArtifacts.push(...(bugfix.artifacts as Artifact[]));
     traceEntries.push({

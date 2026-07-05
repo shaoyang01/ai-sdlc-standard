@@ -77,11 +77,15 @@
     "agent_skill_registry": "implemented_metadata_only",
     "skill_invocation_contract": "implemented_metadata_only",
     "execution_request_skill_metadata": "implemented_optional_metadata",
+    "runtime_skill_annotation": "implemented_optional_metadata",
     "canonical_skill_source": "existing-skills-inventory.json",
     "canonical_skill_name_format": "existing sdlc-* names",
     "affects_runtime_routing": false,
     "affects_agent_selection": false,
     "affects_execution_dispatch": false,
+    "skill_annotation_affects_runtime_routing": false,
+    "skill_annotation_affects_agent_selection": false,
+    "skill_annotation_affects_execution_dispatch": false,
     "real_adapter_enablement": false
   }
 }
