@@ -1,0 +1,540 @@
+{
+  "version": 1,
+  "source_report": "SKILL_FLOW_INVENTORY_REPORT.md",
+  "model": "hybrid_runtime_graph_with_nested_skill_flows",
+  "global_entry_skill": "sdlc-requirement-normalizer",
+  "skills": [
+    {
+      "name": "sdlc-requirement-normalizer",
+      "role": "global_entry",
+      "category": "Intake / Producer",
+      "stage": "Requirement Normalization",
+      "primaryInputArtifacts": ["Raw requirements (Lark, MD, HTML, chat, PDF)"],
+      "primaryOutputArtifacts": ["library/{id}/00-需求资料/"],
+      "downstreamConsumers": ["sdlc-specification-writer"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'stable intake input for sdlc-specification-writer'", "registry: 'Intake Skill'", "artifact number: 00"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-specification-writer",
+      "role": "flow_internal",
+      "category": "Producer",
+      "stage": "Specification Writing",
+      "primaryInputArtifacts": ["00-需求资料"],
+      "primaryOutputArtifacts": ["library/{id}/01-技术方案/"],
+      "downstreamConsumers": ["sdlc-solution-reviewer"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'ready for sdlc-solution-reviewer'", "references/writing-workflow.md: explicit flow diagram"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-solution-reviewer",
+      "role": "flow_internal",
+      "category": "Auditor",
+      "stage": "Specification Audit",
+      "primaryInputArtifacts": ["01-技术方案"],
+      "primaryOutputArtifacts": ["library/{id}/02-方案审核/", "Development Path Decision"],
+      "downstreamConsumers": ["DIRECT_IMPLEMENTATION", "sdlc-speckit-pipeline", "sdlc-specification-writer (revision)"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Global DocFlow Gate'", "development-path-decision.md: three fork outcomes"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-pipeline",
+      "role": "flow_controller",
+      "category": "Workflow",
+      "stage": "Full Lifecycle",
+      "primaryInputArtifacts": ["01-技术方案", "02-方案审核", "SPECKIT_PIPELINE_REQUIRED decision"],
+      "primaryOutputArtifacts": ["Pipeline report", "speckit child skill outputs"],
+      "downstreamConsumers": ["sdlc-implementation-recorder", "sdlc-code-review-normalizer", "sdlc-speckit-sync"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'orchestrate the optional full Speckit SDD path'", "contract: 10-stage sequence"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-specify",
+      "role": "flow_internal",
+      "category": "Producer",
+      "stage": "Spec Sync",
+      "primaryInputArtifacts": ["01-技术方案", "02-方案审核"],
+      "primaryOutputArtifacts": ["specs/{feature}/spec.md"],
+      "downstreamConsumers": ["sdlc-speckit-clarify"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Next step: run sdlc-speckit-clarify'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-clarify",
+      "role": "flow_internal",
+      "category": "Auditor / Producer",
+      "stage": "Clarification Validation",
+      "primaryInputArtifacts": ["specs/{feature}/spec.md"],
+      "primaryOutputArtifacts": ["Clarifications added to spec.md", "Coverage Summary"],
+      "downstreamConsumers": ["sdlc-speckit-plan"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Proceed to sdlc-speckit-plan only when no core ambiguity remains'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-plan",
+      "role": "flow_internal",
+      "category": "Producer / Auditor",
+      "stage": "Plan Gate",
+      "primaryInputArtifacts": ["specs/{feature}/spec.md", "clarify result"],
+      "primaryOutputArtifacts": ["specs/{feature}/plan.md"],
+      "downstreamConsumers": ["sdlc-speckit-tasks"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Next step: sdlc-speckit-tasks'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-tasks",
+      "role": "flow_internal",
+      "category": "Producer / Auditor",
+      "stage": "Task Gate",
+      "primaryInputArtifacts": ["specs/{feature}/spec.md", "specs/{feature}/plan.md"],
+      "primaryOutputArtifacts": ["specs/{feature}/tasks.md"],
+      "downstreamConsumers": ["sdlc-speckit-analyze"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Next step: sdlc-speckit-analyze'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-analyze",
+      "role": "flow_internal",
+      "category": "Auditor",
+      "stage": "Implementation Readiness",
+      "primaryInputArtifacts": ["spec.md", "plan.md", "tasks.md", "route.md"],
+      "primaryOutputArtifacts": ["Analyze Gate result"],
+      "downstreamConsumers": ["sdlc-speckit-implement"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Require Analyze Gate readiness before sdlc-speckit-implement'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-implement",
+      "role": "flow_internal",
+      "category": "Executor / Producer",
+      "stage": "Implementation Execution",
+      "primaryInputArtifacts": ["tasks.md", "analyze result"],
+      "primaryOutputArtifacts": ["Code changes", "specs/{feature}/implementation.md"],
+      "downstreamConsumers": ["sdlc-speckit-sync", "sdlc-implementation-recorder", "sdlc-code-review-normalizer"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'internal Speckit stage 8/10'", "output-and-manifest.md: next step rules"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-sync",
+      "role": "flow_internal",
+      "category": "Sync / Producer",
+      "stage": "Knowledge Sync",
+      "primaryInputArtifacts": ["Implementation evidence"],
+      "primaryOutputArtifacts": [".specify/business_domain/**"],
+      "downstreamConsumers": ["sdlc-speckit-code-doc-reconcile"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'Next step: sdlc-speckit-code-doc-reconcile'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-code-doc-reconcile",
+      "role": "flow_internal",
+      "category": "Auditor / Sync",
+      "stage": "Code-Doc Consistency",
+      "primaryInputArtifacts": ["Code state", "specs/**", "DocFlow artifacts", "business_domain/**"],
+      "primaryOutputArtifacts": ["Drift Matrix"],
+      "downstreamConsumers": ["sdlc-speckit-implement (code fix)", "sdlc-speckit-sync (knowledge fix)"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'after sdlc-speckit-implement or sdlc-speckit-sync'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-speckit-checklist",
+      "role": "flow_internal",
+      "category": "Producer / Auditor",
+      "stage": "Stage Inspection",
+      "primaryInputArtifacts": ["spec.md, plan.md, tasks.md (stage-dependent)"],
+      "primaryOutputArtifacts": ["specs/{feature}/checklists/{stage}-checklist.md"],
+      "downstreamConsumers": ["sdlc-test-feedback-sync"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'on-demand checklist generation'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-code-review-excellence",
+      "role": "flow_internal",
+      "category": "Reviewer / Auditor",
+      "stage": "Code Review Execution",
+      "primaryInputArtifacts": ["Diff, spec, solution review, implementation record"],
+      "primaryOutputArtifacts": ["Review findings"],
+      "downstreamConsumers": ["sdlc-code-review-normalizer"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'hands formal report writing to sdlc-code-review-normalizer'", "output-and-handoff.md"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-code-review-normalizer",
+      "role": "subflow_normalizer",
+      "category": "Reviewer / Producer",
+      "stage": "Code Review Normalization",
+      "primaryInputArtifacts": ["Raw review report, diff, spec"],
+      "primaryOutputArtifacts": ["library/{id}/04-代码审核/"],
+      "downstreamConsumers": ["sdlc-test-feedback-classifier"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'code-review subflow normalizer'", "Normalizes code review outputs into 04-代码审核"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-implementation-recorder",
+      "role": "post_execution_recorder",
+      "category": "Producer",
+      "stage": "Implementation Recording",
+      "primaryInputArtifacts": ["Diff, changed files, task status"],
+      "primaryOutputArtifacts": ["library/{id}/03-实现记录/"],
+      "downstreamConsumers": ["sdlc-code-review-normalizer"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'factual handoff from implementation to code review'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-gate-runner",
+      "role": "flow_internal",
+      "category": "Auditor",
+      "stage": "All Gates",
+      "primaryInputArtifacts": ["manifest.md, artifact for current gate"],
+      "primaryOutputArtifacts": ["Gate Report"],
+      "downstreamConsumers": ["Route to specialized skill owner"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'phase-entry auditor'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-docflow-writer",
+      "role": "flow_internal",
+      "category": "Producer / Renderer / Publisher",
+      "stage": "DocFlow Artifact Generation",
+      "primaryInputArtifacts": ["Source content from calling skill"],
+      "primaryOutputArtifacts": ["MD/HTML/Lark documents"],
+      "downstreamConsumers": ["Called by: requirement-normalizer, specification-writer, solution-reviewer, code-review-normalizer, implementation-recorder, test-feedback-classifier, test-feedback-sync, gate-runner"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'cross-cutting utility'", "referenced by 8 other skills"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-test-feedback-classifier",
+      "role": "flow_internal",
+      "category": "Reviewer / Producer",
+      "stage": "Test Feedback Classification",
+      "primaryInputArtifacts": ["Raw feedback, test results"],
+      "primaryOutputArtifacts": ["library/{id}/05-测试验收/"],
+      "downstreamConsumers": ["sdlc-test-feedback-sync"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'handoff to sdlc-test-feedback-sync'"],
+      "confidence": "high"
+    },
+    {
+      "name": "sdlc-test-feedback-sync",
+      "role": "flow_internal",
+      "category": "Sync / Producer",
+      "stage": "Test Feedback Sync",
+      "primaryInputArtifacts": ["05-测试验收"],
+      "primaryOutputArtifacts": ["Sync recommendations"],
+      "downstreamConsumers": ["sdlc-speckit-sync"],
+      "runtimeInvoked": false,
+      "evidence": ["SKILL.md: 'consumes sdlc-test-feedback-classifier output'"],
+      "confidence": "high"
+    }
+  ],
+  "flows": [
+    {
+      "id": "main_docflow",
+      "name": "Main DocFlow Path",
+      "type": "main_docflow",
+      "entrySkill": "sdlc-requirement-normalizer",
+      "trigger": "External requirement received",
+      "stages": ["00-需求资料", "01-技术方案", "02-方案审核", "Fork: DIRECT / SPECKIT / REVISION"],
+      "edges": [
+        {
+          "from": "sdlc-requirement-normalizer",
+          "to": "sdlc-specification-writer",
+          "artifactHandoff": "00-需求资料",
+          "evidence": ["SKILL.md: 'ready for sdlc-specification-writer'", "contract: '为 sdlc-specification-writer 提供稳定输入'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-specification-writer",
+          "to": "sdlc-solution-reviewer",
+          "artifactHandoff": "01-技术方案",
+          "evidence": ["SKILL.md: 'ready for sdlc-solution-reviewer'", "references/writing-workflow.md: flow diagram"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-solution-reviewer",
+          "to": "FORK",
+          "condition": "Development Path Decision",
+          "evidence": ["SKILL.md: 'DIRECT_IMPLEMENTATION, SPECKIT_PIPELINE_REQUIRED, BLOCKED_NEEDS_REVISION'"],
+          "confidence": "high"
+        }
+      ],
+      "notes": "Global DocFlow. Starts at sdlc-requirement-normalizer. Forks at sdlc-solution-reviewer."
+    },
+    {
+      "id": "direct_implementation_path",
+      "name": "Direct Implementation Path",
+      "type": "direct_implementation_path",
+      "entrySkill": null,
+      "trigger": "sdlc-solution-reviewer returns DIRECT_IMPLEMENTATION",
+      "stages": ["DIRECT_IMPLEMENTATION_AGENT_EXECUTION (skillless)", "03-实现记录", "04-代码审核", "05-测试验收"],
+      "edges": [
+        {
+          "from": "sdlc-solution-reviewer",
+          "to": "DIRECT_IMPLEMENTATION_AGENT_EXECUTION",
+          "condition": "DIRECT_IMPLEMENTATION",
+          "evidence": ["development-path-decision.md: 'Proceed to implementation, then write 03-实现记录'"],
+          "confidence": "high"
+        },
+        {
+          "from": "DIRECT_IMPLEMENTATION_AGENT_EXECUTION",
+          "to": "sdlc-implementation-recorder",
+          "artifactHandoff": "implementation evidence",
+          "evidence": ["registry: 'factual handoff from implementation to code review'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-implementation-recorder",
+          "to": "sdlc-code-review-excellence",
+          "artifactHandoff": "03-实现记录",
+          "evidence": ["recording-workflow.md: 'Recommend sdlc-code-review-normalizer'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-code-review-excellence",
+          "to": "sdlc-code-review-normalizer",
+          "artifactHandoff": "review findings",
+          "evidence": ["registry: 'hands formal report writing to sdlc-code-review-normalizer'", "output-and-handoff.md"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-code-review-normalizer",
+          "to": "sdlc-test-feedback-classifier",
+          "artifactHandoff": "04-代码审核",
+          "evidence": ["normalization-workflow.md: 'Run sdlc-test-feedback-classifier'"],
+          "confidence": "medium"
+        },
+        {
+          "from": "sdlc-test-feedback-classifier",
+          "to": "sdlc-test-feedback-sync",
+          "artifactHandoff": "05-测试验收",
+          "evidence": ["registry: 'consumes sdlc-test-feedback-classifier output'"],
+          "confidence": "high"
+        }
+      ],
+      "notes": "Direct implementation is skillless agent execution. DIRECT_IMPLEMENTATION_AGENT_EXECUTION is not an sdlc-* skill. Do NOT map this to sdlc-speckit-implement."
+    },
+    {
+      "id": "speckit_pipeline",
+      "name": "Speckit Pipeline (Full SDD)",
+      "type": "speckit_pipeline",
+      "entrySkill": "sdlc-speckit-pipeline",
+      "trigger": "sdlc-solution-reviewer returns SPECKIT_PIPELINE_REQUIRED",
+      "stages": ["Preflight", "Domain Route", "Specify", "Clarify", "Plan", "Tasks", "Analyze", "Implement", "Sync", "Reconcile"],
+      "edges": [
+        {
+          "from": "sdlc-solution-reviewer",
+          "to": "sdlc-speckit-pipeline",
+          "condition": "SPECKIT_PIPELINE_REQUIRED",
+          "evidence": ["SKILL.md: 'enter sdlc-speckit-pipeline'", "development-path-decision.md: 'invoke sdlc-speckit-pipeline'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-pipeline",
+          "to": "PREFLIGHT_CONTROLLER",
+          "evidence": ["stage-sequence.md: stage order"],
+          "confidence": "high"
+        },
+        {
+          "from": "PREFLIGHT_CONTROLLER",
+          "to": "DOMAIN_ROUTE_CONTROLLER",
+          "evidence": ["stage-sequence.md: stage order"],
+          "confidence": "high"
+        },
+        {
+          "from": "DOMAIN_ROUTE_CONTROLLER",
+          "to": "sdlc-speckit-specify",
+          "evidence": ["stage-sequence.md: stage order"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-specify",
+          "to": "sdlc-speckit-clarify",
+          "evidence": ["SKILL.md: 'Next step: run sdlc-speckit-clarify'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-clarify",
+          "to": "sdlc-speckit-plan",
+          "evidence": ["SKILL.md: 'Proceed to sdlc-speckit-plan'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-plan",
+          "to": "sdlc-speckit-tasks",
+          "evidence": ["SKILL.md: 'route task breakdown to sdlc-speckit-tasks'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-tasks",
+          "to": "sdlc-speckit-analyze",
+          "evidence": ["SKILL.md: 'Next step: sdlc-speckit-analyze'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-analyze",
+          "to": "sdlc-speckit-implement",
+          "evidence": ["SKILL.md: 'Require Analyze Gate readiness before sdlc-speckit-implement'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-implement",
+          "to": "sdlc-speckit-sync",
+          "evidence": ["SKILL.md: 'route stable fact sync to sdlc-speckit-sync'"],
+          "confidence": "high"
+        },
+        {
+          "from": "sdlc-speckit-sync",
+          "to": "sdlc-speckit-code-doc-reconcile",
+          "evidence": ["SKILL.md: 'Next step: sdlc-speckit-code-doc-reconcile'"],
+          "confidence": "high"
+        }
+      ],
+      "notes": "PREFLIGHT_CONTROLLER and DOMAIN_ROUTE_CONTROLLER are controller stages, not sdlc-* skills. sdlc-speckit-implement is stage 8/10, NOT generic implementation. Clarify boundary: stages before Clarify require user confirmation; stages after execute continuously."
+    },
+    {
+      "id": "code_review_subflow",
+      "name": "Code Review Subflow",
+      "type": "code_review_subflow",
+      "entrySkill": null,
+      "trigger": "After implementation (direct or speckit)",
+      "stages": ["sdlc-code-review-excellence", "sdlc-code-review-normalizer"],
+      "edges": [
+        {
+          "from": "sdlc-code-review-excellence",
+          "to": "sdlc-code-review-normalizer",
+          "artifactHandoff": "review findings",
+          "evidence": ["output-and-handoff.md: 'Handoff To Normalizer'"],
+          "confidence": "high"
+        },
+        {
+          "from": "RAW_REVIEW_INPUT",
+          "to": "sdlc-code-review-normalizer",
+          "evidence": ["SKILL.md: can consume raw review from any source"],
+          "confidence": "medium"
+        }
+      ],
+      "notes": "sdlc-code-review-normalizer is a subflow entry for code-review-only workflows, NOT global entry. RAW_REVIEW_INPUT represents external review sources that bypass sdlc-code-review-excellence."
+    },
+    {
+      "id": "test_feedback_subflow",
+      "name": "Test Feedback Subflow",
+      "type": "test_feedback_subflow",
+      "entrySkill": null,
+      "trigger": "After testing/verification",
+      "stages": ["sdlc-test-feedback-classifier", "sdlc-test-feedback-sync"],
+      "edges": [
+        {
+          "from": "sdlc-test-feedback-classifier",
+          "to": "sdlc-test-feedback-sync",
+          "artifactHandoff": "05-测试验收",
+          "evidence": ["registry: 'consumes sdlc-test-feedback-classifier output'"],
+          "confidence": "high"
+        }
+      ],
+      "notes": "Classification precedes sync. Classifier may route back to specification or solution-reviewer."
+    }
+  ],
+  "runtime_relationships": [
+    {
+      "runtimeNode": "requirement-summary",
+      "currentBehavior": "Regex-based multi-repo detection; returns parsed summary",
+      "relatedSkills": ["sdlc-requirement-normalizer"],
+      "relationshipType": "conceptual_mapping",
+      "runtimeInvokesSkill": false,
+      "notes": "Runtime stub. Real skill does full normalization with source handling and conflict detection."
+    },
+    {
+      "runtimeNode": "tech-design",
+      "currentBehavior": "Hardcoded { result: 'design_completed' }",
+      "relatedSkills": ["sdlc-specification-writer"],
+      "relationshipType": "conceptual_mapping",
+      "runtimeInvokesSkill": false,
+      "notes": "Runtime stub. Real skill generates full ESS-compliant technical specification."
+    },
+    {
+      "runtimeNode": "review",
+      "currentBehavior": "Checks review_result context or complexity-based PASS/FAIL",
+      "relatedSkills": ["sdlc-solution-reviewer"],
+      "relationshipType": "conceptual_mapping",
+      "runtimeInvokesSkill": false,
+      "notes": "Runtime uses simple heuristic. Real skill is full gate with 3-path decision."
+    },
+    {
+      "runtimeNode": "implementation",
+      "currentBehavior": "Calls executionGateway (code_generation) or fanout or speckit stub",
+      "relatedSkills": [],
+      "relationshipType": "skillless_agent_execution",
+      "runtimeInvokesSkill": false,
+      "notes": "Direct implementation is skillless agent execution from prior DocFlow artifacts. Speckit implementation is a nested skill flow candidate (sdlc-speckit-pipeline with 10 stages). Do NOT map this to sdlc-speckit-implement."
+    },
+    {
+      "runtimeNode": "code-review",
+      "currentBehavior": "Shadow code-review adapter (force_review_fail marker)",
+      "relatedSkills": ["sdlc-code-review-excellence", "sdlc-code-review-normalizer"],
+      "relationshipType": "conceptual_mapping",
+      "runtimeInvokesSkill": false,
+      "notes": "Runtime shadow stub. Real flow: code-review-excellence -> code-review-normalizer."
+    },
+    {
+      "runtimeNode": "bugfix",
+      "currentBehavior": "Shadow bugfix adapter (placeholder patch)",
+      "relatedSkills": [],
+      "relationshipType": "no_evidence",
+      "runtimeInvokesSkill": false,
+      "notes": "Bugfix is a runtime concept not represented as a standalone sdlc-* skill."
+    },
+    {
+      "runtimeNode": "validation",
+      "currentBehavior": "Hardcoded { result: 'validated' }",
+      "relatedSkills": ["sdlc-test-feedback-classifier", "sdlc-test-feedback-sync"],
+      "relationshipType": "conceptual_mapping",
+      "runtimeInvokesSkill": false,
+      "notes": "Runtime stub. Real flow: test-feedback-classifier -> test-feedback-sync."
+    }
+  ],
+  "recommendations": {
+    "recommended_architecture": "hybrid_runtime_graph_with_nested_skill_flows",
+    "recommended_next_pr": "skill_flow_inventory_metadata",
+    "do_not_continue": [
+      "runtime_node_to_skill_inference",
+      "skill_inference_disambiguation_based_on_agent_node_requestType",
+      "mapping_sdlc_speckit_implement_to_generic_implementation"
+    ],
+    "recommended_future_work": [
+      "skill_flow_orchestrator_metadata",
+      "rewrite_agent_skill_registry_around_flow_stages",
+      "model_direct_implementation_as_skillless",
+      "model_speckit_as_nested_skill_pipeline",
+      "remove_or_disable_automatic_runtime_skill_annotation"
+    ]
+  },
+  "safety_boundaries": {
+    "metadata_only": true,
+    "changes_runtime_behavior": false,
+    "changes_graph_routing": false,
+    "changes_agent_selection": false,
+    "changes_execution_dispatch": false,
+    "invokes_real_agents": false,
+    "invokes_sdlc_skills": false,
+    "renames_skills": false,
+    "adds_new_skills": false
+  }
+}
