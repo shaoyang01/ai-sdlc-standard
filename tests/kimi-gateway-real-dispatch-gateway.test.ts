@@ -150,12 +150,13 @@ async function test() {
     });
     const rH = await gwH.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-H", input: {},
+      requirementId: "REQ-H", input: { prompt: "must not leak" },
     });
     assert(hCalled === 0, "runner not called when command flag missing");
     assert(rH.success === false, "command disabled failure");
     assert(rH.output["fallback_action"] === "return_structured_disabled", "action disabled");
     assert(rH.output["fallback_reason"] === "command_execution_disabled", "reason command_execution_disabled");
+    assert(!JSON.stringify(rH).includes("must not leak"), "command missing no prompt leak");
 
   } finally {
     if (orig === undefined) delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;

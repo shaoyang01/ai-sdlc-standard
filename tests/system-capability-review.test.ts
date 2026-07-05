@@ -122,13 +122,19 @@ async function test() {
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
   assert(fpCap !== undefined && fpCap["status"] === "implemented", "fallback policy implemented");
+  assert(fpCap["runtime_active_by_default"] === false, "fallback not active by default");
+  assert(fpCap["changes_routing_by_default"] === false, "fallback no routing change");
+  assert(fpCap["changes_final_status"] === false, "fallback no final status change");
   assert(fpCap["fallback_default_action"] === "fall_through_to_shadow", "fallback shadow");
   assert(fpCap["failure_returns_structured_error"] === true, "failure structured");
   assert(fpCap["timeout_returns_structured_error"] === true, "timeout structured");
   assert(fpCap["errors_sanitized"] === true, "errors sanitized");
   assert(fpCap["expands_request_types"] === false, "no expansion");
+  assert(fpCap["writes_files"] === false, "fallback no files");
+  assert(fpCap["persists_audit"] === false, "fallback no persist");
   const fpEvidence = fpCap["evidence"] as string[];
   assert(fpEvidence.includes("execution/kimi-gateway-real-dispatch-fallback-policy.ts"), "fallback evidence");
+  assert(fpEvidence.includes("tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"), "fallback test evidence");
   assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Observability and Audit Metadata", "next PR observability");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
