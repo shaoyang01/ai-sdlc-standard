@@ -14,6 +14,7 @@ import { buildExecutionContext } from "../core/context-builder";
 import { createTraceItem } from "../core/execution-trace";
 import { selectAgent } from "../core/agent-decision";
 import { inferComplexity } from "../core/complexity-inference";
+import { resolveAgentByPolicy } from "../core/agent-policy-engine";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -190,9 +191,9 @@ export async function run(requirement: string): Promise<RuntimeResult> {
 
   // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
-    // Agent selection: decision layer override → AGENT_MAP fallback
-    const decisionAgent = selectAgent(currentNode, execCtx);
-    const agent = decisionAgent ?? getAgent(currentNode);
+    // Agent selection: policy engine → decision layer → AGENT_MAP fallback
+    const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
+    const agent = policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode);
 
     // Update ExecutionContext for current node
     execCtx.node = currentNode;
