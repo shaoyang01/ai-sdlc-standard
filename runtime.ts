@@ -12,6 +12,8 @@ import { SDLC_NODES, SDLC_EDGES } from "../sdlc_graph/graph";
 import { ExecutionContext } from "../core/execution-context";
 import { buildExecutionContext } from "../core/context-builder";
 import { createTraceItem } from "../core/execution-trace";
+import { selectAgent } from "../core/agent-decision";
+import { inferComplexity } from "../core/complexity-inference";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -188,11 +190,14 @@ export async function run(requirement: string): Promise<RuntimeResult> {
 
   // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
-    const agent = getAgent(currentNode);  // ← AGENT_MAP, no context influence
+    // Agent selection: decision layer override → AGENT_MAP fallback
+    const decisionAgent = selectAgent(currentNode, execCtx);
+    const agent = decisionAgent ?? getAgent(currentNode);
 
     // Update ExecutionContext for current node
     execCtx.node = currentNode;
     execCtx.input = { requirement, requirement_id: requirementId };
+    execCtx.metadata.complexity = inferComplexity(requirement);
 
     const nodeOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx);
     legacyContext[currentNode] = nodeOutput;
