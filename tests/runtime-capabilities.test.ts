@@ -90,6 +90,12 @@ async function test() {
   assert(caps.safety_boundaries["no_default_memory_persistence"] === true, "no default memory persistence");
   console.log("");
 
+  // ── Skills ──
+  console.log("Test 9: Skills");
+  assert(caps.skills["agent_skill_registry"] === "not_implemented", "agent skill registry is not implemented");
+  assert(caps.skills["skill_invocation_contract"] === "not_implemented", "skill invocation contract is not implemented");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

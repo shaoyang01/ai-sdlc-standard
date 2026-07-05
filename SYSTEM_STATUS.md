@@ -107,8 +107,10 @@ All evolution proposals have `applied: false` and require human review.
 
 ## 10. Recommended Next PRs
 
-1. **PR-5.2** — Real Kimi / Hermes adapters behind Execution Gateway
-2. **PR-5.3** — Agent Policy Engine consumes memory scores
-3. **PR-5.4** — Graph Kernel upgrade for explicit code-review / bugfix nodes
-4. **PR-5.5** — Codex adapter extended to support review / bugfix request types
-5. **PR-5.6** — Governed memory-aware routing toggle (with audit trail)
+1. **PR-5.2** — Agent Skill Registry and Skill Invocation Contract
+2. **PR-5.3** — Real Kimi Adapter behind Execution Gateway
+3. **PR-5.4** — Real Hermes Adapter behind Execution Gateway
+4. **PR-5.5** — Codex Adapter extended to support review / bugfix request types
+5. **PR-5.6** — Agent Policy Engine consumes memory scores
+6. **PR-5.7** — Governed memory-aware routing toggle with audit trail
+7. **PR-5.8** — Graph Kernel upgrade for explicit code-review / bugfix nodes

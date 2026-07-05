@@ -72,5 +72,9 @@
     "no_auto_git_operations": true,
     "no_default_real_model_execution": true,
     "no_default_memory_persistence": true
+  },
+  "skills": {
+    "agent_skill_registry": "not_implemented",
+    "skill_invocation_contract": "not_implemented"
   }
 }

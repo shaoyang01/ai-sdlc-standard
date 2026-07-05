@@ -17,6 +17,7 @@ export type RuntimeCapabilities = Readonly<{
   routing: Record<string, unknown>;
   self_evolution: Record<string, unknown>;
   safety_boundaries: Record<string, unknown>;
+  skills: Record<string, unknown>;
 }>;
 
 export function loadRuntimeCapabilities(
