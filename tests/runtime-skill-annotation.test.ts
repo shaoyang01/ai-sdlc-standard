@@ -28,7 +28,7 @@ async function test() {
 
   // ── Test 1: Runtime still succeeds ──
   console.log("Test 1: Runtime still succeeds with skill annotation");
-  const result = await run("build payment system with order sync service");
+  const result = await run("create a user registration form with email validation");
   assert(result.final_status === "success", "final status is success");
   console.log("");
 
@@ -60,25 +60,23 @@ async function test() {
   assert(reviewTrace !== undefined, "review trace exists");
   // Agent selection follows normal policy, not skill-driven
   const implAgent = implTrace!.agent;
-  assert(typeof implAgent === "string", `implementation agent is ${implAgent}`);
+  assert(["kimi", "codex", "hermes"].includes(implAgent), `implementation agent is valid: ${implAgent}`);
   console.log("");
 
-  // ── Test 4: Implementation artifact skill matches agent ──
-  console.log("Test 4: Implementation artifact skill metadata present when agent is codex");
+  // ── Test 4: Implementation artifact skill when agent is codex ──
+  console.log("Test 4: Implementation artifact skill metadata");
   const implArtifact = result.artifacts.find(
     (a) => a.node === "implementation" && a.type !== "fanout_result"
   );
   assert(implArtifact !== undefined, "implementation artifact exists");
   const implSV = implArtifact!.content["skill_validation"] as Record<string, unknown> | null;
   assert(implSV !== null && implSV !== undefined, "skill_validation exists");
-  // If agent is codex, skill should be sdlc-speckit-implement (unambiguous)
   if (implAgent === "codex") {
     assert(implArtifact!.content["skill"] === "sdlc-speckit-implement",
-      `skill is sdlc-speckit-implement (got ${implArtifact!.content["skill"]})`);
+      `skill is sdlc-speckit-implement (codex agent)`);
     assert(implSV!["attempted"] === true, "skill_validation.attempted === true");
     assert(implSV!["valid"] === true, "skill_validation.valid === true");
   }
-  // If agent is not codex, skill may be null (no unambiguous mapping)
   console.log("");
 
   // ── Test 5: Code-review artifact has skill_validation ──
@@ -111,14 +109,12 @@ async function test() {
     (fanoutResult.fanout_results!.repo_results || []).length > 0,
     "fanout has repo results"
   );
-  // Fanout child artifacts should carry skill metadata
-  const fanoutArtifacts = fanoutResult.artifacts.filter((a) => a.type === "shadow_output");
-  for (const fa of fanoutArtifacts) {
-    const faSV = fa.content["skill_validation"] as Record<string, unknown> | null;
-    if (faSV) {
-      assert(typeof faSV["attempted"] === "boolean", "fanout artifact has skill_validation.attempted");
-    }
-  }
+  // Fanout child artifacts are internal to gateway execution and not surfaced
+  // in RuntimeResult as individual shadow_output artifacts. Only fanout_result
+  // is surfaced at the top-level. Skill metadata is preserved inside the gateway
+  // but the current RuntimeResult shape does not expose child artifact details.
+  const fanoutArtifact = fanoutResult.artifacts.find((a) => a.type === "fanout_result");
+  assert(fanoutArtifact !== undefined, "fanout_result artifact is surfaced");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
