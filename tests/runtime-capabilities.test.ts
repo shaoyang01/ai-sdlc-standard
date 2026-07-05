@@ -190,7 +190,7 @@ async function test() {
   assert(realAdapters["kimi_runtime_shadow_attachment_writes_files"] === false, "runtime shadow no files");
   assert(realAdapters["kimi_gateway_real_dispatch_contract"] === "implemented_contract_only", "kimi real dispatch contract");
   assert(realAdapters["kimi_gateway_real_dispatch_default_enabled"] === false, "kimi real dispatch default disabled");
-  assert(realAdapters["kimi_gateway_real_dispatch_wired_to_gateway"] === false, "kimi real dispatch not wired gateway");
+  assert(realAdapters["kimi_gateway_real_dispatch_wired_to_gateway"] === true, "kimi real dispatch wired to gateway");
   assert(realAdapters["kimi_gateway_real_dispatch_wired_to_runtime"] === false, "kimi real dispatch not wired runtime");
   const rdTypes = realAdapters["kimi_gateway_real_dispatch_supported_request_types"] as string[];
   assert(Array.isArray(rdTypes) && rdTypes.length === 1 && rdTypes.includes("llm_task"), "kimi real dispatch llm_task only");

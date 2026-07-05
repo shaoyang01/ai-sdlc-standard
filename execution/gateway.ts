@@ -15,6 +15,7 @@ import { getExecutionMode } from "./config";
 import { Artifact } from "../core/artifact";
 import { CodeReviewFinding } from "../core/review-types";
 import { validateExecutionRequestSkill } from "./skill-request-validation";
+import { executeKimiGatewayRequest } from "./kimi-gateway-real-dispatch";
 
 export class ExecutionGateway {
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
@@ -50,6 +51,11 @@ export class ExecutionGateway {
         skill: enriched.skill,
         skillValidation: enriched.skillValidation,
       });
+    }
+
+    // ── Kimi Real Dispatch (feature-flagged, llm_task only) ──
+    if (enriched.agent === "kimi" && enriched.type === "llm_task") {
+      return executeKimiGatewayRequest(enriched);
     }
 
     // ── Default: shadow or codex ──

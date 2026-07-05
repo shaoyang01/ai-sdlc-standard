@@ -106,7 +106,7 @@ async function test() {
   assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-contract.test.ts"), "kimi evidence includes real dispatch test");
   assert(kimi["gateway_real_dispatch_contract"] === "implemented_contract_only", "kimi real dispatch contract");
   assert(kimi["gateway_real_dispatch_default_enabled"] === false, "kimi real dispatch default disabled");
-  assert(kimi["gateway_real_dispatch_wired_to_gateway"] === false, "kimi real dispatch not wired");
+  assert(kimi["gateway_real_dispatch_wired_to_gateway"] === true, "kimi real dispatch wired");
   assert(kimi["gateway_real_dispatch_invokes_cli"] === false, "kimi real dispatch no CLI");
   assert(kimi["gateway_real_dispatch_changes_final_status"] === false, "kimi real dispatch no final status");
   const kimiRT = kimi["gateway_real_dispatch_supported_request_types"] as string[];

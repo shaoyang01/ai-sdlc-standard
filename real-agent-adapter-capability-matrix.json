@@ -72,7 +72,10 @@
         "tests/kimi-runtime-shadow-attachment.test.ts",
         "tests/runtime-kimi-shadow-attachment.test.ts",
         "execution/kimi-gateway-real-dispatch-contract.ts",
-        "tests/kimi-gateway-real-dispatch-contract.test.ts"
+        "tests/kimi-gateway-real-dispatch-contract.test.ts",
+        "execution/kimi-gateway-real-dispatch.ts",
+        "tests/kimi-gateway-real-dispatch.test.ts",
+        "tests/kimi-gateway-real-dispatch-gateway.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -104,7 +107,7 @@
       "runtime_shadow_attachment_changes_agent_selection": false,
       "gateway_real_dispatch_contract": "implemented_contract_only",
       "gateway_real_dispatch_default_enabled": false,
-      "gateway_real_dispatch_wired_to_gateway": false,
+      "gateway_real_dispatch_wired_to_gateway": true,
       "gateway_real_dispatch_supported_request_types": [
         "llm_task"
       ],
@@ -114,7 +117,10 @@
         "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
       ],
       "gateway_real_dispatch_invokes_cli": false,
-      "gateway_real_dispatch_changes_final_status": false
+      "gateway_real_dispatch_changes_final_status": false,
+      "gateway_real_dispatch": "implemented_feature_flagged_gateway_dispatch",
+      "gateway_real_dispatch_invokes_cli_when_enabled": true,
+      "gateway_real_dispatch_invokes_cli_by_default": false
     },
     {
       "adapter": "hermes",
@@ -353,8 +359,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Kimi Gateway Real Dispatch",
-    "reason": "Wire real dispatch contract into Gateway dispatch behind flags",
-    "safety_rationale": "Default off; requires flags; llm_task only; Gateway dispatch unchanged by default"
+    "title": "Kimi Gateway Real Dispatch Hardening and Fallback Policy",
+    "reason": "Add fallback rules, timeout handling, and structured error contracts before expanding request types",
+    "safety_rationale": "Limit blast radius before expanding beyond llm_task"
   }
 }

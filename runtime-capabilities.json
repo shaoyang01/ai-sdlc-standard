@@ -229,6 +229,15 @@
     "kimi_gateway_real_dispatch_changes_final_status": false,
     "kimi_gateway_real_dispatch_changes_routing": false,
     "kimi_gateway_real_dispatch_writes_files": false,
-    "kimi_gateway_real_dispatch_persists_audit": false
+    "kimi_gateway_real_dispatch_persists_audit": false,
+    "kimi_gateway_real_dispatch": "implemented_feature_flagged_gateway_dispatch",
+    "kimi_gateway_real_dispatch_default_enabled": false,
+    "kimi_gateway_real_dispatch_wired_to_gateway": true,
+    "kimi_gateway_real_dispatch_wired_to_runtime": false,
+    "kimi_gateway_real_dispatch_supported_request_types": ["llm_task"],
+    "kimi_gateway_real_dispatch_invokes_cli_when_enabled": true,
+    "kimi_gateway_real_dispatch_invokes_cli_by_default": false,
+    "kimi_gateway_real_dispatch_changes_final_status": false,
+    "kimi_gateway_real_dispatch_changes_routing_by_default": false
   }
 }
