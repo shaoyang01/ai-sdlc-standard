@@ -36,6 +36,8 @@ async function test() {
   assert(r1.success === false && r1.decision === "disabled", "disabled");
   assert(r1.commandPreview === undefined, "no preview");
   assert(r1.audit.enabled === false && r1.audit.invokesCli === false, "audit disabled");
+  assert(r1.audit.spawnsProcess === false, "disabled: no spawn");
+  assert(r1.audit.affectsGateway === false, "disabled: no gateway");
   console.log("");
 
   // Test 2: Missing command
@@ -62,9 +64,12 @@ async function test() {
   assert(r4.commandPreview!.args.includes("--mode"), "args");
   assert(r4.commandPreview!.sanitized === true, "sanitized");
   assert(r4.audit.commandPreviewCreated === true, "preview created");
-  assert(r4.audit.invokesCli === false && r4.audit.spawnsProcess === false, "no CLI");
-  assert(r4.audit.readsApiKeys === false && r4.audit.writesFiles === false, "no files/keys");
-  assert(r4.audit.affectsRuntime === false && r4.audit.affectsGateway === false, "no effects");
+  assert(r4.audit.invokesCli === false, "audit no CLI");
+  assert(r4.audit.spawnsProcess === false, "audit no spawn");
+  assert(r4.audit.readsApiKeys === false, "audit no API keys");
+  assert(r4.audit.writesFiles === false, "audit no files");
+  assert(r4.audit.affectsRuntime === false, "audit no runtime");
+  assert(r4.audit.affectsGateway === false, "audit no gateway");
   console.log("");
 
   // Test 5: Preview excludes artifact content

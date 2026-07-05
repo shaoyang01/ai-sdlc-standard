@@ -84,6 +84,20 @@ async function test() {
   const dryRunEvidence = dryRunCap["evidence"] as string[];
   assert(dryRunEvidence.includes("execution/kimi-cli-dry-run.ts"), "evidence includes kimi-cli-dry-run.ts");
   assert(dryRunEvidence.includes("tests/kimi-cli-dry-run.test.ts"), "evidence includes test");
+  // Hermes dry-run harness
+  assert(capNames.includes("Hermes CLI Adapter Dry-run Harness"), "has Hermes CLI Adapter Dry-run Harness");
+  const hDryRunCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes CLI Adapter Dry-run Harness");
+  assert(hDryRunCap !== undefined, "hermes dry-run capability exists");
+  assert(hDryRunCap["status"] === "feature-flagged-dry-run", "hermes dry-run status");
+  assert(hDryRunCap["runtime_active_by_default"] === false, "hermes dry-run not active");
+  assert(hDryRunCap["changes_routing"] === false, "hermes dry-run no routing");
+  assert(hDryRunCap["changes_agent_selection"] === false, "hermes dry-run no agent");
+  assert(hDryRunCap["invokes_real_agents"] === false, "hermes dry-run no real agents");
+  assert(hDryRunCap["invokes_real_skills"] === false, "hermes dry-run no real skills");
+  assert(hDryRunCap["writes_files"] === false, "hermes dry-run no files");
+  const hEvidence = hDryRunCap["evidence"] as string[];
+  assert(hEvidence.includes("execution/hermes-cli-dry-run.ts"), "hermes evidence includes hermes-cli-dry-run.ts");
+  assert(hEvidence.includes("tests/hermes-cli-dry-run.test.ts"), "hermes evidence includes test");
   console.log("");
 
   // ── Test 5: Safety boundaries ──

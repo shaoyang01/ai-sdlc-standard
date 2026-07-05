@@ -309,6 +309,20 @@
         "execution/kimi-cli-dry-run.ts",
         "tests/kimi-cli-dry-run.test.ts"
       ]
+    },
+    {
+      "name": "Hermes CLI Adapter Dry-run Harness",
+      "status": "feature-flagged-dry-run",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/hermes-cli-dry-run.ts",
+        "tests/hermes-cli-dry-run.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -530,8 +544,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Hermes CLI Adapter Dry-run Harness",
-    "reason": "Mirror the Kimi dry-run pattern for Hermes",
-    "safety_rationale": "Dry-run harness has no process spawn, no CLI execution, no API keys"
+    "title": "Real Adapter CLI Audit Trail",
+    "reason": "Audit shape should be finalized before real command execution",
+    "safety_rationale": "Audit metadata has no CLI execution, no process spawn, no API keys"
   }
 }
