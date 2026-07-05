@@ -5,7 +5,6 @@
 
 import type { ExecutionRequest } from "./types";
 import type { CliAdapterConfig } from "./cli-adapter-contract-types";
-import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
 
 export type KimiGatewayRealDispatchDecision =
   | "real_dispatch_disabled"
@@ -78,7 +77,7 @@ export function evaluateKimiGatewayRealDispatchContract(input: {
   env?: Record<string, string | undefined>;
 }): KimiGatewayRealDispatchContract {
   const env = input.env ?? process.env;
-  const config = input.config ?? getKimiCliAdapterConfig();
+  const config = input.config;
 
   const base = {
     requestId: input.request.requirementId,
@@ -104,10 +103,10 @@ export function evaluateKimiGatewayRealDispatchContract(input: {
   if (env.SDLC_KIMI_CLI_COMMAND_EXECUTION !== "enabled") {
     return { ...base, eligible: false, decision: "command_execution_disabled", auditEvents: buildAudit("command_execution_disabled"), warnings: ["Command execution disabled"] };
   }
-  if (!config.enabled) {
-    return { ...base, eligible: false, decision: "adapter_disabled", auditEvents: buildAudit("adapter_disabled"), warnings: ["Kimi adapter disabled"] };
+  if (!config || config.enabled !== true) {
+    return { ...base, eligible: false, decision: "adapter_disabled", auditEvents: buildAudit("adapter_disabled"), warnings: ["Kimi adapter config missing or disabled"] };
   }
-  if (!config.command) {
+  if (!config.command || config.command.trim() === "") {
     return { ...base, eligible: false, decision: "missing_cli_command", auditEvents: buildAudit("missing_cli_command"), warnings: ["Missing CLI command"] };
   }
   if (!KIMI_REAL_DISPATCH_SUPPORTED_REQUEST_TYPES.includes(input.request.type as never)) {

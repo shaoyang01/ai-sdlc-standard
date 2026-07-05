@@ -188,6 +188,21 @@ async function test() {
   assert(realAdapters["kimi_runtime_shadow_attachment_primary_gateway_unchanged"] === true, "runtime shadow gateway unchanged");
   assert(realAdapters["kimi_runtime_shadow_attachment_persists_audit"] === false, "runtime shadow no persist");
   assert(realAdapters["kimi_runtime_shadow_attachment_writes_files"] === false, "runtime shadow no files");
+  assert(realAdapters["kimi_gateway_real_dispatch_contract"] === "implemented_contract_only", "kimi real dispatch contract");
+  assert(realAdapters["kimi_gateway_real_dispatch_default_enabled"] === false, "kimi real dispatch default disabled");
+  assert(realAdapters["kimi_gateway_real_dispatch_wired_to_gateway"] === false, "kimi real dispatch not wired gateway");
+  assert(realAdapters["kimi_gateway_real_dispatch_wired_to_runtime"] === false, "kimi real dispatch not wired runtime");
+  const rdTypes = realAdapters["kimi_gateway_real_dispatch_supported_request_types"] as string[];
+  assert(Array.isArray(rdTypes) && rdTypes.length === 1 && rdTypes.includes("llm_task"), "kimi real dispatch llm_task only");
+  const rdFlags = realAdapters["kimi_gateway_real_dispatch_requires_flags"] as string[];
+  assert(rdFlags.includes("SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled"), "real dispatch requires real flag");
+  assert(rdFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled") && rdFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "real dispatch 3 flags");
+  assert(realAdapters["kimi_gateway_real_dispatch_invokes_cli"] === false, "real dispatch no CLI");
+  assert(realAdapters["kimi_gateway_real_dispatch_spawns_process"] === false, "real dispatch no spawn");
+  assert(realAdapters["kimi_gateway_real_dispatch_changes_final_status"] === false, "real dispatch no final status");
+  assert(realAdapters["kimi_gateway_real_dispatch_changes_routing"] === false, "real dispatch no routing");
+  assert(realAdapters["kimi_gateway_real_dispatch_writes_files"] === false, "real dispatch no files");
+  assert(realAdapters["kimi_gateway_real_dispatch_persists_audit"] === false, "real dispatch no persist");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

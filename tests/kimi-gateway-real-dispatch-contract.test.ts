@@ -53,6 +53,8 @@ async function test() {
   assert(evaluateKimiGatewayRealDispatchContract({ request, config: { ...validConfig, enabled: false }, env: allOn }).decision === "adapter_disabled", "adapter disabled");
   assert(evaluateKimiGatewayRealDispatchContract({ request, config: { ...validConfig, command: undefined }, env: allOn }).decision === "missing_cli_command", "missing command");
   assert(evaluateKimiGatewayRealDispatchContract({ request: { ...request, type: "code_generation" }, config: validConfig, env: allOn }).decision === "unsupported_request_type", "unsupported type");
+  // Missing config entirely
+  assert(evaluateKimiGatewayRealDispatchContract({ request, env: allOn }).decision === "adapter_disabled", "missing config");
   console.log("Tests 3-7 done\n");
 
   // Test 8: Eligible
@@ -78,7 +80,7 @@ async function test() {
 
   // Test 11: No forbidden imports
   const src = fs.readFileSync("execution/kimi-gateway-real-dispatch-contract.ts", "utf-8");
-  const bad = src.split("\n").filter(l => l.includes("import ") && (l.includes("executeKimiCliCommand") || l.includes("kimi-cli-command-executor") || l.includes("execution-gateway") || l.includes("./runtime") || l.includes("child_process")));
+  const bad = src.split("\n").filter(l => l.includes("import ") && (l.includes("getKimiCliAdapterConfig") || l.includes("kimi-cli-adapter-contract") || l.includes("executeKimiCliCommand") || l.includes("kimi-cli-command-executor") || l.includes("execution-gateway") || l.includes("gateway.ts") || l.includes("./runtime") || l.includes("child_process") || l.includes("\"fs\"") || l.includes("'fs'") || l.includes("graph") || l.includes("policy-memory") || l.includes("http") || l.includes("fetch")));
   assert(bad.length === 0, `no forbidden imports (found ${bad.length})`);
   console.log("Test 11 done\n");
 

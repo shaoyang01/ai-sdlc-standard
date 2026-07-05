@@ -102,6 +102,18 @@ async function test() {
   assert(kimi["runtime_shadow_attachment_changes_routing"] === false, "kimi runtime shadow attachment no routing");
   assert(kimi["runtime_shadow_attachment_changes_final_status"] === false, "kimi runtime shadow attachment no final status");
   assert(kimi["runtime_shadow_attachment_changes_agent_selection"] === false, "kimi runtime shadow attachment no agent");
+  assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-contract.ts"), "kimi evidence includes real dispatch contract");
+  assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-contract.test.ts"), "kimi evidence includes real dispatch test");
+  assert(kimi["gateway_real_dispatch_contract"] === "implemented_contract_only", "kimi real dispatch contract");
+  assert(kimi["gateway_real_dispatch_default_enabled"] === false, "kimi real dispatch default disabled");
+  assert(kimi["gateway_real_dispatch_wired_to_gateway"] === false, "kimi real dispatch not wired");
+  assert(kimi["gateway_real_dispatch_invokes_cli"] === false, "kimi real dispatch no CLI");
+  assert(kimi["gateway_real_dispatch_changes_final_status"] === false, "kimi real dispatch no final status");
+  const kimiRT = kimi["gateway_real_dispatch_supported_request_types"] as string[];
+  assert(kimiRT.length === 1 && kimiRT.includes("llm_task"), "kimi real dispatch llm_task only");
+  const kimiRF = kimi["gateway_real_dispatch_requires_flags"] as string[];
+  assert(kimiRF.includes("SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled"), "kimi real dispatch requires real flag");
+  assert(kimiRF.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled") && kimiRF.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "kimi real dispatch 3 flags");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
