@@ -98,6 +98,11 @@
     "skill_flow_orchestrator_invokes_agents": false,
     "skill_flow_orchestrator_invokes_skills": false,
     "skill_flow_orchestrator_writes_files": false,
-    "skill_flow_orchestrator_affects_runtime": false
+    "skill_flow_orchestrator_affects_runtime": false,
+    "skill_flow_runtime_integration_contract": "implemented_disabled_by_default",
+    "skill_flow_runtime_integration_default": "disabled",
+    "skill_flow_runtime_integration_feature_flag": "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow",
+    "skill_flow_runtime_integration_affects_runtime": false,
+    "skill_flow_runtime_integration_shadow_only": true
   }
 }
