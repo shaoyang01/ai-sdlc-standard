@@ -168,6 +168,13 @@
     "kimi_cli_executor_contract_affects_gateway": false,
     "kimi_cli_executor_contract_affects_runtime": false,
     "kimi_cli_executor_contract_persists_audit": false,
-    "kimi_cli_executor_contract_reads_api_keys": false
+    "kimi_cli_executor_contract_reads_api_keys": false,
+    "hermes_cli_executor_contract": "implemented_contract_only",
+    "hermes_cli_executor_contract_invokes_cli": false,
+    "hermes_cli_executor_contract_spawns_process": false,
+    "hermes_cli_executor_contract_affects_gateway": false,
+    "hermes_cli_executor_contract_affects_runtime": false,
+    "hermes_cli_executor_contract_persists_audit": false,
+    "hermes_cli_executor_contract_reads_api_keys": false
   }
 }

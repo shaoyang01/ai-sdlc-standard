@@ -76,9 +76,12 @@
         "execution/hermes-cli-adapter-contract.ts",
         "tests/hermes-cli-adapter-contract.test.ts",
         "execution/hermes-cli-dry-run.ts",
-        "tests/hermes-cli-dry-run.test.ts"
+        "tests/hermes-cli-dry-run.test.ts",
+        "execution/hermes-cli-executor-contract.ts",
+        "tests/hermes-cli-executor-contract.test.ts"
       ],
-      "dry_run_harness": "implemented_no_process_spawn"
+      "dry_run_harness": "implemented_no_process_spawn",
+      "executor_contract": "implemented_contract_only"
     }
   ],
   "request_types": [
@@ -298,8 +301,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Hermes CLI Command Executor Contract",
-    "reason": "Mirror the Kimi executor contract pattern for Hermes",
-    "safety_rationale": "Contract-only; no process spawn, no CLI execution"
+    "title": "Kimi CLI Command Executor Implementation Behind Feature Flag",
+    "reason": "First real CLI executor behind strict feature flag; both Kimi and Hermes contracts are ready",
+    "safety_rationale": "Feature-flagged, no default execution, no Gateway wiring by default"
   }
 }
