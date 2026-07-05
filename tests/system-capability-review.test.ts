@@ -117,7 +117,28 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Gateway Wiring Shadow Path", "next PR is shadow path");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Shadow Sidecar Runtime Attachment Contract", "next PR is attachment contract");
+  // Kimi Gateway Shadow Sidecar
+  assert(capNames.includes("Kimi Gateway Shadow Sidecar"), "has Kimi Gateway Shadow Sidecar");
+  const ssCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Shadow Sidecar");
+  assert(ssCap !== undefined, "sidecar exists");
+  assert(ssCap["status"] === "feature-flagged-sidecar", "sidecar status");
+  assert(ssCap["runtime_active_by_default"] === false, "sidecar not active");
+  assert(ssCap["changes_routing"] === false, "sidecar no routing");
+  assert(ssCap["changes_agent_selection"] === false, "sidecar no agent");
+  assert(ssCap["changes_final_status"] === false, "sidecar no final status");
+  assert(ssCap["primary_gateway_unchanged"] === true, "sidecar gateway unchanged");
+  assert(ssCap["wired_to_runtime"] === false, "sidecar not wired");
+  assert(ssCap["invokes_real_agents"] === true, "sidecar real agents");
+  assert(ssCap["invokes_real_skills"] === false, "sidecar no skills");
+  assert(ssCap["writes_files"] === false, "sidecar no files");
+  const ssFlags = ssCap["requires_flags"] as string[];
+  assert(ssFlags.includes("SDLC_KIMI_GATEWAY_SHADOW=enabled"), "sidecar shadow flag");
+  assert(ssFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "sidecar integration flag");
+  assert(ssFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "sidecar command flag");
+  const ssEvidence = ssCap["evidence"] as string[];
+  assert(ssEvidence.includes("execution/kimi-gateway-shadow-sidecar.ts"), "sidecar evidence");
+  assert(ssEvidence.includes("tests/kimi-gateway-shadow-sidecar.test.ts"), "sidecar test evidence");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

@@ -343,6 +343,28 @@
         "execution/kimi-gateway-integration-contract.ts",
         "tests/kimi-gateway-integration-contract.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Shadow Sidecar",
+      "status": "feature-flagged-sidecar",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "changes_final_status": false,
+      "primary_gateway_unchanged": true,
+      "wired_to_runtime": false,
+      "invokes_real_agents": true,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "requires_flags": [
+        "SDLC_KIMI_GATEWAY_SHADOW=enabled",
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "evidence": [
+        "execution/kimi-gateway-shadow-sidecar.ts",
+        "tests/kimi-gateway-shadow-sidecar.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -564,8 +586,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Kimi Gateway Wiring Shadow Path",
-    "reason": "Add shadow/sidecar Gateway wiring before any real Gateway routing",
-    "safety_rationale": "Default off, requires explicit flags, must not change runtime/final_status"
+    "title": "Kimi Gateway Shadow Sidecar Runtime Attachment Contract",
+    "reason": "Decide whether/how sidecar metadata attaches to RuntimeResult",
+    "safety_rationale": "Still default-off; shadow/sidecar only"
   }
 }

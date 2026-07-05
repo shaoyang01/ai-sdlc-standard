@@ -81,6 +81,11 @@ async function test() {
   const gwFlags = kimi["gateway_integration_requires_flags"] as string[];
   assert(Array.isArray(gwFlags) && gwFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "gateway requires gateway flag");
   assert(gwFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "gateway requires command flag");
+  assert(kimi["gateway_shadow_sidecar"] === "implemented_feature_flagged_sidecar", "kimi shadow sidecar implemented");
+  assert(kimi["gateway_shadow_sidecar_default_enabled"] === false, "kimi shadow sidecar default disabled");
+  assert(kimi["gateway_shadow_sidecar_wired_to_runtime"] === false, "kimi shadow sidecar not wired");
+  assert(kimi["gateway_shadow_sidecar_changes_routing"] === false, "kimi shadow sidecar no routing");
+  assert(kimi["gateway_shadow_sidecar_changes_final_status"] === false, "kimi shadow sidecar no final status");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");

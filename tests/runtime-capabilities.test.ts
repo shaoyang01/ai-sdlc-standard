@@ -158,6 +158,15 @@ async function test() {
   assert(realAdapters["kimi_gateway_integration_invokes_cli"] === false, "kimi gateway no CLI");
   assert(realAdapters["kimi_gateway_integration_spawns_process"] === false, "kimi gateway no spawn");
   assert(realAdapters["kimi_gateway_integration_changes_final_status"] === false, "kimi gateway no final status change");
+  assert(realAdapters["kimi_gateway_shadow_sidecar"] === "implemented_feature_flagged_sidecar", "kimi shadow sidecar");
+  assert(realAdapters["kimi_gateway_shadow_sidecar_default_enabled"] === false, "kimi shadow sidecar default disabled");
+  const shadowFlags = realAdapters["kimi_gateway_shadow_sidecar_requires_flags"] as string[];
+  assert(Array.isArray(shadowFlags) && shadowFlags.includes("SDLC_KIMI_GATEWAY_SHADOW=enabled"), "shadow requires shadow flag");
+  assert(shadowFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled") && shadowFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "shadow requires all 3 flags");
+  assert(realAdapters["kimi_gateway_shadow_sidecar_wired_to_runtime"] === false, "shadow not wired to runtime");
+  assert(realAdapters["kimi_gateway_shadow_sidecar_changes_final_status"] === false, "shadow no final status change");
+  assert(realAdapters["kimi_gateway_shadow_sidecar_changes_routing"] === false, "shadow no routing change");
+  assert(realAdapters["kimi_gateway_shadow_sidecar_primary_gateway_unchanged"] === true, "shadow primary gateway unchanged");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
