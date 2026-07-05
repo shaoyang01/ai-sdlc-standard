@@ -27,6 +27,11 @@ Requirement Input → Graph Kernel → Runtime Orchestrator → Execution Gatewa
 | Artifact Model (standardized node outputs) | ✅ Implemented |
 | Agent Skill Registry (20 sdlc-* skills) | ✅ Implemented (metadata-only) |
 | Skill Invocation Contract | ✅ Implemented (metadata-only) |
+| Skill Flow Inventory (flow graph metadata) | ✅ Implemented (metadata-only) |
+| ExecutionRequest explicit skill metadata | ✅ Implemented (optional, explicit-only) |
+| Runtime auto skill annotation | ❌ Disabled (deprecated) |
+
+**Skill metadata is explicit-only.** Runtime does not auto-infer skills. sdlc-* skills are flow nodes, not runtime node labels. Direct implementation is skillless. Speckit implementation is a nested skill flow candidate through sdlc-speckit-pipeline.
 
 ## 3. Shadow-only Capabilities
 
@@ -94,6 +99,11 @@ All evolution proposals have `applied: false` and require human review.
 | Persistent self-evolution (auto-apply proposals) | Not implemented |
 | Agent Policy Engine consuming memory scores | Not implemented |
 | Graph Kernel `code-review` / `bugfix` nodes | Managed at runtime level only |
+| Skill Flow Orchestrator | Not implemented |
+| Runtime sdlc-* skill invocation | Runtime does not invoke sdlc-* skills |
+| Runtime skill inference | Disabled — explicit-only metadata |
+| Agent Skill Registry rewritten around flow stages | Not implemented — current registry maps to runtime nodes |
+| Speckit pipeline real skill orchestration | Not implemented — runtime stub only |
 
 ## 9. Safety Guarantees
 
@@ -106,13 +116,17 @@ All evolution proposals have `applied: false` and require human review.
 - ✅ Memory write failure is non-fatal
 - ✅ Memory read failure is non-fatal
 - ✅ Feedback, shadow decisions, and proposals do not affect routing
+- ✅ Runtime does not auto-infer skills (explicit-only metadata)
+- ✅ Skill metadata does not affect routing, agent selection, or dispatch
+- ✅ Direct implementation is skillless agent execution
+- ✅ Speckit implementation is only a nested skill flow candidate
 
 ## 10. Recommended Next PRs
 
-1. **PR-5.2** — Agent Skill Registry and Skill Invocation Contract
-2. **PR-5.3** — Real Kimi Adapter behind Execution Gateway
-3. **PR-5.4** — Real Hermes Adapter behind Execution Gateway
-4. **PR-5.5** — Codex Adapter extended to support review / bugfix request types
-5. **PR-5.6** — Agent Policy Engine consumes memory scores
-6. **PR-5.7** — Governed memory-aware routing toggle with audit trail
-7. **PR-5.8** — Graph Kernel upgrade for explicit code-review / bugfix nodes
+1. **Deprecate Runtime Auto Skill Annotation** — ✅ Done
+2. **Rewrite Agent Skill Registry Around Flow Stages** — Map skills to flow position, not runtime nodes
+3. **Skill Flow Orchestrator Contract** — Define typed contract for explicit skill invocation
+4. **Shadow Skill Flow Orchestrator** — Shadow-mode orchestrator that sequences skills by flow
+5. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters behind Execution Gateway
+6. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+7. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
