@@ -84,8 +84,8 @@ async function test() {
   assert(Array.isArray(fanoutRun.artifacts), "fanout artifacts is array");
   const fanoutTypes = fanoutRun.artifacts.map((a: { type: string }) => a.type);
   assert(
-    fanoutTypes.includes("fanout_result") || fanoutTypes.includes("implementation_plan"),
-    "has fanout or implementation artifact"
+    fanoutTypes.includes("fanout_result"),
+    "has fanout_result artifact (fanout mode)"
   );
   console.log("");
 
