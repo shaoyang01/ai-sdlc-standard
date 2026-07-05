@@ -128,6 +128,60 @@ async function test() {
   assert(valNoSkill.reason.includes("No skill"), "reason mentions no skill");
   console.log("");
 
+  // ── Test 7: Skill metadata preserved in code_review route ──
+  console.log("Test 7: Skill metadata preserved in code_review route");
+  const codeReviewResult = await executionGateway.execute({
+    type: "code_review",
+    node: "code-review",
+    agent: "codex",
+    requirementId: "REQ-CR",
+    input: { artifacts: [] },
+    skill: "sdlc-code-review-excellence",
+  });
+  assert(codeReviewResult.success === true, "code_review with skill succeeds");
+  const crArtifact = codeReviewResult.artifacts[0];
+  assert(crArtifact.content["skill"] === "sdlc-code-review-excellence", "code_review artifact has skill name");
+  const crSV = crArtifact.content["skill_validation"] as Record<string, unknown> | null;
+  assert(crSV !== null, "code_review skill_validation is present");
+  assert(crSV!["attempted"] === true, "code_review skill validation was attempted");
+  console.log("");
+
+  // ── Test 8: Skill metadata preserved in bugfix route ──
+  console.log("Test 8: Skill metadata preserved in bugfix route");
+  const bugfixResult = await executionGateway.execute({
+    type: "bugfix",
+    node: "bugfix",
+    agent: "codex",
+    requirementId: "REQ-BF",
+    input: { artifacts: [], findings: [] },
+    metadata: { attempt: 1 },
+    skill: "sdlc-speckit-implement",
+  });
+  assert(bugfixResult.success === true, "bugfix with skill succeeds");
+  const bfArtifact = bugfixResult.artifacts[0];
+  assert(bfArtifact.content["skill"] === "sdlc-speckit-implement", "bugfix artifact has skill name");
+  const bfSV = bfArtifact.content["skill_validation"] as Record<string, unknown> | null;
+  assert(bfSV !== null, "bugfix skill_validation is present");
+  console.log("");
+
+  // ── Test 9: Invalid skill in bugfix route does not block ──
+  console.log("Test 9: Invalid skill in bugfix route does not block execution");
+  const invalidBugfixResult = await executionGateway.execute({
+    type: "bugfix",
+    node: "bugfix",
+    agent: "hermes",
+    requirementId: "REQ-BF-INV",
+    input: { artifacts: [], findings: [] },
+    metadata: { attempt: 1 },
+    skill: "sdlc-speckit-implement",
+  });
+  assert(invalidBugfixResult.success === true, "bugfix with invalid skill still succeeds");
+  const ibfArtifact = invalidBugfixResult.artifacts[0];
+  const ibfSV = ibfArtifact.content["skill_validation"] as Record<string, unknown> | null;
+  assert(ibfSV !== null, "invalid bugfix skill_validation is present");
+  assert(ibfSV!["valid"] === false, "invalid bugfix skill is flagged invalid");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -31,6 +31,8 @@ export class ExecutionGateway {
         artifacts,
         agent: enriched.agent,
         attempt,
+        skill: enriched.skill,
+        skillValidation: enriched.skillValidation,
       });
     }
 
@@ -45,6 +47,8 @@ export class ExecutionGateway {
         findings,
         agent: enriched.agent,
         attempt,
+        skill: enriched.skill,
+        skillValidation: enriched.skillValidation,
       });
     }
 
