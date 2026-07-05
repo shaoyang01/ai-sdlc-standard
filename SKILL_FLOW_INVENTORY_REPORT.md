@@ -17,9 +17,13 @@
 
 None of the 20 skills' SKILL.md files reference TypeScript runtime node names (`requirement-summary`, `tech-design`, etc.). The flow is artifact-driven, not runtime-node-driven.
 
+### What is the global entry skill?
+
+**Confirmed by source: `sdlc-requirement-normalizer` is the global entry skill for the whole SDLC flow.** It receives external requirements (Lark/Feishu, HTML, Markdown, chat, PDF), generates standardized `00-需求资料` artifacts, and those artifacts trigger the downstream SDLC flow starting with `sdlc-specification-writer`. No other skill is positioned as a global entry point.
+
 ### Is sdlc-code-review-normalizer an entry skill?
 
-**Likely inferred — medium confidence.** Several pieces of evidence point to it as a potential entry skill in certain flows, but `sdlc-requirement-normalizer` is the primary global entry skill. The code-review-normalizer can receive raw review reports and normalize them into the `04-代码审核` artifact, making it a flow entry point for code-review workflows. However, it is normally downstream of `sdlc-code-review-excellence`.
+**Confirmed: NOT the global entry skill.** It belongs to the code-review subflow. It may normalize raw review input for code-review-only workflows, but it does not start the full SDLC flow. In the full SDLC flow, it appears downstream after implementation and code review, normalizing code review outputs into the `04-代码审核` artifact.
 
 ### Is sdlc-speckit-implement only part of the speckit flow?
 
@@ -66,27 +70,18 @@ All 20 skills are in `skills/sdlc-<name>/SKILL.md`. Every skill has a contract i
 
 ## 3. Skill Entry Points
 
-### Global Entry Skill: `sdlc-requirement-normalizer`
+### Global Entry
 
-**Evidence:** It is the only skill categorized as "Intake Skill" in the registry. Its SKILL.md states "Treat this artifact as the stable intake input for sdlc-specification-writer." Its artifact number is `00`. No other skill produces `00-需求资料`.
+- **`sdlc-requirement-normalizer`** — The only confirmed global entry skill. It receives external requirements (Lark, HTML, MD, chat, PDF) and produces the `00-需求资料` artifact that starts the full SDLC flow.
 
-**Confidence:** High. This is the primary global entry point for new requirements.
+### Subflow-Specific Entry
 
-### Flow-Specific Entry Point: `sdlc-code-review-normalizer`
+- **`sdlc-code-review-normalizer`** — Subflow entry only for code-review-only workflows (when raw review input needs normalization without the full SDLC flow). Not a global entry.
+- **`sdlc-speckit-pipeline`** — Subflow entry only after `sdlc-solution-reviewer` selects `SPECKIT_PIPELINE_REQUIRED`. Not a global entry.
 
-**Evidence:** Can consume raw review reports from any source and normalize them into the `04-代码审核` artifact without requiring upstream skills. However, it is normally downstream of `sdlc-code-review-excellence`.
+### Internal Skills
 
-**Confidence:** Medium. It can function as an entry skill for code-review-only workflows but is typically internal.
-
-### Flow Controller: `sdlc-speckit-pipeline`
-
-**Evidence:** This is a "Workflow Skill" — an orchestrator, not a content skill. It activates only after `sdlc-solution-reviewer` returns `SPECKIT_PIPELINE_REQUIRED`. It sequences child skills.
-
-**Status:** Flow-specific entry skill (orchestrator). Not a global entry.
-
-### Other Skills: All Internal
-
-All remaining skills require upstream artifacts and are not entry points. They consume specific DocFlow or Speckit artifacts produced by prior skills.
+All remaining 17 skills require upstream artifacts and are not entry points. They consume specific DocFlow or Speckit artifacts produced by prior skills.
 
 ---
 
@@ -405,6 +400,8 @@ The runtime's `executeSpeckitPipeline()` is a stub that hardcodes 4 incorrect st
 
 **Recommended architecture direction:** Hybrid Model C — Runtime graph controls coarse lifecycle (intake, design, review, execution, validation). Skill flows run inside execution stages. Direct implementation is skillless. Speckit implementation is a nested skill pipeline.
 
+**The full SDLC flow must start from `sdlc-requirement-normalizer`.** The runtime or future skill orchestrator must treat sdlc-requirement-normalizer as the external-demand intake boundary. Do NOT model sdlc-code-review-normalizer as the global flow start.
+
 **Recommended next PR:** Build explicit Skill Flow Inventory metadata (machine-readable flow graph with edges and artifacts). Before any more PRs on skill inference or routing, the actual flow model should be codified.
 
-**Recommended deprecation:** Stop automatic runtime skill annotation (PR-5.4's `buildSkillAwareExecutionRequest`). The (agent, node, requestType) → skill mapping is the wrong model.
+**Recommended deprecation:** Stop automatic runtime skill annotation (PR-5.4's `buildSkillAwareExecutionRequest`). The (agent, node, requestType) → skill mapping is the wrong model. **sdlc-* skills are flow nodes, not runtime node labels.** Direct implementation is skillless. sdlc-speckit-implement is only an internal Speckit stage. Automatic runtime skill inference based on agent/node/requestType should not continue.
