@@ -39,13 +39,13 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | Fanout Engine (multi-repo parallel) | `runtime.ts:executeFanout()` | runtime-active (shadow) |
 | Complexity Inference (text-length heuristic) | `core/complexity-inference.ts` | runtime-active |
 
-### Confirmed NOT runtime-active
+### Confirmed NOT runtime-active by default
 
 | Capability | Why |
 |-----------|-----|
 | Skill Flow Orchestrator | Not imported by `runtime.ts` |
-| Shadow Skill Flow Orchestrator | Not imported by `runtime.ts` |
-| Runtime Integration Contract | Not imported by `runtime.ts` |
+| Shadow Skill Flow Orchestrator | Not called by runtime by default; invoked indirectly via feature-flagged sidecar when enabled |
+| Runtime Integration Contract | Feature-flagged in `runtime.ts` since shadow integration PR; disabled by default |
 | Real sdlc-* skill invocation | No skill invocation exists in code |
 | Runtime auto skill annotation | Removed in PR deprecation |
 | Real Kimi/Hermes adapters | Never implemented |
@@ -59,8 +59,21 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | Execution Gateway default adapter | runtime-active shadow | `executeShadowAgent()` returns deterministic mock output for all request types |
 | Code Review Adapter | runtime-active shadow | Scans for `force_review_fail` marker; PASS by default |
 | Bugfix Adapter | runtime-active shadow | Returns `bugfix_patch` artifact; no real patches applied |
-| Skill Flow Shadow Orchestrator | standalone shadow helper | `executeSkillFlowShadow()` runs plans in memory; not called by runtime |
+| Skill Flow Shadow Orchestrator | standalone shadow helper | `executeSkillFlowShadow()` runs plans in memory; called indirectly via feature-flagged runtime sidecar when enabled |
 | Codex adapter (all non-code_generation types) | shadow fallback | Gateway routes non-code_generation to shadow |
+
+### Runtime Shadow Integration Audit Trail
+
+- **Status:** Implemented (feature-flagged, sidecar-only, in-memory)
+- **Enabled by:** `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow`
+- **Not persisted** — no disk, no SQLite
+- **Does not contain** raw requirement text
+- **Does not contain** full artifact contents
+- **Does not affect** final_status, runtime trace, or artifacts
+- **Does not merge** shadow artifacts into RuntimeResult.artifacts
+- **Does not affect** routing or agent selection
+- **Does not invoke** real agents or real skills
+- **Does not write** files
 
 ---
 
@@ -71,7 +84,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | `SDLC_EXECUTION_MODE=codex` | shadow | Real Codex CLI for `code_generation` | Yes — invokes `codex` CLI via `execFile` | Yes (`codex` binary) |
 | `SDLC_POLICY_MEMORY=enabled` | disabled | Write feedback to local SQLite | Yes — writes `.sdlc-runtime/policy-memory.sqlite` | No (local DB only) |
 | `SDLC_POLICY_MEMORY_READ=enabled` | disabled | Read SQLite for advisory signals | Yes — appends memory suggestions to feedback | No (local DB only) |
-| `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow` | disabled | Contract-only; enables integration helper | No — `runtime.ts` does not use it | No |
+| `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow` | disabled | Feature-flagged runtime shadow sidecar with in-memory audit trail | Yes — when enabled, attaches sidecar-only shadow integration metadata and auditTrail to RuntimeResult | No |
 
 **Key distinction:** `SDLC_EXECUTION_MODE=codex` is the only flag that calls a real external system. All others are local.
 
@@ -82,7 +95,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | `SDLC_EXECUTION_MODE` | `execution/config.ts` | `execution/codex-adapter.ts`, `execution/gateway.ts` | `tests/codex-adapter.test.ts` |
 | `SDLC_POLICY_MEMORY` | `core/policy-memory-config.ts` | `core/policy-memory-store.ts`, `runtime.ts` | `tests/policy-memory.test.ts` |
 | `SDLC_POLICY_MEMORY_READ` | `core/policy-memory-config.ts` | `core/policy-memory-analyzer.ts`, `runtime.ts` | `tests/policy-memory-read.test.ts` |
-| `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION` | `core/skill-flow-runtime-integration-config.ts` | `core/skill-flow-runtime-integration.ts` | `tests/skill-flow-runtime-integration-contract.test.ts` |
+| `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION` | `core/skill-flow-runtime-integration-config.ts` | `core/skill-flow-runtime-integration.ts`, `runtime.ts` | `tests/skill-flow-runtime-integration-contract.test.ts`, `tests/runtime-skill-flow-shadow-integration.test.ts` |
 
 ---
 
