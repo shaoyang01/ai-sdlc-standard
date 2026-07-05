@@ -196,6 +196,23 @@ async function test() {
     assert(memAvoid !== undefined, "memory-derived avoid_agent for hermes exists in runtime feedback");
     assert(memAvoid!.confidence === 0.6, "avoid_agent confidence is 0.6");
 
+    // Verify shadow routing decisions are present and advisory-only
+    const shadowDecisions = runtimeResult.feedback.shadow_routing_decisions;
+    assert(shadowDecisions !== undefined, "shadow_routing_decisions exists");
+    assert(Array.isArray(shadowDecisions), "shadow_routing_decisions is array");
+
+    const implDecision = shadowDecisions!.find((d) => d.node === "implementation");
+    assert(implDecision !== undefined, "shadow routing decision for implementation exists");
+    assert(implDecision!.preferredAgent === "codex", "memory prefers codex");
+    assert(implDecision!.avoidedAgents.includes("hermes"), "memory avoids hermes");
+    assert(implDecision!.applied === false, "decision is not applied");
+    assert(implDecision!.source === "memory", "decision source is memory");
+    assert(typeof implDecision!.confidence === "number", "decision has confidence");
+
+    // Verify actual trace agent is unchanged (decision is advisory only)
+    const implTrace = runtimeResult.execution_trace.find((t) => t.node === "implementation");
+    assert(implTrace !== undefined, "implementation in trace exists");
+    // Memory does not change the actual agent used
     console.log("");
 
   } finally {

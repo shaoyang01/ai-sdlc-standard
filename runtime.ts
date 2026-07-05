@@ -26,6 +26,7 @@ import { isPolicyMemoryEnabled, isPolicyMemoryReadEnabled, getPolicyMemoryPath }
 import { buildPolicyMemoryRecord } from "./core/policy-memory-builder";
 import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core/policy-memory-store";
 import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
+import { buildMemoryShadowRoutingDecisions } from "./core/memory-routing-shadow";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -78,6 +79,19 @@ const AGENT_MAP: Record<NodeType, LoopAgent> = {
 
 function getAgent(node: NodeType): LoopAgent {
   return AGENT_MAP[node] || "kimi";
+}
+
+// Build a node→agent map from execution trace for shadow routing context
+function buildCurrentAgentsByNode(
+  trace: ReadonlyArray<{ node: string; agent: string }>
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const entry of trace) {
+    if (!(entry.node in map)) {
+      map[entry.node] = entry.agent;
+    }
+  }
+  return map;
 }
 
 // ─── DocFlow Node Execution (PURE EXECUTORS) ──────────
@@ -398,11 +412,22 @@ export async function run(requirement: string): Promise<RuntimeResult> {
         node: "implementation",
       });
       if (memorySuggestions.length > 0) {
+        // Build shadow routing decisions from memory suggestions
+        const currentAgentsByNode = buildCurrentAgentsByNode(trace);
+        const shadowDecisions = buildMemoryShadowRoutingDecisions({
+          suggestions: memorySuggestions,
+          currentAgentsByNode,
+        });
+
         feedback = {
           ...feedback,
           policy_suggestions: [
             ...feedback.policy_suggestions,
             ...memorySuggestions,
+          ],
+          shadow_routing_decisions: [
+            ...(feedback.shadow_routing_decisions ?? []),
+            ...shadowDecisions,
           ],
         };
       }

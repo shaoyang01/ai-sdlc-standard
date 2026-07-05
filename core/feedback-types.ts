@@ -37,9 +37,21 @@ export type PolicySuggestion = Readonly<{
   confidence: number;
 }>;
 
+export type ShadowRoutingDecision = Readonly<{
+  node: string;
+  currentAgent?: string;
+  preferredAgent?: string;
+  avoidedAgents: ReadonlyArray<string>;
+  reason: string;
+  confidence: number;
+  source: "memory";
+  applied: false;
+}>;
+
 export type RuntimeFeedback = Readonly<{
   agent_scores: ReadonlyArray<AgentScore>;
   node_outcomes: ReadonlyArray<NodeOutcome>;
   review_summary: ReviewSummary;
   policy_suggestions: ReadonlyArray<PolicySuggestion>;
+  shadow_routing_decisions?: ReadonlyArray<ShadowRoutingDecision>;
 }>;
