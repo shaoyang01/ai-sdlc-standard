@@ -1,21 +1,118 @@
 {
   "version": 1,
   "source": "real-agent-adapter-integration-plan",
+  "source_of_truth_request_types": "execution/types.ts:ExecutionRequestType",
   "default_execution_mode": "shadow",
   "real_execution_default": false,
   "adapters": [
-    {"adapter":"shadow","status":"implemented","default_enabled":true,"invokes_real_external_system":false,"supported_request_types":["requirement_summary","tech_design","solution_review","code_generation","code_review","bugfix","validation"],"unsupported_request_types":[],"fallback_behavior":"n/a (default)","evidence":["execution/shadow-agent-adapter.ts"]},
-    {"adapter":"codex","status":"feature_flagged_partial","default_enabled":false,"invokes_real_external_system":true,"supported_request_types":["code_generation"],"unsupported_request_types":["requirement_summary","tech_design","solution_review","code_review","bugfix","validation"],"fallback_behavior":"shadow for unsupported types","evidence":["execution/codex-adapter.ts","execution/config.ts"]},
-    {"adapter":"kimi","status":"not_implemented","default_enabled":false,"invokes_real_external_system":false,"supported_request_types":[],"unsupported_request_types":[],"fallback_behavior":"shadow (no adapter exists)","evidence":["execution/gateway.ts routes to shadow"]},
-    {"adapter":"hermes","status":"not_implemented","default_enabled":false,"invokes_real_external_system":false,"supported_request_types":[],"unsupported_request_types":[],"fallback_behavior":"shadow (no adapter exists)","evidence":["execution/gateway.ts routes to shadow"]}
+    {
+      "adapter": "shadow",
+      "status": "implemented",
+      "default_enabled": true,
+      "invokes_real_external_system": false,
+      "supported_request_types": ["llm_task","code_generation","review","validation","code_review","bugfix"],
+      "unsupported_request_types": [],
+      "fallback_behavior": "n/a (default)",
+      "evidence": ["execution/shadow-agent-adapter.ts"]
+    },
+    {
+      "adapter": "codex",
+      "status": "feature_flagged_partial",
+      "default_enabled": false,
+      "invokes_real_external_system": true,
+      "supported_request_types": ["code_generation"],
+      "unsupported_request_types": ["llm_task","review","validation","code_review","bugfix"],
+      "fallback_behavior": "shadow for unsupported types",
+      "evidence": ["execution/codex-adapter.ts","execution/config.ts"]
+    },
+    {
+      "adapter": "kimi",
+      "status": "not_implemented",
+      "default_enabled": false,
+      "invokes_real_external_system": false,
+      "supported_request_types": [],
+      "unsupported_request_types": [],
+      "fallback_behavior": "shadow (no adapter exists)",
+      "evidence": ["execution/gateway.ts routes to shadow"]
+    },
+    {
+      "adapter": "hermes",
+      "status": "not_implemented",
+      "default_enabled": false,
+      "invokes_real_external_system": false,
+      "supported_request_types": [],
+      "unsupported_request_types": [],
+      "fallback_behavior": "shadow (no adapter exists)",
+      "evidence": ["execution/gateway.ts routes to shadow"]
+    }
   ],
   "request_types": [
-    {"request_type":"llm_task","shadow":"implemented","codex":"unsupported","kimi":"planned","hermes":"unsupported","recommended_real_adapter":"kimi","notes":"Requirement intake and specification writing"},
-    {"request_type":"code_generation","shadow":"implemented","codex":"feature_flagged","kimi":"planned","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Implementation code generation"},
-    {"request_type":"review","shadow":"implemented","codex":"planned","kimi":"planned","hermes":"planned","recommended_real_adapter":"codex","notes":"Solution review and specification audit"},
-    {"request_type":"validation","shadow":"implemented","codex":"unsupported","kimi":"unsupported","hermes":"planned","recommended_real_adapter":"hermes","notes":"Validation and test feedback"},
-    {"request_type":"code_review","shadow":"implemented","codex":"planned","kimi":"unsupported","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Code review execution and normalization"},
-    {"request_type":"bugfix","shadow":"implemented","codex":"planned","kimi":"unsupported","hermes":"unsupported","recommended_real_adapter":"codex","notes":"Bugfix patch generation"}
+    {
+      "request_type": "llm_task",
+      "shadow": "implemented",
+      "codex": "unsupported",
+      "kimi": "planned",
+      "hermes": "unsupported",
+      "recommended_real_adapter": "kimi",
+      "typical_runtime_nodes": ["requirement-summary","tech-design","review"],
+      "typical_artifacts": ["requirement_summary","tech_design","solution_review"],
+      "notes": "Covers requirement intake, tech design, and solution review style LLM tasks"
+    },
+    {
+      "request_type": "code_generation",
+      "shadow": "implemented",
+      "codex": "feature_flagged",
+      "kimi": "planned",
+      "hermes": "unsupported",
+      "recommended_real_adapter": "codex",
+      "typical_runtime_nodes": ["implementation"],
+      "typical_artifacts": ["code_patch","implementation_plan"],
+      "notes": "Implementation code generation"
+    },
+    {
+      "request_type": "review",
+      "shadow": "implemented",
+      "codex": "planned",
+      "kimi": "planned",
+      "hermes": "planned",
+      "recommended_real_adapter": "codex",
+      "typical_runtime_nodes": ["review"],
+      "typical_artifacts": ["solution_review"],
+      "notes": "Solution review and specification audit"
+    },
+    {
+      "request_type": "validation",
+      "shadow": "implemented",
+      "codex": "unsupported",
+      "kimi": "unsupported",
+      "hermes": "planned",
+      "recommended_real_adapter": "hermes",
+      "typical_runtime_nodes": ["validation"],
+      "typical_artifacts": ["validation_report"],
+      "notes": "Validation and test feedback"
+    },
+    {
+      "request_type": "code_review",
+      "shadow": "implemented",
+      "codex": "planned",
+      "kimi": "unsupported",
+      "hermes": "unsupported",
+      "recommended_real_adapter": "codex",
+      "typical_runtime_nodes": ["code-review"],
+      "typical_artifacts": ["code_review"],
+      "notes": "Code review execution and normalization"
+    },
+    {
+      "request_type": "bugfix",
+      "shadow": "implemented",
+      "codex": "planned",
+      "kimi": "unsupported",
+      "hermes": "unsupported",
+      "recommended_real_adapter": "codex",
+      "typical_runtime_nodes": ["bugfix"],
+      "typical_artifacts": ["bugfix_patch"],
+      "notes": "Bugfix patch generation"
+    }
   ],
   "feature_flags": [
     {"flag":"SDLC_EXECUTION_MODE","status":"implemented","default":"shadow","enabled_value":"codex","purpose":"Enables real Codex for code_generation","changes_runtime_behavior_today":true,"invokes_real_external_system_today":true},
