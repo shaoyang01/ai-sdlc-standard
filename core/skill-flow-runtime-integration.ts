@@ -81,7 +81,7 @@ export function decideSkillFlowRuntimeIntegration(
       shadowPlanStageCount: plan.stages.length,
       shadowExecutionStageCount: execution.stageResults.length,
       shadowArtifactCount: execution.artifacts.length,
-      warnings: [],
+      warnings: [...plan.warnings, ...execution.warnings],
     };
   }
 

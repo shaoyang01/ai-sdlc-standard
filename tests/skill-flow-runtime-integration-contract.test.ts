@@ -115,6 +115,28 @@ async function test() {
   assert(directResult.shadowExecutionCreated === true, "direct execution created");
   console.log("");
 
+  // ── Test 6: Unknown flow under shadow flag preserves warnings ──
+  console.log("Test 6: Unknown flow under shadow flag preserves warnings");
+  const unknownConfig = getSkillFlowRuntimeIntegrationConfig({
+    SDLC_SKILL_FLOW_RUNTIME_INTEGRATION: "shadow",
+  });
+  const unknownResult = decideSkillFlowRuntimeIntegration(unknownConfig, {
+    requirementId: "REQ-UNKNOWN",
+    flowId: "unknown_flow",
+    reason: "test unknown flow",
+    inputArtifacts: [],
+    mode: "shadow_only",
+  });
+  assert(unknownResult.decision === "enabled_shadow_only", "still enabled_shadow_only");
+  assert(unknownResult.shadowPlanCreated === false, "plan not created for unknown flow");
+  assert(unknownResult.shadowExecutionCreated === false, "execution not created for unknown flow");
+  assert(unknownResult.warnings.some((w) => w.includes("Unknown flow")), "warnings include Unknown flow");
+  assert(unknownResult.affectsRuntimeRouting === false, "does not affect routing");
+  assert(unknownResult.invokesRealAgents === false, "does not invoke real agents");
+  assert(unknownResult.invokesRealSkills === false, "does not invoke real skills");
+  assert(unknownResult.writesFiles === false, "does not write files");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
