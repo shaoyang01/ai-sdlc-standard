@@ -21,6 +21,17 @@ const INVALID_REQUEST_TYPES = [
   "solution_review",
 ];
 
+const VALID_ARTIFACT_TYPES = [
+  "requirement_summary",
+  "tech_design",
+  "solution_review",
+  "code_patch",
+  "code_review",
+  "bugfix_patch",
+  "validation_report",
+  "shadow_output",
+];
+
 async function test() {
   let passed = 0;
   let failed = 0;
@@ -97,6 +108,14 @@ async function test() {
   assert(val["recommended_real_adapter"] === "hermes", "validation → hermes");
   const llm = m.request_types.find((r: Record<string, unknown>) => r["request_type"] === "llm_task");
   assert(llm["recommended_real_adapter"] === "kimi", "llm_task → kimi");
+  // Artifact type validation
+  console.log("Test 5b: typical_artifacts use valid execution artifact types");
+  for (const rt of m.request_types) {
+    const arts = rt["typical_artifacts"] as string[];
+    for (const art of arts) {
+      assert(VALID_ARTIFACT_TYPES.includes(art), `${rt["request_type"]}: typical_artifact ${art} is valid`);
+    }
+  }
   console.log("");
 
   // ── Test 6: Feature flags ──
@@ -113,6 +132,7 @@ async function test() {
   const sbNames = m.safety_boundaries.map((s: Record<string, unknown>) => s["name"]);
   assert(sbNames.includes("no_default_real_model_execution"), "no default real execution");
   assert(sbNames.includes("real_adapters_behind_execution_gateway"), "adapters behind gateway");
+  assert(sbNames.includes("no_runtime_direct_adapter_calls"), "no direct adapter calls");
   assert(sbNames.includes("no_secret_logging"), "no secret logging");
   assert(sbNames.includes("no_git_operations_by_adapters"), "no git operations");
   console.log("");

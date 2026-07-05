@@ -10,20 +10,40 @@
       "status": "implemented",
       "default_enabled": true,
       "invokes_real_external_system": false,
-      "supported_request_types": ["llm_task","code_generation","review","validation","code_review","bugfix"],
+      "supported_request_types": [
+        "llm_task",
+        "code_generation",
+        "review",
+        "validation",
+        "code_review",
+        "bugfix"
+      ],
       "unsupported_request_types": [],
       "fallback_behavior": "n/a (default)",
-      "evidence": ["execution/shadow-agent-adapter.ts"]
+      "evidence": [
+        "execution/shadow-agent-adapter.ts"
+      ]
     },
     {
       "adapter": "codex",
       "status": "feature_flagged_partial",
       "default_enabled": false,
       "invokes_real_external_system": true,
-      "supported_request_types": ["code_generation"],
-      "unsupported_request_types": ["llm_task","review","validation","code_review","bugfix"],
+      "supported_request_types": [
+        "code_generation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "review",
+        "validation",
+        "code_review",
+        "bugfix"
+      ],
       "fallback_behavior": "shadow for unsupported types",
-      "evidence": ["execution/codex-adapter.ts","execution/config.ts"]
+      "evidence": [
+        "execution/codex-adapter.ts",
+        "execution/config.ts"
+      ]
     },
     {
       "adapter": "kimi",
@@ -33,7 +53,9 @@
       "supported_request_types": [],
       "unsupported_request_types": [],
       "fallback_behavior": "shadow (no adapter exists)",
-      "evidence": ["execution/gateway.ts routes to shadow"]
+      "evidence": [
+        "execution/gateway.ts routes to shadow"
+      ]
     },
     {
       "adapter": "hermes",
@@ -43,7 +65,9 @@
       "supported_request_types": [],
       "unsupported_request_types": [],
       "fallback_behavior": "shadow (no adapter exists)",
-      "evidence": ["execution/gateway.ts routes to shadow"]
+      "evidence": [
+        "execution/gateway.ts routes to shadow"
+      ]
     }
   ],
   "request_types": [
@@ -54,8 +78,16 @@
       "kimi": "planned",
       "hermes": "unsupported",
       "recommended_real_adapter": "kimi",
-      "typical_runtime_nodes": ["requirement-summary","tech-design","review"],
-      "typical_artifacts": ["requirement_summary","tech_design","solution_review"],
+      "typical_runtime_nodes": [
+        "requirement-summary",
+        "tech-design",
+        "review"
+      ],
+      "typical_artifacts": [
+        "requirement_summary",
+        "tech_design",
+        "solution_review"
+      ],
       "notes": "Covers requirement intake, tech design, and solution review style LLM tasks"
     },
     {
@@ -65,8 +97,12 @@
       "kimi": "planned",
       "hermes": "unsupported",
       "recommended_real_adapter": "codex",
-      "typical_runtime_nodes": ["implementation"],
-      "typical_artifacts": ["code_patch","implementation_plan"],
+      "typical_runtime_nodes": [
+        "implementation"
+      ],
+      "typical_artifacts": [
+        "code_patch"
+      ],
       "notes": "Implementation code generation"
     },
     {
@@ -76,8 +112,12 @@
       "kimi": "planned",
       "hermes": "planned",
       "recommended_real_adapter": "codex",
-      "typical_runtime_nodes": ["review"],
-      "typical_artifacts": ["solution_review"],
+      "typical_runtime_nodes": [
+        "review"
+      ],
+      "typical_artifacts": [
+        "solution_review"
+      ],
       "notes": "Solution review and specification audit"
     },
     {
@@ -87,8 +127,12 @@
       "kimi": "unsupported",
       "hermes": "planned",
       "recommended_real_adapter": "hermes",
-      "typical_runtime_nodes": ["validation"],
-      "typical_artifacts": ["validation_report"],
+      "typical_runtime_nodes": [
+        "validation"
+      ],
+      "typical_artifacts": [
+        "validation_report"
+      ],
       "notes": "Validation and test feedback"
     },
     {
@@ -98,8 +142,12 @@
       "kimi": "unsupported",
       "hermes": "unsupported",
       "recommended_real_adapter": "codex",
-      "typical_runtime_nodes": ["code-review"],
-      "typical_artifacts": ["code_review"],
+      "typical_runtime_nodes": [
+        "code-review"
+      ],
+      "typical_artifacts": [
+        "code_review"
+      ],
       "notes": "Code review execution and normalization"
     },
     {
@@ -109,29 +157,113 @@
       "kimi": "unsupported",
       "hermes": "unsupported",
       "recommended_real_adapter": "codex",
-      "typical_runtime_nodes": ["bugfix"],
-      "typical_artifacts": ["bugfix_patch"],
+      "typical_runtime_nodes": [
+        "bugfix"
+      ],
+      "typical_artifacts": [
+        "bugfix_patch"
+      ],
       "notes": "Bugfix patch generation"
     }
   ],
   "feature_flags": [
-    {"flag":"SDLC_EXECUTION_MODE","status":"implemented","default":"shadow","enabled_value":"codex","purpose":"Enables real Codex for code_generation","changes_runtime_behavior_today":true,"invokes_real_external_system_today":true},
-    {"flag":"SDLC_KIMI_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Enables real Kimi adapter","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
-    {"flag":"SDLC_HERMES_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Enables real Hermes adapter","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
-    {"flag":"SDLC_CODEX_REVIEW_ADAPTER","status":"planned","default":"disabled","enabled_value":"enabled","purpose":"Expands Codex to review/bugfix types","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false},
-    {"flag":"SDLC_REAL_ADAPTER_FALLBACK","status":"planned","default":"shadow","enabled_value":"shadow | fail_closed","purpose":"Controls fallback behavior for real adapter failures","changes_runtime_behavior_today":false,"invokes_real_external_system_today":false}
+    {
+      "flag": "SDLC_EXECUTION_MODE",
+      "status": "implemented",
+      "default": "shadow",
+      "enabled_value": "codex",
+      "purpose": "Enables real Codex for code_generation",
+      "changes_runtime_behavior_today": true,
+      "invokes_real_external_system_today": true
+    },
+    {
+      "flag": "SDLC_KIMI_ADAPTER",
+      "status": "planned",
+      "default": "disabled",
+      "enabled_value": "enabled",
+      "purpose": "Enables real Kimi adapter",
+      "changes_runtime_behavior_today": false,
+      "invokes_real_external_system_today": false
+    },
+    {
+      "flag": "SDLC_HERMES_ADAPTER",
+      "status": "planned",
+      "default": "disabled",
+      "enabled_value": "enabled",
+      "purpose": "Enables real Hermes adapter",
+      "changes_runtime_behavior_today": false,
+      "invokes_real_external_system_today": false
+    },
+    {
+      "flag": "SDLC_CODEX_REVIEW_ADAPTER",
+      "status": "planned",
+      "default": "disabled",
+      "enabled_value": "enabled",
+      "purpose": "Expands Codex to review/bugfix types",
+      "changes_runtime_behavior_today": false,
+      "invokes_real_external_system_today": false
+    },
+    {
+      "flag": "SDLC_REAL_ADAPTER_FALLBACK",
+      "status": "planned",
+      "default": "shadow",
+      "enabled_value": "shadow | fail_closed",
+      "purpose": "Controls fallback behavior for real adapter failures",
+      "changes_runtime_behavior_today": false,
+      "invokes_real_external_system_today": false
+    }
   ],
   "safety_boundaries": [
-    {"name":"no_default_real_model_execution","status":"required","description":"Default execution mode remains shadow"},
-    {"name":"real_adapters_behind_execution_gateway","status":"required","description":"Runtime calls Gateway, not adapters directly"},
-    {"name":"no_runtime_direct_adapter_calls","status":"required","description":"runtime.ts only calls executionGateway.execute()"},
-    {"name":"no_real_sdlc_skill_invocation","status":"required","description":"Adapters execute requests; skills are invoked by future orchestrator"},
-    {"name":"no_file_writes_by_adapters","status":"required","description":"Adapters must not write files to disk"},
-    {"name":"no_git_operations_by_adapters","status":"required","description":"Adapters must not create commits, branches, or PRs"},
-    {"name":"no_secret_logging","status":"required","description":"API keys and full prompts/responses must not be logged"},
-    {"name":"bounded_timeouts","status":"required","description":"All real adapter calls must have configurable timeouts"},
-    {"name":"structured_failures","status":"required","description":"Real adapter failures return structured ExecutionResult"},
-    {"name":"shadow_fallback_policy_explicit","status":"required","description":"Fallback behavior must be explicit per adapter"}
+    {
+      "name": "no_default_real_model_execution",
+      "status": "required",
+      "description": "Default execution mode remains shadow"
+    },
+    {
+      "name": "real_adapters_behind_execution_gateway",
+      "status": "required",
+      "description": "Runtime calls Gateway, not adapters directly"
+    },
+    {
+      "name": "no_runtime_direct_adapter_calls",
+      "status": "required",
+      "description": "runtime.ts only calls executionGateway.execute()"
+    },
+    {
+      "name": "no_real_sdlc_skill_invocation",
+      "status": "required",
+      "description": "Adapters execute requests; skills are invoked by future orchestrator"
+    },
+    {
+      "name": "no_file_writes_by_adapters",
+      "status": "required",
+      "description": "Adapters must not write files to disk"
+    },
+    {
+      "name": "no_git_operations_by_adapters",
+      "status": "required",
+      "description": "Adapters must not create commits, branches, or PRs"
+    },
+    {
+      "name": "no_secret_logging",
+      "status": "required",
+      "description": "API keys and full prompts/responses must not be logged"
+    },
+    {
+      "name": "bounded_timeouts",
+      "status": "required",
+      "description": "All real adapter calls must have configurable timeouts"
+    },
+    {
+      "name": "structured_failures",
+      "status": "required",
+      "description": "Real adapter failures return structured ExecutionResult"
+    },
+    {
+      "name": "shadow_fallback_policy_explicit",
+      "status": "required",
+      "description": "Fallback behavior must be explicit per adapter"
+    }
   ],
   "staged_roadmap": [
     "Real Agent Adapter Integration Plan",

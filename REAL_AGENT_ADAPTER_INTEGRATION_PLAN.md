@@ -35,7 +35,7 @@ The AI SDLC Runtime is shadow-first by default. Only a feature-flagged Codex ada
 
 Recommended real adapters by request type:
 - `code_generation` → codex
-- `requirement_summary`/`tech_design` → kimi
+- `llm_task` → kimi (for requirement intake, tech design, and solution review style work)
 - `validation` → hermes
 - `code_review`/`bugfix` → codex (expansion)
 
