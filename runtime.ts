@@ -20,6 +20,8 @@ import { transition, replayExecution } from "./core/state-machine-vm";
 import { executionGateway } from "./execution";
 import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
+import { analyzeRuntimeFeedback } from "./core/feedback-analyzer";
+import { RuntimeFeedback } from "./core/feedback-types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ interface RuntimeResult {
   requirement_id: string;
   execution_trace: ExecutionTraceEntry[];
   artifacts: Artifact[];
+  feedback: RuntimeFeedback;
   fanout_results?: FanoutResult;
   final_status: "success" | "partial" | "failed";
   completed_at: string;
@@ -374,10 +377,19 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   else if (succeededCount > 0) finalStatus = "partial";
   else finalStatus = "failed";
 
+  // ─── Feedback Analysis — read-only, non-persistent ────
+  const feedback = analyzeRuntimeFeedback({
+    requirementId,
+    executionTrace: trace,
+    artifacts,
+    finalStatus,
+  });
+
   return {
     requirement_id: requirementId,
     execution_trace: trace,
     artifacts,
+    feedback,
     fanout_results: fanoutResult,
     final_status: finalStatus,
     completed_at: new Date().toISOString(),

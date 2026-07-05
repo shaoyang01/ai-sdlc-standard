@@ -78,6 +78,25 @@ async function test() {
   assert(result.artifacts.every((a: { id: string }) => typeof a.id === "string"), "all artifacts have ids");
   console.log("");
 
+  // Test 5c: Feedback analysis
+  console.log("Test 5c: Feedback analysis");
+  assert(result.feedback !== undefined, "feedback exists");
+  assert(Array.isArray(result.feedback.agent_scores), "agent_scores is array");
+  assert(result.feedback.agent_scores.length > 0, "agent_scores has entries");
+  assert(Array.isArray(result.feedback.node_outcomes), "node_outcomes is array");
+  assert(result.feedback.node_outcomes.length > 0, "node_outcomes has entries");
+  assert(result.feedback.review_summary !== undefined, "review_summary exists");
+  assert(result.feedback.review_summary.codeReviewStatus === "PASS", "code review PASS");
+  assert(result.feedback.review_summary.bugfixAttempts === 0, "no bugfix attempts");
+  assert(result.feedback.review_summary.validationPassed === true, "validation passed");
+  assert(Array.isArray(result.feedback.policy_suggestions), "policy_suggestions is array");
+  assert(result.feedback.policy_suggestions.length > 0, "policy_suggestions has entries");
+  const preferAgent = result.feedback.policy_suggestions.find(
+    (s: { type: string }) => s.type === "prefer_agent"
+  );
+  assert(preferAgent !== undefined, "has prefer_agent suggestion in default pass path");
+  console.log("");
+
   // Test 5b: Code review trace and artifacts
   console.log("Test 5b: Code review in default pipeline");
   const traceNodes = result.execution_trace.map((t: { node: string }) => t.node);
