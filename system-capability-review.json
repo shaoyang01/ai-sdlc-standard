@@ -323,6 +323,26 @@
         "execution/hermes-cli-dry-run.ts",
         "tests/hermes-cli-dry-run.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Integration Contract",
+      "status": "contract-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "requires_flags": [
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "evidence": [
+        "execution/kimi-gateway-integration-contract.ts",
+        "tests/kimi-gateway-integration-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -544,8 +564,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Real Adapter CLI Audit Trail",
-    "reason": "Audit shape should be finalized before real command execution",
-    "safety_rationale": "Audit metadata has no CLI execution, no process spawn, no API keys"
+    "title": "Feature-flagged Kimi Gateway Wiring Shadow Path",
+    "reason": "Add shadow/sidecar Gateway wiring before any real Gateway routing",
+    "safety_rationale": "Default off, requires explicit flags, must not change runtime/final_status"
   }
 }

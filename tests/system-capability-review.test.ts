@@ -98,6 +98,26 @@ async function test() {
   const hEvidence = hDryRunCap["evidence"] as string[];
   assert(hEvidence.includes("execution/hermes-cli-dry-run.ts"), "hermes evidence includes hermes-cli-dry-run.ts");
   assert(hEvidence.includes("tests/hermes-cli-dry-run.test.ts"), "hermes evidence includes test");
+  // Kimi Gateway Integration Contract
+  assert(capNames.includes("Kimi Gateway Integration Contract"), "has Kimi Gateway Integration Contract");
+  const gwCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Integration Contract");
+  assert(gwCap !== undefined, "gateway contract exists");
+  assert(gwCap["status"] === "contract-only", "gateway status");
+  assert(gwCap["runtime_active_by_default"] === false, "gateway not active");
+  assert(gwCap["changes_routing"] === false, "gateway no routing");
+  assert(gwCap["changes_agent_selection"] === false, "gateway no agent");
+  assert(gwCap["invokes_real_agents"] === false, "gateway no real agents");
+  assert(gwCap["invokes_real_skills"] === false, "gateway no real skills");
+  assert(gwCap["writes_files"] === false, "gateway no files");
+  assert(gwCap["wired_to_gateway"] === false, "gateway not wired to gateway");
+  assert(gwCap["wired_to_runtime"] === false, "gateway not wired to runtime");
+  const gwFlags = gwCap["requires_flags"] as string[];
+  assert(gwFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "gateway requires gateway flag");
+  assert(gwFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "gateway requires command flag");
+  const gwEvidence = gwCap["evidence"] as string[];
+  assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
+  assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
+  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Gateway Wiring Shadow Path", "next PR is shadow path");
   console.log("");
 
   // ── Test 5: Safety boundaries ──
