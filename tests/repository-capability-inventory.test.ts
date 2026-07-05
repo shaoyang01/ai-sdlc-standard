@@ -57,6 +57,8 @@ async function test() {
       `skill name starts with sdlc-: ${skill["name"]}`
     );
     assert(Array.isArray(skill["sourceFiles"]), `skill ${skill["name"]} has sourceFiles array`);
+    assert(Array.isArray(skill["referenceFiles"]), `skill ${skill["name"]} has referenceFiles array`);
+    assert((skill["referenceFiles"] as unknown[]).length >= 4, `skill ${skill["name"]} has at least 4 reference files`);
   }
   console.log("");
 
@@ -101,6 +103,33 @@ async function test() {
     mdContent.includes("PR-5.2 must use the existing sdlc-* skill names"),
     "REPOSITORY_CAPABILITY_INVENTORY.md instructs PR-5.2 to use existing skill names"
   );
+  console.log("");
+
+  // ── Routing vs Agent Selection distinction ──
+  console.log("Test 8: Routing vs Agent Selection distinction");
+  const policyEngine = inv.policy_modules.find((m) => m["name"] === "agent-policy-engine");
+  assert(policyEngine !== undefined, "agent-policy-engine exists");
+  assert(policyEngine!["changesGraphRouting"] === false, "agent-policy-engine does NOT change graph routing");
+  assert(policyEngine!["changesActualAgentSelection"] === true, "agent-policy-engine DOES change actual agent selection");
+
+  const agentDecision = inv.policy_modules.find((m) => m["name"] === "agent-decision");
+  assert(agentDecision !== undefined, "agent-decision exists");
+  assert(agentDecision!["changesGraphRouting"] === false, "agent-decision does NOT change graph routing");
+  assert(agentDecision!["changesActualAgentSelection"] === true, "agent-decision DOES change actual agent selection");
+
+  const memoryAnalyzer = inv.policy_modules.find((m) => m["name"] === "policy-memory-analyzer");
+  assert(memoryAnalyzer !== undefined, "policy-memory-analyzer exists");
+  assert(memoryAnalyzer!["changesGraphRouting"] === false, "memory-analyzer does NOT change graph routing");
+  assert(memoryAnalyzer!["changesActualAgentSelection"] === false, "memory-analyzer does NOT change actual agent selection");
+  assert(memoryAnalyzer!["onlyProducesSuggestions"] === true, "memory-analyzer only produces suggestions");
+
+  const feedbackAnalyzer = inv.feedback_modules.find((m) => m["name"] === "feedback-analyzer");
+  assert(feedbackAnalyzer !== undefined, "feedback-analyzer exists");
+  assert(feedbackAnalyzer!["changesActualAgentSelection"] === false, "feedback-analyzer does NOT change actual agent selection");
+
+  const evoAnalyzer = inv.evolution_modules.find((m) => m["name"] === "evolution-proposal-analyzer");
+  assert(evoAnalyzer !== undefined, "evolution-proposal-analyzer exists");
+  assert(evoAnalyzer!["changesActualAgentSelection"] === false, "evolution-analyzer does NOT change actual agent selection");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

@@ -108,21 +108,29 @@ This inventory documents all capabilities found in the `ai-sdlc-standard` reposi
 
 ## 8. Runtime-connected Capabilities
 
-These capabilities are directly wired into `runtime.ts` and affect pipeline execution:
+These capabilities are directly wired into `runtime.ts` and affect pipeline execution.
 
-- SDLC Graph Kernel (node/edge transitions)
-- State Machine VM (deterministic state transitions)
+**Graph Routing vs Agent Selection — Critical Distinction:**
+
+- **Graph Kernel (`sdlc_graph/`)** is the single source of truth for graph transitions (which node comes next). Only the Graph Kernel and `getNextNode()` change graph routing.
+- **Agent Policy Engine** and **Agent Decision** affect **actual agent selection** (which agent executes a node), but they do NOT change graph routing. Graph Kernel transitions are unaffected by agent policy.
+- **Memory suggestions, shadow routing decisions, and evolution proposals** are **advisory only**. They do NOT change actual agent selection or graph routing. They appear in `RuntimeResult.feedback` for observability and future governance.
+
+### Runtime-connected Capabilities
+
+- SDLC Graph Kernel (node/edge transitions) — **changes graph routing**
+- State Machine VM (deterministic state transitions) — **changes graph routing**
 - Execution Gateway (single dispatch boundary)
-- Agent Policy Engine (multi-factor agent scoring)
-- Agent Decision Layer (complexity-based selection)
+- Agent Policy Engine (multi-factor agent scoring) — **changes actual agent selection, NOT graph routing**
+- Agent Decision Layer (complexity-based selection) — **changes actual agent selection, NOT graph routing**
 - Shadow Agent Adapter (default execution)
 - Codex Adapter (feature-flagged real execution)
 - Code Review Adapter (shadow review in bounded loop)
 - Bugfix Adapter (shadow bugfix in bounded loop)
 - Feedback Analyzer (pure score/suggestion computation)
 - Policy Memory Store (opt-in SQLite persistence)
-- Memory Routing Shadow (advisory shadow decisions)
-- Evolution Proposal Analyzer (read-only proposals)
+- Memory Routing Shadow (advisory shadow decisions) — **advisory only**
+- Evolution Proposal Analyzer (read-only proposals) — **advisory only**
 
 ## 9. Shadow-only Capabilities
 
@@ -137,11 +145,17 @@ Always return deterministic mock results; never call real external agents:
 
 ## 10. Advisory-only Capabilities
 
-Computed and returned in `RuntimeResult.feedback` but do NOT change routing or agent selection:
+These capabilities are computed and returned in `RuntimeResult.feedback` but do **NOT** change graph routing or actual agent selection:
 
-- Policy Suggestions from memory read (`policy-memory-analyzer.ts`)
-- Shadow Routing Decisions (`memory-routing-shadow.ts`, all `applied: false`)
-- Evolution Proposals (`evolution-proposal-analyzer.ts`, all `applied: false`)
+- Policy Suggestions from memory read (`policy-memory-analyzer.ts`) — **advisory only**
+- Shadow Routing Decisions (`memory-routing-shadow.ts`, all `applied: false`) — **advisory only**
+- Evolution Proposals (`evolution-proposal-analyzer.ts`, all `applied: false`) — **advisory only**
+
+**These capabilities never modify:**
+- Graph Kernel transitions (no node order change)
+- Agent Policy Engine rules (no weight or scoring change)
+- Actual agent selection (no runtime agent override)
+- Source code or policy files (no file mutation)
 
 ## 11. Potentially Unconnected Modules
 

@@ -2,91 +2,975 @@
   "version": 1,
   "generated_by": "static_repository_scan",
   "skills": [
-    {"name":"sdlc-code-review-excellence","skillDirectory":"skills/sdlc-code-review-excellence","skillFile":"skills/sdlc-code-review-excellence/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-code-review-excellence.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Reviewer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-code-review-normalizer","skillDirectory":"skills/sdlc-code-review-normalizer","skillFile":"skills/sdlc-code-review-normalizer/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-code-review-normalizer.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Reviewer/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-docflow-writer","skillDirectory":"skills/sdlc-docflow-writer","skillFile":"skills/sdlc-docflow-writer/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-docflow-writer.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer/Renderer/Publisher skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-gate-runner","skillDirectory":"skills/sdlc-gate-runner","skillFile":"skills/sdlc-gate-runner/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-gate-runner.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-implementation-recorder","skillDirectory":"skills/sdlc-implementation-recorder","skillFile":"skills/sdlc-implementation-recorder/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-implementation-recorder.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-requirement-normalizer","skillDirectory":"skills/sdlc-requirement-normalizer","skillFile":"skills/sdlc-requirement-normalizer/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-requirement-normalizer.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Intake/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-solution-reviewer","skillDirectory":"skills/sdlc-solution-reviewer","skillFile":"skills/sdlc-solution-reviewer/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-solution-reviewer.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-specification-writer","skillDirectory":"skills/sdlc-specification-writer","skillFile":"skills/sdlc-specification-writer/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-specification-writer.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-analyze","skillDirectory":"skills/sdlc-speckit-analyze","skillFile":"skills/sdlc-speckit-analyze/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-analyze.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-checklist","skillDirectory":"skills/sdlc-speckit-checklist","skillFile":"skills/sdlc-speckit-checklist/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-checklist.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-clarify","skillDirectory":"skills/sdlc-speckit-clarify","skillFile":"skills/sdlc-speckit-clarify/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-clarify.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Auditor/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-code-doc-reconcile","skillDirectory":"skills/sdlc-speckit-code-doc-reconcile","skillFile":"skills/sdlc-speckit-code-doc-reconcile/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Auditor/Sync skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-implement","skillDirectory":"skills/sdlc-speckit-implement","skillFile":"skills/sdlc-speckit-implement/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-implement.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Executor/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-pipeline","skillDirectory":"skills/sdlc-speckit-pipeline","skillFile":"skills/sdlc-speckit-pipeline/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-pipeline.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Workflow skill. Fully documented with contract, registry, and references. Runtime has executeSpeckitPipeline() but uses hardcoded stage names, not skill names."},
-    {"name":"sdlc-speckit-plan","skillDirectory":"skills/sdlc-speckit-plan","skillFile":"skills/sdlc-speckit-plan/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-plan.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-specify","skillDirectory":"skills/sdlc-speckit-specify","skillFile":"skills/sdlc-speckit-specify/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-specify.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-sync","skillDirectory":"skills/sdlc-speckit-sync","skillFile":"skills/sdlc-speckit-sync/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-sync.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Sync/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-speckit-tasks","skillDirectory":"skills/sdlc-speckit-tasks","skillFile":"skills/sdlc-speckit-tasks/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-speckit-tasks.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-test-feedback-classifier","skillDirectory":"skills/sdlc-test-feedback-classifier","skillFile":"skills/sdlc-test-feedback-classifier/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-test-feedback-classifier.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Reviewer/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."},
-    {"name":"sdlc-test-feedback-sync","skillDirectory":"skills/sdlc-test-feedback-sync","skillFile":"skills/sdlc-test-feedback-sync/SKILL.md","manifestFile":"manifest.yaml","contractFile":"skill-contracts/known-skills/sdlc-test-feedback-sync.md","sourceFiles":[],"registeredInManifest":true,"registeredInSkillRegistry":true,"referencedByRuntime":false,"referencedByExecutionGateway":false,"referencedByAgentPolicy":false,"referencedByTests":false,"referencedByDocs":true,"inferredStatus":"documented_skill_contract","notes":"Sync/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime."}
+    {
+      "name": "sdlc-code-review-excellence",
+      "skillDirectory": "skills/sdlc-code-review-excellence",
+      "skillFile": "skills/sdlc-code-review-excellence/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-code-review-excellence.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Reviewer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-code-review-excellence/SKILL.md",
+        "skill-contracts/known-skills/sdlc-code-review-excellence.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-code-review-normalizer",
+      "skillDirectory": "skills/sdlc-code-review-normalizer",
+      "skillFile": "skills/sdlc-code-review-normalizer/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-code-review-normalizer.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Reviewer/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-code-review-normalizer/SKILL.md",
+        "skill-contracts/known-skills/sdlc-code-review-normalizer.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-docflow-writer",
+      "skillDirectory": "skills/sdlc-docflow-writer",
+      "skillFile": "skills/sdlc-docflow-writer/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-docflow-writer.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer/Renderer/Publisher skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-docflow-writer/SKILL.md",
+        "skill-contracts/known-skills/sdlc-docflow-writer.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-gate-runner",
+      "skillDirectory": "skills/sdlc-gate-runner",
+      "skillFile": "skills/sdlc-gate-runner/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-gate-runner.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-gate-runner/SKILL.md",
+        "skill-contracts/known-skills/sdlc-gate-runner.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-implementation-recorder",
+      "skillDirectory": "skills/sdlc-implementation-recorder",
+      "skillFile": "skills/sdlc-implementation-recorder/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-implementation-recorder.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-implementation-recorder/SKILL.md",
+        "skill-contracts/known-skills/sdlc-implementation-recorder.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-requirement-normalizer",
+      "skillDirectory": "skills/sdlc-requirement-normalizer",
+      "skillFile": "skills/sdlc-requirement-normalizer/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-requirement-normalizer.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Intake/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-requirement-normalizer/SKILL.md",
+        "skill-contracts/known-skills/sdlc-requirement-normalizer.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-solution-reviewer",
+      "skillDirectory": "skills/sdlc-solution-reviewer",
+      "skillFile": "skills/sdlc-solution-reviewer/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-solution-reviewer.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-solution-reviewer/SKILL.md",
+        "skill-contracts/known-skills/sdlc-solution-reviewer.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-specification-writer",
+      "skillDirectory": "skills/sdlc-specification-writer",
+      "skillFile": "skills/sdlc-specification-writer/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-specification-writer.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-specification-writer/SKILL.md",
+        "skill-contracts/known-skills/sdlc-specification-writer.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-analyze",
+      "skillDirectory": "skills/sdlc-speckit-analyze",
+      "skillFile": "skills/sdlc-speckit-analyze/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-analyze.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-analyze/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-analyze.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-checklist",
+      "skillDirectory": "skills/sdlc-speckit-checklist",
+      "skillFile": "skills/sdlc-speckit-checklist/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-checklist.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-checklist/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-checklist.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-clarify",
+      "skillDirectory": "skills/sdlc-speckit-clarify",
+      "skillFile": "skills/sdlc-speckit-clarify/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-clarify.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-clarify/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-clarify.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-code-doc-reconcile",
+      "skillDirectory": "skills/sdlc-speckit-code-doc-reconcile",
+      "skillFile": "skills/sdlc-speckit-code-doc-reconcile/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor/Sync skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-code-doc-reconcile/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-implement",
+      "skillDirectory": "skills/sdlc-speckit-implement",
+      "skillFile": "skills/sdlc-speckit-implement/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-implement.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Executor/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-implement/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-implement.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-pipeline",
+      "skillDirectory": "skills/sdlc-speckit-pipeline",
+      "skillFile": "skills/sdlc-speckit-pipeline/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Workflow skill. Fully documented with contract, registry, and references. Runtime has executeSpeckitPipeline() but uses hardcoded stage names, not skill names.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-pipeline/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-plan",
+      "skillDirectory": "skills/sdlc-speckit-plan",
+      "skillFile": "skills/sdlc-speckit-plan/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-plan.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-plan/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-plan.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-specify",
+      "skillDirectory": "skills/sdlc-speckit-specify",
+      "skillFile": "skills/sdlc-speckit-specify/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-specify.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-specify/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-specify.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-sync",
+      "skillDirectory": "skills/sdlc-speckit-sync",
+      "skillFile": "skills/sdlc-speckit-sync/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-sync.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Sync/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-sync/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-sync.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-speckit-tasks",
+      "skillDirectory": "skills/sdlc-speckit-tasks",
+      "skillFile": "skills/sdlc-speckit-tasks/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-speckit-tasks.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Producer/Auditor skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-speckit-tasks/SKILL.md",
+        "skill-contracts/known-skills/sdlc-speckit-tasks.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-test-feedback-classifier",
+      "skillDirectory": "skills/sdlc-test-feedback-classifier",
+      "skillFile": "skills/sdlc-test-feedback-classifier/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-test-feedback-classifier.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Reviewer/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-test-feedback-classifier/SKILL.md",
+        "skill-contracts/known-skills/sdlc-test-feedback-classifier.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    },
+    {
+      "name": "sdlc-test-feedback-sync",
+      "skillDirectory": "skills/sdlc-test-feedback-sync",
+      "skillFile": "skills/sdlc-test-feedback-sync/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-test-feedback-sync.md",
+      "sourceFiles": [],
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "referencedByRuntime": false,
+      "referencedByExecutionGateway": false,
+      "referencedByAgentPolicy": false,
+      "referencedByTests": false,
+      "referencedByDocs": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Sync/Producer skill. Fully documented with contract, registry, and references. Not wired to TypeScript runtime.",
+      "referenceFiles": [
+        "skills/sdlc-test-feedback-sync/SKILL.md",
+        "skill-contracts/known-skills/sdlc-test-feedback-sync.md",
+        "manifest.yaml",
+        "registry/skill-registry.md"
+      ]
+    }
   ],
   "skill_registry_files": [
-    {"file":"registry/skill-registry.md","category":"skill_registry","relatedSkills":["sdlc-code-review-excellence","sdlc-code-review-normalizer","sdlc-docflow-writer","sdlc-gate-runner","sdlc-implementation-recorder","sdlc-requirement-normalizer","sdlc-solution-reviewer","sdlc-specification-writer","sdlc-speckit-analyze","sdlc-speckit-checklist","sdlc-speckit-clarify","sdlc-speckit-code-doc-reconcile","sdlc-speckit-implement","sdlc-speckit-pipeline","sdlc-speckit-plan","sdlc-speckit-specify","sdlc-speckit-sync","sdlc-speckit-tasks","sdlc-test-feedback-classifier","sdlc-test-feedback-sync"],"notes":"Main skill registry with 22 entries (20 sdlc-* + html-doc-style legacy + karpathy-guidelines proposed)"},
-    {"file":"manifest.yaml","category":"skill_manifest","relatedSkills":["sdlc-code-review-excellence","sdlc-code-review-normalizer","sdlc-docflow-writer","sdlc-gate-runner","sdlc-implementation-recorder","sdlc-requirement-normalizer","sdlc-solution-reviewer","sdlc-specification-writer","sdlc-speckit-analyze","sdlc-speckit-checklist","sdlc-speckit-clarify","sdlc-speckit-code-doc-reconcile","sdlc-speckit-implement","sdlc-speckit-pipeline","sdlc-speckit-plan","sdlc-speckit-specify","sdlc-speckit-sync","sdlc-speckit-tasks","sdlc-test-feedback-classifier","sdlc-test-feedback-sync"],"notes":"Root manifest declaring 20 skills with paths, contracts, and references. References registry/skill-registry.md."},
-    {"file":"templates/skill-registry-entry-template.md","category":"skill_reference","relatedSkills":[],"notes":"Template for adding new entries to the skill registry."},
-    {"file":"skill-contracts/renderer-skill-contract.md","category":"skill_contract","relatedSkills":[],"notes":"Generic renderer skill contract."},
-    {"file":"skill-contracts/producer-skill-contract.md","category":"skill_contract","relatedSkills":[],"notes":"Generic producer skill contract."},
-    {"file":"skill-contracts/sync-skill-contract.md","category":"skill_contract","relatedSkills":[],"notes":"Generic sync skill contract."},
-    {"file":"skill-contracts/auditor-skill-contract.md","category":"skill_contract","relatedSkills":[],"notes":"Generic auditor skill contract."},
-    {"file":"skill-contracts/executor-skill-contract.md","category":"skill_contract","relatedSkills":[],"notes":"Generic executor skill contract."},
-    {"file":"skill-contracts/skill-contract-template.md","category":"skill_contract","relatedSkills":[],"notes":"Template for creating new skill contracts."},
-    {"file":"skill-contracts/skill-category-guide.md","category":"skill_reference","relatedSkills":[],"notes":"Guide to skill categories."}
+    {
+      "file": "registry/skill-registry.md",
+      "category": "skill_registry",
+      "relatedSkills": [
+        "sdlc-code-review-excellence",
+        "sdlc-code-review-normalizer",
+        "sdlc-docflow-writer",
+        "sdlc-gate-runner",
+        "sdlc-implementation-recorder",
+        "sdlc-requirement-normalizer",
+        "sdlc-solution-reviewer",
+        "sdlc-specification-writer",
+        "sdlc-speckit-analyze",
+        "sdlc-speckit-checklist",
+        "sdlc-speckit-clarify",
+        "sdlc-speckit-code-doc-reconcile",
+        "sdlc-speckit-implement",
+        "sdlc-speckit-pipeline",
+        "sdlc-speckit-plan",
+        "sdlc-speckit-specify",
+        "sdlc-speckit-sync",
+        "sdlc-speckit-tasks",
+        "sdlc-test-feedback-classifier",
+        "sdlc-test-feedback-sync"
+      ],
+      "notes": "Main skill registry with 22 entries (20 sdlc-* + html-doc-style legacy + karpathy-guidelines proposed)"
+    },
+    {
+      "file": "manifest.yaml",
+      "category": "skill_manifest",
+      "relatedSkills": [
+        "sdlc-code-review-excellence",
+        "sdlc-code-review-normalizer",
+        "sdlc-docflow-writer",
+        "sdlc-gate-runner",
+        "sdlc-implementation-recorder",
+        "sdlc-requirement-normalizer",
+        "sdlc-solution-reviewer",
+        "sdlc-specification-writer",
+        "sdlc-speckit-analyze",
+        "sdlc-speckit-checklist",
+        "sdlc-speckit-clarify",
+        "sdlc-speckit-code-doc-reconcile",
+        "sdlc-speckit-implement",
+        "sdlc-speckit-pipeline",
+        "sdlc-speckit-plan",
+        "sdlc-speckit-specify",
+        "sdlc-speckit-sync",
+        "sdlc-speckit-tasks",
+        "sdlc-test-feedback-classifier",
+        "sdlc-test-feedback-sync"
+      ],
+      "notes": "Root manifest declaring 20 skills with paths, contracts, and references. References registry/skill-registry.md."
+    },
+    {
+      "file": "templates/skill-registry-entry-template.md",
+      "category": "skill_reference",
+      "relatedSkills": [],
+      "notes": "Template for adding new entries to the skill registry."
+    },
+    {
+      "file": "skill-contracts/renderer-skill-contract.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Generic renderer skill contract."
+    },
+    {
+      "file": "skill-contracts/producer-skill-contract.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Generic producer skill contract."
+    },
+    {
+      "file": "skill-contracts/sync-skill-contract.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Generic sync skill contract."
+    },
+    {
+      "file": "skill-contracts/auditor-skill-contract.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Generic auditor skill contract."
+    },
+    {
+      "file": "skill-contracts/executor-skill-contract.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Generic executor skill contract."
+    },
+    {
+      "file": "skill-contracts/skill-contract-template.md",
+      "category": "skill_contract",
+      "relatedSkills": [],
+      "notes": "Template for creating new skill contracts."
+    },
+    {
+      "file": "skill-contracts/skill-category-guide.md",
+      "category": "skill_reference",
+      "relatedSkills": [],
+      "notes": "Guide to skill categories."
+    }
   ],
   "runtime_entrypoints": [
-    {"name":"runtime.ts","file":"runtime.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Main SDLC pipeline entry. Graph interpreter with state machine VM, agent policy engine, execution gateway integration."},
-    {"name":"demo.ts","file":"demo.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Demo entrypoint calling run(). Shadow-safe."},
-    {"name":"sdlc_graph","file":"sdlc_graph/","category":"graph","status":"implemented","connectedToRuntime":true,"notes":"Declarative graph kernel: types, 5 nodes, 5 edges, context-aware transitions with retry limits."},
-    {"name":"execution_gateway","file":"execution/gateway.ts","category":"execution","status":"implemented","connectedToRuntime":true,"notes":"Single execution boundary routing to shadow/codex/code-review/bugfix adapters."},
-    {"name":"state_machine_vm","file":"core/state-machine-vm.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Deterministic VM with transition, replay, and validation."},
-    {"name":"execution_context","file":"core/execution-context.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Unified execution context type."},
-    {"name":"execution_state","file":"core/execution-state.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Immutable execution state model."},
-    {"name":"artifact_model","file":"core/artifact.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Standardized artifact model for node outputs."},
-    {"name":"node_artifacts","file":"core/node-artifacts.ts","category":"runtime","status":"implemented","connectedToRuntime":true,"notes":"Converts node outputs to typed artifacts."},
-    {"name":"agent_policy_engine","file":"core/agent-policy-engine.ts","category":"policy","status":"implemented","connectedToRuntime":true,"notes":"Multi-factor scoring engine for agent selection."},
-    {"name":"agent_decision","file":"core/agent-decision.ts","category":"policy","status":"implemented","connectedToRuntime":true,"notes":"Context-aware agent selection layer."},
-    {"name":"feedback_analyzer","file":"core/feedback-analyzer.ts","category":"feedback","status":"implemented","connectedToRuntime":true,"notes":"Pure analyzer computing agent scores and policy suggestions from trace."},
-    {"name":"policy_memory_store","file":"core/policy-memory-store.ts","category":"memory","status":"implemented","connectedToRuntime":true,"notes":"SQLite persistence for feedback records. Opt-in only."},
-    {"name":"policy_memory_config","file":"core/policy-memory-config.ts","category":"memory","status":"implemented","connectedToRuntime":true,"notes":"Feature flags for memory read/write."},
-    {"name":"memory_routing_shadow","file":"core/memory-routing-shadow.ts","category":"shadow_routing","status":"advisory_only","connectedToRuntime":true,"notes":"Converts memory suggestions into shadow routing decisions. Advisory only."},
-    {"name":"evolution_proposal_analyzer","file":"core/evolution-proposal-analyzer.ts","category":"evolution","status":"advisory_only","connectedToRuntime":true,"notes":"Generates read-only self-evolution proposals."},
-    {"name":"runtime_capabilities","file":"core/runtime-capabilities.ts","category":"documentation","status":"metadata_only","connectedToRuntime":false,"notes":"Read-only loader for runtime-capabilities.json. For tests and tooling only."},
-    {"name":"policy_memory_context","file":"core/policy-memory-context.ts","category":"memory","status":"implemented","connectedToRuntime":false,"notes":"Pure context builder for policy memory. Available but not called by runtime."}
+    {
+      "name": "runtime.ts",
+      "file": "runtime.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Main SDLC pipeline entry. Graph interpreter with state machine VM, agent policy engine, execution gateway integration."
+    },
+    {
+      "name": "demo.ts",
+      "file": "demo.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Demo entrypoint calling run(). Shadow-safe."
+    },
+    {
+      "name": "sdlc_graph",
+      "file": "sdlc_graph/",
+      "category": "graph",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Declarative graph kernel: types, 5 nodes, 5 edges, context-aware transitions with retry limits."
+    },
+    {
+      "name": "execution_gateway",
+      "file": "execution/gateway.ts",
+      "category": "execution",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Single execution boundary routing to shadow/codex/code-review/bugfix adapters."
+    },
+    {
+      "name": "state_machine_vm",
+      "file": "core/state-machine-vm.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Deterministic VM with transition, replay, and validation."
+    },
+    {
+      "name": "execution_context",
+      "file": "core/execution-context.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Unified execution context type."
+    },
+    {
+      "name": "execution_state",
+      "file": "core/execution-state.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Immutable execution state model."
+    },
+    {
+      "name": "artifact_model",
+      "file": "core/artifact.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Standardized artifact model for node outputs."
+    },
+    {
+      "name": "node_artifacts",
+      "file": "core/node-artifacts.ts",
+      "category": "runtime",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Converts node outputs to typed artifacts."
+    },
+    {
+      "name": "agent_policy_engine",
+      "file": "core/agent-policy-engine.ts",
+      "category": "policy",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Multi-factor scoring engine for agent selection."
+    },
+    {
+      "name": "agent_decision",
+      "file": "core/agent-decision.ts",
+      "category": "policy",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Context-aware agent selection layer."
+    },
+    {
+      "name": "feedback_analyzer",
+      "file": "core/feedback-analyzer.ts",
+      "category": "feedback",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Pure analyzer computing agent scores and policy suggestions from trace."
+    },
+    {
+      "name": "policy_memory_store",
+      "file": "core/policy-memory-store.ts",
+      "category": "memory",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "SQLite persistence for feedback records. Opt-in only."
+    },
+    {
+      "name": "policy_memory_config",
+      "file": "core/policy-memory-config.ts",
+      "category": "memory",
+      "status": "implemented",
+      "connectedToRuntime": true,
+      "notes": "Feature flags for memory read/write."
+    },
+    {
+      "name": "memory_routing_shadow",
+      "file": "core/memory-routing-shadow.ts",
+      "category": "shadow_routing",
+      "status": "advisory_only",
+      "connectedToRuntime": true,
+      "notes": "Converts memory suggestions into shadow routing decisions. Advisory only."
+    },
+    {
+      "name": "evolution_proposal_analyzer",
+      "file": "core/evolution-proposal-analyzer.ts",
+      "category": "evolution",
+      "status": "advisory_only",
+      "connectedToRuntime": true,
+      "notes": "Generates read-only self-evolution proposals."
+    },
+    {
+      "name": "runtime_capabilities",
+      "file": "core/runtime-capabilities.ts",
+      "category": "documentation",
+      "status": "metadata_only",
+      "connectedToRuntime": false,
+      "notes": "Read-only loader for runtime-capabilities.json. For tests and tooling only."
+    },
+    {
+      "name": "policy_memory_context",
+      "file": "core/policy-memory-context.ts",
+      "category": "memory",
+      "status": "implemented",
+      "connectedToRuntime": false,
+      "notes": "Pure context builder for policy memory. Available but not called by runtime."
+    }
   ],
   "execution_adapters": [
-    {"name":"shadow-agent-adapter","file":"execution/shadow-agent-adapter.ts","supportedAgents":["kimi","codex","hermes"],"supportedRequestTypes":["llm_task","code_generation","review","validation","code_review","bugfix"],"executionMode":"shadow","defaultEnabled":true,"sideEffects":[],"notes":"Universal fallback adapter. Deterministic mock execution. Returns shadow_output artifacts."},
-    {"name":"codex-adapter","file":"execution/codex-adapter.ts","supportedAgents":["codex"],"supportedRequestTypes":["code_generation"],"executionMode":"feature_flagged_real","defaultEnabled":false,"sideEffects":["execFile codex CLI"],"notes":"Real Codex CLI invocation via execFile. Feature-flagged behind SDLC_EXECUTION_MODE=codex. Only supports code_generation."},
-    {"name":"code-review-adapter","file":"execution/code-review-adapter.ts","supportedAgents":["kimi","codex","hermes"],"supportedRequestTypes":["code_review"],"executionMode":"shadow","defaultEnabled":true,"sideEffects":[],"notes":"Shadow code review. Scans for force_review_fail marker. Returns code_review artifacts."},
-    {"name":"bugfix-adapter","file":"execution/bugfix-adapter.ts","supportedAgents":["kimi","codex","hermes"],"supportedRequestTypes":["bugfix"],"executionMode":"shadow","defaultEnabled":true,"sideEffects":[],"notes":"Shadow bugfix. Returns bugfix_patch artifacts with attempt number. No real patches applied."}
+    {
+      "name": "shadow-agent-adapter",
+      "file": "execution/shadow-agent-adapter.ts",
+      "supportedAgents": [
+        "kimi",
+        "codex",
+        "hermes"
+      ],
+      "supportedRequestTypes": [
+        "llm_task",
+        "code_generation",
+        "review",
+        "validation",
+        "code_review",
+        "bugfix"
+      ],
+      "executionMode": "shadow",
+      "defaultEnabled": true,
+      "sideEffects": [],
+      "notes": "Universal fallback adapter. Deterministic mock execution. Returns shadow_output artifacts."
+    },
+    {
+      "name": "codex-adapter",
+      "file": "execution/codex-adapter.ts",
+      "supportedAgents": [
+        "codex"
+      ],
+      "supportedRequestTypes": [
+        "code_generation"
+      ],
+      "executionMode": "feature_flagged_real",
+      "defaultEnabled": false,
+      "sideEffects": [
+        "execFile codex CLI"
+      ],
+      "notes": "Real Codex CLI invocation via execFile. Feature-flagged behind SDLC_EXECUTION_MODE=codex. Only supports code_generation."
+    },
+    {
+      "name": "code-review-adapter",
+      "file": "execution/code-review-adapter.ts",
+      "supportedAgents": [
+        "kimi",
+        "codex",
+        "hermes"
+      ],
+      "supportedRequestTypes": [
+        "code_review"
+      ],
+      "executionMode": "shadow",
+      "defaultEnabled": true,
+      "sideEffects": [],
+      "notes": "Shadow code review. Scans for force_review_fail marker. Returns code_review artifacts."
+    },
+    {
+      "name": "bugfix-adapter",
+      "file": "execution/bugfix-adapter.ts",
+      "supportedAgents": [
+        "kimi",
+        "codex",
+        "hermes"
+      ],
+      "supportedRequestTypes": [
+        "bugfix"
+      ],
+      "executionMode": "shadow",
+      "defaultEnabled": true,
+      "sideEffects": [],
+      "notes": "Shadow bugfix. Returns bugfix_patch artifacts with attempt number. No real patches applied."
+    }
   ],
   "policy_modules": [
-    {"name":"agent-policy","file":"core/agent-policy.ts","category":"policy","changesActualRouting":false,"onlyProducesSuggestions":false,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Type definitions and default weights for agent policy."},
-    {"name":"agent-policy-engine","file":"core/agent-policy-engine.ts","category":"policy","changesActualRouting":false,"onlyProducesSuggestions":false,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Multi-factor scoring: complexity + node type + cost. Returns agent or null for fallback."},
-    {"name":"agent-decision","file":"core/agent-decision.ts","category":"policy","changesActualRouting":false,"onlyProducesSuggestions":false,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Complexity-based agent selection. Returns null to defer to AGENT_MAP."},
-    {"name":"policy-memory-analyzer","file":"core/policy-memory-analyzer.ts","category":"policy","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":true,"writesMemory":false,"defaultEnabled":false,"enabledBy":"SDLC_POLICY_MEMORY_READ=enabled","notes":"Reads SQLite memory and produces prefer_agent/avoid_agent advisory suggestions only."}
+    {
+      "name": "agent-policy",
+      "file": "core/agent-policy.ts",
+      "category": "policy",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": false,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Type definitions and default weights for agent policy."
+    },
+    {
+      "name": "agent-policy-engine",
+      "file": "core/agent-policy-engine.ts",
+      "category": "policy",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": true,
+      "onlyProducesSuggestions": false,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Multi-factor scoring: complexity + node type + cost. Returns agent or null for fallback. Affects actual agent selection."
+    },
+    {
+      "name": "agent-decision",
+      "file": "core/agent-decision.ts",
+      "category": "policy",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": true,
+      "onlyProducesSuggestions": false,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Complexity-based agent selection. Returns null to defer to AGENT_MAP. Affects actual agent selection."
+    },
+    {
+      "name": "policy-memory-analyzer",
+      "file": "core/policy-memory-analyzer.ts",
+      "category": "policy",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": true,
+      "writesMemory": false,
+      "defaultEnabled": false,
+      "enabledBy": "SDLC_POLICY_MEMORY_READ=enabled",
+      "notes": "Reads SQLite memory and produces prefer_agent/avoid_agent advisory suggestions only. Does not affect actual agent selection."
+    }
   ],
   "feedback_modules": [
-    {"name":"feedback-types","file":"core/feedback-types.ts","category":"feedback","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Type definitions for all feedback, shadow routing, and evolution proposal types."},
-    {"name":"feedback-analyzer","file":"core/feedback-analyzer.ts","category":"feedback","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Pure analyzer. Computes agent scores, node outcomes, review summaries, and base policy suggestions from trace + artifacts."},
-    {"name":"review-types","file":"core/review-types.ts","category":"feedback","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Type definitions for code review results and findings."}
+    {
+      "name": "feedback-types",
+      "file": "core/feedback-types.ts",
+      "category": "feedback",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Type definitions for all feedback, shadow routing, and evolution proposal types."
+    },
+    {
+      "name": "feedback-analyzer",
+      "file": "core/feedback-analyzer.ts",
+      "category": "feedback",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Pure analyzer. Computes agent scores, node outcomes, review summaries, and base policy suggestions from trace + artifacts. Does not affect actual agent selection."
+    },
+    {
+      "name": "review-types",
+      "file": "core/review-types.ts",
+      "category": "feedback",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Type definitions for code review results and findings."
+    }
   ],
   "memory_modules": [
-    {"name":"policy-memory-types","file":"core/policy-memory-types.ts","category":"memory","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Type definitions for policy memory records, agent summaries, and memory summaries."},
-    {"name":"policy-memory-config","file":"core/policy-memory-config.ts","category":"memory","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Feature flags for memory read/write. Separate flags, both default disabled."},
-    {"name":"policy-memory-builder","file":"core/policy-memory-builder.ts","category":"memory","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Pure factory building summary-only PolicyMemoryRecord from runtime output."},
-    {"name":"policy-memory-store","file":"core/policy-memory-store.ts","category":"memory","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":true,"writesMemory":true,"defaultEnabled":false,"enabledBy":"SDLC_POLICY_MEMORY=enabled / SDLC_POLICY_MEMORY_READ=enabled","notes":"SQLite persistence layer. Init, append, read summaries and agent aggregations. better-sqlite3."},
-    {"name":"policy-memory-context","file":"core/policy-memory-context.ts","category":"memory","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"Pure context wrapper factory. Available but not called by runtime."}
+    {
+      "name": "policy-memory-types",
+      "file": "core/policy-memory-types.ts",
+      "category": "memory",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Type definitions for policy memory records, agent summaries, and memory summaries."
+    },
+    {
+      "name": "policy-memory-config",
+      "file": "core/policy-memory-config.ts",
+      "category": "memory",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Feature flags for memory read/write. Separate flags, both default disabled."
+    },
+    {
+      "name": "policy-memory-builder",
+      "file": "core/policy-memory-builder.ts",
+      "category": "memory",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Pure factory building summary-only PolicyMemoryRecord from runtime output."
+    },
+    {
+      "name": "policy-memory-store",
+      "file": "core/policy-memory-store.ts",
+      "category": "memory",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": true,
+      "writesMemory": true,
+      "defaultEnabled": false,
+      "enabledBy": "SDLC_POLICY_MEMORY=enabled / SDLC_POLICY_MEMORY_READ=enabled",
+      "notes": "SQLite persistence layer. Init, append, read summaries and agent aggregations. better-sqlite3."
+    },
+    {
+      "name": "policy-memory-context",
+      "file": "core/policy-memory-context.ts",
+      "category": "memory",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "Pure context wrapper factory. Available but not called by runtime."
+    }
   ],
   "evolution_modules": [
-    {"name":"evolution-proposal-analyzer","file":"core/evolution-proposal-analyzer.ts","category":"evolution","changesActualRouting":false,"onlyProducesSuggestions":true,"readsMemory":false,"writesMemory":false,"defaultEnabled":true,"notes":"5-rule proposal generator. All proposals have applied:false. Read-only output only."}
+    {
+      "name": "evolution-proposal-analyzer",
+      "file": "core/evolution-proposal-analyzer.ts",
+      "category": "evolution",
+      "changesGraphRouting": false,
+      "changesActualAgentSelection": false,
+      "onlyProducesSuggestions": true,
+      "readsMemory": false,
+      "writesMemory": false,
+      "defaultEnabled": true,
+      "notes": "5-rule proposal generator. All proposals have applied:false. Advisory only, does not affect actual agent selection or graph routing."
+    }
   ],
   "potentially_unconnected_modules": [
-    {"file":"loop/","reason":"Legacy LOOP orchestration engine with its own engine, executor, router, and registry. Not imported by runtime.ts or any test. Separate implementation from current SDLC runtime.","confidence":"high"},
-    {"file":"docflow/","reason":"Legacy DocFlow linear state machine. Not imported by runtime.ts or any test. Separate from current sdlc_graph-based execution.","confidence":"high"},
-    {"file":"scripts/validate-skill-contracts.rb","reason":"Ruby validation script for skill contracts. Referenced by docs but not called by any TypeScript runtime path.","confidence":"medium"},
-    {"file":"fixtures/","reason":"Test fixture data. Referenced by validation docs but not imported by runtime or test TypeScript files.","confidence":"low"}
+    {
+      "file": "loop/",
+      "reason": "Legacy LOOP orchestration engine with its own engine, executor, router, and registry. Not imported by runtime.ts or any test. Separate implementation from current SDLC runtime.",
+      "confidence": "high"
+    },
+    {
+      "file": "docflow/",
+      "reason": "Legacy DocFlow linear state machine. Not imported by runtime.ts or any test. Separate from current sdlc_graph-based execution.",
+      "confidence": "high"
+    },
+    {
+      "file": "scripts/validate-skill-contracts.rb",
+      "reason": "Ruby validation script for skill contracts. Referenced by docs but not called by any TypeScript runtime path.",
+      "confidence": "medium"
+    },
+    {
+      "file": "fixtures/",
+      "reason": "Test fixture data. Referenced by validation docs but not imported by runtime or test TypeScript files.",
+      "confidence": "low"
+    }
   ],
   "summary": {
     "existing_sdlc_skill_count": 20,
