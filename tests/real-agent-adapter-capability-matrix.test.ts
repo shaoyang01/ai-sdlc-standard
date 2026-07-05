@@ -73,6 +73,7 @@ async function test() {
   assert(kimi["executor_contract"] === "implemented_contract_only", "kimi executor contract implemented");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
+  assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
   console.log("");
 
   // ── Test 3: Request type alignment ──

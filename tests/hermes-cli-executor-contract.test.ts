@@ -50,7 +50,13 @@ async function test() {
   const r4 = prepareHermesCliExecutorContract({ request, config: validConfig });
   assert(r4.success === true && r4.decision === "contract_ready", "ready");
   assert(r4.commandInput!.command === "hermes" && r4.commandInput!.sanitized === true, "command");
-  assert(r4.auditEvents.every(e => e.persistsAudit === false && e.invokesCli === false && e.spawnsProcess === false, "audit safety"));
+  assert(r4.auditEvents.every(e => e.persistsAudit === false), "no persist");
+  assert(r4.auditEvents.every(e => e.invokesCli === false), "contract-ready audit no CLI");
+  assert(r4.auditEvents.every(e => e.spawnsProcess === false), "contract-ready audit no spawn");
+  assert(r4.auditEvents.every(e => e.affectsGateway === false), "contract-ready audit no gateway");
+  assert(r4.auditEvents.every(e => e.affectsRuntime === false), "contract-ready audit no runtime");
+  assert(r4.auditEvents.every(e => e.containsRawPrompt === false), "no raw prompt");
+  assert(r4.auditEvents.every(e => e.containsRawArtifacts === false), "no raw artifacts");
   assert(!JSON.stringify(r4).includes("this artifact must not appear in executor contract"), "no artifact in JSON");
   console.log("Test 4-5 done\n");
 

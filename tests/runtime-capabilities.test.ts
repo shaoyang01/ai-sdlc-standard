@@ -133,6 +133,13 @@ async function test() {
   assert(realAdapters["kimi_cli_executor_contract_affects_runtime"] === false, "kimi executor no runtime");
   assert(realAdapters["kimi_cli_executor_contract_persists_audit"] === false, "kimi executor no persist");
   assert(realAdapters["kimi_cli_executor_contract_reads_api_keys"] === false, "kimi executor no API keys");
+  assert(realAdapters["hermes_cli_executor_contract"] === "implemented_contract_only", "hermes executor contract");
+  assert(realAdapters["hermes_cli_executor_contract_invokes_cli"] === false, "hermes executor no CLI");
+  assert(realAdapters["hermes_cli_executor_contract_spawns_process"] === false, "hermes executor no spawn");
+  assert(realAdapters["hermes_cli_executor_contract_affects_gateway"] === false, "hermes executor no gateway");
+  assert(realAdapters["hermes_cli_executor_contract_affects_runtime"] === false, "hermes executor no runtime");
+  assert(realAdapters["hermes_cli_executor_contract_persists_audit"] === false, "hermes executor no persist");
+  assert(realAdapters["hermes_cli_executor_contract_reads_api_keys"] === false, "hermes executor no API keys");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
