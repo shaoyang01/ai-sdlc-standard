@@ -31,6 +31,8 @@ import { buildEvolutionProposals } from "./core/evolution-proposal-analyzer";
 import { getSkillFlowRuntimeIntegrationConfig } from "./core/skill-flow-runtime-integration-config";
 import { decideSkillFlowRuntimeIntegration } from "./core/skill-flow-runtime-integration";
 import type { SkillFlowRuntimeIntegrationResult } from "./core/skill-flow-runtime-integration-types";
+import { buildOptionalKimiRuntimeShadowAttachment } from "./core/kimi-runtime-shadow-attachment";
+import type { KimiRuntimeShadowAttachment } from "./execution/kimi-runtime-attachment-contract";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ interface RuntimeResult {
   final_status: "success" | "partial" | "failed";
   completed_at: string;
   skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
+  kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
 }
 
 interface RequirementSummary {
@@ -488,6 +491,22 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     }
   }
 
+  // ─── Optional Kimi Runtime Shadow Attachment (disabled by default) ──
+  let kimiRuntimeShadowAttachment: KimiRuntimeShadowAttachment | undefined;
+  try {
+    kimiRuntimeShadowAttachment = await buildOptionalKimiRuntimeShadowAttachment({
+      request: {
+        type: "llm_task",
+        node: "requirement-summary",
+        agent: "kimi",
+        requirementId,
+        input: { requirement },
+      },
+    });
+  } catch (error) {
+    console.warn("Kimi runtime shadow attachment failed:", error);
+  }
+
   return {
     requirement_id: requirementId,
     execution_trace: trace,
@@ -498,6 +517,9 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     completed_at: new Date().toISOString(),
     ...(skillFlowShadowIntegration
       ? { skill_flow_shadow_integration: skillFlowShadowIntegration }
+      : {}),
+    ...(kimiRuntimeShadowAttachment
+      ? { kimi_runtime_shadow_attachment: kimiRuntimeShadowAttachment }
       : {}),
   };
 }

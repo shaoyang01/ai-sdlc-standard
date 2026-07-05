@@ -207,6 +207,16 @@
     "kimi_runtime_attachment_changes_routing": false,
     "kimi_runtime_attachment_changes_agent_selection": false,
     "kimi_runtime_attachment_persists_audit": false,
-    "kimi_runtime_attachment_writes_files": false
+    "kimi_runtime_attachment_writes_files": false,
+    "kimi_runtime_shadow_attachment": "implemented_feature_flagged_runtime_sidecar",
+    "kimi_runtime_shadow_attachment_default_enabled": false,
+    "kimi_runtime_shadow_attachment_requires_flags": ["SDLC_KIMI_RUNTIME_ATTACHMENT=enabled","SDLC_KIMI_GATEWAY_SHADOW=enabled","SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_runtime_shadow_attachment_changes_final_status": false,
+    "kimi_runtime_shadow_attachment_changes_routing": false,
+    "kimi_runtime_shadow_attachment_changes_agent_selection": false,
+    "kimi_runtime_shadow_attachment_primary_runtime_unchanged": true,
+    "kimi_runtime_shadow_attachment_primary_gateway_unchanged": true,
+    "kimi_runtime_shadow_attachment_persists_audit": false,
+    "kimi_runtime_shadow_attachment_writes_files": false
   }
 }
