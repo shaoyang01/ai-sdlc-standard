@@ -40,7 +40,7 @@ async function test() {
   // ── Test 2: Overall status ──
   console.log("Test 2: Overall status");
   assert(review.overall_status.runtime_default === "shadow_first", "runtime default is shadow_first");
-  assert(review.overall_status.runtime_skill_flow_integration === "contract_only_disabled_by_default", "integration is contract_only_disabled_by_default");
+  assert(review.overall_status.runtime_skill_flow_integration === "implemented_feature_flagged_sidecar_only", "integration is implemented_feature_flagged_sidecar_only");
   assert(review.overall_status.real_skill_execution === "not_implemented", "real skill execution is not_implemented");
   console.log("");
 

@@ -6,69 +6,502 @@
     "runtime_default": "shadow_first",
     "skill_flow_model": "implemented_metadata_plan_shadow_contract",
     "real_agent_execution": "codex_code_generation_feature_flag_only",
-    "runtime_skill_flow_integration": "contract_only_disabled_by_default",
+    "runtime_skill_flow_integration": "implemented_feature_flagged_sidecar_only",
     "real_skill_execution": "not_implemented"
   },
   "capabilities": [
-    {"name":"SDLC Graph Kernel","status":"runtime-active","runtime_active_by_default":true,"changes_routing":true,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["sdlc_graph/types.ts","sdlc_graph/graph.ts","sdlc_graph/transitions.ts"]},
-    {"name":"State Machine VM","status":"runtime-active","runtime_active_by_default":true,"changes_routing":true,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/state-machine-vm.ts"]},
-    {"name":"Execution Gateway","status":"runtime-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["execution/gateway.ts"]},
-    {"name":"Shadow Agent Adapter","status":"shadow-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["execution/shadow-agent-adapter.ts"]},
-    {"name":"Artifact Model","status":"runtime-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/artifact.ts"]},
-    {"name":"Code Review + Bugfix Loop","status":"shadow-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["runtime.ts:runCodeReviewBugfixLoop"]},
-    {"name":"Feedback Analyzer","status":"runtime-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/feedback-analyzer.ts"]},
-    {"name":"Evolution Proposal Analyzer","status":"advisory-only","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/evolution-proposal-analyzer.ts"]},
-    {"name":"Agent Policy Engine","status":"runtime-active","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":true,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/agent-policy-engine.ts"]},
-    {"name":"Codex Adapter","status":"feature-flagged","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":true,"invokes_real_skills":false,"writes_files":false,"evidence":["execution/codex-adapter.ts","execution/config.ts"]},
-    {"name":"Policy Memory Write","status":"disabled-by-default","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":true,"evidence":["core/policy-memory-store.ts","core/policy-memory-config.ts"]},
-    {"name":"Policy Memory Read","status":"disabled-by-default","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/policy-memory-analyzer.ts","core/policy-memory-config.ts"]},
-    {"name":"Memory-derived Suggestions","status":"advisory-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/policy-memory-analyzer.ts"]},
-    {"name":"Shadow Routing Decisions","status":"advisory-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/memory-routing-shadow.ts"]},
-    {"name":"Skill Flow Inventory","status":"metadata-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["skill-flow-inventory.json","core/skill-flow-inventory.ts"]},
-    {"name":"Flow-stage Agent Skill Registry","status":"metadata-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/agent-skill-registry.ts","core/skill-types.ts"]},
-    {"name":"Skill Flow Orchestrator Contract","status":"contract-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/skill-flow-orchestrator-types.ts","core/skill-flow-orchestrator.ts"]},
-    {"name":"Shadow Skill Flow Orchestrator","status":"shadow-active","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/skill-flow-shadow-orchestrator.ts"]},
-    {"name":"Runtime Integration Contract","status":"contract-only","runtime_active_by_default":false,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["core/skill-flow-runtime-integration-types.ts","core/skill-flow-runtime-integration.ts"]},
-    {"name":"Explicit Skill Metadata","status":"metadata-only","runtime_active_by_default":true,"changes_routing":false,"changes_agent_selection":false,"invokes_real_agents":false,"invokes_real_skills":false,"writes_files":false,"evidence":["execution/types.ts","execution/skill-request-validation.ts"]}
+    {
+      "name": "SDLC Graph Kernel",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": true,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "sdlc_graph/types.ts",
+        "sdlc_graph/graph.ts",
+        "sdlc_graph/transitions.ts"
+      ]
+    },
+    {
+      "name": "State Machine VM",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": true,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/state-machine-vm.ts"
+      ]
+    },
+    {
+      "name": "Execution Gateway",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/gateway.ts"
+      ]
+    },
+    {
+      "name": "Shadow Agent Adapter",
+      "status": "shadow-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/shadow-agent-adapter.ts"
+      ]
+    },
+    {
+      "name": "Artifact Model",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/artifact.ts"
+      ]
+    },
+    {
+      "name": "Code Review + Bugfix Loop",
+      "status": "shadow-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "runtime.ts:runCodeReviewBugfixLoop"
+      ]
+    },
+    {
+      "name": "Feedback Analyzer",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/feedback-analyzer.ts"
+      ]
+    },
+    {
+      "name": "Evolution Proposal Analyzer",
+      "status": "advisory-only",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/evolution-proposal-analyzer.ts"
+      ]
+    },
+    {
+      "name": "Agent Policy Engine",
+      "status": "runtime-active",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": true,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/agent-policy-engine.ts"
+      ]
+    },
+    {
+      "name": "Codex Adapter",
+      "status": "feature-flagged",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": true,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/codex-adapter.ts",
+        "execution/config.ts"
+      ]
+    },
+    {
+      "name": "Policy Memory Write",
+      "status": "disabled-by-default",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": true,
+      "evidence": [
+        "core/policy-memory-store.ts",
+        "core/policy-memory-config.ts"
+      ]
+    },
+    {
+      "name": "Policy Memory Read",
+      "status": "disabled-by-default",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/policy-memory-analyzer.ts",
+        "core/policy-memory-config.ts"
+      ]
+    },
+    {
+      "name": "Memory-derived Suggestions",
+      "status": "advisory-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/policy-memory-analyzer.ts"
+      ]
+    },
+    {
+      "name": "Shadow Routing Decisions",
+      "status": "advisory-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/memory-routing-shadow.ts"
+      ]
+    },
+    {
+      "name": "Skill Flow Inventory",
+      "status": "metadata-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "skill-flow-inventory.json",
+        "core/skill-flow-inventory.ts"
+      ]
+    },
+    {
+      "name": "Flow-stage Agent Skill Registry",
+      "status": "metadata-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/agent-skill-registry.ts",
+        "core/skill-types.ts"
+      ]
+    },
+    {
+      "name": "Skill Flow Orchestrator Contract",
+      "status": "contract-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/skill-flow-orchestrator-types.ts",
+        "core/skill-flow-orchestrator.ts"
+      ]
+    },
+    {
+      "name": "Shadow Skill Flow Orchestrator",
+      "status": "shadow-active",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/skill-flow-shadow-orchestrator.ts"
+      ]
+    },
+    {
+      "name": "Runtime Integration Contract",
+      "status": "contract-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "core/skill-flow-runtime-integration-types.ts",
+        "core/skill-flow-runtime-integration.ts"
+      ]
+    },
+    {
+      "name": "Explicit Skill Metadata",
+      "status": "metadata-only",
+      "runtime_active_by_default": true,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/types.ts",
+        "execution/skill-request-validation.ts"
+      ]
+    }
   ],
   "feature_flags": [
-    {"flag":"SDLC_EXECUTION_MODE","default":"shadow","enabled_value":"codex","effect":"Enables real Codex CLI execution for code_generation requests","runtime_effect_today":"Yes — invokes codex binary","invokes_real_external_systems":true,"evidence":["execution/config.ts","execution/gateway.ts"]},
-    {"flag":"SDLC_POLICY_MEMORY","default":"disabled","enabled_value":"enabled","effect":"Writes feedback summaries to local SQLite","runtime_effect_today":"Yes — creates .sdlc-runtime/policy-memory.sqlite","invokes_real_external_systems":false,"evidence":["core/policy-memory-config.ts","runtime.ts"]},
-    {"flag":"SDLC_POLICY_MEMORY_READ","default":"disabled","enabled_value":"enabled","effect":"Reads historical agent scores from SQLite for advisory suggestions","runtime_effect_today":"Yes — appends memory suggestions to feedback","invokes_real_external_systems":false,"evidence":["core/policy-memory-config.ts","runtime.ts"]},
-    {"flag":"SDLC_SKILL_FLOW_RUNTIME_INTEGRATION","default":"disabled","enabled_value":"shadow","effect":"Enables shadow skill flow integration in contract helper","runtime_effect_today":"No — runtime.ts does not import it","invokes_real_external_systems":false,"evidence":["core/skill-flow-runtime-integration-config.ts"]}
+    {
+      "flag": "SDLC_EXECUTION_MODE",
+      "default": "shadow",
+      "enabled_value": "codex",
+      "effect": "Enables real Codex CLI execution for code_generation requests",
+      "runtime_effect_today": "Yes — invokes codex binary",
+      "invokes_real_external_systems": true,
+      "evidence": [
+        "execution/config.ts",
+        "execution/gateway.ts"
+      ]
+    },
+    {
+      "flag": "SDLC_POLICY_MEMORY",
+      "default": "disabled",
+      "enabled_value": "enabled",
+      "effect": "Writes feedback summaries to local SQLite",
+      "runtime_effect_today": "Yes — creates .sdlc-runtime/policy-memory.sqlite",
+      "invokes_real_external_systems": false,
+      "evidence": [
+        "core/policy-memory-config.ts",
+        "runtime.ts"
+      ]
+    },
+    {
+      "flag": "SDLC_POLICY_MEMORY_READ",
+      "default": "disabled",
+      "enabled_value": "enabled",
+      "effect": "Reads historical agent scores from SQLite for advisory suggestions",
+      "runtime_effect_today": "Yes — appends memory suggestions to feedback",
+      "invokes_real_external_systems": false,
+      "evidence": [
+        "core/policy-memory-config.ts",
+        "runtime.ts"
+      ]
+    },
+    {
+      "flag": "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION",
+      "default": "disabled",
+      "enabled_value": "shadow",
+      "effect": "Enables shadow skill flow integration in contract helper",
+      "runtime_effect_today": "No — runtime.ts does not import it",
+      "invokes_real_external_systems": false,
+      "evidence": [
+        "core/skill-flow-runtime-integration-config.ts"
+      ]
+    }
   ],
   "safety_boundaries": [
-    {"name":"no_default_real_model_execution","status":"enforced","evidence":["execution/config.ts:getExecutionMode()"]},
-    {"name":"no_runtime_auto_skill_inference","status":"enforced","evidence":["runtime.ts has no buildSkillAwareExecutionRequest"]},
-    {"name":"no_automatic_git_operations","status":"enforced","evidence":["No git calls in runtime or core"]},
-    {"name":"no_automatic_policy_mutation","status":"enforced","evidence":["No policy file writes in codebase"]},
-    {"name":"no_default_memory_persistence","status":"enforced","evidence":["core/policy-memory-config.ts requires exact 'enabled'"]},
-    {"name":"no_direct_implementation_mapped_to_speckit_implement","status":"enforced","evidence":["skill-flow-orchestrator.ts:buildSkilllessAgentExecutionStage()"]},
-    {"name":"no_automatic_evolution_application","status":"enforced","evidence":["All EvolutionProposal.applied === false"]},
-    {"name":"no_unflagged_runtime_skill_flow_integration","status":"enforced","evidence":["getSkillFlowRuntimeIntegrationConfig({}) returns disabled"]}
+    {
+      "name": "no_default_real_model_execution",
+      "status": "enforced",
+      "evidence": [
+        "execution/config.ts:getExecutionMode()"
+      ]
+    },
+    {
+      "name": "no_runtime_auto_skill_inference",
+      "status": "enforced",
+      "evidence": [
+        "runtime.ts has no buildSkillAwareExecutionRequest"
+      ]
+    },
+    {
+      "name": "no_automatic_git_operations",
+      "status": "enforced",
+      "evidence": [
+        "No git calls in runtime or core"
+      ]
+    },
+    {
+      "name": "no_automatic_policy_mutation",
+      "status": "enforced",
+      "evidence": [
+        "No policy file writes in codebase"
+      ]
+    },
+    {
+      "name": "no_default_memory_persistence",
+      "status": "enforced",
+      "evidence": [
+        "core/policy-memory-config.ts requires exact 'enabled'"
+      ]
+    },
+    {
+      "name": "no_direct_implementation_mapped_to_speckit_implement",
+      "status": "enforced",
+      "evidence": [
+        "skill-flow-orchestrator.ts:buildSkilllessAgentExecutionStage()"
+      ]
+    },
+    {
+      "name": "no_automatic_evolution_application",
+      "status": "enforced",
+      "evidence": [
+        "All EvolutionProposal.applied === false"
+      ]
+    },
+    {
+      "name": "no_unflagged_runtime_skill_flow_integration",
+      "status": "enforced",
+      "evidence": [
+        "getSkillFlowRuntimeIntegrationConfig({}) returns disabled"
+      ]
+    }
   ],
   "architecture_compliance": [
-    {"assertion":"sdlc-* skills are flow nodes, not runtime node labels","status":"confirmed","evidence":["skill-flow-inventory.json","core/agent-skill-registry.ts"]},
-    {"assertion":"sdlc-requirement-normalizer is global entry","status":"confirmed","evidence":["skill-flow-inventory.json:global_entry_skill","SKILL_FLOW_INVENTORY_REPORT.md"]},
-    {"assertion":"sdlc-code-review-normalizer is subflow normalizer, not global entry","status":"confirmed","evidence":["core/agent-skill-registry.ts: role=subflow_normalizer"]},
-    {"assertion":"direct implementation is skillless","status":"confirmed","evidence":["core/skill-flow-orchestrator.ts: DIRECT_IMPLEMENTATION_AGENT_EXECUTION"]},
-    {"assertion":"speckit implementation is nested flow","status":"confirmed","evidence":["speckit_pipeline flow in skill-flow-orchestrator.ts"]},
-    {"assertion":"sdlc-speckit-implement is internal Speckit stage","status":"confirmed","evidence":["core/agent-skill-registry.ts: flowIds=['speckit_pipeline']"]},
-    {"assertion":"skill metadata is explicit-only","status":"confirmed","evidence":["runtime-capabilities.json: skill_metadata_explicit_only=true"]},
-    {"assertion":"runtime does not auto-infer skill metadata","status":"confirmed","evidence":["runtime.ts has no buildSkillAwareExecutionRequest"]},
-    {"assertion":"runtime integration contract is disabled by default","status":"confirmed","evidence":["core/skill-flow-runtime-integration-config.ts: getSkillFlowRuntimeIntegrationConfig({})"]}
+    {
+      "assertion": "sdlc-* skills are flow nodes, not runtime node labels",
+      "status": "confirmed",
+      "evidence": [
+        "skill-flow-inventory.json",
+        "core/agent-skill-registry.ts"
+      ]
+    },
+    {
+      "assertion": "sdlc-requirement-normalizer is global entry",
+      "status": "confirmed",
+      "evidence": [
+        "skill-flow-inventory.json:global_entry_skill",
+        "SKILL_FLOW_INVENTORY_REPORT.md"
+      ]
+    },
+    {
+      "assertion": "sdlc-code-review-normalizer is subflow normalizer, not global entry",
+      "status": "confirmed",
+      "evidence": [
+        "core/agent-skill-registry.ts: role=subflow_normalizer"
+      ]
+    },
+    {
+      "assertion": "direct implementation is skillless",
+      "status": "confirmed",
+      "evidence": [
+        "core/skill-flow-orchestrator.ts: DIRECT_IMPLEMENTATION_AGENT_EXECUTION"
+      ]
+    },
+    {
+      "assertion": "speckit implementation is nested flow",
+      "status": "confirmed",
+      "evidence": [
+        "speckit_pipeline flow in skill-flow-orchestrator.ts"
+      ]
+    },
+    {
+      "assertion": "sdlc-speckit-implement is internal Speckit stage",
+      "status": "confirmed",
+      "evidence": [
+        "core/agent-skill-registry.ts: flowIds=['speckit_pipeline']"
+      ]
+    },
+    {
+      "assertion": "skill metadata is explicit-only",
+      "status": "confirmed",
+      "evidence": [
+        "runtime-capabilities.json: skill_metadata_explicit_only=true"
+      ]
+    },
+    {
+      "assertion": "runtime does not auto-infer skill metadata",
+      "status": "confirmed",
+      "evidence": [
+        "runtime.ts has no buildSkillAwareExecutionRequest"
+      ]
+    },
+    {
+      "assertion": "runtime integration contract is disabled by default",
+      "status": "confirmed",
+      "evidence": [
+        "core/skill-flow-runtime-integration-config.ts: getSkillFlowRuntimeIntegrationConfig({})"
+      ]
+    }
   ],
   "risks": [
-    {"risk":"Runtime main pipeline is still coarse stub logic","severity":"medium","why_it_matters":"Node executors return hardcoded outputs; real orchestration would improve fidelity","mitigation":"Implement real DocFlow skill invocation in shadow first","recommended_pr_stage":"Feature-flagged runtime shadow integration"},
-    {"risk":"Skill Flow Orchestrator is not runtime-integrated","severity":"medium","why_it_matters":"Orchestrator and runtime operate independently; drift risk","mitigation":"Wire behind SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow","recommended_pr_stage":"Feature-flagged runtime shadow integration"},
-    {"risk":"Shadow orchestrator can drift from runtime behavior","severity":"low","why_it_matters":"Two separate models of the same flow could diverge","mitigation":"Add drift guard tests","recommended_pr_stage":"Runtime/Skill Flow Drift Guard"},
-    {"risk":"Real adapter boundary is underdeveloped","severity":"medium","why_it_matters":"Only Codex code_generation has real adapter; Kimi/Hermes are shadow-only","mitigation":"Add Kimi/Hermes adapters behind feature flags","recommended_pr_stage":"Real Agent Adapter Integration"},
-    {"risk":"Codex adapter supports only code_generation","severity":"medium","why_it_matters":"Review and bugfix cannot use real Codex","mitigation":"Extend Codex adapter to review/bugfix types","recommended_pr_stage":"Real Agent Adapter Integration"},
-    {"risk":"executeSpeckitPipeline() stub has hardcoded simplified stages","severity":"medium","why_it_matters":"Stub uses 4 incorrect stage names vs actual 10-stage pipeline","mitigation":"Replace or remove stub; use speckit flow from orchestrator","recommended_pr_stage":"Feature-flagged runtime shadow integration"}
+    {
+      "risk": "Runtime main pipeline is still coarse stub logic",
+      "severity": "medium",
+      "why_it_matters": "Node executors return hardcoded outputs; real orchestration would improve fidelity",
+      "mitigation": "Implement real DocFlow skill invocation in shadow first",
+      "recommended_pr_stage": "Feature-flagged runtime shadow integration"
+    },
+    {
+      "risk": "Skill Flow Orchestrator is not runtime-integrated",
+      "severity": "medium",
+      "why_it_matters": "Orchestrator and runtime operate independently; drift risk",
+      "mitigation": "Wire behind SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow",
+      "recommended_pr_stage": "Feature-flagged runtime shadow integration"
+    },
+    {
+      "risk": "Shadow orchestrator can drift from runtime behavior",
+      "severity": "low",
+      "why_it_matters": "Two separate models of the same flow could diverge",
+      "mitigation": "Add drift guard tests",
+      "recommended_pr_stage": "Runtime/Skill Flow Drift Guard"
+    },
+    {
+      "risk": "Real adapter boundary is underdeveloped",
+      "severity": "medium",
+      "why_it_matters": "Only Codex code_generation has real adapter; Kimi/Hermes are shadow-only",
+      "mitigation": "Add Kimi/Hermes adapters behind feature flags",
+      "recommended_pr_stage": "Real Agent Adapter Integration"
+    },
+    {
+      "risk": "Codex adapter supports only code_generation",
+      "severity": "medium",
+      "why_it_matters": "Review and bugfix cannot use real Codex",
+      "mitigation": "Extend Codex adapter to review/bugfix types",
+      "recommended_pr_stage": "Real Agent Adapter Integration"
+    },
+    {
+      "risk": "executeSpeckitPipeline() stub has hardcoded simplified stages",
+      "severity": "medium",
+      "why_it_matters": "Stub uses 4 incorrect stage names vs actual 10-stage pipeline",
+      "mitigation": "Replace or remove stub; use speckit flow from orchestrator",
+      "recommended_pr_stage": "Feature-flagged runtime shadow integration"
+    }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Runtime Shadow Integration",
-    "reason": "Wire decideSkillFlowRuntimeIntegration() behind SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow in runtime.ts for comparison with existing pipeline",
-    "safety_rationale": "Shadow execution produces no side effects. Feature flag keeps it disabled by default. Comparison with existing runtime behavior provides a drift guard."
+    "title": "Runtime Shadow Integration Audit Trail",
+    "reason": "Add structured audit logging to shadow integration sidecar results",
+    "safety_rationale": "Audit trail is observability-only; no runtime behavior change"
   }
 }

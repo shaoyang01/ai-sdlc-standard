@@ -103,6 +103,14 @@
     "skill_flow_runtime_integration_default": "disabled",
     "skill_flow_runtime_integration_feature_flag": "SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow",
     "skill_flow_runtime_integration_affects_runtime": false,
-    "skill_flow_runtime_integration_shadow_only": true
+    "skill_flow_runtime_integration_shadow_only": true,
+    "skill_flow_runtime_shadow_integration": "implemented_feature_flagged",
+    "skill_flow_runtime_shadow_integration_default": "disabled",
+    "skill_flow_runtime_shadow_integration_sidecar_only": true,
+    "skill_flow_runtime_shadow_integration_affects_final_status": false,
+    "skill_flow_runtime_shadow_integration_affects_trace": false,
+    "skill_flow_runtime_shadow_integration_merges_artifacts": false,
+    "skill_flow_runtime_shadow_integration_invokes_real_agents": false,
+    "skill_flow_runtime_shadow_integration_invokes_real_skills": false
   }
 }

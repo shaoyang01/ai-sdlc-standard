@@ -28,6 +28,9 @@ import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core
 import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
 import { buildMemoryShadowRoutingDecisions } from "./core/memory-routing-shadow";
 import { buildEvolutionProposals } from "./core/evolution-proposal-analyzer";
+import { getSkillFlowRuntimeIntegrationConfig } from "./core/skill-flow-runtime-integration-config";
+import { decideSkillFlowRuntimeIntegration } from "./core/skill-flow-runtime-integration";
+import type { SkillFlowRuntimeIntegrationResult } from "./core/skill-flow-runtime-integration-types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ interface RuntimeResult {
   fanout_results?: FanoutResult;
   final_status: "success" | "partial" | "failed";
   completed_at: string;
+  skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
 }
 
 interface RequirementSummary {
@@ -465,6 +469,25 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     }
   }
 
+  // ─── Optional Skill Flow Shadow Integration (disabled by default) ──
+  // Sidecar only — does not affect routing, agent selection, or final_status.
+  let skillFlowShadowIntegration: SkillFlowRuntimeIntegrationResult | undefined;
+  const integrationConfig = getSkillFlowRuntimeIntegrationConfig();
+  if (integrationConfig.enabled) {
+    try {
+      skillFlowShadowIntegration = decideSkillFlowRuntimeIntegration(integrationConfig, {
+        requirementId,
+        flowId: "main_docflow",
+        triggerNode: "runtime-completed",
+        reason: "feature-flagged runtime shadow comparison",
+        inputArtifacts: artifacts.map((a) => a.id),
+        mode: "shadow_only",
+      });
+    } catch (error) {
+      console.warn("Skill flow shadow integration failed:", error);
+    }
+  }
+
   return {
     requirement_id: requirementId,
     execution_trace: trace,
@@ -473,5 +496,6 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     fanout_results: fanoutResult,
     final_status: finalStatus,
     completed_at: new Date().toISOString(),
+    skill_flow_shadow_integration: skillFlowShadowIntegration,
   };
 }
