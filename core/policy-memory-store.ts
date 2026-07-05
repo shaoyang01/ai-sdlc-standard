@@ -9,7 +9,7 @@
 import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { PolicyMemoryRecord } from "./policy-memory-types";
+import { PolicyMemoryRecord, PolicyMemorySummary, AgentMemorySummary } from "./policy-memory-types";
 
 function ensureDir(dbPath: string): void {
   const dir = path.dirname(dbPath);
@@ -153,6 +153,81 @@ export function readPolicyMemorySummary(dbPath: string): {
     const policySuggestionCount = (db.prepare("SELECT COUNT(*) as count FROM policy_suggestions").get() as { count: number }).count;
 
     return { runCount, agentScoreCount, policySuggestionCount };
+  } finally {
+    db.close();
+  }
+}
+
+export function readPolicyMemoryAgentSummaries(dbPath: string): PolicyMemorySummary {
+  // Handle missing DB file gracefully
+  if (!fs.existsSync(dbPath)) {
+    return { available: false, runCount: 0, agentSummaries: [] };
+  }
+
+  const db = openDb(dbPath);
+  try {
+    ensureSchema(db);
+
+    const runCountRow = db.prepare("SELECT COUNT(*) as count FROM runs").get() as { count: number };
+    const runCount = runCountRow.count;
+
+    if (runCount === 0) {
+      return { available: true, runCount: 0, agentSummaries: [] };
+    }
+
+    const rows = db.prepare(`
+      SELECT agent, score, signals
+      FROM agent_scores
+      ORDER BY rowid ASC
+    `).all() as { agent: string; score: number; signals: string }[];
+
+    const agentMap = new Map<string, { scores: number[]; positiveSignals: number; negativeSignals: number }>();
+
+    for (const row of rows) {
+      let entry = agentMap.get(row.agent);
+      if (!entry) {
+        entry = { scores: [], positiveSignals: 0, negativeSignals: 0 };
+      }
+
+      entry.scores.push(row.score);
+
+      // Count signals
+      let signals: string[] = [];
+      try {
+        signals = JSON.parse(row.signals);
+      } catch {
+        // Ignore parse errors
+      }
+
+      for (const sig of signals) {
+        if (sig.includes(":success") || sig.includes(":PASS") || sig.includes("bugfix:completed")) {
+          entry.positiveSignals++;
+        }
+        if (sig.includes(":failure") || sig.includes(":FAIL") || sig.includes("validation:failed")) {
+          entry.negativeSignals++;
+        }
+      }
+
+      agentMap.set(row.agent, entry);
+    }
+
+    const agentSummaries: AgentMemorySummary[] = [];
+    for (const [agent, entry] of agentMap) {
+      const totalScore = entry.scores.reduce((a, b) => a + b, 0);
+      const avgScore = Math.round((totalScore / entry.scores.length) * 100) / 100;
+      agentSummaries.push({
+        agent,
+        runCount: entry.scores.length,
+        averageScore: avgScore,
+        lastScore: entry.scores[entry.scores.length - 1],
+        positiveSignals: entry.positiveSignals,
+        negativeSignals: entry.negativeSignals,
+      });
+    }
+
+    return { available: true, runCount, agentSummaries };
+  } catch {
+    return { available: false, runCount: 0, agentSummaries: [] };
   } finally {
     db.close();
   }

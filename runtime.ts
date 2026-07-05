@@ -22,9 +22,10 @@ import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
 import { analyzeRuntimeFeedback } from "./core/feedback-analyzer";
 import { RuntimeFeedback } from "./core/feedback-types";
-import { isPolicyMemoryEnabled, getPolicyMemoryPath } from "./core/policy-memory-config";
+import { isPolicyMemoryEnabled, isPolicyMemoryReadEnabled, getPolicyMemoryPath } from "./core/policy-memory-config";
 import { buildPolicyMemoryRecord } from "./core/policy-memory-builder";
-import { appendPolicyMemoryRecord } from "./core/policy-memory-store";
+import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core/policy-memory-store";
+import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -381,14 +382,36 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   else finalStatus = "failed";
 
   // ─── Feedback Analysis — read-only, non-persistent ────
-  const feedback = analyzeRuntimeFeedback({
+  let feedback = analyzeRuntimeFeedback({
     requirementId,
     executionTrace: trace,
     artifacts,
     finalStatus,
   });
 
-  // ─── Optional Policy Memory (disabled by default) ─────
+  // ─── Optional Memory Read — advisory only, does not affect routing ──
+  if (isPolicyMemoryReadEnabled()) {
+    try {
+      const memorySummary = readPolicyMemoryAgentSummaries(getPolicyMemoryPath());
+      const memorySuggestions = buildMemoryPolicySuggestions({
+        memory: memorySummary,
+        node: "implementation",
+      });
+      if (memorySuggestions.length > 0) {
+        feedback = {
+          ...feedback,
+          policy_suggestions: [
+            ...feedback.policy_suggestions,
+            ...memorySuggestions,
+          ],
+        };
+      }
+    } catch (error) {
+      console.warn("Policy memory read failed:", error);
+    }
+  }
+
+  // ─── Optional Policy Memory Write (disabled by default) ─────
   if (isPolicyMemoryEnabled()) {
     try {
       const record = buildPolicyMemoryRecord({

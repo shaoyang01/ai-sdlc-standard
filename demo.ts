@@ -4,7 +4,9 @@
 // Safe to execute: all agent calls are shadow-mode simulations.
 // By default this runs in shadow mode.
 // To opt into Codex adapter, set SDLC_EXECUTION_MODE=codex.
-// Optional: set SDLC_POLICY_MEMORY=enabled to persist read-only feedback memory to local SQLite.
+// Optional:
+//   SDLC_POLICY_MEMORY=enabled      persists read-only feedback memory to local SQLite.
+//   SDLC_POLICY_MEMORY_READ=enabled reads local SQLite memory as advisory policy signals.
 
 import { run } from "./runtime";
 

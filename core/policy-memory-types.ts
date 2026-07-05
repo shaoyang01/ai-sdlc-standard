@@ -32,3 +32,18 @@ export type StoredPolicySuggestion = Readonly<{
   reason: string;
   confidence: number;
 }>;
+
+export type AgentMemorySummary = Readonly<{
+  agent: string;
+  runCount: number;
+  averageScore: number;
+  lastScore?: number;
+  positiveSignals: number;
+  negativeSignals: number;
+}>;
+
+export type PolicyMemorySummary = Readonly<{
+  available: boolean;
+  runCount: number;
+  agentSummaries: ReadonlyArray<AgentMemorySummary>;
+}>;
