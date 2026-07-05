@@ -85,6 +85,13 @@ async function test() {
   assert(bad.length === 0, `no forbidden imports (found ${bad.length})`);
   console.log("Test 10 done\n");
 
+  // Test 11: Sanitized catch error
+  const r11 = await dispatchKimiGatewayReal({ request, config: validConfig, env: allOn, runner: { run: async () => { throw new Error("boom token=abc password=123 sk-test"); } } });
+  assert(r11.status === "executed_failure" && r11.executed === false, "catch failure");
+  const j11 = JSON.stringify(r11);
+  assert(!j11.includes("abc") && !j11.includes("123") && !j11.includes("sk-test"), "catch sanitized");
+  console.log("Test 11 done\n");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

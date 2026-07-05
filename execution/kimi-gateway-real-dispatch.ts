@@ -8,7 +8,8 @@ import type { CliAdapterConfig } from "./cli-adapter-contract-types";
 import type { KimiCliProcessRunner } from "./kimi-cli-command-executor";
 import { evaluateKimiGatewayRealDispatchContract, type KimiGatewayRealDispatchDecision } from "./kimi-gateway-real-dispatch-contract";
 import { executeKimiCliCommand } from "./kimi-cli-command-executor";
-import { createArtifact } from "../core/artifact";
+import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
+import { sanitizeErrorSummary } from "./cli-adapter-audit";
 
 export type KimiGatewayRealDispatchResultStatus =
   | "disabled" | "unsupported" | "executed_success"
@@ -90,11 +91,12 @@ export async function dispatchKimiGatewayReal(input: {
       auditEvents: [...base.auditEvents, ...execResult.auditEvents],
     };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       ...base,
       status: "executed_failure",
       executed: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: sanitizeErrorSummary(msg) ?? "Unknown error",
     };
   }
 }
@@ -104,7 +106,8 @@ export async function executeKimiGatewayRequest(
   config?: CliAdapterConfig,
   runner?: KimiCliProcessRunner,
 ): Promise<ExecutionResult> {
-  const dispatch = await dispatchKimiGatewayReal({ request, config, runner });
+  const resolvedConfig = config ?? getKimiCliAdapterConfig();
+  const dispatch = await dispatchKimiGatewayReal({ request, config: resolvedConfig, runner });
 
   if (dispatch.status === "executed_success") {
     const artifact = createArtifact({

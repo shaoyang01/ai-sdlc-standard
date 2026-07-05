@@ -54,7 +54,15 @@ export class ExecutionGateway {
     }
 
     // ── Kimi Real Dispatch (feature-flagged, llm_task only) ──
-    if (enriched.agent === "kimi" && enriched.type === "llm_task") {
+    // Only intercepts when real dispatch flag is explicitly enabled.
+    // Falls through to default shadow when flag is off.
+    const shouldAttemptKimi = (request: ExecutionRequest): boolean => {
+      return request.agent === "kimi"
+        && request.type === "llm_task"
+        && process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH === "enabled";
+    };
+
+    if (shouldAttemptKimi(enriched)) {
       return executeKimiGatewayRequest(enriched);
     }
 
