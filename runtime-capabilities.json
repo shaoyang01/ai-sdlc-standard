@@ -74,7 +74,12 @@
     "no_default_memory_persistence": true
   },
   "skills": {
-    "agent_skill_registry": "not_implemented",
-    "skill_invocation_contract": "not_implemented"
+    "agent_skill_registry": "implemented_metadata_only",
+    "skill_invocation_contract": "implemented_metadata_only",
+    "canonical_skill_source": "existing-skills-inventory.json",
+    "canonical_skill_name_format": "existing sdlc-* names",
+    "affects_runtime_routing": false,
+    "affects_agent_selection": false,
+    "real_adapter_enablement": false
   }
 }

@@ -25,6 +25,8 @@ Requirement Input → Graph Kernel → Runtime Orchestrator → Execution Gatewa
 | Code Review + Bugfix Loop (bounded, 2 retries max) | ✅ Implemented (shadow) |
 | Policy Suggestions (base feedback) | ✅ Implemented |
 | Artifact Model (standardized node outputs) | ✅ Implemented |
+| Agent Skill Registry (20 sdlc-* skills) | ✅ Implemented (metadata-only) |
+| Skill Invocation Contract | ✅ Implemented (metadata-only) |
 
 ## 3. Shadow-only Capabilities
 

@@ -92,8 +92,11 @@ async function test() {
 
   // ── Skills ──
   console.log("Test 9: Skills");
-  assert(caps.skills["agent_skill_registry"] === "not_implemented", "agent skill registry is not implemented");
-  assert(caps.skills["skill_invocation_contract"] === "not_implemented", "skill invocation contract is not implemented");
+  assert(caps.skills["agent_skill_registry"] === "implemented_metadata_only", "agent skill registry is metadata-only");
+  assert(caps.skills["skill_invocation_contract"] === "implemented_metadata_only", "skill invocation contract is metadata-only");
+  assert(caps.skills["affects_runtime_routing"] === false, "registry does not affect runtime routing");
+  assert(caps.skills["affects_agent_selection"] === false, "registry does not affect agent selection");
+  assert(caps.skills["real_adapter_enablement"] === false, "registry does not enable real adapters");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
