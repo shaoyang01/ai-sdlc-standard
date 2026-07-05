@@ -90,5 +90,12 @@
     "affects_agent_selection": false,
     "affects_execution_dispatch": false,
     "real_adapter_enablement": false
+  },
+  "skill_flow_orchestrator": {
+    "skill_flow_orchestrator_contract": "implemented_plan_only",
+    "skill_flow_orchestrator_execution": "not_implemented",
+    "skill_flow_orchestrator_invokes_agents": false,
+    "skill_flow_orchestrator_invokes_skills": false,
+    "skill_flow_orchestrator_affects_runtime": false
   }
 }
