@@ -54,4 +54,30 @@ export type RuntimeFeedback = Readonly<{
   review_summary: ReviewSummary;
   policy_suggestions: ReadonlyArray<PolicySuggestion>;
   shadow_routing_decisions?: ReadonlyArray<ShadowRoutingDecision>;
+  evolution_proposals?: ReadonlyArray<EvolutionProposal>;
+}>;
+
+export type EvolutionProposalType =
+  | "policy_adjustment"
+  | "routing_experiment"
+  | "agent_skill_gap"
+  | "test_coverage"
+  | "manual_review_required";
+
+export type EvolutionProposal = Readonly<{
+  id: string;
+  type: EvolutionProposalType;
+  title: string;
+  rationale: string;
+  suggestedAction: string;
+  relatedNode?: string;
+  relatedAgent?: string;
+  confidence: number;
+  source:
+    | "runtime_feedback"
+    | "policy_memory"
+    | "shadow_routing"
+    | "code_review"
+    | "validation";
+  applied: false;
 }>;

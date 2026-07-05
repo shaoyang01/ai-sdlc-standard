@@ -27,6 +27,7 @@ import { buildPolicyMemoryRecord } from "./core/policy-memory-builder";
 import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core/policy-memory-store";
 import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
 import { buildMemoryShadowRoutingDecisions } from "./core/memory-routing-shadow";
+import { buildEvolutionProposals } from "./core/evolution-proposal-analyzer";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -434,6 +435,18 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     } catch (error) {
       console.warn("Policy memory read failed:", error);
     }
+  }
+
+  // ─── Evolution Proposals — read-only, never applied ───
+  const evolutionProposals = buildEvolutionProposals({
+    requirementId,
+    feedback,
+  });
+  if (evolutionProposals.length > 0) {
+    feedback = {
+      ...feedback,
+      evolution_proposals: evolutionProposals,
+    };
   }
 
   // ─── Optional Policy Memory Write (disabled by default) ─────

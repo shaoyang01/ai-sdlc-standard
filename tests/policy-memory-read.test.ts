@@ -218,6 +218,15 @@ async function test() {
       `shadow currentAgent (${implDecision!.currentAgent}) matches trace agent (${implTrace!.agent})`
     );
     // Memory does not change the actual agent used
+
+    // Verify evolution proposals exist when memory signals are present
+    const evoProposals = runtimeResult.feedback.evolution_proposals;
+    assert(evoProposals !== undefined, "evolution_proposals exists");
+    const policyAdj = evoProposals!.find(
+      (p) => p.type === "policy_adjustment" && p.relatedAgent === "hermes"
+    );
+    assert(policyAdj !== undefined, "policy_adjustment for hermes exists");
+    assert(policyAdj!.applied === false, "evolution proposal is not applied");
     console.log("");
 
   } finally {

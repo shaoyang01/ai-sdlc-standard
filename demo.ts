@@ -22,6 +22,8 @@ run("build payment system with order sync across inventory service and repo-A ca
       feedback_summary: {
         agent_scores: feedback.agent_scores,
         policy_suggestions: feedback.policy_suggestions,
+        shadow_routing_decisions: feedback.shadow_routing_decisions,
+        evolution_proposal_count: feedback.evolution_proposals?.length ?? 0,
       },
       fanout_results,
     }, null, 2));
