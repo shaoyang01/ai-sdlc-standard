@@ -133,6 +133,3 @@ All evolution proposals have `applied: false` and require human review.
 8. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters
 9. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
 10. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
-7. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters
-8. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-9. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
