@@ -60,6 +60,15 @@ async function test() {
   assert(speckitPlan.stages.some((s) => s.stageName === "PREFLIGHT_CONTROLLER"), "includes PREFLIGHT_CONTROLLER");
   assert(speckitPlan.stages.some((s) => s.stageName === "DOMAIN_ROUTE_CONTROLLER"), "includes DOMAIN_ROUTE_CONTROLLER");
   assert(speckitPlan.stages.some((s) => s.skill === "sdlc-speckit-implement"), "includes speckit-implement");
+  // Verify canonical order: pipeline → PREFLIGHT → DOMAIN_ROUTE → specify → ... → reconcile
+  assert(speckitPlan.stages[0].skill === "sdlc-speckit-pipeline", "speckit-pipeline is stage index 0");
+  const spIndex = speckitPlan.stages.findIndex((s) => s.skill === "sdlc-speckit-pipeline");
+  const pfIndex = speckitPlan.stages.findIndex((s) => s.stageName === "PREFLIGHT_CONTROLLER");
+  const drIndex = speckitPlan.stages.findIndex((s) => s.stageName === "DOMAIN_ROUTE_CONTROLLER");
+  const specIndex = speckitPlan.stages.findIndex((s) => s.skill === "sdlc-speckit-specify");
+  assert(spIndex < pfIndex, "pipeline before PREFLIGHT_CONTROLLER");
+  assert(pfIndex < drIndex, "PREFLIGHT before DOMAIN_ROUTE");
+  assert(drIndex < specIndex, "DOMAIN_ROUTE before specify");
   // Verify order: analyze < implement < sync
   const siIndex = speckitPlan.stages.findIndex((s) => s.skill === "sdlc-speckit-implement");
   const analyzeIndex = speckitPlan.stages.findIndex((s) => s.skill === "sdlc-speckit-analyze");

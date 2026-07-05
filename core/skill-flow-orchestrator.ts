@@ -117,6 +117,7 @@ function buildSkilllessAgentExecutionStage(
 
 const FLOW_DEFINITIONS: Record<string, {
   entrySkill?: string;
+  leadSkill?: string;
   skills: string[];
   controllers: string[];
   hasSkilllessAgent: boolean;
@@ -134,7 +135,8 @@ const FLOW_DEFINITIONS: Record<string, {
   },
   speckit_pipeline: {
     entrySkill: "sdlc-speckit-pipeline",
-    skills: ["sdlc-speckit-pipeline", "sdlc-speckit-specify", "sdlc-speckit-clarify", "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement", "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile"],
+    leadSkill: "sdlc-speckit-pipeline",
+    skills: ["sdlc-speckit-specify", "sdlc-speckit-clarify", "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement", "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile"],
     controllers: ["PREFLIGHT_CONTROLLER", "DOMAIN_ROUTE_CONTROLLER"],
     hasSkilllessAgent: false,
   },
@@ -192,7 +194,8 @@ export function planFlowById(input: {
   }
 
   // Check for missing bindings
-  const missingSkills = def.skills.filter((s) => !getSkillFlowBinding(s));
+  const allSkills = def.leadSkill ? [def.leadSkill, ...def.skills] : def.skills;
+  const missingSkills = allSkills.filter((s) => !getSkillFlowBinding(s));
   if (missingSkills.length > 0) {
     return {
       flowId: input.flowId,
@@ -209,7 +212,12 @@ export function planFlowById(input: {
   const stages: SkillFlowStagePlan[] = [];
   let index = 0;
 
-  // Controller stages (before skills)
+  // Lead skill (placed first, before controllers — for speckit)
+  if (def.leadSkill) {
+    stages.push(buildSkillStage(def.leadSkill, input.flowId, input.requirementId, index++));
+  }
+
+  // Controller stages
   for (const ctrl of def.controllers) {
     stages.push(buildControllerStage(ctrl, input.flowId, input.requirementId, index++));
   }
