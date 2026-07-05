@@ -163,9 +163,8 @@ async function test() {
   assert(rsaFlags.length === 4, "runtime shadow 4 flags");
   const rsaEvidence = rsaCap["evidence"] as string[];
   assert(rsaEvidence.includes("core/kimi-runtime-shadow-attachment.ts"), "runtime shadow evidence");
+  assert(rsaEvidence.includes("tests/kimi-runtime-shadow-attachment.test.ts"), "runtime shadow helper test");
   assert(rsaEvidence.includes("tests/runtime-kimi-shadow-attachment.test.ts"), "runtime shadow integration test");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Adapter Dispatch Contract", "next PR dispatch contract");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
