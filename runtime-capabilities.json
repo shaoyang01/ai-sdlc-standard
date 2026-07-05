@@ -152,6 +152,15 @@
     "hermes_cli_adapter_dry_run_persists_audit": false,
     "hermes_cli_adapter_dry_run_reads_api_keys": false,
     "kimi_cli_adapter_reads_api_keys": false,
-    "hermes_cli_adapter_reads_api_keys": false
+    "hermes_cli_adapter_reads_api_keys": false,
+    "cli_adapter_audit_trail_contract": "implemented_metadata_only",
+    "cli_adapter_audit_trail_persisted": false,
+    "cli_adapter_audit_trail_invokes_cli": false,
+    "cli_adapter_audit_trail_spawns_process": false,
+    "cli_adapter_audit_trail_contains_raw_prompt": false,
+    "cli_adapter_audit_trail_contains_raw_artifacts": false,
+    "cli_adapter_audit_trail_contains_secrets": false,
+    "cli_adapter_audit_trail_affects_gateway": false,
+    "cli_adapter_audit_trail_affects_runtime": false
   }
 }
