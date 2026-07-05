@@ -10,6 +10,7 @@ import { NodeType, GraphNode } from "../sdlc_graph/types";
 import { getNextNode, isTerminal } from "../sdlc_graph/transitions";
 import { SDLC_NODES, SDLC_EDGES } from "../sdlc_graph/graph";
 import { ExecutionContext } from "../core/execution-context";
+import { buildExecutionContext } from "../core/context-builder";
 import { createTraceItem } from "../core/execution-trace";
 
 // ─── Types ────────────────────────────────────────────
@@ -64,29 +65,30 @@ function getAgent(node: NodeType): LoopAgent {
 // Each executor is a STATELESS function: (context) → output.
 // No branching. No flow decisions. Graph Kernel controls transitions.
 
-type NodeExecutor = (context: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>;
+type NodeExecutor = (context: Record<string, unknown>, _ctx: ExecutionContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
 // Static executor map — no switch, no branching
 const EXECUTORS: Record<NodeType, NodeExecutor> = {
-  "requirement-summary": (ctx) =>
+  "requirement-summary": (ctx, _execCtx) =>
     executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
-  "tech-design": (ctx) =>
+  "tech-design": (ctx, _execCtx) =>
     ({ node: "tech-design", result: "design_completed", summary: ctx }),
-  "review": (_ctx) =>
+  "review": (_ctx, _execCtx) =>
     ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }),
-  "implementation": (ctx) =>
-    executeImplementation(ctx),
-  "validation": (_ctx) =>
+  "implementation": (ctx, execCtx) =>
+    executeImplementation(ctx, execCtx),
+  "validation": (_ctx, _execCtx) =>
     ({ node: "validation", result: "validated", all_checks_passed: true }),
 };
 
 // Pure dispatch — no control logic, just lookup + execute
 async function executeDocFlowNode(
   node: NodeType,
-  context: Record<string, unknown>
+  context: Record<string, unknown>,
+  _ctx: ExecutionContext
 ): Promise<Record<string, unknown>> {
   const executor = EXECUTORS[node];
-  return executor(context);
+  return executor(context, _ctx);
 }
 
 function executeRequirementSummary(rawText: string, requirementId: string): Record<string, unknown> {
@@ -113,17 +115,17 @@ function extractSubRequirements(text: string): { repo: string; task: string }[] 
 }
 
 // Pure implementation executor — mode from context, not inline decision
-async function executeImplementation(context: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function executeImplementation(context: Record<string, unknown>, _ctx: ExecutionContext): Promise<Record<string, unknown>> {
   const summary = (context["requirement-summary"] || context) as RequirementSummary;
   const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
   const subReqs = summary.sub_requirements || [];
 
   if (subReqs.length > 0) {
-    const result = await executeFanout(summary.requirement_id, subReqs);
+    const result = await executeFanout(summary.requirement_id, subReqs, _ctx);
     return { node: "implementation", mode: "fanout", fanout_result: result };
   }
   if (mode === "speckit") {
-    return executeSpeckitPipeline(summary.requirement_id);
+    return executeSpeckitPipeline(summary.requirement_id, _ctx);
   }
   return { node: "implementation", mode: "direct", result: "implementation_completed" };
 }
@@ -132,7 +134,8 @@ async function executeImplementation(context: Record<string, unknown>): Promise<
 
 async function executeFanout(
   requirementId: string,
-  subReqs: { repo: string; task: string }[]
+  subReqs: { repo: string; task: string }[],
+  _ctx: ExecutionContext
 ): Promise<FanoutResult> {
   const promises = subReqs.map(async (sub) => {
     const result = await dispatchToAgent("implementation", "codex", { repo: sub.repo, task: sub.task });
@@ -157,7 +160,7 @@ async function dispatchToAgent(
 
 // ─── Speckit: Optional Pipeline ───────────────────────
 
-async function executeSpeckitPipeline(requirementId: string): Promise<Record<string, unknown>> {
+async function executeSpeckitPipeline(requirementId: string, _ctx: ExecutionContext): Promise<Record<string, unknown>> {
   const stages = ["spec", "analyze", "implement", "sync"];
   const results: Record<string, string> = {};
   for (const stage of stages) {
@@ -174,21 +177,24 @@ export async function run(requirement: string): Promise<RuntimeResult> {
   const trace: ExecutionTraceEntry[] = [];
   const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
 
+  // ─── ExecutionContext — created once, persists across all nodes ───
+  const execCtx: ExecutionContext = buildExecutionContext(
+    "requirement-summary",
+    { requirement, requirement_id: requirementId },
+    { requirementId, complexity: "medium" }
+  );
+
   let currentNode: NodeType | null = "requirement-summary";
 
   // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
-    const agent = getAgent(currentNode);
+    const agent = getAgent(currentNode);  // ← AGENT_MAP, no context influence
 
-    // Build ExecutionContext (structural wrapper — no behavior change)
-    const execCtx: ExecutionContext = {
-      node: currentNode,
-      input: { requirement, requirement_id: requirementId },
-      metadata: { requirementId, complexity: "medium" },
-      trace: [],
-    };
+    // Update ExecutionContext for current node
+    execCtx.node = currentNode;
+    execCtx.input = { requirement, requirement_id: requirementId };
 
-    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext);
+    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx);
     legacyContext[currentNode] = nodeOutput;
 
     // Record trace via standard ExecutionTrace
@@ -205,7 +211,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     currentNode = getNextNode(currentNode);  // ← Graph Kernel transition
   }
 
-  const implementationOutput = context["implementation"] as Record<string, unknown> | undefined;
+  const implementationOutput = legacyContext["implementation"] as Record<string, unknown> | undefined;
   const fanoutResult = implementationOutput?.fanout_result as FanoutResult | undefined;
   const failedCount = (fanoutResult?.repo_results || []).filter((r: { status: string }) => r.status === "failed").length;
   const succeededCount = (fanoutResult?.repo_results || []).filter((r: { status: string }) => r.status === "success").length;
