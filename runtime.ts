@@ -230,6 +230,7 @@ export async function run(requirement: string): Promise<RuntimeResult> {
       node: currentNode,
       agent,
       output: nodeOutput,
+      index: artifacts.length,
     });
     artifacts.push(...nodeArtifacts);
 

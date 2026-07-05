@@ -1,7 +1,7 @@
 // Artifact Model — Standardized Node Outputs
 // ==========================================
 // Unified artifact contract for all SDLC nodes.
-// Stable format for downstream consumption (code-review, bugfix, learning).
+// No hidden global state. All inputs explicit.
 
 export type ArtifactType =
   | "requirement_summary"
@@ -29,8 +29,7 @@ export type Artifact = Readonly<{
   }>;
 }>;
 
-let artifactIndex = 0;
-
+// Pure factory — no hidden state. All inputs explicit.
 export function createArtifact(input: {
   requirementId: string;
   node: string;
@@ -38,18 +37,18 @@ export function createArtifact(input: {
   content: Record<string, unknown>;
   agent?: string;
   source: "runtime" | "execution_gateway" | "fanout" | "validation";
-  id?: string;
+  id: string;
+  createdAt?: string;
 }): Artifact {
-  const index = ++artifactIndex;
   return {
-    id: input.id || `${input.requirementId}:${input.node}:${input.type}:${index}`,
+    id: input.id,
     requirementId: input.requirementId,
     node: input.node,
     type: input.type,
     content: input.content,
     metadata: {
       agent: input.agent,
-      createdAt: new Date().toISOString(),
+      createdAt: input.createdAt || new Date().toISOString(),
       source: input.source,
     },
   };

@@ -1,6 +1,5 @@
 // Node Artifacts — Deterministic Output Conversion
 // =================================================
-// Converts node outputs into standardized Artifact array.
 // Pure function. No side effects.
 
 import { Artifact, ArtifactType, createArtifact } from "./artifact";
@@ -18,7 +17,24 @@ export function artifactsFromNodeOutput(input: {
   node: string;
   agent?: string;
   output: Record<string, unknown>;
+  index?: number;
 }): Artifact[] {
+  const idx = input.index ?? 0;
+
+  // Fanout mode: emit fanout_result artifact
+  if (input.node === "implementation" && input.output["mode"] === "fanout" && input.output["fanout_result"]) {
+    const fanoutArtifact = createArtifact({
+      requirementId: input.requirementId,
+      node: input.node,
+      type: "fanout_result",
+      content: input.output["fanout_result"] as Record<string, unknown>,
+      agent: input.agent,
+      source: "fanout",
+      id: `${input.requirementId}:${input.node}:fanout_result:${idx}`,
+    });
+    return [fanoutArtifact];
+  }
+
   // If output already contains artifacts from Execution Gateway, return them
   if (Array.isArray(input.output["artifacts"])) {
     return input.output["artifacts"] as Artifact[];
@@ -33,6 +49,7 @@ export function artifactsFromNodeOutput(input: {
     content: input.output,
     agent: input.agent,
     source: "runtime",
+    id: `${input.requirementId}:${input.node}:${type}:${idx}`,
   });
 
   return [artifact];

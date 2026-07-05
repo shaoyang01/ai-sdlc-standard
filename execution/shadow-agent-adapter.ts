@@ -19,6 +19,7 @@ export async function executeShadowAgent(
     },
     agent: request.agent,
     source: "execution_gateway",
+    id: `${request.requirementId}:${request.node}:shadow_output`,
   });
 
   return {

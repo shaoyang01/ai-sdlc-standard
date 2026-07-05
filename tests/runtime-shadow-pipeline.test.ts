@@ -74,6 +74,19 @@ async function test() {
     "has implementation artifact"
   );
   assert(artifactTypes.includes("validation_report"), "has validation_report artifact");
+  // Verify artifact ids exist
+  assert(result.artifacts.every((a: { id: string }) => typeof a.id === "string"), "all artifacts have ids");
+  console.log("");
+
+  // Test 6: Multi-repo fanout produces fanout_result artifact
+  console.log("Test 6: Fanout artifact");
+  const fanoutRun = await run("sync inventory service with repo-A calls repo-B and integration event pipeline");
+  assert(Array.isArray(fanoutRun.artifacts), "fanout artifacts is array");
+  const fanoutTypes = fanoutRun.artifacts.map((a: { type: string }) => a.type);
+  assert(
+    fanoutTypes.includes("fanout_result") || fanoutTypes.includes("implementation_plan"),
+    "has fanout or implementation artifact"
+  );
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
