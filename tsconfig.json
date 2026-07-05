@@ -23,6 +23,7 @@
     "fanout_feedback/**/*.ts",
     "evolution/**/*.ts",
     "adoption/**/*.ts",
+    "execution/**/*.ts",
     "tests/**/*.ts"
   ],
   "exclude": [

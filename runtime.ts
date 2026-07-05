@@ -169,19 +169,6 @@ async function executeFanout(
   return { requirement_id: requirementId, repo_results: repoResults, completed_at: new Date().toISOString() };
 }
 
-// ─── Agents: Deterministic Dispatch ───────────────────
-
-async function dispatchToAgent(
-  node: string,
-  agent: string,
-  payload: Record<string, unknown>
-): Promise<{ success: boolean; output?: Record<string, unknown> }> {
-  return {
-    success: true,
-    output: { node, agent, result: `${node}_by_${agent}`, timestamp: new Date().toISOString(), ...payload },
-  };
-}
-
 // ─── Speckit: Optional Pipeline ───────────────────────
 
 async function executeSpeckitPipeline(requirementId: string, _ctx: ExecutionContext): Promise<Record<string, unknown>> {
