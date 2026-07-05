@@ -140,6 +140,14 @@ async function test() {
   assert(realAdapters["hermes_cli_executor_contract_affects_runtime"] === false, "hermes executor no runtime");
   assert(realAdapters["hermes_cli_executor_contract_persists_audit"] === false, "hermes executor no persist");
   assert(realAdapters["hermes_cli_executor_contract_reads_api_keys"] === false, "hermes executor no API keys");
+  assert(realAdapters["kimi_cli_command_executor"] === "implemented_feature_flagged_isolated", "kimi command executor implemented");
+  assert(realAdapters["kimi_cli_command_executor_default_enabled"] === false, "kimi command executor default disabled");
+  assert(realAdapters["kimi_cli_command_executor_requires_flag"] === "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled", "kimi command executor requires flag");
+  assert(realAdapters["kimi_cli_command_executor_wired_to_gateway"] === false, "kimi command executor not wired to gateway");
+  assert(realAdapters["kimi_cli_command_executor_wired_to_runtime"] === false, "kimi command executor not wired to runtime");
+  assert(realAdapters["kimi_cli_command_executor_persists_audit"] === false, "kimi command executor no persist audit");
+  assert(realAdapters["kimi_cli_command_executor_reads_api_keys"] === false, "kimi command executor no API keys");
+  assert(realAdapters["kimi_cli_command_executor_invokes_cli_by_default"] === false, "kimi command executor no CLI by default");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

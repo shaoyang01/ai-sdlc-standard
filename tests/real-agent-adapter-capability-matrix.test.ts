@@ -71,6 +71,10 @@ async function test() {
   assert(kimi["status"] === "cli_contract_stub_with_dry_run_harness", "kimi cli contract stub with dry-run harness");
   assert(kimi["dry_run_harness"] === "implemented_no_process_spawn", "kimi dry-run harness implemented");
   assert(kimi["executor_contract"] === "implemented_contract_only", "kimi executor contract implemented");
+  assert(kimi["command_executor"] === "implemented_feature_flagged_isolated", "kimi command executor isolated");
+  assert(kimi["command_executor_default_enabled"] === false, "kimi command executor default disabled");
+  assert(kimi["command_executor_wired_to_gateway"] === false, "kimi command executor not wired to gateway");
+  assert(kimi["command_executor_wired_to_runtime"] === false, "kimi command executor not wired to runtime");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
