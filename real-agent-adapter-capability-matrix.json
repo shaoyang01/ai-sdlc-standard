@@ -63,7 +63,7 @@
     },
     {
       "adapter": "hermes",
-      "status": "cli_contract_stub",
+      "status": "cli_contract_stub_with_dry_run_harness",
       "default_enabled": false,
       "invokes_real_external_system": false,
       "supported_request_types": [],
@@ -71,8 +71,11 @@
       "fallback_behavior": "contract-only; no CLI execution",
       "evidence": [
         "execution/hermes-cli-adapter-contract.ts",
-        "tests/hermes-cli-adapter-contract.test.ts"
-      ]
+        "tests/hermes-cli-adapter-contract.test.ts",
+        "execution/hermes-cli-dry-run.ts",
+        "tests/hermes-cli-dry-run.test.ts"
+      ],
+      "dry_run_harness": "implemented_no_process_spawn"
     }
   ],
   "request_types": [
@@ -292,8 +295,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Hermes CLI Adapter Dry-run Harness",
-    "reason": "Mirror the Kimi dry-run harness pattern for Hermes",
-    "safety_rationale": "Dry-run harness has no process spawn, no CLI execution, no API keys"
+    "title": "Real Adapter CLI Audit Trail",
+    "reason": "Audit shape should be finalized before real command execution",
+    "safety_rationale": "Audit metadata has no CLI execution, no process spawn, no API keys"
   }
 }

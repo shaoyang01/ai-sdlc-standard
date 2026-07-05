@@ -70,7 +70,8 @@ async function test() {
   assert(codex["status"] === "feature_flagged_partial", "codex feature_flagged_partial");
   assert(kimi["status"] === "cli_contract_stub_with_dry_run_harness", "kimi cli contract stub with dry-run harness");
   assert(kimi["dry_run_harness"] === "implemented_no_process_spawn", "kimi dry-run harness implemented");
-  assert(hermes["status"] === "cli_contract_stub", "hermes cli_contract_stub");
+  assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
+  assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   console.log("");
 
   // ── Test 3: Request type alignment ──
