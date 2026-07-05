@@ -123,6 +123,13 @@ async function test() {
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
   assert(reviewJson.includes("isolated feature-flagged command executor"), "current Kimi executor state");
   assert(reviewJson.includes("not wired to runtime/Gateway"), "not wired state");
+  // Markdown review must reflect current Kimi state
+  const md = fs.readFileSync("SYSTEM_CAPABILITY_REVIEW.md", "utf-8");
+  assert(!md.includes("Kimi/Hermes are shadow-only"), "MD: no stale shadow-only claim");
+  assert(!md.includes("only CLI contract stubs exist"), "MD: no stale 'only CLI stubs' claim");
+  assert(md.includes("isolated feature-flagged command executor"), "MD: mentions Kimi command executor");
+  assert(md.includes("Gateway integration contract"), "MD: mentions Gateway contract");
+  assert(md.includes("not wired to runtime"), "MD: mentions not wired to runtime");
   console.log("");
 
   // ── Test 5: Safety boundaries ──

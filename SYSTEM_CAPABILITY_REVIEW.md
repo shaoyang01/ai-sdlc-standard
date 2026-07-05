@@ -2,7 +2,11 @@
 
 ## 1. Executive Summary
 
-The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place. Real agent execution is limited to a feature-flagged Codex adapter for `code_generation` only. Kimi/Hermes real CLI execution is not implemented. Kimi and Hermes CLI contract stubs exist, and a Kimi CLI dry-run harness exists (no process spawn, not wired into runtime). No real sdlc-* skill is invoked.
+The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
+
+Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi has an isolated feature-flagged command executor (`SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`) and a Gateway integration contract (`SDLC_KIMI_GATEWAY_INTEGRATION=enabled`), but is **not wired to runtime or ExecutionGateway** — no real Kimi execution is reachable through runtime/Gateway. Hermes has CLI contract, dry-run harness, and executor contract only; real Hermes command executor is not implemented.
+
+The next intended PR is Feature-flagged Kimi Gateway Wiring Shadow Path. Any future Gateway wiring must be shadow/sidecar first, default off, require both flags, and must not change runtime routing or final_status.
 
 ### Status Classification
 
