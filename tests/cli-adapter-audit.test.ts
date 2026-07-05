@@ -33,7 +33,8 @@ async function test() {
   console.log("Test 2: Error sanitizer");
   const s = sanitizeErrorSummary("failed with token=abc\nmore with sk-test and password=123");
   assert(s !== undefined && !s.includes("\n"), "single line");
-  assert(!s!.includes("token=") && !s!.includes("sk-") && !s!.includes("password="), "no secret patterns");
+  assert(!s!.includes("token=") && !s!.includes("password="), "no secret key patterns");
+  assert(!s!.includes("abc") && !s!.includes("sk-test") && !s!.includes("123"), "no secret values");
   assert(s!.length <= 300, "length <= 300");
   console.log("");
 
@@ -93,12 +94,14 @@ async function test() {
 
   // Test 7: Execution failure
   console.log("Test 7: Execution failure audit");
-  const e7 = buildCliExecutionResultAudit({ adapter: "hermes", requestId: "R5", requestType: "validation", exitCode: 1, errorSummary: "failed with token=abc" });
+  const e7 = buildCliExecutionResultAudit({ adapter: "hermes", requestId: "R5", requestType: "validation", exitCode: 1, errorSummary: "failed with token=abc and password=123 and sk-test" });
   assert(e7.stage === "execution_failed", "stage failed");
   assert(e7.outcome === "failure", "outcome failure");
-  assert(e7.errorSummary !== undefined && !e7.errorSummary.includes("token="), "sanitized error");
+  assert(e7.errorSummary !== undefined && !e7.errorSummary.includes("token="), "sanitized: no token=");
+  assert(!e7.errorSummary!.includes("abc"), "sanitized: no abc");
   const j7 = JSON.stringify(e7);
-  assert(!j7.includes("token="), "JSON no secret pattern");
+  assert(!j7.includes("token=") && !j7.includes("password="), "JSON no secret keys");
+  assert(!j7.includes("abc") && !j7.includes("123") && !j7.includes("sk-test"), "JSON no secret values");
   console.log("");
 
   // Test 8: Timeout

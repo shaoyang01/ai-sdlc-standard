@@ -54,23 +54,28 @@ export interface CliAdapterAuditEvent {
   errorSummary?: string;
 }
 
-const SECRET_PATTERNS = [/token=/i, /api_key=/i, /apikey=/i, /secret=/i, /password=/i, /^sk-/];
+const SECRET_KEY_PATTERNS = ["token=", "api_key=", "apikey=", "secret=", "password="];
+const SECRET_PREFIX = "sk-";
 const MAX_ERROR_LENGTH = 300;
 
+function isSecretLikeToken(value: string): boolean {
+  const lower = value.toLowerCase();
+  for (const key of SECRET_KEY_PATTERNS) {
+    if (lower.includes(key)) return true;
+  }
+  return lower.startsWith(SECRET_PREFIX);
+}
+
 export function sanitizeCliArgs(args: string[]): string[] {
-  return args.map((a) => {
-    for (const p of SECRET_PATTERNS) if (p.test(a)) return "[REDACTED]";
-    return a;
-  });
+  return args.map((a) => isSecretLikeToken(a) ? "[REDACTED]" : a);
 }
 
 export function sanitizeErrorSummary(input: string | undefined): string | undefined {
   if (!input || input.trim() === "") return undefined;
-  let out = input.replace(/\n/g, " ");
-  for (const p of SECRET_PATTERNS) {
-    out = out.replace(new RegExp(p.source.replace("^", ""), "gi"), "[REDACTED]");
-  }
-  return out.length > MAX_ERROR_LENGTH ? out.slice(0, MAX_ERROR_LENGTH) + "…" : out;
+  const normalized = input.replace(/\n/g, " ");
+  const tokens = normalized.split(/\s+/);
+  const sanitized = tokens.map((t) => isSecretLikeToken(t) ? "[REDACTED]" : t).join(" ");
+  return sanitized.length > MAX_ERROR_LENGTH ? sanitized.slice(0, MAX_ERROR_LENGTH) + "…" : sanitized;
 }
 
 export function buildCliAdapterAuditEvent(input: {
