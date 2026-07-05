@@ -3,6 +3,7 @@
 // Pure read-only analyzer. Computes agent scores, node outcomes,
 // review summaries, and policy suggestions from runtime trace and artifacts.
 // No side effects. No mutations. No agent calls. No Execution Gateway.
+// Agent scores are attributed ONLY to the agent that executed each node.
 
 import { Artifact } from "./artifact";
 import {
@@ -28,11 +29,10 @@ export function analyzeRuntimeFeedback(input: {
 }): RuntimeFeedback {
   const nodeOutcomes = computeNodeOutcomes(input.executionTrace);
   const reviewSummary = computeReviewSummary(input.artifacts, input.executionTrace);
-  const agentScores = computeAgentScores(nodeOutcomes, reviewSummary, input.finalStatus);
+  const agentScores = computeAgentScores(input.executionTrace, reviewSummary);
   const policySuggestions = computePolicySuggestions(
     reviewSummary,
-    input.finalStatus,
-    nodeOutcomes
+    input.finalStatus
   );
 
   return {
@@ -90,9 +90,13 @@ function computeReviewSummary(
   // Count bugfix_patch artifacts
   const bugfixAttempts = artifacts.filter((a) => a.type === "bugfix_patch").length;
 
-  // Check validation
+  // Check validation: trace OR artifact evidence
   const validationTrace = trace.find((t) => t.node === "validation");
-  const validationPassed = validationTrace?.status === "success";
+  const validationArtifacts = artifacts.filter((a) => a.type === "validation_report");
+  const lastValidationArtifact = validationArtifacts[validationArtifacts.length - 1];
+  const validationPassed =
+    validationTrace?.status === "success" ||
+    lastValidationArtifact?.content["all_checks_passed"] === true;
 
   return {
     codeReviewStatus,
@@ -102,62 +106,63 @@ function computeReviewSummary(
 }
 
 // ─── Agent Scores ─────────────────────────────────────
+// Scores are attributed ONLY to the agent that executed each node.
+// No cross-agent leakage of review/bugfix/validation signals.
 
 function computeAgentScores(
-  outcomes: ReadonlyArray<NodeOutcome>,
-  reviewSummary: ReviewSummary,
-  finalStatus: string
+  trace: ReadonlyArray<TraceEntry>,
+  reviewSummary: ReviewSummary
 ): AgentScore[] {
   const agentMap = new Map<string, { score: number; signals: string[] }>();
 
-  for (const outcome of outcomes) {
-    let entry = agentMap.get(outcome.agent);
-    if (!entry) {
-      entry = { score: 0.5, signals: [] };
+  for (const entry of trace) {
+    let record = agentMap.get(entry.agent);
+    if (!record) {
+      record = { score: 0.5, signals: [] };
     }
 
-    if (outcome.signal === "positive") {
-      entry.score += 0.2;
-      entry.signals.push(`${outcome.node}:success`);
-    } else if (outcome.signal === "negative") {
-      entry.score -= 0.2;
-      entry.signals.push(`${outcome.node}:failure`);
+    // Base node outcome: +0.2 for success, -0.2 for failure
+    if (entry.status === "success") {
+      record.score += 0.2;
+      record.signals.push(`${entry.node}:success`);
+    } else if (entry.status === "failure") {
+      record.score -= 0.2;
+      record.signals.push(`${entry.node}:failure`);
     }
 
-    agentMap.set(outcome.agent, entry);
+    // Node-specific signals — attributed only to the executing agent
+    if (entry.node === "code-review") {
+      if (entry.output["result"] === "PASS") {
+        record.score += 0.1;
+        record.signals.push("code-review:PASS");
+      } else if (entry.output["result"] === "FAIL") {
+        record.score -= 0.1;
+        record.signals.push("code-review:FAIL");
+      }
+    }
+
+    if (entry.node === "bugfix" && entry.status === "success") {
+      record.score += 0.1;
+      record.signals.push("bugfix:completed");
+    }
+
+    if (entry.node === "validation" && entry.status === "failure") {
+      record.score -= 0.1;
+      record.signals.push("validation:failed");
+    }
+
+    agentMap.set(entry.agent, record);
   }
 
-  // Apply review signals
-  for (const [agent, entry] of agentMap) {
-    if (reviewSummary.codeReviewStatus === "PASS") {
-      entry.score += 0.1;
-      entry.signals.push("code-review:PASS");
-    } else if (reviewSummary.codeReviewStatus === "FAIL") {
-      entry.score -= 0.1;
-      entry.signals.push("code-review:FAIL");
-    }
-
-    if (reviewSummary.bugfixAttempts > 0) {
-      entry.score += 0.1;
-      entry.signals.push("bugfix:completed");
-    }
-
-    if (!reviewSummary.validationPassed) {
-      entry.score -= 0.1;
-      entry.signals.push("validation:failed");
-    }
-
-    // Clamp to [0, 1]
-    entry.score = Math.max(0, Math.min(1, Math.round(entry.score * 100) / 100));
-  }
-
+  // Build final score list, clamped to [0, 1]
   const scores: AgentScore[] = [];
-  for (const [agent, entry] of agentMap) {
+  for (const [agent, record] of agentMap) {
+    record.score = Math.max(0, Math.min(1, Math.round(record.score * 100) / 100));
     scores.push({
       agent,
-      score: entry.score,
-      reason: buildAgentReason(agent, entry.signals),
-      signals: entry.signals,
+      score: record.score,
+      reason: buildAgentReason(agent, record.signals),
+      signals: record.signals,
     });
   }
 
@@ -184,8 +189,7 @@ function buildAgentReason(agent: string, signals: string[]): string {
 
 function computePolicySuggestions(
   reviewSummary: ReviewSummary,
-  finalStatus: string,
-  outcomes: ReadonlyArray<NodeOutcome>
+  finalStatus: string
 ): PolicySuggestion[] {
   const suggestions: PolicySuggestion[] = [];
 

@@ -50,6 +50,19 @@ async function test() {
   const codexScore = passResult.agent_scores.find((s) => s.agent === "codex");
   assert(codexScore !== undefined, "codex has a score");
   assert(codexScore!.score > 0.5, `codex score > 0.5 (got ${codexScore!.score})`);
+
+  // Verify code-review:PASS is ONLY attributed to codex, not to kimi
+  const kimiScore = passResult.agent_scores.find((s) => s.agent === "kimi");
+  assert(kimiScore !== undefined, "kimi has a score");
+  assert(
+    !kimiScore!.signals.includes("code-review:PASS"),
+    "kimi does NOT have code-review:PASS signal (attributed to codex only)"
+  );
+  assert(
+    !kimiScore!.signals.includes("code-review:FAIL"),
+    "kimi does NOT have code-review:FAIL signal"
+  );
+
   assert(passResult.node_outcomes.length === passTrace.length, "node_outcomes matches trace length");
   assert(passResult.review_summary.codeReviewStatus === "PASS", "review summary shows PASS");
   assert(passResult.review_summary.bugfixAttempts === 0, "review summary shows 0 bugfix attempts");
@@ -89,6 +102,21 @@ async function test() {
   assert(bugfixResult.review_summary.bugfixAttempts === 2, `bugfix attempts = 2 (got ${bugfixResult.review_summary.bugfixAttempts})`);
   const manualReview = bugfixResult.policy_suggestions.find((s) => s.type === "manual_review");
   assert(manualReview !== undefined, "manual_review suggestion exists when bugfix > 0");
+
+  // Verify bugfix:completed is only attributed to the bugfix agent
+  const bugfixCodexScore = bugfixResult.agent_scores.find((s) => s.agent === "codex");
+  assert(bugfixCodexScore !== undefined, "codex has a score in bugfix path");
+  assert(
+    bugfixCodexScore!.signals.includes("bugfix:completed"),
+    "codex has bugfix:completed signal (ran bugfix)"
+  );
+  const bugfixHermesScore = bugfixResult.agent_scores.find((s) => s.agent === "hermes");
+  if (bugfixHermesScore) {
+    assert(
+      !bugfixHermesScore.signals.includes("bugfix:completed"),
+      "hermes does NOT have bugfix:completed signal"
+    );
+  }
   console.log("");
 
   // ── Test 3: Failed path produces retry suggestion ──
@@ -111,8 +139,30 @@ async function test() {
   assert(failResult.review_summary.validationPassed === false, "validation not passed");
   console.log("");
 
-  // ── Test 4: Analyzer does not mutate input arrays ──
-  console.log("Test 4: Analyzer does not mutate input");
+  // ── Test 4: Validation artifact sets validationPassed without trace ──
+  console.log("Test 4: Validation artifact alone sets validationPassed=true");
+  const artifactOnlyTrace = [
+    { node: "implementation", agent: "codex", status: "success" as const, output: { result: "ok" } },
+    // No validation trace entry — only artifact evidence
+  ];
+
+  const artifactOnlyArtifacts = [
+    createArtifact({ requirementId: "REQ-VA", node: "validation", type: "validation_report", content: { all_checks_passed: true }, agent: "hermes", source: "validation", id: "REQ-VA:validation:validation_report:0" }),
+  ];
+
+  const artifactOnlyResult = analyzeRuntimeFeedback({
+    requirementId: "REQ-VA",
+    executionTrace: artifactOnlyTrace,
+    artifacts: artifactOnlyArtifacts,
+    finalStatus: "success",
+  });
+
+  assert(artifactOnlyResult.review_summary.validationPassed === true,
+    "validationPassed=true from artifact with all_checks_passed=true, even without validation trace");
+  console.log("");
+
+  // ── Test 5: Analyzer does not mutate input arrays ──
+  console.log("Test 5: Analyzer does not mutate input");
   const originalTrace = [
     { node: "tech-design", agent: "kimi", status: "success" as const, output: { result: "ok" } },
   ];
