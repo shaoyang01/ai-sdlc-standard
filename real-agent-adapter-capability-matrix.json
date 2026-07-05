@@ -70,7 +70,9 @@
         "tests/kimi-runtime-attachment-contract.test.ts",
         "core/kimi-runtime-shadow-attachment.ts",
         "tests/kimi-runtime-shadow-attachment.test.ts",
-        "tests/runtime-kimi-shadow-attachment.test.ts"
+        "tests/runtime-kimi-shadow-attachment.test.ts",
+        "execution/kimi-gateway-real-dispatch-contract.ts",
+        "tests/kimi-gateway-real-dispatch-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -99,7 +101,20 @@
       "runtime_shadow_attachment_default_enabled": false,
       "runtime_shadow_attachment_changes_routing": false,
       "runtime_shadow_attachment_changes_final_status": false,
-      "runtime_shadow_attachment_changes_agent_selection": false
+      "runtime_shadow_attachment_changes_agent_selection": false,
+      "gateway_real_dispatch_contract": "implemented_contract_only",
+      "gateway_real_dispatch_default_enabled": false,
+      "gateway_real_dispatch_wired_to_gateway": false,
+      "gateway_real_dispatch_supported_request_types": [
+        "llm_task"
+      ],
+      "gateway_real_dispatch_requires_flags": [
+        "SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_invokes_cli": false,
+      "gateway_real_dispatch_changes_final_status": false
     },
     {
       "adapter": "hermes",
@@ -338,8 +353,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Adapter Dispatch Contract",
-    "reason": "Define safe Gateway dispatch rules before real Kimi routing",
-    "safety_rationale": "Default off; shadow/sidecar proven; Gateway dispatch unchanged"
+    "title": "Feature-flagged Kimi Gateway Real Dispatch",
+    "reason": "Wire real dispatch contract into Gateway dispatch behind flags",
+    "safety_rationale": "Default off; requires flags; llm_task only; Gateway dispatch unchanged by default"
   }
 }
