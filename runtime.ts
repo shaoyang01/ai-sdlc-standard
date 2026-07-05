@@ -15,6 +15,8 @@ import { createTraceItem } from "../core/execution-trace";
 import { selectAgent } from "../core/agent-decision";
 import { inferComplexity } from "../core/complexity-inference";
 import { resolveAgentByPolicy } from "../core/agent-policy-engine";
+import { createInitialState, updateState, ExecutionState } from "../core/execution-state";
+import { transition, replayExecution } from "../core/state-machine-vm";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -191,12 +193,15 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     { requirementId, complexity: "medium" }
   );
 
+  // ─── State Machine VM — state-driven execution ──────────
+  let vmState: ExecutionState = createInitialState(execCtx);
+
   let currentNode: NodeType | null = "requirement-summary";
   let retryCount = 0;
   const MAX_RETRIES = 3;
 
-  // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
-  while (currentNode) {
+  // State-driven execution loop — VM transitions, not node-driven
+  while (currentNode && vmState.status === "running") {
     // Agent selection: policy engine → decision layer → AGENT_MAP fallback
     const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
     const agent = policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode);
@@ -210,7 +215,11 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     legacyContext[currentNode] = nodeOutput;
 
     // Record trace via standard ExecutionTrace
-    execCtx.trace.push(createTraceItem(currentNode, execCtx.input, nodeOutput, agent));
+    const traceItem = createTraceItem(currentNode, execCtx.input, nodeOutput, agent);
+    execCtx.trace.push(traceItem);
+
+    // VM state transition — deterministic state update
+    vmState = transition(vmState, currentNode, traceItem);
 
     trace.push({
       node: currentNode,
