@@ -544,8 +544,8 @@
     {
       "risk": "Real adapter boundary is underdeveloped",
       "severity": "medium",
-      "why_it_matters": "Only Codex code_generation has real adapter; Kimi/Hermes are shadow-only",
-      "mitigation": "Add Kimi/Hermes adapters behind feature flags",
+      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi has an isolated feature-flagged command executor and Gateway integration contract, but it is not wired to runtime/Gateway. Hermes has executor contract only; real Hermes command executor is not implemented.",
+      "mitigation": "Add shadow/sidecar Gateway wiring for Kimi first; keep default off and require explicit flags before any real Gateway routing",
       "recommended_pr_stage": "Real Agent Adapter Integration"
     },
     {

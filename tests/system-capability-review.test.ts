@@ -118,6 +118,11 @@ async function test() {
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
   assert(review.recommended_next_pr.title === "Feature-flagged Kimi Gateway Wiring Shadow Path", "next PR is shadow path");
+  // No stale Kimi/Hermes shadow-only claims
+  const reviewJson = JSON.stringify(review);
+  assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
+  assert(reviewJson.includes("isolated feature-flagged command executor"), "current Kimi executor state");
+  assert(reviewJson.includes("not wired to runtime/Gateway"), "not wired state");
   console.log("");
 
   // ── Test 5: Safety boundaries ──
