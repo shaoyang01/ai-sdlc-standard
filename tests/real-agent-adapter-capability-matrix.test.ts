@@ -68,7 +68,8 @@ async function test() {
   assert(shadow !== undefined && codex !== undefined && kimi !== undefined && hermes !== undefined, "all 4 adapters exist");
   assert(shadow["status"] === "implemented", "shadow implemented");
   assert(codex["status"] === "feature_flagged_partial", "codex feature_flagged_partial");
-  assert(kimi["status"] === "cli_contract_stub", "kimi cli_contract_stub");
+  assert(kimi["status"] === "cli_contract_stub_with_dry_run_harness", "kimi cli contract stub with dry-run harness");
+  assert(kimi["dry_run_harness"] === "implemented_no_process_spawn", "kimi dry-run harness implemented");
   assert(hermes["status"] === "cli_contract_stub", "hermes cli_contract_stub");
   console.log("");
 

@@ -47,7 +47,7 @@
     },
     {
       "adapter": "kimi",
-      "status": "cli_contract_stub",
+      "status": "cli_contract_stub_with_dry_run_harness",
       "default_enabled": false,
       "invokes_real_external_system": false,
       "supported_request_types": [],
@@ -55,8 +55,11 @@
       "fallback_behavior": "contract-only; no CLI execution",
       "evidence": [
         "execution/kimi-cli-adapter-contract.ts",
-        "tests/kimi-cli-adapter-contract.test.ts"
-      ]
+        "tests/kimi-cli-adapter-contract.test.ts",
+        "execution/kimi-cli-dry-run.ts",
+        "tests/kimi-cli-dry-run.test.ts"
+      ],
+      "dry_run_harness": "implemented_no_process_spawn"
     },
     {
       "adapter": "hermes",
@@ -289,8 +292,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Kimi Adapter Contract Stub",
-    "reason": "Define the Kimi adapter interface without network calls; establish pattern before Hermes",
-    "safety_rationale": "Contract stubs have no network calls, no secrets, no real execution"
+    "title": "Feature-flagged Hermes CLI Adapter Dry-run Harness",
+    "reason": "Mirror the Kimi dry-run harness pattern for Hermes",
+    "safety_rationale": "Dry-run harness has no process spawn, no CLI execution, no API keys"
   }
 }

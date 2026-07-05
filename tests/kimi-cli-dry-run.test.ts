@@ -102,6 +102,12 @@ async function test() {
   assert(!preview.args.includes("abc"), "no abc");
   assert(!preview.args.includes("xyz"), "no xyz");
   assert(!preview.args.includes("sk-test"), "no sk-test");
+  // Serialized result also excludes secrets
+  const secretResult = dryRunKimiCliAdapter({ request, config: secretCfg });
+  const secretJson = JSON.stringify(secretResult);
+  assert(!secretJson.includes("abc"), "serialized: no abc");
+  assert(!secretJson.includes("xyz"), "serialized: no xyz");
+  assert(!secretJson.includes("sk-test"), "serialized: no sk-test");
   console.log("");
 
   // Test 7: Config helper integration

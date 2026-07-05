@@ -141,6 +141,9 @@
     "kimi_cli_adapter_dry_run_invokes_cli": false,
     "kimi_cli_adapter_dry_run_spawns_process": false,
     "kimi_cli_adapter_dry_run_affects_gateway": false,
-    "kimi_cli_adapter_dry_run_affects_runtime": false
+    "kimi_cli_adapter_dry_run_affects_runtime": false,
+    "kimi_cli_adapter_dry_run_persists_audit": false,
+    "kimi_cli_adapter_reads_api_keys": false,
+    "hermes_cli_adapter_reads_api_keys": false
   }
 }

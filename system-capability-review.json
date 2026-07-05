@@ -295,6 +295,20 @@
         "runtime.ts",
         "tests/runtime-skill-flow-shadow-integration.test.ts"
       ]
+    },
+    {
+      "name": "Kimi CLI Adapter Dry-run Harness",
+      "status": "feature-flagged-dry-run",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "writes_files": false,
+      "evidence": [
+        "execution/kimi-cli-dry-run.ts",
+        "tests/kimi-cli-dry-run.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -516,8 +530,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Runtime Shadow Integration Audit Trail",
-    "reason": "Add structured audit logging to shadow integration sidecar results",
-    "safety_rationale": "Audit trail is observability-only; no runtime behavior change"
+    "title": "Feature-flagged Hermes CLI Adapter Dry-run Harness",
+    "reason": "Mirror the Kimi dry-run pattern for Hermes",
+    "safety_rationale": "Dry-run harness has no process spawn, no CLI execution, no API keys"
   }
 }
