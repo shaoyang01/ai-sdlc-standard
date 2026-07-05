@@ -183,6 +183,14 @@
     "kimi_cli_command_executor_wired_to_runtime": false,
     "kimi_cli_command_executor_persists_audit": false,
     "kimi_cli_command_executor_reads_api_keys": false,
-    "kimi_cli_command_executor_invokes_cli_by_default": false
+    "kimi_cli_command_executor_invokes_cli_by_default": false,
+    "kimi_gateway_integration_contract": "implemented_contract_only",
+    "kimi_gateway_integration_wired_to_gateway": false,
+    "kimi_gateway_integration_wired_to_runtime": false,
+    "kimi_gateway_integration_default_enabled": false,
+    "kimi_gateway_integration_requires_flags": ["SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_gateway_integration_invokes_cli": false,
+    "kimi_gateway_integration_spawns_process": false,
+    "kimi_gateway_integration_changes_final_status": false
   }
 }

@@ -61,14 +61,23 @@
         "execution/kimi-cli-executor-contract.ts",
         "tests/kimi-cli-executor-contract.test.ts",
         "execution/kimi-cli-command-executor.ts",
-        "tests/kimi-cli-command-executor.test.ts"
+        "tests/kimi-cli-command-executor.test.ts",
+        "execution/kimi-gateway-integration-contract.ts",
+        "tests/kimi-gateway-integration-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
       "command_executor": "implemented_feature_flagged_isolated",
       "command_executor_default_enabled": false,
       "command_executor_wired_to_gateway": false,
-      "command_executor_wired_to_runtime": false
+      "command_executor_wired_to_runtime": false,
+      "gateway_integration_contract": "implemented_contract_only",
+      "gateway_integration_wired": false,
+      "gateway_integration_default_enabled": false,
+      "gateway_integration_requires_flags": [
+        "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+        "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+      ]
     },
     {
       "adapter": "hermes",
@@ -307,8 +316,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Kimi CLI Command Executor Gateway Integration Contract",
-    "reason": "Define safe Gateway integration before wiring",
-    "safety_rationale": "Contract-only; no default execution change"
+    "title": "Feature-flagged Kimi Gateway Wiring Shadow Path",
+    "reason": "Shadow/sidecar first, default off",
+    "safety_rationale": "Two explicit flags required; shadow path before real Gateway routing"
   }
 }
