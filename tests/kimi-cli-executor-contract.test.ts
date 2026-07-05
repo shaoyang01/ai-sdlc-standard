@@ -64,6 +64,10 @@ async function test() {
   assert(r4.commandInput!.sanitized === true, "sanitized");
   assert(r4.auditEvents.some(e => e.stage === "command_preview_built"), "preview audit");
   assert(r4.auditEvents.every(e => e.persistsAudit === false), "no persist");
+  assert(r4.auditEvents.every(e => e.invokesCli === false), "contract-ready audit no CLI");
+  assert(r4.auditEvents.every(e => e.spawnsProcess === false), "contract-ready audit no spawn");
+  assert(r4.auditEvents.every(e => e.affectsGateway === false), "contract-ready audit no gateway");
+  assert(r4.auditEvents.every(e => e.affectsRuntime === false), "contract-ready audit no runtime");
   assert(r4.auditEvents.every(e => e.containsRawPrompt === false), "no raw prompt");
   assert(r4.auditEvents.every(e => e.containsRawArtifacts === false), "no raw artifacts");
   console.log("");

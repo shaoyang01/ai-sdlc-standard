@@ -126,6 +126,13 @@ async function test() {
   assert(realAdapters["hermes_cli_adapter_dry_run_reads_api_keys"] === false, "hermes dry-run no API keys");
   assert(realAdapters["kimi_cli_adapter_reads_api_keys"] === false, "kimi adapter no API keys");
   assert(realAdapters["hermes_cli_adapter_reads_api_keys"] === false, "hermes adapter no API keys");
+  assert(realAdapters["kimi_cli_executor_contract"] === "implemented_contract_only", "kimi executor contract");
+  assert(realAdapters["kimi_cli_executor_contract_invokes_cli"] === false, "kimi executor no CLI");
+  assert(realAdapters["kimi_cli_executor_contract_spawns_process"] === false, "kimi executor no spawn");
+  assert(realAdapters["kimi_cli_executor_contract_affects_gateway"] === false, "kimi executor no gateway");
+  assert(realAdapters["kimi_cli_executor_contract_affects_runtime"] === false, "kimi executor no runtime");
+  assert(realAdapters["kimi_cli_executor_contract_persists_audit"] === false, "kimi executor no persist");
+  assert(realAdapters["kimi_cli_executor_contract_reads_api_keys"] === false, "kimi executor no API keys");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

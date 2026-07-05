@@ -57,9 +57,12 @@
         "execution/kimi-cli-adapter-contract.ts",
         "tests/kimi-cli-adapter-contract.test.ts",
         "execution/kimi-cli-dry-run.ts",
-        "tests/kimi-cli-dry-run.test.ts"
+        "tests/kimi-cli-dry-run.test.ts",
+        "execution/kimi-cli-executor-contract.ts",
+        "tests/kimi-cli-executor-contract.test.ts"
       ],
-      "dry_run_harness": "implemented_no_process_spawn"
+      "dry_run_harness": "implemented_no_process_spawn",
+      "executor_contract": "implemented_contract_only"
     },
     {
       "adapter": "hermes",
@@ -295,8 +298,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Real Adapter CLI Audit Trail",
-    "reason": "Audit shape should be finalized before real command execution",
-    "safety_rationale": "Audit metadata has no CLI execution, no process spawn, no API keys"
+    "title": "Feature-flagged Hermes CLI Command Executor Contract",
+    "reason": "Mirror the Kimi executor contract pattern for Hermes",
+    "safety_rationale": "Contract-only; no process spawn, no CLI execution"
   }
 }
