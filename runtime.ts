@@ -9,6 +9,8 @@
 import { NodeType, GraphNode } from "../sdlc_graph/types";
 import { getNextNode, isTerminal } from "../sdlc_graph/transitions";
 import { SDLC_NODES, SDLC_EDGES } from "../sdlc_graph/graph";
+import { ExecutionContext } from "../core/execution-context";
+import { createTraceItem } from "../core/execution-trace";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -170,16 +172,27 @@ async function executeSpeckitPipeline(requirementId: string): Promise<Record<str
 export async function run(requirement: string): Promise<RuntimeResult> {
   const requirementId = `REQ-${Date.now()}`;
   const trace: ExecutionTraceEntry[] = [];
-  const context: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
+  const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
 
   let currentNode: NodeType | null = "requirement-summary";
 
   // Graph-driven execution loop — transitions from sdlc_graph/transitions.ts
   while (currentNode) {
     const agent = getAgent(currentNode);
-    const nodeOutput = await executeDocFlowNode(currentNode, context);
 
-    context[currentNode] = nodeOutput;
+    // Build ExecutionContext (structural wrapper — no behavior change)
+    const execCtx: ExecutionContext = {
+      node: currentNode,
+      input: { requirement, requirement_id: requirementId },
+      metadata: { requirementId, complexity: "medium" },
+      trace: [],
+    };
+
+    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext);
+    legacyContext[currentNode] = nodeOutput;
+
+    // Record trace via standard ExecutionTrace
+    execCtx.trace.push(createTraceItem(currentNode, execCtx.input, nodeOutput, agent));
 
     trace.push({
       node: currentNode,
