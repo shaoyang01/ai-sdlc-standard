@@ -47,26 +47,28 @@
     },
     {
       "adapter": "kimi",
-      "status": "not_implemented",
+      "status": "cli_contract_stub",
       "default_enabled": false,
       "invokes_real_external_system": false,
       "supported_request_types": [],
       "unsupported_request_types": [],
-      "fallback_behavior": "shadow (no adapter exists)",
+      "fallback_behavior": "contract-only; no CLI execution",
       "evidence": [
-        "execution/gateway.ts routes to shadow"
+        "execution/kimi-cli-adapter-contract.ts",
+        "tests/kimi-cli-adapter-contract.test.ts"
       ]
     },
     {
       "adapter": "hermes",
-      "status": "not_implemented",
+      "status": "cli_contract_stub",
       "default_enabled": false,
       "invokes_real_external_system": false,
       "supported_request_types": [],
       "unsupported_request_types": [],
-      "fallback_behavior": "shadow (no adapter exists)",
+      "fallback_behavior": "contract-only; no CLI execution",
       "evidence": [
-        "execution/gateway.ts routes to shadow"
+        "execution/hermes-cli-adapter-contract.ts",
+        "tests/hermes-cli-adapter-contract.test.ts"
       ]
     }
   ],
@@ -172,34 +174,43 @@
       "status": "implemented",
       "default": "shadow",
       "enabled_value": "codex",
-      "purpose": "Enables real Codex for code_generation",
+      "purpose": "Enables real Codex CLI for code_generation",
       "changes_runtime_behavior_today": true,
       "invokes_real_external_system_today": true
     },
     {
-      "flag": "SDLC_KIMI_ADAPTER",
+      "flag": "SDLC_KIMI_CLI_ADAPTER",
       "status": "planned",
       "default": "disabled",
       "enabled_value": "enabled",
-      "purpose": "Enables real Kimi adapter",
+      "purpose": "Enables Kimi CLI adapter",
       "changes_runtime_behavior_today": false,
       "invokes_real_external_system_today": false
     },
     {
-      "flag": "SDLC_HERMES_ADAPTER",
+      "flag": "SDLC_HERMES_CLI_ADAPTER",
       "status": "planned",
       "default": "disabled",
       "enabled_value": "enabled",
-      "purpose": "Enables real Hermes adapter",
+      "purpose": "Enables Hermes CLI adapter",
       "changes_runtime_behavior_today": false,
       "invokes_real_external_system_today": false
     },
     {
-      "flag": "SDLC_CODEX_REVIEW_ADAPTER",
+      "flag": "SDLC_KIMI_CLI_COMMAND",
       "status": "planned",
-      "default": "disabled",
-      "enabled_value": "enabled",
-      "purpose": "Expands Codex to review/bugfix types",
+      "default": "",
+      "enabled_value": "kimi",
+      "purpose": "Path to Kimi CLI binary",
+      "changes_runtime_behavior_today": false,
+      "invokes_real_external_system_today": false
+    },
+    {
+      "flag": "SDLC_HERMES_CLI_COMMAND",
+      "status": "planned",
+      "default": "",
+      "enabled_value": "hermes",
+      "purpose": "Path to Hermes CLI binary",
       "changes_runtime_behavior_today": false,
       "invokes_real_external_system_today": false
     },
@@ -208,7 +219,7 @@
       "status": "planned",
       "default": "shadow",
       "enabled_value": "shadow | fail_closed",
-      "purpose": "Controls fallback behavior for real adapter failures",
+      "purpose": "Controls fallback for real adapter failures",
       "changes_runtime_behavior_today": false,
       "invokes_real_external_system_today": false
     }

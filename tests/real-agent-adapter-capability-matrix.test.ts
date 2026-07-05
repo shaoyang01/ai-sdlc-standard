@@ -68,8 +68,8 @@ async function test() {
   assert(shadow !== undefined && codex !== undefined && kimi !== undefined && hermes !== undefined, "all 4 adapters exist");
   assert(shadow["status"] === "implemented", "shadow implemented");
   assert(codex["status"] === "feature_flagged_partial", "codex feature_flagged_partial");
-  assert(kimi["status"] === "not_implemented", "kimi not_implemented");
-  assert(hermes["status"] === "not_implemented", "hermes not_implemented");
+  assert(kimi["status"] === "cli_contract_stub", "kimi cli_contract_stub");
+  assert(hermes["status"] === "cli_contract_stub", "hermes cli_contract_stub");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -122,9 +122,12 @@ async function test() {
   console.log("Test 6: Feature flags");
   const ffNames = m.feature_flags.map((f: Record<string, unknown>) => f["flag"]);
   assert(ffNames.includes("SDLC_EXECUTION_MODE"), "has SDLC_EXECUTION_MODE");
-  assert(ffNames.includes("SDLC_KIMI_ADAPTER"), "has SDLC_KIMI_ADAPTER");
-  assert(ffNames.includes("SDLC_HERMES_ADAPTER"), "has SDLC_HERMES_ADAPTER");
+  assert(ffNames.includes("SDLC_KIMI_CLI_ADAPTER"), "has SDLC_KIMI_CLI_ADAPTER");
+  assert(ffNames.includes("SDLC_HERMES_CLI_ADAPTER"), "has SDLC_HERMES_CLI_ADAPTER");
   assert(ffNames.includes("SDLC_REAL_ADAPTER_FALLBACK"), "has SDLC_REAL_ADAPTER_FALLBACK");
+  // No API-style flags
+  assert(!ffNames.includes("SDLC_KIMI_ADAPTER"), "no SDLC_KIMI_ADAPTER");
+  assert(!ffNames.includes("SDLC_HERMES_ADAPTER"), "no SDLC_HERMES_ADAPTER");
   console.log("");
 
   // ── Test 7: Safety boundaries ──
