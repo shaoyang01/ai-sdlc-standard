@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "runtime": {
+    "status": "shadow-first",
+    "default_execution_mode": "shadow",
+    "real_execution_default": false
+  },
+  "execution": {
+    "execution_gateway": {
+      "status": "implemented",
+      "role": "single execution boundary"
+    },
+    "shadow_adapter": {
+      "status": "implemented",
+      "default": true
+    },
+    "codex_adapter": {
+      "status": "implemented_feature_flagged",
+      "enabled_by": "SDLC_EXECUTION_MODE=codex",
+      "default": false
+    },
+    "kimi_adapter": {
+      "status": "not_implemented",
+      "default": false
+    },
+    "hermes_adapter": {
+      "status": "not_implemented",
+      "default": false
+    }
+  },
+  "artifacts": {
+    "artifact_model": "implemented",
+    "runtime_artifact_collection": "implemented"
+  },
+  "review_loop": {
+    "code_review": "implemented_shadow",
+    "bugfix": "implemented_shadow",
+    "bounded_retries": true,
+    "max_bugfix_attempts": 2
+  },
+  "feedback": {
+    "runtime_feedback": "implemented",
+    "agent_scores": "implemented",
+    "policy_suggestions": "implemented",
+    "shadow_routing_decisions": "implemented_advisory_only",
+    "evolution_proposals": "implemented_read_only"
+  },
+  "memory": {
+    "sqlite_policy_memory": {
+      "status": "implemented_opt_in",
+      "write_enabled_by": "SDLC_POLICY_MEMORY=enabled",
+      "read_enabled_by": "SDLC_POLICY_MEMORY_READ=enabled",
+      "default_write": false,
+      "default_read": false
+    }
+  },
+  "routing": {
+    "memory_based_routing": "not_enabled",
+    "shadow_memory_routing": "implemented_advisory_only",
+    "actual_agent_selection_changed_by_memory": false
+  },
+  "self_evolution": {
+    "proposal_generation": "implemented_read_only",
+    "automatic_application": false,
+    "source_code_modification": false,
+    "policy_file_modification": false,
+    "git_operations": false
+  },
+  "safety_boundaries": {
+    "no_self_modifying_code": true,
+    "no_auto_policy_mutation": true,
+    "no_auto_git_operations": true,
+    "no_default_real_model_execution": true,
+    "no_default_memory_persistence": true
+  }
+}
