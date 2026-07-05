@@ -18,6 +18,8 @@ export type RuntimeCapabilities = Readonly<{
   self_evolution: Record<string, unknown>;
   safety_boundaries: Record<string, unknown>;
   skills: Record<string, unknown>;
+  skill_flow_orchestrator: Record<string, unknown>;
+  real_agent_adapter_integration: Record<string, unknown>;
 }>;
 
 export function loadRuntimeCapabilities(

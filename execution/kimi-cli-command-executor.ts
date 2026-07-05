@@ -62,41 +62,44 @@ export function createDefaultKimiCliProcessRunner(): KimiCliProcessRunner {
   return {
     async run(commandInput: KimiCliExecutorCommandInput): Promise<KimiCliProcessResult> {
       const start = Date.now();
-      const child = spawn(commandInput.command, commandInput.args, {
-        shell: false,
-        cwd: commandInput.workingDirectory,
-      });
-
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-
-      const finish = (result: KimiCliProcessResult) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        try { child.kill(); } catch {}
-        resolve(result);
-      };
-
-      const timer = setTimeout(() => {
-        finish({
-          timedOut: true,
-          durationMs: Date.now() - start,
-          stdout: stdout.slice(0, 4000),
-          stderr: stderr.slice(0, 4000),
+      return new Promise<KimiCliProcessResult>((resolve) => {
+        const child = spawn(commandInput.command, commandInput.args, {
+          shell: false,
+          cwd: commandInput.workingDirectory,
         });
-      }, commandInput.timeoutMs);
 
-      child.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
-      child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout>;
 
-      child.on("error", (err) => {
-        finish({ durationMs: Date.now() - start, stderr: err.message });
-      });
+        const finish = (result: KimiCliProcessResult) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { child.kill(); } catch {}
+          resolve(result);
+        };
 
-      child.on("close", (code) => {
-        finish({ exitCode: code ?? undefined, durationMs: Date.now() - start, stdout: stdout.slice(0, 4000), stderr: stderr.slice(0, 4000) });
+        timer = setTimeout(() => {
+          finish({
+            timedOut: true,
+            durationMs: Date.now() - start,
+            stdout: stdout.slice(0, 4000),
+            stderr: stderr.slice(0, 4000),
+          });
+        }, commandInput.timeoutMs);
+
+        child.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
+        child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+        child.on("error", (err) => {
+          finish({ durationMs: Date.now() - start, stderr: err.message });
+        });
+
+        child.on("close", (code) => {
+          finish({ exitCode: code ?? undefined, durationMs: Date.now() - start, stdout: stdout.slice(0, 4000), stderr: stderr.slice(0, 4000) });
+        });
       });
     },
   };
