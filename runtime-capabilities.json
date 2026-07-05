@@ -129,11 +129,15 @@
     "adapter_secret_logging": false,
     "adapter_git_operations": false,
     "adapter_file_writes": false,
-    "kimi_adapter_contract_stub": "implemented_contract_only",
-    "hermes_adapter_contract_stub": "implemented_contract_only",
-    "kimi_adapter_invokes_network": false,
-    "hermes_adapter_invokes_network": false,
-    "kimi_adapter_default_enabled": false,
-    "hermes_adapter_default_enabled": false
+    "kimi_cli_adapter_contract_stub": "implemented_contract_only",
+    "hermes_cli_adapter_contract_stub": "implemented_contract_only",
+    "real_kimi_cli_adapter": "not_implemented",
+    "real_hermes_cli_adapter": "not_implemented",
+    "kimi_cli_adapter_spawns_process": false,
+    "hermes_cli_adapter_spawns_process": false,
+    "kimi_cli_adapter_default_enabled": false,
+    "hermes_cli_adapter_default_enabled": false,
+    "kimi_cli_adapter_reads_api_keys": false,
+    "hermes_cli_adapter_reads_api_keys": false
   }
 }
