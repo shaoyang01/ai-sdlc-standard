@@ -100,6 +100,21 @@ async function test() {
   assert(implDecision!.avoidedAgents.includes("hermes"), "implementation avoids hermes");
   console.log("");
 
+  // ── Test 6: Non-routing suggestions are ignored ──
+  console.log("Test 6: Non-routing suggestions produce no decisions");
+  const nonRouting: PolicySuggestion[] = [
+    { type: "manual_review", node: "implementation", reason: "needs review", confidence: 0.6 },
+    { type: "retry_with_agent", node: "implementation", agent: "kimi", reason: "retry", confidence: 0.5 },
+    { type: "split_task", node: "implementation", reason: "split", confidence: 0.4 },
+  ];
+
+  const nonRoutingDecisions = buildMemoryShadowRoutingDecisions({
+    suggestions: nonRouting,
+  });
+
+  assert(nonRoutingDecisions.length === 0, "non-routing suggestions produce 0 decisions");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

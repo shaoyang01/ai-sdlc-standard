@@ -212,6 +212,11 @@ async function test() {
     // Verify actual trace agent is unchanged (decision is advisory only)
     const implTrace = runtimeResult.execution_trace.find((t) => t.node === "implementation");
     assert(implTrace !== undefined, "implementation in trace exists");
+    // Shadow currentAgent should match the actual agent from trace
+    assert(
+      implDecision!.currentAgent === implTrace!.agent,
+      `shadow currentAgent (${implDecision!.currentAgent}) matches trace agent (${implTrace!.agent})`
+    );
     // Memory does not change the actual agent used
     console.log("");
 
