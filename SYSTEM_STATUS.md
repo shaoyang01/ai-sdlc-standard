@@ -124,7 +124,7 @@ All evolution proposals have `applied: false` and require human review.
 ## 10. Recommended Next PRs
 
 1. **Deprecate Runtime Auto Skill Annotation** — ✅ Done
-2. **Rewrite Agent Skill Registry Around Flow Stages** — Map skills to flow position, not runtime nodes
+2. **Rewrite Agent Skill Registry Around Flow Stages** — ✅ Done
 3. **Skill Flow Orchestrator Contract** — Define typed contract for explicit skill invocation
 4. **Shadow Skill Flow Orchestrator** — Shadow-mode orchestrator that sequences skills by flow
 5. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters behind Execution Gateway

@@ -1,53 +1,60 @@
-// Skill Types — Agent Skill Registry Contracts
-// =============================================
-// Metadata-only type definitions for the Agent Skill Registry.
-// Does not affect runtime execution, routing, or agent selection.
+// Skill Types — Flow-Stage Skill Registry Contracts
+// ===================================================
+// Skills are modeled as flow nodes with positions, artifacts, and handoffs.
+// NOT as runtime node handlers. NOT as (agent, node, requestType) mappings.
+// Metadata-only. Does not affect runtime execution, routing, or agent selection.
 
 export type AgentName = "kimi" | "codex" | "hermes";
 
-export type SkillExecutionMode =
-  | "metadata_only"
-  | "shadow"
-  | "feature_flagged_real"
-  | "not_implemented";
-
 export type SkillRuntimeStatus =
   | "documented_skill_contract"
-  | "runtime_connected"
-  | "execution_connected"
-  | "shadow_only"
-  | "feature_flagged_real"
-  | "not_implemented";
+  | "metadata_only"
+  | "future_orchestrator_only";
 
-export type CanonicalSkillName = string;
+export type SkillFlowRole =
+  | "global_entry"
+  | "subflow_entry"
+  | "subflow_normalizer"
+  | "flow_controller"
+  | "flow_internal"
+  | "post_execution_recorder"
+  | "utility";
 
-export type AgentSkillBinding = Readonly<{
-  skill: CanonicalSkillName;
-  agent: AgentName;
-  expectedNodes: ReadonlyArray<string>;
-  expectedRequestTypes: ReadonlyArray<string>;
-  executionMode: SkillExecutionMode;
+export type SkillFlowType =
+  | "main_docflow"
+  | "direct_implementation_path"
+  | "speckit_pipeline"
+  | "code_review_subflow"
+  | "test_feedback_subflow"
+  | "cross_cutting";
+
+export interface SkillFlowBinding {
+  skill: string;
+  role: SkillFlowRole;
+  flowIds: string[];
+  flowTypes: SkillFlowType[];
+  stage: string;
+  category: string;
+  primaryInputArtifacts: string[];
+  primaryOutputArtifacts: string[];
+  downstreamConsumers: string[];
+  eligibleAgents: AgentName[];
+  runtimeInvoked: false;
+  executionMode: "metadata_only";
   runtimeStatus: SkillRuntimeStatus;
-  wiredToRuntime: boolean;
-  skillFile?: string;
-  contractFile?: string;
-  manifestFile?: string;
-  registryFile?: string;
-  notes?: string;
-}>;
+  evidence: string[];
+  confidence: "high" | "medium" | "low";
+}
 
-export type SkillInvocation = Readonly<{
-  requirementId: string;
-  skill: CanonicalSkillName;
-  agent: AgentName;
-  node: string;
-  requestType: string;
-  input: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}>;
+export interface SkillInvocation {
+  skill: string;
+  flowId?: string;
+  expectedInputArtifacts?: string[];
+}
 
-export type SkillInvocationValidation = Readonly<{
+export interface SkillInvocationValidation {
+  attempted: boolean;
   valid: boolean;
   reason: string;
-  binding?: AgentSkillBinding;
-}>;
+  binding?: SkillFlowBinding;
+}

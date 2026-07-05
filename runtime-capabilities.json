@@ -75,6 +75,10 @@
   },
   "skills": {
     "agent_skill_registry": "implemented_metadata_only",
+    "agent_skill_registry_model": "flow_stage_metadata",
+    "agent_skill_registry_runtime_node_mapping": "deprecated",
+    "skill_registry_canonical_flow_source": "skill-flow-inventory.json",
+    "skill_registry_affects_runtime": false,
     "skill_invocation_contract": "implemented_metadata_only",
     "execution_request_skill_metadata": "implemented_optional_metadata",
     "runtime_auto_skill_annotation": "disabled",

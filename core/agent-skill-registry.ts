@@ -1,342 +1,461 @@
-// Agent Skill Registry — Metadata-only
-// ======================================
-// Static registry of existing sdlc-* skills with expected agent bindings.
-// Uses existing sdlc-* skill names as canonical names.
+// Agent Skill Registry — Flow-Stage Based (Metadata-only)
+// ==========================================================
+// Skills are modeled as flow nodes with positions, artifacts, and handoffs.
+// NOT as runtime node handlers. NOT as (agent, node, requestType) mappings.
+// All bindings: metadata_only, runtimeInvoked: false.
 // Does not affect runtime execution, routing, or agent selection.
-// All bindings are metadata_only / documented_skill_contract in this PR.
 
 import {
-  AgentSkillBinding,
+  SkillFlowBinding,
+  SkillFlowRole,
+  SkillFlowType,
   AgentName,
   SkillInvocation,
   SkillInvocationValidation,
 } from "./skill-types";
 
-export const AGENT_SKILL_REGISTRY: ReadonlyArray<AgentSkillBinding> = [
-  // ── Requirement / Specification ─────────────────────
+export const SKILL_FLOW_REGISTRY: ReadonlyArray<SkillFlowBinding> = [
+  // ── Global Entry ────────────────────────────────────
   {
     skill: "sdlc-requirement-normalizer",
-    agent: "kimi",
-    expectedNodes: ["requirement-summary"],
-    expectedRequestTypes: ["llm_task"],
+    role: "global_entry",
+    flowIds: ["main_docflow"],
+    flowTypes: ["main_docflow"],
+    stage: "Requirement Normalization",
+    category: "Intake / Producer",
+    primaryInputArtifacts: ["Raw requirements (Lark, MD, HTML, chat, PDF)"],
+    primaryOutputArtifacts: ["library/{id}/00-需求资料/"],
+    downstreamConsumers: ["sdlc-specification-writer"],
+    eligibleAgents: ["kimi"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Intake/Producer skill. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'stable intake input for sdlc-specification-writer'", "registry: Intake Skill", "artifact number: 00"],
+    confidence: "high",
   },
   {
     skill: "sdlc-specification-writer",
-    agent: "kimi",
-    expectedNodes: ["tech-design"],
-    expectedRequestTypes: ["llm_task"],
+    role: "flow_internal",
+    flowIds: ["main_docflow"],
+    flowTypes: ["main_docflow"],
+    stage: "Specification Writing",
+    category: "Producer",
+    primaryInputArtifacts: ["00-需求资料"],
+    primaryOutputArtifacts: ["library/{id}/01-技术方案/"],
+    downstreamConsumers: ["sdlc-solution-reviewer"],
+    eligibleAgents: ["kimi"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer skill for specification writing. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'ready for sdlc-solution-reviewer'", "references/writing-workflow.md: flow diagram"],
+    confidence: "high",
   },
   {
     skill: "sdlc-solution-reviewer",
-    agent: "codex",
-    expectedNodes: ["review"],
-    expectedRequestTypes: ["review"],
+    role: "flow_internal",
+    flowIds: ["main_docflow"],
+    flowTypes: ["main_docflow"],
+    stage: "Specification Audit",
+    category: "Auditor",
+    primaryInputArtifacts: ["01-技术方案"],
+    primaryOutputArtifacts: ["library/{id}/02-方案审核/", "Development Path Decision"],
+    downstreamConsumers: ["DIRECT_IMPLEMENTATION", "sdlc-speckit-pipeline", "sdlc-specification-writer (revision)"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Auditor skill for specification audit and development path routing. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Global DocFlow Gate'", "development-path-decision.md: three fork outcomes"],
+    confidence: "high",
   },
 
-  // ── Speckit Pipeline ────────────────────────────────
+  // ── Speckit Pipeline (Flow Controller) ──────────────
   {
     skill: "sdlc-speckit-pipeline",
-    agent: "kimi",
-    expectedNodes: ["implementation"],
-    expectedRequestTypes: ["code_generation"],
+    role: "flow_controller",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Full Lifecycle",
+    category: "Workflow",
+    primaryInputArtifacts: ["01-技术方案", "02-方案审核", "SPECKIT_PIPELINE_REQUIRED decision"],
+    primaryOutputArtifacts: ["Pipeline report", "speckit child skill outputs"],
+    downstreamConsumers: [
+      "sdlc-speckit-specify",
+      "sdlc-speckit-clarify",
+      "sdlc-speckit-plan",
+      "sdlc-speckit-tasks",
+      "sdlc-speckit-analyze",
+      "sdlc-speckit-implement",
+      "sdlc-speckit-sync",
+      "sdlc-speckit-code-doc-reconcile",
+    ],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Workflow skill for full lifecycle. Runtime has executeSpeckitPipeline() but uses hardcoded stages.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'orchestrate the optional full Speckit SDD path'", "contract: 10-stage sequence"],
+    confidence: "high",
   },
   {
     skill: "sdlc-speckit-specify",
-    agent: "kimi",
-    expectedNodes: ["tech-design"],
-    expectedRequestTypes: ["llm_task"],
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Spec Sync",
+    category: "Producer",
+    primaryInputArtifacts: ["01-技术方案", "02-方案审核"],
+    primaryOutputArtifacts: ["specs/{feature}/spec.md"],
+    downstreamConsumers: ["sdlc-speckit-clarify"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer skill for spec sync. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-speckit-plan",
-    agent: "kimi",
-    expectedNodes: ["tech-design"],
-    expectedRequestTypes: ["llm_task"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer/Auditor skill for plan gate. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-speckit-tasks",
-    agent: "kimi",
-    expectedNodes: ["implementation"],
-    expectedRequestTypes: ["code_generation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer/Auditor skill for task gate. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-speckit-implement",
-    agent: "codex",
-    expectedNodes: ["implementation"],
-    expectedRequestTypes: ["code_generation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Executor/Producer skill for implementation execution. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-speckit-analyze",
-    agent: "hermes",
-    expectedNodes: ["review", "validation"],
-    expectedRequestTypes: ["review", "validation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Auditor skill for implementation readiness gate. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-speckit-checklist",
-    agent: "hermes",
-    expectedNodes: ["review", "validation"],
-    expectedRequestTypes: ["review", "validation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer/Auditor skill for stage-specific inspection. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Next step: run sdlc-speckit-clarify'"],
+    confidence: "high",
   },
   {
     skill: "sdlc-speckit-clarify",
-    agent: "kimi",
-    expectedNodes: ["review"],
-    expectedRequestTypes: ["review"],
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Clarification Validation",
+    category: "Auditor / Producer",
+    primaryInputArtifacts: ["specs/{feature}/spec.md"],
+    primaryOutputArtifacts: ["Clarifications added to spec.md", "Coverage Summary"],
+    downstreamConsumers: ["sdlc-speckit-plan"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Auditor/Producer skill for clarification validation. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Proceed to sdlc-speckit-plan only when no core ambiguity remains'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-speckit-plan",
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Plan Gate",
+    category: "Producer / Auditor",
+    primaryInputArtifacts: ["specs/{feature}/spec.md", "clarify result"],
+    primaryOutputArtifacts: ["specs/{feature}/plan.md"],
+    downstreamConsumers: ["sdlc-speckit-tasks"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Next step: sdlc-speckit-tasks'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-speckit-tasks",
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Task Gate",
+    category: "Producer / Auditor",
+    primaryInputArtifacts: ["specs/{feature}/spec.md", "specs/{feature}/plan.md"],
+    primaryOutputArtifacts: ["specs/{feature}/tasks.md"],
+    downstreamConsumers: ["sdlc-speckit-analyze"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Next step: sdlc-speckit-analyze'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-speckit-analyze",
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Implementation Readiness",
+    category: "Auditor",
+    primaryInputArtifacts: ["spec.md", "plan.md", "tasks.md", "route.md"],
+    primaryOutputArtifacts: ["Analyze Gate result"],
+    downstreamConsumers: ["sdlc-speckit-implement"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Require Analyze Gate readiness before sdlc-speckit-implement'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-speckit-implement",
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Implementation Execution",
+    category: "Executor / Producer",
+    primaryInputArtifacts: ["tasks.md", "analyze result"],
+    primaryOutputArtifacts: ["Code changes", "specs/{feature}/implementation.md"],
+    downstreamConsumers: ["sdlc-speckit-sync", "sdlc-implementation-recorder", "sdlc-code-review-normalizer"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'internal Speckit stage 8/10'", "output-and-manifest.md: next step rules"],
+    confidence: "high",
   },
   {
     skill: "sdlc-speckit-sync",
-    agent: "hermes",
-    expectedNodes: ["validation"],
-    expectedRequestTypes: ["validation"],
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Knowledge Sync",
+    category: "Sync / Producer",
+    primaryInputArtifacts: ["Implementation evidence"],
+    primaryOutputArtifacts: [".specify/business_domain/**"],
+    downstreamConsumers: ["sdlc-speckit-code-doc-reconcile"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Sync/Producer skill for knowledge sync. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'Next step: sdlc-speckit-code-doc-reconcile'"],
+    confidence: "high",
   },
   {
     skill: "sdlc-speckit-code-doc-reconcile",
-    agent: "hermes",
-    expectedNodes: ["validation", "code-review"],
-    expectedRequestTypes: ["validation", "code_review"],
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Code-Doc Consistency",
+    category: "Auditor / Sync",
+    primaryInputArtifacts: ["Code state", "specs/**", "DocFlow artifacts", "business_domain/**"],
+    primaryOutputArtifacts: ["Drift Matrix"],
+    downstreamConsumers: ["sdlc-speckit-implement (code fix)", "sdlc-speckit-sync (knowledge fix)"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Auditor/Sync skill for code-documentation consistency. Not wired to runtime. code-review node is runtime-managed, not in Graph Kernel.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'after sdlc-speckit-implement or sdlc-speckit-sync'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-speckit-checklist",
+    role: "flow_internal",
+    flowIds: ["speckit_pipeline"],
+    flowTypes: ["speckit_pipeline"],
+    stage: "Stage Inspection",
+    category: "Producer / Auditor",
+    primaryInputArtifacts: ["spec.md, plan.md, tasks.md (stage-dependent)"],
+    primaryOutputArtifacts: ["specs/{feature}/checklists/{stage}-checklist.md"],
+    downstreamConsumers: ["sdlc-test-feedback-sync"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'on-demand checklist generation'"],
+    confidence: "high",
   },
 
-  // ── Code Review / Implementation Recording ──────────
+  // ── Code Review Subflow ─────────────────────────────
   {
     skill: "sdlc-code-review-excellence",
-    agent: "codex",
-    expectedNodes: ["code-review"],
-    expectedRequestTypes: ["code_review"],
+    role: "flow_internal",
+    flowIds: ["code_review_subflow", "direct_implementation_path"],
+    flowTypes: ["code_review_subflow", "direct_implementation_path"],
+    stage: "Code Review Execution",
+    category: "Reviewer / Auditor",
+    primaryInputArtifacts: ["Diff, spec, solution review, implementation record"],
+    primaryOutputArtifacts: ["Review findings"],
+    downstreamConsumers: ["sdlc-code-review-normalizer"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Reviewer/Auditor skill for code review execution. code-review node is runtime-managed, not in Graph Kernel.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'hands formal report writing to sdlc-code-review-normalizer'", "output-and-handoff.md"],
+    confidence: "high",
   },
   {
     skill: "sdlc-code-review-normalizer",
-    agent: "codex",
-    expectedNodes: ["code-review"],
-    expectedRequestTypes: ["code_review"],
+    role: "subflow_normalizer",
+    flowIds: ["code_review_subflow", "direct_implementation_path"],
+    flowTypes: ["code_review_subflow", "direct_implementation_path"],
+    stage: "Code Review Normalization",
+    category: "Reviewer / Producer",
+    primaryInputArtifacts: ["Raw review report, diff, spec"],
+    primaryOutputArtifacts: ["library/{id}/04-代码审核/"],
+    downstreamConsumers: ["sdlc-test-feedback-classifier"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Reviewer/Producer skill for code review normalization. code-review node is runtime-managed.",
-  },
-  {
-    skill: "sdlc-implementation-recorder",
-    agent: "codex",
-    expectedNodes: ["implementation"],
-    expectedRequestTypes: ["code_generation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer skill for implementation recording. Not wired to runtime.",
-  },
-  {
-    skill: "sdlc-gate-runner",
-    agent: "hermes",
-    expectedNodes: ["review", "validation"],
-    expectedRequestTypes: ["review", "validation"],
-    executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Auditor skill for all gates. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'code-review subflow normalizer'", "Normalizes code review outputs into 04-代码审核"],
+    confidence: "high",
   },
 
-  // ── DocFlow / Test Feedback ─────────────────────────
+  // ── Post-Execution Recorder ─────────────────────────
   {
-    skill: "sdlc-docflow-writer",
-    agent: "kimi",
-    expectedNodes: ["tech-design", "implementation"],
-    expectedRequestTypes: ["llm_task", "code_generation"],
+    skill: "sdlc-implementation-recorder",
+    role: "post_execution_recorder",
+    flowIds: ["direct_implementation_path", "speckit_pipeline"],
+    flowTypes: ["direct_implementation_path", "speckit_pipeline"],
+    stage: "Implementation Recording",
+    category: "Producer",
+    primaryInputArtifacts: ["Diff, changed files, task status"],
+    primaryOutputArtifacts: ["library/{id}/03-实现记录/"],
+    downstreamConsumers: ["sdlc-code-review-normalizer"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Producer/Renderer/Publisher skill for DocFlow artifact generation. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'factual handoff from implementation to code review'"],
+    confidence: "high",
   },
+
+  // ── Test Feedback Subflow ───────────────────────────
   {
     skill: "sdlc-test-feedback-classifier",
-    agent: "hermes",
-    expectedNodes: ["validation"],
-    expectedRequestTypes: ["validation"],
+    role: "flow_internal",
+    flowIds: ["test_feedback_subflow", "direct_implementation_path"],
+    flowTypes: ["test_feedback_subflow", "direct_implementation_path"],
+    stage: "Test Feedback Classification",
+    category: "Reviewer / Producer",
+    primaryInputArtifacts: ["Raw feedback, test results"],
+    primaryOutputArtifacts: ["library/{id}/05-测试验收/"],
+    downstreamConsumers: ["sdlc-test-feedback-sync"],
+    eligibleAgents: ["hermes"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Reviewer/Producer skill for test feedback classification. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'handoff to sdlc-test-feedback-sync'"],
+    confidence: "high",
   },
   {
     skill: "sdlc-test-feedback-sync",
-    agent: "hermes",
-    expectedNodes: ["validation"],
-    expectedRequestTypes: ["validation"],
+    role: "flow_internal",
+    flowIds: ["test_feedback_subflow", "direct_implementation_path"],
+    flowTypes: ["test_feedback_subflow", "direct_implementation_path"],
+    stage: "Test Feedback Sync",
+    category: "Sync / Producer",
+    primaryInputArtifacts: ["05-测试验收"],
+    primaryOutputArtifacts: ["Sync recommendations"],
+    downstreamConsumers: ["sdlc-speckit-sync"],
+    eligibleAgents: ["hermes"],
+    runtimeInvoked: false,
     executionMode: "metadata_only",
-    runtimeStatus: "documented_skill_contract",
-    wiredToRuntime: false,
-    notes: "Sync/Producer skill for test feedback sync. Not wired to runtime.",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'consumes sdlc-test-feedback-classifier output'"],
+    confidence: "high",
+  },
+
+  // ── Cross-Cutting Utility ───────────────────────────
+  {
+    skill: "sdlc-gate-runner",
+    role: "utility",
+    flowIds: ["main_docflow", "direct_implementation_path", "speckit_pipeline"],
+    flowTypes: ["cross_cutting"],
+    stage: "All Gates",
+    category: "Auditor",
+    primaryInputArtifacts: ["manifest.md, artifact for current gate"],
+    primaryOutputArtifacts: ["Gate Report"],
+    downstreamConsumers: ["Route to specialized skill owner"],
+    eligibleAgents: ["codex"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'phase-entry auditor'"],
+    confidence: "high",
+  },
+  {
+    skill: "sdlc-docflow-writer",
+    role: "utility",
+    flowIds: ["main_docflow", "direct_implementation_path", "code_review_subflow", "test_feedback_subflow"],
+    flowTypes: ["cross_cutting"],
+    stage: "DocFlow Artifact Generation",
+    category: "Producer / Renderer / Publisher",
+    primaryInputArtifacts: ["Source content from calling skill"],
+    primaryOutputArtifacts: ["MD/HTML/Lark documents"],
+    downstreamConsumers: ["Called by 8 other skills"],
+    eligibleAgents: ["kimi"],
+    runtimeInvoked: false,
+    executionMode: "metadata_only",
+    runtimeStatus: "metadata_only",
+    evidence: ["SKILL.md: 'cross-cutting utility'", "referenced by 8 other skills"],
+    confidence: "high",
   },
 ];
 
-// ─── Registry Helpers ─────────────────────────────────
+// ─── Flow-Stage Helpers ───────────────────────────────
 
-export function getAllSkillBindings(): ReadonlyArray<AgentSkillBinding> {
-  return AGENT_SKILL_REGISTRY;
+export function getAllSkillFlowBindings(): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY;
 }
 
-export function getBindingsForAgent(
-  agent: AgentName
-): ReadonlyArray<AgentSkillBinding> {
-  return AGENT_SKILL_REGISTRY.filter((b) => b.agent === agent);
+export function getSkillFlowBinding(skill: string): SkillFlowBinding | undefined {
+  return SKILL_FLOW_REGISTRY.find((b) => b.skill === skill);
 }
 
-export function getBindingsForSkill(
-  skill: string
-): ReadonlyArray<AgentSkillBinding> {
-  return AGENT_SKILL_REGISTRY.filter((b) => b.skill === skill);
+export function getSkillsByFlowId(flowId: string): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY.filter((b) => b.flowIds.includes(flowId));
 }
 
-export function getBindingsForNode(
-  node: string
-): ReadonlyArray<AgentSkillBinding> {
-  return AGENT_SKILL_REGISTRY.filter((b) => b.expectedNodes.includes(node));
+export function getSkillsByFlowType(flowType: SkillFlowType): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY.filter((b) => b.flowTypes.includes(flowType));
 }
 
-export function findSkillBinding(input: {
-  skill: string;
-  agent: AgentName;
-  node: string;
-  requestType: string;
-}): AgentSkillBinding | undefined {
-  return AGENT_SKILL_REGISTRY.find(
-    (b) =>
-      b.skill === input.skill &&
-      b.agent === input.agent &&
-      b.expectedNodes.includes(input.node) &&
-      b.expectedRequestTypes.includes(input.requestType)
-  );
+export function getGlobalEntrySkill(): SkillFlowBinding {
+  return SKILL_FLOW_REGISTRY.find((b) => b.role === "global_entry")!;
 }
+
+export function getSubflowEntrySkills(): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY.filter((b) => b.role === "subflow_entry");
+}
+
+export function getSkillsByRole(role: SkillFlowRole): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY.filter((b) => b.role === role);
+}
+
+export function getDownstreamSkills(skill: string): ReadonlyArray<SkillFlowBinding> {
+  const binding = getSkillFlowBinding(skill);
+  if (!binding) return [];
+  return binding.downstreamConsumers
+    .filter((c) => c.startsWith("sdlc-"))
+    .map((c) => getSkillFlowBinding(c))
+    .filter((b): b is SkillFlowBinding => b !== undefined);
+}
+
+export function getEligibleSkillsForAgent(agent: AgentName): ReadonlyArray<SkillFlowBinding> {
+  return SKILL_FLOW_REGISTRY.filter((b) => b.eligibleAgents.includes(agent));
+}
+
+// ─── Validation (flow-stage based, not runtime-node based) ──
 
 export function validateSkillInvocation(
   invocation: SkillInvocation
 ): SkillInvocationValidation {
-  // Check skill exists at all
-  const skillBindings = getBindingsForSkill(invocation.skill);
-  if (skillBindings.length === 0) {
+  if (!invocation.skill) {
     return {
-      valid: false,
-      reason: `Skill "${invocation.skill}" is not registered`,
+      attempted: false,
+      valid: true,
+      reason: "No skill metadata provided",
     };
   }
 
-  // Check agent match
-  const agentBindings = skillBindings.filter((b) => b.agent === invocation.agent);
-  if (agentBindings.length === 0) {
+  const binding = getSkillFlowBinding(invocation.skill);
+  if (!binding) {
     return {
+      attempted: true,
       valid: false,
-      reason: `Skill "${invocation.skill}" is not bound to agent "${invocation.agent}"`,
+      reason: `Unknown skill "${invocation.skill}"`,
     };
   }
 
-  // Check node match
-  const nodeBinding = agentBindings.find((b) =>
-    b.expectedNodes.includes(invocation.node)
-  );
-  if (!nodeBinding) {
+  if (invocation.flowId && !binding.flowIds.includes(invocation.flowId)) {
     return {
+      attempted: true,
       valid: false,
-      reason: `Skill "${invocation.skill}" with agent "${invocation.agent}" does not support node "${invocation.node}"`,
-    };
-  }
-
-  // Check request type match
-  if (!nodeBinding.expectedRequestTypes.includes(invocation.requestType)) {
-    return {
-      valid: false,
-      reason: `Skill "${invocation.skill}" with agent "${invocation.agent}" does not support request type "${invocation.requestType}"`,
+      reason: `Skill "${invocation.skill}" does not belong to flow "${invocation.flowId}"`,
     };
   }
 
   return {
+    attempted: true,
     valid: true,
-    reason: "Skill invocation is valid",
-    binding: nodeBinding,
+    reason: invocation.flowId
+      ? `Skill "${invocation.skill}" belongs to flow "${invocation.flowId}"`
+      : `Known skill "${invocation.skill}"`,
+    binding,
   };
-}
-
-// ─── Inventory Cross-check ────────────────────────────
-
-export function getRegistrySkillsNotInInventory(
-  inventorySkills: ReadonlyArray<string>
-): ReadonlyArray<string> {
-  const inventorySet = new Set(inventorySkills);
-  return AGENT_SKILL_REGISTRY
-    .map((b) => b.skill)
-    .filter((s) => !inventorySet.has(s));
-}
-
-export function getInventorySkillsMissingFromRegistry(
-  inventorySkills: ReadonlyArray<string>
-): ReadonlyArray<string> {
-  const registrySet = new Set(AGENT_SKILL_REGISTRY.map((b) => b.skill));
-  return inventorySkills.filter((s) => !registrySet.has(s));
-}
-
-export function inferSkillForExecution(input: {
-  agent: AgentName;
-  node: string;
-  requestType: string;
-}): AgentSkillBinding | undefined {
-  const matches = AGENT_SKILL_REGISTRY.filter(
-    (b) =>
-      b.agent === input.agent &&
-      b.expectedNodes.includes(input.node) &&
-      b.expectedRequestTypes.includes(input.requestType)
-  );
-  // Only return if exactly one unambiguous match
-  return matches.length === 1 ? matches[0] : undefined;
 }
