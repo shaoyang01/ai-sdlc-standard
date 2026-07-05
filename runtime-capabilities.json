@@ -128,6 +128,12 @@
     "runtime_direct_adapter_calls": false,
     "adapter_secret_logging": false,
     "adapter_git_operations": false,
-    "adapter_file_writes": false
+    "adapter_file_writes": false,
+    "kimi_adapter_contract_stub": "implemented_contract_only",
+    "hermes_adapter_contract_stub": "implemented_contract_only",
+    "kimi_adapter_invokes_network": false,
+    "hermes_adapter_invokes_network": false,
+    "kimi_adapter_default_enabled": false,
+    "hermes_adapter_default_enabled": false
   }
 }
