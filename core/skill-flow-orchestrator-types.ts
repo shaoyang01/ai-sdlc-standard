@@ -75,3 +75,58 @@ export interface SkillFlowPlan {
   };
   warnings: string[];
 }
+
+// ─── Shadow Execution Result Types ────────────────────
+
+export type SkillFlowStageResultStatus =
+  | "shadow_success"
+  | "shadow_skipped"
+  | "shadow_blocked";
+
+export interface SkillFlowStageResult {
+  stageId: string;
+  index: number;
+  kind: SkillFlowStageKind;
+  flowId: string;
+  skill?: string;
+  stageName: string;
+  agent?: AgentName;
+  status: SkillFlowStageResultStatus;
+  output: Readonly<Record<string, unknown>>;
+  artifacts: ReadonlyArray<SkillFlowShadowArtifact>;
+  startedAt: string;
+  completedAt: string;
+  notes: string[];
+}
+
+export interface SkillFlowShadowArtifact {
+  id: string;
+  type:
+    | "shadow_skill_output"
+    | "shadow_skillless_output"
+    | "shadow_controller_output";
+  flowId: string;
+  stageId: string;
+  skill?: string;
+  stageName: string;
+  content: Readonly<Record<string, unknown>>;
+}
+
+export interface SkillFlowExecutionResult {
+  flowId: string;
+  requirementId: string;
+  mode: "shadow_only";
+  status: "shadow_success" | "shadow_partial" | "shadow_failed";
+  stageResults: ReadonlyArray<SkillFlowStageResult>;
+  artifacts: ReadonlyArray<SkillFlowShadowArtifact>;
+  safety: {
+    shadowOnly: true;
+    invokesRealAgents: false;
+    invokesRealSkills: false;
+    writesFiles: false;
+    changesRuntimeBehavior: false;
+    affectsRouting: false;
+    affectsAgentSelection: false;
+  };
+  warnings: string[];
+}

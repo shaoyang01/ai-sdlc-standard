@@ -93,9 +93,11 @@
   },
   "skill_flow_orchestrator": {
     "skill_flow_orchestrator_contract": "implemented_plan_only",
-    "skill_flow_orchestrator_execution": "not_implemented",
+    "skill_flow_shadow_orchestrator": "implemented_shadow_only",
+    "skill_flow_orchestrator_execution": "shadow_only",
     "skill_flow_orchestrator_invokes_agents": false,
     "skill_flow_orchestrator_invokes_skills": false,
+    "skill_flow_orchestrator_writes_files": false,
     "skill_flow_orchestrator_affects_runtime": false
   }
 }
