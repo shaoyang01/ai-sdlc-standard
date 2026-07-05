@@ -79,6 +79,10 @@ async function test() {
   assert(r7.commandInput!.command === "kimi", "command");
   assert(r7.warnings.some(w => w.includes("Gateway not wired")), "not wired warning");
   assert(r7.auditEvents.every(e => e.persistsAudit === false), "no persist");
+  assert(r7.auditEvents.every(e => e.invokesCli === false), "eligible contract no CLI");
+  assert(r7.auditEvents.every(e => e.spawnsProcess === false), "eligible contract no spawn");
+  assert(r7.auditEvents.every(e => e.affectsGateway === false), "eligible contract no gateway");
+  assert(r7.auditEvents.every(e => e.affectsRuntime === false), "eligible contract no runtime");
   assert(r7.auditEvents.every(e => e.containsRawPrompt === false), "no raw prompt");
   assert(r7.auditEvents.every(e => e.containsRawArtifacts === false), "no raw artifacts");
   assert(!JSON.stringify(r7).includes("this prompt must not leak"), "no prompt");

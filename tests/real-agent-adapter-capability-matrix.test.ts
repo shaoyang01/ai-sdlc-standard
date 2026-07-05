@@ -75,6 +75,12 @@ async function test() {
   assert(kimi["command_executor_default_enabled"] === false, "kimi command executor default disabled");
   assert(kimi["command_executor_wired_to_gateway"] === false, "kimi command executor not wired to gateway");
   assert(kimi["command_executor_wired_to_runtime"] === false, "kimi command executor not wired to runtime");
+  assert(kimi["gateway_integration_contract"] === "implemented_contract_only", "kimi gateway contract implemented");
+  assert(kimi["gateway_integration_wired"] === false, "kimi gateway not wired");
+  assert(kimi["gateway_integration_default_enabled"] === false, "kimi gateway default disabled");
+  const gwFlags = kimi["gateway_integration_requires_flags"] as string[];
+  assert(Array.isArray(gwFlags) && gwFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "gateway requires gateway flag");
+  assert(gwFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "gateway requires command flag");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");

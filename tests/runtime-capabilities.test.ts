@@ -148,6 +148,16 @@ async function test() {
   assert(realAdapters["kimi_cli_command_executor_persists_audit"] === false, "kimi command executor no persist audit");
   assert(realAdapters["kimi_cli_command_executor_reads_api_keys"] === false, "kimi command executor no API keys");
   assert(realAdapters["kimi_cli_command_executor_invokes_cli_by_default"] === false, "kimi command executor no CLI by default");
+  assert(realAdapters["kimi_gateway_integration_contract"] === "implemented_contract_only", "kimi gateway contract");
+  assert(realAdapters["kimi_gateway_integration_wired_to_gateway"] === false, "kimi gateway not wired to gateway");
+  assert(realAdapters["kimi_gateway_integration_wired_to_runtime"] === false, "kimi gateway not wired to runtime");
+  assert(realAdapters["kimi_gateway_integration_default_enabled"] === false, "kimi gateway default disabled");
+  const gwFlags = realAdapters["kimi_gateway_integration_requires_flags"] as string[];
+  assert(Array.isArray(gwFlags) && gwFlags.includes("SDLC_KIMI_GATEWAY_INTEGRATION=enabled"), "gateway requires gateway flag");
+  assert(gwFlags.includes("SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"), "gateway requires command flag");
+  assert(realAdapters["kimi_gateway_integration_invokes_cli"] === false, "kimi gateway no CLI");
+  assert(realAdapters["kimi_gateway_integration_spawns_process"] === false, "kimi gateway no spawn");
+  assert(realAdapters["kimi_gateway_integration_changes_final_status"] === false, "kimi gateway no final status change");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
