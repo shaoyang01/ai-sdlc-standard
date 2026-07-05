@@ -365,6 +365,24 @@
         "execution/kimi-gateway-shadow-sidecar.ts",
         "tests/kimi-gateway-shadow-sidecar.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Runtime Attachment Contract",
+      "status": "contract-only",
+      "runtime_active_by_default": false,
+      "changes_routing": false,
+      "changes_agent_selection": false,
+      "changes_final_status": false,
+      "wired_to_runtime": false,
+      "persists_audit": false,
+      "writes_files": false,
+      "invokes_real_agents": false,
+      "invokes_real_skills": false,
+      "requires_flag": "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled",
+      "evidence": [
+        "execution/kimi-runtime-attachment-contract.ts",
+        "tests/kimi-runtime-attachment-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -586,8 +604,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Shadow Sidecar Runtime Attachment Contract",
-    "reason": "Decide whether/how sidecar metadata attaches to RuntimeResult",
-    "safety_rationale": "Still default-off; shadow/sidecar only"
+    "title": "Feature-flagged Kimi Shadow Sidecar Runtime Attachment",
+    "reason": "Wire the contract to RuntimeResult behind runtime attachment flag",
+    "safety_rationale": "Sidecar only, default off, no routing/final_status change"
   }
 }

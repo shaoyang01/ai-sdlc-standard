@@ -40,6 +40,7 @@ export function validateKimiGatewayShadowSidecarForRuntimeAttachment(
   if (!sidecar) {
     return { valid: false, warnings: ["Sidecar is undefined"] };
   }
+  // Safety field checks
   if (sidecar.primaryGatewayUnchanged !== true) {
     warnings.push("primaryGatewayUnchanged is not true");
   }
@@ -51,6 +52,22 @@ export function validateKimiGatewayShadowSidecarForRuntimeAttachment(
   }
   if (sidecar.wiredToRuntime !== false) {
     warnings.push("wiredToRuntime is not false");
+  }
+  // Structural field checks
+  if (!sidecar.decision) {
+    warnings.push("decision is missing");
+  }
+  if (!sidecar.requestId) {
+    warnings.push("requestId is missing");
+  }
+  if (typeof sidecar.enabled !== "boolean") {
+    warnings.push("enabled is not boolean");
+  }
+  if (typeof sidecar.executed !== "boolean") {
+    warnings.push("executed is not boolean");
+  }
+  if (!Array.isArray(sidecar.warnings)) {
+    warnings.push("warnings is not array");
   }
   return { valid: warnings.length === 0, warnings };
 }

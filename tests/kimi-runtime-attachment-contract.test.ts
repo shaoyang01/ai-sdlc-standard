@@ -86,6 +86,19 @@ async function test() {
   const bad2: KimiGatewayShadowSidecar = { ...validSidecar, primaryGatewayUnchanged: false as any };
   const v3 = validateKimiGatewayShadowSidecarForRuntimeAttachment(bad2);
   assert(v3.valid === false && v3.warnings.some(w => w.includes("primaryGatewayUnchanged")), "primaryGatewayUnchanged invalid");
+  // Structural validation
+  const noDecision: any = { ...validSidecar, decision: undefined };
+  assert(validateKimiGatewayShadowSidecarForRuntimeAttachment(noDecision).warnings.some(w => w.includes("decision")), "missing decision");
+  const noRequestId: any = { ...validSidecar, requestId: undefined };
+  assert(validateKimiGatewayShadowSidecarForRuntimeAttachment(noRequestId).warnings.some(w => w.includes("requestId")), "missing requestId");
+  const badEnabled: any = { ...validSidecar, enabled: "yes" };
+  assert(validateKimiGatewayShadowSidecarForRuntimeAttachment(badEnabled).warnings.some(w => w.includes("enabled")), "enabled not boolean");
+  const badExecuted: any = { ...validSidecar, executed: "yes" };
+  assert(validateKimiGatewayShadowSidecarForRuntimeAttachment(badExecuted).warnings.some(w => w.includes("executed")), "executed not boolean");
+  const badWarnings: any = { ...validSidecar, warnings: "not array" };
+  assert(validateKimiGatewayShadowSidecarForRuntimeAttachment(badWarnings).warnings.some(w => w.includes("warnings")), "warnings not array");
+  // buildKimiRuntimeShadowAttachment rejects structural invalids
+  assert(buildKimiRuntimeShadowAttachment({ request, sidecar: noDecision, env: { SDLC_KIMI_RUNTIME_ATTACHMENT: "enabled" } }).decision === "sidecar_rejected_invalid", "rejects missing decision");
   console.log("");
 
   // Test 7: No forbidden imports

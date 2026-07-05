@@ -167,6 +167,15 @@ async function test() {
   assert(realAdapters["kimi_gateway_shadow_sidecar_changes_final_status"] === false, "shadow no final status change");
   assert(realAdapters["kimi_gateway_shadow_sidecar_changes_routing"] === false, "shadow no routing change");
   assert(realAdapters["kimi_gateway_shadow_sidecar_primary_gateway_unchanged"] === true, "shadow primary gateway unchanged");
+  assert(realAdapters["kimi_runtime_attachment_contract"] === "implemented_contract_only", "kimi runtime attachment contract");
+  assert(realAdapters["kimi_runtime_attachment_default_enabled"] === false, "kimi runtime attachment default disabled");
+  assert(realAdapters["kimi_runtime_attachment_requires_flag"] === "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled", "kimi runtime attachment flag");
+  assert(realAdapters["kimi_runtime_attachment_wired_to_runtime"] === false, "kimi runtime attachment not wired");
+  assert(realAdapters["kimi_runtime_attachment_changes_final_status"] === false, "kimi runtime attachment no final status");
+  assert(realAdapters["kimi_runtime_attachment_changes_routing"] === false, "kimi runtime attachment no routing");
+  assert(realAdapters["kimi_runtime_attachment_changes_agent_selection"] === false, "kimi runtime attachment no agent selection");
+  assert(realAdapters["kimi_runtime_attachment_persists_audit"] === false, "kimi runtime attachment no persist");
+  assert(realAdapters["kimi_runtime_attachment_writes_files"] === false, "kimi runtime attachment no files");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

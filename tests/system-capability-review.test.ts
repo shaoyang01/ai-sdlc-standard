@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Shadow Sidecar Runtime Attachment Contract", "next PR is attachment contract");
+  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Shadow Sidecar Runtime Attachment", "next PR is runtime attachment");
   // Kimi Gateway Shadow Sidecar
   assert(capNames.includes("Kimi Gateway Shadow Sidecar"), "has Kimi Gateway Shadow Sidecar");
   const ssCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Shadow Sidecar");
@@ -139,6 +139,18 @@ async function test() {
   const ssEvidence = ssCap["evidence"] as string[];
   assert(ssEvidence.includes("execution/kimi-gateway-shadow-sidecar.ts"), "sidecar evidence");
   assert(ssEvidence.includes("tests/kimi-gateway-shadow-sidecar.test.ts"), "sidecar test evidence");
+  // Kimi Runtime Attachment Contract
+  assert(capNames.includes("Kimi Runtime Attachment Contract"), "has Kimi Runtime Attachment Contract");
+  const raCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Runtime Attachment Contract");
+  assert(raCap !== undefined && raCap["status"] === "contract-only", "runtime attachment contract-only");
+  assert(raCap["runtime_active_by_default"] === false && raCap["wired_to_runtime"] === false, "runtime attachment not active/wired");
+  assert(raCap["changes_routing"] === false && raCap["changes_final_status"] === false, "runtime attachment no effects");
+  assert(raCap["invokes_real_agents"] === false && raCap["invokes_real_skills"] === false, "runtime attachment no real agents");
+  assert(raCap["requires_flag"] === "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled", "runtime attachment flag");
+  const raEvidence = raCap["evidence"] as string[];
+  assert(raEvidence.includes("execution/kimi-runtime-attachment-contract.ts"), "runtime attachment evidence");
+  assert(raEvidence.includes("tests/kimi-runtime-attachment-contract.test.ts"), "runtime attachment test");
+  assert(review.recommended_next_pr.title === "Feature-flagged Kimi Shadow Sidecar Runtime Attachment", "next PR is runtime attachment");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
