@@ -89,7 +89,12 @@ async function test() {
   assert(implRel !== undefined, "implementation runtime relationship exists");
   assert(implRel!["relationshipType"] === "skillless_agent_execution", "implementation is skillless_agent_execution");
   assert(implRel!["runtimeInvokesSkill"] === false, "implementation does not invoke skill");
-  assert((implRel!["relatedSkills"] as string[]).length === 0, "implementation has no related skills");
+  const implSkills = implRel!["relatedSkills"] as string[];
+  assert(implSkills.includes("sdlc-speckit-pipeline"), "implementation relatedSkills includes sdlc-speckit-pipeline");
+  assert(!implSkills.includes("sdlc-speckit-implement"), "implementation relatedSkills does NOT include sdlc-speckit-implement");
+  const implNotes = implRel!["notes"] as string;
+  assert(implNotes.includes("Direct implementation is skillless"), "notes mention direct implementation is skillless");
+  assert(implNotes.includes("sdlc-speckit-pipeline"), "notes mention sdlc-speckit-pipeline");
 
   const bugfixRel = inv.runtime_relationships.find((r) => r["runtimeNode"] === "bugfix");
   assert(bugfixRel !== undefined, "bugfix runtime relationship exists");
@@ -124,6 +129,8 @@ async function test() {
     "recommends against runtime node to skill inference");
   assert(doNotContinue.some((r) => r.includes("speckit_implement_to_generic_implementation")),
     "recommends against mapping speckit-implement to generic implementation");
+  assert(recs["recommended_next_pr"] === "deprecate_runtime_auto_skill_annotation",
+    "recommended_next_pr is deprecate_runtime_auto_skill_annotation");
   const futureWork = recs["recommended_future_work"] as string[];
   assert(futureWork.some((r) => r.includes("skillless")),
     "recommends modeling direct implementation as skillless");

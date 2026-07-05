@@ -480,10 +480,10 @@
     {
       "runtimeNode": "implementation",
       "currentBehavior": "Calls executionGateway (code_generation) or fanout or speckit stub",
-      "relatedSkills": [],
+      "relatedSkills": ["sdlc-speckit-pipeline"],
       "relationshipType": "skillless_agent_execution",
       "runtimeInvokesSkill": false,
-      "notes": "Direct implementation is skillless agent execution from prior DocFlow artifacts. Speckit implementation is a nested skill flow candidate (sdlc-speckit-pipeline with 10 stages). Do NOT map this to sdlc-speckit-implement."
+      "notes": "Direct implementation is skillless agent execution from prior DocFlow artifacts. Speckit implementation is a nested skill flow candidate via sdlc-speckit-pipeline. Do NOT map direct implementation to sdlc-speckit-implement."
     },
     {
       "runtimeNode": "code-review",
@@ -512,7 +512,7 @@
   ],
   "recommendations": {
     "recommended_architecture": "hybrid_runtime_graph_with_nested_skill_flows",
-    "recommended_next_pr": "skill_flow_inventory_metadata",
+    "recommended_next_pr": "deprecate_runtime_auto_skill_annotation",
     "do_not_continue": [
       "runtime_node_to_skill_inference",
       "skill_inference_disambiguation_based_on_agent_node_requestType",
