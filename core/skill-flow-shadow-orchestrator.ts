@@ -47,7 +47,6 @@ export function executeSkillFlowShadow(plan: SkillFlowPlan): SkillFlowExecutionR
 
   const stageResults: SkillFlowStageResult[] = [];
   const allArtifacts: SkillFlowShadowArtifact[] = [];
-  let allSuccess = true;
 
   for (const stage of plan.stages) {
     const now = new Date().toISOString();
@@ -163,7 +162,7 @@ export function executeSkillFlowShadow(plan: SkillFlowPlan): SkillFlowExecutionR
     flowId: plan.flowId,
     requirementId: plan.requirementId,
     mode: "shadow_only",
-    status: allSuccess ? "shadow_success" : "shadow_partial",
+    status: "shadow_success",
     stageResults,
     artifacts: allArtifacts,
     safety: buildSafety(),

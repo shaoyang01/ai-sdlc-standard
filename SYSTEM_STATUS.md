@@ -128,6 +128,6 @@ All evolution proposals have `applied: false` and require human review.
 3. **Skill Flow Orchestrator Contract** — ✅ Done
 4. **Shadow Skill Flow Orchestrator** — ✅ Done
 5. **Skill Flow Orchestrator Runtime Integration Contract** — Define safe integration boundary
-5. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters behind Execution Gateway
-6. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-7. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+6. **Real Agent Adapter Integration** — Kimi, Hermes, Codex adapters behind Execution Gateway
+7. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+8. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
