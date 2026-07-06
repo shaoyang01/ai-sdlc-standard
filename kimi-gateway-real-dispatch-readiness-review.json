@@ -1,0 +1,82 @@
+{
+  "review_name": "Kimi Gateway Real Dispatch Readiness Review",
+  "status": "READY_WITH_CONSTRAINTS",
+  "review_only": true,
+  "implementation_changes": false,
+  "runtime_changes": false,
+  "gateway_routing_changes": false,
+  "request_type_expansion": false,
+  "supported_request_types": ["llm_task"],
+  "default_enabled": false,
+  "requires_flags": [
+    "SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+    "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+  ],
+  "ready_for": [
+    "controlled_llm_task_gateway_dispatch",
+    "manual_feature_flagged_validation",
+    "final_review_before_request_type_expansion"
+  ],
+  "not_ready_for": [
+    "request_type_expansion",
+    "default_routing",
+    "automatic_runtime_routing",
+    "unsupervised_self_evolution",
+    "review_or_validation_request_types",
+    "code_generation_request_type"
+  ],
+  "safety_boundaries": {
+    "changes_runtime_final_status": false,
+    "changes_default_runtime_routing": false,
+    "changes_codex_behavior": false,
+    "changes_hermes_behavior": false,
+    "invokes_real_sdlc_skills": false,
+    "writes_files": false,
+    "persists_audit": false,
+    "calls_real_kimi_cli_in_tests": false,
+    "uses_fake_runners_in_tests": true
+  },
+  "capability_stack": [
+    "kimi_cli_contract_stub",
+    "kimi_cli_dry_run_harness",
+    "cli_adapter_audit_trail",
+    "kimi_cli_executor_contract",
+    "kimi_cli_command_executor_feature_flagged",
+    "kimi_gateway_integration_contract",
+    "kimi_gateway_shadow_sidecar",
+    "kimi_runtime_attachment_contract",
+    "kimi_runtime_shadow_attachment",
+    "kimi_gateway_real_dispatch_contract",
+    "kimi_gateway_real_dispatch_feature_flagged",
+    "kimi_gateway_real_dispatch_fallback_policy",
+    "kimi_gateway_real_dispatch_observability",
+    "kimi_gateway_real_dispatch_guardrails"
+  ],
+  "evidence": [
+    "execution/kimi-gateway-real-dispatch-contract.ts",
+    "execution/kimi-gateway-real-dispatch.ts",
+    "execution/kimi-gateway-real-dispatch-fallback-policy.ts",
+    "execution/kimi-gateway-real-dispatch-observability.ts",
+    "execution/kimi-gateway-real-dispatch-guardrails.ts",
+    "tests/kimi-gateway-real-dispatch-contract.test.ts",
+    "tests/kimi-gateway-real-dispatch.test.ts",
+    "tests/kimi-gateway-real-dispatch-gateway.test.ts",
+    "tests/kimi-gateway-real-dispatch-fallback-policy.test.ts",
+    "tests/kimi-gateway-real-dispatch-observability.test.ts",
+    "tests/kimi-gateway-real-dispatch-guardrails.test.ts"
+  ],
+  "known_limitations": [
+    "llm_task_only",
+    "not_default_enabled",
+    "not_automatic_runtime_routing",
+    "not_request_type_expanded",
+    "manual_feature_flag_required",
+    "fake_runner_tests_only"
+  ],
+  "recommended_next_pr": {
+    "title": "Kimi Gateway Request Type Expansion Contract",
+    "reason": "Define whether Kimi should support additional request types before any implementation.",
+    "safety_rationale": "Contract-only expansion review prevents accidental routing or execution drift."
+  }
+}

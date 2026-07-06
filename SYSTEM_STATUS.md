@@ -41,7 +41,7 @@ These capabilities exist but run entirely in shadow mode with no real external c
 |-----------|-------|
 | Code Review Adapter | Scans artifacts for `force_review_fail` marker; PASS by default |
 | Bugfix Adapter | Returns shadow `bugfix_patch` artifact; no patches applied to disk |
-| Kimi Agent | Not implemented — all Kimi calls fall through to shadow adapter |
+| Kimi Agent | Feature-flagged Gateway real dispatch for `llm_task` only; requires 3 flags; default-off; tested with fake runners |
 | Hermes Agent | Not implemented — all Hermes calls fall through to shadow adapter |
 
 ## 4. Feature-flagged Real Execution
@@ -91,7 +91,7 @@ All evolution proposals have `applied: false` and require human review.
 
 | Feature | Notes |
 |---------|-------|
-| Real Kimi adapter (`execFile` or API) | All Kimi calls → shadow |
+| Real Kimi adapter (execFile or API) | Feature-flagged Gateway dispatch for llm_task; requires 3 flags; not default |
 | Real Hermes adapter | All Hermes calls → shadow |
 | Codex adapter for `review` / `code_review` / `bugfix` types | Only `code_generation` supported |
 | Memory-driven actual agent selection | Shadow decisions exist but are not applied |
@@ -131,5 +131,6 @@ All evolution proposals have `applied: false` and require human review.
 6. **Feature-flagged Runtime Shadow Integration** — ✅ Done (sidecar-only, disabled by default)
 7. **Runtime Shadow Integration Audit Trail** — ✅ Done (in-memory, sidecar-only)
 8. **Real Agent Adapter Integration** — ✅ Kimi complete: stubs → dry-run → audit → executor → command executor → Gateway → shadow sidecar → runtime attachment → real dispatch → fallback → observability → guardrails
-9. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+9. **Kimi Gateway Real Dispatch Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; ready for controlled llm_task Gateway dispatch only)
+10. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
 10. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

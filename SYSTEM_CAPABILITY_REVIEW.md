@@ -244,9 +244,11 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Kimi Gateway Real Dispatch Final Readiness Review**
+**Recommended: Kimi Gateway Request Type Expansion Contract**
 
-Comprehensive review of the complete 14-layer Kimi stack before any request type expansion or further wiring. No implementation changes; review only.
+Define whether Kimi should support additional request types before any implementation. This should be a contract-only PR that analyzes each candidate request type for safety, routing impact, and Gateway behavior implications. No implementation changes.
+
+Comprehensive review of the complete 14-layer Kimi stack has been completed (verdict: READY_WITH_CONSTRAINTS). The next safe step is a contract-only request type expansion review.
 
 ---
 

@@ -490,6 +490,22 @@
         "execution/kimi-gateway-real-dispatch-guardrails.ts",
         "tests/kimi-gateway-real-dispatch-guardrails.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Real Dispatch Readiness Review",
+      "status": "READY_WITH_CONSTRAINTS",
+      "review_only": true,
+      "implementation_changes": false,
+      "runtime_changes": false,
+      "gateway_routing_changes": false,
+      "request_type_expansion": false,
+      "supported_request_types": ["llm_task"],
+      "default_enabled": false,
+      "evidence": [
+        "KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+        "kimi-gateway-real-dispatch-readiness-review.json",
+        "tests/kimi-gateway-real-dispatch-readiness-review.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -711,8 +727,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Dispatch Final Readiness Review",
-    "reason": "Comprehensive review before any request type expansion or further wiring",
-    "safety_rationale": "Review has no side effects; final gate before expansion"
+    "title": "Kimi Gateway Request Type Expansion Contract",
+    "reason": "Define whether Kimi should support additional request types before any implementation.",
+    "safety_rationale": "Contract-only expansion review prevents accidental routing or execution drift."
   }
 }

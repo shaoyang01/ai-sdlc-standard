@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Final Readiness Review", "next PR final readiness review");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Final Readiness Review", "next PR final readiness review");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -240,6 +240,24 @@ async function test() {
   const grEvidence = grCap["evidence"] as string[];
   assert(grEvidence.includes("execution/kimi-gateway-real-dispatch-guardrails.ts"), "guardrails evidence");
   assert(grEvidence.includes("tests/kimi-gateway-real-dispatch-guardrails.test.ts"), "guardrails test evidence");
+  // Kimi Gateway Real Dispatch Readiness Review
+  assert(capNames.includes("Kimi Gateway Real Dispatch Readiness Review"), "has Kimi Readiness Review");
+  const rrCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Readiness Review");
+  assert(rrCap !== undefined && rrCap["status"] === "READY_WITH_CONSTRAINTS", "readiness review status");
+  assert(rrCap["review_only"] === true, "readiness review-only");
+  assert(rrCap["implementation_changes"] === false, "readiness no impl changes");
+  assert(rrCap["runtime_changes"] === false, "readiness no runtime changes");
+  assert(rrCap["gateway_routing_changes"] === false, "readiness no gateway routing changes");
+  assert(rrCap["request_type_expansion"] === false, "readiness no type expansion");
+  const rrTypes = rrCap["supported_request_types"] as string[];
+  assert(rrTypes.length === 1 && rrTypes[0] === "llm_task", "readiness llm_task only");
+  assert(rrCap["default_enabled"] === false, "readiness not default enabled");
+  const rrEvidence = rrCap["evidence"] as string[];
+  assert(rrEvidence.includes("KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "readiness evidence MD");
+  assert(rrEvidence.includes("kimi-gateway-real-dispatch-readiness-review.json"), "readiness evidence JSON");
+  assert(rrEvidence.includes("tests/kimi-gateway-real-dispatch-readiness-review.test.ts"), "readiness evidence test");
+  // Update next PR
+  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
