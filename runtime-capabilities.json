@@ -251,6 +251,16 @@
     "kimi_gateway_real_dispatch_observability_contains_raw_artifacts": false,
     "kimi_gateway_real_dispatch_observability_contains_secrets": false,
     "kimi_gateway_real_dispatch_observability_changes_final_status": false,
-    "kimi_gateway_real_dispatch_observability_changes_routing": false
+    "kimi_gateway_real_dispatch_observability_changes_routing": false,
+    "kimi_gateway_real_dispatch_guardrails": "implemented",
+    "kimi_gateway_real_dispatch_guardrails_default_enabled": true,
+    "kimi_gateway_real_dispatch_guardrails_blocks_large_prompt": true,
+    "kimi_gateway_real_dispatch_guardrails_blocks_large_input": true,
+    "kimi_gateway_real_dispatch_guardrails_validates_cli_config": true,
+    "kimi_gateway_real_dispatch_guardrails_validates_timeout": true,
+    "kimi_gateway_real_dispatch_guardrails_clamps_output_summaries": true,
+    "kimi_gateway_real_dispatch_guardrails_expands_request_types": false,
+    "kimi_gateway_real_dispatch_guardrails_changes_final_status": false,
+    "kimi_gateway_real_dispatch_guardrails_changes_routing": false
   }
 }

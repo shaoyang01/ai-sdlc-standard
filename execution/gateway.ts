@@ -18,10 +18,13 @@ import { validateExecutionRequestSkill } from "./skill-request-validation";
 import { executeKimiGatewayRequest } from "./kimi-gateway-real-dispatch";
 import type { CliAdapterConfig } from "./cli-adapter-contract-types";
 import type { KimiCliProcessRunner } from "./kimi-cli-command-executor";
+import type { KimiGatewayGuardrailResult } from "./kimi-gateway-real-dispatch-guardrails";
+import type { KIMI_GATEWAY_GUARDRAIL_LIMITS } from "./kimi-gateway-real-dispatch-guardrails";
 
 export interface ExecutionGatewayOptions {
   kimiConfig?: CliAdapterConfig;
   kimiRunner?: KimiCliProcessRunner;
+  kimiGuardrailLimits?: Partial<typeof KIMI_GATEWAY_GUARDRAIL_LIMITS>;
 }
 
 export class ExecutionGateway {

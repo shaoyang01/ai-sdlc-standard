@@ -79,7 +79,9 @@
         "execution/kimi-gateway-real-dispatch-fallback-policy.ts",
         "tests/kimi-gateway-real-dispatch-fallback-policy.test.ts",
         "execution/kimi-gateway-real-dispatch-observability.ts",
-        "tests/kimi-gateway-real-dispatch-observability.test.ts"
+        "tests/kimi-gateway-real-dispatch-observability.test.ts",
+        "execution/kimi-gateway-real-dispatch-guardrails.ts",
+        "tests/kimi-gateway-real-dispatch-guardrails.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -132,7 +134,14 @@
       "gateway_real_dispatch_observability_persisted": false,
       "gateway_real_dispatch_observability_contains_raw_prompt": false,
       "gateway_real_dispatch_observability_contains_raw_artifacts": false,
-      "gateway_real_dispatch_observability_contains_secrets": false
+      "gateway_real_dispatch_observability_contains_secrets": false,
+      "gateway_real_dispatch_guardrails": "implemented",
+      "gateway_real_dispatch_guardrails_blocks_large_prompt": true,
+      "gateway_real_dispatch_guardrails_blocks_large_input": true,
+      "gateway_real_dispatch_guardrails_validates_cli_config": true,
+      "gateway_real_dispatch_guardrails_validates_timeout": true,
+      "gateway_real_dispatch_guardrails_clamps_output_summaries": true,
+      "gateway_real_dispatch_guardrails_expands_request_types": false
     },
     {
       "adapter": "hermes",
@@ -371,8 +380,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Dispatch Operational Guardrails",
-    "reason": "Add operational guardrails before any further expansion",
-    "safety_rationale": "Guardrails have no side effects; safe before expansion"
+    "title": "Kimi Gateway Real Dispatch Final Readiness Review",
+    "reason": "Comprehensive review before any request type expansion",
+    "safety_rationale": "Review has no side effects; final gate before expansion"
   }
 }
