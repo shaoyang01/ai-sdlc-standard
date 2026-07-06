@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -546,8 +546,37 @@ async function test() {
   assert(hgiEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes gateway integration evidence test");
   assert(hgiEv.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes gateway integration evidence md");
   assert(hgiEv.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes gateway integration evidence json");
+  // Hermes Gateway Real Dispatch Gateway Integration
+  assert(capNames.includes("Hermes Gateway Real Dispatch Gateway Integration"), "has Hermes Gateway sidecar integration");
+  const hgSidecarCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Gateway Integration");
+  assert(hgSidecarCap !== undefined && hgSidecarCap["status"] === "implemented_feature_flagged_sidecar_metadata", "hermes gateway sidecar status");
+  assert(hgSidecarCap["runtime_active_by_default"] === false, "hermes gateway sidecar not active");
+  assert(hgSidecarCap["wired_to_gateway"] === true, "hermes gateway sidecar wired gateway");
+  assert(hgSidecarCap["wired_to_runtime"] === false, "hermes gateway sidecar not wired runtime");
+  assert(hgSidecarCap["gateway_field"] === "hermes_gateway_real_dispatch", "hermes gateway sidecar field");
+  assert(hgSidecarCap["omit_when_disabled"] === true, "hermes gateway sidecar omit");
+  assert(hgSidecarCap["never_undefined_key"] === true, "hermes gateway sidecar no undefined");
+  const hgSidecarSup = hgSidecarCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgSidecarSup) && hgSidecarSup.includes("review") && hgSidecarSup.includes("code_review") && hgSidecarSup.includes("validation"), "hermes gateway sidecar supported");
+  const hgSidecarUnsup = hgSidecarCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(hgSidecarUnsup) && hgSidecarUnsup.includes("llm_task") && hgSidecarUnsup.includes("code_generation") && hgSidecarUnsup.includes("bugfix"), "hermes gateway sidecar unsupported");
+  assert(hgSidecarCap["changes_gateway_primary_dispatch"] === false, "hermes gateway sidecar no primary dispatch");
+  assert(hgSidecarCap["changes_gateway_final_result"] === false, "hermes gateway sidecar no final result");
+  assert(hgSidecarCap["changes_final_status"] === false, "hermes gateway sidecar no final status");
+  assert(hgSidecarCap["changes_routing"] === false, "hermes gateway sidecar no routing");
+  assert(hgSidecarCap["affects_primary_gateway_result"] === false, "hermes gateway sidecar no primary effect");
+  assert(hgSidecarCap["writes_files"] === false, "hermes gateway sidecar no files");
+  assert(hgSidecarCap["persists_audit"] === false, "hermes gateway sidecar no persist");
+  assert(hgSidecarCap["contains_raw_prompt"] === false, "hermes gateway sidecar no raw prompt");
+  assert(hgSidecarCap["contains_raw_artifacts"] === false, "hermes gateway sidecar no raw artifacts");
+  assert(hgSidecarCap["contains_secrets"] === false, "hermes gateway sidecar no secrets");
+  assert(hgSidecarCap["uses_fake_dispatcher_in_tests"] === true, "hermes gateway sidecar fake dispatcher");
+  const hgSidecarEv = hgSidecarCap["evidence"] as string[];
+  assert(hgSidecarEv.includes("execution/gateway.ts"), "hermes gateway sidecar evidence gateway");
+  assert(hgSidecarEv.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes gateway sidecar evidence contract");
+  assert(hgSidecarEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes gateway sidecar evidence test");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

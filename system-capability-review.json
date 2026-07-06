@@ -852,6 +852,42 @@
         "HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md",
         "hermes-gateway-real-dispatch-gateway-integration-contract.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Gateway Integration",
+      "status": "implemented_feature_flagged_sidecar_metadata",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": true,
+      "wired_to_runtime": false,
+      "gateway_field": "hermes_gateway_real_dispatch",
+      "omit_when_disabled": true,
+      "never_undefined_key": true,
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "uses_fake_dispatcher_in_tests": true,
+      "evidence": [
+        "execution/gateway.ts",
+        "execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts",
+        "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -1073,8 +1109,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration",
-    "reason": "The contract-only Gateway integration rules are implemented. The next PR can wire the Hermes dispatch metadata into Gateway behind the real dispatch flag.",
-    "safety_rationale": "Gateway integration must remain default-off, omit fields when disabled, never write undefined keys, and preserve primary Gateway behavior."
+    "title": "Hermes Gateway Real Dispatch Fallback Policy",
+    "reason": "Hermes Gateway real dispatch is now visible as optional sidecar metadata. The next PR should harden fallback policy while preserving primary Gateway behavior.",
+    "safety_rationale": "Fallback policy changes must keep Hermes sidecar-only, default-off, and unable to affect Runtime final_status or routing."
   }
 }

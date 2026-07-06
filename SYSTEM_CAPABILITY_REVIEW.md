@@ -4,9 +4,9 @@
 
 The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
 
-Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation plus a contract-only Gateway integration definition. Hermes is still not wired to primary Gateway dispatch and does not change Runtime `final_status` or routing.
+Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
 
-The next intended PR is Feature-flagged Hermes Gateway Real Dispatch Gateway Integration. Any future Gateway wiring must remain default off, omit disabled fields, never write undefined keys, and must not change runtime routing or final_status.
+The next intended PR is Hermes Gateway Real Dispatch Fallback Policy. Any fallback hardening must keep Hermes sidecar-only, default off, omit disabled fields, never write undefined keys, and must not change runtime routing or final_status.
 
 ### Status Classification
 
@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Feature-flagged Hermes Gateway Real Dispatch Gateway Integration**
+**Recommended: Hermes Gateway Real Dispatch Fallback Policy**
 
-Hermes Gateway real dispatch helper and its contract-only Gateway integration rules are implemented. The next step is default-off Gateway metadata integration using the `hermes_gateway_real_dispatch` field, omitted when disabled and never written as an undefined key.
+Hermes Gateway real dispatch helper is now visible only as optional Gateway sidecar metadata under `hermes_gateway_real_dispatch`. The next step is fallback policy hardening that preserves primary Gateway behavior.
 
 ---
 

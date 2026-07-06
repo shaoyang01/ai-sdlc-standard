@@ -347,6 +347,30 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes evidence dispatch gateway integration test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes evidence dispatch gateway integration md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes evidence dispatch gateway integration json");
+  assert(hermes["gateway_real_dispatch_gateway_integration"] === "implemented_feature_flagged_sidecar_metadata", "hermes dispatch gateway sidecar integration");
+  assert(hermes["gateway_real_dispatch_gateway_integration_default_enabled"] === false, "hermes dispatch gateway sidecar default disabled");
+  assert(hermes["gateway_real_dispatch_gateway_integration_wired_to_gateway"] === true, "hermes dispatch gateway sidecar wired gateway");
+  assert(hermes["gateway_real_dispatch_gateway_integration_wired_to_runtime"] === false, "hermes dispatch gateway sidecar not wired runtime");
+  assert(hermes["gateway_real_dispatch_gateway_integration_field"] === "hermes_gateway_real_dispatch", "hermes dispatch gateway sidecar field");
+  assert(hermes["gateway_real_dispatch_gateway_integration_omit_when_disabled"] === true, "hermes dispatch gateway sidecar omit");
+  assert(hermes["gateway_real_dispatch_gateway_integration_never_undefined_key"] === true, "hermes dispatch gateway sidecar no undefined");
+  const hgSidecarSupported = hermes["gateway_real_dispatch_gateway_integration_supported_request_types"] as string[];
+  assert(Array.isArray(hgSidecarSupported) && hgSidecarSupported.includes("review") && hgSidecarSupported.includes("code_review") && hgSidecarSupported.includes("validation"), "hermes dispatch gateway sidecar supported");
+  const hgSidecarUnsupported = hermes["gateway_real_dispatch_gateway_integration_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgSidecarUnsupported) && hgSidecarUnsupported.includes("llm_task") && hgSidecarUnsupported.includes("code_generation") && hgSidecarUnsupported.includes("bugfix"), "hermes dispatch gateway sidecar unsupported");
+  assert(hermes["gateway_real_dispatch_gateway_integration_changes_gateway_primary_dispatch"] === false, "hermes dispatch gateway sidecar no primary dispatch");
+  assert(hermes["gateway_real_dispatch_gateway_integration_changes_gateway_final_result"] === false, "hermes dispatch gateway sidecar no final result");
+  assert(hermes["gateway_real_dispatch_gateway_integration_changes_final_status"] === false, "hermes dispatch gateway sidecar no final status");
+  assert(hermes["gateway_real_dispatch_gateway_integration_changes_routing"] === false, "hermes dispatch gateway sidecar no routing");
+  assert(hermes["gateway_real_dispatch_gateway_integration_affects_primary_gateway_result"] === false, "hermes dispatch gateway sidecar no primary effect");
+  assert(hermes["gateway_real_dispatch_gateway_integration_writes_files"] === false, "hermes dispatch gateway sidecar no files");
+  assert(hermes["gateway_real_dispatch_gateway_integration_persists_audit"] === false, "hermes dispatch gateway sidecar no persist");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contains_raw_prompt"] === false, "hermes dispatch gateway sidecar no raw prompt");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contains_raw_artifacts"] === false, "hermes dispatch gateway sidecar no raw artifacts");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contains_secrets"] === false, "hermes dispatch gateway sidecar no secrets");
+  assert(hermes["gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests"] === true, "hermes dispatch gateway sidecar fake dispatcher");
+  assert(hermesEvidence.includes("execution/gateway.ts"), "hermes evidence Gateway sidecar");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes evidence Gateway sidecar test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

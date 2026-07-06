@@ -5,6 +5,7 @@
 // No target repository write operations.
 
 import { Artifact } from "../core/artifact";
+import type { HermesGatewayRealDispatchResult } from "./hermes-gateway-real-dispatch";
 
 export type AgentName = "kimi" | "codex" | "hermes";
 
@@ -50,4 +51,5 @@ export type ExecutionResult = Readonly<{
   output: Record<string, unknown>;
   artifacts: ReadonlyArray<ExecutionArtifact>;
   error?: string;
+  hermes_gateway_real_dispatch?: HermesGatewayRealDispatchResult;
 }>;

@@ -410,6 +410,28 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_prompt"] === false, "hermes dispatch gateway integration no raw prompt");
   assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_artifacts"] === false, "hermes dispatch gateway integration no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_secrets"] === false, "hermes dispatch gateway integration no secrets");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration"] === "implemented_feature_flagged_sidecar_metadata", "hermes dispatch gateway sidecar integration");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_default_enabled"] === false, "hermes dispatch gateway sidecar default disabled");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_wired_to_gateway"] === true, "hermes dispatch gateway sidecar wired gateway");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_wired_to_runtime"] === false, "hermes dispatch gateway sidecar not wired runtime");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_field"] === "hermes_gateway_real_dispatch", "hermes dispatch gateway sidecar field");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_omit_when_disabled"] === true, "hermes dispatch gateway sidecar omit");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_never_undefined_key"] === true, "hermes dispatch gateway sidecar no undefined");
+  const hgiSupported = realAdapters["hermes_gateway_real_dispatch_gateway_integration_supported_request_types"] as string[];
+  assert(Array.isArray(hgiSupported) && hgiSupported.includes("review") && hgiSupported.includes("code_review") && hgiSupported.includes("validation"), "hermes dispatch gateway sidecar supported");
+  const hgiUnsupported = realAdapters["hermes_gateway_real_dispatch_gateway_integration_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgiUnsupported) && hgiUnsupported.includes("llm_task") && hgiUnsupported.includes("code_generation") && hgiUnsupported.includes("bugfix"), "hermes dispatch gateway sidecar unsupported");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_changes_gateway_primary_dispatch"] === false, "hermes dispatch gateway sidecar no primary dispatch");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_changes_gateway_final_result"] === false, "hermes dispatch gateway sidecar no final result");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_changes_final_status"] === false, "hermes dispatch gateway sidecar no final status");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_changes_routing"] === false, "hermes dispatch gateway sidecar no routing");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_affects_primary_gateway_result"] === false, "hermes dispatch gateway sidecar no primary effect");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_writes_files"] === false, "hermes dispatch gateway sidecar no files");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_persists_audit"] === false, "hermes dispatch gateway sidecar no persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contains_raw_prompt"] === false, "hermes dispatch gateway sidecar no raw prompt");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contains_raw_artifacts"] === false, "hermes dispatch gateway sidecar no raw artifacts");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contains_secrets"] === false, "hermes dispatch gateway sidecar no secrets");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests"] === true, "hermes dispatch gateway sidecar fake dispatcher");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
