@@ -218,7 +218,11 @@
         "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
         "tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
-        "hermes-gateway-real-dispatch-rollout-validation-checklist.json"
+        "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+        "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
+        "tests/hermes-gateway-real-dispatch-operator-runbook.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+        "hermes-gateway-real-dispatch-operator-runbook.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -692,7 +696,59 @@
       "gateway_real_dispatch_rollout_validation_checklist_operator_approval_required": true,
       "gateway_real_dispatch_rollout_validation_checklist_rollout_may_proceed_automatically": false,
       "gateway_real_dispatch_rollout_validation_checklist_automatic_enablement_allowed": false,
-      "gateway_real_dispatch_rollout_validation_checklist_recommended_next_pr": "Hermes Gateway Real Dispatch Operator Runbook"
+      "gateway_real_dispatch_rollout_validation_checklist_recommended_next_pr": "Hermes Gateway Real Dispatch Operator Runbook",
+      "gateway_real_dispatch_operator_runbook": "implemented_runbook_only",
+      "gateway_real_dispatch_operator_runbook_status": "runbook_only",
+      "gateway_real_dispatch_operator_runbook_executing_now": false,
+      "gateway_real_dispatch_operator_runbook_enables_feature_flags_now": false,
+      "gateway_real_dispatch_operator_runbook_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_operator_runbook_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_operator_runbook_adds_enablement_scripts": false,
+      "gateway_real_dispatch_operator_runbook_changes_ci_behavior": false,
+      "gateway_real_dispatch_operator_runbook_readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_operator_runbook_rollout_plan_status_required": "plan_only",
+      "gateway_real_dispatch_operator_runbook_rollout_validation_checklist_status_required": "checklist_only",
+      "gateway_real_dispatch_operator_runbook_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_operator_runbook_current_rollout_plan_status": "plan_only",
+      "gateway_real_dispatch_operator_runbook_current_rollout_validation_checklist_status": "checklist_only",
+      "gateway_real_dispatch_operator_runbook_default_disabled": true,
+      "gateway_real_dispatch_operator_runbook_feature_flagged": true,
+      "gateway_real_dispatch_operator_runbook_requires_multiple_flags": true,
+      "gateway_real_dispatch_operator_runbook_initial_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_operator_runbook_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_operator_runbook_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_operator_runbook_operator_approval_required": true,
+      "gateway_real_dispatch_operator_runbook_rollout_may_proceed_automatically": false,
+      "gateway_real_dispatch_operator_runbook_automatic_enablement_allowed": false,
+      "gateway_real_dispatch_operator_runbook_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_operator_runbook_changes_gateway_final_result": false,
+      "gateway_real_dispatch_operator_runbook_changes_final_status": false,
+      "gateway_real_dispatch_operator_runbook_changes_routing": false,
+      "gateway_real_dispatch_operator_runbook_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_operator_runbook_makes_hermes_default": false,
+      "gateway_real_dispatch_operator_runbook_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_operator_runbook_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_operator_runbook_writes_files": false,
+      "gateway_real_dispatch_operator_runbook_persists_runbook_logs": false,
+      "gateway_real_dispatch_operator_runbook_persists_validation_logs": false,
+      "gateway_real_dispatch_operator_runbook_persists_rollout_logs": false,
+      "gateway_real_dispatch_operator_runbook_persists_audit": false,
+      "gateway_real_dispatch_operator_runbook_persists_observability": false,
+      "gateway_real_dispatch_operator_runbook_persists_guardrails": false,
+      "gateway_real_dispatch_operator_runbook_contains_raw_prompt": false,
+      "gateway_real_dispatch_operator_runbook_contains_raw_artifacts": false,
+      "gateway_real_dispatch_operator_runbook_contains_secrets": false,
+      "gateway_real_dispatch_operator_runbook_recommended_next_pr": "Hermes Gateway Real Dispatch Post-Enablement Review Template"
     }
   ],
   "request_types": [
@@ -912,8 +968,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Operator Runbook",
-    "reason": "Hermes Gateway real dispatch has a non-executing rollout validation checklist with operator approval required before enablement.",
-    "safety_rationale": "Runbook remains non-executing and documents operator-managed enablement/rollback without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
+    "reason": "Hermes Gateway real dispatch has a runbook-only operator guide for manual enablement and rollback.",
+    "safety_rationale": "Template remains non-executing and documents post-enable review criteria without changing defaults."
   }
 }

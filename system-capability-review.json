@@ -1166,6 +1166,67 @@
         "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
         "hermes-gateway-real-dispatch-rollout-validation-checklist.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Operator Runbook",
+      "status": "implemented_runbook_only",
+      "runbook_only": true,
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "adds_enablement_scripts": false,
+      "changes_ci_behavior": false,
+      "readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "rollout_plan_status_required": "plan_only",
+      "rollout_validation_checklist_status_required": "checklist_only",
+      "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "current_rollout_plan_status": "plan_only",
+      "current_rollout_validation_checklist_status": "checklist_only",
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "initial_request_types": [
+        "review"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "operator_approval_required": true,
+      "rollout_may_proceed_automatically": false,
+      "automatic_enablement_allowed": false,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_runbook_logs": false,
+      "persists_validation_logs": false,
+      "persists_rollout_logs": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
+        "tests/hermes-gateway-real-dispatch-operator-runbook.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+        "hermes-gateway-real-dispatch-operator-runbook.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -1367,9 +1428,9 @@
     {
       "risk": "Real adapter boundary is underdeveloped",
       "severity": "medium",
-      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, operational guardrails, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, and a checklist-only rollout validation gate; it still does not own Gateway primary result or Runtime final_status/routing.",
-      "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch sidecar stack is readiness-reviewed with a non-executing controlled rollout plan and checklist-only rollout validation. Next: operator runbook before any manual enablement.",
-      "recommended_pr_stage": "Hermes Gateway Real Dispatch Operator Runbook"
+      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, operational guardrails, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, checklist-only rollout validation, and a runbook-only operator guide; it still does not own Gateway primary result or Runtime final_status/routing.",
+      "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch sidecar stack is readiness-reviewed with a non-executing controlled rollout plan, checklist-only rollout validation, and runbook-only operator guidance. Next: post-enablement review template.",
+      "recommended_pr_stage": "Hermes Gateway Real Dispatch Post-Enablement Review Template"
     },
     {
       "risk": "Codex adapter supports only code_generation",
@@ -1387,8 +1448,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Operator Runbook",
-    "reason": "Hermes Gateway real dispatch has a checklist-only rollout validation gate with operator approval required.",
-    "safety_rationale": "Runbook remains non-executing and documents operator-managed enablement/rollback without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
+    "reason": "Hermes Gateway real dispatch has a runbook-only operator guide for manual enablement and rollback.",
+    "safety_rationale": "Template remains non-executing and documents post-enable review criteria without changing defaults."
   }
 }

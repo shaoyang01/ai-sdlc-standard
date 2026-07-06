@@ -577,6 +577,55 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts"), "hermes evidence validation checklist test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md"), "hermes evidence validation checklist md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-rollout-validation-checklist.json"), "hermes evidence validation checklist json");
+  assert(hermes["gateway_real_dispatch_operator_runbook"] === "implemented_runbook_only", "hermes dispatch operator runbook");
+  assert(hermes["gateway_real_dispatch_operator_runbook_status"] === "runbook_only", "hermes dispatch operator status");
+  assert(hermes["gateway_real_dispatch_operator_runbook_executing_now"] === false, "hermes dispatch operator not executing");
+  assert(hermes["gateway_real_dispatch_operator_runbook_enables_feature_flags_now"] === false, "hermes dispatch operator no flags");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_runtime_behavior_now"] === false, "hermes dispatch operator no runtime behavior");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_gateway_behavior_now"] === false, "hermes dispatch operator no gateway behavior");
+  assert(hermes["gateway_real_dispatch_operator_runbook_adds_enablement_scripts"] === false, "hermes dispatch operator no scripts");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_ci_behavior"] === false, "hermes dispatch operator no CI");
+  assert(hermes["gateway_real_dispatch_operator_runbook_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch operator required verdict");
+  assert(hermes["gateway_real_dispatch_operator_runbook_rollout_plan_status_required"] === "plan_only", "hermes dispatch operator required rollout plan");
+  assert(hermes["gateway_real_dispatch_operator_runbook_rollout_validation_checklist_status_required"] === "checklist_only", "hermes dispatch operator required checklist");
+  assert(hermes["gateway_real_dispatch_operator_runbook_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch operator current verdict");
+  assert(hermes["gateway_real_dispatch_operator_runbook_current_rollout_plan_status"] === "plan_only", "hermes dispatch operator current rollout plan");
+  assert(hermes["gateway_real_dispatch_operator_runbook_current_rollout_validation_checklist_status"] === "checklist_only", "hermes dispatch operator current checklist");
+  assert(hermes["gateway_real_dispatch_operator_runbook_default_disabled"] === true, "hermes dispatch operator default disabled");
+  assert(hermes["gateway_real_dispatch_operator_runbook_feature_flagged"] === true, "hermes dispatch operator feature flagged");
+  assert(hermes["gateway_real_dispatch_operator_runbook_requires_multiple_flags"] === true, "hermes dispatch operator multiple flags");
+  const hRunbookInitial = hermes["gateway_real_dispatch_operator_runbook_initial_request_types"] as string[];
+  assert(Array.isArray(hRunbookInitial) && hRunbookInitial.length === 1 && hRunbookInitial[0] === "review", "hermes dispatch operator initial review");
+  const hRunbookSupported = hermes["gateway_real_dispatch_operator_runbook_supported_request_types"] as string[];
+  assert(Array.isArray(hRunbookSupported) && hRunbookSupported.includes("review") && hRunbookSupported.includes("code_review") && hRunbookSupported.includes("validation"), "hermes dispatch operator supported");
+  const hRunbookUnsupported = hermes["gateway_real_dispatch_operator_runbook_unsupported_request_types"] as string[];
+  assert(Array.isArray(hRunbookUnsupported) && hRunbookUnsupported.includes("llm_task") && hRunbookUnsupported.includes("code_generation") && hRunbookUnsupported.includes("bugfix"), "hermes dispatch operator unsupported");
+  assert(hermes["gateway_real_dispatch_operator_runbook_operator_approval_required"] === true, "hermes dispatch operator approval");
+  assert(hermes["gateway_real_dispatch_operator_runbook_rollout_may_proceed_automatically"] === false, "hermes dispatch operator no automatic rollout");
+  assert(hermes["gateway_real_dispatch_operator_runbook_automatic_enablement_allowed"] === false, "hermes dispatch operator no automatic enablement");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_gateway_primary_dispatch"] === false, "hermes dispatch operator no primary dispatch");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_gateway_final_result"] === false, "hermes dispatch operator no gateway final");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_final_status"] === false, "hermes dispatch operator no final status");
+  assert(hermes["gateway_real_dispatch_operator_runbook_changes_routing"] === false, "hermes dispatch operator no routing");
+  assert(hermes["gateway_real_dispatch_operator_runbook_affects_primary_gateway_result"] === false, "hermes dispatch operator no primary effect");
+  assert(hermes["gateway_real_dispatch_operator_runbook_makes_hermes_default"] === false, "hermes dispatch operator not default");
+  assert(hermes["gateway_real_dispatch_operator_runbook_makes_hermes_final_review_owner"] === false, "hermes dispatch operator not review owner");
+  assert(hermes["gateway_real_dispatch_operator_runbook_makes_hermes_final_validation_owner"] === false, "hermes dispatch operator not validation owner");
+  assert(hermes["gateway_real_dispatch_operator_runbook_writes_files"] === false, "hermes dispatch operator no files");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_runbook_logs"] === false, "hermes dispatch operator no runbook logs");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_validation_logs"] === false, "hermes dispatch operator no validation logs");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_rollout_logs"] === false, "hermes dispatch operator no rollout logs");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_audit"] === false, "hermes dispatch operator no audit persist");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_observability"] === false, "hermes dispatch operator no observability persist");
+  assert(hermes["gateway_real_dispatch_operator_runbook_persists_guardrails"] === false, "hermes dispatch operator no guardrail persist");
+  assert(hermes["gateway_real_dispatch_operator_runbook_contains_raw_prompt"] === false, "hermes dispatch operator no raw prompt");
+  assert(hermes["gateway_real_dispatch_operator_runbook_contains_raw_artifacts"] === false, "hermes dispatch operator no raw artifacts");
+  assert(hermes["gateway_real_dispatch_operator_runbook_contains_secrets"] === false, "hermes dispatch operator no secrets");
+  assert(hermes["gateway_real_dispatch_operator_runbook_recommended_next_pr"] === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "hermes dispatch operator next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-operator-runbook.ts"), "hermes evidence operator runbook module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-operator-runbook.test.ts"), "hermes evidence operator runbook test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md"), "hermes evidence operator runbook md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-operator-runbook.json"), "hermes evidence operator runbook json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -649,7 +698,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operator Runbook", "next PR operator runbook");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "next PR post-enablement review template");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

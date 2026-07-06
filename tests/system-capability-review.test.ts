@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operator Runbook", "next PR Hermes operator runbook");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "next PR Hermes post-enablement template");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operator Runbook", "next PR Hermes operator runbook");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "next PR Hermes post-enablement template");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -810,8 +810,61 @@ async function test() {
   assert(hgChecklistEv.includes("tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts"), "hermes gateway validation checklist evidence test");
   assert(hgChecklistEv.includes("HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md"), "hermes gateway validation checklist evidence md");
   assert(hgChecklistEv.includes("hermes-gateway-real-dispatch-rollout-validation-checklist.json"), "hermes gateway validation checklist evidence json");
+  // Hermes Gateway Real Dispatch Operator Runbook
+  assert(capNames.includes("Hermes Gateway Real Dispatch Operator Runbook"), "has Hermes Gateway operator runbook");
+  const hgRunbookCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Operator Runbook");
+  assert(hgRunbookCap !== undefined && hgRunbookCap["status"] === "implemented_runbook_only", "hermes gateway operator runbook status");
+  assert(hgRunbookCap["runbook_only"] === true, "hermes gateway operator runbook only");
+  assert(hgRunbookCap["executing_now"] === false, "hermes gateway operator runbook not executing");
+  assert(hgRunbookCap["enables_feature_flags_now"] === false, "hermes gateway operator runbook no flags");
+  assert(hgRunbookCap["changes_runtime_behavior_now"] === false, "hermes gateway operator runbook no runtime behavior");
+  assert(hgRunbookCap["changes_gateway_behavior_now"] === false, "hermes gateway operator runbook no gateway behavior");
+  assert(hgRunbookCap["adds_enablement_scripts"] === false, "hermes gateway operator runbook no scripts");
+  assert(hgRunbookCap["changes_ci_behavior"] === false, "hermes gateway operator runbook no CI");
+  assert(hgRunbookCap["readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes gateway operator runbook required verdict");
+  assert(hgRunbookCap["rollout_plan_status_required"] === "plan_only", "hermes gateway operator runbook required rollout plan");
+  assert(hgRunbookCap["rollout_validation_checklist_status_required"] === "checklist_only", "hermes gateway operator runbook required checklist");
+  assert(hgRunbookCap["current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes gateway operator runbook current verdict");
+  assert(hgRunbookCap["current_rollout_plan_status"] === "plan_only", "hermes gateway operator runbook current rollout plan");
+  assert(hgRunbookCap["current_rollout_validation_checklist_status"] === "checklist_only", "hermes gateway operator runbook current checklist");
+  assert(hgRunbookCap["default_disabled"] === true, "hermes gateway operator runbook default disabled");
+  assert(hgRunbookCap["feature_flagged"] === true, "hermes gateway operator runbook feature flagged");
+  assert(hgRunbookCap["requires_multiple_flags"] === true, "hermes gateway operator runbook multiple flags");
+  const hgRunbookInitial = hgRunbookCap["initial_request_types"] as string[];
+  assert(Array.isArray(hgRunbookInitial) && hgRunbookInitial.length === 1 && hgRunbookInitial[0] === "review", "hermes gateway operator runbook initial review only");
+  const hgRunbookSup = hgRunbookCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgRunbookSup) && hgRunbookSup.includes("review") && hgRunbookSup.includes("code_review") && hgRunbookSup.includes("validation"), "hermes gateway operator runbook supported");
+  const hgRunbookUnsup = hgRunbookCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(hgRunbookUnsup) && hgRunbookUnsup.includes("llm_task") && hgRunbookUnsup.includes("code_generation") && hgRunbookUnsup.includes("bugfix"), "hermes gateway operator runbook unsupported");
+  assert(hgRunbookCap["operator_approval_required"] === true, "hermes gateway operator runbook operator approval");
+  assert(hgRunbookCap["rollout_may_proceed_automatically"] === false, "hermes gateway operator runbook no automatic rollout");
+  assert(hgRunbookCap["automatic_enablement_allowed"] === false, "hermes gateway operator runbook no automatic enablement");
+  assert(hgRunbookCap["changes_gateway_primary_dispatch"] === false, "hermes gateway operator runbook no primary dispatch");
+  assert(hgRunbookCap["changes_gateway_final_result"] === false, "hermes gateway operator runbook no gateway final");
+  assert(hgRunbookCap["changes_final_status"] === false, "hermes gateway operator runbook no final status");
+  assert(hgRunbookCap["changes_routing"] === false, "hermes gateway operator runbook no routing");
+  assert(hgRunbookCap["affects_primary_gateway_result"] === false, "hermes gateway operator runbook no primary effect");
+  assert(hgRunbookCap["makes_hermes_default"] === false, "hermes gateway operator runbook not default");
+  assert(hgRunbookCap["makes_hermes_final_review_owner"] === false, "hermes gateway operator runbook not review owner");
+  assert(hgRunbookCap["makes_hermes_final_validation_owner"] === false, "hermes gateway operator runbook not validation owner");
+  assert(hgRunbookCap["writes_files"] === false, "hermes gateway operator runbook no files");
+  assert(hgRunbookCap["persists_runbook_logs"] === false, "hermes gateway operator runbook no runbook logs");
+  assert(hgRunbookCap["persists_validation_logs"] === false, "hermes gateway operator runbook no validation logs");
+  assert(hgRunbookCap["persists_rollout_logs"] === false, "hermes gateway operator runbook no rollout logs");
+  assert(hgRunbookCap["persists_audit"] === false, "hermes gateway operator runbook no audit persist");
+  assert(hgRunbookCap["persists_observability"] === false, "hermes gateway operator runbook no observability persist");
+  assert(hgRunbookCap["persists_guardrails"] === false, "hermes gateway operator runbook no guardrail persist");
+  assert(hgRunbookCap["contains_raw_prompt"] === false, "hermes gateway operator runbook no raw prompt");
+  assert(hgRunbookCap["contains_raw_artifacts"] === false, "hermes gateway operator runbook no raw artifacts");
+  assert(hgRunbookCap["contains_secrets"] === false, "hermes gateway operator runbook no secrets");
+  assert(hgRunbookCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "hermes gateway operator runbook next PR");
+  const hgRunbookEv = hgRunbookCap["evidence"] as string[];
+  assert(hgRunbookEv.includes("execution/hermes-gateway-real-dispatch-operator-runbook.ts"), "hermes gateway operator runbook evidence module");
+  assert(hgRunbookEv.includes("tests/hermes-gateway-real-dispatch-operator-runbook.test.ts"), "hermes gateway operator runbook evidence test");
+  assert(hgRunbookEv.includes("HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md"), "hermes gateway operator runbook evidence md");
+  assert(hgRunbookEv.includes("hermes-gateway-real-dispatch-operator-runbook.json"), "hermes gateway operator runbook evidence json");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operator Runbook", "next PR Hermes operator runbook");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Post-Enablement Review Template", "next PR Hermes post-enablement template");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
