@@ -249,9 +249,12 @@ async function test() {
   const md = fs.readFileSync("SYSTEM_CAPABILITY_REVIEW.md", "utf-8");
   assert(!md.includes("Kimi/Hermes are shadow-only"), "MD: no stale shadow-only claim");
   assert(!md.includes("only CLI contract stubs exist"), "MD: no stale 'only CLI stubs' claim");
-  assert(md.includes("isolated feature-flagged command executor"), "MD: mentions Kimi command executor");
-  assert(md.includes("Gateway integration contract"), "MD: mentions Gateway contract");
-  assert(md.includes("not wired to runtime"), "MD: mentions not wired to runtime");
+  assert(!md.includes("not wired to runtime or ExecutionGateway"), "MD: no stale 'not wired' claim");
+  assert(!md.includes("no real Kimi execution is reachable through runtime/Gateway"), "MD: no stale 'no real Kimi' claim");
+  assert(md.includes("feature-flagged Gateway real dispatch"), "MD: mentions Gateway real dispatch");
+  assert(md.includes("default-off, Gateway-controlled"), "MD: mentions default-off Gateway-controlled");
+  assert(md.includes("fallback policy, observability, and operational guardrails"), "MD: mentions fallback/observability/guardrails");
+  assert(md.includes("does not change Runtime"), "MD: mentions no Runtime change");
   console.log("");
 
   // ── Test 5: Safety boundaries ──
