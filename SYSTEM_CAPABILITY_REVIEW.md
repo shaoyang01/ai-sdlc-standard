@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Feature-flagged Hermes Runtime Shadow Attachment Runtime Integration**
+**Recommended: Hermes Runtime Shadow Attachment Audit Metadata**
 
-Hermes now has a full stack including wiring contract. The next step is feature-flagged runtime integration (sidecar-only, in-memory, disabled by default).
+Hermes runtime integration is wired into RuntimeResult behind a feature flag. The next step is a lightweight in-memory audit trail.
 
 ---
 

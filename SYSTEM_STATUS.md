@@ -139,5 +139,6 @@ All evolution proposals have `applied: false` and require human review.
 14. **Hermes Runtime Shadow Attachment Contract** — ✅ Done (contract-only; defines safe runtime attachment rules; not wired to Runtime)
 15. **Feature-flagged Hermes Runtime Shadow Attachment** — ✅ Done (standalone helper; default disabled; not wired to runtime.ts)
 16. **Hermes Runtime Shadow Attachment Wiring Contract** — ✅ Done (contract-only; field name defined; omit when disabled; no undefined key)
-17. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-18. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+17. **Feature-flagged Hermes Runtime Shadow Attachment Runtime Integration** — ✅ Done (feature-flagged in runtime.ts; optional sidecar field; omit when disabled; no final_status/routing change)
+18. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+19. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

@@ -649,6 +649,26 @@
         "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
         "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Runtime Shadow Attachment Runtime Integration",
+      "status": "implemented_feature_flagged_runtime_sidecar",
+      "runtime_active_by_default": false,
+      "wired_to_runtime": true,
+      "requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+      "runtime_field": "hermes_runtime_shadow_attachment",
+      "omit_when_disabled": true,
+      "never_undefined_key": true,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "uses_fake_builder_in_tests": true,
+      "evidence": [
+        "runtime.ts",
+        "tests/runtime-hermes-shadow-attachment.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -870,8 +890,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Feature-flagged Hermes Runtime Shadow Attachment Runtime Integration",
-    "reason": "Hermes wiring contract defines safe attachment rules. The next step is feature-flagged runtime integration.",
-    "safety_rationale": "Integration must be feature-flagged, in-memory, and sidecar-only."
+    "title": "Hermes Runtime Shadow Attachment Audit Metadata",
+    "reason": "Hermes runtime integration is wired. A lightweight in-memory audit trail should follow.",
+    "safety_rationale": "Audit metadata is in-memory only; no persistence, no routing change."
   }
 }

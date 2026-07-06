@@ -33,6 +33,8 @@ import { decideSkillFlowRuntimeIntegration } from "./core/skill-flow-runtime-int
 import type { SkillFlowRuntimeIntegrationResult } from "./core/skill-flow-runtime-integration-types";
 import { buildOptionalKimiRuntimeShadowAttachment } from "./core/kimi-runtime-shadow-attachment";
 import type { KimiRuntimeShadowAttachment } from "./execution/kimi-runtime-attachment-contract";
+import { buildHermesRuntimeShadowAttachmentFromRequest } from "./core/hermes-runtime-shadow-attachment";
+import type { HermesRuntimeShadowAttachmentBuildResult } from "./core/hermes-runtime-shadow-attachment";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -66,6 +68,7 @@ interface RuntimeResult {
   completed_at: string;
   skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
   kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
+  hermes_runtime_shadow_attachment?: HermesRuntimeShadowAttachmentBuildResult;
 }
 
 interface RequirementSummary {
@@ -507,6 +510,22 @@ export async function run(requirement: string): Promise<RuntimeResult> {
     console.warn("Kimi runtime shadow attachment failed:", error);
   }
 
+  // ─── Optional Hermes Runtime Shadow Attachment (disabled by default) ──
+  let hermesRuntimeShadowAttachment: HermesRuntimeShadowAttachmentBuildResult | undefined;
+  try {
+    hermesRuntimeShadowAttachment = await buildHermesRuntimeShadowAttachmentFromRequest({
+      request: {
+        type: "validation",
+        node: "validation",
+        agent: "hermes",
+        requirementId,
+        input: { requirement },
+      },
+    });
+  } catch (error) {
+    console.warn("Hermes runtime shadow attachment failed:", error);
+  }
+
   return {
     requirement_id: requirementId,
     execution_trace: trace,
@@ -520,6 +539,9 @@ export async function run(requirement: string): Promise<RuntimeResult> {
       : {}),
     ...(kimiRuntimeShadowAttachment
       ? { kimi_runtime_shadow_attachment: kimiRuntimeShadowAttachment }
+      : {}),
+    ...(hermesRuntimeShadowAttachment
+      ? { hermes_runtime_shadow_attachment: hermesRuntimeShadowAttachment }
       : {}),
   };
 }

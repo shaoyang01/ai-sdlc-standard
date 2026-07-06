@@ -180,7 +180,9 @@
         "core/hermes-runtime-shadow-attachment.ts",
         "tests/hermes-runtime-shadow-attachment.test.ts",
         "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
-        "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"
+        "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts",
+        "runtime.ts",
+        "tests/runtime-hermes-shadow-attachment.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -262,7 +264,20 @@
       "runtime_shadow_attachment_wiring_contract_changes_routing": false,
       "runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result": false,
       "runtime_shadow_attachment_wiring_contract_writes_files": false,
-      "runtime_shadow_attachment_wiring_contract_persists_audit": false
+      "runtime_shadow_attachment_wiring_contract_persists_audit": false,
+      "runtime_shadow_attachment_runtime_integration": "implemented_feature_flagged_runtime_sidecar",
+      "runtime_shadow_attachment_runtime_integration_default_enabled": false,
+      "runtime_shadow_attachment_runtime_integration_wired_to_runtime": true,
+      "runtime_shadow_attachment_runtime_integration_field": "hermes_runtime_shadow_attachment",
+      "runtime_shadow_attachment_runtime_integration_omit_when_disabled": true,
+      "runtime_shadow_attachment_runtime_integration_never_undefined_key": true,
+      "runtime_shadow_attachment_runtime_integration_changes_final_status": false,
+      "runtime_shadow_attachment_runtime_integration_changes_routing": false,
+      "runtime_shadow_attachment_runtime_integration_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_runtime_integration_writes_files": false,
+      "runtime_shadow_attachment_runtime_integration_persists_audit": false,
+      "runtime_shadow_attachment_runtime_integration_uses_fake_builder_in_tests": true,
+      "runtime_shadow_attachment_runtime_integration_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled"
     }
   ],
   "request_types": [

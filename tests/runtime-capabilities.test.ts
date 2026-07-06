@@ -306,6 +306,19 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result"] === false, "hermes wiring no primary");
   assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_writes_files"] === false, "hermes wiring no files");
   assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_persists_audit"] === false, "hermes wiring no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration"] === "implemented_feature_flagged_runtime_sidecar", "hermes runtime integration");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_default_enabled"] === false, "hermes runtime int default disabled");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_wired_to_runtime"] === true, "hermes runtime int wired");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_field"] === "hermes_runtime_shadow_attachment", "hermes runtime int field");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_omit_when_disabled"] === true, "hermes runtime int omit");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_never_undefined_key"] === true, "hermes runtime int no undefined");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_changes_final_status"] === false, "hermes runtime int no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_changes_routing"] === false, "hermes runtime int no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_affects_primary_gateway_result"] === false, "hermes runtime int no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_writes_files"] === false, "hermes runtime int no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_persists_audit"] === false, "hermes runtime int no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_uses_fake_builder_in_tests"] === true, "hermes runtime int fake builder");
+  assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime int flag");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

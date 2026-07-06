@@ -240,6 +240,21 @@ async function test() {
   assert(hermes["runtime_shadow_attachment_wiring_contract_persists_audit"] === false, "hermes wiring no persist");
   assert(hermesEvidence.includes("core/hermes-runtime-shadow-attachment-wiring-contract.ts"), "hermes evidence wiring contract");
   assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"), "hermes evidence wiring test");
+  assert(hermes["runtime_shadow_attachment_runtime_integration"] === "implemented_feature_flagged_runtime_sidecar", "hermes runtime int");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_default_enabled"] === false, "hermes runtime int default disabled");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_wired_to_runtime"] === true, "hermes runtime int wired");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_field"] === "hermes_runtime_shadow_attachment", "hermes runtime int field");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_omit_when_disabled"] === true, "hermes runtime int omit");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_never_undefined_key"] === true, "hermes runtime int no undefined");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_changes_final_status"] === false, "hermes runtime int no final status");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_changes_routing"] === false, "hermes runtime int no routing");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_affects_primary_gateway_result"] === false, "hermes runtime int no primary");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_writes_files"] === false, "hermes runtime int no files");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_persists_audit"] === false, "hermes runtime int no persist");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_uses_fake_builder_in_tests"] === true, "hermes runtime int fake builder");
+  assert(hermes["runtime_shadow_attachment_runtime_integration_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime int flag");
+  assert(hermesEvidence.includes("runtime.ts"), "hermes evidence runtime");
+  assert(hermesEvidence.includes("tests/runtime-hermes-shadow-attachment.test.ts"), "hermes evidence runtime test");
   console.log("");
 
   // ── Test 3: Request type alignment ──
