@@ -202,10 +202,11 @@ async function test() {
   }
   console.log("");
 
-  // Test 12: Standalone helper does not attach fallback policy
-  console.log("Test 12: Standalone helper does not attach fallback policy");
+  // Test 12: Standalone helper does not attach Gateway-only sidecar metadata
+  console.log("Test 12: Standalone helper does not attach Gateway-only sidecar metadata");
   for (const r of [r1, r2, r3, r5, r6, r7, r8, r9, rThrow]) {
     assert(r.fallbackPolicy === undefined, `${r.status}: no standalone fallback policy`);
+    assert(r.observability === undefined, `${r.status}: no standalone observability`);
   }
   console.log("");
 

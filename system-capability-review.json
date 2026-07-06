@@ -942,6 +942,36 @@
         "execution/gateway.ts",
         "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Observability",
+      "status": "implemented_sidecar_metadata",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": true,
+      "wired_to_runtime": false,
+      "field": "observability",
+      "top_level_field": false,
+      "preserves_gateway_primary_result": true,
+      "preserves_gateway_final_result": true,
+      "preserves_runtime_final_status": true,
+      "preserves_runtime_routing": true,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_observability": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-observability.ts",
+        "tests/hermes-gateway-real-dispatch-observability.test.ts",
+        "execution/gateway.ts",
+        "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -1163,8 +1193,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Observability",
-    "reason": "Hermes Gateway real dispatch now has explicit sidecar fallback policy. The next PR should add structured sanitized observability for sidecar outcomes without persisting audit logs.",
-    "safety_rationale": "Observability changes must keep Hermes sidecar-only, default-off, and unable to affect Runtime final_status or routing."
+    "title": "Hermes Gateway Real Dispatch Operational Guardrails",
+    "reason": "Hermes Gateway real dispatch now has explicit fallback policy and sanitized sidecar observability. The next PR should add operational guardrails without changing Gateway primary/final result or Runtime final_status/routing.",
+    "safety_rationale": "Operational guardrails must keep Hermes sidecar-only, default-off, request-type bounded, sanitized, and non-persistent."
   }
 }

@@ -402,6 +402,29 @@ async function test() {
   assert(hermes["gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests"] === true, "hermes dispatch fallback fake dispatcher");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-fallback-policy.ts"), "hermes evidence fallback policy");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-fallback-policy.test.ts"), "hermes evidence fallback policy test");
+  assert(hermes["gateway_real_dispatch_observability"] === "implemented_sidecar_metadata", "hermes dispatch observability");
+  assert(hermes["gateway_real_dispatch_observability_default_enabled"] === false, "hermes dispatch observability default disabled");
+  assert(hermes["gateway_real_dispatch_observability_wired_to_gateway"] === true, "hermes dispatch observability wired gateway");
+  assert(hermes["gateway_real_dispatch_observability_wired_to_runtime"] === false, "hermes dispatch observability not wired runtime");
+  assert(hermes["gateway_real_dispatch_observability_field"] === "observability", "hermes dispatch observability field");
+  assert(hermes["gateway_real_dispatch_observability_top_level_field"] === false, "hermes dispatch observability no top-level field");
+  assert(hermes["gateway_real_dispatch_observability_preserves_gateway_primary_result"] === true, "hermes dispatch observability preserves primary");
+  assert(hermes["gateway_real_dispatch_observability_preserves_gateway_final_result"] === true, "hermes dispatch observability preserves gateway final");
+  assert(hermes["gateway_real_dispatch_observability_preserves_runtime_final_status"] === true, "hermes dispatch observability preserves runtime final status");
+  assert(hermes["gateway_real_dispatch_observability_preserves_runtime_routing"] === true, "hermes dispatch observability preserves runtime routing");
+  assert(hermes["gateway_real_dispatch_observability_changes_gateway_primary_dispatch"] === false, "hermes dispatch observability no primary dispatch");
+  assert(hermes["gateway_real_dispatch_observability_changes_gateway_final_result"] === false, "hermes dispatch observability no gateway final result");
+  assert(hermes["gateway_real_dispatch_observability_changes_final_status"] === false, "hermes dispatch observability no final status");
+  assert(hermes["gateway_real_dispatch_observability_changes_routing"] === false, "hermes dispatch observability no routing");
+  assert(hermes["gateway_real_dispatch_observability_affects_primary_gateway_result"] === false, "hermes dispatch observability no primary effect");
+  assert(hermes["gateway_real_dispatch_observability_writes_files"] === false, "hermes dispatch observability no files");
+  assert(hermes["gateway_real_dispatch_observability_persists_observability"] === false, "hermes dispatch observability no obs persist");
+  assert(hermes["gateway_real_dispatch_observability_persists_audit"] === false, "hermes dispatch observability no audit persist");
+  assert(hermes["gateway_real_dispatch_observability_contains_raw_prompt"] === false, "hermes dispatch observability no raw prompt");
+  assert(hermes["gateway_real_dispatch_observability_contains_raw_artifacts"] === false, "hermes dispatch observability no raw artifacts");
+  assert(hermes["gateway_real_dispatch_observability_contains_secrets"] === false, "hermes dispatch observability no secrets");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-observability.ts"), "hermes evidence observability");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-observability.test.ts"), "hermes evidence observability test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operational Guardrails", "next PR Hermes guardrails");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operational Guardrails", "next PR Hermes guardrails");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -611,8 +611,37 @@ async function test() {
   assert(hgFallbackEv.includes("execution/hermes-gateway-real-dispatch-fallback-policy.ts"), "hermes gateway fallback evidence policy");
   assert(hgFallbackEv.includes("tests/hermes-gateway-real-dispatch-fallback-policy.test.ts"), "hermes gateway fallback evidence test");
   assert(hgFallbackEv.includes("execution/gateway.ts"), "hermes gateway fallback evidence gateway");
+  // Hermes Gateway Real Dispatch Observability
+  assert(capNames.includes("Hermes Gateway Real Dispatch Observability"), "has Hermes Gateway observability");
+  const hgObsCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Observability");
+  assert(hgObsCap !== undefined && hgObsCap["status"] === "implemented_sidecar_metadata", "hermes gateway observability status");
+  assert(hgObsCap["runtime_active_by_default"] === false, "hermes gateway observability not active");
+  assert(hgObsCap["wired_to_gateway"] === true, "hermes gateway observability wired gateway");
+  assert(hgObsCap["wired_to_runtime"] === false, "hermes gateway observability not wired runtime");
+  assert(hgObsCap["field"] === "observability", "hermes gateway observability field");
+  assert(hgObsCap["top_level_field"] === false, "hermes gateway observability no top-level field");
+  assert(hgObsCap["preserves_gateway_primary_result"] === true, "hermes gateway observability preserves primary");
+  assert(hgObsCap["preserves_gateway_final_result"] === true, "hermes gateway observability preserves gateway final");
+  assert(hgObsCap["preserves_runtime_final_status"] === true, "hermes gateway observability preserves runtime final status");
+  assert(hgObsCap["preserves_runtime_routing"] === true, "hermes gateway observability preserves runtime routing");
+  assert(hgObsCap["changes_gateway_primary_dispatch"] === false, "hermes gateway observability no primary dispatch");
+  assert(hgObsCap["changes_gateway_final_result"] === false, "hermes gateway observability no gateway final result");
+  assert(hgObsCap["changes_final_status"] === false, "hermes gateway observability no final status");
+  assert(hgObsCap["changes_routing"] === false, "hermes gateway observability no routing");
+  assert(hgObsCap["affects_primary_gateway_result"] === false, "hermes gateway observability no primary effect");
+  assert(hgObsCap["writes_files"] === false, "hermes gateway observability no files");
+  assert(hgObsCap["persists_observability"] === false, "hermes gateway observability no obs persist");
+  assert(hgObsCap["persists_audit"] === false, "hermes gateway observability no persist");
+  assert(hgObsCap["contains_raw_prompt"] === false, "hermes gateway observability no raw prompt");
+  assert(hgObsCap["contains_raw_artifacts"] === false, "hermes gateway observability no raw artifacts");
+  assert(hgObsCap["contains_secrets"] === false, "hermes gateway observability no secrets");
+  const hgObsEv = hgObsCap["evidence"] as string[];
+  assert(hgObsEv.includes("execution/hermes-gateway-real-dispatch-observability.ts"), "hermes gateway observability evidence module");
+  assert(hgObsEv.includes("tests/hermes-gateway-real-dispatch-observability.test.ts"), "hermes gateway observability evidence test");
+  assert(hgObsEv.includes("execution/gateway.ts"), "hermes gateway observability evidence gateway");
+  assert(hgObsEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes gateway observability evidence integration test");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operational Guardrails", "next PR Hermes guardrails");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

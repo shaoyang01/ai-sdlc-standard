@@ -34,6 +34,9 @@ import {
 import {
   evaluateHermesGatewayRealDispatchFallbackPolicy,
 } from "./hermes-gateway-real-dispatch-fallback-policy";
+import {
+  buildHermesGatewayRealDispatchObservability,
+} from "./hermes-gateway-real-dispatch-observability";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
@@ -148,19 +151,39 @@ export class ExecutionGateway {
         integrationMayAttach: integration.mayAttach,
         realDispatchEnabled: true,
       });
+      const attached = integration.mayAttach && fallbackPolicy.shouldAttachSidecar;
+      const observability = buildHermesGatewayRealDispatchObservability({
+        requestType: request.type,
+        dispatchResult,
+        fallbackPolicy,
+        attached,
+        omitted: !attached,
+        safeToAttach: integration.mayAttach,
+        realDispatchEnabled: true,
+      });
 
-      if (integration.mayAttach && fallbackPolicy.shouldAttachSidecar) {
+      if (attached) {
         return {
           ...primaryResult,
           hermes_gateway_real_dispatch: {
             ...dispatchResult,
             fallbackPolicy,
+            observability,
           },
         };
       }
     } catch (err) {
-      evaluateHermesGatewayRealDispatchFallbackPolicy({
+      const fallbackPolicy = evaluateHermesGatewayRealDispatchFallbackPolicy({
         requestType: request.type,
+        dispatcherException: err,
+        realDispatchEnabled: true,
+      });
+      buildHermesGatewayRealDispatchObservability({
+        requestType: request.type,
+        fallbackPolicy,
+        attached: false,
+        omitted: true,
+        safeToAttach: false,
         dispatcherException: err,
         realDispatchEnabled: true,
       });

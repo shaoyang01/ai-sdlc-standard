@@ -566,6 +566,27 @@
     "hermes_gateway_real_dispatch_fallback_policy_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_fallback_policy_contains_raw_artifacts": false,
     "hermes_gateway_real_dispatch_fallback_policy_contains_secrets": false,
-    "hermes_gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests": true
+    "hermes_gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests": true,
+    "hermes_gateway_real_dispatch_observability": "implemented_sidecar_metadata",
+    "hermes_gateway_real_dispatch_observability_default_enabled": false,
+    "hermes_gateway_real_dispatch_observability_wired_to_gateway": true,
+    "hermes_gateway_real_dispatch_observability_wired_to_runtime": false,
+    "hermes_gateway_real_dispatch_observability_field": "observability",
+    "hermes_gateway_real_dispatch_observability_top_level_field": false,
+    "hermes_gateway_real_dispatch_observability_preserves_gateway_primary_result": true,
+    "hermes_gateway_real_dispatch_observability_preserves_gateway_final_result": true,
+    "hermes_gateway_real_dispatch_observability_preserves_runtime_final_status": true,
+    "hermes_gateway_real_dispatch_observability_preserves_runtime_routing": true,
+    "hermes_gateway_real_dispatch_observability_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_observability_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_observability_changes_final_status": false,
+    "hermes_gateway_real_dispatch_observability_changes_routing": false,
+    "hermes_gateway_real_dispatch_observability_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_observability_writes_files": false,
+    "hermes_gateway_real_dispatch_observability_persists_observability": false,
+    "hermes_gateway_real_dispatch_observability_persists_audit": false,
+    "hermes_gateway_real_dispatch_observability_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_observability_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_observability_contains_secrets": false
   }
 }
