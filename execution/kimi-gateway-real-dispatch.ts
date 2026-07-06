@@ -17,6 +17,13 @@ import {
   buildObservabilitySummary,
   type KimiGatewayRealDispatchObservabilityEvent,
 } from "./kimi-gateway-real-dispatch-observability";
+import {
+  evaluateKimiGatewayGuardrails,
+  clampKimiGatewaySummary,
+  KIMI_GATEWAY_GUARDRAIL_LIMITS,
+  type KimiGatewayGuardrailLimits,
+  type KimiGatewayGuardrailDecision,
+} from "./kimi-gateway-real-dispatch-guardrails";
 
 export type KimiGatewayRealDispatchResultStatus =
   | "disabled" | "unsupported" | "executed_success"
@@ -40,6 +47,7 @@ export interface KimiGatewayRealDispatchResult {
   warnings: string[];
   auditEvents: unknown[];
   observabilityEvents: KimiGatewayRealDispatchObservabilityEvent[];
+  guardrailDecision?: KimiGatewayGuardrailDecision;
 }
 
 export async function dispatchKimiGatewayReal(input: {
@@ -47,6 +55,7 @@ export async function dispatchKimiGatewayReal(input: {
   config?: CliAdapterConfig;
   env?: Record<string, string | undefined>;
   runner?: KimiCliProcessRunner;
+  guardrailLimits?: Partial<KimiGatewayGuardrailLimits>;
 }): Promise<KimiGatewayRealDispatchResult> {
   const contract = evaluateKimiGatewayRealDispatchContract({
     request: input.request, config: input.config, env: input.env,
@@ -82,7 +91,34 @@ export async function dispatchKimiGatewayReal(input: {
         dispatchStatus: statusMap[contract.decision] ?? "disabled",
       })],
     };
+    }
+
+  // ── Operational Guardrails (before CLI execution) ───
+  const guardrail = evaluateKimiGatewayGuardrails({
+    request: input.request,
+    config: input.config,
+    limits: input.guardrailLimits,
+  });
+  if (!guardrail.allowed) {
+    return {
+      ...base,
+      status: guardrail.decision === "unsupported_request_type" ? "unsupported" : "contract_rejected",
+      executed: false,
+      error: guardrail.sanitizedMessage,
+      warnings: [...base.warnings, ...guardrail.warnings],
+      guardrailDecision: guardrail.decision,
+      observabilityEvents: [
+        buildKimiGatewayRealDispatchObservabilityEvent({
+          stage: "contract_rejected", request: input.request,
+          contractDecision: guardrail.decision,
+          dispatchStatus: guardrail.decision,
+          warnings: guardrail.warnings,
+        }),
+      ],
+    };
   }
+
+  const limits = { ...KIMI_GATEWAY_GUARDRAIL_LIMITS, ...input.guardrailLimits };
 
   try {
     const execResult = await executeKimiCliCommand({
@@ -99,9 +135,9 @@ export async function dispatchKimiGatewayReal(input: {
       ...base,
       status: statusMap[execResult.decision] ?? "executed_failure",
       executed: execResult.decision.startsWith("executed"),
-      stdoutSummary: execResult.stdoutSummary,
-      stderrSummary: execResult.stderrSummary,
-      error: execResult.error,
+      stdoutSummary: clampKimiGatewaySummary({ value: execResult.stdoutSummary, maxLength: limits.maxStdoutSummaryLength }),
+      stderrSummary: clampKimiGatewaySummary({ value: execResult.stderrSummary, maxLength: limits.maxStderrSummaryLength }),
+      error: clampKimiGatewaySummary({ value: execResult.error, maxLength: limits.maxErrorSummaryLength }),
       auditEvents: [...base.auditEvents, ...execResult.auditEvents],
       observabilityEvents: [
         buildKimiGatewayRealDispatchObservabilityEvent({
@@ -141,9 +177,10 @@ export async function executeKimiGatewayRequest(
   request: ExecutionRequest,
   config?: CliAdapterConfig,
   runner?: KimiCliProcessRunner,
+  guardrailLimits?: Partial<KimiGatewayGuardrailLimits>,
 ): Promise<ExecutionResult> {
   const resolvedConfig = config ?? getKimiCliAdapterConfig();
-  const dispatch = await dispatchKimiGatewayReal({ request, config: resolvedConfig, runner });
+  const dispatch = await dispatchKimiGatewayReal({ request, config: resolvedConfig, runner, guardrailLimits });
 
   if (dispatch.status === "executed_success") {
     const artifact = createArtifact({
@@ -173,6 +210,7 @@ export async function executeKimiGatewayRequest(
       fallback_action: fallback.action,
       fallback_reason: fallback.reason,
       observability: buildObservabilitySummary(dispatch.observabilityEvents),
+      ...(dispatch.guardrailDecision ? { guardrail_decision: dispatch.guardrailDecision } : {}),
     },
     artifacts: [],
     error: fallback.sanitizedMessage,

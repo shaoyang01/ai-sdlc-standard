@@ -105,6 +105,30 @@ async function test() {
   assert(!j11.includes("abc") && !j11.includes("123") && !j11.includes("sk-test"), "catch sanitized");
   console.log("Test 11 done\n");
 
+  // Test 12: Guardrail prompt too large blocks runner
+  console.log("Test 12: Guardrail prompt too large blocks runner");
+  let called12 = 0;
+  const r12 = await dispatchKimiGatewayReal({
+    request: { ...request, input: { prompt: "x".repeat(100) } },
+    config: validConfig, env: allOn,
+    runner: { run: async () => { called12++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
+    guardrailLimits: { maxPromptLength: 10 },
+  });
+  assert(called12 === 0, "runner not called");
+  assert(r12.executed === false && r12.guardrailDecision === "prompt_too_large", "prompt too large");
+  assert(r12.observabilityEvents.some((e: any) => e.stage === "contract_rejected"), "obs contract rejected");
+  assert(!JSON.stringify(r12).includes("xxx"), "no prompt in result");
+  console.log("Test 12 done\n");
+
+  // Test 13: Guardrail timeout out of range
+  console.log("Test 13: Guardrail timeout out of range");
+  const r13 = await dispatchKimiGatewayReal({
+    request, config: { ...validConfig, timeoutMs: 10 },
+    env: allOn, runner: { run: async () => { throw new Error("nope"); } },
+    guardrailLimits: { minTimeoutMs: 1000 },
+  });
+  assert(r13.executed === false && r13.guardrailDecision === "timeout_out_of_range", "timeout out of range");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

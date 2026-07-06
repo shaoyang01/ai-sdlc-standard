@@ -172,6 +172,42 @@ async function test() {
     const obsH = rH.output["observability"] as Record<string, unknown>;
     assert(obsH !== undefined && (obsH["stages"] as string[]).includes("contract_rejected"), "obs contract rejected");
     assert(obsH["containsRawPrompt"] === false && obsH["containsSecrets"] === false, "obs safe");
+    console.log("");
+
+    // Test I: Prompt too large through Gateway
+    console.log("Test I: Prompt too large through Gateway");
+    process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION = "enabled";
+    let iCalled = 0;
+    const gwI = new ExecutionGateway({
+      kimiConfig: validConfig,
+      kimiRunner: { run: async () => { iCalled++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
+      kimiGuardrailLimits: { maxPromptLength: 10 },
+    });
+    const rI = await gwI.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-I", input: { prompt: "this is way too long for the guardrail" },
+    });
+    assert(iCalled === 0, "runner not called for oversized prompt");
+    assert(rI.success === false, "guardrail blocked");
+    assert(rI.output["guardrail_decision"] === "prompt_too_large", "guardrail prompt");
+    const obsI = rI.output["observability"] as Record<string, unknown>;
+    assert(obsI !== undefined && (obsI["stages"] as string[]).includes("contract_rejected"), "obs rejected");
+    assert(!JSON.stringify(rI).includes("this is way too long"), "no prompt");
+    console.log("");
+
+    // Test J: Timeout out of range through Gateway
+    console.log("Test J: Timeout out of range through Gateway");
+    const gwJ = new ExecutionGateway({
+      kimiConfig: { ...validConfig, timeoutMs: 500 },
+      kimiRunner: { run: async () => { throw new Error("nope"); } },
+      kimiGuardrailLimits: { minTimeoutMs: 1000 },
+    });
+    const rJ = await gwJ.execute({
+      type: "llm_task", node: "requirement-summary", agent: "kimi",
+      requirementId: "REQ-J", input: {},
+    });
+    assert(rJ.success === false, "timeout blocked");
+    assert(rJ.output["guardrail_decision"] === "timeout_out_of_range", "guardrail timeout");
 
   } finally {
     if (orig === undefined) delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;

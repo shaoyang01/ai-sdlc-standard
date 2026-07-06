@@ -43,6 +43,8 @@ export const KIMI_GATEWAY_GUARDRAIL_LIMITS = {
   maxTimeoutMs: 300000,
 } as const;
 
+export type KimiGatewayGuardrailLimits = typeof KIMI_GATEWAY_GUARDRAIL_LIMITS;
+
 function buildBase(request: ExecutionRequest, limits: typeof KIMI_GATEWAY_GUARDRAIL_LIMITS) {
   return {
     requestId: request.requirementId, requestType: request.type,
