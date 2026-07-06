@@ -61,6 +61,22 @@ function sanitizeHermesDispatchText(value?: string): string | undefined {
   return scrubbed.length > 1000 ? scrubbed.slice(0, 1000) + "…[truncated]" : scrubbed;
 }
 
+function isHermesExecutorThrownFailure(input: {
+  decision: string;
+  exitCode?: number;
+  durationMs?: number;
+  stdoutSummary?: string;
+  stderrSummary?: string;
+  error?: string;
+}): boolean {
+  return input.decision === "executed_failure"
+    && input.exitCode === undefined
+    && input.durationMs === undefined
+    && input.stdoutSummary === undefined
+    && input.stderrSummary === undefined
+    && input.error !== undefined;
+}
+
 export async function dispatchHermesGatewayReal(input: {
   request: ExecutionRequest;
   config?: CliAdapterConfig;
@@ -118,13 +134,16 @@ export async function dispatchHermesGatewayReal(input: {
       executed_failure: "dispatch_executed_failure",
       executed_timeout: "dispatch_executed_timeout",
     };
-    const status = statusMap[execResult.decision] ?? "dispatch_guarded_fallback";
+    const thrownFailure = isHermesExecutorThrownFailure(execResult);
+    const status = thrownFailure
+      ? "dispatch_guarded_fallback"
+      : statusMap[execResult.decision] ?? "dispatch_guarded_fallback";
     const isSuccess = status === "dispatch_executed_success";
 
     return {
       ...base,
       status, enabled: true, eligible: true,
-      executed: execResult.decision.startsWith("executed"),
+      executed: thrownFailure ? false : execResult.decision.startsWith("executed"),
       commandDecision: execResult.decision,
       outputSummary: sanitizeHermesDispatchText(execResult.stdoutSummary),
       errorSummary: sanitizeHermesDispatchText(execResult.stderrSummary) ?? sanitizeHermesDispatchText(execResult.error),
@@ -137,7 +156,7 @@ export async function dispatchHermesGatewayReal(input: {
     return {
       ...base,
       status: "dispatch_guarded_fallback", enabled: true, eligible: true, executed: false,
-      errorSummary: sanitizeErrorSummary(msg) ?? "Unknown error",
+      errorSummary: sanitizeHermesDispatchText(msg) ?? "Unknown error",
       fallbackAction: "fallback_without_final_status_change",
     };
   }

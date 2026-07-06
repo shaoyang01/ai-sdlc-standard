@@ -160,16 +160,51 @@ async function test() {
   assert(r9.fallbackAction === "fallback_without_final_status_change", "fallback timeout");
   console.log("");
 
-  // Test 10: Raw prompt does not leak
-  console.log("Test 10: Raw prompt does not leak");
-  for (const r of [r1, r2, r3, r7, r8, r9]) {
+  // Test 10: Fake runner throws -> guarded fallback sanitizes
+  console.log("Test 10: Fake runner throws -> guarded fallback sanitizes");
+  const rThrow = await dispatchHermesGatewayReal({
+    request,
+    config: validConfig,
+    env: allOn,
+    runner: {
+      run: async () => {
+        throw new Error(
+          "boom token=abc password=123 api_key=xyz sk-test THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK"
+        );
+      },
+    },
+  });
+  assert(rThrow.status === "dispatch_guarded_fallback", "guarded fallback on throw");
+  assert(rThrow.eligible === true, "throw eligible true");
+  assert(rThrow.executed === false, "throw executed false");
+  assert(rThrow.fallbackAction === "fallback_without_final_status_change", "throw fallback action");
+  const jThrow = JSON.stringify(rThrow);
+  assert(!jThrow.includes("abc"), "throw no abc");
+  assert(!jThrow.includes("123"), "throw no 123");
+  assert(!jThrow.includes("xyz"), "throw no xyz");
+  assert(!jThrow.includes("sk-test"), "throw no sk-test");
+  assert(!jThrow.includes("THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK"), "throw no prompt marker");
+  assert(rThrow.affectsPrimaryGatewayResult === false, "throw no primary");
+  assert(rThrow.changesGatewayPrimaryDispatch === false, "throw no gateway change");
+  assert(rThrow.changesRuntimeFinalStatus === false, "throw no final status");
+  assert(rThrow.changesRuntimeRouting === false, "throw no routing");
+  assert(rThrow.writesFiles === false, "throw no files");
+  assert(rThrow.persistsAudit === false, "throw no persist");
+  assert(rThrow.containsRawPrompt === false, "throw no raw prompt");
+  assert(rThrow.containsRawArtifacts === false, "throw no raw artifacts");
+  assert(rThrow.containsSecrets === false, "throw no secrets");
+  console.log("");
+
+  // Test 11: Raw prompt does not leak
+  console.log("Test 11: Raw prompt does not leak");
+  for (const r of [r1, r2, r3, r7, r8, r9, rThrow]) {
     assert(!JSON.stringify(r).includes("THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK"), `${r.status}: no prompt leak`);
   }
   console.log("");
 
-  // Test 11: Safety fields
-  console.log("Test 11: Safety fields");
-  for (const r of [r1, r2, r3, r5, r6, r7, r8, r9]) {
+  // Test 12: Safety fields
+  console.log("Test 12: Safety fields");
+  for (const r of [r1, r2, r3, r5, r6, r7, r8, r9, rThrow]) {
     assert(r.affectsPrimaryGatewayResult === false, `${r.status}: no primary`);
     assert(r.changesGatewayPrimaryDispatch === false, `${r.status}: no gateway change`);
     assert(r.changesRuntimeFinalStatus === false, `${r.status}: no final status`);
@@ -182,8 +217,8 @@ async function test() {
   }
   console.log("");
 
-  // Test 12: Forbidden imports
-  console.log("Test 12: Forbidden imports");
+  // Test 13: Forbidden imports
+  console.log("Test 13: Forbidden imports");
   const src = fs.readFileSync("execution/hermes-gateway-real-dispatch.ts", "utf-8");
   const forbidden = ["runtime", "execution/gateway", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch"];
   const badLines = src.split("\n").filter((l: string) => {
