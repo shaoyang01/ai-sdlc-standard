@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Runtime Shadow Attachment", "next PR Hermes runtime shadow attachment");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Wiring Contract", "next PR Hermes wiring contract");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Runtime Shadow Attachment", "next PR Hermes runtime shadow attachment");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Wiring Contract", "next PR Hermes wiring contract");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -355,8 +355,28 @@ async function test() {
   const hraEvidence = hraCap["evidence"] as string[];
   assert(hraEvidence.includes("execution/hermes-runtime-attachment-contract.ts"), "hermes runtime attachment evidence");
   assert(hraEvidence.includes("tests/hermes-runtime-attachment-contract.test.ts"), "hermes runtime attachment test evidence");
+  // Hermes Runtime Shadow Attachment Helper
+  assert(capNames.includes("Hermes Runtime Shadow Attachment Helper"), "has Hermes Runtime Shadow Helper");
+  const hrsCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Runtime Shadow Attachment Helper");
+  assert(hrsCap !== undefined && hrsCap["status"] === "implemented_feature_flagged_helper", "hermes runtime shadow helper status");
+  assert(hrsCap["runtime_active_by_default"] === false, "hermes runtime shadow not active");
+  assert(hrsCap["wired_to_runtime"] === false, "hermes runtime shadow not wired");
+  assert(hrsCap["requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime shadow flag");
+  assert(hrsCap["invokes_sidecar_when_enabled"] === true, "hermes runtime shadow invokes sidecar");
+  assert(hrsCap["uses_fake_runner_in_tests"] === true, "hermes runtime shadow fake runner");
+  assert(hrsCap["changes_final_status"] === false, "hermes runtime shadow no final status");
+  assert(hrsCap["changes_routing"] === false, "hermes runtime shadow no routing");
+  assert(hrsCap["affects_primary_gateway_result"] === false, "hermes runtime shadow no primary");
+  assert(hrsCap["writes_files"] === false, "hermes runtime shadow no files");
+  assert(hrsCap["persists_audit"] === false, "hermes runtime shadow no persist");
+  assert(hrsCap["contains_raw_prompt"] === false, "hermes runtime shadow no raw prompt");
+  assert(hrsCap["contains_raw_artifacts"] === false, "hermes runtime shadow no raw artifacts");
+  assert(hrsCap["contains_secrets"] === false, "hermes runtime shadow no secrets");
+  const hrsEvidence = hrsCap["evidence"] as string[];
+  assert(hrsEvidence.includes("core/hermes-runtime-shadow-attachment.ts"), "hermes runtime shadow evidence");
+  assert(hrsEvidence.includes("tests/hermes-runtime-shadow-attachment.test.ts"), "hermes runtime shadow test evidence");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Runtime Shadow Attachment", "next PR Hermes runtime shadow attachment");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Wiring Contract", "next PR Hermes wiring contract");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

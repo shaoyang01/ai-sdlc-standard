@@ -137,5 +137,6 @@ All evolution proposals have `applied: false` and require human review.
 12. **Hermes Gateway Integration Contract** — ✅ Done (contract-only; supports review/code_review/validation; requires 2 flags; not wired)
 13. **Hermes Gateway Shadow Sidecar** — ✅ Done (feature-flagged standalone helper; requires 3 flags; not wired to primary Gateway or Runtime)
 14. **Hermes Runtime Shadow Attachment Contract** — ✅ Done (contract-only; defines safe runtime attachment rules; not wired to Runtime)
-15. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-16. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+15. **Feature-flagged Hermes Runtime Shadow Attachment** — ✅ Done (standalone helper; default disabled; not wired to runtime.ts)
+16. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+17. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

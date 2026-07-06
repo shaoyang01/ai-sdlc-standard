@@ -313,6 +313,20 @@
     "hermes_runtime_attachment_contract_contains_raw_prompt": false,
     "hermes_runtime_attachment_contract_contains_raw_artifacts": false,
     "hermes_runtime_attachment_contract_contains_secrets": false,
-    "hermes_runtime_attachment_contract_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled"
+    "hermes_runtime_attachment_contract_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+    "hermes_runtime_shadow_attachment": "implemented_feature_flagged_helper",
+    "hermes_runtime_shadow_attachment_default_enabled": false,
+    "hermes_runtime_shadow_attachment_wired_to_runtime": false,
+    "hermes_runtime_shadow_attachment_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+    "hermes_runtime_shadow_attachment_invokes_sidecar_when_enabled": true,
+    "hermes_runtime_shadow_attachment_uses_fake_runner_in_tests": true,
+    "hermes_runtime_shadow_attachment_changes_final_status": false,
+    "hermes_runtime_shadow_attachment_changes_routing": false,
+    "hermes_runtime_shadow_attachment_affects_primary_gateway_result": false,
+    "hermes_runtime_shadow_attachment_writes_files": false,
+    "hermes_runtime_shadow_attachment_persists_audit": false,
+    "hermes_runtime_shadow_attachment_contains_raw_prompt": false,
+    "hermes_runtime_shadow_attachment_contains_raw_artifacts": false,
+    "hermes_runtime_shadow_attachment_contains_secrets": false
   }
 }

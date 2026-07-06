@@ -176,7 +176,9 @@
         "execution/hermes-gateway-shadow-sidecar.ts",
         "tests/hermes-gateway-shadow-sidecar.test.ts",
         "execution/hermes-runtime-attachment-contract.ts",
-        "tests/hermes-runtime-attachment-contract.test.ts"
+        "tests/hermes-runtime-attachment-contract.test.ts",
+        "core/hermes-runtime-shadow-attachment.ts",
+        "tests/hermes-runtime-shadow-attachment.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -231,7 +233,21 @@
       "runtime_attachment_contract_contains_raw_prompt": false,
       "runtime_attachment_contract_contains_raw_artifacts": false,
       "runtime_attachment_contract_contains_secrets": false,
-      "runtime_attachment_contract_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled"
+      "runtime_attachment_contract_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+      "runtime_shadow_attachment": "implemented_feature_flagged_helper",
+      "runtime_shadow_attachment_default_enabled": false,
+      "runtime_shadow_attachment_wired_to_runtime": false,
+      "runtime_shadow_attachment_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+      "runtime_shadow_attachment_invokes_sidecar_when_enabled": true,
+      "runtime_shadow_attachment_uses_fake_runner_in_tests": true,
+      "runtime_shadow_attachment_changes_final_status": false,
+      "runtime_shadow_attachment_changes_routing": false,
+      "runtime_shadow_attachment_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_writes_files": false,
+      "runtime_shadow_attachment_persists_audit": false,
+      "runtime_shadow_attachment_contains_raw_prompt": false,
+      "runtime_shadow_attachment_contains_raw_artifacts": false,
+      "runtime_shadow_attachment_contains_secrets": false
     }
   ],
   "request_types": [

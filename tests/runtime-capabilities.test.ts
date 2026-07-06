@@ -279,6 +279,20 @@ async function test() {
   assert(realAdapters["hermes_runtime_attachment_contract_contains_raw_artifacts"] === false, "hermes runtime attachment no raw artifacts");
   assert(realAdapters["hermes_runtime_attachment_contract_contains_secrets"] === false, "hermes runtime attachment no secrets");
   assert(realAdapters["hermes_runtime_attachment_contract_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime attachment flag");
+  assert(realAdapters["hermes_runtime_shadow_attachment"] === "implemented_feature_flagged_helper", "hermes runtime shadow helper");
+  assert(realAdapters["hermes_runtime_shadow_attachment_default_enabled"] === false, "hermes runtime shadow default disabled");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wired_to_runtime"] === false, "hermes runtime shadow not wired");
+  assert(realAdapters["hermes_runtime_shadow_attachment_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime shadow flag");
+  assert(realAdapters["hermes_runtime_shadow_attachment_invokes_sidecar_when_enabled"] === true, "hermes runtime shadow invokes sidecar");
+  assert(realAdapters["hermes_runtime_shadow_attachment_uses_fake_runner_in_tests"] === true, "hermes runtime shadow fake runner");
+  assert(realAdapters["hermes_runtime_shadow_attachment_changes_final_status"] === false, "hermes runtime shadow no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_changes_routing"] === false, "hermes runtime shadow no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_affects_primary_gateway_result"] === false, "hermes runtime shadow no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_writes_files"] === false, "hermes runtime shadow no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_persists_audit"] === false, "hermes runtime shadow no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_contains_raw_prompt"] === false, "hermes runtime shadow no raw prompt");
+  assert(realAdapters["hermes_runtime_shadow_attachment_contains_raw_artifacts"] === false, "hermes runtime shadow no raw artifacts");
+  assert(realAdapters["hermes_runtime_shadow_attachment_contains_secrets"] === false, "hermes runtime shadow no secrets");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
