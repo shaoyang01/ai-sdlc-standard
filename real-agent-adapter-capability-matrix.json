@@ -206,7 +206,11 @@
         "execution/hermes-gateway-real-dispatch-observability.ts",
         "tests/hermes-gateway-real-dispatch-observability.test.ts",
         "execution/hermes-gateway-real-dispatch-guardrails.ts",
-        "tests/hermes-gateway-real-dispatch-guardrails.test.ts"
+        "tests/hermes-gateway-real-dispatch-guardrails.test.ts",
+        "execution/hermes-gateway-real-dispatch-readiness-review.ts",
+        "tests/hermes-gateway-real-dispatch-readiness-review.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+        "hermes-gateway-real-dispatch-readiness-review.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -553,7 +557,46 @@
       "gateway_real_dispatch_guardrails_persists_audit": false,
       "gateway_real_dispatch_guardrails_contains_raw_prompt": false,
       "gateway_real_dispatch_guardrails_contains_raw_artifacts": false,
-      "gateway_real_dispatch_guardrails_contains_secrets": false
+      "gateway_real_dispatch_guardrails_contains_secrets": false,
+      "gateway_real_dispatch_final_readiness_review": "implemented_review_only",
+      "gateway_real_dispatch_final_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_final_readiness_runtime_active_by_default": false,
+      "gateway_real_dispatch_final_readiness_gateway_active_by_default": false,
+      "gateway_real_dispatch_final_readiness_wired_to_gateway": true,
+      "gateway_real_dispatch_final_readiness_wired_to_runtime": false,
+      "gateway_real_dispatch_final_readiness_field": "hermes_gateway_real_dispatch",
+      "gateway_real_dispatch_final_readiness_fallback_policy_field": "fallbackPolicy",
+      "gateway_real_dispatch_final_readiness_observability_field": "observability",
+      "gateway_real_dispatch_final_readiness_guardrails_field": "guardrails",
+      "gateway_real_dispatch_final_readiness_default_disabled": true,
+      "gateway_real_dispatch_final_readiness_feature_flagged": true,
+      "gateway_real_dispatch_final_readiness_requires_multiple_flags": true,
+      "gateway_real_dispatch_final_readiness_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_final_readiness_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_final_readiness_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_final_readiness_changes_gateway_final_result": false,
+      "gateway_real_dispatch_final_readiness_changes_final_status": false,
+      "gateway_real_dispatch_final_readiness_changes_routing": false,
+      "gateway_real_dispatch_final_readiness_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_final_readiness_makes_hermes_default": false,
+      "gateway_real_dispatch_final_readiness_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_final_readiness_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_final_readiness_writes_files": false,
+      "gateway_real_dispatch_final_readiness_persists_audit": false,
+      "gateway_real_dispatch_final_readiness_persists_observability": false,
+      "gateway_real_dispatch_final_readiness_persists_guardrails": false,
+      "gateway_real_dispatch_final_readiness_contains_raw_prompt": false,
+      "gateway_real_dispatch_final_readiness_contains_raw_artifacts": false,
+      "gateway_real_dispatch_final_readiness_contains_secrets": false,
+      "gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan"
     }
   ],
   "request_types": [
@@ -773,8 +816,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Final Readiness Review",
-    "reason": "Hermes Gateway real dispatch now has sidecar integration, fallback policy, sanitized observability, and operational guardrails. The next step is a final readiness review before any controlled operational rollout.",
-    "safety_rationale": "Readiness review must verify Hermes remains sidecar-only, default-off, request-type bounded, sanitized, non-persistent, and unable to affect Runtime final_status or routing."
+    "title": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+    "reason": "Hermes Gateway real dispatch sidecar stack is readiness-reviewed and complete with verdict READY_WITH_CONSTRAINTS.",
+    "safety_rationale": "Rollout planning remains non-executing and must preserve default-off sidecar-only semantics."
   }
 }

@@ -1012,6 +1012,54 @@
         "execution/gateway.ts",
         "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Final Readiness Review",
+      "status": "implemented_review_only",
+      "verdict": "READY_WITH_CONSTRAINTS",
+      "runtime_active_by_default": false,
+      "gateway_active_by_default": false,
+      "wired_to_gateway": true,
+      "wired_to_runtime": false,
+      "gateway_field": "hermes_gateway_real_dispatch",
+      "fallback_policy_field": "fallbackPolicy",
+      "observability_field": "observability",
+      "guardrails_field": "guardrails",
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-readiness-review.ts",
+        "tests/hermes-gateway-real-dispatch-readiness-review.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+        "hermes-gateway-real-dispatch-readiness-review.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -1213,9 +1261,9 @@
     {
       "risk": "Real adapter boundary is underdeveloped",
       "severity": "medium",
-      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, and operational guardrails; it still does not own Gateway primary result or Runtime final_status/routing.",
-      "mitigation": "Kimi Gateway real dispatch is now feature-flagged and wired (READY_WITH_CONSTRAINTS). Next: contract-only request type expansion review before any further implementation.",
-      "recommended_pr_stage": "Kimi Gateway Request Type Expansion Contract"
+      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, operational guardrails, and final readiness verdict READY_WITH_CONSTRAINTS; it still does not own Gateway primary result or Runtime final_status/routing.",
+      "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch sidecar stack is readiness-reviewed and complete. Next: controlled rollout planning without enabling default execution.",
+      "recommended_pr_stage": "Hermes Gateway Real Dispatch Controlled Rollout Plan"
     },
     {
       "risk": "Codex adapter supports only code_generation",
@@ -1233,8 +1281,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Final Readiness Review",
-    "reason": "Hermes Gateway real dispatch now has sidecar integration, fallback policy, sanitized observability, and operational guardrails. The next PR should perform the final readiness review before controlled rollout.",
-    "safety_rationale": "Final readiness review must verify Hermes remains sidecar-only, default-off, request-type bounded, sanitized, and non-persistent."
+    "title": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+    "reason": "Hermes Gateway real dispatch sidecar stack is readiness-reviewed and complete with verdict READY_WITH_CONSTRAINTS.",
+    "safety_rationale": "Rollout planning remains non-executing and must preserve default-off sidecar-only semantics."
   }
 }

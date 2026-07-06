@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Final Readiness Review", "next PR Hermes readiness");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "next PR Hermes rollout");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Final Readiness Review", "next PR Hermes readiness");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "next PR Hermes rollout");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -679,8 +679,49 @@ async function test() {
   assert(hgGuardEv.includes("tests/hermes-gateway-real-dispatch-guardrails.test.ts"), "hermes gateway guardrails evidence test");
   assert(hgGuardEv.includes("execution/gateway.ts"), "hermes gateway guardrails evidence gateway");
   assert(hgGuardEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes gateway guardrails evidence integration test");
+  // Hermes Gateway Real Dispatch Final Readiness Review
+  assert(capNames.includes("Hermes Gateway Real Dispatch Final Readiness Review"), "has Hermes Gateway readiness review");
+  const hgReadyCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Final Readiness Review");
+  assert(hgReadyCap !== undefined && hgReadyCap["status"] === "implemented_review_only", "hermes gateway readiness status");
+  assert(hgReadyCap["verdict"] === "READY_WITH_CONSTRAINTS", "hermes gateway readiness verdict");
+  assert(hgReadyCap["runtime_active_by_default"] === false, "hermes gateway readiness runtime inactive");
+  assert(hgReadyCap["gateway_active_by_default"] === false, "hermes gateway readiness gateway inactive");
+  assert(hgReadyCap["wired_to_gateway"] === true, "hermes gateway readiness wired gateway");
+  assert(hgReadyCap["wired_to_runtime"] === false, "hermes gateway readiness not wired runtime");
+  assert(hgReadyCap["gateway_field"] === "hermes_gateway_real_dispatch", "hermes gateway readiness field");
+  assert(hgReadyCap["fallback_policy_field"] === "fallbackPolicy", "hermes gateway readiness fallback field");
+  assert(hgReadyCap["observability_field"] === "observability", "hermes gateway readiness observability field");
+  assert(hgReadyCap["guardrails_field"] === "guardrails", "hermes gateway readiness guardrails field");
+  assert(hgReadyCap["default_disabled"] === true, "hermes gateway readiness default disabled");
+  assert(hgReadyCap["feature_flagged"] === true, "hermes gateway readiness feature flagged");
+  assert(hgReadyCap["requires_multiple_flags"] === true, "hermes gateway readiness multiple flags");
+  const hgReadySup = hgReadyCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgReadySup) && hgReadySup.includes("review") && hgReadySup.includes("code_review") && hgReadySup.includes("validation"), "hermes gateway readiness supported");
+  const hgReadyUnsup = hgReadyCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(hgReadyUnsup) && hgReadyUnsup.includes("llm_task") && hgReadyUnsup.includes("code_generation") && hgReadyUnsup.includes("bugfix"), "hermes gateway readiness unsupported");
+  assert(hgReadyCap["changes_gateway_primary_dispatch"] === false, "hermes gateway readiness no primary dispatch");
+  assert(hgReadyCap["changes_gateway_final_result"] === false, "hermes gateway readiness no gateway final");
+  assert(hgReadyCap["changes_final_status"] === false, "hermes gateway readiness no final status");
+  assert(hgReadyCap["changes_routing"] === false, "hermes gateway readiness no routing");
+  assert(hgReadyCap["affects_primary_gateway_result"] === false, "hermes gateway readiness no primary effect");
+  assert(hgReadyCap["makes_hermes_default"] === false, "hermes gateway readiness not default");
+  assert(hgReadyCap["makes_hermes_final_review_owner"] === false, "hermes gateway readiness not review owner");
+  assert(hgReadyCap["makes_hermes_final_validation_owner"] === false, "hermes gateway readiness not validation owner");
+  assert(hgReadyCap["writes_files"] === false, "hermes gateway readiness no files");
+  assert(hgReadyCap["persists_audit"] === false, "hermes gateway readiness no audit persist");
+  assert(hgReadyCap["persists_observability"] === false, "hermes gateway readiness no observability persist");
+  assert(hgReadyCap["persists_guardrails"] === false, "hermes gateway readiness no guardrail persist");
+  assert(hgReadyCap["contains_raw_prompt"] === false, "hermes gateway readiness no raw prompt");
+  assert(hgReadyCap["contains_raw_artifacts"] === false, "hermes gateway readiness no raw artifacts");
+  assert(hgReadyCap["contains_secrets"] === false, "hermes gateway readiness no secrets");
+  assert(hgReadyCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "hermes gateway readiness next PR");
+  const hgReadyEv = hgReadyCap["evidence"] as string[];
+  assert(hgReadyEv.includes("execution/hermes-gateway-real-dispatch-readiness-review.ts"), "hermes gateway readiness evidence module");
+  assert(hgReadyEv.includes("tests/hermes-gateway-real-dispatch-readiness-review.test.ts"), "hermes gateway readiness evidence test");
+  assert(hgReadyEv.includes("HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "hermes gateway readiness evidence md");
+  assert(hgReadyEv.includes("hermes-gateway-real-dispatch-readiness-review.json"), "hermes gateway readiness evidence json");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Final Readiness Review", "next PR Hermes readiness");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "next PR Hermes rollout");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

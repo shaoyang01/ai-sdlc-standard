@@ -618,6 +618,45 @@
     "hermes_gateway_real_dispatch_guardrails_persists_audit": false,
     "hermes_gateway_real_dispatch_guardrails_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_guardrails_contains_raw_artifacts": false,
-    "hermes_gateway_real_dispatch_guardrails_contains_secrets": false
+    "hermes_gateway_real_dispatch_guardrails_contains_secrets": false,
+    "hermes_gateway_real_dispatch_final_readiness_review": "implemented_review_only",
+    "hermes_gateway_real_dispatch_final_readiness_verdict": "READY_WITH_CONSTRAINTS",
+    "hermes_gateway_real_dispatch_final_readiness_runtime_active_by_default": false,
+    "hermes_gateway_real_dispatch_final_readiness_gateway_active_by_default": false,
+    "hermes_gateway_real_dispatch_final_readiness_wired_to_gateway": true,
+    "hermes_gateway_real_dispatch_final_readiness_wired_to_runtime": false,
+    "hermes_gateway_real_dispatch_final_readiness_field": "hermes_gateway_real_dispatch",
+    "hermes_gateway_real_dispatch_final_readiness_fallback_policy_field": "fallbackPolicy",
+    "hermes_gateway_real_dispatch_final_readiness_observability_field": "observability",
+    "hermes_gateway_real_dispatch_final_readiness_guardrails_field": "guardrails",
+    "hermes_gateway_real_dispatch_final_readiness_default_disabled": true,
+    "hermes_gateway_real_dispatch_final_readiness_feature_flagged": true,
+    "hermes_gateway_real_dispatch_final_readiness_requires_multiple_flags": true,
+    "hermes_gateway_real_dispatch_final_readiness_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_final_readiness_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
+    "hermes_gateway_real_dispatch_final_readiness_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_final_readiness_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_final_readiness_changes_final_status": false,
+    "hermes_gateway_real_dispatch_final_readiness_changes_routing": false,
+    "hermes_gateway_real_dispatch_final_readiness_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_final_readiness_makes_hermes_default": false,
+    "hermes_gateway_real_dispatch_final_readiness_makes_hermes_final_review_owner": false,
+    "hermes_gateway_real_dispatch_final_readiness_makes_hermes_final_validation_owner": false,
+    "hermes_gateway_real_dispatch_final_readiness_writes_files": false,
+    "hermes_gateway_real_dispatch_final_readiness_persists_audit": false,
+    "hermes_gateway_real_dispatch_final_readiness_persists_observability": false,
+    "hermes_gateway_real_dispatch_final_readiness_persists_guardrails": false,
+    "hermes_gateway_real_dispatch_final_readiness_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_final_readiness_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_final_readiness_contains_secrets": false,
+    "hermes_gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan"
   }
 }

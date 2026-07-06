@@ -458,6 +458,43 @@ async function test() {
   assert(hermes["gateway_real_dispatch_guardrails_contains_secrets"] === false, "hermes dispatch guardrails no secrets");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-guardrails.ts"), "hermes evidence guardrails");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-guardrails.test.ts"), "hermes evidence guardrails test");
+  assert(hermes["gateway_real_dispatch_final_readiness_review"] === "implemented_review_only", "hermes dispatch readiness review");
+  assert(hermes["gateway_real_dispatch_final_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch readiness verdict");
+  assert(hermes["gateway_real_dispatch_final_readiness_runtime_active_by_default"] === false, "hermes dispatch readiness runtime inactive");
+  assert(hermes["gateway_real_dispatch_final_readiness_gateway_active_by_default"] === false, "hermes dispatch readiness gateway inactive");
+  assert(hermes["gateway_real_dispatch_final_readiness_wired_to_gateway"] === true, "hermes dispatch readiness wired gateway");
+  assert(hermes["gateway_real_dispatch_final_readiness_wired_to_runtime"] === false, "hermes dispatch readiness not wired runtime");
+  assert(hermes["gateway_real_dispatch_final_readiness_field"] === "hermes_gateway_real_dispatch", "hermes dispatch readiness field");
+  assert(hermes["gateway_real_dispatch_final_readiness_fallback_policy_field"] === "fallbackPolicy", "hermes dispatch readiness fallback");
+  assert(hermes["gateway_real_dispatch_final_readiness_observability_field"] === "observability", "hermes dispatch readiness observability");
+  assert(hermes["gateway_real_dispatch_final_readiness_guardrails_field"] === "guardrails", "hermes dispatch readiness guardrails");
+  assert(hermes["gateway_real_dispatch_final_readiness_default_disabled"] === true, "hermes dispatch readiness default disabled");
+  assert(hermes["gateway_real_dispatch_final_readiness_feature_flagged"] === true, "hermes dispatch readiness feature flagged");
+  assert(hermes["gateway_real_dispatch_final_readiness_requires_multiple_flags"] === true, "hermes dispatch readiness multiple flags");
+  const hReadySupported = hermes["gateway_real_dispatch_final_readiness_supported_request_types"] as string[];
+  assert(Array.isArray(hReadySupported) && hReadySupported.includes("review") && hReadySupported.includes("code_review") && hReadySupported.includes("validation"), "hermes dispatch readiness supported");
+  const hReadyUnsupported = hermes["gateway_real_dispatch_final_readiness_unsupported_request_types"] as string[];
+  assert(Array.isArray(hReadyUnsupported) && hReadyUnsupported.includes("llm_task") && hReadyUnsupported.includes("code_generation") && hReadyUnsupported.includes("bugfix"), "hermes dispatch readiness unsupported");
+  assert(hermes["gateway_real_dispatch_final_readiness_changes_gateway_primary_dispatch"] === false, "hermes dispatch readiness no primary dispatch");
+  assert(hermes["gateway_real_dispatch_final_readiness_changes_gateway_final_result"] === false, "hermes dispatch readiness no gateway final");
+  assert(hermes["gateway_real_dispatch_final_readiness_changes_final_status"] === false, "hermes dispatch readiness no final status");
+  assert(hermes["gateway_real_dispatch_final_readiness_changes_routing"] === false, "hermes dispatch readiness no routing");
+  assert(hermes["gateway_real_dispatch_final_readiness_affects_primary_gateway_result"] === false, "hermes dispatch readiness no primary effect");
+  assert(hermes["gateway_real_dispatch_final_readiness_makes_hermes_default"] === false, "hermes dispatch readiness not default");
+  assert(hermes["gateway_real_dispatch_final_readiness_makes_hermes_final_review_owner"] === false, "hermes dispatch readiness not review owner");
+  assert(hermes["gateway_real_dispatch_final_readiness_makes_hermes_final_validation_owner"] === false, "hermes dispatch readiness not validation owner");
+  assert(hermes["gateway_real_dispatch_final_readiness_writes_files"] === false, "hermes dispatch readiness no files");
+  assert(hermes["gateway_real_dispatch_final_readiness_persists_audit"] === false, "hermes dispatch readiness no audit persist");
+  assert(hermes["gateway_real_dispatch_final_readiness_persists_observability"] === false, "hermes dispatch readiness no observability persist");
+  assert(hermes["gateway_real_dispatch_final_readiness_persists_guardrails"] === false, "hermes dispatch readiness no guardrail persist");
+  assert(hermes["gateway_real_dispatch_final_readiness_contains_raw_prompt"] === false, "hermes dispatch readiness no raw prompt");
+  assert(hermes["gateway_real_dispatch_final_readiness_contains_raw_artifacts"] === false, "hermes dispatch readiness no raw artifacts");
+  assert(hermes["gateway_real_dispatch_final_readiness_contains_secrets"] === false, "hermes dispatch readiness no secrets");
+  assert(hermes["gateway_real_dispatch_final_readiness_recommended_next_pr"] === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "hermes dispatch readiness next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-readiness-review.ts"), "hermes evidence readiness module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-readiness-review.test.ts"), "hermes evidence readiness test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "hermes evidence readiness md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-readiness-review.json"), "hermes evidence readiness json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -530,8 +567,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(typeof m.recommended_next_pr.title === "string", "title is string");
-  assert(m.recommended_next_pr.title.length > 0, "title non-empty");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "next PR controlled rollout");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
