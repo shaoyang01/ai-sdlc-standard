@@ -136,5 +136,6 @@ All evolution proposals have `applied: false` and require human review.
 11. **Hermes CLI Command Executor Implementation Behind Feature Flag** — ✅ Done (isolated, feature-flagged; not wired to Gateway or Runtime; fake-runner tests only)
 12. **Hermes Gateway Integration Contract** — ✅ Done (contract-only; supports review/code_review/validation; requires 2 flags; not wired)
 13. **Hermes Gateway Shadow Sidecar** — ✅ Done (feature-flagged standalone helper; requires 3 flags; not wired to primary Gateway or Runtime)
-14. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-15. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+14. **Hermes Runtime Shadow Attachment Contract** — ✅ Done (contract-only; defines safe runtime attachment rules; not wired to Runtime)
+15. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+16. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

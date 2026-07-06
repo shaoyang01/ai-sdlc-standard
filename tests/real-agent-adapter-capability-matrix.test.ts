@@ -196,6 +196,19 @@ async function test() {
   assert(hermes["gateway_shadow_sidecar_uses_fake_runner_in_tests"] === true, "hermes shadow fake runner");
   assert(hermesEvidence.includes("execution/hermes-gateway-shadow-sidecar.ts"), "hermes evidence shadow sidecar");
   assert(hermesEvidence.includes("tests/hermes-gateway-shadow-sidecar.test.ts"), "hermes evidence shadow sidecar test");
+  assert(hermes["runtime_attachment_contract"] === "implemented_contract_only", "hermes runtime attachment contract");
+  assert(hermes["runtime_attachment_contract_default_enabled"] === false, "hermes runtime attachment default disabled");
+  assert(hermes["runtime_attachment_contract_wired_to_runtime"] === false, "hermes runtime attachment not wired");
+  assert(hermes["runtime_attachment_contract_changes_final_status"] === false, "hermes runtime attachment no final status");
+  assert(hermes["runtime_attachment_contract_changes_routing"] === false, "hermes runtime attachment no routing");
+  assert(hermes["runtime_attachment_contract_writes_files"] === false, "hermes runtime attachment no files");
+  assert(hermes["runtime_attachment_contract_persists_audit"] === false, "hermes runtime attachment no persist");
+  assert(hermes["runtime_attachment_contract_contains_raw_prompt"] === false, "hermes runtime attachment no raw prompt");
+  assert(hermes["runtime_attachment_contract_contains_raw_artifacts"] === false, "hermes runtime attachment no raw artifacts");
+  assert(hermes["runtime_attachment_contract_contains_secrets"] === false, "hermes runtime attachment no secrets");
+  assert(hermes["runtime_attachment_contract_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime attachment flag");
+  assert(hermesEvidence.includes("execution/hermes-runtime-attachment-contract.ts"), "hermes evidence runtime attachment");
+  assert(hermesEvidence.includes("tests/hermes-runtime-attachment-contract.test.ts"), "hermes evidence runtime attachment test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Hermes Runtime Shadow Attachment Contract**
+**Recommended: Feature-flagged Hermes Runtime Shadow Attachment**
 
-Hermes now has a command executor, Gateway integration contract, and Gateway shadow sidecar. The next step is a runtime shadow attachment contract (following Kimi's pattern) to define how Hermes sidecar results may attach to RuntimeResult.
+Hermes now has a full stack through Gateway shadow sidecar. The runtime attachment contract defines safe attachment rules. The next step is the feature-flagged runtime shadow attachment helper.
 
 ---
 

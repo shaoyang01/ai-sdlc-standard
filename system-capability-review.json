@@ -590,6 +590,24 @@
         "execution/hermes-gateway-shadow-sidecar.ts",
         "tests/hermes-gateway-shadow-sidecar.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Runtime Shadow Attachment Contract",
+      "status": "implemented_contract_only",
+      "runtime_active_by_default": false,
+      "wired_to_runtime": false,
+      "requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+      "changes_final_status": false,
+      "changes_routing": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "execution/hermes-runtime-attachment-contract.ts",
+        "tests/hermes-runtime-attachment-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -811,8 +829,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Runtime Shadow Attachment Contract",
-    "reason": "Hermes shadow sidecar is implemented. A runtime shadow attachment contract (following Kimi's pattern) should define how Hermes sidecar results attach to RuntimeResult.",
-    "safety_rationale": "Contract-only runtime attachment review prevents accidental routing or Runtime behavior changes."
+    "title": "Feature-flagged Hermes Runtime Shadow Attachment",
+    "reason": "Hermes runtime attachment contract is defined. The next step is the actual feature-flagged runtime sidecar helper (following Kimi's pattern).",
+    "safety_rationale": "Feature-flagged sidecar is in-memory only; no Gateway or Runtime behavior change."
   }
 }

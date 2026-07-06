@@ -268,6 +268,17 @@ async function test() {
   assert(realAdapters["hermes_gateway_shadow_sidecar_writes_files"] === false, "hermes shadow no files");
   assert(realAdapters["hermes_gateway_shadow_sidecar_persists_audit"] === false, "hermes shadow no persist");
   assert(realAdapters["hermes_gateway_shadow_sidecar_uses_fake_runner_in_tests"] === true, "hermes shadow fake runner");
+  assert(realAdapters["hermes_runtime_attachment_contract"] === "implemented_contract_only", "hermes runtime attachment contract");
+  assert(realAdapters["hermes_runtime_attachment_contract_default_enabled"] === false, "hermes runtime attachment default disabled");
+  assert(realAdapters["hermes_runtime_attachment_contract_wired_to_runtime"] === false, "hermes runtime attachment not wired");
+  assert(realAdapters["hermes_runtime_attachment_contract_changes_final_status"] === false, "hermes runtime attachment no final status");
+  assert(realAdapters["hermes_runtime_attachment_contract_changes_routing"] === false, "hermes runtime attachment no routing");
+  assert(realAdapters["hermes_runtime_attachment_contract_writes_files"] === false, "hermes runtime attachment no files");
+  assert(realAdapters["hermes_runtime_attachment_contract_persists_audit"] === false, "hermes runtime attachment no persist");
+  assert(realAdapters["hermes_runtime_attachment_contract_contains_raw_prompt"] === false, "hermes runtime attachment no raw prompt");
+  assert(realAdapters["hermes_runtime_attachment_contract_contains_raw_artifacts"] === false, "hermes runtime attachment no raw artifacts");
+  assert(realAdapters["hermes_runtime_attachment_contract_contains_secrets"] === false, "hermes runtime attachment no secrets");
+  assert(realAdapters["hermes_runtime_attachment_contract_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime attachment flag");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
