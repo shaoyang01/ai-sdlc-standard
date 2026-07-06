@@ -56,11 +56,20 @@ async function test() {
   assert(r5.status === "executed_success" && r5.executed === true, "success");
   assert(r5.stdoutSummary === "ok", "stdout");
   assert(r5.affectsFinalStatus === false && r5.writesFiles === false && r5.persistsAudit === false, "safe");
+  // Observability
+  assert(Array.isArray(r5.observabilityEvents), "success observability events");
+  const r5Stages = r5.observabilityEvents.map((e: any) => e.stage);
+  assert(r5Stages.includes("execution_started"), "success started");
+  assert(r5Stages.includes("execution_success"), "success event");
+  assert(r5.observabilityEvents.every((e: any) => e.containsRawPrompt === false), "obs no raw prompt");
+  assert(r5.observabilityEvents.every((e: any) => e.persistsAudit === false), "obs no persist");
+  assert(!JSON.stringify(r5.observabilityEvents).includes("this prompt must not leak"), "obs no prompt");
   console.log("Test 5 done\n");
 
   // Test 6: Fake failure sanitizes
   const r6 = await dispatchKimiGatewayReal({ request, config: validConfig, env: allOn, runner: fr({ exitCode: 1, durationMs: 5, stdout: "", stderr: "failed token=abc password=123 sk-test" }) });
   assert(r6.status === "executed_failure", "failure");
+  assert(r6.observabilityEvents.some((e: any) => e.stage === "execution_failure"), "obs failure");
   const j6 = JSON.stringify(r6);
   assert(!j6.includes("abc") && !j6.includes("123") && !j6.includes("sk-test"), "no secrets");
   console.log("Test 6 done\n");
@@ -68,11 +77,15 @@ async function test() {
   // Test 7: Timeout
   const r7 = await dispatchKimiGatewayReal({ request, config: validConfig, env: allOn, runner: fr({ timedOut: true, durationMs: 120000, stderr: "timeout" }) });
   assert(r7.status === "executed_timeout", "timeout");
+  assert(r7.observabilityEvents.some((e: any) => e.stage === "execution_timeout"), "obs timeout");
+  assert(r7.observabilityEvents.every((e: any) => e.affectsFinalStatus === false), "timeout no final status");
   console.log("Test 7 done\n");
 
   // Test 8: Missing config
   const r8 = await dispatchKimiGatewayReal({ request, env: allOn });
   assert(r8.status === "disabled" && r8.executed === false, "missing config");
+  assert(r8.observabilityEvents.some((e: any) => e.stage === "contract_rejected"), "obs contract rejected");
+  assert(r8.observabilityEvents.every((e: any) => e.invokesCli === false), "disabled no CLI");
   console.log("Test 8 done\n");
 
   // Test 9: No prompt

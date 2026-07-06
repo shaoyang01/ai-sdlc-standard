@@ -454,6 +454,22 @@
         "execution/kimi-gateway-real-dispatch-fallback-policy.ts",
         "tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Real Dispatch Observability",
+      "status": "implemented",
+      "runtime_active_by_default": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "expands_request_types": false,
+      "evidence": [
+        "execution/kimi-gateway-real-dispatch-observability.ts",
+        "tests/kimi-gateway-real-dispatch-observability.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -675,8 +691,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Dispatch Observability and Audit Metadata",
-    "reason": "Add structured observability before expanding request types",
-    "safety_rationale": "Observability has no side effects; safe before any expansion"
+    "title": "Kimi Gateway Real Dispatch Operational Guardrails",
+    "reason": "Add operational guardrails before any further expansion",
+    "safety_rationale": "Guardrails have no side effects; safe before expansion"
   }
 }

@@ -209,6 +209,13 @@ async function test() {
   assert(realAdapters["kimi_gateway_real_dispatch_timeout_returns_structured_error"] === true, "kimi timeout structured");
   assert(realAdapters["kimi_gateway_real_dispatch_errors_sanitized"] === true, "kimi errors sanitized");
   assert(realAdapters["kimi_gateway_real_dispatch_expands_request_types"] === false, "kimi no request type expansion");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability"] === "implemented", "kimi observability");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_default_persisted"] === false, "kimi obs not persisted");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_contains_raw_prompt"] === false, "kimi obs no prompt");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_contains_raw_artifacts"] === false, "kimi obs no artifacts");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_contains_secrets"] === false, "kimi obs no secrets");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_changes_final_status"] === false, "kimi obs no final status");
+  assert(realAdapters["kimi_gateway_real_dispatch_observability_changes_routing"] === false, "kimi obs no routing");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Observability and Audit Metadata", "next PR dispatch contract");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Operational Guardrails", "next PR dispatch contract");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -135,7 +135,7 @@ async function test() {
   const fpEvidence = fpCap["evidence"] as string[];
   assert(fpEvidence.includes("execution/kimi-gateway-real-dispatch-fallback-policy.ts"), "fallback evidence");
   assert(fpEvidence.includes("tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"), "fallback test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Observability and Audit Metadata", "next PR observability");
+  assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Operational Guardrails", "next PR observability");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");

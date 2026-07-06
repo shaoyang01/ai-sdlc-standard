@@ -73,6 +73,13 @@ async function test() {
     assert(rC.success === true && rC.agent === "kimi", "kimi success");
     assert(rC.output["result"] === "kimi_executed_success", "executed_success");
     assert(rC.artifacts.length > 0, "artifacts exist");
+    // Observability
+    const obsC = rC.output["observability"] as Record<string, unknown>;
+    assert(obsC !== undefined && obsC["source"] === "kimi_gateway_real_dispatch", "obs source");
+    const stagesC = obsC["stages"] as string[];
+    assert(stagesC.includes("execution_started") && stagesC.includes("execution_success"), "obs stages");
+    assert(obsC["containsRawPrompt"] === false && obsC["containsSecrets"] === false, "obs safe");
+    assert(obsC["affectsFinalStatus"] === false && obsC["persistsAudit"] === false, "obs no effects");
     // Artifact agent is in metadata, not content
     assert((rC.artifacts[0] as any).metadata?.agent === "kimi" || rC.artifacts[0].content?.["result"] === "kimi_llm_task_completed", "artifact kimi");
     console.log("");
@@ -123,6 +130,8 @@ async function test() {
     assert(rF.output["fallback_reason"] === "cli_failure", "reason cli_failure");
     const jF = JSON.stringify(rF);
     assert(!jF.includes("abc") && !jF.includes("123") && !jF.includes("sk-test"), "sanitized");
+    const obsF = rF.output["observability"] as Record<string, unknown>;
+    assert(obsF !== undefined && (obsF["stages"] as string[]).includes("execution_failure"), "obs failure");
     console.log("");
 
     // Test G: All flags + fake timeout
@@ -138,6 +147,9 @@ async function test() {
     assert(rG.success === false, "timeout failure");
     assert(rG.output["fallback_action"] === "return_structured_timeout", "action timeout");
     assert(rG.output["fallback_reason"] === "cli_timeout", "reason cli_timeout");
+    const obsG = rG.output["observability"] as Record<string, unknown>;
+    assert(obsG !== undefined && (obsG["stages"] as string[]).includes("execution_timeout"), "obs timeout");
+    assert(obsG["persistsAudit"] === false, "obs timeout no persist");
     console.log("");
 
     // Test H: Command execution flag missing
@@ -157,6 +169,9 @@ async function test() {
     assert(rH.output["fallback_action"] === "return_structured_disabled", "action disabled");
     assert(rH.output["fallback_reason"] === "command_execution_disabled", "reason command_execution_disabled");
     assert(!JSON.stringify(rH).includes("must not leak"), "command missing no prompt leak");
+    const obsH = rH.output["observability"] as Record<string, unknown>;
+    assert(obsH !== undefined && (obsH["stages"] as string[]).includes("contract_rejected"), "obs contract rejected");
+    assert(obsH["containsRawPrompt"] === false && obsH["containsSecrets"] === false, "obs safe");
 
   } finally {
     if (orig === undefined) delete process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH;

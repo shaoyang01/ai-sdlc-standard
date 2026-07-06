@@ -119,6 +119,13 @@ async function test() {
   assert(kimi["gateway_real_dispatch_expands_request_types"] === false, "kimi no expansion");
   assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-fallback-policy.ts"), "kimi evidence fallback policy");
   assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"), "kimi evidence fallback test");
+  assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "kimi evidence observability");
+  assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "kimi evidence observability test");
+  assert(kimi["gateway_real_dispatch_observability"] === "implemented", "kimi observability");
+  assert(kimi["gateway_real_dispatch_observability_persisted"] === false, "kimi observability not persisted");
+  assert(kimi["gateway_real_dispatch_observability_contains_raw_prompt"] === false, "kimi observability no prompt");
+  assert(kimi["gateway_real_dispatch_observability_contains_raw_artifacts"] === false, "kimi observability no artifacts");
+  assert(kimi["gateway_real_dispatch_observability_contains_secrets"] === false, "kimi observability no secrets");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
