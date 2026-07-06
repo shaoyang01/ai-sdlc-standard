@@ -11,7 +11,8 @@ export type KimiGatewayRealDispatchFallbackReason =
   | "real_dispatch_disabled" | "gateway_integration_disabled"
   | "command_execution_disabled" | "adapter_disabled"
   | "missing_cli_command" | "unsupported_request_type"
-  | "cli_failure" | "cli_timeout" | "unexpected_error";
+  | "cli_failure" | "cli_timeout" | "guardrail_rejected"
+  | "unexpected_error";
 
 export type KimiGatewayRealDispatchFallbackAction =
   | "fall_through_to_shadow" | "return_structured_disabled"
@@ -44,8 +45,21 @@ const FALLBACK_MAP: Record<string, { reason: KimiGatewayRealDispatchFallbackReas
 export function classifyKimiGatewayRealDispatchFallback(input: {
   contractDecision?: KimiGatewayRealDispatchDecision;
   dispatchStatus?: KimiGatewayRealDispatchResultStatus;
+  guardrailDecision?: string;
   error?: string;
 }): KimiGatewayRealDispatchFallbackPolicy {
+  // Guardrail rejection takes precedence — it is a structured, intentional block
+  if (input.guardrailDecision) {
+    const rawMessage = input.error ?? `Kimi dispatch: guardrail_rejected (${input.guardrailDecision})`;
+    const sanitizedMessage = sanitizeErrorSummary(rawMessage) ?? rawMessage.slice(0, 100);
+    return {
+      reason: "guardrail_rejected", action: "return_structured_failure", success: false,
+      affectsFinalStatus: false, affectsRuntimeRouting: false,
+      writesFiles: false, persistsAudit: false,
+      sanitizedMessage, warnings: [sanitizedMessage],
+    };
+  }
+
   // Prefer dispatch status for executed_* outcomes; contract decision for pre-execution
   const key = (input.dispatchStatus && input.dispatchStatus.startsWith("executed"))
     ? input.dispatchStatus

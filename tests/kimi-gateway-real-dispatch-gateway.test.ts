@@ -189,6 +189,8 @@ async function test() {
     });
     assert(iCalled === 0, "runner not called for oversized prompt");
     assert(rI.success === false, "guardrail blocked");
+    assert(rI.output["fallback_reason"] === "guardrail_rejected", "guardrail fallback reason");
+    assert(rI.output["fallback_action"] === "return_structured_failure", "guardrail fallback action");
     assert(rI.output["guardrail_decision"] === "prompt_too_large", "guardrail prompt");
     const obsI = rI.output["observability"] as Record<string, unknown>;
     assert(obsI !== undefined && (obsI["stages"] as string[]).includes("contract_rejected"), "obs rejected");
@@ -197,16 +199,20 @@ async function test() {
 
     // Test J: Timeout out of range through Gateway
     console.log("Test J: Timeout out of range through Gateway");
+    let jCalled = 0;
     const gwJ = new ExecutionGateway({
       kimiConfig: { ...validConfig, timeoutMs: 500 },
-      kimiRunner: { run: async () => { throw new Error("nope"); } },
+      kimiRunner: { run: async () => { jCalled++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
       kimiGuardrailLimits: { minTimeoutMs: 1000 },
     });
     const rJ = await gwJ.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
       requirementId: "REQ-J", input: {},
     });
+    assert(jCalled === 0, "runner not called for timeout guardrail");
     assert(rJ.success === false, "timeout blocked");
+    assert(rJ.output["fallback_reason"] === "guardrail_rejected", "timeout guardrail fallback reason");
+    assert(rJ.output["fallback_action"] === "return_structured_failure", "timeout guardrail fallback action");
     assert(rJ.output["guardrail_decision"] === "timeout_out_of_range", "guardrail timeout");
 
   } finally {

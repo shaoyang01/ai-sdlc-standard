@@ -43,9 +43,17 @@ export const KIMI_GATEWAY_GUARDRAIL_LIMITS = {
   maxTimeoutMs: 300000,
 } as const;
 
-export type KimiGatewayGuardrailLimits = typeof KIMI_GATEWAY_GUARDRAIL_LIMITS;
+export type KimiGatewayGuardrailLimits = {
+  maxPromptLength: number;
+  maxSerializedInputLength: number;
+  maxStdoutSummaryLength: number;
+  maxStderrSummaryLength: number;
+  maxErrorSummaryLength: number;
+  minTimeoutMs: number;
+  maxTimeoutMs: number;
+};
 
-function buildBase(request: ExecutionRequest, limits: typeof KIMI_GATEWAY_GUARDRAIL_LIMITS) {
+function buildBase(request: ExecutionRequest, limits: KimiGatewayGuardrailLimits) {
   return {
     requestId: request.requirementId, requestType: request.type,
     maxPromptLength: limits.maxPromptLength,
@@ -63,7 +71,7 @@ function buildBase(request: ExecutionRequest, limits: typeof KIMI_GATEWAY_GUARDR
 export function evaluateKimiGatewayGuardrails(input: {
   request: ExecutionRequest;
   config?: CliAdapterConfig;
-  limits?: Partial<typeof KIMI_GATEWAY_GUARDRAIL_LIMITS>;
+  limits?: Partial<KimiGatewayGuardrailLimits>;
 }): KimiGatewayGuardrailResult {
   const limits = { ...KIMI_GATEWAY_GUARDRAIL_LIMITS, ...input.limits };
   const base = buildBase(input.request, limits);

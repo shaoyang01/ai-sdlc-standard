@@ -129,6 +129,64 @@ async function test() {
   });
   assert(r13.executed === false && r13.guardrailDecision === "timeout_out_of_range", "timeout out of range");
 
+  // Test 14: Summary clamp — success path
+  console.log("Test 14: Summary clamp — success path");
+  const r14 = await dispatchKimiGatewayReal({
+    request,
+    config: validConfig, env: allOn,
+    runner: {
+      run: async () => ({
+        exitCode: 0, durationMs: 5,
+        stdout: "token=abc password=123 sk-test " + "y".repeat(500),
+        stderr: "api_key=xyz " + "z".repeat(500),
+      }),
+    },
+    guardrailLimits: {
+      maxStdoutSummaryLength: 50,
+      maxStderrSummaryLength: 50,
+      maxErrorSummaryLength: 50,
+    },
+  });
+  assert(r14.status === "executed_success", "clamp success status");
+  assert(typeof r14.stdoutSummary === "string" && r14.stdoutSummary.length <= 63, "stdout clamped length");
+  assert(typeof r14.stderrSummary === "string" && r14.stderrSummary.length <= 63, "stderr clamped length");
+  assert(r14.error === undefined, "no error on success");
+  const j14 = JSON.stringify(r14);
+  assert(!j14.includes("abc"), "clamp no abc");
+  assert(!j14.includes("123"), "clamp no 123");
+  assert(!j14.includes("sk-test"), "clamp no sk-test");
+  assert(!j14.includes("xyz"), "clamp no xyz");
+  assert(!j14.includes("y".repeat(100)), "clamp no long raw stdout");
+  assert(!(r14.stderrSummary ?? "").includes("z".repeat(100)), "stderr summary clamped");
+  console.log("Test 14 done\n");
+
+  // Test 15: Summary clamp — failure path
+  console.log("Test 15: Summary clamp — failure path");
+  const r15 = await dispatchKimiGatewayReal({
+    request,
+    config: validConfig, env: allOn,
+    runner: {
+      run: async () => ({
+        exitCode: 1, durationMs: 5,
+        stdout: "",
+        stderr: "password=abc token=xyz " + "e".repeat(500),
+      }),
+    },
+    guardrailLimits: {
+      maxStderrSummaryLength: 50,
+      maxErrorSummaryLength: 50,
+    },
+  });
+  assert(r15.status === "executed_failure", "clamp failure status");
+  assert(typeof r15.stderrSummary === "string" && r15.stderrSummary.length <= 63, "failure stderr clamped");
+  assert(typeof r15.error === "string" && r15.error.length <= 70, "failure error clamped");
+  const j15 = JSON.stringify(r15);
+  assert(!j15.includes("abc"), "failure clamp no abc");
+  assert(!j15.includes("xyz"), "failure clamp no xyz");
+  assert(!(r15.stderrSummary ?? "").includes("e".repeat(100)), "failure stderr summary clamped");
+  assert(!(r15.error ?? "").includes("e".repeat(100)), "failure error clamped");
+  console.log("Test 15 done\n");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

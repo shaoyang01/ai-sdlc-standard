@@ -40,6 +40,16 @@ async function test() {
   assert(classifyKimiGatewayRealDispatchFallback({ dispatchStatus: "executed_timeout" }).action === "return_structured_timeout", "timeout");
   console.log("Test 7 done\n");
 
+  // Test 7b: Guardrail rejection → structured failure
+  const p7b = classifyKimiGatewayRealDispatchFallback({
+    dispatchStatus: "contract_rejected",
+    guardrailDecision: "prompt_too_large",
+  });
+  assert(p7b.reason === "guardrail_rejected", "guardrail reason");
+  assert(p7b.action === "return_structured_failure", "guardrail action");
+  assert(p7b.success === false && p7b.affectsFinalStatus === false, "guardrail no effects");
+  console.log("Test 7b done\n");
+
   // Test 8: Sanitization
   const p8 = classifyKimiGatewayRealDispatchFallback({ error: "failed token=abc password=123 sk-test api_key=xyz" });
   const j8 = JSON.stringify(p8);

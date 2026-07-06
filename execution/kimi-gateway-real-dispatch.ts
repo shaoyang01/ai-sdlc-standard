@@ -201,6 +201,7 @@ export async function executeKimiGatewayRequest(
   const fallback = classifyKimiGatewayRealDispatchFallback({
     contractDecision: dispatch.contractDecision,
     dispatchStatus: dispatch.status,
+    guardrailDecision: dispatch.guardrailDecision,
     error: dispatch.error ?? dispatch.stderrSummary,
   });
   return {
