@@ -162,6 +162,22 @@ async function test() {
   const hermesEvidence = hermes["evidence"] as string[];
   assert(hermesEvidence.includes("execution/hermes-cli-command-executor.ts"), "hermes evidence command executor");
   assert(hermesEvidence.includes("tests/hermes-cli-command-executor.test.ts"), "hermes evidence command executor test");
+  assert(hermes["gateway_integration_contract"] === "implemented_contract_only", "hermes gateway contract");
+  assert(hermes["gateway_integration_contract_default_enabled"] === false, "hermes gateway default disabled");
+  assert(hermes["gateway_integration_contract_wired_to_gateway"] === false, "hermes gateway not wired gateway");
+  assert(hermes["gateway_integration_contract_wired_to_runtime"] === false, "hermes gateway not wired runtime");
+  assert(hermes["gateway_integration_contract_invokes_cli"] === false, "hermes gateway no CLI");
+  assert(hermes["gateway_integration_contract_spawns_process"] === false, "hermes gateway no spawn");
+  const hgwSupported = hermes["gateway_integration_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hgwSupported) && hgwSupported.includes("review") && hgwSupported.includes("code_review") && hgwSupported.includes("validation"), "hermes gateway supported types");
+  const hgwUnsupported = hermes["gateway_integration_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgwUnsupported) && hgwUnsupported.includes("llm_task") && hgwUnsupported.includes("code_generation") && hgwUnsupported.includes("bugfix"), "hermes gateway unsupported types");
+  const hgwFlags = hermes["gateway_integration_contract_requires_flags"] as string[];
+  assert(Array.isArray(hgwFlags) && hgwFlags.length === 2, "hermes gateway 2 flags");
+  assert(hermes["gateway_integration_contract_changes_final_status"] === false, "hermes gateway no final status");
+  assert(hermes["gateway_integration_contract_changes_routing"] === false, "hermes gateway no routing");
+  assert(hermesEvidence.includes("execution/hermes-gateway-integration-contract.ts"), "hermes evidence gateway contract");
+  assert(hermesEvidence.includes("tests/hermes-gateway-integration-contract.test.ts"), "hermes evidence gateway test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

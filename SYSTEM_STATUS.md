@@ -134,5 +134,6 @@ All evolution proposals have `applied: false` and require human review.
 9. **Kimi Gateway Real Dispatch Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; ready for controlled llm_task Gateway dispatch only)
 10. **Kimi Gateway Request Type Expansion Contract** — ✅ Done (verdict: NO_EXPANSION_IN_THIS_PR; Kimi remains llm_task only; code_generation→Codex, review/validation→Hermes, bugfix→separate review)
 11. **Hermes CLI Command Executor Implementation Behind Feature Flag** — ✅ Done (isolated, feature-flagged; not wired to Gateway or Runtime; fake-runner tests only)
-12. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-13. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+12. **Hermes Gateway Integration Contract** — ✅ Done (contract-only; supports review/code_review/validation; requires 2 flags; not wired)
+13. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+14. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

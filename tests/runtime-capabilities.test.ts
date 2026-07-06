@@ -236,6 +236,21 @@ async function test() {
   assert(realAdapters["hermes_cli_command_executor_persists_audit"] === false, "hermes command executor no persist");
   assert(realAdapters["hermes_cli_command_executor_changes_final_status"] === false, "hermes command executor no final status");
   assert(realAdapters["hermes_cli_command_executor_changes_routing"] === false, "hermes command executor no routing");
+  assert(realAdapters["hermes_gateway_integration_contract"] === "implemented_contract_only", "hermes gateway contract implemented");
+  assert(realAdapters["hermes_gateway_integration_contract_default_enabled"] === false, "hermes gateway default disabled");
+  assert(realAdapters["hermes_gateway_integration_contract_wired_to_gateway"] === false, "hermes gateway not wired gateway");
+  assert(realAdapters["hermes_gateway_integration_contract_wired_to_runtime"] === false, "hermes gateway not wired runtime");
+  assert(realAdapters["hermes_gateway_integration_contract_invokes_cli"] === false, "hermes gateway no CLI");
+  assert(realAdapters["hermes_gateway_integration_contract_spawns_process"] === false, "hermes gateway no spawn");
+  const hgwSupported = realAdapters["hermes_gateway_integration_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hgwSupported) && hgwSupported.includes("review") && hgwSupported.includes("code_review") && hgwSupported.includes("validation"), "hermes gateway supported types");
+  const hgwUnsupported = realAdapters["hermes_gateway_integration_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgwUnsupported) && hgwUnsupported.includes("llm_task") && hgwUnsupported.includes("code_generation") && hgwUnsupported.includes("bugfix"), "hermes gateway unsupported types");
+  const hgwFlags = realAdapters["hermes_gateway_integration_contract_requires_flags"] as string[];
+  assert(Array.isArray(hgwFlags) && hgwFlags.length === 2, "hermes gateway 2 flags");
+  assert(hgwFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hgwFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes gateway flags correct");
+  assert(realAdapters["hermes_gateway_integration_contract_changes_final_status"] === false, "hermes gateway no final status");
+  assert(realAdapters["hermes_gateway_integration_contract_changes_routing"] === false, "hermes gateway no routing");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

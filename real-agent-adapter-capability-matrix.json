@@ -170,7 +170,9 @@
         "execution/hermes-cli-executor-contract.ts",
         "tests/hermes-cli-executor-contract.test.ts",
         "execution/hermes-cli-command-executor.ts",
-        "tests/hermes-cli-command-executor.test.ts"
+        "tests/hermes-cli-command-executor.test.ts",
+        "execution/hermes-gateway-integration-contract.ts",
+        "tests/hermes-gateway-integration-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -183,7 +185,21 @@
       "command_executor_writes_files": false,
       "command_executor_persists_audit": false,
       "command_executor_changes_final_status": false,
-      "command_executor_changes_routing": false
+      "command_executor_changes_routing": false,
+      "gateway_integration_contract": "implemented_contract_only",
+      "gateway_integration_contract_default_enabled": false,
+      "gateway_integration_contract_wired_to_gateway": false,
+      "gateway_integration_contract_wired_to_runtime": false,
+      "gateway_integration_contract_invokes_cli": false,
+      "gateway_integration_contract_spawns_process": false,
+      "gateway_integration_contract_supported_request_types": ["review", "code_review", "validation"],
+      "gateway_integration_contract_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "gateway_integration_contract_requires_flags": [
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_integration_contract_changes_final_status": false,
+      "gateway_integration_contract_changes_routing": false
     }
   ],
   "request_types": [

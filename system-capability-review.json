@@ -543,6 +543,29 @@
         "execution/hermes-cli-command-executor.ts",
         "tests/hermes-cli-command-executor.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Gateway Integration Contract",
+      "status": "implemented_contract_only",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "invokes_cli": false,
+      "spawns_process": false,
+      "supported_request_types": ["review", "code_review", "validation"],
+      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "requires_flags": [
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "changes_final_status": false,
+      "changes_routing": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "evidence": [
+        "execution/hermes-gateway-integration-contract.ts",
+        "tests/hermes-gateway-integration-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -764,8 +787,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Integration Contract",
-    "reason": "Hermes now has an isolated command executor. A Gateway integration contract (following Kimi's pattern) should define how Hermes connects to the Execution Gateway.",
-    "safety_rationale": "Contract-only Gateway integration prevents accidental wiring or routing changes."
+    "title": "Hermes Gateway Shadow Sidecar",
+    "reason": "Hermes now has command executor and Gateway integration contract. A shadow sidecar should be next, following Kimi's pattern.",
+    "safety_rationale": "Shadow sidecar is in-memory and feature-flagged; no Gateway or Runtime behavior change."
   }
 }
