@@ -293,6 +293,19 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_contains_raw_prompt"] === false, "hermes runtime shadow no raw prompt");
   assert(realAdapters["hermes_runtime_shadow_attachment_contains_raw_artifacts"] === false, "hermes runtime shadow no raw artifacts");
   assert(realAdapters["hermes_runtime_shadow_attachment_contains_secrets"] === false, "hermes runtime shadow no secrets");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract"] === "implemented_contract_only", "hermes wiring contract");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_default_enabled"] === false, "hermes wiring default disabled");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_wired_to_runtime"] === false, "hermes wiring not wired");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_field"] === "hermes_runtime_shadow_attachment", "hermes wiring field");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_conditional_field_only"] === true, "hermes wiring conditional");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_omit_when_disabled"] === true, "hermes wiring omit");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_never_undefined_key"] === true, "hermes wiring no undefined");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_changes_runtime_result_shape_now"] === false, "hermes wiring no shape now");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_changes_final_status"] === false, "hermes wiring no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_changes_routing"] === false, "hermes wiring no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result"] === false, "hermes wiring no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_writes_files"] === false, "hermes wiring no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_wiring_contract_persists_audit"] === false, "hermes wiring no persist");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

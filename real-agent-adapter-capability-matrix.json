@@ -178,7 +178,9 @@
         "execution/hermes-runtime-attachment-contract.ts",
         "tests/hermes-runtime-attachment-contract.test.ts",
         "core/hermes-runtime-shadow-attachment.ts",
-        "tests/hermes-runtime-shadow-attachment.test.ts"
+        "tests/hermes-runtime-shadow-attachment.test.ts",
+        "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
+        "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -247,7 +249,20 @@
       "runtime_shadow_attachment_persists_audit": false,
       "runtime_shadow_attachment_contains_raw_prompt": false,
       "runtime_shadow_attachment_contains_raw_artifacts": false,
-      "runtime_shadow_attachment_contains_secrets": false
+      "runtime_shadow_attachment_contains_secrets": false,
+      "runtime_shadow_attachment_wiring_contract": "implemented_contract_only",
+      "runtime_shadow_attachment_wiring_contract_default_enabled": false,
+      "runtime_shadow_attachment_wiring_contract_wired_to_runtime": false,
+      "runtime_shadow_attachment_wiring_contract_field": "hermes_runtime_shadow_attachment",
+      "runtime_shadow_attachment_wiring_contract_conditional_field_only": true,
+      "runtime_shadow_attachment_wiring_contract_omit_when_disabled": true,
+      "runtime_shadow_attachment_wiring_contract_never_undefined_key": true,
+      "runtime_shadow_attachment_wiring_contract_changes_runtime_result_shape_now": false,
+      "runtime_shadow_attachment_wiring_contract_changes_final_status": false,
+      "runtime_shadow_attachment_wiring_contract_changes_routing": false,
+      "runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_wiring_contract_writes_files": false,
+      "runtime_shadow_attachment_wiring_contract_persists_audit": false
     }
   ],
   "request_types": [

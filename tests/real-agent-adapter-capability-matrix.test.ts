@@ -225,6 +225,21 @@ async function test() {
   assert(hermes["runtime_shadow_attachment_contains_secrets"] === false, "hermes runtime shadow no secrets");
   assert(hermesEvidence.includes("core/hermes-runtime-shadow-attachment.ts"), "hermes evidence runtime shadow");
   assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment.test.ts"), "hermes evidence runtime shadow test");
+  assert(hermes["runtime_shadow_attachment_wiring_contract"] === "implemented_contract_only", "hermes wiring contract");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_default_enabled"] === false, "hermes wiring default disabled");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_wired_to_runtime"] === false, "hermes wiring not wired");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_field"] === "hermes_runtime_shadow_attachment", "hermes wiring field");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_conditional_field_only"] === true, "hermes wiring conditional");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_omit_when_disabled"] === true, "hermes wiring omit");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_never_undefined_key"] === true, "hermes wiring no undefined");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_changes_runtime_result_shape_now"] === false, "hermes wiring no shape now");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_changes_final_status"] === false, "hermes wiring no final status");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_changes_routing"] === false, "hermes wiring no routing");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result"] === false, "hermes wiring no primary");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_writes_files"] === false, "hermes wiring no files");
+  assert(hermes["runtime_shadow_attachment_wiring_contract_persists_audit"] === false, "hermes wiring no persist");
+  assert(hermesEvidence.includes("core/hermes-runtime-shadow-attachment-wiring-contract.ts"), "hermes evidence wiring contract");
+  assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"), "hermes evidence wiring test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

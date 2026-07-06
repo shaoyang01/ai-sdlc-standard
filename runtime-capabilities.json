@@ -327,6 +327,19 @@
     "hermes_runtime_shadow_attachment_persists_audit": false,
     "hermes_runtime_shadow_attachment_contains_raw_prompt": false,
     "hermes_runtime_shadow_attachment_contains_raw_artifacts": false,
-    "hermes_runtime_shadow_attachment_contains_secrets": false
+    "hermes_runtime_shadow_attachment_contains_secrets": false,
+    "hermes_runtime_shadow_attachment_wiring_contract": "implemented_contract_only",
+    "hermes_runtime_shadow_attachment_wiring_contract_default_enabled": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_wired_to_runtime": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_field": "hermes_runtime_shadow_attachment",
+    "hermes_runtime_shadow_attachment_wiring_contract_conditional_field_only": true,
+    "hermes_runtime_shadow_attachment_wiring_contract_omit_when_disabled": true,
+    "hermes_runtime_shadow_attachment_wiring_contract_never_undefined_key": true,
+    "hermes_runtime_shadow_attachment_wiring_contract_changes_runtime_result_shape_now": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_changes_final_status": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_changes_routing": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_affects_primary_gateway_result": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_writes_files": false,
+    "hermes_runtime_shadow_attachment_wiring_contract_persists_audit": false
   }
 }
