@@ -149,6 +149,19 @@ async function test() {
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
+  assert(hermes["command_executor"] === "implemented_feature_flagged_isolated", "hermes command executor implemented");
+  assert(hermes["command_executor_default_enabled"] === false, "hermes command executor default disabled");
+  assert(hermes["command_executor_wired_to_gateway"] === false, "hermes command executor not wired gateway");
+  assert(hermes["command_executor_wired_to_runtime"] === false, "hermes command executor not wired runtime");
+  assert(hermes["command_executor_requires_flag"] === "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled", "hermes command executor flag");
+  assert(hermes["command_executor_uses_fake_runner_in_tests"] === true, "hermes command executor fake runner");
+  assert(hermes["command_executor_writes_files"] === false, "hermes command executor no files");
+  assert(hermes["command_executor_persists_audit"] === false, "hermes command executor no persist");
+  assert(hermes["command_executor_changes_final_status"] === false, "hermes command executor no final status");
+  assert(hermes["command_executor_changes_routing"] === false, "hermes command executor no routing");
+  const hermesEvidence = hermes["evidence"] as string[];
+  assert(hermesEvidence.includes("execution/hermes-cli-command-executor.ts"), "hermes evidence command executor");
+  assert(hermesEvidence.includes("tests/hermes-cli-command-executor.test.ts"), "hermes evidence command executor test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

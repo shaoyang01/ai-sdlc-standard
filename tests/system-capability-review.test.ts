@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Integration Contract", "next PR Hermes gateway integration");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Integration Contract", "next PR Hermes gateway integration");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -277,8 +277,24 @@ async function test() {
   assert(xpEvidence.includes("KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md"), "expansion evidence MD");
   assert(xpEvidence.includes("kimi-request-type-expansion-contract.json"), "expansion evidence JSON");
   assert(xpEvidence.includes("tests/kimi-request-type-expansion-contract.test.ts"), "expansion evidence test");
+  // Hermes CLI Command Executor
+  assert(capNames.includes("Hermes CLI Command Executor"), "has Hermes Command Executor");
+  const hxCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes CLI Command Executor");
+  assert(hxCap !== undefined && hxCap["status"] === "implemented_feature_flagged_isolated", "hermes executor status");
+  assert(hxCap["runtime_active_by_default"] === false, "hermes executor not active default");
+  assert(hxCap["requires_flag"] === "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled", "hermes executor flag");
+  assert(hxCap["wired_to_gateway"] === false, "hermes executor not wired gateway");
+  assert(hxCap["wired_to_runtime"] === false, "hermes executor not wired runtime");
+  assert(hxCap["uses_fake_runner_in_tests"] === true, "hermes executor fake runner");
+  assert(hxCap["writes_files"] === false, "hermes executor no files");
+  assert(hxCap["persists_audit"] === false, "hermes executor no persist");
+  assert(hxCap["changes_final_status"] === false, "hermes executor no final status");
+  assert(hxCap["changes_routing"] === false, "hermes executor no routing");
+  const hxEvidence = hxCap["evidence"] as string[];
+  assert(hxEvidence.includes("execution/hermes-cli-command-executor.ts"), "hermes executor evidence");
+  assert(hxEvidence.includes("tests/hermes-cli-command-executor.test.ts"), "hermes executor test evidence");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Integration Contract", "next PR Hermes gateway integration");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

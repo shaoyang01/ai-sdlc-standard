@@ -526,6 +526,23 @@
         "kimi-request-type-expansion-contract.json",
         "tests/kimi-request-type-expansion-contract.test.ts"
       ]
+    },
+    {
+      "name": "Hermes CLI Command Executor",
+      "status": "implemented_feature_flagged_isolated",
+      "runtime_active_by_default": false,
+      "requires_flag": "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled",
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "uses_fake_runner_in_tests": true,
+      "writes_files": false,
+      "persists_audit": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "evidence": [
+        "execution/hermes-cli-command-executor.ts",
+        "tests/hermes-cli-command-executor.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -747,8 +764,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes CLI Command Executor Implementation Behind Feature Flag",
-    "reason": "review/code_review/validation expansion is deferred to Hermes, so Hermes must advance before Kimi expands beyond llm_task.",
-    "safety_rationale": "Hermes executor implementation can be isolated and feature-flagged without changing Gateway or Runtime behavior."
+    "title": "Hermes Gateway Integration Contract",
+    "reason": "Hermes now has an isolated command executor. A Gateway integration contract (following Kimi's pattern) should define how Hermes connects to the Execution Gateway.",
+    "safety_rationale": "Contract-only Gateway integration prevents accidental wiring or routing changes."
   }
 }

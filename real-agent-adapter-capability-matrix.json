@@ -168,10 +168,22 @@
         "execution/hermes-cli-dry-run.ts",
         "tests/hermes-cli-dry-run.test.ts",
         "execution/hermes-cli-executor-contract.ts",
-        "tests/hermes-cli-executor-contract.test.ts"
+        "tests/hermes-cli-executor-contract.test.ts",
+        "execution/hermes-cli-command-executor.ts",
+        "tests/hermes-cli-command-executor.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
-      "executor_contract": "implemented_contract_only"
+      "executor_contract": "implemented_contract_only",
+      "command_executor": "implemented_feature_flagged_isolated",
+      "command_executor_default_enabled": false,
+      "command_executor_wired_to_gateway": false,
+      "command_executor_wired_to_runtime": false,
+      "command_executor_requires_flag": "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled",
+      "command_executor_uses_fake_runner_in_tests": true,
+      "command_executor_writes_files": false,
+      "command_executor_persists_audit": false,
+      "command_executor_changes_final_status": false,
+      "command_executor_changes_routing": false
     }
   ],
   "request_types": [

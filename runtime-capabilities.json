@@ -261,6 +261,16 @@
     "kimi_gateway_real_dispatch_guardrails_clamps_output_summaries": true,
     "kimi_gateway_real_dispatch_guardrails_expands_request_types": false,
     "kimi_gateway_real_dispatch_guardrails_changes_final_status": false,
-    "kimi_gateway_real_dispatch_guardrails_changes_routing": false
+    "kimi_gateway_real_dispatch_guardrails_changes_routing": false,
+    "hermes_cli_command_executor": "implemented_feature_flagged_isolated",
+    "hermes_cli_command_executor_default_enabled": false,
+    "hermes_cli_command_executor_wired_to_gateway": false,
+    "hermes_cli_command_executor_wired_to_runtime": false,
+    "hermes_cli_command_executor_requires_flag": "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled",
+    "hermes_cli_command_executor_uses_fake_runner_in_tests": true,
+    "hermes_cli_command_executor_writes_files": false,
+    "hermes_cli_command_executor_persists_audit": false,
+    "hermes_cli_command_executor_changes_final_status": false,
+    "hermes_cli_command_executor_changes_routing": false
   }
 }

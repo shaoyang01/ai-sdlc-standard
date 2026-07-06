@@ -226,6 +226,16 @@ async function test() {
   assert(realAdapters["kimi_gateway_real_dispatch_guardrails_expands_request_types"] === false, "kimi guardrails no request expansion");
   assert(realAdapters["kimi_gateway_real_dispatch_guardrails_changes_final_status"] === false, "kimi guardrails no final status change");
   assert(realAdapters["kimi_gateway_real_dispatch_guardrails_changes_routing"] === false, "kimi guardrails no routing change");
+  assert(realAdapters["hermes_cli_command_executor"] === "implemented_feature_flagged_isolated", "hermes command executor implemented");
+  assert(realAdapters["hermes_cli_command_executor_default_enabled"] === false, "hermes command executor default disabled");
+  assert(realAdapters["hermes_cli_command_executor_wired_to_gateway"] === false, "hermes command executor not wired gateway");
+  assert(realAdapters["hermes_cli_command_executor_wired_to_runtime"] === false, "hermes command executor not wired runtime");
+  assert(realAdapters["hermes_cli_command_executor_requires_flag"] === "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled", "hermes command executor flag");
+  assert(realAdapters["hermes_cli_command_executor_uses_fake_runner_in_tests"] === true, "hermes command executor fake runner");
+  assert(realAdapters["hermes_cli_command_executor_writes_files"] === false, "hermes command executor no files");
+  assert(realAdapters["hermes_cli_command_executor_persists_audit"] === false, "hermes command executor no persist");
+  assert(realAdapters["hermes_cli_command_executor_changes_final_status"] === false, "hermes command executor no final status");
+  assert(realAdapters["hermes_cli_command_executor_changes_routing"] === false, "hermes command executor no routing");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
