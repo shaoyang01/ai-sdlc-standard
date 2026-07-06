@@ -707,6 +707,29 @@
         "tests/hermes-runtime-shadow-attachment.test.ts",
         "tests/runtime-hermes-shadow-attachment.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Runtime Shadow Attachment Final Readiness Review",
+      "status": "implemented_review_only",
+      "verdict": "READY_WITH_CONSTRAINTS",
+      "runtime_active_by_default": false,
+      "wired_to_runtime": true,
+      "wired_to_gateway": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "persists_audit": false,
+      "writes_files": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Contract",
+      "evidence": [
+        "core/hermes-runtime-shadow-attachment-readiness-review.ts",
+        "tests/hermes-runtime-shadow-attachment-readiness-review.test.ts",
+        "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
+        "hermes-runtime-shadow-attachment-readiness-review.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -928,8 +951,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Runtime Shadow Attachment Final Readiness Review",
-    "reason": "Hermes runtime sidecar has audit metadata and observability summary. A final readiness review should follow.",
-    "safety_rationale": "Review has no side effects; final gate before any Hermes Gateway real dispatch."
+    "title": "Hermes Gateway Real Dispatch Contract",
+    "reason": "Hermes runtime sidecar stack is complete and readiness-reviewed. The next step is a Gateway real dispatch contract following Kimi's pattern.",
+    "safety_rationale": "Contract-only Gateway real dispatch prevents accidental wiring or routing changes."
   }
 }

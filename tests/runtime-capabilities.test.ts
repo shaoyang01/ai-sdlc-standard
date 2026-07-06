@@ -339,6 +339,20 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_contains_raw_artifacts"] === false, "hermes obs no raw artifacts");
   assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_contains_secrets"] === false, "hermes obs no secrets");
   assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_field"] === "observabilitySummary", "hermes obs field");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_review"] === "implemented_review_only", "hermes readiness review");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes readiness verdict");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_runtime_active_by_default"] === false, "hermes readiness not active");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_wired_to_runtime"] === true, "hermes readiness wired runtime");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_wired_to_gateway"] === false, "hermes readiness not wired gateway");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_changes_final_status"] === false, "hermes readiness no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_changes_routing"] === false, "hermes readiness no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_affects_primary_gateway_result"] === false, "hermes readiness no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_persists_audit"] === false, "hermes readiness no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_writes_files"] === false, "hermes readiness no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_contains_raw_prompt"] === false, "hermes readiness no raw prompt");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_contains_raw_artifacts"] === false, "hermes readiness no raw artifacts");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_contains_secrets"] === false, "hermes readiness no secrets");
+  assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_recommended_next_pr"] === "Hermes Gateway Real Dispatch Contract", "hermes readiness next PR");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

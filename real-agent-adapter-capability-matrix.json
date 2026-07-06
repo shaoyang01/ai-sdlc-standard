@@ -182,7 +182,11 @@
         "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
         "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts",
         "runtime.ts",
-        "tests/runtime-hermes-shadow-attachment.test.ts"
+        "tests/runtime-hermes-shadow-attachment.test.ts",
+        "core/hermes-runtime-shadow-attachment-readiness-review.ts",
+        "tests/hermes-runtime-shadow-attachment-readiness-review.test.ts",
+        "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
+        "hermes-runtime-shadow-attachment-readiness-review.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -297,7 +301,21 @@
       "runtime_shadow_attachment_observability_summary_contains_raw_prompt": false,
       "runtime_shadow_attachment_observability_summary_contains_raw_artifacts": false,
       "runtime_shadow_attachment_observability_summary_contains_secrets": false,
-      "runtime_shadow_attachment_observability_summary_field": "observabilitySummary"
+      "runtime_shadow_attachment_observability_summary_field": "observabilitySummary",
+      "runtime_shadow_attachment_final_readiness_review": "implemented_review_only",
+      "runtime_shadow_attachment_final_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "runtime_shadow_attachment_final_readiness_runtime_active_by_default": false,
+      "runtime_shadow_attachment_final_readiness_wired_to_runtime": true,
+      "runtime_shadow_attachment_final_readiness_wired_to_gateway": false,
+      "runtime_shadow_attachment_final_readiness_changes_final_status": false,
+      "runtime_shadow_attachment_final_readiness_changes_routing": false,
+      "runtime_shadow_attachment_final_readiness_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_final_readiness_persists_audit": false,
+      "runtime_shadow_attachment_final_readiness_writes_files": false,
+      "runtime_shadow_attachment_final_readiness_contains_raw_prompt": false,
+      "runtime_shadow_attachment_final_readiness_contains_raw_artifacts": false,
+      "runtime_shadow_attachment_final_readiness_contains_secrets": false,
+      "runtime_shadow_attachment_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Contract"
     }
   ],
   "request_types": [

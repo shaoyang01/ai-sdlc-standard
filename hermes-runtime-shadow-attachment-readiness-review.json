@@ -1,0 +1,47 @@
+{
+  "name": "Hermes Runtime Shadow Attachment Final Readiness Review",
+  "adapter": "hermes",
+  "scope": "runtime_shadow_attachment",
+  "verdict": "READY_WITH_CONSTRAINTS",
+  "runtime_active_by_default": false,
+  "wired_to_runtime": true,
+  "wired_to_gateway": false,
+  "gateway_primary_dispatch_changed": false,
+  "runtime_final_status_changed": false,
+  "runtime_routing_changed": false,
+  "primary_gateway_result_affected": false,
+  "default_disabled": true,
+  "omitted_when_disabled": true,
+  "never_undefined_key": true,
+  "uses_fake_builder_in_tests": true,
+  "uses_fake_runner_in_tests": true,
+  "invokes_real_hermes_cli_in_tests": false,
+  "persists_audit": false,
+  "writes_files": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "has_audit_metadata": true,
+  "has_observability_summary": true,
+  "constraints": [
+    "Hermes is still not wired to primary Gateway dispatch.",
+    "Hermes real dispatch must remain behind separate Gateway real dispatch contract.",
+    "Runtime sidecar metadata must remain optional and omitted when disabled.",
+    "No Runtime final_status or routing may depend on Hermes sidecar output.",
+    "No persisted audit or observability is allowed without a separate contract."
+  ],
+  "evidence": [
+    "core/hermes-runtime-shadow-attachment.ts",
+    "tests/hermes-runtime-shadow-attachment.test.ts",
+    "tests/runtime-hermes-shadow-attachment.test.ts",
+    "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
+    "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts",
+    "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
+    "hermes-runtime-shadow-attachment-readiness-review.json"
+  ],
+  "recommended_next_pr": {
+    "title": "Hermes Gateway Real Dispatch Contract",
+    "reason": "Hermes runtime sidecar stack is complete and readiness-reviewed. The next step is a Gateway real dispatch contract following Kimi's pattern.",
+    "safety_rationale": "Contract-only Gateway real dispatch prevents accidental wiring or routing changes."
+  }
+}

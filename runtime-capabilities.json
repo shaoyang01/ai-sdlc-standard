@@ -373,6 +373,20 @@
     "hermes_runtime_shadow_attachment_observability_summary_contains_raw_prompt": false,
     "hermes_runtime_shadow_attachment_observability_summary_contains_raw_artifacts": false,
     "hermes_runtime_shadow_attachment_observability_summary_contains_secrets": false,
-    "hermes_runtime_shadow_attachment_observability_summary_field": "observabilitySummary"
+    "hermes_runtime_shadow_attachment_observability_summary_field": "observabilitySummary",
+    "hermes_runtime_shadow_attachment_final_readiness_review": "implemented_review_only",
+    "hermes_runtime_shadow_attachment_final_readiness_verdict": "READY_WITH_CONSTRAINTS",
+    "hermes_runtime_shadow_attachment_final_readiness_runtime_active_by_default": false,
+    "hermes_runtime_shadow_attachment_final_readiness_wired_to_runtime": true,
+    "hermes_runtime_shadow_attachment_final_readiness_wired_to_gateway": false,
+    "hermes_runtime_shadow_attachment_final_readiness_changes_final_status": false,
+    "hermes_runtime_shadow_attachment_final_readiness_changes_routing": false,
+    "hermes_runtime_shadow_attachment_final_readiness_affects_primary_gateway_result": false,
+    "hermes_runtime_shadow_attachment_final_readiness_persists_audit": false,
+    "hermes_runtime_shadow_attachment_final_readiness_writes_files": false,
+    "hermes_runtime_shadow_attachment_final_readiness_contains_raw_prompt": false,
+    "hermes_runtime_shadow_attachment_final_readiness_contains_raw_artifacts": false,
+    "hermes_runtime_shadow_attachment_final_readiness_contains_secrets": false,
+    "hermes_runtime_shadow_attachment_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Contract"
   }
 }

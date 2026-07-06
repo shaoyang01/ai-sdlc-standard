@@ -275,6 +275,24 @@ async function test() {
   assert(hermes["runtime_shadow_attachment_observability_summary_contains_raw_artifacts"] === false, "hermes obs no raw artifacts");
   assert(hermes["runtime_shadow_attachment_observability_summary_contains_secrets"] === false, "hermes obs no secrets");
   assert(hermes["runtime_shadow_attachment_observability_summary_field"] === "observabilitySummary", "hermes obs field");
+  assert(hermes["runtime_shadow_attachment_final_readiness_review"] === "implemented_review_only", "hermes readiness review");
+  assert(hermes["runtime_shadow_attachment_final_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes readiness verdict");
+  assert(hermes["runtime_shadow_attachment_final_readiness_runtime_active_by_default"] === false, "hermes readiness not active");
+  assert(hermes["runtime_shadow_attachment_final_readiness_wired_to_runtime"] === true, "hermes readiness wired runtime");
+  assert(hermes["runtime_shadow_attachment_final_readiness_wired_to_gateway"] === false, "hermes readiness not wired gateway");
+  assert(hermes["runtime_shadow_attachment_final_readiness_changes_final_status"] === false, "hermes readiness no final status");
+  assert(hermes["runtime_shadow_attachment_final_readiness_changes_routing"] === false, "hermes readiness no routing");
+  assert(hermes["runtime_shadow_attachment_final_readiness_affects_primary_gateway_result"] === false, "hermes readiness no primary");
+  assert(hermes["runtime_shadow_attachment_final_readiness_persists_audit"] === false, "hermes readiness no persist");
+  assert(hermes["runtime_shadow_attachment_final_readiness_writes_files"] === false, "hermes readiness no files");
+  assert(hermes["runtime_shadow_attachment_final_readiness_contains_raw_prompt"] === false, "hermes readiness no raw prompt");
+  assert(hermes["runtime_shadow_attachment_final_readiness_contains_raw_artifacts"] === false, "hermes readiness no raw artifacts");
+  assert(hermes["runtime_shadow_attachment_final_readiness_contains_secrets"] === false, "hermes readiness no secrets");
+  assert(hermes["runtime_shadow_attachment_final_readiness_recommended_next_pr"] === "Hermes Gateway Real Dispatch Contract", "hermes readiness next PR");
+  assert(hermesEvidence.includes("core/hermes-runtime-shadow-attachment-readiness-review.ts"), "hermes evidence readiness ts");
+  assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment-readiness-review.test.ts"), "hermes evidence readiness test");
+  assert(hermesEvidence.includes("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes evidence readiness md");
+  assert(hermesEvidence.includes("hermes-runtime-shadow-attachment-readiness-review.json"), "hermes evidence readiness json");
   console.log("");
 
   // ── Test 3: Request type alignment ──

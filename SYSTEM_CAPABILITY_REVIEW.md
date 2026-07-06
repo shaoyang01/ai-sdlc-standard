@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Hermes Runtime Shadow Attachment Final Readiness Review**
+**Recommended: Hermes Gateway Real Dispatch Contract**
 
-Hermes runtime sidecar now has audit metadata and observability summary. A final readiness review should follow before any Gateway real dispatch.
+Hermes runtime sidecar stack is complete and readiness-reviewed (verdict: READY_WITH_CONSTRAINTS). The next step is a Gateway real dispatch contract following Kimi's pattern — contract-only, requiring multiple flags, default-off.
 
 ---
 
