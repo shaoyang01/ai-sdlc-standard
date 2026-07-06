@@ -533,6 +533,50 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts"), "hermes evidence rollout test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md"), "hermes evidence rollout md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-controlled-rollout-plan.json"), "hermes evidence rollout json");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist"] === "implemented_checklist_only", "hermes dispatch validation checklist");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_status"] === "checklist_only", "hermes dispatch validation status");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_executing_now"] === false, "hermes dispatch validation not executing");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_enables_feature_flags_now"] === false, "hermes dispatch validation no flags");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_runtime_behavior_now"] === false, "hermes dispatch validation no runtime behavior");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_gateway_behavior_now"] === false, "hermes dispatch validation no gateway behavior");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch validation required verdict");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_rollout_plan_status_required"] === "plan_only", "hermes dispatch validation required rollout plan");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch validation current verdict");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_current_rollout_plan_status"] === "plan_only", "hermes dispatch validation current rollout plan");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_default_disabled"] === true, "hermes dispatch validation default disabled");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_feature_flagged"] === true, "hermes dispatch validation feature flagged");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_requires_multiple_flags"] === true, "hermes dispatch validation multiple flags");
+  const hChecklistInitial = hermes["gateway_real_dispatch_rollout_validation_checklist_initial_request_types"] as string[];
+  assert(Array.isArray(hChecklistInitial) && hChecklistInitial.length === 1 && hChecklistInitial[0] === "review", "hermes dispatch validation initial review");
+  const hChecklistSupported = hermes["gateway_real_dispatch_rollout_validation_checklist_supported_request_types"] as string[];
+  assert(Array.isArray(hChecklistSupported) && hChecklistSupported.includes("review") && hChecklistSupported.includes("code_review") && hChecklistSupported.includes("validation"), "hermes dispatch validation supported");
+  const hChecklistUnsupported = hermes["gateway_real_dispatch_rollout_validation_checklist_unsupported_request_types"] as string[];
+  assert(Array.isArray(hChecklistUnsupported) && hChecklistUnsupported.includes("llm_task") && hChecklistUnsupported.includes("code_generation") && hChecklistUnsupported.includes("bugfix"), "hermes dispatch validation unsupported");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_gateway_primary_dispatch"] === false, "hermes dispatch validation no primary dispatch");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_gateway_final_result"] === false, "hermes dispatch validation no gateway final");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_final_status"] === false, "hermes dispatch validation no final status");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_changes_routing"] === false, "hermes dispatch validation no routing");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_affects_primary_gateway_result"] === false, "hermes dispatch validation no primary effect");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_makes_hermes_default"] === false, "hermes dispatch validation not default");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_makes_hermes_final_review_owner"] === false, "hermes dispatch validation not review owner");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_makes_hermes_final_validation_owner"] === false, "hermes dispatch validation not validation owner");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_writes_files"] === false, "hermes dispatch validation no files");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_persists_validation_logs"] === false, "hermes dispatch validation no validation logs");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_persists_rollout_logs"] === false, "hermes dispatch validation no rollout logs");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_persists_audit"] === false, "hermes dispatch validation no audit persist");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_persists_observability"] === false, "hermes dispatch validation no observability persist");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_persists_guardrails"] === false, "hermes dispatch validation no guardrail persist");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_contains_raw_prompt"] === false, "hermes dispatch validation no raw prompt");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_contains_raw_artifacts"] === false, "hermes dispatch validation no raw artifacts");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_contains_secrets"] === false, "hermes dispatch validation no secrets");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_operator_approval_required"] === true, "hermes dispatch validation operator approval");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_rollout_may_proceed_automatically"] === false, "hermes dispatch validation no automatic rollout");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_automatic_enablement_allowed"] === false, "hermes dispatch validation no automatic enablement");
+  assert(hermes["gateway_real_dispatch_rollout_validation_checklist_recommended_next_pr"] === "Hermes Gateway Real Dispatch Operator Runbook", "hermes dispatch validation next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts"), "hermes evidence validation checklist module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts"), "hermes evidence validation checklist test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md"), "hermes evidence validation checklist md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-rollout-validation-checklist.json"), "hermes evidence validation checklist json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -605,7 +649,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Rollout Validation Checklist", "next PR rollout checklist");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Operator Runbook", "next PR operator runbook");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

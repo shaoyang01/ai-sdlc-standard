@@ -214,7 +214,11 @@
         "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
         "tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-        "hermes-gateway-real-dispatch-controlled-rollout-plan.json"
+        "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+        "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
+        "tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+        "hermes-gateway-real-dispatch-rollout-validation-checklist.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -641,7 +645,54 @@
       "gateway_real_dispatch_controlled_rollout_plan_contains_raw_prompt": false,
       "gateway_real_dispatch_controlled_rollout_plan_contains_raw_artifacts": false,
       "gateway_real_dispatch_controlled_rollout_plan_contains_secrets": false,
-      "gateway_real_dispatch_controlled_rollout_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Rollout Validation Checklist"
+      "gateway_real_dispatch_controlled_rollout_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Rollout Validation Checklist",
+      "gateway_real_dispatch_rollout_validation_checklist": "implemented_checklist_only",
+      "gateway_real_dispatch_rollout_validation_checklist_status": "checklist_only",
+      "gateway_real_dispatch_rollout_validation_checklist_executing_now": false,
+      "gateway_real_dispatch_rollout_validation_checklist_enables_feature_flags_now": false,
+      "gateway_real_dispatch_rollout_validation_checklist_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_rollout_validation_checklist_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_rollout_validation_checklist_readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_rollout_validation_checklist_rollout_plan_status_required": "plan_only",
+      "gateway_real_dispatch_rollout_validation_checklist_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_rollout_validation_checklist_current_rollout_plan_status": "plan_only",
+      "gateway_real_dispatch_rollout_validation_checklist_default_disabled": true,
+      "gateway_real_dispatch_rollout_validation_checklist_feature_flagged": true,
+      "gateway_real_dispatch_rollout_validation_checklist_requires_multiple_flags": true,
+      "gateway_real_dispatch_rollout_validation_checklist_initial_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_rollout_validation_checklist_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_rollout_validation_checklist_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_rollout_validation_checklist_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_rollout_validation_checklist_changes_gateway_final_result": false,
+      "gateway_real_dispatch_rollout_validation_checklist_changes_final_status": false,
+      "gateway_real_dispatch_rollout_validation_checklist_changes_routing": false,
+      "gateway_real_dispatch_rollout_validation_checklist_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_rollout_validation_checklist_makes_hermes_default": false,
+      "gateway_real_dispatch_rollout_validation_checklist_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_rollout_validation_checklist_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_rollout_validation_checklist_writes_files": false,
+      "gateway_real_dispatch_rollout_validation_checklist_persists_validation_logs": false,
+      "gateway_real_dispatch_rollout_validation_checklist_persists_rollout_logs": false,
+      "gateway_real_dispatch_rollout_validation_checklist_persists_audit": false,
+      "gateway_real_dispatch_rollout_validation_checklist_persists_observability": false,
+      "gateway_real_dispatch_rollout_validation_checklist_persists_guardrails": false,
+      "gateway_real_dispatch_rollout_validation_checklist_contains_raw_prompt": false,
+      "gateway_real_dispatch_rollout_validation_checklist_contains_raw_artifacts": false,
+      "gateway_real_dispatch_rollout_validation_checklist_contains_secrets": false,
+      "gateway_real_dispatch_rollout_validation_checklist_operator_approval_required": true,
+      "gateway_real_dispatch_rollout_validation_checklist_rollout_may_proceed_automatically": false,
+      "gateway_real_dispatch_rollout_validation_checklist_automatic_enablement_allowed": false,
+      "gateway_real_dispatch_rollout_validation_checklist_recommended_next_pr": "Hermes Gateway Real Dispatch Operator Runbook"
     }
   ],
   "request_types": [
@@ -861,8 +912,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Rollout Validation Checklist",
-    "reason": "Hermes Gateway real dispatch has a non-executing controlled rollout plan with initial scope limited to review.",
-    "safety_rationale": "Checklist remains non-executing and validates controlled rollout readiness before any operator-managed enablement."
+    "title": "Hermes Gateway Real Dispatch Operator Runbook",
+    "reason": "Hermes Gateway real dispatch has a non-executing rollout validation checklist with operator approval required before enablement.",
+    "safety_rationale": "Runbook remains non-executing and documents operator-managed enablement/rollback without changing defaults."
   }
 }
