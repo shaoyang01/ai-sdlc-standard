@@ -133,4 +133,4 @@ All evolution proposals have `applied: false` and require human review.
 8. **Real Agent Adapter Integration** — ✅ Kimi complete: stubs → dry-run → audit → executor → command executor → Gateway → shadow sidecar → runtime attachment → real dispatch → fallback → observability → guardrails
 9. **Kimi Gateway Real Dispatch Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; ready for controlled llm_task Gateway dispatch only)
 10. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-10. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+11. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

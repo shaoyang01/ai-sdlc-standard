@@ -261,8 +261,10 @@ async function test() {
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
-  assert(reviewJson.includes("isolated feature-flagged command executor"), "current Kimi executor state");
-  assert(reviewJson.includes("not wired to runtime/Gateway"), "not wired state");
+  assert(!reviewJson.includes("not wired to runtime/Gateway"), "no stale not-wired runtime/Gateway state");
+  assert(!reviewJson.includes("no real Kimi execution is reachable through runtime/Gateway"), "no stale no-real-Kimi state");
+  assert(reviewJson.includes("Kimi Gateway Real Dispatch Readiness Review"), "current readiness review present");
+  assert(reviewJson.includes("READY_WITH_CONSTRAINTS"), "current readiness verdict present");
   // Markdown review must reflect current Kimi state
   const md = fs.readFileSync("SYSTEM_CAPABILITY_REVIEW.md", "utf-8");
   assert(!md.includes("Kimi/Hermes are shadow-only"), "MD: no stale shadow-only claim");
