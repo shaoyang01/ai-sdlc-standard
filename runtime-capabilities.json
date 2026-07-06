@@ -409,6 +409,28 @@
     "hermes_gateway_real_dispatch_contract_persists_audit": false,
     "hermes_gateway_real_dispatch_contract_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_contract_contains_raw_artifacts": false,
-    "hermes_gateway_real_dispatch_contract_contains_secrets": false
+    "hermes_gateway_real_dispatch_contract_contains_secrets": false,
+    "hermes_gateway_real_dispatch": "implemented_feature_flagged_helper",
+    "hermes_gateway_real_dispatch_default_enabled": false,
+    "hermes_gateway_real_dispatch_wired_to_gateway": false,
+    "hermes_gateway_real_dispatch_wired_to_runtime": false,
+    "hermes_gateway_real_dispatch_supported_request_types": ["review", "code_review", "validation"],
+    "hermes_gateway_real_dispatch_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_real_dispatch_requires_flags": [
+      "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+      "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+      "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+    ],
+    "hermes_gateway_real_dispatch_invokes_cli_when_eligible": true,
+    "hermes_gateway_real_dispatch_uses_fake_runner_in_tests": true,
+    "hermes_gateway_real_dispatch_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_changes_final_status": false,
+    "hermes_gateway_real_dispatch_changes_routing": false,
+    "hermes_gateway_real_dispatch_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_writes_files": false,
+    "hermes_gateway_real_dispatch_persists_audit": false,
+    "hermes_gateway_real_dispatch_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_contains_secrets": false
   }
 }

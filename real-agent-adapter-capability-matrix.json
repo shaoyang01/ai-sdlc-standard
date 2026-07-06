@@ -190,7 +190,9 @@
         "execution/hermes-gateway-real-dispatch-contract.ts",
         "tests/hermes-gateway-real-dispatch-contract.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md",
-        "hermes-gateway-real-dispatch-contract.json"
+        "hermes-gateway-real-dispatch-contract.json",
+        "execution/hermes-gateway-real-dispatch.ts",
+        "tests/hermes-gateway-real-dispatch.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -341,7 +343,29 @@
       "gateway_real_dispatch_contract_persists_audit": false,
       "gateway_real_dispatch_contract_contains_raw_prompt": false,
       "gateway_real_dispatch_contract_contains_raw_artifacts": false,
-      "gateway_real_dispatch_contract_contains_secrets": false
+      "gateway_real_dispatch_contract_contains_secrets": false,
+      "gateway_real_dispatch": "implemented_feature_flagged_helper",
+      "gateway_real_dispatch_default_enabled": false,
+      "gateway_real_dispatch_wired_to_gateway": false,
+      "gateway_real_dispatch_wired_to_runtime": false,
+      "gateway_real_dispatch_supported_request_types": ["review", "code_review", "validation"],
+      "gateway_real_dispatch_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "gateway_real_dispatch_requires_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_invokes_cli_when_eligible": true,
+      "gateway_real_dispatch_uses_fake_runner_in_tests": true,
+      "gateway_real_dispatch_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_changes_final_status": false,
+      "gateway_real_dispatch_changes_routing": false,
+      "gateway_real_dispatch_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_writes_files": false,
+      "gateway_real_dispatch_persists_audit": false,
+      "gateway_real_dispatch_contains_raw_prompt": false,
+      "gateway_real_dispatch_contains_raw_artifacts": false,
+      "gateway_real_dispatch_contains_secrets": false
     }
   ],
   "request_types": [

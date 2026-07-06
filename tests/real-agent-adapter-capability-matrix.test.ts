@@ -314,6 +314,18 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-contract.test.ts"), "hermes evidence dispatch test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes evidence dispatch md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-contract.json"), "hermes evidence dispatch json");
+  assert(hermes["gateway_real_dispatch"] === "implemented_feature_flagged_helper", "hermes real dispatch");
+  assert(hermes["gateway_real_dispatch_default_enabled"] === false, "hermes real dispatch default disabled");
+  assert(hermes["gateway_real_dispatch_wired_to_gateway"] === false, "hermes real dispatch not wired gateway");
+  assert(hermes["gateway_real_dispatch_invokes_cli_when_eligible"] === true, "hermes real dispatch invokes CLI");
+  assert(hermes["gateway_real_dispatch_uses_fake_runner_in_tests"] === true, "hermes real dispatch fake runner");
+  assert(hermes["gateway_real_dispatch_changes_final_status"] === false, "hermes real dispatch no final status");
+  assert(hermes["gateway_real_dispatch_changes_routing"] === false, "hermes real dispatch no routing");
+  assert(hermes["gateway_real_dispatch_affects_primary_gateway_result"] === false, "hermes real dispatch no primary");
+  assert(hermes["gateway_real_dispatch_writes_files"] === false, "hermes real dispatch no files");
+  assert(hermes["gateway_real_dispatch_contains_secrets"] === false, "hermes real dispatch no secrets");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch.ts"), "hermes evidence real dispatch");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch.test.ts"), "hermes evidence real dispatch test");
   console.log("");
 
   // ── Test 3: Request type alignment ──

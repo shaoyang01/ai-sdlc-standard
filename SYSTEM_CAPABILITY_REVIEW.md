@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Feature-flagged Hermes Gateway Real Dispatch**
+**Recommended: Hermes Gateway Real Dispatch Gateway Integration Contract**
 
-Hermes Gateway real dispatch contract is defined (contract-only, 3 flags, review/code_review/validation). The next step is feature-flagged implementation following Kimi's pattern.
+Hermes Gateway real dispatch helper is implemented. The next step is a Gateway integration contract.
 
 ---
 
