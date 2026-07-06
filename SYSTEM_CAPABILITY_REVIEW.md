@@ -6,7 +6,7 @@ The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All a
 
 Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi has an isolated feature-flagged command executor (`SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`) and a Gateway integration contract (`SDLC_KIMI_GATEWAY_INTEGRATION=enabled`), but is **not wired to runtime or ExecutionGateway** — no real Kimi execution is reachable through runtime/Gateway. Hermes has CLI contract, dry-run harness, and executor contract only; real Hermes command executor is not implemented.
 
-The next intended PR is Feature-flagged Kimi Gateway Wiring Shadow Path. Any future Gateway wiring must be shadow/sidecar first, default off, require both flags, and must not change runtime routing or final_status.
+The next intended PR is Kimi Gateway Real Dispatch Final Readiness Review. Any future Gateway wiring must be shadow/sidecar first, default off, require multiple flags, and must not change runtime routing or final_status.
 
 ### Status Classification
 
@@ -141,7 +141,39 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ---
 
-## 8. Explicitly Not Implemented
+## 8. Kimi Gateway Real Dispatch
+
+The Kimi Gateway real dispatch stack is implemented behind `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled` (plus integration and command execution flags). All components are wired and tested with fake runners; no real Kimi CLI is called in tests.
+
+### Dispatch Layers
+
+| Layer | Status | File |
+|-------|--------|------|
+| Real Dispatch Contract | contract-only | `execution/kimi-gateway-real-dispatch-contract.ts` |
+| Real Dispatch (wired to Gateway) | implemented_feature_flagged | `execution/kimi-gateway-real-dispatch.ts` |
+| Fallback Policy | implemented | `execution/kimi-gateway-real-dispatch-fallback-policy.ts` |
+| Observability (in-memory) | implemented | `execution/kimi-gateway-real-dispatch-observability.ts` |
+| Operational Guardrails | implemented | `execution/kimi-gateway-real-dispatch-guardrails.ts` |
+
+### Guardrails
+
+- **Status:** Implemented (enabled by default when dispatch is enabled)
+- **Large prompt blocked:** Yes (`maxPromptLength: 20000`)
+- **Large input blocked:** Yes (`maxSerializedInputLength: 50000`)
+- **CLI config validated:** Yes (command, enabled flag, args)
+- **Timeout validated:** Yes (range: 1000ms–300000ms)
+- **Output summaries clamped:** Yes (stdout 4000, stderr 4000, error 2000)
+- **No request type expansion:** llm_task only
+- **No final_status change:** does not affect Runtime result
+- **No routing change:** advisory only within Gateway
+- **No file writes:** in-memory only
+- **No audit persistence:** persistsAudit: false
+
+Guardrail rejection is classified as `guardrail_rejected` in the fallback policy (not `unexpected_error`).
+
+---
+
+## 9. Explicitly Not Implemented
 
 | Capability | Status |
 |-----------|--------|
@@ -161,7 +193,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ---
 
-## 9. Forbidden by Design
+## 10. Forbidden by Design
 
 | Capability | Enforced By |
 |-----------|------------|
@@ -177,7 +209,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ---
 
-## 10. Corrected Architecture Compliance
+## 11. Corrected Architecture Compliance
 
 | Assertion | Status | Evidence |
 |-----------|--------|----------|
@@ -193,7 +225,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ---
 
-## 11. Current Risks
+## 12. Current Risks
 
 | Risk | Severity | Mitigation | Recommended PR |
 |------|----------|------------|----------------|
@@ -210,15 +242,15 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 
 ---
 
-## 12. Recommended Next PR
+## 13. Recommended Next PR
 
-**Recommended: Feature-flagged Hermes CLI Adapter Dry-run Harness**
+**Recommended: Kimi Gateway Real Dispatch Final Readiness Review**
 
-Mirror the Kimi dry-run pattern for Hermes. No process spawn, no CLI execution, no API keys, no Gateway/runtime behavior change.
+Comprehensive review of the complete 14-layer Kimi stack before any request type expansion or further wiring. No implementation changes; review only.
 
 ---
 
-## 13. Evidence Index
+## 14. Evidence Index
 
 | Claim | Evidence File(s) |
 |-------|-----------------|

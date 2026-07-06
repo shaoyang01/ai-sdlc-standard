@@ -216,6 +216,16 @@ async function test() {
   assert(realAdapters["kimi_gateway_real_dispatch_observability_contains_secrets"] === false, "kimi obs no secrets");
   assert(realAdapters["kimi_gateway_real_dispatch_observability_changes_final_status"] === false, "kimi obs no final status");
   assert(realAdapters["kimi_gateway_real_dispatch_observability_changes_routing"] === false, "kimi obs no routing");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails"] === "implemented", "kimi guardrails implemented");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_default_enabled"] === true, "kimi guardrails default enabled when dispatch enabled");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_blocks_large_prompt"] === true, "kimi guardrails block large prompt");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_blocks_large_input"] === true, "kimi guardrails block large input");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_validates_cli_config"] === true, "kimi guardrails validate config");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_validates_timeout"] === true, "kimi guardrails validate timeout");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_clamps_output_summaries"] === true, "kimi guardrails clamp summaries");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_expands_request_types"] === false, "kimi guardrails no request expansion");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_changes_final_status"] === false, "kimi guardrails no final status change");
+  assert(realAdapters["kimi_gateway_real_dispatch_guardrails_changes_routing"] === false, "kimi guardrails no routing change");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

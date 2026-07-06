@@ -470,6 +470,26 @@
         "execution/kimi-gateway-real-dispatch-observability.ts",
         "tests/kimi-gateway-real-dispatch-observability.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Gateway Real Dispatch Guardrails",
+      "status": "implemented",
+      "runtime_active_by_default": false,
+      "guardrails_default_enabled_when_dispatch_enabled": true,
+      "blocks_large_prompt": true,
+      "blocks_large_input": true,
+      "validates_cli_config": true,
+      "validates_timeout": true,
+      "clamps_output_summaries": true,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "expands_request_types": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "evidence": [
+        "execution/kimi-gateway-real-dispatch-guardrails.ts",
+        "tests/kimi-gateway-real-dispatch-guardrails.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -691,8 +711,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Real Dispatch Operational Guardrails",
-    "reason": "Add operational guardrails before any further expansion",
-    "safety_rationale": "Guardrails have no side effects; safe before expansion"
+    "title": "Kimi Gateway Real Dispatch Final Readiness Review",
+    "reason": "Comprehensive review before any request type expansion or further wiring",
+    "safety_rationale": "Review has no side effects; final gate before expansion"
   }
 }

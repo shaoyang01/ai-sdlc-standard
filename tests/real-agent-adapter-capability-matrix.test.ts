@@ -126,6 +126,15 @@ async function test() {
   assert(kimi["gateway_real_dispatch_observability_contains_raw_prompt"] === false, "kimi observability no prompt");
   assert(kimi["gateway_real_dispatch_observability_contains_raw_artifacts"] === false, "kimi observability no artifacts");
   assert(kimi["gateway_real_dispatch_observability_contains_secrets"] === false, "kimi observability no secrets");
+  assert(kimi["gateway_real_dispatch_guardrails"] === "implemented", "kimi guardrails implemented");
+  assert(kimi["gateway_real_dispatch_guardrails_blocks_large_prompt"] === true, "kimi guardrails block large prompt");
+  assert(kimi["gateway_real_dispatch_guardrails_blocks_large_input"] === true, "kimi guardrails block large input");
+  assert(kimi["gateway_real_dispatch_guardrails_validates_cli_config"] === true, "kimi guardrails validate config");
+  assert(kimi["gateway_real_dispatch_guardrails_validates_timeout"] === true, "kimi guardrails validate timeout");
+  assert(kimi["gateway_real_dispatch_guardrails_clamps_output_summaries"] === true, "kimi guardrails clamp summaries");
+  assert(kimi["gateway_real_dispatch_guardrails_expands_request_types"] === false, "kimi guardrails no expansion");
+  assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-guardrails.ts"), "kimi evidence guardrails");
+  assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-guardrails.test.ts"), "kimi evidence guardrails test");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");
