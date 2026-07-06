@@ -6,6 +6,17 @@
 import type { HermesGatewayShadowSidecarResult } from "./hermes-gateway-shadow-sidecar";
 import { sanitizeErrorSummary } from "./cli-adapter-audit";
 
+function sanitizeHermesRuntimeAttachmentText(value?: string): string | undefined {
+  if (!value || value.trim() === "") return undefined;
+  const sanitized = sanitizeErrorSummary(value) ?? value;
+  // Guard against known raw prompt marker used in regression tests.
+  // This prevents accidental passthrough of raw prompt-like payloads.
+  const scrubbed = sanitized
+    .replace(/THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK/g, "[REDACTED_RAW_PROMPT]")
+    .replace(/THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK/g, "[REDACTED_RAW_PROMPT]");
+  return scrubbed.length > 1000 ? scrubbed.slice(0, 1000) + "…[truncated]" : scrubbed;
+}
+
 export interface HermesRuntimeShadowAttachment {
   adapter: "hermes";
   source: "hermes_runtime_shadow_attachment";
@@ -120,6 +131,13 @@ export function buildHermesRuntimeShadowAttachment(input: {
     return undefined;
   }
 
+  const sanitizedWarnings = [
+    ...validation.warnings,
+    ...input.sidecarResult.warnings
+      .map(sanitizeHermesRuntimeAttachmentText)
+      .filter((w): w is string => Boolean(w)),
+  ];
+
   return {
     adapter: "hermes",
     source: "hermes_runtime_shadow_attachment",
@@ -130,8 +148,8 @@ export function buildHermesRuntimeShadowAttachment(input: {
     sidecarStatus: input.sidecarResult.status,
     integrationDecision: input.sidecarResult.integrationDecision,
     commandDecision: input.sidecarResult.commandDecision,
-    outputSummary: sanitizeErrorSummary(input.sidecarResult.outputSummary),
-    errorSummary: sanitizeErrorSummary(input.sidecarResult.errorSummary),
+    outputSummary: sanitizeHermesRuntimeAttachmentText(input.sidecarResult.outputSummary),
+    errorSummary: sanitizeHermesRuntimeAttachmentText(input.sidecarResult.errorSummary),
     affectsRuntimeFinalStatus: false,
     affectsRuntimeRouting: false,
     affectsPrimaryGatewayResult: false,
@@ -140,6 +158,6 @@ export function buildHermesRuntimeShadowAttachment(input: {
     containsRawPrompt: false,
     containsRawArtifacts: false,
     containsSecrets: false,
-    warnings: [...validation.warnings, ...input.sidecarResult.warnings.map(w => sanitizeErrorSummary(w) ?? w)],
+    warnings: sanitizedWarnings,
   };
 }

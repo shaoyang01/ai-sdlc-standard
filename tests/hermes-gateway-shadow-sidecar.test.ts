@@ -29,14 +29,6 @@ const allOn: Record<string, string | undefined> = {
 };
 
 function fr(v: any): HermesCliProcessRunner { return { run: async () => v }; }
-function counter(): { called: number; runner: HermesCliProcessRunner } {
-  const state = { called: 0 };
-  return {
-    called: 0,
-    runner: { run: async () => { state.called++; return { exitCode: 0, durationMs: 1, stdout: "", stderr: "" }; } },
-    get called() { return state.called; },
-  };
-}
 
 async function test() {
   let passed = 0, failed = 0;

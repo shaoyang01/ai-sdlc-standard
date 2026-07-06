@@ -112,28 +112,59 @@ async function test() {
   }
   console.log("");
 
-  // Test 5: Output/error summary is sanitized
-  console.log("Test 5: Output/error summary sanitized");
-  const secretSidecar2 = {
+  // Test 5: Raw prompt leakage prevention
+  console.log("Test 5: Raw prompt leakage prevention");
+  const promptSidecar = {
     ...safeSidecar,
-    outputSummary: "token=abc secret=xyz",
-    errorSummary: "password=123",
-    warnings: ["api_key=abc sk-test"],
+    outputSummary: "THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK",
+    errorSummary: "prefix THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK suffix",
+    warnings: ["warning THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"],
   };
-  const a5 = buildHermesRuntimeShadowAttachment({ sidecarResult: secretSidecar2, env: attachmentOn })!;
+  const a5 = buildHermesRuntimeShadowAttachment({ sidecarResult: promptSidecar, env: attachmentOn })!;
+  assert(a5 !== undefined, "prompt attachment exists");
   const j5 = JSON.stringify(a5);
-  assert(!j5.includes("abc"), "no abc");
-  assert(!j5.includes("123"), "no 123");
-  assert(!j5.includes("xyz"), "no xyz");
-  assert(!j5.includes("sk-test"), "no sk-test");
-  assert(a5.outputSummary !== undefined, "output summary present");
-  assert(a5.containsRawPrompt === false, "no raw prompt flag");
-  assert(a5.containsRawArtifacts === false, "no raw artifacts flag");
-  assert(a5.containsSecrets === false, "no secrets flag");
+  assert(!j5.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "no raw prompt marker");
+  assert(a5.containsRawPrompt === false, "raw prompt flag false");
+  assert(a5.containsRawArtifacts === false, "raw artifacts flag false");
+  assert(a5.containsSecrets === false, "secrets flag false");
+  assert(a5.outputSummary !== undefined && !a5.outputSummary.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "output summary scrubbed");
+  assert(a5.errorSummary !== undefined && !a5.errorSummary.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "error summary scrubbed");
+  assert(a5.warnings.every(w => !w.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK")), "warnings scrubbed");
   console.log("");
 
-  // Test 6: No forbidden imports
-  console.log("Test 6: No forbidden imports");
+  // Test 6: Secret values do not leak
+  console.log("Test 6: Secret values do not leak");
+  const secretSidecar = {
+    ...safeSidecar,
+    outputSummary: "token=abc",
+    errorSummary: "password=123",
+    warnings: ["api_key=xyz sk-test"],
+  };
+  const a6 = buildHermesRuntimeShadowAttachment({ sidecarResult: secretSidecar, env: attachmentOn })!;
+  const j6 = JSON.stringify(a6);
+  assert(!j6.includes("abc"), "no abc");
+  assert(!j6.includes("123"), "no 123");
+  assert(!j6.includes("xyz"), "no xyz");
+  assert(!j6.includes("sk-test"), "no sk-test");
+  console.log("");
+
+  // Test 7: Truncation of long output
+  console.log("Test 7: Truncation of long output");
+  const longSidecar = {
+    ...safeSidecar,
+    outputSummary: "x".repeat(2000),
+    errorSummary: "y".repeat(2000),
+    warnings: ["z".repeat(2000)],
+  };
+  const a7 = buildHermesRuntimeShadowAttachment({ sidecarResult: longSidecar, env: attachmentOn })!;
+  assert(a7 !== undefined, "truncated attachment exists");
+  assert(a7.outputSummary !== undefined && a7.outputSummary.length <= 1014, `output truncated (${a7.outputSummary!.length})`);
+  assert(a7.errorSummary !== undefined && a7.errorSummary.length <= 1014, `error truncated (${a7.errorSummary!.length})`);
+  assert(a7.warnings.every(w => w.length <= 1014), "warnings truncated");
+  console.log("");
+
+  // Test 8: No forbidden imports
+  console.log("Test 8: No forbidden imports");
   const src = fs.readFileSync("execution/hermes-runtime-attachment-contract.ts", "utf-8");
   const forbidden = ["runtime", "execution/gateway", "executeHermesCliCommand", "runHermesGatewayShadowSidecar", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch"];
   const badLines = src.split("\n").filter((l: string) => {
