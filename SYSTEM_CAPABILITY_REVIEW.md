@@ -244,11 +244,11 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Kimi Gateway Request Type Expansion Contract**
+**Recommended: Hermes CLI Command Executor Implementation Behind Feature Flag**
 
 Define whether Kimi should support additional request types before any implementation. This should be a contract-only PR that analyzes each candidate request type for safety, routing impact, and Gateway behavior implications. No implementation changes.
 
-Comprehensive review of the complete 14-layer Kimi stack has been completed (verdict: READY_WITH_CONSTRAINTS). The next safe step is a contract-only request type expansion review.
+The Kimi request type expansion contract has been completed (verdict: NO_EXPANSION_IN_THIS_PR). Kimi remains llm_task only. code_generation is Codex-owned. review/code_review/validation are deferred to Hermes. bugfix requires a separate review. Since review/validation are deferred to Hermes, Hermes should advance next.
 
 ---
 

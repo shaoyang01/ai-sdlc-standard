@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
+  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
+  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -256,8 +256,29 @@ async function test() {
   assert(rrEvidence.includes("KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "readiness evidence MD");
   assert(rrEvidence.includes("kimi-gateway-real-dispatch-readiness-review.json"), "readiness evidence JSON");
   assert(rrEvidence.includes("tests/kimi-gateway-real-dispatch-readiness-review.test.ts"), "readiness evidence test");
+  // Kimi Request Type Expansion Contract
+  assert(capNames.includes("Kimi Request Type Expansion Contract"), "has Kimi Expansion Contract");
+  const xpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Request Type Expansion Contract");
+  assert(xpCap !== undefined && xpCap["status"] === "NO_EXPANSION_IN_THIS_PR", "expansion status NO_EXPANSION");
+  assert(xpCap["contract_only"] === true, "expansion contract-only");
+  assert(xpCap["implementation_changes"] === false, "expansion no impl changes");
+  assert(xpCap["runtime_changes"] === false, "expansion no runtime changes");
+  assert(xpCap["gateway_routing_changes"] === false, "expansion no gateway routing changes");
+  assert(xpCap["request_type_expansion"] === false, "expansion no type expansion");
+  const xpCur = xpCap["current_supported_request_types"] as string[];
+  assert(Array.isArray(xpCur) && xpCur.length === 1 && xpCur[0] === "llm_task", "expansion current llm_task only");
+  const xpNew = xpCap["newly_supported_request_types"] as string[];
+  assert(Array.isArray(xpNew) && xpNew.length === 0, "expansion no newly supported");
+  assert(xpCap["defer_code_generation_to"] === "codex", "expansion defer code_gen to codex");
+  assert(xpCap["defer_review_validation_to"] === "hermes", "expansion defer review to hermes");
+  assert(xpCap["bugfix_requires_separate_review"] === true, "expansion bugfix separate review");
+  const xpEvidence = xpCap["evidence"] as string[];
+  assert(xpEvidence.includes("execution/kimi-request-type-expansion-contract.ts"), "expansion evidence contract");
+  assert(xpEvidence.includes("KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md"), "expansion evidence MD");
+  assert(xpEvidence.includes("kimi-request-type-expansion-contract.json"), "expansion evidence JSON");
+  assert(xpEvidence.includes("tests/kimi-request-type-expansion-contract.test.ts"), "expansion evidence test");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Kimi Gateway Request Type Expansion Contract", "next PR expansion contract");
+  assert(review.recommended_next_pr.title === "Hermes CLI Command Executor Implementation Behind Feature Flag", "next PR Hermes executor");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

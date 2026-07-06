@@ -81,7 +81,11 @@
         "execution/kimi-gateway-real-dispatch-observability.ts",
         "tests/kimi-gateway-real-dispatch-observability.test.ts",
         "execution/kimi-gateway-real-dispatch-guardrails.ts",
-        "tests/kimi-gateway-real-dispatch-guardrails.test.ts"
+        "tests/kimi-gateway-real-dispatch-guardrails.test.ts",
+        "execution/kimi-request-type-expansion-contract.ts",
+        "KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
+        "kimi-request-type-expansion-contract.json",
+        "tests/kimi-request-type-expansion-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -141,7 +145,14 @@
       "gateway_real_dispatch_guardrails_validates_cli_config": true,
       "gateway_real_dispatch_guardrails_validates_timeout": true,
       "gateway_real_dispatch_guardrails_clamps_output_summaries": true,
-      "gateway_real_dispatch_guardrails_expands_request_types": false
+      "gateway_real_dispatch_guardrails_expands_request_types": false,
+      "request_type_expansion_contract": "implemented_contract_only",
+      "request_type_expansion_contract_status": "NO_EXPANSION_IN_THIS_PR",
+      "request_type_expansion_newly_supported_types": [],
+      "request_type_expansion_current_supported_types": ["llm_task"],
+      "request_type_expansion_defer_code_generation_to": "codex",
+      "request_type_expansion_defer_review_validation_to": "hermes",
+      "request_type_expansion_bugfix_requires_separate_review": true
     },
     {
       "adapter": "hermes",

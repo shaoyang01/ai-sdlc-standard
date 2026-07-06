@@ -1,0 +1,70 @@
+{
+  "contract_name": "Kimi Request Type Expansion Contract",
+  "status": "NO_EXPANSION_IN_THIS_PR",
+  "contract_only": true,
+  "implementation_changes": false,
+  "runtime_changes": false,
+  "gateway_routing_changes": false,
+  "request_type_expansion": false,
+  "current_supported_request_types": ["llm_task"],
+  "newly_supported_request_types": [],
+  "decisions": [
+    {
+      "request_type": "llm_task",
+      "recommendation": "approved_candidate",
+      "future_owner": "kimi",
+      "implemented_now": false,
+      "already_supported": true
+    },
+    {
+      "request_type": "code_generation",
+      "recommendation": "defer_to_codex",
+      "future_owner": "codex",
+      "implemented_now": false,
+      "already_supported": false
+    },
+    {
+      "request_type": "code_review",
+      "recommendation": "defer_to_hermes",
+      "future_owner": "hermes",
+      "implemented_now": false,
+      "already_supported": false
+    },
+    {
+      "request_type": "validation",
+      "recommendation": "defer_to_hermes",
+      "future_owner": "hermes",
+      "implemented_now": false,
+      "already_supported": false
+    },
+    {
+      "request_type": "review",
+      "recommendation": "defer_to_hermes",
+      "future_owner": "hermes",
+      "implemented_now": false,
+      "already_supported": false
+    },
+    {
+      "request_type": "bugfix",
+      "recommendation": "requires_separate_review",
+      "future_owner": "tbd",
+      "implemented_now": false,
+      "already_supported": false
+    }
+  ],
+  "safety_boundaries": {
+    "changes_runtime_final_status": false,
+    "changes_default_runtime_routing": false,
+    "changes_gateway_dispatch": false,
+    "changes_codex_behavior": false,
+    "changes_hermes_behavior": false,
+    "calls_real_kimi_cli": false,
+    "writes_files": false,
+    "persists_audit": false
+  },
+  "recommended_next_pr": {
+    "title": "Hermes CLI Command Executor Implementation Behind Feature Flag",
+    "reason": "review/code_review/validation expansion is deferred to Hermes, so Hermes must advance before Kimi expands beyond llm_task.",
+    "safety_rationale": "Hermes executor implementation can be isolated and feature-flagged without changing Gateway or Runtime behavior."
+  }
+}

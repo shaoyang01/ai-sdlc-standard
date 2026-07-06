@@ -135,6 +135,17 @@ async function test() {
   assert(kimi["gateway_real_dispatch_guardrails_expands_request_types"] === false, "kimi guardrails no expansion");
   assert(kimiEvidence.includes("execution/kimi-gateway-real-dispatch-guardrails.ts"), "kimi evidence guardrails");
   assert(kimiEvidence.includes("tests/kimi-gateway-real-dispatch-guardrails.test.ts"), "kimi evidence guardrails test");
+  assert(kimi["request_type_expansion_contract"] === "implemented_contract_only", "kimi expansion contract");
+  assert(kimi["request_type_expansion_contract_status"] === "NO_EXPANSION_IN_THIS_PR", "kimi expansion NO_EXPANSION");
+  const expTypes = kimi["request_type_expansion_newly_supported_types"] as string[];
+  assert(Array.isArray(expTypes) && expTypes.length === 0, "kimi expansion no new types");
+  const curTypes = kimi["request_type_expansion_current_supported_types"] as string[];
+  assert(Array.isArray(curTypes) && curTypes.length === 1 && curTypes[0] === "llm_task", "kimi expansion current llm_task only");
+  assert(kimi["request_type_expansion_defer_code_generation_to"] === "codex", "kimi expansion defer code_gen to codex");
+  assert(kimi["request_type_expansion_defer_review_validation_to"] === "hermes", "kimi expansion defer review to hermes");
+  assert(kimi["request_type_expansion_bugfix_requires_separate_review"] === true, "kimi expansion bugfix separate review");
+  assert(kimiEvidence.includes("execution/kimi-request-type-expansion-contract.ts"), "kimi evidence expansion contract");
+  assert(kimiEvidence.includes("tests/kimi-request-type-expansion-contract.test.ts"), "kimi evidence expansion test");
   assert(hermes["status"] === "cli_contract_stub_with_dry_run_harness", "hermes cli contract stub with dry-run harness");
   assert(hermes["dry_run_harness"] === "implemented_no_process_spawn", "hermes dry-run harness implemented");
   assert(hermes["executor_contract"] === "implemented_contract_only", "hermes executor contract implemented");

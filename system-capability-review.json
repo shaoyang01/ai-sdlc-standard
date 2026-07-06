@@ -506,6 +506,26 @@
         "kimi-gateway-real-dispatch-readiness-review.json",
         "tests/kimi-gateway-real-dispatch-readiness-review.test.ts"
       ]
+    },
+    {
+      "name": "Kimi Request Type Expansion Contract",
+      "status": "NO_EXPANSION_IN_THIS_PR",
+      "contract_only": true,
+      "implementation_changes": false,
+      "runtime_changes": false,
+      "gateway_routing_changes": false,
+      "request_type_expansion": false,
+      "current_supported_request_types": ["llm_task"],
+      "newly_supported_request_types": [],
+      "defer_code_generation_to": "codex",
+      "defer_review_validation_to": "hermes",
+      "bugfix_requires_separate_review": true,
+      "evidence": [
+        "execution/kimi-request-type-expansion-contract.ts",
+        "KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
+        "kimi-request-type-expansion-contract.json",
+        "tests/kimi-request-type-expansion-contract.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -727,8 +747,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Kimi Gateway Request Type Expansion Contract",
-    "reason": "Define whether Kimi should support additional request types before any implementation.",
-    "safety_rationale": "Contract-only expansion review prevents accidental routing or execution drift."
+    "title": "Hermes CLI Command Executor Implementation Behind Feature Flag",
+    "reason": "review/code_review/validation expansion is deferred to Hermes, so Hermes must advance before Kimi expands beyond llm_task.",
+    "safety_rationale": "Hermes executor implementation can be isolated and feature-flagged without changing Gateway or Runtime behavior."
   }
 }

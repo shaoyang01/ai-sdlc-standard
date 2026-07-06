@@ -132,5 +132,6 @@ All evolution proposals have `applied: false` and require human review.
 7. **Runtime Shadow Integration Audit Trail** — ✅ Done (in-memory, sidecar-only)
 8. **Real Agent Adapter Integration** — ✅ Kimi complete: stubs → dry-run → audit → executor → command executor → Gateway → shadow sidecar → runtime attachment → real dispatch → fallback → observability → guardrails
 9. **Kimi Gateway Real Dispatch Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; ready for controlled llm_task Gateway dispatch only)
-10. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-11. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+10. **Kimi Gateway Request Type Expansion Contract** — ✅ Done (verdict: NO_EXPANSION_IN_THIS_PR; Kimi remains llm_task only; code_generation→Codex, review/validation→Hermes, bugfix→separate review)
+11. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+12. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
