@@ -135,6 +135,21 @@ async function test() {
   const fpEvidence = fpCap["evidence"] as string[];
   assert(fpEvidence.includes("execution/kimi-gateway-real-dispatch-fallback-policy.ts"), "fallback evidence");
   assert(fpEvidence.includes("tests/kimi-gateway-real-dispatch-fallback-policy.test.ts"), "fallback test evidence");
+  // Kimi Gateway Real Dispatch Observability
+  assert(capNames.includes("Kimi Gateway Real Dispatch Observability"), "has Kimi Observability");
+  const obsCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Observability");
+  assert(obsCap !== undefined && obsCap["status"] === "implemented", "observability implemented");
+  assert(obsCap["runtime_active_by_default"] === false, "obs not active by default");
+  assert(obsCap["persists_audit"] === false, "obs not persisted");
+  assert(obsCap["contains_raw_prompt"] === false, "obs no raw prompt");
+  assert(obsCap["contains_raw_artifacts"] === false, "obs no raw artifacts");
+  assert(obsCap["contains_secrets"] === false, "obs no secrets");
+  assert(obsCap["changes_final_status"] === false, "obs no final status");
+  assert(obsCap["changes_routing"] === false, "obs no routing");
+  assert(obsCap["expands_request_types"] === false, "obs no expansion");
+  const obsEvidence = obsCap["evidence"] as string[];
+  assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
+  assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
   assert(review.recommended_next_pr.title === "Kimi Gateway Real Dispatch Operational Guardrails", "next PR observability");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
