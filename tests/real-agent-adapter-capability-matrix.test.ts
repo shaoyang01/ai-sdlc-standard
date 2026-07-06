@@ -495,6 +495,44 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-readiness-review.test.ts"), "hermes evidence readiness test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "hermes evidence readiness md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-readiness-review.json"), "hermes evidence readiness json");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan"] === "implemented_plan_only", "hermes dispatch rollout plan");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_status"] === "plan_only", "hermes dispatch rollout status");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_executing_now"] === false, "hermes dispatch rollout not executing");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_enables_feature_flags_now"] === false, "hermes dispatch rollout no flags");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_runtime_behavior_now"] === false, "hermes dispatch rollout no runtime behavior");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_gateway_behavior_now"] === false, "hermes dispatch rollout no gateway behavior");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch rollout required verdict");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch rollout current verdict");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_default_disabled"] === true, "hermes dispatch rollout default disabled");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_feature_flagged"] === true, "hermes dispatch rollout feature flagged");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_requires_multiple_flags"] === true, "hermes dispatch rollout multiple flags");
+  const hRolloutInitial = hermes["gateway_real_dispatch_controlled_rollout_plan_initial_request_types"] as string[];
+  assert(Array.isArray(hRolloutInitial) && hRolloutInitial.length === 1 && hRolloutInitial[0] === "review", "hermes dispatch rollout initial review");
+  const hRolloutSupported = hermes["gateway_real_dispatch_controlled_rollout_plan_supported_request_types"] as string[];
+  assert(Array.isArray(hRolloutSupported) && hRolloutSupported.includes("review") && hRolloutSupported.includes("code_review") && hRolloutSupported.includes("validation"), "hermes dispatch rollout supported");
+  const hRolloutUnsupported = hermes["gateway_real_dispatch_controlled_rollout_plan_unsupported_request_types"] as string[];
+  assert(Array.isArray(hRolloutUnsupported) && hRolloutUnsupported.includes("llm_task") && hRolloutUnsupported.includes("code_generation") && hRolloutUnsupported.includes("bugfix"), "hermes dispatch rollout unsupported");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_gateway_primary_dispatch"] === false, "hermes dispatch rollout no primary dispatch");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_gateway_final_result"] === false, "hermes dispatch rollout no gateway final");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_final_status"] === false, "hermes dispatch rollout no final status");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_changes_routing"] === false, "hermes dispatch rollout no routing");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_affects_primary_gateway_result"] === false, "hermes dispatch rollout no primary effect");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_makes_hermes_default"] === false, "hermes dispatch rollout not default");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_review_owner"] === false, "hermes dispatch rollout not review owner");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_validation_owner"] === false, "hermes dispatch rollout not validation owner");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_writes_files"] === false, "hermes dispatch rollout no files");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_persists_rollout_logs"] === false, "hermes dispatch rollout no rollout logs");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_persists_audit"] === false, "hermes dispatch rollout no audit persist");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_persists_observability"] === false, "hermes dispatch rollout no observability persist");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_persists_guardrails"] === false, "hermes dispatch rollout no guardrail persist");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_contains_raw_prompt"] === false, "hermes dispatch rollout no raw prompt");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_contains_raw_artifacts"] === false, "hermes dispatch rollout no raw artifacts");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_contains_secrets"] === false, "hermes dispatch rollout no secrets");
+  assert(hermes["gateway_real_dispatch_controlled_rollout_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Rollout Validation Checklist", "hermes dispatch rollout next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts"), "hermes evidence rollout module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts"), "hermes evidence rollout test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md"), "hermes evidence rollout md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-controlled-rollout-plan.json"), "hermes evidence rollout json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -567,7 +605,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Controlled Rollout Plan", "next PR controlled rollout");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Rollout Validation Checklist", "next PR rollout checklist");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

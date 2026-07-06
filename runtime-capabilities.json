@@ -657,6 +657,47 @@
     "hermes_gateway_real_dispatch_final_readiness_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_final_readiness_contains_raw_artifacts": false,
     "hermes_gateway_real_dispatch_final_readiness_contains_secrets": false,
-    "hermes_gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan"
+    "hermes_gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+    "hermes_gateway_real_dispatch_controlled_rollout_plan": "implemented_plan_only",
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_status": "plan_only",
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_executing_now": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_enables_feature_flags_now": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_runtime_behavior_now": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_gateway_behavior_now": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_default_disabled": true,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_feature_flagged": true,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_requires_multiple_flags": true,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_initial_request_types": [
+      "review"
+    ],
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_final_status": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_changes_routing": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_makes_hermes_default": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_review_owner": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_validation_owner": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_writes_files": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_persists_rollout_logs": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_persists_audit": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_persists_observability": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_persists_guardrails": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_contains_secrets": false,
+    "hermes_gateway_real_dispatch_controlled_rollout_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Rollout Validation Checklist"
   }
 }

@@ -210,7 +210,11 @@
         "execution/hermes-gateway-real-dispatch-readiness-review.ts",
         "tests/hermes-gateway-real-dispatch-readiness-review.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-        "hermes-gateway-real-dispatch-readiness-review.json"
+        "hermes-gateway-real-dispatch-readiness-review.json",
+        "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
+        "tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+        "hermes-gateway-real-dispatch-controlled-rollout-plan.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -596,7 +600,48 @@
       "gateway_real_dispatch_final_readiness_contains_raw_prompt": false,
       "gateway_real_dispatch_final_readiness_contains_raw_artifacts": false,
       "gateway_real_dispatch_final_readiness_contains_secrets": false,
-      "gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan"
+      "gateway_real_dispatch_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+      "gateway_real_dispatch_controlled_rollout_plan": "implemented_plan_only",
+      "gateway_real_dispatch_controlled_rollout_plan_status": "plan_only",
+      "gateway_real_dispatch_controlled_rollout_plan_executing_now": false,
+      "gateway_real_dispatch_controlled_rollout_plan_enables_feature_flags_now": false,
+      "gateway_real_dispatch_controlled_rollout_plan_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_controlled_rollout_plan_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_controlled_rollout_plan_readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_controlled_rollout_plan_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_controlled_rollout_plan_default_disabled": true,
+      "gateway_real_dispatch_controlled_rollout_plan_feature_flagged": true,
+      "gateway_real_dispatch_controlled_rollout_plan_requires_multiple_flags": true,
+      "gateway_real_dispatch_controlled_rollout_plan_initial_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_controlled_rollout_plan_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_controlled_rollout_plan_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_controlled_rollout_plan_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_controlled_rollout_plan_changes_gateway_final_result": false,
+      "gateway_real_dispatch_controlled_rollout_plan_changes_final_status": false,
+      "gateway_real_dispatch_controlled_rollout_plan_changes_routing": false,
+      "gateway_real_dispatch_controlled_rollout_plan_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_controlled_rollout_plan_makes_hermes_default": false,
+      "gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_controlled_rollout_plan_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_controlled_rollout_plan_writes_files": false,
+      "gateway_real_dispatch_controlled_rollout_plan_persists_rollout_logs": false,
+      "gateway_real_dispatch_controlled_rollout_plan_persists_audit": false,
+      "gateway_real_dispatch_controlled_rollout_plan_persists_observability": false,
+      "gateway_real_dispatch_controlled_rollout_plan_persists_guardrails": false,
+      "gateway_real_dispatch_controlled_rollout_plan_contains_raw_prompt": false,
+      "gateway_real_dispatch_controlled_rollout_plan_contains_raw_artifacts": false,
+      "gateway_real_dispatch_controlled_rollout_plan_contains_secrets": false,
+      "gateway_real_dispatch_controlled_rollout_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Rollout Validation Checklist"
     }
   ],
   "request_types": [
@@ -816,8 +861,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
-    "reason": "Hermes Gateway real dispatch sidecar stack is readiness-reviewed and complete with verdict READY_WITH_CONSTRAINTS.",
-    "safety_rationale": "Rollout planning remains non-executing and must preserve default-off sidecar-only semantics."
+    "title": "Hermes Gateway Real Dispatch Rollout Validation Checklist",
+    "reason": "Hermes Gateway real dispatch has a non-executing controlled rollout plan with initial scope limited to review.",
+    "safety_rationale": "Checklist remains non-executing and validates controlled rollout readiness before any operator-managed enablement."
   }
 }

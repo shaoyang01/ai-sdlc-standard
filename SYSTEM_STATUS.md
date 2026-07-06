@@ -151,6 +151,7 @@ All evolution proposals have `applied: false` and require human review.
 26. **Hermes Gateway Real Dispatch Observability** — ✅ Done (nested `hermes_gateway_real_dispatch.observability`; warning count only; no top-level field; no persisted observability/audit; no file writes; no raw prompt/artifacts/secrets; no Gateway primary/final result change; no Runtime final_status/routing change)
 27. **Hermes Gateway Real Dispatch Operational Guardrails** — ✅ Done (nested `hermes_gateway_real_dispatch.guardrails`; no top-level field; rejects unsupported request type / unexpected status / warning limit / missing policy / missing observability / raw prompt / artifact / secret risk; no persisted guardrail/observability/audit logs; no file writes; no Gateway primary/final result change; no Runtime final_status/routing change)
 28. **Hermes Gateway Real Dispatch Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; Gateway sidecar stack complete; sidecar-only; default disabled; feature-flagged; no primary Gateway result ownership; no Runtime final_status/routing change; no persistence; no raw prompt/artifacts/secrets)
-29. **Hermes Gateway Real Dispatch Controlled Rollout Plan** — next safe step
-30. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-31. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+29. **Hermes Gateway Real Dispatch Controlled Rollout Plan** — ✅ Done (status: plan_only; no rollout execution; no feature flag enablement; no Runtime behavior change; no Gateway behavior change; initial rollout scope review only; expansion to code_review/validation requires approval; no Hermes default routing; no final review/validation ownership; no persistence; no raw prompt/artifacts/secrets)
+30. **Hermes Gateway Real Dispatch Rollout Validation Checklist** — next safe step
+31. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+32. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

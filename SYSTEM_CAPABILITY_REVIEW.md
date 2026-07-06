@@ -4,9 +4,9 @@
 
 The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
 
-Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, sidecar attach `guardrails`, and final readiness verdict READY_WITH_CONSTRAINTS for safe outcomes. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
+Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, sidecar attach `guardrails`, final readiness verdict READY_WITH_CONSTRAINTS, and a plan-only controlled rollout plan. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
 
-The next intended PR is Hermes Gateway Real Dispatch Controlled Rollout Plan. Any rollout plan must keep Hermes sidecar-only, default off, request-type bounded, sanitized, non-persistent, and unable to change runtime routing or final_status.
+The next intended PR is Hermes Gateway Real Dispatch Rollout Validation Checklist. Any checklist must remain non-executing and validate controlled rollout readiness before operator-managed enablement.
 
 ### Status Classification
 
@@ -189,6 +189,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Observability | implemented_sidecar_metadata | `execution/hermes-gateway-real-dispatch-observability.ts` |
 | Operational Guardrails | implemented_sidecar_metadata_guardrails | `execution/hermes-gateway-real-dispatch-guardrails.ts` |
 | Final Readiness Review | implemented_review_only, READY_WITH_CONSTRAINTS | `execution/hermes-gateway-real-dispatch-readiness-review.ts` |
+| Controlled Rollout Plan | implemented_plan_only | `execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts` |
 
 ### Readiness Guarantees
 
@@ -201,7 +202,10 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - No Runtime final_status or routing change
 - No persisted audit/observability/guardrail logs
 - No raw prompt/artifacts/secrets
-- Next PR: Hermes Gateway Real Dispatch Controlled Rollout Plan
+- Controlled rollout plan status: `plan_only`
+- Initial rollout request type: `review`
+- Expansion to `code_review` and `validation` requires operator approval
+- Next PR: Hermes Gateway Real Dispatch Rollout Validation Checklist
 
 ---
 
@@ -264,9 +268,9 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Skill Flow Orchestrator is not runtime-integrated | Medium | Wire behind `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow` | Feature-flagged runtime shadow integration |
 | Shadow orchestrator can drift from runtime behavior | Low | Add drift guard tests comparing shadow vs runtime node order | Runtime/Skill Flow Drift Guard |
 | SYSTEM_STATUS / runtime-capabilities / JSON files can drift | Low | Add cross-reference validation tests | Ongoing |
-| Real adapter rollout remains constrained | Medium | Plan controlled Hermes rollout without changing default-off sidecar-only semantics | Hermes Gateway Real Dispatch Controlled Rollout Plan |
+| Real adapter rollout remains constrained | Medium | Validate controlled Hermes rollout readiness without enabling flags | Hermes Gateway Real Dispatch Rollout Validation Checklist |
 | Codex adapter supports only code_generation | Medium | Extend to review/bugfix types | Codex Adapter extension |
-| No primary Hermes Gateway ownership | Medium | Keep Hermes as sidecar metadata until a separate ownership contract exists | Hermes Gateway Real Dispatch Controlled Rollout Plan |
+| No primary Hermes Gateway ownership | Medium | Keep Hermes as sidecar metadata until a separate ownership contract exists | Hermes Gateway Real Dispatch Rollout Validation Checklist |
 | Skill artifacts are not persisted | Low | Implement sdlc-docflow-writer integration | After shadow orchestrator |
 | executeSpeckitPipeline() stub has hardcoded simplified stages | Medium | Replace or remove; use speckit flow from orchestrator | Feature-flagged runtime shadow integration |
 | Memory/evolution are advisory but may be mistaken as applied | Low | Documentation + `applied: false` field | Ongoing |
@@ -275,9 +279,9 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 
 ## 14. Recommended Next PR
 
-**Recommended: Hermes Gateway Real Dispatch Controlled Rollout Plan**
+**Recommended: Hermes Gateway Real Dispatch Rollout Validation Checklist**
 
-Hermes Gateway real dispatch helper is now readiness-reviewed with verdict READY_WITH_CONSTRAINTS and remains optional Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, and sidecar attach `guardrails` for attachable outcomes. The next step is a non-executing controlled rollout plan that preserves default-off sidecar-only semantics.
+Hermes Gateway real dispatch helper is now readiness-reviewed and has a non-executing controlled rollout plan. The next step is a rollout validation checklist that preserves default-off sidecar-only semantics before any operator-managed enablement.
 
 ---
 

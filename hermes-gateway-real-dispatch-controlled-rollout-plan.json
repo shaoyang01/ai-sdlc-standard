@@ -1,0 +1,212 @@
+{
+  "name": "Hermes Gateway Real Dispatch Controlled Rollout Plan",
+  "adapter": "hermes",
+  "scope": "gateway_real_dispatch_sidecar_rollout_plan",
+  "status": "plan_only",
+  "plan_only": true,
+  "executing_now": false,
+  "enables_feature_flags_now": false,
+  "changes_runtime_behavior_now": false,
+  "changes_gateway_behavior_now": false,
+  "readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+  "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+  "gateway_field": "hermes_gateway_real_dispatch",
+  "fallback_policy_field": "fallbackPolicy",
+  "observability_field": "observability",
+  "guardrails_field": "guardrails",
+  "default_disabled": true,
+  "feature_flagged": true,
+  "requires_multiple_flags": true,
+  "required_flags": [
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+  ],
+  "supported_request_types": [
+    "review",
+    "code_review",
+    "validation"
+  ],
+  "initial_rollout_request_types": [
+    "review"
+  ],
+  "unsupported_request_types": [
+    "llm_task",
+    "code_generation",
+    "bugfix"
+  ],
+  "changes_gateway_primary_dispatch": false,
+  "changes_gateway_final_result": false,
+  "changes_runtime_final_status": false,
+  "changes_runtime_routing": false,
+  "affects_primary_gateway_result": false,
+  "makes_hermes_default": false,
+  "makes_hermes_final_review_owner": false,
+  "makes_hermes_final_validation_owner": false,
+  "writes_files": false,
+  "persists_rollout_logs": false,
+  "persists_audit": false,
+  "persists_observability": false,
+  "persists_guardrails": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "rollout_phases": [
+    {
+      "name": "phase_0_plan_only",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [],
+      "required_before_next_phase": [
+        "Controlled rollout plan reviewed and approved.",
+        "Readiness verdict remains READY_WITH_CONSTRAINTS."
+      ],
+      "rollback_criteria": [
+        "Any request to enable flags in this PR.",
+        "Any runtime or Gateway behavior change in this PR."
+      ]
+    },
+    {
+      "name": "phase_1_local_fake_dispatcher_validation",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [
+        "review"
+      ],
+      "required_before_next_phase": [
+        "Local validation uses fake dispatcher only.",
+        "No real Hermes CLI is invoked.",
+        "Disabled and unsupported paths do not call dispatcher.",
+        "Sidecar remains omitted on unsafe/exception paths."
+      ],
+      "rollback_criteria": [
+        "Fake validation shows primary Gateway result changes.",
+        "Any raw prompt/artifact/secret appears in sidecar metadata."
+      ]
+    },
+    {
+      "name": "phase_2_ci_fake_runner_validation",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [
+        "review"
+      ],
+      "required_before_next_phase": [
+        "CI validates fake runner/fake dispatcher only.",
+        "Warning limit rejection is covered.",
+        "Guardrails reject unsafe metadata."
+      ],
+      "rollback_criteria": [
+        "CI invokes real Hermes CLI.",
+        "CI requires external services."
+      ]
+    },
+    {
+      "name": "phase_3_single_request_type_manual_enablement",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [
+        "review"
+      ],
+      "required_before_next_phase": [
+        "Manual enablement remains operator-controlled.",
+        "All three Hermes flags are explicitly enabled only in controlled environment.",
+        "Sidecar metadata is reviewed for attach/omit behavior."
+      ],
+      "rollback_criteria": [
+        "Sidecar changes primary Gateway result.",
+        "Sidecar changes Runtime final_status/routing.",
+        "Dispatcher exception leaks raw text."
+      ]
+    },
+    {
+      "name": "phase_4_limited_operator_enablement",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "required_before_next_phase": [
+        "Operators confirm request-type bounded behavior.",
+        "No unsupported request types trigger dispatcher.",
+        "Guardrails remain below warning threshold."
+      ],
+      "rollback_criteria": [
+        "Unsupported request type invokes dispatcher.",
+        "Warning limit exceeded repeatedly.",
+        "Any final review/validation ownership is inferred from sidecar output."
+      ]
+    },
+    {
+      "name": "phase_5_post_rollout_readiness_review",
+      "status": "planned",
+      "executing_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "allowed_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "required_before_next_phase": [
+        "Post-rollout readiness review is completed.",
+        "Any move from sidecar metadata to decision ownership has a separate contract."
+      ],
+      "rollback_criteria": [
+        "Rollout proposes Hermes as default.",
+        "Rollout proposes primary Gateway result ownership without separate contract."
+      ]
+    }
+  ],
+  "global_rollback_criteria": [
+    "Any Hermes sidecar output changes Gateway primary result.",
+    "Any Hermes sidecar output changes Gateway final result.",
+    "Any Hermes sidecar output changes Runtime final_status or routing.",
+    "Any unsupported request type invokes Hermes dispatcher.",
+    "Any raw prompt, raw artifact, or secret appears in sidecar metadata.",
+    "Any persisted rollout, audit, observability, or guardrail log is introduced without a separate contract.",
+    "Any real Hermes CLI invocation appears in tests.",
+    "Any feature flag becomes enabled by default."
+  ],
+  "rollout_constraints": [
+    "This PR is plan-only and does not execute rollout.",
+    "Hermes remains Gateway sidecar metadata only.",
+    "Hermes remains default-off and requires explicit flags.",
+    "Hermes may initially roll out only for review request type.",
+    "Expansion to code_review and validation requires operator approval.",
+    "Hermes must not become final review or validation owner without a separate contract.",
+    "Runtime final_status and routing must not depend on Hermes sidecar output.",
+    "No rollout logs, audit logs, observability logs, or guardrail logs may persist without a separate contract."
+  ],
+  "evidence": [
+    "execution/hermes-gateway-real-dispatch-readiness-review.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "hermes-gateway-real-dispatch-readiness-review.json",
+    "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
+    "tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "hermes-gateway-real-dispatch-controlled-rollout-plan.json"
+  ],
+  "recommended_next_pr": {
+    "title": "Hermes Gateway Real Dispatch Rollout Validation Checklist",
+    "safety_rationale": "Checklist remains non-executing and validates controlled rollout readiness before any operator-managed enablement."
+  }
+}
