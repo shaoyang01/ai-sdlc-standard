@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -575,8 +575,44 @@ async function test() {
   assert(hgSidecarEv.includes("execution/gateway.ts"), "hermes gateway sidecar evidence gateway");
   assert(hgSidecarEv.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes gateway sidecar evidence contract");
   assert(hgSidecarEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes gateway sidecar evidence test");
+  // Hermes Gateway Real Dispatch Fallback Policy
+  assert(capNames.includes("Hermes Gateway Real Dispatch Fallback Policy"), "has Hermes Gateway fallback policy");
+  const hgFallbackCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Fallback Policy");
+  assert(hgFallbackCap !== undefined && hgFallbackCap["status"] === "implemented_sidecar_metadata_policy", "hermes gateway fallback status");
+  assert(hgFallbackCap["runtime_active_by_default"] === false, "hermes gateway fallback not active");
+  assert(hgFallbackCap["wired_to_gateway"] === true, "hermes gateway fallback wired gateway");
+  assert(hgFallbackCap["wired_to_runtime"] === false, "hermes gateway fallback not wired runtime");
+  assert(hgFallbackCap["parent_gateway_field"] === "hermes_gateway_real_dispatch", "hermes gateway fallback parent field");
+  assert(hgFallbackCap["policy_field"] === "fallbackPolicy", "hermes gateway fallback field");
+  const hgFallbackSup = hgFallbackCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgFallbackSup) && hgFallbackSup.includes("review") && hgFallbackSup.includes("code_review") && hgFallbackSup.includes("validation"), "hermes gateway fallback supported");
+  const hgFallbackUnsup = hgFallbackCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(hgFallbackUnsup) && hgFallbackUnsup.includes("llm_task") && hgFallbackUnsup.includes("code_generation") && hgFallbackUnsup.includes("bugfix"), "hermes gateway fallback unsupported");
+  const hgFallbackReasons = hgFallbackCap["reasons"] as string[];
+  assert(Array.isArray(hgFallbackReasons) && hgFallbackReasons.includes("dispatch_success") && hgFallbackReasons.includes("dispatch_guarded_fallback") && hgFallbackReasons.includes("dispatcher_exception"), "hermes gateway fallback reasons");
+  assert(hgFallbackCap["attach_success"] === true, "hermes gateway fallback attach success");
+  assert(hgFallbackCap["attach_safe_failures"] === true, "hermes gateway fallback attach failures");
+  assert(hgFallbackCap["omit_disabled"] === true, "hermes gateway fallback omit disabled");
+  assert(hgFallbackCap["omit_unsupported"] === true, "hermes gateway fallback omit unsupported");
+  assert(hgFallbackCap["omit_unsafe"] === true, "hermes gateway fallback omit unsafe");
+  assert(hgFallbackCap["omit_dispatcher_exception"] === true, "hermes gateway fallback omit exception");
+  assert(hgFallbackCap["changes_gateway_primary_dispatch"] === false, "hermes gateway fallback no primary dispatch");
+  assert(hgFallbackCap["changes_gateway_final_result"] === false, "hermes gateway fallback no final result");
+  assert(hgFallbackCap["changes_final_status"] === false, "hermes gateway fallback no final status");
+  assert(hgFallbackCap["changes_routing"] === false, "hermes gateway fallback no routing");
+  assert(hgFallbackCap["affects_primary_gateway_result"] === false, "hermes gateway fallback no primary effect");
+  assert(hgFallbackCap["writes_files"] === false, "hermes gateway fallback no files");
+  assert(hgFallbackCap["persists_audit"] === false, "hermes gateway fallback no persist");
+  assert(hgFallbackCap["contains_raw_prompt"] === false, "hermes gateway fallback no raw prompt");
+  assert(hgFallbackCap["contains_raw_artifacts"] === false, "hermes gateway fallback no raw artifacts");
+  assert(hgFallbackCap["contains_secrets"] === false, "hermes gateway fallback no secrets");
+  assert(hgFallbackCap["uses_fake_dispatcher_in_tests"] === true, "hermes gateway fallback fake dispatcher");
+  const hgFallbackEv = hgFallbackCap["evidence"] as string[];
+  assert(hgFallbackEv.includes("execution/hermes-gateway-real-dispatch-fallback-policy.ts"), "hermes gateway fallback evidence policy");
+  assert(hgFallbackEv.includes("tests/hermes-gateway-real-dispatch-fallback-policy.test.ts"), "hermes gateway fallback evidence test");
+  assert(hgFallbackEv.includes("execution/gateway.ts"), "hermes gateway fallback evidence gateway");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Fallback Policy", "next PR Hermes fallback policy");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Observability", "next PR Hermes observability");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

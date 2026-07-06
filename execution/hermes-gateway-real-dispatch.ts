@@ -8,6 +8,7 @@
 import type { ExecutionRequest } from "./types";
 import type { CliAdapterConfig } from "./cli-adapter-contract-types";
 import type { HermesCliProcessRunner } from "./hermes-cli-command-executor";
+import type { HermesGatewayRealDispatchFallbackPolicyResult } from "./hermes-gateway-real-dispatch-fallback-policy";
 import {
   evaluateHermesGatewayRealDispatchContract,
   type HermesGatewayRealDispatchContractDecision,
@@ -41,6 +42,7 @@ export interface HermesGatewayRealDispatchResult {
   fallbackAction:
     | "preserve_existing_gateway_behavior"
     | "fallback_without_final_status_change";
+  fallbackPolicy?: HermesGatewayRealDispatchFallbackPolicyResult;
   affectsPrimaryGatewayResult: false;
   changesGatewayPrimaryDispatch: false;
   changesRuntimeFinalStatus: false;

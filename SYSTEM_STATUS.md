@@ -147,6 +147,7 @@ All evolution proposals have `applied: false` and require human review.
 22. **Feature-flagged Hermes Gateway Real Dispatch** — ✅ Done (standalone helper; default disabled; 3 flags; fake-runner tested; fallback-safe)
 23. **Hermes Gateway Real Dispatch Gateway Integration Contract** — ✅ Done (contract-only; default disabled; future field `hermes_gateway_real_dispatch`; omit when disabled; never undefined key; no Gateway primary dispatch/final result change; no Runtime final_status/routing change)
 24. **Feature-flagged Hermes Gateway Real Dispatch Gateway Integration** — ✅ Done (Gateway sidecar metadata only; default disabled; field `hermes_gateway_real_dispatch`; omitted when disabled; never undefined key; only review/code_review/validation; no Gateway primary dispatch/final result change; no Runtime final_status/routing change; fake dispatcher in tests)
-25. **Hermes Gateway Real Dispatch Fallback Policy** — next safe step
-26. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-27. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+25. **Hermes Gateway Real Dispatch Fallback Policy** — ✅ Done (sidecar-only `fallbackPolicy`; attach success/safe failures; omit disabled/unsupported/unsafe/dispatcher exception; no Gateway primary/final result change; no Runtime final_status/routing change; fake dispatcher tests)
+26. **Hermes Gateway Real Dispatch Observability** — next safe step
+27. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+28. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

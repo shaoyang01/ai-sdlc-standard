@@ -31,6 +31,9 @@ import {
 import {
   evaluateHermesGatewayRealDispatchGatewayIntegrationContract,
 } from "./hermes-gateway-real-dispatch-gateway-integration-contract";
+import {
+  evaluateHermesGatewayRealDispatchFallbackPolicy,
+} from "./hermes-gateway-real-dispatch-fallback-policy";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
@@ -139,14 +142,28 @@ export class ExecutionGateway {
         dispatchResult,
         env: this.options.env,
       });
+      const fallbackPolicy = evaluateHermesGatewayRealDispatchFallbackPolicy({
+        requestType: request.type,
+        dispatchResult,
+        integrationMayAttach: integration.mayAttach,
+        realDispatchEnabled: true,
+      });
 
-      if (integration.mayAttach && dispatchResult.enabled && dispatchResult.eligible) {
+      if (integration.mayAttach && fallbackPolicy.shouldAttachSidecar) {
         return {
           ...primaryResult,
-          hermes_gateway_real_dispatch: dispatchResult,
+          hermes_gateway_real_dispatch: {
+            ...dispatchResult,
+            fallbackPolicy,
+          },
         };
       }
-    } catch {
+    } catch (err) {
+      evaluateHermesGatewayRealDispatchFallbackPolicy({
+        requestType: request.type,
+        dispatcherException: err,
+        realDispatchEnabled: true,
+      });
       // Hermes real dispatch is sidecar metadata only. Dispatcher failures must not affect Gateway output.
     }
 

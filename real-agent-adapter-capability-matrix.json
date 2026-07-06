@@ -200,7 +200,9 @@
         "HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md",
         "hermes-gateway-real-dispatch-gateway-integration-contract.json",
         "execution/gateway.ts",
-        "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
+        "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts",
+        "execution/hermes-gateway-real-dispatch-fallback-policy.ts",
+        "tests/hermes-gateway-real-dispatch-fallback-policy.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -450,7 +452,52 @@
       "gateway_real_dispatch_gateway_integration_contains_raw_prompt": false,
       "gateway_real_dispatch_gateway_integration_contains_raw_artifacts": false,
       "gateway_real_dispatch_gateway_integration_contains_secrets": false,
-      "gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests": true
+      "gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests": true,
+      "gateway_real_dispatch_fallback_policy": "implemented_sidecar_metadata_policy",
+      "gateway_real_dispatch_fallback_policy_default_enabled": false,
+      "gateway_real_dispatch_fallback_policy_wired_to_gateway": true,
+      "gateway_real_dispatch_fallback_policy_wired_to_runtime": false,
+      "gateway_real_dispatch_fallback_policy_field": "fallbackPolicy",
+      "gateway_real_dispatch_fallback_policy_parent_field": "hermes_gateway_real_dispatch",
+      "gateway_real_dispatch_fallback_policy_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_fallback_policy_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_fallback_policy_reasons": [
+        "disabled",
+        "unsupported_request_type",
+        "contract_ineligible",
+        "dispatch_success",
+        "dispatch_failure",
+        "dispatch_timeout",
+        "dispatch_guarded_fallback",
+        "unsafe_dispatch_result",
+        "dispatcher_exception",
+        "missing_dispatch_result"
+      ],
+      "gateway_real_dispatch_fallback_policy_attach_success": true,
+      "gateway_real_dispatch_fallback_policy_attach_safe_failures": true,
+      "gateway_real_dispatch_fallback_policy_omit_disabled": true,
+      "gateway_real_dispatch_fallback_policy_omit_unsupported": true,
+      "gateway_real_dispatch_fallback_policy_omit_unsafe": true,
+      "gateway_real_dispatch_fallback_policy_omit_dispatcher_exception": true,
+      "gateway_real_dispatch_fallback_policy_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_fallback_policy_changes_gateway_final_result": false,
+      "gateway_real_dispatch_fallback_policy_changes_final_status": false,
+      "gateway_real_dispatch_fallback_policy_changes_routing": false,
+      "gateway_real_dispatch_fallback_policy_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_fallback_policy_writes_files": false,
+      "gateway_real_dispatch_fallback_policy_persists_audit": false,
+      "gateway_real_dispatch_fallback_policy_contains_raw_prompt": false,
+      "gateway_real_dispatch_fallback_policy_contains_raw_artifacts": false,
+      "gateway_real_dispatch_fallback_policy_contains_secrets": false,
+      "gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests": true
     }
   ],
   "request_types": [
@@ -670,8 +717,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Fallback Policy",
-    "reason": "Hermes Gateway real dispatch is now attached as optional Gateway sidecar metadata. The next step is hardening fallback classification and policy for sidecar outcomes.",
-    "safety_rationale": "Fallback policy hardening should preserve primary Gateway output and Runtime final_status/routing while making sidecar outcomes explicit."
+    "title": "Hermes Gateway Real Dispatch Observability",
+    "reason": "Hermes Gateway real dispatch now has explicit sidecar fallback policy. The next step is structured sidecar observability without persisting audit logs or changing Gateway/Runtime results.",
+    "safety_rationale": "Observability must remain sidecar-only, default-off, sanitized, and unable to affect Runtime final_status or routing."
   }
 }

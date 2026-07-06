@@ -202,8 +202,15 @@ async function test() {
   }
   console.log("");
 
-  // Test 12: Safety fields
-  console.log("Test 12: Safety fields");
+  // Test 12: Standalone helper does not attach fallback policy
+  console.log("Test 12: Standalone helper does not attach fallback policy");
+  for (const r of [r1, r2, r3, r5, r6, r7, r8, r9, rThrow]) {
+    assert(r.fallbackPolicy === undefined, `${r.status}: no standalone fallback policy`);
+  }
+  console.log("");
+
+  // Test 13: Safety fields
+  console.log("Test 13: Safety fields");
   for (const r of [r1, r2, r3, r5, r6, r7, r8, r9, rThrow]) {
     assert(r.affectsPrimaryGatewayResult === false, `${r.status}: no primary`);
     assert(r.changesGatewayPrimaryDispatch === false, `${r.status}: no gateway change`);
@@ -217,8 +224,8 @@ async function test() {
   }
   console.log("");
 
-  // Test 13: Forbidden imports
-  console.log("Test 13: Forbidden imports");
+  // Test 14: Forbidden imports
+  console.log("Test 14: Forbidden imports");
   const src = fs.readFileSync("execution/hermes-gateway-real-dispatch.ts", "utf-8");
   const forbidden = ["runtime", "execution/gateway", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch"];
   const badLines = src.split("\n").filter((l: string) => {

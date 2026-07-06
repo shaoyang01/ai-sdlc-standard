@@ -84,6 +84,11 @@ function assertNoHermesField(result: ExecutionResult, label: string): void {
   assert(Object.prototype.hasOwnProperty.call(result, "hermes_gateway_real_dispatch") === false, `${label}: no own Hermes property`);
 }
 
+function assertNoTopLevelFallbackField(result: ExecutionResult, label: string): void {
+  assert(!("fallbackPolicy" in result), `${label}: no top-level fallback policy`);
+  assert(Object.prototype.hasOwnProperty.call(result, "fallbackPolicy") === false, `${label}: no own top-level fallback policy`);
+}
+
 function assertPrimaryGatewayResultUnchanged(result: ExecutionResult, label: string): void {
   assert(result.success === true, `${label}: success unchanged`);
   assert(result.agent === "hermes", `${label}: primary agent unchanged`);
@@ -98,6 +103,36 @@ function assertShadowReviewUnchanged(result: ExecutionResult, label: string): vo
   assert(result.artifacts.length === 1, `${label}: artifact count unchanged`);
   assert(result.artifacts[0].type === "shadow_output", `${label}: artifact type unchanged`);
   assert(result.artifacts[0].id === "REQ-HERMES-GW:review:shadow_output", `${label}: artifact id unchanged`);
+}
+
+function assertFallbackPolicy(
+  result: ExecutionResult,
+  expected: {
+    reason: NonNullable<HermesGatewayRealDispatchResult["fallbackPolicy"]>["reason"];
+    action: NonNullable<HermesGatewayRealDispatchResult["fallbackPolicy"]>["action"];
+    attach: boolean;
+  },
+  label: string
+): void {
+  const policy = result.hermes_gateway_real_dispatch?.fallbackPolicy;
+  assert(policy !== undefined, `${label}: fallback policy attached`);
+  assert(policy?.reason === expected.reason, `${label}: fallback reason`);
+  assert(policy?.action === expected.action, `${label}: fallback action`);
+  assert(policy?.shouldAttachSidecar === expected.attach, `${label}: fallback attach`);
+  assert(policy?.shouldOmitSidecar === !expected.attach, `${label}: fallback omit`);
+  assert(policy?.preservesGatewayPrimaryResult === true, `${label}: preserves primary`);
+  assert(policy?.preservesGatewayFinalResult === true, `${label}: preserves gateway final`);
+  assert(policy?.preservesRuntimeFinalStatus === true, `${label}: preserves runtime final status`);
+  assert(policy?.preservesRuntimeRouting === true, `${label}: preserves runtime routing`);
+  assert(policy?.changesGatewayPrimaryDispatch === false, `${label}: no gateway dispatch change`);
+  assert(policy?.changesGatewayFinalResult === false, `${label}: no gateway final result change`);
+  assert(policy?.changesRuntimeFinalStatus === false, `${label}: no runtime final status change`);
+  assert(policy?.changesRuntimeRouting === false, `${label}: no runtime routing change`);
+  assert(policy?.writesFiles === false, `${label}: no file writes`);
+  assert(policy?.persistsAudit === false, `${label}: no audit persistence`);
+  assert(policy?.containsRawPrompt === false, `${label}: no raw prompt`);
+  assert(policy?.containsRawArtifacts === false, `${label}: no raw artifacts`);
+  assert(policy?.containsSecrets === false, `${label}: no secrets`);
 }
 
 async function test(): Promise<void> {
@@ -151,10 +186,51 @@ async function test(): Promise<void> {
   assert(r3.hermes_gateway_real_dispatch?.containsRawPrompt === false, "safe no raw prompt");
   assert(r3.hermes_gateway_real_dispatch?.containsRawArtifacts === false, "safe no raw artifacts");
   assert(r3.hermes_gateway_real_dispatch?.containsSecrets === false, "safe no secrets");
+  assertFallbackPolicy(r3, {
+    reason: "dispatch_success",
+    action: "attach_sidecar_metadata",
+    attach: true,
+  }, "safe");
   assertShadowReviewUnchanged(r3, "safe");
   console.log("");
 
-  console.log("Test 4: code_review and validation also attach when safe");
+  console.log("Test 4: Safe failure, timeout, and guarded fallback attach policy metadata");
+  for (const [label, overrides, reason] of [
+    ["failure", {
+      status: "dispatch_executed_failure",
+      commandDecision: "executed_failure",
+      fallbackAction: "fallback_without_final_status_change",
+    }, "dispatch_failure"],
+    ["timeout", {
+      status: "dispatch_executed_timeout",
+      commandDecision: "executed_timeout",
+      fallbackAction: "fallback_without_final_status_change",
+    }, "dispatch_timeout"],
+    ["guarded", {
+      status: "dispatch_guarded_fallback",
+      executed: false,
+      commandDecision: "executed_failure",
+      fallbackAction: "fallback_without_final_status_change",
+    }, "dispatch_guarded_fallback"],
+  ] as const) {
+    const variant = makeDispatcher((request) => safeDispatchResult(request, overrides));
+    const gateway = new ExecutionGateway({
+      env: allHermesFlags,
+      hermesGatewayRealDispatcher: variant.dispatcher,
+    });
+    const result = await gateway.execute(reviewRequest());
+    assert(variant.calls() === 1, `${label}: dispatcher called once`);
+    assert(Object.prototype.hasOwnProperty.call(result, "hermes_gateway_real_dispatch") === true, `${label}: field attached`);
+    assertFallbackPolicy(result, {
+      reason,
+      action: "fallback_without_final_status_change",
+      attach: true,
+    }, label);
+    assertShadowReviewUnchanged(result, label);
+  }
+  console.log("");
+
+  console.log("Test 5: code_review and validation also attach when safe");
   for (const type of ["code_review", "validation"] as const) {
     const typed = makeDispatcher((request) => safeDispatchResult(request));
     const gateway = new ExecutionGateway({
@@ -168,10 +244,15 @@ async function test(): Promise<void> {
     assert(typed.calls() === 1, `${type}: dispatcher called once`);
     assert(result.hermes_gateway_real_dispatch?.requestType === type, `${type}: request type preserved`);
     assert(Object.prototype.hasOwnProperty.call(result, "hermes_gateway_real_dispatch") === true, `${type}: field attached`);
+    assertFallbackPolicy(result, {
+      reason: "dispatch_success",
+      action: "attach_sidecar_metadata",
+      attach: true,
+    }, type);
   }
   console.log("");
 
-  console.log("Test 5: Unsafe dispatch result rejected");
+  console.log("Test 6: Unsafe dispatch result rejected");
   const unsafe = makeDispatcher((request) => safeDispatchResult(request, {
     changesGatewayPrimaryDispatch: true as false,
   }));
@@ -182,10 +263,11 @@ async function test(): Promise<void> {
   const r5 = await unsafeGateway.execute(reviewRequest());
   assert(unsafe.calls() === 1, "unsafe dispatcher called");
   assertNoHermesField(r5, "unsafe");
+  assertNoTopLevelFallbackField(r5, "unsafe");
   assertShadowReviewUnchanged(r5, "unsafe");
   console.log("");
 
-  console.log("Test 6: Dispatcher throws safely");
+  console.log("Test 7: Dispatcher throws safely");
   const throwing: { dispatcher: HermesGatewayRealDispatcher; calls: () => number } = (() => {
     let called = 0;
     return {
@@ -203,13 +285,14 @@ async function test(): Promise<void> {
   const r6 = await throwingGateway.execute(reviewRequest());
   assert(throwing.calls() === 1, "throw dispatcher called");
   assertNoHermesField(r6, "throw");
+  assertNoTopLevelFallbackField(r6, "throw");
   assertShadowReviewUnchanged(r6, "throw");
   const j6 = JSON.stringify(r6);
   assert(!j6.includes("THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK"), "throw no prompt marker");
   assert(!j6.includes("abc"), "throw no secret-like token");
   console.log("");
 
-  console.log("Test 7: No raw prompt leak from Hermes field");
+  console.log("Test 8: No raw prompt leak from Hermes field and policy");
   const promptMarker = "THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK";
   const markerRequest = reviewRequest({ prompt: promptMarker });
   const safeNoPrompt = makeDispatcher((request) => safeDispatchResult(request, { outputSummary: "sanitized" }));
@@ -219,6 +302,10 @@ async function test(): Promise<void> {
   });
   const r7Safe = await safePromptGateway.execute(markerRequest);
   assert(JSON.stringify(r7Safe.hermes_gateway_real_dispatch).includes(promptMarker) === false, "safe field no prompt marker");
+  assert(JSON.stringify(r7Safe.hermes_gateway_real_dispatch?.fallbackPolicy).includes(promptMarker) === false, "safe policy no prompt marker");
+  assert(JSON.stringify(r7Safe.hermes_gateway_real_dispatch?.fallbackPolicy).includes("abc") === false, "safe policy no abc");
+  assert(JSON.stringify(r7Safe.hermes_gateway_real_dispatch?.fallbackPolicy).includes("123") === false, "safe policy no 123");
+  assert(JSON.stringify(r7Safe.hermes_gateway_real_dispatch?.fallbackPolicy).includes("sk-test") === false, "safe policy no sk-test");
   const r7Disabled = await disabledGateway.execute(markerRequest);
   assertNoHermesField(r7Disabled, "raw disabled");
   const r7Unsafe = await unsafeGateway.execute(markerRequest);
@@ -227,7 +314,7 @@ async function test(): Promise<void> {
   assertNoHermesField(r7Throw, "raw throw");
   console.log("");
 
-  console.log("Test 8: No undefined key");
+  console.log("Test 9: No undefined key");
   for (const [label, result] of [
     ["disabled", r1],
     ["unsupported", await unsupportedGateway.execute(unsupportedRequests[0])],
@@ -238,13 +325,13 @@ async function test(): Promise<void> {
   }
   console.log("");
 
-  console.log("Test 9: No Runtime changes");
+  console.log("Test 10: No Runtime changes");
   const runtimeSrc = fs.readFileSync("runtime.ts", "utf-8");
   assert(!runtimeSrc.includes("hermes_gateway_real_dispatch"), "runtime no Hermes Gateway field");
   assert(!runtimeSrc.includes("hermes-gateway-real-dispatch"), "runtime no Hermes real dispatch import");
   console.log("");
 
-  console.log("Test 10: No direct CLI imports in Gateway");
+  console.log("Test 11: No direct CLI imports in Gateway");
   const gatewaySrc = fs.readFileSync("execution/gateway.ts", "utf-8");
   const forbiddenGatewayImports = [
     "executeHermesCliCommand",
@@ -262,10 +349,13 @@ async function test(): Promise<void> {
   assert(badGatewayLines.length === 0, `gateway no direct CLI imports (found ${badGatewayLines.length})`);
   console.log("");
 
-  console.log("Test 11: Gateway integration contract is used");
+  console.log("Test 12: Gateway integration contract and fallback policy are used");
   assert(gatewaySrc.includes("evaluateHermesGatewayRealDispatchGatewayIntegrationContract"), "gateway uses integration contract");
   assert(gatewaySrc.includes("integration.mayAttach"), "gateway attaches only when mayAttach");
-  assert(gatewaySrc.includes("hermes_gateway_real_dispatch: dispatchResult"), "gateway attaches dispatch result field");
+  assert(gatewaySrc.includes("evaluateHermesGatewayRealDispatchFallbackPolicy"), "gateway uses fallback policy");
+  assert(gatewaySrc.includes("fallbackPolicy.shouldAttachSidecar"), "gateway attaches only when fallback policy allows");
+  assert(gatewaySrc.includes("fallbackPolicy"), "gateway attaches fallback policy field");
+  assert(gatewaySrc.includes("hermes_gateway_real_dispatch: {"), "gateway attaches dispatch result object");
   console.log("");
 
   console.log(`Results: ${passed} passed, ${failed} failed`);

@@ -521,6 +521,51 @@
     "hermes_gateway_real_dispatch_gateway_integration_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_gateway_integration_contains_raw_artifacts": false,
     "hermes_gateway_real_dispatch_gateway_integration_contains_secrets": false,
-    "hermes_gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests": true
+    "hermes_gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests": true,
+    "hermes_gateway_real_dispatch_fallback_policy": "implemented_sidecar_metadata_policy",
+    "hermes_gateway_real_dispatch_fallback_policy_default_enabled": false,
+    "hermes_gateway_real_dispatch_fallback_policy_wired_to_gateway": true,
+    "hermes_gateway_real_dispatch_fallback_policy_wired_to_runtime": false,
+    "hermes_gateway_real_dispatch_fallback_policy_field": "fallbackPolicy",
+    "hermes_gateway_real_dispatch_fallback_policy_parent_field": "hermes_gateway_real_dispatch",
+    "hermes_gateway_real_dispatch_fallback_policy_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_fallback_policy_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
+    "hermes_gateway_real_dispatch_fallback_policy_reasons": [
+      "disabled",
+      "unsupported_request_type",
+      "contract_ineligible",
+      "dispatch_success",
+      "dispatch_failure",
+      "dispatch_timeout",
+      "dispatch_guarded_fallback",
+      "unsafe_dispatch_result",
+      "dispatcher_exception",
+      "missing_dispatch_result"
+    ],
+    "hermes_gateway_real_dispatch_fallback_policy_attach_success": true,
+    "hermes_gateway_real_dispatch_fallback_policy_attach_safe_failures": true,
+    "hermes_gateway_real_dispatch_fallback_policy_omit_disabled": true,
+    "hermes_gateway_real_dispatch_fallback_policy_omit_unsupported": true,
+    "hermes_gateway_real_dispatch_fallback_policy_omit_unsafe": true,
+    "hermes_gateway_real_dispatch_fallback_policy_omit_dispatcher_exception": true,
+    "hermes_gateway_real_dispatch_fallback_policy_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_fallback_policy_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_fallback_policy_changes_final_status": false,
+    "hermes_gateway_real_dispatch_fallback_policy_changes_routing": false,
+    "hermes_gateway_real_dispatch_fallback_policy_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_fallback_policy_writes_files": false,
+    "hermes_gateway_real_dispatch_fallback_policy_persists_audit": false,
+    "hermes_gateway_real_dispatch_fallback_policy_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_fallback_policy_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_fallback_policy_contains_secrets": false,
+    "hermes_gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests": true
   }
 }

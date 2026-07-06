@@ -371,6 +371,37 @@ async function test() {
   assert(hermes["gateway_real_dispatch_gateway_integration_uses_fake_dispatcher_in_tests"] === true, "hermes dispatch gateway sidecar fake dispatcher");
   assert(hermesEvidence.includes("execution/gateway.ts"), "hermes evidence Gateway sidecar");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"), "hermes evidence Gateway sidecar test");
+  assert(hermes["gateway_real_dispatch_fallback_policy"] === "implemented_sidecar_metadata_policy", "hermes dispatch fallback policy");
+  assert(hermes["gateway_real_dispatch_fallback_policy_default_enabled"] === false, "hermes dispatch fallback default disabled");
+  assert(hermes["gateway_real_dispatch_fallback_policy_wired_to_gateway"] === true, "hermes dispatch fallback wired gateway");
+  assert(hermes["gateway_real_dispatch_fallback_policy_wired_to_runtime"] === false, "hermes dispatch fallback not wired runtime");
+  assert(hermes["gateway_real_dispatch_fallback_policy_field"] === "fallbackPolicy", "hermes dispatch fallback field");
+  assert(hermes["gateway_real_dispatch_fallback_policy_parent_field"] === "hermes_gateway_real_dispatch", "hermes dispatch fallback parent field");
+  const hgFallbackSupported = hermes["gateway_real_dispatch_fallback_policy_supported_request_types"] as string[];
+  assert(Array.isArray(hgFallbackSupported) && hgFallbackSupported.includes("review") && hgFallbackSupported.includes("code_review") && hgFallbackSupported.includes("validation"), "hermes dispatch fallback supported");
+  const hgFallbackUnsupported = hermes["gateway_real_dispatch_fallback_policy_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgFallbackUnsupported) && hgFallbackUnsupported.includes("llm_task") && hgFallbackUnsupported.includes("code_generation") && hgFallbackUnsupported.includes("bugfix"), "hermes dispatch fallback unsupported");
+  const hgFallbackReasons = hermes["gateway_real_dispatch_fallback_policy_reasons"] as string[];
+  assert(Array.isArray(hgFallbackReasons) && hgFallbackReasons.includes("dispatch_success") && hgFallbackReasons.includes("dispatch_guarded_fallback") && hgFallbackReasons.includes("dispatcher_exception"), "hermes dispatch fallback reasons");
+  assert(hermes["gateway_real_dispatch_fallback_policy_attach_success"] === true, "hermes dispatch fallback attach success");
+  assert(hermes["gateway_real_dispatch_fallback_policy_attach_safe_failures"] === true, "hermes dispatch fallback attach failures");
+  assert(hermes["gateway_real_dispatch_fallback_policy_omit_disabled"] === true, "hermes dispatch fallback omit disabled");
+  assert(hermes["gateway_real_dispatch_fallback_policy_omit_unsupported"] === true, "hermes dispatch fallback omit unsupported");
+  assert(hermes["gateway_real_dispatch_fallback_policy_omit_unsafe"] === true, "hermes dispatch fallback omit unsafe");
+  assert(hermes["gateway_real_dispatch_fallback_policy_omit_dispatcher_exception"] === true, "hermes dispatch fallback omit exception");
+  assert(hermes["gateway_real_dispatch_fallback_policy_changes_gateway_primary_dispatch"] === false, "hermes dispatch fallback no primary dispatch");
+  assert(hermes["gateway_real_dispatch_fallback_policy_changes_gateway_final_result"] === false, "hermes dispatch fallback no final result");
+  assert(hermes["gateway_real_dispatch_fallback_policy_changes_final_status"] === false, "hermes dispatch fallback no final status");
+  assert(hermes["gateway_real_dispatch_fallback_policy_changes_routing"] === false, "hermes dispatch fallback no routing");
+  assert(hermes["gateway_real_dispatch_fallback_policy_affects_primary_gateway_result"] === false, "hermes dispatch fallback no primary effect");
+  assert(hermes["gateway_real_dispatch_fallback_policy_writes_files"] === false, "hermes dispatch fallback no files");
+  assert(hermes["gateway_real_dispatch_fallback_policy_persists_audit"] === false, "hermes dispatch fallback no persist");
+  assert(hermes["gateway_real_dispatch_fallback_policy_contains_raw_prompt"] === false, "hermes dispatch fallback no raw prompt");
+  assert(hermes["gateway_real_dispatch_fallback_policy_contains_raw_artifacts"] === false, "hermes dispatch fallback no raw artifacts");
+  assert(hermes["gateway_real_dispatch_fallback_policy_contains_secrets"] === false, "hermes dispatch fallback no secrets");
+  assert(hermes["gateway_real_dispatch_fallback_policy_uses_fake_dispatcher_in_tests"] === true, "hermes dispatch fallback fake dispatcher");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-fallback-policy.ts"), "hermes evidence fallback policy");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-fallback-policy.test.ts"), "hermes evidence fallback policy test");
   console.log("");
 
   // ── Test 3: Request type alignment ──
