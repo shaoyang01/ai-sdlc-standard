@@ -251,6 +251,23 @@ async function test() {
   assert(hgwFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hgwFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes gateway flags correct");
   assert(realAdapters["hermes_gateway_integration_contract_changes_final_status"] === false, "hermes gateway no final status");
   assert(realAdapters["hermes_gateway_integration_contract_changes_routing"] === false, "hermes gateway no routing");
+  assert(realAdapters["hermes_gateway_shadow_sidecar"] === "implemented_feature_flagged_sidecar", "hermes shadow sidecar implemented");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_default_enabled"] === false, "hermes shadow sidecar default disabled");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_wired_to_gateway"] === false, "hermes shadow sidecar not wired gateway");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_wired_to_runtime"] === false, "hermes shadow sidecar not wired runtime");
+  const hssFlags = realAdapters["hermes_gateway_shadow_sidecar_requires_flags"] as string[];
+  assert(Array.isArray(hssFlags) && hssFlags.length === 3, "hermes shadow 3 flags");
+  assert(hssFlags.includes("SDLC_HERMES_GATEWAY_SHADOW=enabled") && hssFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hssFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes shadow flags correct");
+  const hssSupported = realAdapters["hermes_gateway_shadow_sidecar_supported_request_types"] as string[];
+  assert(Array.isArray(hssSupported) && hssSupported.includes("review") && hssSupported.includes("code_review") && hssSupported.includes("validation"), "hermes shadow supported types");
+  const hssUnsupported = realAdapters["hermes_gateway_shadow_sidecar_unsupported_request_types"] as string[];
+  assert(Array.isArray(hssUnsupported) && hssUnsupported.includes("llm_task") && hssUnsupported.includes("code_generation") && hssUnsupported.includes("bugfix"), "hermes shadow unsupported types");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_affects_primary_gateway_result"] === false, "hermes shadow no primary gateway");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_changes_final_status"] === false, "hermes shadow no final status");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_changes_routing"] === false, "hermes shadow no routing");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_writes_files"] === false, "hermes shadow no files");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_persists_audit"] === false, "hermes shadow no persist");
+  assert(realAdapters["hermes_gateway_shadow_sidecar_uses_fake_runner_in_tests"] === true, "hermes shadow fake runner");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

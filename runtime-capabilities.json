@@ -285,6 +285,23 @@
       "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
     ],
     "hermes_gateway_integration_contract_changes_final_status": false,
-    "hermes_gateway_integration_contract_changes_routing": false
+    "hermes_gateway_integration_contract_changes_routing": false,
+    "hermes_gateway_shadow_sidecar": "implemented_feature_flagged_sidecar",
+    "hermes_gateway_shadow_sidecar_default_enabled": false,
+    "hermes_gateway_shadow_sidecar_wired_to_gateway": false,
+    "hermes_gateway_shadow_sidecar_wired_to_runtime": false,
+    "hermes_gateway_shadow_sidecar_requires_flags": [
+      "SDLC_HERMES_GATEWAY_SHADOW=enabled",
+      "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+      "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+    ],
+    "hermes_gateway_shadow_sidecar_supported_request_types": ["review", "code_review", "validation"],
+    "hermes_gateway_shadow_sidecar_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_shadow_sidecar_affects_primary_gateway_result": false,
+    "hermes_gateway_shadow_sidecar_changes_final_status": false,
+    "hermes_gateway_shadow_sidecar_changes_routing": false,
+    "hermes_gateway_shadow_sidecar_writes_files": false,
+    "hermes_gateway_shadow_sidecar_persists_audit": false,
+    "hermes_gateway_shadow_sidecar_uses_fake_runner_in_tests": true
   }
 }

@@ -172,7 +172,9 @@
         "execution/hermes-cli-command-executor.ts",
         "tests/hermes-cli-command-executor.test.ts",
         "execution/hermes-gateway-integration-contract.ts",
-        "tests/hermes-gateway-integration-contract.test.ts"
+        "tests/hermes-gateway-integration-contract.test.ts",
+        "execution/hermes-gateway-shadow-sidecar.ts",
+        "tests/hermes-gateway-shadow-sidecar.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -199,7 +201,24 @@
         "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
       ],
       "gateway_integration_contract_changes_final_status": false,
-      "gateway_integration_contract_changes_routing": false
+      "gateway_integration_contract_changes_routing": false,
+      "gateway_shadow_sidecar": "implemented_feature_flagged_sidecar",
+      "gateway_shadow_sidecar_default_enabled": false,
+      "gateway_shadow_sidecar_wired_to_gateway": false,
+      "gateway_shadow_sidecar_wired_to_runtime": false,
+      "gateway_shadow_sidecar_requires_flags": [
+        "SDLC_HERMES_GATEWAY_SHADOW=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_shadow_sidecar_supported_request_types": ["review", "code_review", "validation"],
+      "gateway_shadow_sidecar_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "gateway_shadow_sidecar_affects_primary_gateway_result": false,
+      "gateway_shadow_sidecar_changes_final_status": false,
+      "gateway_shadow_sidecar_changes_routing": false,
+      "gateway_shadow_sidecar_writes_files": false,
+      "gateway_shadow_sidecar_persists_audit": false,
+      "gateway_shadow_sidecar_uses_fake_runner_in_tests": true
     }
   ],
   "request_types": [

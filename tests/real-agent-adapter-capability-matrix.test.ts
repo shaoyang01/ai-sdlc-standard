@@ -178,6 +178,24 @@ async function test() {
   assert(hermes["gateway_integration_contract_changes_routing"] === false, "hermes gateway no routing");
   assert(hermesEvidence.includes("execution/hermes-gateway-integration-contract.ts"), "hermes evidence gateway contract");
   assert(hermesEvidence.includes("tests/hermes-gateway-integration-contract.test.ts"), "hermes evidence gateway test");
+  assert(hermes["gateway_shadow_sidecar"] === "implemented_feature_flagged_sidecar", "hermes shadow sidecar");
+  assert(hermes["gateway_shadow_sidecar_default_enabled"] === false, "hermes shadow sidecar default disabled");
+  assert(hermes["gateway_shadow_sidecar_wired_to_gateway"] === false, "hermes shadow not wired gateway");
+  assert(hermes["gateway_shadow_sidecar_wired_to_runtime"] === false, "hermes shadow not wired runtime");
+  const hssFlags = hermes["gateway_shadow_sidecar_requires_flags"] as string[];
+  assert(Array.isArray(hssFlags) && hssFlags.length === 3, "hermes shadow 3 flags");
+  const hssSupported = hermes["gateway_shadow_sidecar_supported_request_types"] as string[];
+  assert(Array.isArray(hssSupported) && hssSupported.includes("review") && hssSupported.includes("code_review") && hssSupported.includes("validation"), "hermes shadow supported types");
+  const hssUnsupported = hermes["gateway_shadow_sidecar_unsupported_request_types"] as string[];
+  assert(Array.isArray(hssUnsupported) && hssUnsupported.includes("llm_task") && hssUnsupported.includes("code_generation") && hssUnsupported.includes("bugfix"), "hermes shadow unsupported types");
+  assert(hermes["gateway_shadow_sidecar_affects_primary_gateway_result"] === false, "hermes shadow no primary");
+  assert(hermes["gateway_shadow_sidecar_changes_final_status"] === false, "hermes shadow no final status");
+  assert(hermes["gateway_shadow_sidecar_changes_routing"] === false, "hermes shadow no routing");
+  assert(hermes["gateway_shadow_sidecar_writes_files"] === false, "hermes shadow no files");
+  assert(hermes["gateway_shadow_sidecar_persists_audit"] === false, "hermes shadow no persist");
+  assert(hermes["gateway_shadow_sidecar_uses_fake_runner_in_tests"] === true, "hermes shadow fake runner");
+  assert(hermesEvidence.includes("execution/hermes-gateway-shadow-sidecar.ts"), "hermes evidence shadow sidecar");
+  assert(hermesEvidence.includes("tests/hermes-gateway-shadow-sidecar.test.ts"), "hermes evidence shadow sidecar test");
   console.log("");
 
   // ── Test 3: Request type alignment ──
