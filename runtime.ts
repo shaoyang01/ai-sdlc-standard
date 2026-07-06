@@ -35,6 +35,7 @@ import { buildOptionalKimiRuntimeShadowAttachment } from "./core/kimi-runtime-sh
 import type { KimiRuntimeShadowAttachment } from "./execution/kimi-runtime-attachment-contract";
 import { buildHermesRuntimeShadowAttachmentFromRequest } from "./core/hermes-runtime-shadow-attachment";
 import type { HermesRuntimeShadowAttachmentBuildResult } from "./core/hermes-runtime-shadow-attachment";
+import { isHermesRuntimeAttachmentEnabled } from "./execution/hermes-runtime-attachment-contract";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -69,6 +70,11 @@ interface RuntimeResult {
   skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
   kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
   hermes_runtime_shadow_attachment?: HermesRuntimeShadowAttachmentBuildResult;
+}
+
+export interface RuntimeOptions {
+  hermesRuntimeShadowAttachmentBuilder?: typeof buildHermesRuntimeShadowAttachmentFromRequest;
+  env?: Record<string, string | undefined>;
 }
 
 interface RequirementSummary {
@@ -313,7 +319,11 @@ export async function runCodeReviewBugfixLoop(input: {
 // ─── MAIN RUNTIME — GRAPH INTERPRETER ───────────────────
 // Graph Kernel is the SINGLE source of truth for transitions.
 
-export async function run(requirement: string): Promise<RuntimeResult> {
+export async function run(
+  requirement: string,
+  options: RuntimeOptions = {}
+): Promise<RuntimeResult> {
+  const env = options.env ?? process.env;
   const requirementId = `REQ-${Date.now()}`;
   const trace: ExecutionTraceEntry[] = [];
   const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
@@ -512,18 +522,24 @@ export async function run(requirement: string): Promise<RuntimeResult> {
 
   // ─── Optional Hermes Runtime Shadow Attachment (disabled by default) ──
   let hermesRuntimeShadowAttachment: HermesRuntimeShadowAttachmentBuildResult | undefined;
-  try {
-    hermesRuntimeShadowAttachment = await buildHermesRuntimeShadowAttachmentFromRequest({
-      request: {
-        type: "validation",
-        node: "validation",
-        agent: "hermes",
-        requirementId,
-        input: { requirement },
-      },
-    });
-  } catch (error) {
-    console.warn("Hermes runtime shadow attachment failed:", error);
+  if (isHermesRuntimeAttachmentEnabled(env)) {
+    const hermesBuilder =
+      options.hermesRuntimeShadowAttachmentBuilder ??
+      buildHermesRuntimeShadowAttachmentFromRequest;
+    try {
+      hermesRuntimeShadowAttachment = await hermesBuilder({
+        request: {
+          type: "validation",
+          node: "validation",
+          agent: "hermes",
+          requirementId,
+          input: { requirement },
+        },
+        env,
+      });
+    } catch (error) {
+      console.warn("Hermes runtime shadow attachment failed:", error);
+    }
   }
 
   return {

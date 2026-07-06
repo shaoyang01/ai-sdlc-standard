@@ -2,8 +2,9 @@
 // ================================================================
 // Fake builder only. No real Hermes CLI. No Gateway mutation.
 
-import { run } from "../runtime";
+import { run, RuntimeOptions } from "../runtime";
 import type { HermesRuntimeShadowAttachmentBuildResult } from "../core/hermes-runtime-shadow-attachment";
+import * as fs from "fs";
 
 const safeAttachment: HermesRuntimeShadowAttachmentBuildResult = {
   adapter: "hermes",
@@ -34,62 +35,104 @@ async function test() {
   }
   console.log("Hermes Runtime Shadow Attachment Integration Test\n");
 
-  // ─── Disabled baseline ───────────────────────────────
-  // Default runtime (no SDLC_HERMES_RUNTIME_ATTACHMENT) — must not have Hermes field
-  console.log("Test 1: Default disabled — no Hermes field");
-  delete process.env.SDCLC_HERMES_RUNTIME_ATTACHMENT;
-  const r1 = await run("Build a feature");
+  // Test 1: Disabled — builder not called
+  console.log("Test 1: Disabled — builder not called");
+  let calls1 = 0;
+  const r1 = await run("Build a feature", {
+    env: {},
+    hermesRuntimeShadowAttachmentBuilder: async (input) => {
+      calls1++;
+      return safeAttachment;
+    },
+  });
+  assert(calls1 === 0, "builder not called when disabled");
   assert(r1.final_status === "success", "final_status success");
-  assert(!("hermes_runtime_shadow_attachment" in r1), "no hermes field when disabled");
+  assert(!("hermes_runtime_shadow_attachment" in r1), "no hermes field");
+  assert(r1.hasOwnProperty("hermes_runtime_shadow_attachment") === false, "no own property");
   console.log("");
 
-  // ─── Enabled via env — field present with safe result ──
-  console.log("Test 2: Enabled — field present");
-  // When runtime flag enabled, builder produces result even if shadow
-  // is disabled (sidecar result is safe for attachment per wiring contract)
-  process.env.SDLC_HERMES_RUNTIME_ATTACHMENT = "enabled";
-  const r2 = await run("Build another feature");
-  assert(r2.final_status === "success", "enabled final_status success");
-  assert("hermes_runtime_shadow_attachment" in r2, "hermes field present when enabled");
-  assert(r2.hermes_runtime_shadow_attachment !== undefined, "attachment not undefined");
-  assert(r2.hermes_runtime_shadow_attachment!.enabled === true, "attachment enabled");
-  assert(r2.hermes_runtime_shadow_attachment!.affectsRuntimeFinalStatus === false, "no final status effect");
-  assert(r2.hermes_runtime_shadow_attachment!.affectsRuntimeRouting === false, "no routing effect");
-  assert(r2.hermes_runtime_shadow_attachment!.affectsPrimaryGatewayResult === false, "no primary gateway effect");
-  delete process.env.SDLC_HERMES_RUNTIME_ATTACHMENT;
+  // Test 2: Enabled — builder returns undefined, field omitted
+  console.log("Test 2: Enabled — builder returns undefined");
+  let calls2 = 0;
+  const r2 = await run("Build another feature", {
+    env: { SDLC_HERMES_RUNTIME_ATTACHMENT: "enabled" },
+    hermesRuntimeShadowAttachmentBuilder: async (input) => {
+      calls2++;
+      return undefined;
+    },
+  });
+  assert(calls2 === 1, "builder called once");
+  assert(r2.final_status === "success", "final_status success");
+  assert(!("hermes_runtime_shadow_attachment" in r2), "no hermes field when undefined");
+  assert(r2.hasOwnProperty("hermes_runtime_shadow_attachment") === false, "no own property");
   console.log("");
 
-  // ─── Verify no undefined key ─────────────────────────
-  console.log("Test 3: No undefined key");
-  assert(r1.hasOwnProperty("hermes_runtime_shadow_attachment") === false, "r1 no own property");
-  // r2 has own property because field was explicitly set
-  assert(r2.hasOwnProperty("hermes_runtime_shadow_attachment") === true, "r2 has own property");
-  assert(r2.hermes_runtime_shadow_attachment !== undefined, "r2 value not undefined");
-  assert(!("hermes_runtime_shadow_attachment" in r1), "r1 not in");
-  assert("hermes_runtime_shadow_attachment" in r2, "r2 in");
+  // Test 3: Enabled — safe attachment attached
+  console.log("Test 3: Enabled — safe attachment");
+  let calls3 = 0;
+  const r3 = await run("Build a third feature", {
+    env: { SDLC_HERMES_RUNTIME_ATTACHMENT: "enabled" },
+    hermesRuntimeShadowAttachmentBuilder: async (input) => {
+      calls3++;
+      return { ...safeAttachment, requestId: input.request.requirementId };
+    },
+  });
+  assert(calls3 === 1, "builder called once");
+  assert(r3.final_status === "success", "final_status success");
+  assert("hermes_runtime_shadow_attachment" in r3, "hermes field present");
+  assert(r3.hasOwnProperty("hermes_runtime_shadow_attachment") === true, "has own property");
+  assert(r3.hermes_runtime_shadow_attachment !== undefined, "not undefined");
+  assert(r3.hermes_runtime_shadow_attachment!.enabled === true, "attachment enabled");
+  assert(r3.hermes_runtime_shadow_attachment!.affectsRuntimeFinalStatus === false, "no final status");
+  assert(r3.hermes_runtime_shadow_attachment!.affectsRuntimeRouting === false, "no routing");
+  assert(r3.hermes_runtime_shadow_attachment!.affectsPrimaryGatewayResult === false, "no primary gateway");
+  assert(r3.hermes_runtime_shadow_attachment!.writesFiles === false, "no files");
+  assert(r3.hermes_runtime_shadow_attachment!.persistsAudit === false, "no persist");
+  assert(r3.hermes_runtime_shadow_attachment!.containsRawPrompt === false, "no raw prompt");
+  assert(r3.hermes_runtime_shadow_attachment!.containsRawArtifacts === false, "no raw artifacts");
+  assert(r3.hermes_runtime_shadow_attachment!.containsSecrets === false, "no secrets");
   console.log("");
 
-  // ─── Safety: final_status unchanged ──────────────────
-  console.log("Test 4: final_status unchanged");
-  assert(r1.final_status === "success", "r1 baseline success");
-  assert(r2.final_status === "success", "r2 same final_status");
+  // Test 4: No raw prompt / secret leak (safe fake builder)
+  console.log("Test 4: No raw prompt / secret leak");
+  // The attachment itself is safe (all safety fields false)
+  assert(r3.hermes_runtime_shadow_attachment!.containsRawPrompt === false, "attachment no raw prompt");
+  assert(r3.hermes_runtime_shadow_attachment!.containsRawArtifacts === false, "attachment no raw artifacts");
+  assert(r3.hermes_runtime_shadow_attachment!.containsSecrets === false, "attachment no secrets");
+  // Verify attachment warnings don't contain markers
+  const aWarnings = r3.hermes_runtime_shadow_attachment!.warnings;
+  for (const w of aWarnings) {
+    assert(!w.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "warning no runtime prompt");
+    assert(!w.includes("THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"), "warning no shadow prompt");
+    assert(!w.includes("token=abc") && !w.includes("password=123") && !w.includes("api_key=xyz") && !w.includes("sk-test"), "warning no secrets");
+  }
   console.log("");
 
-  // ─── Safety: no gateway change ───────────────────────
+  // Test 5: No Gateway change
   console.log("Test 5: No Gateway change");
-  const gwSrc = require("fs").readFileSync("execution/gateway.ts", "utf-8");
+  const gwSrc = fs.readFileSync("execution/gateway.ts", "utf-8");
   assert(!gwSrc.includes("hermes_runtime_shadow_attachment"), "gateway has no hermes attachment logic");
   console.log("");
 
-  // ─── Safety: result shape is consistent ─────────────
-  console.log("Test 6: Result shape consistent");
-  assert(typeof r1.requirement_id === "string" && r1.requirement_id.length > 0, "r1 has requirement_id");
-  assert(Array.isArray(r1.execution_trace) && r1.execution_trace.length > 0, "r1 has trace");
-  assert(Array.isArray(r1.artifacts), "r1 has artifacts");
-  assert(typeof r1.feedback === "object" && r1.feedback !== null, "r1 has feedback");
-  assert(typeof r2.requirement_id === "string" && r2.requirement_id.length > 0, "r2 has requirement_id");
-  assert(Array.isArray(r2.execution_trace) && r2.execution_trace.length > 0, "r2 has trace");
+  // Test 6: No real Hermes CLI in tests
+  console.log("Test 6: No real Hermes CLI in tests");
+  const testSrc = fs.readFileSync("tests/runtime-hermes-shadow-attachment.test.ts", "utf-8");
+  const badImports = testSrc.split("\n").filter(l =>
+    l.includes("import ") && (
+      l.includes("executeHermesCliCommand") ||
+      l.includes("runHermesGatewayShadowSidecar") ||
+      l.includes("child_process")
+    )
+  );
+  assert(badImports.length === 0, `no forbidden imports in test (found ${badImports.length})`);
   console.log("");
+
+  // Test 7: Backward compatibility — run(requirement) still works
+  console.log("Test 7: Backward compatibility");
+  const r7 = await run("simple");
+  assert(r7.final_status === "success", "backward compat success");
+  assert(typeof r7.requirement_id === "string" && r7.requirement_id.length > 0, "backward compat requirement_id");
+  assert(Array.isArray(r7.execution_trace) && r7.execution_trace.length > 0, "backward compat trace");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
