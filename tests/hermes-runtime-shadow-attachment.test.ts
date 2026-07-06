@@ -4,6 +4,7 @@
 
 import {
   buildHermesRuntimeShadowAttachmentFromRequest,
+  buildHermesRuntimeShadowAttachmentAuditMetadata,
 } from "../core/hermes-runtime-shadow-attachment";
 import { HERMES_RUNTIME_ATTACHMENT_FLAG } from "../execution/hermes-runtime-attachment-contract";
 import { HERMES_GATEWAY_SHADOW_FLAG } from "../execution/hermes-gateway-shadow-sidecar";
@@ -190,13 +191,41 @@ async function test() {
   assert(r5!.auditMetadata!.sidecarStatus === "integration_ineligible", "unsupported: status");
   console.log("");
 
-  // Test 10: Audit warnings sanitized — helper-level check
-  console.log("Test 10: Audit warnings sanitized");
-  const amJson = JSON.stringify(r3!.auditMetadata);
-  assert(!amJson.includes("abc"), "audit no abc");
-  assert(!amJson.includes("sk-test"), "audit no sk-test");
-  assert(!amJson.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "audit no runtime prompt");
-  assert(!amJson.includes("THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"), "audit no shadow prompt");
+  // Test 10: Audit warnings sanitized — direct injection
+  console.log("Test 10: Audit warnings sanitized — direct injection");
+  const audit = buildHermesRuntimeShadowAttachmentAuditMetadata({
+    requestId: "REQ-AUDIT",
+    requestType: "validation",
+    enabled: true,
+    attached: true,
+    sidecarExecuted: true,
+    attachmentBuilt: true,
+    sidecarStatus: "shadow_executed_success",
+    validationReason: "valid_attachment",
+    warnings: [
+      "token=abc password=123 api_key=xyz sk-test THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"
+    ],
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+  });
+  assert(audit.auditVersion === 1, "audit version");
+  assert(audit.timestamp === "2026-01-01T00:00:00.000Z", "timestamp fixed");
+  assert(audit.containsRawPrompt === false, "no raw prompt flag");
+  assert(audit.containsRawArtifacts === false, "no raw artifacts flag");
+  assert(audit.containsSecrets === false, "no secrets flag");
+  assert(audit.persistsAudit === false, "no persist");
+  assert(audit.writesFiles === false, "no files");
+  const auditJson = JSON.stringify(audit);
+  assert(!auditJson.includes("abc"), "audit no abc");
+  assert(!auditJson.includes("123"), "audit no 123");
+  assert(!auditJson.includes("xyz"), "audit no xyz");
+  assert(!auditJson.includes("sk-test"), "audit no sk-test");
+  assert(!auditJson.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "audit no runtime prompt");
+  assert(!auditJson.includes("THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"), "audit no shadow prompt");
+  // Verify warnings are scrubbed
+  for (const w of audit.warnings) {
+    assert(!w.includes("abc"), "warning no abc");
+    assert(!w.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "warning no runtime prompt");
+  }
   console.log("");
 
   // Test 11: No forbidden imports

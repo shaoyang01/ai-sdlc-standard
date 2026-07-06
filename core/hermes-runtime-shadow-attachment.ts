@@ -65,7 +65,18 @@ export interface HermesRuntimeShadowAttachmentBuildResult {
   warnings: string[];
 }
 
-function buildHermesRuntimeShadowAttachmentAuditMetadata(input: {
+function sanitizeHermesRuntimeShadowAuditText(value?: string): string | undefined {
+  if (!value || value.trim() === "") return undefined;
+  const sanitized = sanitizeErrorSummary(value) ?? value;
+  const scrubbed = sanitized
+    .replace(/THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK/g, "[REDACTED_RAW_PROMPT]")
+    .replace(/THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK/g, "[REDACTED_RAW_PROMPT]");
+  return scrubbed.length > 1000
+    ? scrubbed.slice(0, 1000) + "…[truncated]"
+    : scrubbed;
+}
+
+export function buildHermesRuntimeShadowAttachmentAuditMetadata(input: {
   requestId: string;
   requestType: string;
   enabled: boolean;
@@ -101,7 +112,9 @@ function buildHermesRuntimeShadowAttachmentAuditMetadata(input: {
     containsRawPrompt: false,
     containsRawArtifacts: false,
     containsSecrets: false,
-    warnings: input.warnings.map(w => sanitizeErrorSummary(w) ?? "[REDACTED]"),
+    warnings: input.warnings
+      .map(sanitizeHermesRuntimeShadowAuditText)
+      .filter((w): w is string => Boolean(w)),
   };
 }
 
