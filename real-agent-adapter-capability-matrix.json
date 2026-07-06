@@ -287,7 +287,17 @@
       "runtime_shadow_attachment_audit_metadata_contains_raw_prompt": false,
       "runtime_shadow_attachment_audit_metadata_contains_raw_artifacts": false,
       "runtime_shadow_attachment_audit_metadata_contains_secrets": false,
-      "runtime_shadow_attachment_audit_metadata_field": "auditMetadata"
+      "runtime_shadow_attachment_audit_metadata_field": "auditMetadata",
+      "runtime_shadow_attachment_observability_summary": "implemented_in_memory_sidecar_metadata",
+      "runtime_shadow_attachment_observability_summary_persisted": false,
+      "runtime_shadow_attachment_observability_summary_writes_files": false,
+      "runtime_shadow_attachment_observability_summary_changes_final_status": false,
+      "runtime_shadow_attachment_observability_summary_changes_routing": false,
+      "runtime_shadow_attachment_observability_summary_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_observability_summary_contains_raw_prompt": false,
+      "runtime_shadow_attachment_observability_summary_contains_raw_artifacts": false,
+      "runtime_shadow_attachment_observability_summary_contains_secrets": false,
+      "runtime_shadow_attachment_observability_summary_field": "observabilitySummary"
     }
   ],
   "request_types": [

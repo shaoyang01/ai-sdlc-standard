@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Hermes Runtime Shadow Attachment Observability Summary**
+**Recommended: Hermes Runtime Shadow Attachment Final Readiness Review**
 
-Hermes runtime sidecar now has in-memory audit metadata. The next step is a lightweight observability summary.
+Hermes runtime sidecar now has audit metadata and observability summary. A final readiness review should follow before any Gateway real dispatch.
 
 ---
 

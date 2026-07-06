@@ -329,6 +329,16 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_contains_raw_artifacts"] === false, "hermes audit no raw artifacts");
   assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_contains_secrets"] === false, "hermes audit no secrets");
   assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_field"] === "auditMetadata", "hermes audit field");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary"] === "implemented_in_memory_sidecar_metadata", "hermes obs summary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_persisted"] === false, "hermes obs no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_writes_files"] === false, "hermes obs no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_changes_final_status"] === false, "hermes obs no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_changes_routing"] === false, "hermes obs no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_affects_primary_gateway_result"] === false, "hermes obs no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_contains_raw_prompt"] === false, "hermes obs no raw prompt");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_contains_raw_artifacts"] === false, "hermes obs no raw artifacts");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_contains_secrets"] === false, "hermes obs no secrets");
+  assert(realAdapters["hermes_runtime_shadow_attachment_observability_summary_field"] === "observabilitySummary", "hermes obs field");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

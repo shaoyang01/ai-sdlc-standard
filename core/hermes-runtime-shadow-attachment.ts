@@ -42,6 +42,40 @@ export interface HermesRuntimeShadowAttachmentAuditMetadata {
   warnings: string[];
 }
 
+export interface HermesRuntimeShadowAttachmentObservabilitySummary {
+  adapter: "hermes";
+  source: "hermes_runtime_shadow_attachment_observability";
+  observabilityVersion: 1;
+  runtimeAttachmentField: "hermes_runtime_shadow_attachment";
+  enabled: boolean;
+  attached: boolean;
+  sidecarExecuted: boolean;
+  attachmentBuilt: boolean;
+  sidecarStatus?: string;
+  validationReason?: string;
+  outcome:
+    | "disabled"
+    | "attached"
+    | "not_attached"
+    | "sidecar_not_executed"
+    | "sidecar_failed"
+    | "sidecar_timeout"
+    | "integration_ineligible";
+  requestType: string;
+  hasWarnings: boolean;
+  warningCount: number;
+  redactionApplied: boolean;
+  timestamp: string;
+  affectsRuntimeFinalStatus: false;
+  affectsRuntimeRouting: false;
+  affectsPrimaryGatewayResult: false;
+  writesFiles: false;
+  persistsAudit: false;
+  containsRawPrompt: false;
+  containsRawArtifacts: false;
+  containsSecrets: false;
+}
+
 export interface HermesRuntimeShadowAttachmentBuildResult {
   adapter: "hermes";
   source: "hermes_runtime_shadow_attachment_helper";
@@ -54,6 +88,7 @@ export interface HermesRuntimeShadowAttachmentBuildResult {
   validationReason?: string;
   attachment?: HermesRuntimeShadowAttachment;
   auditMetadata?: HermesRuntimeShadowAttachmentAuditMetadata;
+  observabilitySummary?: HermesRuntimeShadowAttachmentObservabilitySummary;
   affectsRuntimeFinalStatus: false;
   affectsRuntimeRouting: false;
   affectsPrimaryGatewayResult: false;
@@ -118,6 +153,67 @@ export function buildHermesRuntimeShadowAttachmentAuditMetadata(input: {
   };
 }
 
+function resolveObservabilityOutcome(input: {
+  enabled: boolean;
+  attached: boolean;
+  sidecarExecuted: boolean;
+  sidecarStatus?: string;
+}): HermesRuntimeShadowAttachmentObservabilitySummary["outcome"] {
+  if (!input.enabled) return "disabled";
+  if (input.sidecarStatus === "integration_ineligible") return "integration_ineligible";
+  if (input.sidecarStatus === "shadow_executed_timeout") return "sidecar_timeout";
+  if (input.sidecarStatus === "shadow_executed_failure") return "sidecar_failed";
+  if (!input.sidecarExecuted) return "sidecar_not_executed";
+  if (input.attached) return "attached";
+  return "not_attached";
+}
+
+export function buildHermesRuntimeShadowAttachmentObservabilitySummary(input: {
+  requestType: string;
+  enabled: boolean;
+  attached: boolean;
+  sidecarExecuted: boolean;
+  attachmentBuilt: boolean;
+  sidecarStatus?: string;
+  validationReason?: string;
+  warnings: string[];
+  redactionApplied?: boolean;
+  now?: () => Date;
+}): HermesRuntimeShadowAttachmentObservabilitySummary {
+  const clock = input.now ?? (() => new Date());
+  return {
+    adapter: "hermes",
+    source: "hermes_runtime_shadow_attachment_observability",
+    observabilityVersion: 1,
+    runtimeAttachmentField: "hermes_runtime_shadow_attachment",
+    enabled: input.enabled,
+    attached: input.attached,
+    sidecarExecuted: input.sidecarExecuted,
+    attachmentBuilt: input.attachmentBuilt,
+    sidecarStatus: input.sidecarStatus,
+    validationReason: input.validationReason,
+    outcome: resolveObservabilityOutcome({
+      enabled: input.enabled,
+      attached: input.attached,
+      sidecarExecuted: input.sidecarExecuted,
+      sidecarStatus: input.sidecarStatus,
+    }),
+    requestType: input.requestType,
+    hasWarnings: input.warnings.length > 0,
+    warningCount: input.warnings.length,
+    redactionApplied: input.redactionApplied ?? false,
+    timestamp: clock().toISOString(),
+    affectsRuntimeFinalStatus: false,
+    affectsRuntimeRouting: false,
+    affectsPrimaryGatewayResult: false,
+    writesFiles: false,
+    persistsAudit: false,
+    containsRawPrompt: false,
+    containsRawArtifacts: false,
+    containsSecrets: false,
+  };
+}
+
 export async function buildHermesRuntimeShadowAttachmentFromRequest(input: {
   request: ExecutionRequest;
   config?: CliAdapterConfig;
@@ -168,6 +264,17 @@ export async function buildHermesRuntimeShadowAttachmentFromRequest(input: {
       sidecarStatus: sidecarResult.status,
       validationReason: validation.reason,
       warnings: [...sidecarResult.warnings, ...validation.warnings],
+    }),
+    observabilitySummary: buildHermesRuntimeShadowAttachmentObservabilitySummary({
+      requestType: input.request.type,
+      enabled: true,
+      attached: Boolean(attachment),
+      sidecarExecuted: sidecarResult.executed,
+      attachmentBuilt: Boolean(attachment),
+      sidecarStatus: sidecarResult.status,
+      validationReason: validation.reason,
+      warnings: [...sidecarResult.warnings, ...validation.warnings],
+      redactionApplied: true,
     }),
     affectsRuntimeFinalStatus: false,
     affectsRuntimeRouting: false,

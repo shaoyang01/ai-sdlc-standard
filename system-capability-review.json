@@ -688,6 +688,25 @@
         "tests/hermes-runtime-shadow-attachment.test.ts",
         "tests/runtime-hermes-shadow-attachment.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Runtime Shadow Attachment Observability Summary",
+      "status": "implemented_in_memory_sidecar_metadata",
+      "runtime_active_by_default": false,
+      "field": "observabilitySummary",
+      "persisted": false,
+      "writes_files": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "core/hermes-runtime-shadow-attachment.ts",
+        "tests/hermes-runtime-shadow-attachment.test.ts",
+        "tests/runtime-hermes-shadow-attachment.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -909,8 +928,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Runtime Shadow Attachment Observability Summary",
-    "reason": "Hermes runtime sidecar has audit metadata. A lightweight observability summary should follow.",
-    "safety_rationale": "Observability is in-memory only; no persistence, no routing change."
+    "title": "Hermes Runtime Shadow Attachment Final Readiness Review",
+    "reason": "Hermes runtime sidecar has audit metadata and observability summary. A final readiness review should follow.",
+    "safety_rationale": "Review has no side effects; final gate before any Hermes Gateway real dispatch."
   }
 }

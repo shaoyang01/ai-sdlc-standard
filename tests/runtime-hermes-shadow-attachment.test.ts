@@ -41,6 +41,32 @@ const safeAttachment: HermesRuntimeShadowAttachmentBuildResult = {
     containsSecrets: false,
     warnings: [],
   },
+  observabilitySummary: {
+    adapter: "hermes",
+    source: "hermes_runtime_shadow_attachment_observability",
+    observabilityVersion: 1,
+    runtimeAttachmentField: "hermes_runtime_shadow_attachment",
+    enabled: true,
+    attached: true,
+    sidecarExecuted: true,
+    attachmentBuilt: true,
+    sidecarStatus: "shadow_executed_success",
+    validationReason: "valid_attachment",
+    outcome: "attached",
+    requestType: "validation",
+    hasWarnings: false,
+    warningCount: 0,
+    redactionApplied: false,
+    timestamp: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+    affectsRuntimeFinalStatus: false,
+    affectsRuntimeRouting: false,
+    affectsPrimaryGatewayResult: false,
+    writesFiles: false,
+    persistsAudit: false,
+    containsRawPrompt: false,
+    containsRawArtifacts: false,
+    containsSecrets: false,
+  },
   affectsRuntimeFinalStatus: false,
   affectsRuntimeRouting: false,
   affectsPrimaryGatewayResult: false,
@@ -126,6 +152,12 @@ async function test() {
   assert(am.attached === true, "audit attached");
   assert(am.persistsAudit === false, "audit no persist");
   assert(am.writesFiles === false, "audit no files");
+  // Observability summary
+  assert(r3.hermes_runtime_shadow_attachment!.observabilitySummary !== undefined, "observability present");
+  const os = r3.hermes_runtime_shadow_attachment!.observabilitySummary!;
+  assert(os.outcome === "attached", "obs outcome attached");
+  assert(os.observabilityVersion === 1, "obs version");
+  assert(os.containsRawPrompt === false && os.containsSecrets === false, "obs no raw/secrets");
   console.log("");
 
   // Test 4: No raw prompt / secret leak (safe fake builder)

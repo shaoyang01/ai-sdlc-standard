@@ -5,6 +5,7 @@
 import {
   buildHermesRuntimeShadowAttachmentFromRequest,
   buildHermesRuntimeShadowAttachmentAuditMetadata,
+  buildHermesRuntimeShadowAttachmentObservabilitySummary,
 } from "../core/hermes-runtime-shadow-attachment";
 import { HERMES_RUNTIME_ATTACHMENT_FLAG } from "../execution/hermes-runtime-attachment-contract";
 import { HERMES_GATEWAY_SHADOW_FLAG } from "../execution/hermes-gateway-shadow-sidecar";
@@ -228,8 +229,116 @@ async function test() {
   }
   console.log("");
 
-  // Test 11: No forbidden imports
-  console.log("Test 11: No forbidden imports");
+  // Test 11: Observability summary — enabled results
+  console.log("Test 11: Observability summary in enabled results");
+  for (const r of allResults) {
+    assert(r.observabilitySummary !== undefined, `${r.sidecarStatus}: obs exists`);
+    const os = r.observabilitySummary!;
+    assert(os.observabilityVersion === 1, `${r.sidecarStatus}: obs version`);
+    assert(os.adapter === "hermes", `${r.sidecarStatus}: obs adapter`);
+    assert(os.source === "hermes_runtime_shadow_attachment_observability", `${r.sidecarStatus}: obs source`);
+    assert(os.runtimeAttachmentField === "hermes_runtime_shadow_attachment", `${r.sidecarStatus}: obs field`);
+    assert(os.enabled === true, `${r.sidecarStatus}: obs enabled`);
+    assert(typeof os.timestamp === "string" && !isNaN(Date.parse(os.timestamp)), `${r.sidecarStatus}: obs timestamp`);
+    assert(os.affectsRuntimeFinalStatus === false, `${r.sidecarStatus}: obs no final status`);
+    assert(os.affectsRuntimeRouting === false, `${r.sidecarStatus}: obs no routing`);
+    assert(os.affectsPrimaryGatewayResult === false, `${r.sidecarStatus}: obs no primary`);
+    assert(os.writesFiles === false, `${r.sidecarStatus}: obs no files`);
+    assert(os.persistsAudit === false, `${r.sidecarStatus}: obs no persist`);
+    assert(os.containsRawPrompt === false, `${r.sidecarStatus}: obs no raw prompt`);
+    assert(os.containsRawArtifacts === false, `${r.sidecarStatus}: obs no raw artifacts`);
+    assert(os.containsSecrets === false, `${r.sidecarStatus}: obs no secrets`);
+  }
+  // State-specific outcome checks
+  assert(r2!.observabilitySummary!.outcome === "sidecar_not_executed", "shadow disabled: sidecar_not_executed");
+  assert(r2!.observabilitySummary!.sidecarExecuted === false, "shadow disabled: not executed");
+  assert(r3!.observabilitySummary!.outcome === "attached", "success: attached");
+  assert(r3!.observabilitySummary!.attached === true, "success: attached true");
+  assert(r3!.observabilitySummary!.sidecarStatus === "shadow_executed_success", "success: status");
+  assert(r4!.observabilitySummary!.outcome === "integration_ineligible", "ineligible: outcome");
+  assert(r5!.observabilitySummary!.outcome === "integration_ineligible", "unsupported: outcome");
+  assert(r6!.observabilitySummary!.outcome === "sidecar_failed", "failure: sidecar_failed");
+  assert(r6!.observabilitySummary!.sidecarExecuted === true, "failure: executed");
+  console.log("");
+
+  // Test 12: Direct observability builder — outcome mapping
+  console.log("Test 12: Direct observability builder — outcome mapping");
+  const fixed = () => new Date("2026-01-01T00:00:00.000Z");
+  const disabledObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: false, attached: false,
+    sidecarExecuted: false, attachmentBuilt: false, warnings: [], now: fixed,
+  });
+  assert(disabledObs.outcome === "disabled", "disabled outcome");
+  assert(disabledObs.timestamp === "2026-01-01T00:00:00.000Z", "disabled timestamp");
+  assert(disabledObs.hasWarnings === false && disabledObs.warningCount === 0, "disabled no warnings");
+
+  const notExecObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: false,
+    sidecarExecuted: false, attachmentBuilt: false,
+    sidecarStatus: "shadow_disabled", warnings: [], now: fixed,
+  });
+  assert(notExecObs.outcome === "sidecar_not_executed", "not executed outcome");
+
+  const ineligibleObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: false,
+    sidecarExecuted: false, attachmentBuilt: false,
+    sidecarStatus: "integration_ineligible", warnings: [], now: fixed,
+  });
+  assert(ineligibleObs.outcome === "integration_ineligible", "ineligible outcome");
+
+  const failedObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: false,
+    sidecarExecuted: true, attachmentBuilt: false,
+    sidecarStatus: "shadow_executed_failure", warnings: [], now: fixed,
+  });
+  assert(failedObs.outcome === "sidecar_failed", "failed outcome");
+
+  const timeoutObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: false,
+    sidecarExecuted: true, attachmentBuilt: false,
+    sidecarStatus: "shadow_executed_timeout", warnings: [], now: fixed,
+  });
+  assert(timeoutObs.outcome === "sidecar_timeout", "timeout outcome");
+
+  const attachedObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: true,
+    sidecarExecuted: true, attachmentBuilt: true,
+    sidecarStatus: "shadow_executed_success", validationReason: "valid_attachment",
+    warnings: ["w1", "w2"], redactionApplied: true, now: fixed,
+  });
+  assert(attachedObs.outcome === "attached", "attached outcome");
+  assert(attachedObs.hasWarnings === true && attachedObs.warningCount === 2, "attached warnings");
+  assert(attachedObs.redactionApplied === true, "attached redaction");
+  assert(attachedObs.timestamp === "2026-01-01T00:00:00.000Z", "attached timestamp");
+
+  const notAttObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: false,
+    sidecarExecuted: true, attachmentBuilt: false,
+    sidecarStatus: "shadow_executed_success", warnings: [], now: fixed,
+  });
+  assert(notAttObs.outcome === "not_attached", "not attached outcome");
+  console.log("");
+
+  // Test 13: Observability summary contains no raw warning text
+  console.log("Test 13: Observability no raw text");
+  const rawObs = buildHermesRuntimeShadowAttachmentObservabilitySummary({
+    requestType: "validation", enabled: true, attached: true,
+    sidecarExecuted: true, attachmentBuilt: true,
+    sidecarStatus: "shadow_executed_success",
+    warnings: ["token=abc password=123 api_key=xyz sk-test THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"],
+    now: fixed,
+  });
+  const obsJson = JSON.stringify(rawObs);
+  assert(!obsJson.includes("abc"), "obs no abc");
+  assert(!obsJson.includes("123"), "obs no 123");
+  assert(!obsJson.includes("xyz"), "obs no xyz");
+  assert(!obsJson.includes("sk-test"), "obs no sk-test");
+  assert(!obsJson.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "obs no runtime prompt");
+  assert(!obsJson.includes("THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"), "obs no shadow prompt");
+  console.log("");
+
+  // Test 14: No forbidden imports
+  console.log("Test 14: No forbidden imports");
   const src = fs.readFileSync("core/hermes-runtime-shadow-attachment.ts", "utf-8");
   const forbidden = ["runtime", "execution/gateway", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch", "writeFile", "appendFile"];
   const badLines = src.split("\n").filter((l: string) => {
