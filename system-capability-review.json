@@ -730,6 +730,37 @@
         "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
         "hermes-runtime-shadow-attachment-readiness-review.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Contract",
+      "status": "implemented_contract_only",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "supported_request_types": ["review", "code_review", "validation"],
+      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "requires_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "invokes_cli": false,
+      "spawns_process": false,
+      "changes_gateway_primary_dispatch_now": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-contract.ts",
+        "tests/hermes-gateway-real-dispatch-contract.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md",
+        "hermes-gateway-real-dispatch-contract.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -951,8 +982,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Contract",
-    "reason": "Hermes runtime sidecar stack is complete and readiness-reviewed. The next step is a Gateway real dispatch contract following Kimi's pattern.",
-    "safety_rationale": "Contract-only Gateway real dispatch prevents accidental wiring or routing changes."
+    "title": "Feature-flagged Hermes Gateway Real Dispatch",
+    "reason": "Hermes Gateway real dispatch contract is defined. The next step is feature-flagged implementation following Kimi's pattern.",
+    "safety_rationale": "Implementation must be default-off, Gateway-controlled, and use fake runners in tests."
   }
 }

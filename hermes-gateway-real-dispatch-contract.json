@@ -1,0 +1,37 @@
+{
+  "name": "Hermes Gateway Real Dispatch Contract",
+  "adapter": "hermes",
+  "status": "implemented_contract_only",
+  "contract_only": true,
+  "default_enabled": false,
+  "wired_to_gateway": false,
+  "wired_to_runtime": false,
+  "supported_request_types": ["review", "code_review", "validation"],
+  "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+  "required_flags": [
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+  ],
+  "invokes_cli": false,
+  "spawns_process": false,
+  "writes_files": false,
+  "persists_audit": false,
+  "changes_gateway_primary_dispatch_now": false,
+  "changes_runtime_final_status": false,
+  "changes_runtime_routing": false,
+  "affects_primary_gateway_result": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "fallback_policy": {
+    "on_ineligible": "preserve_existing_gateway_behavior",
+    "on_unsupported_request_type": "preserve_existing_gateway_behavior",
+    "on_missing_command": "preserve_existing_gateway_behavior",
+    "on_future_execution_failure": "fallback_without_final_status_change"
+  },
+  "recommended_next_pr": {
+    "title": "Feature-flagged Hermes Gateway Real Dispatch",
+    "safety_rationale": "Real dispatch implementation remains feature-flagged, default-off, and Gateway-controlled."
+  }
+}

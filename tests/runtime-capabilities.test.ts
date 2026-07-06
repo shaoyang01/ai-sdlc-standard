@@ -353,6 +353,27 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_contains_raw_artifacts"] === false, "hermes readiness no raw artifacts");
   assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_contains_secrets"] === false, "hermes readiness no secrets");
   assert(realAdapters["hermes_runtime_shadow_attachment_final_readiness_recommended_next_pr"] === "Hermes Gateway Real Dispatch Contract", "hermes readiness next PR");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract"] === "implemented_contract_only", "hermes dispatch contract");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_default_enabled"] === false, "hermes dispatch default disabled");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_wired_to_gateway"] === false, "hermes dispatch not wired gateway");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_wired_to_runtime"] === false, "hermes dispatch not wired runtime");
+  const hrdSupported = realAdapters["hermes_gateway_real_dispatch_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hrdSupported) && hrdSupported.includes("review") && hrdSupported.includes("code_review") && hrdSupported.includes("validation"), "hermes dispatch supported");
+  const hrdUnsupported = realAdapters["hermes_gateway_real_dispatch_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hrdUnsupported) && hrdUnsupported.includes("llm_task") && hrdUnsupported.includes("code_generation") && hrdUnsupported.includes("bugfix"), "hermes dispatch unsupported");
+  const hrdFlags = realAdapters["hermes_gateway_real_dispatch_contract_requires_flags"] as string[];
+  assert(Array.isArray(hrdFlags) && hrdFlags.length === 3, "hermes dispatch 3 flags");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_invokes_cli"] === false, "hermes dispatch no CLI");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_spawns_process"] === false, "hermes dispatch no spawn");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_changes_gateway_primary_dispatch_now"] === false, "hermes dispatch no gateway change");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_changes_final_status"] === false, "hermes dispatch no final status");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_changes_routing"] === false, "hermes dispatch no routing");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_affects_primary_gateway_result"] === false, "hermes dispatch no primary");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_writes_files"] === false, "hermes dispatch no files");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_persists_audit"] === false, "hermes dispatch no persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_contains_raw_prompt"] === false, "hermes dispatch no raw prompt");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_contains_raw_artifacts"] === false, "hermes dispatch no raw artifacts");
+  assert(realAdapters["hermes_gateway_real_dispatch_contract_contains_secrets"] === false, "hermes dispatch no secrets");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

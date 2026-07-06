@@ -143,5 +143,6 @@ All evolution proposals have `applied: false` and require human review.
 18. **Hermes Runtime Shadow Attachment Audit Metadata** — ✅ Done (in-memory sidecar metadata; no persistence; no raw prompt/artifacts/secrets)
 19. **Hermes Runtime Shadow Attachment Observability Summary** — ✅ Done (in-memory; summary-only with outcome/count/booleans; no warning text)
 20. **Hermes Runtime Shadow Attachment Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; runtime sidecar stack complete; Gateway real dispatch not included)
-21. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-22. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+21. **Hermes Gateway Real Dispatch Contract** — ✅ Done (contract-only; 3 flags; review/code_review/validation; fallback policy; not wired)
+22. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+23. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

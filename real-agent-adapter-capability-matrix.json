@@ -186,7 +186,11 @@
         "core/hermes-runtime-shadow-attachment-readiness-review.ts",
         "tests/hermes-runtime-shadow-attachment-readiness-review.test.ts",
         "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
-        "hermes-runtime-shadow-attachment-readiness-review.json"
+        "hermes-runtime-shadow-attachment-readiness-review.json",
+        "execution/hermes-gateway-real-dispatch-contract.ts",
+        "tests/hermes-gateway-real-dispatch-contract.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md",
+        "hermes-gateway-real-dispatch-contract.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -315,7 +319,29 @@
       "runtime_shadow_attachment_final_readiness_contains_raw_prompt": false,
       "runtime_shadow_attachment_final_readiness_contains_raw_artifacts": false,
       "runtime_shadow_attachment_final_readiness_contains_secrets": false,
-      "runtime_shadow_attachment_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Contract"
+      "runtime_shadow_attachment_final_readiness_recommended_next_pr": "Hermes Gateway Real Dispatch Contract",
+      "gateway_real_dispatch_contract": "implemented_contract_only",
+      "gateway_real_dispatch_contract_default_enabled": false,
+      "gateway_real_dispatch_contract_wired_to_gateway": false,
+      "gateway_real_dispatch_contract_wired_to_runtime": false,
+      "gateway_real_dispatch_contract_supported_request_types": ["review", "code_review", "validation"],
+      "gateway_real_dispatch_contract_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "gateway_real_dispatch_contract_requires_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_contract_invokes_cli": false,
+      "gateway_real_dispatch_contract_spawns_process": false,
+      "gateway_real_dispatch_contract_changes_gateway_primary_dispatch_now": false,
+      "gateway_real_dispatch_contract_changes_final_status": false,
+      "gateway_real_dispatch_contract_changes_routing": false,
+      "gateway_real_dispatch_contract_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_contract_writes_files": false,
+      "gateway_real_dispatch_contract_persists_audit": false,
+      "gateway_real_dispatch_contract_contains_raw_prompt": false,
+      "gateway_real_dispatch_contract_contains_raw_artifacts": false,
+      "gateway_real_dispatch_contract_contains_secrets": false
     }
   ],
   "request_types": [

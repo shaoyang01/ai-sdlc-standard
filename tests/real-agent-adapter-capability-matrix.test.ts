@@ -293,6 +293,27 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment-readiness-review.test.ts"), "hermes evidence readiness test");
   assert(hermesEvidence.includes("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes evidence readiness md");
   assert(hermesEvidence.includes("hermes-runtime-shadow-attachment-readiness-review.json"), "hermes evidence readiness json");
+  assert(hermes["gateway_real_dispatch_contract"] === "implemented_contract_only", "hermes dispatch contract");
+  assert(hermes["gateway_real_dispatch_contract_default_enabled"] === false, "hermes dispatch default disabled");
+  assert(hermes["gateway_real_dispatch_contract_wired_to_gateway"] === false, "hermes dispatch not wired gateway");
+  assert(hermes["gateway_real_dispatch_contract_wired_to_runtime"] === false, "hermes dispatch not wired runtime");
+  const hrdSupported = hermes["gateway_real_dispatch_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hrdSupported) && hrdSupported.includes("review"), "hermes dispatch supported");
+  const hrdUnsupported = hermes["gateway_real_dispatch_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hrdUnsupported) && hrdUnsupported.includes("llm_task"), "hermes dispatch unsupported");
+  const hrdFlags = hermes["gateway_real_dispatch_contract_requires_flags"] as string[];
+  assert(Array.isArray(hrdFlags) && hrdFlags.length === 3, "hermes dispatch 3 flags");
+  assert(hermes["gateway_real_dispatch_contract_invokes_cli"] === false, "hermes dispatch no CLI");
+  assert(hermes["gateway_real_dispatch_contract_changes_gateway_primary_dispatch_now"] === false, "hermes dispatch no gateway change");
+  assert(hermes["gateway_real_dispatch_contract_changes_final_status"] === false, "hermes dispatch no final status");
+  assert(hermes["gateway_real_dispatch_contract_changes_routing"] === false, "hermes dispatch no routing");
+  assert(hermes["gateway_real_dispatch_contract_writes_files"] === false, "hermes dispatch no files");
+  assert(hermes["gateway_real_dispatch_contract_persists_audit"] === false, "hermes dispatch no persist");
+  assert(hermes["gateway_real_dispatch_contract_contains_secrets"] === false, "hermes dispatch no secrets");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-contract.ts"), "hermes evidence dispatch contract");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-contract.test.ts"), "hermes evidence dispatch test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes evidence dispatch md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-contract.json"), "hermes evidence dispatch json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
