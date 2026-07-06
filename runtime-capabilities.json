@@ -244,6 +244,13 @@
     "kimi_gateway_real_dispatch_failure_returns_structured_error": true,
     "kimi_gateway_real_dispatch_timeout_returns_structured_error": true,
     "kimi_gateway_real_dispatch_errors_sanitized": true,
-    "kimi_gateway_real_dispatch_expands_request_types": false
+    "kimi_gateway_real_dispatch_expands_request_types": false,
+    "kimi_gateway_real_dispatch_observability": "implemented",
+    "kimi_gateway_real_dispatch_observability_default_persisted": false,
+    "kimi_gateway_real_dispatch_observability_contains_raw_prompt": false,
+    "kimi_gateway_real_dispatch_observability_contains_raw_artifacts": false,
+    "kimi_gateway_real_dispatch_observability_contains_secrets": false,
+    "kimi_gateway_real_dispatch_observability_changes_final_status": false,
+    "kimi_gateway_real_dispatch_observability_changes_routing": false
   }
 }

@@ -12,6 +12,11 @@ import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
 import { sanitizeErrorSummary } from "./cli-adapter-audit";
 import { createArtifact } from "../core/artifact";
 import { classifyKimiGatewayRealDispatchFallback } from "./kimi-gateway-real-dispatch-fallback-policy";
+import {
+  buildKimiGatewayRealDispatchObservabilityEvent,
+  buildObservabilitySummary,
+  type KimiGatewayRealDispatchObservabilityEvent,
+} from "./kimi-gateway-real-dispatch-observability";
 
 export type KimiGatewayRealDispatchResultStatus =
   | "disabled" | "unsupported" | "executed_success"
@@ -34,6 +39,7 @@ export interface KimiGatewayRealDispatchResult {
   error?: string;
   warnings: string[];
   auditEvents: unknown[];
+  observabilityEvents: KimiGatewayRealDispatchObservabilityEvent[];
 }
 
 export async function dispatchKimiGatewayReal(input: {
@@ -69,7 +75,13 @@ export async function dispatchKimiGatewayReal(input: {
       missing_cli_command: "disabled",
       unsupported_request_type: "unsupported",
     };
-    return { ...base, status: statusMap[contract.decision] ?? "disabled", executed: false };
+    return { ...base, status: statusMap[contract.decision] ?? "disabled", executed: false,
+      observabilityEvents: [buildKimiGatewayRealDispatchObservabilityEvent({
+        stage: "contract_rejected", request: input.request,
+        contractDecision: contract.decision,
+        dispatchStatus: statusMap[contract.decision] ?? "disabled",
+      })],
+    };
   }
 
   try {
@@ -91,6 +103,23 @@ export async function dispatchKimiGatewayReal(input: {
       stderrSummary: execResult.stderrSummary,
       error: execResult.error,
       auditEvents: [...base.auditEvents, ...execResult.auditEvents],
+      observabilityEvents: [
+        buildKimiGatewayRealDispatchObservabilityEvent({
+          stage: "execution_started", request: input.request,
+          contractDecision: contract.decision,
+        }),
+        buildKimiGatewayRealDispatchObservabilityEvent({
+          stage: statusMap[execResult.decision] === "executed_success" ? "execution_success"
+            : statusMap[execResult.decision] === "executed_timeout" ? "execution_timeout"
+            : "execution_failure",
+          request: input.request,
+          contractDecision: contract.decision,
+          dispatchStatus: statusMap[execResult.decision],
+          executed: execResult.decision.startsWith("executed"),
+          invokesCli: true,
+          spawnsProcess: execResult.decision === "executed_success",
+        }),
+      ],
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -99,6 +128,11 @@ export async function dispatchKimiGatewayReal(input: {
       status: "executed_failure",
       executed: false,
       error: sanitizeErrorSummary(msg) ?? "Unknown error",
+      observabilityEvents: [buildKimiGatewayRealDispatchObservabilityEvent({
+        stage: "execution_failure", request: input.request,
+        contractDecision: contract.decision,
+        executed: false,
+      })],
     };
   }
 }
@@ -117,7 +151,14 @@ export async function executeKimiGatewayRequest(
       content: { result: `kimi_llm_task_completed`, summary: dispatch.stdoutSummary ?? "" },
       agent: "kimi", source: "execution_gateway", id: `${dispatch.requestId}:kimi:shadow_output`,
     });
-    return { success: true, node: request.node, agent: "kimi", output: { result: "kimi_executed_success", summary: dispatch.stdoutSummary }, artifacts: [artifact] };
+    return {
+      success: true, node: request.node, agent: "kimi",
+      output: {
+        result: "kimi_executed_success", summary: dispatch.stdoutSummary,
+        observability: buildObservabilitySummary(dispatch.observabilityEvents),
+      },
+      artifacts: [artifact],
+    };
   }
 
   const fallback = classifyKimiGatewayRealDispatchFallback({
@@ -131,6 +172,7 @@ export async function executeKimiGatewayRequest(
       error: fallback.sanitizedMessage,
       fallback_action: fallback.action,
       fallback_reason: fallback.reason,
+      observability: buildObservabilitySummary(dispatch.observabilityEvents),
     },
     artifacts: [],
     error: fallback.sanitizedMessage,
