@@ -188,13 +188,20 @@
     "kimi_gateway_integration_wired_to_gateway": false,
     "kimi_gateway_integration_wired_to_runtime": false,
     "kimi_gateway_integration_default_enabled": false,
-    "kimi_gateway_integration_requires_flags": ["SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_gateway_integration_requires_flags": [
+      "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+      "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+    ],
     "kimi_gateway_integration_invokes_cli": false,
     "kimi_gateway_integration_spawns_process": false,
     "kimi_gateway_integration_changes_final_status": false,
     "kimi_gateway_shadow_sidecar": "implemented_feature_flagged_sidecar",
     "kimi_gateway_shadow_sidecar_default_enabled": false,
-    "kimi_gateway_shadow_sidecar_requires_flags": ["SDLC_KIMI_GATEWAY_SHADOW=enabled","SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_gateway_shadow_sidecar_requires_flags": [
+      "SDLC_KIMI_GATEWAY_SHADOW=enabled",
+      "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+      "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+    ],
     "kimi_gateway_shadow_sidecar_wired_to_runtime": false,
     "kimi_gateway_shadow_sidecar_changes_final_status": false,
     "kimi_gateway_shadow_sidecar_changes_routing": false,
@@ -210,7 +217,12 @@
     "kimi_runtime_attachment_writes_files": false,
     "kimi_runtime_shadow_attachment": "implemented_feature_flagged_runtime_sidecar",
     "kimi_runtime_shadow_attachment_default_enabled": false,
-    "kimi_runtime_shadow_attachment_requires_flags": ["SDLC_KIMI_RUNTIME_ATTACHMENT=enabled","SDLC_KIMI_GATEWAY_SHADOW=enabled","SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_runtime_shadow_attachment_requires_flags": [
+      "SDLC_KIMI_RUNTIME_ATTACHMENT=enabled",
+      "SDLC_KIMI_GATEWAY_SHADOW=enabled",
+      "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+      "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+    ],
     "kimi_runtime_shadow_attachment_changes_final_status": false,
     "kimi_runtime_shadow_attachment_changes_routing": false,
     "kimi_runtime_shadow_attachment_changes_agent_selection": false,
@@ -220,10 +232,16 @@
     "kimi_runtime_shadow_attachment_writes_files": false,
     "kimi_gateway_real_dispatch_contract": "implemented_contract_only",
     "kimi_gateway_real_dispatch_default_enabled": false,
-    "kimi_gateway_real_dispatch_wired_to_gateway": false,
+    "kimi_gateway_real_dispatch_wired_to_gateway": true,
     "kimi_gateway_real_dispatch_wired_to_runtime": false,
-    "kimi_gateway_real_dispatch_supported_request_types": ["llm_task"],
-    "kimi_gateway_real_dispatch_requires_flags": ["SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled","SDLC_KIMI_GATEWAY_INTEGRATION=enabled","SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"],
+    "kimi_gateway_real_dispatch_supported_request_types": [
+      "llm_task"
+    ],
+    "kimi_gateway_real_dispatch_requires_flags": [
+      "SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled",
+      "SDLC_KIMI_GATEWAY_INTEGRATION=enabled",
+      "SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled"
+    ],
     "kimi_gateway_real_dispatch_invokes_cli": false,
     "kimi_gateway_real_dispatch_spawns_process": false,
     "kimi_gateway_real_dispatch_changes_final_status": false,
@@ -231,13 +249,8 @@
     "kimi_gateway_real_dispatch_writes_files": false,
     "kimi_gateway_real_dispatch_persists_audit": false,
     "kimi_gateway_real_dispatch": "implemented_feature_flagged_gateway_dispatch",
-    "kimi_gateway_real_dispatch_default_enabled": false,
-    "kimi_gateway_real_dispatch_wired_to_gateway": true,
-    "kimi_gateway_real_dispatch_wired_to_runtime": false,
-    "kimi_gateway_real_dispatch_supported_request_types": ["llm_task"],
     "kimi_gateway_real_dispatch_invokes_cli_when_enabled": true,
     "kimi_gateway_real_dispatch_invokes_cli_by_default": false,
-    "kimi_gateway_real_dispatch_changes_final_status": false,
     "kimi_gateway_real_dispatch_changes_routing_by_default": false,
     "kimi_gateway_real_dispatch_fallback_policy": "implemented",
     "kimi_gateway_real_dispatch_fallback_default_action": "fall_through_to_shadow",
@@ -278,8 +291,16 @@
     "hermes_gateway_integration_contract_wired_to_runtime": false,
     "hermes_gateway_integration_contract_invokes_cli": false,
     "hermes_gateway_integration_contract_spawns_process": false,
-    "hermes_gateway_integration_contract_supported_request_types": ["review", "code_review", "validation"],
-    "hermes_gateway_integration_contract_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_integration_contract_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_integration_contract_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
     "hermes_gateway_integration_contract_requires_flags": [
       "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
       "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
@@ -295,8 +316,16 @@
       "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
       "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
     ],
-    "hermes_gateway_shadow_sidecar_supported_request_types": ["review", "code_review", "validation"],
-    "hermes_gateway_shadow_sidecar_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_shadow_sidecar_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_shadow_sidecar_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
     "hermes_gateway_shadow_sidecar_affects_primary_gateway_result": false,
     "hermes_gateway_shadow_sidecar_changes_final_status": false,
     "hermes_gateway_shadow_sidecar_changes_routing": false,
@@ -392,8 +421,16 @@
     "hermes_gateway_real_dispatch_contract_default_enabled": false,
     "hermes_gateway_real_dispatch_contract_wired_to_gateway": false,
     "hermes_gateway_real_dispatch_contract_wired_to_runtime": false,
-    "hermes_gateway_real_dispatch_contract_supported_request_types": ["review", "code_review", "validation"],
-    "hermes_gateway_real_dispatch_contract_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_real_dispatch_contract_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_contract_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
     "hermes_gateway_real_dispatch_contract_requires_flags": [
       "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
       "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
@@ -414,8 +451,16 @@
     "hermes_gateway_real_dispatch_default_enabled": false,
     "hermes_gateway_real_dispatch_wired_to_gateway": false,
     "hermes_gateway_real_dispatch_wired_to_runtime": false,
-    "hermes_gateway_real_dispatch_supported_request_types": ["review", "code_review", "validation"],
-    "hermes_gateway_real_dispatch_unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+    "hermes_gateway_real_dispatch_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
     "hermes_gateway_real_dispatch_requires_flags": [
       "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
       "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
@@ -431,6 +476,23 @@
     "hermes_gateway_real_dispatch_persists_audit": false,
     "hermes_gateway_real_dispatch_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_contains_raw_artifacts": false,
-    "hermes_gateway_real_dispatch_contains_secrets": false
+    "hermes_gateway_real_dispatch_contains_secrets": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract": "implemented_contract_only",
+    "hermes_gateway_real_dispatch_gateway_integration_contract_default_enabled": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_wired_to_gateway": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_wired_to_runtime": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_field": "hermes_gateway_real_dispatch",
+    "hermes_gateway_real_dispatch_gateway_integration_contract_omit_when_disabled": true,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_never_undefined_key": true,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_changes_gateway_primary_dispatch_now": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_changes_gateway_final_result_now": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_changes_final_status": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_changes_routing": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_writes_files": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_persists_audit": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_gateway_integration_contract_contains_secrets": false
   }
 }

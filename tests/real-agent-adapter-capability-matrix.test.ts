@@ -326,6 +326,27 @@ async function test() {
   assert(hermes["gateway_real_dispatch_contains_secrets"] === false, "hermes real dispatch no secrets");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch.ts"), "hermes evidence real dispatch");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch.test.ts"), "hermes evidence real dispatch test");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract"] === "implemented_contract_only", "hermes dispatch gateway integration contract");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_default_enabled"] === false, "hermes dispatch gateway integration default disabled");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_wired_to_gateway"] === false, "hermes dispatch gateway integration not wired gateway");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_wired_to_runtime"] === false, "hermes dispatch gateway integration not wired runtime");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_field"] === "hermes_gateway_real_dispatch", "hermes dispatch gateway integration field");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_omit_when_disabled"] === true, "hermes dispatch gateway integration omit");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_never_undefined_key"] === true, "hermes dispatch gateway integration no undefined");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_changes_gateway_primary_dispatch_now"] === false, "hermes dispatch gateway integration no primary dispatch");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_changes_gateway_final_result_now"] === false, "hermes dispatch gateway integration no final result");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_changes_final_status"] === false, "hermes dispatch gateway integration no final status");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_changes_routing"] === false, "hermes dispatch gateway integration no routing");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_affects_primary_gateway_result"] === false, "hermes dispatch gateway integration no primary effect");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_writes_files"] === false, "hermes dispatch gateway integration no files");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_persists_audit"] === false, "hermes dispatch gateway integration no persist");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_contains_raw_prompt"] === false, "hermes dispatch gateway integration no raw prompt");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_contains_raw_artifacts"] === false, "hermes dispatch gateway integration no raw artifacts");
+  assert(hermes["gateway_real_dispatch_gateway_integration_contract_contains_secrets"] === false, "hermes dispatch gateway integration no secrets");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes evidence dispatch gateway integration contract");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes evidence dispatch gateway integration test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes evidence dispatch gateway integration md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes evidence dispatch gateway integration json");
   console.log("");
 
   // ── Test 3: Request type alignment ──

@@ -393,6 +393,23 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_contains_raw_prompt"] === false, "hermes dispatch no raw prompt");
   assert(realAdapters["hermes_gateway_real_dispatch_contains_raw_artifacts"] === false, "hermes dispatch no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_contains_secrets"] === false, "hermes dispatch no secrets 2");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract"] === "implemented_contract_only", "hermes dispatch gateway integration contract");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_default_enabled"] === false, "hermes dispatch gateway integration default disabled");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_wired_to_gateway"] === false, "hermes dispatch gateway integration not wired gateway");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_wired_to_runtime"] === false, "hermes dispatch gateway integration not wired runtime");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_field"] === "hermes_gateway_real_dispatch", "hermes dispatch gateway integration field");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_omit_when_disabled"] === true, "hermes dispatch gateway integration omit");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_never_undefined_key"] === true, "hermes dispatch gateway integration no undefined");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_changes_gateway_primary_dispatch_now"] === false, "hermes dispatch gateway integration no primary dispatch");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_changes_gateway_final_result_now"] === false, "hermes dispatch gateway integration no final result");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_changes_final_status"] === false, "hermes dispatch gateway integration no final status");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_changes_routing"] === false, "hermes dispatch gateway integration no routing");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_affects_primary_gateway_result"] === false, "hermes dispatch gateway integration no primary effect");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_writes_files"] === false, "hermes dispatch gateway integration no files");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_persists_audit"] === false, "hermes dispatch gateway integration no persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_prompt"] === false, "hermes dispatch gateway integration no raw prompt");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_raw_artifacts"] === false, "hermes dispatch gateway integration no raw artifacts");
+  assert(realAdapters["hermes_gateway_real_dispatch_gateway_integration_contract_contains_secrets"] === false, "hermes dispatch gateway integration no secrets");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

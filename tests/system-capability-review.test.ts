@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Gateway Integration Contract", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Gateway Integration Contract", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -521,8 +521,33 @@ async function test() {
   const hrdEv = hrdCap["evidence"] as string[];
   assert(hrdEv.includes("execution/hermes-gateway-real-dispatch.ts"), "hermes real dispatch evidence ts");
   assert(hrdEv.includes("tests/hermes-gateway-real-dispatch.test.ts"), "hermes real dispatch evidence test");
+  // Hermes Gateway Real Dispatch Gateway Integration Contract
+  assert(capNames.includes("Hermes Gateway Real Dispatch Gateway Integration Contract"), "has Hermes Gateway integration contract");
+  const hgiCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Gateway Integration Contract");
+  assert(hgiCap !== undefined && hgiCap["status"] === "implemented_contract_only", "hermes gateway integration contract status");
+  assert(hgiCap["runtime_active_by_default"] === false, "hermes gateway integration contract not active");
+  assert(hgiCap["wired_to_gateway"] === false, "hermes gateway integration contract not wired gateway");
+  assert(hgiCap["wired_to_runtime"] === false, "hermes gateway integration contract not wired runtime");
+  assert(hgiCap["gateway_field"] === "hermes_gateway_real_dispatch", "hermes gateway integration contract field");
+  assert(hgiCap["omit_when_disabled"] === true, "hermes gateway integration contract omit");
+  assert(hgiCap["never_undefined_key"] === true, "hermes gateway integration contract no undefined");
+  assert(hgiCap["changes_gateway_primary_dispatch_now"] === false, "hermes gateway integration contract no primary dispatch");
+  assert(hgiCap["changes_gateway_final_result_now"] === false, "hermes gateway integration contract no Gateway final result");
+  assert(hgiCap["changes_final_status"] === false, "hermes gateway integration contract no final status");
+  assert(hgiCap["changes_routing"] === false, "hermes gateway integration contract no routing");
+  assert(hgiCap["affects_primary_gateway_result"] === false, "hermes gateway integration contract no primary effect");
+  assert(hgiCap["writes_files"] === false, "hermes gateway integration contract no files");
+  assert(hgiCap["persists_audit"] === false, "hermes gateway integration contract no persist");
+  assert(hgiCap["contains_raw_prompt"] === false, "hermes gateway integration contract no raw prompt");
+  assert(hgiCap["contains_raw_artifacts"] === false, "hermes gateway integration contract no raw artifacts");
+  assert(hgiCap["contains_secrets"] === false, "hermes gateway integration contract no secrets");
+  const hgiEv = hgiCap["evidence"] as string[];
+  assert(hgiEv.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes gateway integration evidence ts");
+  assert(hgiEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes gateway integration evidence test");
+  assert(hgiEv.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes gateway integration evidence md");
+  assert(hgiEv.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes gateway integration evidence json");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Gateway Integration Contract", "next PR Hermes gw integration");
+  assert(review.recommended_next_pr.title === "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration", "next PR Hermes gw integration");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

@@ -2,7 +2,11 @@
 // Lightweight runtime validation schema.
 // JSON Schema equivalent is at ../../schemas/requirement.schema.json
 
-export const RequirementSummarySchema = {
+type RequirementSummarySchemaContract = {
+  parse(obj: unknown): asserts obj is Record<string, unknown>;
+};
+
+export const RequirementSummarySchema: RequirementSummarySchemaContract = {
   parse(obj: unknown): asserts obj is Record<string, unknown> {
     const o = obj as Record<string, unknown>;
     if (!o || typeof o !== "object") throw new Error("Invalid requirement summary: not an object");

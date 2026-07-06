@@ -4,6 +4,7 @@
 // PURELY STRUCTURAL. No behavior change.
 
 import { NodeType } from "../sdlc_graph/types";
+import type { ExecutionTraceItem } from "./execution-trace";
 
 export type ExecutionContext = {
   node: NodeType;

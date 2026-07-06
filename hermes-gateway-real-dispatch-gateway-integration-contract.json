@@ -1,0 +1,38 @@
+{
+  "name": "Hermes Gateway Real Dispatch Gateway Integration Contract",
+  "adapter": "hermes",
+  "status": "implemented_contract_only",
+  "contract_only": true,
+  "default_enabled": false,
+  "wired_to_gateway": false,
+  "wired_to_runtime": false,
+  "gateway_field": "hermes_gateway_real_dispatch",
+  "conditional_field_only": true,
+  "omit_when_disabled": true,
+  "never_undefined_key": true,
+  "changes_gateway_primary_dispatch_now": false,
+  "changes_gateway_final_result_now": false,
+  "changes_runtime_final_status": false,
+  "changes_runtime_routing": false,
+  "affects_primary_gateway_result": false,
+  "supported_request_types": [
+    "review",
+    "code_review",
+    "validation"
+  ],
+  "unsupported_request_types": [
+    "llm_task",
+    "code_generation",
+    "bugfix"
+  ],
+  "requires_flag": "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+  "writes_files": false,
+  "persists_audit": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "recommended_next_pr": {
+    "title": "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration",
+    "safety_rationale": "Actual Gateway integration remains feature-flagged, default-off, and must preserve primary Gateway behavior."
+  }
+}

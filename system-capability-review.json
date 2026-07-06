@@ -499,7 +499,9 @@
       "runtime_changes": false,
       "gateway_routing_changes": false,
       "request_type_expansion": false,
-      "supported_request_types": ["llm_task"],
+      "supported_request_types": [
+        "llm_task"
+      ],
       "default_enabled": false,
       "evidence": [
         "KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
@@ -515,7 +517,9 @@
       "runtime_changes": false,
       "gateway_routing_changes": false,
       "request_type_expansion": false,
-      "current_supported_request_types": ["llm_task"],
+      "current_supported_request_types": [
+        "llm_task"
+      ],
       "newly_supported_request_types": [],
       "defer_code_generation_to": "codex",
       "defer_review_validation_to": "hermes",
@@ -552,8 +556,16 @@
       "wired_to_runtime": false,
       "invokes_cli": false,
       "spawns_process": false,
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "requires_flags": [
         "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
         "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
@@ -578,8 +590,16 @@
         "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
         "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
       ],
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "affects_primary_gateway_result": false,
       "changes_final_status": false,
       "changes_routing": false,
@@ -737,8 +757,16 @@
       "runtime_active_by_default": false,
       "wired_to_gateway": false,
       "wired_to_runtime": false,
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "requires_flags": [
         "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
         "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
@@ -768,8 +796,16 @@
       "runtime_active_by_default": false,
       "wired_to_gateway": false,
       "wired_to_runtime": false,
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "requires_flags": [
         "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
         "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
@@ -789,6 +825,32 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch.ts",
         "tests/hermes-gateway-real-dispatch.test.ts"
+      ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Gateway Integration Contract",
+      "status": "implemented_contract_only",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "gateway_field": "hermes_gateway_real_dispatch",
+      "omit_when_disabled": true,
+      "never_undefined_key": true,
+      "changes_gateway_primary_dispatch_now": false,
+      "changes_gateway_final_result_now": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts",
+        "tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md",
+        "hermes-gateway-real-dispatch-gateway-integration-contract.json"
       ]
     }
   ],
@@ -1011,8 +1073,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Gateway Integration Contract",
-    "reason": "Hermes real dispatch helper is implemented. A Gateway integration contract should define how to wire it into the ExecutionGateway later.",
-    "safety_rationale": "Gateway integration must remain contract-only; no accidental wiring or routing changes."
+    "title": "Feature-flagged Hermes Gateway Real Dispatch Gateway Integration",
+    "reason": "The contract-only Gateway integration rules are implemented. The next PR can wire the Hermes dispatch metadata into Gateway behind the real dispatch flag.",
+    "safety_rationale": "Gateway integration must remain default-off, omit fields when disabled, never write undefined keys, and preserve primary Gateway behavior."
   }
 }

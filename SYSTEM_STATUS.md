@@ -42,7 +42,7 @@ These capabilities exist but run entirely in shadow mode with no real external c
 | Code Review Adapter | Scans artifacts for `force_review_fail` marker; PASS by default |
 | Bugfix Adapter | Returns shadow `bugfix_patch` artifact; no patches applied to disk |
 | Kimi Agent | Feature-flagged Gateway real dispatch for `llm_task` only; requires 3 flags; default-off; tested with fake runners |
-| Hermes Agent | Not implemented — all Hermes calls fall through to shadow adapter |
+| Hermes Agent | Review/code_review/validation stack is contract-defined and standalone; Gateway integration contract is done; not wired to primary Gateway dispatch |
 
 ## 4. Feature-flagged Real Execution
 
@@ -145,5 +145,7 @@ All evolution proposals have `applied: false` and require human review.
 20. **Hermes Runtime Shadow Attachment Final Readiness Review** — ✅ Done (verdict: READY_WITH_CONSTRAINTS; runtime sidecar stack complete; Gateway real dispatch not included)
 21. **Hermes Gateway Real Dispatch Contract** — ✅ Done (contract-only; 3 flags; review/code_review/validation; fallback policy; not wired)
 22. **Feature-flagged Hermes Gateway Real Dispatch** — ✅ Done (standalone helper; default disabled; 3 flags; fake-runner tested; fallback-safe)
-23. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-24. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+23. **Hermes Gateway Real Dispatch Gateway Integration Contract** — ✅ Done (contract-only; default disabled; not wired to Gateway; future field `hermes_gateway_real_dispatch`; omit when disabled; never undefined key; no Gateway primary dispatch/final result change; no Runtime final_status/routing change)
+24. **Feature-flagged Hermes Gateway Real Dispatch Gateway Integration** — next safe step
+25. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+26. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

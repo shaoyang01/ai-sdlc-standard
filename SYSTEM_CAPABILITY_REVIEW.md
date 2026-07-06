@@ -4,9 +4,9 @@
 
 The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
 
-Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes has CLI contract, dry-run harness, and executor contract only; real Hermes command executor is not implemented.
+Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation plus a contract-only Gateway integration definition. Hermes is still not wired to primary Gateway dispatch and does not change Runtime `final_status` or routing.
 
-The next intended PR is Kimi Gateway Real Dispatch Final Readiness Review. Any future Gateway wiring must be shadow/sidecar first, default off, require multiple flags, and must not change runtime routing or final_status.
+The next intended PR is Feature-flagged Hermes Gateway Real Dispatch Gateway Integration. Any future Gateway wiring must remain default off, omit disabled fields, never write undefined keys, and must not change runtime routing or final_status.
 
 ### Status Classification
 
@@ -127,6 +127,7 @@ Capabilities activated by `runtime.run()` by default (no feature flags):
 | Kimi CLI Adapter Contract Stub | `getKimiCliAdapterConfig()`, `executeKimiCliAdapterContractOnly()` | No CLI execution, no process spawn | Future real Kimi CLI execution |
 | Hermes CLI Adapter Contract Stub | `getHermesCliAdapterConfig()`, `executeHermesCliAdapterContractOnly()` | No CLI execution, no process spawn | Future real Hermes CLI execution |
 | Kimi CLI Adapter Dry-run Harness | `dryRunKimiCliAdapter()`, `buildKimiCliCommandPreview()` | No process spawn, not wired to runtime or Gateway | Future real Kimi CLI dry-run verification |
+| Hermes Gateway Real Dispatch Gateway Integration Contract | `evaluateHermesGatewayRealDispatchGatewayIntegrationContract()` | No Gateway wiring, no CLI execution, no runtime change | Future feature-flagged Hermes Gateway metadata attachment |
 
 ---
 
@@ -178,8 +179,7 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 | Capability | Status |
 |-----------|--------|
 | Real Kimi CLI execution | Not implemented (contract stub + dry-run harness exist) |
-| Real Hermes CLI execution | Not implemented (contract stub exists) |
-| Hermes CLI dry-run harness | Not implemented |
+| Real Hermes CLI execution through primary Gateway dispatch | Not implemented (standalone helper and Gateway integration contract exist; not wired) |
 | Codex adapter for review / bugfix / code_review types | Not implemented (only `code_generation`) |
 | Real sdlc-* skill execution | Not implemented |
 | Runtime integration with Skill Flow Orchestrator | Contract only; not active |
@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Hermes Gateway Real Dispatch Gateway Integration Contract**
+**Recommended: Feature-flagged Hermes Gateway Real Dispatch Gateway Integration**
 
-Hermes Gateway real dispatch helper is implemented. The next step is a Gateway integration contract.
+Hermes Gateway real dispatch helper and its contract-only Gateway integration rules are implemented. The next step is default-off Gateway metadata integration using the `hermes_gateway_real_dispatch` field, omitted when disabled and never written as an undefined key.
 
 ---
 
