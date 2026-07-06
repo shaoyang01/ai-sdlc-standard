@@ -972,6 +972,46 @@
         "execution/gateway.ts",
         "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Operational Guardrails",
+      "status": "implemented_sidecar_metadata_guardrails",
+      "runtime_active_by_default": false,
+      "wired_to_gateway": true,
+      "wired_to_runtime": false,
+      "field": "guardrails",
+      "top_level_field": false,
+      "max_warnings_default": 20,
+      "rejects_unsupported_request_type": true,
+      "rejects_unexpected_status": true,
+      "rejects_warning_limit_exceeded": true,
+      "rejects_missing_fallback_policy": true,
+      "rejects_missing_observability": true,
+      "rejects_raw_prompt_risk": true,
+      "rejects_raw_artifact_risk": true,
+      "rejects_secret_risk": true,
+      "preserves_gateway_primary_result": true,
+      "preserves_gateway_final_result": true,
+      "preserves_runtime_final_status": true,
+      "preserves_runtime_routing": true,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "writes_files": false,
+      "persists_guardrails": false,
+      "persists_observability": false,
+      "persists_audit": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-guardrails.ts",
+        "tests/hermes-gateway-real-dispatch-guardrails.test.ts",
+        "execution/gateway.ts",
+        "tests/hermes-gateway-real-dispatch-gateway-integration.test.ts"
+      ]
     }
   ],
   "feature_flags": [
@@ -1173,7 +1213,7 @@
     {
       "risk": "Real adapter boundary is underdeveloped",
       "severity": "medium",
-      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs → dry-run → audit → executor → command executor → Gateway → shadow sidecar → runtime attachment → real dispatch → fallback → observability → guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes has executor contract only; real Hermes command executor is not implemented.",
+      "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, and operational guardrails; it still does not own Gateway primary result or Runtime final_status/routing.",
       "mitigation": "Kimi Gateway real dispatch is now feature-flagged and wired (READY_WITH_CONSTRAINTS). Next: contract-only request type expansion review before any further implementation.",
       "recommended_pr_stage": "Kimi Gateway Request Type Expansion Contract"
     },
@@ -1193,8 +1233,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Operational Guardrails",
-    "reason": "Hermes Gateway real dispatch now has explicit fallback policy and sanitized sidecar observability. The next PR should add operational guardrails without changing Gateway primary/final result or Runtime final_status/routing.",
-    "safety_rationale": "Operational guardrails must keep Hermes sidecar-only, default-off, request-type bounded, sanitized, and non-persistent."
+    "title": "Hermes Gateway Real Dispatch Final Readiness Review",
+    "reason": "Hermes Gateway real dispatch now has sidecar integration, fallback policy, sanitized observability, and operational guardrails. The next PR should perform the final readiness review before controlled rollout.",
+    "safety_rationale": "Final readiness review must verify Hermes remains sidecar-only, default-off, request-type bounded, sanitized, and non-persistent."
   }
 }

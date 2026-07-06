@@ -10,6 +10,7 @@ import type { CliAdapterConfig } from "./cli-adapter-contract-types";
 import type { HermesCliProcessRunner } from "./hermes-cli-command-executor";
 import type { HermesGatewayRealDispatchFallbackPolicyResult } from "./hermes-gateway-real-dispatch-fallback-policy";
 import type { HermesGatewayRealDispatchObservability } from "./hermes-gateway-real-dispatch-observability";
+import type { HermesGatewayRealDispatchGuardrailResult } from "./hermes-gateway-real-dispatch-guardrails";
 import {
   evaluateHermesGatewayRealDispatchContract,
   type HermesGatewayRealDispatchContractDecision,
@@ -45,6 +46,7 @@ export interface HermesGatewayRealDispatchResult {
     | "fallback_without_final_status_change";
   fallbackPolicy?: HermesGatewayRealDispatchFallbackPolicyResult;
   observability?: HermesGatewayRealDispatchObservability;
+  guardrails?: HermesGatewayRealDispatchGuardrailResult;
   affectsPrimaryGatewayResult: false;
   changesGatewayPrimaryDispatch: false;
   changesRuntimeFinalStatus: false;

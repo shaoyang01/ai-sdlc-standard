@@ -94,6 +94,11 @@ function assertNoTopLevelObservabilityField(result: ExecutionResult, label: stri
   assert(Object.prototype.hasOwnProperty.call(result, "observability") === false, `${label}: no own top-level observability`);
 }
 
+function assertNoTopLevelGuardrailsField(result: ExecutionResult, label: string): void {
+  assert(!("guardrails" in result), `${label}: no top-level guardrails`);
+  assert(Object.prototype.hasOwnProperty.call(result, "guardrails") === false, `${label}: no own top-level guardrails`);
+}
+
 function assertPrimaryGatewayResultUnchanged(result: ExecutionResult, label: string): void {
   assert(result.success === true, `${label}: success unchanged`);
   assert(result.agent === "hermes", `${label}: primary agent unchanged`);
@@ -172,6 +177,37 @@ function assertObservability(
   assert(observability?.containsSecrets === false, `${label}: observability no secrets`);
 }
 
+function assertGuardrails(result: ExecutionResult, label: string): void {
+  const guardrails = result.hermes_gateway_real_dispatch?.guardrails;
+  assert(guardrails !== undefined, `${label}: guardrails attached`);
+  assert(guardrails?.decision === "allow_attach", `${label}: guardrails allow`);
+  assert(guardrails?.allowed === true, `${label}: guardrails allowed`);
+  assert(guardrails?.shouldAttachSidecar === true, `${label}: guardrails should attach`);
+  assert(guardrails?.checks.requestTypeAllowed === true, `${label}: guardrails request type`);
+  assert(guardrails?.checks.statusAllowed === true, `${label}: guardrails status`);
+  assert(guardrails?.checks.warningLimitOk === true, `${label}: guardrails warning limit`);
+  assert(guardrails?.checks.fallbackPolicyPresent === true, `${label}: guardrails fallback present`);
+  assert(guardrails?.checks.observabilityPresent === true, `${label}: guardrails observability present`);
+  assert(guardrails?.checks.noRawPrompt === true, `${label}: guardrails no raw prompt check`);
+  assert(guardrails?.checks.noRawArtifacts === true, `${label}: guardrails no raw artifacts check`);
+  assert(guardrails?.checks.noSecrets === true, `${label}: guardrails no secrets check`);
+  assert(guardrails?.preservesGatewayPrimaryResult === true, `${label}: guardrails preserves primary`);
+  assert(guardrails?.preservesGatewayFinalResult === true, `${label}: guardrails preserves gateway final`);
+  assert(guardrails?.preservesRuntimeFinalStatus === true, `${label}: guardrails preserves runtime final status`);
+  assert(guardrails?.preservesRuntimeRouting === true, `${label}: guardrails preserves runtime routing`);
+  assert(guardrails?.changesGatewayPrimaryDispatch === false, `${label}: guardrails no gateway dispatch change`);
+  assert(guardrails?.changesGatewayFinalResult === false, `${label}: guardrails no gateway final result change`);
+  assert(guardrails?.changesRuntimeFinalStatus === false, `${label}: guardrails no runtime final status change`);
+  assert(guardrails?.changesRuntimeRouting === false, `${label}: guardrails no runtime routing change`);
+  assert(guardrails?.writesFiles === false, `${label}: guardrails no file writes`);
+  assert(guardrails?.persistsGuardrails === false, `${label}: guardrails no persistence`);
+  assert(guardrails?.persistsObservability === false, `${label}: guardrails no observability persistence`);
+  assert(guardrails?.persistsAudit === false, `${label}: guardrails no audit persistence`);
+  assert(guardrails?.containsRawPrompt === false, `${label}: guardrails no raw prompt`);
+  assert(guardrails?.containsRawArtifacts === false, `${label}: guardrails no raw artifacts`);
+  assert(guardrails?.containsSecrets === false, `${label}: guardrails no secrets`);
+}
+
 async function test(): Promise<void> {
   console.log("Hermes Gateway Real Dispatch Gateway Integration Test\n");
 
@@ -185,6 +221,7 @@ async function test(): Promise<void> {
   assert(disabled.calls() === 0, "disabled dispatcher not called");
   assertNoHermesField(r1, "disabled");
   assertNoTopLevelObservabilityField(r1, "disabled");
+  assertNoTopLevelGuardrailsField(r1, "disabled");
   assertShadowReviewUnchanged(r1, "disabled");
   console.log("");
 
@@ -203,6 +240,7 @@ async function test(): Promise<void> {
     const result = await unsupportedGateway.execute(request);
     assertNoHermesField(result, `${request.type}`);
     assertNoTopLevelObservabilityField(result, `${request.type}`);
+    assertNoTopLevelGuardrailsField(result, `${request.type}`);
     assert(result.success === true, `${request.type}: primary result unchanged`);
   }
   assert(unsupported.calls() === 0, "unsupported dispatcher not called");
@@ -236,6 +274,7 @@ async function test(): Promise<void> {
     omitted: false,
     safeToAttach: true,
   }, "safe");
+  assertGuardrails(r3, "safe");
   assertShadowReviewUnchanged(r3, "safe");
   console.log("");
 
@@ -277,6 +316,7 @@ async function test(): Promise<void> {
       omitted: false,
       safeToAttach: true,
     }, label);
+    assertGuardrails(result, label);
     assertShadowReviewUnchanged(result, label);
   }
   console.log("");
@@ -306,6 +346,7 @@ async function test(): Promise<void> {
       omitted: false,
       safeToAttach: true,
     }, type);
+    assertGuardrails(result, type);
   }
   console.log("");
 
@@ -322,10 +363,27 @@ async function test(): Promise<void> {
   assertNoHermesField(r5, "unsafe");
   assertNoTopLevelFallbackField(r5, "unsafe");
   assertNoTopLevelObservabilityField(r5, "unsafe");
+  assertNoTopLevelGuardrailsField(r5, "unsafe");
   assertShadowReviewUnchanged(r5, "unsafe");
   console.log("");
 
-  console.log("Test 7: Dispatcher throws safely");
+  console.log("Test 7: Warning limit guardrail rejects sidecar");
+  const warningLimit = makeDispatcher((request) => safeDispatchResult(request, {
+    warnings: ["safe warning count only"],
+  }));
+  const warningLimitGateway = new ExecutionGateway({
+    env: allHermesFlags,
+    hermesGatewayRealDispatcher: warningLimit.dispatcher,
+    hermesGuardrailLimits: { maxWarnings: 0 },
+  });
+  const rWarn = await warningLimitGateway.execute(reviewRequest());
+  assert(warningLimit.calls() === 1, "warning limit dispatcher called");
+  assertNoHermesField(rWarn, "warning limit");
+  assertNoTopLevelGuardrailsField(rWarn, "warning limit");
+  assertShadowReviewUnchanged(rWarn, "warning limit");
+  console.log("");
+
+  console.log("Test 8: Dispatcher throws safely");
   const throwing: { dispatcher: HermesGatewayRealDispatcher; calls: () => number } = (() => {
     let called = 0;
     return {
@@ -345,13 +403,14 @@ async function test(): Promise<void> {
   assertNoHermesField(r6, "throw");
   assertNoTopLevelFallbackField(r6, "throw");
   assertNoTopLevelObservabilityField(r6, "throw");
+  assertNoTopLevelGuardrailsField(r6, "throw");
   assertShadowReviewUnchanged(r6, "throw");
   const j6 = JSON.stringify(r6);
   assert(!j6.includes("THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK"), "throw no prompt marker");
   assert(!j6.includes("abc"), "throw no secret-like token");
   console.log("");
 
-  console.log("Test 8: No raw prompt leak from Hermes field, policy, and observability");
+  console.log("Test 9: No raw prompt leak from Hermes field, policy, observability, and guardrails");
   const promptMarker = "THIS_HERMES_GATEWAY_REAL_DISPATCH_PROMPT_MUST_NOT_LEAK";
   const markerRequest = reviewRequest({ prompt: promptMarker });
   const safeNoPrompt = makeDispatcher((request) => safeDispatchResult(request, {
@@ -377,18 +436,28 @@ async function test(): Promise<void> {
   assert(!obsJson.includes("123"), "safe observability no 123");
   assert(!obsJson.includes("xyz"), "safe observability no xyz");
   assert(!obsJson.includes("sk-test"), "safe observability no sk-test");
+  assert(r7Safe.hermes_gateway_real_dispatch?.guardrails?.warningCount === 2, "safe guardrails warning count");
+  const guardrailsJson = JSON.stringify(r7Safe.hermes_gateway_real_dispatch?.guardrails);
+  assert(!guardrailsJson.includes(promptMarker), "safe guardrails no prompt marker");
+  assert(!guardrailsJson.includes("abc"), "safe guardrails no abc");
+  assert(!guardrailsJson.includes("123"), "safe guardrails no 123");
+  assert(!guardrailsJson.includes("xyz"), "safe guardrails no xyz");
+  assert(!guardrailsJson.includes("sk-test"), "safe guardrails no sk-test");
   const r7Disabled = await disabledGateway.execute(markerRequest);
   assertNoHermesField(r7Disabled, "raw disabled");
   assertNoTopLevelObservabilityField(r7Disabled, "raw disabled");
+  assertNoTopLevelGuardrailsField(r7Disabled, "raw disabled");
   const r7Unsafe = await unsafeGateway.execute(markerRequest);
   assertNoHermesField(r7Unsafe, "raw unsafe");
   assertNoTopLevelObservabilityField(r7Unsafe, "raw unsafe");
+  assertNoTopLevelGuardrailsField(r7Unsafe, "raw unsafe");
   const r7Throw = await throwingGateway.execute(reviewRequest());
   assertNoHermesField(r7Throw, "raw throw");
   assertNoTopLevelObservabilityField(r7Throw, "raw throw");
+  assertNoTopLevelGuardrailsField(r7Throw, "raw throw");
   console.log("");
 
-  console.log("Test 9: No undefined key");
+  console.log("Test 10: No undefined key");
   for (const [label, result] of [
     ["disabled", r1],
     ["unsupported", await unsupportedGateway.execute(unsupportedRequests[0])],
@@ -397,16 +466,17 @@ async function test(): Promise<void> {
   ] as const) {
     assertNoHermesField(result, label);
     assertNoTopLevelObservabilityField(result, label);
+    assertNoTopLevelGuardrailsField(result, label);
   }
   console.log("");
 
-  console.log("Test 10: No Runtime changes");
+  console.log("Test 11: No Runtime changes");
   const runtimeSrc = fs.readFileSync("runtime.ts", "utf-8");
   assert(!runtimeSrc.includes("hermes_gateway_real_dispatch"), "runtime no Hermes Gateway field");
   assert(!runtimeSrc.includes("hermes-gateway-real-dispatch"), "runtime no Hermes real dispatch import");
   console.log("");
 
-  console.log("Test 11: No direct CLI imports in Gateway");
+  console.log("Test 12: No direct CLI imports in Gateway");
   const gatewaySrc = fs.readFileSync("execution/gateway.ts", "utf-8");
   const forbiddenGatewayImports = [
     "executeHermesCliCommand",
@@ -424,14 +494,17 @@ async function test(): Promise<void> {
   assert(badGatewayLines.length === 0, `gateway no direct CLI imports (found ${badGatewayLines.length})`);
   console.log("");
 
-  console.log("Test 12: Gateway integration contract, fallback policy, and observability are used");
+  console.log("Test 13: Gateway integration contract, fallback policy, observability, and guardrails are used");
   assert(gatewaySrc.includes("evaluateHermesGatewayRealDispatchGatewayIntegrationContract"), "gateway uses integration contract");
   assert(gatewaySrc.includes("integration.mayAttach"), "gateway attaches only when mayAttach");
   assert(gatewaySrc.includes("evaluateHermesGatewayRealDispatchFallbackPolicy"), "gateway uses fallback policy");
   assert(gatewaySrc.includes("fallbackPolicy.shouldAttachSidecar"), "gateway attaches only when fallback policy allows");
   assert(gatewaySrc.includes("buildHermesGatewayRealDispatchObservability"), "gateway builds observability");
+  assert(gatewaySrc.includes("evaluateHermesGatewayRealDispatchGuardrails"), "gateway uses guardrails");
+  assert(gatewaySrc.includes("guardrails.shouldAttachSidecar"), "gateway attaches only when guardrails allow");
   assert(gatewaySrc.includes("fallbackPolicy"), "gateway attaches fallback policy field");
   assert(gatewaySrc.includes("observability"), "gateway attaches observability field");
+  assert(gatewaySrc.includes("guardrails"), "gateway attaches guardrails field");
   assert(gatewaySrc.includes("hermes_gateway_real_dispatch: {"), "gateway attaches dispatch result object");
   console.log("");
 

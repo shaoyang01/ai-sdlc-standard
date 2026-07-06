@@ -149,6 +149,7 @@ All evolution proposals have `applied: false` and require human review.
 24. **Feature-flagged Hermes Gateway Real Dispatch Gateway Integration** — ✅ Done (Gateway sidecar metadata only; default disabled; field `hermes_gateway_real_dispatch`; omitted when disabled; never undefined key; only review/code_review/validation; no Gateway primary dispatch/final result change; no Runtime final_status/routing change; fake dispatcher in tests)
 25. **Hermes Gateway Real Dispatch Fallback Policy** — ✅ Done (sidecar-only `fallbackPolicy`; attach success/safe failures; omit disabled/unsupported/unsafe/dispatcher exception; no Gateway primary/final result change; no Runtime final_status/routing change; fake dispatcher tests)
 26. **Hermes Gateway Real Dispatch Observability** — ✅ Done (nested `hermes_gateway_real_dispatch.observability`; warning count only; no top-level field; no persisted observability/audit; no file writes; no raw prompt/artifacts/secrets; no Gateway primary/final result change; no Runtime final_status/routing change)
-27. **Hermes Gateway Real Dispatch Operational Guardrails** — next safe step
-28. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
-29. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes
+27. **Hermes Gateway Real Dispatch Operational Guardrails** — ✅ Done (nested `hermes_gateway_real_dispatch.guardrails`; no top-level field; rejects unsupported request type / unexpected status / warning limit / missing policy / missing observability / raw prompt / artifact / secret risk; no persisted guardrail/observability/audit logs; no file writes; no Gateway primary/final result change; no Runtime final_status/routing change)
+28. **Hermes Gateway Real Dispatch Final Readiness Review** — next safe step
+29. **Controlled Skill Flow Routing / Governance** — Memory-aware routing with audit trail
+30. **Graph Kernel Alignment** — code-review / bugfix as lifecycle nodes

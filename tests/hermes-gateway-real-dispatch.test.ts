@@ -207,6 +207,7 @@ async function test() {
   for (const r of [r1, r2, r3, r5, r6, r7, r8, r9, rThrow]) {
     assert(r.fallbackPolicy === undefined, `${r.status}: no standalone fallback policy`);
     assert(r.observability === undefined, `${r.status}: no standalone observability`);
+    assert(r.guardrails === undefined, `${r.status}: no standalone guardrails`);
   }
   console.log("");
 

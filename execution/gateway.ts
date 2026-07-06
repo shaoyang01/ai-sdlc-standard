@@ -37,6 +37,10 @@ import {
 import {
   buildHermesGatewayRealDispatchObservability,
 } from "./hermes-gateway-real-dispatch-observability";
+import {
+  evaluateHermesGatewayRealDispatchGuardrails,
+  type HermesGatewayRealDispatchGuardrailLimits,
+} from "./hermes-gateway-real-dispatch-guardrails";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
@@ -48,6 +52,7 @@ export interface ExecutionGatewayOptions {
   hermesConfig?: CliAdapterConfig;
   hermesRunner?: HermesCliProcessRunner;
   hermesGatewayRealDispatcher?: HermesGatewayRealDispatcher;
+  hermesGuardrailLimits?: Partial<HermesGatewayRealDispatchGuardrailLimits>;
 }
 
 export class ExecutionGateway {
@@ -161,14 +166,24 @@ export class ExecutionGateway {
         safeToAttach: integration.mayAttach,
         realDispatchEnabled: true,
       });
+      const guardrails = evaluateHermesGatewayRealDispatchGuardrails({
+        requestType: request.type,
+        dispatchResult,
+        fallbackPolicy,
+        observability,
+        realDispatchEnabled: true,
+        integrationMayAttach: integration.mayAttach,
+        limits: this.options.hermesGuardrailLimits,
+      });
 
-      if (attached) {
+      if (attached && guardrails.shouldAttachSidecar) {
         return {
           ...primaryResult,
           hermes_gateway_real_dispatch: {
             ...dispatchResult,
             fallbackPolicy,
             observability,
+            guardrails,
           },
         };
       }

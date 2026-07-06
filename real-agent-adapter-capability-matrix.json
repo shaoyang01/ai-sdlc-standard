@@ -204,7 +204,9 @@
         "execution/hermes-gateway-real-dispatch-fallback-policy.ts",
         "tests/hermes-gateway-real-dispatch-fallback-policy.test.ts",
         "execution/hermes-gateway-real-dispatch-observability.ts",
-        "tests/hermes-gateway-real-dispatch-observability.test.ts"
+        "tests/hermes-gateway-real-dispatch-observability.test.ts",
+        "execution/hermes-gateway-real-dispatch-guardrails.ts",
+        "tests/hermes-gateway-real-dispatch-guardrails.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -520,7 +522,38 @@
       "gateway_real_dispatch_observability_persists_audit": false,
       "gateway_real_dispatch_observability_contains_raw_prompt": false,
       "gateway_real_dispatch_observability_contains_raw_artifacts": false,
-      "gateway_real_dispatch_observability_contains_secrets": false
+      "gateway_real_dispatch_observability_contains_secrets": false,
+      "gateway_real_dispatch_guardrails": "implemented_sidecar_metadata_guardrails",
+      "gateway_real_dispatch_guardrails_default_enabled": false,
+      "gateway_real_dispatch_guardrails_wired_to_gateway": true,
+      "gateway_real_dispatch_guardrails_wired_to_runtime": false,
+      "gateway_real_dispatch_guardrails_field": "guardrails",
+      "gateway_real_dispatch_guardrails_top_level_field": false,
+      "gateway_real_dispatch_guardrails_max_warnings_default": 20,
+      "gateway_real_dispatch_guardrails_rejects_unsupported_request_type": true,
+      "gateway_real_dispatch_guardrails_rejects_unexpected_status": true,
+      "gateway_real_dispatch_guardrails_rejects_warning_limit_exceeded": true,
+      "gateway_real_dispatch_guardrails_rejects_missing_fallback_policy": true,
+      "gateway_real_dispatch_guardrails_rejects_missing_observability": true,
+      "gateway_real_dispatch_guardrails_rejects_raw_prompt_risk": true,
+      "gateway_real_dispatch_guardrails_rejects_raw_artifact_risk": true,
+      "gateway_real_dispatch_guardrails_rejects_secret_risk": true,
+      "gateway_real_dispatch_guardrails_preserves_gateway_primary_result": true,
+      "gateway_real_dispatch_guardrails_preserves_gateway_final_result": true,
+      "gateway_real_dispatch_guardrails_preserves_runtime_final_status": true,
+      "gateway_real_dispatch_guardrails_preserves_runtime_routing": true,
+      "gateway_real_dispatch_guardrails_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_guardrails_changes_gateway_final_result": false,
+      "gateway_real_dispatch_guardrails_changes_final_status": false,
+      "gateway_real_dispatch_guardrails_changes_routing": false,
+      "gateway_real_dispatch_guardrails_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_guardrails_writes_files": false,
+      "gateway_real_dispatch_guardrails_persists_guardrails": false,
+      "gateway_real_dispatch_guardrails_persists_observability": false,
+      "gateway_real_dispatch_guardrails_persists_audit": false,
+      "gateway_real_dispatch_guardrails_contains_raw_prompt": false,
+      "gateway_real_dispatch_guardrails_contains_raw_artifacts": false,
+      "gateway_real_dispatch_guardrails_contains_secrets": false
     }
   ],
   "request_types": [
@@ -740,8 +773,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Operational Guardrails",
-    "reason": "Hermes Gateway real dispatch now has explicit fallback policy and sanitized sidecar observability. The next step is operational guardrails while preserving sidecar-only behavior.",
-    "safety_rationale": "Operational guardrails must keep Hermes default-off, request-type bounded, sanitized, non-persistent, and unable to affect Runtime final_status or routing."
+    "title": "Hermes Gateway Real Dispatch Final Readiness Review",
+    "reason": "Hermes Gateway real dispatch now has sidecar integration, fallback policy, sanitized observability, and operational guardrails. The next step is a final readiness review before any controlled operational rollout.",
+    "safety_rationale": "Readiness review must verify Hermes remains sidecar-only, default-off, request-type bounded, sanitized, non-persistent, and unable to affect Runtime final_status or routing."
   }
 }
