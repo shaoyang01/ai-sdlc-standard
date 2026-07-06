@@ -16,6 +16,31 @@ const safeAttachment: HermesRuntimeShadowAttachmentBuildResult = {
   attachmentBuilt: true,
   sidecarStatus: "shadow_executed_success",
   validationReason: "valid_attachment",
+  auditMetadata: {
+    adapter: "hermes",
+    source: "hermes_runtime_shadow_attachment_audit",
+    auditVersion: 1,
+    runtimeAttachmentField: "hermes_runtime_shadow_attachment",
+    featureFlag: "SDLC_HERMES_RUNTIME_ATTACHMENT",
+    enabled: true,
+    attached: true,
+    sidecarExecuted: true,
+    attachmentBuilt: true,
+    sidecarStatus: "shadow_executed_success",
+    validationReason: "valid_attachment",
+    requestId: "REQ-TEST-INT",
+    requestType: "validation",
+    timestamp: new Date().toISOString(),
+    affectsRuntimeFinalStatus: false,
+    affectsRuntimeRouting: false,
+    affectsPrimaryGatewayResult: false,
+    writesFiles: false,
+    persistsAudit: false,
+    containsRawPrompt: false,
+    containsRawArtifacts: false,
+    containsSecrets: false,
+    warnings: [],
+  },
   affectsRuntimeFinalStatus: false,
   affectsRuntimeRouting: false,
   affectsPrimaryGatewayResult: false,
@@ -91,6 +116,16 @@ async function test() {
   assert(r3.hermes_runtime_shadow_attachment!.containsRawPrompt === false, "no raw prompt");
   assert(r3.hermes_runtime_shadow_attachment!.containsRawArtifacts === false, "no raw artifacts");
   assert(r3.hermes_runtime_shadow_attachment!.containsSecrets === false, "no secrets");
+  // Audit metadata
+  assert(r3.hermes_runtime_shadow_attachment!.auditMetadata !== undefined, "audit metadata present");
+  const am = r3.hermes_runtime_shadow_attachment!.auditMetadata!;
+  assert(am.auditVersion === 1, "audit version 1");
+  assert(am.adapter === "hermes", "audit adapter");
+  assert(am.enabled === true, "audit enabled");
+  assert(am.sidecarExecuted === true, "audit sidecar executed");
+  assert(am.attached === true, "audit attached");
+  assert(am.persistsAudit === false, "audit no persist");
+  assert(am.writesFiles === false, "audit no files");
   console.log("");
 
   // Test 4: No raw prompt / secret leak (safe fake builder)

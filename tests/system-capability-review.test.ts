@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Audit Metadata", "next PR Hermes audit metadata");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Observability Summary", "next PR Hermes observability");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Audit Metadata", "next PR Hermes audit metadata");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Observability Summary", "next PR Hermes observability");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -413,8 +413,26 @@ async function test() {
   const hriEvidence = hriCap["evidence"] as string[];
   assert(hriEvidence.includes("runtime.ts"), "hermes runtime int evidence runtime");
   assert(hriEvidence.includes("tests/runtime-hermes-shadow-attachment.test.ts"), "hermes runtime int test evidence");
+  // Hermes Runtime Shadow Attachment Audit Metadata
+  assert(capNames.includes("Hermes Runtime Shadow Attachment Audit Metadata"), "has Hermes Audit Metadata");
+  const hamCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Runtime Shadow Attachment Audit Metadata");
+  assert(hamCap !== undefined && hamCap["status"] === "implemented_in_memory_sidecar_metadata", "hermes audit status");
+  assert(hamCap["runtime_active_by_default"] === false, "hermes audit not active");
+  assert(hamCap["field"] === "auditMetadata", "hermes audit field");
+  assert(hamCap["persisted"] === false, "hermes audit not persisted");
+  assert(hamCap["writes_files"] === false, "hermes audit no files");
+  assert(hamCap["changes_final_status"] === false, "hermes audit no final status");
+  assert(hamCap["changes_routing"] === false, "hermes audit no routing");
+  assert(hamCap["affects_primary_gateway_result"] === false, "hermes audit no primary");
+  assert(hamCap["contains_raw_prompt"] === false, "hermes audit no raw prompt");
+  assert(hamCap["contains_raw_artifacts"] === false, "hermes audit no raw artifacts");
+  assert(hamCap["contains_secrets"] === false, "hermes audit no secrets");
+  const hamEvidence = hamCap["evidence"] as string[];
+  assert(hamEvidence.includes("core/hermes-runtime-shadow-attachment.ts"), "hermes audit evidence helper");
+  assert(hamEvidence.includes("tests/hermes-runtime-shadow-attachment.test.ts"), "hermes audit evidence helper test");
+  assert(hamEvidence.includes("tests/runtime-hermes-shadow-attachment.test.ts"), "hermes audit evidence runtime test");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Audit Metadata", "next PR Hermes audit metadata");
+  assert(review.recommended_next_pr.title === "Hermes Runtime Shadow Attachment Observability Summary", "next PR Hermes observability");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

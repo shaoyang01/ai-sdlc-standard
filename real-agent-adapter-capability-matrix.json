@@ -277,7 +277,17 @@
       "runtime_shadow_attachment_runtime_integration_writes_files": false,
       "runtime_shadow_attachment_runtime_integration_persists_audit": false,
       "runtime_shadow_attachment_runtime_integration_uses_fake_builder_in_tests": true,
-      "runtime_shadow_attachment_runtime_integration_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled"
+      "runtime_shadow_attachment_runtime_integration_requires_flag": "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled",
+      "runtime_shadow_attachment_audit_metadata": "implemented_in_memory_sidecar_metadata",
+      "runtime_shadow_attachment_audit_metadata_persisted": false,
+      "runtime_shadow_attachment_audit_metadata_writes_files": false,
+      "runtime_shadow_attachment_audit_metadata_changes_final_status": false,
+      "runtime_shadow_attachment_audit_metadata_changes_routing": false,
+      "runtime_shadow_attachment_audit_metadata_affects_primary_gateway_result": false,
+      "runtime_shadow_attachment_audit_metadata_contains_raw_prompt": false,
+      "runtime_shadow_attachment_audit_metadata_contains_raw_artifacts": false,
+      "runtime_shadow_attachment_audit_metadata_contains_secrets": false,
+      "runtime_shadow_attachment_audit_metadata_field": "auditMetadata"
     }
   ],
   "request_types": [

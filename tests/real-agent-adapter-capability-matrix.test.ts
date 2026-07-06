@@ -255,6 +255,16 @@ async function test() {
   assert(hermes["runtime_shadow_attachment_runtime_integration_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime int flag");
   assert(hermesEvidence.includes("runtime.ts"), "hermes evidence runtime");
   assert(hermesEvidence.includes("tests/runtime-hermes-shadow-attachment.test.ts"), "hermes evidence runtime test");
+  assert(hermes["runtime_shadow_attachment_audit_metadata"] === "implemented_in_memory_sidecar_metadata", "hermes audit metadata");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_persisted"] === false, "hermes audit no persist");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_writes_files"] === false, "hermes audit no files");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_changes_final_status"] === false, "hermes audit no final status");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_changes_routing"] === false, "hermes audit no routing");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_affects_primary_gateway_result"] === false, "hermes audit no primary");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_contains_raw_prompt"] === false, "hermes audit no raw prompt");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_contains_raw_artifacts"] === false, "hermes audit no raw artifacts");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_contains_secrets"] === false, "hermes audit no secrets");
+  assert(hermes["runtime_shadow_attachment_audit_metadata_field"] === "auditMetadata", "hermes audit field");
   console.log("");
 
   // ── Test 3: Request type alignment ──

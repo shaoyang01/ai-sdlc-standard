@@ -244,9 +244,9 @@ Guardrail rejection is classified as `guardrail_rejected` in the fallback policy
 
 ## 13. Recommended Next PR
 
-**Recommended: Hermes Runtime Shadow Attachment Audit Metadata**
+**Recommended: Hermes Runtime Shadow Attachment Observability Summary**
 
-Hermes runtime integration is wired into RuntimeResult behind a feature flag. The next step is a lightweight in-memory audit trail.
+Hermes runtime sidecar now has in-memory audit metadata. The next step is a lightweight observability summary.
 
 ---
 

@@ -319,6 +319,16 @@ async function test() {
   assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_persists_audit"] === false, "hermes runtime int no persist");
   assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_uses_fake_builder_in_tests"] === true, "hermes runtime int fake builder");
   assert(realAdapters["hermes_runtime_shadow_attachment_runtime_integration_requires_flag"] === "SDLC_HERMES_RUNTIME_ATTACHMENT=enabled", "hermes runtime int flag");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata"] === "implemented_in_memory_sidecar_metadata", "hermes audit metadata");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_persisted"] === false, "hermes audit no persist");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_writes_files"] === false, "hermes audit no files");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_changes_final_status"] === false, "hermes audit no final status");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_changes_routing"] === false, "hermes audit no routing");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_affects_primary_gateway_result"] === false, "hermes audit no primary");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_contains_raw_prompt"] === false, "hermes audit no raw prompt");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_contains_raw_artifacts"] === false, "hermes audit no raw artifacts");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_contains_secrets"] === false, "hermes audit no secrets");
+  assert(realAdapters["hermes_runtime_shadow_attachment_audit_metadata_field"] === "auditMetadata", "hermes audit field");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

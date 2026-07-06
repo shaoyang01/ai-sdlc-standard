@@ -159,10 +159,50 @@ async function test() {
   }
   console.log("");
 
-  // Test 9: No forbidden imports
-  console.log("Test 9: No forbidden imports");
+  // Test 9: Audit metadata exists
+  console.log("Test 9: Audit metadata");
+  for (const r of allResults) {
+    assert(r.auditMetadata !== undefined, `${r.sidecarStatus}: audit exists`);
+    const am = r.auditMetadata!;
+    assert(am.auditVersion === 1, `${r.sidecarStatus}: audit version 1`);
+    assert(am.adapter === "hermes", `${r.sidecarStatus}: audit adapter`);
+    assert(am.source === "hermes_runtime_shadow_attachment_audit", `${r.sidecarStatus}: audit source`);
+    assert(am.runtimeAttachmentField === "hermes_runtime_shadow_attachment", `${r.sidecarStatus}: audit field`);
+    assert(am.featureFlag === "SDLC_HERMES_RUNTIME_ATTACHMENT", `${r.sidecarStatus}: audit flag`);
+    assert(am.enabled === true, `${r.sidecarStatus}: audit enabled`);
+    assert(typeof am.timestamp === "string" && !isNaN(Date.parse(am.timestamp)), `${r.sidecarStatus}: audit timestamp`);
+    assert(am.affectsRuntimeFinalStatus === false, `${r.sidecarStatus}: audit no final status`);
+    assert(am.affectsRuntimeRouting === false, `${r.sidecarStatus}: audit no routing`);
+    assert(am.persistsAudit === false, `${r.sidecarStatus}: audit no persist`);
+    assert(am.writesFiles === false, `${r.sidecarStatus}: audit no files`);
+    assert(am.containsRawPrompt === false, `${r.sidecarStatus}: audit no raw prompt`);
+    assert(am.containsRawArtifacts === false, `${r.sidecarStatus}: audit no raw artifacts`);
+    assert(am.containsSecrets === false, `${r.sidecarStatus}: audit no secrets`);
+  }
+  // Specific checks per state
+  assert(r2!.auditMetadata!.sidecarExecuted === false, "shadow disabled: sidecar false");
+  assert(r2!.auditMetadata!.sidecarStatus === "shadow_disabled", "shadow disabled: status");
+  assert(r3!.auditMetadata!.sidecarExecuted === true, "success: sidecar true");
+  assert(r3!.auditMetadata!.sidecarStatus === "shadow_executed_success", "success: status");
+  assert(r3!.auditMetadata!.validationReason === "valid_attachment", "success: validation");
+  assert(r4!.auditMetadata!.sidecarStatus === "integration_ineligible", "ineligible: status");
+  assert(r4!.auditMetadata!.sidecarExecuted === false, "ineligible: not executed");
+  assert(r5!.auditMetadata!.sidecarStatus === "integration_ineligible", "unsupported: status");
+  console.log("");
+
+  // Test 10: Audit warnings sanitized — helper-level check
+  console.log("Test 10: Audit warnings sanitized");
+  const amJson = JSON.stringify(r3!.auditMetadata);
+  assert(!amJson.includes("abc"), "audit no abc");
+  assert(!amJson.includes("sk-test"), "audit no sk-test");
+  assert(!amJson.includes("THIS_HERMES_RUNTIME_PROMPT_MUST_NOT_LEAK"), "audit no runtime prompt");
+  assert(!amJson.includes("THIS_HERMES_SHADOW_PROMPT_MUST_NOT_LEAK"), "audit no shadow prompt");
+  console.log("");
+
+  // Test 11: No forbidden imports
+  console.log("Test 11: No forbidden imports");
   const src = fs.readFileSync("core/hermes-runtime-shadow-attachment.ts", "utf-8");
-  const forbidden = ["runtime", "execution/gateway", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch"];
+  const forbidden = ["runtime", "execution/gateway", "child_process", "kimi-gateway-real-dispatch", "codex", "policy-memory", "graph", "\"fs\"", "http", "https", "fetch", "writeFile", "appendFile"];
   const badLines = src.split("\n").filter((l: string) => {
     if (!l.includes("import ")) return false;
     for (const f of forbidden) {

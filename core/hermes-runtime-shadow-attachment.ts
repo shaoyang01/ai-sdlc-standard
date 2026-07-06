@@ -14,6 +14,33 @@ import {
   isHermesRuntimeAttachmentEnabled,
   type HermesRuntimeShadowAttachment,
 } from "../execution/hermes-runtime-attachment-contract";
+import { sanitizeErrorSummary } from "../execution/cli-adapter-audit";
+
+export interface HermesRuntimeShadowAttachmentAuditMetadata {
+  adapter: "hermes";
+  source: "hermes_runtime_shadow_attachment_audit";
+  auditVersion: 1;
+  runtimeAttachmentField: "hermes_runtime_shadow_attachment";
+  featureFlag: "SDLC_HERMES_RUNTIME_ATTACHMENT";
+  enabled: boolean;
+  attached: boolean;
+  sidecarExecuted: boolean;
+  attachmentBuilt: boolean;
+  sidecarStatus?: string;
+  validationReason?: string;
+  requestId: string;
+  requestType: string;
+  timestamp: string;
+  affectsRuntimeFinalStatus: false;
+  affectsRuntimeRouting: false;
+  affectsPrimaryGatewayResult: false;
+  writesFiles: false;
+  persistsAudit: false;
+  containsRawPrompt: false;
+  containsRawArtifacts: false;
+  containsSecrets: false;
+  warnings: string[];
+}
 
 export interface HermesRuntimeShadowAttachmentBuildResult {
   adapter: "hermes";
@@ -26,6 +53,7 @@ export interface HermesRuntimeShadowAttachmentBuildResult {
   sidecarStatus?: string;
   validationReason?: string;
   attachment?: HermesRuntimeShadowAttachment;
+  auditMetadata?: HermesRuntimeShadowAttachmentAuditMetadata;
   affectsRuntimeFinalStatus: false;
   affectsRuntimeRouting: false;
   affectsPrimaryGatewayResult: false;
@@ -35,6 +63,46 @@ export interface HermesRuntimeShadowAttachmentBuildResult {
   containsRawArtifacts: false;
   containsSecrets: false;
   warnings: string[];
+}
+
+function buildHermesRuntimeShadowAttachmentAuditMetadata(input: {
+  requestId: string;
+  requestType: string;
+  enabled: boolean;
+  attached: boolean;
+  sidecarExecuted: boolean;
+  attachmentBuilt: boolean;
+  sidecarStatus?: string;
+  validationReason?: string;
+  warnings: string[];
+  now?: () => Date;
+}): HermesRuntimeShadowAttachmentAuditMetadata {
+  const clock = input.now ?? (() => new Date());
+  return {
+    adapter: "hermes",
+    source: "hermes_runtime_shadow_attachment_audit",
+    auditVersion: 1,
+    runtimeAttachmentField: "hermes_runtime_shadow_attachment",
+    featureFlag: "SDLC_HERMES_RUNTIME_ATTACHMENT",
+    enabled: input.enabled,
+    attached: input.attached,
+    sidecarExecuted: input.sidecarExecuted,
+    attachmentBuilt: input.attachmentBuilt,
+    sidecarStatus: input.sidecarStatus,
+    validationReason: input.validationReason,
+    requestId: input.requestId,
+    requestType: input.requestType,
+    timestamp: clock().toISOString(),
+    affectsRuntimeFinalStatus: false,
+    affectsRuntimeRouting: false,
+    affectsPrimaryGatewayResult: false,
+    writesFiles: false,
+    persistsAudit: false,
+    containsRawPrompt: false,
+    containsRawArtifacts: false,
+    containsSecrets: false,
+    warnings: input.warnings.map(w => sanitizeErrorSummary(w) ?? "[REDACTED]"),
+  };
 }
 
 export async function buildHermesRuntimeShadowAttachmentFromRequest(input: {
@@ -77,6 +145,17 @@ export async function buildHermesRuntimeShadowAttachmentFromRequest(input: {
     sidecarStatus: sidecarResult.status,
     validationReason: validation.reason,
     attachment,
+    auditMetadata: buildHermesRuntimeShadowAttachmentAuditMetadata({
+      requestId: input.request.requirementId,
+      requestType: input.request.type,
+      enabled: true,
+      attached: Boolean(attachment),
+      sidecarExecuted: sidecarResult.executed,
+      attachmentBuilt: Boolean(attachment),
+      sidecarStatus: sidecarResult.status,
+      validationReason: validation.reason,
+      warnings: [...sidecarResult.warnings, ...validation.warnings],
+    }),
     affectsRuntimeFinalStatus: false,
     affectsRuntimeRouting: false,
     affectsPrimaryGatewayResult: false,
