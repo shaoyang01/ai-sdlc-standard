@@ -250,7 +250,11 @@
         "execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
-        "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json"
+        "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json",
+        "execution/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
+        "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -1195,7 +1199,68 @@
       "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_prompt": false,
       "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_artifacts": false,
       "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_secrets": false,
-      "gateway_real_dispatch_phase_2_controlled_enablement_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract"
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract",
+      "gateway_real_dispatch_phase_2_enablement_guard_contract": "implemented_contract_only",
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_status": "contract_only",
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_contract_only": true,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_executing_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_enables_feature_flags_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_expands_request_types_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_validates_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_adds_enablement_scripts": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_ci_behavior": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_current_validated_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_phase_2_guard_targets": [
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_default_disabled": true,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_feature_flagged": true,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_requires_multiple_flags": true,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_operator_approval_required": true,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_automatic_enablement_allowed": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_rollout_may_proceed_automatically": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_phase_2_may_proceed_automatically": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_gateway_final_result": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_final_status": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_changes_routing": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_makes_hermes_default": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_makes_hermes_final_code_review_owner": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_writes_files": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_enablement_logs": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_validation_logs": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_review_logs": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_audit": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_observability": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_persists_guardrails": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_contains_raw_prompt": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_contains_raw_artifacts": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_contains_secrets": false,
+      "gateway_real_dispatch_phase_2_enablement_guard_contract_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan"
     }
   ],
   "request_types": [
@@ -1415,8 +1480,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract",
-    "reason": "Hermes Gateway real dispatch has a plan-only phase-2 controlled enablement plan.",
-    "safety_rationale": "Enablement guard contract remains non-executing and non-enabling."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan",
+    "reason": "Hermes Gateway real dispatch has a contract-only phase-2 enablement guard contract.",
+    "safety_rationale": "Shadow enablement implementation plan remains non-executing and non-enabling."
   }
 }
