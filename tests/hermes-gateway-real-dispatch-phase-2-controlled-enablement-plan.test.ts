@@ -6,6 +6,33 @@ import {
   HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN,
 } from "../execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan";
 import * as fs from "fs";
+import * as path from "path";
+
+function fileExists(p: string): boolean {
+  try { fs.accessSync(p); return true; } catch { return false; }
+}
+
+function readTextSafe(p: string): string | undefined {
+  try { return fs.readFileSync(p, "utf-8"); } catch { return undefined; }
+}
+
+function scanDirForString(dir: string, needle: string): { found: boolean; file?: string } {
+  if (!fileExists(dir)) return { found: false };
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = scanDirForString(full, needle);
+      if (nested.found) return nested;
+    } else if (entry.isFile()) {
+      const text = readTextSafe(full);
+      if (text !== undefined && text.includes(needle)) {
+        return { found: true, file: full };
+      }
+    }
+  }
+  return { found: false };
+}
 
 async function test() {
   let passed = 0, failed = 0;
@@ -129,12 +156,23 @@ async function test() {
   console.log("Test 13: Forbidden runtime/script/CI changes");
   const rt = fs.readFileSync("runtime.ts", "utf-8");
   const gw = fs.readFileSync("execution/gateway.ts", "utf-8");
+  const hd = fs.readFileSync("execution/hermes-gateway-real-dispatch.ts", "utf-8");
   const pj = fs.readFileSync("package.json", "utf-8");
-  assert(!rt.includes("phase_2_controlled_enablement"), "runtime no phase 2");
-  assert(!gw.includes("phase_2_controlled_enablement"), "gateway no phase 2");
-  assert(!pj.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled"), "package no flag enablement");
-  // Check no flag enablement in test scripts
-  assert(!pj.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") || pj.includes("&& tsx"), "package no integration flag");
+  assert(!rt.includes("phase_2_controlled_enablement"), "runtime.ts no phase_2_controlled_enablement");
+  assert(!gw.includes("phase_2_controlled_enablement"), "execution/gateway.ts no phase_2_controlled_enablement");
+  assert(!hd.includes("phase_2_controlled_enablement"), "execution/hermes-gateway-real-dispatch.ts no phase_2_controlled_enablement");
+  const forbiddenFlags = [
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled",
+  ];
+  for (const flag of forbiddenFlags) {
+    assert(!pj.includes(flag), `package.json does not contain ${flag}`);
+  }
+  const githubScan = scanDirForString(".github", "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled");
+  assert(!githubScan.found, `.github does not contain SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled${githubScan.file ? ` (found in ${githubScan.file})` : ""}`);
+  const scriptsScan = scanDirForString("scripts", "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled");
+  assert(!scriptsScan.found, `scripts does not contain SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled${scriptsScan.file ? ` (found in ${scriptsScan.file})` : ""}`);
   console.log("");
 
   // Test 14: Markdown consistency

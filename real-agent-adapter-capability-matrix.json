@@ -246,7 +246,11 @@
         "execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md",
-        "hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"
+        "hermes-gateway-real-dispatch-phase-2-final-readiness-review.json",
+        "execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
+        "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -1131,7 +1135,67 @@
       "gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_final_validation_owner": false,
       "gateway_real_dispatch_phase_2_final_readiness_review_contains_raw_prompt": false,
       "gateway_real_dispatch_phase_2_final_readiness_review_contains_secrets": false,
-      "gateway_real_dispatch_phase_2_final_readiness_review_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan"
+      "gateway_real_dispatch_phase_2_final_readiness_review_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan": "implemented_plan_only",
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_status": "plan_only",
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_executing_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_enables_feature_flags_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_expands_request_types_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_validates_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_adds_enablement_scripts": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_ci_behavior": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_current_validated_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_phase_2_enablement_targets": [
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_default_disabled": true,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_feature_flagged": true,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_requires_multiple_flags": true,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_operator_approval_required": true,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_automatic_enablement_allowed": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_rollout_may_proceed_automatically": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_phase_2_may_proceed_automatically": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_final_result": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_final_status": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_routing": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_default": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_code_review_owner": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_writes_files": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_enablement_logs": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_validation_logs": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_review_logs": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_audit": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_observability": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_guardrails": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_prompt": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_artifacts": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_secrets": false,
+      "gateway_real_dispatch_phase_2_controlled_enablement_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract"
     }
   ],
   "request_types": [
@@ -1351,8 +1415,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
-    "reason": "Hermes Gateway real dispatch has a review-only phase-2 final readiness review.",
-    "safety_rationale": "Enablement plan remains non-executing."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract",
+    "reason": "Hermes Gateway real dispatch has a plan-only phase-2 controlled enablement plan.",
+    "safety_rationale": "Enablement guard contract remains non-executing and non-enabling."
   }
 }

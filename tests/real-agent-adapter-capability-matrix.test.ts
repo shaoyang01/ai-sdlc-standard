@@ -796,6 +796,59 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts"), "hermes evidence phase-2 final readiness review test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes evidence phase-2 final readiness review md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes evidence phase-2 final readiness review json");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan"] === "implemented_plan_only", "hermes dispatch phase-2 controlled enablement plan");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_status"] === "plan_only", "hermes dispatch phase-2 controlled enablement plan status");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_executing_now"] === false, "hermes dispatch phase-2 controlled enablement plan not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_enables_feature_flags_now"] === false, "hermes dispatch phase-2 controlled enablement plan no flags now");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_expands_request_types_now"] === false, "hermes dispatch phase-2 controlled enablement plan no expansion now");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_validates_now"] === false, "hermes dispatch phase-2 controlled enablement plan not validating");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 controlled enablement plan no runtime behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_behavior_now"] === false, "hermes dispatch phase-2 controlled enablement plan no gateway behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_adds_enablement_scripts"] === false, "hermes dispatch phase-2 controlled enablement plan no scripts");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_ci_behavior"] === false, "hermes dispatch phase-2 controlled enablement plan no CI");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 controlled enablement plan verdict");
+  const hPhase2PlanCurrent = hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_current_validated_request_types"] as string[];
+  assert(Array.isArray(hPhase2PlanCurrent) && hPhase2PlanCurrent.length === 1 && hPhase2PlanCurrent[0] === "review", "hermes dispatch phase-2 controlled enablement plan current validated review");
+  const hPhase2PlanTargets = hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_phase_2_enablement_targets"] as string[];
+  assert(Array.isArray(hPhase2PlanTargets) && hPhase2PlanTargets.includes("code_review") && hPhase2PlanTargets.includes("validation"), "hermes dispatch phase-2 controlled enablement plan targets");
+  const hPhase2PlanSupported = hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_supported_request_types"] as string[];
+  assert(Array.isArray(hPhase2PlanSupported) && hPhase2PlanSupported.includes("review") && hPhase2PlanSupported.includes("code_review") && hPhase2PlanSupported.includes("validation"), "hermes dispatch phase-2 controlled enablement plan supported");
+  const hPhase2PlanUnsupported = hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_unsupported_request_types"] as string[];
+  assert(Array.isArray(hPhase2PlanUnsupported) && hPhase2PlanUnsupported.includes("llm_task") && hPhase2PlanUnsupported.includes("code_generation") && hPhase2PlanUnsupported.includes("bugfix"), "hermes dispatch phase-2 controlled enablement plan unsupported");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_default_disabled"] === true, "hermes dispatch phase-2 controlled enablement plan default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_feature_flagged"] === true, "hermes dispatch phase-2 controlled enablement plan feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_requires_multiple_flags"] === true, "hermes dispatch phase-2 controlled enablement plan multiple flags");
+  const hPhase2PlanFlags = hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_required_flags"] as string[];
+  assert(Array.isArray(hPhase2PlanFlags) && hPhase2PlanFlags.length === 3, "hermes dispatch phase-2 controlled enablement plan 3 flags");
+  assert(hPhase2PlanFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hPhase2PlanFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hPhase2PlanFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 controlled enablement plan flags correct");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_operator_approval_required"] === true, "hermes dispatch phase-2 controlled enablement plan operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 controlled enablement plan no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_rollout_may_proceed_automatically"] === false, "hermes dispatch phase-2 controlled enablement plan no automatic rollout");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 controlled enablement plan no automatic phase-2");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 controlled enablement plan no primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_gateway_final_result"] === false, "hermes dispatch phase-2 controlled enablement plan no gateway final");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_final_status"] === false, "hermes dispatch phase-2 controlled enablement plan no final status");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_changes_routing"] === false, "hermes dispatch phase-2 controlled enablement plan no routing");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_affects_primary_gateway_result"] === false, "hermes dispatch phase-2 controlled enablement plan no primary effect");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_default"] === false, "hermes dispatch phase-2 controlled enablement plan not default");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_review_owner"] === false, "hermes dispatch phase-2 controlled enablement plan not review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 controlled enablement plan not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 controlled enablement plan not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_writes_files"] === false, "hermes dispatch phase-2 controlled enablement plan no files");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_enablement_logs"] === false, "hermes dispatch phase-2 controlled enablement plan no enablement logs");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_validation_logs"] === false, "hermes dispatch phase-2 controlled enablement plan no validation logs");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_review_logs"] === false, "hermes dispatch phase-2 controlled enablement plan no review logs");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_audit"] === false, "hermes dispatch phase-2 controlled enablement plan no audit persist");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_observability"] === false, "hermes dispatch phase-2 controlled enablement plan no observability persist");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_persists_guardrails"] === false, "hermes dispatch phase-2 controlled enablement plan no guardrail persist");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_prompt"] === false, "hermes dispatch phase-2 controlled enablement plan no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_raw_artifacts"] === false, "hermes dispatch phase-2 controlled enablement plan no raw artifacts");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_contains_secrets"] === false, "hermes dispatch phase-2 controlled enablement plan no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract", "hermes dispatch phase-2 controlled enablement plan next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts"), "hermes evidence phase-2 controlled enablement plan module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts"), "hermes evidence phase-2 controlled enablement plan test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md"), "hermes evidence phase-2 controlled enablement plan md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json"), "hermes evidence phase-2 controlled enablement plan json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -868,7 +921,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "next PR phase-2 controlled enablement plan");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract", "next PR phase-2 enablement guard contract");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
