@@ -758,7 +758,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Expansion Contract", "next PR phase-2 expansion contract");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist", "next PR phase-2 validation checklist");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

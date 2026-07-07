@@ -1,0 +1,334 @@
+{
+  "name": "Hermes Gateway Real Dispatch Phase-2 Expansion Contract",
+  "adapter": "hermes",
+  "scope": "gateway_real_dispatch_sidecar_phase_2_expansion_contract",
+  "status": "contract_only",
+  "contract_only": true,
+  "executing_now": false,
+  "expands_request_types_now": false,
+  "enables_feature_flags_now": false,
+  "changes_runtime_behavior_now": false,
+  "changes_gateway_behavior_now": false,
+  "adds_enablement_scripts": false,
+  "changes_ci_behavior": false,
+  "readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+  "rollout_plan_status_required": "plan_only",
+  "rollout_validation_checklist_status_required": "checklist_only",
+  "operator_runbook_status_required": "runbook_only",
+  "post_enablement_review_template_status_required": "template_only",
+  "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+  "current_rollout_plan_status": "plan_only",
+  "current_rollout_validation_checklist_status": "checklist_only",
+  "current_operator_runbook_status": "runbook_only",
+  "current_post_enablement_review_template_status": "template_only",
+  "gateway_field": "hermes_gateway_real_dispatch",
+  "fallback_policy_field": "fallbackPolicy",
+  "observability_field": "observability",
+  "guardrails_field": "guardrails",
+  "default_disabled": true,
+  "feature_flagged": true,
+  "requires_multiple_flags": true,
+  "required_flags": [
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+  ],
+  "current_validated_request_types": ["review"],
+  "phase_2_expansion_targets": ["code_review", "validation"],
+  "supported_request_types": ["review", "code_review", "validation"],
+  "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+  "operator_approval_required": true,
+  "automatic_enablement_allowed": false,
+  "rollout_may_proceed_automatically": false,
+  "phase_2_may_proceed_automatically": false,
+  "changes_gateway_primary_dispatch": false,
+  "changes_gateway_final_result": false,
+  "changes_runtime_final_status": false,
+  "changes_runtime_routing": false,
+  "affects_primary_gateway_result": false,
+  "makes_hermes_default": false,
+  "makes_hermes_final_review_owner": false,
+  "makes_hermes_final_code_review_owner": false,
+  "makes_hermes_final_validation_owner": false,
+  "writes_files": false,
+  "persists_expansion_logs": false,
+  "persists_review_logs": false,
+  "persists_rollout_logs": false,
+  "persists_audit": false,
+  "persists_observability": false,
+  "persists_guardrails": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "expansion_targets": [
+    {
+      "request_type": "code_review",
+      "status": "contracted_not_enabled",
+      "eligible_for_future_operator_validation": true,
+      "enabled_now": false,
+      "executes_now": false,
+      "final_decision_owner": false,
+      "sidecar_only": true,
+      "requires_separate_operator_approval": true,
+      "requires_post_enablement_review_for_review_scope": true,
+      "pass_criteria": [
+        "code_review remains sidecar-only.",
+        "Hermes does not become final code review owner.",
+        "Gateway primary/final result remains unchanged.",
+        "Runtime final_status/routing remains unchanged."
+      ],
+      "fail_criteria": [
+        "code_review expansion enables Hermes by default.",
+        "Hermes output becomes final code review decision.",
+        "Hermes sidecar changes Gateway primary/final result."
+      ]
+    },
+    {
+      "request_type": "validation",
+      "status": "contracted_not_enabled",
+      "eligible_for_future_operator_validation": true,
+      "enabled_now": false,
+      "executes_now": false,
+      "final_decision_owner": false,
+      "sidecar_only": true,
+      "requires_separate_operator_approval": true,
+      "requires_post_enablement_review_for_review_scope": true,
+      "pass_criteria": [
+        "validation remains sidecar-only.",
+        "Hermes does not become final validation owner.",
+        "Gateway primary/final result remains unchanged.",
+        "Runtime final_status/routing remains unchanged."
+      ],
+      "fail_criteria": [
+        "validation expansion enables Hermes by default.",
+        "Hermes output becomes final validation decision.",
+        "Hermes sidecar changes Gateway primary/final result."
+      ]
+    }
+  ],
+  "expansion_gates": [
+    {
+      "id": "post_enablement_review_gate",
+      "category": "post_enablement_review",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm review-only post-enablement evidence is sanitized and complete before phase-2 expansion.",
+      "pass_criteria": [
+        "Review-only post-enablement review is completed.",
+        "Review outcomes do not include rollback.",
+        "Evidence contains no raw prompt, artifact, secret, stdout, stderr, or full CLI output."
+      ],
+      "fail_criteria": [
+        "Review-only phase is not reviewed.",
+        "Review-only phase requires rollback.",
+        "Raw or sensitive evidence is required for phase-2 decision."
+      ]
+    },
+    {
+      "id": "request_scope_gate",
+      "category": "request_scope",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm phase-2 targets are only code_review and validation.",
+      "pass_criteria": [
+        "Expansion targets are exactly code_review and validation.",
+        "llm_task, code_generation, and bugfix remain unsupported."
+      ],
+      "fail_criteria": [
+        "Any unsupported request type is added.",
+        "bugfix is included in phase-2 expansion."
+      ]
+    },
+    {
+      "id": "sidecar_safety_gate",
+      "category": "sidecar_safety",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm sidecar metadata remains bounded and nested.",
+      "pass_criteria": [
+        "fallbackPolicy, observability, and guardrails remain nested under hermes_gateway_real_dispatch.",
+        "No top-level fallback/observability/guardrails fields are introduced.",
+        "Raw prompt/artifact/secret collection remains disallowed."
+      ],
+      "fail_criteria": [
+        "Metadata is promoted to top-level fields.",
+        "Raw prompt/artifact/secret is collected or persisted."
+      ]
+    },
+    {
+      "id": "gateway_runtime_safety_gate",
+      "category": "gateway_runtime_safety",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm phase-2 expansion cannot affect Gateway or Runtime outcomes.",
+      "pass_criteria": [
+        "Gateway primary result remains unchanged.",
+        "Gateway final result remains unchanged.",
+        "Runtime final_status/routing remains unchanged."
+      ],
+      "fail_criteria": [
+        "Hermes sidecar changes Gateway primary/final result.",
+        "Hermes sidecar changes Runtime final_status or routing."
+      ]
+    },
+    {
+      "id": "ownership_boundary_gate",
+      "category": "ownership_boundary",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm Hermes remains advisory sidecar metadata, not final decision owner.",
+      "pass_criteria": [
+        "Hermes is not final review owner.",
+        "Hermes is not final code_review owner.",
+        "Hermes is not final validation owner."
+      ],
+      "fail_criteria": [
+        "Hermes output becomes final review/code_review/validation decision.",
+        "Hermes becomes default or primary Gateway owner."
+      ]
+    },
+    {
+      "id": "operator_approval_gate",
+      "category": "operator_approval",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm phase-2 expansion requires separate operator approval.",
+      "pass_criteria": [
+        "Operator approval is required before phase-2 validation.",
+        "Phase-2 cannot proceed automatically.",
+        "Automatic enablement is disallowed."
+      ],
+      "fail_criteria": [
+        "Any automatic expansion path is introduced.",
+        "Any flag becomes enabled by default."
+      ]
+    },
+    {
+      "id": "rollback_gate",
+      "category": "rollback",
+      "status": "required",
+      "required_before_expansion": true,
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "target_request_types": ["code_review", "validation"],
+      "description": "Confirm rollback criteria exist before phase-2 validation.",
+      "pass_criteria": [
+        "Rollback triggers include Gateway primary/final result changes.",
+        "Rollback triggers include Runtime final_status/routing changes.",
+        "Rollback triggers include raw prompt/artifact/secret leakage.",
+        "Rollback triggers include repeated guardrail rejection."
+      ],
+      "fail_criteria": [
+        "Rollback criteria are missing.",
+        "Rollback depends on raw sensitive evidence."
+      ]
+    }
+  ],
+  "required_gate_count": 7,
+  "contract_constraints": [
+    "This PR is contract-only and does not execute phase-2 expansion.",
+    "This PR does not change actual Gateway dispatch behavior.",
+    "This PR does not enable Hermes feature flags.",
+    "This PR does not add enablement scripts or CI behavior.",
+    "Phase-2 targets are code_review and validation only.",
+    "Current validated request type remains review only.",
+    "Hermes remains Gateway sidecar metadata only.",
+    "Hermes remains default-off and requires explicit flags.",
+    "Hermes must not become final review, code_review, or validation owner without a separate ownership contract.",
+    "Runtime final_status and routing must not depend on Hermes sidecar output.",
+    "No expansion, review, rollout, audit, observability, or guardrail logs may persist without a separate contract.",
+    "raw prompt, raw artifact, secret, stdout, stderr, full CLI output, and full warning text remain disallowed.",
+    "No automatic phase-2 expansion or automatic enablement is allowed."
+  ],
+  "required_post_enablement_evidence": [
+    "review-only post-enablement decision",
+    "review-only attach/omit summary",
+    "review-only fallbackPolicy reason/action summary",
+    "review-only observability outcome/count summary",
+    "review-only guardrail decision/check summary",
+    "review-only rollback/escalation summary",
+    "operator approval reference"
+  ],
+  "disallowed_expansion_evidence": [
+    "raw prompts",
+    "raw artifacts",
+    "secrets",
+    "stdout",
+    "stderr",
+    "full Hermes CLI output",
+    "full warning text",
+    "customer data",
+    "credentials",
+    "tokens",
+    "unsanitized review payloads"
+  ],
+  "allowed_phase_2_outcomes": [
+    "remain_review_only",
+    "proceed_to_phase_2_validation_checklist",
+    "rollback"
+  ],
+  "evidence": [
+    "execution/hermes-gateway-real-dispatch-readiness-review.ts",
+    "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
+    "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
+    "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
+    "execution/hermes-gateway-real-dispatch-post-enablement-review-template.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
+    "hermes-gateway-real-dispatch-readiness-review.json",
+    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+    "hermes-gateway-real-dispatch-operator-runbook.json",
+    "hermes-gateway-real-dispatch-post-enablement-review-template.json",
+    "execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts",
+    "tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+    "hermes-gateway-real-dispatch-phase-2-expansion-contract.json"
+  ],
+  "recommended_next_pr": {
+    "title": "Hermes Gateway Real Dispatch Phase-2 Validation Checklist",
+    "safety_rationale": "Checklist remains non-executing and validates code_review/validation expansion before any operator-managed phase-2 enablement."
+  }
+}

@@ -4,9 +4,9 @@
 
 The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
 
-Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, sidecar attach `guardrails`, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, a checklist-only rollout validation gate, a runbook-only operator guide, and a template-only post-enablement review template. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
+Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, sidecar attach `guardrails`, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, a checklist-only rollout validation gate, a runbook-only operator guide, a template-only post-enablement review template, and a contract-only phase-2 expansion contract defining future `code_review`/`validation` expansion targets. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
 
-The next intended PR is Hermes Gateway Real Dispatch Phase-2 Expansion Contract. The post-enablement review template remains non-executing, requires operator approval, and blocks automatic enablement.
+The next intended PR is Hermes Gateway Real Dispatch Phase-2 Validation Checklist. The phase-2 expansion contract remains non-executing, requires operator approval, and blocks automatic enablement.
 
 ### Status Classification
 
@@ -193,6 +193,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Rollout Validation Checklist | implemented_checklist_only | `execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts` |
 | Operator Runbook | implemented_runbook_only | `execution/hermes-gateway-real-dispatch-operator-runbook.ts` |
 | Post-Enablement Review Template | implemented_template_only | `execution/hermes-gateway-real-dispatch-post-enablement-review-template.ts` |
+| Phase-2 Expansion Contract | implemented_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts` |
 
 ### Readiness Guarantees
 
@@ -209,13 +210,15 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - Rollout validation checklist status: `checklist_only`
 - Operator runbook status: `runbook_only`
 - Post-enablement review template status: `template_only`
+- Phase-2 expansion contract status: `contract_only`
 - Initial rollout request type: `review`
-- Expansion to `code_review` and `validation` requires operator approval
+- Phase-2 expansion targets: `code_review`, `validation` (contracted only, not enabled)
+- Expansion to `code_review` and `validation` requires operator approval and a future phase-2 validation checklist
 - Operator approval is required before enablement
 - No operator actions are executed by the repository
 - No enablement scripts or package commands are added
 - Automatic rollout and automatic enablement are disabled
-- Next PR: Hermes Gateway Real Dispatch Phase-2 Expansion Contract
+- Next PR: Hermes Gateway Real Dispatch Phase-2 Validation Checklist
 
 ---
 
@@ -278,9 +281,9 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Skill Flow Orchestrator is not runtime-integrated | Medium | Wire behind `SDLC_SKILL_FLOW_RUNTIME_INTEGRATION=shadow` | Feature-flagged runtime shadow integration |
 | Shadow orchestrator can drift from runtime behavior | Low | Add drift guard tests comparing shadow vs runtime node order | Runtime/Skill Flow Drift Guard |
 | SYSTEM_STATUS / runtime-capabilities / JSON files can drift | Low | Add cross-reference validation tests | Ongoing |
-| Real adapter rollout remains constrained | Medium | Post-enablement review template now documents non-executing review criteria after runbook-only operator guidance | Hermes Gateway Real Dispatch Phase-2 Expansion Contract |
+| Real adapter rollout remains constrained | Medium | Hermes Gateway real dispatch has a contract-only phase-2 expansion artifact defining future code_review/validation expansion. Next step is a non-executing phase-2 validation checklist. | Hermes Gateway Real Dispatch Phase-2 Validation Checklist |
 | Codex adapter supports only code_generation | Medium | Extend to review/bugfix types | Codex Adapter extension |
-| No primary Hermes Gateway ownership | Medium | Keep Hermes as sidecar metadata until a separate ownership contract exists | Hermes Gateway Real Dispatch Phase-2 Expansion Contract |
+| No primary Hermes Gateway ownership | Medium | Phase-2 expansion contract defines code_review/validation expansion targets as sidecar-only and forbids final ownership without a separate ownership contract. Next step is phase-2 validation checklist. | Hermes Gateway Real Dispatch Phase-2 Validation Checklist |
 | Skill artifacts are not persisted | Low | Implement sdlc-docflow-writer integration | After shadow orchestrator |
 | executeSpeckitPipeline() stub has hardcoded simplified stages | Medium | Replace or remove; use speckit flow from orchestrator | Feature-flagged runtime shadow integration |
 | Memory/evolution are advisory but may be mistaken as applied | Low | Documentation + `applied: false` field | Ongoing |
@@ -289,9 +292,9 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 
 ## 14. Recommended Next PR
 
-**Recommended: Hermes Gateway Real Dispatch Phase-2 Expansion Contract**
+**Recommended: Hermes Gateway Real Dispatch Phase-2 Validation Checklist**
 
-Hermes Gateway real dispatch helper now has a template-only post-enablement review artifact that documents review criteria without changing defaults. The next step is a separate phase-2 expansion contract for any expansion beyond review-only post-enablement scope.
+Hermes Gateway real dispatch now has a contract-only phase-2 expansion artifact that defines future `code_review`/`validation` expansion targets without changing defaults or executing expansion. The next step is a separate phase-2 validation checklist for any operator-managed expansion beyond review-only post-enablement scope.
 
 ---
 
