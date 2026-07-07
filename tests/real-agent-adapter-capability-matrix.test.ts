@@ -719,6 +719,44 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts"), "hermes evidence phase-2 validation checklist test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes evidence phase-2 validation checklist md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes evidence phase-2 validation checklist json");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook"] === "implemented_runbook_only", "hermes dispatch phase-2 operator runbook");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_status"] === "runbook_only", "hermes dispatch phase-2 operator runbook status");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_executing_now"] === false, "hermes dispatch phase-2 operator runbook not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_validates_now"] === false, "hermes dispatch phase-2 operator runbook not validating");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_expands_request_types_now"] === false, "hermes dispatch phase-2 operator runbook no request type expansion");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_enables_feature_flags_now"] === false, "hermes dispatch phase-2 operator runbook no flags");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 operator runbook required verdict");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_phase_2_expansion_contract_status_required"] === "contract_only", "hermes dispatch phase-2 operator runbook required phase-2 contract");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_phase_2_validation_checklist_status_required"] === "checklist_only", "hermes dispatch phase-2 operator runbook required phase-2 validation checklist");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 operator runbook current verdict");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_rollout_plan_status"] === "plan_only", "hermes dispatch phase-2 operator runbook current rollout plan");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_rollout_validation_checklist_status"] === "checklist_only", "hermes dispatch phase-2 operator runbook current checklist");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_operator_runbook_status"] === "runbook_only", "hermes dispatch phase-2 operator runbook current runbook");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_post_enablement_review_template_status"] === "template_only", "hermes dispatch phase-2 operator runbook current template");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_phase_2_expansion_contract_status"] === "contract_only", "hermes dispatch phase-2 operator runbook current phase-2 contract");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_phase_2_validation_checklist_status"] === "checklist_only", "hermes dispatch phase-2 operator runbook current phase-2 validation checklist");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_current_phase_2_operator_runbook_status"] === "runbook_only", "hermes dispatch phase-2 operator runbook current phase-2 runbook");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_default_disabled"] === true, "hermes dispatch phase-2 operator runbook default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_feature_flagged"] === true, "hermes dispatch phase-2 operator runbook feature flagged");
+  const hgPhase2RunbookTargets = hermes["gateway_real_dispatch_phase_2_operator_runbook_phase_2_operator_targets"] as string[];
+  assert(Array.isArray(hgPhase2RunbookTargets) && hgPhase2RunbookTargets.includes("code_review") && hgPhase2RunbookTargets.includes("validation"), "hermes dispatch phase-2 operator runbook targets");
+  const hgPhase2RunbookSupported = hermes["gateway_real_dispatch_phase_2_operator_runbook_supported_request_types"] as string[];
+  assert(Array.isArray(hgPhase2RunbookSupported) && hgPhase2RunbookSupported.includes("review") && hgPhase2RunbookSupported.includes("code_review") && hgPhase2RunbookSupported.includes("validation"), "hermes dispatch phase-2 operator runbook supported");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_operator_approval_required"] === true, "hermes dispatch phase-2 operator runbook operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 operator runbook no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 operator runbook no automatic phase-2");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 operator runbook no primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_makes_hermes_default"] === false, "hermes dispatch phase-2 operator runbook not default");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 operator runbook not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 operator runbook not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_persists_phase_2_runbook_logs"] === false, "hermes dispatch phase-2 operator runbook no phase-2 runbook logs");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_contains_raw_prompt"] === false, "hermes dispatch phase-2 operator runbook no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_contains_secrets"] === false, "hermes dispatch phase-2 operator runbook no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template", "hermes dispatch phase-2 operator runbook next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-operator-runbook.ts"), "hermes evidence phase-2 operator runbook module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts"), "hermes evidence phase-2 operator runbook test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes evidence phase-2 operator runbook md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes evidence phase-2 operator runbook json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -791,7 +829,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "next PR phase-2 operator runbook");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template", "next PR phase-2 post-validation review template");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
