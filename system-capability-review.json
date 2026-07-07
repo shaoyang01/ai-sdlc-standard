@@ -1613,6 +1613,39 @@
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md",
         "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
+      "status": "implemented_review_only",
+      "review_only": true,
+      "verdict": "READY_WITH_CONSTRAINTS",
+      "executing_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "default_disabled": true,
+      "feature_flagged": true,
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_readiness_targets": [
+        "code_review",
+        "validation"
+      ],
+      "makes_hermes_default": false,
+      "makes_hermes_final_code_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "persists_readiness_logs": false,
+      "contains_raw_prompt": false,
+      "contains_secrets": false,
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md",
+        "hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -1834,8 +1867,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
-    "reason": "Hermes Gateway real dispatch has a template-only phase-2 post-validation review artifact.",
-    "safety_rationale": "Final readiness review remains non-executing and evaluates whether Phase-2 can proceed without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
+    "reason": "Hermes Gateway real dispatch has a review-only phase-2 final readiness review.",
+    "safety_rationale": "Enablement plan remains non-executing."
   }
 }

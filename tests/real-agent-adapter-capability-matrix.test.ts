@@ -780,6 +780,22 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts"), "hermes evidence phase-2 post-validation review template test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes evidence phase-2 post-validation review template md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes evidence phase-2 post-validation review template json");
+
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review"] === "implemented_review_only", "hermes dispatch phase-2 final readiness review");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_status"] === "review_only", "hermes dispatch phase-2 final readiness review status");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 final readiness review verdict");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_executing_now"] === false, "hermes dispatch phase-2 final readiness review not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_default_disabled"] === true, "hermes dispatch phase-2 final readiness review default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_feature_flagged"] === true, "hermes dispatch phase-2 final readiness review feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_default"] === false, "hermes dispatch phase-2 final readiness review not default");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 final readiness review not cr owner");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 final readiness review not val owner");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_contains_raw_prompt"] === false, "hermes dispatch phase-2 final readiness review no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "hermes dispatch phase-2 final readiness review next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts"), "hermes evidence phase-2 final readiness review module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts"), "hermes evidence phase-2 final readiness review test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes evidence phase-2 final readiness review md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes evidence phase-2 final readiness review json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -852,7 +868,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "next PR phase-2 final readiness review");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "next PR phase-2 controlled enablement plan");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

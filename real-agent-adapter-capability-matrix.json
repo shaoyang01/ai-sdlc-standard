@@ -242,7 +242,11 @@
         "execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md",
-        "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"
+        "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json",
+        "execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md",
+        "hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -1108,7 +1112,26 @@
       "gateway_real_dispatch_phase_2_post_validation_review_template_raw_prompt_collection_allowed": false,
       "gateway_real_dispatch_phase_2_post_validation_review_template_raw_artifact_collection_allowed": false,
       "gateway_real_dispatch_phase_2_post_validation_review_template_secret_collection_allowed": false,
-      "gateway_real_dispatch_phase_2_post_validation_review_template_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review"
+      "gateway_real_dispatch_phase_2_post_validation_review_template_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
+      "gateway_real_dispatch_phase_2_final_readiness_review": "implemented_review_only",
+      "gateway_real_dispatch_phase_2_final_readiness_review_status": "review_only",
+      "gateway_real_dispatch_phase_2_final_readiness_review_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_phase_2_final_readiness_review_executing_now": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_default_disabled": true,
+      "gateway_real_dispatch_phase_2_final_readiness_review_feature_flagged": true,
+      "gateway_real_dispatch_phase_2_final_readiness_review_current_validated_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_phase_2_final_readiness_review_phase_2_readiness_targets": [
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_default": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_final_code_review_owner": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_contains_raw_prompt": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_contains_secrets": false,
+      "gateway_real_dispatch_phase_2_final_readiness_review_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan"
     }
   ],
   "request_types": [
@@ -1328,8 +1351,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
-    "reason": "Hermes Gateway real dispatch has a template-only phase-2 post-validation review artifact.",
-    "safety_rationale": "Final readiness review remains non-executing and evaluates whether Phase-2 can proceed without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
+    "reason": "Hermes Gateway real dispatch has a review-only phase-2 final readiness review.",
+    "safety_rationale": "Enablement plan remains non-executing."
   }
 }

@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "next PR Hermes phase-2 operator runbook");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "next PR Hermes phase-2 operator runbook");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "next PR Hermes phase-2 operator runbook");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "next PR Hermes phase-2 operator runbook");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -1118,8 +1118,30 @@ async function test() {
   assert(hgPostValEv.includes("tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts"), "hermes gateway phase-2 post-validation review template evidence test");
   assert(hgPostValEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes gateway phase-2 post-validation review template evidence md");
   assert(hgPostValEv.includes("hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes gateway phase-2 post-validation review template evidence json");
+
+  // Hermes Gateway Real Dispatch Phase-2 Final Readiness Review
+  assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Final Readiness Review"), "has Hermes Gateway phase-2 final readiness review");
+  const hgFinalRRCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review");
+  assert(hgFinalRRCap !== undefined && hgFinalRRCap["status"] === "implemented_review_only", "hermes gateway phase-2 final readiness review status");
+  assert(hgFinalRRCap["review_only"] === true, "hermes gateway phase-2 final readiness review review only");
+  assert(hgFinalRRCap["verdict"] === "READY_WITH_CONSTRAINTS", "hermes gateway phase-2 final readiness review verdict");
+  assert(hgFinalRRCap["executing_now"] === false, "hermes gateway phase-2 final readiness review not executing");
+  assert(hgFinalRRCap["expands_request_types_now"] === false, "hermes gateway phase-2 final readiness review no type expansion");
+  assert(hgFinalRRCap["default_disabled"] === true, "hermes gateway phase-2 final readiness review default disabled");
+  assert(hgFinalRRCap["feature_flagged"] === true, "hermes gateway phase-2 final readiness review feature flagged");
+  assert(hgFinalRRCap["makes_hermes_default"] === false, "hermes gateway phase-2 final readiness review not default");
+  assert(hgFinalRRCap["makes_hermes_final_code_review_owner"] === false, "hermes gateway phase-2 final readiness review not cr owner");
+  assert(hgFinalRRCap["makes_hermes_final_validation_owner"] === false, "hermes gateway phase-2 final readiness review not val owner");
+  assert(hgFinalRRCap["persists_readiness_logs"] === false, "hermes gateway phase-2 final readiness review no readiness logs");
+  assert(hgFinalRRCap["contains_raw_prompt"] === false, "hermes gateway phase-2 final readiness review no raw prompt");
+  assert(hgFinalRRCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "hermes gateway phase-2 final readiness review next PR");
+  const hgFinalRREv = hgFinalRRCap["evidence"] as string[];
+  assert(hgFinalRREv.includes("execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts"), "hermes gateway phase-2 final readiness review evidence module");
+  assert(hgFinalRREv.includes("tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts"), "hermes gateway phase-2 final readiness review evidence test");
+  assert(hgFinalRREv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes gateway phase-2 final readiness review evidence md");
+  assert(hgFinalRREv.includes("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes gateway phase-2 final readiness review evidence json");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "next PR Hermes phase-2 post-validation review template");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "next PR Hermes phase-2 post-validation review template");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
