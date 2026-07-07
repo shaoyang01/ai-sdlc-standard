@@ -1280,6 +1280,134 @@
     "hermes_gateway_real_dispatch_phase_2_enablement_guard_contract_contains_raw_prompt": false,
     "hermes_gateway_real_dispatch_phase_2_enablement_guard_contract_contains_raw_artifacts": false,
     "hermes_gateway_real_dispatch_phase_2_enablement_guard_contract_contains_secrets": false,
-    "hermes_gateway_real_dispatch_phase_2_enablement_guard_contract_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan"
+    "hermes_gateway_real_dispatch_phase_2_enablement_guard_contract_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan": "implemented_plan_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_status": "plan_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_executing_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_implements_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_enables_feature_flags_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_expands_request_types_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_validates_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_runtime_behavior_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_behavior_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_hermes_dispatch_eligibility_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_adds_enablement_scripts": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_ci_behavior": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_current_validated_request_types": [
+      "review"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_phase_2_shadow_targets": [
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_default_disabled": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_feature_flagged": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_requires_multiple_flags": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_required_flags": [
+      "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+      "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+      "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_operator_approval_required": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_automatic_enablement_allowed": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_rollout_may_proceed_automatically": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_phase_2_may_proceed_automatically": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_final_status": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_routing": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_default": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_review_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_code_review_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_validation_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_writes_files": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_enablement_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_validation_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_review_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_audit": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_observability": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_guardrails": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_secrets": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_implementation_phases": [
+      "Add shadow-only eligibility contract for code_review and validation.",
+      "Add disabled-by-default guard checks.",
+      "Add sidecar-only attach/omit behavior for Phase-2 targets.",
+      "Add observability and guardrail summary checks.",
+      "Add fake-runner tests for disabled, unsupported, unsafe, exception, code_review, and validation paths.",
+      "Add rollback and post-enablement review requirements."
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_required_shadow_behaviors": [
+      "Shadow sidecar may attach only under explicit flags and operator-approved conditions.",
+      "Shadow sidecar must never change Gateway primary/final result.",
+      "Shadow sidecar must never change Runtime final_status/routing.",
+      "Shadow sidecar must remain nested under hermes_gateway_real_dispatch.",
+      "Shadow sidecar must omit when disabled.",
+      "Shadow sidecar must omit unsupported request types.",
+      "Shadow sidecar must omit unsafe metadata.",
+      "Shadow sidecar must omit on exception.",
+      "Hermes output must not be final code_review decision.",
+      "Hermes output must not be final validation decision."
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_required_test_coverage": [
+      "disabled path",
+      "unsupported request type path",
+      "unsafe metadata path",
+      "exception path",
+      "code_review shadow attach path",
+      "validation shadow attach path",
+      "Gateway primary/final unchanged",
+      "Runtime final_status/routing unchanged",
+      "no real Hermes CLI in tests",
+      "no package/script/CI flag enablement",
+      "rollback trigger coverage"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_prohibited_implementation_behaviors": [
+      "Changing Runtime final_status.",
+      "Changing Runtime routing.",
+      "Changing Gateway primary dispatch result.",
+      "Changing Gateway final result.",
+      "Changing Hermes dispatch eligibility in this PR.",
+      "Making Hermes default.",
+      "Making Hermes final review/code_review/validation owner.",
+      "Enabling any Hermes flag by default.",
+      "Adding package/script/CI enablement.",
+      "Persisting raw prompts, artifacts, secrets, stdout, stderr, or full CLI output.",
+      "Persisting enablement/validation/review/audit/observability/guardrail logs without separate contract.",
+      "Routing llm_task, code_generation, or bugfix to Hermes.",
+      "Automatic Phase-2 validation, expansion, rollout, or enablement."
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_rollback_required_when": [
+      "Hermes output becomes final code_review decision.",
+      "Hermes output becomes final validation decision.",
+      "Gateway primary result changes.",
+      "Gateway final result changes.",
+      "Runtime final_status or routing changes.",
+      "Unsupported request type invokes Hermes dispatcher.",
+      "Raw prompt, raw artifact, or secret appears in sidecar metadata.",
+      "Any enablement, validation, audit, observability, or guardrail log is persisted without separate contract.",
+      "Any feature flag is enabled by default.",
+      "Any package/script/CI path enables Hermes flags."
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_evidence": [
+      "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.ts",
+      "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts",
+      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md",
+      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"
+    ]
   }
 }

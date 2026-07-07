@@ -1836,6 +1836,151 @@
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
         "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan",
+      "status": "implemented_plan_only",
+      "plan_only": true,
+      "executing_now": false,
+      "implements_now": false,
+      "enables_feature_flags_now": false,
+      "expands_request_types_now": false,
+      "validates_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "changes_hermes_dispatch_eligibility_now": false,
+      "adds_enablement_scripts": false,
+      "changes_ci_behavior": false,
+      "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_shadow_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "operator_approval_required": true,
+      "automatic_enablement_allowed": false,
+      "rollout_may_proceed_automatically": false,
+      "phase_2_may_proceed_automatically": false,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_code_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_enablement_logs": false,
+      "persists_validation_logs": false,
+      "persists_review_logs": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "implementation_phases": [
+        "Add shadow-only eligibility contract for code_review and validation.",
+        "Add disabled-by-default guard checks.",
+        "Add sidecar-only attach/omit behavior for Phase-2 targets.",
+        "Add observability and guardrail summary checks.",
+        "Add fake-runner tests for disabled, unsupported, unsafe, exception, code_review, and validation paths.",
+        "Add rollback and post-enablement review requirements."
+      ],
+      "required_shadow_behaviors": [
+        "Shadow sidecar may attach only under explicit flags and operator-approved conditions.",
+        "Shadow sidecar must never change Gateway primary/final result.",
+        "Shadow sidecar must never change Runtime final_status/routing.",
+        "Shadow sidecar must remain nested under hermes_gateway_real_dispatch.",
+        "Shadow sidecar must omit when disabled.",
+        "Shadow sidecar must omit unsupported request types.",
+        "Shadow sidecar must omit unsafe metadata.",
+        "Shadow sidecar must omit on exception.",
+        "Hermes output must not be final code_review decision.",
+        "Hermes output must not be final validation decision."
+      ],
+      "required_test_coverage": [
+        "disabled path",
+        "unsupported request type path",
+        "unsafe metadata path",
+        "exception path",
+        "code_review shadow attach path",
+        "validation shadow attach path",
+        "Gateway primary/final unchanged",
+        "Runtime final_status/routing unchanged",
+        "no real Hermes CLI in tests",
+        "no package/script/CI flag enablement",
+        "rollback trigger coverage"
+      ],
+      "prohibited_implementation_behaviors": [
+        "Changing Runtime final_status.",
+        "Changing Runtime routing.",
+        "Changing Gateway primary dispatch result.",
+        "Changing Gateway final result.",
+        "Changing Hermes dispatch eligibility in this PR.",
+        "Making Hermes default.",
+        "Making Hermes final review/code_review/validation owner.",
+        "Enabling any Hermes flag by default.",
+        "Adding package/script/CI enablement.",
+        "Persisting raw prompts, artifacts, secrets, stdout, stderr, or full CLI output.",
+        "Persisting enablement/validation/review/audit/observability/guardrail logs without separate contract.",
+        "Routing llm_task, code_generation, or bugfix to Hermes.",
+        "Automatic Phase-2 validation, expansion, rollout, or enablement."
+      ],
+      "rollback_required_when": [
+        "Hermes output becomes final code_review decision.",
+        "Hermes output becomes final validation decision.",
+        "Gateway primary result changes.",
+        "Gateway final result changes.",
+        "Runtime final_status or routing changes.",
+        "Unsupported request type invokes Hermes dispatcher.",
+        "Raw prompt, raw artifact, or secret appears in sidecar metadata.",
+        "Any enablement, validation, audit, observability, or guardrail log is persisted without separate contract.",
+        "Any feature flag is enabled by default.",
+        "Any package/script/CI path enables Hermes flags."
+      ],
+      "required_prerequisites": [
+        "READY_WITH_CONSTRAINTS readiness review",
+        "plan_only controlled rollout plan",
+        "checklist_only rollout validation checklist",
+        "runbook_only operator runbook",
+        "template_only post-enablement review template",
+        "contract_only Phase-2 expansion contract",
+        "checklist_only Phase-2 validation checklist",
+        "runbook_only Phase-2 operator runbook",
+        "template_only Phase-2 post-validation review template",
+        "review_only Phase-2 final readiness review",
+        "plan_only Phase-2 controlled enablement plan",
+        "contract_only Phase-2 enablement guard contract"
+      ],
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md",
+        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"
+      ],
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract"
     }
   ],
   "feature_flags": [
@@ -2038,8 +2183,8 @@
       "risk": "Real adapter boundary is underdeveloped",
       "severity": "medium",
       "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, operational guardrails, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, checklist-only rollout validation, a runbook-only operator guide, a template-only post-enablement review template, a contract-only phase-2 expansion contract defining future code_review/validation expansion targets, a checklist-only phase-2 validation checklist, a runbook-only phase-2 operator runbook, a template-only phase-2 post-validation review template, a review-only phase-2 final readiness review, a plan-only phase-2 controlled enablement plan, and a contract-only phase-2 enablement guard contract defining mandatory guard conditions before any future implementation PR; it still does not own Gateway primary result or Runtime final_status/routing.",
-      "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch has a contract-only phase-2 enablement guard contract for future operator-managed enablement. Next step is a phase-2 shadow enablement implementation plan.",
-      "recommended_pr_stage": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan"
+      "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch has a contract-only phase-2 enablement guard contract for future operator-managed enablement. Next step is a phase-2 shadow enablement contract.",
+      "recommended_pr_stage": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract"
     },
     {
       "risk": "Codex adapter supports only code_generation",
@@ -2057,8 +2202,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan",
-    "reason": "Hermes Gateway real dispatch has a contract-only phase-2 enablement guard contract.",
-    "safety_rationale": "Shadow enablement implementation plan remains non-executing and non-enabling."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract",
+    "reason": "Hermes Gateway real dispatch has a plan-only phase-2 shadow enablement implementation plan.",
+    "safety_rationale": "Shadow enablement contract remains non-executing and non-enabling."
   }
 }

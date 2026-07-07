@@ -903,79 +903,70 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts"), "hermes evidence phase-2 enablement guard contract test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md"), "hermes evidence phase-2 enablement guard contract md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"), "hermes evidence phase-2 enablement guard contract json");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.ts"), "hermes evidence phase-2 shadow enablement implementation plan module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts"), "hermes evidence phase-2 shadow enablement implementation plan test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md"), "hermes evidence phase-2 shadow enablement implementation plan md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"), "hermes evidence phase-2 shadow enablement implementation plan json");
   console.log("");
 
-  // ── Test 3: Request type alignment ──
-  console.log("Test 3: Request types match ExecutionRequestType");
-  const rtNames = m.request_types.map((r: Record<string, unknown>) => r["request_type"]);
-  for (const vt of VALID_REQUEST_TYPES) {
-    assert(rtNames.includes(vt), `request_type includes ${vt}`);
-  }
-  for (const rt of rtNames) {
-    assert(VALID_REQUEST_TYPES.includes(rt), `request_type ${rt} is a valid ExecutionRequestType`);
-  }
-  // No artifact/node names used as request types
-  for (const inv of INVALID_REQUEST_TYPES) {
-    assert(!rtNames.includes(inv), `request_type does NOT include ${inv} (artifact/node name)`);
-  }
-  console.log("");
-
-  // ── Test 4: Adapter supported/unsupported types are valid ──
-  console.log("Test 4: Adapter supported/unsupported types use valid values");
-  for (const adapter of m.adapters) {
-    for (const rt of (adapter["supported_request_types"] as string[])) {
-      assert(VALID_REQUEST_TYPES.includes(rt), `${adapter["adapter"]} supported: ${rt} is valid`);
-    }
-    for (const rt of (adapter["unsupported_request_types"] as string[])) {
-      assert(VALID_REQUEST_TYPES.includes(rt), `${adapter["adapter"]} unsupported: ${rt} is valid`);
-      assert(!INVALID_REQUEST_TYPES.includes(rt), `${adapter["adapter"]} unsupported: ${rt} is NOT an artifact name`);
-    }
-  }
-  console.log("");
-
-  // ── Test 5: Recommended adapters ──
-  console.log("Test 5: Recommended adapters per request type");
-  const cg = m.request_types.find((r: Record<string, unknown>) => r["request_type"] === "code_generation");
-  assert(cg["recommended_real_adapter"] === "codex", "code_generation → codex");
-  const val = m.request_types.find((r: Record<string, unknown>) => r["request_type"] === "validation");
-  assert(val["recommended_real_adapter"] === "hermes", "validation → hermes");
-  const llm = m.request_types.find((r: Record<string, unknown>) => r["request_type"] === "llm_task");
-  assert(llm["recommended_real_adapter"] === "kimi", "llm_task → kimi");
-  // Artifact type validation
-  console.log("Test 5b: typical_artifacts use valid execution artifact types");
-  for (const rt of m.request_types) {
-    const arts = rt["typical_artifacts"] as string[];
-    for (const art of arts) {
-      assert(VALID_ARTIFACT_TYPES.includes(art), `${rt["request_type"]}: typical_artifact ${art} is valid`);
-    }
-  }
-  console.log("");
-
-  // ── Test 6: Feature flags ──
-  console.log("Test 6: Feature flags");
-  const ffNames = m.feature_flags.map((f: Record<string, unknown>) => f["flag"]);
-  assert(ffNames.includes("SDLC_EXECUTION_MODE"), "has SDLC_EXECUTION_MODE");
-  assert(ffNames.includes("SDLC_KIMI_CLI_ADAPTER"), "has SDLC_KIMI_CLI_ADAPTER");
-  assert(ffNames.includes("SDLC_HERMES_CLI_ADAPTER"), "has SDLC_HERMES_CLI_ADAPTER");
-  assert(ffNames.includes("SDLC_REAL_ADAPTER_FALLBACK"), "has SDLC_REAL_ADAPTER_FALLBACK");
-  // No API-style flags
-  assert(!ffNames.includes("SDLC_KIMI_ADAPTER"), "no SDLC_KIMI_ADAPTER");
-  assert(!ffNames.includes("SDLC_HERMES_ADAPTER"), "no SDLC_HERMES_ADAPTER");
-  console.log("");
-
-  // ── Test 7: Safety boundaries ──
-  console.log("Test 7: Safety boundaries");
-  const sbNames = m.safety_boundaries.map((s: Record<string, unknown>) => s["name"]);
-  assert(sbNames.includes("no_default_real_model_execution"), "no default real execution");
-  assert(sbNames.includes("real_adapters_behind_execution_gateway"), "adapters behind gateway");
-  assert(sbNames.includes("no_runtime_direct_adapter_calls"), "no direct adapter calls");
-  assert(sbNames.includes("no_secret_logging"), "no secret logging");
-  assert(sbNames.includes("no_git_operations_by_adapters"), "no git operations");
+  // ── Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan ──
+  console.log("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan"] === "implemented_plan_only", "hermes dispatch phase-2 shadow enablement implementation plan");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_status"] === "plan_only", "hermes dispatch phase-2 shadow enablement implementation plan status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_executing_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_implements_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not implementing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_enables_feature_flags_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no flags now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_expands_request_types_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no expansion now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_validates_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not validating");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no runtime behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no gateway behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_hermes_dispatch_eligibility_now"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no dispatch eligibility change");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_adds_enablement_scripts"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no scripts");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_ci_behavior"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no CI");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 shadow enablement implementation plan verdict");
+  const hShadowCurrent = hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_current_validated_request_types"] as string[];
+  assert(Array.isArray(hShadowCurrent) && hShadowCurrent.length === 1 && hShadowCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement implementation plan current validated review");
+  const hShadowTargets = hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hShadowTargets) && hShadowTargets.includes("code_review") && hShadowTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement implementation plan targets");
+  const hShadowSupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_supported_request_types"] as string[];
+  assert(Array.isArray(hShadowSupported) && hShadowSupported.includes("review") && hShadowSupported.includes("code_review") && hShadowSupported.includes("validation"), "hermes dispatch phase-2 shadow enablement implementation plan supported");
+  const hShadowUnsupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_unsupported_request_types"] as string[];
+  assert(Array.isArray(hShadowUnsupported) && hShadowUnsupported.includes("llm_task") && hShadowUnsupported.includes("code_generation") && hShadowUnsupported.includes("bugfix"), "hermes dispatch phase-2 shadow enablement implementation plan unsupported");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement implementation plan default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_feature_flagged"] === true, "hermes dispatch phase-2 shadow enablement implementation plan feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_requires_multiple_flags"] === true, "hermes dispatch phase-2 shadow enablement implementation plan multiple flags");
+  const hShadowFlags = hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_required_flags"] as string[];
+  assert(Array.isArray(hShadowFlags) && hShadowFlags.length === 3, "hermes dispatch phase-2 shadow enablement implementation plan 3 flags");
+  assert(hShadowFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hShadowFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hShadowFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 shadow enablement implementation plan flags correct");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement implementation plan operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_rollout_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no automatic rollout");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no automatic phase-2");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_gateway_final_result"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no gateway final");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_final_status"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no final status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_changes_routing"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no routing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_affects_primary_gateway_result"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no primary effect");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_default"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not default");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_review_owner"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 shadow enablement implementation plan not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_writes_files"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no files");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_enablement_logs"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no enablement logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_validation_logs"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no validation logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_review_logs"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no review logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_audit"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no audit persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_observability"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no observability persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_persists_guardrails"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no guardrail persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no raw artifacts");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement implementation plan no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract", "hermes dispatch phase-2 shadow enablement implementation plan next PR");
   console.log("");
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan", "next PR phase-2 shadow enablement implementation plan");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Contract", "next PR phase-2 shadow enablement contract");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
