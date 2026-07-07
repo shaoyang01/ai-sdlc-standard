@@ -111,4 +111,4 @@ Gateway real dispatch sidecar Phase-2 shadow enablement contract only. Defines t
 
 ## Recommended Next PR
 
-**Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan**
+**Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract**

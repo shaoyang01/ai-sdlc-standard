@@ -219,7 +219,7 @@ async function test() {
   assert(md.includes("contract_only"), "md: status");
   assert(md.includes("No Phase-2 enablement now"), "md: no enablement");
   assert(md.includes("No request type expansion now"), "md: no expansion");
-  assert(md.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan"), "md: next PR");
+  assert(md.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract"), "md: next PR");
   console.log("");
 
   // Test 17: JSON consistency
@@ -230,7 +230,7 @@ async function test() {
   assert(json.contract_only === true, "json: contract only");
   assert(json.implements_now === false, "json: implements_now false");
   assert(json.changes_hermes_dispatch_eligibility_now === false, "json: no dispatch eligibility change");
-  assert(json.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan", "json: next PR");
+  assert(json.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract", "json: next PR");
   console.log("");
 
   // Test 18: Forbidden imports

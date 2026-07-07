@@ -164,5 +164,5 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT = {
     "hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json",
     "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts",
   ],
-  recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan",
+  recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract",
 };

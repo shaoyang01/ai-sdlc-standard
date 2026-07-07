@@ -154,6 +154,6 @@
     "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan"
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract"
   }
 }
