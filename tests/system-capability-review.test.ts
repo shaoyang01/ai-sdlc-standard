@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "next PR Hermes phase-2 shadow enablement observability contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "next PR Hermes phase-2 shadow enablement guardrail contract");
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
   assert(fpCap !== undefined && fpCap["status"] === "implemented", "fallback policy implemented");
@@ -149,7 +149,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "next PR Hermes phase-2 shadow enablement observability contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "next PR Hermes phase-2 shadow enablement guardrail contract");
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
   assert(rdCap !== undefined && rdCap["status"] === "contract-only", "real dispatch contract-only");
@@ -1381,7 +1381,7 @@ async function test() {
   assert(Array.isArray(hgShadowContractTests) && hgShadowContractTests.length === 15, "hermes gateway phase-2 shadow enablement contract 15 required tests");
   const hgShadowContractProhibited = hgShadowContractCap["prohibited_behaviors"] as string[];
   assert(Array.isArray(hgShadowContractProhibited) && hgShadowContractProhibited.length === 13, "hermes gateway phase-2 shadow enablement contract 13 prohibited behaviors");
-  assert(hgShadowContractCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes gateway phase-2 shadow enablement contract next PR");
+  assert(hgShadowContractCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes gateway phase-2 shadow enablement contract next PR");
   const hgShadowContractEv = hgShadowContractCap["evidence"] as string[];
   assert(hgShadowContractEv.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.ts"), "hermes gateway phase-2 shadow enablement contract evidence module");
   assert(hgShadowContractEv.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts"), "hermes gateway phase-2 shadow enablement contract evidence test");
@@ -1448,7 +1448,7 @@ async function test() {
   assert(Array.isArray(hgShadowTestPlanTests) && hgShadowTestPlanTests.length >= 10, "hermes gateway phase-2 shadow enablement test plan required tests");
   const hgShadowTestPlanProhibited = hgShadowTestPlanCap["prohibited_test_behaviors"] as string[] ?? hgShadowTestPlanCap["prohibited_behaviors"] as string[];
   assert(Array.isArray(hgShadowTestPlanProhibited) && hgShadowTestPlanProhibited.length >= 10, "hermes gateway phase-2 shadow enablement test plan prohibited behaviors");
-  assert(hgShadowTestPlanCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes gateway phase-2 shadow enablement test plan next PR");
+  assert(hgShadowTestPlanCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes gateway phase-2 shadow enablement test plan next PR");
   const hgShadowTestPlanEv = hgShadowTestPlanCap["evidence"] as string[];
   assert(hgShadowTestPlanEv.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.ts"), "hermes gateway phase-2 shadow enablement test plan evidence module");
   assert(hgShadowTestPlanEv.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts"), "hermes gateway phase-2 shadow enablement test plan evidence test");
@@ -1520,15 +1520,87 @@ async function test() {
   assert(Array.isArray(hgShadowFixtureContractSafetyRules) && hgShadowFixtureContractSafetyRules.length === 15, "hermes gateway phase-2 shadow enablement fixture contract 15 safety rules");
   const hgShadowFixtureContractProhibited = hgShadowFixtureContractCap["prohibited_fixture_data"] as string[];
   assert(Array.isArray(hgShadowFixtureContractProhibited) && hgShadowFixtureContractProhibited.length === 16, "hermes gateway phase-2 shadow enablement fixture contract 16 prohibited fixture data");
-  assert(hgShadowFixtureContractCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes gateway phase-2 shadow enablement fixture contract next PR");
+  assert(hgShadowFixtureContractCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes gateway phase-2 shadow enablement fixture contract next PR");
   const hgShadowFixtureContractEv = hgShadowFixtureContractCap["evidence"] as string[];
   assert(hgShadowFixtureContractEv.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.ts"), "hermes gateway phase-2 shadow enablement fixture contract evidence module");
   assert(hgShadowFixtureContractEv.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts"), "hermes gateway phase-2 shadow enablement fixture contract evidence test");
   assert(hgShadowFixtureContractEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md"), "hermes gateway phase-2 shadow enablement fixture contract evidence md");
   assert(hgShadowFixtureContractEv.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"), "hermes gateway phase-2 shadow enablement fixture contract evidence json");
 
+  // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract
+  assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract"), "has Hermes phase-2 shadow enablement observability contract");
+  const hgShadowObservabilityContractCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract");
+  assert(hgShadowObservabilityContractCap !== undefined && hgShadowObservabilityContractCap["status"] === "implemented_observability_contract_only", "hermes gateway phase-2 shadow enablement observability contract status");
+  assert(hgShadowObservabilityContractCap["observability_contract_only"] === true, "hermes gateway phase-2 shadow enablement observability contract observability_contract_only flag");
+  assert(hgShadowObservabilityContractCap["runtime_active_by_default"] === false, "hermes gateway phase-2 shadow enablement observability contract not active");
+  assert(hgShadowObservabilityContractCap["wired_to_gateway"] === false, "hermes gateway phase-2 shadow enablement observability contract not wired to gateway");
+  assert(hgShadowObservabilityContractCap["wired_to_runtime"] === false, "hermes gateway phase-2 shadow enablement observability contract not wired to runtime");
+  assert(hgShadowObservabilityContractCap["executing_now"] === false, "hermes gateway phase-2 shadow enablement observability contract not executing");
+  assert(hgShadowObservabilityContractCap["implements_now"] === false, "hermes gateway phase-2 shadow enablement observability contract not implementing");
+  assert(hgShadowObservabilityContractCap["adds_real_observability_collection_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no real collection");
+  assert(hgShadowObservabilityContractCap["persists_observability_logs_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no log persistence");
+  assert(hgShadowObservabilityContractCap["enables_feature_flags_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no flags");
+  assert(hgShadowObservabilityContractCap["expands_request_types_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no expansion");
+  assert(hgShadowObservabilityContractCap["changes_runtime_behavior_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no runtime change");
+  assert(hgShadowObservabilityContractCap["changes_gateway_behavior_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no gateway change");
+  assert(hgShadowObservabilityContractCap["changes_hermes_dispatch_eligibility_now"] === false, "hermes gateway phase-2 shadow enablement observability contract no dispatch eligibility change");
+  assert(hgShadowObservabilityContractCap["adds_enablement_scripts"] === false, "hermes gateway phase-2 shadow enablement observability contract no scripts");
+  assert(hgShadowObservabilityContractCap["changes_ci_behavior"] === false, "hermes gateway phase-2 shadow enablement observability contract no CI");
+  assert(hgShadowObservabilityContractCap["current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes gateway phase-2 shadow enablement observability contract verdict");
+  const hgShadowObservabilityContractCurrent = hgShadowObservabilityContractCap["current_validated_request_types"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractCurrent) && hgShadowObservabilityContractCurrent.length === 1 && hgShadowObservabilityContractCurrent[0] === "review", "hermes gateway phase-2 shadow enablement observability contract current validated review");
+  const hgShadowObservabilityContractTargets = hgShadowObservabilityContractCap["phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractTargets) && hgShadowObservabilityContractTargets.includes("code_review") && hgShadowObservabilityContractTargets.includes("validation"), "hermes gateway phase-2 shadow enablement observability contract targets");
+  const hgShadowObservabilityContractSupported = hgShadowObservabilityContractCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractSupported) && hgShadowObservabilityContractSupported.includes("review") && hgShadowObservabilityContractSupported.includes("code_review") && hgShadowObservabilityContractSupported.includes("validation"), "hermes gateway phase-2 shadow enablement observability contract supported");
+  const hgShadowObservabilityContractUnsupported = hgShadowObservabilityContractCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractUnsupported) && hgShadowObservabilityContractUnsupported.includes("llm_task") && hgShadowObservabilityContractUnsupported.includes("code_generation") && hgShadowObservabilityContractUnsupported.includes("bugfix"), "hermes gateway phase-2 shadow enablement observability contract unsupported");
+  assert(hgShadowObservabilityContractCap["default_disabled"] === true, "hermes gateway phase-2 shadow enablement observability contract default disabled");
+  assert(hgShadowObservabilityContractCap["feature_flagged"] === true, "hermes gateway phase-2 shadow enablement observability contract feature flagged");
+  assert(hgShadowObservabilityContractCap["requires_multiple_flags"] === true, "hermes gateway phase-2 shadow enablement observability contract multiple flags");
+  const hgShadowObservabilityContractFlags = hgShadowObservabilityContractCap["required_flags"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractFlags) && hgShadowObservabilityContractFlags.length === 3, "hermes gateway phase-2 shadow enablement observability contract 3 flags");
+  assert(hgShadowObservabilityContractFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hgShadowObservabilityContractFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hgShadowObservabilityContractFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes gateway phase-2 shadow enablement observability contract flags correct");
+  assert(hgShadowObservabilityContractCap["operator_approval_required"] === true, "hermes gateway phase-2 shadow enablement observability contract operator approval");
+  assert(hgShadowObservabilityContractCap["automatic_enablement_allowed"] === false, "hermes gateway phase-2 shadow enablement observability contract no automatic enablement");
+  assert(hgShadowObservabilityContractCap["rollout_may_proceed_automatically"] === false, "hermes gateway phase-2 shadow enablement observability contract no automatic rollout");
+  assert(hgShadowObservabilityContractCap["phase_2_may_proceed_automatically"] === false, "hermes gateway phase-2 shadow enablement observability contract no automatic phase-2");
+  assert(hgShadowObservabilityContractCap["changes_gateway_primary_dispatch"] === false, "hermes gateway phase-2 shadow enablement observability contract no primary dispatch");
+  assert(hgShadowObservabilityContractCap["changes_gateway_final_result"] === false, "hermes gateway phase-2 shadow enablement observability contract no gateway final");
+  assert(hgShadowObservabilityContractCap["changes_final_status"] === false, "hermes gateway phase-2 shadow enablement observability contract no final_status");
+  assert(hgShadowObservabilityContractCap["changes_routing"] === false, "hermes gateway phase-2 shadow enablement observability contract no routing");
+  assert(hgShadowObservabilityContractCap["affects_primary_gateway_result"] === false, "hermes gateway phase-2 shadow enablement observability contract no primary effect");
+  assert(hgShadowObservabilityContractCap["makes_hermes_default"] === false, "hermes gateway phase-2 shadow enablement observability contract not default");
+  assert(hgShadowObservabilityContractCap["makes_hermes_final_review_owner"] === false, "hermes gateway phase-2 shadow enablement observability contract not review owner");
+  assert(hgShadowObservabilityContractCap["makes_hermes_final_code_review_owner"] === false, "hermes gateway phase-2 shadow enablement observability contract not code review owner");
+  assert(hgShadowObservabilityContractCap["makes_hermes_final_validation_owner"] === false, "hermes gateway phase-2 shadow enablement observability contract not validation owner");
+  assert(hgShadowObservabilityContractCap["writes_files"] === false, "hermes gateway phase-2 shadow enablement observability contract no files");
+  assert(hgShadowObservabilityContractCap["persists_enablement_logs"] === false, "hermes gateway phase-2 shadow enablement observability contract no enablement logs");
+  assert(hgShadowObservabilityContractCap["persists_validation_logs"] === false, "hermes gateway phase-2 shadow enablement observability contract no validation logs");
+  assert(hgShadowObservabilityContractCap["persists_review_logs"] === false, "hermes gateway phase-2 shadow enablement observability contract no review logs");
+  assert(hgShadowObservabilityContractCap["persists_audit"] === false, "hermes gateway phase-2 shadow enablement observability contract no audit");
+  assert(hgShadowObservabilityContractCap["persists_observability"] === false, "hermes gateway phase-2 shadow enablement observability contract no observability");
+  assert(hgShadowObservabilityContractCap["persists_guardrails"] === false, "hermes gateway phase-2 shadow enablement observability contract no guardrails");
+  assert(hgShadowObservabilityContractCap["contains_raw_prompt"] === false, "hermes gateway phase-2 shadow enablement observability contract no raw prompt");
+  assert(hgShadowObservabilityContractCap["contains_raw_artifacts"] === false, "hermes gateway phase-2 shadow enablement observability contract no raw artifacts");
+  assert(hgShadowObservabilityContractCap["contains_secrets"] === false, "hermes gateway phase-2 shadow enablement observability contract no secrets");
+  const hgShadowObservabilityContractAllowed = hgShadowObservabilityContractCap["allowed_observability_signals"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractAllowed) && hgShadowObservabilityContractAllowed.length >= 10, "hermes gateway phase-2 shadow enablement observability contract allowed signals");
+  const hgShadowObservabilityContractProhibited = hgShadowObservabilityContractCap["prohibited_observability_signals"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractProhibited) && hgShadowObservabilityContractProhibited.length >= 10, "hermes gateway phase-2 shadow enablement observability contract prohibited signals");
+  const hgShadowObservabilityContractShape = hgShadowObservabilityContractCap["observability_shape"] as Record<string, unknown>;
+  assert(hgShadowObservabilityContractShape !== undefined && typeof hgShadowObservabilityContractShape === "object", "hermes gateway phase-2 shadow enablement observability contract observability shape");
+  const hgShadowObservabilityContractSafetyRules = hgShadowObservabilityContractCap["observability_safety_rules"] as string[];
+  assert(Array.isArray(hgShadowObservabilityContractSafetyRules) && hgShadowObservabilityContractSafetyRules.length >= 10, "hermes gateway phase-2 shadow enablement observability contract safety rules");
+  assert(hgShadowObservabilityContractCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes gateway phase-2 shadow enablement observability contract next PR");
+  const hgShadowObservabilityContractEv = hgShadowObservabilityContractCap["evidence"] as string[];
+  assert(hgShadowObservabilityContractEv.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.ts"), "hermes gateway phase-2 shadow enablement observability contract evidence module");
+  assert(hgShadowObservabilityContractEv.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts"), "hermes gateway phase-2 shadow enablement observability contract evidence test");
+  assert(hgShadowObservabilityContractEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md"), "hermes gateway phase-2 shadow enablement observability contract evidence md");
+  assert(hgShadowObservabilityContractEv.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes gateway phase-2 shadow enablement observability contract evidence json");
+
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "next PR Hermes phase-2 shadow enablement observability contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "next PR Hermes phase-2 shadow enablement guardrail contract");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
@@ -1550,6 +1622,7 @@ async function test() {
   assert(md.includes("Phase-2 Shadow Enablement Contract"), "MD: mentions shadow enablement contract");
   assert(md.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan"), "MD: mentions test plan");
   assert(md.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract"), "MD: mentions fixture contract");
+  assert(md.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract"), "MD: mentions observability contract");
   console.log("");
 
   // ── Test 5: Safety boundaries ──

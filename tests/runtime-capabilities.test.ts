@@ -1135,7 +1135,7 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement contract no raw prompt");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement contract no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement contract no secrets");
-  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes dispatch phase-2 shadow enablement contract next PR");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement contract next PR");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan");
@@ -1190,7 +1190,7 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement test plan no raw prompt");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement test plan no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement test plan no secrets");
-  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes dispatch phase-2 shadow enablement test plan next PR");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement test plan next PR");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract");
@@ -1246,7 +1246,68 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement fixture contract no raw prompt");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement fixture contract no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement fixture contract no secrets");
-  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract", "hermes dispatch phase-2 shadow enablement fixture contract next PR");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement fixture contract next PR");
+  console.log("");
+
+
+  console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract"] === "implemented_observability_contract_only", "hermes dispatch phase-2 shadow enablement observability contract");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_status"] === "observability_contract_only", "hermes dispatch phase-2 shadow enablement observability contract status");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_executing_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract not executing");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_implements_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract not implementing");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_adds_real_observability_collection_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no real collection");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_observability_logs_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no log persistence");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_enables_feature_flags_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no flags now");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_expands_request_types_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no expansion now");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_validates_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract not validating");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no runtime behavior");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_gateway_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no gateway behavior");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_hermes_dispatch_eligibility_now"] === false, "hermes dispatch phase-2 shadow enablement observability contract no dispatch eligibility change");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_adds_enablement_scripts"] === false, "hermes dispatch phase-2 shadow enablement observability contract no scripts");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_ci_behavior"] === false, "hermes dispatch phase-2 shadow enablement observability contract no CI");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 shadow enablement observability contract verdict");
+  const hgObsCurrent = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_current_validated_request_types"] as string[];
+  assert(Array.isArray(hgObsCurrent) && hgObsCurrent.length === 1 && hgObsCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement observability contract current validated review");
+  const hgObsTargets = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hgObsTargets) && hgObsTargets.includes("code_review") && hgObsTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement observability contract targets");
+  const hgObsSupported = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hgObsSupported) && hgObsSupported.includes("review") && hgObsSupported.includes("code_review") && hgObsSupported.includes("validation"), "hermes dispatch phase-2 shadow enablement observability contract supported");
+  const hgObsUnsupported = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgObsUnsupported) && hgObsUnsupported.includes("llm_task") && hgObsUnsupported.includes("code_generation") && hgObsUnsupported.includes("bugfix"), "hermes dispatch phase-2 shadow enablement observability contract unsupported");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement observability contract default disabled");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_feature_flagged"] === true, "hermes dispatch phase-2 shadow enablement observability contract feature flagged");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_requires_multiple_flags"] === true, "hermes dispatch phase-2 shadow enablement observability contract multiple flags");
+  const hgObsFlags = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_required_flags"] as string[];
+  assert(Array.isArray(hgObsFlags) && hgObsFlags.length === 3, "hermes dispatch phase-2 shadow enablement observability contract 3 flags");
+  assert(hgObsFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hgObsFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hgObsFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 shadow enablement observability contract flags correct");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement observability contract operator approval");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 shadow enablement observability contract no automatic enablement");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_rollout_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement observability contract no automatic rollout");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement observability contract no automatic phase-2");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 shadow enablement observability contract no primary dispatch");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_gateway_final_result"] === false, "hermes dispatch phase-2 shadow enablement observability contract no gateway final");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_final_status"] === false, "hermes dispatch phase-2 shadow enablement observability contract no final status");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_changes_routing"] === false, "hermes dispatch phase-2 shadow enablement observability contract no routing");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_affects_primary_gateway_result"] === false, "hermes dispatch phase-2 shadow enablement observability contract no primary effect");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_makes_hermes_default"] === false, "hermes dispatch phase-2 shadow enablement observability contract not default");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_makes_hermes_final_review_owner"] === false, "hermes dispatch phase-2 shadow enablement observability contract not review owner");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 shadow enablement observability contract not code review owner");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 shadow enablement observability contract not validation owner");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_writes_files"] === false, "hermes dispatch phase-2 shadow enablement observability contract no files");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_enablement_logs"] === false, "hermes dispatch phase-2 shadow enablement observability contract no enablement logs");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_validation_logs"] === false, "hermes dispatch phase-2 shadow enablement observability contract no validation logs");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_review_logs"] === false, "hermes dispatch phase-2 shadow enablement observability contract no review logs");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_audit"] === false, "hermes dispatch phase-2 shadow enablement observability contract no audit persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_observability"] === false, "hermes dispatch phase-2 shadow enablement observability contract no observability persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_persists_guardrails"] === false, "hermes dispatch phase-2 shadow enablement observability contract no guardrail persist");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement observability contract no raw prompt");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement observability contract no raw artifacts");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement observability contract no secrets");
+  const hgObsAllowed = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_allowed_observability_signals"] as string[];
+  assert(Array.isArray(hgObsAllowed) && hgObsAllowed.length >= 10, "hermes dispatch phase-2 shadow enablement observability contract allowed signals");
+  const hgObsProhibited = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_prohibited_observability_signals"] as string[];
+  assert(Array.isArray(hgObsProhibited) && hgObsProhibited.length >= 10, "hermes dispatch phase-2 shadow enablement observability contract prohibited signals");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement observability contract next PR");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
