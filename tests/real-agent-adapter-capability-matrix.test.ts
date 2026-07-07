@@ -757,6 +757,29 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts"), "hermes evidence phase-2 operator runbook test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes evidence phase-2 operator runbook md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes evidence phase-2 operator runbook json");
+
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template"] === "implemented_template_only", "hermes dispatch phase-2 post-validation review template");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_status"] === "template_only", "hermes dispatch phase-2 post-validation review template status");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_executing_now"] === false, "hermes dispatch phase-2 post-validation review not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_collects_data_now"] === false, "hermes dispatch phase-2 post-validation review not collecting");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_expands_request_types_now"] === false, "hermes dispatch phase-2 post-validation review no type expand");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 post-validation review required verdict");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_phase_2_operator_runbook_status_required"] === "runbook_only", "hermes dispatch phase-2 post-validation review required phase-2 runbook");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_default_disabled"] === true, "hermes dispatch phase-2 post-validation review default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_feature_flagged"] === true, "hermes dispatch phase-2 post-validation review feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_default"] === false, "hermes dispatch phase-2 post-validation review not default");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 post-validation review not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 post-validation review not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_contains_raw_prompt"] === false, "hermes dispatch phase-2 post-validation review no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_contains_secrets"] === false, "hermes dispatch phase-2 post-validation review no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_template_fields_are_placeholders_only"] === true, "hermes dispatch phase-2 post-validation review placeholders only");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_raw_prompt_collection_allowed"] === false, "hermes dispatch phase-2 post-validation review no prompt collection");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_secret_collection_allowed"] === false, "hermes dispatch phase-2 post-validation review no secret collection");
+  assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "hermes dispatch phase-2 post-validation review next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts"), "hermes evidence phase-2 post-validation review template module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts"), "hermes evidence phase-2 post-validation review template test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes evidence phase-2 post-validation review template md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes evidence phase-2 post-validation review template json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -829,7 +852,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template", "next PR phase-2 post-validation review template");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "next PR phase-2 final readiness review");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

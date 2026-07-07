@@ -896,6 +896,24 @@ async function test() {
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_operator_runbook_contains_raw_artifacts"] === false, "hermes dispatch phase-2 operator runbook no raw artifacts");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_operator_runbook_contains_secrets"] === false, "hermes dispatch phase-2 operator runbook no secrets");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_operator_runbook_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template", "hermes dispatch phase-2 operator runbook next PR");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template"] === "implemented_template_only", "hermes dispatch phase-2 post-validation review template");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_status"] === "template_only", "hermes dispatch phase-2 post-validation review template status");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_executing_now"] === false, "hermes dispatch phase-2 post-validation review not executing");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_collects_data_now"] === false, "hermes dispatch phase-2 post-validation review not collecting");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_expands_request_types_now"] === false, "hermes dispatch phase-2 post-validation review no type expand");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 post-validation review required verdict");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_default_disabled"] === true, "hermes dispatch phase-2 post-validation review default disabled");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_feature_flagged"] === true, "hermes dispatch phase-2 post-validation review feature flagged");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_default"] === false, "hermes dispatch phase-2 post-validation review not default");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 post-validation review not code review owner");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 post-validation review not validation owner");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_persists_phase_2_post_validation_review_logs"] === false, "hermes dispatch phase-2 post-validation review no review logs");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_contains_raw_prompt"] === false, "hermes dispatch phase-2 post-validation review no raw prompt");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_contains_secrets"] === false, "hermes dispatch phase-2 post-validation review no secrets");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_template_fields_are_placeholders_only"] === true, "hermes dispatch phase-2 post-validation review placeholders only");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_raw_prompt_collection_allowed"] === false, "hermes dispatch phase-2 post-validation review no prompt collection");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_secret_collection_allowed"] === false, "hermes dispatch phase-2 post-validation review no secret collection");
+  assert(realAdapters["hermes_gateway_real_dispatch_phase_2_post_validation_review_template_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "hermes dispatch phase-2 post-validation review next PR");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

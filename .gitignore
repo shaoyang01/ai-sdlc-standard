@@ -7,3 +7,4 @@ Thumbs.db
 .sdlc-runtime/
 .sdlc-runtime-test/
 
+node_modules/

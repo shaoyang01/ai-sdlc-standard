@@ -1251,9 +1251,19 @@
       "default_disabled": true,
       "feature_flagged": true,
       "requires_multiple_flags": true,
-      "review_request_types": ["review"],
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "review_request_types": [
+        "review"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "operator_approval_required": true,
       "automatic_enablement_allowed": false,
       "rollout_may_proceed_automatically": false,
@@ -1312,10 +1322,23 @@
       "default_disabled": true,
       "feature_flagged": true,
       "requires_multiple_flags": true,
-      "current_validated_request_types": ["review"],
-      "phase_2_expansion_targets": ["code_review", "validation"],
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_expansion_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "operator_approval_required": true,
       "automatic_enablement_allowed": false,
       "rollout_may_proceed_automatically": false,
@@ -1374,10 +1397,23 @@
       "default_disabled": true,
       "feature_flagged": true,
       "requires_multiple_flags": true,
-      "current_validated_request_types": ["review"],
-      "phase_2_validation_targets": ["code_review", "validation"],
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_validation_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "operator_approval_required": true,
       "automatic_enablement_allowed": false,
       "rollout_may_proceed_automatically": false,
@@ -1440,10 +1476,23 @@
       "default_disabled": true,
       "feature_flagged": true,
       "requires_multiple_flags": true,
-      "current_validated_request_types": ["review"],
-      "phase_2_operator_targets": ["code_review", "validation"],
-      "supported_request_types": ["review", "code_review", "validation"],
-      "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_operator_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
       "operator_approval_required": true,
       "automatic_enablement_allowed": false,
       "rollout_may_proceed_automatically": false,
@@ -1476,6 +1525,94 @@
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md",
         "hermes-gateway-real-dispatch-phase-2-operator-runbook.json"
       ]
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template",
+      "status": "implemented_template_only",
+      "template_only": true,
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "validates_now": false,
+      "expands_request_types_now": false,
+      "enables_feature_flags_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "adds_enablement_scripts": false,
+      "changes_ci_behavior": false,
+      "readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "rollout_plan_status_required": "plan_only",
+      "rollout_validation_checklist_status_required": "checklist_only",
+      "operator_runbook_status_required": "runbook_only",
+      "post_enablement_review_template_status_required": "template_only",
+      "phase_2_expansion_contract_status_required": "contract_only",
+      "phase_2_validation_checklist_status_required": "checklist_only",
+      "phase_2_operator_runbook_status_required": "runbook_only",
+      "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "current_rollout_plan_status": "plan_only",
+      "current_rollout_validation_checklist_status": "checklist_only",
+      "current_operator_runbook_status": "runbook_only",
+      "current_post_enablement_review_template_status": "template_only",
+      "current_phase_2_expansion_contract_status": "contract_only",
+      "current_phase_2_validation_checklist_status": "checklist_only",
+      "current_phase_2_operator_runbook_status": "runbook_only",
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_review_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "operator_approval_required": true,
+      "automatic_enablement_allowed": false,
+      "rollout_may_proceed_automatically": false,
+      "phase_2_may_proceed_automatically": false,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_code_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_phase_2_post_validation_review_logs": false,
+      "persists_phase_2_runbook_logs": false,
+      "persists_phase_2_validation_logs": false,
+      "persists_expansion_logs": false,
+      "persists_review_logs": false,
+      "persists_rollout_logs": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "template_fields_are_placeholders_only": true,
+      "raw_prompt_collection_allowed": false,
+      "raw_artifact_collection_allowed": false,
+      "secret_collection_allowed": false,
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md",
+        "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"
+      ]
     }
   ],
   "feature_flags": [
@@ -1484,7 +1621,7 @@
       "default": "shadow",
       "enabled_value": "codex",
       "effect": "Enables real Codex CLI execution for code_generation requests",
-      "runtime_effect_today": "Yes — invokes codex binary",
+      "runtime_effect_today": "Yes \u2014 invokes codex binary",
       "invokes_real_external_systems": true,
       "evidence": [
         "execution/config.ts",
@@ -1496,7 +1633,7 @@
       "default": "disabled",
       "enabled_value": "enabled",
       "effect": "Writes feedback summaries to local SQLite",
-      "runtime_effect_today": "Yes — creates .sdlc-runtime/policy-memory.sqlite",
+      "runtime_effect_today": "Yes \u2014 creates .sdlc-runtime/policy-memory.sqlite",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/policy-memory-config.ts",
@@ -1508,7 +1645,7 @@
       "default": "disabled",
       "enabled_value": "enabled",
       "effect": "Reads historical agent scores from SQLite for advisory suggestions",
-      "runtime_effect_today": "Yes — appends memory suggestions to feedback",
+      "runtime_effect_today": "Yes \u2014 appends memory suggestions to feedback",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/policy-memory-config.ts",
@@ -1520,7 +1657,7 @@
       "default": "disabled",
       "enabled_value": "shadow",
       "effect": "Enables shadow skill flow integration in contract helper",
-      "runtime_effect_today": "Yes — when enabled, attaches sidecar-only shadow integration metadata and in-memory audit trail to RuntimeResult",
+      "runtime_effect_today": "Yes \u2014 when enabled, attaches sidecar-only shadow integration metadata and in-memory audit trail to RuntimeResult",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/skill-flow-runtime-integration-config.ts"
@@ -1679,7 +1816,7 @@
       "severity": "medium",
       "why_it_matters": "Codex code_generation has runtime-routed real execution. Kimi now has a feature-flagged Gateway real dispatch path (14-layer stack: stubs -> dry-run -> audit -> executor -> command executor -> Gateway -> shadow sidecar -> runtime attachment -> real dispatch -> fallback -> observability -> guardrails), ready for controlled llm_task dispatch only (verdict: READY_WITH_CONSTRAINTS). Hermes now has a default-off Gateway real dispatch sidecar stack for review/code_review/validation with fallback policy, sanitized observability, operational guardrails, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, checklist-only rollout validation, a runbook-only operator guide, a template-only post-enablement review template, a contract-only phase-2 expansion contract defining future code_review/validation expansion targets, a checklist-only phase-2 validation checklist, and a runbook-only phase-2 operator runbook; it still does not own Gateway primary result or Runtime final_status/routing.",
       "mitigation": "Kimi Gateway real dispatch is feature-flagged and wired (READY_WITH_CONSTRAINTS). Hermes Gateway real dispatch has a runbook-only phase-2 operator runbook for operator-managed validation. Next: phase-2 post-validation review template.",
-      "recommended_pr_stage": "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template"
+      "recommended_pr_stage": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review"
     },
     {
       "risk": "Codex adapter supports only code_generation",
@@ -1697,8 +1834,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template",
-    "reason": "Hermes Gateway real dispatch has a runbook-only phase-2 operator runbook.",
-    "safety_rationale": "Post-validation review template remains non-executing and documents operator-managed Phase-2 post-validation review without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review",
+    "reason": "Hermes Gateway real dispatch has a template-only phase-2 post-validation review artifact.",
+    "safety_rationale": "Final readiness review remains non-executing and evaluates whether Phase-2 can proceed without changing defaults."
   }
 }
