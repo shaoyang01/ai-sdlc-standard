@@ -2049,7 +2049,10 @@
       "contains_raw_artifacts": false,
       "contains_secrets": false,
       "attach_contract": {
-        "may_attach_for_request_types": ["code_review", "validation"],
+        "may_attach_for_request_types": [
+          "code_review",
+          "validation"
+        ],
         "requires_all_hermes_flags_explicitly_enabled": true,
         "requires_operator_approval": true,
         "sidecar_mode_only": true,
@@ -2143,7 +2146,9 @@
         "review_only Phase-2 final readiness review",
         "plan_only Phase-2 controlled enablement plan",
         "contract_only Phase-2 enablement guard contract",
-        "plan_only Phase-2 shadow enablement implementation plan"
+        "plan_only Phase-2 shadow enablement implementation plan",
+        "contract_only Phase-2 shadow enablement contract",
+        "test_plan_only Phase-2 shadow enablement test plan"
       ],
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.ts",
@@ -2151,13 +2156,7 @@
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md",
         "hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"
       ],
-      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract",
-      "evidence": [
-        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.ts",
-        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"
-      ]
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract"
     },
     {
       "name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan",
@@ -2324,7 +2323,228 @@
         "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md",
         "hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json"
       ],
-      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract"
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract"
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract",
+      "status": "fixture_contract_only",
+      "fixture_contract_only": true,
+      "executing_now": false,
+      "implements_now": false,
+      "adds_real_implementation_fixtures_now": false,
+      "adds_real_implementation_tests_now": false,
+      "enables_feature_flags_now": false,
+      "expands_request_types_now": false,
+      "validates_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "changes_hermes_dispatch_eligibility_now": false,
+      "adds_enablement_scripts": false,
+      "changes_ci_behavior": false,
+      "runtime_active_by_default": false,
+      "wired_to_gateway": false,
+      "wired_to_runtime": false,
+      "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_shadow_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "operator_approval_required": true,
+      "automatic_enablement_allowed": false,
+      "rollout_may_proceed_automatically": false,
+      "phase_2_may_proceed_automatically": false,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_code_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_enablement_logs": false,
+      "persists_validation_logs": false,
+      "persists_review_logs": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "fixture_groups": [
+        "safe_code_review_request",
+        "safe_validation_request",
+        "unsupported_llm_task_request",
+        "unsupported_code_generation_request",
+        "unsupported_bugfix_request",
+        "missing_gateway_real_dispatch_flag",
+        "missing_gateway_integration_flag",
+        "missing_cli_command_execution_flag",
+        "missing_operator_approval",
+        "unsafe_metadata_request",
+        "dispatcher_exception_result",
+        "sanitization_failure_result"
+      ],
+      "required_fixture_shapes": {
+        "safe_code_review_request": {
+          "description": "Sanitized code_review request fixture",
+          "request_type": "code_review",
+          "prompt": "sanitized prompt summary only",
+          "artifacts": "sanitized artifact summary only",
+          "contains_raw_prompt": false,
+          "contains_raw_artifacts": false,
+          "contains_secrets": false,
+          "expected_behavior": "sidecar attach allowed only when all flags and operator approval are present",
+          "sidecar_field": "hermes_gateway_real_dispatch",
+          "must_not_change_gateway_primary_result": true,
+          "must_not_change_gateway_final_result": true,
+          "must_not_change_runtime_final_status": true,
+          "must_not_change_runtime_routing": true
+        },
+        "safe_validation_request": {
+          "description": "Sanitized validation request fixture",
+          "request_type": "validation",
+          "prompt": "sanitized validation summary only",
+          "artifacts": "sanitized artifact summary only",
+          "contains_raw_prompt": false,
+          "contains_raw_artifacts": false,
+          "contains_secrets": false,
+          "expected_behavior": "sidecar attach allowed only when all flags and operator approval are present",
+          "sidecar_field": "hermes_gateway_real_dispatch",
+          "must_not_change_gateway_primary_result": true,
+          "must_not_change_gateway_final_result": true,
+          "must_not_change_runtime_final_status": true,
+          "must_not_change_runtime_routing": true
+        },
+        "unsupported_request": {
+          "description": "Unsupported request type fixture",
+          "request_types": [
+            "llm_task",
+            "code_generation",
+            "bugfix"
+          ],
+          "expected_behavior": "sidecar omitted",
+          "gateway_primary_result": "unchanged",
+          "gateway_final_result": "unchanged",
+          "runtime_final_status": "unchanged",
+          "runtime_routing": "unchanged"
+        },
+        "missing_flag_request": {
+          "description": "Missing one required Hermes flag fixture",
+          "flags_missing_one_of": [
+            "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+            "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+            "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+          ],
+          "expected_behavior": "sidecar omitted",
+          "dispatcher_call_required": false
+        },
+        "missing_operator_approval": {
+          "description": "Missing operator approval fixture",
+          "flags": "all required flags present",
+          "operator_approval": false,
+          "expected_behavior": "sidecar omitted"
+        },
+        "unsafe_metadata_request": {
+          "description": "Unsafe metadata fixture",
+          "metadata": "marked unsafe",
+          "expected_behavior": "sidecar omitted",
+          "raw_unsafe_payload_must_not_be_stored": true
+        },
+        "dispatcher_exception_result": {
+          "description": "Dispatcher throws exception fixture",
+          "dispatcher": "fake dispatcher throws",
+          "expected_behavior": "sidecar omitted",
+          "primary_gateway_result_preserved": true
+        },
+        "sanitization_failure_result": {
+          "description": "Sanitization fails fixture",
+          "sanitizer": "fake sanitizer fails",
+          "expected_behavior": "sidecar omitted",
+          "raw_payload_must_not_be_retained": true
+        }
+      },
+      "fixture_safety_rules": [
+        "Fixtures must be synthetic.",
+        "Fixtures must be sanitized.",
+        "Fixtures must not contain real prompts.",
+        "Fixtures must not contain raw artifacts.",
+        "Fixtures must not contain secrets.",
+        "Fixtures must not contain credentials or tokens.",
+        "Fixtures must not contain stdout/stderr/full CLI output.",
+        "Fixtures must not contain customer data.",
+        "Fixtures must not read environment variables.",
+        "Fixtures must not read real API keys.",
+        "Fixtures must not invoke real Hermes CLI.",
+        "Fixtures must not spawn external processes.",
+        "Fixtures must not persist enablement/review/validation/audit/observability/guardrail logs.",
+        "Fixtures must preserve Gateway primary/final result expectations.",
+        "Fixtures must preserve Runtime final_status/routing expectations."
+      ],
+      "prohibited_fixture_data": [
+        "raw prompts",
+        "raw artifacts",
+        "secrets",
+        "credentials",
+        "tokens",
+        "customer data",
+        "stdout",
+        "stderr",
+        "full CLI output",
+        "real API keys",
+        "real repository-private payloads",
+        "unsanitized Hermes responses",
+        "unsanitized warning text",
+        "persisted audit logs",
+        "persisted observability logs",
+        "persisted guardrail logs"
+      ],
+      "required_prerequisites": [
+        "READY_WITH_CONSTRAINTS readiness review",
+        "plan_only controlled rollout plan",
+        "checklist_only rollout validation checklist",
+        "runbook_only operator runbook",
+        "template_only post-enablement review template",
+        "contract_only Phase-2 expansion contract",
+        "checklist_only Phase-2 validation checklist",
+        "runbook_only Phase-2 operator runbook",
+        "template_only Phase-2 post-validation review template",
+        "review_only Phase-2 final readiness review",
+        "plan_only Phase-2 controlled enablement plan",
+        "contract_only Phase-2 enablement guard contract",
+        "plan_only Phase-2 shadow enablement implementation plan",
+        "contract_only Phase-2 shadow enablement contract",
+        "test_plan_only Phase-2 shadow enablement test plan"
+      ],
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md",
+        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"
+      ],
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract"
     }
   ],
   "feature_flags": [
@@ -2546,8 +2766,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract",
-    "reason": "Hermes Gateway real dispatch has a test-plan-only phase-2 shadow enablement test plan.",
-    "safety_rationale": "Phase-2 shadow enablement test plan remains non-executing and non-enabling."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract",
+    "reason": "Hermes Gateway real dispatch has a fixture-contract-only phase-2 shadow enablement fixture contract.",
+    "safety_rationale": "Phase-2 shadow enablement fixture contract remains non-executing and non-enabling."
   }
 }
