@@ -222,7 +222,11 @@
         "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
         "tests/hermes-gateway-real-dispatch-operator-runbook.test.ts",
         "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
-        "hermes-gateway-real-dispatch-operator-runbook.json"
+        "hermes-gateway-real-dispatch-operator-runbook.json",
+        "execution/hermes-gateway-real-dispatch-post-enablement-review-template.ts",
+        "tests/hermes-gateway-real-dispatch-post-enablement-review-template.test.ts",
+        "HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
+        "hermes-gateway-real-dispatch-post-enablement-review-template.json"
       ],
       "dry_run_harness": "implemented_no_process_spawn",
       "executor_contract": "implemented_contract_only",
@@ -748,7 +752,71 @@
       "gateway_real_dispatch_operator_runbook_contains_raw_prompt": false,
       "gateway_real_dispatch_operator_runbook_contains_raw_artifacts": false,
       "gateway_real_dispatch_operator_runbook_contains_secrets": false,
-      "gateway_real_dispatch_operator_runbook_recommended_next_pr": "Hermes Gateway Real Dispatch Post-Enablement Review Template"
+      "gateway_real_dispatch_operator_runbook_recommended_next_pr": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
+      "gateway_real_dispatch_post_enablement_review_template": "implemented_template_only",
+      "gateway_real_dispatch_post_enablement_review_template_status": "template_only",
+      "gateway_real_dispatch_post_enablement_review_template_executing_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_collects_data_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_data_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_enables_feature_flags_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_gateway_behavior_now": false,
+      "gateway_real_dispatch_post_enablement_review_template_adds_enablement_scripts": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_ci_behavior": false,
+      "gateway_real_dispatch_post_enablement_review_template_readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_post_enablement_review_template_rollout_plan_status_required": "plan_only",
+      "gateway_real_dispatch_post_enablement_review_template_rollout_validation_checklist_status_required": "checklist_only",
+      "gateway_real_dispatch_post_enablement_review_template_operator_runbook_status_required": "runbook_only",
+      "gateway_real_dispatch_post_enablement_review_template_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "gateway_real_dispatch_post_enablement_review_template_current_rollout_plan_status": "plan_only",
+      "gateway_real_dispatch_post_enablement_review_template_current_rollout_validation_checklist_status": "checklist_only",
+      "gateway_real_dispatch_post_enablement_review_template_current_operator_runbook_status": "runbook_only",
+      "gateway_real_dispatch_post_enablement_review_template_default_disabled": true,
+      "gateway_real_dispatch_post_enablement_review_template_feature_flagged": true,
+      "gateway_real_dispatch_post_enablement_review_template_requires_multiple_flags": true,
+      "gateway_real_dispatch_post_enablement_review_template_required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_post_enablement_review_template_review_request_types": ["review"],
+      "gateway_real_dispatch_post_enablement_review_template_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_post_enablement_review_template_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_post_enablement_review_template_operator_approval_required": true,
+      "gateway_real_dispatch_post_enablement_review_template_automatic_enablement_allowed": false,
+      "gateway_real_dispatch_post_enablement_review_template_rollout_may_proceed_automatically": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_gateway_primary_dispatch": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_gateway_final_result": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_final_status": false,
+      "gateway_real_dispatch_post_enablement_review_template_changes_routing": false,
+      "gateway_real_dispatch_post_enablement_review_template_affects_primary_gateway_result": false,
+      "gateway_real_dispatch_post_enablement_review_template_makes_hermes_default": false,
+      "gateway_real_dispatch_post_enablement_review_template_makes_hermes_final_review_owner": false,
+      "gateway_real_dispatch_post_enablement_review_template_makes_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_post_enablement_review_template_writes_files": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_review_logs": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_runbook_logs": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_validation_logs": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_rollout_logs": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_audit": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_observability": false,
+      "gateway_real_dispatch_post_enablement_review_template_persists_guardrails": false,
+      "gateway_real_dispatch_post_enablement_review_template_contains_raw_prompt": false,
+      "gateway_real_dispatch_post_enablement_review_template_contains_raw_artifacts": false,
+      "gateway_real_dispatch_post_enablement_review_template_contains_secrets": false,
+      "gateway_real_dispatch_post_enablement_review_template_template_fields_are_placeholders_only": true,
+      "gateway_real_dispatch_post_enablement_review_template_raw_prompt_collection_allowed": false,
+      "gateway_real_dispatch_post_enablement_review_template_raw_artifact_collection_allowed": false,
+      "gateway_real_dispatch_post_enablement_review_template_secret_collection_allowed": false,
+      "gateway_real_dispatch_post_enablement_review_template_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Expansion Contract"
     }
   ],
   "request_types": [
@@ -968,8 +1036,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
-    "reason": "Hermes Gateway real dispatch has a runbook-only operator guide for manual enablement and rollback.",
-    "safety_rationale": "Template remains non-executing and documents post-enable review criteria without changing defaults."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Expansion Contract",
+    "reason": "Hermes Gateway real dispatch has a template-only post-enablement review artifact.",
+    "safety_rationale": "Any expansion beyond review-only post-enablement must be separately contracted and remain default-off."
   }
 }

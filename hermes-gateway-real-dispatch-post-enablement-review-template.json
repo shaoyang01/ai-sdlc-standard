@@ -1,0 +1,656 @@
+{
+  "name": "Hermes Gateway Real Dispatch Post-Enablement Review Template",
+  "adapter": "hermes",
+  "scope": "gateway_real_dispatch_sidecar_post_enablement_review_template",
+  "status": "template_only",
+  "template_only": true,
+  "executing_now": false,
+  "collects_data_now": false,
+  "persists_data_now": false,
+  "enables_feature_flags_now": false,
+  "changes_runtime_behavior_now": false,
+  "changes_gateway_behavior_now": false,
+  "adds_enablement_scripts": false,
+  "changes_ci_behavior": false,
+  "readiness_verdict_required": "READY_WITH_CONSTRAINTS",
+  "rollout_plan_status_required": "plan_only",
+  "rollout_validation_checklist_status_required": "checklist_only",
+  "operator_runbook_status_required": "runbook_only",
+  "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+  "current_rollout_plan_status": "plan_only",
+  "current_rollout_validation_checklist_status": "checklist_only",
+  "current_operator_runbook_status": "runbook_only",
+  "gateway_field": "hermes_gateway_real_dispatch",
+  "fallback_policy_field": "fallbackPolicy",
+  "observability_field": "observability",
+  "guardrails_field": "guardrails",
+  "default_disabled": true,
+  "feature_flagged": true,
+  "requires_multiple_flags": true,
+  "required_flags": [
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+  ],
+  "review_request_types": ["review"],
+  "supported_request_types": [
+    "review",
+    "code_review",
+    "validation"
+  ],
+  "unsupported_request_types": [
+    "llm_task",
+    "code_generation",
+    "bugfix"
+  ],
+  "operator_approval_required": true,
+  "automatic_enablement_allowed": false,
+  "rollout_may_proceed_automatically": false,
+  "changes_gateway_primary_dispatch": false,
+  "changes_gateway_final_result": false,
+  "changes_runtime_final_status": false,
+  "changes_runtime_routing": false,
+  "affects_primary_gateway_result": false,
+  "makes_hermes_default": false,
+  "makes_hermes_final_review_owner": false,
+  "makes_hermes_final_validation_owner": false,
+  "writes_files": false,
+  "persists_review_logs": false,
+  "persists_runbook_logs": false,
+  "persists_validation_logs": false,
+  "persists_rollout_logs": false,
+  "persists_audit": false,
+  "persists_observability": false,
+  "persists_guardrails": false,
+  "contains_raw_prompt": false,
+  "contains_raw_artifacts": false,
+  "contains_secrets": false,
+  "sections": [
+    {
+      "id": "review_summary",
+      "category": "summary",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Summarize the operator-managed enablement review without storing raw prompts, artifacts, or secrets.",
+      "fields": [
+        {
+          "id": "review_date_placeholder",
+          "label": "Review date placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "operator_approval_reference_placeholder",
+          "label": "Operator approval reference placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "environment_label_placeholder",
+          "label": "Environment label placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Review summary is sanitized.",
+        "Operator approval reference is present."
+      ],
+      "fail_criteria": [
+        "Summary includes raw prompt, artifact, secret, stdout, or stderr."
+      ]
+    },
+    {
+      "id": "scope_confirmation",
+      "category": "scope",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Confirm reviewed scope remains review-only and sidecar-only.",
+      "fields": [
+        {
+          "id": "request_type_scope_placeholder",
+          "label": "Request type scope placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "sidecar_scope_placeholder",
+          "label": "Sidecar scope placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "unsupported_request_type_check_placeholder",
+          "label": "Unsupported request type check placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Reviewed request type is review.",
+        "Hermes remains sidecar metadata only.",
+        "Unsupported request types remain omitted."
+      ],
+      "fail_criteria": [
+        "code_review or validation is reviewed before phase-2 approval.",
+        "llm_task, code_generation, or bugfix invokes Hermes dispatcher."
+      ]
+    },
+    {
+      "id": "sidecar_attach_omit_behavior",
+      "category": "sidecar_behavior",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Review attach and omit behavior for safe, disabled, unsupported, unsafe, and exception paths.",
+      "fields": [
+        {
+          "id": "attached_success_count_placeholder",
+          "label": "Attached success count placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "omitted_disabled_count_placeholder",
+          "label": "Omitted disabled count placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "omitted_unsupported_count_placeholder",
+          "label": "Omitted unsupported count placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "omitted_unsafe_count_placeholder",
+          "label": "Omitted unsafe count placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "omitted_exception_count_placeholder",
+          "label": "Omitted exception count placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Safe review requests attach sidecar metadata.",
+        "Disabled, unsupported, and exception paths omit sidecar."
+      ],
+      "fail_criteria": [
+        "Unsafe metadata attaches.",
+        "Disabled or unsupported paths call dispatcher."
+      ]
+    },
+    {
+      "id": "gateway_runtime_safety",
+      "category": "safety",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Confirm Gateway and Runtime behavior remain independent of Hermes sidecar output.",
+      "fields": [
+        {
+          "id": "gateway_primary_result_check_placeholder",
+          "label": "Gateway primary result check placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "gateway_final_result_check_placeholder",
+          "label": "Gateway final result check placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "runtime_final_status_check_placeholder",
+          "label": "Runtime final_status check placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "runtime_routing_check_placeholder",
+          "label": "Runtime routing check placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Gateway primary result is unchanged.",
+        "Gateway final result is unchanged.",
+        "Runtime final_status and routing are unchanged."
+      ],
+      "fail_criteria": [
+        "Hermes sidecar output changes Gateway primary/final result.",
+        "Hermes sidecar output changes Runtime final_status or routing."
+      ]
+    },
+    {
+      "id": "fallback_policy_review",
+      "category": "sidecar_behavior",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Review fallbackPolicy reason/action values without copying raw payloads.",
+      "fields": [
+        {
+          "id": "fallback_reason_distribution_placeholder",
+          "label": "Fallback reason distribution placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "fallback_action_distribution_placeholder",
+          "label": "Fallback action distribution placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "fallbackPolicy contains expected reason/action values only.",
+        "No raw prompt/artifact/secret is present."
+      ],
+      "fail_criteria": [
+        "fallbackPolicy includes raw text or unbounded payloads."
+      ]
+    },
+    {
+      "id": "observability_review",
+      "category": "observability",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Review observability outcomes and warning counts only.",
+      "fields": [
+        {
+          "id": "observability_outcome_distribution_placeholder",
+          "label": "Observability outcome distribution placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "warning_count_summary_placeholder",
+          "label": "Warning count summary placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "has_warnings_summary_placeholder",
+          "label": "Has warnings summary placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Observability uses counts/booleans only.",
+        "Warning text is not copied."
+      ],
+      "fail_criteria": [
+        "Warning text, raw prompt, artifact, secret, stdout, or stderr is copied."
+      ]
+    },
+    {
+      "id": "guardrails_review",
+      "category": "guardrails",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Review guardrail decisions and checks without storing raw evidence.",
+      "fields": [
+        {
+          "id": "guardrail_decision_distribution_placeholder",
+          "label": "Guardrail decision distribution placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "guardrail_reject_reason_summary_placeholder",
+          "label": "Guardrail reject reason summary placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "guardrail_checks_summary_placeholder",
+          "label": "Guardrail checks summary placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Guardrails allow only safe bounded metadata.",
+        "Rejects are explainable using decision/check fields."
+      ],
+      "fail_criteria": [
+        "Guardrails allow unsafe metadata.",
+        "Guardrail review requires raw prompt/artifact/secret."
+      ]
+    },
+    {
+      "id": "rollback_and_escalation_review",
+      "category": "rollback",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Record whether rollback or escalation criteria were triggered using sanitized placeholders only.",
+      "fields": [
+        {
+          "id": "rollback_triggered_placeholder",
+          "label": "Rollback triggered placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "rollback_reason_placeholder",
+          "label": "Rollback reason placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "escalation_triggered_placeholder",
+          "label": "Escalation triggered placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "escalation_reason_placeholder",
+          "label": "Escalation reason placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Rollback/escalation decisions are based on sanitized criteria.",
+        "No raw prompt/artifact/secret is persisted."
+      ],
+      "fail_criteria": [
+        "Rollback evidence requires raw sensitive data.",
+        "Escalation proposes Hermes default or primary Gateway ownership without contract."
+      ]
+    },
+    {
+      "id": "post_enablement_decision",
+      "category": "decision",
+      "status": "template",
+      "executing_now": false,
+      "collects_data_now": false,
+      "persists_data_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "description": "Record sanitized review decision for whether to remain in current phase, roll back, or propose separate phase-2 contract.",
+      "fields": [
+        {
+          "id": "review_decision_placeholder",
+          "label": "Review decision placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "follow_up_owner_placeholder",
+          "label": "Follow-up owner placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        },
+        {
+          "id": "follow_up_pr_placeholder",
+          "label": "Follow-up PR placeholder",
+          "required": true,
+          "placeholder_only": true,
+          "collects_data_now": false,
+          "persists_data_now": false,
+          "contains_raw_prompt_allowed": false,
+          "contains_raw_artifacts_allowed": false,
+          "contains_secrets_allowed": false
+        }
+      ],
+      "pass_criteria": [
+        "Decision is one of remain_current_phase, rollback, or propose_phase_2_contract.",
+        "Any phase-2 expansion is routed through a separate contract."
+      ],
+      "fail_criteria": [
+        "Decision enables automatic expansion.",
+        "Decision makes Hermes final review/validation owner without separate contract."
+      ]
+    }
+  ],
+  "required_section_count": 9,
+  "template_fields_are_placeholders_only": true,
+  "raw_prompt_collection_allowed": false,
+  "raw_artifact_collection_allowed": false,
+  "secret_collection_allowed": false,
+  "review_constraints": [
+    "This PR is template-only and does not collect post-enablement data.",
+    "This PR does not persist review, validation, rollout, audit, observability, guardrail, or runbook logs.",
+    "Template fields are placeholders only.",
+    "No raw prompts, raw artifacts, secrets, stdout, or stderr may be copied into the review.",
+    "Hermes remains Gateway sidecar metadata only.",
+    "Hermes remains default-off and requires explicit flags.",
+    "Initial post-enablement review scope is review-only.",
+    "Expansion to code_review and validation requires a separate contract for phase-2 expansion.",
+    "Hermes must not become final review or validation owner without a separate contract.",
+    "Runtime final_status and routing must not depend on Hermes sidecar output.",
+    "No automatic rollout or automatic enablement is allowed."
+  ],
+  "non_persisted_signals_allowed": [
+    "fallbackPolicy.reason",
+    "fallbackPolicy.action",
+    "observability.outcome",
+    "observability.warningCount",
+    "observability.hasWarnings",
+    "guardrails.decision",
+    "guardrails.allowed",
+    "guardrails.warningCount",
+    "guardrails.checks"
+  ],
+  "disallowed_evidence": [
+    "raw prompts",
+    "raw artifacts",
+    "secrets",
+    "stdout",
+    "stderr",
+    "full Hermes CLI output",
+    "full warning text",
+    "customer data",
+    "credentials",
+    "tokens"
+  ],
+  "review_outcomes": [
+    "remain_current_phase",
+    "rollback",
+    "propose_phase_2_contract"
+  ],
+  "evidence": [
+    "execution/hermes-gateway-real-dispatch-readiness-review.ts",
+    "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
+    "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
+    "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+    "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+    "hermes-gateway-real-dispatch-readiness-review.json",
+    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+    "hermes-gateway-real-dispatch-operator-runbook.json",
+    "execution/hermes-gateway-real-dispatch-post-enablement-review-template.ts",
+    "tests/hermes-gateway-real-dispatch-post-enablement-review-template.test.ts",
+    "HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
+    "hermes-gateway-real-dispatch-post-enablement-review-template.json"
+  ],
+  "recommended_next_pr": {
+    "title": "Hermes Gateway Real Dispatch Phase-2 Expansion Contract",
+    "safety_rationale": "Any expansion beyond review-only post-enablement must be separately contracted and remain default-off."
+  }
+}
