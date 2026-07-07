@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist", "next PR Hermes phase-2 validation checklist");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "next PR Hermes phase-2 operator runbook");
   // Kimi Gateway Real Dispatch Fallback Policy
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
@@ -150,7 +150,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist", "next PR Hermes phase-2 validation checklist");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "next PR Hermes phase-2 operator runbook");
   // Kimi Gateway Real Dispatch Contract
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
@@ -987,8 +987,45 @@ async function test() {
   assert(hgPhase2Ev.includes("tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts"), "hermes gateway phase-2 expansion contract evidence test");
   assert(hgPhase2Ev.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes gateway phase-2 expansion contract evidence md");
   assert(hgPhase2Ev.includes("hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes gateway phase-2 expansion contract evidence json");
+  // Hermes Gateway Real Dispatch Phase-2 Validation Checklist
+  assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Validation Checklist"), "has Hermes Gateway phase-2 validation checklist");
+  const hgVChecklistCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist");
+  assert(hgVChecklistCap !== undefined && hgVChecklistCap["status"] === "implemented_checklist_only", "hermes gateway phase-2 validation checklist status");
+  assert(hgVChecklistCap["checklist_only"] === true, "hermes gateway phase-2 validation checklist only");
+  assert(hgVChecklistCap["executing_now"] === false, "hermes gateway phase-2 validation checklist not executing");
+  assert(hgVChecklistCap["validates_now"] === false, "hermes gateway phase-2 validation checklist not validating");
+  assert(hgVChecklistCap["expands_request_types_now"] === false, "hermes gateway phase-2 validation checklist no request type expansion");
+  assert(hgVChecklistCap["enables_feature_flags_now"] === false, "hermes gateway phase-2 validation checklist no flags");
+  assert(hgVChecklistCap["changes_runtime_behavior_now"] === false, "hermes gateway phase-2 validation checklist no runtime behavior");
+  assert(hgVChecklistCap["changes_gateway_behavior_now"] === false, "hermes gateway phase-2 validation checklist no gateway behavior");
+  assert(hgVChecklistCap["readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes gateway phase-2 validation checklist required verdict");
+  assert(hgVChecklistCap["phase_2_expansion_contract_status_required"] === "contract_only", "hermes gateway phase-2 validation checklist required phase-2 contract");
+  assert(hgVChecklistCap["default_disabled"] === true, "hermes gateway phase-2 validation checklist default disabled");
+  assert(hgVChecklistCap["feature_flagged"] === true, "hermes gateway phase-2 validation checklist feature flagged");
+  assert(hgVChecklistCap["requires_multiple_flags"] === true, "hermes gateway phase-2 validation checklist multiple flags");
+  const hgVChecklistTargets = hgVChecklistCap["phase_2_validation_targets"] as string[];
+  assert(Array.isArray(hgVChecklistTargets) && hgVChecklistTargets.includes("code_review") && hgVChecklistTargets.includes("validation"), "hermes gateway phase-2 validation checklist targets");
+  const hgVChecklistSup = hgVChecklistCap["supported_request_types"] as string[];
+  assert(Array.isArray(hgVChecklistSup) && hgVChecklistSup.includes("review") && hgVChecklistSup.includes("code_review") && hgVChecklistSup.includes("validation"), "hermes gateway phase-2 validation checklist supported");
+  assert(hgVChecklistCap["operator_approval_required"] === true, "hermes gateway phase-2 validation checklist operator approval");
+  assert(hgVChecklistCap["automatic_enablement_allowed"] === false, "hermes gateway phase-2 validation checklist no automatic enablement");
+  assert(hgVChecklistCap["phase_2_may_proceed_automatically"] === false, "hermes gateway phase-2 validation checklist no automatic phase-2");
+  assert(hgVChecklistCap["changes_gateway_primary_dispatch"] === false, "hermes gateway phase-2 validation checklist no primary dispatch");
+  assert(hgVChecklistCap["changes_gateway_final_result"] === false, "hermes gateway phase-2 validation checklist no gateway final");
+  assert(hgVChecklistCap["makes_hermes_default"] === false, "hermes gateway phase-2 validation checklist not default");
+  assert(hgVChecklistCap["makes_hermes_final_code_review_owner"] === false, "hermes gateway phase-2 validation checklist not code review owner");
+  assert(hgVChecklistCap["makes_hermes_final_validation_owner"] === false, "hermes gateway phase-2 validation checklist not validation owner");
+  assert(hgVChecklistCap["persists_phase_2_validation_logs"] === false, "hermes gateway phase-2 validation checklist no phase-2 validation logs");
+  assert(hgVChecklistCap["contains_raw_prompt"] === false, "hermes gateway phase-2 validation checklist no raw prompt");
+  assert(hgVChecklistCap["contains_secrets"] === false, "hermes gateway phase-2 validation checklist no secrets");
+  assert(hgVChecklistCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "hermes gateway phase-2 validation checklist next PR");
+  const hgVChecklistEv = hgVChecklistCap["evidence"] as string[];
+  assert(hgVChecklistEv.includes("execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts"), "hermes gateway phase-2 validation checklist evidence module");
+  assert(hgVChecklistEv.includes("tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts"), "hermes gateway phase-2 validation checklist evidence test");
+  assert(hgVChecklistEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes gateway phase-2 validation checklist evidence md");
+  assert(hgVChecklistEv.includes("hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes gateway phase-2 validation checklist evidence json");
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist", "next PR Hermes phase-2 validation checklist");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "next PR Hermes phase-2 operator runbook");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");

@@ -686,6 +686,39 @@ async function test() {
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-post-enablement-review-template.test.ts"), "hermes evidence post-enablement template test");
   assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md"), "hermes evidence post-enablement template md");
   assert(hermesEvidence.includes("hermes-gateway-real-dispatch-post-enablement-review-template.json"), "hermes evidence post-enablement template json");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts"), "hermes evidence phase-2 expansion contract module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts"), "hermes evidence phase-2 expansion contract test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes evidence phase-2 expansion contract md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes evidence phase-2 expansion contract json");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist"] === "implemented_checklist_only", "hermes dispatch phase-2 validation checklist");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_status"] === "checklist_only", "hermes dispatch phase-2 validation checklist status");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_executing_now"] === false, "hermes dispatch phase-2 validation checklist not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_validates_now"] === false, "hermes dispatch phase-2 validation checklist not validating");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_expands_request_types_now"] === false, "hermes dispatch phase-2 validation checklist no request type expansion");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_enables_feature_flags_now"] === false, "hermes dispatch phase-2 validation checklist no flags");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_readiness_verdict_required"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 validation checklist required verdict");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_phase_2_expansion_contract_status_required"] === "contract_only", "hermes dispatch phase-2 validation checklist required phase-2 contract");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_default_disabled"] === true, "hermes dispatch phase-2 validation checklist default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_feature_flagged"] === true, "hermes dispatch phase-2 validation checklist feature flagged");
+  const hgVChecklistTargets = hermes["gateway_real_dispatch_phase_2_validation_checklist_phase_2_validation_targets"] as string[];
+  assert(Array.isArray(hgVChecklistTargets) && hgVChecklistTargets.includes("code_review") && hgVChecklistTargets.includes("validation"), "hermes dispatch phase-2 validation checklist targets");
+  const hgVChecklistSupported = hermes["gateway_real_dispatch_phase_2_validation_checklist_supported_request_types"] as string[];
+  assert(Array.isArray(hgVChecklistSupported) && hgVChecklistSupported.includes("review") && hgVChecklistSupported.includes("code_review") && hgVChecklistSupported.includes("validation"), "hermes dispatch phase-2 validation checklist supported");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_operator_approval_required"] === true, "hermes dispatch phase-2 validation checklist operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 validation checklist no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 validation checklist no automatic phase-2");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 validation checklist no primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_makes_hermes_default"] === false, "hermes dispatch phase-2 validation checklist not default");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 validation checklist not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 validation checklist not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_persists_phase_2_validation_logs"] === false, "hermes dispatch phase-2 validation checklist no phase-2 validation logs");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_contains_raw_prompt"] === false, "hermes dispatch phase-2 validation checklist no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_contains_secrets"] === false, "hermes dispatch phase-2 validation checklist no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "hermes dispatch phase-2 validation checklist next PR");
+  assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts"), "hermes evidence phase-2 validation checklist module");
+  assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts"), "hermes evidence phase-2 validation checklist test");
+  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes evidence phase-2 validation checklist md");
+  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes evidence phase-2 validation checklist json");
   console.log("");
 
   // ── Test 3: Request type alignment ──
@@ -758,7 +791,7 @@ async function test() {
 
   // ── Test 8: Recommended next PR ──
   console.log("Test 8: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist", "next PR phase-2 validation checklist");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "next PR phase-2 operator runbook");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
