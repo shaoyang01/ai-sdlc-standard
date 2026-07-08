@@ -23,9 +23,10 @@ async function test() {
 
   // ── Test 1: Flow completes without real adapter flags ──
   console.log("Test 1: Flow completes in default shadow mode");
+  const testEnv: Record<string, string | undefined> = {};
   let result;
   try {
-    result = await run("build a user registration form with email validation", { env: {} });
+    result = await run("build a user registration form with email validation", { env: testEnv });
     assert(true, "run() completed without throwing");
   } catch (e) {
     assert(false, `run() threw: ${e}`);
@@ -84,9 +85,9 @@ async function test() {
 
   // ── Test 9: Default mode requires no real adapter flags ──
   console.log("Test 9: No real adapter flags required");
-  assert(process.env.SDLC_EXECUTION_MODE !== "codex", "SDLC_EXECUTION_MODE is not codex");
-  assert(process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH !== "enabled", "Kimi real dispatch flag not enabled");
-  assert(process.env.SDLC_HERMES_GATEWAY_REAL_DISPATCH !== "enabled", "Hermes real dispatch flag not enabled");
+  assert(testEnv.SDLC_EXECUTION_MODE !== "codex", "SDLC_EXECUTION_MODE is not codex");
+  assert(testEnv.SDLC_KIMI_GATEWAY_REAL_DISPATCH !== "enabled", "Kimi real dispatch flag not enabled");
+  assert(testEnv.SDLC_HERMES_GATEWAY_REAL_DISPATCH !== "enabled", "Hermes real dispatch flag not enabled");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
