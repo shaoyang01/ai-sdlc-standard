@@ -85,6 +85,21 @@ This cleanup is proposed only; do not move or delete files in this PR.
 - No file moves in this PR.
 - No deletion of existing evidence files in this PR.
 
+## Minimal E2E Smoke Test Result
+
+The minimal end-to-end SDLC flow smoke test passed in default shadow/mock mode.
+
+Validated:
+
+- `requirement-summary` entry step
+- `tech-design` planning step
+- `implementation` step
+- `code-review`/`review` representation
+- `validation` step
+- no real adapter flags required
+- no Hermes final ownership
+- no runtime skill inference for implementation
+
 ## Recommended Next Step
 
 Review this consolidation, then decide whether to:
