@@ -2798,7 +2798,7 @@
         "execution/gateway.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"
       ],
-      "gateway_real_dispatch_phase_2_shadow_enablement_implementation_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+      "gateway_real_dispatch_phase_2_shadow_enablement_implementation_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",
       "gateway_real_dispatch_phase_2_shadow_enablement_validation": "implemented_phase_2_shadow_sidecar_validation_only",
       "gateway_real_dispatch_phase_2_shadow_enablement_validation_name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",
       "gateway_real_dispatch_phase_2_shadow_enablement_validation_adapter": "hermes",
@@ -3141,7 +3141,354 @@
       ],
       "gateway_real_dispatch_phase_2_shadow_enablement_validation_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
       "gateway_real_dispatch_phase_2_shadow_enablement_validation_feature_flagged": true,
-      "gateway_real_dispatch_phase_2_shadow_enablement_validation_requires_multiple_flags": true
+      "gateway_real_dispatch_phase_2_shadow_enablement_validation_requires_multiple_flags": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance": "operator_acceptance_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_adapter": "hermes",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_scope": "gateway_real_dispatch_sidecar_phase_2_shadow_enablement_operator_acceptance",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_status": "operator_acceptance_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_only": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_executing_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_executes_operator_actions_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_enables_feature_flags_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_expands_request_types_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_runtime_behavior_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_gateway_primary_dispatch_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_gateway_final_result_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_hermes_dispatch_eligibility_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_makes_hermes_default_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_makes_hermes_final_owner_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_adds_package_script_flag_enablement_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_ci_behavior_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_logs_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_implementation_status": "implemented_phase_2_shadow_sidecar_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_validation_status": "implemented_phase_2_shadow_sidecar_validation_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_current_validated_request_types": [
+        "review"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_phase_2_shadow_targets": [
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_approval_required": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_required": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_action_executed": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_default_disabled": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_feature_flagged": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_requires_multiple_flags": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_sidecar_only": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_gateway_primary_result_preserved": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_gateway_final_result_preserved": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_runtime_final_status_preserved": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_runtime_routing_preserved": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_review_owner": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_code_review_owner": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_validation_owner": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_raw_prompt": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_raw_artifacts": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_secrets": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_stdout_stderr_or_full_cli_output": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_full_warning_text": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_readiness_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_audit_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_rollback_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_guardrail_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_observability_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_review_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_validation_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_operator_acceptance_logs": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_checklist": [
+        {
+          "name": "implementation artifact present",
+          "expected_outcome": "operator_accepts_implementation_present",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "validation artifact present",
+          "expected_outcome": "operator_accepts_validation_present",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "disabled path validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "missing flag paths validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "missing operator approval validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "unsupported request types validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "unsafe metadata validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "sanitization failure validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "dispatcher exception validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "guardrail refusal validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "rollback required validated",
+          "expected_outcome": "operator_accepts_omit_sidecar",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "safe code_review attach validated",
+          "expected_outcome": "operator_accepts_sanitized_sidecar_only",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "safe validation attach validated",
+          "expected_outcome": "operator_accepts_sanitized_sidecar_only",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "raw prompt leakage prevention validated",
+          "expected_outcome": "operator_accepts_no_leak",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "raw artifact leakage prevention validated",
+          "expected_outcome": "operator_accepts_no_leak",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "secret leakage prevention validated",
+          "expected_outcome": "operator_accepts_no_leak",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "stdout/stderr/full CLI output prevention validated",
+          "expected_outcome": "operator_accepts_no_leak",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "full warning text prevention validated",
+          "expected_outcome": "operator_accepts_no_leak",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "Gateway primary/final preservation validated",
+          "expected_outcome": "operator_accepts_preserved",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "Runtime final_status/routing preservation validated",
+          "expected_outcome": "operator_accepts_preserved",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "Hermes non-final-owner guarantee validated",
+          "expected_outcome": "operator_accepts_not_owner",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "no persistence validated",
+          "expected_outcome": "operator_accepts_no_persistence",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "no real Hermes CLI in tests validated",
+          "expected_outcome": "operator_accepts_fake_dispatcher_only",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "no package/script/CI flag enablement validated",
+          "expected_outcome": "operator_accepts_no_enablement",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "roadmap numbering continuity validated",
+          "expected_outcome": "operator_accepts_continuous",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        },
+        {
+          "name": "operator acceptance recorded as static artifact only",
+          "expected_outcome": "operator_accepts_static_artifact_only",
+          "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
+          "required": true
+        }
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_required_operator_inputs": [
+        "implementation status",
+        "validation status",
+        "validation matrix",
+        "pass criteria",
+        "failure criteria",
+        "operator approval requirement",
+        "three required Hermes flags requirement",
+        "sidecar-only ownership boundary",
+        "Gateway primary/final preservation guarantee",
+        "Runtime final_status/routing preservation guarantee",
+        "no raw prompt/artifact/secret guarantee",
+        "no stdout/stderr/full CLI output/full warning text guarantee",
+        "no persistence guarantee",
+        "no package/script/CI flag enablement guarantee",
+        "next rollout gate requirement"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_pass_criteria": [
+        "implementation is present",
+        "validation is present",
+        "implementation remains sidecar-only",
+        "validation remains validation-only",
+        "operator approval remains required",
+        "all three Hermes flags remain required",
+        "default remains disabled",
+        "unsupported request types remain unsupported",
+        "Gateway primary/final result preservation is validated",
+        "Runtime final_status/routing preservation is validated",
+        "Hermes non-final-owner guarantee is validated",
+        "leakage prevention is validated",
+        "persistence prohibition is validated",
+        "real Hermes CLI is not called in tests",
+        "package/script/CI flag enablement is absent",
+        "roadmap numbering is continuous",
+        "future controlled rollout gate is required before broader rollout"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_reject_criteria": [
+        "implementation missing",
+        "validation missing",
+        "operator approval no longer required",
+        "one or more required Hermes flags missing",
+        "Phase-2 enabled by default",
+        "unsupported request types included",
+        "Hermes becomes final review/code_review/validation owner",
+        "Gateway primary/final result preservation not guaranteed",
+        "Runtime final_status/routing preservation not guaranteed",
+        "raw prompt/artifact/secret leakage risk unresolved",
+        "stdout/stderr/full CLI output/full warning text leakage risk unresolved",
+        "persistence introduced",
+        "real Hermes CLI called in tests",
+        "package/script/CI flag enablement introduced",
+        "roadmap numbering jumps",
+        "controlled rollout gate skipped"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_prohibited_operator_acceptance_behaviors": [
+        "Executing operator actions.",
+        "Enabling Hermes flags by default.",
+        "Adding package scripts that set Hermes flags.",
+        "Adding CI env that sets Hermes flags.",
+        "Calling real Hermes CLI in tests.",
+        "Reading real API keys.",
+        "Spawning real external processes.",
+        "Persisting readiness/audit/rollback/guardrail/observability/review/validation/operator logs.",
+        "Changing Runtime final_status.",
+        "Changing Runtime routing.",
+        "Changing Gateway primary dispatch.",
+        "Changing Gateway final result.",
+        "Making Hermes final review owner.",
+        "Making Hermes final code_review owner.",
+        "Making Hermes final validation owner.",
+        "Routing llm_task/code_generation/bugfix to Hermes.",
+        "Storing raw prompt/artifact/secret/stdout/stderr/full CLI output/full warning text.",
+        "Skipping future controlled rollout gate."
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts",
+        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.ts",
+        "execution/gateway.ts",
+        "execution/types.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts",
+        "runtime-capabilities.json",
+        "real-agent-adapter-capability-matrix.json",
+        "SYSTEM_STATUS.md",
+        "SYSTEM_CAPABILITY_REVIEW.md",
+        "system-capability-review.json"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_required_prerequisites": [
+        "READY_WITH_CONSTRAINTS readiness review",
+        "plan_only controlled rollout plan",
+        "checklist_only rollout validation checklist",
+        "runbook_only operator runbook",
+        "template_only post-enablement review template",
+        "contract_only Phase-2 expansion contract",
+        "checklist_only Phase-2 validation checklist",
+        "runbook_only Phase-2 operator runbook",
+        "template_only Phase-2 post-validation review template",
+        "review_only Phase-2 final readiness review",
+        "plan_only Phase-2 controlled enablement plan",
+        "contract_only Phase-2 enablement guard contract",
+        "plan_only Phase-2 shadow enablement implementation plan",
+        "contract_only Phase-2 shadow enablement contract",
+        "test_plan_only Phase-2 shadow enablement test plan",
+        "fixture_contract_only Phase-2 shadow enablement fixture contract",
+        "observability_contract_only Phase-2 shadow enablement observability contract",
+        "guardrail_contract_only Phase-2 shadow enablement guardrail contract",
+        "rollback_contract_only Phase-2 shadow enablement rollback contract",
+        "readiness_gate_only Phase-2 shadow enablement readiness gate",
+        "implemented_phase_2_shadow_sidecar_only Phase-2 shadow enablement implementation",
+        "implemented_phase_2_shadow_sidecar_validation_only Phase-2 shadow enablement validation"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_evidence": [
+        "READY_WITH_CONSTRAINTS readiness review",
+        "implemented_phase_2_shadow_sidecar_only implementation",
+        "implemented_phase_2_shadow_sidecar_validation_only validation",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate"
     }
   ],
   "request_types": [
@@ -3361,8 +3708,8 @@
     "Controlled Real Adapter Rollout"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance",
-    "reason": "Hermes Gateway real dispatch has a validated phase-2 shadow sidecar attachment for code_review and validation.",
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate",
+    "reason": "Hermes Gateway real dispatch has operator acceptance of the validated phase-2 shadow sidecar attachment for code_review and validation.",
     "safety_rationale": "Phase-2 shadow sidecar attachment remains feature-flagged, operator-approved, sidecar-only, and default-off."
   }
 }

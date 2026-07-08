@@ -1198,7 +1198,7 @@ async function test() {
 
   // ── Test 9: Recommended next PR ──
   console.log("Test 9: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR phase-2 shadow enablement operator acceptance");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate", "next PR phase-2 shadow enablement controlled rollout gate");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract");
@@ -1439,7 +1439,7 @@ async function test() {
   assert(hImplEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts"), "hermes evidence phase-2 shadow enablement implementation module");
   assert(hImplEvidence.includes("execution/gateway.ts"), "hermes evidence phase-2 shadow enablement implementation gateway");
   assert(hImplEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"), "hermes evidence phase-2 shadow enablement implementation test");
-  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "hermes dispatch phase-2 shadow enablement implementation next PR");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_implementation_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "hermes dispatch phase-2 shadow enablement implementation next PR");
   console.log("");
 
   // ── Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation ──
@@ -1503,6 +1503,83 @@ async function test() {
   assert(Array.isArray(hValMatrix) && hValMatrix.length >= 27, "hermes dispatch phase-2 shadow enablement validation matrix length");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_validation_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "hermes dispatch phase-2 shadow enablement validation next PR");
   console.log("");
+
+  // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance
+  console.log("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance"] === "operator_acceptance_only", "hermes dispatch phase-2 shadow enablement operator acceptance");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_status"] === "operator_acceptance_only", "hermes dispatch phase-2 shadow enablement operator acceptance status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_only"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance only");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_executing_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_executes_operator_actions_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no operator actions");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_enables_feature_flags_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no flags now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_expands_request_types_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no expansion now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no runtime behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_gateway_primary_dispatch_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no gateway primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_gateway_final_result_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no gateway final");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_hermes_dispatch_eligibility_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no dispatch eligibility change");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_makes_hermes_default_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not default");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_makes_hermes_final_owner_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not final owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_adds_package_script_flag_enablement_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no package script flag enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_changes_ci_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no CI");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_logs_now"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_implementation_status"] === "implemented_phase_2_shadow_sidecar_only", "hermes dispatch phase-2 shadow enablement operator acceptance implementation status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_validation_status"] === "implemented_phase_2_shadow_sidecar_validation_only", "hermes dispatch phase-2 shadow enablement operator acceptance validation status");
+  const hOpCurrent = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_current_validated_request_types"] as string[];
+  assert(Array.isArray(hOpCurrent) && hOpCurrent.length === 1 && hOpCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement operator acceptance current validated review");
+  const hOpTargets = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hOpTargets) && hOpTargets.includes("code_review") && hOpTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement operator acceptance targets");
+  const hOpSupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_supported_request_types"] as string[];
+  assert(Array.isArray(hOpSupported) && hOpSupported.includes("review") && hOpSupported.includes("code_review") && hOpSupported.includes("validation"), "hermes dispatch phase-2 shadow enablement operator acceptance supported");
+  const hOpUnsupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_unsupported_request_types"] as string[];
+  assert(Array.isArray(hOpUnsupported) && hOpUnsupported.includes("llm_task") && hOpUnsupported.includes("code_generation") && hOpUnsupported.includes("bugfix"), "hermes dispatch phase-2 shadow enablement operator acceptance unsupported");
+  const hOpFlags = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_required_flags"] as string[];
+  assert(Array.isArray(hOpFlags) && hOpFlags.length === 3, "hermes dispatch phase-2 shadow enablement operator acceptance 3 flags");
+  assert(hOpFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hOpFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hOpFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 shadow enablement operator acceptance flags correct");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_required"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance required");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_action_executed"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance action not executed");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_sidecar_only"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance sidecar only");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_gateway_primary_result_preserved"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance primary preserved");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_gateway_final_result_preserved"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance final preserved");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_runtime_final_status_preserved"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance final_status preserved");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_runtime_routing_preserved"] === true, "hermes dispatch phase-2 shadow enablement operator acceptance routing preserved");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_review_owner"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no raw artifacts");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no secrets");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_stdout_stderr_or_full_cli_output"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no stdout/stderr/full CLI output");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_contains_full_warning_text"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no full warning text");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_readiness_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no readiness logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_audit_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no audit logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_rollback_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no rollback logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_guardrail_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no guardrail logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_observability_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no observability logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_review_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no review logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_validation_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no validation logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_persists_operator_acceptance_logs"] === false, "hermes dispatch phase-2 shadow enablement operator acceptance no operator acceptance logs");
+  const hOpChecklist = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_checklist"] as { name: string; expected_outcome: string; accepted_by: string; required: boolean }[];
+  assert(Array.isArray(hOpChecklist) && hOpChecklist.length >= 26, "hermes dispatch phase-2 shadow enablement operator acceptance checklist length");
+  const hOpChecklistNames = hOpChecklist.map(r => r.name);
+  for (const requiredName of [
+    "implementation artifact present",
+    "validation artifact present",
+    "safe code_review attach validated",
+    "safe validation attach validated",
+    "no persistence validated",
+    "operator acceptance recorded as static artifact only",
+  ]) {
+    assert(hOpChecklistNames.includes(requiredName), `hermes dispatch phase-2 shadow enablement operator acceptance checklist row: ${requiredName}`);
+  }
+  const hOpInputs = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_required_operator_inputs"] as string[];
+  assert(Array.isArray(hOpInputs) && hOpInputs.includes("implementation status") && hOpInputs.includes("validation status") && hOpInputs.includes("next rollout gate requirement"), "hermes dispatch phase-2 shadow enablement operator acceptance required inputs");
+  const hOpPass = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_pass_criteria"] as string[];
+  assert(Array.isArray(hOpPass) && hOpPass.includes("implementation is present") && hOpPass.includes("future controlled rollout gate is required before broader rollout"), "hermes dispatch phase-2 shadow enablement operator acceptance pass criteria");
+  const hOpReject = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_reject_criteria"] as string[];
+  assert(Array.isArray(hOpReject) && hOpReject.includes("controlled rollout gate skipped"), "hermes dispatch phase-2 shadow enablement operator acceptance reject criteria");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate", "hermes dispatch phase-2 shadow enablement operator acceptance next PR");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
