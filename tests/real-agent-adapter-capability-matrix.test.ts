@@ -1198,7 +1198,7 @@ async function test() {
 
   // ── Test 9: Recommended next PR ──
   console.log("Test 9: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR phase-2 shadow enablement readiness gate");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation", "next PR phase-2 shadow enablement implementation");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract");
@@ -1332,6 +1332,57 @@ async function test() {
   const hgRollbackMatrixProhibited = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_prohibited_rollback_data"] as string[];
   assert(Array.isArray(hgRollbackMatrixProhibited) && hgRollbackMatrixProhibited.length >= 10, "hermes dispatch phase-2 shadow enablement rollback contract prohibited data");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "hermes dispatch phase-2 shadow enablement rollback contract next PR");
+  console.log("");
+
+  console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate"] === "implemented_readiness_gate_only", "hermes dispatch phase-2 shadow enablement readiness gate");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_status"] === "readiness_gate_only", "hermes dispatch phase-2 shadow enablement readiness gate status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_executing_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_implements_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not implementing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_adds_real_shadow_enablement_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no real shadow enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_adds_real_readiness_evaluation_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no real readiness evaluation");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_readiness_logs_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no readiness log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_audit_logs_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no audit log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_rollback_logs_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no rollback log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_guardrail_logs_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no guardrail log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_observability_logs_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no observability log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no runtime behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_changes_gateway_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no gateway behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_changes_hermes_dispatch_eligibility_now"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no dispatch eligibility change");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 shadow enablement readiness gate verdict");
+  const hgGateMatrixCurrent = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_current_validated_request_types"] as string[];
+  assert(Array.isArray(hgGateMatrixCurrent) && hgGateMatrixCurrent.length === 1 && hgGateMatrixCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement readiness gate current review only");
+  const hgGateMatrixTargets = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hgGateMatrixTargets) && hgGateMatrixTargets.includes("code_review") && hgGateMatrixTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement readiness gate phase-2 targets");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement readiness gate default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_feature_flagged"] === true, "hermes dispatch phase-2 shadow enablement readiness gate feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement readiness gate operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_implementation_pr_required"] === true, "hermes dispatch phase-2 shadow enablement readiness gate implementation PR required");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_makes_hermes_default"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not default");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_makes_hermes_final_review_owner"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 shadow enablement readiness gate not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_writes_files"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no files");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_persists_readiness"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no readiness persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement readiness gate no raw prompt");
+  const hgGateMatrixShape = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_readiness_gate_decision_shape"] as Record<string, unknown>;
+  assert(hgGateMatrixShape !== undefined && typeof hgGateMatrixShape === "object", "hermes dispatch phase-2 shadow enablement readiness gate decision shape");
+  const hgGateMatrixInputs = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_required_gate_inputs"] as string[];
+  assert(Array.isArray(hgGateMatrixInputs) && hgGateMatrixInputs.length >= 10, "hermes dispatch phase-2 shadow enablement readiness gate required inputs");
+  const hgGateMatrixPass = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_pass_criteria"] as string[];
+  assert(Array.isArray(hgGateMatrixPass) && hgGateMatrixPass.length >= 10, "hermes dispatch phase-2 shadow enablement readiness gate pass criteria");
+  const hgGateMatrixFail = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_fail_criteria"] as string[];
+  assert(Array.isArray(hgGateMatrixFail) && hgGateMatrixFail.length >= 5, "hermes dispatch phase-2 shadow enablement readiness gate fail criteria");
+  const hgGateMatrixBlocked = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_blocked_criteria"] as string[];
+  assert(Array.isArray(hgGateMatrixBlocked) && hgGateMatrixBlocked.length >= 5, "hermes dispatch phase-2 shadow enablement readiness gate blocked criteria");
+  const hgGateMatrixTests = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_required_future_implementation_tests"] as string[];
+  assert(Array.isArray(hgGateMatrixTests) && hgGateMatrixTests.length >= 10, "hermes dispatch phase-2 shadow enablement readiness gate future tests");
+  const hgGateMatrixProhibited = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_prohibited_readiness_data"] as string[];
+  assert(Array.isArray(hgGateMatrixProhibited) && hgGateMatrixProhibited.length >= 10, "hermes dispatch phase-2 shadow enablement readiness gate prohibited data");
+  const hgGateMatrixRules = hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_safety_rules"] as string[];
+  assert(Array.isArray(hgGateMatrixRules) && hgGateMatrixRules.length >= 10, "hermes dispatch phase-2 shadow enablement readiness gate safety rules");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation", "hermes dispatch phase-2 shadow enablement readiness gate next PR");
   console.log("");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
