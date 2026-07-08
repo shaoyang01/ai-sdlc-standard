@@ -1198,7 +1198,7 @@ async function test() {
 
   // ── Test 9: Recommended next PR ──
   console.log("Test 9: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate", "next PR phase-2 shadow enablement controlled rollout gate");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "next PR phase-2 shadow enablement controlled rollout plan");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract");
@@ -1580,6 +1580,69 @@ async function test() {
   const hOpReject = hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_operator_acceptance_reject_criteria"] as string[];
   assert(Array.isArray(hOpReject) && hOpReject.includes("controlled rollout gate skipped"), "hermes dispatch phase-2 shadow enablement operator acceptance reject criteria");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_operator_acceptance_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate", "hermes dispatch phase-2 shadow enablement operator acceptance next PR");
+
+  // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate
+  console.log("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate"] === "controlled_rollout_gate_only", "hermes dispatch phase-2 shadow enablement controlled rollout gate");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_status"] === "controlled_rollout_gate_only", "hermes dispatch phase-2 shadow enablement controlled rollout gate status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_only"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate only");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_executing_now"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_executes_rollout_now"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate no rollout execution");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_executes_operator_actions_now"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate no operator actions");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_rollout_plan_required"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate rollout plan required");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_required"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate required");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_rollout_executed"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate rollout not executed");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_rollout_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate no automatic rollout");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 shadow enablement controlled rollout gate no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_implementation_status"] === "implemented_phase_2_shadow_sidecar_only", "hermes dispatch phase-2 shadow enablement controlled rollout gate implementation status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_validation_status"] === "implemented_phase_2_shadow_sidecar_validation_only", "hermes dispatch phase-2 shadow enablement controlled rollout gate validation status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_operator_acceptance_status"] === "operator_acceptance_only", "hermes dispatch phase-2 shadow enablement controlled rollout gate operator acceptance status");
+  const hGateCurrent = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_current_validated_request_types"] as string[];
+  assert(Array.isArray(hGateCurrent) && hGateCurrent.length === 1 && hGateCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement controlled rollout gate current validated review");
+  const hGateTargets = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hGateTargets) && hGateTargets.includes("code_review") && hGateTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement controlled rollout gate targets");
+  const hGateFlags = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_required_flags"] as string[];
+  assert(Array.isArray(hGateFlags) && hGateFlags.length === 3, "hermes dispatch phase-2 shadow enablement controlled rollout gate 3 flags");
+  assert(hGateFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hGateFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hGateFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 shadow enablement controlled rollout gate flags correct");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_sidecar_only"] === true, "hermes dispatch phase-2 shadow enablement controlled rollout gate sidecar only");
+  const hGateChecklist = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_checklist"] as { name: string; expected_outcome: string; accepted_by: string; required: boolean }[];
+  assert(Array.isArray(hGateChecklist) && hGateChecklist.length >= 22, "hermes dispatch phase-2 shadow enablement controlled rollout gate checklist length");
+  const hGateChecklistNames = hGateChecklist.map(r => r.name);
+  for (const requiredName of [
+    "operator acceptance artifact present",
+    "implementation artifact present",
+    "validation artifact present",
+    "rollout plan present",
+    "controlled rollout gate only",
+    "rollout not executed now",
+    "rollout plan required before execution",
+    "operator approval required",
+    "three required Hermes flags required",
+    "default disabled validated",
+    "unsupported request types validated",
+    "sidecar-only validated",
+    "Gateway primary/final preservation validated",
+    "Runtime final_status/routing preservation validated",
+    "Hermes non-final-owner guarantee validated",
+    "raw prompt/artifact/secret leakage prevention validated",
+    "stdout/stderr/full CLI output/full warning text leakage prevention validated",
+    "no persistence validated",
+    "no package/script/CI flag enablement validated",
+    "no real Hermes CLI in tests validated",
+    "roadmap numbering continuity validated",
+    "controlled rollout gate recorded as static artifact only",
+  ]) {
+    assert(hGateChecklistNames.includes(requiredName), `hermes dispatch phase-2 shadow enablement controlled rollout gate checklist row: ${requiredName}`);
+  }
+  const hGateInputs = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_required_inputs"] as string[];
+  assert(Array.isArray(hGateInputs) && hGateInputs.includes("operator acceptance status") && hGateInputs.includes("rollout plan requirement") && hGateInputs.includes("next rollout plan requirement"), "hermes dispatch phase-2 shadow enablement controlled rollout gate required inputs");
+  const hGatePass = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_pass_criteria"] as string[];
+  assert(Array.isArray(hGatePass) && hGatePass.includes("rollout plan is present") && hGatePass.includes("future controlled rollout plan is required before any execution"), "hermes dispatch phase-2 shadow enablement controlled rollout gate pass criteria");
+  const hGateReject = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_reject_criteria"] as string[];
+  assert(Array.isArray(hGateReject) && hGateReject.includes("rollout executed now") && hGateReject.includes("controlled rollout plan skipped"), "hermes dispatch phase-2 shadow enablement controlled rollout gate reject criteria");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "hermes dispatch phase-2 shadow enablement controlled rollout gate next PR");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
