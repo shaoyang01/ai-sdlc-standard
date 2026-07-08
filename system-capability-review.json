@@ -4197,8 +4197,8 @@
           "required": true
         },
         {
-          "name": "rollout plan present",
-          "expected_outcome": "operator_accepts_rollout_plan_present",
+          "name": "future rollout plan required",
+          "expected_outcome": "operator_accepts_rollout_plan_required",
           "accepted_by": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate",
           "required": true
         },
@@ -4332,7 +4332,7 @@
         "operator acceptance is present",
         "implementation is present",
         "validation is present",
-        "rollout plan is present",
+        "future rollout plan is required",
         "controlled rollout gate only",
         "rollout not executed",
         "rollout plan required before execution",

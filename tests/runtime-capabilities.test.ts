@@ -1773,7 +1773,7 @@ async function test() {
     "operator acceptance artifact present",
     "implementation artifact present",
     "validation artifact present",
-    "rollout plan present",
+    "future rollout plan required",
     "controlled rollout gate only",
     "rollout not executed now",
     "rollout plan required before execution",
@@ -1798,7 +1798,7 @@ async function test() {
   const hgRolloutGateInputs = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_required_inputs"] as string[];
   assert(Array.isArray(hgRolloutGateInputs) && hgRolloutGateInputs.includes("operator acceptance status") && hgRolloutGateInputs.includes("rollout plan requirement") && hgRolloutGateInputs.includes("next rollout plan requirement"), "hermes dispatch phase-2 shadow enablement controlled rollout gate required inputs");
   const hgRolloutGatePass = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_pass_criteria"] as string[];
-  assert(Array.isArray(hgRolloutGatePass) && hgRolloutGatePass.includes("rollout plan is present") && hgRolloutGatePass.includes("future controlled rollout plan is required before any execution"), "hermes dispatch phase-2 shadow enablement controlled rollout gate pass criteria");
+  assert(Array.isArray(hgRolloutGatePass) && hgRolloutGatePass.includes("future rollout plan is required") && hgRolloutGatePass.includes("future controlled rollout plan is required before any execution"), "hermes dispatch phase-2 shadow enablement controlled rollout gate pass criteria");
   const hgRolloutGateReject = realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_reject_criteria"] as string[];
   assert(Array.isArray(hgRolloutGateReject) && hgRolloutGateReject.includes("rollout executed now") && hgRolloutGateReject.includes("controlled rollout plan skipped"), "hermes dispatch phase-2 shadow enablement controlled rollout gate reject criteria");
   assert(realAdapters["hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "hermes dispatch phase-2 shadow enablement controlled rollout gate next PR");

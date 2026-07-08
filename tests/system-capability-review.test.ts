@@ -2060,7 +2060,7 @@ async function test() {
     "operator acceptance artifact present",
     "implementation artifact present",
     "validation artifact present",
-    "rollout plan present",
+    "future rollout plan required",
     "controlled rollout gate only",
     "rollout not executed now",
     "rollout plan required before execution",
@@ -2085,7 +2085,7 @@ async function test() {
   const rolloutGateInputs = hgRolloutGateCap["controlled_rollout_gate_required_inputs"] as string[];
   assert(Array.isArray(rolloutGateInputs) && rolloutGateInputs.includes("operator acceptance status") && rolloutGateInputs.includes("rollout plan requirement") && rolloutGateInputs.includes("next rollout plan requirement"), "controlled rollout gate required inputs");
   const rolloutGatePass = hgRolloutGateCap["controlled_rollout_gate_pass_criteria"] as string[];
-  assert(Array.isArray(rolloutGatePass) && rolloutGatePass.includes("rollout plan is present") && rolloutGatePass.includes("future controlled rollout plan is required before any execution"), "controlled rollout gate pass criteria");
+  assert(Array.isArray(rolloutGatePass) && rolloutGatePass.includes("future rollout plan is required") && rolloutGatePass.includes("future controlled rollout plan is required before any execution"), "controlled rollout gate pass criteria");
   const rolloutGateReject = hgRolloutGateCap["controlled_rollout_gate_reject_criteria"] as string[];
   assert(Array.isArray(rolloutGateReject) && rolloutGateReject.includes("rollout executed now") && rolloutGateReject.includes("controlled rollout plan skipped"), "controlled rollout gate reject criteria");
   assert(hgRolloutGateCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "controlled rollout gate next PR");

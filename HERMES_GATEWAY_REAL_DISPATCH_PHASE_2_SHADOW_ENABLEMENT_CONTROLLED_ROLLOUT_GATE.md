@@ -27,7 +27,7 @@ Controlled rollout gate for the operator-accepted Phase-2 shadow sidecar attachm
 | operator acceptance artifact present | operator_accepts_present | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
 | implementation artifact present | operator_accepts_implementation_present | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
 | validation artifact present | operator_accepts_validation_present | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
-| rollout plan present | operator_accepts_rollout_plan_present | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
+| future rollout plan required | operator_accepts_rollout_plan_required | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
 | controlled rollout gate only | operator_accepts_gate_only | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
 | rollout not executed now | operator_accepts_rollout_not_executed | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
 | rollout plan required before execution | operator_accepts_rollout_plan_required | Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate | yes |
@@ -70,7 +70,7 @@ Controlled rollout gate for the operator-accepted Phase-2 shadow sidecar attachm
 - operator acceptance is present
 - implementation is present
 - validation is present
-- rollout plan is present
+- future rollout plan is required
 - controlled rollout gate only
 - rollout not executed
 - rollout plan required before execution
