@@ -206,6 +206,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Phase-2 Shadow Enablement Fixture Contract | implemented_fixture_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.ts` |
 | Phase-2 Shadow Enablement Observability Contract | implemented_observability_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.ts` |
 | Phase-2 Shadow Enablement Guardrail Contract | implemented_guardrail_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.ts` |
+| Phase-2 Shadow Enablement Rollback Contract | implemented_rollback_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.ts` |
 
 ### Readiness Guarantees
 
@@ -234,6 +235,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - Phase-2 shadow enablement fixture contract status: `fixture_contract_only`
 - Phase-2 shadow enablement observability contract status: `observability_contract_only`
 - Phase-2 shadow enablement guardrail contract status: `guardrail_contract_only`
+- Phase-2 shadow enablement rollback contract status: `rollback_contract_only`
 - Initial rollout request type: `review`
 - Phase-2 validation targets: `code_review`, `validation` (validated only, not enabled)
 - Expansion to `code_review` and `validation` requires operator approval and a future phase-2 shadow enablement implementation PR
@@ -241,7 +243,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - No operator actions are executed by the repository
 - No enablement scripts or package commands are added
 - Automatic rollout and automatic enablement are disabled
-- Next PR: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract
+- Next PR: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate
 
 ---
 
