@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement readiness gate");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement readiness gate");
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
   assert(fpCap !== undefined && fpCap["status"] === "implemented", "fallback policy implemented");
@@ -149,7 +149,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement readiness gate");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement readiness gate");
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
   assert(rdCap !== undefined && rdCap["status"] === "contract-only", "real dispatch contract-only");
@@ -1600,7 +1600,7 @@ async function test() {
   assert(hgShadowObservabilityContractEv.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes gateway phase-2 shadow enablement observability contract evidence json");
 
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement readiness gate");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement readiness gate");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
@@ -1711,7 +1711,7 @@ async function test() {
   assert(hgGrEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts"), "guardrail contract evidence test");
   assert(hgGrEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md"), "guardrail contract evidence md");
   assert(hgGrEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"), "guardrail contract evidence json");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement readiness gate");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement readiness gate");
 
 
 
@@ -1772,7 +1772,7 @@ async function test() {
   assert(hgRbEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts"), "rollback contract evidence test");
   assert(hgRbEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md"), "rollback contract evidence md");
   assert(hgRbEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json"), "rollback contract evidence json");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement implementation");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement implementation");
   console.log("");
 
   // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate
@@ -1838,7 +1838,7 @@ async function test() {
   assert(hgGateEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts"), "readiness gate evidence test");
   assert(hgGateEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md"), "readiness gate evidence md");
   assert(hgGateEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json"), "readiness gate evidence json");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "next PR Hermes phase-2 shadow enablement implementation");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "next PR Hermes phase-2 shadow enablement implementation");
   console.log("");
 
   // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation
@@ -1879,7 +1879,63 @@ async function test() {
   assert(implEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts"), "implementation evidence module");
   assert(implEvidence.includes("execution/gateway.ts"), "implementation evidence gateway");
   assert(implEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"), "implementation evidence test");
-  assert(hgImplCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation", "implementation next PR");
+  assert(hgImplCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "implementation next PR");
+  console.log("");
+
+  // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation
+  assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation"), "has Hermes Phase-2 Shadow Enablement Validation");
+  const hgValCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation");
+  assert(hgValCap !== undefined && hgValCap["status"] === "implemented_phase_2_shadow_sidecar_validation_only", "validation status");
+  assert(hgValCap["validation_only"] === true, "validation only");
+  assert(hgValCap["executing_now"] === false, "validation not executing");
+  assert(hgValCap["enables_feature_flags_now"] === false, "validation no flags");
+  assert(hgValCap["expands_request_types_now"] === false, "validation no expansion");
+  assert(hgValCap["changes_runtime_behavior_now"] === false, "validation no runtime behavior");
+  assert(hgValCap["changes_gateway_primary_dispatch_now"] === false, "validation no gateway primary dispatch");
+  assert(hgValCap["changes_gateway_final_result_now"] === false, "validation no gateway final");
+  assert(hgValCap["changes_hermes_dispatch_eligibility_now"] === false, "validation no dispatch eligibility change");
+  assert(hgValCap["makes_hermes_default_now"] === false, "validation not default");
+  assert(hgValCap["makes_hermes_final_owner_now"] === false, "validation not final owner");
+  assert(hgValCap["adds_package_script_flag_enablement_now"] === false, "validation no package script flag enablement");
+  assert(hgValCap["changes_ci_behavior_now"] === false, "validation no CI");
+  assert(hgValCap["persists_logs_now"] === false, "validation no log persistence");
+  assert(hgValCap["implementation_status"] === "implemented_phase_2_shadow_sidecar_only", "validation implementation status");
+  const valCurrent = hgValCap["current_validated_request_types"] as string[];
+  assert(Array.isArray(valCurrent) && valCurrent.length === 1 && valCurrent[0] === "review", "validation current validated review");
+  const valTargets = hgValCap["phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(valTargets) && valTargets.includes("code_review") && valTargets.includes("validation"), "validation phase-2 targets");
+  const valSupported = hgValCap["supported_request_types"] as string[];
+  assert(Array.isArray(valSupported) && valSupported.includes("review") && valSupported.includes("code_review") && valSupported.includes("validation"), "validation supported request types");
+  const valUnsupported = hgValCap["unsupported_request_types"] as string[];
+  assert(Array.isArray(valUnsupported) && valUnsupported.includes("llm_task") && valUnsupported.includes("code_generation") && valUnsupported.includes("bugfix"), "validation unsupported request types");
+  assert(hgValCap["default_disabled"] === true, "validation default disabled");
+  assert(hgValCap["feature_flagged"] === true, "validation feature flagged");
+  assert(hgValCap["operator_approval_required"] === true, "validation operator approval");
+  assert(hgValCap["sidecar_only"] === true, "validation sidecar only");
+  assert(hgValCap["implementation_pr_already_exists"] === true, "validation implementation PR exists");
+  assert(hgValCap["validation_pr_only"] === true, "validation PR only");
+  assert(hgValCap["gateway_primary_result_preserved"] === true, "validation primary preserved");
+  assert(hgValCap["gateway_final_result_preserved"] === true, "validation final preserved");
+  assert(hgValCap["runtime_final_status_preserved"] === true, "validation final_status preserved");
+  assert(hgValCap["runtime_routing_preserved"] === true, "validation routing preserved");
+  assert(hgValCap["hermes_final_review_owner"] === false, "validation not review owner");
+  assert(hgValCap["hermes_final_code_review_owner"] === false, "validation not code review owner");
+  assert(hgValCap["hermes_final_validation_owner"] === false, "validation not validation owner");
+  assert(hgValCap["contains_raw_prompt"] === false, "validation no raw prompt");
+  assert(hgValCap["contains_raw_artifacts"] === false, "validation no raw artifacts");
+  assert(hgValCap["contains_secrets"] === false, "validation no secrets");
+  assert(hgValCap["contains_stdout_stderr_or_full_cli_output"] === false, "validation no stdout/stderr/full CLI output");
+  assert(hgValCap["contains_full_warning_text"] === false, "validation no full warning text");
+  assert(hgValCap["persists_readiness_logs"] === false, "validation no readiness logs");
+  assert(hgValCap["persists_audit_logs"] === false, "validation no audit logs");
+  assert(hgValCap["persists_rollback_logs"] === false, "validation no rollback logs");
+  assert(hgValCap["persists_guardrail_logs"] === false, "validation no guardrail logs");
+  assert(hgValCap["persists_observability_logs"] === false, "validation no observability logs");
+  assert(hgValCap["persists_review_logs"] === false, "validation no review logs");
+  assert(hgValCap["persists_validation_logs"] === false, "validation no validation logs");
+  const valMatrix = hgValCap["validation_matrix"] as { name: string; expected_outcome: string; validated_by: string; required: boolean }[];
+  assert(Array.isArray(valMatrix) && valMatrix.length >= 27, "validation matrix length");
+  assert(hgValCap["recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance", "validation next PR");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

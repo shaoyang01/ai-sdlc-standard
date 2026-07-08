@@ -6,7 +6,7 @@ The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All a
 
 Codex code_generation has runtime-routed real execution behind `SDLC_EXECUTION_MODE=codex`. Kimi now has a feature-flagged Gateway real dispatch path for `llm_task` only. It requires `SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled`, `SDLC_KIMI_GATEWAY_INTEGRATION=enabled`, and `SDLC_KIMI_CLI_COMMAND_EXECUTION=enabled`. The path is default-off, Gateway-controlled, and protected by fallback policy, observability, and operational guardrails. It is tested with fake runners; no real Kimi CLI is called in tests. Kimi does not change Runtime `final_status` or default Runtime routing. Hermes now has a default-off standalone Gateway real dispatch helper for review/code_review/validation and feature-flagged Gateway sidecar metadata under `hermes_gateway_real_dispatch`, with explicit `fallbackPolicy`, sanitized `observability`, sidecar attach `guardrails`, final readiness verdict READY_WITH_CONSTRAINTS, a plan-only controlled rollout plan, a checklist-only rollout validation gate, a runbook-only operator guide, a template-only post-enablement review template, a contract-only phase-2 expansion contract, a checklist-only phase-2 validation checklist, a runbook-only phase-2 operator runbook, a template-only phase-2 post-validation review template, a review-only phase-2 final readiness review, a plan-only phase-2 controlled enablement plan, a contract-only phase-2 enablement guard contract defining mandatory guard conditions before any future implementation PR, a plan-only phase-2 shadow enablement implementation plan, a contract-only phase-2 shadow enablement contract, a test-plan-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Test Plan**, a fixture-contract-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract**, an observability-contract-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Observability Contract**, a guardrail-contract-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract**, a rollback-contract-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract**, a readiness-gate-only **Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate**, and an implemented phase-2 shadow sidecar attachment for code_review and validation. Hermes still does not own primary Gateway dispatch and does not change Runtime `final_status` or routing.
 
-The next intended PR is Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation. Hermes Gateway real dispatch now has an implemented phase-2 shadow sidecar attachment for code_review and validation that remains feature-flagged, operator-approved, sidecar-only, default-off, and unable to change Gateway primary result or Runtime final_status/routing.
+The next intended PR is Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance. Hermes Gateway real dispatch now has a validated phase-2 shadow sidecar attachment for code_review and validation that remains feature-flagged, operator-approved, sidecar-only, default-off, and unable to change Gateway primary result or Runtime final_status/routing.
 
 ### Status Classification
 
@@ -209,6 +209,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 | Phase-2 Shadow Enablement Rollback Contract | implemented_rollback_contract_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.ts` |
 | Phase-2 Shadow Enablement Readiness Gate | implemented_readiness_gate_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.ts` |
 | Phase-2 Shadow Enablement Implementation | implemented_phase_2_shadow_sidecar_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts`, `execution/gateway.ts` |
+| Phase-2 Shadow Enablement Validation | validation_only | `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.ts` |
 
 ### Readiness Guarantees
 
@@ -240,6 +241,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - Phase-2 shadow enablement rollback contract status: `rollback_contract_only`
 - Phase-2 shadow enablement readiness gate status: `readiness_gate_only`
 - Phase-2 shadow enablement implementation status: `implemented_phase_2_shadow_sidecar_only`
+- Phase-2 shadow enablement validation status: `validation_only`
 - Initial rollout request type: `review`
 - Phase-2 shadow targets: `code_review`, `validation` (sidecar-only, not final owner)
 - Expansion to `code_review` and `validation` requires all three Hermes flags, operator approval, and uses the implemented phase-2 shadow sidecar path
@@ -247,7 +249,7 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 - No operator actions are executed by the repository
 - No enablement scripts or package commands are added
 - Automatic rollout and automatic enablement are disabled
-- Next PR: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation
+- Next PR: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance
 
 ---
 
@@ -321,9 +323,9 @@ Hermes Gateway real dispatch is readiness-reviewed for optional Gateway sidecar 
 
 ## 14. Recommended Next PR
 
-**Recommended: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation**
+**Recommended: Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance**
 
-Hermes Gateway real dispatch now has an implemented phase-2 shadow sidecar attachment for code_review and validation under `hermes_gateway_real_dispatch`. The implementation remains feature-flagged, operator-approved, sidecar-only, default-off, and preserves Gateway primary/final result and Runtime final_status/routing. The next step is a validation-focused PR that verifies the implemented shadow sidecar path end-to-end without enabling Phase-2 by default.
+Hermes Gateway real dispatch now has a validated phase-2 shadow sidecar attachment for code_review and validation under `hermes_gateway_real_dispatch`. The validation PR confirms the implementation satisfies the prior contracts and safety baseline without enabling Phase-2 by default. The next step is operator acceptance before any broader rollout.
 
 ---
 
