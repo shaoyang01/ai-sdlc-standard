@@ -91,3 +91,15 @@ docs/             Guides, reports, and summary documentation
 ```
 
 Full entrypoint list is in `manifest.yaml`.
+
+## AI Change Guardrails
+
+For AI-assisted or Codex-assisted changes, follow [`AI_CHANGE_GUARDRAILS.md`](AI_CHANGE_GUARDRAILS.md).
+
+Small fixes should modify only explicitly requested files, avoid broad metadata/artifact churn, and avoid changing recommended next PRs unless explicitly requested.
+
+For Hermes Phase-2 work, use the consolidation and cleanup plans as review-scope references:
+
+- [`HERMES_PHASE_2_CONSOLIDATION.md`](HERMES_PHASE_2_CONSOLIDATION.md)
+- [`CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md`](CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md)
+
