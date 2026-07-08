@@ -3,10 +3,13 @@
 // Pure transition engine. Event-sourced execution model.
 // Guaranteed replay consistency: same trace → same final state.
 // No side effects. No randomness. No hidden mutation.
+// Replay transition decisions delegate to the Graph Kernel so the graph
+// remains the single source of truth for node ordering.
 
 import { ExecutionState, updateState } from "./execution-state";
 import { ExecutionTraceItem } from "./execution-trace";
 import { NodeType } from "../sdlc_graph/types";
+import { getNextNode } from "../sdlc_graph/transitions";
 
 // Pure transition — immutable, no side effects
 export function transition(
@@ -24,10 +27,19 @@ export function replayExecution(
   history: ExecutionTraceItem[]
 ): ExecutionState {
   let state = initialState;
+  let retryCount = 0;
 
   for (const event of history) {
-    const nextNode = determineNextFromTrace(event);
-    state = transition(state, nextNode, event);
+    // Match Runtime retry counting semantics:
+    // increment on review FAIL, persist through tech-design redesign, reset elsewhere.
+    if (event.node === "review" && event.output?.["result"] === "FAIL") {
+      retryCount++;
+    } else if (event.node !== "tech-design") {
+      retryCount = 0;
+    }
+
+    const nextNode = getNextNode(event.node, event.output, retryCount);
+    state = transition(state, nextNode, event, retryCount);
   }
 
   return state;
@@ -44,22 +56,4 @@ export function validateReplay(
     originalState.status === replayedState.status &&
     originalState.history.length === replayedState.history.length
   );
-}
-
-// Extract next node from trace event (deterministic replay path)
-function determineNextFromTrace(event: ExecutionTraceItem): NodeType | null {
-  const node = event.node;
-  const result = event.output?.["result"] as string | undefined;
-
-  if (node === "validation") return null;
-  if (node === "review" && result === "FAIL") return "tech-design";
-  if (node === "review") return "implementation";
-
-  const linearMap: Record<string, NodeType | null> = {
-    "requirement-summary": "tech-design",
-    "tech-design": "review",
-    "implementation": "validation",
-  };
-
-  return linearMap[node] ?? null;
 }
