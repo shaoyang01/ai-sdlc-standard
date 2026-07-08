@@ -117,7 +117,7 @@ async function test() {
   const gwEvidence = gwCap["evidence"] as string[];
   assert(gwEvidence.includes("execution/kimi-gateway-integration-contract.ts"), "gateway evidence");
   assert(gwEvidence.includes("tests/kimi-gateway-integration-contract.test.ts"), "gateway test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "next PR Hermes phase-2 shadow enablement rollback contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR Hermes phase-2 shadow enablement readiness gate");
   assert(capNames.includes("Kimi Gateway Real Dispatch Fallback Policy"), "has Kimi Fallback Policy");
   const fpCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Fallback Policy");
   assert(fpCap !== undefined && fpCap["status"] === "implemented", "fallback policy implemented");
@@ -149,7 +149,7 @@ async function test() {
   const obsEvidence = obsCap["evidence"] as string[];
   assert(obsEvidence.includes("execution/kimi-gateway-real-dispatch-observability.ts"), "obs evidence");
   assert(obsEvidence.includes("tests/kimi-gateway-real-dispatch-observability.test.ts"), "obs test evidence");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "next PR Hermes phase-2 shadow enablement rollback contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR Hermes phase-2 shadow enablement readiness gate");
   assert(capNames.includes("Kimi Gateway Real Dispatch Contract"), "has Kimi Gateway Real Dispatch Contract");
   const rdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Kimi Gateway Real Dispatch Contract");
   assert(rdCap !== undefined && rdCap["status"] === "contract-only", "real dispatch contract-only");
@@ -1600,7 +1600,7 @@ async function test() {
   assert(hgShadowObservabilityContractEv.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes gateway phase-2 shadow enablement observability contract evidence json");
 
   // Update next PR
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "next PR Hermes phase-2 shadow enablement rollback contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR Hermes phase-2 shadow enablement readiness gate");
   // No stale Kimi/Hermes shadow-only claims
   const reviewJson = JSON.stringify(review);
   assert(!reviewJson.includes("Kimi/Hermes are shadow-only"), "no stale shadow-only claim");
@@ -1711,8 +1711,68 @@ async function test() {
   assert(hgGrEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts"), "guardrail contract evidence test");
   assert(hgGrEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md"), "guardrail contract evidence md");
   assert(hgGrEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"), "guardrail contract evidence json");
-  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "next PR Hermes phase-2 shadow enablement rollback contract");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR Hermes phase-2 shadow enablement readiness gate");
 
+
+
+  // Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract
+  assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract"), "has Hermes Phase-2 Shadow Enablement Rollback Contract");
+  const hgRbCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract");
+  assert(hgRbCap !== undefined && hgRbCap["status"] === "implemented_rollback_contract_only", "rollback contract status");
+  assert(hgRbCap["rollback_contract_only"] === true, "rollback_contract_only true");
+  assert(hgRbCap["executing_now"] === false, "rollback contract not executing");
+  assert(hgRbCap["implements_now"] === false, "rollback contract not implementing");
+  assert(hgRbCap["adds_real_rollback_execution_now"] === false, "rollback contract no real execution");
+  assert(hgRbCap["persists_rollback_logs_now"] === false, "rollback contract no rollback log persistence");
+  assert(hgRbCap["persists_audit_logs_now"] === false, "rollback contract no audit log persistence");
+  assert(hgRbCap["persists_guardrail_logs_now"] === false, "rollback contract no guardrail log persistence");
+  assert(hgRbCap["persists_observability_logs_now"] === false, "rollback contract no observability log persistence");
+  assert(hgRbCap["changes_runtime_behavior_now"] === false, "rollback contract no runtime behavior");
+  assert(hgRbCap["changes_gateway_behavior_now"] === false, "rollback contract no gateway behavior");
+  assert(hgRbCap["changes_hermes_dispatch_eligibility_now"] === false, "rollback contract no dispatch eligibility change");
+  assert(hgRbCap["current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "rollback contract verdict");
+  const rbCurrent = hgRbCap["current_validated_request_types"] as string[];
+  assert(Array.isArray(rbCurrent) && rbCurrent.length === 1 && rbCurrent[0] === "review", "rollback contract current review only");
+  const rbTargets = hgRbCap["phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(rbTargets) && rbTargets.includes("code_review") && rbTargets.includes("validation"), "rollback contract phase-2 targets");
+  assert(hgRbCap["default_disabled"] === true, "rollback contract default disabled");
+  assert(hgRbCap["feature_flagged"] === true, "rollback contract feature flagged");
+  assert(hgRbCap["operator_approval_required"] === true, "rollback contract operator approval");
+  assert(hgRbCap["automatic_enablement_allowed"] === false, "rollback contract no automatic enablement");
+  assert(hgRbCap["rollout_may_proceed_automatically"] === false, "rollback contract no automatic rollout");
+  assert(hgRbCap["phase_2_may_proceed_automatically"] === false, "rollback contract no automatic phase-2");
+  assert(hgRbCap["changes_gateway_primary_dispatch"] === false, "rollback contract no primary dispatch");
+  assert(hgRbCap["changes_gateway_final_result"] === false, "rollback contract no gateway final");
+  assert(hgRbCap["changes_final_status"] === false, "rollback contract no final status");
+  assert(hgRbCap["changes_routing"] === false, "rollback contract no routing");
+  assert(hgRbCap["makes_hermes_default"] === false, "rollback contract not default");
+  assert(hgRbCap["makes_hermes_final_review_owner"] === false, "rollback contract not review owner");
+  assert(hgRbCap["makes_hermes_final_code_review_owner"] === false, "rollback contract not code review owner");
+  assert(hgRbCap["makes_hermes_final_validation_owner"] === false, "rollback contract not validation owner");
+  assert(hgRbCap["writes_files"] === false, "rollback contract no files");
+  assert(hgRbCap["persists_audit"] === false, "rollback contract no audit");
+  assert(hgRbCap["persists_observability"] === false, "rollback contract no observability");
+  assert(hgRbCap["persists_guardrails"] === false, "rollback contract no guardrails");
+  assert(hgRbCap["persists_rollback"] === false, "rollback contract no rollback persistence");
+  assert(hgRbCap["contains_raw_prompt"] === false, "rollback contract no raw prompt");
+  assert(hgRbCap["contains_raw_artifacts"] === false, "rollback contract no raw artifacts");
+  assert(hgRbCap["contains_secrets"] === false, "rollback contract no secrets");
+  const rbShape = hgRbCap["rollback_decision_shape"] as Record<string, unknown>;
+  assert(rbShape !== undefined && typeof rbShape === "object", "rollback contract decision shape");
+  const rbTriggers = hgRbCap["rollback_triggers"] as string[];
+  assert(Array.isArray(rbTriggers) && rbTriggers.length >= 10, "rollback contract triggers");
+  const rbActions = hgRbCap["rollback_actions"] as string[];
+  assert(Array.isArray(rbActions) && rbActions.length >= 5, "rollback contract actions");
+  const rbRules = hgRbCap["rollback_safety_rules"] as string[];
+  assert(Array.isArray(rbRules) && rbRules.length >= 10, "rollback contract safety rules");
+  const rbProhibited = hgRbCap["prohibited_rollback_data"] as string[];
+  assert(Array.isArray(rbProhibited) && rbProhibited.length >= 10, "rollback contract prohibited data");
+  const hgRbEvidence = hgRbCap["evidence"] as string[];
+  assert(hgRbEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.ts"), "rollback contract evidence ts");
+  assert(hgRbEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts"), "rollback contract evidence test");
+  assert(hgRbEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md"), "rollback contract evidence md");
+  assert(hgRbEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json"), "rollback contract evidence json");
+  assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR Hermes phase-2 shadow enablement readiness gate");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

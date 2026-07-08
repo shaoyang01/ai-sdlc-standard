@@ -1198,7 +1198,7 @@ async function test() {
 
   // ── Test 9: Recommended next PR ──
   console.log("Test 9: Recommended next PR");
-  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "next PR phase-2 shadow enablement rollback contract");
+  assert(m.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "next PR phase-2 shadow enablement readiness gate");
   console.log("");
 
   console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract");
@@ -1263,6 +1263,76 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_guardrail_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "hermes dispatch phase-2 shadow enablement guardrail contract next PR");
   console.log("");
 
+
+  console.log("Test : Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract"] === "implemented_rollback_contract_only", "hermes dispatch phase-2 shadow enablement rollback contract");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_status"] === "rollback_contract_only", "hermes dispatch phase-2 shadow enablement rollback contract status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_executing_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not executing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_implements_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not implementing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_adds_real_rollback_execution_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no real execution");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_rollback_logs_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no rollback log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_audit_logs_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no audit log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_guardrail_logs_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no guardrail log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_observability_logs_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no observability log persistence");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_enables_feature_flags_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no flags now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_expands_request_types_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no expansion now");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_validates_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not validating");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_runtime_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no runtime behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_gateway_behavior_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no gateway behavior");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_hermes_dispatch_eligibility_now"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no dispatch eligibility change");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_adds_enablement_scripts"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no scripts");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_ci_behavior"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no CI");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_current_readiness_verdict"] === "READY_WITH_CONSTRAINTS", "hermes dispatch phase-2 shadow enablement rollback contract verdict");
+  const hgRollbackMatrixCurrent = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_current_validated_request_types"] as string[];
+  assert(Array.isArray(hgRollbackMatrixCurrent) && hgRollbackMatrixCurrent.length === 1 && hgRollbackMatrixCurrent[0] === "review", "hermes dispatch phase-2 shadow enablement rollback contract current validated review");
+  const hgRollbackMatrixTargets = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_phase_2_shadow_targets"] as string[];
+  assert(Array.isArray(hgRollbackMatrixTargets) && hgRollbackMatrixTargets.includes("code_review") && hgRollbackMatrixTargets.includes("validation"), "hermes dispatch phase-2 shadow enablement rollback contract targets");
+  const hgRollbackMatrixSupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_supported_request_types"] as string[];
+  assert(Array.isArray(hgRollbackMatrixSupported) && hgRollbackMatrixSupported.includes("review") && hgRollbackMatrixSupported.includes("code_review") && hgRollbackMatrixSupported.includes("validation"), "hermes dispatch phase-2 shadow enablement rollback contract supported");
+  const hgRollbackMatrixUnsupported = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_unsupported_request_types"] as string[];
+  assert(Array.isArray(hgRollbackMatrixUnsupported) && hgRollbackMatrixUnsupported.includes("llm_task") && hgRollbackMatrixUnsupported.includes("code_generation") && hgRollbackMatrixUnsupported.includes("bugfix"), "hermes dispatch phase-2 shadow enablement rollback contract unsupported");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_default_disabled"] === true, "hermes dispatch phase-2 shadow enablement rollback contract default disabled");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_feature_flagged"] === true, "hermes dispatch phase-2 shadow enablement rollback contract feature flagged");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_requires_multiple_flags"] === true, "hermes dispatch phase-2 shadow enablement rollback contract multiple flags");
+  const hgRollbackMatrixFlags = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_required_flags"] as string[];
+  assert(Array.isArray(hgRollbackMatrixFlags) && hgRollbackMatrixFlags.length === 3, "hermes dispatch phase-2 shadow enablement rollback contract 3 flags");
+  assert(hgRollbackMatrixFlags.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled") && hgRollbackMatrixFlags.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled") && hgRollbackMatrixFlags.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "hermes dispatch phase-2 shadow enablement rollback contract flags correct");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_operator_approval_required"] === true, "hermes dispatch phase-2 shadow enablement rollback contract operator approval");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_automatic_enablement_allowed"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no automatic enablement");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_rollout_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no automatic rollout");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_phase_2_may_proceed_automatically"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no automatic phase-2");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_gateway_primary_dispatch"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no primary dispatch");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_gateway_final_result"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no gateway final");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_final_status"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no final status");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_changes_routing"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no routing");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_affects_primary_gateway_result"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no primary effect");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_makes_hermes_default"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not default");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_makes_hermes_final_review_owner"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_makes_hermes_final_code_review_owner"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not code review owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_makes_hermes_final_validation_owner"] === false, "hermes dispatch phase-2 shadow enablement rollback contract not validation owner");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_writes_files"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no files");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_enablement_logs"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no enablement logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_validation_logs"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no validation logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_review_logs"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no review logs");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_audit"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no audit persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_observability"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no observability persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_guardrails"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no guardrail persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_persists_rollback"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no rollback persist");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_contains_raw_prompt"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no raw prompt");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_contains_raw_artifacts"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no raw artifacts");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_contains_secrets"] === false, "hermes dispatch phase-2 shadow enablement rollback contract no secrets");
+  const hgRollbackMatrixShape = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_rollback_decision_shape"] as Record<string, unknown>;
+  assert(hgRollbackMatrixShape !== undefined && typeof hgRollbackMatrixShape === "object", "hermes dispatch phase-2 shadow enablement rollback contract decision shape");
+  const hgRollbackMatrixTriggers = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_rollback_triggers"] as string[];
+  assert(Array.isArray(hgRollbackMatrixTriggers) && hgRollbackMatrixTriggers.length >= 10, "hermes dispatch phase-2 shadow enablement rollback contract triggers");
+  const hgRollbackMatrixActions = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_rollback_actions"] as string[];
+  assert(Array.isArray(hgRollbackMatrixActions) && hgRollbackMatrixActions.length >= 5, "hermes dispatch phase-2 shadow enablement rollback contract actions");
+  const hgRollbackMatrixRules = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_rollback_safety_rules"] as string[];
+  assert(Array.isArray(hgRollbackMatrixRules) && hgRollbackMatrixRules.length >= 10, "hermes dispatch phase-2 shadow enablement rollback contract safety rules");
+  const hgRollbackMatrixProhibited = hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_prohibited_rollback_data"] as string[];
+  assert(Array.isArray(hgRollbackMatrixProhibited) && hgRollbackMatrixProhibited.length >= 10, "hermes dispatch phase-2 shadow enablement rollback contract prohibited data");
+  assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_rollback_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate", "hermes dispatch phase-2 shadow enablement rollback contract next PR");
+  console.log("");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
