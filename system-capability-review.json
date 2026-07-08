@@ -3333,7 +3333,85 @@
         "hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts"
       ],
-      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation"
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation"
+    },
+    {
+      "name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation",
+      "status": "implemented_phase_2_shadow_sidecar_only",
+      "executing_now": true,
+      "implements_now": true,
+      "adds_real_shadow_enablement_now": true,
+      "adds_real_readiness_evaluation_now": false,
+      "persists_readiness_logs_now": false,
+      "persists_audit_logs_now": false,
+      "persists_rollback_logs_now": false,
+      "persists_guardrail_logs_now": false,
+      "persists_observability_logs_now": false,
+      "enables_feature_flags_now": false,
+      "expands_request_types_now": false,
+      "validates_now": false,
+      "changes_runtime_behavior_now": false,
+      "changes_gateway_behavior_now": false,
+      "changes_hermes_dispatch_eligibility_now": false,
+      "adds_enablement_scripts": false,
+      "changes_ci_behavior": false,
+      "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+      "current_validated_request_types": [
+        "review"
+      ],
+      "phase_2_shadow_targets": [
+        "code_review",
+        "validation"
+      ],
+      "supported_request_types": [
+        "review",
+        "code_review",
+        "validation"
+      ],
+      "unsupported_request_types": [
+        "llm_task",
+        "code_generation",
+        "bugfix"
+      ],
+      "default_disabled": true,
+      "feature_flagged": true,
+      "requires_multiple_flags": true,
+      "required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "operator_approval_required": true,
+      "automatic_enablement_allowed": false,
+      "rollout_may_proceed_automatically": false,
+      "phase_2_may_proceed_automatically": false,
+      "changes_gateway_primary_dispatch": false,
+      "changes_gateway_final_result": false,
+      "changes_final_status": false,
+      "changes_routing": false,
+      "affects_primary_gateway_result": false,
+      "makes_hermes_default": false,
+      "makes_hermes_final_review_owner": false,
+      "makes_hermes_final_code_review_owner": false,
+      "makes_hermes_final_validation_owner": false,
+      "writes_files": false,
+      "persists_enablement_logs": false,
+      "persists_validation_logs": false,
+      "persists_review_logs": false,
+      "persists_audit": false,
+      "persists_observability": false,
+      "persists_guardrails": false,
+      "persists_rollback": false,
+      "contains_raw_prompt": false,
+      "contains_raw_artifacts": false,
+      "contains_secrets": false,
+      "uses_fake_dispatcher_in_tests": true,
+      "evidence": [
+        "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts",
+        "execution/gateway.ts",
+        "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"
+      ],
+      "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation"
     }
   ],
   "feature_flags": [
@@ -3342,7 +3420,7 @@
       "default": "shadow",
       "enabled_value": "codex",
       "effect": "Enables real Codex CLI execution for code_generation requests",
-      "runtime_effect_today": "Yes — invokes codex binary",
+      "runtime_effect_today": "Yes \u2014 invokes codex binary",
       "invokes_real_external_systems": true,
       "evidence": [
         "execution/config.ts",
@@ -3354,7 +3432,7 @@
       "default": "disabled",
       "enabled_value": "enabled",
       "effect": "Writes feedback summaries to local SQLite",
-      "runtime_effect_today": "Yes — creates .sdlc-runtime/policy-memory.sqlite",
+      "runtime_effect_today": "Yes \u2014 creates .sdlc-runtime/policy-memory.sqlite",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/policy-memory-config.ts",
@@ -3366,7 +3444,7 @@
       "default": "disabled",
       "enabled_value": "enabled",
       "effect": "Reads historical agent scores from SQLite for advisory suggestions",
-      "runtime_effect_today": "Yes — appends memory suggestions to feedback",
+      "runtime_effect_today": "Yes \u2014 appends memory suggestions to feedback",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/policy-memory-config.ts",
@@ -3378,7 +3456,7 @@
       "default": "disabled",
       "enabled_value": "shadow",
       "effect": "Enables shadow skill flow integration in contract helper",
-      "runtime_effect_today": "Yes — when enabled, attaches sidecar-only shadow integration metadata and in-memory audit trail to RuntimeResult",
+      "runtime_effect_today": "Yes \u2014 when enabled, attaches sidecar-only shadow integration metadata and in-memory audit trail to RuntimeResult",
       "invokes_real_external_systems": false,
       "evidence": [
         "core/skill-flow-runtime-integration-config.ts"
@@ -3555,8 +3633,8 @@
     }
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation",
-    "reason": "Hermes Gateway real dispatch has a readiness-gate-only phase-2 shadow enablement readiness gate.",
-    "safety_rationale": "Phase-2 shadow enablement readiness gate remains non-executing and non-enabling."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",
+    "reason": "Hermes Gateway real dispatch has an implemented phase-2 shadow sidecar attachment for code_review and validation.",
+    "safety_rationale": "Phase-2 shadow sidecar attachment remains feature-flagged, operator-approved, sidecar-only, and default-off."
   }
 }

@@ -2731,11 +2731,84 @@
       "hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts"
     ],
-    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation"
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation": "implemented_phase_2_shadow_sidecar_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_adapter": "hermes",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_scope": "gateway_real_dispatch_sidecar_phase_2_shadow_enablement_implementation",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_status": "implemented_phase_2_shadow_sidecar_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_executing_now": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_implements_now": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_adds_real_shadow_enablement_now": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_enables_feature_flags_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_expands_request_types_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_validates_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_runtime_behavior_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_gateway_behavior_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_hermes_dispatch_eligibility_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_adds_enablement_scripts": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_ci_behavior": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_current_readiness_verdict": "READY_WITH_CONSTRAINTS",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_current_validated_request_types": [
+      "review"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_phase_2_shadow_targets": [
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_supported_request_types": [
+      "review",
+      "code_review",
+      "validation"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_unsupported_request_types": [
+      "llm_task",
+      "code_generation",
+      "bugfix"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_default_disabled": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_feature_flagged": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_requires_multiple_flags": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_required_flags": [
+      "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+      "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+      "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_operator_approval_required": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_automatic_enablement_allowed": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_rollout_may_proceed_automatically": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_phase_2_may_proceed_automatically": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_gateway_primary_dispatch": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_gateway_final_result": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_final_status": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_changes_routing": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_affects_primary_gateway_result": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_makes_hermes_default": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_makes_hermes_final_review_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_makes_hermes_final_code_review_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_makes_hermes_final_validation_owner": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_writes_files": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_enablement_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_validation_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_review_logs": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_audit": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_observability": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_guardrails": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_persists_rollback": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_contains_raw_prompt": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_contains_raw_artifacts": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_contains_secrets": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_uses_fake_dispatcher_in_tests": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_evidence": [
+      "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts",
+      "execution/gateway.ts",
+      "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"
+    ],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation"
   },
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation",
-    "reason": "Hermes Gateway real dispatch has a readiness-gate-only phase-2 shadow enablement readiness gate.",
-    "safety_rationale": "Phase-2 shadow enablement readiness gate remains non-executing and non-enabling."
+    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",
+    "reason": "Hermes Gateway real dispatch has an implemented phase-2 shadow sidecar attachment for code_review and validation.",
+    "safety_rationale": "Phase-2 shadow sidecar attachment remains feature-flagged, operator-approved, sidecar-only, and default-off."
   }
 }

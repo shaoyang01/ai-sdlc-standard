@@ -6,6 +6,7 @@
 
 import { Artifact } from "../core/artifact";
 import type { HermesGatewayRealDispatchResult } from "./hermes-gateway-real-dispatch";
+import type { HermesPhase2ShadowEnablementSidecar } from "./hermes-gateway-real-dispatch-phase-2-shadow-enablement";
 
 export type AgentName = "kimi" | "codex" | "hermes";
 
@@ -30,6 +31,9 @@ export type ExecutionRequest = Readonly<{
     valid: boolean;
     reason: string;
   }>;
+  operatorApproval?: Readonly<{
+    hermesPhase2ShadowEnablement?: true;
+  }>;
 }>;
 
 export type ExecutionArtifactType =
@@ -51,5 +55,5 @@ export type ExecutionResult = Readonly<{
   output: Record<string, unknown>;
   artifacts: ReadonlyArray<ExecutionArtifact>;
   error?: string;
-  hermes_gateway_real_dispatch?: HermesGatewayRealDispatchResult;
+  hermes_gateway_real_dispatch?: HermesGatewayRealDispatchResult | HermesPhase2ShadowEnablementSidecar;
 }>;

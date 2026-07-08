@@ -32,6 +32,11 @@ import {
   evaluateHermesGatewayRealDispatchGatewayIntegrationContract,
 } from "./hermes-gateway-real-dispatch-gateway-integration-contract";
 import {
+  attachHermesPhase2ShadowEnablementSidecar,
+  isHermesPhase2ShadowEnablementRequestType,
+  type HermesPhase2ShadowDispatcher,
+} from "./hermes-gateway-real-dispatch-phase-2-shadow-enablement";
+import {
   evaluateHermesGatewayRealDispatchFallbackPolicy,
 } from "./hermes-gateway-real-dispatch-fallback-policy";
 import {
@@ -52,6 +57,7 @@ export interface ExecutionGatewayOptions {
   hermesConfig?: CliAdapterConfig;
   hermesRunner?: HermesCliProcessRunner;
   hermesGatewayRealDispatcher?: HermesGatewayRealDispatcher;
+  hermesPhase2ShadowDispatcher?: HermesPhase2ShadowDispatcher;
   hermesGuardrailLimits?: Partial<HermesGatewayRealDispatchGuardrailLimits>;
 }
 
@@ -136,6 +142,16 @@ export class ExecutionGateway {
   ): Promise<ExecutionResult> {
     if (!this.shouldAttemptHermesGatewayRealDispatch(request)) {
       return primaryResult;
+    }
+
+    if (isHermesPhase2ShadowEnablementRequestType(request.type)) {
+      return attachHermesPhase2ShadowEnablementSidecar({
+        request,
+        primaryResult,
+        env: this.options.env,
+        config: this.options.hermesConfig,
+        dispatcher: this.options.hermesPhase2ShadowDispatcher,
+      });
     }
 
     try {

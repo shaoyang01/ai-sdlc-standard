@@ -5,6 +5,7 @@ import fs from "fs";
 import { ExecutionGateway, type HermesGatewayRealDispatcher } from "../execution/gateway";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
 import type { HermesGatewayRealDispatchResult } from "../execution/hermes-gateway-real-dispatch";
+import type { HermesPhase2ShadowDispatcher, HermesPhase2ShadowEnablementDispatchResult } from "../execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement";
 
 let passed = 0;
 let failed = 0;
@@ -79,6 +80,19 @@ function makeDispatcher(
   };
 }
 
+function makePhase2Dispatcher(
+  impl: (request: ExecutionRequest) => HermesPhase2ShadowEnablementDispatchResult | Promise<HermesPhase2ShadowEnablementDispatchResult>
+): { dispatcher: HermesPhase2ShadowDispatcher; calls: () => number } {
+  let called = 0;
+  return {
+    calls: () => called,
+    dispatcher: async (input) => {
+      called++;
+      return impl(input.request);
+    },
+  };
+}
+
 function assertNoHermesField(result: ExecutionResult, label: string): void {
   assert(!("hermes_gateway_real_dispatch" in result), `${label}: no Hermes field`);
   assert(Object.prototype.hasOwnProperty.call(result, "hermes_gateway_real_dispatch") === false, `${label}: no own Hermes property`);
@@ -124,7 +138,8 @@ function assertFallbackPolicy(
   },
   label: string
 ): void {
-  const policy = result.hermes_gateway_real_dispatch?.fallbackPolicy;
+  const sidecar = result.hermes_gateway_real_dispatch as HermesGatewayRealDispatchResult | undefined;
+  const policy = sidecar?.fallbackPolicy;
   assert(policy !== undefined, `${label}: fallback policy attached`);
   assert(policy?.reason === expected.reason, `${label}: fallback reason`);
   assert(policy?.action === expected.action, `${label}: fallback action`);
@@ -155,7 +170,8 @@ function assertObservability(
   },
   label: string
 ): void {
-  const observability = result.hermes_gateway_real_dispatch?.observability;
+  const sidecar = result.hermes_gateway_real_dispatch as HermesGatewayRealDispatchResult | undefined;
+  const observability = sidecar?.observability;
   assert(observability !== undefined, `${label}: observability attached`);
   assert(observability?.outcome === expected.outcome, `${label}: observability outcome`);
   assert(observability?.attached === expected.attached, `${label}: observability attached flag`);
@@ -178,7 +194,8 @@ function assertObservability(
 }
 
 function assertGuardrails(result: ExecutionResult, label: string): void {
-  const guardrails = result.hermes_gateway_real_dispatch?.guardrails;
+  const sidecar = result.hermes_gateway_real_dispatch as HermesGatewayRealDispatchResult | undefined;
+  const guardrails = sidecar?.guardrails;
   assert(guardrails !== undefined, `${label}: guardrails attached`);
   assert(guardrails?.decision === "allow_attach", `${label}: guardrails allow`);
   assert(guardrails?.allowed === true, `${label}: guardrails allowed`);
@@ -321,32 +338,52 @@ async function test(): Promise<void> {
   }
   console.log("");
 
-  console.log("Test 5: code_review and validation also attach when safe");
+  console.log("Test 5: code_review and validation use Phase-2 shadow sidecar path");
   for (const type of ["code_review", "validation"] as const) {
-    const typed = makeDispatcher((request) => safeDispatchResult(request));
+    const phase2Dispatcher = makePhase2Dispatcher(() => ({ status: "success", summary: "ok", warnings: [] }));
     const gateway = new ExecutionGateway({
       env: allHermesFlags,
-      hermesGatewayRealDispatcher: typed.dispatcher,
+      hermesPhase2ShadowDispatcher: phase2Dispatcher.dispatcher,
     });
-    const request: ExecutionRequest = type === "code_review"
-      ? { type, node: "code-review", agent: "hermes", requirementId: `REQ-${type}`, input: { artifacts: [] } }
-      : { type, node: "validation", agent: "hermes", requirementId: `REQ-${type}`, input: {} };
+    const request: ExecutionRequest = {
+      type,
+      node: type === "code_review" ? "code-review" : "validation",
+      agent: "hermes",
+      requirementId: `REQ-${type}`,
+      input: type === "code_review" ? { artifacts: [] } : {},
+      operatorApproval: { hermesPhase2ShadowEnablement: true },
+    };
     const result = await gateway.execute(request);
-    assert(typed.calls() === 1, `${type}: dispatcher called once`);
-    assert(result.hermes_gateway_real_dispatch?.requestType === type, `${type}: request type preserved`);
+    assert(phase2Dispatcher.calls() === 1, `${type}: Phase-2 dispatcher called once`);
     assert(Object.prototype.hasOwnProperty.call(result, "hermes_gateway_real_dispatch") === true, `${type}: field attached`);
-    assertFallbackPolicy(result, {
-      reason: "dispatch_success",
-      action: "attach_sidecar_metadata",
-      attach: true,
-    }, type);
-    assertObservability(result, {
-      outcome: "attached_success",
-      attached: true,
-      omitted: false,
-      safeToAttach: true,
-    }, type);
-    assertGuardrails(result, type);
+    const sidecar = result.hermes_gateway_real_dispatch as unknown as Record<string, unknown> | undefined;
+    assert(sidecar?.requestType === type, `${type}: request type preserved`);
+    assert(sidecar?.phase === "phase_2_shadow_enablement", `${type}: Phase-2 phase`);
+    assert(sidecar?.mode === "shadow_sidecar", `${type}: shadow sidecar mode`);
+    assert(sidecar?.status === "attached", `${type}: sidecar attached`);
+    assert(sidecar?.affectsPrimaryGatewayResult === false, `${type}: no primary effect`);
+    assert(sidecar?.changesGatewayPrimaryDispatch === false, `${type}: no gateway dispatch change`);
+    assert(sidecar?.changesGatewayFinalResult === false, `${type}: no gateway final result change`);
+    assert(sidecar?.changesRuntimeFinalStatus === false, `${type}: no runtime final_status change`);
+    assert(sidecar?.changesRuntimeRouting === false, `${type}: no runtime routing change`);
+    assert(sidecar?.writesFiles === false, `${type}: no file writes`);
+    assert(sidecar?.persistsAudit === false, `${type}: no audit persistence`);
+    assert(sidecar?.containsRawPrompt === false, `${type}: no raw prompt`);
+    assert(sidecar?.containsRawArtifacts === false, `${type}: no raw artifacts`);
+    assert(sidecar?.containsSecrets === false, `${type}: no secrets`);
+    assert(typeof (sidecar?.fallbackPolicy as Record<string, unknown> | undefined)?.reason === "string", `${type}: fallback reason`);
+    assert(typeof (sidecar?.fallbackPolicy as Record<string, unknown> | undefined)?.action === "string", `${type}: fallback action`);
+    assert(typeof (sidecar?.observability as Record<string, unknown> | undefined)?.outcome === "string", `${type}: observability outcome`);
+    assert(typeof (sidecar?.observability as Record<string, unknown> | undefined)?.warningCount === "number", `${type}: observability warningCount`);
+    assert(typeof (sidecar?.observability as Record<string, unknown> | undefined)?.hasWarnings === "boolean", `${type}: observability hasWarnings`);
+    assert((sidecar?.guardrails as Record<string, unknown> | undefined)?.decision === "allow", `${type}: guardrails allow`);
+    assert((sidecar?.guardrails as Record<string, unknown> | undefined)?.allowed === true, `${type}: guardrails allowed`);
+    assert(typeof (sidecar?.guardrails as Record<string, unknown> | undefined)?.warningCount === "number", `${type}: guardrails warningCount`);
+    assert(Array.isArray((sidecar?.guardrails as Record<string, unknown> | undefined)?.checks), `${type}: guardrails checks array`);
+    assert((sidecar?.rollback as Record<string, unknown> | undefined)?.decision === "not_required", `${type}: rollback not_required`);
+    assert((sidecar?.rollback as Record<string, unknown> | undefined)?.required === false, `${type}: rollback required false`);
+    assert(typeof (sidecar?.rollback as Record<string, unknown> | undefined)?.action === "string", `${type}: rollback action`);
+    assertPrimaryGatewayResultUnchanged(result, `${type} primary unchanged`);
   }
   console.log("");
 
