@@ -98,6 +98,7 @@ async function test() {
   ];
   const thirdFailReplay = replayExecution(initialState, thirdFailHistory);
   assert(thirdFailReplay.currentNode === "validation", "3rd review FAIL routes to validation, not tech-design");
+  assert(thirdFailReplay.status === "running", "replay remains running until validation is executed");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

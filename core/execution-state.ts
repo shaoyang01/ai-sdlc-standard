@@ -40,7 +40,7 @@ export function updateState(
   newRetryCount?: number
 ): ExecutionState {
   const retry = newRetryCount !== undefined ? newRetryCount : state.retryCount;
-  const isDone = !nextNode || retry >= 3;
+  const isDone = !nextNode;
 
   return {
     currentNode: nextNode,
