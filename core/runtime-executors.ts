@@ -43,6 +43,62 @@ export interface ImplementationExecutorInput {
   executionMode: ExecutionMode;
 }
 
+// Pure structured tech-design builder: deterministic design from requirement text and summary.
+export function buildTechDesign(
+  rawText: string,
+  requirementSummary: RequirementSummary
+): Record<string, unknown> {
+  const hasApi = /\b(api|endpoint|http|restful)\b/i.test(rawText);
+  const hasEvent = /\b(event|message|queue|pipeline)\b/i.test(rawText);
+  const hasUi = /\b(form|page|frontend|ui)\b/i.test(rawText);
+  const hasDb = /\b(database|db|table|storage)\b/i.test(rawText);
+
+  const components: string[] = [];
+  if (hasApi) components.push("api");
+  if (hasEvent) components.push("event_pipeline");
+  if (hasUi) components.push("ui_form");
+  if (hasDb) components.push("data_store");
+  if (components.length === 0) components.push("service");
+
+  const interfaces: string[] = [];
+  if (hasApi) interfaces.push("http_api");
+  if (hasEvent) interfaces.push("event_message");
+  if (hasUi) interfaces.push("user_interface");
+
+  const dependencies: string[] = [];
+  if (hasDb) dependencies.push("database");
+  if (/\b(cache|redis)\b/i.test(rawText)) dependencies.push("cache");
+  if (/\b(queue|kafka|mq|message)\b/i.test(rawText)) dependencies.push("queue");
+  if (/\b(oauth|sso|login|auth)\b/i.test(rawText)) dependencies.push("third_party_auth");
+
+  let test_strategy: "unit" | "unit_plus_integration" | "unit_integration_e2e" = "unit";
+  if (/\b(e2e|end-to-end|end to end)\b/i.test(rawText)) {
+    test_strategy = "unit_integration_e2e";
+  } else if (/\b(integration|api|event|database|queue)\b/i.test(rawText)) {
+    test_strategy = "unit_plus_integration";
+  }
+
+  const risks: string[] = [];
+  if (requirementSummary.multi_repo) risks.push("multi_repo_sync");
+  if (dependencies.length > 0) risks.push("external_dependency");
+  if (interfaces.length > 1) risks.push("interface_contract_drift");
+
+  return {
+    node: "tech-design",
+    result: "design_completed",
+    requirement_id: requirementSummary.requirement_id,
+    multi_repo: requirementSummary.multi_repo,
+    design: {
+      approach: requirementSummary.multi_repo ? "multi_repo_fanout" : "single_service",
+      components,
+      interfaces,
+      dependencies,
+      test_strategy,
+      risks,
+    },
+  };
+}
+
 // Pure builder: converts the Runtime's raw context into the typed implementation input contract.
 export function buildImplementationExecutorInput(
   context: Record<string, unknown>,
@@ -110,7 +166,10 @@ export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
   "requirement-summary": (ctx, _execCtx) =>
     executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
   "tech-design": (ctx, _execCtx) =>
-    ({ node: "tech-design", result: "design_completed", summary: ctx }),
+    buildTechDesign(
+      ctx.raw_text as string,
+      (ctx["requirement-summary"] ?? ctx) as RequirementSummary
+    ),
   "review": (ctx, execCtx) =>
     ({
       node: "review",

@@ -108,6 +108,25 @@ async function test() {
   assert(codeReviewArtifact!.content["status"] === "PASS", "default code review status is PASS");
   console.log("");
 
+  // Test 5c: Structured tech-design artifact
+  console.log("Test 5c: Structured tech-design artifact");
+  const designRun = await run("build a user login page with database storage");
+  assert(designRun.final_status === "success", "design run completes with success");
+  const designArtifact = designRun.artifacts.find((a: { type: string }) => a.type === "tech_design");
+  assert(designArtifact !== undefined, "tech_design artifact exists");
+  assert(designArtifact!.content["result"] === "design_completed", "tech design result is design_completed");
+  assert(typeof designArtifact!.content["requirement_id"] === "string", "tech design has requirement_id");
+  assert(typeof designArtifact!.content["multi_repo"] === "boolean", "tech design has multi_repo");
+  const design = designArtifact!.content["design"] as Record<string, unknown> | undefined;
+  assert(design !== undefined, "tech design has structured design object");
+  assert(design!["approach"] === "single_service", "single-service approach for non-multi-repo requirement");
+  assert(Array.isArray(design!["components"]) && (design!["components"] as unknown[]).length > 0, "design components is non-empty array");
+  assert(Array.isArray(design!["interfaces"]), "design interfaces is array");
+  assert(Array.isArray(design!["dependencies"]), "design dependencies is array");
+  assert(typeof design!["test_strategy"] === "string", "design test_strategy exists");
+  assert(Array.isArray(design!["risks"]), "design risks is array");
+  console.log("");
+
   // Test 6: Multi-repo fanout produces fanout_result artifact
   console.log("Test 6: Fanout artifact");
   const fanoutRun = await run("sync inventory service with repo-A calls repo-B and integration event pipeline");
