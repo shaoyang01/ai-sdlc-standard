@@ -7,6 +7,7 @@
 import { NodeType } from "../sdlc_graph/types";
 import { ExecutionContext } from "./execution-context";
 import { executionGateway } from "../execution";
+import { Artifact } from "./artifact";
 
 export type ExecutionMode = "direct" | "speckit";
 
@@ -30,6 +31,31 @@ export type NodeExecutor = (
 
 export type RuntimeExecutorMap = Record<NodeType, NodeExecutor>;
 
+// Typed contract for the implementation executor.
+// Future real/fake implementation adapters should accept this input and return this output.
+export interface ImplementationExecutorInput {
+  requirement: string;
+  requirementId: string;
+  summary: RequirementSummary;
+  designOutput: unknown;
+  reviewOutput: unknown;
+  complexity?: "low" | "medium" | "high";
+  executionMode: ExecutionMode;
+}
+
+export interface ImplementationExecutorOutput {
+  node: "implementation";
+  mode: ExecutionMode | "fanout";
+  result: string;
+  code?: string;
+  artifacts?: Artifact[];
+  fanout_result?: FanoutResult;
+  speckit_stages?: Record<string, string>;
+  execution_result?: Record<string, unknown>;
+  requirement_id?: string;
+  error?: string;
+}
+
 // Default executor map — no switch, no branching
 export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
   "requirement-summary": (ctx, _execCtx) =>
@@ -43,7 +69,7 @@ export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
       reviewed_at: new Date().toISOString(),
     }),
   "implementation": (ctx, execCtx) =>
-    executeImplementation(ctx, execCtx),
+    executeImplementation(ctx, execCtx) as unknown as Promise<Record<string, unknown>>,
   "validation": (_ctx, _execCtx) =>
     ({ node: "validation", result: "validated", all_checks_passed: true }),
 };
@@ -83,14 +109,14 @@ function extractSubRequirements(text: string): { repo: string; task: string }[] 
 }
 
 // Pure implementation executor — mode from context, not inline decision
-export async function executeImplementation(context: Record<string, unknown>, _execCtx: ExecutionContext): Promise<Record<string, unknown>> {
+export async function executeImplementation(context: Record<string, unknown>, _execCtx: ExecutionContext): Promise<ImplementationExecutorOutput> {
   const summary = (context["requirement-summary"] || context) as RequirementSummary;
   const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
   const subReqs = summary.sub_requirements || [];
 
   if (subReqs.length > 0) {
     const result = await executeFanout(summary.requirement_id, subReqs, _execCtx);
-    return { node: "implementation", mode: "fanout", fanout_result: result };
+    return { node: "implementation", mode: "fanout", result: "fanout_completed", fanout_result: result };
   }
   if (mode === "speckit") {
     return executeSpeckitPipeline(summary.requirement_id, _execCtx);
@@ -103,7 +129,7 @@ export async function executeImplementation(context: Record<string, unknown>, _e
     requirementId: summary.requirement_id,
     input: { mode, context },
   });
-  return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts };
+  return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts as Artifact[] };
 }
 
 // Fanout: Parallel Multi-Repo Execution
@@ -127,11 +153,11 @@ export async function executeFanout(
 }
 
 // Speckit: Optional Pipeline
-export async function executeSpeckitPipeline(requirementId: string, _execCtx: ExecutionContext): Promise<Record<string, unknown>> {
+export async function executeSpeckitPipeline(requirementId: string, _execCtx: ExecutionContext): Promise<ImplementationExecutorOutput> {
   const stages = ["spec", "analyze", "implement", "sync"];
   const results: Record<string, string> = {};
   for (const stage of stages) {
     results[stage] = `${stage}_completed`;
   }
-  return { node: "implementation", mode: "speckit", speckit_stages: results, requirement_id: requirementId };
+  return { node: "implementation", mode: "speckit", result: "speckit_completed", speckit_stages: results, requirement_id: requirementId };
 }
