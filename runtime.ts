@@ -292,6 +292,12 @@ export async function run(
     currentNode = getNextNode(currentNode, nodeOutput, retryCount);
   }
 
+  // ─── Final Status ─────────────────────────────────────
+  // NOTE: final_status currently reflects FANOUT COMPLETION STATUS only.
+  // Validation and code-review failures are intentionally surfaced through
+  // feedback.review_summary, policy_suggestions, trace status, and artifacts.
+  // Do not turn this into a quality-gate status without an explicit Runtime
+  // semantic decision that also addresses code-review failure handling.
   const implementationOutput = legacyContext["implementation"] as Record<string, unknown> | undefined;
   const fanoutResult = implementationOutput?.fanout_result as FanoutResult | undefined;
   const failedCount = (fanoutResult?.repo_results || []).filter((r: { status: string }) => r.status === "failed").length;

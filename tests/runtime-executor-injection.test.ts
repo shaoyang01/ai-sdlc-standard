@@ -230,6 +230,9 @@ async function test() {
     },
   });
 
+  // Current semantics: final_status reflects fanout completion only.
+  // Validation failure is advisory feedback in the shadow-first Runtime;
+  // it is intentionally exposed through feedback and artifacts, not final_status.
   assert(result3.final_status === "success", "runtime completes despite validation failure");
 
   const implTrace3 = result3.execution_trace.find((t) => t.node === "implementation");
