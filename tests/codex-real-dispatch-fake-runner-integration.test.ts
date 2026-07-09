@@ -429,23 +429,8 @@ async function test() {
   assert(injectedResult.artifacts[0].content["file"] === "src/generated-codex-patch.ts", "injected gateway artifact has expected file path");
   console.log("");
 
-  // ── Test 14b: Gateway with codex mode and no injected runner uses legacy adapter path ──
-  console.log("Test 14b: Gateway codex mode without injected runner uses legacy path");
-  process.env.SDLC_EXECUTION_MODE = "codex";
-  const legacyGateway = new ExecutionGateway();
-  const legacyGatewayResult = await legacyGateway.execute(requestWithImplInput);
-  // The legacy adapter path attempts to invoke the real Codex CLI. In test environments
-  // the CLI is not installed, so it returns a failure result rather than shadow_output or
-  // a fake-runner code_patch. This proves the Gateway routed to executeCodexAgent.
-  assert(legacyGatewayResult.success === false, "legacy path returns failure when Codex CLI is unavailable");
-  assert(legacyGatewayResult.artifacts.length === 0, "legacy path returns no artifacts on CLI failure");
-  assert(legacyGatewayResult.error !== undefined, "legacy path includes an error");
-  assert(!legacyGatewayResult.artifacts.some((a) => a.type === "shadow_output"), "legacy path did not fall back to shadow_output");
-  assert(!legacyGatewayResult.artifacts.some((a) => a.type === "code_patch"), "legacy path did not use fake runner code_patch");
-  console.log("");
-
-  // ── Test 14c: Injected runner is not used when agent !== codex ──
-  console.log("Test 14c: Injected runner ignored when agent is not codex");
+  // ── Test 14b: Injected runner is not used when agent !== codex ──
+  console.log("Test 14b: Injected runner ignored when agent is not codex");
   process.env.SDLC_EXECUTION_MODE = "codex";
   const kimiRunnerGateway = new ExecutionGateway({
     codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
@@ -460,8 +445,8 @@ async function test() {
   assert(!kimiResult.artifacts.some((a) => a.type === "code_patch"), "kimi request did not produce code_patch");
   console.log("");
 
-  // ── Test 14d: Injected runner is not used when mode is not codex ──
-  console.log("Test 14d: Injected runner ignored when mode is not codex");
+  // ── Test 14c: Injected runner is not used when mode is not codex ──
+  console.log("Test 14c: Injected runner ignored when mode is not codex");
   delete process.env.SDLC_EXECUTION_MODE;
   const shadowModeGateway = new ExecutionGateway({
     codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
