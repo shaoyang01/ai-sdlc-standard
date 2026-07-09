@@ -200,6 +200,52 @@ async function test() {
   assert(testEnv.SDLC_KIMI_GATEWAY_REAL_DISPATCH !== "enabled", "Kimi real dispatch flag not enabled");
   assert(testEnv.SDLC_HERMES_GATEWAY_REAL_DISPATCH !== "enabled", "Hermes real dispatch flag not enabled");
 
+  const validationTrace2 = result2.execution_trace.find((t) => t.node === "validation");
+  assert(validationTrace2 !== undefined, "validation trace exists after artifact passthrough");
+  assert(validationTrace2!.output["result"] === "validated", "validation passes when implementation has artifacts");
+  assert(validationTrace2!.output["all_checks_passed"] === true, "validation all_checks_passed is true");
+
+  const validationArtifact2 = result2.artifacts.find((a) => a.node === "validation" && a.type === "validation_report");
+  assert(validationArtifact2 !== undefined, "validation artifact exists");
+  assert(validationArtifact2!.content["all_checks_passed"] === true, "validation artifact records all_checks_passed true");
+  assert(result2.feedback.review_summary.validationPassed === true, "feedback reflects validation passed");
+
+  console.log("");
+
+  // ── Test 3: Empty implementation fails validation ──
+  console.log("Test 3: Empty implementation fails validation");
+  const emptyImplementationExecutor = async (
+    _context: Record<string, unknown>,
+    _execCtx: ExecutionContext
+  ) => ({
+    node: "implementation",
+    mode: "direct",
+    result: "empty",
+  });
+
+  const result3 = await run("build nothing", {
+    env: testEnv,
+    executors: {
+      implementation: emptyImplementationExecutor as any,
+    },
+  });
+
+  assert(result3.final_status === "success", "runtime completes despite validation failure");
+
+  const implTrace3 = result3.execution_trace.find((t) => t.node === "implementation");
+  assert(implTrace3 !== undefined, "execution trace includes empty implementation");
+  assert(implTrace3!.output["result"] === "empty", "empty implementation result recorded");
+
+  const validationTrace3 = result3.execution_trace.find((t) => t.node === "validation");
+  assert(validationTrace3 !== undefined, "validation trace exists after empty implementation");
+  assert(validationTrace3!.output["result"] === "FAIL", "validation fails when implementation has no product");
+  assert(validationTrace3!.output["all_checks_passed"] === false, "validation all_checks_passed is false");
+
+  const validationArtifact3 = result3.artifacts.find((a) => a.node === "validation" && a.type === "validation_report");
+  assert(validationArtifact3 !== undefined, "validation artifact exists for empty implementation");
+  assert(validationArtifact3!.content["all_checks_passed"] === false, "validation artifact records all_checks_passed false");
+  assert(result3.feedback.review_summary.validationPassed === false, "feedback reflects validation failed");
+
   console.log("");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

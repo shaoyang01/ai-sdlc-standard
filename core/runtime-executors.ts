@@ -78,6 +78,33 @@ export interface ImplementationExecutorOutput {
   error?: string;
 }
 
+// Validation: inspect implementation output, do not always pass.
+export function validateImplementationOutput(
+  context: Record<string, unknown>
+): Record<string, unknown> {
+  const implOutput = context["implementation"] as Record<string, unknown> | undefined;
+  const hasCode =
+    typeof implOutput?.["code"] === "string" &&
+    (implOutput["code"] as string).trim().length > 0;
+  const hasExecutionResult =
+    implOutput?.["execution_result"] !== undefined &&
+    implOutput?.["execution_result"] !== null;
+  const hasArtifacts =
+    Array.isArray(implOutput?.["artifacts"]) &&
+    (implOutput["artifacts"] as unknown[]).length > 0;
+  const allChecksPassed = Boolean(hasCode || hasExecutionResult || hasArtifacts);
+  return {
+    node: "validation",
+    result: allChecksPassed ? "validated" : "FAIL",
+    all_checks_passed: allChecksPassed,
+    checks: {
+      has_code: hasCode,
+      has_execution_result: hasExecutionResult,
+      has_artifacts: hasArtifacts,
+    },
+  };
+}
+
 // Default executor map — no switch, no branching
 export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
   "requirement-summary": (ctx, _execCtx) =>
@@ -92,8 +119,7 @@ export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
     }),
   "implementation": (ctx, execCtx) =>
     executeImplementation(ctx, execCtx) as unknown as Promise<Record<string, unknown>>,
-  "validation": (_ctx, _execCtx) =>
-    ({ node: "validation", result: "validated", all_checks_passed: true }),
+  "validation": (ctx, _execCtx) => validateImplementationOutput(ctx),
 };
 
 // Pure dispatch — no control logic, just lookup + execute
