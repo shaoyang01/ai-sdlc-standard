@@ -7,7 +7,9 @@
 import { run } from "../runtime";
 import { NodeType } from "../sdlc_graph/types";
 import { ExecutionContext } from "../core/execution-context";
+import { buildExecutionContext } from "../core/context-builder";
 import { createArtifact, Artifact } from "../core/artifact";
+import { buildImplementationExecutorInput } from "../core/runtime-executors";
 
 async function test() {
   let passed = 0;
@@ -26,6 +28,52 @@ async function test() {
   console.log("Runtime Executor Injection Test\n");
 
   const testEnv: Record<string, string | undefined> = {};
+
+  // ── Test 0: buildImplementationExecutorInput ──
+  console.log("Test 0: Implementation executor input builder");
+  const summary = {
+    requirement_id: "REQ-BUILDER",
+    multi_repo: false,
+    main_repo: "main",
+    sub_requirements: [],
+    parsed_at: new Date().toISOString(),
+  };
+  const designOutput = { node: "tech-design", result: "design_completed" };
+  const reviewOutput = { node: "review", result: "PASS" };
+  const ctx = buildExecutionContext("implementation", { requirement: "build login" }, { requirementId: "REQ-BUILDER", complexity: "medium" });
+
+  const input0 = buildImplementationExecutorInput(
+    {
+      raw_text: "build login",
+      requirement_id: "REQ-BUILDER",
+      execution_mode: "direct",
+      "requirement-summary": summary,
+      "tech-design": designOutput,
+      "review": reviewOutput,
+    },
+    ctx
+  );
+  assert(input0.requirement === "build login", "requirement from context");
+  assert(input0.requirementId === "REQ-BUILDER", "requirementId from context");
+  assert(input0.summary === summary, "summary from context");
+  assert(input0.designOutput === designOutput, "designOutput from context");
+  assert(input0.reviewOutput === reviewOutput, "reviewOutput from context");
+  assert(input0.complexity === "medium", "complexity from execCtx");
+  assert(input0.executionMode === "direct", "executionMode from context");
+
+  // Fallback: when raw_text / requirement_id are missing, read from execCtx
+  const input0Fallback = buildImplementationExecutorInput(
+    {
+      "requirement-summary": summary,
+      "tech-design": designOutput,
+      "review": reviewOutput,
+    },
+    ctx
+  );
+  assert(input0Fallback.requirement === "build login", "fallback requirement from execCtx");
+  assert(input0Fallback.requirementId === "REQ-BUILDER", "fallback requirementId from execCtx");
+  assert(input0Fallback.executionMode === "direct", "default executionMode is direct");
+  console.log("");
 
   // ── Test 1: Inline implementation output ──
   console.log("Test 1: Inline implementation executor output");

@@ -43,6 +43,28 @@ export interface ImplementationExecutorInput {
   executionMode: ExecutionMode;
 }
 
+// Pure builder: converts the Runtime's raw context into the typed implementation input contract.
+export function buildImplementationExecutorInput(
+  context: Record<string, unknown>,
+  execCtx: ExecutionContext
+): ImplementationExecutorInput {
+  return {
+    requirement:
+      (context.raw_text as string) ??
+      (execCtx.input?.requirement as string) ??
+      "",
+    requirementId:
+      (context.requirement_id as string) ??
+      (execCtx.metadata?.requirementId as string) ??
+      "",
+    summary: (context["requirement-summary"] ?? context) as RequirementSummary,
+    designOutput: context["tech-design"],
+    reviewOutput: context["review"],
+    complexity: execCtx.metadata?.complexity as "low" | "medium" | "high" | undefined,
+    executionMode: (context.execution_mode as ExecutionMode) || "direct",
+  };
+}
+
 export interface ImplementationExecutorOutput {
   node: "implementation";
   mode: ExecutionMode | "fanout";
@@ -109,25 +131,24 @@ function extractSubRequirements(text: string): { repo: string; task: string }[] 
 }
 
 // Pure implementation executor — mode from context, not inline decision
-export async function executeImplementation(context: Record<string, unknown>, _execCtx: ExecutionContext): Promise<ImplementationExecutorOutput> {
-  const summary = (context["requirement-summary"] || context) as RequirementSummary;
-  const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
-  const subReqs = summary.sub_requirements || [];
+export async function executeImplementation(context: Record<string, unknown>, execCtx: ExecutionContext): Promise<ImplementationExecutorOutput> {
+  const input = buildImplementationExecutorInput(context, execCtx);
+  const subReqs = input.summary.sub_requirements || [];
 
   if (subReqs.length > 0) {
-    const result = await executeFanout(summary.requirement_id, subReqs, _execCtx);
+    const result = await executeFanout(input.requirementId, subReqs, execCtx);
     return { node: "implementation", mode: "fanout", result: "fanout_completed", fanout_result: result };
   }
-  if (mode === "speckit") {
-    return executeSpeckitPipeline(summary.requirement_id, _execCtx);
+  if (input.executionMode === "speckit") {
+    return executeSpeckitPipeline(input.requirementId, execCtx);
   }
   // Direct path — route through Execution Gateway
   const result = await executionGateway.execute({
     type: "code_generation",
     node: "implementation",
     agent: "codex",
-    requirementId: summary.requirement_id,
-    input: { mode, context },
+    requirementId: input.requirementId,
+    input: { mode: input.executionMode, context },
   });
   return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts as Artifact[] };
 }
