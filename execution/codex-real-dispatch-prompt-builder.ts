@@ -134,10 +134,15 @@ export function buildCodexPrompt(
     "- Do not include secrets, credentials, or environment variables.",
     "",
     "# Expected Output Contract",
-    "Return the output in the following format:",
+    "Return the output inside a structured fenced block with the exact format below:",
+    "",
+    "```codex-code-patch",
     "FILE: <relative-file-path>",
     "PATCH:",
     "<sanitized unified diff or code patch>",
+    "```",
+    "",
+    "Do not include raw stdout, raw stderr, secrets, credentials, or environment variables.",
   ].join("\n");
 
   if (prompt.length > limits.maxPromptChars) {

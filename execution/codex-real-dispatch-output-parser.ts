@@ -72,6 +72,19 @@ interface ParsedPatch {
   patch: string;
 }
 
+function extractStructuredOutput(stdout: string): string {
+  const fenceStart = stdout.indexOf("```codex-code-patch");
+  if (fenceStart === -1) return stdout;
+
+  const contentStart = stdout.indexOf("\n", fenceStart);
+  if (contentStart === -1) return stdout;
+
+  const fenceEnd = stdout.indexOf("```", contentStart + 1);
+  if (fenceEnd === -1) return stdout;
+
+  return stdout.slice(contentStart + 1, fenceEnd).trim();
+}
+
 function parsePatch(stdout: string): { kind: "ok"; parsed: ParsedPatch } | { kind: "missing_file_path" | "empty_patch" | "parse_error" } {
   const hasFile = stdout.includes("FILE:");
   const hasPatch = stdout.includes("PATCH:");
@@ -120,7 +133,8 @@ export function parseCodexOutput(
     };
   }
 
-  const parsed = parsePatch(stdout);
+  const structuredOutput = extractStructuredOutput(stdout);
+  const parsed = parsePatch(structuredOutput);
   if (parsed.kind !== "ok") {
     return {
       ok: false,

@@ -86,6 +86,13 @@ async function test() {
     assert(promptResult.prompt.includes("# Implementation Constraints"), "prompt includes implementation constraints section");
     assert(promptResult.prompt.includes("# Expected Output Contract"), "prompt includes expected output contract section");
     assert(promptResult.prompt.includes("REQ-FAKE-RUNNER"), "prompt includes requirement id");
+    assert(promptResult.prompt.includes("```codex-code-patch"), "prompt includes structured fenced output requirement");
+    assert(promptResult.prompt.includes("FILE: <relative-file-path>"), "prompt includes file path placeholder");
+    assert(!promptResult.prompt.includes("raw_context"), "prompt does not include raw_context");
+    assert(!promptResult.prompt.includes("raw_artifacts"), "prompt does not include raw_artifacts");
+    assert(!promptResult.prompt.includes("full_patch"), "prompt does not include full_patch");
+    assert(!promptResult.prompt.includes("raw_stdout"), "prompt does not include raw_stdout");
+    assert(!promptResult.prompt.includes("raw_stderr"), "prompt does not include raw_stderr");
     assert(!promptResult.prompt.includes(JSON.stringify({ raw_text: "anything" })), "prompt does not dump raw context");
   }
   console.log("");
@@ -211,6 +218,86 @@ async function test() {
   assert(oversizedResult.ok === false, "parser rejects oversized output");
   if (!oversizedResult.ok) {
     assert(oversizedResult.fallbackAction === "truncate_and_shadow_fallback", "fallback action is truncate_and_shadow_fallback");
+  }
+  console.log("");
+
+  // ── Test 8b: Output parser supports structured fenced output ──
+  console.log("Test 8b: Output parser supports structured fenced output");
+  const structuredStdout = [
+    "Some preamble text",
+    "```codex-code-patch",
+    "FILE: src/structured.ts",
+    "PATCH:",
+    "// Structured output patch",
+    "export const structured = true;",
+    "```",
+    "Some trailing text",
+  ].join("\n");
+  const structuredResult = parseCodexOutput(structuredStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(structuredResult.ok === true, "parser succeeds for structured fenced output");
+  if (structuredResult.ok) {
+    assert(structuredResult.artifact.content["file"] === "src/structured.ts", "structured artifact has file path");
+    assert((structuredResult.artifact.content["patch"] as string).includes("export const structured = true;"), "structured artifact has patch content");
+  }
+  console.log("");
+
+  // ── Test 8c: Output parser supports legacy simple FILE/PATCH output ──
+  console.log("Test 8c: Output parser supports legacy simple FILE/PATCH output");
+  const legacyStdout = [
+    "FILE: src/legacy.ts",
+    "PATCH:",
+    "// Legacy output patch",
+    "export const legacy = true;",
+  ].join("\n");
+  const legacyResult = parseCodexOutput(legacyStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(legacyResult.ok === true, "parser succeeds for legacy simple output");
+  if (legacyResult.ok) {
+    assert(legacyResult.artifact.content["file"] === "src/legacy.ts", "legacy artifact has file path");
+    assert((legacyResult.artifact.content["patch"] as string).includes("export const legacy = true;"), "legacy artifact has patch content");
+  }
+  console.log("");
+
+  // ── Test 8d: Output parser rejects malformed fenced output ──
+  console.log("Test 8d: Output parser rejects malformed fenced output");
+  const malformedFencedStdout = [
+    "```codex-code-patch",
+    "// Missing FILE and PATCH markers",
+    "```",
+  ].join("\n");
+  const malformedResult = parseCodexOutput(malformedFencedStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(malformedResult.ok === false, "parser rejects malformed fenced output");
+  if (!malformedResult.ok) {
+    assert(malformedResult.reason === "parse_error", "malformed fenced reason is parse_error");
+  }
+  console.log("");
+
+  // ── Test 8e: Output parser rejects fenced output with missing FILE ──
+  console.log("Test 8e: Output parser rejects fenced output with missing FILE");
+  const fencedMissingFileStdout = [
+    "```codex-code-patch",
+    "PATCH:",
+    "// Patch without file",
+    "```",
+  ].join("\n");
+  const fencedMissingFileResult = parseCodexOutput(fencedMissingFileStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(fencedMissingFileResult.ok === false, "parser rejects fenced output with missing file");
+  if (!fencedMissingFileResult.ok) {
+    assert(fencedMissingFileResult.reason === "missing_file_path", "reason is missing_file_path");
+  }
+  console.log("");
+
+  // ── Test 8f: Output parser rejects fenced output with empty PATCH ──
+  console.log("Test 8f: Output parser rejects fenced output with empty PATCH");
+  const fencedEmptyPatchStdout = [
+    "```codex-code-patch",
+    "FILE: src/empty-fenced.ts",
+    "PATCH:",
+    "```",
+  ].join("\n");
+  const fencedEmptyPatchResult = parseCodexOutput(fencedEmptyPatchStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(fencedEmptyPatchResult.ok === false, "parser rejects fenced output with empty patch");
+  if (!fencedEmptyPatchResult.ok) {
+    assert(fencedEmptyPatchResult.reason === "empty_patch", "reason is empty_patch");
   }
   console.log("");
 
