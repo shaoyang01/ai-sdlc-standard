@@ -301,6 +301,33 @@ async function test() {
   }
   console.log("");
 
+  // ── Test 8g: Output parser rejects unterminated fenced block ──
+  console.log("Test 8g: Output parser rejects unterminated fenced block");
+  const unterminatedStdout = [
+    "```codex-code-patch",
+    "FILE: src/unterminated.ts",
+    "PATCH:",
+    "// No closing fence",
+  ].join("\n");
+  const unterminatedResult = parseCodexOutput(unterminatedStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(unterminatedResult.ok === false, "parser rejects unterminated fenced block");
+  if (!unterminatedResult.ok) {
+    assert(unterminatedResult.reason === "parse_error", "reason is parse_error");
+    assert(unterminatedResult.fallbackAction === "reject_and_shadow_fallback", "fallback action is reject_and_shadow_fallback");
+  }
+  console.log("");
+
+  // ── Test 8h: Output parser rejects fenced block with no newline after marker ──
+  console.log("Test 8h: Output parser rejects fenced block with no newline after marker");
+  const noNewlineStdout = "```codex-code-patch FILE: src/no-newline.ts PATCH:\n// content\n```";
+  const noNewlineResult = parseCodexOutput(noNewlineStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(noNewlineResult.ok === false, "parser rejects fenced block with no newline after marker");
+  if (!noNewlineResult.ok) {
+    assert(noNewlineResult.reason === "parse_error", "reason is parse_error");
+    assert(noNewlineResult.fallbackAction === "reject_and_shadow_fallback", "fallback action is reject_and_shadow_fallback");
+  }
+  console.log("");
+
   // ── Test 9: Fake runner success scenario ──
   console.log("Test 9: Fake runner success scenario");
   const successRunner = createCodexFakeRunner({ scenario: "success_code_patch" });

@@ -72,17 +72,31 @@ interface ParsedPatch {
   patch: string;
 }
 
-function extractStructuredOutput(stdout: string): string {
+type StructuredExtractionResult =
+  | { kind: "no_fence"; output: string }
+  | { kind: "valid_fence"; output: string }
+  | { kind: "malformed_fence" };
+
+function extractStructuredOutput(stdout: string): StructuredExtractionResult {
   const fenceStart = stdout.indexOf("```codex-code-patch");
-  if (fenceStart === -1) return stdout;
+  if (fenceStart === -1) {
+    return { kind: "no_fence", output: stdout };
+  }
 
   const contentStart = stdout.indexOf("\n", fenceStart);
-  if (contentStart === -1) return stdout;
+  if (contentStart === -1) {
+    return { kind: "malformed_fence" };
+  }
 
   const fenceEnd = stdout.indexOf("```", contentStart + 1);
-  if (fenceEnd === -1) return stdout;
+  if (fenceEnd === -1) {
+    return { kind: "malformed_fence" };
+  }
 
-  return stdout.slice(contentStart + 1, fenceEnd).trim();
+  return {
+    kind: "valid_fence",
+    output: stdout.slice(contentStart + 1, fenceEnd).trim(),
+  };
 }
 
 function parsePatch(stdout: string): { kind: "ok"; parsed: ParsedPatch } | { kind: "missing_file_path" | "empty_patch" | "parse_error" } {
@@ -133,8 +147,16 @@ export function parseCodexOutput(
     };
   }
 
-  const structuredOutput = extractStructuredOutput(stdout);
-  const parsed = parsePatch(structuredOutput);
+  const extraction = extractStructuredOutput(stdout);
+  if (extraction.kind === "malformed_fence") {
+    return {
+      ok: false,
+      reason: safeMessage("parse_error", limits),
+      fallbackAction: "reject_and_shadow_fallback",
+    };
+  }
+
+  const parsed = parsePatch(extraction.output);
   if (parsed.kind !== "ok") {
     return {
       ok: false,
