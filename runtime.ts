@@ -17,6 +17,13 @@ import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
+import {
+  DEFAULT_EXECUTORS,
+  executeDocFlowNode,
+  type NodeExecutor,
+  type RuntimeExecutorMap,
+  type FanoutResult,
+} from "./core/runtime-executors";
 import { executionGateway } from "./execution";
 import { Artifact } from "./core/artifact";
 import { artifactsFromNodeOutput } from "./core/node-artifacts";
@@ -40,7 +47,6 @@ import { isHermesRuntimeAttachmentEnabled } from "./execution/hermes-runtime-att
 // ─── Types ────────────────────────────────────────────
 
 type LoopAgent = "kimi" | "codex" | "hermes";
-type ExecutionMode = "direct" | "speckit";
 
 // RuntimeNode extends Graph Kernel NodeType with runtime-managed nodes
 type RuntimeNode = NodeType | "code-review" | "bugfix";
@@ -51,12 +57,6 @@ interface ExecutionTraceEntry {
   status: "success" | "failure";
   output: Record<string, unknown>;
   timestamp: string;
-}
-
-interface FanoutResult {
-  requirement_id: string;
-  repo_results: { repo: string; status: "success" | "failed"; output: Record<string, unknown> }[];
-  completed_at: string;
 }
 
 interface RuntimeResult {
@@ -75,13 +75,7 @@ interface RuntimeResult {
 export interface RuntimeOptions {
   hermesRuntimeShadowAttachmentBuilder?: typeof buildHermesRuntimeShadowAttachmentFromRequest;
   env?: Record<string, string | undefined>;
-}
-
-interface RequirementSummary {
-  requirement_id: string;
-  multi_repo: boolean;
-  main_repo: string;
-  sub_requirements: { repo: string; task: string }[];
+  executors?: Partial<RuntimeExecutorMap>;
 }
 
 // ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
@@ -109,119 +103,6 @@ function buildCurrentAgentsByNode(
     }
   }
   return map;
-}
-
-// ─── DocFlow Node Execution (PURE EXECUTORS) ──────────
-// Each executor is a STATELESS function: (context) → output.
-// No branching. No flow decisions. Graph Kernel controls transitions.
-
-type NodeExecutor = (context: Record<string, unknown>, _ctx: ExecutionContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
-
-// Static executor map — no switch, no branching
-const EXECUTORS: Record<NodeType, NodeExecutor> = {
-  "requirement-summary": (ctx, _execCtx) =>
-    executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
-  "tech-design": (ctx, _execCtx) =>
-    ({ node: "tech-design", result: "design_completed", summary: ctx }),
-  "review": (ctx, execCtx) =>
-    ({
-      node: "review",
-      result: (ctx["review_result"] as string) || (execCtx?.metadata?.complexity === "high" ? "FAIL" : "PASS"),
-      reviewed_at: new Date().toISOString(),
-    }),
-  "implementation": (ctx, execCtx) =>
-    executeImplementation(ctx, execCtx),
-  "validation": (_ctx, _execCtx) =>
-    ({ node: "validation", result: "validated", all_checks_passed: true }),
-};
-
-// Pure dispatch — no control logic, just lookup + execute
-async function executeDocFlowNode(
-  node: NodeType,
-  context: Record<string, unknown>,
-  _ctx: ExecutionContext
-): Promise<Record<string, unknown>> {
-  const executor = EXECUTORS[node];
-  return executor(context, _ctx);
-}
-
-function executeRequirementSummary(rawText: string, requirementId: string): Record<string, unknown> {
-  const multiRepo = /(sync|integration|event|pipeline|api|service|system|orchestrat)/i.test(rawText) ||
-                    /([A-Z][a-z]+[-_][A-Z][a-z]+).*([A-Z][a-z]+[-_][A-Z][a-z]+)/.test(rawText);
-  const subReqs = multiRepo ? extractSubRequirements(rawText) : [];
-  return {
-    requirement_id: requirementId,
-    multi_repo: multiRepo,
-    main_repo: "main",
-    sub_requirements: subReqs,
-    parsed_at: new Date().toISOString(),
-  };
-}
-
-function extractSubRequirements(text: string): { repo: string; task: string }[] {
-  const results: { repo: string; task: string }[] = [];
-  const sentences = text.split(/[.;。；\n]+/);
-  for (const sentence of sentences) {
-    const match = sentence.match(/\b(repo[-_][A-Z]+|[A-Z][a-z]+Repo)\b/i);
-    if (match) results.push({ repo: match[1], task: sentence.trim() });
-  }
-  return results;
-}
-
-// Pure implementation executor — mode from context, not inline decision
-async function executeImplementation(context: Record<string, unknown>, _ctx: ExecutionContext): Promise<Record<string, unknown>> {
-  const summary = (context["requirement-summary"] || context) as RequirementSummary;
-  const mode: ExecutionMode = (context.execution_mode as ExecutionMode) || "direct";
-  const subReqs = summary.sub_requirements || [];
-
-  if (subReqs.length > 0) {
-    const result = await executeFanout(summary.requirement_id, subReqs, _ctx);
-    return { node: "implementation", mode: "fanout", fanout_result: result };
-  }
-  if (mode === "speckit") {
-    return executeSpeckitPipeline(summary.requirement_id, _ctx);
-  }
-  // Direct path — route through Execution Gateway
-  const result = await executionGateway.execute({
-    type: "code_generation",
-    node: "implementation",
-    agent: "codex",
-    requirementId: summary.requirement_id,
-    input: { mode, context },
-  });
-  return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts };
-}
-
-// ─── Fanout: Parallel Multi-Repo Execution ────────────
-
-async function executeFanout(
-  requirementId: string,
-  subReqs: { repo: string; task: string }[],
-  _ctx: ExecutionContext
-): Promise<FanoutResult> {
-  const promises = subReqs.map(async (sub) => {
-    const result = await executionGateway.execute({
-      type: "code_generation",
-      node: "implementation",
-      agent: "codex",
-      requirementId,
-      input: { repo: sub.repo, task: sub.task },
-    });
-    return { repo: sub.repo, status: result.success ? "success" as const : "failed" as const, output: result.output || {} };
-  });
-  const repoResults = await Promise.all(promises);
-  return { requirement_id: requirementId, repo_results: repoResults, completed_at: new Date().toISOString() };
-}
-
-// ─── Speckit: Optional Pipeline ───────────────────────
-
-async function executeSpeckitPipeline(requirementId: string, _ctx: ExecutionContext): Promise<Record<string, unknown>> {
-  const stages = ["spec", "analyze", "implement", "sync"];
-  const results: Record<string, string> = {};
-  for (const stage of stages) {
-    results[stage] = `${stage}_completed`;
-  }
-  return { node: "implementation", mode: "speckit", speckit_stages: results, requirement_id: requirementId };
 }
 
 // ─── Code Review + Bugfix Loop ────────────────────────
@@ -344,6 +225,11 @@ export async function run(
   const artifacts: Artifact[] = [];
 
   // State-driven execution loop — VM transitions, not node-driven
+  const executors: RuntimeExecutorMap = {
+    ...DEFAULT_EXECUTORS,
+    ...options.executors,
+  };
+
   while (currentNode && vmState.status === "running") {
     // Agent selection: policy engine → decision layer → AGENT_MAP fallback
     const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
@@ -354,7 +240,7 @@ export async function run(
     execCtx.input = { requirement, requirement_id: requirementId };
     execCtx.metadata.complexity = inferComplexity(requirement);
 
-    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx);
+    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx, executors);
     legacyContext[currentNode] = nodeOutput;
 
     // Record trace via standard ExecutionTrace
