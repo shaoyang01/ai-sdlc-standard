@@ -125,6 +125,18 @@ export class ExecutionGateway {
     }
 
     // ── Default: shadow or codex ──
+    // Default behavior is shadow unless SDLC_EXECUTION_MODE is explicitly "codex".
+    // When mode is codex and agent is codex, the Gateway chooses between two paths:
+    //   1. Legacy Codex adapter path: executeCodexAgent(enriched) — attempts real
+    //      Codex CLI invocation. This is the historical behavior and remains unchanged.
+    //   2. Injectable runner path: this.options.codexRunner.run(enriched) — used by
+    //      the fake runner in tests and will be used by future real-dispatch runners.
+    // The injectable runner is used ONLY when all three conditions are true:
+    //   - SDLC_EXECUTION_MODE=codex
+    //   - agent === "codex"
+    //   - options.codexRunner is explicitly provided.
+    // Without an injected runner, default production behavior falls back to the legacy
+    // adapter (which itself is opt-in via SDLC_EXECUTION_MODE).
     const mode = getExecutionMode();
     if (mode === "codex" && enriched.agent === "codex") {
       if (this.options.codexRunner) {
