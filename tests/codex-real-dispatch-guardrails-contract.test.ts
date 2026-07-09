@@ -33,7 +33,7 @@ async function test() {
   assert(c.addsRealGuardrailEnforcementNow === false, "not adding real enforcement now");
   assert(c.persistsGuardrailLogsNow === false, "not persisting logs now");
   assert(c.verdict === "APPROVED_FOR_PLANNING", "verdict");
-  assert(c.recommendedNextPr === "Codex Real Dispatch Guardrails Contract", "next PR");
+  assert(c.recommendedNextPr === "Codex Real Dispatch Prompt Builder Contract", "next PR");
   console.log("");
 
   console.log("Test 2: default / feature constraints");

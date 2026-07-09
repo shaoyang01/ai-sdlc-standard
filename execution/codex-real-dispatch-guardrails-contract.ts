@@ -67,7 +67,7 @@ export interface CodexRealDispatchGuardrailsContract {
   requiredBeforeImplementation: readonly string[];
   evidence: readonly string[];
   verdict: "APPROVED_FOR_PLANNING";
-  recommendedNextPr: "Codex Real Dispatch Guardrails Contract";
+  recommendedNextPr: "Codex Real Dispatch Prompt Builder Contract";
 }
 
 export const CODEX_REAL_DISPATCH_GUARDRAILS_CONTRACT: CodexRealDispatchGuardrailsContract = {
@@ -230,5 +230,5 @@ export const CODEX_REAL_DISPATCH_GUARDRAILS_CONTRACT: CodexRealDispatchGuardrail
     "CODEX_REAL_DISPATCH_OBSERVABILITY_CONTRACT.md",
   ],
   verdict: "APPROVED_FOR_PLANNING",
-  recommendedNextPr: "Codex Real Dispatch Guardrails Contract",
+  recommendedNextPr: "Codex Real Dispatch Prompt Builder Contract",
 };

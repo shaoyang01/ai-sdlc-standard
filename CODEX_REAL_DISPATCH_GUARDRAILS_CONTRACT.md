@@ -131,3 +131,8 @@ Before any real guardrail enforcement is implemented, the following must be read
 `APPROVED_FOR_PLANNING`
 
 This guardrails contract is approved for planning only. It remains contract-only and default-off. No real Codex execution is enabled by this document.
+
+## Recommended Next PR
+
+**Codex Real Dispatch Prompt Builder Contract**
+
