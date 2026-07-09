@@ -73,6 +73,22 @@ async function test() {
     artifactTypes.includes("shadow_output") || artifactTypes.includes("implementation_plan"),
     "has implementation artifact"
   );
+  assert(artifactTypes.includes("code_patch"), "has code_patch artifact from default implementation");
+  const codePatchArtifact = result.artifacts.find((a: { type: string }) => a.type === "code_patch");
+  assert(codePatchArtifact !== undefined, "code_patch artifact exists");
+  assert(codePatchArtifact!.node === "implementation", "code_patch artifact node is implementation");
+  assert(codePatchArtifact!.content["file"] === "src/generated-shadow-implementation.ts", "code_patch file is deterministic");
+  assert(
+    typeof codePatchArtifact!.content["patch"] === "string" &&
+    (codePatchArtifact!.content["patch"] as string).includes("generatedShadowImplementation"),
+    "code_patch contains deterministic generated function"
+  );
+  assert(
+    (codePatchArtifact!.content["patch"] as string).includes(result.requirement_id),
+    "code_patch references requirement_id"
+  );
+  // Gateway shadow artifact preserved alongside deterministic code patch
+  assert(artifactTypes.includes("shadow_output"), "Gateway shadow_output artifact still present");
   assert(artifactTypes.includes("validation_report"), "has validation_report artifact");
   // Verify artifact ids exist
   assert(result.artifacts.every((a: { id: string }) => typeof a.id === "string"), "all artifacts have ids");

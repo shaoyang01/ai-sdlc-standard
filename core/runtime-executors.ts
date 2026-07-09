@@ -7,7 +7,7 @@
 import { NodeType } from "../sdlc_graph/types";
 import { ExecutionContext } from "./execution-context";
 import { executionGateway } from "../execution";
-import { Artifact } from "./artifact";
+import { Artifact, createArtifact } from "./artifact";
 
 export type ExecutionMode = "direct" | "speckit";
 
@@ -119,6 +119,36 @@ export function buildImplementationExecutorInput(
     complexity: execCtx.metadata?.complexity as "low" | "medium" | "high" | undefined,
     executionMode: (context.execution_mode as ExecutionMode) || "direct",
   };
+}
+
+// Deterministic shadow code patch artifact for default direct implementation.
+// No real Codex call. No timestamps in patch content or ID.
+export function buildShadowCodePatchArtifact(input: ImplementationExecutorInput): Artifact {
+  const design = input.designOutput as Record<string, unknown> | undefined;
+  const designBody = design?.["design"] as Record<string, unknown> | undefined;
+  const approach = (designBody?.["approach"] as string | undefined) ?? "direct";
+  const components = Array.isArray(designBody?.["components"])
+    ? (designBody["components"] as unknown[]).join(",")
+    : "service";
+  return createArtifact({
+    id: `${input.requirementId}:implementation:code_patch:shadow`,
+    requirementId: input.requirementId,
+    node: "implementation",
+    type: "code_patch",
+    content: {
+      file: "src/generated-shadow-implementation.ts",
+      patch: [
+        `// Shadow implementation for ${input.requirementId}`,
+        `// Approach: ${approach}`,
+        `// Components: ${components}`,
+        "export function generatedShadowImplementation() {",
+        "  return true;",
+        "}",
+      ].join("\n"),
+    },
+    agent: "codex",
+    source: "execution_gateway",
+  });
 }
 
 export interface ImplementationExecutorOutput {
@@ -235,7 +265,15 @@ export async function executeImplementation(context: Record<string, unknown>, ex
     requirementId: input.requirementId,
     input: { mode: input.executionMode, context },
   });
-  return { node: "implementation", mode: "direct", result: "implementation_completed", execution_result: result.output, artifacts: result.artifacts as Artifact[] };
+  const shadowCodePatchArtifact = buildShadowCodePatchArtifact(input);
+  return {
+    node: "implementation",
+    mode: "direct",
+    result: "implementation_completed",
+    execution_result: result.output,
+    code: shadowCodePatchArtifact.content["patch"] as string,
+    artifacts: [...(result.artifacts as Artifact[]), shadowCodePatchArtifact],
+  };
 }
 
 // Fanout: Parallel Multi-Repo Execution
