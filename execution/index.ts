@@ -19,6 +19,11 @@ export {
   type CodexFakeRunnerScenario,
   type CodexRunnerOptions,
 } from "./codex-real-dispatch-runner";
+export {
+  createCodexRealDispatchRunner,
+  type CodexCliProcessRunner,
+  type CodexRealDispatchRunnerOptions,
+} from "./codex-real-dispatch-real-runner";
 export type {
   AgentName,
   ExecutionRequestType,
