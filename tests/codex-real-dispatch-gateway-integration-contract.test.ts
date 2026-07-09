@@ -34,7 +34,7 @@ async function test() {
   assert(c.attachesMetadataToExecutionResultNow === false, "not attaching metadata now");
   assert(c.invokesCodexCliNow === false, "not invoking Codex CLI now");
   assert(c.verdict === "APPROVED_FOR_PLANNING", "verdict");
-  assert(c.recommendedNextPr === "Codex Real Dispatch Controlled Rollout Plan", "next PR");
+  assert(c.recommendedNextPr === "Codex Real Dispatch Fake Runner Test Plan Contract", "next PR");
   console.log("");
 
   console.log("Test 2: default / feature constraints");

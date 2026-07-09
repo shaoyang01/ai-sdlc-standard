@@ -76,7 +76,7 @@ export interface CodexRealDispatchGatewayIntegrationContract {
   requiredBeforeImplementation: readonly string[];
   evidence: readonly string[];
   verdict: "APPROVED_FOR_PLANNING";
-  recommendedNextPr: "Codex Real Dispatch Controlled Rollout Plan";
+  recommendedNextPr: "Codex Real Dispatch Fake Runner Test Plan Contract";
 }
 
 export const CODEX_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT: CodexRealDispatchGatewayIntegrationContract = {
@@ -248,5 +248,5 @@ export const CODEX_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT: CodexRealDispatch
     "CODEX_REAL_DISPATCH_OUTPUT_PARSER_CONTRACT.md",
   ],
   verdict: "APPROVED_FOR_PLANNING",
-  recommendedNextPr: "Codex Real Dispatch Controlled Rollout Plan",
+  recommendedNextPr: "Codex Real Dispatch Fake Runner Test Plan Contract",
 };

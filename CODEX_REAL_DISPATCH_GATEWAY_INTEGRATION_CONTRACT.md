@@ -142,4 +142,4 @@ This Gateway integration contract is approved for planning only. It remains cont
 
 ## Recommended Next PR
 
-**Codex Real Dispatch Controlled Rollout Plan**
+**Codex Real Dispatch Fake Runner Test Plan Contract**
