@@ -167,7 +167,7 @@ export function createCodexRealDispatchRunner(
           request,
           "unknown_error",
           "shadow_fallback",
-          `Codex CLI runner error: ${error instanceof Error ? error.message : String(error)}`
+          "Codex CLI runner failed"
         );
       }
 

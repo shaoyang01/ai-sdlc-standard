@@ -192,6 +192,30 @@ async function test() {
   assert(cliMissingResult.output["codex_fallback_action"] === "shadow_fallback", "cli missing action is shadow_fallback");
   console.log("");
 
+  // ── Test 7b: Unknown error with unsafe text is sanitized ──
+  console.log("Test 7b: Unknown error with unsafe text is sanitized");
+  const unsafeErrorRunner = createCodexRealDispatchRunner({
+    processRunner: createThrowingRunner(new Error("raw_stdout token api_key password private_key")),
+  });
+  const unsafeErrorResult = await unsafeErrorRunner.run(baseRequest);
+  assert(unsafeErrorResult.success === true, "unsafe error keeps Gateway success true");
+  assert(unsafeErrorResult.artifacts[0].type === "shadow_output", "unsafe error falls back to shadow_output");
+  assert(unsafeErrorResult.output["codex_fallback_reason"] === "unknown_error", "unsafe error reason is unknown_error");
+  assert(unsafeErrorResult.output["codex_fallback_action"] === "shadow_fallback", "unsafe error action is shadow_fallback");
+  const outputSafeMessage = String(unsafeErrorResult.output["safe_message"] ?? "");
+  const artifactSafeMessage = String(unsafeErrorResult.artifacts[0].content["safe_message"] ?? "");
+  assert(!outputSafeMessage.includes("raw_stdout"), "output safe_message does not contain raw_stdout");
+  assert(!outputSafeMessage.includes("token"), "output safe_message does not contain token");
+  assert(!outputSafeMessage.includes("api_key"), "output safe_message does not contain api_key");
+  assert(!outputSafeMessage.includes("password"), "output safe_message does not contain password");
+  assert(!outputSafeMessage.includes("private_key"), "output safe_message does not contain private_key");
+  assert(!artifactSafeMessage.includes("raw_stdout"), "artifact safe_message does not contain raw_stdout");
+  assert(!artifactSafeMessage.includes("token"), "artifact safe_message does not contain token");
+  assert(!artifactSafeMessage.includes("api_key"), "artifact safe_message does not contain api_key");
+  assert(!artifactSafeMessage.includes("password"), "artifact safe_message does not contain password");
+  assert(!artifactSafeMessage.includes("private_key"), "artifact safe_message does not contain private_key");
+  console.log("");
+
   // ── Test 8: Parser failure - missing file path ──
   console.log("Test 8: Parser failure - missing file path");
   const missingFileRunner = createCodexRealDispatchRunner({
@@ -280,6 +304,7 @@ async function test() {
     nonZeroExitResult,
     timeoutResult,
     cliMissingResult,
+    unsafeErrorResult,
     missingFileResult,
     emptyPatchResult,
     prohibitedResult,
@@ -299,6 +324,25 @@ async function test() {
       assert(artifact.content["password"] === undefined, `${artifact.type} artifact has no password`);
     }
   }
+  console.log("");
+
+  // ── Test 13: Static import prohibition ──
+  console.log("Test 13: Static import prohibition");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "execution", "codex-real-dispatch-real-runner.ts"),
+    "utf-8"
+  );
+  assert(!source.includes('from "child_process"'), "module does not import child_process");
+  assert(!source.includes("from 'child_process'"), "module does not import child_process (single quotes)");
+  assert(!source.includes('from "fs"'), "module does not import fs");
+  assert(!source.includes("from 'fs'"), "module does not import fs (single quotes)");
+  assert(!source.includes('from "http"'), "module does not import http");
+  assert(!source.includes("from 'http'"), "module does not import http (single quotes)");
+  assert(!source.includes('from "https"'), "module does not import https");
+  assert(!source.includes("from 'https'"), "module does not import https (single quotes)");
+  assert(!source.includes("fetch("), "module does not call fetch");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
