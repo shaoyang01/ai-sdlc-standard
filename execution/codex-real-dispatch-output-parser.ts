@@ -72,16 +72,33 @@ interface ParsedPatch {
   patch: string;
 }
 
-function parsePatch(stdout: string): ParsedPatch | null {
-  const fileMatch = stdout.match(/FILE:\s*(.+)/);
-  if (!fileMatch) return null;
-  const file = fileMatch[1].trim();
+function parsePatch(stdout: string): { kind: "ok"; parsed: ParsedPatch } | { kind: "missing_file_path" | "empty_patch" | "parse_error" } {
+  const hasFile = stdout.includes("FILE:");
+  const hasPatch = stdout.includes("PATCH:");
 
+  // No FILE and no PATCH, or FILE without PATCH => parse_error
+  if ((!hasFile && !hasPatch) || (hasFile && !hasPatch)) {
+    return { kind: "parse_error" };
+  }
+
+  // PATCH exists but FILE missing => missing_file_path
+  const fileMatch = stdout.match(/FILE:\s*(.+)/);
+  if (!fileMatch) {
+    return { kind: "missing_file_path" };
+  }
+
+  const file = fileMatch[1].trim();
   const patchIndex = stdout.indexOf("PATCH:");
-  if (patchIndex === -1) return null;
+  if (patchIndex === -1) {
+    return { kind: "parse_error" };
+  }
   const patch = stdout.slice(patchIndex + 6).trim();
 
-  return { file, patch };
+  if (patch.length === 0) {
+    return { kind: "empty_patch" };
+  }
+
+  return { kind: "ok", parsed: { file, patch } };
 }
 
 /**
@@ -104,7 +121,17 @@ export function parseCodexOutput(
   }
 
   const parsed = parsePatch(stdout);
-  if (!parsed) {
+  if (parsed.kind !== "ok") {
+    return {
+      ok: false,
+      reason: safeMessage(parsed.kind, limits),
+      fallbackAction: "reject_and_shadow_fallback",
+    };
+  }
+
+  const { file, patch } = parsed.parsed;
+
+  if (file.length > limits.maxFilePathChars) {
     return {
       ok: false,
       reason: safeMessage("missing_file_path", limits),
@@ -112,23 +139,15 @@ export function parseCodexOutput(
     };
   }
 
-  if (parsed.file.length > limits.maxFilePathChars) {
+  if (patch.length > limits.maxPatchChars) {
     return {
       ok: false,
-      reason: safeMessage("missing_file_path", limits),
-      fallbackAction: "reject_and_shadow_fallback",
+      reason: safeMessage("output_too_large", limits),
+      fallbackAction: "truncate_and_shadow_fallback",
     };
   }
 
-  if (parsed.patch.length === 0 || parsed.patch.length > limits.maxPatchChars) {
-    return {
-      ok: false,
-      reason: safeMessage(parsed.patch.length === 0 ? "empty_patch" : "output_too_large", limits),
-      fallbackAction: parsed.patch.length === 0 ? "reject_and_shadow_fallback" : "truncate_and_shadow_fallback",
-    };
-  }
-
-  if (containsProhibitedContent(parsed.patch) || containsProhibitedContent(parsed.file)) {
+  if (containsProhibitedContent(patch) || containsProhibitedContent(file)) {
     return {
       ok: false,
       reason: safeMessage("prohibited_output_content", limits),
@@ -142,8 +161,8 @@ export function parseCodexOutput(
     node,
     type: "code_patch",
     content: {
-      file: parsed.file,
-      patch: parsed.patch,
+      file,
+      patch,
       parser_summary: "parsed_from_synthetic_stdout",
     },
     agent: "codex",

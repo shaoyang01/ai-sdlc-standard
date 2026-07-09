@@ -139,6 +139,15 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
 
   return {
     async run(request: ExecutionRequest): Promise<ExecutionResult> {
+      if (request.type !== "code_generation") {
+        return buildShadowFallbackResult(
+          request,
+          "unsupported_request_type",
+          "reject_and_shadow_fallback",
+          "Unsupported request type"
+        );
+      }
+
       const implInput = request.input
         .implementationExecutorInput as CodexPromptBuilderInput | undefined;
 
@@ -155,9 +164,9 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
       if (!promptResult.ok) {
         return buildShadowFallbackResult(
           request,
-          promptResult.reason,
-          promptResult.fallbackAction,
-          `Prompt builder refused: ${promptResult.reason}`
+          promptResult.reason ?? "unknown_error",
+          promptResult.fallbackAction ?? "shadow_fallback",
+          `Prompt builder refused: ${promptResult.reason ?? "unknown_error"}`
         );
       }
 
@@ -196,9 +205,9 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
       if (!parseResult.ok) {
         return buildShadowFallbackResult(
           request,
-          parseResult.reason,
-          parseResult.fallbackAction,
-          `Output parser refused: ${parseResult.reason}`
+          parseResult.reason ?? "unknown_error",
+          parseResult.fallbackAction ?? "shadow_fallback",
+          `Output parser refused: ${parseResult.reason ?? "unknown_error"}`
         );
       }
 

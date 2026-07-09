@@ -146,8 +146,32 @@ async function test() {
   const missingFileResult = parseCodexOutput(missingFileStdout, "REQ-FAKE-RUNNER", "implementation");
   assert(missingFileResult.ok === false, "parser rejects missing file path");
   if (!missingFileResult.ok) {
-    assert(missingFileResult.reason.includes("missing_file_path"), "reason mentions missing_file_path");
+    assert(missingFileResult.reason === "missing_file_path", "reason is missing_file_path");
     assert(missingFileResult.fallbackAction === "reject_and_shadow_fallback", "fallback action is reject_and_shadow_fallback");
+  }
+  console.log("");
+
+  // ── Test 5b: Output parser rejects parse error ──
+  console.log("Test 5b: Output parser rejects parse error");
+  const parseErrorStdout = "This output does not match the expected format at all.";
+  const parseErrorResult = parseCodexOutput(parseErrorStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(parseErrorResult.ok === false, "parser rejects parse error");
+  if (!parseErrorResult.ok) {
+    assert(parseErrorResult.reason === "parse_error", "reason is parse_error");
+    assert(parseErrorResult.fallbackAction === "reject_and_shadow_fallback", "fallback action is reject_and_shadow_fallback");
+  }
+  console.log("");
+
+  // ── Test 5c: Output parser rejects FILE without PATCH ──
+  console.log("Test 5c: Output parser rejects FILE without PATCH");
+  const fileOnlyStdout = [
+    "FILE: src/no-patch.ts",
+    "// No PATCH marker",
+  ].join("\n");
+  const fileOnlyResult = parseCodexOutput(fileOnlyStdout, "REQ-FAKE-RUNNER", "implementation");
+  assert(fileOnlyResult.ok === false, "parser rejects file without patch");
+  if (!fileOnlyResult.ok) {
+    assert(fileOnlyResult.reason === "parse_error", "reason is parse_error");
   }
   console.log("");
 
@@ -229,7 +253,30 @@ async function test() {
     assert(result.success === true, `${scenario} keeps Gateway success true`);
     assert(result.artifacts[0].type === "shadow_output", `${scenario} falls back to shadow_output`);
     assert(result.output["codex_fallback_action"] === "reject_and_shadow_fallback", `${scenario} uses reject_and_shadow_fallback`);
+    if (scenario === "parse_error") {
+      assert(result.output["codex_fallback_reason"] === "parse_error", "parse_error exposes parse_error reason");
+    }
+    if (scenario === "missing_file_path") {
+      assert(result.output["codex_fallback_reason"] === "missing_file_path", "missing_file_path exposes missing_file_path reason");
+    }
   }
+  console.log("");
+
+  // ── Test 11b: Fake runner unsupported request type ──
+  console.log("Test 11b: Fake runner unsupported request type");
+  const unsupportedRequest: ExecutionRequest = {
+    type: "llm_task",
+    node: "implementation",
+    agent: "codex",
+    requirementId: "REQ-UNSUPPORTED",
+    input: { implementationExecutorInput: implInput },
+  };
+  const unsupportedRunner = createCodexFakeRunner({ scenario: "success_code_patch" });
+  const unsupportedResult = await unsupportedRunner.run(unsupportedRequest);
+  assert(unsupportedResult.success === true, "unsupported request keeps Gateway success true");
+  assert(unsupportedResult.artifacts[0].type === "shadow_output", "unsupported request falls back to shadow_output");
+  assert(unsupportedResult.output["codex_fallback_reason"] === "unsupported_request_type", "unsupported request exposes unsupported_request_type reason");
+  assert(unsupportedResult.output["codex_fallback_action"] === "reject_and_shadow_fallback", "unsupported request uses reject_and_shadow_fallback");
   console.log("");
 
   // ── Test 12: Fake runner output_too_large scenario ──
