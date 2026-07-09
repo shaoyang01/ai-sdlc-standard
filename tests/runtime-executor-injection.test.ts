@@ -250,6 +250,91 @@ async function test() {
   assert(result3.feedback.review_summary.validationPassed === false, "feedback reflects validation failed");
 
   console.log("");
+
+  // ── Test 4: Design-aware fake implementation executor ──
+  console.log("Test 4: Design-aware fake implementation executor");
+  const designAwareExecutor = async (
+    context: Record<string, unknown>,
+    execCtx: ExecutionContext
+  ) => {
+    const input = buildImplementationExecutorInput(context, execCtx);
+    const design = input.designOutput as Record<string, unknown> | undefined;
+    const designBody = design?.["design"] as Record<string, unknown> | undefined;
+    const approach = (designBody?.["approach"] as string | undefined) ?? "unknown";
+    const components = Array.isArray(designBody?.["components"])
+      ? (designBody["components"] as unknown[])
+      : [];
+
+    const patch = [
+      `// Design-aware implementation for ${input.requirementId}`,
+      `// Approach: ${approach}`,
+      `// Components: ${components.join(",")}`,
+      "export function designAwareImplementation() {",
+      "  return true;",
+      "}",
+    ].join("\n");
+
+    return {
+      node: "implementation",
+      mode: "direct",
+      result: "fake_design_aware_implementation_completed",
+      code: patch,
+      artifacts: [
+        createArtifact({
+          id: `${input.requirementId}:implementation:code_patch:design-aware`,
+          requirementId: input.requirementId,
+          node: "implementation",
+          type: "code_patch",
+          content: {
+            file: "src/design-aware.ts",
+            patch,
+          },
+          agent: "codex",
+          source: "execution_gateway",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        }),
+      ],
+    };
+  };
+
+  const result4 = await run("build a user login page with database storage", {
+    env: testEnv,
+    executors: {
+      implementation: designAwareExecutor as any,
+    },
+  });
+
+  assert(result4.final_status === "success", "design-aware runtime completes with success");
+
+  const implTrace4 = result4.execution_trace.find((t) => t.node === "implementation");
+  assert(implTrace4 !== undefined, "execution trace includes design-aware implementation");
+  assert(
+    implTrace4!.output["result"] === "fake_design_aware_implementation_completed",
+    "design-aware implementation result recorded"
+  );
+
+  const designAwareArtifact = result4.artifacts.find((a) => a.id.includes("design-aware"));
+  assert(designAwareArtifact !== undefined, "design-aware code_patch artifact exists");
+  assert(designAwareArtifact!.type === "code_patch", "design-aware artifact is code_patch");
+
+  const patch4 = designAwareArtifact!.content["patch"] as string;
+  assert(
+    patch4.includes("single_service") || patch4.includes("multi_repo_fanout"),
+    "patch includes design approach"
+  );
+  assert(
+    patch4.includes("ui_form") || patch4.includes("data_store") || patch4.includes("service"),
+    "patch includes a design component"
+  );
+
+  assert(result4.feedback.review_summary.codeReviewStatus === "PASS", "design-aware code review passes");
+  assert(result4.feedback.review_summary.validationPassed === true, "design-aware validation passes");
+
+  assert(testEnv.SDLC_EXECUTION_MODE !== "codex", "SDLC_EXECUTION_MODE is not codex");
+  assert(testEnv.SDLC_KIMI_GATEWAY_REAL_DISPATCH !== "enabled", "Kimi real dispatch flag not enabled");
+  assert(testEnv.SDLC_HERMES_GATEWAY_REAL_DISPATCH !== "enabled", "Hermes real dispatch flag not enabled");
+
+  console.log("");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
