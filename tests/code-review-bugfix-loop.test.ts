@@ -52,6 +52,39 @@ async function test() {
   assert(!passResult.traceEntries.some((t) => t.node === "bugfix"), "no bugfix in pass path");
   console.log("");
 
+  // ── Test 1b: Empty code_patch patch fails review ──
+  console.log("Test 1b: Empty code_patch patch fails review");
+  const emptyPatchId = "REQ-EMPTY:implementation:code_patch:0";
+  const emptyArtifacts = [
+    createArtifact({
+      requirementId: "REQ-EMPTY",
+      node: "implementation",
+      type: "code_patch",
+      content: { patch: "" },
+      agent: "codex",
+      source: "execution_gateway",
+      id: emptyPatchId,
+    }),
+  ];
+
+  const emptyResult = await runCodeReviewBugfixLoop({
+    requirementId: "REQ-EMPTY",
+    artifacts: emptyArtifacts,
+    agent: "codex",
+  });
+
+  assert(emptyResult.finalReviewStatus === "FAIL", "empty patch fails review");
+  const emptyReviewArtifact = emptyResult.artifacts.find((a) => a.type === "code_review");
+  assert(emptyReviewArtifact !== undefined, "empty patch review artifact exists");
+  assert(emptyReviewArtifact!.content["status"] === "FAIL", "empty patch review status is FAIL");
+  const emptyFindings = emptyReviewArtifact!.content["findings"] as Array<{ severity: string; message: string; artifactId?: string }>;
+  assert(Array.isArray(emptyFindings), "empty patch findings is array");
+  const emptyFinding = emptyFindings.find((f) => f.message.includes("is empty"));
+  assert(emptyFinding !== undefined, "empty patch finding mentions empty");
+  assert(emptyFinding!.severity === "high", "empty patch finding severity is high");
+  assert(emptyFinding!.artifactId === emptyPatchId, "empty patch finding artifactId matches");
+  console.log("");
+
   // ── Test 2: Failure path with force_review_fail marker ──
   console.log("Test 2: Failure path triggers bugfix loop");
   const failArtifacts = [

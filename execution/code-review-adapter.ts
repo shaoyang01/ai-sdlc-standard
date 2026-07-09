@@ -1,7 +1,8 @@
 // Code Review Adapter
 // ====================
 // Shadow code review executor. Reviews artifacts and returns findings.
-// Default shadow review passes unless artifacts contain force_review_fail marker.
+// Default shadow review passes unless artifacts contain force_review_fail marker
+// or a code_patch artifact has an empty patch.
 // No external calls. No disk writes. No Git operations.
 // Accepts attempt from gateway metadata for unique artifact IDs on retry.
 
@@ -33,6 +34,17 @@ export async function executeCodeReview(input: {
         message: `Artifact ${artifact.id} has force_review_fail marker`,
         artifactId: artifact.id,
       });
+    }
+
+    if (artifact.type === "code_patch") {
+      const patch = artifact.content["patch"];
+      if (typeof patch !== "string" || patch.trim().length === 0) {
+        findings.push({
+          severity: "high",
+          message: `Code patch ${artifact.id} is empty`,
+          artifactId: artifact.id,
+        });
+      }
     }
   }
 
