@@ -12,6 +12,7 @@ import { executeCodexAgent } from "./codex-adapter";
 import { executeCodeReview } from "./code-review-adapter";
 import { executeBugfix } from "./bugfix-adapter";
 import { getExecutionMode } from "./config";
+import type { CodexRunner } from "./codex-real-dispatch-runner";
 import { Artifact } from "../core/artifact";
 import { CodeReviewFinding } from "../core/review-types";
 import { validateExecutionRequestSkill } from "./skill-request-validation";
@@ -51,6 +52,7 @@ export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
 export interface ExecutionGatewayOptions {
   env?: Record<string, string | undefined>;
+  codexRunner?: CodexRunner;
   kimiConfig?: CliAdapterConfig;
   kimiRunner?: KimiCliProcessRunner;
   kimiGuardrailLimits?: Partial<KimiGatewayGuardrailLimits>;
@@ -125,6 +127,9 @@ export class ExecutionGateway {
     // ── Default: shadow or codex ──
     const mode = getExecutionMode();
     if (mode === "codex" && enriched.agent === "codex") {
+      if (this.options.codexRunner) {
+        return this.options.codexRunner.run(enriched);
+      }
       return executeCodexAgent(enriched);
     }
     return executeShadowAgent(enriched);
