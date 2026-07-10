@@ -11,6 +11,7 @@ import type { RuntimeExecutionGateway } from "../core/runtime-executors";
 import type {
   ExecutionRequest,
   ExecutionResult,
+  ExecutionRequestType,
 } from "../execution/types";
 
 function createFakeCodePatchArtifact(requirementId: string): Artifact {
@@ -49,7 +50,7 @@ function createCodeReviewArtifact(requirementId: string): Artifact {
     node: "code-review",
     type: "code_review",
     content: {
-      result: "PASS",
+      status: "PASS",
       findings: [],
     },
     agent: "codex",
@@ -189,6 +190,77 @@ function fakeGatewayReturningUnusableCodePatches(requirementId: string): Runtime
       };
     },
   };
+}
+
+function recordingFakeGateway(
+  requirementId: string,
+  reviewBehavior: "pass" | "fail_then_bugfix_pass"
+): { gateway: RuntimeExecutionGateway; sequence: ExecutionRequestType[] } {
+  const sequence: ExecutionRequestType[] = [];
+  let reviewCount = 0;
+  const gateway: RuntimeExecutionGateway = {
+    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+      sequence.push(request.type);
+      if (request.type === "code_review") {
+        reviewCount++;
+        if (reviewBehavior === "pass" || reviewCount > 1) {
+          return {
+            success: true,
+            node: "code-review",
+            agent: "codex",
+            output: { result: "PASS", findings: [] },
+            artifacts: [createCodeReviewArtifact(request.requirementId)],
+          };
+        }
+        return {
+          success: true,
+          node: "code-review",
+          agent: "codex",
+          output: {
+            result: "FAIL",
+            findings: [
+              {
+                severity: "major",
+                message: "needs fix",
+                file: "src/fake-gateway-implementation.ts",
+              },
+            ],
+          },
+          artifacts: [],
+        };
+      }
+      if (request.type === "bugfix") {
+        return {
+          success: true,
+          node: "bugfix",
+          agent: "codex",
+          output: { result: "bugfix_completed" },
+          artifacts: [
+            createArtifact({
+              id: `${request.requirementId}:bugfix:patch`,
+              requirementId: request.requirementId,
+              node: "bugfix",
+              type: "bugfix_patch",
+              content: {
+                file: "src/fake-gateway-implementation.ts",
+                patch: "// bugfix applied",
+              },
+              agent: "codex",
+              source: "execution_gateway",
+            }),
+          ],
+        };
+      }
+      return {
+        success: true,
+        node: "implementation",
+        agent: "codex",
+        output: { result: "code_patch_generated" },
+        artifacts: [createFakeCodePatchArtifact(request.requirementId)],
+      };
+    },
+  };
+  return { gateway, sequence };
 }
 
 function assert(condition: boolean, message: string, passed: { count: number }, failed: { count: number }) {
@@ -420,10 +492,21 @@ async function test() {
 
   // ── Test D: Executor override takes precedence over injected Gateway ──
   console.log("Test D: executors.implementation overrides executionGateway");
-  let gatewayCalled = false;
+  let gatewayDCodeGenerationCalled = false;
   const gatewayD: RuntimeExecutionGateway = {
     async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-      gatewayCalled = true;
+      if (request.type === "code_generation") {
+        gatewayDCodeGenerationCalled = true;
+      }
+      if (request.type === "code_review") {
+        return {
+          success: true,
+          node: "code-review",
+          agent: "codex",
+          output: { result: "PASS", findings: [] },
+          artifacts: [createCodeReviewArtifact(request.requirementId)],
+        };
+      }
       return {
         success: true,
         node: request.node,
@@ -462,12 +545,115 @@ async function test() {
     },
   });
 
-  a(!gatewayCalled, "injected Gateway was not called");
+  a(!gatewayDCodeGenerationCalled, "injected Gateway was not called for code_generation");
   a(resultD.final_status === "success", "Runtime completes with custom executor");
   const implTraceD = resultD.execution_trace.find((t) => t.node === "implementation");
   a(
     implTraceD?.output["result"] === "custom_implementation_completed",
     "custom implementation executor ran"
+  );
+  a(
+    resultD.feedback.review_summary.codeReviewStatus === "PASS",
+    "code review still uses injected Gateway and passes"
+  );
+  console.log("");
+
+  // ── Test F: Injected Gateway handles implementation and code review in sequence ──
+  console.log("Test F: Injected Gateway receives code_generation then code_review");
+  const { gateway: gatewayF, sequence: sequenceF } = recordingFakeGateway(
+    "REQ-FULL-SEQUENCE",
+    "pass"
+  );
+  const resultF = await run("build a user login form with email validation", {
+    executionGateway: gatewayF,
+  });
+
+  a(resultF.final_status === "success", "Runtime completes through validation");
+  a(
+    sequenceF.join(",") === "code_generation,code_review",
+    "Gateway received code_generation then code_review in order"
+  );
+  a(
+    resultF.feedback.review_summary.codeReviewStatus === "PASS",
+    "code review passes using injected Gateway"
+  );
+  a(
+    resultF.feedback.review_summary.validationPassed === true,
+    "validation passes"
+  );
+  console.log("");
+
+  // ── Test G: Injected Gateway handles bugfix loop sequence ──
+  console.log("Test G: Injected Gateway receives code_generation, code_review, bugfix, code_review");
+  const { gateway: gatewayG, sequence: sequenceG } = recordingFakeGateway(
+    "REQ-BUGFIX-LOOP",
+    "fail_then_bugfix_pass"
+  );
+  const resultG = await run("build a user login form with email validation", {
+    executionGateway: gatewayG,
+  });
+
+  a(resultG.final_status === "success", "Runtime completes after bugfix loop");
+  a(
+    sequenceG.join(",") === "code_generation,code_review,bugfix,code_review",
+    "Gateway received code_generation → code_review → bugfix → code_review"
+  );
+  const bugfixTraceG = resultG.execution_trace.filter((t) => t.node === "bugfix");
+  a(bugfixTraceG.length === 1, "one bugfix node is recorded");
+  const codeReviewTraceG = resultG.execution_trace.filter((t) => t.node === "code-review");
+  a(codeReviewTraceG.length === 2, "two code-review nodes are recorded");
+  a(
+    resultG.feedback.review_summary.validationPassed === true,
+    "validation passes after bugfix loop"
+  );
+  console.log("");
+
+  // ── Test H: Executor override prevents code_generation but code_review still uses injected Gateway ──
+  console.log("Test H: executors.implementation overrides Gateway, but code_review still uses injected Gateway");
+  const { gateway: gatewayH, sequence: sequenceH } = recordingFakeGateway(
+    "REQ-OVERRIDE",
+    "pass"
+  );
+  const customImplementationExecutorH = async () => ({
+    node: "implementation",
+    mode: "direct",
+    result: "custom_implementation_completed",
+    code: "export function custom() { return true; }",
+    artifacts: [
+      createArtifact({
+        id: "custom-code-patch-H",
+        requirementId: "REQ-OVERRIDE",
+        node: "implementation",
+        type: "code_patch",
+        content: {
+          file: "src/custom-h.ts",
+          patch: "export function custom() { return true; }",
+        },
+        agent: "codex",
+        source: "execution_gateway",
+      }),
+    ],
+  });
+
+  const resultH = await run("build a custom feature", {
+    executionGateway: gatewayH,
+    executors: {
+      implementation: customImplementationExecutorH as any,
+    },
+  });
+
+  a(resultH.final_status === "success", "Runtime completes with custom executor and injected review Gateway");
+  a(
+    !sequenceH.includes("code_generation"),
+    "injected Gateway did not receive code_generation"
+  );
+  a(
+    sequenceH.includes("code_review"),
+    "injected Gateway received code_review"
+  );
+  a(
+    resultH.feedback.review_summary.codeReviewStatus === "PASS",
+    "code review passes using injected Gateway"
   );
   console.log("");
 

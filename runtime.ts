@@ -125,15 +125,17 @@ export async function runCodeReviewBugfixLoop(input: {
   requirementId: string;
   artifacts: Artifact[];
   agent: LoopAgent;
+  gateway?: RuntimeExecutionGateway;
 }): Promise<ReviewLoopResult> {
   const collectedArtifacts: Artifact[] = [];
   const traceEntries: ExecutionTraceEntry[] = [];
   let currentArtifacts = input.artifacts;
   let attempts = 0;
+  const gateway = input.gateway ?? executionGateway;
 
   while (attempts <= MAX_BUGFIX_ATTEMPTS) {
     // ── Code Review (via Execution Gateway) ──
-    const review = await executionGateway.execute({
+    const review = await gateway.execute({
       type: "code_review",
       node: "code-review",
       agent: input.agent,
@@ -170,7 +172,7 @@ export async function runCodeReviewBugfixLoop(input: {
 
     // ── Bugfix (via Execution Gateway) ──
     const findings = review.output["findings"] as ReadonlyArray<{ severity: string; message: string; artifactId?: string; file?: string }>;
-    const bugfix = await executionGateway.execute({
+    const bugfix = await gateway.execute({
       type: "bugfix",
       node: "bugfix",
       agent: input.agent,
@@ -211,6 +213,7 @@ export async function run(
   const requirementId = `REQ-${Date.now()}`;
   const trace: ExecutionTraceEntry[] = [];
   const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
+  const runtimeGateway = options.executionGateway ?? executionGateway;
 
   // ─── ExecutionContext — created once, persists across all nodes ───
   const execCtx: ExecutionContext = buildExecutionContext(
@@ -229,7 +232,7 @@ export async function run(
 
   // State-driven execution loop — VM transitions, not node-driven
   const executors: RuntimeExecutorMap = {
-    ...createDefaultExecutors(options.executionGateway ?? executionGateway),
+    ...createDefaultExecutors(runtimeGateway),
     ...options.executors,
   };
 
@@ -286,6 +289,7 @@ export async function run(
         requirementId,
         artifacts: [...artifacts],
         agent: "codex",
+        gateway: runtimeGateway,
       });
       artifacts.push(...reviewResult.artifacts);
       trace.push(...reviewResult.traceEntries);
