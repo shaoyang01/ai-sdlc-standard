@@ -211,6 +211,7 @@ async function test() {
   const result8 = await runner8.run(prompt);
   assert(result8.stdout.length <= 5000, "stdout is bounded to maxStdoutChars");
   assert(result8.stdout.length > 0, "stdout is not empty");
+  assert(result8.stdoutTruncated === true, "stdoutTruncated is true when stdout exceeded limit");
   console.log("");
 
   // ── Test 9: Oversized stderr is bounded ──
@@ -223,6 +224,7 @@ async function test() {
   });
   const result9 = await runner9.run(prompt);
   assert(result9.stderr.length <= 3000, "stderr is bounded to maxStderrChars");
+  assert(result9.stderrTruncated === true, "stderrTruncated is true when stderr exceeded limit");
   console.log("");
 
   // ── Test 10: Oversized stdout still large enough for output_too_large classification ──
@@ -235,6 +237,18 @@ async function test() {
   const result10 = await runner10.run(prompt);
   assert(result10.stdout.length === 70_000, "stdout bounded to configured max");
   assert(result10.stdout.length > 64_000, "bounded stdout exceeds default parser maxStdoutChars");
+  assert(result10.stdoutTruncated === true, "stdoutTruncated is true when bounded above parser limit");
+  console.log("");
+
+  // ── Test 10b: Default stdout limit detects output_too_large ──
+  console.log("Test 10b: Default stdout limit detects oversized output");
+  const runner10b = createCodexCliProcessRunner({
+    workingDirectory,
+    spawnFn: asSpawnFn(createFakeSpawn({ stdoutData: "x".repeat(100_000) })),
+  });
+  const result10b = await runner10b.run(prompt);
+  assert(result10b.stdout.length === 64_000, "stdout bounded to default maxStdoutChars");
+  assert(result10b.stdoutTruncated === true, "stdoutTruncated is true with default limit and oversized output");
   console.log("");
 
   // ── Test 11: No real Codex CLI invoked ──

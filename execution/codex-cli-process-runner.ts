@@ -45,6 +45,8 @@ export function createCodexCliProcessRunner(
       stdout: string;
       stderr?: string;
       durationMs?: number;
+      stdoutTruncated?: boolean;
+      stderrTruncated?: boolean;
     }> {
       const args = [
         "exec",
@@ -69,6 +71,8 @@ export function createCodexCliProcessRunner(
 
         let stdout = "";
         let stderr = "";
+        let stdoutTruncated = false;
+        let stderrTruncated = false;
         let settled = false;
         let timer: ReturnType<typeof setTimeout>;
 
@@ -90,6 +94,8 @@ export function createCodexCliProcessRunner(
             stdout: truncate(stdout, maxStdoutChars),
             stderr: truncate(stderr, maxStderrChars),
             durationMs: Date.now() - start,
+            stdoutTruncated,
+            stderrTruncated,
           });
         };
 
@@ -104,11 +110,17 @@ export function createCodexCliProcessRunner(
 
         child.stdout?.on("data", (data: Buffer) => {
           stdout += data.toString();
+          if (stdout.length > maxStdoutChars) {
+            stdoutTruncated = true;
+          }
           stdout = truncate(stdout, maxStdoutChars);
         });
 
         child.stderr?.on("data", (data: Buffer) => {
           stderr += data.toString();
+          if (stderr.length > maxStderrChars) {
+            stderrTruncated = true;
+          }
           stderr = truncate(stderr, maxStderrChars);
         });
 

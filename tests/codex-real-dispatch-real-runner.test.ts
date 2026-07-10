@@ -76,6 +76,8 @@ async function test() {
     stdout: string;
     stderr?: string;
     durationMs?: number;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
   }): CodexCliProcessRunner {
     return {
       async run(_prompt: string) {
@@ -275,7 +277,7 @@ async function test() {
   assert(prohibitedResult.output["codex_fallback_reason"] === "prohibited_output_content", "prohibited content reason is prohibited_output_content");
   console.log("");
 
-  // ── Test 11: Output too large ──
+  // ── Test 11: Output too large (parser limit) ──
   console.log("Test 11: Output too large");
   const oversizedStdout = [
     "```codex-code-patch",
@@ -294,6 +296,24 @@ async function test() {
   assert(oversizedResult.output["codex_fallback_action"] === "truncate_and_shadow_fallback", "oversized output action is truncate_and_shadow_fallback");
   console.log("");
 
+  // ── Test 11b: Output truncated by process runner maps to output_too_large ──
+  console.log("Test 11b: Process-runner truncation maps to output_too_large");
+  const truncatedRunner = createCodexRealDispatchRunner({
+    processRunner: createFakeRunner({
+      exitCode: 0,
+      stdout: "x".repeat(64_000),
+      stdoutTruncated: true,
+    }),
+  });
+  const truncatedResult = await truncatedRunner.run(baseRequest);
+  assert(truncatedResult.success === true, "truncated stdout keeps Gateway success true");
+  assert(truncatedResult.artifacts[0].type === "shadow_output", "truncated stdout falls back to shadow_output");
+  assert(truncatedResult.output["codex_fallback_reason"] === "output_too_large", "truncated stdout reason is output_too_large");
+  assert(truncatedResult.output["codex_fallback_action"] === "truncate_and_shadow_fallback", "truncated stdout action is truncate_and_shadow_fallback");
+  assert(truncatedResult.output["stdout"] === undefined, "truncated stdout not exposed in output");
+  assert(truncatedResult.artifacts[0].content["stdout"] === undefined, "truncated stdout not exposed in artifact");
+  console.log("");
+
   // ── Test 12: No raw data exposed across results ──
   console.log("Test 12: No raw data exposed");
   const results = [
@@ -309,6 +329,7 @@ async function test() {
     emptyPatchResult,
     prohibitedResult,
     oversizedResult,
+    truncatedResult,
   ];
   for (const result of results) {
     assert(result.output["raw_prompt"] === undefined, `${result.output["codex_fallback_reason"] ?? "success"} output has no raw_prompt`);

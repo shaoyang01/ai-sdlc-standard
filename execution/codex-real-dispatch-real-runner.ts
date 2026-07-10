@@ -27,6 +27,8 @@ export interface CodexCliProcessRunner {
     stdout: string;
     stderr?: string;
     durationMs?: number;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
   }>;
 }
 
@@ -177,6 +179,15 @@ export function createCodexRealDispatchRunner(
           "non_zero_exit",
           "shadow_fallback",
           `Codex CLI exited with code ${processResult.exitCode}`
+        );
+      }
+
+      if (processResult.stdoutTruncated) {
+        return buildShadowFallbackResult(
+          request,
+          "output_too_large",
+          "truncate_and_shadow_fallback",
+          "Codex CLI stdout exceeded maximum allowed size"
         );
       }
 
