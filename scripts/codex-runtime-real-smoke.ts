@@ -28,6 +28,22 @@ function formatTraceSequence(trace: ReadonlyArray<{ node: string }>): string {
   return trace.map((entry) => entry.node).join(" → ");
 }
 
+function hasOrderedSubsequence(
+  traceNodes: readonly string[],
+  requiredNodes: readonly string[]
+): boolean {
+  let requiredIndex = 0;
+  for (const node of traceNodes) {
+    if (node === requiredNodes[requiredIndex]) {
+      requiredIndex++;
+      if (requiredIndex === requiredNodes.length) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function main() {
   const validation = validateSmokeEnvironment(process.env);
   if (validation.ok === false) {
@@ -75,9 +91,12 @@ async function main() {
     "validation",
   ];
   const traceNodes = trace.map((entry) => entry.node);
-  const hasAllRequiredNodes = requiredNodes.every((node) =>
-    traceNodes.includes(node as string)
-  );
+  const hasRequiredOrder = hasOrderedSubsequence(traceNodes, requiredNodes);
+
+  const reviewTraces = trace.filter((entry) => entry.node === "review");
+  const finalReviewResult = reviewTraces[reviewTraces.length - 1]?.output["result"] as
+    | string
+    | undefined;
 
   const implArtifacts = result.artifacts.filter(
     (a) => a.node === "implementation" && a.type === "code_patch"
@@ -101,7 +120,7 @@ async function main() {
 
   const passed =
     result.final_status === "success" &&
-    hasAllRequiredNodes &&
+    hasRequiredOrder &&
     implArtifacts.length === 1 &&
     typeof file === "string" &&
     file.trim().length > 0 &&
@@ -112,6 +131,7 @@ async function main() {
     executionResult["result"] === "code_patch_generated" &&
     executionResult["codex_fallback_reason"] === undefined &&
     codeReviewStatus === "PASS" &&
+    finalReviewResult === "PASS" &&
     result.feedback.review_summary.validationPassed === true;
 
   const traceSequence = formatTraceSequence(trace);
@@ -123,6 +143,7 @@ async function main() {
     console.log(`implementation artifact type: code_patch`);
     console.log(`generated file path: ${file}`);
     console.log(`patch character count: ${(patch as string).length}`);
+    console.log(`solution review status: ${finalReviewResult}`);
     console.log(`code review status: ${codeReviewStatus}`);
     console.log(`validation passed: true`);
     if (executionResult["duration_ms"] !== undefined) {
@@ -143,6 +164,7 @@ async function main() {
   if (executionResult["codex_fallback_action"] !== undefined) {
     console.log(`fallback action: ${executionResult["codex_fallback_action"]}`);
   }
+  console.log(`solution review status: ${finalReviewResult ?? "none"}`);
   console.log(`code review status: ${codeReviewStatus ?? "none"}`);
   console.log(`validation passed: ${result.feedback.review_summary.validationPassed}`);
   process.exit(1);
