@@ -25,6 +25,7 @@ import {
   type RuntimeExecutorMap,
   type FanoutResult,
   type RuntimeExecutionGateway,
+  type ImplementationOutcome,
 } from "./core/runtime-executors";
 import { executionGateway } from "./execution";
 import { Artifact } from "./core/artifact";
@@ -68,6 +69,7 @@ interface RuntimeResult {
   feedback: RuntimeFeedback;
   fanout_results?: FanoutResult;
   final_status: "success" | "partial" | "failed";
+  implementation_outcome: ImplementationOutcome;
   completed_at: string;
   skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
   kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
@@ -202,6 +204,22 @@ export async function runCodeReviewBugfixLoop(input: {
   };
 }
 
+function resolveImplementationOutcome(
+  implementationOutput: Record<string, unknown> | undefined
+): ImplementationOutcome {
+  const outcome = implementationOutput?.["implementation_outcome"];
+  if (
+    outcome === "real_code_patch" ||
+    outcome === "shadow_code_patch" ||
+    outcome === "fanout" ||
+    outcome === "speckit" ||
+    outcome === "failed"
+  ) {
+    return outcome;
+  }
+  return "failed";
+}
+
 // ─── MAIN RUNTIME — GRAPH INTERPRETER ───────────────────
 // Graph Kernel is the SINGLE source of truth for transitions.
 
@@ -314,6 +332,8 @@ export async function run(
   if (failedCount === 0) finalStatus = "success";
   else if (succeededCount > 0) finalStatus = "partial";
   else finalStatus = "failed";
+
+  const implementationOutcome = resolveImplementationOutcome(implementationOutput);
 
   // ─── Feedback Analysis — read-only, non-persistent ────
   let feedback = analyzeRuntimeFeedback({
@@ -448,6 +468,7 @@ export async function run(
     feedback,
     fanout_results: fanoutResult,
     final_status: finalStatus,
+    implementation_outcome: implementationOutcome,
     completed_at: new Date().toISOString(),
     ...(skillFlowShadowIntegration
       ? { skill_flow_shadow_integration: skillFlowShadowIntegration }

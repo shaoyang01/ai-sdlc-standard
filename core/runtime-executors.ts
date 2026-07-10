@@ -15,6 +15,13 @@ import type {
 
 export type ExecutionMode = "direct" | "speckit";
 
+export type ImplementationOutcome =
+  | "real_code_patch"
+  | "shadow_code_patch"
+  | "fanout"
+  | "speckit"
+  | "failed";
+
 export interface RuntimeExecutionGateway {
   execute(request: ExecutionRequest): Promise<ExecutionResult>;
 }
@@ -170,6 +177,7 @@ export interface ImplementationExecutorOutput {
   execution_result?: Record<string, unknown>;
   requirement_id?: string;
   error?: string;
+  implementation_outcome: ImplementationOutcome;
 }
 
 // Validation: inspect implementation output, do not always pass.
@@ -289,7 +297,13 @@ export async function executeImplementation(
 
   if (subReqs.length > 0) {
     const result = await executeFanout(input.requirementId, subReqs, execCtx);
-    return { node: "implementation", mode: "fanout", result: "fanout_completed", fanout_result: result };
+    return {
+      node: "implementation",
+      mode: "fanout",
+      result: "fanout_completed",
+      fanout_result: result,
+      implementation_outcome: "fanout",
+    };
   }
   if (input.executionMode === "speckit") {
     return executeSpeckitPipeline(input.requirementId, execCtx);
@@ -316,6 +330,7 @@ export async function executeImplementation(
       execution_result: result.output,
       code: gatewayCodePatch.content["patch"] as string,
       artifacts: gatewayArtifacts,
+      implementation_outcome: "real_code_patch",
     };
   }
 
@@ -330,6 +345,7 @@ export async function executeImplementation(
     execution_result: result.output,
     code: shadowPatch.content["patch"] as string,
     artifacts: [...safeGatewayArtifacts, shadowPatch],
+    implementation_outcome: "shadow_code_patch",
   };
 }
 
@@ -360,5 +376,12 @@ export async function executeSpeckitPipeline(requirementId: string, _execCtx: Ex
   for (const stage of stages) {
     results[stage] = `${stage}_completed`;
   }
-  return { node: "implementation", mode: "speckit", result: "speckit_completed", speckit_stages: results, requirement_id: requirementId };
+  return {
+    node: "implementation",
+    mode: "speckit",
+    result: "speckit_completed",
+    speckit_stages: results,
+    requirement_id: requirementId,
+    implementation_outcome: "speckit",
+  };
 }

@@ -367,6 +367,10 @@ async function test() {
   });
 
   a(resultB.final_status === "success", "Runtime completes through validation");
+  a(
+    resultB.implementation_outcome === "real_code_patch",
+    "implementation outcome is real_code_patch"
+  );
 
   const implTraceB = resultB.execution_trace.find((t) => t.node === "implementation");
   a(implTraceB !== undefined, "implementation trace entry exists");
@@ -407,6 +411,10 @@ async function test() {
   });
 
   a(resultC.final_status === "success", "Runtime completes through validation with shadow fallback");
+  a(
+    resultC.implementation_outcome === "shadow_code_patch",
+    "implementation outcome is shadow_code_patch"
+  );
 
   const implTraceC = resultC.execution_trace.find((t) => t.node === "implementation");
   a(implTraceC !== undefined, "implementation trace entry exists");
@@ -446,6 +454,10 @@ async function test() {
   });
 
   a(resultC2.final_status === "success", "Runtime completes through validation with unusable Gateway patches");
+  a(
+    resultC2.implementation_outcome === "shadow_code_patch",
+    "implementation outcome is shadow_code_patch"
+  );
 
   const implTraceC2 = resultC2.execution_trace.find((t) => t.node === "implementation");
   a(implTraceC2 !== undefined, "implementation trace entry exists");
@@ -522,6 +534,7 @@ async function test() {
     mode: "direct",
     result: "custom_implementation_completed",
     code: "export function custom() { return true; }",
+    implementation_outcome: "real_code_patch" as const,
     artifacts: [
       createArtifact({
         id: "custom-code-patch",
@@ -551,6 +564,10 @@ async function test() {
   a(
     implTraceD?.output["result"] === "custom_implementation_completed",
     "custom implementation executor ran"
+  );
+  a(
+    resultD.implementation_outcome === "real_code_patch",
+    "Runtime preserves explicit real_code_patch from custom executor"
   );
   a(
     resultD.feedback.review_summary.codeReviewStatus === "PASS",
@@ -657,8 +674,67 @@ async function test() {
   );
   console.log("");
 
-  // ── Test E: No real CLI dependencies in this test file ──
-  console.log("Test E: Tests require no real CLI or working directory");
+  // ── Test E: Custom implementation executor without explicit outcome resolves to failed ──
+  console.log("Test E: executors.implementation without outcome resolves to failed");
+  let gatewayECodeGenerationCalled = false;
+  const gatewayE: RuntimeExecutionGateway = {
+    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+      if (request.type === "code_generation") {
+        gatewayECodeGenerationCalled = true;
+      }
+      if (request.type === "code_review") {
+        return {
+          success: true,
+          node: "code-review",
+          agent: "codex",
+          output: { result: "PASS", findings: [] },
+          artifacts: [createCodeReviewArtifact(request.requirementId)],
+        };
+      }
+      return {
+        success: true,
+        node: request.node,
+        agent: request.agent,
+        output: {},
+        artifacts: [],
+      };
+    },
+  };
+
+  const customImplementationExecutorWithoutOutcome = async () => ({
+    node: "implementation",
+    mode: "direct",
+    result: "custom_implementation_completed",
+    code: "export function customNoOutcome() { return true; }",
+    artifacts: [
+      createArtifact({
+        id: "custom-no-outcome-code-patch",
+        requirementId: "REQ-NO-OUTCOME",
+        node: "implementation",
+        type: "code_patch",
+        content: {
+          file: "src/custom-no-outcome.ts",
+          patch: "export function customNoOutcome() { return true; }",
+        },
+        agent: "codex",
+        source: "execution_gateway",
+      }),
+    ],
+  });
+
+  const resultE = await run("build a custom feature", {
+    executionGateway: gatewayE,
+    executors: {
+      implementation: customImplementationExecutorWithoutOutcome as any,
+    },
+  });
+
+  a(!gatewayECodeGenerationCalled, "injected Gateway was not called for code_generation");
+  a(resultE.final_status === "success", "Runtime completes with custom executor");
+  a(
+    resultE.implementation_outcome === "failed",
+    "Runtime resolves missing implementation_outcome to failed"
+  );
   a(true, "tests use only injected fake gateways");
   a(true, "no working directory is configured");
   a(true, "no real Codex CLI process is spawned");

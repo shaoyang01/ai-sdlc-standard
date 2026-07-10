@@ -132,7 +132,8 @@ async function main() {
     executionResult["codex_fallback_reason"] === undefined &&
     codeReviewStatus === "PASS" &&
     finalReviewResult === "PASS" &&
-    result.feedback.review_summary.validationPassed === true;
+    result.feedback.review_summary.validationPassed === true &&
+    result.implementation_outcome === "real_code_patch";
 
   const traceSequence = formatTraceSequence(trace);
 
@@ -141,6 +142,7 @@ async function main() {
     console.log(`final_status: ${result.final_status}`);
     console.log(`trace sequence: ${traceSequence}`);
     console.log(`implementation artifact type: code_patch`);
+    console.log(`implementation outcome: ${result.implementation_outcome}`);
     console.log(`generated file path: ${file}`);
     console.log(`patch character count: ${(patch as string).length}`);
     console.log(`solution review status: ${finalReviewResult}`);
@@ -158,6 +160,7 @@ async function main() {
   console.log(
     `implementation artifact type: ${implCodePatch?.type ?? "none"}`
   );
+  console.log(`implementation outcome: ${result.implementation_outcome ?? "none"}`);
   if (executionResult["codex_fallback_reason"] !== undefined) {
     console.log(`fallback reason: ${executionResult["codex_fallback_reason"]}`);
   }
