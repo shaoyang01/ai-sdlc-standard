@@ -122,10 +122,11 @@ export class ExecutionGateway {
     // ── Kimi Real Dispatch (feature-flagged, llm_task only) ──
     // Only intercepts when real dispatch flag is explicitly enabled.
     // Falls through to default shadow when flag is off.
+    const env = this.options.env ?? process.env;
     const shouldAttemptKimi = (request: ExecutionRequest): boolean => {
       return request.agent === "kimi"
         && request.type === "llm_task"
-        && process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH === "enabled";
+        && env.SDLC_KIMI_GATEWAY_REAL_DISPATCH === "enabled";
     };
 
     if (shouldAttemptKimi(enriched)) {
@@ -134,6 +135,7 @@ export class ExecutionGateway {
         this.options.kimiConfig,
         this.options.kimiRunner,
         this.options.kimiGuardrailLimits,
+        env,
       );
     }
 
@@ -149,7 +151,6 @@ export class ExecutionGateway {
     //   - codexRealDispatchConfig.workingDirectory is a non-empty string after trim
     // If any condition is missing, the Gateway returns shadow.
     // The legacy executeCodexAgent path is no longer reachable through ExecutionGateway.
-    const env = this.options.env ?? process.env;
     const mode = getExecutionMode(env);
     if (mode !== "codex" || enriched.agent !== "codex") {
       return executeShadowAgent(enriched);

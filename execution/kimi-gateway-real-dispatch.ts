@@ -43,6 +43,7 @@ export interface KimiGatewayRealDispatchResult {
   persistsAudit: false;
   stdoutSummary?: string;
   stderrSummary?: string;
+  stdoutPayload?: string;
   error?: string;
   warnings: string[];
   auditEvents: unknown[];
@@ -137,6 +138,7 @@ export async function dispatchKimiGatewayReal(input: {
       executed: execResult.decision.startsWith("executed"),
       stdoutSummary: clampKimiGatewaySummary({ value: execResult.stdoutSummary, maxLength: limits.maxStdoutSummaryLength }),
       stderrSummary: clampKimiGatewaySummary({ value: execResult.stderrSummary, maxLength: limits.maxStderrSummaryLength }),
+      stdoutPayload: execResult.stdoutPayload,
       error: clampKimiGatewaySummary({ value: execResult.error, maxLength: limits.maxErrorSummaryLength }),
       auditEvents: [...base.auditEvents, ...execResult.auditEvents],
       observabilityEvents: [
@@ -173,25 +175,95 @@ export async function dispatchKimiGatewayReal(input: {
   }
 }
 
+function buildKimiLlmTaskPrompt(request: ExecutionRequest): string | undefined {
+  if (
+    request.node === "requirement-summary" &&
+    request.input?.["expected_output"] === "requirement_summary"
+  ) {
+    const requirement = request.input["requirement"] ?? "";
+    const requirementId = request.requirementId;
+    return [
+      "You are a requirement analysis assistant.",
+      "Read the requirement below and return a single JSON object only.",
+      "Do not include markdown fences, explanations, or any text outside the JSON object.",
+      "",
+      "Requirement:",
+      typeof requirement === "string" ? requirement : JSON.stringify(requirement),
+      "",
+      `Requirement ID: ${requirementId}`,
+      "",
+      "Return exactly this JSON shape:",
+      JSON.stringify({
+        requirement_id: requirementId,
+        multi_repo: false,
+        main_repo: "main",
+        sub_requirements: [],
+      }),
+      "",
+      "Rules:",
+      "- requirement_id must match exactly",
+      "- multi_repo must be true if the requirement describes multiple repositories, otherwise false",
+      "- main_repo must be a non-empty string",
+      "- sub_requirements must be an array of objects with non-empty repo and task strings",
+      "- If multi_repo is false, sub_requirements must be empty",
+      "- If multi_repo is true, sub_requirements must contain at least one item",
+    ].join("\n");
+  }
+  const prompt = request.input?.["prompt"];
+  return typeof prompt === "string" ? prompt : undefined;
+}
+
 export async function executeKimiGatewayRequest(
   request: ExecutionRequest,
   config?: CliAdapterConfig,
   runner?: KimiCliProcessRunner,
   guardrailLimits?: Partial<KimiGatewayGuardrailLimits>,
+  env?: Record<string, string | undefined>,
 ): Promise<ExecutionResult> {
-  const resolvedConfig = config ?? getKimiCliAdapterConfig();
-  const dispatch = await dispatchKimiGatewayReal({ request, config: resolvedConfig, runner, guardrailLimits });
+  const prompt = buildKimiLlmTaskPrompt(request);
+  if (prompt === undefined) {
+    return {
+      success: false,
+      node: request.node,
+      agent: "kimi",
+      output: { error: "Kimi Gateway request missing prompt" },
+      artifacts: [],
+      error: "missing_prompt",
+    };
+  }
+
+  const requestWithPrompt: ExecutionRequest = {
+    ...request,
+    input: { ...request.input, prompt },
+  };
+
+  const resolvedConfig = config ?? getKimiCliAdapterConfig(env);
+  const dispatch = await dispatchKimiGatewayReal({
+    request: requestWithPrompt,
+    config: resolvedConfig,
+    runner,
+    guardrailLimits,
+    env,
+  });
 
   if (dispatch.status === "executed_success") {
+    const summaryPayload = dispatch.stdoutPayload ?? dispatch.stdoutSummary ?? "";
     const artifact = createArtifact({
-      requirementId: dispatch.requestId, node: request.node, type: "shadow_output",
-      content: { result: `kimi_llm_task_completed`, summary: dispatch.stdoutSummary ?? "" },
-      agent: "kimi", source: "execution_gateway", id: `${dispatch.requestId}:kimi:shadow_output`,
+      requirementId: dispatch.requestId,
+      node: request.node,
+      type: "shadow_output",
+      content: { result: `kimi_llm_task_completed`, summary: summaryPayload },
+      agent: "kimi",
+      source: "execution_gateway",
+      id: `${dispatch.requestId}:kimi:shadow_output`,
     });
     return {
-      success: true, node: request.node, agent: "kimi",
+      success: true,
+      node: request.node,
+      agent: "kimi",
       output: {
-        result: "kimi_executed_success", summary: dispatch.stdoutSummary,
+        result: "kimi_executed_success",
+        summary: summaryPayload,
         observability: buildObservabilitySummary(dispatch.observabilityEvents),
       },
       artifacts: [artifact],

@@ -35,6 +35,8 @@ export interface KimiCliExecutorCommandInput {
   workingDirectory?: string;
   timeoutMs: number;
   sanitized: true;
+  stdin?: string;
+  maxStdoutPayloadChars?: number;
 }
 
 export interface KimiCliExecutorContractResult {

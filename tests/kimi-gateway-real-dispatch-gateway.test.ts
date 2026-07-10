@@ -58,16 +58,32 @@ async function test() {
     process.env.SDLC_KIMI_GATEWAY_REAL_DISPATCH = "enabled";
     process.env.SDLC_KIMI_GATEWAY_INTEGRATION = "enabled";
     process.env.SDLC_KIMI_CLI_COMMAND_EXECUTION = "enabled";
+    const validKimiSummaryC = JSON.stringify({
+      requirement_id: "REQ-C",
+      multi_repo: false,
+      main_repo: "main",
+      sub_requirements: [],
+    });
     let called = 0;
     const gwC = new ExecutionGateway({
       kimiConfig: validConfig,
       kimiRunner: {
-        run: async () => { called++; return { exitCode: 0, durationMs: 12, stdout: "ok", stderr: "" }; },
+        run: async () => {
+          called++;
+          return {
+            exitCode: 0,
+            durationMs: 12,
+            stdout: validKimiSummaryC,
+            stderr: "",
+            stdoutPayload: validKimiSummaryC,
+          };
+        },
       },
     });
     const rC = await gwC.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-C", input: {},
+      requirementId: "REQ-C",
+      input: { expected_output: "requirement_summary", requirement: "test requirement" },
     });
     assert(called === 1, "runner called once");
     assert(rC.success === true && rC.agent === "kimi", "kimi success");
@@ -106,7 +122,8 @@ async function test() {
     });
     const rE = await gwE.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-E", input: {},
+      requirementId: "REQ-E",
+      input: { prompt: "test requirement" },
     });
     assert(eCalled === 0, "runner not called when integration missing");
     assert(rE.success === false, "structured disabled");
@@ -123,7 +140,8 @@ async function test() {
     });
     const rF = await gwF.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-F", input: {},
+      requirementId: "REQ-F",
+      input: { expected_output: "requirement_summary", requirement: "test requirement" },
     });
     assert(rF.success === false, "failure");
     assert(rF.output["fallback_action"] === "return_structured_failure", "action failure");
@@ -142,7 +160,8 @@ async function test() {
     });
     const rG = await gwG.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-G", input: {},
+      requirementId: "REQ-G",
+      input: { expected_output: "requirement_summary", requirement: "test requirement" },
     });
     assert(rG.success === false, "timeout failure");
     assert(rG.output["fallback_action"] === "return_structured_timeout", "action timeout");
@@ -207,7 +226,8 @@ async function test() {
     });
     const rJ = await gwJ.execute({
       type: "llm_task", node: "requirement-summary", agent: "kimi",
-      requirementId: "REQ-J", input: {},
+      requirementId: "REQ-J",
+      input: { expected_output: "requirement_summary", requirement: "test requirement" },
     });
     assert(jCalled === 0, "runner not called for timeout guardrail");
     assert(rJ.success === false, "timeout blocked");

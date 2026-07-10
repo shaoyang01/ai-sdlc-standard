@@ -5,9 +5,11 @@
 // All Gateway calls are fake; no real Kimi or Codex CLI is invoked.
 
 import { run } from "../runtime";
+import { ExecutionGateway } from "../execution/gateway";
 import { createArtifact, Artifact } from "../core/artifact";
 import type { RuntimeExecutionGateway } from "../core/runtime-executors";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
+import type { KimiCliProcessRunner, KimiCliProcessResult } from "../execution/kimi-cli-command-executor";
 
 function createCodeReviewArtifact(requirementId: string, attempt = 0): Artifact {
   return createArtifact({
@@ -357,6 +359,174 @@ async function test() {
     !JSON.stringify(reqSummaryTraceF?.output).includes("api_key"),
     "raw error text is not exposed in requirement-summary output"
   );
+  console.log("");
+
+  // ── Test G: End-to-end through ExecutionGateway with fake Kimi process runner ──
+  console.log("Test G: fake process runner end-to-end through ExecutionGateway");
+
+  function buildValidKimiJson(requirementId: string): string {
+    return JSON.stringify({
+      requirement_id: requirementId,
+      multi_repo: false,
+      main_repo: "main",
+      sub_requirements: [],
+    });
+  }
+
+  const envG = {
+    SDLC_KIMI_GATEWAY_REAL_DISPATCH: "enabled",
+    SDLC_KIMI_GATEWAY_INTEGRATION: "enabled",
+    SDLC_KIMI_CLI_COMMAND_EXECUTION: "enabled",
+    SDLC_KIMI_CLI_ADAPTER: "enabled",
+    SDLC_KIMI_CLI_COMMAND: "kimi",
+  };
+
+  // G1: prompt propagation and valid structured stdout
+  let capturedStdinG1: string | undefined;
+  const runnerG1: KimiCliProcessRunner = {
+    async run(commandInput): Promise<KimiCliProcessResult> {
+      capturedStdinG1 = commandInput.stdin;
+      const requirementId = commandInput.requestId;
+      return {
+        exitCode: 0,
+        durationMs: 10,
+        stdout: buildValidKimiJson(requirementId),
+        stderr: "",
+        stdoutPayload: buildValidKimiJson(requirementId),
+      };
+    },
+  };
+
+  const gatewayG1 = new ExecutionGateway({
+    env: envG,
+    kimiRunner: runnerG1,
+  });
+
+  const requirementG = "build a simple login form with email validation";
+  const resultG1 = await run(requirementG, {
+    executionGateway: gatewayG1,
+    requirementSummaryMode: "kimi_gateway",
+  });
+
+  a(capturedStdinG1 !== undefined, "fake Kimi process runner received stdin");
+  a(
+    typeof capturedStdinG1 === "string" && capturedStdinG1.includes(requirementG),
+    "stdin contains the original requirement"
+  );
+  a(
+    typeof capturedStdinG1 === "string" && capturedStdinG1.includes("JSON object only"),
+    "stdin instructs JSON-only output"
+  );
+  a(
+    typeof capturedStdinG1 === "string" && capturedStdinG1.includes("multi_repo"),
+    "stdin references multi_repo"
+  );
+  a(
+    typeof capturedStdinG1 === "string" && capturedStdinG1.includes("sub_requirements"),
+    "stdin references sub_requirements"
+  );
+  a(
+    !JSON.stringify(resultG1).includes(capturedStdinG1 ?? ""),
+    "raw prompt is not exposed in Runtime result"
+  );
+  a(resultG1.final_status === "success", "Runtime completes with valid Kimi stdout");
+  const reqSummaryTraceG1 = resultG1.execution_trace.find((t) => t.node === "requirement-summary");
+  a(reqSummaryTraceG1?.output["execution_source"] === "kimi_real", "execution_source is kimi_real");
+
+  // G2: multiline JSON preserved exactly
+  let capturedPayloadG2: string | undefined;
+  const runnerG2: KimiCliProcessRunner = {
+    async run(commandInput): Promise<KimiCliProcessResult> {
+      const requirementId = commandInput.requestId;
+      const payload = JSON.stringify(
+        {
+          requirement_id: requirementId,
+          multi_repo: false,
+          main_repo: "main",
+          sub_requirements: [],
+        },
+        null,
+        2
+      );
+      capturedPayloadG2 = payload;
+      return {
+        exitCode: 0,
+        durationMs: 10,
+        stdout: payload,
+        stderr: "",
+        stdoutPayload: payload,
+      };
+    },
+  };
+  const gatewayG2 = new ExecutionGateway({ env: envG, kimiRunner: runnerG2 });
+  const resultG2 = await run("build a login form", {
+    executionGateway: gatewayG2,
+    requirementSummaryMode: "kimi_gateway",
+  });
+  a(resultG2.final_status === "success", "Runtime completes with multiline JSON");
+  const reqSummaryTraceG2 = resultG2.execution_trace.find((t) => t.node === "requirement-summary");
+  a(reqSummaryTraceG2?.output["execution_source"] === "kimi_real", "multiline JSON execution_source is kimi_real");
+  a(
+    JSON.stringify(reqSummaryTraceG2?.output["multi_repo"]) === "false",
+    "multiline JSON parsed correctly"
+  );
+  a(
+    capturedPayloadG2 !== undefined && capturedPayloadG2.includes("\n"),
+    "multiline payload was returned by runner"
+  );
+
+  // G3: oversized stdout triggers fallback
+  const runnerG3: KimiCliProcessRunner = {
+    async run(): Promise<KimiCliProcessResult> {
+      return {
+        exitCode: 0,
+        durationMs: 10,
+        stdout: "x".repeat(20_000),
+        stderr: "",
+        stdoutPayload: "x".repeat(20_000),
+        stdoutTruncated: true,
+      };
+    },
+  };
+  const gatewayG3 = new ExecutionGateway({ env: envG, kimiRunner: runnerG3 });
+  const resultG3 = await run("build a login form", {
+    executionGateway: gatewayG3,
+    requirementSummaryMode: "kimi_gateway",
+  });
+  a(resultG3.final_status === "success", "Runtime completes after oversized stdout fallback");
+  const reqSummaryTraceG3 = resultG3.execution_trace.find((t) => t.node === "requirement-summary");
+  a(reqSummaryTraceG3?.output["execution_source"] === "kimi_fallback", "oversized stdout execution_source is kimi_fallback");
+
+  // G4: malformed stdout triggers fallback
+  const malformedPayloadsG4 = [
+    "Here is the result: {\"requirement_id\": \"x\", \"multi_repo\": false}",
+    "```json\n{\"requirement_id\": \"x\"}\n```",
+    "not valid json",
+  ];
+  for (const malformed of malformedPayloadsG4) {
+    const runnerG4: KimiCliProcessRunner = {
+      async run(): Promise<KimiCliProcessResult> {
+        return {
+          exitCode: 0,
+          durationMs: 10,
+          stdout: malformed,
+          stderr: "",
+          stdoutPayload: malformed,
+        };
+      },
+    };
+    const gatewayG4 = new ExecutionGateway({ env: envG, kimiRunner: runnerG4 });
+    const resultG4 = await run("build a login form", {
+      executionGateway: gatewayG4,
+      requirementSummaryMode: "kimi_gateway",
+    });
+    a(resultG4.final_status === "success", "Runtime completes after malformed stdout fallback");
+    const reqSummaryTraceG4 = resultG4.execution_trace.find((t) => t.node === "requirement-summary");
+    a(
+      reqSummaryTraceG4?.output["execution_source"] === "kimi_fallback",
+      `malformed stdout fallback: ${malformed.slice(0, 40)}`
+    );
+  }
   console.log("");
 
   console.log(`\nResults: ${passed.count} passed, ${failed.count} failed`);

@@ -23,8 +23,13 @@ export type KimiCliCommandExecutorDecision =
   | "execution_not_enabled" | "executed_success" | "executed_failure" | "executed_timeout";
 
 export interface KimiCliProcessResult {
-  exitCode?: number; stdout?: string; stderr?: string;
-  durationMs: number; timedOut?: boolean;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  durationMs: number;
+  timedOut?: boolean;
+  stdoutPayload?: string;
+  stdoutTruncated?: boolean;
 }
 
 export interface KimiCliProcessRunner {
@@ -32,11 +37,21 @@ export interface KimiCliProcessRunner {
 }
 
 export interface KimiCliCommandExecutorResult {
-  success: boolean; decision: KimiCliCommandExecutorDecision;
-  requestId: string; commandInput?: KimiCliExecutorCommandInput;
+  success: boolean;
+  decision: KimiCliCommandExecutorDecision;
+  requestId: string;
+  commandInput?: KimiCliExecutorCommandInput;
   auditEvents: CliAdapterAuditEvent[];
-  stdoutSummary?: string; stderrSummary?: string; error?: string;
+  stdoutSummary?: string;
+  stderrSummary?: string;
+  error?: string;
+  stdoutPayload?: string;
+  stdoutTruncated?: boolean;
 }
+
+const DEFAULT_MAX_STDOUT_PAYLOAD_CHARS = 16_000;
+const SUMMARY_MAX_STDOUT_CHARS = 4000;
+const SUMMARY_MAX_STDERR_CHARS = 4000;
 
 // ─── Feature Flag ─────────────────────────────────────
 
@@ -85,8 +100,8 @@ export function createDefaultKimiCliProcessRunner(): KimiCliProcessRunner {
           finish({
             timedOut: true,
             durationMs: Date.now() - start,
-            stdout: stdout.slice(0, 4000),
-            stderr: stderr.slice(0, 4000),
+            stdout: stdout.slice(0, SUMMARY_MAX_STDOUT_CHARS),
+            stderr: stderr.slice(0, SUMMARY_MAX_STDERR_CHARS),
           });
         }, commandInput.timeoutMs);
 
@@ -98,8 +113,31 @@ export function createDefaultKimiCliProcessRunner(): KimiCliProcessRunner {
         });
 
         child.on("close", (code) => {
-          finish({ exitCode: code ?? undefined, durationMs: Date.now() - start, stdout: stdout.slice(0, 4000), stderr: stderr.slice(0, 4000) });
+          const maxPayload = commandInput.maxStdoutPayloadChars ?? DEFAULT_MAX_STDOUT_PAYLOAD_CHARS;
+          const stdoutTruncated = stdout.length > maxPayload;
+          const stdoutPayload = stdout.slice(0, maxPayload);
+          finish({
+            exitCode: code ?? undefined,
+            durationMs: Date.now() - start,
+            stdout: stdout.slice(0, SUMMARY_MAX_STDOUT_CHARS),
+            stderr: stderr.slice(0, SUMMARY_MAX_STDERR_CHARS),
+            stdoutPayload,
+            stdoutTruncated,
+          });
         });
+
+        if (commandInput.stdin && child.stdin) {
+          child.stdin.write(commandInput.stdin);
+          child.stdin.end();
+        } else if (commandInput.stdin) {
+          finish({
+            exitCode: undefined,
+            durationMs: Date.now() - start,
+            stderr: "Kimi CLI stdin is unavailable",
+            stdoutPayload: "",
+            stdoutTruncated: false,
+          });
+        }
       });
     },
   };
@@ -146,7 +184,12 @@ export async function executeKimiCliCommand(input: {
   }
 
   const runner = input.runner ?? createDefaultKimiCliProcessRunner();
-  const processResult = await runner.run(contract.commandInput!);
+  const runnerCommandInput: KimiCliExecutorCommandInput = {
+    ...contract.commandInput!,
+    stdin: input.request.input?.["prompt"] as string | undefined,
+    maxStdoutPayloadChars: DEFAULT_MAX_STDOUT_PAYLOAD_CHARS,
+  };
+  const processResult = await runner.run(runnerCommandInput);
 
   const resultAudit = buildCliExecutionResultAudit({
     adapter: "kimi", requestId: contract.requestId,
@@ -157,12 +200,28 @@ export async function executeKimiCliCommand(input: {
 
   const stdoutSummary = summarizeOutput(processResult.stdout);
   const stderrSummary = summarizeOutput(processResult.stderr);
+  const stdoutPayload = processResult.stdoutPayload;
+  const stdoutTruncated = processResult.stdoutTruncated;
 
+  if (stdoutTruncated) {
+    return {
+      success: false,
+      decision: "executed_failure",
+      requestId: contract.requestId,
+      commandInput: contract.commandInput,
+      auditEvents: [...contract.auditEvents, resultAudit],
+      stdoutSummary,
+      stderrSummary,
+      stdoutPayload,
+      stdoutTruncated,
+      error: "Kimi CLI stdout exceeded structured output limit",
+    };
+  }
   if (processResult.timedOut) {
-    return { success: false, decision: "executed_timeout", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, error: "Kimi CLI command timed out" };
+    return { success: false, decision: "executed_timeout", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: "Kimi CLI command timed out" };
   }
   if (processResult.exitCode === 0) {
-    return { success: true, decision: "executed_success", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary };
+    return { success: true, decision: "executed_success", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated };
   }
-  return { success: false, decision: "executed_failure", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, error: `Kimi CLI exited with code ${processResult.exitCode}` };
+  return { success: false, decision: "executed_failure", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: `Kimi CLI exited with code ${processResult.exitCode}` };
 }
