@@ -8,11 +8,14 @@
 
 import { ExecutionRequest, ExecutionResult } from "./types";
 import { executeShadowAgent } from "./shadow-agent-adapter";
-import { executeCodexAgent } from "./codex-adapter";
 import { executeCodeReview } from "./code-review-adapter";
 import { executeBugfix } from "./bugfix-adapter";
-import { getExecutionMode } from "./config";
+import { getExecutionMode, isCodexRealDispatchEnabled } from "./config";
 import type { CodexRunner } from "./codex-real-dispatch-runner";
+import { createCodexRealDispatchRunner } from "./codex-real-dispatch-real-runner";
+import type { CodexCliProcessRunner } from "./codex-real-dispatch-real-runner";
+import { createCodexCliProcessRunner } from "./codex-cli-process-runner";
+import type { CodexCliProcessRunnerOptions } from "./codex-cli-process-runner";
 import { Artifact } from "../core/artifact";
 import { CodeReviewFinding } from "../core/review-types";
 import { validateExecutionRequestSkill } from "./skill-request-validation";
@@ -50,9 +53,19 @@ import {
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
+export interface CodexGatewayRealDispatchConfig {
+  workingDirectory: string;
+  command?: string;
+  timeoutMs?: number;
+  maxStdoutChars?: number;
+  maxStderrChars?: number;
+}
+
 export interface ExecutionGatewayOptions {
   env?: Record<string, string | undefined>;
   codexRunner?: CodexRunner;
+  codexProcessRunner?: CodexCliProcessRunner;
+  codexRealDispatchConfig?: CodexGatewayRealDispatchConfig;
   kimiConfig?: CliAdapterConfig;
   kimiRunner?: KimiCliProcessRunner;
   kimiGuardrailLimits?: Partial<KimiGatewayGuardrailLimits>;
@@ -126,24 +139,47 @@ export class ExecutionGateway {
 
     // ── Default: shadow or codex ──
     // Default behavior is shadow unless SDLC_EXECUTION_MODE is explicitly "codex".
-    // When mode is codex and agent is codex, the Gateway chooses between two paths:
-    //   1. Legacy Codex adapter path: executeCodexAgent(enriched) — attempts real
-    //      Codex CLI invocation. This is the historical behavior and remains unchanged.
-    //   2. Injectable runner path: this.options.codexRunner.run(enriched) — used by
-    //      the fake runner in tests and will be used by future real-dispatch runners.
-    // The injectable runner is used ONLY when all three conditions are true:
+    // When mode is codex and agent is codex, the Gateway uses an explicitly injected
+    // codexRunner if provided. Otherwise real dispatch is permitted only when all of
+    // the following are true:
     //   - SDLC_EXECUTION_MODE=codex
+    //   - SDLC_CODEX_REAL_DISPATCH=enabled
     //   - agent === "codex"
-    //   - options.codexRunner is explicitly provided.
-    // Without an injected runner, default production behavior falls back to the legacy
-    // adapter (which itself is opt-in via SDLC_EXECUTION_MODE).
-    const mode = getExecutionMode();
-    if (mode === "codex" && enriched.agent === "codex") {
-      if (this.options.codexRunner) {
-        return this.options.codexRunner.run(enriched);
-      }
-      return executeCodexAgent(enriched);
+    //   - request.type === "code_generation"
+    //   - codexRealDispatchConfig.workingDirectory is a non-empty string
+    // If any condition is missing, the Gateway returns shadow.
+    // The legacy executeCodexAgent path is no longer reachable through ExecutionGateway.
+    const env = this.options.env ?? process.env;
+    const mode = getExecutionMode(env);
+    if (mode !== "codex" || enriched.agent !== "codex") {
+      return executeShadowAgent(enriched);
     }
+
+    if (this.options.codexRunner) {
+      return this.options.codexRunner.run(enriched);
+    }
+
+    if (
+      isCodexRealDispatchEnabled(env) &&
+      enriched.type === "code_generation" &&
+      typeof this.options.codexRealDispatchConfig?.workingDirectory === "string" &&
+      this.options.codexRealDispatchConfig.workingDirectory.length > 0
+    ) {
+      const config = this.options.codexRealDispatchConfig;
+      const processRunner =
+        this.options.codexProcessRunner ??
+        createCodexCliProcessRunner({
+          workingDirectory: config.workingDirectory,
+          command: config.command,
+          timeoutMs: config.timeoutMs,
+          maxStdoutChars: config.maxStdoutChars,
+          maxStderrChars: config.maxStderrChars,
+        } satisfies CodexCliProcessRunnerOptions);
+
+      const realDispatchRunner = createCodexRealDispatchRunner({ processRunner });
+      return realDispatchRunner.run(enriched);
+    }
+
     return executeShadowAgent(enriched);
   }
 

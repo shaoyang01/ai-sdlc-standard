@@ -1,9 +1,10 @@
 export { ExecutionGateway, executionGateway } from "./gateway";
+export type { ExecutionGatewayOptions, CodexGatewayRealDispatchConfig } from "./gateway";
 export { executeShadowAgent } from "./shadow-agent-adapter";
 export { executeCodexAgent } from "./codex-adapter";
 export { executeCodeReview } from "./code-review-adapter";
 export { executeBugfix } from "./bugfix-adapter";
-export { getExecutionMode } from "./config";
+export { getExecutionMode, isCodexRealDispatchEnabled } from "./config";
 export {
   buildCodexPrompt,
   DEFAULT_PROMPT_BUILDER_LIMITS,
