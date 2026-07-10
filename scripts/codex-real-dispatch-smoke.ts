@@ -10,26 +10,41 @@
 //   SDLC_CODEX_SMOKE_CONFIRM=yes
 //   SDLC_CODEX_WORKING_DIRECTORY=<absolute path to a git repository>
 
-import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { ExecutionGateway } from "../execution/gateway";
 import type { ExecutionRequest } from "../execution/types";
+
+export interface SmokeFsHelpers {
+  existsSync(path: string): boolean;
+  statSync(path: string): { isDirectory(): boolean; isFile(): boolean };
+  realpathSync(path: string): string;
+  isAbsolute(path: string): boolean;
+}
+
+const defaultFsHelpers: SmokeFsHelpers = {
+  existsSync,
+  statSync,
+  realpathSync,
+  isAbsolute,
+};
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function validateEnvironment(): {
-  ok: true;
-  workingDirectory: string;
-} | {
-  ok: false;
-  message: string;
-} {
-  const mode = process.env.SDLC_EXECUTION_MODE;
-  const realDispatch = process.env.SDLC_CODEX_REAL_DISPATCH;
-  const confirm = process.env.SDLC_CODEX_SMOKE_CONFIRM;
-  const workingDirectory = process.env.SDLC_CODEX_WORKING_DIRECTORY;
+export type SmokeValidationSuccess = { ok: true; workingDirectory: string };
+export type SmokeValidationFailure = { ok: false; message: string };
+export type SmokeValidationResult = SmokeValidationSuccess | SmokeValidationFailure;
+
+export function validateSmokeEnvironment(
+  env: Record<string, string | undefined>,
+  fs: SmokeFsHelpers = defaultFsHelpers
+): SmokeValidationResult {
+  const mode = env.SDLC_EXECUTION_MODE;
+  const realDispatch = env.SDLC_CODEX_REAL_DISPATCH;
+  const confirm = env.SDLC_CODEX_SMOKE_CONFIRM;
+  const workingDirectory = env.SDLC_CODEX_WORKING_DIRECTORY;
 
   if (mode !== "codex") {
     return {
@@ -52,43 +67,64 @@ function validateEnvironment(): {
   if (!isNonEmptyString(workingDirectory)) {
     return {
       ok: false,
-      message: "Refused: SDLC_CODEX_WORKING_DIRECTORY must be a non-empty absolute path.",
-    };
-  }
-  if (!resolve(workingDirectory).startsWith("/")) {
-    return {
-      ok: false,
-      message: "Refused: SDLC_CODEX_WORKING_DIRECTORY must be an absolute path.",
+      message:
+        "Refused: SDLC_CODEX_WORKING_DIRECTORY must be a non-empty absolute path.",
     };
   }
 
-  const canonical = resolve(workingDirectory.trim());
-  if (!existsSync(canonical)) {
+  const trimmedWorkingDirectory = workingDirectory.trim();
+  if (!fs.isAbsolute(trimmedWorkingDirectory)) {
     return {
       ok: false,
-      message: "Refused: working directory does not exist.",
-    };
-  }
-  const stats = statSync(canonical);
-  if (!stats.isDirectory()) {
-    return {
-      ok: false,
-      message: "Refused: working directory path is not a directory.",
-    };
-  }
-  if (!existsSync(resolve(canonical, ".git"))) {
-    return {
-      ok: false,
-      message: "Refused: working directory does not contain a .git directory.",
+      message:
+        "Refused: SDLC_CODEX_WORKING_DIRECTORY must be an absolute path.",
     };
   }
 
-  return { ok: true, workingDirectory: canonical };
+  try {
+    if (!fs.existsSync(trimmedWorkingDirectory)) {
+      return {
+        ok: false,
+        message: "Refused: working directory does not exist.",
+      };
+    }
+
+    const stats = fs.statSync(trimmedWorkingDirectory);
+    if (!stats.isDirectory()) {
+      return {
+        ok: false,
+        message: "Refused: working directory path is not a directory.",
+      };
+    }
+
+    const gitPath = resolve(trimmedWorkingDirectory, ".git");
+    if (!fs.existsSync(gitPath)) {
+      return {
+        ok: false,
+        message: "Refused: working directory does not contain a .git directory.",
+      };
+    }
+    const gitStats = fs.statSync(gitPath);
+    if (!gitStats.isDirectory()) {
+      return {
+        ok: false,
+        message: "Refused: .git exists but is not a directory.",
+      };
+    }
+
+    const canonicalWorkingDirectory = fs.realpathSync(trimmedWorkingDirectory);
+    return { ok: true, workingDirectory: canonicalWorkingDirectory };
+  } catch {
+    return {
+      ok: false,
+      message: "Refused: working directory validation failed.",
+    };
+  }
 }
 
 async function main() {
-  const validation = validateEnvironment();
-  if (!validation.ok) {
+  const validation = validateSmokeEnvironment(process.env);
+  if (validation.ok === false) {
     console.error(validation.message);
     process.exit(1);
   }
@@ -155,10 +191,7 @@ async function main() {
     const artifact = result.artifacts[0];
     const file = artifact.content["file"];
     const patch = artifact.content["patch"];
-    if (
-      isNonEmptyString(file) &&
-      isNonEmptyString(patch)
-    ) {
+    if (isNonEmptyString(file) && isNonEmptyString(patch)) {
       console.log("Smoke test passed");
       console.log(`success: true`);
       console.log(`artifact type: ${artifact.type}`);
@@ -191,8 +224,10 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((error) => {
-  console.error("Smoke test failed with an unexpected error.");
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+const isMain = process.argv[1] === __filename;
+if (isMain) {
+  main().catch(() => {
+    console.error("Smoke test failed with an unexpected error.");
+    process.exit(1);
+  });
+}
