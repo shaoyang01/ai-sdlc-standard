@@ -172,6 +172,23 @@ async function test() {
   assert(tracking4.called === false, "process runner not called when working directory missing");
   console.log("");
 
+  // ── Test 4b: Both flags enabled but working directory is whitespace-only ──
+  console.log("Test 4b: Whitespace-only working directory rejected");
+  const tracking4b = createTrackingFakeProcessRunner();
+  const gateway4b = new ExecutionGateway({
+    env: {
+      SDLC_EXECUTION_MODE: "codex",
+      SDLC_CODEX_REAL_DISPATCH: "enabled",
+    },
+    codexProcessRunner: tracking4b.runner,
+    codexRealDispatchConfig: { workingDirectory: "   " },
+  });
+  const result4b = await gateway4b.execute(baseRequest);
+  assert(result4b.success === true, "whitespace working directory returns success");
+  assert(result4b.artifacts[0].type === "shadow_output", "whitespace working directory returns shadow_output");
+  assert(tracking4b.called === false, "process runner not called for whitespace working directory");
+  console.log("");
+
   // ── Test 5: Both flags enabled with working directory and injected fake process runner ──
   console.log("Test 5: Real dispatch produces sanitized code_patch");
   const gateway5 = new ExecutionGateway({

@@ -146,7 +146,7 @@ export class ExecutionGateway {
     //   - SDLC_CODEX_REAL_DISPATCH=enabled
     //   - agent === "codex"
     //   - request.type === "code_generation"
-    //   - codexRealDispatchConfig.workingDirectory is a non-empty string
+    //   - codexRealDispatchConfig.workingDirectory is a non-empty string after trim
     // If any condition is missing, the Gateway returns shadow.
     // The legacy executeCodexAgent path is no longer reachable through ExecutionGateway.
     const env = this.options.env ?? process.env;
@@ -163,13 +163,14 @@ export class ExecutionGateway {
       isCodexRealDispatchEnabled(env) &&
       enriched.type === "code_generation" &&
       typeof this.options.codexRealDispatchConfig?.workingDirectory === "string" &&
-      this.options.codexRealDispatchConfig.workingDirectory.length > 0
+      this.options.codexRealDispatchConfig.workingDirectory.trim().length > 0
     ) {
       const config = this.options.codexRealDispatchConfig;
+      const workingDirectory = config.workingDirectory.trim();
       const processRunner =
         this.options.codexProcessRunner ??
         createCodexCliProcessRunner({
-          workingDirectory: config.workingDirectory,
+          workingDirectory,
           command: config.command,
           timeoutMs: config.timeoutMs,
           maxStdoutChars: config.maxStdoutChars,
