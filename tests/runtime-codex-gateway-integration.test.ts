@@ -129,6 +129,68 @@ function fakeGatewayReturningShadowFallback(requirementId: string): RuntimeExecu
   };
 }
 
+function fakeGatewayReturningUnusableCodePatches(requirementId: string): RuntimeExecutionGateway {
+  return {
+    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+      if (request.type === "code_review") {
+        return {
+          success: true,
+          node: "code-review",
+          agent: "codex",
+          output: { result: "PASS", findings: [] },
+          artifacts: [createCodeReviewArtifact(request.requirementId)],
+        };
+      }
+      if (request.type === "bugfix") {
+        return {
+          success: true,
+          node: "bugfix",
+          agent: "codex",
+          output: { result: "bugfix_completed" },
+          artifacts: [],
+        };
+      }
+      return {
+        success: true,
+        node: "implementation",
+        agent: "codex",
+        output: {
+          result: "shadow_output",
+          codex_fallback_reason: "empty_patch",
+          codex_fallback_action: "reject_and_shadow_fallback",
+        },
+        artifacts: [
+          createShadowOutputArtifact(request.requirementId),
+          createArtifact({
+            id: `${requirementId}:implementation:code_patch:empty`,
+            requirementId,
+            node: "implementation",
+            type: "code_patch",
+            content: {
+              file: "src/empty-patch.ts",
+              patch: "   ",
+            },
+            agent: "codex",
+            source: "execution_gateway",
+          }),
+          createArtifact({
+            id: `${requirementId}:implementation:code_patch:blank-file`,
+            requirementId,
+            node: "implementation",
+            type: "code_patch",
+            content: {
+              file: "   ",
+              patch: "export function invalid() { return true; }",
+            },
+            agent: "codex",
+            source: "execution_gateway",
+          }),
+        ],
+      };
+    },
+  };
+}
+
 function assert(condition: boolean, message: string, passed: { count: number }, failed: { count: number }) {
   if (condition) {
     passed.count++;
@@ -302,6 +364,58 @@ async function test() {
   const validationTraceC = resultC.execution_trace.find((t) => t.node === "validation");
   a(validationTraceC !== undefined, "validation trace exists");
   a(validationTraceC!.output["result"] === "validated", "validation passes under shadow-first semantics");
+  console.log("");
+
+  // ── Test C2: Unusable Gateway code patches are removed before shadow fallback ──
+  console.log("Test C2: Invalid Gateway code_patch artifacts are stripped before shadow fallback");
+  const gatewayC2 = fakeGatewayReturningUnusableCodePatches("REQ-UNUSABLE-PATCH");
+  const resultC2 = await run("build a user login form with email validation", {
+    executionGateway: gatewayC2,
+  });
+
+  a(resultC2.final_status === "success", "Runtime completes through validation with unusable Gateway patches");
+
+  const implTraceC2 = resultC2.execution_trace.find((t) => t.node === "implementation");
+  a(implTraceC2 !== undefined, "implementation trace entry exists");
+  a(
+    typeof implTraceC2!.output["code"] === "string" && implTraceC2!.output["code"].length > 0,
+    "implementation output.code is a non-empty shadow patch"
+  );
+  a(
+    (implTraceC2!.output["code"] as string).includes("generatedShadowImplementation"),
+    "shadow patch contains generated shadow function"
+  );
+
+  const shadowOutputArtifactsC2 = resultC2.artifacts.filter(
+    (a) => a.node === "implementation" && a.type === "shadow_output"
+  );
+  a(shadowOutputArtifactsC2.length === 1, "Gateway shadow_output artifact is preserved");
+
+  const implCodePatchesC2 = resultC2.artifacts.filter(
+    (a) => a.node === "implementation" && a.type === "code_patch"
+  );
+  a(implCodePatchesC2.length === 1, "exactly one implementation code_patch exists");
+  a(
+    implCodePatchesC2[0].content["file"] === "src/generated-shadow-implementation.ts",
+    "shadow code_patch file is src/generated-shadow-implementation.ts"
+  );
+  a(
+    !resultC2.artifacts.some(
+      (a) =>
+        a.node === "implementation" &&
+        a.type === "code_patch" &&
+        (a.content["file"] === "src/empty-patch.ts" || a.content["file"] === "   ")
+    ),
+    "invalid Gateway code_patch artifacts are absent"
+  );
+
+  const validationTraceC2 = resultC2.execution_trace.find((t) => t.node === "validation");
+  a(validationTraceC2 !== undefined, "validation trace exists");
+  a(validationTraceC2!.output["result"] === "validated", "validation passes under shadow-first semantics");
+  a(
+    resultC2.feedback.review_summary.codeReviewStatus === "PASS",
+    "code review passes after invalid Gateway patches are removed"
+  );
   console.log("");
 
   // ── Test D: Executor override takes precedence over injected Gateway ──

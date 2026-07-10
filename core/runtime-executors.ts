@@ -320,13 +320,16 @@ export async function executeImplementation(
   }
 
   const shadowPatch = buildShadowCodePatchArtifact(input);
+  const safeGatewayArtifacts = gatewayArtifacts.filter(
+    (a) => a.type !== "code_patch"
+  );
   return {
     node: "implementation",
     mode: "direct",
     result: "implementation_completed",
     execution_result: result.output,
     code: shadowPatch.content["patch"] as string,
-    artifacts: [...gatewayArtifacts, shadowPatch],
+    artifacts: [...safeGatewayArtifacts, shadowPatch],
   };
 }
 
