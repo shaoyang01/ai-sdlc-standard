@@ -18,11 +18,13 @@ import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
 import {
+  createDefaultExecutors,
   DEFAULT_EXECUTORS,
   executeDocFlowNode,
   type NodeExecutor,
   type RuntimeExecutorMap,
   type FanoutResult,
+  type RuntimeExecutionGateway,
 } from "./core/runtime-executors";
 import { executionGateway } from "./execution";
 import { Artifact } from "./core/artifact";
@@ -76,6 +78,7 @@ export interface RuntimeOptions {
   hermesRuntimeShadowAttachmentBuilder?: typeof buildHermesRuntimeShadowAttachmentFromRequest;
   env?: Record<string, string | undefined>;
   executors?: Partial<RuntimeExecutorMap>;
+  executionGateway?: RuntimeExecutionGateway;
 }
 
 // ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
@@ -226,7 +229,7 @@ export async function run(
 
   // State-driven execution loop — VM transitions, not node-driven
   const executors: RuntimeExecutorMap = {
-    ...DEFAULT_EXECUTORS,
+    ...createDefaultExecutors(options.executionGateway ?? executionGateway),
     ...options.executors,
   };
 

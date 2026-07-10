@@ -8,8 +8,16 @@ import { NodeType } from "../sdlc_graph/types";
 import { ExecutionContext } from "./execution-context";
 import { executionGateway } from "../execution";
 import { Artifact, createArtifact } from "./artifact";
+import type {
+  ExecutionRequest,
+  ExecutionResult,
+} from "../execution/types";
 
 export type ExecutionMode = "direct" | "speckit";
+
+export interface RuntimeExecutionGateway {
+  execute(request: ExecutionRequest): Promise<ExecutionResult>;
+}
 
 export interface RequirementSummary {
   requirement_id: string;
@@ -191,25 +199,33 @@ export function validateImplementationOutput(
   };
 }
 
-// Default executor map — no switch, no branching
-export const DEFAULT_EXECUTORS: RuntimeExecutorMap = {
-  "requirement-summary": (ctx, _execCtx) =>
-    executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
-  "tech-design": (ctx, _execCtx) =>
-    buildTechDesign(
-      ctx.raw_text as string,
-      (ctx["requirement-summary"] ?? ctx) as RequirementSummary
-    ),
-  "review": (ctx, execCtx) =>
-    ({
-      node: "review",
-      result: (ctx["review_result"] as string) || (execCtx?.metadata?.complexity === "high" ? "FAIL" : "PASS"),
-      reviewed_at: new Date().toISOString(),
-    }),
-  "implementation": (ctx, execCtx) =>
-    executeImplementation(ctx, execCtx) as unknown as Promise<Record<string, unknown>>,
-  "validation": (ctx, _execCtx) => validateImplementationOutput(ctx),
-};
+// Default executor map factory — allows optional Gateway injection for implementation.
+// All other node executors remain stateless and Gateway-agnostic.
+export function createDefaultExecutors(
+  gateway: RuntimeExecutionGateway = executionGateway
+): RuntimeExecutorMap {
+  return {
+    "requirement-summary": (ctx, _execCtx) =>
+      executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
+    "tech-design": (ctx, _execCtx) =>
+      buildTechDesign(
+        ctx.raw_text as string,
+        (ctx["requirement-summary"] ?? ctx) as RequirementSummary
+      ),
+    "review": (ctx, execCtx) =>
+      ({
+        node: "review",
+        result: (ctx["review_result"] as string) || (execCtx?.metadata?.complexity === "high" ? "FAIL" : "PASS"),
+        reviewed_at: new Date().toISOString(),
+      }),
+    "implementation": (ctx, execCtx) =>
+      executeImplementation(ctx, execCtx, gateway) as unknown as Promise<Record<string, unknown>>,
+    "validation": (ctx, _execCtx) => validateImplementationOutput(ctx),
+  };
+}
+
+// Default executor map — backward-compatible default using the global execution gateway.
+export const DEFAULT_EXECUTORS: RuntimeExecutorMap = createDefaultExecutors();
 
 // Pure dispatch — no control logic, just lookup + execute
 export async function executeDocFlowNode(
@@ -245,8 +261,29 @@ function extractSubRequirements(text: string): { repo: string; task: string }[] 
   return results;
 }
 
+function findUsableCodePatch(artifacts: readonly Artifact[]): Artifact | undefined {
+  for (const artifact of artifacts) {
+    if (artifact.type !== "code_patch") continue;
+    const file = artifact.content["file"];
+    const patch = artifact.content["patch"];
+    if (
+      typeof file === "string" &&
+      file.trim().length > 0 &&
+      typeof patch === "string" &&
+      patch.trim().length > 0
+    ) {
+      return artifact;
+    }
+  }
+  return undefined;
+}
+
 // Pure implementation executor — mode from context, not inline decision
-export async function executeImplementation(context: Record<string, unknown>, execCtx: ExecutionContext): Promise<ImplementationExecutorOutput> {
+export async function executeImplementation(
+  context: Record<string, unknown>,
+  execCtx: ExecutionContext,
+  gateway: RuntimeExecutionGateway = executionGateway
+): Promise<ImplementationExecutorOutput> {
   const input = buildImplementationExecutorInput(context, execCtx);
   const subReqs = input.summary.sub_requirements || [];
 
@@ -257,22 +294,39 @@ export async function executeImplementation(context: Record<string, unknown>, ex
   if (input.executionMode === "speckit") {
     return executeSpeckitPipeline(input.requirementId, execCtx);
   }
-  // Direct path — route through Execution Gateway
-  const result = await executionGateway.execute({
+  // Direct path — route through Execution Gateway with typed implementation input.
+  const result = await gateway.execute({
     type: "code_generation",
     node: "implementation",
     agent: "codex",
     requirementId: input.requirementId,
-    input: { mode: input.executionMode, context },
+    input: {
+      implementationExecutorInput: input,
+    },
   });
-  const shadowCodePatchArtifact = buildShadowCodePatchArtifact(input);
+
+  const gatewayArtifacts = [...result.artifacts];
+  const gatewayCodePatch = findUsableCodePatch(gatewayArtifacts);
+
+  if (gatewayCodePatch) {
+    return {
+      node: "implementation",
+      mode: "direct",
+      result: "implementation_completed",
+      execution_result: result.output,
+      code: gatewayCodePatch.content["patch"] as string,
+      artifacts: gatewayArtifacts,
+    };
+  }
+
+  const shadowPatch = buildShadowCodePatchArtifact(input);
   return {
     node: "implementation",
     mode: "direct",
     result: "implementation_completed",
     execution_result: result.output,
-    code: shadowCodePatchArtifact.content["patch"] as string,
-    artifacts: [...(result.artifacts as Artifact[]), shadowCodePatchArtifact],
+    code: shadowPatch.content["patch"] as string,
+    artifacts: [...gatewayArtifacts, shadowPatch],
   };
 }
 
