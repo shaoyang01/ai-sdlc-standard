@@ -24,6 +24,10 @@ export {
   type CodexCliProcessRunner,
   type CodexRealDispatchRunnerOptions,
 } from "./codex-real-dispatch-real-runner";
+export {
+  createCodexCliProcessRunner,
+  type CodexCliProcessRunnerOptions,
+} from "./codex-cli-process-runner";
 export type {
   AgentName,
   ExecutionRequestType,
