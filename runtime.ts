@@ -81,6 +81,7 @@ export interface RuntimeOptions {
   env?: Record<string, string | undefined>;
   executors?: Partial<RuntimeExecutorMap>;
   executionGateway?: RuntimeExecutionGateway;
+  requirementSummaryMode?: "deterministic" | "kimi_gateway";
 }
 
 // ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
@@ -250,7 +251,9 @@ export async function run(
 
   // State-driven execution loop — VM transitions, not node-driven
   const executors: RuntimeExecutorMap = {
-    ...createDefaultExecutors(runtimeGateway),
+    ...createDefaultExecutors(runtimeGateway, {
+      requirementSummaryMode: options.requirementSummaryMode,
+    }),
     ...options.executors,
   };
 

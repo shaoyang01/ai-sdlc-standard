@@ -15,6 +15,12 @@ import type {
 
 export type ExecutionMode = "direct" | "speckit";
 
+export type RequirementSummaryMode = "deterministic" | "kimi_gateway";
+
+export interface RuntimeExecutorOptions {
+  requirementSummaryMode?: RequirementSummaryMode;
+}
+
 export type ImplementationOutcome =
   | "real_code_patch"
   | "shadow_code_patch"
@@ -210,11 +216,17 @@ export function validateImplementationOutput(
 // Default executor map factory — allows optional Gateway injection for implementation.
 // All other node executors remain stateless and Gateway-agnostic.
 export function createDefaultExecutors(
-  gateway: RuntimeExecutionGateway = executionGateway
+  gateway: RuntimeExecutionGateway = executionGateway,
+  options: RuntimeExecutorOptions = {}
 ): RuntimeExecutorMap {
   return {
     "requirement-summary": (ctx, _execCtx) =>
-      executeRequirementSummary(ctx.raw_text as string, ctx.requirement_id as string),
+      executeRequirementSummary(
+        ctx.raw_text as string,
+        ctx.requirement_id as string,
+        gateway,
+        options.requirementSummaryMode ?? "deterministic"
+      ),
     "tech-design": (ctx, _execCtx) =>
       buildTechDesign(
         ctx.raw_text as string,
@@ -246,7 +258,53 @@ export async function executeDocFlowNode(
   return executor(context, execCtx);
 }
 
-function executeRequirementSummary(rawText: string, requirementId: string): Record<string, unknown> {
+export function isValidRequirementSummary(
+  value: unknown,
+  expectedRequirementId: string
+): value is RequirementSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v.requirement_id !== expectedRequirementId) return false;
+  if (typeof v.multi_repo !== "boolean") return false;
+  if (typeof v.main_repo !== "string" || v.main_repo.trim().length === 0) return false;
+  if (!Array.isArray(v.sub_requirements)) return false;
+  for (const item of v.sub_requirements) {
+    if (typeof item !== "object" || item === null) return false;
+    const i = item as Record<string, unknown>;
+    if (typeof i.repo !== "string" || i.repo.trim().length === 0) return false;
+    if (typeof i.task !== "string" || i.task.trim().length === 0) return false;
+  }
+  if (!v.multi_repo && v.sub_requirements.length !== 0) return false;
+  if (v.multi_repo && v.sub_requirements.length === 0) return false;
+  return true;
+}
+
+const MAX_KIMI_REQUIREMENT_SUMMARY_CHARS = 16_000;
+
+function parseRequirementSummaryFromGatewayResult(
+  result: ExecutionResult,
+  expectedRequirementId: string
+): RequirementSummary | undefined {
+  if (!result.success) return undefined;
+  const summary = result.output["summary"];
+  if (typeof summary !== "string") return undefined;
+  if (summary.length > MAX_KIMI_REQUIREMENT_SUMMARY_CHARS) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(summary);
+  } catch {
+    return undefined;
+  }
+  if (isValidRequirementSummary(parsed, expectedRequirementId)) {
+    return parsed;
+  }
+  return undefined;
+}
+
+function buildDeterministicRequirementSummary(
+  rawText: string,
+  requirementId: string
+): RequirementSummary {
   const multiRepo = /(sync|integration|event|pipeline|api|service|system|orchestrat)/i.test(rawText) ||
                     /([A-Z][a-z]+[-_][A-Z][a-z]+).*([A-Z][a-z]+[-_][A-Z][a-z]+)/.test(rawText);
   const subReqs = multiRepo ? extractSubRequirements(rawText) : [];
@@ -255,7 +313,49 @@ function executeRequirementSummary(rawText: string, requirementId: string): Reco
     multi_repo: multiRepo,
     main_repo: "main",
     sub_requirements: subReqs,
+  };
+}
+
+async function executeRequirementSummary(
+  rawText: string,
+  requirementId: string,
+  gateway: RuntimeExecutionGateway,
+  mode: RequirementSummaryMode
+): Promise<Record<string, unknown>> {
+  if (mode === "kimi_gateway") {
+    try {
+      const result = await gateway.execute({
+        type: "llm_task",
+        node: "requirement-summary",
+        agent: "kimi",
+        requirementId,
+        input: {
+          requirement: rawText,
+          expected_output: "requirement_summary",
+        },
+      });
+      const parsed = parseRequirementSummaryFromGatewayResult(result, requirementId);
+      if (parsed) {
+        return {
+          ...parsed,
+          parsed_at: new Date().toISOString(),
+          execution_source: "kimi_real",
+        };
+      }
+    } catch {
+      // Fall through to deterministic fallback.
+    }
+    return {
+      ...buildDeterministicRequirementSummary(rawText, requirementId),
+      parsed_at: new Date().toISOString(),
+      execution_source: "kimi_fallback",
+    };
+  }
+
+  return {
+    ...buildDeterministicRequirementSummary(rawText, requirementId),
     parsed_at: new Date().toISOString(),
+    execution_source: "deterministic",
   };
 }
 
