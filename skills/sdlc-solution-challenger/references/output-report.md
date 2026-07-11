@@ -61,6 +61,21 @@ findings:
     scope_basis:
       type: REQUIREMENT | ACCEPTANCE_CRITERIA | EXISTING_FLOW | SPECIFICATION_DECISION | REQUIRED_CORRECTNESS
       reference:
+    existing_mechanism_verification:  # REQUIRED for BLOCKING and REQUIRED; optional for NON_BLOCKING
+      searched_sections:
+      searched_terms:
+      mechanism_found: true | false
+      mechanism:
+      equivalent_behavior:
+      sufficient_for_current_phase: true | false
+      remaining_gap:
+    blocking_counter_evidence:  # REQUIRED only for BLOCKING; every field must have explicit judgment
+      equivalent_mechanism_absent:
+      manual_fallback_absent_or_insufficient:
+      documentation_only_fix_insufficient:
+      parameter_only_fix_insufficient:
+      risk_unrecoverable_or_unacceptable:
+      current_phase_goal_prevented:
     target_section:
     issue:
     impact:
@@ -122,6 +137,10 @@ Summary counts and status. The status is determined by the presence of BLOCKING 
 
 ### findings[]
 The core output. Each finding is fully classified. Findings are ordered by: BLOCKING first, then REQUIRED, then NON_BLOCKING, then OUT_OF_SCOPE. Within each group, ordered by severity (CRITICAL → HIGH → MEDIUM → LOW).
+
+**existing_mechanism_verification**: Required for every BLOCKING and REQUIRED finding (optional for NON_BLOCKING, not required for OUT_OF_SCOPE). Must be completed before the finding is classified. If  and , the concern must not remain BLOCKING or REQUIRED.
+
+**blocking_counter_evidence**: Required only for BLOCKING findings. Every field must contain an explicit judgment (true/false), not be left blank. All conditions must be true for a finding to be BLOCKING.
 
 ### accepted_phase_constraints
 Risks and limitations that are accepted for the current phase with documented rationale, current fallback, ownership, and planned follow-up phase.

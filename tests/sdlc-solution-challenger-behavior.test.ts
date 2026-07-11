@@ -601,6 +601,35 @@ async function test() {
 
   console.log("");
 
+  // ═══════════════════════════════════════════════════════
+  // SECTION 12: Output-Contract Consistency
+  // ═══════════════════════════════════════════════════════
+  console.log("Section 12: Output-Contract Consistency");
+
+  // 12a. Contract includes existing_mechanism_verification
+  assertContains(contractMd, "existing_mechanism_verification", "contract: includes existing_mechanism_verification");
+  assertContains(contractMd, "BLOCKING/REQUIRED 必填", "contract: states BLOCKING/REQUIRED required");
+  assertContains(contractMd, "NON_BLOCKING 可选", "contract: states NON_BLOCKING optional");
+  assertContains(contractMd, "OUT_OF_SCOPE 不需要", "contract: states OUT_OF_SCOPE not required");
+
+  // 12b. Contract includes blocking_counter_evidence
+  assertContains(contractMd, "blocking_counter_evidence", "contract: includes blocking_counter_evidence");
+  assertContains(contractMd, "仅 BLOCKING 必填", "contract: states BLOCKING only required");
+  assertContains(contractMd, "不得留空", "contract: states fields must not be blank");
+
+  // 12c. Output-report includes existing_mechanism_verification
+  assertContains(orRef, "existing_mechanism_verification:", "output-report: includes existing_mechanism_verification");
+  assertContains(orRef, "Required for every BLOCKING and REQUIRED", "output-report: states required applicability");
+
+  // 12d. Output-report includes blocking_counter_evidence
+  assertContains(orRef, "blocking_counter_evidence:", "output-report: includes blocking_counter_evidence");
+  assertContains(orRef, "Required only for BLOCKING", "output-report: states BLOCKING only applicability");
+
+  // 12e. mechanism_found + sufficient → must not remain BLOCKING/REQUIRED
+  assertContains(orRef, "must not remain BLOCKING or REQUIRED", "output-report: mechanism_found rule documented");
+
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

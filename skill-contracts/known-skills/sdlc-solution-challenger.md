@@ -120,7 +120,7 @@ library/{requirement_id}/01-技术方案/{requirement_id}_方案挑战报告.md
 - `challenge_result` (status, blocking_count, required_count, non_blocking_count, out_of_scope_count)
 - `challenge_cycle` (current_cycle, max_cycles: 2, exhausted)
 - `phase_complexity_assessment` (current_design, proposed_revision_delta, exceeds_phase_budget)
-- `findings[]` — 每条包含 id, necessity, category, severity, phase_relevance, scope_basis, target_section, issue, impact, challenge_question, minimum_sufficient_fix, required_resolution, complexity_impact, phase_value, blocking
+- `findings[]` — 每条包含 id, necessity, category, severity, phase_relevance, scope_basis, existing_mechanism_verification (BLOCKING/REQUIRED 必填；NON_BLOCKING 可选；OUT_OF_SCOPE 不需要), blocking_counter_evidence (仅 BLOCKING 必填，每字段必须明确判断), target_section, issue, impact, challenge_question, minimum_sufficient_fix, required_resolution, complexity_impact, phase_value, blocking
 - `accepted_phase_constraints[]`
 - `future_phase_observations[]` (最多 5 条)
 - `out_of_scope_observations[]` (最多 3 条)
@@ -137,6 +137,24 @@ library/{requirement_id}/01-技术方案/{requirement_id}_方案挑战报告.md
 ```
 
 OUT_OF_SCOPE 和 FUTURE_PHASE 永远不能阻塞 READY_FOR_GATE。
+
+### existing_mechanism_verification 适用规则
+
+```text
+- BLOCKING / REQUIRED: 必填。必须在分类前完成全文已有机制搜索。
+- NON_BLOCKING: 可选。
+- OUT_OF_SCOPE: 不需要。
+- mechanism_found = true 且 sufficient_for_current_phase = true
+  → 该 concern 不得保持 BLOCKING 或 REQUIRED。
+```
+
+### blocking_counter_evidence 适用规则
+
+```text
+- 仅 BLOCKING 必填。
+- 每字段必须包含明确判断（true/false），不得留空。
+- 所有条件成立时才能标为 BLOCKING。
+```
 
 ## Side Effects
 
