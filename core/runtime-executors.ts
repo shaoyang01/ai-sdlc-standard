@@ -217,111 +217,15 @@ export function validateImplementationOutput(
 // Explicit skill metadata binding: implemented.
 // Real Gateway skill invocation: not implemented (future).
 
-const MAX_CHALLENGE_REVISION_CYCLES = 2;
+import {
+  type SolutionChallengeState,
+  advanceChallengeCycle,
+  deriveSolutionChallengeResult,
+} from "./solution-challenge-state";
 
-export interface SolutionChallengeState {
-  mode: "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION";
-  currentCycle: 1 | 2;
-  maxCycles: 2;
-  exhausted: boolean;
-  status: "NEEDS_REVISION" | "READY_FOR_GATE";
-  findingIds?: string[];
-  reportPath?: string | null;
-  artifactStatus: "shadow_only" | "generated";
-}
-
-/** Derive top-level result from SolutionChallengeState.status. */
-function deriveResult(status: "NEEDS_REVISION" | "READY_FOR_GATE"): "PASS" | "FAIL" {
-  return status === "NEEDS_REVISION" ? "FAIL" : "PASS";
-}
-
-/** Validate that an object is a well-formed SolutionChallengeState.
- *  Returns the validated state or throws on malformed input. */
-function validateSolutionChallengeState(raw: unknown): SolutionChallengeState {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("solution-challenge: missing or invalid solution_challenge state");
-  }
-  const s = raw as Record<string, unknown>;
-
-  // status: required, exact values
-  if (s.status !== "NEEDS_REVISION" && s.status !== "READY_FOR_GATE") {
-    throw new Error(`solution-challenge: invalid status: ${String(s.status)}`);
-  }
-
-  // mode: required, exact values
-  if (s.mode !== "INITIAL_CHALLENGE" && s.mode !== "FOLLOW_UP_VERIFICATION") {
-    throw new Error(`solution-challenge: invalid mode: ${String(s.mode)}`);
-  }
-
-  // currentCycle: required, 1 | 2
-  if (s.currentCycle !== 1 && s.currentCycle !== 2) {
-    throw new Error(`solution-challenge: invalid currentCycle: ${s.currentCycle}`);
-  }
-
-  // maxCycles: required, exactly 2
-  if (s.maxCycles !== 2) {
-    throw new Error(`solution-challenge: invalid maxCycles: ${s.maxCycles}`);
-  }
-
-  // exhausted: required boolean, consistent with currentCycle/maxCycles
-  if (typeof s.exhausted !== "boolean") {
-    throw new Error("solution-challenge: exhausted must be boolean");
-  }
-  if (s.exhausted !== (s.currentCycle >= s.maxCycles)) {
-    throw new Error(`solution-challenge: exhausted inconsistent: cycle=${s.currentCycle}, max=${s.maxCycles}, exhausted=${s.exhausted}`);
-  }
-
-  // mode must match currentCycle
-  if (s.currentCycle === 1 && s.mode !== "INITIAL_CHALLENGE") {
-    throw new Error("solution-challenge: currentCycle=1 requires INITIAL_CHALLENGE mode");
-  }
-  if (s.currentCycle === 2 && s.mode !== "FOLLOW_UP_VERIFICATION") {
-    throw new Error("solution-challenge: currentCycle=2 requires FOLLOW_UP_VERIFICATION mode");
-  }
-
-  // artifactStatus: required, exact values
-  if (s.artifactStatus !== "shadow_only" && s.artifactStatus !== "generated") {
-    throw new Error(`solution-challenge: invalid artifactStatus: ${String(s.artifactStatus)}`);
-  }
-
-  // findingIds: optional, must be array of strings if present
-  if (s.findingIds !== undefined) {
-    if (!Array.isArray(s.findingIds) || s.findingIds.some((id: unknown) => typeof id !== "string")) {
-      throw new Error("solution-challenge: findingIds must be an array of strings");
-    }
-  }
-
-  // reportPath: optional, string or null
-  if (s.reportPath !== undefined && s.reportPath !== null && typeof s.reportPath !== "string") {
-    throw new Error("solution-challenge: reportPath must be string or null");
-  }
-
-  // artifact cross-field validation
-  if (s.artifactStatus === "shadow_only" && s.reportPath !== null && s.reportPath !== undefined) {
-    throw new Error("solution-challenge: shadow_only requires reportPath = null");
-  }
-  if (s.artifactStatus === "generated" && (s.reportPath === null || s.reportPath === undefined || typeof s.reportPath !== "string" || s.reportPath.length === 0)) {
-    throw new Error("solution-challenge: generated requires non-empty reportPath string");
-  }
-
-  return s as unknown as SolutionChallengeState;
-}
-
-/** Normalize a solution-challenge node output.
- *  Validates the state and ensures result is derived from status.
- *  This is the single normalization boundary — applied centrally in runtime. */
-export function normalizeSolutionChallengeOutput(
-  output: Record<string, unknown>
-): Record<string, unknown> {
-  const raw = output["solution_challenge"];
-  const state = validateSolutionChallengeState(raw);
-
-  return {
-    ...output,
-    result: deriveResult(state.status),
-    solution_challenge: state,
-  };
-}
+// Re-export for consumers (execution-context, runtime, tests)
+export { type SolutionChallengeState } from "./solution-challenge-state";
+export { normalizeSolutionChallengeOutput as normalizeSolutionOutput } from "./solution-challenge-state";
 
 function executeSolutionChallenge(
   _rawText: string,
@@ -329,30 +233,14 @@ function executeSolutionChallenge(
   techDesignOutput: Record<string, unknown>,
   previous?: SolutionChallengeState
 ): Record<string, unknown> {
-  const currentCycle = (previous
-    ? Math.min(previous.currentCycle + 1, MAX_CHALLENGE_REVISION_CYCLES)
-    : 1) as 1 | 2;
-  const exhausted = currentCycle >= MAX_CHALLENGE_REVISION_CYCLES;
-  const mode = previous ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE";
-
-  // Shadow mode: produce deterministic metadata-only result.
-  const state: SolutionChallengeState = {
-    mode,
-    currentCycle,
-    maxCycles: 2,
-    exhausted,
-    status: "READY_FOR_GATE",
-    findingIds: [],
-    reportPath: null,
-    artifactStatus: "shadow_only",
-  };
+  const state = advanceChallengeCycle(previous);
 
   return {
     node: "solution-challenge",
     skill: "sdlc-solution-challenger",
     // explicit skill metadata binding: implemented
     // real Gateway skill invocation: not implemented
-    result: deriveResult(state.status),
+    result: deriveSolutionChallengeResult(state.status),
     execution_source: "deterministic_shadow",
     executor_type: "shadow",
     fallback_used: false,

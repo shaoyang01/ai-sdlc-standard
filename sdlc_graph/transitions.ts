@@ -6,6 +6,7 @@
 
 import { NodeType } from "./types";
 import { SDLC_EDGES } from "./graph";
+import { validateSolutionChallengeState, createShadowReadyChallengeState } from "../core/solution-challenge-state";
 
 const MAX_LOOP_DEPTH = 3;
 
@@ -16,22 +17,13 @@ export function getNextNode(
   retryCount: number = 0
 ): NodeType | null {
   // ─── Solution-challenge: self-contained cycle routing ──
-  // Routes on solution_challenge.status (required, validated by normalizer).
+  // Uses shared validator for complete state validation.
   if (current === "solution-challenge" && nodeResult) {
-    const state = nodeResult["solution_challenge"] as Record<string, unknown> | undefined;
+    const state = validateSolutionChallengeState(
+      nodeResult["solution_challenge"]
+    );
 
-    if (!state) {
-      throw new Error("solution-challenge transition requires solution_challenge state");
-    }
-
-    const status = state.status as string | undefined;
-
-    if (status !== "NEEDS_REVISION" && status !== "READY_FOR_GATE") {
-      throw new Error(`invalid solution-challenge status: ${String(status)}`);
-    }
-
-    const exhausted = state.exhausted === true;
-    if (status === "NEEDS_REVISION" && !exhausted) {
+    if (state.status === "NEEDS_REVISION" && !state.exhausted) {
       return "tech-design";
     }
     // NEEDS_REVISION + exhausted → review, or READY_FOR_GATE → review
@@ -85,7 +77,7 @@ export function getTransitionPath(): NodeType[] {
   let current: NodeType = "requirement-summary";
   while (true) {
     const nodeResult = current === "solution-challenge"
-      ? { result: "PASS", solution_challenge: { status: "READY_FOR_GATE", exhausted: false, currentCycle: 1, maxCycles: 2, mode: "INITIAL_CHALLENGE", artifactStatus: "shadow_only" } }
+      ? { result: "PASS", solution_challenge: createShadowReadyChallengeState() }
       : { result: "PASS" };
     const next = getNextNode(current, nodeResult);
     if (!next) break;

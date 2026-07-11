@@ -17,7 +17,8 @@ import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
-import { SolutionChallengeState, normalizeSolutionChallengeOutput as normalizeSolutionOutput } from "./core/runtime-executors";
+import { SolutionChallengeState, createShadowReadyChallengeState } from "./core/solution-challenge-state";
+import { normalizeSolutionChallengeOutput as normalizeSolutionOutput } from "./core/solution-challenge-state";
 import {
   createDefaultExecutors,
   DEFAULT_EXECUTORS,
@@ -265,7 +266,7 @@ export async function run(
     if (currentNode === "solution-challenge" && options.solutionChallengeMode !== "shadow") {
       currentNode = getNextNode(currentNode, {
         result: "PASS",
-        solution_challenge: { status: "READY_FOR_GATE", exhausted: false, currentCycle: 1, maxCycles: 2, mode: "INITIAL_CHALLENGE", artifactStatus: "shadow_only" },
+        solution_challenge: createShadowReadyChallengeState(),
       }, retryCount);
       continue;
     }

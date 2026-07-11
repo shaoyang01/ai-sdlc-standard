@@ -5,7 +5,7 @@
 
 import { NodeType } from "../sdlc_graph/types";
 import type { ExecutionTraceItem } from "./execution-trace";
-import type { SolutionChallengeState } from "./runtime-executors";
+import type { SolutionChallengeState } from "./solution-challenge-state";
 
 export type ExecutionContext = {
   node: NodeType;
