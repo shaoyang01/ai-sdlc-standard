@@ -31,12 +31,12 @@ side_effects:
 can_modify_code: false
 can_modify_docs: true
 can_modify_knowledge_base: false
-can_execute_commands: true
+can_execute_commands: false
 blocking_conditions:
   - missing technical specification
   - unreadable required artifact
   - requirement scope indeterminable
-  - current phase goal completely absent and cannot be inferred
+  - current delivery goal completely indeterminable
   - original flow impact unidentifiable
   - any key finding requires guessing business rules
 ```
@@ -84,7 +84,8 @@ blocking_conditions:
 
 - 技术方案缺失或不可读时停止。
 - 需求范围无法确定时停止。
-- 当前阶段目标完全缺失且无法判断时，输出 finding 但不发明阶段边界。
+- 当前交付目标完全无法判断时：停止，返回 missing-input diagnostics，不输出 NEEDS_REVISION / READY_FOR_GATE，不继续完整挑战扫描。
+- 阶段边界信息不完整但当前交付目标仍然可识别时：继续 INITIAL_CHALLENGE，输出 PHASE_BOUNDARY_MISSING finding，标记不确定项为 UNKNOWN_PHASE，不发明阶段边界。
 - 原流程影响无法识别时停止。
 - 任何关键 finding 需要猜测业务规则时停止。
 
@@ -117,6 +118,7 @@ library/{requirement_id}/01-技术方案/{requirement_id}_方案挑战报告.md
 - `challenge_context` (current_phase, phase_goal, must_have, phase_constraints, explicitly_deferred, future_direction)
 - `scope_boundary` (reviewed_in_scope, explicitly_not_reviewed)
 - `challenge_result` (status, blocking_count, required_count, non_blocking_count, out_of_scope_count)
+- `challenge_cycle` (current_cycle, max_cycles: 2, exhausted)
 - `phase_complexity_assessment` (current_design, proposed_revision_delta, exceeds_phase_budget)
 - `findings[]` — 每条包含 id, necessity, category, severity, phase_relevance, scope_basis, target_section, issue, impact, challenge_question, minimum_sufficient_fix, required_resolution, complexity_impact, phase_value, blocking
 - `accepted_phase_constraints[]`
@@ -125,7 +127,7 @@ library/{requirement_id}/01-技术方案/{requirement_id}_方案挑战报告.md
 - `sections_requiring_revision[]`
 - `closed_previous_findings[]` (仅 FOLLOW_UP_VERIFICATION 模式)
 - `remaining_previous_findings[]` (仅 FOLLOW_UP_VERIFICATION 模式)
-- `recommended_next_step` (RETURN_TO_SPECIFICATION_WRITER / PROCEED_TO_SOLUTION_REVIEWER)
+- `recommended_next_step` (RETURN_TO_SPECIFICATION_WRITER / PROCEED_TO_SOLUTION_REVIEWER / ESCALATE_TO_SOLUTION_REVIEWER)
 
 状态规则：
 
@@ -157,7 +159,7 @@ OUT_OF_SCOPE 和 FUTURE_PHASE 永远不能阻塞 READY_FOR_GATE。
 
 - 技术方案不存在或无法读取。
 - 需求目标或范围无法判断。
-- 当前阶段目标完全缺失且无法从材料中推断。
+- 当前交付目标完全无法判断（完全 indeterminable，非仅阶段边界不完整）。
 - 原流程影响无法识别。
 - 关键异常、失败降级、幂等、事务、状态流转或测试策略缺失且无法从现有材料中判断。
 - 需要猜测业务规则才能完成挑战。

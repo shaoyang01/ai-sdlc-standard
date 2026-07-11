@@ -42,6 +42,11 @@ challenge_result:
   non_blocking_count:
   out_of_scope_count:
 
+challenge_cycle:
+  current_cycle: 1 | 2
+  max_cycles: 2
+  exhausted: true | false
+
 phase_complexity_assessment:
   current_design: LOW | MEDIUM | HIGH
   proposed_revision_delta: LOW | MEDIUM | HIGH
@@ -101,6 +106,7 @@ remaining_previous_findings:  # FOLLOW_UP_VERIFICATION mode only
 recommended_next_step:
   RETURN_TO_SPECIFICATION_WRITER
   PROCEED_TO_SOLUTION_REVIEWER
+  ESCALATE_TO_SOLUTION_REVIEWER
 ```
 
 ## Section Details
@@ -133,8 +139,9 @@ Specific specification sections that need updates, mapped to the findings that d
 Only in FOLLOW_UP_VERIFICATION mode. Tracks which previous BLOCKING / REQUIRED findings have been resolved and which remain.
 
 ### recommended_next_step
-- `RETURN_TO_SPECIFICATION_WRITER` — when status is NEEDS_REVISION
+- `RETURN_TO_SPECIFICATION_WRITER` — when status is NEEDS_REVISION and cycle not exhausted
 - `PROCEED_TO_SOLUTION_REVIEWER` — when status is READY_FOR_GATE
+- `ESCALATE_TO_SOLUTION_REVIEWER` — when status is NEEDS_REVISION and cycle exhausted (handoff, not Gate decision)
 
 ## Manifest Update Recommendation
 

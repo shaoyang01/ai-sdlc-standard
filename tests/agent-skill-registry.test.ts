@@ -147,6 +147,80 @@ async function test() {
     "does NOT include requirement-normalizer (global entry)");
   console.log("");
 
+  // ── Test 11: sdlc-solution-challenger semantic invariants ──
+  console.log("Test 11: sdlc-solution-challenger semantic invariants");
+  const fs = require("fs");
+  const path = require("path");
+
+  const skillMd = fs.readFileSync("skills/sdlc-solution-challenger/SKILL.md", "utf-8");
+  const contractMd = fs.readFileSync("skill-contracts/known-skills/sdlc-solution-challenger.md", "utf-8");
+  const fuRef = fs.readFileSync("skills/sdlc-solution-challenger/references/follow-up-verification.md", "utf-8");
+  const spRef = fs.readFileSync("skills/sdlc-solution-challenger/references/scope-and-phase-firewall.md", "utf-8");
+
+  // 1. READY_FOR_GATE is impossible when BLOCKING or REQUIRED remain
+  assert(
+    skillMd.includes("Never output `READY_FOR_GATE` while BLOCKING or REQUIRED"),
+    "SKILL.md: never READY_FOR_GATE while BLOCKING/REQUIRED remain"
+  );
+  assert(
+    fuRef.includes("Never output `READY_FOR_GATE` while BLOCKING or REQUIRED"),
+    "follow-up-verification.md: never READY_FOR_GATE while BLOCKING/REQUIRED remain"
+  );
+
+  // 2. Cycle exhaustion preserves NEEDS_REVISION (not READY_FOR_GATE)
+  assert(
+    skillMd.includes("NEEDS_REVISION") && skillMd.includes("challenge_cycle.exhausted: true"),
+    "SKILL.md: cycle exhaustion uses NEEDS_REVISION with exhausted flag"
+  );
+  assert(
+    fuRef.includes("NEEDS_REVISION") && fuRef.includes("challenge_cycle.exhausted: true"),
+    "follow-up-verification.md: cycle exhaustion uses NEEDS_REVISION"
+  );
+
+  // 3. Cycle exhaustion may recommend ESCALATE_TO_SOLUTION_REVIEWER
+  assert(
+    skillMd.includes("ESCALATE_TO_SOLUTION_REVIEWER"),
+    "SKILL.md: ESCALATE_TO_SOLUTION_REVIEWER is documented"
+  );
+  assert(
+    fuRef.includes("ESCALATE_TO_SOLUTION_REVIEWER"),
+    "follow-up-verification.md: ESCALATE_TO_SOLUTION_REVIEWER is documented"
+  );
+  // ESCALATE is a handoff, not a Gate decision
+  assert(
+    skillMd.includes("handoff action") && skillMd.includes("not a Gate decision"),
+    "SKILL.md: ESCALATE is described as handoff, not Gate decision"
+  );
+
+  // 4. Incomplete phase boundary vs indeterminable goal are treated differently
+  assert(
+    spRef.includes("completely indeterminable") && spRef.includes("Stop immediately"),
+    "scope-and-phase-firewall.md: completely indeterminable goal → stop immediately"
+  );
+  assert(
+    spRef.includes("still identifiable") && spRef.includes("Continue INITIAL_CHALLENGE"),
+    "scope-and-phase-firewall.md: identifiable goal → continue with PHASE_BOUNDARY_MISSING"
+  );
+  assert(
+    skillMd.includes("completely indeterminable") && skillMd.includes("do not produce a definitive"),
+    "SKILL.md: indeterminable goal → no NEEDS_REVISION / READY_FOR_GATE"
+  );
+
+  // 5. Contract has can_execute_commands: false
+  assert(
+    contractMd.includes("can_execute_commands: false"),
+    "contract: can_execute_commands is false"
+  );
+
+  // 6. challenge_cycle fields are in the output structure (output-report.md)
+  const orRef = fs.readFileSync("skills/sdlc-solution-challenger/references/output-report.md", "utf-8");
+  assert(
+    orRef.includes("challenge_cycle:") && orRef.includes("max_cycles: 2") && orRef.includes("exhausted:"),
+    "output-report.md: challenge_cycle with current_cycle, max_cycles, exhausted"
+  );
+
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

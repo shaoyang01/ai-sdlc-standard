@@ -77,7 +77,17 @@ delivery_phase:
 
 Read from: `00-需求资料`, `01-技术方案`, `manifest`, user's explicit statements.
 
-If not declared, output a finding but do not invent phase boundaries.
+If the phase boundary is incomplete but the current delivery goal is still identifiable:
+- Continue INITIAL_CHALLENGE.
+- Emit a `PHASE_BOUNDARY_MISSING` finding.
+- Mark uncertain items `UNKNOWN_PHASE`.
+- Do not invent phase boundaries.
+
+If the current delivery goal is completely indeterminable:
+- Stop immediately.
+- Return missing-input diagnostics.
+- Do not produce a definitive `NEEDS_REVISION` / `READY_FOR_GATE` result.
+- Do not continue the full challenge scan.
 
 ### Phase Relevance Marking
 

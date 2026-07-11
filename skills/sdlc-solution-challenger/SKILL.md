@@ -92,7 +92,19 @@ library/{requirement_id}/00-需求资料/*
 
 Optionally read: manifest, original flow docs, API definitions, data models, related code context, historical specs, previous challenge reports, confirmed current-phase scope, user-deferred capability lists.
 
-Stop if: specification missing or unreadable, requirement scope indeterminable, current phase goal completely absent, original flow impact unidentifiable, any key finding requires guessing business rules.
+Stop if: specification missing or unreadable, requirement scope indeterminable, current delivery goal completely indeterminable, original flow impact unidentifiable, any key finding requires guessing business rules.
+
+If the phase boundary is incomplete but the current delivery goal is still identifiable:
+- continue INITIAL_CHALLENGE;
+- emit a `PHASE_BOUNDARY_MISSING` finding;
+- mark uncertain items `UNKNOWN_PHASE`;
+- do not invent phase boundaries.
+
+If the current delivery goal is completely indeterminable:
+- stop;
+- return missing-input diagnostics;
+- do not produce a definitive `NEEDS_REVISION` / `READY_FOR_GATE` result;
+- do not continue the full challenge scan.
 
 Do not write or rewrite the technical specification.
 
@@ -185,7 +197,8 @@ Do not renumber existing DocFlow directories.
 
 **Report Next Step:**
 
-- `NEEDS_REVISION` → `RETURN_TO_SPECIFICATION_WRITER`
+- `NEEDS_REVISION` (within cycle limit) → `RETURN_TO_SPECIFICATION_WRITER`
+- `NEEDS_REVISION` (cycle exhausted) → `ESCALATE_TO_SOLUTION_REVIEWER`
 - `READY_FOR_GATE` → `PROCEED_TO_SOLUTION_REVIEWER`
 
 ## Output Requirements
@@ -195,6 +208,7 @@ Each report must contain:
 - `challenge_context` (current_phase, phase_goal, must_have, phase_constraints, explicitly_deferred, future_direction)
 - `scope_boundary` (reviewed_in_scope, explicitly_not_reviewed)
 - `challenge_result` (status: NEEDS_REVISION / READY_FOR_GATE, blocking_count, required_count, non_blocking_count, out_of_scope_count)
+- `challenge_cycle` (current_cycle, max_cycles: 2, exhausted: true | false)
 - `phase_complexity_assessment` (current_design, proposed_revision_delta, exceeds_phase_budget)
 - `findings[]` — each with full classification (id, necessity, category, severity, phase_relevance, scope_basis, target_section, issue, impact, challenge_question, minimum_sufficient_fix, required_resolution, complexity_impact, phase_value, blocking)
 - `accepted_phase_constraints[]`
@@ -203,7 +217,7 @@ Each report must contain:
 - `sections_requiring_revision[]`
 - `closed_previous_findings[]` (FOLLOW_UP_VERIFICATION mode)
 - `remaining_previous_findings[]` (FOLLOW_UP_VERIFICATION mode)
-- `recommended_next_step`
+- `recommended_next_step` (RETURN_TO_SPECIFICATION_WRITER / PROCEED_TO_SOLUTION_REVIEWER / ESCALATE_TO_SOLUTION_REVIEWER)
 
 ## Execution Modes
 
@@ -217,6 +231,15 @@ Only verify closure of previous BLOCKING / REQUIRED findings. Check if revisions
 
 Max 2 revision cycles. Second cycle must use FOLLOW_UP_VERIFICATION mode.
 
+**Cycle exhaustion:** If BLOCKING / REQUIRED findings remain after the max two cycles:
+- result is `NEEDS_REVISION`;
+- `challenge_cycle.exhausted: true`;
+- recommended next step: `ESCALATE_TO_SOLUTION_REVIEWER`.
+
+`ESCALATE_TO_SOLUTION_REVIEWER` is a handoff action (not a Gate decision, not a Direct/Speckit decision). The formal Gate review can elevate remaining concerns if needed.
+
+Never output `READY_FOR_GATE` while BLOCKING or REQUIRED findings remain.
+
 ## Finding Count Limits
 
 - BLOCKING: max 5
@@ -227,7 +250,11 @@ Max 2 revision cycles. Second cycle must use FOLLOW_UP_VERIFICATION mode.
 
 ## Stop Conditions
 
-Stop challenging when:
+Stop immediately (do not produce NEEDS_REVISION / READY_FOR_GATE) when:
+- The current delivery goal is completely indeterminable.
+- Missing inputs prevent meaningful challenge.
+
+Stop challenging further when:
 
 1. Every In Scope item has corresponding specification design.
 2. Every current-phase must-have has a design mapping.

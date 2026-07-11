@@ -32,6 +32,7 @@ When a specification has been revised in response to a previous INITIAL_CHALLENG
 - If any previous BLOCKING or REQUIRED finding remains unclosed → `NEEDS_REVISION`
 - If new CRITICAL issues were introduced by the revision → `NEEDS_REVISION`
 - All previous BLOCKING/REQUIRED closed and no new CRITICAL → `READY_FOR_GATE`
+- Never output `READY_FOR_GATE` while BLOCKING or REQUIRED findings remain.
 
 ### 5. Output
 Use the same report structure with:
@@ -46,11 +47,24 @@ Use the same report structure with:
 MAX_CHALLENGE_REVISION_CYCLES = 2
 ```
 
-The second cycle must be FOLLOW_UP_VERIFICATION. If issues remain after two cycles, the specification and remaining findings should be handed to `sdlc-solution-reviewer` for formal Gate review. The formal Gate can then decide whether to BLOCKED_NEEDS_REVISION or accept the remaining risks.
+The second cycle must be FOLLOW_UP_VERIFICATION.
+
+**Cycle exhaustion rule:** If BLOCKING or REQUIRED findings remain after the max two cycles:
+- result is `NEEDS_REVISION`;
+- `challenge_cycle.exhausted: true`;
+- recommended next step: `ESCALATE_TO_SOLUTION_REVIEWER`.
+
+`ESCALATE_TO_SOLUTION_REVIEWER` is a handoff action (not a Gate decision, not a Direct/Speckit decision). The formal Gate review can elevate remaining concerns as needed.
+
+Never output `READY_FOR_GATE` while BLOCKING or REQUIRED findings remain.
 
 ## Handoff to Solution Reviewer
 
-When the cycle limit is reached:
-- Output `READY_FOR_GATE` with remaining NON_BLOCKING findings and accepted constraints
+When the cycle limit is reached and BLOCKING/REQUIRED findings remain:
+- Output `NEEDS_REVISION` with `challenge_cycle.exhausted: true`
+- Recommend `ESCALATE_TO_SOLUTION_REVIEWER`
+- The formal Gate review can then decide whether to `BLOCKED_NEEDS_REVISION` or accept the remaining risks
+
+When all BLOCKING/REQUIRED findings are closed:
+- Output `READY_FOR_GATE`
 - Recommend `PROCEED_TO_SOLUTION_REVIEWER`
-- The formal Gate review can elevate remaining concerns if needed

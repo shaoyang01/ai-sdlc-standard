@@ -49,10 +49,17 @@ delivery_phase:
   future_direction:
 ```
 
-If the current phase boundary is not declared anywhere:
-- Output a finding: "Specification lacks delivery phase boundaries — cannot determine which capabilities must be implemented in the current phase versus deferred."
+If the phase boundary is incomplete but the current delivery goal is still identifiable:
+- Continue INITIAL_CHALLENGE.
+- Emit a `PHASE_BOUNDARY_MISSING` finding.
+- Mark uncertain items `UNKNOWN_PHASE`.
 - Do not invent phase boundaries.
-- Continue challenging with phase_relevance marked as UNKNOWN_PHASE where appropriate.
+
+If the current delivery goal is completely indeterminable:
+- Stop immediately.
+- Return missing-input diagnostics.
+- Do not produce a definitive `NEEDS_REVISION` / `READY_FOR_GATE` result.
+- Do not continue the full challenge scan.
 
 ## Step 3: Load Challenge Rules
 
