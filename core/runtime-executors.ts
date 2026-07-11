@@ -313,10 +313,11 @@ async function executeGatewayShadowChallenge(
   gateway: RuntimeExecutionGateway
 ): Promise<Record<string, unknown>> {
   const cycle = advanceChallengeCycle(previous);
-  const base = {
-    node: "solution-challenge",
-    skill: "sdlc-solution-challenger",
-    executor_type: "gateway_shadow",
+  // Shadow internal state — used only for cycle tracking, NOT as observation.
+  // Never exposed as observed READY_FOR_GATE.
+  const shadowState: SolutionChallengeState = {
+    ...cycle,
+    status: "READY_FOR_GATE", // internal shadow default, not observed
   };
 
   const prompt = buildChallengePrompt({
@@ -344,23 +345,30 @@ async function executeGatewayShadowChallenge(
       },
     });
 
-    const parsed = parseChallengeResult(gwResult, cycle);
+    const parsed = parseChallengeResult(gwResult, shadowState);
 
-    // Build the output state — only use parsed state when available.
-    // On failure, keep the shadow cycle state (not READY_FOR_GATE).
+    // Only use parsed state when available. Never use shadowState as observation.
     const outputState = parsed.availability === "available" && parsed.state
-      ? parsed.state : cycle;
+      ? parsed.state : shadowState;
 
-    return {
-      ...base,
+    const output = {
+      node: "solution-challenge",
+      skill: "sdlc-solution-challenger",
+      executor_type: "gateway_shadow",
       result: "PASS",
       execution_source: parsed.availability === "available" ? "gateway" : "gateway_error",
-      executor_type: "gateway_shadow",
       fallback_used: parsed.availability !== "available",
       fallback_reason: parsed.availability !== "available"
         ? (parsed.error ?? "gateway_unavailable") : "none",
       solution_challenge: outputState,
-      solution_challenge_observation: parsed,
+      solution_challenge_observation: {
+        availability: parsed.availability as "available" | "unavailable",
+        state: parsed.state,
+        findings: parsed.findings,
+        findingIds: parsed.findingIds,
+        counts: parsed.counts,
+        error: parsed.error,
+      },
       observedStatus: parsed.state?.status ?? "unavailable",
       routingEffect: "shadow_pass_through",
       wouldRouteTo: parsed.state
@@ -381,20 +389,24 @@ async function executeGatewayShadowChallenge(
       gateway_artifacts: gwResult.artifacts ?? [],
       duration_ms: 0,
     };
+
+    // Validate before returning
+    return validateGatewayShadowOutput(output);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ...base,
+    const output = {
+      node: "solution-challenge",
+      skill: "sdlc-solution-challenger",
+      executor_type: "gateway_shadow",
       result: "PASS",
       execution_source: "gateway_error",
-      executor_type: "gateway_shadow",
       fallback_used: true,
       fallback_reason: msg.slice(0, 200),
-      solution_challenge: cycle,
+      solution_challenge: shadowState,
       solution_challenge_observation: {
         availability: "unavailable" as const,
         error: msg.slice(0, 200),
-      } as ChallengeObservation,
+      },
       observedStatus: "unavailable",
       routingEffect: "shadow_pass_through",
       wouldRouteTo: "review",
@@ -403,7 +415,46 @@ async function executeGatewayShadowChallenge(
       gateway_artifacts: [],
       duration_ms: 0,
     };
+    return validateGatewayShadowOutput(output);
   }
+}
+
+/** Validate gateway shadow output before it enters trace/routing. */
+function validateGatewayShadowOutput(
+  output: Record<string, unknown>
+): Record<string, unknown> {
+  if (output["routingEffect"] !== "shadow_pass_through") {
+    throw new Error("gateway shadow: missing routingEffect=shadow_pass_through");
+  }
+
+  const obs = output["solution_challenge_observation"] as Record<string, unknown> | undefined;
+  if (!obs) {
+    throw new Error("gateway shadow: missing solution_challenge_observation");
+  }
+
+  const availability = obs["availability"];
+  if (availability !== "available" && availability !== "unavailable") {
+    throw new Error(`gateway shadow: invalid availability: ${String(availability)}`);
+  }
+
+  if (availability === "available") {
+    if (!obs["state"]) {
+      throw new Error("gateway shadow: available but missing state");
+    }
+  }
+
+  if (availability === "unavailable") {
+    if (obs["state"]) {
+      throw new Error("gateway shadow: unavailable must not carry state");
+    }
+  }
+
+  const observedStatus = output["observedStatus"];
+  if (availability === "available" && observedStatus === "unavailable") {
+    throw new Error("gateway shadow: available with observedStatus=unavailable");
+  }
+
+  return output;
 }
 
 interface ParsedChallengeResult {

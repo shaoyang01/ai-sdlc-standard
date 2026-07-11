@@ -304,6 +304,12 @@ export async function run(
     });
     artifacts.push(...nodeArtifacts);
 
+    // Collect gateway artifacts from solution-challenge gateway_shadow mode
+    if (currentNode === "solution-challenge" && Array.isArray(nodeOutput["gateway_artifacts"])) {
+      const gwArts = nodeOutput["gateway_artifacts"] as ReadonlyArray<Artifact>;
+      artifacts.push(...gwArts);
+    }
+
     // VM state transition — deterministic state update
     vmState = transition(vmState, currentNode, traceItem);
 

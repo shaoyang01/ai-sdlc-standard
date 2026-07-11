@@ -223,14 +223,19 @@ async function test() {
 
   // ═══ Test 10: Real ExecutionGateway + fake Kimi runner contract smoke ═══
   console.log("Test 10: Real ExecutionGateway + fake Kimi runner contract smoke");
-  // ExecutionGateway imported at top of file
-  // Fake Kimi runner returns Challenger JSON in summary
+  const challengeJson = JSON.stringify({
+    status: "NEEDS_REVISION", mode: "INITIAL_CHALLENGE", currentCycle: 1, maxCycles: 2,
+    exhausted: false, artifactStatus: "shadow_only", reportPath: null,
+    blocking_count: 1, required_count: 2, non_blocking_count: 0, out_of_scope_count: 0,
+    findings: [{ id: "CH-001" }, { id: "CH-002" }],
+    finding_ids: ["CH-001", "CH-002"],
+  });
   const fakeKimiRunner = {
     async run() {
       return {
         exitCode: 0, durationMs: 1,
-        stdout: JSON.stringify({ status: "NEEDS_REVISION", mode: "INITIAL_CHALLENGE", currentCycle: 1, maxCycles: 2, exhausted: false, artifactStatus: "shadow_only", reportPath: null, blocking_count: 1, required_count: 2, non_blocking_count: 0, out_of_scope_count: 0, findings: [{ id: "CH-001" }, { id: "CH-002" }], finding_ids: ["CH-001", "CH-002"] }),
-        stderr: "", stdoutPayload: JSON.stringify({ status: "NEEDS_REVISION", mode: "INITIAL_CHALLENGE", currentCycle: 1, maxCycles: 2, exhausted: false }),
+        stdout: challengeJson, stderr: "",
+        stdoutPayload: challengeJson, // all fields in payload, not just stdout
       };
     },
   };
@@ -251,17 +256,14 @@ async function test() {
   assert(obs10?.availability === "available", "observation available from real Gateway");
   assert(obs10?.state !== undefined, "state parsed");
   assert(sc10!.output["observedStatus"] === "NEEDS_REVISION", "observed NEEDS_REVISION from Kimi");
-  // Counts from parsed JSON (not from gwResult.output directly)
   assert(sc10!.output["blocking_count"] === 1, "blocking_count = 1 from parsed summary");
   assert(sc10!.output["required_count"] === 2, "required_count = 2");
-  // findingIds extracted from findings
   const state10 = sc10!.output["solution_challenge"] as SolutionChallengeState | undefined;
   assert(state10?.findingIds?.includes("CH-001"), "findingIds includes CH-001");
   assert(state10?.findingIds?.includes("CH-002"), "findingIds includes CH-002");
-  // Gateway artifacts preserved
-  const gwArts10 = sc10!.output["gateway_artifacts"] as unknown[] | undefined;
-  assert(gwArts10 !== undefined, "gateway_artifacts field present");
-  // Flow continues
+  // Gateway artifacts flow into RuntimeResult.artifacts
+  const gwArtifacts10 = r10.artifacts.filter((a) => a.metadata.source === "execution_gateway");
+  assert(gwArtifacts10.length > 0, "gateway artifacts in RuntimeResult.artifacts");
   assert(r10.execution_trace.some((t) => t.node === "review"), "flow continued to review");
   console.log("");
 
