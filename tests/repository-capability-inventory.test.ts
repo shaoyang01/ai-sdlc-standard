@@ -64,10 +64,10 @@ async function test() {
 
   // ── Summary statistics ──
   console.log("Test 4: Summary statistics");
-  assert(inv.summary["skills_with_skill_md_count"] === 20, "all 20 skills have SKILL.md");
-  assert(inv.summary["skills_with_manifest_count"] === 20, "all 20 skills are in manifest");
-  assert(inv.summary["skills_with_contract_count"] === 20, "all 20 skills have contracts");
-  assert(inv.summary["skills_registered_count"] === 20, "all 20 skills are registered");
+  assert(inv.summary["skills_with_skill_md_count"] === 21, "all 21 skills have SKILL.md");
+  assert(inv.summary["skills_with_manifest_count"] === 21, "all 21 skills are in manifest");
+  assert(inv.summary["skills_with_contract_count"] === 21, "all 21 skills have contracts");
+  assert(inv.summary["skills_registered_count"] === 21, "all 21 skills are registered");
   assert(inv.summary["skills_runtime_referenced_count"] === 0, "no skills are runtime-referenced");
   assert(inv.summary["execution_adapter_count"] === 4, "4 execution adapters");
   assert(inv.summary["feature_flagged_real_adapter_count"] === 1, "1 feature-flagged real adapter (codex)");

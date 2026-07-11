@@ -116,6 +116,15 @@ skills:
       - skills/sdlc-requirement-normalizer/references/source-handling.md
       - skills/sdlc-requirement-normalizer/references/conflict-and-blocking.md
       - skills/sdlc-requirement-normalizer/references/output-artifact.md
+  sdlc_solution_challenger:
+    path: skills/sdlc-solution-challenger/SKILL.md
+    contract: skill-contracts/known-skills/sdlc-solution-challenger.md
+    references:
+      - skills/sdlc-solution-challenger/references/challenge-workflow.md
+      - skills/sdlc-solution-challenger/references/scope-and-phase-firewall.md
+      - skills/sdlc-solution-challenger/references/finding-classification.md
+      - skills/sdlc-solution-challenger/references/output-report.md
+      - skills/sdlc-solution-challenger/references/follow-up-verification.md
   sdlc_solution_reviewer:
     path: skills/sdlc-solution-reviewer/SKILL.md
     contract: skill-contracts/known-skills/sdlc-solution-reviewer.md

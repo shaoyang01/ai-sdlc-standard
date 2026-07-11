@@ -141,7 +141,7 @@ Change History:
   Required Re-Gate: <node/gate>
 
 Next Step:
-  Run sdlc-solution-reviewer
+  Run sdlc-solution-challenger
 ```
 
 ## Ready-for-Review Criteria

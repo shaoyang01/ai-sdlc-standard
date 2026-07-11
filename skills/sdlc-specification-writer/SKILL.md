@@ -7,7 +7,7 @@ version: 0.1.0
 
 # Specification Writer
 
-Generate an ESS-compliant technical specification as the DocFlow `01-技术方案` artifact. Treat this specification as the stable input for `sdlc-solution-reviewer` and, when needed, for `sdlc-speckit-specify`.
+Generate an ESS-compliant technical specification as the DocFlow `01-技术方案` artifact. Treat this specification as the stable input for `sdlc-solution-challenger` and then `sdlc-solution-reviewer` and, when needed, for `sdlc-speckit-specify`.
 
 ## Core Rules
 
@@ -141,9 +141,9 @@ Always report:
 - Requirement ID
 - Output artifact path or recommended path
 - Missing information
-- Whether the specification is ready for `sdlc-solution-reviewer`
+- Whether the specification is ready for `sdlc-solution-challenger`
 - Manifest update recommendations
-- Next step: run `sdlc-solution-reviewer`
+- Next step: run `sdlc-solution-challenger`
 
 ## Output Requirements
 
@@ -157,7 +157,7 @@ Every specification must:
 - Define failure and exception behavior.
 - Define testing and acceptance.
 - Mark uncertainty explicitly.
-- Avoid sdlc-solution-reviewer Gate language such as `PASS` or `FAIL`.
+- Avoid sdlc-solution-challenger or sdlc-solution-reviewer Gate language such as `PASS` or `FAIL`.
 
 ## Stop Conditions
 

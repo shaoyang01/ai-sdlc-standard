@@ -78,6 +78,39 @@ notes:
   - does not write technical specifications
 ```
 
+### sdlc-solution-challenger
+
+```yaml
+name: sdlc-solution-challenger
+category: Auditor Skill
+stage: Specification Challenge / Pre-Gate Review
+status: active
+skill_path:
+  - skills/sdlc-solution-challenger/SKILL.md
+contract:
+  - skill-contracts/known-skills/sdlc-solution-challenger.md
+references:
+  - skills/sdlc-solution-challenger/references/challenge-workflow.md
+  - skills/sdlc-solution-challenger/references/scope-and-phase-firewall.md
+  - skills/sdlc-solution-challenger/references/finding-classification.md
+  - skills/sdlc-solution-challenger/references/output-report.md
+  - skills/sdlc-solution-challenger/references/follow-up-verification.md
+required_schema:
+  - ess/specification-schema.md
+required_checklist:
+  - checklists/specification-checklist.md
+required_storage:
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-flow.md
+  - ai-sdlc/change-control.md
+runtime_invoked: false
+execution_mode: metadata_only
+notes:
+  - pre-Gate adversarial challenge between specification-writer and solution-reviewer
+  - only outputs NEEDS_REVISION / READY_FOR_GATE
+  - does not make formal Gate decisions
+```
+
 ### sdlc-solution-reviewer
 
 ```yaml

@@ -36,7 +36,7 @@ async function test() {
   assert(inv.source_report === "SKILL_FLOW_INVENTORY_REPORT.md", "source report is correct");
   assert(inv.global_entry_skill === "sdlc-requirement-normalizer", "global entry is requirement-normalizer");
   assert(Array.isArray(inv.skills), "skills is array");
-  assert(inv.skills.length === 20, `20 skills (got ${inv.skills.length})`);
+  assert(inv.skills.length === 21, `21 skills (got ${inv.skills.length})`);
   assert(Array.isArray(inv.flows), "flows is array");
   assert(Array.isArray(inv.runtime_relationships), "runtime_relationships is array");
   console.log("");

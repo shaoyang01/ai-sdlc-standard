@@ -34,7 +34,7 @@ async function test() {
   // ── Test 1: Basic registry ──
   console.log("Test 1: Basic registry");
   const all = getAllSkillFlowBindings();
-  assert(all.length === 20, `20 skills (got ${all.length})`);
+  assert(all.length === 21, `21 skills (got ${all.length})`);
   for (const b of all) {
     assert(b.skill.startsWith("sdlc-"), `${b.skill} starts with sdlc-`);
     assert(b.runtimeInvoked === false, `${b.skill}: runtimeInvoked is false`);
@@ -82,6 +82,7 @@ async function test() {
   const mainFlow = getSkillsByFlowId("main_docflow");
   assert(mainFlow.some((b) => b.skill === "sdlc-requirement-normalizer"), "main includes requirement-normalizer");
   assert(mainFlow.some((b) => b.skill === "sdlc-specification-writer"), "main includes specification-writer");
+  assert(mainFlow.some((b) => b.skill === "sdlc-solution-challenger"), "main includes solution-challenger");
   assert(mainFlow.some((b) => b.skill === "sdlc-solution-reviewer"), "main includes solution-reviewer");
 
   const speckitFlow = getSkillsByFlowId("speckit_pipeline");
@@ -97,6 +98,12 @@ async function test() {
   console.log("Test 7: Downstream lookups");
   const rnDownstream = getDownstreamSkills("sdlc-requirement-normalizer");
   assert(rnDownstream.some((b) => b.skill === "sdlc-specification-writer"), "requirement-normalizer → specification-writer");
+
+  const swDownstream = getDownstreamSkills("sdlc-specification-writer");
+  assert(swDownstream.some((b) => b.skill === "sdlc-solution-challenger"), "specification-writer → solution-challenger");
+
+  const scDownstream = getDownstreamSkills("sdlc-solution-challenger");
+  assert(scDownstream.some((b) => b.skill === "sdlc-solution-reviewer"), "solution-challenger → solution-reviewer");
 
   const analyzeDownstream = getDownstreamSkills("sdlc-speckit-analyze");
   assert(analyzeDownstream.some((b) => b.skill === "sdlc-speckit-implement"), "analyze → implement");

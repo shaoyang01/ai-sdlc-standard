@@ -214,6 +214,22 @@ Delta Change Mode 规则：
 - `FAIL` 必须回到 `01-技术方案`。
 - Development Path Recommendation 必须写入方案审核产物，并建议同步到 `manifest.md`。
 
+## Relationship With Other Skills
+
+### sdlc-solution-challenger
+
+`sdlc-solution-challenger` 在正式 Gate 之前对技术方案进行对抗式审视。当 `sdlc-solution-challenger` 输出 `READY_FOR_GATE` 时，方案进入 `sdlc-solution-reviewer` 正式 Gate 审核。
+
+两个 skill 的区别：
+- `sdlc-solution-challenger` 只输出 NEEDS_REVISION / READY_FOR_GATE，不做正式 Gate 决策。
+- `sdlc-solution-reviewer` 输出 PASS / FAIL / PASS_WITH_RISK，并决定 DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION。
+
+如果 `sdlc-solution-challenger` 的挑战报告存在，`sdlc-solution-reviewer` 应将其作为审阅参考。
+
+### sdlc-specification-writer
+
+`sdlc-specification-writer` 生成技术方案，经 `sdlc-solution-challenger` 挑战后到达 `sdlc-solution-reviewer`。
+
 ## Manifest Update Recommendation
 
 审阅完成后，建议更新：

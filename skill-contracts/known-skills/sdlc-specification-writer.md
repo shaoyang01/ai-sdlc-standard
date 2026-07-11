@@ -163,7 +163,7 @@ library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 - Artifact Index: `01 技术方案`
 - Activity Log
 - Missing Artifacts
-- Next Step: 执行 `sdlc-solution-reviewer`
+- Next Step: 执行 `sdlc-solution-challenger`
 
 ## Side Effects
 
@@ -203,9 +203,9 @@ library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 
 后置 Gate：
 
-- 生成 `01-技术方案` 后，必须进入 `sdlc-solution-reviewer`。
-- 未经 `sdlc-solution-reviewer` 审阅，不得直接进入实现。
-- 如果方案内仍存在待确认事项，`sdlc-solution-reviewer` 应判断是否 `BLOCKED_NEEDS_REVISION`。
+- 生成 `01-技术方案` 后，必须进入 `sdlc-solution-challenger`。
+- 未经 `sdlc-solution-challenger` 审视，不建议直接进入 `sdlc-solution-reviewer` 正式 Gate。
+- 如果方案内仍存在待确认事项，`sdlc-solution-challenger` 应标记为 NEEDS_REVISION。
 
 ## Relationship With Other Skills
 

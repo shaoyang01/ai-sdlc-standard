@@ -141,6 +141,27 @@
       ]
     },
     {
+      "name": "sdlc-solution-challenger",
+      "skillDirectory": "skills/sdlc-solution-challenger/",
+      "skillFile": "skills/sdlc-solution-challenger/SKILL.md",
+      "manifestFile": "manifest.yaml",
+      "contractFile": "skill-contracts/known-skills/sdlc-solution-challenger.md",
+      "registeredInManifest": true,
+      "registeredInSkillRegistry": true,
+      "inferredStatus": "documented_skill_contract",
+      "notes": "Auditor Skill - pre-Gate adversarial challenge",
+      "sourceFiles": [
+        "skills/sdlc-solution-challenger/SKILL.md"
+      ],
+      "referenceFiles": [
+        "skills/sdlc-solution-challenger/references/challenge-workflow.md",
+        "skills/sdlc-solution-challenger/references/scope-and-phase-firewall.md",
+        "skills/sdlc-solution-challenger/references/finding-classification.md",
+        "skills/sdlc-solution-challenger/references/output-report.md",
+        "skills/sdlc-solution-challenger/references/follow-up-verification.md"
+      ]
+    },
+    {
       "name": "sdlc-solution-reviewer",
       "skillDirectory": "skills/sdlc-solution-reviewer",
       "skillFile": "skills/sdlc-solution-reviewer/SKILL.md",
@@ -973,11 +994,11 @@
     }
   ],
   "summary": {
-    "existing_sdlc_skill_count": 20,
-    "skills_with_skill_md_count": 20,
-    "skills_with_manifest_count": 20,
-    "skills_with_contract_count": 20,
-    "skills_registered_count": 20,
+    "existing_sdlc_skill_count": 21,
+    "skills_with_skill_md_count": 21,
+    "skills_with_manifest_count": 21,
+    "skills_with_contract_count": 21,
+    "skills_registered_count": 21,
     "skills_runtime_referenced_count": 0,
     "runtime_entrypoint_count": 18,
     "execution_adapter_count": 4,
