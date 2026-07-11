@@ -14,6 +14,7 @@ import {
   sanitizeErrorSummary,
   buildSanitizedPromptArgs,
   redactDynamicPrompt,
+  redactRawInput,
 } from "./cli-adapter-audit";
 import {
   prepareKimiCliExecutorContract,
@@ -188,6 +189,7 @@ export async function executeKimiCliCommand(input: {
 
   const runner = input.runner ?? createDefaultKimiCliProcessRunner();
   const dynamicPrompt = input.request.input?.["prompt"] as string | undefined;
+  const rawRequirement = input.request.input?.["requirement"] as string | undefined;
   const transport = contract.commandInput?.promptTransport ?? "stdin";
   const promptArg = contract.commandInput?.promptArgument ?? "-p";
 
@@ -240,9 +242,11 @@ export async function executeKimiCliCommand(input: {
 
   const processResult = await runner.run(runnerCommandInput);
 
-  // ── Redact dynamic prompt from stderr and stdout summaries ──
-  const safeStderr = redactDynamicPrompt(processResult.stderr, dynamicPrompt);
-  const safeStdout = redactDynamicPrompt(processResult.stdout, dynamicPrompt);
+  // ── Redact dynamic prompt and raw requirement from stderr and stdout summaries ──
+  let safeStderr = redactDynamicPrompt(processResult.stderr, dynamicPrompt);
+  safeStderr = redactRawInput(safeStderr, rawRequirement);
+  let safeStdout = redactDynamicPrompt(processResult.stdout, dynamicPrompt);
+  safeStdout = redactRawInput(safeStdout, rawRequirement);
 
   const resultAudit = buildCliExecutionResultAudit({
     adapter: "kimi", requestId: contract.requestId,
@@ -256,8 +260,12 @@ export async function executeKimiCliCommand(input: {
   const stdoutPayload = processResult.stdoutPayload;
   const stdoutTruncated = processResult.stdoutTruncated;
 
-  // ── Reject if bounded stdoutPayload contains the complete dynamic prompt ──
-  if (stdoutPayload && dynamicPrompt && stdoutPayload.includes(dynamicPrompt)) {
+  // ── Reject if bounded stdoutPayload contains the dynamic prompt or raw requirement ──
+  // Only check rawRequirement when it meets the minimum length to avoid over-rejection.
+  const rawReqTooShort = !rawRequirement || rawRequirement.length < 8;
+  const payloadHasPrompt = stdoutPayload && dynamicPrompt && stdoutPayload.includes(dynamicPrompt);
+  const payloadHasRawReq = stdoutPayload && !rawReqTooShort && stdoutPayload.includes(rawRequirement!);
+  if (payloadHasPrompt || payloadHasRawReq) {
     return {
       success: false,
       decision: "executed_failure",
@@ -266,7 +274,7 @@ export async function executeKimiCliCommand(input: {
       auditEvents: [...contract.auditEvents, resultAudit],
       stdoutSummary,
       stderrSummary,
-      // Do NOT return stdoutPayload — it contains the raw prompt
+      // Do NOT return stdoutPayload — it contains the raw prompt or requirement
       stdoutTruncated: false,
       error: "Kimi CLI structured output rejected",
     };

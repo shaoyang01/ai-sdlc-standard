@@ -72,6 +72,8 @@ export function sanitizeCliArgs(args: string[]): string[] {
 }
 
 const REDACTED_PROMPT_PLACEHOLDER = "[REDACTED_PROMPT]";
+const REDACTED_INPUT_PLACEHOLDER = "[REDACTED_INPUT]";
+const MIN_REDACT_LENGTH = 8;
 
 /**
  * Build sanitized args for display/audit when the dynamic prompt is passed
@@ -100,6 +102,24 @@ export function redactDynamicPrompt(
   if (!value || !prompt || prompt.length === 0) return value;
   const parts = value.split(prompt);
   return parts.join(REDACTED_PROMPT_PLACEHOLDER);
+}
+
+/**
+ * Redact every exact occurrence of the original raw requirement/input
+ * from a string. Uses `[REDACTED_INPUT]` placeholder.
+ *
+ * Only redacts inputs with length >= MIN_REDACT_LENGTH (8 chars)
+ * to avoid over-redaction of short common words.
+ *
+ * Uses exact string matching (not regex) to avoid injection risks.
+ */
+export function redactRawInput(
+  value: string | undefined,
+  rawInput: string | undefined,
+): string | undefined {
+  if (!value || !rawInput || rawInput.length < MIN_REDACT_LENGTH) return value;
+  const parts = value.split(rawInput);
+  return parts.join(REDACTED_INPUT_PLACEHOLDER);
 }
 
 export function sanitizeErrorSummary(input: string | undefined): string | undefined {

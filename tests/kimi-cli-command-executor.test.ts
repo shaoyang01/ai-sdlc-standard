@@ -554,6 +554,117 @@ async function test() {
   assert(!ci18b.includes(leakPayloadPrompt), "argument: prompt not in commandInput");
   console.log("");
 
+  // Test 19: Raw requirement in stdoutPayload rejected (not just full prompt)
+  console.log("Test 19: Raw requirement in stdoutPayload rejected");
+  const rawReqText = "deploy a kubernetes cluster with helm";
+  const rawReqPrompt = `You are a requirement analysis assistant.\nRead the requirement below and return a single JSON object only.\n\nRequirement:\n${rawReqText}\n\nRequirement ID: REQ-KIMI-RAW\n\nReturn exactly this JSON shape:\n...`;
+  const rawReqRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-RAW",
+    input: { prompt: rawReqPrompt, requirement: rawReqText },
+  };
+
+  // ── stdin mode: stdoutPayload contains raw requirement ──
+  let rawReqRunCount = 0;
+  const rawReqRunner: KimiCliProcessRunner = {
+    run: async (_ci: KimiCliExecutorCommandInput) => {
+      rawReqRunCount++;
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: `• Processing: ${rawReqText}`,
+        stderr: `• Thinking about: ${rawReqText}`,
+        stdoutPayload: `• Processing: ${rawReqText}`, // raw requirement in payload
+      };
+    },
+  };
+  const r19a = await executeKimiCliCommand({
+    request: rawReqRequest,
+    config: validConfig, // stdin mode
+    env: envOn,
+    runner: rawReqRunner,
+  });
+  assert(rawReqRunCount === 1, "stdin: runner called once");
+  assert(r19a.decision === "executed_failure", "stdin: failure decision");
+  assert(r19a.success === false, "stdin: not success");
+  assert(r19a.error === "Kimi CLI structured output rejected", "stdin: generic error");
+  // stdoutPayload must be absent
+  assert(r19a.stdoutPayload === undefined, "stdin: stdoutPayload absent");
+  // Raw requirement must not appear in stderrSummary
+  assert(!(r19a.stderrSummary ?? "").includes(rawReqText), "stdin: raw req not in stderrSummary");
+  // Raw requirement must not appear in stdoutSummary
+  assert(!(r19a.stdoutSummary ?? "").includes(rawReqText), "stdin: raw req not in stdoutSummary");
+  // Serialized result must not contain raw requirement
+  const j19a = JSON.stringify(r19a);
+  assert(!j19a.includes(rawReqText), "stdin: raw req not in serialized result");
+  // Audit events must not contain raw requirement
+  for (const evt of r19a.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(rawReqText), `stdin audit ${evt.stage}: no raw req`);
+  }
+
+  // ── argument mode: stdoutPayload contains raw requirement ──
+  let rawReqArgRunCount = 0;
+  const rawReqArgRunner: KimiCliProcessRunner = {
+    run: async (_ci: KimiCliExecutorCommandInput) => {
+      rawReqArgRunCount++;
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: `• Processing: ${rawReqText}`,
+        stderr: `• Thinking about: ${rawReqText}`,
+        stdoutPayload: `• Processing: ${rawReqText}`,
+      };
+    },
+  };
+  const r19b = await executeKimiCliCommand({
+    request: rawReqRequest,
+    config: argConfig, // argument mode
+    env: envOn,
+    runner: rawReqArgRunner,
+  });
+  assert(rawReqArgRunCount === 1, "argument: runner called once");
+  assert(r19b.decision === "executed_failure", "argument: failure decision");
+  assert(r19b.stdoutPayload === undefined, "argument: stdoutPayload absent");
+  const j19b = JSON.stringify(r19b);
+  assert(!j19b.includes(rawReqText), "argument: raw req not in serialized result");
+  for (const evt of r19b.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(rawReqText), `argument audit ${evt.stage}: no raw req`);
+  }
+
+  // ── Minimum length guard: short raw requirement (< 8 chars) NOT rejected ──
+  const shortReq = "login";
+  const shortReqRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-SHORT",
+    input: { prompt: `You are a requirement analysis assistant.\n\nRequirement:\n${shortReq}\n\nRequirement ID: REQ-KIMI-SHORT`, requirement: shortReq },
+  };
+  let shortReqRunCount = 0;
+  const shortReqRunner: KimiCliProcessRunner = {
+    run: async (_ci: KimiCliExecutorCommandInput) => {
+      shortReqRunCount++;
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: "ok",
+        stderr: "",
+        stdoutPayload: `{"requirement_id":"REQ-KIMI-SHORT","multi_repo":false,"main_repo":"main","sub_requirements":[]}`,
+      };
+    },
+  };
+  const r19c = await executeKimiCliCommand({
+    request: shortReqRequest,
+    config: validConfig,
+    env: envOn,
+    runner: shortReqRunner,
+  });
+  assert(shortReqRunCount === 1, "short req: runner called");
+  // Short requirement (< 8 chars) should NOT trigger rejection
+  // (It may succeed or fail for other reasons, but not for prompt leak)
+  assert(r19c.error !== "Kimi CLI structured output rejected", "short req: not rejected as leak");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
