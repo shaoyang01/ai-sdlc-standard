@@ -227,6 +227,15 @@ export interface SolutionChallengeState {
   status?: "NEEDS_REVISION" | "READY_FOR_GATE";
   findingIds?: string[];
   reportPath?: string | null;
+  artifactStatus: "shadow_only" | "generated";
+}
+
+/** Derive top-level result from SolutionChallengeState.status.
+ *  This is the single derivation point — callers must not supply
+ *  independent result values that contradict the state. */
+function deriveResult(status?: "NEEDS_REVISION" | "READY_FOR_GATE"): "PASS" | "FAIL" {
+  if (status === "NEEDS_REVISION") return "FAIL";
+  return "PASS"; // READY_FOR_GATE or undefined → PASS
 }
 
 function executeSolutionChallenge(
@@ -250,6 +259,7 @@ function executeSolutionChallenge(
     status: "READY_FOR_GATE",
     findingIds: [],
     reportPath: null,
+    artifactStatus: "shadow_only",
   };
 
   return {
@@ -257,7 +267,7 @@ function executeSolutionChallenge(
     skill: "sdlc-solution-challenger",
     // explicit skill metadata binding: implemented
     // real Gateway skill invocation: not implemented
-    result: "PASS",
+    result: deriveResult(state.status),
     execution_source: "deterministic_shadow",
     executor_type: "shadow",
     fallback_used: false,
