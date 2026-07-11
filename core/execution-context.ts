@@ -5,6 +5,7 @@
 
 import { NodeType } from "../sdlc_graph/types";
 import type { ExecutionTraceItem } from "./execution-trace";
+import type { SolutionChallengeState } from "./runtime-executors";
 
 export type ExecutionContext = {
   node: NodeType;
@@ -16,11 +17,7 @@ export type ExecutionContext = {
     requirementId?: string;
     complexity?: "low" | "medium" | "high";
     estimatedCost?: number;
-    previousChallenge?: {
-      cycle?: { currentCycle: 1 | 2; maxCycles: 2; exhausted: boolean };
-      findingIds?: string[];
-      reportPath?: string;
-    };
+    solutionChallenge?: SolutionChallengeState;
   };
 
   trace: ExecutionTraceItem[];

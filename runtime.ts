@@ -17,6 +17,7 @@ import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
+import { SolutionChallengeState } from "./core/runtime-executors";
 import {
   createDefaultExecutors,
   DEFAULT_EXECUTORS,
@@ -312,14 +313,9 @@ export async function run(
       retryCount = 0; // reset on non-loop nodes
     }
 
-    // ── Persist challenge cycle state for FOLLOW_UP_VERIFICATION ──
+    // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
     if (currentNode === "solution-challenge") {
-      const cycle = nodeOutput["challenge_cycle"] as Record<string, unknown> | undefined;
-      execCtx.metadata.previousChallenge = {
-        cycle: cycle as { currentCycle: 1 | 2; maxCycles: 2; exhausted: boolean } | undefined,
-        findingIds: (nodeOutput["blocking_finding_ids"] ?? nodeOutput["remaining_finding_ids"]) as string[] | undefined,
-        reportPath: nodeOutput["report_path"] as string | undefined,
-      };
+      execCtx.metadata.solutionChallenge = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
     }
 
     // ─── Code Review + Bugfix Loop (after implementation, before validation) ───

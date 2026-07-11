@@ -16,20 +16,19 @@ export function getNextNode(
   retryCount: number = 0
 ): NodeType | null {
   // ─── Solution-challenge: self-contained cycle routing ──
-  // Uses challenge output directly (result + challenge_cycle.exhausted).
-  // Does NOT consume the global review retryCount.
+  // Reads solution_challenge state from node output.
   if (current === "solution-challenge" && nodeResult) {
     const challengeResult = nodeResult["result"] as string | undefined;
-    const cycle = nodeResult["challenge_cycle"] as Record<string, unknown> | undefined;
-    const exhausted = cycle?.exhausted === true;
+    const state = nodeResult["solution_challenge"] as Record<string, unknown> | undefined;
+    const exhausted = state?.exhausted === true;
 
     if (challengeResult === "FAIL" && !exhausted) {
-      return "tech-design";  // NEEDS_REVISION → revise
+      return "tech-design";
     }
     if (challengeResult === "FAIL" && exhausted) {
-      return "review";       // cycle exhausted → escalate to review
+      return "review";
     }
-    // PASS (READY_FOR_GATE) → fall through to PASS edge → review
+    // PASS → fall through to edge
   }
 
   // ─── Review: conditional PASS/FAIL routing ─────────────

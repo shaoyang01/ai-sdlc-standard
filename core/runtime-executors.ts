@@ -219,55 +219,55 @@ export function validateImplementationOutput(
 
 const MAX_CHALLENGE_REVISION_CYCLES = 2;
 
-type ChallengeCycleState = {
+export interface SolutionChallengeState {
+  mode: "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION";
   currentCycle: 1 | 2;
   maxCycles: 2;
   exhausted: boolean;
-};
-
-interface PreviousChallengeContext {
-  cycle?: ChallengeCycleState;
+  status?: "NEEDS_REVISION" | "READY_FOR_GATE";
   findingIds?: string[];
-  reportPath?: string;
+  reportPath?: string | null;
 }
 
 function executeSolutionChallenge(
   _rawText: string,
   requirementId: string,
   techDesignOutput: Record<string, unknown>,
-  previous?: PreviousChallengeContext
+  previous?: SolutionChallengeState
 ): Record<string, unknown> {
-  const prevCycle = previous?.cycle;
-  const currentCycle = (prevCycle ? Math.min(prevCycle.currentCycle + 1, MAX_CHALLENGE_REVISION_CYCLES) : 1) as 1 | 2;
+  const currentCycle = (previous
+    ? Math.min(previous.currentCycle + 1, MAX_CHALLENGE_REVISION_CYCLES)
+    : 1) as 1 | 2;
   const exhausted = currentCycle >= MAX_CHALLENGE_REVISION_CYCLES;
+  const mode = previous ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE";
 
   // Shadow mode: produce deterministic metadata-only result.
-  // This is intentional shadow behavior, not a fallback.
+  const state: SolutionChallengeState = {
+    mode,
+    currentCycle,
+    maxCycles: 2,
+    exhausted,
+    status: "READY_FOR_GATE",
+    findingIds: [],
+    reportPath: null,
+  };
+
   return {
     node: "solution-challenge",
     skill: "sdlc-solution-challenger",
     // explicit skill metadata binding: implemented
     // real Gateway skill invocation: not implemented
-    mode: prevCycle ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE",
-    result: "PASS",  // shadow: default READY_FOR_GATE
+    result: "PASS",
     execution_source: "deterministic_shadow",
+    executor_type: "shadow",
     fallback_used: false,
     fallback_reason: "none",
-    challenge_cycle: {
-      current_cycle: currentCycle,
-      max_cycles: MAX_CHALLENGE_REVISION_CYCLES,
-      exhausted,
-    },
-    previous_finding_ids: previous?.findingIds ?? [],
-    previous_report_path: previous?.reportPath ?? "none",
+    solution_challenge: state,
     blocking_count: 0,
     required_count: 0,
     non_blocking_count: 0,
     out_of_scope_count: 0,
-    remaining_finding_ids: [],
-    closed_finding_ids: [],
     recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
-    report_path: "none",
     duration_ms: 0,
   };
 }
@@ -296,7 +296,7 @@ export function createDefaultExecutors(
         ctx.raw_text as string,
         ctx.requirement_id as string,
         (ctx["tech-design"] ?? {}) as Record<string, unknown>,
-        _execCtx?.metadata?.previousChallenge as PreviousChallengeContext | undefined
+        _execCtx?.metadata?.solutionChallenge as SolutionChallengeState | undefined
       ),
     "review": (ctx, execCtx) =>
       ({
