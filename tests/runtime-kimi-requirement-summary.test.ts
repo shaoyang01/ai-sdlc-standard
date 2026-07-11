@@ -529,6 +529,41 @@ async function test() {
   }
   console.log("");
 
+  // H: prompt too large is rejected before runner and falls back safely
+  console.log("Test H: oversized prompt is rejected and Runtime falls back");
+  const hugeRequirement = "x".repeat(20_000);
+  let runnerCalledH = 0;
+  const runnerH: KimiCliProcessRunner = {
+    async run(): Promise<KimiCliProcessResult> {
+      runnerCalledH++;
+      return {
+        exitCode: 0,
+        durationMs: 10,
+        stdout: JSON.stringify({
+          requirement_id: "REQ-KIMI-HUGE",
+          multi_repo: false,
+          main_repo: "main",
+          sub_requirements: [],
+        }),
+        stderr: "",
+      };
+    },
+  };
+  const gatewayH = new ExecutionGateway({ env: envG, kimiRunner: runnerH });
+  const resultH = await run(hugeRequirement, {
+    executionGateway: gatewayH,
+    requirementSummaryMode: "kimi_gateway",
+  });
+  a(runnerCalledH === 0, "runner is not invoked for oversized prompt");
+  a(resultH.final_status === "success", "Runtime completes after oversized prompt fallback");
+  const reqSummaryTraceH = resultH.execution_trace.find((t) => t.node === "requirement-summary");
+  a(reqSummaryTraceH?.output["execution_source"] === "kimi_fallback", "execution_source is kimi_fallback for oversized prompt");
+  a(
+    !JSON.stringify(resultH).includes(hugeRequirement),
+    "raw requirement text is not exposed in Runtime result"
+  );
+  console.log("");
+
   console.log(`\nResults: ${passed.count} passed, ${failed.count} failed`);
   process.exit(failed.count > 0 ? 1 : 0);
 }

@@ -175,42 +175,67 @@ export async function dispatchKimiGatewayReal(input: {
   }
 }
 
-function buildKimiLlmTaskPrompt(request: ExecutionRequest): string | undefined {
+const MAX_KIMI_LLM_PROMPT_CHARS = 16_000;
+
+type KimiPromptBuildResult =
+  | { ok: true; prompt: string }
+  | { ok: false; reason: "missing_prompt" | "prompt_too_large" };
+
+function buildKimiLlmTaskPrompt(request: ExecutionRequest): KimiPromptBuildResult {
+  let rawRequirement = "";
   if (
     request.node === "requirement-summary" &&
     request.input?.["expected_output"] === "requirement_summary"
   ) {
-    const requirement = request.input["requirement"] ?? "";
-    const requirementId = request.requirementId;
-    return [
-      "You are a requirement analysis assistant.",
-      "Read the requirement below and return a single JSON object only.",
-      "Do not include markdown fences, explanations, or any text outside the JSON object.",
-      "",
-      "Requirement:",
-      typeof requirement === "string" ? requirement : JSON.stringify(requirement),
-      "",
-      `Requirement ID: ${requirementId}`,
-      "",
-      "Return exactly this JSON shape:",
-      JSON.stringify({
-        requirement_id: requirementId,
-        multi_repo: false,
-        main_repo: "main",
-        sub_requirements: [],
-      }),
-      "",
-      "Rules:",
-      "- requirement_id must match exactly",
-      "- multi_repo must be true if the requirement describes multiple repositories, otherwise false",
-      "- main_repo must be a non-empty string",
-      "- sub_requirements must be an array of objects with non-empty repo and task strings",
-      "- If multi_repo is false, sub_requirements must be empty",
-      "- If multi_repo is true, sub_requirements must contain at least one item",
-    ].join("\n");
+    const requirement = request.input["requirement"];
+    if (typeof requirement !== "string" || requirement.trim().length === 0) {
+      return { ok: false, reason: "missing_prompt" };
+    }
+    rawRequirement = requirement;
+  } else {
+    const prompt = request.input?.["prompt"];
+    if (typeof prompt !== "string" || prompt.trim().length === 0) {
+      return { ok: false, reason: "missing_prompt" };
+    }
+    if (prompt.length > MAX_KIMI_LLM_PROMPT_CHARS) {
+      return { ok: false, reason: "prompt_too_large" };
+    }
+    return { ok: true, prompt };
   }
-  const prompt = request.input?.["prompt"];
-  return typeof prompt === "string" ? prompt : undefined;
+
+  const requirementId = request.requirementId;
+  const prompt = [
+    "You are a requirement analysis assistant.",
+    "Read the requirement below and return a single JSON object only.",
+    "Do not include markdown fences, explanations, or any text outside the JSON object.",
+    "",
+    "Requirement:",
+    rawRequirement,
+    "",
+    `Requirement ID: ${requirementId}`,
+    "",
+    "Return exactly this JSON shape:",
+    JSON.stringify({
+      requirement_id: requirementId,
+      multi_repo: false,
+      main_repo: "main",
+      sub_requirements: [],
+    }),
+    "",
+    "Rules:",
+    "- requirement_id must match exactly",
+    "- multi_repo must be true if the requirement describes multiple repositories, otherwise false",
+    "- main_repo must be a non-empty string",
+    "- sub_requirements must be an array of objects with non-empty repo and task strings",
+    "- If multi_repo is false, sub_requirements must be empty",
+    "- If multi_repo is true, sub_requirements must contain at least one item",
+  ].join("\n");
+
+  if (prompt.length > MAX_KIMI_LLM_PROMPT_CHARS) {
+    return { ok: false, reason: "prompt_too_large" };
+  }
+
+  return { ok: true, prompt };
 }
 
 export async function executeKimiGatewayRequest(
@@ -220,18 +245,23 @@ export async function executeKimiGatewayRequest(
   guardrailLimits?: Partial<KimiGatewayGuardrailLimits>,
   env?: Record<string, string | undefined>,
 ): Promise<ExecutionResult> {
-  const prompt = buildKimiLlmTaskPrompt(request);
-  if (prompt === undefined) {
+  const promptResult = buildKimiLlmTaskPrompt(request);
+  if (promptResult.ok === false) {
     return {
       success: false,
       node: request.node,
       agent: "kimi",
-      output: { error: "Kimi Gateway request missing prompt" },
+      output: {
+        error: "Kimi Gateway request prompt rejected",
+        fallback_reason: promptResult.reason,
+        fallback_action: "return_structured_failure",
+      },
       artifacts: [],
-      error: "missing_prompt",
+      error: promptResult.reason,
     };
   }
 
+  const prompt = promptResult.prompt;
   const requestWithPrompt: ExecutionRequest = {
     ...request,
     input: { ...request.input, prompt },
