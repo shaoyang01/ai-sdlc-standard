@@ -16,19 +16,28 @@ export function getNextNode(
   retryCount: number = 0
 ): NodeType | null {
   // ─── Solution-challenge: self-contained cycle routing ──
-  // Routes on solution_challenge.status (not top-level result).
+  // Routes on solution_challenge.status (required, validated by normalizer).
   if (current === "solution-challenge" && nodeResult) {
     const state = nodeResult["solution_challenge"] as Record<string, unknown> | undefined;
-    const status = state?.status as string | undefined;
-    const exhausted = state?.exhausted === true;
 
+    // If no solution_challenge present (e.g. synthetic PASS from getTransitionPath),
+    // default to READY_FOR_GATE routing.
+    if (!state) {
+      return "review"; // READY_FOR_GATE default
+    }
+
+    const status = state.status as string | undefined;
+    const exhausted = state.exhausted === true;
+
+    // Status is required when solution_challenge is present.
+    if (status !== "NEEDS_REVISION" && status !== "READY_FOR_GATE") {
+      return null; // invalid: fail fast
+    }
     if (status === "NEEDS_REVISION" && !exhausted) {
       return "tech-design";
     }
-    if (status === "NEEDS_REVISION" && exhausted) {
-      return "review";
-    }
-    // READY_FOR_GATE or undefined → fall through to edge → review
+    // NEEDS_REVISION + exhausted → review, or READY_FOR_GATE → review
+    return "review";
   }
 
   // ─── Review: conditional PASS/FAIL routing ─────────────

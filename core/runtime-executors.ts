@@ -224,18 +224,48 @@ export interface SolutionChallengeState {
   currentCycle: 1 | 2;
   maxCycles: 2;
   exhausted: boolean;
-  status?: "NEEDS_REVISION" | "READY_FOR_GATE";
+  status: "NEEDS_REVISION" | "READY_FOR_GATE";
   findingIds?: string[];
   reportPath?: string | null;
   artifactStatus: "shadow_only" | "generated";
 }
 
-/** Derive top-level result from SolutionChallengeState.status.
- *  This is the single derivation point — callers must not supply
- *  independent result values that contradict the state. */
-function deriveResult(status?: "NEEDS_REVISION" | "READY_FOR_GATE"): "PASS" | "FAIL" {
-  if (status === "NEEDS_REVISION") return "FAIL";
-  return "PASS"; // READY_FOR_GATE or undefined → PASS
+/** Derive top-level result from SolutionChallengeState.status. */
+function deriveResult(status: "NEEDS_REVISION" | "READY_FOR_GATE"): "PASS" | "FAIL" {
+  return status === "NEEDS_REVISION" ? "FAIL" : "PASS";
+}
+
+/** Validate that an object is a well-formed SolutionChallengeState.
+ *  Returns the validated state or throws on malformed input. */
+function validateSolutionChallengeState(raw: unknown): SolutionChallengeState {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("solution-challenge: missing or invalid solution_challenge state");
+  }
+  const s = raw as Record<string, unknown>;
+  if (s.status !== "NEEDS_REVISION" && s.status !== "READY_FOR_GATE") {
+    throw new Error(`solution-challenge: invalid status: ${String(s.status)}`);
+  }
+  if (typeof s.mode !== "string" || typeof s.currentCycle !== "number" ||
+      typeof s.exhausted !== "boolean") {
+    throw new Error("solution-challenge: missing required state fields");
+  }
+  return s as unknown as SolutionChallengeState;
+}
+
+/** Normalize a solution-challenge node output.
+ *  Validates the state and ensures result is derived from status.
+ *  This is the single normalization boundary — applied centrally in runtime. */
+export function normalizeSolutionChallengeOutput(
+  output: Record<string, unknown>
+): Record<string, unknown> {
+  const raw = output["solution_challenge"];
+  const state = validateSolutionChallengeState(raw);
+
+  return {
+    ...output,
+    result: deriveResult(state.status),
+    solution_challenge: state,
+  };
 }
 
 function executeSolutionChallenge(

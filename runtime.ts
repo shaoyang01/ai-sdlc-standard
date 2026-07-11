@@ -17,7 +17,7 @@ import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
 import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
 import { transition, replayExecution } from "./core/state-machine-vm";
-import { SolutionChallengeState } from "./core/runtime-executors";
+import { SolutionChallengeState, normalizeSolutionChallengeOutput as normalizeSolutionOutput } from "./core/runtime-executors";
 import {
   createDefaultExecutors,
   DEFAULT_EXECUTORS,
@@ -276,7 +276,13 @@ export async function run(
     execCtx.input = { requirement, requirement_id: requirementId };
     execCtx.metadata.complexity = inferComplexity(requirement);
 
-    const nodeOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx, executors);
+    const rawOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx, executors);
+
+    // ── Normalize solution-challenge output (single boundary) ──
+    const nodeOutput = currentNode === "solution-challenge"
+      ? normalizeSolutionOutput(rawOutput)
+      : rawOutput;
+
     legacyContext[currentNode] = nodeOutput;
 
     // Record trace via standard ExecutionTrace

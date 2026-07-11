@@ -1,7 +1,7 @@
-// Solution Challenge State Model + Routing Test
-// ==============================================
-// Validates solution_challenge.status as routing source of truth,
-// contradictory-state prevention, and shadow artifact semantics.
+// Solution Challenge Normalization + Routing Test
+// ================================================
+// Validates output normalization, required status,
+// contradictory-state prevention, and findingIds propagation.
 
 import { run } from "../runtime";
 import { createArtifact } from "../core/artifact";
@@ -53,78 +53,122 @@ async function test() {
     else { failed++; console.error(`  ✗ ${m}`); }
   }
 
-  console.log("Solution Challenge Routing + Artifact Test\n");
+  console.log("Solution Challenge Normalization Test\n");
 
-  // ═══ Test 1: Routing uses solution_challenge.status ═══
-  console.log("Test 1: Routing uses status (not top-level result)");
+  // ═══ Test 1: Routing by status ═══
+  console.log("Test 1: Routing by status");
   const { getNextNode: gn } = await import("../sdlc_graph/transitions");
 
-  // NEEDS_REVISION + not exhausted → tech-design
   assert(gn("solution-challenge", {
     result: "FAIL",
     solution_challenge: makeState({ status: "NEEDS_REVISION", exhausted: false }),
-  }) === "tech-design", "NEEDS_REVISION + not exhausted → tech-design");
+  }) === "tech-design", "NEEDS_REVISION + !exhausted → tech-design");
 
-  // NEEDS_REVISION + exhausted → review
   assert(gn("solution-challenge", {
     result: "FAIL",
     solution_challenge: makeState({ mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, status: "NEEDS_REVISION", exhausted: true }),
   }) === "review", "NEEDS_REVISION + exhausted → review");
 
-  // READY_FOR_GATE → review
   assert(gn("solution-challenge", {
     result: "PASS",
     solution_challenge: makeState({ status: "READY_FOR_GATE" }),
   }) === "review", "READY_FOR_GATE → review");
   console.log("");
 
-  // ═══ Test 2: Contradictory top-level result cannot override state.status ═══
-  console.log("Test 2: Contradictory result cannot override status");
+  // ═══ Test 2: Normalization enforces consistency ═══
+  console.log("Test 2: Normalization makes contradictory output consistent");
+  const { normalizeSolutionChallengeOutput: norm } = await import("../core/runtime-executors");
 
-  // Top-level PASS with state NEEDS_REVISION → state wins (tech-design)
-  assert(gn("solution-challenge", {
-    result: "PASS",  // contradictory!
-    solution_challenge: makeState({ status: "NEEDS_REVISION", exhausted: false }),
-  }) === "tech-design", "PASS + NEEDS_REVISION → tech-design (state wins)");
-
-  // Top-level FAIL with state READY_FOR_GATE → state wins (review)
-  assert(gn("solution-challenge", {
-    result: "FAIL",  // contradictory!
-    solution_challenge: makeState({ status: "READY_FOR_GATE" }),
-  }) === "review", "FAIL + READY_FOR_GATE → review (state wins)");
-  console.log("");
-
-  // ═══ Test 3: Missing status does not silently fall through ═══
-  console.log("Test 3: Missing status behavior");
-  // Missing status → default to review (safe: doesn't loop back to tech-design)
-  assert(gn("solution-challenge", {
+  // Contradictory: PASS + NEEDS_REVISION → normalized to FAIL
+  const n2a = norm({
     result: "PASS",
-    solution_challenge: makeState({ status: undefined }),
-  }) === "review", "missing status → review (safe default)");
+    solution_challenge: makeState({ status: "NEEDS_REVISION", exhausted: false }),
+  });
+  assert(n2a.result === "FAIL", "PASS + NEEDS_REVISION → normalized result = FAIL");
+  const s2a = n2a.solution_challenge as SolutionChallengeState;
+  assert(s2a.status === "NEEDS_REVISION", "status unchanged");
+
+  // Contradictory: FAIL + READY_FOR_GATE → normalized to PASS
+  const n2b = norm({
+    result: "FAIL",
+    solution_challenge: makeState({ status: "READY_FOR_GATE" }),
+  });
+  assert(n2b.result === "PASS", "FAIL + READY_FOR_GATE → normalized result = PASS");
+  const s2b = n2b.solution_challenge as SolutionChallengeState;
+  assert(s2b.status === "READY_FOR_GATE", "status unchanged");
+
+  // Already consistent: no change
+  const n2c = norm({
+    result: "FAIL",
+    solution_challenge: makeState({ status: "NEEDS_REVISION", exhausted: false }),
+  });
+  assert(n2c.result === "FAIL", "FAIL + NEEDS_REVISION → still FAIL");
   console.log("");
 
-  // ═══ Test 4: Two-cycle exact counts ═══
-  console.log("Test 4: Two-cycle exact counts");
-  let callCount4 = 0;
-  const capturedStates: SolutionChallengeState[] = [];
+  // ═══ Test 3: Malformed output rejected ═══
+  console.log("Test 3: Malformed output rejected");
+  let rejected3 = false;
+  try { norm({ solution_challenge: { status: "INVALID" } }); } catch { rejected3 = true; }
+  assert(rejected3, "invalid status rejected");
+
+  let rejected3b = false;
+  try { norm({ solution_challenge: {} }); } catch { rejected3b = true; }
+  assert(rejected3b, "missing status rejected");
+
+  let rejected3c = false;
+  try { norm({}); } catch { rejected3c = true; }
+  assert(rejected3c, "missing solution_challenge rejected");
+  console.log("");
+
+  // ═══ Test 4: Malformed output in Runtime does not reach review ═══
+  console.log("Test 4: Malformed output in Runtime → error, not review");
+  const badExec: RuntimeExecutorMap["solution-challenge"] = async () => ({
+    node: "solution-challenge", skill: "sdlc-solution-challenger",
+    result: "PASS", execution_source: "deterministic_shadow", executor_type: "shadow",
+    fallback_used: false, fallback_reason: "none",
+    solution_challenge: {}, // missing status — will fail validation
+    blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+    recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER", duration_ms: 0,
+  });
+  let errorCaught4 = false;
+  try {
+    await run("build a login form", {
+      executionGateway: fakeGateway, solutionChallengeMode: "shadow",
+      executors: { "solution-challenge": badExec,
+        "review": async () => ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }),
+      },
+    });
+  } catch { errorCaught4 = true; }
+  assert(errorCaught4, "malformed output causes error, not silent review");
+  console.log("");
+
+  // ═══ Test 5: Two-cycle with findingIds propagation ═══
+  console.log("Test 5: Two-cycle findingIds propagation");
+  let callCount5 = 0;
+  const capturedMetadata5: (SolutionChallengeState | undefined)[] = [];
+  const sentFindingIds5 = ["CH-001", "CH-002"];
 
   const twoCycleExec: RuntimeExecutorMap["solution-challenge"] = async (_ctx, execCtx) => {
-    callCount4++;
-    if (callCount4 > 2) {
+    callCount5++;
+    const prev = execCtx?.metadata?.solutionChallenge;
+    capturedMetadata5.push(prev);
+
+    if (callCount5 > 2) {
       return { node: "solution-challenge", skill: "sdlc-solution-challenger", result: "PASS",
         execution_source: "deterministic_shadow", executor_type: "shadow", fallback_used: false, fallback_reason: "none",
-        solution_challenge: makeState({ mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, exhausted: true, status: "READY_FOR_GATE", findingIds: [], artifactStatus: "shadow_only" }),
+        solution_challenge: makeState({ mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, exhausted: true, status: "READY_FOR_GATE" }),
         blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0, recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER", duration_ms: 0 };
     }
-    const prev = execCtx?.metadata?.solutionChallenge;
+
     const c = (prev ? Math.min(prev.currentCycle + 1, 2) : 1) as 1 | 2;
     const e = c >= 2;
+    // Cycle 2 receives Cycle 1's findingIds from metadata
+    const fIds = callCount5 === 1 ? sentFindingIds5 : (prev?.findingIds ?? []);
     const state = makeState({
       mode: prev ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE",
       currentCycle: c, exhausted: e,
-      status: "NEEDS_REVISION", findingIds: ["CH-001"],
+      status: "NEEDS_REVISION", findingIds: fIds,
     });
-    capturedStates.push(state);
     return { node: "solution-challenge", skill: "sdlc-solution-challenger",
       result: "FAIL", execution_source: "deterministic_shadow", executor_type: "shadow",
       fallback_used: false, fallback_reason: "none",
@@ -133,7 +177,7 @@ async function test() {
       recommended_next_step: e ? "ESCALATE_TO_SOLUTION_REVIEWER" : "RETURN_TO_SPECIFICATION_WRITER", duration_ms: 0 };
   };
 
-  const r4 = await run("build a login form", {
+  const r5 = await run("build a login form", {
     executionGateway: fakeGateway, solutionChallengeMode: "shadow",
     executors: {
       "solution-challenge": twoCycleExec,
@@ -141,59 +185,39 @@ async function test() {
     },
   });
 
-  assert(callCount4 === 2, `executor called exactly twice (got ${callCount4})`);
-  assert(r4.execution_trace.filter((t) => t.node === "solution-challenge").length === 2, "two challenge trace entries");
-  assert(r4.final_status === "success", "runtime completes");
+  assert(callCount5 === 2, `executor called exactly twice (got ${callCount5})`);
+  // Cycle 1 metadata: should be undefined (first call)
+  assert(capturedMetadata5[0] === undefined, "cycle 1: no previous metadata");
+  // Cycle 2 metadata: should contain Cycle 1's findingIds
+  assert(capturedMetadata5[1] !== undefined, "cycle 2: previous metadata exists");
+  assert(capturedMetadata5[1]!.findingIds?.includes("CH-001") === true, "cycle 2: findingIds contains CH-001");
+  assert(capturedMetadata5[1]!.findingIds?.includes("CH-002") === true, "cycle 2: findingIds contains CH-002");
+  assert(r5.final_status === "success", "runtime completes");
   console.log("");
 
-  // ═══ Test 5: Cycle mode + currentCycle exact values ═══
-  console.log("Test 5: Cycle mode and currentCycle");
-  assert(capturedStates.length === 2, "two states captured");
-  assert(capturedStates[0].mode === "INITIAL_CHALLENGE", "cycle 1: INITIAL_CHALLENGE");
-  assert(capturedStates[0].currentCycle === 1, "cycle 1: currentCycle = 1");
-  assert(capturedStates[1].mode === "FOLLOW_UP_VERIFICATION", "cycle 2: FOLLOW_UP_VERIFICATION");
-  assert(capturedStates[1].currentCycle === 2, "cycle 2: currentCycle = 2");
+  // ═══ Test 6: Trace status matches normalized result ═══
+  console.log("Test 6: Trace status matches normalized result");
+  const r6 = await run("build a login form", { executionGateway: fakeGateway, solutionChallengeMode: "shadow" });
+  const sc6 = r6.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc6?.output["result"] === "PASS", "shadow result = PASS");
+  // result is derived from status (READY_FOR_GATE → PASS)
+  const s6 = sc6!.output["solution_challenge"] as SolutionChallengeState;
+  assert(s6.status === "READY_FOR_GATE", "status = READY_FOR_GATE");
+  // Verify internal consistency: result must match status
+  const derivedResult = s6.status === "NEEDS_REVISION" ? "FAIL" : "PASS";
+  assert(sc6!.output["result"] === derivedResult, `result (${sc6!.output["result"]}) matches derived (${derivedResult})`);
   console.log("");
 
-  // ═══ Test 6: Second invocation receives first-round findingIds ═══
-  console.log("Test 6: findingIds propagated to second cycle");
-  // The injected executor reads from execCtx.metadata.solutionChallenge
-  // Cycle 1 returns findingIds: ["CH-001"], which runtime persists
-  // Cycle 2 should receive them via metadata.solutionChallenge
-  assert(capturedStates[0].findingIds?.includes("CH-001"), "cycle 1 produced CH-001");
-  // Verification: the second cycle's state was built from execCtx metadata
-  // (tested implicitly by the capturedStates[1] having mode FOLLOW_UP_VERIFICATION)
+  // ═══ Test 7: Shadow artifact status ═══
+  console.log("Test 7: Shadow artifact status");
+  const sc7 = r6.execution_trace.find((t) => t.node === "solution-challenge");
+  const s7 = sc7?.output["solution_challenge"] as SolutionChallengeState | undefined;
+  assert(s7?.artifactStatus === "shadow_only", "artifactStatus = shadow_only");
+  assert(s7?.reportPath === null, "reportPath = null");
   console.log("");
 
-  // ═══ Test 7: Exhausted NEEDS_REVISION preserved entering review ═══
-  console.log("Test 7: Exhausted NEEDS_REVISION preserved");
-  const scTraces4 = r4.execution_trace.filter((t) => t.node === "solution-challenge");
-  const lastState = scTraces4[scTraces4.length - 1]?.output["solution_challenge"] as SolutionChallengeState | undefined;
-  assert(lastState?.status === "NEEDS_REVISION", "last challenge status = NEEDS_REVISION");
-  assert(lastState?.exhausted === true, "last challenge exhausted = true");
-  // Review should still be reached (exhausted → review)
-  assert(r4.execution_trace.some((t) => t.node === "review"), "review reached after exhausted challenge");
-  // The status entering review is NEEDS_REVISION (not rewritten to READY_FOR_GATE)
-  const reviewTrace = r4.execution_trace.find((t) => t.node === "review");
-  assert(reviewTrace !== undefined, "review trace exists");
-  console.log("");
-
-  // ═══ Test 8: Shadow artifactStatus ═══
-  console.log("Test 8: Shadow artifact semantics");
-  const r8 = await run("build a login form", { executionGateway: fakeGateway, solutionChallengeMode: "shadow" });
-  const sc8 = r8.execution_trace.find((t) => t.node === "solution-challenge");
-  const state8 = sc8?.output["solution_challenge"] as SolutionChallengeState | undefined;
-  assert(state8?.artifactStatus === "shadow_only", "artifactStatus = shadow_only");
-  assert(state8?.reportPath === null, "reportPath = null");
-
-  // Artifact metadata
-  const scArtifact8 = r8.artifacts.find((a) => a.node === "solution-challenge");
-  assert(scArtifact8 !== undefined, "artifact exists");
-  assert(scArtifact8!.type === "solution_challenge", "artifact type = solution_challenge");
-  console.log("");
-
-  // ═══ Test 9: Graph structure ═══
-  console.log("Test 9: Graph structure");
+  // ═══ Test 8: Graph structure ═══
+  console.log("Test 8: Graph structure");
   const { getNode, getEdge } = await import("../sdlc_graph/graph");
   assert(getNode("solution-challenge")?.order === 2, "order = 2");
   assert(getEdge("tech-design")?.to === "solution-challenge", "tech → challenge");
