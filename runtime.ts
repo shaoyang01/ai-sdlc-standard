@@ -285,7 +285,9 @@ export async function run(
 
     // ── Normalize solution-challenge output (single boundary) ──
     const nodeOutput = currentNode === "solution-challenge"
-      ? normalizeSolutionOutput(rawOutput)
+      ? (options.solutionChallengeMode === "gateway_shadow"
+        ? rawOutput // gateway shadow: validated internally, no normalization needed
+        : normalizeSolutionOutput(rawOutput))
       : rawOutput;
 
     legacyContext[currentNode] = nodeOutput;
@@ -332,16 +334,21 @@ export async function run(
 
     // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
     if (currentNode === "solution-challenge") {
-      // Prefer shadow_challenge_cycle for cycle tracking (gateway_shadow mode).
-      // Fall back to solution_challenge state for deterministic shadow mode.
       const shadowCycle = nodeOutput["shadow_challenge_cycle"] as Record<string, unknown> | undefined;
       const scState = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
-      if (shadowCycle && scState) {
+      const obs = nodeOutput["solution_challenge_observation"] as Record<string, unknown> | undefined;
+
+      if (shadowCycle) {
+        // Gateway shadow mode: build cycle state from shadow_challenge_cycle
         execCtx.metadata.solutionChallenge = {
-          ...scState,
-          currentCycle: Math.min(Math.max((shadowCycle["currentCycle"] as number) ?? scState.currentCycle, 1), 2) as 1 | 2,
-          mode: (shadowCycle["mode"] as "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION") ?? scState.mode,
-          exhausted: (shadowCycle["exhausted"] as boolean) ?? scState.exhausted,
+          mode: (shadowCycle["mode"] as "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION") ?? "INITIAL_CHALLENGE",
+          currentCycle: Math.min(Math.max((shadowCycle["currentCycle"] as number) ?? 1, 1), 2) as 1 | 2,
+          maxCycles: 2 as const,
+          exhausted: (shadowCycle["exhausted"] as boolean) ?? false,
+          status: "READY_FOR_GATE",
+          findingIds: (obs?.availability === "available" ? obs["findingIds"] : (shadowCycle["previousFindingIds"] ?? [])) as string[] | undefined,
+          reportPath: null,
+          artifactStatus: "shadow_only" as const,
         };
       } else if (scState) {
         execCtx.metadata.solutionChallenge = scState;

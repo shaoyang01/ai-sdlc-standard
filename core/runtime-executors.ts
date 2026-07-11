@@ -356,13 +356,13 @@ async function executeGatewayShadowChallenge(
       executor_type: "gateway_shadow",
       result: "PASS",
       shadow_challenge_cycle: shadowCycle,
-      solution_challenge: parsed.state ?? cycle,
       routingEffect: "shadow_pass_through",
       gateway_artifacts: gwResult.artifacts ?? [],
       duration_ms: 0,
     };
 
     if (parsed.availability === "available" && parsed.state) {
+      output["solution_challenge"] = parsed.state;
       output["execution_source"] = "gateway";
       output["fallback_used"] = false;
       output["fallback_reason"] = "none";
@@ -384,6 +384,7 @@ async function executeGatewayShadowChallenge(
         ? (parsed.state.exhausted ? "ESCALATE_TO_SOLUTION_REVIEWER" : "RETURN_TO_SPECIFICATION_WRITER")
         : "PROCEED_TO_SOLUTION_REVIEWER";
     } else {
+      // unavailable: no solution_challenge, no state, no counts
       output["execution_source"] = "gateway_error";
       output["fallback_used"] = true;
       output["fallback_reason"] = parsed.error ?? "gateway_unavailable";
@@ -393,11 +394,6 @@ async function executeGatewayShadowChallenge(
       };
       output["observedStatus"] = "unavailable";
       output["wouldRouteTo"] = "review";
-      output["blocking_count"] = 0;
-      output["required_count"] = 0;
-      output["non_blocking_count"] = 0;
-      output["out_of_scope_count"] = 0;
-      output["recommended_next_step"] = "PROCEED_TO_SOLUTION_REVIEWER";
     }
 
     return output;
@@ -412,13 +408,10 @@ async function executeGatewayShadowChallenge(
       fallback_used: true,
       fallback_reason: msg.slice(0, 200),
       shadow_challenge_cycle: shadowCycle,
-      solution_challenge: cycle,
       solution_challenge_observation: { availability: "unavailable", error: msg.slice(0, 200) },
       observedStatus: "unavailable",
       routingEffect: "shadow_pass_through",
       wouldRouteTo: "review",
-      blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
-      recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
       gateway_artifacts: [],
       duration_ms: 0,
     };
