@@ -458,6 +458,102 @@ async function test() {
   // (verified by throwingRunner — if runner were called, it would throw)
   console.log("");
 
+  // ═══ stdoutPayload Prompt-Leak Boundary Test ═══
+
+  // Test 18: stdoutPayload containing dynamic prompt is rejected (not redacted)
+  console.log("Test 18: stdoutPayload prompt-leak rejection");
+  const leakPayloadPrompt = "build a login form with 2FA support";
+  const leakPayloadRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-PAYLOAD-LEAK",
+    input: { prompt: leakPayloadPrompt },
+  };
+  // Simulate Kimi echoing the full prompt back in stdout/stderr/stdoutPayload
+  const leakedPayload = `Got it! I'll ${leakPayloadPrompt}. Here is the JSON: {"requirement_id":"REQ-KIMI-PAYLOAD-LEAK","multi_repo":false,"main_repo":"main","sub_requirements":[]}`;
+  const leakedStderr = `• User asked: ${leakPayloadPrompt}. Analyzing...`;
+  const payloadLeakRunner: KimiCliProcessRunner = {
+    run: async (_ci: KimiCliExecutorCommandInput) => ({
+      exitCode: 0,
+      durationMs: 50,
+      stdout: leakedPayload,
+      stderr: leakedStderr,
+      stdoutPayload: leakedPayload, // <-- prompt leaked into bounded payload
+    }),
+  };
+
+  // ── stdin mode: stdoutPayload contains prompt → rejected ──
+  let payloadLeakRunCount = 0;
+  const payloadLeakCountingRunner: KimiCliProcessRunner = {
+    run: async (ci: KimiCliExecutorCommandInput) => {
+      payloadLeakRunCount++;
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: leakedPayload,
+        stderr: leakedStderr,
+        stdoutPayload: leakedPayload,
+      };
+    },
+  };
+  const r18a = await executeKimiCliCommand({
+    request: leakPayloadRequest,
+    config: validConfig, // stdin mode
+    env: envOn,
+    runner: payloadLeakCountingRunner,
+  });
+  assert(payloadLeakRunCount === 1, "stdin: runner called once");
+  assert(r18a.decision === "executed_failure", "stdin: failure decision");
+  assert(r18a.success === false, "stdin: not success");
+  assert(r18a.error === "Kimi CLI structured output rejected", "stdin: generic error");
+  // stdoutPayload must NOT be present in result
+  const j18a = JSON.stringify(r18a);
+  assert(!j18a.includes(leakPayloadPrompt), "stdin: raw prompt not in serialized result");
+  assert(r18a.stdoutPayload === undefined, "stdin: stdoutPayload absent from result");
+  // stderrSummary may contain [REDACTED_PROMPT] but NOT the raw prompt
+  assert(!(r18a.stderrSummary ?? "").includes(leakPayloadPrompt), "stdin: prompt not in stderrSummary");
+  // Audit events must not contain the prompt
+  for (const evt of r18a.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(leakPayloadPrompt), `stdin audit ${evt.stage}: no prompt`);
+  }
+
+  // ── argument mode: stdoutPayload contains prompt → rejected ──
+  let argLeakRunCount = 0;
+  const argLeakCountingRunner: KimiCliProcessRunner = {
+    run: async (ci: KimiCliExecutorCommandInput) => {
+      argLeakRunCount++;
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: leakedPayload,
+        stderr: leakedStderr,
+        stdoutPayload: leakedPayload,
+      };
+    },
+  };
+  const r18b = await executeKimiCliCommand({
+    request: leakPayloadRequest,
+    config: argConfig, // argument mode
+    env: envOn,
+    runner: argLeakCountingRunner,
+  });
+  assert(argLeakRunCount === 1, "argument: runner called once");
+  assert(r18b.decision === "executed_failure", "argument: failure decision");
+  assert(r18b.success === false, "argument: not success");
+  assert(r18b.error === "Kimi CLI structured output rejected", "argument: generic error");
+  const j18b = JSON.stringify(r18b);
+  assert(!j18b.includes(leakPayloadPrompt), "argument: raw prompt not in serialized result");
+  assert(r18b.stdoutPayload === undefined, "argument: stdoutPayload absent from result");
+  assert(!(r18b.stderrSummary ?? "").includes(leakPayloadPrompt), "argument: prompt not in stderrSummary");
+  for (const evt of r18b.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(leakPayloadPrompt), `argument audit ${evt.stage}: no prompt`);
+  }
+  // commandInput must not leak prompt
+  const ci18b = JSON.stringify(r18b.commandInput);
+  assert(!ci18b.includes(leakPayloadPrompt), "argument: prompt not in commandInput");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

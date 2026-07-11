@@ -564,6 +564,68 @@ async function test() {
   );
   console.log("");
 
+  // I: stdoutPayload containing the dynamic prompt is rejected and Runtime falls back
+  console.log("Test I: stdoutPayload prompt leak rejected, Runtime falls back safely");
+  const requirementI = "deploy a kubernetes cluster with helm";
+  // The prompt that the real Gateway builds includes the requirement text —
+  // if Kimi echoes it back in the structured output, it must be rejected.
+  let runnerCallCountI = 0;
+  let capturedStdinI: string | undefined;
+  const runnerI: KimiCliProcessRunner = {
+    async run(commandInput): Promise<KimiCliProcessResult> {
+      runnerCallCountI++;
+      capturedStdinI = commandInput.stdin;
+      // Simulate Kimi echoing the full prompt back in stdoutPayload
+      // The built prompt contains the requirement text
+      return {
+        exitCode: 0,
+        durationMs: 50,
+        stdout: `• Processing: ${requirementI}. Result: {"requirement_id":"REQ-KIMI-LEAK-I","multi_repo":false}`,
+        stderr: `• User asked about ${requirementI}. Thinking...`,
+        stdoutPayload: `• Processing: ${requirementI}. Result: {"requirement_id":"REQ-KIMI-LEAK-I","multi_repo":false}`,
+      };
+    },
+  };
+  const gatewayI = new ExecutionGateway({
+    env: envG,
+    kimiRunner: runnerI,
+  });
+  const resultI = await run(requirementI, {
+    executionGateway: gatewayI,
+    requirementSummaryMode: "kimi_gateway",
+  });
+  a(runnerCallCountI === 1, "runner is called exactly once");
+  a(resultI.final_status === "success", "Runtime completes after stdoutPayload leak fallback");
+  const reqSummaryTraceI = resultI.execution_trace.find((t) => t.node === "requirement-summary");
+  a(reqSummaryTraceI?.output["execution_source"] === "kimi_fallback", "execution_source is kimi_fallback");
+  // The leaked stdoutPayload must not appear in the Gateway output.summary
+  const gatewaySummaryI = reqSummaryTraceI?.output["summary"] as string | undefined;
+  a(
+    gatewaySummaryI === undefined || !gatewaySummaryI.includes(requirementI),
+    "Gateway output.summary does not contain raw requirement"
+  );
+  // The Gateway result (full output) must not contain the leaked prompt text
+  const gatewayOutputI = JSON.stringify(reqSummaryTraceI?.output ?? {});
+  a(
+    !gatewayOutputI.includes(requirementI),
+    "Gateway output does not contain raw requirement"
+  );
+  // Observability must not contain raw prompt
+  const obsI = reqSummaryTraceI?.output["observability"];
+  if (obsI) {
+    a(
+      !JSON.stringify(obsI).includes(requirementI),
+      "observability does not contain raw requirement"
+    );
+  }
+  // The leaked error message must not contain the prompt
+  const errorI = reqSummaryTraceI?.output["error"] as string | undefined;
+  a(
+    errorI === undefined || !errorI.includes(requirementI),
+    "error message does not contain raw requirement"
+  );
+  console.log("");
+
   console.log(`\nResults: ${passed.count} passed, ${failed.count} failed`);
   process.exit(failed.count > 0 ? 1 : 0);
 }

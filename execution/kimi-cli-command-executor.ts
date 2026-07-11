@@ -256,6 +256,22 @@ export async function executeKimiCliCommand(input: {
   const stdoutPayload = processResult.stdoutPayload;
   const stdoutTruncated = processResult.stdoutTruncated;
 
+  // ── Reject if bounded stdoutPayload contains the complete dynamic prompt ──
+  if (stdoutPayload && dynamicPrompt && stdoutPayload.includes(dynamicPrompt)) {
+    return {
+      success: false,
+      decision: "executed_failure",
+      requestId: contract.requestId,
+      commandInput: displayCommandInput,
+      auditEvents: [...contract.auditEvents, resultAudit],
+      stdoutSummary,
+      stderrSummary,
+      // Do NOT return stdoutPayload — it contains the raw prompt
+      stdoutTruncated: false,
+      error: "Kimi CLI structured output rejected",
+    };
+  }
+
   if (stdoutTruncated) {
     return {
       success: false,
