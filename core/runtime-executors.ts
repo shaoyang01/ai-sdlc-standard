@@ -258,104 +258,6 @@ function executeSolutionChallenge(
   };
 }
 
-/** Execute solution-challenge via real Gateway in shadow mode.
- *  Calls RuntimeExecutionGateway with explicit skill name.
- *  Observed result is recorded but routing always pass-through to review. */
-async function executeGatewayShadowChallenge(
-  requirement: string,
-  requirementId: string,
-  techDesignOutput: Record<string, unknown>,
-  previous: SolutionChallengeState | undefined,
-  gateway: RuntimeExecutionGateway
-): Promise<Record<string, unknown>> {
-  const cycle = advanceChallengeCycle(previous);
-  const base = {
-    node: "solution-challenge",
-    skill: "sdlc-solution-challenger",
-    executor_type: "gateway_shadow",
-  };
-
-  // Build prompt for Kimi Gateway (llm_task requires input.prompt)
-  const prompt = buildChallengePrompt({
-    requirement,
-    techDesign: JSON.stringify(techDesignOutput).slice(0, 8000),
-    mode: cycle.mode,
-    currentCycle: cycle.currentCycle,
-    previousFindingIds: previous?.findingIds ?? [],
-  });
-
-  try {
-    const gwResult = await gateway.execute({
-      type: "llm_task",
-      node: "solution-challenge",
-      agent: "kimi",
-      skill: "sdlc-solution-challenger",
-      requirementId,
-      input: {
-        prompt,
-        requirement,
-        "tech-design": techDesignOutput,
-        mode: cycle.mode,
-        currentCycle: cycle.currentCycle,
-        previousFindingIds: previous?.findingIds ?? [],
-      },
-    });
-
-    // Parse structured observation from gateway output
-    const observation = parseChallengeObservation(gwResult, cycle);
-
-    return {
-      ...base,
-      result: "PASS", // shadow: always pass-through to review
-      execution_source: observation.availability === "available" && observation.state
-        ? "gateway" : "gateway_error",
-      fallback_used: observation.availability !== "available",
-      fallback_reason: observation.availability !== "available"
-        ? (observation.error ?? "gateway_unavailable") : "none",
-      solution_challenge: observation.state ?? cycle,
-      solution_challenge_observation: observation,
-      observedStatus: observation.state?.status ?? "unavailable",
-      routingEffect: "shadow_pass_through",
-      wouldRouteTo: observation.state
-        ? (observation.state.status === "NEEDS_REVISION" && !observation.state.exhausted
-          ? "tech-design" : "review")
-        : "review",
-      blocking_count: observation.state ? (gwResult.output?.["blocking_count"] ?? 0) : 0,
-      required_count: observation.state ? (gwResult.output?.["required_count"] ?? 0) : 0,
-      non_blocking_count: observation.state ? (gwResult.output?.["non_blocking_count"] ?? 0) : 0,
-      out_of_scope_count: observation.state ? (gwResult.output?.["out_of_scope_count"] ?? 0) : 0,
-      recommended_next_step: observation.state
-        ? (observation.state.status === "NEEDS_REVISION" && observation.state.exhausted
-          ? "ESCALATE_TO_SOLUTION_REVIEWER"
-          : observation.state.status === "NEEDS_REVISION"
-          ? "RETURN_TO_SPECIFICATION_WRITER"
-          : "PROCEED_TO_SOLUTION_REVIEWER")
-        : "PROCEED_TO_SOLUTION_REVIEWER",
-      duration_ms: 0,
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ...base,
-      result: "PASS",
-      execution_source: "gateway_error",
-      fallback_used: true,
-      fallback_reason: msg.slice(0, 200),
-      solution_challenge: cycle,
-      solution_challenge_observation: {
-        availability: "unavailable" as const,
-        error: msg.slice(0, 200),
-      },
-      observedStatus: "unavailable",
-      routingEffect: "shadow_pass_through",
-      wouldRouteTo: "review",
-      blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
-      recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
-      duration_ms: 0,
-    };
-  }
-}
-
 interface ChallengePromptInput {
   requirement: string;
   techDesign: string;
@@ -400,40 +302,166 @@ function buildChallengePrompt(input: ChallengePromptInput): string {
   ].filter(Boolean).join("\n");
 }
 
-interface ChallengeObservation {
+/** Execute solution-challenge via real Gateway in shadow mode.
+ *  Calls RuntimeExecutionGateway with explicit skill name.
+ *  Observed result is recorded but routing always pass-through to review. */
+async function executeGatewayShadowChallenge(
+  requirement: string,
+  requirementId: string,
+  techDesignOutput: Record<string, unknown>,
+  previous: SolutionChallengeState | undefined,
+  gateway: RuntimeExecutionGateway
+): Promise<Record<string, unknown>> {
+  const cycle = advanceChallengeCycle(previous);
+  const base = {
+    node: "solution-challenge",
+    skill: "sdlc-solution-challenger",
+    executor_type: "gateway_shadow",
+  };
+
+  const prompt = buildChallengePrompt({
+    requirement,
+    techDesign: JSON.stringify(techDesignOutput).slice(0, 8000),
+    mode: cycle.mode,
+    currentCycle: cycle.currentCycle,
+    previousFindingIds: previous?.findingIds ?? [],
+  });
+
+  try {
+    const gwResult = await gateway.execute({
+      type: "llm_task",
+      node: "solution-challenge",
+      agent: "kimi",
+      skill: "sdlc-solution-challenger",
+      requirementId,
+      input: {
+        prompt,
+        requirement,
+        "tech-design": techDesignOutput,
+        mode: cycle.mode,
+        currentCycle: cycle.currentCycle,
+        previousFindingIds: previous?.findingIds ?? [],
+      },
+    });
+
+    const parsed = parseChallengeResult(gwResult, cycle);
+
+    // Build the output state — only use parsed state when available.
+    // On failure, keep the shadow cycle state (not READY_FOR_GATE).
+    const outputState = parsed.availability === "available" && parsed.state
+      ? parsed.state : cycle;
+
+    return {
+      ...base,
+      result: "PASS",
+      execution_source: parsed.availability === "available" ? "gateway" : "gateway_error",
+      executor_type: "gateway_shadow",
+      fallback_used: parsed.availability !== "available",
+      fallback_reason: parsed.availability !== "available"
+        ? (parsed.error ?? "gateway_unavailable") : "none",
+      solution_challenge: outputState,
+      solution_challenge_observation: parsed,
+      observedStatus: parsed.state?.status ?? "unavailable",
+      routingEffect: "shadow_pass_through",
+      wouldRouteTo: parsed.state
+        ? (parsed.state.status === "NEEDS_REVISION" && !parsed.state.exhausted
+          ? "tech-design" : "review")
+        : "review",
+      blocking_count: parsed.counts.blocking,
+      required_count: parsed.counts.required,
+      non_blocking_count: parsed.counts.nonBlocking,
+      out_of_scope_count: parsed.counts.outOfScope,
+      recommended_next_step: parsed.state
+        ? (parsed.state.status === "NEEDS_REVISION" && parsed.state.exhausted
+          ? "ESCALATE_TO_SOLUTION_REVIEWER"
+          : parsed.state.status === "NEEDS_REVISION"
+          ? "RETURN_TO_SPECIFICATION_WRITER"
+          : "PROCEED_TO_SOLUTION_REVIEWER")
+        : "PROCEED_TO_SOLUTION_REVIEWER",
+      gateway_artifacts: gwResult.artifacts ?? [],
+      duration_ms: 0,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      result: "PASS",
+      execution_source: "gateway_error",
+      executor_type: "gateway_shadow",
+      fallback_used: true,
+      fallback_reason: msg.slice(0, 200),
+      solution_challenge: cycle,
+      solution_challenge_observation: {
+        availability: "unavailable" as const,
+        error: msg.slice(0, 200),
+      } as ChallengeObservation,
+      observedStatus: "unavailable",
+      routingEffect: "shadow_pass_through",
+      wouldRouteTo: "review",
+      blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+      recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
+      gateway_artifacts: [],
+      duration_ms: 0,
+    };
+  }
+}
+
+interface ParsedChallengeResult {
   availability: "available" | "unavailable";
   state?: SolutionChallengeState;
+  findings?: Record<string, unknown>[];
+  findingIds: string[];
+  counts: { blocking: number; required: number; nonBlocking: number; outOfScope: number };
   error?: string;
 }
 
-function parseChallengeObservation(
-  gwResult: { success: boolean; output?: Record<string, unknown>; error?: string },
+interface ChallengeObservation {
+  availability: "available" | "unavailable";
+  state?: SolutionChallengeState;
+  findings?: Record<string, unknown>[];
+  findingIds?: string[];
+  counts?: { blocking: number; required: number; nonBlocking: number; outOfScope: number };
+  error?: string;
+}
+
+function parseChallengeResult(
+  gwResult: { success: boolean; output?: Record<string, unknown>; error?: string; artifacts?: readonly unknown[] },
   fallbackState: SolutionChallengeState
-): ChallengeObservation {
+): ParsedChallengeResult {
+  const empty = { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 };
+
   if (!gwResult.success) {
-    return {
-      availability: "unavailable",
-      error: gwResult.error ?? "gateway_returned_failure",
-    };
+    return { availability: "unavailable", findingIds: [], counts: empty, error: gwResult.error ?? "gateway_returned_failure" };
   }
 
   const rawOutput = gwResult.output;
   if (!rawOutput) {
-    return { availability: "unavailable", error: "empty_gateway_output" };
+    return { availability: "unavailable", findingIds: [], counts: empty, error: "empty_gateway_output" };
   }
 
-  // Try to extract structured state from summary (Kimi text output)
+  // Parse from summary (Kimi text output → JSON)
   const summary = typeof rawOutput["summary"] === "string" ? rawOutput["summary"] as string : "";
   if (summary) {
     try {
       const parsed = JSON.parse(summary);
-      const state = validateSolutionChallengeState({
-        ...fallbackState,
-        ...parsed,
-      });
-      return { availability: "available", state };
+      if (typeof parsed === "object" && parsed !== null) {
+        const state = validateSolutionChallengeState({ ...fallbackState, ...parsed });
+        const findings = Array.isArray(parsed["findings"]) ? parsed["findings"] as Record<string, unknown>[] : [];
+        const findingIds = extractFindingIds(findings, parsed);
+        const counts = {
+          blocking: typeof parsed["blocking_count"] === "number" ? parsed["blocking_count"] : 0,
+          required: typeof parsed["required_count"] === "number" ? parsed["required_count"] : 0,
+          nonBlocking: typeof parsed["non_blocking_count"] === "number" ? parsed["non_blocking_count"] : 0,
+          outOfScope: typeof parsed["out_of_scope_count"] === "number" ? parsed["out_of_scope_count"] : 0,
+        };
+        // Merge findingIds into state for propagation
+        if (findingIds.length > 0) {
+          state.findingIds = findingIds;
+        }
+        return { availability: "available", state, findings, findingIds, counts };
+      }
     } catch {
-      // Not valid JSON or invalid state — try raw solution_challenge
+      // Fall through to raw solution_challenge
     }
   }
 
@@ -442,13 +470,29 @@ function parseChallengeObservation(
   if (rawState) {
     try {
       const state = validateSolutionChallengeState(rawState);
-      return { availability: "available", state };
+      return { availability: "available", state, findingIds: state.findingIds ?? [], counts: empty };
     } catch {
-      return { availability: "unavailable", error: "invalid_solution_challenge_state" };
+      return { availability: "unavailable", findingIds: [], counts: empty, error: "invalid_solution_challenge_state" };
     }
   }
 
-  return { availability: "unavailable", error: "no_parseable_output" };
+  return { availability: "unavailable", findingIds: [], counts: empty, error: "no_parseable_output" };
+}
+
+function extractFindingIds(findings: Record<string, unknown>[], parsed: Record<string, unknown>): string[] {
+  const ids: string[] = [];
+  for (const f of findings) {
+    const id = f["id"];
+    if (typeof id === "string" && id.length > 0) ids.push(id);
+  }
+  // Also check top-level finding_ids
+  const topIds = parsed["finding_ids"];
+  if (Array.isArray(topIds)) {
+    for (const id of topIds) {
+      if (typeof id === "string" && id.length > 0 && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
 }
 
 // Default executor map factory — allows optional Gateway injection for implementation.
