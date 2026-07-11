@@ -20,16 +20,14 @@ export function getNextNode(
   if (current === "solution-challenge" && nodeResult) {
     const state = nodeResult["solution_challenge"] as Record<string, unknown> | undefined;
 
-    // If no solution_challenge present (e.g. synthetic PASS from getTransitionPath),
-    // default to READY_FOR_GATE routing.
+    // solution_challenge is required for routing. Callers must provide it.
     if (!state) {
-      return "review"; // READY_FOR_GATE default
+      return null; // invalid: missing state
     }
 
     const status = state.status as string | undefined;
     const exhausted = state.exhausted === true;
 
-    // Status is required when solution_challenge is present.
     if (status !== "NEEDS_REVISION" && status !== "READY_FOR_GATE") {
       return null; // invalid: fail fast
     }
@@ -86,7 +84,10 @@ export function getTransitionPath(): NodeType[] {
   const path: NodeType[] = ["requirement-summary"];
   let current: NodeType = "requirement-summary";
   while (true) {
-    const next = getNextNode(current, { result: "PASS" });
+    const nodeResult = current === "solution-challenge"
+      ? { result: "PASS", solution_challenge: { status: "READY_FOR_GATE", exhausted: false, currentCycle: 1, maxCycles: 2, mode: "INITIAL_CHALLENGE", artifactStatus: "shadow_only" } }
+      : { result: "PASS" };
+    const next = getNextNode(current, nodeResult);
     if (!next) break;
     path.push(next);
     current = next;

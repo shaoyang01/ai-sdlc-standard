@@ -263,8 +263,10 @@ export async function run(
   while (currentNode && vmState.status === "running") {
     // ── Skip solution-challenge when disabled ──
     if (currentNode === "solution-challenge" && options.solutionChallengeMode !== "shadow") {
-      // Skip to next node as if challenge passed (READY_FOR_GATE)
-      currentNode = getNextNode(currentNode, { result: "PASS" }, retryCount);
+      currentNode = getNextNode(currentNode, {
+        result: "PASS",
+        solution_challenge: { status: "READY_FOR_GATE", exhausted: false, currentCycle: 1, maxCycles: 2, mode: "INITIAL_CHALLENGE", artifactStatus: "shadow_only" },
+      }, retryCount);
       continue;
     }
     // Agent selection: policy engine → decision layer → AGENT_MAP fallback

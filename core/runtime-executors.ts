@@ -242,13 +242,60 @@ function validateSolutionChallengeState(raw: unknown): SolutionChallengeState {
     throw new Error("solution-challenge: missing or invalid solution_challenge state");
   }
   const s = raw as Record<string, unknown>;
+
+  // status: required, exact values
   if (s.status !== "NEEDS_REVISION" && s.status !== "READY_FOR_GATE") {
     throw new Error(`solution-challenge: invalid status: ${String(s.status)}`);
   }
-  if (typeof s.mode !== "string" || typeof s.currentCycle !== "number" ||
-      typeof s.exhausted !== "boolean") {
-    throw new Error("solution-challenge: missing required state fields");
+
+  // mode: required, exact values
+  if (s.mode !== "INITIAL_CHALLENGE" && s.mode !== "FOLLOW_UP_VERIFICATION") {
+    throw new Error(`solution-challenge: invalid mode: ${String(s.mode)}`);
   }
+
+  // currentCycle: required, 1 | 2
+  if (s.currentCycle !== 1 && s.currentCycle !== 2) {
+    throw new Error(`solution-challenge: invalid currentCycle: ${s.currentCycle}`);
+  }
+
+  // maxCycles: required, exactly 2
+  if (s.maxCycles !== 2) {
+    throw new Error(`solution-challenge: invalid maxCycles: ${s.maxCycles}`);
+  }
+
+  // exhausted: required boolean, consistent with currentCycle/maxCycles
+  if (typeof s.exhausted !== "boolean") {
+    throw new Error("solution-challenge: exhausted must be boolean");
+  }
+  if (s.exhausted !== (s.currentCycle >= s.maxCycles)) {
+    throw new Error(`solution-challenge: exhausted inconsistent: cycle=${s.currentCycle}, max=${s.maxCycles}, exhausted=${s.exhausted}`);
+  }
+
+  // mode must match currentCycle
+  if (s.currentCycle === 1 && s.mode !== "INITIAL_CHALLENGE") {
+    throw new Error("solution-challenge: currentCycle=1 requires INITIAL_CHALLENGE mode");
+  }
+  if (s.currentCycle === 2 && s.mode !== "FOLLOW_UP_VERIFICATION") {
+    throw new Error("solution-challenge: currentCycle=2 requires FOLLOW_UP_VERIFICATION mode");
+  }
+
+  // artifactStatus: required, exact values
+  if (s.artifactStatus !== "shadow_only" && s.artifactStatus !== "generated") {
+    throw new Error(`solution-challenge: invalid artifactStatus: ${String(s.artifactStatus)}`);
+  }
+
+  // findingIds: optional, must be array of strings if present
+  if (s.findingIds !== undefined) {
+    if (!Array.isArray(s.findingIds) || s.findingIds.some((id: unknown) => typeof id !== "string")) {
+      throw new Error("solution-challenge: findingIds must be an array of strings");
+    }
+  }
+
+  // reportPath: optional, string or null
+  if (s.reportPath !== undefined && s.reportPath !== null && typeof s.reportPath !== "string") {
+    throw new Error("solution-challenge: reportPath must be string or null");
+  }
+
   return s as unknown as SolutionChallengeState;
 }
 
