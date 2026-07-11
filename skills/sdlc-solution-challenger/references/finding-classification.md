@@ -38,6 +38,20 @@ scope_basis:
   type:  # REQUIREMENT | ACCEPTANCE_CRITERIA | EXISTING_FLOW | SPECIFICATION_DECISION | REQUIRED_CORRECTNESS
   reference:  # corresponding requirement, acceptance criteria, original flow, or specification section
 
+existing_mechanism_verification:  # REQUIRED for BLOCKING and REQUIRED findings
+  searched_sections:
+  searched_terms:
+    - direct terms
+    - synonyms
+    - related states
+    - related data fields
+    - related recovery flows
+  mechanism_found: true | false
+  mechanism:
+  equivalent_behavior:
+  sufficient_for_current_phase: true | false
+  remaining_gap:
+
 target_section:  # which section of the specification is affected
 
 issue:  # concise description of the gap
@@ -68,7 +82,34 @@ phase_value:
 blocking:
   true
   false
+
+# BLOCKING counter-evidence (required for every BLOCKING finding)
+blocking_counter_evidence:
+  equivalent_mechanism_absent:
+  manual_fallback_absent_or_insufficient:
+  documentation_only_fix_insufficient:
+  parameter_only_fix_insufficient:
+  risk_unrecoverable_or_unacceptable:
+  current_phase_goal_prevented:
 ```
+
+## Severity Calibration Order
+
+Always calibrate bottom-up, not top-down:
+
+1. **Already covered** (existing mechanism sufficient for current phase)
+   → no finding. Do not output BLOCKING or REQUIRED.
+
+2. **Existing mechanism present, only description or parameters missing**
+   → NON_BLOCKING or REQUIRED. Minimum fix: supplement description, parameters, or operational steps. Do not add a duplicate mechanism.
+
+3. **Current-phase behavior truly missing, but reasonable manual/procedural fallback exists**
+   → REQUIRED. Minimum fix: document fallback, define ownership, add monitoring.
+
+4. **Current-phase behavior missing, severe risk, no reasonable fallback**
+   → BLOCKING. Must complete blocking_counter_evidence.
+
+A parameter-only gap (timeout value, retry count, backoff interval) is not BLOCKING by default, unless the absence of that parameter would directly cause unacceptable and unrecoverable risk with no fallback in the current phase.
 
 ## Necessity Classification
 

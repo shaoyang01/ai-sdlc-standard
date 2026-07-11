@@ -38,6 +38,19 @@ Require only the minimum sufficient design for the current phase.
 2. Review against the declared current delivery phase, not the system's ideal final form.
 3. Do not introduce new business goals, user scenarios, product capabilities, or platform initiatives.
 4. Every blocking or required finding must cite a scope basis.
+
+4a. Do not create a BLOCKING or REQUIRED finding until the full specification has been searched for an existing or equivalent mechanism.
+
+4b. Judge required behavior, not the presence of a particular mechanism name. An existing combination of states, timeout handling, operational procedures, rollback, monitoring, or recovery behavior may satisfy the required behavior even if no component uses the expected terminology.
+
+4c. A potential risk is not BLOCKING merely because the preferred mechanism is not explicitly named. BLOCKING requires proof that no sufficient equivalent mechanism, bounded fallback, or documentation-level closure exists.
+
+4d. Calibrate severity bottom-up, not top-down:
+  1. Already covered → no finding.
+  2. Existing mechanism, only description or parameters missing → NON_BLOCKING or REQUIRED.
+  3. Current-phase behavior truly missing, but reasonable manual/procedural fallback exists → REQUIRED.
+  4. Current-phase behavior missing, severe risk, no reasonable fallback → BLOCKING.
+
 5. Prefer the minimum sufficient clarification or design change.
 6. Prefer bounded manual fallback over new automation when that is sufficient for the current phase.
 7. Challenge primary behavior and one recovery level in detail.
@@ -156,12 +169,37 @@ Review the specification against these dimensions, but only for content within t
 
 Skip dimensions that are irrelevant. Do not invent findings to fill the list.
 
-### 4. Classify and Consolidate Findings
+### 4. Verify Existing Mechanisms
+
+Before classifying any finding as BLOCKING or REQUIRED, search the full specification for existing or equivalent mechanisms:
+
+```yaml
+existing_mechanism_verification:
+  searched_sections:
+  searched_terms:
+    - direct terms
+    - synonyms
+    - related states
+    - related data fields
+    - related recovery flows
+  mechanism_found: true | false
+  mechanism:
+  equivalent_behavior:
+  sufficient_for_current_phase: true | false
+  remaining_gap:
+```
+
+Check at minimum: related flow sections, state model, data model, exception handling, configuration, monitoring & operations, test & acceptance, and relevant additions in the revision history.
+
+If `mechanism_found = true` and `sufficient_for_current_phase = true`: do not output BLOCKING or REQUIRED. The concern may be dismissed or noted internally.
+
+### 5. Classify and Consolidate Findings
 
 For each finding, apply:
 
 - Scope Firewall (`references/scope-and-phase-firewall.md`)
 - Phase Firewall (`references/scope-and-phase-firewall.md`)
+- Existing-mechanism verification (Step 4 above)
 - Minimum sufficient fix principle
 - Recovery depth limit
 - Complexity budget assessment
@@ -170,7 +208,7 @@ Classify using the finding schema in `references/finding-classification.md`.
 
 Consolidate findings by root cause. Do not split one missing decision into multiple findings.
 
-### 5. Decide Result
+### 6. Decide Result
 
 ```
 Any BLOCKING or REQUIRED finding
@@ -184,7 +222,7 @@ OUT_OF_SCOPE and FUTURE_PHASE findings never block READY_FOR_GATE.
 
 If the challenger's own proposed revisions would escalate complexity from LOW to HIGH, re-screen findings: move non-essential items to future phase, keep only the minimum revisions required for current phase goals.
 
-### 6. Output Report
+### 7. Output Report
 
 Write the challenge report using the structure defined in `references/output-report.md`.
 

@@ -548,6 +548,59 @@ async function test() {
 
   console.log("");
 
+  // ═══════════════════════════════════════════════════════
+  // SECTION 11: Existing-Mechanism Verification Gate
+  // ═══════════════════════════════════════════════════════
+  console.log("Section 11: Existing-Mechanism Verification Gate");
+
+  // 11a. Core Rule 4a: no BLOCKING/REQUIRED without mechanism search
+  assertContains(skillMd, "Do not create a BLOCKING or REQUIRED finding until the full specification has been searched", "Rule 4a: existing-mechanism verification gate");
+
+  // 11b. Core Rule 4b: judge behavior, not mechanism name
+  assertContains(skillMd, "Judge required behavior, not the presence of a particular mechanism name", "Rule 4b: equivalent mechanism recognition");
+
+  // 11c. Core Rule 4c: BLOCKING requires proof of no equivalent
+  assertContains(skillMd, "BLOCKING requires proof that no sufficient equivalent mechanism", "Rule 4c: blocking counter-evidence");
+
+  // 11d. Core Rule 4d: severity calibration bottom-up
+  assertContains(skillMd, "Calibrate severity bottom-up", "Rule 4d: severity calibration order");
+
+  // 11e. Severity calibration order in finding-classification.md
+  assertContains(fcRef, "Severity Calibration Order", "finding-classification: severity calibration section");
+  assertContains(fcRef, "Already covered", "finding-classification: already covered → no finding");
+  assertContains(fcRef, "Existing mechanism present, only description or parameters missing", "finding-classification: mechanism exists → max REQUIRED");
+  assertContains(fcRef, "parameter-only gap", "finding-classification: parameter-only not BLOCKING by default");
+
+  // 11f. existing_mechanism_verification field in schema
+  assertContains(fcRef, "existing_mechanism_verification:", "finding-classification: existing_mechanism_verification field");
+  assertContains(fcRef, "REQUIRED for BLOCKING and REQUIRED", "finding-classification: required for BLOCKING/REQUIRED");
+  assertContains(fcRef, "mechanism_found:", "finding-classification: mechanism_found field");
+  assertContains(fcRef, "equivalent_behavior:", "finding-classification: equivalent_behavior field");
+  assertContains(fcRef, "sufficient_for_current_phase:", "finding-classification: sufficient_for_current_phase field");
+
+  // 11g. blocking_counter_evidence field
+  assertContains(fcRef, "blocking_counter_evidence:", "finding-classification: blocking_counter_evidence field");
+  assertContains(fcRef, "equivalent_mechanism_absent:", "finding-classification: equivalent_mechanism_absent field");
+  assertContains(fcRef, "manual_fallback_absent_or_insufficient:", "finding-classification: manual_fallback_absent field");
+
+  // 11h. Workflow step 4: Verify Existing Mechanisms
+  assertContains(skillMd, "Verify Existing Mechanisms", "SKILL.md: workflow step 4 is verify mechanisms");
+  assertContains(skillMd, "searched_sections", "SKILL.md: searched_sections in workflow");
+
+  // 11i. Fixture Case 1: explicit existing mechanism → no REQUIRED/BLOCKING
+  assertContains(skillMd, "do not output BLOCKING or REQUIRED", "Rule: explicit mechanism → no finding");
+
+  // 11j. Fixture Case 2: equivalent mechanism → not BLOCKING on terminology alone
+  assertContains(skillMd, "not the presence of a particular mechanism name", "Rule: equivalent mechanism recognized");
+
+  // 11k. Fixture Case 3: parameter-only gap → default not BLOCKING
+  assertContains(fcRef, "not BLOCKING by default", "Rule: parameter-only not BLOCKING");
+
+  // 11l. Fixture Case 4: true absence + no fallback → BLOCKING allowed
+  assertContains(fcRef, "BLOCKING", "Rule: true absence can be BLOCKING");
+
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
