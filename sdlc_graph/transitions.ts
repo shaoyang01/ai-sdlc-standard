@@ -20,17 +20,17 @@ export function getNextNode(
   if (current === "solution-challenge" && nodeResult) {
     const state = nodeResult["solution_challenge"] as Record<string, unknown> | undefined;
 
-    // solution_challenge is required for routing. Callers must provide it.
     if (!state) {
-      return null; // invalid: missing state
+      throw new Error("solution-challenge transition requires solution_challenge state");
     }
 
     const status = state.status as string | undefined;
-    const exhausted = state.exhausted === true;
 
     if (status !== "NEEDS_REVISION" && status !== "READY_FOR_GATE") {
-      return null; // invalid: fail fast
+      throw new Error(`invalid solution-challenge status: ${String(status)}`);
     }
+
+    const exhausted = state.exhausted === true;
     if (status === "NEEDS_REVISION" && !exhausted) {
       return "tech-design";
     }

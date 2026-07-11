@@ -296,6 +296,14 @@ function validateSolutionChallengeState(raw: unknown): SolutionChallengeState {
     throw new Error("solution-challenge: reportPath must be string or null");
   }
 
+  // artifact cross-field validation
+  if (s.artifactStatus === "shadow_only" && s.reportPath !== null && s.reportPath !== undefined) {
+    throw new Error("solution-challenge: shadow_only requires reportPath = null");
+  }
+  if (s.artifactStatus === "generated" && (s.reportPath === null || s.reportPath === undefined || typeof s.reportPath !== "string" || s.reportPath.length === 0)) {
+    throw new Error("solution-challenge: generated requires non-empty reportPath string");
+  }
+
   return s as unknown as SolutionChallengeState;
 }
 
