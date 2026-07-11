@@ -70,6 +70,21 @@ export function sanitizeCliArgs(args: string[]): string[] {
   return args.map((a) => isSecretLikeToken(a) ? "[REDACTED]" : a);
 }
 
+const REDACTED_PROMPT_PLACEHOLDER = "[REDACTED_PROMPT]";
+
+/**
+ * Build sanitized args for display/audit when the dynamic prompt is passed
+ * as a CLI argument. Replaces the prompt value with a placeholder while
+ * preserving the static args and the prompt flag (e.g. "-p").
+ */
+export function buildSanitizedPromptArgs(
+  staticArgs: string[],
+  promptArg?: string,
+): string[] {
+  if (!promptArg) return sanitizeCliArgs(staticArgs);
+  return [...sanitizeCliArgs(staticArgs), promptArg, REDACTED_PROMPT_PLACEHOLDER];
+}
+
 export function sanitizeErrorSummary(input: string | undefined): string | undefined {
   if (!input || input.trim() === "") return undefined;
   const normalized = input.replace(/\n/g, " ");

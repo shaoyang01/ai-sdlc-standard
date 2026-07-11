@@ -79,9 +79,13 @@ export function buildKimiCliCommandPreview(
   _request: ExecutionRequest
 ): KimiCliCommandPreview | undefined {
   if (!config.command) return undefined;
+  const transport = config.promptTransport ?? "stdin";
+  const args = transport === "argument"
+    ? [...config.args.map(sanitizeArg), config.promptArgument ?? "-p", "[REDACTED_PROMPT]"]
+    : config.args.map(sanitizeArg);
   return {
     command: config.command,
-    args: config.args.map(sanitizeArg),
+    args,
     workingDirectory: config.workingDirectory,
     timeoutMs: config.timeoutMs,
     sanitized: true,

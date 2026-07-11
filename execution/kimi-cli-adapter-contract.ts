@@ -8,6 +8,7 @@ import {
   CliAdapterConfig,
   CliAdapterSupportMatrix,
   CliAdapterMockParseResult,
+  type KimiPromptTransport,
 } from "./cli-adapter-contract-types";
 
 // ─── Config ───────────────────────────────────────────
@@ -37,6 +38,40 @@ export function getKimiCliAdapterConfig(
   const argsRaw = env.SDLC_KIMI_CLI_ARGS;
   const args = argsRaw ? argsRaw.split(/\s+/).filter(Boolean) : [];
 
+  // ── Prompt Transport ────────────────────────────────
+  const transportRaw = env.SDLC_KIMI_CLI_PROMPT_TRANSPORT;
+  let promptTransport: KimiPromptTransport = "stdin";
+  if (transportRaw !== undefined && transportRaw !== "") {
+    if (transportRaw === "stdin" || transportRaw === "argument") {
+      promptTransport = transportRaw;
+    } else {
+      return {
+        adapter: "kimi",
+        enabled: false,
+        source: "environment",
+        args: [],
+        timeoutMs: 120000,
+        rawMode: `unknown_prompt_transport:${transportRaw}`,
+      };
+    }
+  }
+
+  const promptArgumentRaw = env.SDLC_KIMI_CLI_PROMPT_ARGUMENT;
+  let promptArgument: string | undefined;
+  if (promptArgumentRaw !== undefined) {
+    if (promptArgumentRaw === "") {
+      return {
+        adapter: "kimi",
+        enabled: false,
+        source: "environment",
+        args: [],
+        timeoutMs: 120000,
+        rawMode: "empty_prompt_argument",
+      };
+    }
+    promptArgument = promptArgumentRaw;
+  }
+
   return {
     adapter: "kimi",
     enabled: true,
@@ -45,6 +80,8 @@ export function getKimiCliAdapterConfig(
     args,
     workingDirectory: env.SDLC_KIMI_CLI_WORKING_DIR,
     timeoutMs,
+    promptTransport,
+    promptArgument,
   };
 }
 

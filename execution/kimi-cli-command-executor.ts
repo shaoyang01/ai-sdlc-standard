@@ -12,6 +12,7 @@ import {
   buildCliExecutionResultAudit,
   buildCliExecutionSkippedAudit,
   sanitizeErrorSummary,
+  buildSanitizedPromptArgs,
 } from "./cli-adapter-audit";
 import {
   prepareKimiCliExecutorContract,
@@ -184,11 +185,37 @@ export async function executeKimiCliCommand(input: {
   }
 
   const runner = input.runner ?? createDefaultKimiCliProcessRunner();
+  const dynamicPrompt = input.request.input?.["prompt"] as string | undefined;
+  const transport = contract.commandInput?.promptTransport ?? "stdin";
+  const promptArg = contract.commandInput?.promptArgument ?? "-p";
+
   const runnerCommandInput: KimiCliExecutorCommandInput = {
     ...contract.commandInput!,
-    stdin: input.request.input?.["prompt"] as string | undefined,
     maxStdoutPayloadChars: DEFAULT_MAX_STDOUT_PAYLOAD_CHARS,
   };
+
+  // Build sanitized display commandInput (with [REDACTED_PROMPT] for argument mode)
+  let displayCommandInput: KimiCliExecutorCommandInput;
+
+  if (transport === "argument" && dynamicPrompt) {
+    // Argument mode: prompt goes in args, not stdin
+    runnerCommandInput.args = [
+      ...contract.commandInput!.args,
+      promptArg,
+      dynamicPrompt,
+    ];
+    runnerCommandInput.stdin = undefined;
+    displayCommandInput = {
+      ...contract.commandInput!,
+      args: buildSanitizedPromptArgs(contract.commandInput!.args, promptArg),
+      stdin: undefined,
+    };
+  } else {
+    // Stdin mode: existing behavior
+    runnerCommandInput.stdin = dynamicPrompt;
+    displayCommandInput = contract.commandInput!;
+  }
+
   const processResult = await runner.run(runnerCommandInput);
 
   const resultAudit = buildCliExecutionResultAudit({
@@ -208,7 +235,7 @@ export async function executeKimiCliCommand(input: {
       success: false,
       decision: "executed_failure",
       requestId: contract.requestId,
-      commandInput: contract.commandInput,
+      commandInput: displayCommandInput,
       auditEvents: [...contract.auditEvents, resultAudit],
       stdoutSummary,
       stderrSummary,
@@ -218,10 +245,10 @@ export async function executeKimiCliCommand(input: {
     };
   }
   if (processResult.timedOut) {
-    return { success: false, decision: "executed_timeout", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: "Kimi CLI command timed out" };
+    return { success: false, decision: "executed_timeout", requestId: contract.requestId, commandInput: displayCommandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: "Kimi CLI command timed out" };
   }
   if (processResult.exitCode === 0) {
-    return { success: true, decision: "executed_success", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated };
+    return { success: true, decision: "executed_success", requestId: contract.requestId, commandInput: displayCommandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated };
   }
-  return { success: false, decision: "executed_failure", requestId: contract.requestId, commandInput: contract.commandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: `Kimi CLI exited with code ${processResult.exitCode}` };
+  return { success: false, decision: "executed_failure", requestId: contract.requestId, commandInput: displayCommandInput, auditEvents: [...contract.auditEvents, resultAudit], stdoutSummary, stderrSummary, stdoutPayload, stdoutTruncated, error: `Kimi CLI exited with code ${processResult.exitCode}` };
 }

@@ -4,7 +4,7 @@
 // Builds command input, audit events, and mock results.
 
 import type { ExecutionRequest } from "./types";
-import type { CliAdapterConfig } from "./cli-adapter-contract-types";
+import type { CliAdapterConfig, KimiPromptTransport } from "./cli-adapter-contract-types";
 import {
   buildCliCommandPreviewAudit,
   buildCliExecutionSkippedAudit,
@@ -37,6 +37,8 @@ export interface KimiCliExecutorCommandInput {
   sanitized: true;
   stdin?: string;
   maxStdoutPayloadChars?: number;
+  promptTransport?: KimiPromptTransport;
+  promptArgument?: string;
 }
 
 export interface KimiCliExecutorContractResult {
@@ -63,6 +65,8 @@ export function buildKimiCliExecutorCommandInput(input: {
     workingDirectory: input.config.workingDirectory,
     timeoutMs: input.config.timeoutMs,
     sanitized: true,
+    promptTransport: input.config.promptTransport,
+    promptArgument: input.config.promptArgument,
   };
 }
 

@@ -9,6 +9,8 @@ import type { ExecutionRequestType } from "./types";
 
 export type CliAdapterName = "kimi" | "hermes";
 
+export type KimiPromptTransport = "stdin" | "argument";
+
 export type CliAdapterContractStatus =
   | "contract_only"
   | "disabled"
@@ -26,6 +28,8 @@ export interface CliAdapterConfig {
   workingDirectory?: string;
   timeoutMs: number;
   rawMode?: string;
+  promptTransport?: KimiPromptTransport;
+  promptArgument?: string;
 }
 
 export interface CliAdapterSupportMatrix {

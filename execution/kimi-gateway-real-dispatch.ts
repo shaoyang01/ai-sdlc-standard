@@ -12,6 +12,7 @@ import { getKimiCliAdapterConfig } from "./kimi-cli-adapter-contract";
 import { sanitizeErrorSummary } from "./cli-adapter-audit";
 import { createArtifact } from "../core/artifact";
 import { classifyKimiGatewayRealDispatchFallback } from "./kimi-gateway-real-dispatch-fallback-policy";
+import { normalizeKimiOneShotTextOutput } from "./kimi-output-normalizer";
 import {
   buildKimiGatewayRealDispatchObservabilityEvent,
   buildObservabilitySummary,
@@ -277,7 +278,8 @@ export async function executeKimiGatewayRequest(
   });
 
   if (dispatch.status === "executed_success") {
-    const summaryPayload = dispatch.stdoutPayload ?? dispatch.stdoutSummary ?? "";
+    const rawPayload = dispatch.stdoutPayload ?? dispatch.stdoutSummary ?? "";
+    const summaryPayload = normalizeKimiOneShotTextOutput(rawPayload);
     const artifact = createArtifact({
       requirementId: dispatch.requestId,
       node: request.node,
