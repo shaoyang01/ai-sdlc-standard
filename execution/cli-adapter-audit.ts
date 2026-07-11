@@ -23,6 +23,7 @@ export type CliAdapterAuditOutcome =
   | "unsupported_request_type"
   | "dry_run_ready"
   | "skipped_contract_only"
+  | "missing_prompt"
   | "success"
   | "failure"
   | "timeout";
@@ -83,6 +84,22 @@ export function buildSanitizedPromptArgs(
 ): string[] {
   if (!promptArg) return sanitizeCliArgs(staticArgs);
   return [...sanitizeCliArgs(staticArgs), promptArg, REDACTED_PROMPT_PLACEHOLDER];
+}
+
+/**
+ * Redact every exact occurrence of the dynamic prompt from a string.
+ * Must be applied to stderr and stdout summaries before they reach
+ * audit events, observability, fallback classification, or returned errors.
+ *
+ * Uses exact string matching (not regex) to avoid injection risks.
+ */
+export function redactDynamicPrompt(
+  value: string | undefined,
+  prompt: string | undefined,
+): string | undefined {
+  if (!value || !prompt || prompt.length === 0) return value;
+  const parts = value.split(prompt);
+  return parts.join(REDACTED_PROMPT_PLACEHOLDER);
 }
 
 export function sanitizeErrorSummary(input: string | undefined): string | undefined {
@@ -150,7 +167,7 @@ export function buildCliExecutionSkippedAudit(input: {
   adapter: CliAdapterName;
   requestId: string;
   requestType: ExecutionRequestType | string;
-  reason: "disabled" | "missing_cli_command" | "unsupported_request_type" | "skipped_contract_only";
+  reason: "disabled" | "missing_cli_command" | "unsupported_request_type" | "skipped_contract_only" | "missing_prompt";
   config?: CliAdapterConfig;
 }): CliAdapterAuditEvent {
   return buildCliAdapterAuditEvent({

@@ -13,6 +13,7 @@ import {
   buildCliExecutionSkippedAudit,
   sanitizeErrorSummary,
   buildSanitizedPromptArgs,
+  redactDynamicPrompt,
 } from "./cli-adapter-audit";
 import {
   prepareKimiCliExecutorContract,
@@ -21,7 +22,8 @@ import {
 
 export type KimiCliCommandExecutorDecision =
   | "disabled" | "missing_cli_command" | "unsupported_request_type"
-  | "execution_not_enabled" | "executed_success" | "executed_failure" | "executed_timeout";
+  | "execution_not_enabled" | "missing_prompt"
+  | "executed_success" | "executed_failure" | "executed_timeout";
 
 export interface KimiCliProcessResult {
   exitCode?: number;
@@ -189,6 +191,26 @@ export async function executeKimiCliCommand(input: {
   const transport = contract.commandInput?.promptTransport ?? "stdin";
   const promptArg = contract.commandInput?.promptArgument ?? "-p";
 
+  // ── Reject missing or blank prompts before invoking runner ──
+  if (!dynamicPrompt || dynamicPrompt.trim().length === 0) {
+    return {
+      success: false,
+      decision: "missing_prompt",
+      requestId: contract.requestId,
+      commandInput: contract.commandInput,
+      auditEvents: [
+        ...contract.auditEvents,
+        buildCliExecutionSkippedAudit({
+          adapter: "kimi", requestId: contract.requestId,
+          requestType: input.request.type,
+          reason: "missing_prompt",
+          config: input.config,
+        }),
+      ],
+      error: "Kimi CLI: prompt is missing or blank",
+    };
+  }
+
   const runnerCommandInput: KimiCliExecutorCommandInput = {
     ...contract.commandInput!,
     maxStdoutPayloadChars: DEFAULT_MAX_STDOUT_PAYLOAD_CHARS,
@@ -197,7 +219,7 @@ export async function executeKimiCliCommand(input: {
   // Build sanitized display commandInput (with [REDACTED_PROMPT] for argument mode)
   let displayCommandInput: KimiCliExecutorCommandInput;
 
-  if (transport === "argument" && dynamicPrompt) {
+  if (transport === "argument") {
     // Argument mode: prompt goes in args, not stdin
     runnerCommandInput.args = [
       ...contract.commandInput!.args,
@@ -218,15 +240,19 @@ export async function executeKimiCliCommand(input: {
 
   const processResult = await runner.run(runnerCommandInput);
 
+  // ── Redact dynamic prompt from stderr and stdout summaries ──
+  const safeStderr = redactDynamicPrompt(processResult.stderr, dynamicPrompt);
+  const safeStdout = redactDynamicPrompt(processResult.stdout, dynamicPrompt);
+
   const resultAudit = buildCliExecutionResultAudit({
     adapter: "kimi", requestId: contract.requestId,
     requestType: input.request.type, config: input.config,
     exitCode: processResult.exitCode, durationMs: processResult.durationMs,
-    errorSummary: processResult.stderr, timedOut: processResult.timedOut,
+    errorSummary: safeStderr, timedOut: processResult.timedOut,
   });
 
-  const stdoutSummary = summarizeOutput(processResult.stdout);
-  const stderrSummary = summarizeOutput(processResult.stderr);
+  const stdoutSummary = summarizeOutput(safeStdout);
+  const stderrSummary = summarizeOutput(safeStderr);
   const stdoutPayload = processResult.stdoutPayload;
   const stdoutTruncated = processResult.stdoutTruncated;
 

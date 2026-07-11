@@ -73,10 +73,11 @@ async function test() {
   assert(r8 === "", "empty unchanged");
   console.log("");
 
-  // Test 9: Only bullet (just the prefix, no content)
-  console.log("Test 9: Bullet with no content");
+  // Test 9: Bare bullet (no space) preserved — only exact "• " prefix is removed
+  console.log("Test 9: Bare bullet without trailing space is preserved");
   const r9 = normalizeKimiOneShotTextOutput("\u2022 ");
-  assert(r9 === "", "bullet-only becomes empty");
+  // After trim: "\u2022" (bare bullet). Does NOT match exact "\u2022 " prefix.
+  assert(r9 === "\u2022", "bare bullet preserved — only exact bullet+space prefix removed");
   console.log("");
 
   // Test 10: Bullet prefix on non-JSON text

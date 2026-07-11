@@ -333,6 +333,131 @@ async function test() {
   assert(!j15.includes(promptText), "prompt not in JSON");
   console.log("");
 
+  // ═══ Safety Fix Tests ═══
+
+  // Test 16: Stderr containing dynamic prompt is fully redacted
+  console.log("Test 16: Stderr prompt redaction");
+  const leakPrompt = "Reply with exactly: KIMI_SAFETY_CHECK";
+  const leakRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-LEAK",
+    input: { prompt: leakPrompt },
+  };
+  // Simulate Kimi's real behavior: stderr echoes the prompt in model thinking
+  const leakStderr = `• The user wants me to ${leakPrompt}. No tools needed.\n\nTo resume this session: kimi -r session_abc`;
+  const leakRunner: KimiCliProcessRunner = {
+    run: async (_ci: KimiCliExecutorCommandInput) => ({
+      exitCode: 0, durationMs: 50,
+      stdout: `{"requirement_id":"REQ-KIMI-LEAK"}`,
+      stderr: leakStderr,
+      stdoutPayload: `{"requirement_id":"REQ-KIMI-LEAK"}`,
+    }),
+  };
+
+  // ── stdin mode with prompt in stderr ──
+  const r16a = await executeKimiCliCommand({
+    request: leakRequest,
+    config: validConfig, // stdin mode
+    env: envOn,
+    runner: leakRunner,
+  });
+  assert(r16a.decision === "executed_success", "stdin: success");
+  // Raw prompt must not appear in:
+  const j16a = JSON.stringify(r16a);
+  assert(!j16a.includes(leakPrompt), "stdin: prompt not in JSON result");
+  assert(!(r16a.stderrSummary ?? "").includes(leakPrompt), "stdin: prompt not in stderrSummary");
+  assert(!(r16a.stdoutSummary ?? "").includes(leakPrompt), "stdin: prompt not in stdoutSummary");
+  assert(!(r16a.error ?? "").includes(leakPrompt), "stdin: prompt not in error");
+  // Audit events must not contain prompt
+  for (const evt of r16a.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(leakPrompt), `stdin audit ${evt.stage}: no prompt`);
+    assert(!(evt.errorSummary ?? "").includes(leakPrompt), `stdin audit ${evt.stage}: no prompt in errorSummary`);
+  }
+
+  // ── argument mode with prompt in stderr ──
+  const r16b = await executeKimiCliCommand({
+    request: leakRequest,
+    config: argConfig, // argument mode
+    env: envOn,
+    runner: leakRunner,
+  });
+  assert(r16b.decision === "executed_success", "argument: success");
+  const j16b = JSON.stringify(r16b);
+  assert(!j16b.includes(leakPrompt), "argument: prompt not in JSON result");
+  assert(!(r16b.stderrSummary ?? "").includes(leakPrompt), "argument: prompt not in stderrSummary");
+  assert(!(r16b.error ?? "").includes(leakPrompt), "argument: prompt not in error");
+  // commandInput must not leak prompt
+  const ci16b = JSON.stringify(r16b.commandInput);
+  assert(!ci16b.includes(leakPrompt), "argument: prompt not in commandInput");
+  // Audit events must not contain prompt
+  for (const evt of r16b.auditEvents) {
+    const je = JSON.stringify(evt);
+    assert(!je.includes(leakPrompt), `argument audit ${evt.stage}: no prompt`);
+    assert(!(evt.errorSummary ?? "").includes(leakPrompt), `argument audit ${evt.stage}: no prompt in errorSummary`);
+  }
+  console.log("");
+
+  // Test 17: Missing prompt rejected without invoking runner (both transports)
+  console.log("Test 17: Missing prompt rejection");
+
+  // ── stdin mode, no prompt ──
+  const noPromptRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-NOPROMPT",
+    input: {}, // no prompt field
+  };
+  const r17a = await executeKimiCliCommand({
+    request: noPromptRequest,
+    config: validConfig, // stdin mode
+    env: envOn,
+    runner: throwingRunner(), // must NOT be called
+  });
+  assert(r17a.decision === "missing_prompt", "stdin: missing_prompt decision");
+  assert(r17a.success === false, "stdin: failure");
+  assert(r17a.error !== undefined && r17a.error.includes("missing"), "stdin: error message");
+  // Audit event for missing prompt
+  assert(r17a.auditEvents.some(e => e.outcome === "missing_prompt"), "stdin: missing_prompt audit");
+
+  // ── argument mode, no prompt ──
+  const r17b = await executeKimiCliCommand({
+    request: noPromptRequest,
+    config: argConfig, // argument mode
+    env: envOn,
+    runner: throwingRunner(), // must NOT be called
+  });
+  assert(r17b.decision === "missing_prompt", "argument: missing_prompt decision");
+  assert(r17b.success === false, "argument: failure");
+  // Must NOT fall through to stdin mode — runner never called
+  assert(r17b.error !== undefined, "argument: error reported");
+
+  // ── stdin mode, blank prompt ──
+  const blankPromptRequest: ExecutionRequest = {
+    type: "llm_task", node: "requirement-summary", agent: "kimi",
+    requirementId: "REQ-KIMI-BLANK",
+    input: { prompt: "   " }, // whitespace-only
+  };
+  const r17c = await executeKimiCliCommand({
+    request: blankPromptRequest,
+    config: validConfig,
+    env: envOn,
+    runner: throwingRunner(),
+  });
+  assert(r17c.decision === "missing_prompt", "stdin blank: missing_prompt decision");
+
+  // ── argument mode, blank prompt ──
+  const r17d = await executeKimiCliCommand({
+    request: blankPromptRequest,
+    config: argConfig,
+    env: envOn,
+    runner: throwingRunner(),
+  });
+  assert(r17d.decision === "missing_prompt", "argument blank: missing_prompt decision");
+
+  // ── argument mode with missing prompt must NOT fall through to stdin ──
+  // (verified by throwingRunner — if runner were called, it would throw)
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

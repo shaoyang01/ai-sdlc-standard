@@ -12,27 +12,29 @@
 //
 // Runtime schema validation remains authoritative.
 
-const KIMI_BULLET_PREFIX = "\u2022"; // "•"
+const KIMI_BULLET_PREFIX = "\u2022 "; // "• "
 
 /**
  * Normalize Kimi one-shot `--output-format text` output.
  *
  * Allowed transformations:
  *   - Trim leading/trailing whitespace
- *   - Remove exactly one leading "•" bullet character followed by optional space
- *     when it appears at the beginning of the complete response
+ *   - Remove exactly one leading "• " (bullet + space) when it appears
+ *     at the beginning of the complete response
  *
- * Returns the normalized string. If no normalization was needed,
- * returns the trimmed input unchanged.
+ * Deliberately does NOT:
+ *   - Remove a bare bullet character without trailing space
+ *   - Extract JSON from arbitrary prose
+ *   - Search for the first `{` and last `}`
+ *   - Strip markdown fences
+ *   - Silently repair malformed JSON
+ *
+ * Runtime schema validation remains authoritative.
  */
 export function normalizeKimiOneShotTextOutput(value: string): string {
   let result = value.trim();
   if (result.startsWith(KIMI_BULLET_PREFIX)) {
-    // Remove bullet + optional trailing space
     result = result.slice(KIMI_BULLET_PREFIX.length);
-    if (result.startsWith(" ")) {
-      result = result.slice(1);
-    }
   }
   return result;
 }
