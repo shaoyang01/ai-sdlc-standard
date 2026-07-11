@@ -6,7 +6,7 @@
 
 import { NodeType } from "./types";
 import { SDLC_EDGES } from "./graph";
-import { validateSolutionChallengeState, createShadowReadyChallengeState } from "../core/solution-challenge-state";
+import { validateSolutionChallengeState, createShadowReadyChallengeState, validateGatewayShadowChallengeOutput } from "../core/solution-challenge-state";
 
 const MAX_LOOP_DEPTH = 3;
 
@@ -19,8 +19,9 @@ export function getNextNode(
   // ─── Solution-challenge: self-contained cycle routing ──
   // Uses shared validator for complete state validation.
   if (current === "solution-challenge" && nodeResult) {
-    // Shadow pass-through: always route to review regardless of status
+    // Shadow pass-through: validate, then always route to review
     if (nodeResult["routingEffect"] === "shadow_pass_through") {
+      validateGatewayShadowChallengeOutput(nodeResult);
       return "review";
     }
 

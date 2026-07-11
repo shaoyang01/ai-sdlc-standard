@@ -332,7 +332,20 @@ export async function run(
 
     // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
     if (currentNode === "solution-challenge") {
-      execCtx.metadata.solutionChallenge = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
+      // Prefer shadow_challenge_cycle for cycle tracking (gateway_shadow mode).
+      // Fall back to solution_challenge state for deterministic shadow mode.
+      const shadowCycle = nodeOutput["shadow_challenge_cycle"] as Record<string, unknown> | undefined;
+      const scState = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
+      if (shadowCycle && scState) {
+        execCtx.metadata.solutionChallenge = {
+          ...scState,
+          currentCycle: Math.min(Math.max((shadowCycle["currentCycle"] as number) ?? scState.currentCycle, 1), 2) as 1 | 2,
+          mode: (shadowCycle["mode"] as "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION") ?? scState.mode,
+          exhausted: (shadowCycle["exhausted"] as boolean) ?? scState.exhausted,
+        };
+      } else if (scState) {
+        execCtx.metadata.solutionChallenge = scState;
+      }
     }
 
     // ── Gateway shadow: record observed routing metadata in trace ──

@@ -393,6 +393,51 @@ async function test() {
   assert(typeof r18.implementation_outcome === "string", "implementation_outcome set");
   console.log("");
 
+  // ═══════════════════════════════════════════════════════
+  // Replay Malformed Gateway Shadow Tests
+  // ═══════════════════════════════════════════════════════
+
+  console.log("Replay: Malformed gateway shadow traces rejected");
+
+  const { getNextNode: gnR } = await import("../sdlc_graph/transitions");
+  const readyOut = { routingEffect: "shadow_pass_through", solution_challenge_observation: { availability: "available", state: gatewayReadyState, findingIds: [], counts: { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 } }, observedStatus: "READY_FOR_GATE", fallback_used: false, wouldRouteTo: "review", solution_challenge: gatewayReadyState };
+  const unavailOut = { routingEffect: "shadow_pass_through", solution_challenge_observation: { availability: "unavailable", error: "test" }, observedStatus: "unavailable", fallback_used: true, wouldRouteTo: "review", solution_challenge: gatewayReadyState };
+
+  // R1: missing observation → throws
+  let rr1 = false; try { gnR("solution-challenge", { routingEffect: "shadow_pass_through" }); } catch { rr1 = true; }
+  assert(rr1, "R1: missing observation throws");
+
+  // R2: available but missing state → throws
+  let rr2 = false; try { gnR("solution-challenge", { routingEffect: "shadow_pass_through", solution_challenge_observation: { availability: "available" }, observedStatus: "READY_FOR_GATE", fallback_used: false, wouldRouteTo: "review" }); } catch { rr2 = true; }
+  assert(rr2, "R2: available missing state throws");
+
+  // R3: available with invalid state → throws
+  let rr3 = false; try { gnR("solution-challenge", { routingEffect: "shadow_pass_through", solution_challenge_observation: { availability: "available", state: { status: "INVALID" } }, observedStatus: "READY_FOR_GATE", fallback_used: false, wouldRouteTo: "review" }); } catch { rr3 = true; }
+  assert(rr3, "R3: invalid state throws");
+
+  // R4: observedStatus mismatch → throws
+  let rr4 = false; try { gnR("solution-challenge", { ...readyOut, observedStatus: "NEEDS_REVISION" }); } catch { rr4 = true; }
+  assert(rr4, "R4: observedStatus mismatch throws");
+
+  // R5: unavailable carries state → throws
+  let rr5 = false; try { gnR("solution-challenge", { ...unavailOut, solution_challenge_observation: { availability: "unavailable", state: gatewayReadyState, error: "x" } }); } catch { rr5 = true; }
+  assert(rr5, "R5: unavailable with state throws");
+
+  // R6: wouldRouteTo mismatch → throws
+  let rr6 = false; try { gnR("solution-challenge", { ...readyOut, wouldRouteTo: "tech-design" }); } catch { rr6 = true; }
+  assert(rr6, "R6: wouldRouteTo mismatch throws");
+
+  // R7: unavailable fallback_used=false → throws
+  let rr7 = false; try { gnR("solution-challenge", { ...unavailOut, fallback_used: false }); } catch { rr7 = true; }
+  assert(rr7, "R7: unavailable fallback_used=false throws");
+
+  // R8: valid available → review
+  assert(gnR("solution-challenge", readyOut) === "review", "R8: valid available → review");
+
+  // R9: valid unavailable → review
+  assert(gnR("solution-challenge", unavailOut) === "review", "R9: valid unavailable → review");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

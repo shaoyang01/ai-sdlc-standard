@@ -178,3 +178,92 @@ export function normalizeSolutionChallengeOutput(
     solution_challenge: state,
   };
 }
+
+// ─── Gateway Shadow Observation ──────────────────────────
+
+export interface GatewayShadowChallengeCounts {
+  blocking: number;
+  required: number;
+  nonBlocking: number;
+  outOfScope: number;
+}
+
+export type GatewayShadowChallengeObservation =
+  | {
+      availability: "available";
+      state: SolutionChallengeState;
+      findings?: Record<string, unknown>[];
+      findingIds: string[];
+      counts: GatewayShadowChallengeCounts;
+    }
+  | {
+      availability: "unavailable";
+      error: string;
+    };
+
+/** Validate gateway shadow output before Graph routing or Replay. */
+export function validateGatewayShadowChallengeOutput(
+  output: Record<string, unknown>
+): void {
+  if (output["routingEffect"] !== "shadow_pass_through") {
+    throw new Error("gateway shadow: missing routingEffect=shadow_pass_through");
+  }
+
+  const obs = output["solution_challenge_observation"] as Record<string, unknown> | undefined;
+  if (!obs) {
+    throw new Error("gateway shadow: missing solution_challenge_observation");
+  }
+
+  const availability = obs["availability"];
+
+  if (availability === "available") {
+    const state = obs["state"];
+    if (!state) throw new Error("gateway shadow: available but missing state");
+    // Validate state is well-formed
+    validateSolutionChallengeState(state);
+
+    if (output["observedStatus"] !== (state as Record<string, unknown>)["status"]) {
+      throw new Error("gateway shadow: observedStatus mismatch with state.status");
+    }
+    if (output["fallback_used"] !== false) {
+      throw new Error("gateway shadow: available must have fallback_used=false");
+    }
+    // Validate counts
+    const counts = obs["counts"] as Record<string, unknown> | undefined;
+    if (counts) {
+      for (const k of ["blocking", "required", "nonBlocking", "outOfScope"]) {
+        if (typeof counts[k] !== "number" || (counts[k] as number) < 0) {
+          throw new Error(`gateway shadow: invalid count ${k}`);
+        }
+      }
+    }
+    // Validate findingIds
+    const fIds = obs["findingIds"];
+    if (fIds !== undefined) {
+      if (!Array.isArray(fIds) || fIds.some((id: unknown) => typeof id !== "string" || (id as string).length === 0)) {
+        throw new Error("gateway shadow: findingIds must be non-empty string array");
+      }
+    }
+    // wouldRouteTo must match state
+    const expectedRoute = (state as Record<string, unknown>)["status"] === "NEEDS_REVISION"
+      && !(state as Record<string, unknown>)["exhausted"] ? "tech-design" : "review";
+    if (output["wouldRouteTo"] !== expectedRoute) {
+      throw new Error(`gateway shadow: wouldRouteTo mismatch: expected ${expectedRoute}`);
+    }
+  } else if (availability === "unavailable") {
+    if (obs["state"]) {
+      throw new Error("gateway shadow: unavailable must not carry state");
+    }
+    if (output["observedStatus"] !== "unavailable") {
+      throw new Error("gateway shadow: unavailable requires observedStatus=unavailable");
+    }
+    if (output["fallback_used"] !== true) {
+      throw new Error("gateway shadow: unavailable requires fallback_used=true");
+    }
+    if (output["wouldRouteTo"] !== "review") {
+      throw new Error("gateway shadow: unavailable requires wouldRouteTo=review");
+    }
+  } else {
+    throw new Error(`gateway shadow: invalid availability: ${String(availability)}`);
+  }
+}
