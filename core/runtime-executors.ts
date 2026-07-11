@@ -445,7 +445,7 @@ function parseChallengeResult(
     try {
       const parsed = JSON.parse(summary);
       if (typeof parsed === "object" && parsed !== null) {
-        const state = validateSolutionChallengeState({ ...fallbackState, ...parsed });
+        // Extract findings and findingIds before validation
         const findings = Array.isArray(parsed["findings"]) ? parsed["findings"] as Record<string, unknown>[] : [];
         const findingIds = extractFindingIds(findings, parsed);
         const counts = {
@@ -454,10 +454,9 @@ function parseChallengeResult(
           nonBlocking: typeof parsed["non_blocking_count"] === "number" ? parsed["non_blocking_count"] : 0,
           outOfScope: typeof parsed["out_of_scope_count"] === "number" ? parsed["out_of_scope_count"] : 0,
         };
-        // Merge findingIds into state for propagation
-        if (findingIds.length > 0) {
-          state.findingIds = findingIds;
-        }
+        // Merge findingIds into the spread before validation
+        const merged = { ...fallbackState, ...parsed, findingIds: findingIds.length > 0 ? findingIds : (parsed["findingIds"] ?? fallbackState.findingIds) };
+        const state = validateSolutionChallengeState(merged);
         return { availability: "available", state, findings, findingIds, counts };
       }
     } catch {

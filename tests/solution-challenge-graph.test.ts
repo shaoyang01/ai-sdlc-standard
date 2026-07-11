@@ -8,6 +8,7 @@ import { createArtifact } from "../core/artifact";
 import { createInitialState, ExecutionState } from "../core/execution-state";
 import { replayExecution } from "../core/state-machine-vm";
 import { buildExecutionContext } from "../core/context-builder";
+import { ExecutionGateway } from "../execution/gateway";
 import {
   type SolutionChallengeState,
   createShadowReadyChallengeState,
@@ -222,8 +223,7 @@ async function test() {
 
   // ═══ Test 10: Real ExecutionGateway + fake Kimi runner contract smoke ═══
   console.log("Test 10: Real ExecutionGateway + fake Kimi runner contract smoke");
-  const { ExecutionGateway } = await import("../execution/gateway");
-  const { createArtifact: ca } = await import("../core/artifact");
+  // ExecutionGateway imported at top of file
   // Fake Kimi runner returns Challenger JSON in summary
   const fakeKimiRunner = {
     async run() {
