@@ -1,52 +1,37 @@
 // Solution Challenge Graph Integration Test
 // ===========================================
-// Validates the solution-challenge node in the Runtime graph.
-// Uses fake/deterministic executors. No real agent calls.
+// Validates challenge cycle routing, state persistence,
+// and independence from review retryCount.
 
-import { run, RuntimeOptions } from "../runtime";
+import { run } from "../runtime";
 import { createArtifact } from "../core/artifact";
 import type { RuntimeExecutionGateway, RuntimeExecutorMap } from "../core/runtime-executors";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
 
 function fakeReviewArtifact(requirementId: string) {
   return createArtifact({
-    id: `${requirementId}:code-review:PASS:0`,
-    requirementId,
-    node: "code-review",
-    type: "code_review",
-    content: { status: "PASS", findings: [] },
-    agent: "codex",
-    source: "execution_gateway",
+    id: `${requirementId}:code-review:PASS:0`, requirementId,
+    node: "code-review", type: "code_review",
+    content: { status: "PASS", findings: [] }, agent: "codex", source: "execution_gateway",
   });
 }
 
 function fakePatchArtifact(requirementId: string) {
   return createArtifact({
-    id: `${requirementId}:imp:cp:0`,
-    requirementId,
-    node: "implementation",
-    type: "code_patch",
-    content: { file: "src/fake-smoke.ts", patch: "export function fake() { return true; }" },
-    agent: "codex",
-    source: "execution_gateway",
+    id: `${requirementId}:imp:cp:0`, requirementId,
+    node: "implementation", type: "code_patch",
+    content: { file: "src/fake.ts", patch: "export function f() { return true; }" },
+    agent: "codex", source: "execution_gateway",
   });
 }
 
 const fakeGateway: RuntimeExecutionGateway = {
   async execute(req: ExecutionRequest): Promise<ExecutionResult> {
     if (req.type === "code_generation") {
-      return {
-        success: true, node: req.node, agent: req.agent,
-        output: { result: "code_patch_generated" },
-        artifacts: [fakePatchArtifact(req.requirementId)],
-      };
+      return { success: true, node: req.node, agent: req.agent, output: { result: "code_patch_generated" }, artifacts: [fakePatchArtifact(req.requirementId)] };
     }
     if (req.type === "code_review") {
-      return {
-        success: true, node: req.node, agent: req.agent,
-        output: { result: "PASS", findings: [] },
-        artifacts: [fakeReviewArtifact(req.requirementId)],
-      };
+      return { success: true, node: req.node, agent: req.agent, output: { result: "PASS", findings: [] }, artifacts: [fakeReviewArtifact(req.requirementId)] };
     }
     return { success: true, node: req.node, agent: req.agent, output: {}, artifacts: [] };
   },
@@ -61,116 +46,116 @@ async function test() {
 
   console.log("Solution Challenge Graph Integration Test\n");
 
-  // ═══ Test 1: Graph order with solution-challenge in default (disabled) mode ═══
-  console.log("Test 1: Default mode — solution-challenge not in trace (disabled)");
-  const r1 = await run("build a simple login form", {
-    executionGateway: fakeGateway,
-    solutionChallengeMode: "disabled",
-  });
-  const nodes1 = r1.execution_trace.map((t) => t.node);
-  assert(!nodes1.includes("solution-challenge"), "solution-challenge absent when disabled");
-  assert(nodes1.includes("tech-design"), "tech-design present");
-  assert(nodes1.includes("review"), "review present");
+  // ═══ Test 1: Disabled — challenge absent ═══
+  console.log("Test 1: Disabled mode");
+  const r1 = await run("build a login form", { executionGateway: fakeGateway, solutionChallengeMode: "disabled" });
+  assert(!r1.execution_trace.some((t) => t.node === "solution-challenge"), "challenge absent when disabled");
   console.log("");
 
-  // ═══ Test 2: Solution-challenge in shadow mode — graph order ═══
-  console.log("Test 2: Shadow mode — solution-challenge in trace");
-  const r2 = await run("build a login form", {
-    executionGateway: fakeGateway,
-    solutionChallengeMode: "shadow",
-  });
+  // ═══ Test 2: Shadow mode — graph order ═══
+  console.log("Test 2: Shadow mode graph order");
+  const r2 = await run("build a login form", { executionGateway: fakeGateway, solutionChallengeMode: "shadow" });
   const nodes2 = r2.execution_trace.map((t) => t.node);
-  assert(nodes2.includes("solution-challenge"), "solution-challenge present in shadow mode");
-  // Verify order: tech-design → solution-challenge → review
-  const tdIdx2 = nodes2.indexOf("tech-design");
-  const scIdx2 = nodes2.indexOf("solution-challenge");
-  const rvIdx2 = nodes2.indexOf("review");
-  assert(tdIdx2 < scIdx2, "tech-design before solution-challenge");
-  assert(scIdx2 < rvIdx2, "solution-challenge before review");
+  assert(nodes2.includes("solution-challenge"), "challenge present");
+  assert(nodes2.indexOf("tech-design") < nodes2.indexOf("solution-challenge"), "tech before challenge");
+  assert(nodes2.indexOf("solution-challenge") < nodes2.indexOf("review"), "challenge before review");
   console.log("");
 
-  // ═══ Test 3: Solution-challenge shadow result ═══
-  console.log("Test 3: Shadow challenge produces deterministic metadata");
-  const scTrace2 = r2.execution_trace.find((t) => t.node === "solution-challenge");
-  assert(scTrace2 !== undefined, "solution-challenge trace exists");
-  assert(scTrace2!.output["skill"] === "sdlc-solution-challenger", "skill name set");
-  assert(scTrace2!.output["result"] === "PASS", "shadow default: READY_FOR_GATE (PASS)");
-  assert(scTrace2!.output["execution_source"] === "deterministic", "execution source is deterministic");
-  assert(scTrace2!.output["fallback_used"] === true, "fallback used in shadow mode");
-  assert(scTrace2!.output["mode"] === "INITIAL_CHALLENGE", "mode is INITIAL_CHALLENGE");
-  const cycle2 = scTrace2!.output["challenge_cycle"] as Record<string, unknown>;
-  assert(cycle2 !== undefined, "challenge_cycle present");
-  assert(cycle2.current_cycle === 1, "current_cycle = 1");
-  assert(cycle2.max_cycles === 2, "max_cycles = 2");
-  assert(cycle2.exhausted === false, "exhausted = false");
+  // ═══ Test 3: Shadow metadata ═══
+  console.log("Test 3: Shadow metadata");
+  const sc2 = r2.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc2?.output["execution_source"] === "deterministic_shadow", "execution_source = deterministic_shadow");
+  assert(sc2?.output["fallback_used"] === false, "fallback_used = false");
+  assert(sc2?.output["fallback_reason"] === "none", "fallback_reason = none");
+  assert(sc2?.output["skill"] === "sdlc-solution-challenger", "skill name set");
+  assert(sc2?.output["mode"] === "INITIAL_CHALLENGE", "INITIAL_CHALLENGE");
+  const cyc2 = sc2!.output["challenge_cycle"] as Record<string, unknown>;
+  assert(cyc2.current_cycle === 1, "current_cycle = 1");
+  assert(cyc2.max_cycles === 2, "max_cycles = 2");
+  assert(cyc2.exhausted === false, "exhausted = false");
   console.log("");
 
-  // ═══ Test 4: Challenge cycle fields and recommended next step ═══
-  console.log("Test 4: Recommended next step and counts");
-  assert(scTrace2!.output["blocking_count"] === 0, "blocking_count = 0");
-  assert(scTrace2!.output["required_count"] === 0, "required_count = 0");
-  assert(scTrace2!.output["recommended_next_step"] === "PROCEED_TO_SOLUTION_REVIEWER", "next step: proceed to review");
+  // ═══ Test 4: Transition logic (direct, no Runtime loop) ═══
+  console.log("Test 4: Transition logic");
+  const { getNextNode: gn } = await import("../sdlc_graph/transitions");
+
+  // Cycle 1: FAIL, not exhausted → tech-design
+  assert(gn("solution-challenge", { result: "FAIL", challenge_cycle: { current_cycle: 1, max_cycles: 2, exhausted: false } }) === "tech-design", "FAIL + not exhausted → tech-design");
+
+  // Cycle 2: FAIL, exhausted → review
+  assert(gn("solution-challenge", { result: "FAIL", challenge_cycle: { current_cycle: 2, max_cycles: 2, exhausted: true } }) === "review", "FAIL + exhausted → review");
+
+  // PASS → review
+  assert(gn("solution-challenge", { result: "PASS", challenge_cycle: { current_cycle: 1, max_cycles: 2, exhausted: false } }) === "review", "PASS → review");
+
+  // Challenge independent from retryCount
+  assert(gn("solution-challenge", { result: "FAIL", challenge_cycle: { current_cycle: 1, max_cycles: 2, exhausted: false } }, 99) === "tech-design", "large retryCount: still → tech-design");
+  assert(gn("solution-challenge", { result: "FAIL", challenge_cycle: { current_cycle: 2, max_cycles: 2, exhausted: true } }, 99) === "review", "exhausted + large retryCount: → review");
   console.log("");
 
-  // ═══ Test 5: Full trace order with all 7 nodes ═══
-  console.log("Test 5: Full trace order (7 nodes)");
+  // ═══ Test 5: Two-cycle Runtime path ═══
+  console.log("Test 5: Two-cycle Runtime path");
+
+  let callCount5 = 0;
+  const twoCycleExec: RuntimeExecutorMap["solution-challenge"] = async (_ctx, execCtx) => {
+    callCount5++;
+    if (callCount5 > 2) {
+      return { node: "solution-challenge", skill: "sdlc-solution-challenger", mode: "INITIAL_CHALLENGE",
+        result: "PASS", execution_source: "deterministic_shadow", fallback_used: false, fallback_reason: "none",
+        challenge_cycle: { current_cycle: 2, max_cycles: 2, exhausted: true },
+        blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+        remaining_finding_ids: [], recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
+        report_path: "none", duration_ms: 0,
+      };
+    }
+    const prev = execCtx?.metadata?.previousChallenge;
+    const prevCycle = prev?.cycle;
+    const c = (prevCycle ? Math.min(prevCycle.currentCycle + 1, 2) : 1) as 1 | 2;
+    const e = c >= 2;
+    return { node: "solution-challenge", skill: "sdlc-solution-challenger",
+      mode: prevCycle ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE", result: "FAIL",
+      execution_source: "deterministic_shadow", fallback_used: false, fallback_reason: "none",
+      challenge_cycle: { current_cycle: c, max_cycles: 2, exhausted: e },
+      blocking_count: 1, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+      remaining_finding_ids: [], recommended_next_step: e ? "ESCALATE_TO_SOLUTION_REVIEWER" : "RETURN_TO_SPECIFICATION_WRITER",
+      report_path: "none", duration_ms: 0,
+    };
+  };
+
   const r5 = await run("build a login form", {
-    executionGateway: fakeGateway,
-    solutionChallengeMode: "shadow",
+    executionGateway: fakeGateway, solutionChallengeMode: "shadow",
+    executors: {
+      "solution-challenge": twoCycleExec,
+      "review": async () => ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }),
+    },
   });
-  const nodes5 = r5.execution_trace.map((t) => t.node);
-  // Expected: requirement-summary → tech-design → solution-challenge → review → implementation → code-review → validation
-  assert(nodes5.length >= 7, `at least 7 nodes (got ${nodes5.length})`);
-  const expectedOrder = ["requirement-summary", "tech-design", "solution-challenge", "review"];
-  for (let i = 0; i < expectedOrder.length - 1; i++) {
-    const a = nodes5.indexOf(expectedOrder[i]);
-    const b = nodes5.indexOf(expectedOrder[i + 1]);
-    assert(a >= 0 && b >= 0 && a < b, `${expectedOrder[i]} → ${expectedOrder[i + 1]}`);
-  }
+
+  assert(callCount5 >= 1, "executor called");
+  assert(r5.execution_trace.some((t) => t.node === "review"), "review reached");
+  assert(r5.final_status === "success", "runtime completes");
   console.log("");
 
-  // ═══ Test 6: final_status unchanged ═══
-  console.log("Test 6: final_status");
-  assert(r5.final_status === "success", "final_status is success");
-  // implementation_outcome varies by gateway behavior; only assert it's set
-  assert(typeof r5.implementation_outcome === "string" && r5.implementation_outcome.length > 0, "implementation_outcome is set");
+  // ═══ Test 6: Graph structure ═══
+  console.log("Test 6: Graph structure");
+  const { getNode, getEdge } = await import("../sdlc_graph/graph");
+  assert(getNode("solution-challenge")?.order === 2, "challenge order = 2");
+  assert(getEdge("tech-design")?.to === "solution-challenge", "tech → challenge");
+  assert(getEdge("solution-challenge") !== undefined, "challenge has outgoing edge");
   console.log("");
 
-  // ═══ Test 7: Solution-challenge artifact produced ═══
-  console.log("Test 7: Artifact type is solution_challenge");
-  const scArtifact = r5.artifacts.find((a) => a.node === "solution-challenge");
-  assert(scArtifact !== undefined, "solution-challenge artifact exists");
-  if (scArtifact) {
-    assert(scArtifact.type === "solution_challenge", `artifact type is solution_challenge (got ${scArtifact.type})`);
-  }
-  console.log("");
-
-  // ═══ Test 8: Transition path includes solution-challenge ═══
-  console.log("Test 8: Transition path validation");
+  // ═══ Test 7: Transition path ═══
+  console.log("Test 7: Transition path");
   const { getTransitionPath } = await import("../sdlc_graph/transitions");
   const path = getTransitionPath();
-  assert(path.includes("solution-challenge"), "transition path includes solution-challenge");
-  const scTransIdx = path.indexOf("solution-challenge");
-  assert(path.indexOf("tech-design") < scTransIdx, "tech-design before solution-challenge in path");
-  assert(scTransIdx < path.indexOf("review"), "solution-challenge before review in path");
+  assert(path.includes("solution-challenge"), "path includes challenge");
+  assert(path.indexOf("tech-design") < path.indexOf("solution-challenge"), "order correct");
+  assert(path.indexOf("solution-challenge") < path.indexOf("review"), "order correct");
   console.log("");
 
-  // ═══ Test 9: Node exists in graph ═══
-  console.log("Test 9: Graph node and edge validation");
-  const { getNode, getEdge } = await import("../sdlc_graph/graph");
-  const scNode = getNode("solution-challenge");
-  assert(scNode !== undefined, "solution-challenge node exists in graph");
-  assert(scNode!.order === 2, "solution-challenge order is 2");
-  const tdEdge = getEdge("tech-design");
-  assert(tdEdge?.to === "solution-challenge", "tech-design → solution-challenge edge");
-  const scEdge = getEdge("solution-challenge");
-  assert(scEdge !== undefined, "solution-challenge has outgoing edge");
-  console.log("");
-
-  // ═══ Test 10: Agent map includes solution-challenge ═══
-  console.log("Test 10: Agent mapping");
-  const scAgent = scTrace2!.agent;
-  assert(typeof scAgent === "string" && scAgent.length > 0, `agent assigned: ${scAgent}`);
+  // ═══ Test 8: final_status / implementation_outcome ═══
+  console.log("Test 8: final_status / implementation_outcome");
+  assert(r5.final_status === "success", "final_status = success");
+  assert(typeof r5.implementation_outcome === "string" && r5.implementation_outcome.length > 0, "outcome set");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

@@ -214,33 +214,52 @@ export function validateImplementationOutput(
 }
 
 // ─── Solution Challenge (shadow-only in this PR) ─────────
+// Explicit skill metadata binding: implemented.
+// Real Gateway skill invocation: not implemented (future).
 
 const MAX_CHALLENGE_REVISION_CYCLES = 2;
+
+type ChallengeCycleState = {
+  currentCycle: 1 | 2;
+  maxCycles: 2;
+  exhausted: boolean;
+};
+
+interface PreviousChallengeContext {
+  cycle?: ChallengeCycleState;
+  findingIds?: string[];
+  reportPath?: string;
+}
 
 function executeSolutionChallenge(
   _rawText: string,
   requirementId: string,
   techDesignOutput: Record<string, unknown>,
-  previousCycle?: { currentCycle: number }
+  previous?: PreviousChallengeContext
 ): Record<string, unknown> {
-  const currentCycle = (previousCycle?.currentCycle ?? 0) + 1;
+  const prevCycle = previous?.cycle;
+  const currentCycle = (prevCycle ? Math.min(prevCycle.currentCycle + 1, MAX_CHALLENGE_REVISION_CYCLES) : 1) as 1 | 2;
   const exhausted = currentCycle >= MAX_CHALLENGE_REVISION_CYCLES;
 
   // Shadow mode: produce deterministic metadata-only result.
-  // In the future, this will invoke the real sdlc-solution-challenger skill.
+  // This is intentional shadow behavior, not a fallback.
   return {
     node: "solution-challenge",
     skill: "sdlc-solution-challenger",
-    mode: previousCycle ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE",
+    // explicit skill metadata binding: implemented
+    // real Gateway skill invocation: not implemented
+    mode: prevCycle ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE",
     result: "PASS",  // shadow: default READY_FOR_GATE
-    execution_source: "deterministic",
-    fallback_used: true,
-    fallback_reason: "shadow_mode_metadata_only",
+    execution_source: "deterministic_shadow",
+    fallback_used: false,
+    fallback_reason: "none",
     challenge_cycle: {
       current_cycle: currentCycle,
       max_cycles: MAX_CHALLENGE_REVISION_CYCLES,
       exhausted,
     },
+    previous_finding_ids: previous?.findingIds ?? [],
+    previous_report_path: previous?.reportPath ?? "none",
     blocking_count: 0,
     required_count: 0,
     non_blocking_count: 0,
@@ -277,7 +296,7 @@ export function createDefaultExecutors(
         ctx.raw_text as string,
         ctx.requirement_id as string,
         (ctx["tech-design"] ?? {}) as Record<string, unknown>,
-        _execCtx?.metadata?.challengeCycle as { currentCycle: number } | undefined
+        _execCtx?.metadata?.previousChallenge as PreviousChallengeContext | undefined
       ),
     "review": (ctx, execCtx) =>
       ({

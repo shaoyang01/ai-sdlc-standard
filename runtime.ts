@@ -312,6 +312,16 @@ export async function run(
       retryCount = 0; // reset on non-loop nodes
     }
 
+    // ── Persist challenge cycle state for FOLLOW_UP_VERIFICATION ──
+    if (currentNode === "solution-challenge") {
+      const cycle = nodeOutput["challenge_cycle"] as Record<string, unknown> | undefined;
+      execCtx.metadata.previousChallenge = {
+        cycle: cycle as { currentCycle: 1 | 2; maxCycles: 2; exhausted: boolean } | undefined,
+        findingIds: (nodeOutput["blocking_finding_ids"] ?? nodeOutput["remaining_finding_ids"]) as string[] | undefined,
+        reportPath: nodeOutput["report_path"] as string | undefined,
+      };
+    }
+
     // ─── Code Review + Bugfix Loop (after implementation, before validation) ───
     if (currentNode === "implementation") {
       const reviewResult = await runCodeReviewBugfixLoop({
