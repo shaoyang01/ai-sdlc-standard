@@ -138,7 +138,7 @@ Summary counts and status. The status is determined by the presence of BLOCKING 
 ### findings[]
 The core output. Each finding is fully classified. Findings are ordered by: BLOCKING first, then REQUIRED, then NON_BLOCKING, then OUT_OF_SCOPE. Within each group, ordered by severity (CRITICAL → HIGH → MEDIUM → LOW).
 
-**existing_mechanism_verification**: Required for every BLOCKING and REQUIRED finding (optional for NON_BLOCKING, not required for OUT_OF_SCOPE). Must be completed before the finding is classified. If  and , the concern must not remain BLOCKING or REQUIRED.
+**existing_mechanism_verification**: Required for every BLOCKING and REQUIRED finding (optional for NON_BLOCKING, not required for OUT_OF_SCOPE). Must be completed before the finding is classified. If `mechanism_found = true` and `sufficient_for_current_phase = true`, the concern must not remain `BLOCKING` or `REQUIRED`.
 
 **blocking_counter_evidence**: Required only for BLOCKING findings. Every field must contain an explicit judgment (true/false), not be left blank. All conditions must be true for a finding to be BLOCKING.
 

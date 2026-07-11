@@ -625,8 +625,10 @@ async function test() {
   assertContains(orRef, "blocking_counter_evidence:", "output-report: includes blocking_counter_evidence");
   assertContains(orRef, "Required only for BLOCKING", "output-report: states BLOCKING only applicability");
 
-  // 12e. mechanism_found + sufficient → must not remain BLOCKING/REQUIRED
-  assertContains(orRef, "must not remain BLOCKING or REQUIRED", "output-report: mechanism_found rule documented");
+  // 12e. mechanism_found + sufficient → must not remain BLOCKING/REQUIRED (all parts)
+  assertContains(orRef, "mechanism_found = true", "output-report: contains mechanism_found = true condition");
+  assertContains(orRef, "sufficient_for_current_phase = true", "output-report: contains sufficient_for_current_phase = true condition");
+  assertContains(orRef, "must not remain `BLOCKING` or `REQUIRED`", "output-report: contains must not remain consequence");
 
   console.log("");
 
