@@ -213,6 +213,46 @@ export function validateImplementationOutput(
   };
 }
 
+// ─── Solution Challenge (shadow-only in this PR) ─────────
+
+const MAX_CHALLENGE_REVISION_CYCLES = 2;
+
+function executeSolutionChallenge(
+  _rawText: string,
+  requirementId: string,
+  techDesignOutput: Record<string, unknown>,
+  previousCycle?: { currentCycle: number }
+): Record<string, unknown> {
+  const currentCycle = (previousCycle?.currentCycle ?? 0) + 1;
+  const exhausted = currentCycle >= MAX_CHALLENGE_REVISION_CYCLES;
+
+  // Shadow mode: produce deterministic metadata-only result.
+  // In the future, this will invoke the real sdlc-solution-challenger skill.
+  return {
+    node: "solution-challenge",
+    skill: "sdlc-solution-challenger",
+    mode: previousCycle ? "FOLLOW_UP_VERIFICATION" : "INITIAL_CHALLENGE",
+    result: "PASS",  // shadow: default READY_FOR_GATE
+    execution_source: "deterministic",
+    fallback_used: true,
+    fallback_reason: "shadow_mode_metadata_only",
+    challenge_cycle: {
+      current_cycle: currentCycle,
+      max_cycles: MAX_CHALLENGE_REVISION_CYCLES,
+      exhausted,
+    },
+    blocking_count: 0,
+    required_count: 0,
+    non_blocking_count: 0,
+    out_of_scope_count: 0,
+    remaining_finding_ids: [],
+    closed_finding_ids: [],
+    recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
+    report_path: "none",
+    duration_ms: 0,
+  };
+}
+
 // Default executor map factory — allows optional Gateway injection for implementation.
 // All other node executors remain stateless and Gateway-agnostic.
 export function createDefaultExecutors(
@@ -231,6 +271,13 @@ export function createDefaultExecutors(
       buildTechDesign(
         ctx.raw_text as string,
         (ctx["requirement-summary"] ?? ctx) as RequirementSummary
+      ),
+    "solution-challenge": (ctx, _execCtx) =>
+      executeSolutionChallenge(
+        ctx.raw_text as string,
+        ctx.requirement_id as string,
+        (ctx["tech-design"] ?? {}) as Record<string, unknown>,
+        _execCtx?.metadata?.challengeCycle as { currentCycle: number } | undefined
       ),
     "review": (ctx, execCtx) =>
       ({

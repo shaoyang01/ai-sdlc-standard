@@ -7,6 +7,7 @@ import { Artifact, ArtifactType, createArtifact } from "./artifact";
 const NODE_TYPE_MAP: Record<string, ArtifactType> = {
   "requirement-summary": "requirement_summary",
   "tech-design": "tech_design",
+  "solution-challenge": "solution_challenge",
   "review": "solution_review",
   "implementation": "implementation_plan",
   "validation": "validation_report",

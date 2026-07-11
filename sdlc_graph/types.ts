@@ -5,6 +5,7 @@
 export type NodeType =
   | "requirement-summary"
   | "tech-design"
+  | "solution-challenge"
   | "review"
   | "implementation"
   | "validation";

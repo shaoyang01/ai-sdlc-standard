@@ -7,6 +7,7 @@ export type ArtifactType =
   | "requirement_summary"
   | "requirement_breakdown"
   | "tech_design"
+  | "solution_challenge"
   | "solution_review"
   | "implementation_plan"
   | "code_patch"

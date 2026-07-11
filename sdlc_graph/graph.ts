@@ -11,17 +11,21 @@ import { NodeType, GraphNode, GraphEdge } from "./types";
 export const SDLC_NODES: GraphNode[] = [
   { id: "requirement-summary", label: "Requirement Summary", order: 0 },
   { id: "tech-design",           label: "Tech Design",           order: 1 },
-  { id: "review",                label: "Review",                order: 2 },
-  { id: "implementation",        label: "Implementation",        order: 3 },
-  { id: "validation",            label: "Validation",            order: 4 },
+  { id: "solution-challenge",    label: "Solution Challenge",    order: 2 },
+  { id: "review",                label: "Review",                order: 3 },
+  { id: "implementation",        label: "Implementation",        order: 4 },
+  { id: "validation",            label: "Validation",            order: 5 },
 ];
 
 export const SDLC_EDGES: GraphEdge[] = [
   { from: "requirement-summary", to: "tech-design" },
-  { from: "tech-design",           to: "review" },
+  { from: "tech-design",           to: "solution-challenge" },
+  // Solution-challenge: READY_FOR_GATE → review, NEEDS_REVISION → tech-design
+  { from: "solution-challenge",    to: "review",              condition: "PASS" },
+  { from: "solution-challenge",    to: "tech-design",         condition: "FAIL" },
   // Review: PASS → implementation, FAIL → tech-design (feedback loop)
-  { from: "review",                to: "implementation",  condition: "PASS" },
-  { from: "review",                to: "tech-design",     condition: "FAIL" },
+  { from: "review",                to: "implementation",      condition: "PASS" },
+  { from: "review",                to: "tech-design",         condition: "FAIL" },
   { from: "implementation",        to: "validation" },
 ];
 

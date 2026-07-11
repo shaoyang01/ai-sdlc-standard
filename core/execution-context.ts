@@ -16,6 +16,7 @@ export type ExecutionContext = {
     requirementId?: string;
     complexity?: "low" | "medium" | "high";
     estimatedCost?: number;
+    challengeCycle?: { currentCycle: number };
   };
 
   trace: ExecutionTraceItem[];

@@ -15,6 +15,19 @@ export function getNextNode(
   nodeResult?: Record<string, unknown>,
   retryCount: number = 0
 ): NodeType | null {
+  // ─── Solution-challenge: PASS = READY_FOR_GATE, FAIL = NEEDS_REVISION ──
+  if (current === "solution-challenge" && nodeResult) {
+    const challengeResult = nodeResult["result"] as string | undefined;
+
+    if (challengeResult === "FAIL" && retryCount < MAX_LOOP_DEPTH) {
+      return "tech-design";  // NEEDS_REVISION → revise tech design
+    }
+    if (challengeResult === "FAIL" && retryCount >= MAX_LOOP_DEPTH) {
+      return "review";       // cycle exhausted → escalate to review
+    }
+    // PASS (READY_FOR_GATE) → fall through to default
+  }
+
   // ─── Review: conditional PASS/FAIL routing ─────────────
   if (current === "review" && nodeResult) {
     const reviewResult = nodeResult["result"] as string | undefined;

@@ -82,6 +82,7 @@ export interface RuntimeOptions {
   executors?: Partial<RuntimeExecutorMap>;
   executionGateway?: RuntimeExecutionGateway;
   requirementSummaryMode?: "deterministic" | "kimi_gateway";
+  solutionChallengeMode?: "disabled" | "shadow";
 }
 
 // ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
@@ -89,6 +90,7 @@ export interface RuntimeOptions {
 const AGENT_MAP: Record<NodeType, LoopAgent> = {
   "requirement-summary": "kimi",
   "tech-design":          "kimi",
+  "solution-challenge":   "kimi",
   "review":               "codex",
   "implementation":       "codex",
   "validation":           "hermes",
@@ -258,6 +260,12 @@ export async function run(
   };
 
   while (currentNode && vmState.status === "running") {
+    // ── Skip solution-challenge when disabled ──
+    if (currentNode === "solution-challenge" && options.solutionChallengeMode !== "shadow") {
+      // Skip to next node as if challenge passed (READY_FOR_GATE)
+      currentNode = getNextNode(currentNode, { result: "PASS" }, retryCount);
+      continue;
+    }
     // Agent selection: policy engine → decision layer → AGENT_MAP fallback
     const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
     const agent = (policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode)) as LoopAgent;
