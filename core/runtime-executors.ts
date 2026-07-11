@@ -273,74 +273,63 @@ async function executeGatewayShadowChallenge(
     node: "solution-challenge",
     skill: "sdlc-solution-challenger",
     executor_type: "gateway_shadow",
-    fallback_used: false,
-    fallback_reason: "none",
-    solution_challenge: cycle,
-    blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
-    recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
   };
+
+  // Build prompt for Kimi Gateway (llm_task requires input.prompt)
+  const prompt = buildChallengePrompt({
+    requirement,
+    techDesign: JSON.stringify(techDesignOutput).slice(0, 8000),
+    mode: cycle.mode,
+    currentCycle: cycle.currentCycle,
+    previousFindingIds: previous?.findingIds ?? [],
+  });
 
   try {
     const gwResult = await gateway.execute({
       type: "llm_task",
       node: "solution-challenge",
       agent: "kimi",
+      skill: "sdlc-solution-challenger",
       requirementId,
       input: {
+        prompt,
         requirement,
         "tech-design": techDesignOutput,
         mode: cycle.mode,
         currentCycle: cycle.currentCycle,
         previousFindingIds: previous?.findingIds ?? [],
-        previousReportPath: previous?.reportPath ?? null,
       },
     });
 
-    // Try to extract and validate solution_challenge from gateway result
-    const rawState = gwResult.output?.["solution_challenge"] as Record<string, unknown> | undefined;
-    let validatedState: SolutionChallengeState;
-    let executionSource = "gateway";
-
-    try {
-      validatedState = validateSolutionChallengeState(rawState ?? { status: "READY_FOR_GATE" });
-    } catch {
-      // Gateway returned invalid state — record error, keep shadow cycle state
-      return {
-        ...base,
-        result: "PASS",
-        execution_source: "gateway_error",
-        observedStatus: "unavailable",
-        gatewayError: "invalid_solution_challenge_state",
-        routingEffect: "shadow_pass_through",
-        wouldRouteTo: "review",
-        duration_ms: 0,
-      };
-    }
-
-    const observedStatus = validatedState.status;
-    const wouldRouteTo = observedStatus === "NEEDS_REVISION" && !validatedState.exhausted
-      ? "tech-design" : "review";
+    // Parse structured observation from gateway output
+    const observation = parseChallengeObservation(gwResult, cycle);
 
     return {
       ...base,
-      skill: "sdlc-solution-challenger",
-      result: deriveSolutionChallengeResult(validatedState.status),
-      execution_source: executionSource,
-      solution_challenge: {
-        ...validatedState,
-        artifactStatus: validatedState.artifactStatus === "generated" ? "generated" : "shadow_only",
-      },
-      observedStatus,
+      result: "PASS", // shadow: always pass-through to review
+      execution_source: observation.availability === "available" && observation.state
+        ? "gateway" : "gateway_error",
+      fallback_used: observation.availability !== "available",
+      fallback_reason: observation.availability !== "available"
+        ? (observation.error ?? "gateway_unavailable") : "none",
+      solution_challenge: observation.state ?? cycle,
+      solution_challenge_observation: observation,
+      observedStatus: observation.state?.status ?? "unavailable",
       routingEffect: "shadow_pass_through",
-      wouldRouteTo,
-      blocking_count: gwResult.output?.["blocking_count"] ?? 0,
-      required_count: gwResult.output?.["required_count"] ?? 0,
-      non_blocking_count: gwResult.output?.["non_blocking_count"] ?? 0,
-      out_of_scope_count: gwResult.output?.["out_of_scope_count"] ?? 0,
-      recommended_next_step: observedStatus === "NEEDS_REVISION" && validatedState.exhausted
-        ? "ESCALATE_TO_SOLUTION_REVIEWER"
-        : observedStatus === "NEEDS_REVISION"
-        ? "RETURN_TO_SPECIFICATION_WRITER"
+      wouldRouteTo: observation.state
+        ? (observation.state.status === "NEEDS_REVISION" && !observation.state.exhausted
+          ? "tech-design" : "review")
+        : "review",
+      blocking_count: observation.state ? (gwResult.output?.["blocking_count"] ?? 0) : 0,
+      required_count: observation.state ? (gwResult.output?.["required_count"] ?? 0) : 0,
+      non_blocking_count: observation.state ? (gwResult.output?.["non_blocking_count"] ?? 0) : 0,
+      out_of_scope_count: observation.state ? (gwResult.output?.["out_of_scope_count"] ?? 0) : 0,
+      recommended_next_step: observation.state
+        ? (observation.state.status === "NEEDS_REVISION" && observation.state.exhausted
+          ? "ESCALATE_TO_SOLUTION_REVIEWER"
+          : observation.state.status === "NEEDS_REVISION"
+          ? "RETURN_TO_SPECIFICATION_WRITER"
+          : "PROCEED_TO_SOLUTION_REVIEWER")
         : "PROCEED_TO_SOLUTION_REVIEWER",
       duration_ms: 0,
     };
@@ -350,13 +339,116 @@ async function executeGatewayShadowChallenge(
       ...base,
       result: "PASS",
       execution_source: "gateway_error",
+      fallback_used: true,
+      fallback_reason: msg.slice(0, 200),
+      solution_challenge: cycle,
+      solution_challenge_observation: {
+        availability: "unavailable" as const,
+        error: msg.slice(0, 200),
+      },
       observedStatus: "unavailable",
-      gatewayError: msg.slice(0, 200),
       routingEffect: "shadow_pass_through",
       wouldRouteTo: "review",
+      blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+      recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
       duration_ms: 0,
     };
   }
+}
+
+interface ChallengePromptInput {
+  requirement: string;
+  techDesign: string;
+  mode: string;
+  currentCycle: number;
+  previousFindingIds: string[];
+}
+
+function buildChallengePrompt(input: ChallengePromptInput): string {
+  return [
+    "You are a technical specification challenger (sdlc-solution-challenger).",
+    "Review the technical specification below against the current delivery phase.",
+    "",
+    "Requirement:",
+    input.requirement,
+    "",
+    "Technical Specification (summary):",
+    input.techDesign,
+    "",
+    `Mode: ${input.mode} | Cycle: ${input.currentCycle}/2`,
+    input.previousFindingIds.length > 0
+      ? `Previous findings to verify: ${input.previousFindingIds.join(", ")}`
+      : "",
+    "",
+    "Return a single JSON object with this structure:",
+    JSON.stringify({
+      status: "NEEDS_REVISION | READY_FOR_GATE",
+      mode: input.mode,
+      currentCycle: input.currentCycle,
+      maxCycles: 2,
+      exhausted: input.currentCycle >= 2,
+      artifactStatus: "shadow_only",
+      reportPath: null,
+      findings: [],
+      blocking_count: 0,
+      required_count: 0,
+      non_blocking_count: 0,
+      out_of_scope_count: 0,
+    }),
+    "",
+    "Do not include markdown fences or explanatory text.",
+  ].filter(Boolean).join("\n");
+}
+
+interface ChallengeObservation {
+  availability: "available" | "unavailable";
+  state?: SolutionChallengeState;
+  error?: string;
+}
+
+function parseChallengeObservation(
+  gwResult: { success: boolean; output?: Record<string, unknown>; error?: string },
+  fallbackState: SolutionChallengeState
+): ChallengeObservation {
+  if (!gwResult.success) {
+    return {
+      availability: "unavailable",
+      error: gwResult.error ?? "gateway_returned_failure",
+    };
+  }
+
+  const rawOutput = gwResult.output;
+  if (!rawOutput) {
+    return { availability: "unavailable", error: "empty_gateway_output" };
+  }
+
+  // Try to extract structured state from summary (Kimi text output)
+  const summary = typeof rawOutput["summary"] === "string" ? rawOutput["summary"] as string : "";
+  if (summary) {
+    try {
+      const parsed = JSON.parse(summary);
+      const state = validateSolutionChallengeState({
+        ...fallbackState,
+        ...parsed,
+      });
+      return { availability: "available", state };
+    } catch {
+      // Not valid JSON or invalid state — try raw solution_challenge
+    }
+  }
+
+  // Try raw solution_challenge field
+  const rawState = rawOutput["solution_challenge"] as Record<string, unknown> | undefined;
+  if (rawState) {
+    try {
+      const state = validateSolutionChallengeState(rawState);
+      return { availability: "available", state };
+    } catch {
+      return { availability: "unavailable", error: "invalid_solution_challenge_state" };
+    }
+  }
+
+  return { availability: "unavailable", error: "no_parseable_output" };
 }
 
 // Default executor map factory — allows optional Gateway injection for implementation.

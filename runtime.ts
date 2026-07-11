@@ -329,21 +329,13 @@ export async function run(
       execCtx.metadata.solutionChallenge = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
     }
 
-    // ── Gateway shadow: record observed routing, always pass-through to review ──
+    // ── Gateway shadow: record observed routing metadata in trace ──
     if (currentNode === "solution-challenge" && options.solutionChallengeMode === "gateway_shadow") {
-      const state = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
-      const wouldRoute = state
-        ? (state.status === "NEEDS_REVISION" && !state.exhausted ? "tech-design" : "review")
-        : "review";
-      // Record shadow routing metadata in trace output
       const scTrace = trace[trace.length - 1];
       if (scTrace && scTrace.node === "solution-challenge") {
+        // Graph transition reads routingEffect from output to determine route
         (scTrace.output as Record<string, unknown>)["routingEffect"] = "shadow_pass_through";
-        (scTrace.output as Record<string, unknown>)["wouldRouteTo"] = wouldRoute;
       }
-      // Override: always route to review in shadow mode
-      currentNode = "review";
-      continue;
     }
 
     // ─── Code Review + Bugfix Loop (after implementation, before validation) ───

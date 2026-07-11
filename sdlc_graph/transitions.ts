@@ -19,6 +19,11 @@ export function getNextNode(
   // ─── Solution-challenge: self-contained cycle routing ──
   // Uses shared validator for complete state validation.
   if (current === "solution-challenge" && nodeResult) {
+    // Shadow pass-through: always route to review regardless of status
+    if (nodeResult["routingEffect"] === "shadow_pass_through") {
+      return "review";
+    }
+
     const state = validateSolutionChallengeState(
       nodeResult["solution_challenge"]
     );
