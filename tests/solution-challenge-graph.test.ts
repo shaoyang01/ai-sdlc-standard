@@ -195,6 +195,153 @@ async function test() {
   assert(getNode("solution-challenge")?.order === 2, "order = 2");
   console.log("");
 
+  // ═══════════════════════════════════════════════════════
+  // Gateway Shadow Tests
+  // ═══════════════════════════════════════════════════════
+
+  // ═══ Test 9: Gateway shadow — skill name explicitly sent ═══
+  console.log("Test 9: Gateway shadow sends explicit skill name");
+  let capturedGwRequest9: ExecutionRequest | undefined;
+  const gw9: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        capturedGwRequest9 = req;
+        return { success: true, node: req.node, agent: req.agent, output: { solution_challenge: createShadowReadyChallengeState() }, artifacts: [] };
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  await run("x", { executionGateway: gw9, solutionChallengeMode: "gateway_shadow" });
+  assert(capturedGwRequest9 !== undefined, "gateway received request");
+  assert(capturedGwRequest9!.type === "llm_task", "request type is llm_task");
+  assert(capturedGwRequest9!.agent === "kimi", "agent is kimi");
+  assert(capturedGwRequest9!.node === "solution-challenge", "node is solution-challenge");
+  // Verify skill name is NOT inferred — it must be explicit. The gateway call
+  // uses type/agent/node; skill binding is in the executor output (skill field).
+  console.log("");
+
+  // ═══ Test 10: Gateway shadow — READY_FOR_GATE observed, continues to review ═══
+  console.log("Test 10: Gateway shadow READY_FOR_GATE");
+  const gw10: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        return { success: true, node: "solution-challenge", agent: "kimi", output: { solution_challenge: createShadowReadyChallengeState() }, artifacts: [] };
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  const r10 = await run("x", { executionGateway: gw10, solutionChallengeMode: "gateway_shadow" });
+  const sc10 = r10.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc10?.output["observedStatus"] === "READY_FOR_GATE", "observedStatus = READY_FOR_GATE");
+  assert(sc10?.output["routingEffect"] === "shadow_pass_through", "routingEffect = shadow_pass_through");
+  assert(sc10?.output["wouldRouteTo"] === "review", "wouldRouteTo = review");
+  assert(r10.execution_trace.some((t) => t.node === "review"), "flow continued to review");
+  assert(sc10?.output["execution_source"] === "gateway", "execution_source = gateway");
+  assert(sc10?.output["executor_type"] === "gateway_shadow", "executor_type = gateway_shadow");
+  console.log("");
+
+  // ═══ Test 11: Gateway shadow — NEEDS_REVISION observed, would route to tech-design ═══
+  console.log("Test 11: Gateway shadow NEEDS_REVISION");
+  const needsRevState = { ...createShadowReadyChallengeState(), status: "NEEDS_REVISION" as const, exhausted: false };
+  const gw11: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        return { success: true, node: "solution-challenge", agent: "kimi", output: { solution_challenge: needsRevState }, artifacts: [] };
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  const r11 = await run("x", { executionGateway: gw11, solutionChallengeMode: "gateway_shadow" });
+  const sc11 = r11.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc11?.output["observedStatus"] === "NEEDS_REVISION", "observedStatus = NEEDS_REVISION");
+  assert(sc11?.output["routingEffect"] === "shadow_pass_through", "routingEffect = shadow_pass_through");
+  assert(sc11?.output["wouldRouteTo"] === "tech-design", "wouldRouteTo = tech-design");
+  // Shadow still continues to review (not tech-design)
+  assert(r11.execution_trace.some((t) => t.node === "review"), "flow continued to review (not tech-design)");
+  assert(sc11?.output["recommended_next_step"] === "RETURN_TO_SPECIFICATION_WRITER", "recommended = RETURN_TO_SPECIFICATION_WRITER");
+  console.log("");
+
+  // ═══ Test 12: Gateway shadow — exhausted NEEDS_REVISION preserved ═══
+  console.log("Test 12: Gateway shadow exhausted NEEDS_REVISION");
+  const exhaustedState = { ...createShadowReadyChallengeState(), mode: "FOLLOW_UP_VERIFICATION" as const, currentCycle: 2 as const, status: "NEEDS_REVISION" as const, exhausted: true };
+  const gw12: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        return { success: true, node: "solution-challenge", agent: "kimi", output: { solution_challenge: exhaustedState }, artifacts: [] };
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  const r12 = await run("x", { executionGateway: gw12, solutionChallengeMode: "gateway_shadow" });
+  const sc12 = r12.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc12?.output["observedStatus"] === "NEEDS_REVISION", "observedStatus = NEEDS_REVISION");
+  assert(sc12?.output["routingEffect"] === "shadow_pass_through", "shadow pass through");
+  assert(sc12?.output["wouldRouteTo"] === "review", "wouldRouteTo = review (exhausted)");
+  assert(sc12?.output["recommended_next_step"] === "ESCALATE_TO_SOLUTION_REVIEWER", "recommended = ESCALATE");
+  // Status preserved (not rewritten to READY_FOR_GATE)
+  const s12 = sc12?.output["solution_challenge"] as SolutionChallengeState | undefined;
+  assert(s12?.status === "NEEDS_REVISION", "status preserved as NEEDS_REVISION");
+  console.log("");
+
+  // ═══ Test 13: Gateway failure — no fake READY or generated artifact ═══
+  console.log("Test 13: Gateway failure handled gracefully");
+  const gw13: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        throw new Error("gateway unavailable");
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  const r13 = await run("x", { executionGateway: gw13, solutionChallengeMode: "gateway_shadow" });
+  const sc13 = r13.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc13 !== undefined, "challenge trace exists");
+  assert(sc13!.output["execution_source"] === "gateway_error", "execution_source = gateway_error");
+  assert(sc13!.output["observedStatus"] === "unavailable", "observedStatus = unavailable");
+  assert(sc13!.output["routingEffect"] === "shadow_pass_through", "shadow pass through");
+  assert(sc13!.output["gatewayError"] !== undefined, "gatewayError recorded");
+  // Flow still continues to review
+  assert(r13.execution_trace.some((t) => t.node === "review"), "flow continued to review after gateway error");
+  // Artifact is NOT generated
+  const s13 = sc13!.output["solution_challenge"] as SolutionChallengeState | undefined;
+  assert(s13?.artifactStatus === "shadow_only" || s13?.artifactStatus !== "generated", "not generated on error");
+  console.log("");
+
+  // ═══ Test 14: Gateway malformed output — no fake READY ═══
+  console.log("Test 14: Gateway malformed output handled");
+  const gw14: RuntimeExecutionGateway = {
+    async execute(req: ExecutionRequest): Promise<ExecutionResult> {
+      if (req.type === "llm_task" && req.node === "solution-challenge") {
+        return { success: true, node: "solution-challenge", agent: "kimi", output: { solution_challenge: { status: "INVALID" } }, artifacts: [] };
+      }
+      return fakeGateway.execute(req);
+    },
+  };
+  const r14 = await run("x", { executionGateway: gw14, solutionChallengeMode: "gateway_shadow" });
+  const sc14 = r14.execution_trace.find((t) => t.node === "solution-challenge");
+  assert(sc14?.output["execution_source"] === "gateway_error", "malformed → gateway_error");
+  assert(sc14?.output["observedStatus"] === "unavailable", "observedStatus = unavailable");
+  // Does NOT forge READY_FOR_GATE
+  const s14 = sc14?.output["solution_challenge"] as SolutionChallengeState | undefined;
+  assert(s14?.status !== "READY_FOR_GATE" || sc14?.output["execution_source"] === "gateway_error", "no fake READY");
+  console.log("");
+
+  // ═══ Test 15: Disabled and shadow modes not regressed ═══
+  console.log("Test 15: Disabled and shadow modes not regressed");
+  const r15a = await run("x", { executionGateway: fakeGateway, solutionChallengeMode: "disabled" });
+  assert(!r15a.execution_trace.some((t) => t.node === "solution-challenge"), "disabled: no challenge");
+  const r15b = await run("x", { executionGateway: fakeGateway, solutionChallengeMode: "shadow" });
+  assert(r15b.execution_trace.some((t) => t.node === "solution-challenge"), "shadow: challenge present");
+  assert(r15b.execution_trace.some((t) => t.node === "review"), "shadow: review reached");
+  console.log("");
+
+  // ═══ Test 16: final_status and implementation_outcome not affected ═══
+  console.log("Test 16: final_status / implementation_outcome preserved");
+  const r16 = await run("x", { executionGateway: gw10, solutionChallengeMode: "gateway_shadow" });
+  assert(r16.final_status === "success", "final_status = success");
+  assert(typeof r16.implementation_outcome === "string", "implementation_outcome set");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

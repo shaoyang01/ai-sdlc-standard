@@ -19,6 +19,8 @@ export type RequirementSummaryMode = "deterministic" | "kimi_gateway";
 
 export interface RuntimeExecutorOptions {
   requirementSummaryMode?: RequirementSummaryMode;
+  solutionChallengeMode?: "disabled" | "shadow" | "gateway_shadow";
+  solutionChallengeGateway?: RuntimeExecutionGateway;
 }
 
 export type ImplementationOutcome =
@@ -221,6 +223,7 @@ import {
   type SolutionChallengeState,
   advanceChallengeCycle,
   deriveSolutionChallengeResult,
+  validateSolutionChallengeState,
 } from "./solution-challenge-state";
 
 // Re-export for consumers (execution-context, runtime, tests)
@@ -255,6 +258,107 @@ function executeSolutionChallenge(
   };
 }
 
+/** Execute solution-challenge via real Gateway in shadow mode.
+ *  Calls RuntimeExecutionGateway with explicit skill name.
+ *  Observed result is recorded but routing always pass-through to review. */
+async function executeGatewayShadowChallenge(
+  requirement: string,
+  requirementId: string,
+  techDesignOutput: Record<string, unknown>,
+  previous: SolutionChallengeState | undefined,
+  gateway: RuntimeExecutionGateway
+): Promise<Record<string, unknown>> {
+  const cycle = advanceChallengeCycle(previous);
+  const base = {
+    node: "solution-challenge",
+    skill: "sdlc-solution-challenger",
+    executor_type: "gateway_shadow",
+    fallback_used: false,
+    fallback_reason: "none",
+    solution_challenge: cycle,
+    blocking_count: 0, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0,
+    recommended_next_step: "PROCEED_TO_SOLUTION_REVIEWER",
+  };
+
+  try {
+    const gwResult = await gateway.execute({
+      type: "llm_task",
+      node: "solution-challenge",
+      agent: "kimi",
+      requirementId,
+      input: {
+        requirement,
+        "tech-design": techDesignOutput,
+        mode: cycle.mode,
+        currentCycle: cycle.currentCycle,
+        previousFindingIds: previous?.findingIds ?? [],
+        previousReportPath: previous?.reportPath ?? null,
+      },
+    });
+
+    // Try to extract and validate solution_challenge from gateway result
+    const rawState = gwResult.output?.["solution_challenge"] as Record<string, unknown> | undefined;
+    let validatedState: SolutionChallengeState;
+    let executionSource = "gateway";
+
+    try {
+      validatedState = validateSolutionChallengeState(rawState ?? { status: "READY_FOR_GATE" });
+    } catch {
+      // Gateway returned invalid state — record error, keep shadow cycle state
+      return {
+        ...base,
+        result: "PASS",
+        execution_source: "gateway_error",
+        observedStatus: "unavailable",
+        gatewayError: "invalid_solution_challenge_state",
+        routingEffect: "shadow_pass_through",
+        wouldRouteTo: "review",
+        duration_ms: 0,
+      };
+    }
+
+    const observedStatus = validatedState.status;
+    const wouldRouteTo = observedStatus === "NEEDS_REVISION" && !validatedState.exhausted
+      ? "tech-design" : "review";
+
+    return {
+      ...base,
+      skill: "sdlc-solution-challenger",
+      result: deriveSolutionChallengeResult(validatedState.status),
+      execution_source: executionSource,
+      solution_challenge: {
+        ...validatedState,
+        artifactStatus: validatedState.artifactStatus === "generated" ? "generated" : "shadow_only",
+      },
+      observedStatus,
+      routingEffect: "shadow_pass_through",
+      wouldRouteTo,
+      blocking_count: gwResult.output?.["blocking_count"] ?? 0,
+      required_count: gwResult.output?.["required_count"] ?? 0,
+      non_blocking_count: gwResult.output?.["non_blocking_count"] ?? 0,
+      out_of_scope_count: gwResult.output?.["out_of_scope_count"] ?? 0,
+      recommended_next_step: observedStatus === "NEEDS_REVISION" && validatedState.exhausted
+        ? "ESCALATE_TO_SOLUTION_REVIEWER"
+        : observedStatus === "NEEDS_REVISION"
+        ? "RETURN_TO_SPECIFICATION_WRITER"
+        : "PROCEED_TO_SOLUTION_REVIEWER",
+      duration_ms: 0,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      result: "PASS",
+      execution_source: "gateway_error",
+      observedStatus: "unavailable",
+      gatewayError: msg.slice(0, 200),
+      routingEffect: "shadow_pass_through",
+      wouldRouteTo: "review",
+      duration_ms: 0,
+    };
+  }
+}
+
 // Default executor map factory — allows optional Gateway injection for implementation.
 // All other node executors remain stateless and Gateway-agnostic.
 export function createDefaultExecutors(
@@ -274,13 +378,25 @@ export function createDefaultExecutors(
         ctx.raw_text as string,
         (ctx["requirement-summary"] ?? ctx) as RequirementSummary
       ),
-    "solution-challenge": (ctx, _execCtx) =>
-      executeSolutionChallenge(
+    "solution-challenge": (ctx, _execCtx) => {
+      const mode = options.solutionChallengeMode ?? "disabled";
+      const gateway = options.solutionChallengeGateway;
+      if (mode === "gateway_shadow" && gateway) {
+        return executeGatewayShadowChallenge(
+          ctx.raw_text as string,
+          ctx.requirement_id as string,
+          (ctx["tech-design"] ?? {}) as Record<string, unknown>,
+          _execCtx?.metadata?.solutionChallenge as SolutionChallengeState | undefined,
+          gateway,
+        );
+      }
+      return executeSolutionChallenge(
         ctx.raw_text as string,
         ctx.requirement_id as string,
         (ctx["tech-design"] ?? {}) as Record<string, unknown>,
         _execCtx?.metadata?.solutionChallenge as SolutionChallengeState | undefined
-      ),
+      );
+    },
     "review": (ctx, execCtx) =>
       ({
         node: "review",

@@ -84,7 +84,7 @@ export interface RuntimeOptions {
   executors?: Partial<RuntimeExecutorMap>;
   executionGateway?: RuntimeExecutionGateway;
   requirementSummaryMode?: "deterministic" | "kimi_gateway";
-  solutionChallengeMode?: "disabled" | "shadow";
+  solutionChallengeMode?: "disabled" | "shadow" | "gateway_shadow";
 }
 
 // ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
@@ -257,13 +257,15 @@ export async function run(
   const executors: RuntimeExecutorMap = {
     ...createDefaultExecutors(runtimeGateway, {
       requirementSummaryMode: options.requirementSummaryMode,
+      solutionChallengeMode: options.solutionChallengeMode,
+      solutionChallengeGateway: runtimeGateway,
     }),
     ...options.executors,
   };
 
   while (currentNode && vmState.status === "running") {
     // ── Skip solution-challenge when disabled ──
-    if (currentNode === "solution-challenge" && options.solutionChallengeMode !== "shadow") {
+    if (currentNode === "solution-challenge" && options.solutionChallengeMode === "disabled") {
       currentNode = getNextNode(currentNode, {
         result: "PASS",
         solution_challenge: createShadowReadyChallengeState(),
@@ -325,6 +327,23 @@ export async function run(
     // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
     if (currentNode === "solution-challenge") {
       execCtx.metadata.solutionChallenge = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
+    }
+
+    // ── Gateway shadow: record observed routing, always pass-through to review ──
+    if (currentNode === "solution-challenge" && options.solutionChallengeMode === "gateway_shadow") {
+      const state = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
+      const wouldRoute = state
+        ? (state.status === "NEEDS_REVISION" && !state.exhausted ? "tech-design" : "review")
+        : "review";
+      // Record shadow routing metadata in trace output
+      const scTrace = trace[trace.length - 1];
+      if (scTrace && scTrace.node === "solution-challenge") {
+        (scTrace.output as Record<string, unknown>)["routingEffect"] = "shadow_pass_through";
+        (scTrace.output as Record<string, unknown>)["wouldRouteTo"] = wouldRoute;
+      }
+      // Override: always route to review in shadow mode
+      currentNode = "review";
+      continue;
     }
 
     // ─── Code Review + Bugfix Loop (after implementation, before validation) ───
