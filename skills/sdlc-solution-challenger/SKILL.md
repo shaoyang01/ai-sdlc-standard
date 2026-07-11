@@ -60,6 +60,7 @@ Require only the minimum sufficient design for the current phase.
 ## Required Standard Files
 
 - `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
+- `${AI_SDLC_STANDARD_HOME}/checklists/specification-checklist.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-flow.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
