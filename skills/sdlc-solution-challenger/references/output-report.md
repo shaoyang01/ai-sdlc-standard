@@ -12,6 +12,18 @@ This keeps it as an auxiliary artifact within the specification phase, without r
 ## Report Structure
 
 ```yaml
+## Metadata
+
+- Requirement ID:
+- Artifact Type: 方案挑战报告
+- Version: 1.0.0
+- Status: draft / active
+- Reviewer / Skill: sdlc-solution-challenger
+- Created At:
+- Updated At:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+
 requirement_id:
 
 reviewed_artifact:  # the specification file reviewed
@@ -122,6 +134,11 @@ recommended_next_step:
   RETURN_TO_SPECIFICATION_WRITER
   PROCEED_TO_SOLUTION_REVIEWER
   ESCALATE_TO_SOLUTION_REVIEWER
+
+## 修订记录
+
+| Version | Date | Author / Skill | Change Type | Summary |
+|---|---|---|---|---|
 ```
 
 ## Section Details
