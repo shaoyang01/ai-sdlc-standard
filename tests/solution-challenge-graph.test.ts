@@ -174,16 +174,32 @@ async function test() {
   assert(r7d.error, "invalid artifact combo: replay throws error");
 
   // Case 7e: valid READY_FOR_GATE → replays to review
-  const r7e = runReplay([makeTraceItem("solution-challenge", scOut(ready))]);
-  assert(!r7e.error, "valid READY_FOR_GATE: no error");
-  // getNextNode for the next step should be review
-  assert(gn("solution-challenge", scOut(ready)) === "review", "valid READY_FOR_GATE → review");
+  const r7eResult = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [makeTraceItem("solution-challenge", scOut(ready))]
+  );
+  assert(r7eResult.status === "running", "7e: replay status = running");
+  assert(r7eResult.currentNode === "review", "7e: currentNode = review");
+  assert(r7eResult.step === 1, "7e: step = 1");
+  assert(r7eResult.retryCount === 0, "7e: retryCount = 0");
 
   // Case 7f: valid NEEDS_REVISION + !exhausted → tech-design
-  assert(gn("solution-challenge", scOut(needsRev)) === "tech-design", "valid NEEDS_REVISION → tech-design");
+  const r7fResult = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [makeTraceItem("solution-challenge", scOut(needsRev))]
+  );
+  assert(r7fResult.status === "running", "7f: replay status = running");
+  assert(r7fResult.currentNode === "tech-design", "7f: currentNode = tech-design");
+  assert(r7fResult.step === 1, "7f: step = 1");
 
   // Case 7g: valid NEEDS_REVISION + exhausted → review
-  assert(gn("solution-challenge", scOut(needsRevEx)) === "review", "valid exhausted NEEDS_REVISION → review");
+  const r7gResult = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [makeTraceItem("solution-challenge", scOut(needsRevEx))]
+  );
+  assert(r7gResult.status === "running", "7g: replay status = running");
+  assert(r7gResult.currentNode === "review", "7g: exhausted NEEDS_REVISION → review");
+  assert(r7gResult.step === 1, "7g: step = 1");
   console.log("");
 
   // ═══ Test 8: Shadow artifact + graph ═══
@@ -582,14 +598,57 @@ async function test() {
   assert(rr8, "RR8: replay throws on empty findingId");
 
   // RR9: valid available → replay succeeds, routes to review
-  let rr9ok = false;
-  try { const result = replayExecution(createInitialState(buildExecutionContext("requirement-summary", {})), [availTi]); rr9ok = result.status !== "completed"; } catch { rr9ok = true; }
-  assert(rr9ok, "RR9: valid available replay processes (not error)");
+  const rr9State = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [availTi]
+  );
+  assert(rr9State.status === "running", "RR9: replay status = running");
+  assert(rr9State.step === 1, "RR9: step = 1");
+  assert(rr9State.currentNode === "review", "RR9: currentNode = review");
+  assert(rr9State.retryCount === 0, "RR9: retryCount = 0");
+  assert(rr9State.history.length === 1, "RR9: history.length = 1");
+  assert(rr9State.history[0].output["routingEffect"] === "shadow_pass_through", "RR9: routingEffect preserved");
+  assert(rr9State.history[0].output["wouldRouteTo"] === "review", "RR9: wouldRouteTo preserved");
+  assert(rr9State.history[0].output["observedStatus"] === "READY_FOR_GATE", "RR9: observedStatus preserved");
 
   // RR10: valid unavailable → replay succeeds, no READY state in history
-  let rr10ok = false;
-  try { const result = replayExecution(createInitialState(buildExecutionContext("requirement-summary", {})), [unavailTi]); rr10ok = result.status !== "completed"; } catch { rr10ok = true; }
-  assert(rr10ok, "RR10: valid unavailable replay processes (not error)");
+  const rr10State = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [unavailTi]
+  );
+  assert(rr10State.status === "running", "RR10: replay status = running");
+  assert(rr10State.currentNode === "review", "RR10: currentNode = review");
+  assert(rr10State.step === 1, "RR10: step = 1");
+  assert(rr10State.history.length === 1, "RR10: history.length = 1");
+  // Use hasOwnProperty to verify absence, not just undefined check
+  const rr10output = rr10State.history[0].output as Record<string, unknown>;
+  assert(!Object.prototype.hasOwnProperty.call(rr10output, "solution_challenge"), "RR10: no solution_challenge by own property");
+  const rr10obs = rr10output["solution_challenge_observation"] as Record<string, unknown>;
+  assert(rr10obs !== undefined, "RR10: observation exists");
+  assert(!Object.prototype.hasOwnProperty.call(rr10obs, "state"), "RR10: no observation.state");
+  assert(!Object.prototype.hasOwnProperty.call(rr10obs, "findings"), "RR10: no findings");
+  assert(!Object.prototype.hasOwnProperty.call(rr10obs, "findingIds"), "RR10: no findingIds");
+  assert(!Object.prototype.hasOwnProperty.call(rr10obs, "counts"), "RR10: no counts");
+  // Verify absence of READY_FOR_GATE in history output
+  const rr10json = JSON.stringify(rr10State.history);
+  assert(!rr10json.includes("READY_FOR_GATE"), "RR10: no READY_FOR_GATE in history");
+
+  // RR12: NEEDS_REVISION shadow pass-through (wouldRouteTo=tech-design, actual→review)
+  console.log("Replay: NEEDS_REVISION shadow pass-through");
+  const needsRevTi = makeTi("solution-challenge", {
+    routingEffect: "shadow_pass_through",
+    solution_challenge: { ...gatewayReadyState, status: "NEEDS_REVISION" as const, exhausted: false, findingIds: ["CH-001"] },
+    solution_challenge_observation: { availability: "available", state: { ...gatewayReadyState, status: "NEEDS_REVISION" as const, exhausted: false, findingIds: ["CH-001"] }, findingIds: ["CH-001"], counts: { blocking: 1, required: 0, nonBlocking: 0, outOfScope: 0 } },
+    observedStatus: "NEEDS_REVISION", fallback_used: false, wouldRouteTo: "tech-design",
+  });
+  const rr12State = replayExecution(
+    createInitialState(buildExecutionContext("requirement-summary", {})),
+    [needsRevTi]
+  );
+  assert(rr12State.status === "running", "RR12: replay status = running");
+  assert(rr12State.currentNode === "review", "RR12: shadow_pass_through → review (not tech-design)");
+  assert(rr12State.history[0].output["wouldRouteTo"] === "tech-design", "RR12: wouldRouteTo = tech-design");
+  assert(rr12State.history[0].output["routingEffect"] === "shadow_pass_through", "RR12: routingEffect preserved");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
