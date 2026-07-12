@@ -56,10 +56,10 @@ The following modules exist in the repository and are referenced by tests, TypeS
 | --- | --- |
 | `loop/` | Older static node-flow table and linear execution helpers. The Runtime no longer routes through it, but files remain for reference and potential compatibility paths. |
 | `docflow/` | Linear deterministic state-machine engine and node handlers. It represents an alternative execution shape that is kept distinct from the graph-based Runtime. |
-| `fanout_engine/` | Multi-repo fanout orchestration utilities used by the Runtime for fanout implementations. |
-| `fanout_feedback/` | Feedback collection and mapping for fanout results. |
-| `evolution/` | Proposal collection and metrics for runtime/evolution feedback. |
-| `adoption/` | Intake, classifier, validator, and executor helpers for adopting the standard package. |
+| `fanout_engine/` | Independent deterministic multi-repo fanout engine. The current main Runtime does **not** use it; Runtime fanout is inline in `core/runtime-executors.ts#executeFanout`. Long-term relationship to the Runtime is undecided. |
+| `fanout_feedback/` | Independent result collection, DocFlow validation mapping, and validation report building for fanout outputs. Not wired into the current main Runtime. |
+| `evolution/` | Independent read-only observability module: event collection, metrics computation, pattern analysis, and report generation. Does not influence current routing or execution. |
+| `adoption/` | Rule-driven change adoption/application gateway for `EvolutionProposal` objects. Not a standard-package installation or rollout helper. |
 
 These modules continue to compile and appear in `tsconfig.json`. Their long-term relationship to the Runtime is documented under **Open Decisions** below.
 
@@ -69,7 +69,7 @@ The following questions are intentionally left open and are out of scope for thi
 
 1. **Lifecycle classification of compatible/auxiliary modules** — Whether `loop/`, `docflow/`, `fanout_engine/`, `fanout_feedback/`, `evolution/`, and `adoption/` should be promoted to first-class Runtime subsystems, extracted into separate packages, or maintained as stable compatibility layers.
 2. **Standard package and Runtime co-location** — Whether the standard package (`manifest.yaml`, governance docs, templates, skills) and the Runtime (`package.json`, TypeScript source) should remain in one repository or split.
-3. **Single source of truth for status documents** — Which file among `SYSTEM_STATUS.md`, `SYSTEM_CAPABILITY_REVIEW.md`, `runtime-capabilities.json`, and the capability JSON files is the canonical status source.
+3. **Single source of truth for status documents** — Which file among `docs/CURRENT_STATUS.md`, `SYSTEM_STATUS.md`, `SYSTEM_CAPABILITY_REVIEW.md`, `runtime-capabilities.json`, and the capability JSON files is the canonical status source.
 4. **Runtime source layout** — Whether Runtime code should migrate into an `src/` directory or remain at the repository root.
 
 ## Capability and Material Boundaries
