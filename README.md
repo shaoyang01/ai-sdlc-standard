@@ -8,6 +8,15 @@
 
 Current mainline completed through PR J–P. Final Audit Cleanup completed. Full repository review: PASS（0 P0, 2 P1 resolved, 4 P2 noted）. All validators pass, 16/16 product parity fixtures pass, 3/3 acceptance commands pass.
 
+## Repository Structure
+
+This repository contains two product surfaces:
+
+- **Standard Package** — governance docs, templates, skills, and validators. Canonical entrypoints: `README.md`, `manifest.yaml`, `ROADMAP.md`, `PORTABILITY.md`, and `AI_CHANGE_GUARDRAILS.md`. `manifest.yaml` is the standard package index, not a Runtime manifest.
+- **Runtime** — the deterministic TypeScript graph interpreter. Entrypoints: `package.json`, `runtime.ts`, `demo.ts`, plus `core/`, `execution/`, `sdlc_graph/`, `tests/`, and CI.
+
+See [`docs/REPOSITORY-STRUCTURE.md`](docs/REPOSITORY-STRUCTURE.md) for the full authority map.
+
 ## What This Repository Provides
 
 ### DocFlow / AI SDLC
