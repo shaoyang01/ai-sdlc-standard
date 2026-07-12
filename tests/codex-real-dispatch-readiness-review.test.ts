@@ -117,7 +117,7 @@ async function test() {
   console.log("");
 
   console.log("Test 10: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
   assert(md.includes("READY_WITH_CONSTRAINTS"), "md: verdict");
   assert(md.includes("SDLC_EXECUTION_MODE=codex"), "md: required flag");
   assert(md.includes("code_generation"), "md: supported request type");

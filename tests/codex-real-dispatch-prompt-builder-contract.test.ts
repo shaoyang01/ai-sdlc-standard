@@ -173,7 +173,7 @@ async function test() {
   console.log("");
 
   console.log("Test 16: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_PROMPT_BUILDER_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_PROMPT_BUILDER_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Prompt Source") || md.includes("prompt source"), "md: prompt source");
   assert(md.includes("Required Prompt Sections") || md.includes("required prompt sections"), "md: required sections");

@@ -160,7 +160,7 @@ async function test() {
   console.log("");
 
   console.log("Test 13: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_OBSERVABILITY_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_OBSERVABILITY_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Allowed Summary Fields") || md.includes("allowed summary fields"), "md: allowed fields");
   assert(md.includes("Prohibited Fields") || md.includes("prohibited fields"), "md: prohibited fields");
