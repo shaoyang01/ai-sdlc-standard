@@ -504,8 +504,8 @@
       ],
       "default_enabled": false,
       "evidence": [
-        "KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-        "kimi-gateway-real-dispatch-readiness-review.json",
+        "docs/capabilities/kimi/KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+        "metadata/capabilities/kimi/kimi-gateway-real-dispatch-readiness-review.json",
         "tests/kimi-gateway-real-dispatch-readiness-review.test.ts"
       ]
     },
@@ -526,8 +526,8 @@
       "bugfix_requires_separate_review": true,
       "evidence": [
         "execution/kimi-request-type-expansion-contract.ts",
-        "KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
-        "kimi-request-type-expansion-contract.json",
+        "docs/capabilities/kimi/KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
+        "metadata/capabilities/kimi/kimi-request-type-expansion-contract.json",
         "tests/kimi-request-type-expansion-contract.test.ts"
       ]
     },
