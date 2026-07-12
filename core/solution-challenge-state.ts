@@ -285,10 +285,8 @@ export function validateGatewayShadowChallengeOutput(
 	      }
 	    }
 
-	    // undefined vs [] — different lengths caught above; check undefined consistency
-	    if ((topFindingIds === undefined) !== (obsStateFindingIds === undefined)) {
-	      throw new Error("gateway shadow: findingIds undefined inconsistency between solution_challenge and observation.state");
-	    }
+		    // undefined and [] are equivalent in comparison
+		    // (already normalized via ?? on lines above)
 
     // ── observedStatus ──
     if (output["observedStatus"] !== state.status) {

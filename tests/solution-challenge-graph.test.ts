@@ -471,7 +471,53 @@ async function test() {
   let f13 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: [""] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: [""] }, findingIds: [""] } })); } catch (e) { f13 = String(e).includes("findingIds"); }
   assert(f13, "F13: empty string in findingIds throws");
 
+  // F14: undefined/[] equivalence — state findingIds undefined, observation findingIds []
+  let f14 = false; try {
+    const s = { ...gatewayReadyState } as Record<string, unknown>; delete s["findingIds"];
+    vgw(mkOut({ solution_challenge: s, solution_challenge_observation: { ...baseObs, state: s, findingIds: [] } }));
+    f14 = true;
+  } catch { }
+  assert(f14, "F14: state undefined + obs [] passes (equivalent)");
+
+  // F15: both states missing findingIds, obs is []
+  let f15 = false; try {
+    const s = { ...gatewayReadyState } as Record<string, unknown>; delete s["findingIds"];
+    vgw(mkOut({ solution_challenge: s, solution_challenge_observation: { ...baseObs, state: s, findingIds: [] } }));
+    f15 = true;
+  } catch { }
+  assert(f15, "F15: both states undefined + obs [] passes");
+
+  // Linked-field rejection: mode+currentCycle+exhausted mismatch (catches mode first)
+  let f2b = false; try {
+    vgw(mkOut({
+      solution_challenge: { ...gatewayReadyState, mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, exhausted: true },
+      solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState } },
+    }));
+  } catch (e) { f2b = String(e).includes("mode"); }
+  assert(f2b, "F2b: linked mode/cycle/exhausted mismatch throws with mode");
+
+  // maxCycles mismatch (both sides valid, different maxCycles... but maxCycles is always 2 per validator)
+  // maxCycles cannot be different while both sides pass single-object validation.
+  // Verified: maxCycles is enforced as exactly 2 by validateSolutionChallengeState.
+
   console.log("");
+
+  // ═══════════════════════════════════════════════════════
+  // Replay Cross-Object Field Drift Test
+  // ═══════════════════════════════════════════════════════
+
+  console.log("Replay: cross-object field drift rejected");
+
+  // RR11: replay trace where solution_challenge.status differs from observation.state.status
+  const driftTi = makeTi("solution-challenge", {
+    routingEffect: "shadow_pass_through",
+    solution_challenge: { ...gatewayReadyState, status: "NEEDS_REVISION", exhausted: false, findingIds: [] },
+    solution_challenge_observation: { availability: "available", state: { ...gatewayReadyState, findingIds: [] }, findingIds: [], counts: { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 } },
+    observedStatus: "READY_FOR_GATE", fallback_used: false, wouldRouteTo: "review",
+  });
+  let rr11 = false;
+  try { replayExecution(createInitialState(buildExecutionContext("requirement-summary", {})), [driftTi]); } catch (e) { rr11 = String(e).includes("status"); }
+  assert(rr11, "RR11: replay rejects cross-object status drift");
 
   // ═══════════════════════════════════════════════════════
   // Replay Malformed Gateway Shadow Tests (real replayExecution)
@@ -485,8 +531,8 @@ async function test() {
 
   const availTi = makeTi("solution-challenge", {
     routingEffect: "shadow_pass_through",
-    solution_challenge: gatewayReadyState,
-    solution_challenge_observation: { availability: "available", state: gatewayReadyState, findingIds: ["CH-001"], counts: { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 } },
+    solution_challenge: { ...gatewayReadyState, findingIds: ["CH-001"] },
+    solution_challenge_observation: { availability: "available", state: { ...gatewayReadyState, findingIds: ["CH-001"] }, findingIds: ["CH-001"], counts: { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 } },
     observedStatus: "READY_FOR_GATE", fallback_used: false, wouldRouteTo: "review",
   });
   const unavailTi = makeTi("solution-challenge", {
