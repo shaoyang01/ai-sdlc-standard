@@ -6,11 +6,12 @@ This document inventories every capability-related Markdown and JSON file at the
 
 ## Audit Method and Authority Rules
 
-1. Enumerate every root-level `*.md` and `*.json` file.
-2. Exclude only the eight non-capability files listed below.
-3. Search the repository, excluding `.git`, `node_modules`, and `.zcode`, for each inventoried basename.
-4. Classify actual reads separately from static evidence/path strings and same-stem companions. A same-stem TypeScript file is not a reference unless it reads or names the target MD/JSON.
-5. Treat `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` as `cleanup_plan_only`: its retention list, target directories, and batches are proposals, not approved authority or migration decisions.
+1. Baseline commit for this audit: `1a6268a8dbe6d34ba70a05d1588bd94516613faf`.
+2. Enumerate every root-level `*.md` and `*.json` file.
+3. Exclude only the eight non-capability files listed below.
+4. Search the repository, excluding `.git`, `node_modules`, and `.zcode`, for each inventoried basename.
+5. Classify actual reads separately from static evidence/path strings and same-stem companions. A same-stem TypeScript file is not a reference unless it reads or names the target MD/JSON.
+6. Treat `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` as `cleanup_plan_only`: its retention list, target directories, and batches are proposals, not approved authority or migration decisions.
 
 `runtime file load` means a production runtime path actually reads the root artifact. `non-runtime tooling loader` means a loader explicitly scoped to tests/tooling. `test hard-coded read` means a test reads the artifact by a fixed path. `TypeScript static evidence/path string` means TypeScript names the artifact as evidence or a path string without loading it. `JSON static source/evidence/path string` means a tracked JSON file contains the target basename as a string value (for example, an `evidence` array or `source_report` field) without a runtime loader. `Markdown link` and `script / validator / CI` describe those repository reference surfaces. `same-stem companion only` is recorded for clarity but is not counted as a reference. `none` means no in-repository reference was found.
 
@@ -60,6 +61,18 @@ No `Files with production code references` aggregate is used because it conflate
 ## Proposal Boundaries
 
 Every Suggested Target and Batch value below is explicitly a `proposal`. Root Retention is `proposal / undecided`. Redirect Needed is `undecided / unknown`; absence of repository references is not evidence that redirects are unnecessary. External Risk is `unknown` because repository-external consumers have not been disproved. Relationships without explicit evidence are `relationship pending confirmation`.
+
+## Migration Tracking
+
+The following historical capability reports had no observed in-repository references (other than this matrix). Their bodies were moved to `docs/reports/archive/capabilities/` and a root-level reference note was left in place. This is the `historical-none` batch only; no other capability family migration is approved.
+
+| Baseline Root Path | Archived Content Path | Root Reference Note | Batch | Compatibility Strategy | Migration Status |
+| --- | --- | --- | --- | --- | --- |
+| `CONTROL_PLANE_AUDIT.md` | `docs/reports/archive/capabilities/CONTROL_PLANE_AUDIT.md` | `CONTROL_PLANE_AUDIT.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
+| `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `docs/reports/archive/capabilities/GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
+| `PROJECT_FILE_INVENTORY.md` | `docs/reports/archive/capabilities/PROJECT_FILE_INVENTORY.md` | `PROJECT_FILE_INVENTORY.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
+| `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `docs/reports/archive/capabilities/REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
+| `SYSTEM_REVIEW.md` | `docs/reports/archive/capabilities/SYSTEM_REVIEW.md` | `SYSTEM_REVIEW.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
 
 ## Matrix
 
