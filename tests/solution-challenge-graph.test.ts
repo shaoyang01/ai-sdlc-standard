@@ -395,6 +395,84 @@ async function test() {
   assert(typeof r18.implementation_outcome === "string", "implementation_outcome set");
   console.log("");
 
+
+  // ═══════════════════════════════════════════════════════
+  // Cross-Object Field Consistency Tests (validator)
+  // ═══════════════════════════════════════════════════════
+
+  console.log("Cross-object field consistency tests");
+
+  const { validateGatewayShadowChallengeOutput: vgw } = await import("../core/solution-challenge-state");
+  const baseObs = { availability: "available" as const, state: { ...gatewayReadyState }, findingIds: ["CH-001"], counts: { blocking: 0, required: 0, nonBlocking: 0, outOfScope: 0 } };
+
+  function mkOut(o: Record<string, unknown>) {
+    return {
+      routingEffect: "shadow_pass_through",
+      solution_challenge: gatewayReadyState,
+      solution_challenge_observation: { ...baseObs },
+      observedStatus: "READY_FOR_GATE",
+      fallback_used: false,
+      wouldRouteTo: "review",
+      ...o,
+    };
+  }
+
+  // F1: valid available passes
+  let f1 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ["CH-001"] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-001"] }, findingIds: ["CH-001"] } })); f1 = true; } catch { }
+  assert(f1, "F1: valid available passes");
+
+  // F2: mode mismatch
+  // Linked: mode+currentCycle+exhausted change together; first field in order is "mode"
+  let f2 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, exhausted: true }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState } } })); } catch (e) { f2 = String(e).includes("mode"); }
+  assert(f2, "F2: mode mismatch throws");
+
+  // F3: currentCycle mismatch
+
+
+  // F4: exhausted mismatch
+
+
+  // F5: status mismatch
+  let f5 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, status: "NEEDS_REVISION", exhausted: false }, wouldRouteTo: "tech-design", observedStatus: "NEEDS_REVISION", solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState } } })); } catch (e) { f5 = String(e).includes("status"); }
+  assert(f5, "F3: status mismatch throws");
+
+  // F6: artifactStatus mismatch
+  let f6 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, artifactStatus: "generated", reportPath: "lib/r.md" }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState } } })); } catch (e) { f6 = String(e).includes("artifactStatus"); }
+  assert(f6, "F4: artifactStatus mismatch throws");
+
+  // F7: reportPath mismatch
+  let f7 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, reportPath: "lib/a.md", artifactStatus: "generated" }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, reportPath: "lib/b.md", artifactStatus: "generated" } } })); } catch (e) { f7 = String(e).includes("reportPath"); }
+  assert(f7, "F5: reportPath mismatch throws");
+
+  // findingIds consistency
+  const ids2 = ["CH-001", "CH-002"];
+
+  // F8: top state findingIds length differs from obs
+  let f8 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ["CH-001"] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-001"] }, findingIds: ids2 } })); } catch (e) { f8 = String(e).includes("findingIds") && String(e).includes("length"); }
+  assert(f8, "F8: findingIds length mismatch throws");
+
+  // F9: obs.state findingIds length differs from obs
+  let f9 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ids2 }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-001"] }, findingIds: ids2 } })); } catch (e) { f9 = String(e).includes("findingIds") && String(e).includes("length"); }
+  assert(f9, "F9: obs.state findingIds length mismatch throws");
+
+  // F10: same length different value at index
+  let f10 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ["CH-001", "CH-003"] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-001", "CH-003"] }, findingIds: ids2 } })); } catch (e) { f10 = String(e).includes("findingIds[1]"); }
+  assert(f10, "F10: findingIds[1] value mismatch throws");
+
+  // F11: different order
+  let f11 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ["CH-002", "CH-001"] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-002", "CH-001"] }, findingIds: ids2 } })); } catch (e) { f11 = String(e).includes("findingIds[0]"); }
+  assert(f11, "F11: different order throws");
+
+  // F12: valid three-way empty arrays
+  let f12 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: [] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: [] }, findingIds: [] } })); f12 = true; } catch { }
+  assert(f12, "F12: valid three-way empty arrays pass");
+
+  // F13: empty string in findingIds (structural)
+  let f13 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: [""] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: [""] }, findingIds: [""] } })); } catch (e) { f13 = String(e).includes("findingIds"); }
+  assert(f13, "F13: empty string in findingIds throws");
+
+  console.log("");
+
   // ═══════════════════════════════════════════════════════
   // Replay Malformed Gateway Shadow Tests (real replayExecution)
   // ═══════════════════════════════════════════════════════

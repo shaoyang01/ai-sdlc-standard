@@ -222,13 +222,73 @@ export function validateGatewayShadowChallengeOutput(
     if (!obsState) throw new Error("gateway shadow: available but missing observation.state");
     const state = validateSolutionChallengeState(obsState);
 
-    // ── top-level solution_challenge must match observation.state ──
-    const topState = output["solution_challenge"];
-    if (!topState) throw new Error("gateway shadow: available requires top-level solution_challenge");
-    const validatedTop = validateSolutionChallengeState(topState);
-    if (validatedTop.status !== state.status) {
-      throw new Error("gateway shadow: solution_challenge.status mismatch with observation.state.status");
-    }
+	    // ── top-level solution_challenge must match observation.state ──
+	    const topState = output["solution_challenge"];
+	    if (!topState) throw new Error("gateway shadow: available requires top-level solution_challenge");
+	    const validatedTop = validateSolutionChallengeState(topState);
+
+	    // Full-field consistency between top-level solution_challenge and observation.state
+	    const fieldPairs: Array<[string, (s: SolutionChallengeState) => unknown]> = [
+	      ["mode",           s => s.mode],
+	      ["currentCycle",   s => s.currentCycle],
+	      ["maxCycles",      s => s.maxCycles],
+	      ["exhausted",      s => s.exhausted],
+	      ["status",         s => s.status],
+	      ["artifactStatus", s => s.artifactStatus],
+	      ["reportPath",     s => s.reportPath],
+	    ];
+	    for (const [field, getter] of fieldPairs) {
+	      const topVal = JSON.stringify(getter(validatedTop));
+	      const obsVal = JSON.stringify(getter(state));
+	      if (topVal !== obsVal) {
+	        throw new Error(
+	          `gateway shadow: solution_challenge.${field} mismatch with observation.state.${field}`
+	        );
+	      }
+	    }
+
+	    // ── Three-way findingIds consistency ──
+	    const topFindingIds = validatedTop.findingIds;
+	    const obsStateFindingIds = state.findingIds;
+
+	    // Structural validation of observation.findingIds first
+	    const obsFindingIds = obs["findingIds"];
+	    if (!Array.isArray(obsFindingIds)) {
+	      throw new Error("gateway shadow: available requires findingIds array");
+	    }
+	    for (const id of obsFindingIds) {
+	      if (typeof id !== "string" || id.trim().length === 0) {
+	        throw new Error(`gateway shadow: findingIds contains invalid entry: ${String(id)}`);
+	      }
+	    }
+
+	    // All three must be arrays (structural check above already confirmed obs)
+	    const topArr = topFindingIds ?? [];
+	    const stateArr = obsStateFindingIds ?? [];
+	    const obsArr = obsFindingIds;
+
+	    // Length comparison
+	    if (topArr.length !== obsArr.length) {
+	      throw new Error("gateway shadow: solution_challenge.findingIds length mismatch with observation.findingIds");
+	    }
+	    if (stateArr.length !== obsArr.length) {
+	      throw new Error("gateway shadow: observation.state.findingIds length mismatch with observation.findingIds");
+	    }
+
+	    // Element-by-element comparison (strict order, no sorting, no dedup)
+	    for (let i = 0; i < obsArr.length; i++) {
+	      if (topArr[i] !== obsArr[i]) {
+	        throw new Error(`gateway shadow: solution_challenge.findingIds[${i}] mismatch with observation.findingIds[${i}]`);
+	      }
+	      if (stateArr[i] !== obsArr[i]) {
+	        throw new Error(`gateway shadow: observation.state.findingIds[${i}] mismatch with observation.findingIds[${i}]`);
+	      }
+	    }
+
+	    // undefined vs [] — different lengths caught above; check undefined consistency
+	    if ((topFindingIds === undefined) !== (obsStateFindingIds === undefined)) {
+	      throw new Error("gateway shadow: findingIds undefined inconsistency between solution_challenge and observation.state");
+	    }
 
     // ── observedStatus ──
     if (output["observedStatus"] !== state.status) {
@@ -240,18 +300,7 @@ export function validateGatewayShadowChallengeOutput(
       throw new Error("gateway shadow: available requires fallback_used=false");
     }
 
-    // ── findingIds: required, all non-empty strings ──
-    const fIds = obs["findingIds"];
-    if (!Array.isArray(fIds)) {
-      throw new Error("gateway shadow: available requires findingIds array");
-    }
-    for (const id of fIds) {
-      if (typeof id !== "string" || id.trim().length === 0) {
-        throw new Error(`gateway shadow: findingIds contains invalid entry: ${String(id)}`);
-      }
-    }
-
-    // ── counts: required, all non-negative integers ──
+	    // ── counts: required, all non-negative integers ──
     const counts = obs["counts"] as Record<string, unknown> | undefined;
     if (!counts) throw new Error("gateway shadow: available requires counts");
     for (const k of ["blocking", "required", "nonBlocking", "outOfScope"]) {
