@@ -251,8 +251,8 @@ async function test() {
   assert(rrTypes.length === 1 && rrTypes[0] === "llm_task", "readiness llm_task only");
   assert(rrCap["default_enabled"] === false, "readiness not default enabled");
   const rrEvidence = rrCap["evidence"] as string[];
-  assert(rrEvidence.includes("KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "readiness evidence MD");
-  assert(rrEvidence.includes("kimi-gateway-real-dispatch-readiness-review.json"), "readiness evidence JSON");
+  assert(rrEvidence.includes("docs/capabilities/kimi/KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md"), "readiness evidence MD");
+  assert(rrEvidence.includes("metadata/capabilities/kimi/kimi-gateway-real-dispatch-readiness-review.json"), "readiness evidence JSON");
   assert(rrEvidence.includes("tests/kimi-gateway-real-dispatch-readiness-review.test.ts"), "readiness evidence test");
   // Kimi Request Type Expansion Contract
   assert(capNames.includes("Kimi Request Type Expansion Contract"), "has Kimi Expansion Contract");
@@ -272,8 +272,8 @@ async function test() {
   assert(xpCap["bugfix_requires_separate_review"] === true, "expansion bugfix separate review");
   const xpEvidence = xpCap["evidence"] as string[];
   assert(xpEvidence.includes("execution/kimi-request-type-expansion-contract.ts"), "expansion evidence contract");
-  assert(xpEvidence.includes("KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md"), "expansion evidence MD");
-  assert(xpEvidence.includes("kimi-request-type-expansion-contract.json"), "expansion evidence JSON");
+  assert(xpEvidence.includes("docs/capabilities/kimi/KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md"), "expansion evidence MD");
+  assert(xpEvidence.includes("metadata/capabilities/kimi/kimi-request-type-expansion-contract.json"), "expansion evidence JSON");
   assert(xpEvidence.includes("tests/kimi-request-type-expansion-contract.test.ts"), "expansion evidence test");
   // Hermes CLI Command Executor
   assert(capNames.includes("Hermes CLI Command Executor"), "has Hermes Command Executor");

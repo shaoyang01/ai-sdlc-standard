@@ -15,7 +15,7 @@ async function test() {
 
   // ── JSON assertions ──
   console.log("Test 1: JSON review");
-  const raw = fs.readFileSync("kimi-gateway-real-dispatch-readiness-review.json", "utf-8");
+  const raw = fs.readFileSync("metadata/capabilities/kimi/kimi-gateway-real-dispatch-readiness-review.json", "utf-8");
   const review = JSON.parse(raw);
 
   assert(review.status === "READY_WITH_CONSTRAINTS", "status READY_WITH_CONSTRAINTS");
@@ -73,7 +73,7 @@ async function test() {
 
   // ── Markdown assertions ──
   console.log("Test 2: Markdown review");
-  const md = fs.readFileSync("KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/kimi/KIMI_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
 
   // Must contain
   assert(md.includes("READY_WITH_CONSTRAINTS"), "MD: verdict");

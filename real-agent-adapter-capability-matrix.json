@@ -83,8 +83,8 @@
         "execution/kimi-gateway-real-dispatch-guardrails.ts",
         "tests/kimi-gateway-real-dispatch-guardrails.test.ts",
         "execution/kimi-request-type-expansion-contract.ts",
-        "KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
-        "kimi-request-type-expansion-contract.json",
+        "docs/capabilities/kimi/KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md",
+        "metadata/capabilities/kimi/kimi-request-type-expansion-contract.json",
         "tests/kimi-request-type-expansion-contract.test.ts"
       ],
       "dry_run_harness": "implemented_no_process_spawn",

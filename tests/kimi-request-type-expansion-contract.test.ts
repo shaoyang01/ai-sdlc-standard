@@ -67,7 +67,7 @@ async function test() {
 
   // ── Test 5: JSON assertions ──
   console.log("Test 5: JSON contract");
-  const raw = fs.readFileSync("kimi-request-type-expansion-contract.json", "utf-8");
+  const raw = fs.readFileSync("metadata/capabilities/kimi/kimi-request-type-expansion-contract.json", "utf-8");
   const j = JSON.parse(raw);
   assert(j.status === "NO_EXPANSION_IN_THIS_PR", "json: status");
   assert(j.contract_only === true, "json: contract_only");
@@ -83,7 +83,7 @@ async function test() {
 
   // ── Test 6: Markdown assertions ──
   console.log("Test 6: Markdown contract");
-  const md = fs.readFileSync("KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/kimi/KIMI_REQUEST_TYPE_EXPANSION_CONTRACT.md", "utf-8");
   assert(md.includes("NO_EXPANSION_IN_THIS_PR"), "md: verdict");
   assert(md.includes("Kimi remains `llm_task` only"), "md: Kimi remains llm_task only");
   assert(md.includes("code_generation remains Codex-owned"), "md: code_generation Codex-owned");
