@@ -607,9 +607,18 @@ async function test() {
   assert(rr9State.currentNode === "review", "RR9: currentNode = review");
   assert(rr9State.retryCount === 0, "RR9: retryCount = 0");
   assert(rr9State.history.length === 1, "RR9: history.length = 1");
-  assert(rr9State.history[0].output["routingEffect"] === "shadow_pass_through", "RR9: routingEffect preserved");
-  assert(rr9State.history[0].output["wouldRouteTo"] === "review", "RR9: wouldRouteTo preserved");
-  assert(rr9State.history[0].output["observedStatus"] === "READY_FOR_GATE", "RR9: observedStatus preserved");
+  assert(rr9State.history[0].node === "solution-challenge", "RR9: history node = solution-challenge");
+  const rr9output = rr9State.history[0].output as Record<string, unknown>;
+  assert(rr9output["routingEffect"] === "shadow_pass_through", "RR9: routingEffect = shadow_pass_through");
+  assert(rr9output["wouldRouteTo"] === "review", "RR9: wouldRouteTo = review");
+  assert(rr9output["observedStatus"] === "READY_FOR_GATE", "RR9: observedStatus = READY_FOR_GATE");
+  const rr9obs = rr9output["solution_challenge_observation"] as Record<string, unknown>;
+  assert(rr9obs !== undefined, "RR9: solution_challenge_observation exists");
+  assert(rr9obs.availability === "available", "RR9: observation availability = available");
+  const rr9obsInput = (availTi.output as Record<string, unknown>)["solution_challenge_observation"] as Record<string, unknown>;
+  assert(JSON.stringify(rr9obs.state) === JSON.stringify(rr9obsInput.state), "RR9: observation.state preserved by value");
+  assert(JSON.stringify(rr9obs.findingIds) === JSON.stringify(rr9obsInput.findingIds), "RR9: observation.findingIds preserved by value");
+  assert(JSON.stringify(rr9obs.counts) === JSON.stringify(rr9obsInput.counts), "RR9: observation.counts preserved by value");
 
   // RR10: valid unavailable → replay succeeds, no READY state in history
   const rr10State = replayExecution(
@@ -619,12 +628,20 @@ async function test() {
   assert(rr10State.status === "running", "RR10: replay status = running");
   assert(rr10State.currentNode === "review", "RR10: currentNode = review");
   assert(rr10State.step === 1, "RR10: step = 1");
+  assert(rr10State.retryCount === 0, "RR10: retryCount = 0");
   assert(rr10State.history.length === 1, "RR10: history.length = 1");
+  assert(rr10State.history[0].node === "solution-challenge", "RR10: history node = solution-challenge");
   // Use hasOwnProperty to verify absence, not just undefined check
   const rr10output = rr10State.history[0].output as Record<string, unknown>;
+  assert(rr10output["routingEffect"] === "shadow_pass_through", "RR10: routingEffect = shadow_pass_through");
+  assert(rr10output["observedStatus"] === "unavailable", "RR10: observedStatus = unavailable");
+  assert(rr10output["fallback_used"] === true, "RR10: fallback_used = true");
+  assert(rr10output["wouldRouteTo"] === "review", "RR10: wouldRouteTo = review");
   assert(!Object.prototype.hasOwnProperty.call(rr10output, "solution_challenge"), "RR10: no solution_challenge by own property");
   const rr10obs = rr10output["solution_challenge_observation"] as Record<string, unknown>;
-  assert(rr10obs !== undefined, "RR10: observation exists");
+  assert(rr10obs !== undefined, "RR10: solution_challenge_observation exists");
+  assert(rr10obs.availability === "unavailable", "RR10: observation availability = unavailable");
+  assert(typeof rr10obs.error === "string" && rr10obs.error.length > 0, "RR10: observation.error is non-empty string");
   assert(!Object.prototype.hasOwnProperty.call(rr10obs, "state"), "RR10: no observation.state");
   assert(!Object.prototype.hasOwnProperty.call(rr10obs, "findings"), "RR10: no findings");
   assert(!Object.prototype.hasOwnProperty.call(rr10obs, "findingIds"), "RR10: no findingIds");
