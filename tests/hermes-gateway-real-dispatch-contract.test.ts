@@ -160,13 +160,13 @@ async function test() {
 
   // Test 12: Markdown / JSON consistency
   console.log("Test 12: Markdown / JSON consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md", "utf-8");
   assert(md.includes("implemented_contract_only"), "md: status");
   assert(md.includes("SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled"), "md: real flag");
   assert(md.includes("SDLC_HERMES_GATEWAY_INTEGRATION=enabled"), "md: integration flag");
   assert(md.includes("SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"), "md: command flag");
   assert(md.includes("Feature-flagged Hermes Gateway Real Dispatch"), "md: next PR");
-  const jsonRaw = fs.readFileSync("hermes-gateway-real-dispatch-contract.json", "utf-8");
+  const jsonRaw = fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-contract.json", "utf-8");
   const json = JSON.parse(jsonRaw);
   assert(json.status === "implemented_contract_only", "json: status");
   assert(json.contract_only === true, "json: contract only");

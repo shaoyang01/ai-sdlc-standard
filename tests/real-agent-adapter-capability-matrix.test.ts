@@ -312,8 +312,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_contract_contains_secrets"] === false, "hermes dispatch no secrets");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-contract.ts"), "hermes evidence dispatch contract");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-contract.test.ts"), "hermes evidence dispatch test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes evidence dispatch md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-contract.json"), "hermes evidence dispatch json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes evidence dispatch md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-contract.json"), "hermes evidence dispatch json");
   assert(hermes["gateway_real_dispatch"] === "implemented_feature_flagged_helper", "hermes real dispatch");
   assert(hermes["gateway_real_dispatch_default_enabled"] === false, "hermes real dispatch default disabled");
   assert(hermes["gateway_real_dispatch_wired_to_gateway"] === false, "hermes real dispatch not wired gateway");
@@ -345,8 +345,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_gateway_integration_contract_contains_secrets"] === false, "hermes dispatch gateway integration no secrets");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes evidence dispatch gateway integration contract");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes evidence dispatch gateway integration test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes evidence dispatch gateway integration md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes evidence dispatch gateway integration json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes evidence dispatch gateway integration md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes evidence dispatch gateway integration json");
   assert(hermes["gateway_real_dispatch_gateway_integration"] === "implemented_feature_flagged_sidecar_metadata", "hermes dispatch gateway sidecar integration");
   assert(hermes["gateway_real_dispatch_gateway_integration_default_enabled"] === false, "hermes dispatch gateway sidecar default disabled");
   assert(hermes["gateway_real_dispatch_gateway_integration_wired_to_gateway"] === true, "hermes dispatch gateway sidecar wired gateway");

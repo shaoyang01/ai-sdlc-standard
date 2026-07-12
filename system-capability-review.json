@@ -786,8 +786,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-contract.ts",
         "tests/hermes-gateway-real-dispatch-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md",
-        "hermes-gateway-real-dispatch-contract.json"
+        "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-contract.json"
       ]
     },
     {
@@ -849,8 +849,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts",
         "tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md",
-        "hermes-gateway-real-dispatch-gateway-integration-contract.json"
+        "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-gateway-integration-contract.json"
       ]
     },
     {

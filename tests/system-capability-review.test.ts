@@ -496,8 +496,8 @@ async function test() {
   const hdcEvidence = hdcCap["evidence"] as string[];
   assert(hdcEvidence.includes("execution/hermes-gateway-real-dispatch-contract.ts"), "hermes dispatch evidence ts");
   assert(hdcEvidence.includes("tests/hermes-gateway-real-dispatch-contract.test.ts"), "hermes dispatch evidence test");
-  assert(hdcEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes dispatch evidence md");
-  assert(hdcEvidence.includes("hermes-gateway-real-dispatch-contract.json"), "hermes dispatch evidence json");
+  assert(hdcEvidence.includes("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTRACT.md"), "hermes dispatch evidence md");
+  assert(hdcEvidence.includes("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-contract.json"), "hermes dispatch evidence json");
   // Hermes Gateway Real Dispatch
   assert(capNames.includes("Hermes Gateway Real Dispatch"), "has Hermes Real Dispatch");
   const hrdCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch");
@@ -542,8 +542,8 @@ async function test() {
   const hgiEv = hgiCap["evidence"] as string[];
   assert(hgiEv.includes("execution/hermes-gateway-real-dispatch-gateway-integration-contract.ts"), "hermes gateway integration evidence ts");
   assert(hgiEv.includes("tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts"), "hermes gateway integration evidence test");
-  assert(hgiEv.includes("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes gateway integration evidence md");
-  assert(hgiEv.includes("hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes gateway integration evidence json");
+  assert(hgiEv.includes("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md"), "hermes gateway integration evidence md");
+  assert(hgiEv.includes("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-gateway-integration-contract.json"), "hermes gateway integration evidence json");
   // Hermes Gateway Real Dispatch Gateway Integration
   assert(capNames.includes("Hermes Gateway Real Dispatch Gateway Integration"), "has Hermes Gateway sidecar integration");
   const hgSidecarCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Gateway Integration");
