@@ -23,6 +23,7 @@ required_checklist:
   - checklists/specification-checklist.md
 required_storage:
   - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
   - ai-sdlc/artifact-flow.md
   - ai-sdlc/change-control.md
 side_effects:
