@@ -68,11 +68,11 @@ The following historical capability reports had no observed in-repository refere
 
 | Baseline Root Path | Archived Content Path | Root Reference Note | Batch | Compatibility Strategy | Migration Status |
 | --- | --- | --- | --- | --- | --- |
-| `CONTROL_PLANE_AUDIT.md` | `docs/reports/archive/capabilities/CONTROL_PLANE_AUDIT.md` | `CONTROL_PLANE_AUDIT.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
-| `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `docs/reports/archive/capabilities/GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
-| `PROJECT_FILE_INVENTORY.md` | `docs/reports/archive/capabilities/PROJECT_FILE_INVENTORY.md` | `PROJECT_FILE_INVENTORY.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
-| `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `docs/reports/archive/capabilities/REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
-| `SYSTEM_REVIEW.md` | `docs/reports/archive/capabilities/SYSTEM_REVIEW.md` | `SYSTEM_REVIEW.md` | historical-none | root reference note, minimum 30-day retention | migrated in this change; pending PR merge |
+| `CONTROL_PLANE_AUDIT.md` | `docs/reports/archive/capabilities/CONTROL_PLANE_AUDIT.md` | `CONTROL_PLANE_AUDIT.md` | historical-none | root reference note, minimum 30-day retention | implemented in PR #9; effective upon merge |
+| `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `docs/reports/archive/capabilities/GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` | historical-none | root reference note, minimum 30-day retention | implemented in PR #9; effective upon merge |
+| `PROJECT_FILE_INVENTORY.md` | `docs/reports/archive/capabilities/PROJECT_FILE_INVENTORY.md` | `PROJECT_FILE_INVENTORY.md` | historical-none | root reference note, minimum 30-day retention | implemented in PR #9; effective upon merge |
+| `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `docs/reports/archive/capabilities/REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` | historical-none | root reference note, minimum 30-day retention | implemented in PR #9; effective upon merge |
+| `SYSTEM_REVIEW.md` | `docs/reports/archive/capabilities/SYSTEM_REVIEW.md` | `SYSTEM_REVIEW.md` | historical-none | root reference note, minimum 30-day retention | implemented in PR #9; effective upon merge |
 
 ## Matrix
 
