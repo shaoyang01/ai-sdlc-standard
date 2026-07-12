@@ -183,7 +183,7 @@ async function test() {
   console.log("");
 
   console.log("Test 15: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_FAKE_RUNNER_TEST_PLAN_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_FAKE_RUNNER_TEST_PLAN_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Fake Runner Boundary") || md.includes("fake runner boundary"), "md: fake runner boundary");
   assert(md.includes("Fake Runner Scenarios") || md.includes("fake runner scenarios"), "md: fake runner scenarios");

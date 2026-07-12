@@ -183,7 +183,7 @@ async function test() {
   console.log("");
 
   console.log("Test 16: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_OUTPUT_PARSER_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_OUTPUT_PARSER_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Parser Input Source") || md.includes("parser input source"), "md: parser input source");
   assert(md.includes("Expected Output Artifact") || md.includes("expected output artifact"), "md: expected output artifact");

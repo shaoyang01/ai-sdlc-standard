@@ -175,7 +175,7 @@ async function test() {
   console.log("");
 
   console.log("Test 15: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Integration Boundary") || md.includes("integration boundary"), "md: integration boundary");
   assert(md.includes("ExecutionResult") || md.includes("execution result"), "md: ExecutionResult metadata");

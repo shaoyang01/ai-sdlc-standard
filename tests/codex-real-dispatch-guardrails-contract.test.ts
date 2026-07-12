@@ -164,7 +164,7 @@ async function test() {
   console.log("");
 
   console.log("Test 14: Markdown consistency");
-  const md = fs.readFileSync("CODEX_REAL_DISPATCH_GUARDRAILS_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/codex/CODEX_REAL_DISPATCH_GUARDRAILS_CONTRACT.md", "utf-8");
   assert(md.includes("APPROVED_FOR_PLANNING"), "md: verdict");
   assert(md.includes("Limits") || md.includes("limits"), "md: limits");
   assert(md.includes("Pre-Dispatch") || md.includes("pre-dispatch"), "md: pre-dispatch checks");
