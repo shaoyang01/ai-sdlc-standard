@@ -233,6 +233,7 @@ export async function run(
   options: RuntimeOptions = {}
 ): Promise<RuntimeResult> {
   const env = options.env ?? process.env;
+  const solutionChallengeMode = options.solutionChallengeMode ?? "disabled";
   const requirementId = `REQ-${Date.now()}`;
   const trace: ExecutionTraceEntry[] = [];
   const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
@@ -257,7 +258,7 @@ export async function run(
   const executors: RuntimeExecutorMap = {
     ...createDefaultExecutors(runtimeGateway, {
       requirementSummaryMode: options.requirementSummaryMode,
-      solutionChallengeMode: options.solutionChallengeMode,
+      solutionChallengeMode,
       solutionChallengeGateway: runtimeGateway,
     }),
     ...options.executors,
@@ -265,7 +266,7 @@ export async function run(
 
   while (currentNode && vmState.status === "running") {
     // ── Skip solution-challenge when disabled ──
-    if (currentNode === "solution-challenge" && options.solutionChallengeMode === "disabled") {
+    if (currentNode === "solution-challenge" && solutionChallengeMode === "disabled") {
       currentNode = getNextNode(currentNode, {
         result: "PASS",
         solution_challenge: createShadowReadyChallengeState(),
@@ -285,7 +286,7 @@ export async function run(
 
     // ── Normalize solution-challenge output (single boundary) ──
     const nodeOutput = currentNode === "solution-challenge"
-      ? (options.solutionChallengeMode === "gateway_shadow"
+      ? (solutionChallengeMode === "gateway_shadow"
         ? rawOutput // gateway shadow: validated internally, no normalization needed
         : normalizeSolutionOutput(rawOutput))
       : rawOutput;
@@ -356,7 +357,7 @@ export async function run(
     }
 
     // ── Gateway shadow: record observed routing metadata in trace ──
-    if (currentNode === "solution-challenge" && options.solutionChallengeMode === "gateway_shadow") {
+    if (currentNode === "solution-challenge" && solutionChallengeMode === "gateway_shadow") {
       const scTrace = trace[trace.length - 1];
       if (scTrace && scTrace.node === "solution-challenge") {
         // Graph transition reads routingEffect from output to determine route
