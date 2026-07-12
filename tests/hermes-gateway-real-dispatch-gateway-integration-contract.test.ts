@@ -142,8 +142,8 @@ async function test(): Promise<void> {
   console.log("");
 
   console.log("Test 6: Markdown / JSON consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md", "utf-8");
-  const jsonRaw = fs.readFileSync("hermes-gateway-real-dispatch-gateway-integration-contract.json", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_GATEWAY_INTEGRATION_CONTRACT.md", "utf-8");
+  const jsonRaw = fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-gateway-integration-contract.json", "utf-8");
   const json = JSON.parse(jsonRaw);
   assert(md.includes("implemented_contract_only"), "md status");
   assert(md.includes("hermes_gateway_real_dispatch"), "md gateway field");
