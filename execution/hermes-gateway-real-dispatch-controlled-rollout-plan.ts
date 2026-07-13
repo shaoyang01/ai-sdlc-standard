@@ -236,12 +236,12 @@ export const HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN: HermesGateway
   ],
   evidence: [
     "execution/hermes-gateway-real-dispatch-readiness-review.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
     "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
     "tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Rollout Validation Checklist",
 };

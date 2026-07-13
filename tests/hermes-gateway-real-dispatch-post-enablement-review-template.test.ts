@@ -210,25 +210,25 @@ async function test() {
     "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
     "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
     "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
-    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
-    "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
-    "hermes-gateway-real-dispatch-operator-runbook.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-operator-runbook.json",
     "execution/hermes-gateway-real-dispatch-post-enablement-review-template.ts",
     "tests/hermes-gateway-real-dispatch-post-enablement-review-template.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
-    "hermes-gateway-real-dispatch-post-enablement-review-template.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json",
   ]) {
     assert(t.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 12: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md", "utf-8");
   assert(md.includes("template_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar post-enablement review template only"), "md: scope");
   assert(md.includes("This PR does not collect post-enablement data"), "md: no data collection");
@@ -248,7 +248,7 @@ async function test() {
   console.log("");
 
   console.log("Test 13: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-post-enablement-review-template.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json", "utf-8"));
   assert(json.status === t.status, "json: status");
   assert(json.template_only === true, "json: template only");
   assert(json.executing_now === false, "json: not executing");

@@ -127,8 +127,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW: HermesGatewayRealDis
     "tests/hermes-gateway-real-dispatch-fallback-policy.test.ts",
     "tests/hermes-gateway-real-dispatch-observability.test.ts",
     "tests/hermes-gateway-real-dispatch-guardrails.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Controlled Rollout Plan",
 };

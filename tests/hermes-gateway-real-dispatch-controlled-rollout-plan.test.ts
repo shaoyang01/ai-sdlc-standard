@@ -127,12 +127,12 @@ async function test() {
   console.log("Test 10: evidence");
   const expectedEvidence = [
     "execution/hermes-gateway-real-dispatch-readiness-review.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
     "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
     "tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
   ];
   for (const file of expectedEvidence) {
     assert(p.evidence.includes(file), `evidence: ${file}`);
@@ -140,7 +140,7 @@ async function test() {
   console.log("");
 
   console.log("Test 11: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md", "utf-8");
   assert(md.includes("plan_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar rollout plan only"), "md: scope");
   assert(md.includes("This PR does not execute rollout"), "md: no rollout execution");
@@ -156,7 +156,7 @@ async function test() {
   console.log("");
 
   console.log("Test 12: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-controlled-rollout-plan.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json", "utf-8"));
   assert(json.status === p.status, "json: status");
   assert(json.plan_only === true, "json: plan only");
   assert(json.executing_now === false, "json: not executing");
