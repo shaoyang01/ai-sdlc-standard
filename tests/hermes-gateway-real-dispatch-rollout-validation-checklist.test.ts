@@ -150,21 +150,21 @@ async function test() {
   for (const file of [
     "execution/hermes-gateway-real-dispatch-readiness-review.ts",
     "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
-    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
     "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
     "tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
-    "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json",
   ]) {
     assert(c.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 12: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md", "utf-8");
   assert(md.includes("checklist_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar rollout validation only"), "md: scope");
   assert(md.includes("This PR does not execute rollout"), "md: no rollout execution");
@@ -181,7 +181,7 @@ async function test() {
   console.log("");
 
   console.log("Test 13: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-rollout-validation-checklist.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json", "utf-8"));
   assert(json.status === c.status, "json: status");
   assert(json.checklist_only === true, "json: checklist only");
   assert(json.executing_now === false, "json: not executing");

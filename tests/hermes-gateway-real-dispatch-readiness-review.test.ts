@@ -114,8 +114,8 @@ async function test() {
     "tests/hermes-gateway-real-dispatch-fallback-policy.test.ts",
     "tests/hermes-gateway-real-dispatch-observability.test.ts",
     "tests/hermes-gateway-real-dispatch-guardrails.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
   ];
   for (const file of expectedEvidence) {
     assert(r.evidence.includes(file), `evidence: ${file}`);
@@ -123,7 +123,7 @@ async function test() {
   console.log("");
 
   console.log("Test 10: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md", "utf-8");
   assert(md.includes("READY_WITH_CONSTRAINTS"), "md: verdict");
   assert(md.includes("Gateway real dispatch sidecar metadata only"), "md: scope");
   assert(md.includes("hermes_gateway_real_dispatch"), "md: gateway field");
@@ -135,7 +135,7 @@ async function test() {
   console.log("");
 
   console.log("Test 11: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-readiness-review.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json", "utf-8"));
   assert(json.verdict === r.verdict, "json: verdict matches");
   assert(json.gateway_field === r.gatewayField, "json: gateway field matches");
   assert(json.wired_to_gateway === true, "json: wired gateway");

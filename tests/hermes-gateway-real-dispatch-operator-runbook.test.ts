@@ -199,23 +199,23 @@ async function test() {
     "execution/hermes-gateway-real-dispatch-readiness-review.ts",
     "execution/hermes-gateway-real-dispatch-controlled-rollout-plan.ts",
     "execution/hermes-gateway-real-dispatch-rollout-validation-checklist.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
-    "hermes-gateway-real-dispatch-readiness-review.json",
-    "hermes-gateway-real-dispatch-controlled-rollout-plan.json",
-    "hermes-gateway-real-dispatch-rollout-validation-checklist.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_READINESS_REVIEW.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_CONTROLLED_ROLLOUT_PLAN.md",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json",
     "execution/hermes-gateway-real-dispatch-operator-runbook.ts",
     "tests/hermes-gateway-real-dispatch-operator-runbook.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
-    "hermes-gateway-real-dispatch-operator-runbook.json",
+    "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
+    "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-operator-runbook.json",
   ]) {
     assert(r.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 13: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md", "utf-8");
   assert(md.includes("runbook_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar operator runbook only"), "md: scope");
   assert(md.includes("This PR does not execute operator actions"), "md: no operator execution");
@@ -234,7 +234,7 @@ async function test() {
   console.log("");
 
   console.log("Test 14: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-operator-runbook.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-operator-runbook.json", "utf-8"));
   assert(json.status === r.status, "json: status");
   assert(json.runbook_only === true, "json: runbook only");
   assert(json.executing_now === false, "json: not executing");
