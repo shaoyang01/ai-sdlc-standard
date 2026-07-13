@@ -122,8 +122,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN = {
   ],
   evidence: [
     "execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
-    "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json",
     "tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract",

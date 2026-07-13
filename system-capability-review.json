@@ -1712,8 +1712,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
-        "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json"
       ]
     },
     {
@@ -1833,8 +1833,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"
       ]
     },
     {

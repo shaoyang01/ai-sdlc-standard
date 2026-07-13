@@ -1,9 +1,9 @@
 {
-  "name": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract",
+  "name": "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan",
   "adapter": "hermes",
-  "scope": "gateway_real_dispatch_sidecar_phase_2_enablement_guard_contract",
-  "status": "contract_only",
-  "contract_only": true,
+  "scope": "gateway_real_dispatch_sidecar_phase_2_controlled_enablement_plan",
+  "status": "plan_only",
+  "plan_only": true,
   "executing_now": false,
   "enables_feature_flags_now": false,
   "expands_request_types_now": false,
@@ -14,7 +14,7 @@
   "changes_ci_behavior": false,
   "current_readiness_verdict": "READY_WITH_CONSTRAINTS",
   "current_validated_request_types": ["review"],
-  "phase_2_guard_targets": ["code_review", "validation"],
+  "phase_2_enablement_targets": ["code_review", "validation"],
   "supported_request_types": ["review", "code_review", "validation"],
   "unsupported_request_types": ["llm_task", "code_generation", "bugfix"],
   "default_disabled": true,
@@ -48,47 +48,33 @@
   "contains_raw_prompt": false,
   "contains_raw_artifacts": false,
   "contains_secrets": false,
-  "required_guard_conditions": [
-    "Phase-2 implementation must be in a separate future PR.",
+  "required_operator_gates": [
+    "Operator approval must be recorded outside repository automation.",
+    "All three Hermes flags must be manually provided in a controlled environment.",
     "Phase-2 targets are exactly code_review and validation.",
-    "Current validated request type remains review until implementation PR.",
-    "All three Hermes flags must remain explicit and default-off.",
-    "Operator approval must be required.",
-    "Automatic enablement must be disallowed.",
+    "Current validated request type remains review until a separate implementation PR.",
     "Gateway primary/final result must remain independent of Hermes sidecar.",
     "Runtime final_status/routing must remain independent of Hermes sidecar.",
     "Hermes must remain sidecar-only.",
     "Hermes must not become final code_review or validation owner.",
-    "Unsupported request types must remain omitted.",
-    "Rollback and post-enablement review must be mandatory."
+    "Rollback criteria must be defined before any future enablement.",
+    "Post-enablement review must be required after future enablement."
   ],
-  "prohibited_implementation_behaviors": [
-    "Changing Runtime final_status.",
-    "Changing Runtime routing.",
-    "Changing Gateway primary dispatch result.",
-    "Changing Gateway final result.",
-    "Making Hermes default.",
-    "Making Hermes final review/code_review/validation owner.",
-    "Enabling any Hermes flag by default.",
-    "Adding package/script/CI enablement.",
-    "Persisting raw prompts, artifacts, secrets, stdout, stderr, or full CLI output.",
-    "Persisting enablement/validation/review/audit/observability/guardrail logs without separate contract.",
-    "Routing llm_task, code_generation, or bugfix to Hermes.",
-    "Automatic Phase-2 validation, expansion, rollout, or enablement."
+  "manual_enablement_steps": [
+    "Confirm Phase-2 final readiness review verdict is READY_WITH_CONSTRAINTS.",
+    "Confirm operator approval outside repository automation.",
+    "Prepare controlled environment.",
+    "Manually provide the three Hermes required flags.",
+    "Validate only code_review and validation targets.",
+    "Confirm unsupported request types remain omitted.",
+    "Confirm Gateway primary/final result is unchanged.",
+    "Confirm Runtime final_status/routing is unchanged.",
+    "Confirm Hermes sidecar metadata is nested under hermes_gateway_real_dispatch.",
+    "Stop immediately if any blocking condition occurs.",
+    "These steps are not executed by this PR.",
+    "These steps must not be encoded into package scripts, CI, tests, or defaults."
   ],
-  "future_implementation_requirements": [
-    "Future implementation must remain feature-flagged.",
-    "Future implementation must include shadow-first behavior.",
-    "Future implementation must keep Hermes sidecar-only.",
-    "Future implementation must preserve Gateway primary/final results.",
-    "Future implementation must preserve Runtime final_status/routing.",
-    "Future implementation must include tests for disabled, unsupported, unsafe, exception, code_review, and validation paths.",
-    "Future implementation must include rollback tests.",
-    "Future implementation must not call real Hermes CLI in tests.",
-    "Future implementation must not add package/script/CI enablement.",
-    "Future implementation must require a separate post-enablement review."
-  ],
-  "rollback_required_when": [
+  "rollback_triggers": [
     "Hermes output becomes final code_review decision.",
     "Hermes output becomes final validation decision.",
     "Gateway primary result changes.",
@@ -100,6 +86,18 @@
     "Any feature flag is enabled by default.",
     "Any package/script/CI path enables Hermes flags."
   ],
+  "blocking_conditions": [
+    "Any Runtime or Gateway implementation change.",
+    "Any actual request type expansion in this PR.",
+    "Any feature flag enabled by default.",
+    "Any package/script/CI enablement path.",
+    "Any real Hermes CLI call in tests.",
+    "Any Hermes output treated as final code_review or validation decision.",
+    "Any raw prompt/artifact/secret collection.",
+    "Any persisted enablement/review/validation/observability/guardrail log.",
+    "Any unsupported request type routed to Hermes.",
+    "Any automatic Phase-2 validation, expansion, rollout, or enablement."
+  ],
   "required_prerequisites": [
     "READY_WITH_CONSTRAINTS readiness review",
     "plan_only controlled rollout plan",
@@ -110,16 +108,15 @@
     "checklist_only Phase-2 validation checklist",
     "runbook_only Phase-2 operator runbook",
     "template_only Phase-2 post-validation review template",
-    "review_only Phase-2 final readiness review",
-    "plan_only Phase-2 controlled enablement plan"
+    "review_only Phase-2 final readiness review"
   ],
   "evidence": [
-    "execution/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
-    "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json",
-    "tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts"
+    "execution/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.ts",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_CONTROLLED_ENABLEMENT_PLAN.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.json",
+    "tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts"
   ],
   "recommended_next_pr": {
-    "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan"
+    "title": "Hermes Gateway Real Dispatch Phase-2 Enablement Guard Contract"
   }
 }

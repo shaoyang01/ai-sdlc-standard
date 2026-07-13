@@ -126,8 +126,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT = {
   ],
   evidence: [
     "execution/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
-    "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_ENABLEMENT_GUARD_CONTRACT.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json",
     "tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan",
