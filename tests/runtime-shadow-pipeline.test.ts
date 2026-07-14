@@ -23,9 +23,12 @@ async function test() {
 
   // Test 1: run() completes without throwing
   console.log("Test 1: Pipeline completes");
+  const executionId = "test-shadow-pipeline-001";
   let result;
   try {
-    result = await run("build order sync system across inventory service");
+    result = await run("build order sync system across inventory service", {
+      executionId,
+    });
     assert(true, "run() completed without throwing");
   } catch (e) {
     assert(false, `run() threw: ${e}`);
@@ -39,6 +42,60 @@ async function test() {
   assert(typeof result.requirement_id === "string", "has requirement_id");
   assert(Array.isArray(result.execution_trace), "execution_trace is array");
   assert(result.execution_trace.length > 0, "trace has entries");
+  assert(result.graph_status === "completed", `graph_status is "completed" (got "${result.graph_status}")`);
+  assert(result.graph_replay_trace !== undefined, "graph_replay_trace exists");
+  assert(result.graph_replay_trace.executionId === executionId, "graph_replay_trace.executionId matches explicit executionId");
+  assert(result.graph_replay_trace.runConfig.requirementSummaryMode === "deterministic", "runConfig.requirementSummaryMode is deterministic");
+  assert(result.graph_replay_trace.runConfig.solutionChallengeMode === "disabled", "runConfig.solutionChallengeMode is disabled");
+  assert(Array.isArray(result.graph_replay_trace.events), "graph_replay_trace.events is array");
+  console.log("");
+
+  // Test 2b: Canonical graph trace shape
+  console.log("Test 2b: Canonical graph trace");
+  const canonical = result.graph_replay_trace.events;
+  const canonicalNodes = canonical.map((e: { node: string }) => e.node);
+  const expectedCanonicalNodes = [
+    "requirement-summary",
+    "tech-design",
+    "solution-challenge",
+    "review",
+    "implementation",
+    "validation",
+  ];
+  assert(
+    JSON.stringify(canonicalNodes) === JSON.stringify(expectedCanonicalNodes),
+    `canonical nodes are [${canonicalNodes.join(", ")}]`
+  );
+
+  const expectedKinds = ["node_executed", "node_executed", "node_skipped", "node_executed", "node_executed", "node_executed"];
+  const actualKinds = canonical.map((e: { kind: string }) => e.kind);
+  assert(
+    JSON.stringify(actualKinds) === JSON.stringify(expectedKinds),
+    `canonical kinds are [${actualKinds.join(", ")}]`
+  );
+
+  for (let i = 0; i < canonical.length; i++) {
+    const event = canonical[i];
+    assert(event.sequence === i + 1, `event ${i} sequence is ${i + 1} (got ${event.sequence})`);
+    assert(event.eventId === `${executionId}:${i + 1}`, `event ${i} eventId is ${executionId}:${i + 1} (got ${event.eventId})`);
+  }
+
+  const skippedEvent = canonical.find((e: { node: string; kind: string }) => e.node === "solution-challenge" && e.kind === "node_skipped");
+  assert(skippedEvent !== undefined, "solution-challenge skipped event exists");
+  assert(skippedEvent!.skipReason === "solution_challenge_disabled", "skipped event skipReason is solution_challenge_disabled");
+  assert(skippedEvent!.output["result"] === "SKIPPED", "skipped event output.result is SKIPPED");
+
+  const hasCodeReview = canonical.some((e: { node: string }) => e.node === "code-review");
+  const hasBugfix = canonical.some((e: { node: string }) => e.node === "bugfix");
+  assert(!hasCodeReview, "canonical trace does NOT contain code-review");
+  assert(!hasBugfix, "canonical trace does NOT contain bugfix");
+  console.log("");
+
+  // Test 2c: Observability trace compatibility
+  console.log("Test 2c: Observability trace compatibility");
+  const observabilityNodes = result.execution_trace.map((t: { node: string }) => t.node);
+  assert(!observabilityNodes.includes("solution-challenge"), "observability trace does NOT include solution-challenge");
+  assert(observabilityNodes.includes("code-review"), "observability trace still includes code-review");
   console.log("");
 
   // Test 3: trace includes all 5 expected nodes IN ORDER
@@ -124,8 +181,21 @@ async function test() {
   assert(codeReviewArtifact!.content["status"] === "PASS", "default code review status is PASS");
   console.log("");
 
-  // Test 5c: Structured tech-design artifact
-  console.log("Test 5c: Structured tech-design artifact");
+  // Test 5d: Shadow mode solution-challenge is executed
+  console.log("Test 5d: Shadow mode solution-challenge");
+  const shadowResult = await run("build order sync system across inventory service", {
+    executionId: "test-shadow-mode-001",
+    solutionChallengeMode: "shadow",
+  });
+  assert(shadowResult.graph_status === "completed", "shadow run graph_status is completed");
+  const shadowCanonical = shadowResult.graph_replay_trace.events;
+  const shadowNodes = shadowCanonical.map((e: { node: string }) => e.node);
+  assert(shadowNodes.includes("solution-challenge"), "shadow canonical trace includes solution-challenge");
+  const shadowChallengeEvent = shadowCanonical.find((e: { node: string }) => e.node === "solution-challenge");
+  assert(shadowChallengeEvent !== undefined, "shadow solution-challenge event exists");
+  assert(shadowChallengeEvent!.kind === "node_executed", "shadow solution-challenge kind is node_executed");
+  assert(!shadowCanonical.some((e: { kind: string }) => e.kind === "node_skipped"), "shadow canonical trace has no skipped events");
+  console.log("");
   const designRun = await run("build a user login page with database storage");
   assert(designRun.final_status === "success", "design run completes with success");
   const designArtifact = designRun.artifacts.find((a: { type: string }) => a.type === "tech_design");
