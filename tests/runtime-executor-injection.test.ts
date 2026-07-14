@@ -102,7 +102,6 @@ async function test() {
   assert(result1.graph_status === "completed", "graph_status is completed");
   assert(result1.graph_replay_trace.executionId === executionId1, "explicit executionId is used");
 
-  const canonicalNodes1 = result1.graph_replay_trace.events.map((e) => e.node);
   const expectedOrder: NodeType[] = [
     "requirement-summary",
     "tech-design",
@@ -110,12 +109,65 @@ async function test() {
     "implementation",
     "validation",
   ];
-  let pos = 0;
+
+  // Observability trace node order (regression compatibility)
+  const observabilityNodes1 = result1.execution_trace.map((t) => t.node);
+  let posObs = 0;
   for (const exp of expectedOrder) {
-    const idx = canonicalNodes1.indexOf(exp, pos);
-    assert(idx >= pos, `"${exp}" appears at expected position`);
-    if (idx >= 0) pos = idx + 1;
+    const idx = observabilityNodes1.indexOf(exp, posObs);
+    assert(idx >= posObs, `observability trace: "${exp}" appears at expected position`);
+    if (idx >= 0) posObs = idx + 1;
   }
+
+  // Canonical trace node order
+  const canonicalNodes1 = result1.graph_replay_trace.events.map((e) => e.node);
+  let posCanonical = 0;
+  for (const exp of expectedOrder) {
+    const idx = canonicalNodes1.indexOf(exp, posCanonical);
+    assert(idx >= posCanonical, `canonical trace: "${exp}" appears at expected position`);
+    if (idx >= 0) posCanonical = idx + 1;
+  }
+
+  const requirementText = "build a user login form with email validation";
+
+  // Canonical input safety: must include requirement_id, must not leak raw requirement
+  for (const event of result1.graph_replay_trace.events) {
+    assert(
+      event.input["requirement_id"] === result1.requirement_id,
+      `canonical event ${event.node} input.requirement_id matches result requirement_id`
+    );
+    assert(
+      !("requirement" in event.input),
+      `canonical event ${event.node} input does not contain requirement property`
+    );
+    assert(
+      !JSON.stringify(event.input).includes(requirementText),
+      `canonical event ${event.node} input string does not contain raw requirement`
+    );
+  }
+
+  // Explicit coverage for disabled solution-challenge skipped event
+  const skippedChallengeEvent = result1.graph_replay_trace.events.find(
+    (e) => e.node === "solution-challenge" && e.kind === "node_skipped"
+  );
+  assert(skippedChallengeEvent !== undefined, "disabled solution-challenge skipped event exists in canonical trace");
+  assert(skippedChallengeEvent!.kind === "node_skipped", "skipped solution-challenge event kind is node_skipped");
+  assert(
+    skippedChallengeEvent!.skipReason === "solution_challenge_disabled",
+    "skipped solution-challenge event skipReason is solution_challenge_disabled"
+  );
+  assert(
+    skippedChallengeEvent!.input["requirement_id"] === result1.requirement_id,
+    "skipped solution-challenge event input.requirement_id matches result requirement_id"
+  );
+  assert(
+    !("requirement" in skippedChallengeEvent!.input),
+    "skipped solution-challenge event input does not contain requirement property"
+  );
+  assert(
+    !JSON.stringify(skippedChallengeEvent!.input).includes(requirementText),
+    "skipped solution-challenge event input string does not contain raw requirement"
+  );
 
   const implTrace1 = result1.execution_trace.find((t) => t.node === "implementation");
   assert(implTrace1 !== undefined, "execution trace includes implementation");
