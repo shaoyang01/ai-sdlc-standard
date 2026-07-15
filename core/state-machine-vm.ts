@@ -189,30 +189,33 @@ export function replayTrustedHistory(
 function assertNonNullObject(
   value: unknown,
   code: GraphReplayValidationCode,
-  message: string
+  message: string,
+  context?: { sequence?: number; eventId?: string; node?: string }
 ): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new GraphReplayValidationError(code, message);
+    throw new GraphReplayValidationError(code, message, context);
   }
 }
 
 function assertFiniteNumber(
   value: unknown,
   code: GraphReplayValidationCode,
-  message: string
+  message: string,
+  context?: { sequence?: number; eventId?: string; node?: string }
 ): asserts value is number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new GraphReplayValidationError(code, message);
+    throw new GraphReplayValidationError(code, message, context);
   }
 }
 
 function assertPositiveInteger(
   value: unknown,
   code: GraphReplayValidationCode,
-  message: string
+  message: string,
+  context?: { sequence?: number; eventId?: string; node?: string }
 ): asserts value is number {
   if (!Number.isInteger(value) || (value as number) <= 0) {
-    throw new GraphReplayValidationError(code, message);
+    throw new GraphReplayValidationError(code, message, context);
   }
 }
 
@@ -325,25 +328,29 @@ export function validateAndReplayHistory(
       event.input,
       "INVALID_EVENT",
       "input must be a non-null, non-array object",
+      eventContext
     );
     assertNonNullObject(
       event.output,
       "INVALID_EVENT",
       "output must be a non-null, non-array object",
+      eventContext
     );
 
     // timestamp
     assertFiniteNumber(
       event.timestamp,
       "INVALID_EVENT",
-      "timestamp must be a finite number"
+      "timestamp must be a finite number",
+      eventContext
     );
 
     // sequence
     assertPositiveInteger(
       event.sequence,
       "INVALID_SEQUENCE",
-      `sequence must be a positive integer: ${String(event.sequence)}`
+      `sequence must be a positive integer: ${String(event.sequence)}`,
+      eventContext
     );
 
     // eventId
@@ -399,6 +406,19 @@ export function validateAndReplayHistory(
       throw new GraphReplayValidationError(
         "UNEXPECTED_NODE",
         `Expected node ${validationState.currentNode}, got ${event.node}`,
+        eventContext
+      );
+    }
+
+    // disabled mode must represent solution-challenge as skipped, not executed
+    if (
+      trace.runConfig.solutionChallengeMode === "disabled" &&
+      event.node === "solution-challenge" &&
+      event.kind === "node_executed"
+    ) {
+      throw new GraphReplayValidationError(
+        "INVALID_SKIP",
+        "solution-challenge must be skipped when solutionChallengeMode=disabled",
         eventContext
       );
     }

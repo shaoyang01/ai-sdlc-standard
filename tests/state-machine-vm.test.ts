@@ -174,7 +174,8 @@ async function test() {
   function expectError(
     fn: () => unknown,
     expectedCode: GraphReplayValidationCode,
-    message: string
+    message: string,
+    expectedContext?: { sequence?: number; eventId?: string; node?: string }
   ) {
     try {
       fn();
@@ -182,6 +183,15 @@ async function test() {
     } catch (e) {
       if (e instanceof GraphReplayValidationError) {
         assert(e.code === expectedCode, `${message} (code=${e.code})`);
+        if (expectedContext?.sequence !== undefined) {
+          assert(e.sequence === expectedContext.sequence, `${message} (sequence=${e.sequence})`);
+        }
+        if (expectedContext?.eventId !== undefined) {
+          assert(e.eventId === expectedContext.eventId, `${message} (eventId=${e.eventId})`);
+        }
+        if (expectedContext?.node !== undefined) {
+          assert(e.node === expectedContext.node, `${message} (node=${e.node})`);
+        }
       } else {
         assert(false, `${message} (threw non-GraphReplayValidationError)`);
       }
@@ -500,6 +510,34 @@ async function test() {
   );
   console.log("");
 
+  // Test 17b: event shape errors carry event context
+  console.log("Test 17b: event shape errors carry context");
+  expectError(
+    () => validateAndReplayHistory(freshState(), makeTrace(execId, "disabled", [
+      { ...makeExecutedEvent(execId, 1, "requirement-summary", { result: "PASS" }), input: null as any } as GraphReplayEvent,
+    ])),
+    "INVALID_EVENT",
+    "invalid input carries context",
+    { sequence: 1, eventId: `${execId}:1`, node: "requirement-summary" }
+  );
+  expectError(
+    () => validateAndReplayHistory(freshState(), makeTrace(execId, "disabled", [
+      { ...makeExecutedEvent(execId, 1, "requirement-summary", { result: "PASS" }), timestamp: NaN } as GraphReplayEvent,
+    ])),
+    "INVALID_EVENT",
+    "invalid timestamp carries context",
+    { sequence: 1, eventId: `${execId}:1`, node: "requirement-summary" }
+  );
+  expectError(
+    () => validateAndReplayHistory(freshState(), makeTrace(execId, "disabled", [
+      makeExecutedEvent(execId, 0, "requirement-summary", { result: "PASS" }),
+    ])),
+    "INVALID_SEQUENCE",
+    "invalid sequence carries context",
+    { sequence: 0, eventId: `${execId}:0`, node: "requirement-summary" }
+  );
+  console.log("");
+
   // Test 18: invalid sequence
   console.log("Test 18: invalid sequence rejected");
   expectError(
@@ -639,6 +677,20 @@ async function test() {
     ])),
     "INVALID_SKIP",
     "skipped output not SKIPPED rejected"
+  );
+  console.log("");
+
+  // Test 22b: disabled mode must reject executed solution-challenge
+  console.log("Test 22b: disabled mode rejects executed solution-challenge");
+  expectError(
+    () => validateAndReplayHistory(freshState(), makeTrace(execId, "disabled", [
+      makeExecutedEvent(execId, 1, "requirement-summary", { result: "PASS" }),
+      makeExecutedEvent(execId, 2, "tech-design", { result: "PASS" }),
+      makeExecutedEvent(execId, 3, "solution-challenge", readyChallengeOutput),
+    ])),
+    "INVALID_SKIP",
+    "disabled mode executed solution-challenge rejected",
+    { sequence: 3, eventId: `${execId}:3`, node: "solution-challenge" }
   );
   console.log("");
 
