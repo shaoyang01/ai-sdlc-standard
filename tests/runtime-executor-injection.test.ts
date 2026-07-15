@@ -77,6 +77,7 @@ async function test() {
 
   // ── Test 1: Inline implementation output ──
   console.log("Test 1: Inline implementation executor output");
+  const executionId1 = "test-executor-injection-001";
   const fakeImplementationOutput = {
     node: "implementation",
     mode: "direct",
@@ -91,14 +92,16 @@ async function test() {
 
   const result1 = await run("build a user login form with email validation", {
     env: testEnv,
+    executionId: executionId1,
     executors: {
       implementation: fakeImplementationExecutor as any,
     },
   });
 
   assert(result1.final_status === "success", "runtime completes with success");
+  assert(result1.graph_status === "completed", "graph_status is completed");
+  assert(result1.graph_replay_trace.executionId === executionId1, "explicit executionId is used");
 
-  const nodes1 = result1.execution_trace.map((t) => t.node);
   const expectedOrder: NodeType[] = [
     "requirement-summary",
     "tech-design",
@@ -106,12 +109,65 @@ async function test() {
     "implementation",
     "validation",
   ];
-  let pos = 0;
+
+  // Observability trace node order (regression compatibility)
+  const observabilityNodes1 = result1.execution_trace.map((t) => t.node);
+  let posObs = 0;
   for (const exp of expectedOrder) {
-    const idx = nodes1.indexOf(exp, pos);
-    assert(idx >= pos, `"${exp}" appears at expected position`);
-    if (idx >= 0) pos = idx + 1;
+    const idx = observabilityNodes1.indexOf(exp, posObs);
+    assert(idx >= posObs, `observability trace: "${exp}" appears at expected position`);
+    if (idx >= 0) posObs = idx + 1;
   }
+
+  // Canonical trace node order
+  const canonicalNodes1 = result1.graph_replay_trace.events.map((e) => e.node);
+  let posCanonical = 0;
+  for (const exp of expectedOrder) {
+    const idx = canonicalNodes1.indexOf(exp, posCanonical);
+    assert(idx >= posCanonical, `canonical trace: "${exp}" appears at expected position`);
+    if (idx >= 0) posCanonical = idx + 1;
+  }
+
+  const requirementText = "build a user login form with email validation";
+
+  // Canonical input safety: must include requirement_id, must not leak raw requirement
+  for (const event of result1.graph_replay_trace.events) {
+    assert(
+      event.input["requirement_id"] === result1.requirement_id,
+      `canonical event ${event.node} input.requirement_id matches result requirement_id`
+    );
+    assert(
+      !("requirement" in event.input),
+      `canonical event ${event.node} input does not contain requirement property`
+    );
+    assert(
+      !JSON.stringify(event.input).includes(requirementText),
+      `canonical event ${event.node} input string does not contain raw requirement`
+    );
+  }
+
+  // Explicit coverage for disabled solution-challenge skipped event
+  const skippedChallengeEvent = result1.graph_replay_trace.events.find(
+    (e) => e.node === "solution-challenge" && e.kind === "node_skipped"
+  );
+  assert(skippedChallengeEvent !== undefined, "disabled solution-challenge skipped event exists in canonical trace");
+  assert(skippedChallengeEvent!.kind === "node_skipped", "skipped solution-challenge event kind is node_skipped");
+  assert(
+    skippedChallengeEvent!.skipReason === "solution_challenge_disabled",
+    "skipped solution-challenge event skipReason is solution_challenge_disabled"
+  );
+  assert(
+    skippedChallengeEvent!.input["requirement_id"] === result1.requirement_id,
+    "skipped solution-challenge event input.requirement_id matches result requirement_id"
+  );
+  assert(
+    !("requirement" in skippedChallengeEvent!.input),
+    "skipped solution-challenge event input does not contain requirement property"
+  );
+  assert(
+    !JSON.stringify(skippedChallengeEvent!.input).includes(requirementText),
+    "skipped solution-challenge event input string does not contain raw requirement"
+  );
 
   const implTrace1 = result1.execution_trace.find((t) => t.node === "implementation");
   assert(implTrace1 !== undefined, "execution trace includes implementation");
@@ -119,6 +175,23 @@ async function test() {
     implTrace1!.output["result"] === "fake_implementation_completed",
     "implementation output comes from fake executor"
   );
+
+  const canonicalImpl1 = result1.graph_replay_trace.events.find((e) => e.node === "implementation");
+  assert(canonicalImpl1 !== undefined, "canonical trace includes implementation event");
+  assert(
+    canonicalImpl1!.output["result"] === "fake_implementation_completed",
+    "canonical implementation event contains fake executor output"
+  );
+  assert(
+    canonicalImpl1!.output["fake_generated_code"] === "function fake() { return true; }",
+    "canonical implementation event preserves fake executor output fields"
+  );
+
+  for (let i = 0; i < result1.graph_replay_trace.events.length; i++) {
+    const event = result1.graph_replay_trace.events[i];
+    assert(event.sequence === i + 1, `canonical event ${i} sequence is ${i + 1}`);
+    assert(event.eventId === `${executionId1}:${i + 1}`, `canonical event ${i} eventId is stable`);
+  }
 
   const implArtifact1 = result1.artifacts.find(
     (a) => a.node === "implementation" && a.type !== "fanout_result"
@@ -234,6 +307,13 @@ async function test() {
   // Validation failure is advisory feedback in the shadow-first Runtime;
   // it is intentionally exposed through feedback and artifacts, not final_status.
   assert(result3.final_status === "success", "runtime completes despite validation failure");
+  assert(result3.graph_status === "completed", "graph_status is completed after validation failure");
+
+  const canonicalEvents3 = result3.graph_replay_trace.events;
+  const lastCanonical3 = canonicalEvents3[canonicalEvents3.length - 1];
+  assert(lastCanonical3 !== undefined, "canonical trace has a last event");
+  assert(lastCanonical3.node === "validation", "canonical last event is validation");
+  assert(lastCanonical3.kind === "node_executed", "canonical last event kind is node_executed");
 
   const implTrace3 = result3.execution_trace.find((t) => t.node === "implementation");
   assert(implTrace3 !== undefined, "execution trace includes empty implementation");
@@ -333,6 +413,26 @@ async function test() {
   assert(testEnv.SDLC_EXECUTION_MODE !== "codex", "SDLC_EXECUTION_MODE is not codex");
   assert(testEnv.SDLC_KIMI_GATEWAY_REAL_DISPATCH !== "enabled", "Kimi real dispatch flag not enabled");
   assert(testEnv.SDLC_HERMES_GATEWAY_REAL_DISPATCH !== "enabled", "Hermes real dispatch flag not enabled");
+
+  console.log("");
+
+  // ── Test 5: executionId validation ──
+  console.log("Test 5: executionId validation");
+  let emptyRejected = false;
+  try {
+    await run("build nothing", { executionId: "" });
+  } catch (e) {
+    emptyRejected = true;
+  }
+  assert(emptyRejected, "empty executionId is rejected");
+
+  let whitespaceRejected = false;
+  try {
+    await run("build nothing", { executionId: "   \t\n  " });
+  } catch (e) {
+    whitespaceRejected = true;
+  }
+  assert(whitespaceRejected, "whitespace-only executionId is rejected");
 
   console.log("");
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

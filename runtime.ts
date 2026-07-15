@@ -11,7 +11,13 @@ import { getNextNode, isTerminal } from "./sdlc_graph/transitions";
 import { SDLC_NODES, SDLC_EDGES } from "./sdlc_graph/graph";
 import { ExecutionContext } from "./core/execution-context";
 import { buildExecutionContext } from "./core/context-builder";
-import { createTraceItem } from "./core/execution-trace";
+import {
+  createGraphRunConfig,
+  createExecutedEvent,
+  createSkippedEvent,
+  type GraphReplayEvent,
+  type GraphReplayTrace,
+} from "./core/graph-replay-trace";
 import { selectAgent } from "./core/agent-decision";
 import { inferComplexity } from "./core/complexity-inference";
 import { resolveAgentByPolicy } from "./core/agent-policy-engine";
@@ -73,6 +79,8 @@ interface RuntimeResult {
   final_status: "success" | "partial" | "failed";
   implementation_outcome: ImplementationOutcome;
   completed_at: string;
+  graph_status: "running" | "completed" | "failed";
+  graph_replay_trace: GraphReplayTrace;
   skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
   kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
   hermes_runtime_shadow_attachment?: HermesRuntimeShadowAttachmentBuildResult;
@@ -83,6 +91,7 @@ export interface RuntimeOptions {
   env?: Record<string, string | undefined>;
   executors?: Partial<RuntimeExecutorMap>;
   executionGateway?: RuntimeExecutionGateway;
+  executionId?: string;
   requirementSummaryMode?: "deterministic" | "kimi_gateway";
   solutionChallengeMode?: "disabled" | "shadow" | "gateway_shadow";
 }
@@ -235,7 +244,26 @@ export async function run(
   const env = options.env ?? process.env;
   const solutionChallengeMode = options.solutionChallengeMode ?? "disabled";
   const requirementId = `REQ-${Date.now()}`;
+
+  // Validate executionId: empty or whitespace-only strings are rejected.
+  let executionId: string;
+  if (options.executionId === undefined) {
+    executionId = requirementId;
+  } else {
+    const trimmed = options.executionId.trim();
+    if (trimmed.length === 0) {
+      throw new Error("executionId cannot be empty or whitespace-only");
+    }
+    executionId = trimmed;
+  }
+
+  const runConfig = createGraphRunConfig({
+    requirementSummaryMode: options.requirementSummaryMode,
+    solutionChallengeMode,
+  });
+
   const trace: ExecutionTraceEntry[] = [];
+  const canonicalEvents: GraphReplayEvent[] = [];
   const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
   const runtimeGateway = options.executionGateway ?? executionGateway;
 
@@ -246,15 +274,12 @@ export async function run(
     { requirementId, complexity: "medium" }
   );
 
-  // ─── State Machine VM — state-driven execution ──────────
+  // ─── State Machine VM — single graph cursor ─────────────
   let vmState: ExecutionState = createInitialState(execCtx);
-
-  let currentNode: NodeType | null = "requirement-summary";
-  let retryCount = 0;
-  const MAX_RETRIES = 3;
   const artifacts: Artifact[] = [];
+  let sequence = 0;
 
-  // State-driven execution loop — VM transitions, not node-driven
+  // State-driven execution loop — VM is the only cursor
   const executors: RuntimeExecutorMap = {
     ...createDefaultExecutors(runtimeGateway, {
       requirementSummaryMode: options.requirementSummaryMode,
@@ -264,38 +289,70 @@ export async function run(
     ...options.executors,
   };
 
-  while (currentNode && vmState.status === "running") {
-    // ── Skip solution-challenge when disabled ──
-    if (currentNode === "solution-challenge" && solutionChallengeMode === "disabled") {
-      currentNode = getNextNode(currentNode, {
-        result: "PASS",
-        solution_challenge: createShadowReadyChallengeState(),
-      }, retryCount);
-      continue;
-    }
-    // Agent selection: policy engine → decision layer → AGENT_MAP fallback
-    const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
-    const agent = (policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode)) as LoopAgent;
+  while (vmState.currentNode && vmState.status === "running") {
+    const currentNode = vmState.currentNode;
 
     // Update ExecutionContext for current node
     execCtx.node = currentNode;
     execCtx.input = { requirement, requirement_id: requirementId };
     execCtx.metadata.complexity = inferComplexity(requirement);
 
+    // Canonical trace input omits raw requirement text to preserve observability guardrails
+    const canonicalInput = { requirement_id: requirementId };
+
+    // Agent selection: policy engine → decision layer → AGENT_MAP fallback
+    const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
+    const agent = (policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode)) as LoopAgent;
+
+    // ── Skip solution-challenge when disabled ──
+    if (currentNode === "solution-challenge" && solutionChallengeMode === "disabled") {
+      const skipOutput = { result: "SKIPPED" };
+      sequence++;
+      const skippedEvent = createSkippedEvent(
+        executionId,
+        sequence,
+        "solution-challenge",
+        agent,
+        canonicalInput,
+        "solution_challenge_disabled",
+        skipOutput
+      );
+      canonicalEvents.push(skippedEvent);
+      execCtx.trace.push(skippedEvent);
+
+      const routingOutput = { result: "PASS", solution_challenge: createShadowReadyChallengeState() };
+      const nextNode = getNextNode("solution-challenge", routingOutput, vmState.retryCount);
+      vmState = transition(vmState, nextNode, skippedEvent, vmState.retryCount);
+      continue;
+    }
+
     const rawOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx, executors);
 
     // ── Normalize solution-challenge output (single boundary) ──
-    const nodeOutput = currentNode === "solution-challenge"
-      ? (solutionChallengeMode === "gateway_shadow"
-        ? rawOutput // gateway shadow: validated internally, no normalization needed
-        : normalizeSolutionOutput(rawOutput))
-      : rawOutput;
+    let nodeOutput: Record<string, unknown> = rawOutput;
+    if (currentNode === "solution-challenge") {
+      if (solutionChallengeMode === "gateway_shadow") {
+        // gateway shadow: validated internally, routingEffect drives the route
+        nodeOutput = { ...rawOutput, routingEffect: "shadow_pass_through" };
+      } else {
+        nodeOutput = normalizeSolutionOutput(rawOutput);
+      }
+    }
 
     legacyContext[currentNode] = nodeOutput;
 
-    // Record trace via standard ExecutionTrace
-    const traceItem = createTraceItem(currentNode, execCtx.input, nodeOutput, agent);
-    execCtx.trace.push(traceItem);
+    // Create the single canonical event for this node
+    sequence++;
+    const canonicalEvent = createExecutedEvent(
+      executionId,
+      sequence,
+      currentNode,
+      agent,
+      canonicalInput,
+      nodeOutput
+    );
+    canonicalEvents.push(canonicalEvent);
+    execCtx.trace.push(canonicalEvent);
 
     // Collect standardized artifacts from node output
     const nodeArtifacts = artifactsFromNodeOutput({
@@ -313,9 +370,7 @@ export async function run(
       artifacts.push(...gwArts);
     }
 
-    // VM state transition — deterministic state update
-    vmState = transition(vmState, currentNode, traceItem);
-
+    // Observability trace keeps its existing shape and content
     trace.push({
       node: currentNode,
       agent,
@@ -323,15 +378,6 @@ export async function run(
       output: nodeOutput,
       timestamp: new Date().toISOString(),
     });
-
-    // Track retries for review→tech-design feedback loop
-    if (currentNode === "review" && nodeOutput["result"] === "FAIL") {
-      retryCount++;
-    } else if (currentNode === "tech-design") {
-      // retryCount persists across re-design cycles
-    } else {
-      retryCount = 0; // reset on non-loop nodes
-    }
 
     // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
     if (currentNode === "solution-challenge") {
@@ -356,15 +402,6 @@ export async function run(
       }
     }
 
-    // ── Gateway shadow: record observed routing metadata in trace ──
-    if (currentNode === "solution-challenge" && solutionChallengeMode === "gateway_shadow") {
-      const scTrace = trace[trace.length - 1];
-      if (scTrace && scTrace.node === "solution-challenge") {
-        // Graph transition reads routingEffect from output to determine route
-        (scTrace.output as Record<string, unknown>)["routingEffect"] = "shadow_pass_through";
-      }
-    }
-
     // ─── Code Review + Bugfix Loop (after implementation, before validation) ───
     if (currentNode === "implementation") {
       const reviewResult = await runCodeReviewBugfixLoop({
@@ -377,8 +414,26 @@ export async function run(
       trace.push(...reviewResult.traceEntries);
     }
 
-    // Context-aware transition — review result drives PASS/FAIL routing
-    currentNode = getNextNode(currentNode, nodeOutput, retryCount);
+    // Compute retryCount for the next transition
+    let newRetryCount = vmState.retryCount;
+    if (currentNode === "review" && nodeOutput["result"] === "FAIL") {
+      newRetryCount++;
+    } else if (currentNode === "tech-design") {
+      // retryCount persists across re-design cycles
+    } else {
+      newRetryCount = 0; // reset on non-loop nodes
+    }
+
+    // Graph Kernel decides the next node once per step
+    const nextNode = getNextNode(currentNode, nodeOutput, newRetryCount);
+
+    // VM transition — single cursor, single source of retry truth
+    vmState = transition(vmState, nextNode, canonicalEvent, newRetryCount);
+  }
+
+  // Terminal validation: the VM must end at a completed terminal state.
+  if (vmState.currentNode !== null || vmState.status !== "completed") {
+    throw new Error(`Runtime graph did not reach a completed terminal state: currentNode=${vmState.currentNode}, status=${vmState.status}`);
   }
 
   // ─── Final Status ─────────────────────────────────────
@@ -534,6 +589,12 @@ export async function run(
     final_status: finalStatus,
     implementation_outcome: implementationOutcome,
     completed_at: new Date().toISOString(),
+    graph_status: vmState.status,
+    graph_replay_trace: {
+      executionId,
+      runConfig,
+      events: canonicalEvents,
+    },
     ...(skillFlowShadowIntegration
       ? { skill_flow_shadow_integration: skillFlowShadowIntegration }
       : {}),
