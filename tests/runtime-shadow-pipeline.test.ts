@@ -4,6 +4,37 @@
 // All agent calls are simulated — no real execution.
 
 import { run } from "../runtime";
+import { validateAndReplayHistory } from "../core/state-machine-vm";
+import { createInitialState } from "../core/execution-state";
+import { buildExecutionContext } from "../core/context-builder";
+import type { GraphReplayTrace } from "../core/graph-replay-trace";
+
+function assertVerifiesTrace(
+  result: { requirement_id: string; graph_status: string; graph_replay_trace: GraphReplayTrace },
+  assertFn: (condition: boolean, message: string) => void
+) {
+  const initialState = createInitialState(
+    buildExecutionContext("requirement-summary", { requirement_id: result.requirement_id })
+  );
+  const replayed = validateAndReplayHistory(initialState, result.graph_replay_trace);
+  assertFn(replayed.currentNode === null, `verifier currentNode is null (got ${replayed.currentNode})`);
+  assertFn(replayed.status === "completed", `verifier status is completed (got ${replayed.status})`);
+  assertFn(replayed.status === result.graph_status, "verifier status matches graph_status");
+  assertFn(
+    replayed.step === result.graph_replay_trace.events.length,
+    `verifier step is ${result.graph_replay_trace.events.length} (got ${replayed.step})`
+  );
+  assertFn(
+    replayed.history.length === result.graph_replay_trace.events.length,
+    `verifier history length is ${result.graph_replay_trace.events.length} (got ${replayed.history.length})`
+  );
+  for (let i = 0; i < result.graph_replay_trace.events.length; i++) {
+    assertFn(
+      replayed.history[i] === result.graph_replay_trace.events[i],
+      `verifier history[${i}] is identical object to canonical event[${i}]`
+    );
+  }
+}
 
 async function test() {
   let passed = 0;
@@ -96,6 +127,11 @@ async function test() {
   const observabilityNodes = result.execution_trace.map((t: { node: string }) => t.node);
   assert(!observabilityNodes.includes("solution-challenge"), "observability trace does NOT include solution-challenge");
   assert(observabilityNodes.includes("code-review"), "observability trace still includes code-review");
+  console.log("");
+
+  // Test 2d: Verifier accepts deterministic disabled canonical trace
+  console.log("Test 2d: Verifier accepts deterministic disabled canonical trace");
+  assertVerifiesTrace(result, assert);
   console.log("");
 
   // Test 3: trace includes all 5 expected nodes IN ORDER
@@ -195,6 +231,7 @@ async function test() {
   assert(shadowChallengeEvent !== undefined, "shadow solution-challenge event exists");
   assert(shadowChallengeEvent!.kind === "node_executed", "shadow solution-challenge kind is node_executed");
   assert(!shadowCanonical.some((e: { kind: string }) => e.kind === "node_skipped"), "shadow canonical trace has no skipped events");
+  assertVerifiesTrace(shadowResult, assert);
   console.log("");
   const designRun = await run("build a user login page with database storage");
   assert(designRun.final_status === "success", "design run completes with success");
