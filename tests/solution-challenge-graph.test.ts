@@ -6,7 +6,7 @@
 import { run } from "../runtime";
 import { createArtifact } from "../core/artifact";
 import { createInitialState, ExecutionState } from "../core/execution-state";
-import { replayExecution } from "../core/state-machine-vm";
+import { replayExecution, validateAndReplayHistory } from "../core/state-machine-vm";
 import { buildExecutionContext } from "../core/context-builder";
 import { ExecutionGateway } from "../execution/gateway";
 import {
@@ -18,6 +18,7 @@ import {
 import type { RuntimeExecutionGateway, RuntimeExecutorMap } from "../core/runtime-executors";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
 import type { ExecutionTraceItem } from "../core/execution-trace";
+import type { GraphReplayTrace } from "../core/graph-replay-trace";
 
 function fakeReviewArtifact(reqId: string) {
   return createArtifact({ id: `${reqId}:cr:PASS:0`, requirementId: reqId, node: "code-review", type: "code_review", content: { status: "PASS", findings: [] }, agent: "codex", source: "execution_gateway" });
@@ -38,6 +39,33 @@ function scOut(s: SolutionChallengeState) { return { result: "FAIL", solution_ch
 async function test() {
   let passed = 0, failed = 0;
   function assert(c: boolean, m: string) { if (c) { passed++; console.log(`  ✓ ${m}`); } else { failed++; console.error(`  ✗ ${m}`); } }
+
+  function assertVerifiesTrace(
+    result: { requirement_id: string; graph_status: string; graph_replay_trace: GraphReplayTrace },
+    assertFn: (condition: boolean, message: string) => void
+  ) {
+    const initialState = createInitialState(
+      buildExecutionContext("requirement-summary", { requirement_id: result.requirement_id })
+    );
+    const replayed = validateAndReplayHistory(initialState, result.graph_replay_trace);
+    assertFn(replayed.currentNode === null, `verifier currentNode is null (got ${replayed.currentNode})`);
+    assertFn(replayed.status === "completed", `verifier status is completed (got ${replayed.status})`);
+    assertFn(replayed.status === result.graph_status, "verifier status matches graph_status");
+    assertFn(
+      replayed.step === result.graph_replay_trace.events.length,
+      `verifier step is ${result.graph_replay_trace.events.length} (got ${replayed.step})`
+    );
+    assertFn(
+      replayed.history.length === result.graph_replay_trace.events.length,
+      `verifier history length is ${result.graph_replay_trace.events.length} (got ${replayed.history.length})`
+    );
+    for (let i = 0; i < result.graph_replay_trace.events.length; i++) {
+      assertFn(
+        replayed.history[i] === result.graph_replay_trace.events[i],
+        `verifier history[${i}] is identical object to canonical event[${i}]`
+      );
+    }
+  }
 
   console.log("Solution Challenge Shared Validation + Replay Test\n");
 
@@ -132,10 +160,37 @@ async function test() {
     const st = { ...createShadowReadyChallengeState(), mode: modeVal, currentCycle: c, exhausted: e, status: "NEEDS_REVISION" as const, findingIds: ids };
     return { node: "solution-challenge", skill: "sdlc-solution-challenger", result: "FAIL", execution_source: "deterministic_shadow", executor_type: "shadow", fallback_used: false, fallback_reason: "none", solution_challenge: st, blocking_count: 1, required_count: 0, non_blocking_count: 0, out_of_scope_count: 0, recommended_next_step: e ? "ESCALATE_TO_SOLUTION_REVIEWER" : "RETURN_TO_SPECIFICATION_WRITER", duration_ms: 0 };
   };
-  const r6 = await run("x", { executionGateway: fakeGateway, solutionChallengeMode: "shadow", executors: { "solution-challenge": exec6, "review": async () => ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }) } });
+  const r6ExecutionId = "test-solution-challenge-two-cycle-001";
+  const r6 = await run("x", { executionId: r6ExecutionId, executionGateway: fakeGateway, solutionChallengeMode: "shadow", executors: { "solution-challenge": exec6, "review": async () => ({ node: "review", result: "PASS", reviewed_at: new Date().toISOString() }) } });
   assert(calls6 === 2, `called twice (got ${calls6})`);
   assert(meta6[1]?.findingIds?.includes("CH-001"), "cycle 2 has CH-001");
   assert(r6.final_status === "success", "runtime completes");
+  assert(r6.graph_replay_trace.executionId === r6ExecutionId, "r6 executionId matches explicit value");
+  assert(r6.graph_replay_trace.runConfig.requirementSummaryMode === "deterministic", "r6 requirementSummaryMode is deterministic");
+  assert(r6.graph_replay_trace.runConfig.solutionChallengeMode === "shadow", "r6 solutionChallengeMode is shadow");
+  const r6CanonicalNodes = r6.graph_replay_trace.events.map((e) => e.node);
+  assert(
+    JSON.stringify(r6CanonicalNodes) === JSON.stringify([
+      "requirement-summary",
+      "tech-design",
+      "solution-challenge",
+      "tech-design",
+      "solution-challenge",
+      "review",
+      "implementation",
+      "validation",
+    ]),
+    `r6 canonical nodes are [${r6CanonicalNodes.join(", ")}]`
+  );
+  const r6ChallengeEvents = r6.graph_replay_trace.events.filter((e) => e.node === "solution-challenge");
+  assert(r6ChallengeEvents.length === 2, "r6 has two solution-challenge events");
+  assert(r6ChallengeEvents.every((e) => e.kind === "node_executed"), "r6 solution-challenge events are executed");
+  assert((r6ChallengeEvents[0].output["solution_challenge"] as { status: string }).status === "NEEDS_REVISION", "r6 first challenge status is NEEDS_REVISION");
+  assert((r6ChallengeEvents[0].output["solution_challenge"] as { exhausted: boolean }).exhausted === false, "r6 first challenge not exhausted");
+  assert((r6ChallengeEvents[1].output["solution_challenge"] as { mode: string }).mode === "FOLLOW_UP_VERIFICATION", "r6 second challenge mode is FOLLOW_UP_VERIFICATION");
+  assert((r6ChallengeEvents[1].output["solution_challenge"] as { currentCycle: number }).currentCycle === 2, "r6 second challenge currentCycle is 2");
+  assert((r6ChallengeEvents[1].output["solution_challenge"] as { exhausted: boolean }).exhausted === true, "r6 second challenge exhausted");
+  assertVerifiesTrace(r6, assert);
   console.log("");
 
   // ═══ Test 7: replayExecution rejects malformed challenge traces ═══
@@ -293,7 +348,8 @@ async function test() {
       return fakeGateway.execute(req);
     },
   };
-  const r11 = await run("x", { executionGateway: gw11, solutionChallengeMode: "gateway_shadow" });
+  const r11ExecutionId = "test-gateway-shadow-ready-001";
+  const r11 = await run("x", { executionId: r11ExecutionId, executionGateway: gw11, solutionChallengeMode: "gateway_shadow" });
   const sc11 = r11.execution_trace.find((t) => t.node === "solution-challenge");
   const obs11 = sc11?.output["solution_challenge_observation"] as Record<string, unknown> | undefined;
   assert(obs11?.availability === "available", "observation available");
@@ -301,6 +357,10 @@ async function test() {
   assert(sc11?.output["routingEffect"] === "shadow_pass_through", "shadow pass through");
   assert(sc11?.output["fallback_used"] === false, "no fallback");
   assert(r11.execution_trace.some((t) => t.node === "review"), "flow continued to review");
+  assert(r11.graph_replay_trace.executionId === r11ExecutionId, "r11 executionId matches explicit value");
+  assert(r11.graph_replay_trace.runConfig.requirementSummaryMode === "deterministic", "r11 requirementSummaryMode is deterministic");
+  assert(r11.graph_replay_trace.runConfig.solutionChallengeMode === "gateway_shadow", "r11 solutionChallengeMode is gateway_shadow");
+  assertVerifiesTrace(r11, assert);
   // Replay: shadow_pass_through → review
   const { getNextNode: gn11 } = await import("../sdlc_graph/transitions");
   assert(gn11("solution-challenge", sc11!.output) === "review", "replay: shadow_pass_through → review");
@@ -317,10 +377,16 @@ async function test() {
       return fakeGateway.execute(req);
     },
   };
-  const r12 = await run("x", { executionGateway: gw12, solutionChallengeMode: "gateway_shadow" });
+  const r12ExecutionId = "test-gateway-shadow-needs-revision-001";
+  const r12 = await run("x", { executionId: r12ExecutionId, executionGateway: gw12, solutionChallengeMode: "gateway_shadow" });
   const sc12 = r12.execution_trace.find((t) => t.node === "solution-challenge");
   assert(sc12?.output["wouldRouteTo"] === "tech-design", "wouldRouteTo = tech-design");
   assert(r12.execution_trace.some((t) => t.node === "review"), "actual → review (not tech-design)");
+  assert(r12.graph_replay_trace.executionId === r12ExecutionId, "r12 executionId matches explicit value");
+  assert(r12.graph_replay_trace.runConfig.solutionChallengeMode === "gateway_shadow", "r12 solutionChallengeMode is gateway_shadow");
+  assert(sc12?.output["observedStatus"] === "NEEDS_REVISION", "r12 observedStatus is NEEDS_REVISION");
+  assert(sc12?.output["routingEffect"] === "shadow_pass_through", "r12 routingEffect is shadow_pass_through");
+  assertVerifiesTrace(r12, assert);
   // Replay must also route to review
   const { getNextNode: gn12 } = await import("../sdlc_graph/transitions");
   assert(gn12("solution-challenge", sc12!.output) === "review", "replay: shadow_pass_through → review");
@@ -353,7 +419,8 @@ async function test() {
       return fakeGateway.execute(req);
     },
   };
-  const r14 = await run("x", { executionGateway: gw14, solutionChallengeMode: "gateway_shadow" });
+  const r14ExecutionId = "test-gateway-shadow-unavailable-001";
+  const r14 = await run("x", { executionId: r14ExecutionId, executionGateway: gw14, solutionChallengeMode: "gateway_shadow" });
   const sc14 = r14.execution_trace.find((t) => t.node === "solution-challenge");
   const obs14 = sc14?.output["solution_challenge_observation"] as Record<string, unknown> | undefined;
   assert(obs14?.availability === "unavailable", "observation unavailable");
@@ -361,6 +428,13 @@ async function test() {
   assert(sc14?.output["fallback_used"] === true, "fallback_used = true");
   assert(sc14?.output["solution_challenge"] === undefined, "unavailable: no solution_challenge");
   assert(r14.execution_trace.some((t) => t.node === "review"), "flow continued to review");
+  assert(r14.graph_replay_trace.executionId === r14ExecutionId, "r14 executionId matches explicit value");
+  assert(r14.graph_replay_trace.runConfig.solutionChallengeMode === "gateway_shadow", "r14 solutionChallengeMode is gateway_shadow");
+  assert(obs14?.availability === "unavailable", "r14 observation availability is unavailable");
+  assert(sc14?.output["observedStatus"] === "unavailable", "r14 observedStatus is unavailable");
+  assert(sc14?.output["fallback_used"] === true, "r14 fallback_used is true");
+  assert(sc14?.output["solution_challenge"] === undefined, "r14 no top-level solution_challenge");
+  assertVerifiesTrace(r14, assert);
   console.log("");
 
   // ═══ Test 15: Exception → no fake READY ═══

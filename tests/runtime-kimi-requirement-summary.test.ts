@@ -5,11 +5,42 @@
 // All Gateway calls are fake; no real Kimi or Codex CLI is invoked.
 
 import { run } from "../runtime";
+import { validateAndReplayHistory } from "../core/state-machine-vm";
+import { createInitialState } from "../core/execution-state";
+import { buildExecutionContext } from "../core/context-builder";
 import { ExecutionGateway } from "../execution/gateway";
 import { createArtifact, Artifact } from "../core/artifact";
 import type { RuntimeExecutionGateway } from "../core/runtime-executors";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
 import type { KimiCliProcessRunner, KimiCliProcessResult } from "../execution/kimi-cli-command-executor";
+import type { GraphReplayTrace } from "../core/graph-replay-trace";
+
+function assertVerifiesTrace(
+  result: { requirement_id: string; graph_status: string; graph_replay_trace: GraphReplayTrace },
+  assertFn: (condition: boolean, message: string) => void
+) {
+  const initialState = createInitialState(
+    buildExecutionContext("requirement-summary", { requirement_id: result.requirement_id })
+  );
+  const replayed = validateAndReplayHistory(initialState, result.graph_replay_trace);
+  assertFn(replayed.currentNode === null, `verifier currentNode is null (got ${replayed.currentNode})`);
+  assertFn(replayed.status === "completed", `verifier status is completed (got ${replayed.status})`);
+  assertFn(replayed.status === result.graph_status, "verifier status matches graph_status");
+  assertFn(
+    replayed.step === result.graph_replay_trace.events.length,
+    `verifier step is ${result.graph_replay_trace.events.length} (got ${replayed.step})`
+  );
+  assertFn(
+    replayed.history.length === result.graph_replay_trace.events.length,
+    `verifier history length is ${result.graph_replay_trace.events.length} (got ${replayed.history.length})`
+  );
+  for (let i = 0; i < result.graph_replay_trace.events.length; i++) {
+    assertFn(
+      replayed.history[i] === result.graph_replay_trace.events[i],
+      `verifier history[${i}] is identical object to canonical event[${i}]`
+    );
+  }
+}
 
 function createCodeReviewArtifact(requirementId: string, attempt = 0): Artifact {
   return createArtifact({
@@ -161,7 +192,9 @@ async function test() {
     },
   };
 
+  const executionIdB = "test-kimi-requirement-summary-single-001";
   const resultB = await run("build a simple login form", {
+    executionId: executionIdB,
     executionGateway: recordingGatewayB,
     requirementSummaryMode: "kimi_gateway",
   });
@@ -187,6 +220,15 @@ async function test() {
     implCodePatchB?.content["file"] === "src/fake-gateway-implementation.ts",
     "Codex implementation used the fake Gateway patch"
   );
+  a(resultB.graph_replay_trace.executionId === executionIdB, "resultB executionId matches explicit value");
+  a(resultB.graph_replay_trace.runConfig.requirementSummaryMode === "kimi_gateway", "resultB requirementSummaryMode is kimi_gateway");
+  a(resultB.graph_replay_trace.runConfig.solutionChallengeMode === "disabled", "resultB solutionChallengeMode is disabled");
+  const skippedB = resultB.graph_replay_trace.events.find((e) => e.node === "solution-challenge");
+  a(skippedB !== undefined, "resultB canonical trace includes solution-challenge");
+  a(skippedB?.kind === "node_skipped", "resultB solution-challenge is skipped");
+  a(skippedB?.skipReason === "solution_challenge_disabled", "resultB skipReason is solution_challenge_disabled");
+  a(skippedB?.output["result"] === "SKIPPED", "resultB skipped output.result is SKIPPED");
+  assertVerifiesTrace(resultB, a);
   console.log("");
 
   // ── Test C: valid multi-repository Kimi summary routes to fanout ──
