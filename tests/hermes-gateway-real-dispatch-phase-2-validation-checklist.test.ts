@@ -230,24 +230,24 @@ async function test() {
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-operator-runbook.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json",
-    "hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
     "execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts",
     "tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
-    "hermes-gateway-real-dispatch-phase-2-validation-checklist.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json",
   ]) {
     assert(c.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 12: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md", "utf-8");
   assert(md.includes("checklist_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar Phase-2 validation checklist only"), "md: scope");
   assert(md.includes("This PR does not execute Phase-2 validation"), "md: no phase-2 validation");
@@ -267,7 +267,7 @@ async function test() {
   console.log("");
 
   console.log("Test 13: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-phase-2-validation-checklist.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json", "utf-8"));
   assert(json.status === c.status, "json: status");
   assert(json.checklist_only === true, "json: checklist only");
   assert(json.executing_now === false, "json: not executing");

@@ -263,26 +263,26 @@ async function test() {
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_ROLLOUT_VALIDATION_CHECKLIST.md",
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_OPERATOR_RUNBOOK.md",
     "docs/capabilities/hermes/phase-1/HERMES_GATEWAY_REAL_DISPATCH_POST_ENABLEMENT_REVIEW_TEMPLATE.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-readiness-review.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-controlled-rollout-plan.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-rollout-validation-checklist.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-operator-runbook.json",
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json",
-    "hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
-    "hermes-gateway-real-dispatch-phase-2-validation-checklist.json",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json",
     "execution/hermes-gateway-real-dispatch-phase-2-operator-runbook.ts",
     "tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md",
-    "hermes-gateway-real-dispatch-phase-2-operator-runbook.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-operator-runbook.json",
   ]) {
     assert(r.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 13: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md", "utf-8");
   assert(md.includes("runbook_only"), "md: status");
   assert(md.includes("Phase-2 operator"), "md: scope");
   assert(md.includes("does not execute Phase-2 validation"), "md: no phase-2 validation");
@@ -302,7 +302,7 @@ async function test() {
   console.log("");
 
   console.log("Test 14: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-phase-2-operator-runbook.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-operator-runbook.json", "utf-8"));
   assert(json.status === r.status, "json: status");
   assert(json.runbook_only === true, "json: runbook only");
   assert(json.executing_now === false, "json: not executing");

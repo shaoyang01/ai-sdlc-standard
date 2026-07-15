@@ -983,8 +983,8 @@ async function test() {
   const hgPhase2Ev = hgPhase2Cap["evidence"] as string[];
   assert(hgPhase2Ev.includes("execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts"), "hermes gateway phase-2 expansion contract evidence module");
   assert(hgPhase2Ev.includes("tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts"), "hermes gateway phase-2 expansion contract evidence test");
-  assert(hgPhase2Ev.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes gateway phase-2 expansion contract evidence md");
-  assert(hgPhase2Ev.includes("hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes gateway phase-2 expansion contract evidence json");
+  assert(hgPhase2Ev.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes gateway phase-2 expansion contract evidence md");
+  assert(hgPhase2Ev.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes gateway phase-2 expansion contract evidence json");
   // Hermes Gateway Real Dispatch Phase-2 Validation Checklist
   assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Validation Checklist"), "has Hermes Gateway phase-2 validation checklist");
   const hgVChecklistCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Validation Checklist");
@@ -1020,8 +1020,8 @@ async function test() {
   const hgVChecklistEv = hgVChecklistCap["evidence"] as string[];
   assert(hgVChecklistEv.includes("execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts"), "hermes gateway phase-2 validation checklist evidence module");
   assert(hgVChecklistEv.includes("tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts"), "hermes gateway phase-2 validation checklist evidence test");
-  assert(hgVChecklistEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes gateway phase-2 validation checklist evidence md");
-  assert(hgVChecklistEv.includes("hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes gateway phase-2 validation checklist evidence json");
+  assert(hgVChecklistEv.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes gateway phase-2 validation checklist evidence md");
+  assert(hgVChecklistEv.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes gateway phase-2 validation checklist evidence json");
   // Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template
   assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Operator Runbook"), "has Hermes Gateway phase-2 operator runbook");
   const hgPhase2RunbookCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook");
@@ -1090,8 +1090,8 @@ async function test() {
   const hgPhase2RunbookEv = hgPhase2RunbookCap["evidence"] as string[];
   assert(hgPhase2RunbookEv.includes("execution/hermes-gateway-real-dispatch-phase-2-operator-runbook.ts"), "hermes gateway phase-2 operator runbook evidence module");
   assert(hgPhase2RunbookEv.includes("tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts"), "hermes gateway phase-2 operator runbook evidence test");
-  assert(hgPhase2RunbookEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes gateway phase-2 operator runbook evidence md");
-  assert(hgPhase2RunbookEv.includes("hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes gateway phase-2 operator runbook evidence json");
+  assert(hgPhase2RunbookEv.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes gateway phase-2 operator runbook evidence md");
+  assert(hgPhase2RunbookEv.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes gateway phase-2 operator runbook evidence json");
 
   // Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template
   assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template"), "has Hermes Gateway phase-2 post-validation review template");
@@ -1114,8 +1114,8 @@ async function test() {
   const hgPostValEv = hgPostValCap["evidence"] as string[];
   assert(hgPostValEv.includes("execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts"), "hermes gateway phase-2 post-validation review template evidence module");
   assert(hgPostValEv.includes("tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts"), "hermes gateway phase-2 post-validation review template evidence test");
-  assert(hgPostValEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes gateway phase-2 post-validation review template evidence md");
-  assert(hgPostValEv.includes("hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes gateway phase-2 post-validation review template evidence json");
+  assert(hgPostValEv.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes gateway phase-2 post-validation review template evidence md");
+  assert(hgPostValEv.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes gateway phase-2 post-validation review template evidence json");
 
   // Hermes Gateway Real Dispatch Phase-2 Final Readiness Review
   assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Final Readiness Review"), "has Hermes Gateway phase-2 final readiness review");
@@ -1136,8 +1136,8 @@ async function test() {
   const hgFinalRREv = hgFinalRRCap["evidence"] as string[];
   assert(hgFinalRREv.includes("execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts"), "hermes gateway phase-2 final readiness review evidence module");
   assert(hgFinalRREv.includes("tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts"), "hermes gateway phase-2 final readiness review evidence test");
-  assert(hgFinalRREv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes gateway phase-2 final readiness review evidence md");
-  assert(hgFinalRREv.includes("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes gateway phase-2 final readiness review evidence json");
+  assert(hgFinalRREv.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes gateway phase-2 final readiness review evidence md");
+  assert(hgFinalRREv.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes gateway phase-2 final readiness review evidence json");
   // Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan
   assert(capNames.includes("Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan"), "has Hermes Gateway phase-2 controlled enablement plan");
   const hgPlanCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan");
