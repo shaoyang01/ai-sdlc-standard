@@ -905,8 +905,8 @@ async function test() {
   assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.json"), "hermes evidence phase-2 enablement guard contract json");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.ts"), "hermes evidence phase-2 shadow enablement implementation plan module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts"), "hermes evidence phase-2 shadow enablement implementation plan test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md"), "hermes evidence phase-2 shadow enablement implementation plan md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"), "hermes evidence phase-2 shadow enablement implementation plan json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md"), "hermes evidence phase-2 shadow enablement implementation plan md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"), "hermes evidence phase-2 shadow enablement implementation plan json");
   console.log("");
 
   // ── Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Implementation Plan ──
@@ -1018,8 +1018,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement contract next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.ts"), "hermes evidence phase-2 shadow enablement contract module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts"), "hermes evidence phase-2 shadow enablement contract test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md"), "hermes evidence phase-2 shadow enablement contract md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"), "hermes evidence phase-2 shadow enablement contract json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md"), "hermes evidence phase-2 shadow enablement contract md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"), "hermes evidence phase-2 shadow enablement contract json");
 
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_test_plan"] === "implemented_test_plan_only", "hermes dispatch phase-2 shadow enablement test plan");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_test_plan_status"] === "test_plan_only", "hermes dispatch phase-2 shadow enablement test plan status");
@@ -1075,8 +1075,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_test_plan_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement test plan next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.ts"), "hermes evidence phase-2 shadow enablement test plan module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts"), "hermes evidence phase-2 shadow enablement test plan test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md"), "hermes evidence phase-2 shadow enablement test plan md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json"), "hermes evidence phase-2 shadow enablement test plan json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md"), "hermes evidence phase-2 shadow enablement test plan md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json"), "hermes evidence phase-2 shadow enablement test plan json");
 
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract"] === "implemented_fixture_contract_only", "hermes dispatch phase-2 shadow enablement fixture contract");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_status"] === "fixture_contract_only", "hermes dispatch phase-2 shadow enablement fixture contract status");
@@ -1133,8 +1133,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract", "hermes dispatch phase-2 shadow enablement fixture contract next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.ts"), "hermes evidence phase-2 shadow enablement fixture contract module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts"), "hermes evidence phase-2 shadow enablement fixture contract test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md"), "hermes evidence phase-2 shadow enablement fixture contract md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"), "hermes evidence phase-2 shadow enablement fixture contract json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md"), "hermes evidence phase-2 shadow enablement fixture contract md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"), "hermes evidence phase-2 shadow enablement fixture contract json");
   console.log("");
 
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_observability_contract"] === "implemented_observability_contract_only", "hermes dispatch phase-2 shadow enablement observability contract");

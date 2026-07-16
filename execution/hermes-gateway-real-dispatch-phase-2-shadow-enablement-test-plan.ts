@@ -156,8 +156,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN = 
   ],
   evidence: [
     "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md",
-    "hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json",
     "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Fixture Contract",

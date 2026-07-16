@@ -1406,8 +1406,8 @@
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_implementation_plan_evidence": [
       "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.ts",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts",
-      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md",
-      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_IMPLEMENTATION_PLAN.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.json"
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract": "implemented_contract_only",
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_status": "contract_only",
@@ -1573,8 +1573,8 @@
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_evidence": [
       "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.ts",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts",
-      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md",
-      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTRACT.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.json"
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_contract_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract",
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan": "implemented_test_plan_only",
@@ -1734,8 +1734,8 @@
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_evidence": [
       "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.ts",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts",
-      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md",
-      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json"
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_TEST_PLAN.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.json"
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_test_plan_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract",
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract": "implemented_fixture_contract_only",
@@ -1949,8 +1949,8 @@
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_evidence": [
       "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.ts",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts",
-      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md",
-      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_FIXTURE_CONTRACT.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.json"
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_fixture_contract_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Guardrail Contract",
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_observability_contract": "implemented_observability_contract_only",
