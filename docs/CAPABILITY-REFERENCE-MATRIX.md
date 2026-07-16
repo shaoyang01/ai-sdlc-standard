@@ -131,6 +131,8 @@ The following Hermes Phase 2 controlled enablement capability artifacts were mov
 
 The following Hermes Phase 2 readiness / validation capability artifacts were moved to approved phase directories. Their baselines were recorded at `3593495d8cdb06cef1e11a4fe704608af7b66560`. No root-level reference note or JSON stub was retained; all in-repository references were updated to the new paths. This is the `hermes-phase-2-readiness-validation` batch only; Shadow Enablement, `HERMES_PHASE_2_CONSOLIDATION.md`, Runtime Shadow Attachment readiness, historical artifacts, shared/system artifacts, and other capability families are not approved for migration.
 
+This path migration does not constitute capability approval, enablement, or execution and does not change capability status or ownership.
+
 | Baseline Root Path | New Content Path | Root Reference Note | Batch | Compatibility Strategy | Migration Status |
 | --- | --- | --- | --- | --- | --- |
 | `HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md` | `docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md` | none | hermes-phase-2-readiness-validation | direct move; no root note or JSON stub; path metadata synchronized | implemented in Hermes Phase 2 readiness/validation migration PR; effective upon merge |
