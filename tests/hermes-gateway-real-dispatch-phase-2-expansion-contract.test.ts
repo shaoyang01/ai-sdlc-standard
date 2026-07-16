@@ -238,15 +238,15 @@ async function test() {
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json",
     "execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts",
     "tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
-    "hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
   ]) {
     assert(c.evidence.includes(file), `evidence: ${file}`);
   }
   console.log("");
 
   console.log("Test 13: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md", "utf-8");
   assert(md.includes("contract_only"), "md: status");
   assert(md.includes("Gateway real dispatch sidecar phase-2 expansion contract only"), "md: scope");
   assert(md.includes("This PR does not execute phase-2 expansion"), "md: no phase-2 execution");
@@ -265,7 +265,7 @@ async function test() {
   console.log("");
 
   console.log("Test 14: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-phase-2-expansion-contract.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json", "utf-8"));
   assert(json.status === c.status, "json: status");
   assert(json.contract_only === true, "json: contract only");
   assert(json.executing_now === false, "json: not executing");

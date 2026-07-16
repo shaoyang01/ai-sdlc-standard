@@ -1366,8 +1366,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-expansion-contract.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json"
       ]
     },
     {
@@ -1442,8 +1442,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
-        "hermes-gateway-real-dispatch-phase-2-validation-checklist.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json"
       ]
     },
     {
@@ -1522,8 +1522,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-operator-runbook.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md",
-        "hermes-gateway-real-dispatch-phase-2-operator-runbook.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-operator-runbook.json"
       ]
     },
     {
@@ -1610,8 +1610,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md",
-        "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"
       ]
     },
     {
@@ -1643,8 +1643,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md",
-        "hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"
       ]
     },
     {

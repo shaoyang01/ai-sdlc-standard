@@ -130,7 +130,7 @@ async function test() {
   console.log("");
 
   console.log("Test 10: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md", "utf-8");
   assert(md.includes("review_only"), "md: status");
   assert(md.includes("READY_WITH_CONSTRAINTS"), "md: verdict");
   assert(md.includes("Phase-2 final readiness review"), "md: scope");
@@ -141,7 +141,7 @@ async function test() {
   console.log("");
 
   console.log("Test 11: JSON consistency");
-  const json = JSON.parse(fs.readFileSync("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json", "utf-8"));
+  const json = JSON.parse(fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-final-readiness-review.json", "utf-8"));
   assert(json.status === r.status, "json: status");
   assert(json.verdict === r.verdict, "json: verdict");
   assert(json.review_only === true, "json: review only");

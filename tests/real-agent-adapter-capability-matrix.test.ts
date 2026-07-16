@@ -688,8 +688,8 @@ async function test() {
   assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json"), "hermes evidence post-enablement template json");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts"), "hermes evidence phase-2 expansion contract module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts"), "hermes evidence phase-2 expansion contract test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes evidence phase-2 expansion contract md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes evidence phase-2 expansion contract json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md"), "hermes evidence phase-2 expansion contract md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json"), "hermes evidence phase-2 expansion contract json");
   assert(hermes["gateway_real_dispatch_phase_2_validation_checklist"] === "implemented_checklist_only", "hermes dispatch phase-2 validation checklist");
   assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_status"] === "checklist_only", "hermes dispatch phase-2 validation checklist status");
   assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_executing_now"] === false, "hermes dispatch phase-2 validation checklist not executing");
@@ -717,8 +717,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_validation_checklist_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Operator Runbook", "hermes dispatch phase-2 validation checklist next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-validation-checklist.ts"), "hermes evidence phase-2 validation checklist module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts"), "hermes evidence phase-2 validation checklist test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes evidence phase-2 validation checklist md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes evidence phase-2 validation checklist json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_VALIDATION_CHECKLIST.md"), "hermes evidence phase-2 validation checklist md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-validation-checklist.json"), "hermes evidence phase-2 validation checklist json");
   assert(hermes["gateway_real_dispatch_phase_2_operator_runbook"] === "implemented_runbook_only", "hermes dispatch phase-2 operator runbook");
   assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_status"] === "runbook_only", "hermes dispatch phase-2 operator runbook status");
   assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_executing_now"] === false, "hermes dispatch phase-2 operator runbook not executing");
@@ -755,8 +755,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_operator_runbook_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Post-Validation Review Template", "hermes dispatch phase-2 operator runbook next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-operator-runbook.ts"), "hermes evidence phase-2 operator runbook module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts"), "hermes evidence phase-2 operator runbook test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes evidence phase-2 operator runbook md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes evidence phase-2 operator runbook json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_OPERATOR_RUNBOOK.md"), "hermes evidence phase-2 operator runbook md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-operator-runbook.json"), "hermes evidence phase-2 operator runbook json");
 
   assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template"] === "implemented_template_only", "hermes dispatch phase-2 post-validation review template");
   assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_status"] === "template_only", "hermes dispatch phase-2 post-validation review template status");
@@ -778,8 +778,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_post_validation_review_template_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Final Readiness Review", "hermes dispatch phase-2 post-validation review next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.ts"), "hermes evidence phase-2 post-validation review template module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts"), "hermes evidence phase-2 post-validation review template test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes evidence phase-2 post-validation review template md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes evidence phase-2 post-validation review template json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_POST_VALIDATION_REVIEW_TEMPLATE.md"), "hermes evidence phase-2 post-validation review template md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.json"), "hermes evidence phase-2 post-validation review template json");
 
   assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review"] === "implemented_review_only", "hermes dispatch phase-2 final readiness review");
   assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_status"] === "review_only", "hermes dispatch phase-2 final readiness review status");
@@ -794,8 +794,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_final_readiness_review_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Controlled Enablement Plan", "hermes dispatch phase-2 final readiness review next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-final-readiness-review.ts"), "hermes evidence phase-2 final readiness review module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts"), "hermes evidence phase-2 final readiness review test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes evidence phase-2 final readiness review md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes evidence phase-2 final readiness review json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_FINAL_READINESS_REVIEW.md"), "hermes evidence phase-2 final readiness review md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-final-readiness-review.json"), "hermes evidence phase-2 final readiness review json");
   assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan"] === "implemented_plan_only", "hermes dispatch phase-2 controlled enablement plan");
   assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_status"] === "plan_only", "hermes dispatch phase-2 controlled enablement plan status");
   assert(hermes["gateway_real_dispatch_phase_2_controlled_enablement_plan_executing_now"] === false, "hermes dispatch phase-2 controlled enablement plan not executing");

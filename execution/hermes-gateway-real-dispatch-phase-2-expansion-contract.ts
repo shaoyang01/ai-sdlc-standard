@@ -412,8 +412,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT: HermesGate
     "metadata/capabilities/hermes/phase-1/hermes-gateway-real-dispatch-post-enablement-review-template.json",
     "execution/hermes-gateway-real-dispatch-phase-2-expansion-contract.ts",
     "tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
-    "hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_EXPANSION_CONTRACT.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-expansion-contract.json",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Validation Checklist",
 };
