@@ -171,8 +171,8 @@ export const HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CO
   ],
   evidence: [
     "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.ts",
-    "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md",
-    "hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json",
+    "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md",
+    "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json",
     "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts",
   ],
   recommendedNextPr: "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract",

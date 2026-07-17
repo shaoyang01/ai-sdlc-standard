@@ -1192,8 +1192,8 @@ async function test() {
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_observability_contract_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract", "hermes dispatch phase-2 shadow enablement observability contract next PR");
   assert(hermesEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.ts"), "hermes evidence phase-2 shadow enablement observability contract module");
   assert(hermesEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts"), "hermes evidence phase-2 shadow enablement observability contract test");
-  assert(hermesEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md"), "hermes evidence phase-2 shadow enablement observability contract md");
-  assert(hermesEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes evidence phase-2 shadow enablement observability contract json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md"), "hermes evidence phase-2 shadow enablement observability contract md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes evidence phase-2 shadow enablement observability contract json");
   console.log("");
 
   // ── Test 9: Recommended next PR ──

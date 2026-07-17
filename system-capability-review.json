@@ -2722,8 +2722,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"
       ],
       "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract"
     },
@@ -2893,8 +2893,8 @@
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"
       ],
       "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Rollback Contract"
     },
@@ -3079,8 +3079,8 @@
       ],
       "evidence": [
         "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.ts",
-        "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md",
-        "hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json",
+        "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md",
+        "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts"
       ],
       "recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Readiness Gate"
