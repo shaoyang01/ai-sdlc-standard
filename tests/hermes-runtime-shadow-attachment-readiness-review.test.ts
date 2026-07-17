@@ -75,13 +75,13 @@ async function test() {
   assert(r.evidence.includes("tests/runtime-hermes-shadow-attachment.test.ts"), "evidence: runtime test");
   assert(r.evidence.includes("core/hermes-runtime-shadow-attachment-wiring-contract.ts"), "evidence: wiring");
   assert(r.evidence.includes("tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts"), "evidence: wiring test");
-  assert(r.evidence.includes("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "evidence: md");
-  assert(r.evidence.includes("hermes-runtime-shadow-attachment-readiness-review.json"), "evidence: json");
+  assert(r.evidence.includes("docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "evidence: md");
+  assert(r.evidence.includes("metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json"), "evidence: json");
   console.log("");
 
   // Test 7: Markdown consistency
   console.log("Test 7: Markdown consistency");
-  const md = fs.readFileSync("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md", "utf-8");
   assert(md.includes("READY_WITH_CONSTRAINTS"), "md: verdict");
   assert(md.includes("Runtime shadow attachment only"), "md: scope");
   assert(md.includes("Not wired to Gateway primary dispatch"), "md: no gateway");
@@ -91,7 +91,7 @@ async function test() {
 
   // Test 8: JSON consistency
   console.log("Test 8: JSON consistency");
-  const jsonRaw = fs.readFileSync("hermes-runtime-shadow-attachment-readiness-review.json", "utf-8");
+  const jsonRaw = fs.readFileSync("metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json", "utf-8");
   const json = JSON.parse(jsonRaw);
   assert(json.verdict === "READY_WITH_CONSTRAINTS", "json: verdict");
   assert(json.recommended_next_pr.title === "Hermes Gateway Real Dispatch Contract", "json: next PR");

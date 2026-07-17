@@ -291,8 +291,8 @@ async function test() {
   assert(hermes["runtime_shadow_attachment_final_readiness_recommended_next_pr"] === "Hermes Gateway Real Dispatch Contract", "hermes readiness next PR");
   assert(hermesEvidence.includes("core/hermes-runtime-shadow-attachment-readiness-review.ts"), "hermes evidence readiness ts");
   assert(hermesEvidence.includes("tests/hermes-runtime-shadow-attachment-readiness-review.test.ts"), "hermes evidence readiness test");
-  assert(hermesEvidence.includes("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes evidence readiness md");
-  assert(hermesEvidence.includes("hermes-runtime-shadow-attachment-readiness-review.json"), "hermes evidence readiness json");
+  assert(hermesEvidence.includes("docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes evidence readiness md");
+  assert(hermesEvidence.includes("metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json"), "hermes evidence readiness json");
   assert(hermes["gateway_real_dispatch_contract"] === "implemented_contract_only", "hermes dispatch contract");
   assert(hermes["gateway_real_dispatch_contract_default_enabled"] === false, "hermes dispatch default disabled");
   assert(hermes["gateway_real_dispatch_contract_wired_to_gateway"] === false, "hermes dispatch not wired gateway");

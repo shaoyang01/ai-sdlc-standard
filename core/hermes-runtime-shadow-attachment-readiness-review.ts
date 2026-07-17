@@ -77,7 +77,7 @@ export const HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW: HermesRuntimeSha
     "tests/runtime-hermes-shadow-attachment.test.ts",
     "core/hermes-runtime-shadow-attachment-wiring-contract.ts",
     "tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts",
-    "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
-    "hermes-runtime-shadow-attachment-readiness-review.json",
+    "docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
+    "metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json",
   ],
 };

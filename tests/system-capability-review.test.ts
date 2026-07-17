@@ -467,8 +467,8 @@ async function test() {
   const hrrEvidence = hrrCap["evidence"] as string[];
   assert(hrrEvidence.includes("core/hermes-runtime-shadow-attachment-readiness-review.ts"), "hermes readiness evidence ts");
   assert(hrrEvidence.includes("tests/hermes-runtime-shadow-attachment-readiness-review.test.ts"), "hermes readiness evidence test");
-  assert(hrrEvidence.includes("HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes readiness evidence md");
-  assert(hrrEvidence.includes("hermes-runtime-shadow-attachment-readiness-review.json"), "hermes readiness evidence json");
+  assert(hrrEvidence.includes("docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md"), "hermes readiness evidence md");
+  assert(hrrEvidence.includes("metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json"), "hermes readiness evidence json");
   // Hermes Gateway Real Dispatch Contract
   assert(capNames.includes("Hermes Gateway Real Dispatch Contract"), "has Hermes Dispatch Contract");
   const hdcCap = review.capabilities.find((c: Record<string, unknown>) => c["name"] === "Hermes Gateway Real Dispatch Contract");

@@ -747,8 +747,8 @@
       "evidence": [
         "core/hermes-runtime-shadow-attachment-readiness-review.ts",
         "tests/hermes-runtime-shadow-attachment-readiness-review.test.ts",
-        "HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
-        "hermes-runtime-shadow-attachment-readiness-review.json"
+        "docs/capabilities/hermes/HERMES_RUNTIME_SHADOW_ATTACHMENT_READINESS_REVIEW.md",
+        "metadata/capabilities/hermes/hermes-runtime-shadow-attachment-readiness-review.json"
       ]
     },
     {
