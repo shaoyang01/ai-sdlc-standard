@@ -517,10 +517,22 @@ async function test() {
   assert(f2, "F2: mode mismatch throws");
 
   // F3: currentCycle mismatch
-
+  // currentCycle 与 mode/exhausted 联动：独立 currentCycle mismatch 无法通过单对象校验
+  // （cycle=2 强制 FOLLOW_UP_VERIFICATION mode，cycle=1 强制 INITIAL_CHALLENGE mode）。
+  // 这里验证携带异常 currentCycle 组合的 observation.state 被共享 validator 拒绝。
+  let f3 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, mode: "INITIAL_CHALLENGE", currentCycle: 2, exhausted: true } } })); } catch (e) { f3 = String(e).includes("currentCycle"); }
+  assert(f3, "F3: currentCycle anomaly rejected");
 
   // F4: exhausted mismatch
+  // exhausted 必须与 currentCycle>=maxCycles 一致；独立 exhausted mismatch 无法通过单对象校验。
+  // 这里验证 exhausted 与 cycle 不一致的 observation.state 被拒绝。
+  let f4 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, currentCycle: 1, exhausted: true } } })); } catch (e) { f4 = String(e).includes("exhausted"); }
+  assert(f4, "F4: exhausted anomaly rejected");
 
+  // F4b: maxCycles mismatch
+  // maxCycles 被单对象校验强制为 2；任何 maxCycles != 2 的 state 被拒绝。
+  let f4b = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, mode: "FOLLOW_UP_VERIFICATION", currentCycle: 2, maxCycles: 3, exhausted: false } } })); } catch (e) { f4b = String(e).includes("maxCycles"); }
+  assert(f4b, "F4b: maxCycles anomaly rejected");
 
   // F5: status mismatch
   let f5 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, status: "NEEDS_REVISION", exhausted: false }, wouldRouteTo: "tech-design", observedStatus: "NEEDS_REVISION", solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState } } })); } catch (e) { f5 = String(e).includes("status"); }
@@ -576,6 +588,18 @@ async function test() {
     f15 = true;
   } catch { }
   assert(f15, "F15: both states undefined + obs [] passes");
+
+  // F15b: undefined/[] equivalence — top state undefined, obs.state explicit [], obs []
+  let f15b = false; try {
+    const sTop = { ...gatewayReadyState } as Record<string, unknown>; delete sTop["findingIds"];
+    vgw(mkOut({ solution_challenge: sTop, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: [] }, findingIds: [] } }));
+    f15b = true;
+  } catch { }
+  assert(f15b, "F15b: top undefined + obs.state explicit [] + obs [] passes (equivalent)");
+
+  // F16: observation findingIds value mismatch — top == obs.state, obs differs (same length)
+  let f16 = false; try { vgw(mkOut({ solution_challenge: { ...gatewayReadyState, findingIds: ["CH-001"] }, solution_challenge_observation: { ...baseObs, state: { ...gatewayReadyState, findingIds: ["CH-001"] }, findingIds: ["CH-002"] } })); } catch (e) { f16 = String(e).includes("findingIds[0]"); }
+  assert(f16, "F16: observation findingIds value mismatch throws");
 
   // Linked-field rejection: mode+currentCycle+exhausted mismatch (catches mode first)
   let f2b = false; try {
