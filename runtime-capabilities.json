@@ -2727,8 +2727,8 @@
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_evidence": [
       "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.ts",
-      "HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md",
-      "hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json",
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts"
     ],
     "hermes_gateway_real_dispatch_phase_2_shadow_enablement_readiness_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation",

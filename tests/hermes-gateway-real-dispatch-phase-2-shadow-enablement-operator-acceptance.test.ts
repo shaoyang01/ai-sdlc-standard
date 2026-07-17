@@ -258,7 +258,7 @@ async function test() {
   console.log("");
 
   console.log("Test 20: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OPERATOR_ACCEPTANCE.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OPERATOR_ACCEPTANCE.md", "utf-8");
   assert(md.includes("# Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Operator Acceptance"), "md title");
   assert(md.includes("## Status"), "md status section");
   assert(md.includes("operator_acceptance_only"), "md status value");
@@ -273,7 +273,7 @@ async function test() {
   console.log("");
 
   console.log("Test 21: JSON consistency");
-  const jsonText = fs.readFileSync("hermes-gateway-real-dispatch-phase-2-shadow-enablement-operator-acceptance.json", "utf-8");
+  const jsonText = fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-operator-acceptance.json", "utf-8");
   const json = JSON.parse(jsonText);
   assert(json.status === o.status, "json status");
   assert(json.operator_acceptance_only === o.operatorAcceptanceOnly, "json operator_acceptance_only");
