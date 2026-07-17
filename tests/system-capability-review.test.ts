@@ -1836,8 +1836,8 @@ async function test() {
   const hgGateEvidence = hgGateCap["evidence"] as string[];
   assert(hgGateEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.ts"), "readiness gate evidence ts");
   assert(hgGateEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts"), "readiness gate evidence test");
-  assert(hgGateEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md"), "readiness gate evidence md");
-  assert(hgGateEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json"), "readiness gate evidence json");
+  assert(hgGateEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md"), "readiness gate evidence md");
+  assert(hgGateEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json"), "readiness gate evidence json");
   assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "next PR Hermes phase-2 shadow enablement implementation");
   console.log("");
 

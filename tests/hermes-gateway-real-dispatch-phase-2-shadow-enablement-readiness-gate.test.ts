@@ -278,7 +278,7 @@ async function test() {
 
   // Test 21: Markdown consistency
   console.log("Test 21: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_READINESS_GATE.md", "utf-8");
   assert(md.includes("readiness_gate_only"), "md: status");
   assert(md.includes("No Phase-2 enablement now") || md.includes("no Phase-2 enablement now"), "md: no enablement");
   assert(md.includes("No request type expansion now") || md.includes("no request type expansion now"), "md: no expansion");
@@ -287,7 +287,7 @@ async function test() {
 
   // Test 22: JSON consistency
   console.log("Test 22: JSON consistency");
-  const jr = fs.readFileSync("hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json", "utf-8");
+  const jr = fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.json", "utf-8");
   const json = JSON.parse(jr);
   assert(json.status === "readiness_gate_only", "json: status");
   assert(json.readiness_gate_only === true, "json: readiness gate only");

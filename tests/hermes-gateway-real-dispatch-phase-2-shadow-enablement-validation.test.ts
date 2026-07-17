@@ -227,7 +227,7 @@ async function test() {
   console.log("");
 
   console.log("Test 17: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_VALIDATION.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_VALIDATION.md", "utf-8");
   assert(md.includes("# Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Validation"), "md title");
   assert(md.includes("## Status"), "md status section");
   assert(md.includes("validation_only"), "md status value");
@@ -241,7 +241,7 @@ async function test() {
   console.log("");
 
   console.log("Test 18: JSON consistency");
-  const jsonText = fs.readFileSync("hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.json", "utf-8");
+  const jsonText = fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.json", "utf-8");
   const json = JSON.parse(jsonText);
   assert(json.status === v.status, "json status");
   assert(json.validation_only === v.validationOnly, "json validation_only");

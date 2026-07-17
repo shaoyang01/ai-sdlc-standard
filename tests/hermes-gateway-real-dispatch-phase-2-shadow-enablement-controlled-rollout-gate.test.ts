@@ -275,7 +275,7 @@ async function test() {
   console.log("");
 
   console.log("Test 21: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTROLLED_ROLLOUT_GATE.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTROLLED_ROLLOUT_GATE.md", "utf-8");
   assert(md.includes("# Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Gate"), "md title");
   assert(md.includes("## Status"), "md status section");
   assert(md.includes("controlled_rollout_gate_only"), "md status value");
@@ -290,7 +290,7 @@ async function test() {
   console.log("");
 
   console.log("Test 22: JSON consistency");
-  const jsonText = fs.readFileSync("hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.json", "utf-8");
+  const jsonText = fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.json", "utf-8");
   const json = JSON.parse(jsonText);
   assert(json.status === o.status, "json status");
   assert(json.controlled_rollout_gate_only === o.controlledRolloutGateOnly, "json controlled_rollout_gate_only");
