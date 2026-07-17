@@ -1596,8 +1596,8 @@ async function test() {
   const hgShadowObservabilityContractEv = hgShadowObservabilityContractCap["evidence"] as string[];
   assert(hgShadowObservabilityContractEv.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.ts"), "hermes gateway phase-2 shadow enablement observability contract evidence module");
   assert(hgShadowObservabilityContractEv.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts"), "hermes gateway phase-2 shadow enablement observability contract evidence test");
-  assert(hgShadowObservabilityContractEv.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md"), "hermes gateway phase-2 shadow enablement observability contract evidence md");
-  assert(hgShadowObservabilityContractEv.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes gateway phase-2 shadow enablement observability contract evidence json");
+  assert(hgShadowObservabilityContractEv.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_OBSERVABILITY_CONTRACT.md"), "hermes gateway phase-2 shadow enablement observability contract evidence md");
+  assert(hgShadowObservabilityContractEv.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.json"), "hermes gateway phase-2 shadow enablement observability contract evidence json");
 
   // Update next PR
   assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "next PR Hermes phase-2 shadow enablement readiness gate");
@@ -1709,8 +1709,8 @@ async function test() {
   const hgGrEvidence = hgGrCap["evidence"] as string[];
   assert(hgGrEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.ts"), "guardrail contract evidence ts");
   assert(hgGrEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts"), "guardrail contract evidence test");
-  assert(hgGrEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md"), "guardrail contract evidence md");
-  assert(hgGrEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"), "guardrail contract evidence json");
+  assert(hgGrEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md"), "guardrail contract evidence md");
+  assert(hgGrEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json"), "guardrail contract evidence json");
   assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "next PR Hermes phase-2 shadow enablement readiness gate");
 
 
@@ -1770,8 +1770,8 @@ async function test() {
   const hgRbEvidence = hgRbCap["evidence"] as string[];
   assert(hgRbEvidence.includes("execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.ts"), "rollback contract evidence ts");
   assert(hgRbEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts"), "rollback contract evidence test");
-  assert(hgRbEvidence.includes("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md"), "rollback contract evidence md");
-  assert(hgRbEvidence.includes("hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json"), "rollback contract evidence json");
+  assert(hgRbEvidence.includes("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_ROLLBACK_CONTRACT.md"), "rollback contract evidence md");
+  assert(hgRbEvidence.includes("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.json"), "rollback contract evidence json");
   assert(review.recommended_next_pr.title === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "next PR Hermes phase-2 shadow enablement implementation");
   console.log("");
 

@@ -222,7 +222,7 @@ async function test() {
 
   // Test 18: Markdown consistency
   console.log("Test 18: Markdown consistency");
-  const md = fs.readFileSync("HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md", "utf-8");
+  const md = fs.readFileSync("docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_GUARDRAIL_CONTRACT.md", "utf-8");
   assert(md.includes("guardrail_contract_only"), "md: status");
   assert(md.includes("No Phase-2 enablement now") || md.includes("no Phase-2 enablement now"), "md: no enablement");
   assert(md.includes("No request type expansion now") || md.includes("no request type expansion now"), "md: no expansion");
@@ -231,7 +231,7 @@ async function test() {
 
   // Test 19: JSON consistency
   console.log("Test 19: JSON consistency");
-  const jr = fs.readFileSync("hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json", "utf-8");
+  const jr = fs.readFileSync("metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.json", "utf-8");
   const json = JSON.parse(jr);
   assert(json.status === "guardrail_contract_only", "json: status");
   assert(json.guardrail_contract_only === true, "json: guardrail contract only");
