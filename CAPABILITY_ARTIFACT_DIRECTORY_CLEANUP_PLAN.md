@@ -4,6 +4,12 @@
 
 `cleanup_plan_only`
 
+### Current Interpretation
+
+This file records the original pre-migration cleanup plan. Multiple merged migration batches have partially implemented the family-directory layout. Current paths, reference types, compatibility strategies, migration history, and external-risk boundaries are tracked in the [Capability Reference Matrix](docs/CAPABILITY-REFERENCE-MATRIX.md).
+
+The body below is preserved as historical plan context rather than a current root inventory. Partial implementation does not approve or complete the remaining shared/system placement, consolidation-file placement, historical compatibility-note lifecycle, external-consumer compatibility, root-governance, or capability approval, enablement, execution, validation, operator-acceptance, rollout, and ownership decisions.
+
 ## Current Problem
 
 The repository root currently contains many capability-related artifacts, including:

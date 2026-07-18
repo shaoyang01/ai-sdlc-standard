@@ -74,10 +74,13 @@ The following questions are intentionally left open and are out of scope for thi
 
 ## Capability and Material Boundaries
 
-- Root-level capability Markdown/JSON files (for example, `HERMES_GATEWAY_REAL_DISPATCH_*.md`, `KIMI_GATEWAY_REAL_DISPATCH_*.md`, and their JSON counterparts) are still referenced by code, tests, or documentation. Before any reorganization, a per-file reference matrix must be established.
-- `docs/reports/archive/` is the location for historical reports and post-review artifacts.
+- Human-readable family capability evidence, contracts, and reviews are primarily organized under `docs/capabilities/**`, including the Codex, Kimi, and Hermes family directories and the Hermes phase-specific subdirectories (`docs/capabilities/hermes/phase-1/`, `docs/capabilities/hermes/phase-2/`).
+- Machine-readable family capability contracts, status, and evidence are primarily organized under `metadata/capabilities/**`, including the Kimi and Hermes family directories and the Hermes phase-specific subdirectories (`metadata/capabilities/hermes/phase-1/`, `metadata/capabilities/hermes/phase-2/`).
+- Historical capability report bodies may live under `docs/reports/archive/capabilities/**`; `docs/reports/archive/` remains the general location for historical reports and post-review artifacts.
+- The repository root remains a mixed surface. It may contain Standard Package canonical entrypoints, high-level status/index files, machine-readable registries, consolidation/governance references, historical compatibility notes, and remaining shared/system materials. Their presence in root does not by itself make them migration leftovers, and not all root capability/material files are expected to be deleted; not all capability/material artifacts have been migrated.
+- Detailed current paths, reference types, migration history, compatibility strategy, and the external-risk boundary are recorded in the [Capability Reference Matrix](CAPABILITY-REFERENCE-MATRIX.md). Its initial inventory counts are audit snapshots bound to a historical baseline, not current root file counts. External consumer risk remains `unknown` where in-repository search cannot disprove it. `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` is the original pre-migration cleanup plan, preserved as historical plan context.
+- Completed path migrations do not constitute capability approval, enablement, execution, validation, operator acceptance, rollout, or ownership change.
 - `temp/` is a working directory and is **not** an authoritative entrypoint.
-- `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` describes a future cleanup plan; no root capability files have been moved or deleted.
 
 ## Review Guidance
 
