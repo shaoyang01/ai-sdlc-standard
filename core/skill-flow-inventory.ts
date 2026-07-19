@@ -19,7 +19,7 @@ export type SkillFlowInventory = Readonly<{
 }>;
 
 export function loadSkillFlowInventory(
-  filePath = "skill-flow-inventory.json"
+  filePath = "metadata/capabilities/shared/skill-flow-inventory.json"
 ): SkillFlowInventory {
   const fullPath = path.resolve(filePath);
   const raw = fs.readFileSync(fullPath, "utf-8");

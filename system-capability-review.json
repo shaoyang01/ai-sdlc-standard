@@ -207,7 +207,7 @@
       "invokes_real_skills": false,
       "writes_files": false,
       "evidence": [
-        "skill-flow-inventory.json",
+        "metadata/capabilities/shared/skill-flow-inventory.json",
         "core/skill-flow-inventory.ts"
       ]
     },
@@ -4558,7 +4558,7 @@
       "assertion": "sdlc-* skills are flow nodes, not runtime node labels",
       "status": "confirmed",
       "evidence": [
-        "skill-flow-inventory.json",
+        "metadata/capabilities/shared/skill-flow-inventory.json",
         "core/agent-skill-registry.ts"
       ]
     },
@@ -4566,8 +4566,8 @@
       "assertion": "sdlc-requirement-normalizer is global entry",
       "status": "confirmed",
       "evidence": [
-        "skill-flow-inventory.json:global_entry_skill",
-        "SKILL_FLOW_INVENTORY_REPORT.md"
+        "metadata/capabilities/shared/skill-flow-inventory.json:global_entry_skill",
+        "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md"
       ]
     },
     {
