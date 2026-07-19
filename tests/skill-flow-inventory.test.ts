@@ -4,6 +4,7 @@
 // Static metadata test. No runtime, no DB, no agents.
 
 import { loadSkillFlowInventory } from "../core/skill-flow-inventory";
+import * as fs from "node:fs";
 
 async function test() {
   let passed = 0;
@@ -20,7 +21,8 @@ async function test() {
   }
 
   console.log("Skill Flow Inventory Test\n");
-  const inv = loadSkillFlowInventory("skill-flow-inventory.json");
+  const inv = loadSkillFlowInventory("metadata/capabilities/shared/skill-flow-inventory.json");
+  const defaultInv = loadSkillFlowInventory();
 
   function findSkill(name: string) {
     return inv.skills.find((s) => s["name"] === name);
@@ -33,7 +35,15 @@ async function test() {
   // ── Test 1: Basic structure ──
   console.log("Test 1: Basic structure");
   assert(inv.version === 1, "version is 1");
-  assert(inv.source_report === "SKILL_FLOW_INVENTORY_REPORT.md", "source report is correct");
+  assert(
+    inv.source_report === "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md",
+    "source report points to archived report body"
+  );
+  assert(defaultInv.version === 1, "default loader loads relocated shared skill flow inventory");
+  assert(
+    defaultInv.global_entry_skill === inv.global_entry_skill,
+    "default loader matches explicit path"
+  );
   assert(inv.global_entry_skill === "sdlc-requirement-normalizer", "global entry is requirement-normalizer");
   assert(Array.isArray(inv.skills), "skills is array");
   assert(inv.skills.length === 21, `21 skills (got ${inv.skills.length})`);
@@ -134,6 +144,28 @@ async function test() {
   const futureWork = recs["recommended_future_work"] as string[];
   assert(futureWork.some((r) => r.includes("skillless")),
     "recommends modeling direct implementation as skillless");
+  console.log("");
+
+  // ── Test 9: Archived report body and root compatibility note ──
+  console.log("Test 9: archived SKILL_FLOW_INVENTORY_REPORT.md body and root note");
+  const archivedReport = fs.readFileSync(
+    "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md",
+    "utf-8"
+  );
+  assert(
+    archivedReport.includes("# SDLC Skill Flow Inventory Report"),
+    "archived SKILL_FLOW_INVENTORY_REPORT.md body is preserved"
+  );
+  const rootNote = fs.readFileSync("SKILL_FLOW_INVENTORY_REPORT.md", "utf-8");
+  assert(rootNote.includes("# Archived Historical Report"), "root note is an archived historical report note");
+  assert(rootNote.includes("non-authoritative"), "root note is non-authoritative");
+  assert(
+    rootNote.includes("docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md"),
+    "root note links to archived body"
+  );
+  assert(rootNote.includes("temporary compatibility reference"), "root note is a temporary compatibility reference");
+  assert(rootNote.includes("at least 30 days"), "root note declares minimum 30-day retention");
+  assert(rootNote.includes("separate governance decision"), "root note removal requires a separate governance decision");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

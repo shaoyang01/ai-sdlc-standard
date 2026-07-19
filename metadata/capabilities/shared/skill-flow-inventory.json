@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source_report": "SKILL_FLOW_INVENTORY_REPORT.md",
+  "source_report": "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md",
   "model": "hybrid_runtime_graph_with_nested_skill_flows",
   "global_entry_skill": "sdlc-requirement-normalizer",
   "skills": [

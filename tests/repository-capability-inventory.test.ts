@@ -22,7 +22,17 @@ async function test() {
 
   console.log("Repository Capability Inventory Test\n");
 
-  const inv = loadRepositoryCapabilityInventory("existing-skills-inventory.json");
+  const inv = loadRepositoryCapabilityInventory("metadata/capabilities/shared/existing-skills-inventory.json");
+  const defaultInv = loadRepositoryCapabilityInventory();
+
+  // ── Loader default path ──
+  console.log("Test 0: Loader default path resolves relocated shared inventory");
+  assert(defaultInv.version === 1, "default loader loads relocated shared inventory");
+  assert(
+    defaultInv.skills.length === inv.skills.length,
+    "default loader matches explicit path"
+  );
+  console.log("");
 
   // ── Basic structure ──
   console.log("Test 1: Basic structure");
@@ -96,13 +106,26 @@ async function test() {
   assert(shadowAgents.includes("hermes"), "shadow adapter supports hermes");
   console.log("");
 
-  // ── Documentation reference ──
-  console.log("Test 7: REPOSITORY_CAPABILITY_INVENTORY.md references PR-5.2");
-  const mdContent = fs.readFileSync("REPOSITORY_CAPABILITY_INVENTORY.md", "utf-8");
-  assert(
-    mdContent.includes("PR-5.2 must use the existing sdlc-* skill names"),
-    "REPOSITORY_CAPABILITY_INVENTORY.md instructs PR-5.2 to use existing skill names"
+  // ── Archived documentation body and root compatibility note ──
+  console.log("Test 7: archived REPOSITORY_CAPABILITY_INVENTORY.md body and root note");
+  const archivedMd = fs.readFileSync(
+    "docs/reports/archive/capabilities/REPOSITORY_CAPABILITY_INVENTORY.md",
+    "utf-8"
   );
+  assert(
+    archivedMd.includes("PR-5.2 must use the existing sdlc-* skill names"),
+    "archived REPOSITORY_CAPABILITY_INVENTORY.md instructs PR-5.2 to use existing skill names"
+  );
+  const rootNote = fs.readFileSync("REPOSITORY_CAPABILITY_INVENTORY.md", "utf-8");
+  assert(rootNote.includes("# Archived Historical Report"), "root note is an archived historical report note");
+  assert(rootNote.includes("non-authoritative"), "root note is non-authoritative");
+  assert(
+    rootNote.includes("docs/reports/archive/capabilities/REPOSITORY_CAPABILITY_INVENTORY.md"),
+    "root note links to archived body"
+  );
+  assert(rootNote.includes("temporary compatibility reference"), "root note is a temporary compatibility reference");
+  assert(rootNote.includes("at least 30 days"), "root note declares minimum 30-day retention");
+  assert(rootNote.includes("separate governance decision"), "root note removal requires a separate governance decision");
   console.log("");
 
   // ── Routing vs Agent Selection distinction ──

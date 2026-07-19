@@ -22,7 +22,7 @@ export type RepositoryCapabilityInventory = Readonly<{
 }>;
 
 export function loadRepositoryCapabilityInventory(
-  filePath = "existing-skills-inventory.json"
+  filePath = "metadata/capabilities/shared/existing-skills-inventory.json"
 ): RepositoryCapabilityInventory {
   const fullPath = path.resolve(filePath);
   const raw = fs.readFileSync(fullPath, "utf-8");
