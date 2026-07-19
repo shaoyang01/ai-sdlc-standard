@@ -1831,6 +1831,35 @@ async function test() {
   assert(authority.legacy_recommended_next_pr_authority === "compatibility_reference_only", "legacy recommended_next_pr is compatibility reference only");
   console.log("");
 
+  // ── Phase-2 shadow controlled rollout plan metadata (plan-only) ──
+  console.log("Test : phase-2 shadow controlled rollout plan metadata");
+  const rolloutPlanPrefix = "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_";
+  assert(realAdapters[`${rolloutPlanPrefix}plan_status`] === "plan_only", "rollout plan status is plan_only");
+  assert(realAdapters[`${rolloutPlanPrefix}plan_exists`] === true, "rollout plan exists");
+  assert(realAdapters[`${rolloutPlanPrefix}executing_now`] === false, "rollout plan not executing");
+  assert(realAdapters[`${rolloutPlanPrefix}implementation_authorization_scope`] === "plan_material_only", "rollout plan authorization scope is plan_material_only");
+  assert(realAdapters[`${rolloutPlanPrefix}operator_action_authorization`] === "not_granted", "operator action authorization not_granted");
+  assert(realAdapters[`${rolloutPlanPrefix}rollout_authorization`] === "not_granted", "rollout authorization not_granted");
+  assert(realAdapters[`${rolloutPlanPrefix}operator_action_executed`] === false, "operator action not executed");
+  assert(realAdapters[`${rolloutPlanPrefix}rollout_executed`] === false, "rollout not executed");
+  assert(realAdapters[`${rolloutPlanPrefix}operator_approval_required`] === true, "operator approval required");
+  assert(realAdapters[`${rolloutPlanPrefix}per_phase_approval_required`] === true, "per-phase approval required");
+  assert(realAdapters[`${rolloutPlanPrefix}per_request_operator_approval_required`] === true, "per-request operator approval required");
+  assert(realAdapters[`${rolloutPlanPrefix}default_disabled`] === true, "default disabled");
+  assert(realAdapters[`${rolloutPlanPrefix}sidecar_only`] === true, "sidecar only");
+  assert(JSON.stringify(realAdapters[`${rolloutPlanPrefix}initial_rollout_request_types`]) === JSON.stringify(["code_review"]), "initial rollout request types is code_review first");
+  assert(JSON.stringify(realAdapters[`${rolloutPlanPrefix}phase_2_shadow_targets`]) === JSON.stringify(["code_review", "validation"]), "phase-2 shadow targets");
+  const rolloutPhaseCaps = realAdapters[`${rolloutPlanPrefix}phase_request_caps`] as Record<string, unknown>;
+  assert(rolloutPhaseCaps["code_review_canary"] === 1, "cap code_review_canary is 1");
+  assert(rolloutPhaseCaps["code_review_limited"] === 5, "cap code_review_limited is 5");
+  assert(rolloutPhaseCaps["validation_canary"] === 1, "cap validation_canary is 1");
+  assert(rolloutPhaseCaps["mixed_limited_total"] === 5, "cap mixed_limited_total is 5");
+  assert(realAdapters[`${rolloutPlanPrefix}evidence_mode`] === "manual_sanitized_summary_only", "evidence mode manual_sanitized_summary_only");
+  assert(realAdapters[`${rolloutPlanPrefix}legacy_recommended_next_pr_fulfilled`] === true, "legacy recommended_next_pr fulfilled (compatibility check only)");
+  assert(realAdapters[`${rolloutPlanPrefix}next_governance_decision`] === "separate_operator_action_authorization", "next governance decision is separate operator action authorization");
+  assert(caps.authority.role === "canonical_machine_runtime_capability_registry", "authority object unchanged");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

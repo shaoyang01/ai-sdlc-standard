@@ -7,7 +7,7 @@
 
 - Repository：`shaoyang01/ai-sdlc-standard`
 - Fact branch：`feature/loop-runtime-v1`
-- As-of source commit：`07c5d26cc9d11a010cb183934950cdb13cb58d42`
+- As-of source commit：`721fd120d3ace9335cb010a48275ace0e2253c57`（取代上一固定基线 `07c5d26cc9d11a010cb183934950cdb13cb58d42`）
 - 本文件描述的实现事实均以上述固定 source commit 核对，不引用任何未来任务 commit 或 merge commit。
 
 ## 本次变更边界
@@ -28,7 +28,28 @@
 - Codex 真实执行保持 feature-flagged，且仅限 `code_generation`。
 - Kimi 真实 Gateway dispatch 保持 feature-flagged，且仅限 `llm_task`。
 - Hermes 保持 default-off、sidecar-bounded，范围为 `review` / `code_review` / `validation`；不拥有 Gateway primary/final result，也不拥有 Runtime `final_status` 或 routing。
-- 没有已发生的 Controlled Rollout Plan、operator action 或 rollout execution。
+- Controlled Rollout Plan 仅以 plan-only 静态材料形式存在（见下节）；没有已执行的 operator action 或 rollout execution。
+
+## Controlled Rollout Plan 状态
+
+固定事实基线 `721fd120d3ace9335cb010a48275ace0e2253c57` 下最终计划文件尚不存在；本变更在合并后创建该 plan-only 静态材料；PR 未合并前不得把 plan_exists 当作事实分支状态。
+
+    controlled_rollout_plan_exists_after_this_change_merges: true
+    controlled_rollout_plan_status: plan_only
+    implementation_authorization_scope: plan_material_only
+    operator_action_authorization: not_granted
+    rollout_authorization: not_granted
+    operator_action_executed: false
+    rollout_executed: false
+    initial_rollout_request_type: code_review
+    phase_request_caps: 1/5/1/5
+    evidence_mode: manual_sanitized_summary_only
+    next_governance_decision: separate_operator_action_authorization
+
+- 本 PR 只增加静态计划材料；plan exists 不代表 approved operator action、feature enablement 或 rollout。
+- 三个 Hermes flags 保持默认关闭。
+- 不改变 Runtime、Gateway、Graph、routing、ownership 或执行行为。
+- 计划合并后仍需单独的 operator action 授权；本次直接执行授权只授权 plan material implementation，不授权后续 operator action 或 rollout。
 
 ## Skill inventory
 
