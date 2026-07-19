@@ -69,8 +69,7 @@ The following questions are intentionally left open and are out of scope for thi
 
 1. **Lifecycle classification of compatible/auxiliary modules** — Whether `loop/`, `docflow/`, `fanout_engine/`, `fanout_feedback/`, `evolution/`, and `adoption/` should be promoted to first-class Runtime subsystems, extracted into separate packages, or maintained as stable compatibility layers.
 2. **Standard package and Runtime co-location** — Whether the standard package (`manifest.yaml`, governance docs, templates, skills) and the Runtime (`package.json`, TypeScript source) should remain in one repository or split.
-3. **Single source of truth for status documents** — Which file among `docs/CURRENT_STATUS.md`, `SYSTEM_STATUS.md`, `SYSTEM_CAPABILITY_REVIEW.md`, `runtime-capabilities.json`, and the capability JSON files is the canonical status source.
-4. **Runtime source layout** — Whether Runtime code should migrate into an `src/` directory or remain at the repository root.
+3. **Runtime source layout** — Whether Runtime code should migrate into an `src/` directory or remain at the repository root.
 
 ## Capability and Material Boundaries
 
@@ -81,6 +80,23 @@ The following questions are intentionally left open and are out of scope for thi
 - Detailed current paths, reference types, migration history, compatibility strategy, and the external-risk boundary are recorded in the [Capability Reference Matrix](CAPABILITY-REFERENCE-MATRIX.md). Its initial inventory counts are audit snapshots bound to a historical baseline, not current root file counts. External consumer risk remains `unknown` where in-repository search cannot disprove it. `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` is the original pre-migration cleanup plan, preserved as historical plan context.
 - Completed path migrations do not constitute capability approval, enablement, execution, validation, operator acceptance, rollout, or ownership change.
 - `temp/` is a working directory and is **not** an authoritative entrypoint.
+
+## Status and Capability Authority
+
+The accepted layered status authority model (`layered_status_authority_v1`) assigns the following precedence and roles:
+
+1. Git commit/tree/diff, executable tests, PR facts, and CI are the implementation fact authority. No status document or JSON file can override current Git/test/PR/CI facts.
+2. `docs/CURRENT_STATUS.md` is the canonical human-readable current repository status/index. It never overrides code, tests, PRs, or CI.
+3. `runtime-capabilities.json` is the canonical machine-readable runtime-capability registry for tests and tooling only.
+4. `system-capability-review.json` is a scoped system-capability evidence/review dataset, not global current status or planning authority.
+5. `real-agent-adapter-capability-matrix.json` is authoritative only for scoped adapter and ExecutionRequestType evidence.
+6. `metadata/capabilities/**` files remain scoped family contracts/evidence, not global project status.
+7. `SYSTEM_STATUS.md` and `SYSTEM_CAPABILITY_REVIEW.md` are historical, non-authoritative snapshots.
+8. `README.md` is the standard-package/product overview and release summary, not canonical Runtime or project status.
+9. Planning, authorization, operator, rollout, publication, and Project Controller sequencing remain outside the authority of all three root JSON files.
+10. Legacy `recommended_next_pr` fields are compatibility references only and must not be presented as Project Controller decisions.
+
+`manifest.yaml` is a standard-package index, not current project or Runtime status authority. This model does not decide module lifecycle, repository split, `src/` migration, rollout, operator ownership, or capability enablement.
 
 ## Review Guidance
 

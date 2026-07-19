@@ -3843,5 +3843,19 @@
     "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
     "reason": "Hermes Gateway real dispatch has a controlled rollout gate for the validated phase-2 shadow sidecar attachment for code_review and validation.",
     "safety_rationale": "Phase-2 shadow sidecar attachment remains feature-flagged, operator-approved, sidecar-only, and default-off until a separate controlled rollout plan is approved."
+  },
+  "authority": {
+    "model": "layered_status_authority_v1",
+    "human_status_index": "docs/CURRENT_STATUS.md",
+    "implementation_fact_precedence": "git_tests_pr_ci",
+    "global_project_status_authority": false,
+    "planning_authority": false,
+    "authorization_authority": false,
+    "operator_authority": false,
+    "rollout_authority": false,
+    "publication_authority": false,
+    "legacy_recommended_next_pr_authority": "compatibility_reference_only",
+    "role": "canonical_machine_runtime_capability_registry",
+    "scope": "runtime_capability_metadata_for_tests_and_tooling"
   }
 }

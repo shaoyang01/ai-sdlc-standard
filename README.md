@@ -4,7 +4,9 @@
 > **Status**: Active — PR J–P mainline completed
 > **Language**: zh-CN
 
-## Current Status
+## Standard Package Release Summary
+
+> 本节是标准包发布摘要，不是 canonical Runtime/project status。当前项目状态见 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)；仓库结构与状态权威模型见 [docs/REPOSITORY-STRUCTURE.md](docs/REPOSITORY-STRUCTURE.md)。
 
 Current mainline completed through PR J–P. Final Audit Cleanup completed. Full repository review: PASS（0 P0, 2 P1 resolved, 4 P2 noted）. All validators pass, 16/16 product parity fixtures pass, 3/3 acceptance commands pass.
 

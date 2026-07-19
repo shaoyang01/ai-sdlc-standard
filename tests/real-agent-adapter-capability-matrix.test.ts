@@ -3,6 +3,11 @@
 // Verifies the machine-readable adapter matrix is accurate.
 // Uses execution/types.ts ExecutionRequestType as source of truth.
 // No runtime, no Gateway, no adapters, no network.
+//
+// NOTE: All legacy recommended_next_pr assertions in this file are
+// compatibility checks only. They do not establish Project Controller
+// sequencing or any authorization, enablement, operator action, rollout,
+// or publication decision.
 
 import * as fs from "node:fs";
 
@@ -1643,6 +1648,25 @@ async function test() {
   const hGateReject = hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_controlled_rollout_gate_reject_criteria"] as string[];
   assert(Array.isArray(hGateReject) && hGateReject.includes("rollout executed now") && hGateReject.includes("controlled rollout plan skipped"), "hermes dispatch phase-2 shadow enablement controlled rollout gate reject criteria");
   assert(hermes["gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan", "hermes dispatch phase-2 shadow enablement controlled rollout gate next PR");
+  console.log("");
+
+  // ── Authority model (layered_status_authority_v1) ──
+  console.log("Test : layered status authority model");
+  const authority = m["authority"];
+  assert(authority !== undefined, "authority object exists");
+  assert(authority["model"] === "layered_status_authority_v1", "authority model is layered_status_authority_v1");
+  assert(authority["human_status_index"] === "docs/CURRENT_STATUS.md", "human status index is docs/CURRENT_STATUS.md");
+  assert(authority["implementation_fact_precedence"] === "git_tests_pr_ci", "implementation fact precedence is git_tests_pr_ci");
+  assert(authority["role"] === "scoped_adapter_request_type_evidence_matrix", "role is scoped adapter request type evidence matrix");
+  assert(authority["scope"] === "adapter_and_execution_request_type_evidence", "scope is adapter and execution request type evidence");
+  assert(authority["global_project_status_authority"] === false, "not global project status authority");
+  assert(authority["planning_authority"] === false, "not planning authority");
+  assert(authority["authorization_authority"] === false, "not authorization authority");
+  assert(authority["operator_authority"] === false, "not operator authority");
+  assert(authority["rollout_authority"] === false, "not rollout authority");
+  assert(authority["publication_authority"] === false, "not publication authority");
+  assert(authority["legacy_recommended_next_pr_authority"] === "compatibility_reference_only", "legacy recommended_next_pr is compatibility reference only");
+  console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
