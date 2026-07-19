@@ -74,3 +74,5 @@ jobs:
       - run: ruby scripts/validate-skill-contracts.rb
 
       - run: ruby scripts/validate-product-parity-fixtures.rb
+
+      - run: ruby scripts/validate-capability-metadata-chain.rb
