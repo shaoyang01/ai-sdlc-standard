@@ -2,6 +2,11 @@
 // =============================================================
 // Verifies the machine-readable capability review is accurate.
 // No runtime, no DB, no agents.
+//
+// NOTE: All legacy recommended_next_pr assertions in this file are
+// compatibility checks only. They do not establish Project Controller
+// sequencing or any authorization, enablement, operator action, rollout,
+// or publication decision.
 
 import * as fs from "node:fs";
 
@@ -2097,6 +2102,25 @@ async function test() {
   assert(rolloutGateEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-operator-acceptance.test.ts"), "controlled rollout gate evidence operator acceptance test");
   assert(rolloutGateEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts"), "controlled rollout gate evidence implementation test");
   assert(rolloutGateEvidence.includes("tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts"), "controlled rollout gate evidence validation test");
+  console.log("");
+
+  // ── Authority model (layered_status_authority_v1) ──
+  console.log("Test : layered status authority model");
+  const authority = review["authority"];
+  assert(authority !== undefined, "authority object exists");
+  assert(authority["model"] === "layered_status_authority_v1", "authority model is layered_status_authority_v1");
+  assert(authority["human_status_index"] === "docs/CURRENT_STATUS.md", "human status index is docs/CURRENT_STATUS.md");
+  assert(authority["implementation_fact_precedence"] === "git_tests_pr_ci", "implementation fact precedence is git_tests_pr_ci");
+  assert(authority["role"] === "scoped_system_capability_evidence_review_dataset", "role is scoped system capability evidence/review dataset");
+  assert(authority["scope"] === "system_capability_evidence_and_review", "scope is system capability evidence and review");
+  assert(authority["global_project_status_authority"] === false, "not global project status authority");
+  assert(authority["planning_authority"] === false, "not planning authority");
+  assert(authority["authorization_authority"] === false, "not authorization authority");
+  assert(authority["operator_authority"] === false, "not operator authority");
+  assert(authority["rollout_authority"] === false, "not rollout authority");
+  assert(authority["publication_authority"] === false, "not publication authority");
+  assert(authority["legacy_recommended_next_pr_authority"] === "compatibility_reference_only", "legacy recommended_next_pr is compatibility reference only");
+  console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

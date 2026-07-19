@@ -349,9 +349,140 @@ else
   errors << "shared-inventory: system-capability-review.json must exist"
 end
 
+# ── Layered status authority model checks ──
+
+def file_includes(relative_path, needle)
+  path = File.join(ROOT, relative_path)
+  File.file?(path) && File.read(path).include?(needle)
+end
+
+AUTHORITY_COMMON = {
+  "model" => "layered_status_authority_v1",
+  "human_status_index" => "docs/CURRENT_STATUS.md",
+  "implementation_fact_precedence" => "git_tests_pr_ci",
+  "global_project_status_authority" => false,
+  "planning_authority" => false,
+  "authorization_authority" => false,
+  "operator_authority" => false,
+  "rollout_authority" => false,
+  "publication_authority" => false,
+  "legacy_recommended_next_pr_authority" => "compatibility_reference_only"
+}.freeze
+
+AUTHORITY_ROLES = {
+  "runtime-capabilities.json" => {
+    "role" => "canonical_machine_runtime_capability_registry",
+    "scope" => "runtime_capability_metadata_for_tests_and_tooling"
+  },
+  "system-capability-review.json" => {
+    "role" => "scoped_system_capability_evidence_review_dataset",
+    "scope" => "system_capability_evidence_and_review"
+  },
+  "real-agent-adapter-capability-matrix.json" => {
+    "role" => "scoped_adapter_request_type_evidence_matrix",
+    "scope" => "adapter_and_execution_request_type_evidence"
+  }
+}.freeze
+
+AUTHORITY_ROLES.each do |path, role_scope|
+  full = File.join(ROOT, path)
+  unless File.file?(full)
+    errors << "authority: #{path} must exist"
+    next
+  end
+  begin
+    data = JSON.parse(File.read(full))
+  rescue JSON::ParserError => e
+    errors << "authority: #{path} does not parse as JSON (#{e.message})"
+    next
+  end
+  authority = data.is_a?(Hash) ? data["authority"] : nil
+  unless authority.is_a?(Hash)
+    errors << "authority: #{path} is missing the authority object"
+    next
+  end
+  AUTHORITY_COMMON.merge(role_scope).each do |key, expected|
+    actual = authority[key]
+    unless actual == expected
+      errors << "authority: #{path} authority.#{key} must equal #{expected.inspect} (got #{actual.inspect})"
+    end
+  end
+end
+
+structure_path = File.join(ROOT, "docs/REPOSITORY-STRUCTURE.md")
+if File.file?(structure_path)
+  structure = File.read(structure_path)
+  unless structure.include?("layered_status_authority_v1")
+    errors << "authority: docs/REPOSITORY-STRUCTURE.md is missing the layered status authority model"
+  end
+  if structure.include?("Single source of truth for status documents")
+    errors << "authority: docs/REPOSITORY-STRUCTURE.md still contains the unresolved " \
+              "Single source of truth for status documents decision"
+  end
+else
+  errors << "authority: docs/REPOSITORY-STRUCTURE.md must exist"
+end
+
+{
+  "docs/CURRENT_STATUS.md" => [
+    "canonical human-readable current repository status/index",
+    "feature/loop-runtime-v1",
+    "07c5d26cc9d11a010cb183934950cdb13cb58d42",
+    "`requirement-summary`",
+    "`tech-design`",
+    "`solution-challenge`",
+    "`review`",
+    "`implementation`",
+    "`validation`",
+    "canonical_machine_runtime_capability_registry",
+    "scoped_system_capability_evidence_review_dataset",
+    "scoped_adapter_request_type_evidence_matrix",
+    "planning_authority: false",
+    "authorization_authority: false",
+    "operator_authority: false",
+    "rollout_authority: false",
+    "publication_authority: false",
+    "recommended_next_pr",
+    "Project Controller sequencing"
+  ],
+  "SYSTEM_STATUS.md" => [
+    "HISTORICAL SNAPSHOT — NON-AUTHORITATIVE",
+    "[docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)",
+    "[runtime-capabilities.json](runtime-capabilities.json)"
+  ],
+  "SYSTEM_CAPABILITY_REVIEW.md" => [
+    "HISTORICAL SNAPSHOT — NON-AUTHORITATIVE",
+    "[docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)",
+    "[runtime-capabilities.json](runtime-capabilities.json)"
+  ],
+  "README.md" => [
+    "Standard Package Release Summary",
+    "docs/CURRENT_STATUS.md",
+    "docs/REPOSITORY-STRUCTURE.md"
+  ],
+  "docs/CAPABILITY-REFERENCE-MATRIX.md" => [
+    "| `runtime-capabilities.json` | shared/system | registry | scoped machine registry |",
+    "| `system-capability-review.json` | shared/system | review | scoped evidence/review |",
+    "| `real-agent-adapter-capability-matrix.json` | shared/system | matrix | scoped adapter evidence |",
+    "accepted canonical machine runtime capability registry for tests and tooling; " \
+      "no global planning or execution authority",
+    "accepted scoped system capability evidence/review dataset; " \
+      "no global planning or execution authority",
+    "accepted scoped adapter and ExecutionRequestType evidence authority; " \
+      "no global planning or execution authority"
+  ]
+}.each do |path, needles|
+  needles.each do |needle|
+    unless file_includes(path, needle)
+      errors << "authority: #{path} is missing required content #{needle.inspect}"
+    end
+  end
+end
+
 if errors.empty?
   puts "capability metadata chain validation ok " \
-       "(#{implemented_rows.length} implemented migration rows checked)"
+       "(#{implemented_rows.length} implemented migration rows checked; " \
+       "layered status authority v1 verified)"
 else
   warn "capability metadata chain validation failed:"
   errors.each { |error| warn "- #{error}" }

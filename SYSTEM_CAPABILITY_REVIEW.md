@@ -1,5 +1,12 @@
 # System Capability Review
 
+> **HISTORICAL SNAPSHOT — NON-AUTHORITATIVE**
+>
+> This file is a historical snapshot. It is non-authoritative and may contain stale counts, paths, and next-step claims.
+> Current human status: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)
+> Machine runtime capability metadata: [runtime-capabilities.json](runtime-capabilities.json)
+> Git commit/tree/diff, tests, PRs, and CI take precedence over this file.
+
 ## 1. Executive Summary
 
 The AI SDLC Runtime is a **shadow-first** TypeScript orchestration engine. All agent calls default to shadow (mock) execution. The system has completed a significant architecture correction: sdlc-* skills are now modeled as flow nodes, not runtime node labels. Runtime auto skill inference has been deprecated. A plan-only Skill Flow Orchestrator contract, shadow orchestrator, and disabled-by-default runtime integration contract are in place.
