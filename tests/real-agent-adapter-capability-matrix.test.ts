@@ -1668,6 +1668,38 @@ async function test() {
   assert(authority["legacy_recommended_next_pr_authority"] === "compatibility_reference_only", "legacy recommended_next_pr is compatibility reference only");
   console.log("");
 
+  // ── Phase-2 shadow controlled rollout plan metadata (plan-only) ──
+  console.log("Test : phase-2 shadow controlled rollout plan metadata");
+  const rolloutPlanPrefix = "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_";
+  assert(hermes[`${rolloutPlanPrefix}plan_status`] === "plan_only", "rollout plan status is plan_only");
+  assert(hermes[`${rolloutPlanPrefix}plan_exists`] === true, "rollout plan exists");
+  assert(hermes[`${rolloutPlanPrefix}executing_now`] === false, "rollout plan not executing");
+  assert(hermes[`${rolloutPlanPrefix}operator_action_authorization`] === "not_granted", "operator action authorization not_granted");
+  assert(hermes[`${rolloutPlanPrefix}rollout_authorization`] === "not_granted", "rollout authorization not_granted");
+  assert(hermes[`${rolloutPlanPrefix}operator_action_executed`] === false, "operator action not executed");
+  assert(hermes[`${rolloutPlanPrefix}rollout_executed`] === false, "rollout not executed");
+  assert(JSON.stringify(hermes[`${rolloutPlanPrefix}required_flags`]) === JSON.stringify([
+    "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+    "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+    "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled",
+  ]), "rollout plan required flags in exact order");
+  assert(JSON.stringify(hermes[`${rolloutPlanPrefix}initial_rollout_request_types`]) === JSON.stringify(["code_review"]), "initial rollout request types is code_review first");
+  assert(JSON.stringify(hermes[`${rolloutPlanPrefix}phase_2_shadow_targets`]) === JSON.stringify(["code_review", "validation"]), "phase-2 shadow targets");
+  const matrixRolloutCaps = hermes[`${rolloutPlanPrefix}phase_request_caps`] as Record<string, unknown>;
+  assert(matrixRolloutCaps["code_review_canary"] === 1, "cap code_review_canary is 1");
+  assert(matrixRolloutCaps["code_review_limited"] === 5, "cap code_review_limited is 5");
+  assert(matrixRolloutCaps["validation_canary"] === 1, "cap validation_canary is 1");
+  assert(matrixRolloutCaps["mixed_limited_total"] === 5, "cap mixed_limited_total is 5");
+  assert(hermes[`${rolloutPlanPrefix}per_phase_approval_required`] === true, "per-phase approval required");
+  assert(hermes[`${rolloutPlanPrefix}per_request_operator_approval_required`] === true, "per-request operator approval required");
+  assert(hermes[`${rolloutPlanPrefix}evidence_mode`] === "manual_sanitized_summary_only", "evidence mode manual_sanitized_summary_only");
+  assert((hermes[`${rolloutPlanPrefix}global_stop_conditions`] as unknown[]).length === 20, "20 global stop conditions");
+  assert((hermes[`${rolloutPlanPrefix}global_rollback_actions`] as unknown[]).length === 8, "8 global rollback actions");
+  assert(hermes[`${rolloutPlanPrefix}legacy_recommended_next_pr_fulfilled`] === true, "legacy recommended_next_pr fulfilled (compatibility check only)");
+  assert(hermes[`${rolloutPlanPrefix}next_governance_decision`] === "separate_operator_action_authorization", "next governance decision is separate operator action authorization");
+  assert(m["authority"]["role"] === "scoped_adapter_request_type_evidence_matrix", "authority object unchanged");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

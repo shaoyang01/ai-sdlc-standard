@@ -3831,7 +3831,66 @@
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts",
         "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts"
       ],
-      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan"
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_plan_status": "plan_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_plan_exists": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_executing_now": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_operator_action_authorization": "not_granted",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_rollout_authorization": "not_granted",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_operator_action_executed": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_rollout_executed": false,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_required_flags": [
+        "SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled",
+        "SDLC_HERMES_GATEWAY_INTEGRATION=enabled",
+        "SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_supported_request_types": ["review", "code_review", "validation"],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_initial_rollout_request_types": ["code_review"],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_phase_2_shadow_targets": ["code_review", "validation"],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_phase_request_caps": {
+        "code_review_canary": 1,
+        "code_review_limited": 5,
+        "validation_canary": 1,
+        "mixed_limited_total": 5
+      },
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_per_phase_approval_required": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_per_request_operator_approval_required": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_evidence_mode": "manual_sanitized_summary_only",
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_global_stop_conditions": [
+        "a separate Project Controller phase approval is missing",
+        "operator, controlled environment, or rollback owner is not identified",
+        "any real request is missing any of the three required flags",
+        "any real request is missing per-request operator approval",
+        "an unsupported request type invokes the dispatcher",
+        "an approved canary or limited request does not attach the expected safe sidecar",
+        "a dispatcher exception, sanitization failure, guardrail refusal, or rollback-required outcome occurs",
+        "guardrails.allowed is not true or guardrails.decision is not allow",
+        "Gateway primary result or Gateway final result changes",
+        "Runtime final_status or Runtime routing changes",
+        "Hermes is inferred to be the final review, code_review, or validation owner",
+        "raw prompt, artifact, business data, secret, stdout, stderr, full CLI output, or full warning text leaks",
+        "any persistence not separately approved is introduced",
+        "package.json, scripts, or CI sets Hermes flags by default",
+        "a feature flag becomes enabled by default",
+        "a test invokes a real Hermes CLI or an external service",
+        "phase request types or the 1/5/1/5 caps are exceeded",
+        "any warning pauses further requests for manual review; exceeding the existing guardrail warning limit stops and rolls back",
+        "a phase is entered automatically without a new approval",
+        "a change to Runtime, Gateway, ownership, request-type contracts, or persistence contracts is required"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_global_rollback_actions": [
+        "stop new controlled requests immediately",
+        "remove all three Hermes flags from the controlled environment",
+        "stop providing hermesPhase2ShadowEnablement operator approval",
+        "confirm the disabled path does not invoke the dispatcher and does not attach the sidecar",
+        "confirm Gateway primary/final result and Runtime final_status/routing are unchanged",
+        "produce only a manual sanitized summary; do not keep raw inputs, outputs, or logs",
+        "report the stop reason and completed request counts to the Project Controller",
+        "do not resume a phase or expand scope without a new explicit approval"
+      ],
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_legacy_recommended_next_pr_fulfilled": true,
+      "gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_next_governance_decision": "separate_operator_action_authorization"
     }
   ],
   "request_types": [

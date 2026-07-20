@@ -2122,6 +2122,53 @@ async function test() {
   assert(authority["legacy_recommended_next_pr_authority"] === "compatibility_reference_only", "legacy recommended_next_pr is compatibility reference only");
   console.log("");
 
+  // ── Phase-2 shadow controlled rollout plan capability (plan-only) ──
+  console.log("Test : phase-2 shadow controlled rollout plan capability");
+  const rolloutPlan = (review["capabilities"] as Array<Record<string, unknown>>).find(
+    (candidate) => candidate["name"] === "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan"
+  )!;
+  assert(rolloutPlan !== undefined, "rollout plan capability object exists");
+  assert(rolloutPlan["status"] === "plan_only", "rollout plan status is plan_only");
+  assert(rolloutPlan["plan_only"] === true, "rollout plan plan_only is true");
+  assert(rolloutPlan["executing_now"] === false, "rollout plan not executing");
+  assert(rolloutPlan["implementation_authorization_scope"] === "plan_material_only", "rollout plan authorization scope is plan_material_only");
+  assert(rolloutPlan["operator_action_authorization"] === "not_granted", "operator action authorization not_granted");
+  assert(rolloutPlan["rollout_authorization"] === "not_granted", "rollout authorization not_granted");
+  assert(rolloutPlan["operator_action_executed"] === false, "operator action not executed");
+  assert(rolloutPlan["rollout_executed"] === false, "rollout not executed");
+  assert(rolloutPlan["changes_gateway_primary_result"] === false, "does not change Gateway primary result");
+  assert(rolloutPlan["changes_gateway_final_result"] === false, "does not change Gateway final result");
+  assert(rolloutPlan["changes_runtime_final_status"] === false, "does not change Runtime final_status");
+  assert(rolloutPlan["changes_runtime_routing"] === false, "does not change Runtime routing");
+  assert(rolloutPlan["changes_ownership"] === false, "does not change ownership");
+  assert(rolloutPlan["persists_logs_now"] === false, "persists no logs");
+  const rolloutPlanPhases = rolloutPlan["rollout_phases"] as Array<Record<string, unknown>>;
+  assert(rolloutPlanPhases.length === 7, "rollout plan has 7 phases");
+  const expectedRolloutPhaseShape: ReadonlyArray<readonly [string, string, number]> = [
+    ["phase_0_plan_approval", "none", 0],
+    ["phase_1_fake_preflight", "fake_only", 0],
+    ["phase_2_code_review_canary_one", "controlled_real_sidecar", 1],
+    ["phase_3_code_review_limited_max_five", "controlled_real_sidecar", 5],
+    ["phase_4_validation_canary_one", "controlled_real_sidecar", 1],
+    ["phase_5_mixed_limited_max_five", "controlled_real_sidecar", 5],
+    ["phase_6_post_rollout_review", "none", 0],
+  ];
+  expectedRolloutPhaseShape.forEach(([id, executionMode, maxRealRequests], index) => {
+    const phase = rolloutPlanPhases[index];
+    assert(phase["id"] === id, `phase ${index} is ${id}`);
+    assert(phase["execution_mode"] === executionMode, `${id} execution_mode is ${executionMode}`);
+    assert(phase["max_real_requests"] === maxRealRequests, `${id} max_real_requests is ${maxRealRequests}`);
+  });
+  const phase2Canary = rolloutPlanPhases[2];
+  assert(JSON.stringify(phase2Canary["allowed_request_types"]) === JSON.stringify(["code_review"]), "phase_2 canary is code_review first");
+  assert(rolloutPlan["evidence_policy"]["mode"] === "manual_sanitized_summary_only", "evidence mode manual_sanitized_summary_only");
+  assert((rolloutPlan["global_stop_conditions"] as unknown[]).length === 20, "20 global stop conditions");
+  assert((rolloutPlan["global_rollback_actions"] as unknown[]).length === 8, "8 global rollback actions");
+  assert(rolloutPlan["legacy_recommended_next_pr_fulfilled"] === true, "legacy recommended_next_pr fulfilled (compatibility check only)");
+  assert(rolloutPlan["next_governance_decision"] === "separate_operator_action_authorization", "next governance decision is separate operator action authorization");
+  assert(review["authority"]["role"] === "scoped_system_capability_evidence_review_dataset", "authority object unchanged");
+  console.log("");
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

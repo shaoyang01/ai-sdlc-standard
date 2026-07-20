@@ -409,6 +409,30 @@ AUTHORITY_ROLES.each do |path, role_scope|
   end
 end
 
+EXPECTED_CURRENT_STATUS_SOURCE_COMMIT = "721fd120d3ace9335cb010a48275ace0e2253c57"
+CURRENT_STATUS_AS_OF_PATTERN = /\A- As-of source commit：`([0-9a-f]{40})`\z/
+
+current_status_path = File.join(ROOT, "docs/CURRENT_STATUS.md")
+if File.file?(current_status_path)
+  as_of_shas = []
+  File.readlines(current_status_path, chomp: true).each do |line|
+    match = CURRENT_STATUS_AS_OF_PATTERN.match(line)
+    as_of_shas << match[1] if match
+  end
+  if as_of_shas.empty?
+    errors << "authority: docs/CURRENT_STATUS.md is missing the As-of source commit line " \
+              "(expected exactly 1, found 0)"
+  elsif as_of_shas.length > 1
+    errors << "authority: docs/CURRENT_STATUS.md has duplicate As-of source commit lines " \
+              "(expected exactly 1, found #{as_of_shas.length})"
+  elsif as_of_shas.first != EXPECTED_CURRENT_STATUS_SOURCE_COMMIT
+    errors << "authority: docs/CURRENT_STATUS.md As-of source commit mismatch: " \
+              "expected #{EXPECTED_CURRENT_STATUS_SOURCE_COMMIT}, actual #{as_of_shas.first}"
+  end
+else
+  errors << "authority: docs/CURRENT_STATUS.md must exist"
+end
+
 structure_path = File.join(ROOT, "docs/REPOSITORY-STRUCTURE.md")
 if File.file?(structure_path)
   structure = File.read(structure_path)
@@ -427,7 +451,6 @@ end
   "docs/CURRENT_STATUS.md" => [
     "canonical human-readable current repository status/index",
     "feature/loop-runtime-v1",
-    "07c5d26cc9d11a010cb183934950cdb13cb58d42",
     "`requirement-summary`",
     "`tech-design`",
     "`solution-challenge`",
@@ -482,7 +505,8 @@ end
 if errors.empty?
   puts "capability metadata chain validation ok " \
        "(#{implemented_rows.length} implemented migration rows checked; " \
-       "layered status authority v1 verified)"
+       "layered status authority v1 verified; " \
+       "current status baseline #{EXPECTED_CURRENT_STATUS_SOURCE_COMMIT} verified)"
 else
   warn "capability metadata chain validation failed:"
   errors.each { |error| warn "- #{error}" }

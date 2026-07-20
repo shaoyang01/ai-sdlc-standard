@@ -3837,7 +3837,38 @@
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts",
       "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts"
     ],
-    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan"
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_gate_recommended_next_pr": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_name": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_plan_status": "plan_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_plan_exists": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_executing_now": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_implementation_authorization_scope": "plan_material_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_operator_action_authorization": "not_granted",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_rollout_authorization": "not_granted",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_operator_action_executed": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_rollout_executed": false,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_operator_approval_required": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_per_phase_approval_required": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_per_request_operator_approval_required": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_default_disabled": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_sidecar_only": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_initial_rollout_request_types": ["code_review"],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_phase_2_shadow_targets": ["code_review", "validation"],
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_phase_request_caps": {
+      "code_review_canary": 1,
+      "code_review_limited": 5,
+      "validation_canary": 1,
+      "mixed_limited_total": 5
+    },
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_evidence_mode": "manual_sanitized_summary_only",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_legacy_recommended_next_pr_fulfilled": true,
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_next_governance_decision": "separate_operator_action_authorization",
+    "hermes_gateway_real_dispatch_phase_2_shadow_enablement_controlled_rollout_plan_evidence": [
+      "execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.ts",
+      "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts",
+      "docs/capabilities/hermes/phase-2/HERMES_GATEWAY_REAL_DISPATCH_PHASE_2_SHADOW_ENABLEMENT_CONTROLLED_ROLLOUT_PLAN.md",
+      "metadata/capabilities/hermes/phase-2/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.json"
+    ]
   },
   "recommended_next_pr": {
     "title": "Hermes Gateway Real Dispatch Phase-2 Shadow Enablement Controlled Rollout Plan",
