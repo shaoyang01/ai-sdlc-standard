@@ -408,47 +408,90 @@ async function test() {
     assert(result3.decision === "clock_failure", "clock non-integer");
   }
 
-  // Test 26: approval replay
-  console.log("Test 26: approval replay");
+  // Test 26: first valid claim calls verifier exactly once
+  console.log("Test 26: first valid claim verifier call count");
   {
-    const gate = createTestGate();
+    let verifierCallCount = 0;
+    const gate = createTestGate({
+      verifyApproval: () => {
+        verifierCallCount++;
+        return true;
+      },
+    });
+    const req = makeRequest();
+    const approval = makeApproval(req);
+    const result = gate.claim(makeRequestWithApproval(approval), PAYLOAD_DIGEST);
+    assert(result.allowed === true, "first claim allowed");
+    assert(verifierCallCount === 1, "verifier called once");
+  }
+
+  // Test 27: approval replay does not call verifier again
+  console.log("Test 27: approval replay skips verifier");
+  {
+    let verifierCallCount = 0;
+    const gate = createTestGate({
+      verifyApproval: () => {
+        verifierCallCount++;
+        return true;
+      },
+    });
     const req = makeRequest();
     const approval = makeApproval(req);
     const reqWithApproval = makeRequestWithApproval(approval);
-    gate.claim(reqWithApproval, PAYLOAD_DIGEST);
-    const result = gate.claim(reqWithApproval, PAYLOAD_DIGEST);
-    assert(result.decision === "approval_replayed", "same approval replayed");
+    const r1 = gate.claim(reqWithApproval, PAYLOAD_DIGEST);
+    assert(r1.allowed === true, "first claim allowed");
+    assert(verifierCallCount === 1, "verifier called once for first claim");
+
+    const r2 = gate.claim(reqWithApproval, PAYLOAD_DIGEST);
+    assert(r2.decision === "approval_replayed", "replay rejected");
+    assert(verifierCallCount === 1, "verifier still called only once");
   }
 
-  // Test 27: nonce replay
-  console.log("Test 27: nonce replay");
+  // Test 28: nonce replay does not call verifier again
+  console.log("Test 28: nonce replay skips verifier");
   {
-    const gate = createTestGate();
+    let verifierCallCount = 0;
+    const gate = createTestGate({
+      verifyApproval: () => {
+        verifierCallCount++;
+        return true;
+      },
+    });
     const req = makeRequest();
-    const approval1 = makeApproval(req, { approvalId: "approval-A" });
-    gate.claim(makeRequestWithApproval(approval1), PAYLOAD_DIGEST);
-    // Different approvalId but same nonce
-    const approval2 = makeApproval(req, { approvalId: "approval-B" });
-    const result = gate.claim(makeRequestWithApproval(approval2), PAYLOAD_DIGEST);
-    assert(result.decision === "nonce_replayed", "same nonce different approval");
+    const approval1 = makeApproval(req, { approvalId: "approval-A", nonce: "nonce-shared-1234567890" });
+    const r1 = gate.claim(makeRequestWithApproval(approval1), PAYLOAD_DIGEST);
+    assert(r1.allowed === true, "first claim allowed");
+    assert(verifierCallCount === 1, "verifier called once for first claim");
+
+    const approval2 = makeApproval(req, { approvalId: "approval-B", nonce: "nonce-shared-1234567890" });
+    const r2 = gate.claim(makeRequestWithApproval(approval2), PAYLOAD_DIGEST);
+    assert(r2.decision === "nonce_replayed", "nonce replay rejected");
+    assert(verifierCallCount === 1, "verifier still called only once");
   }
 
-  // Test 28: second different approval rejected by request cap
-  console.log("Test 28: second approval rejected by cap");
+  // Test 29: request cap exhausted does not call verifier again
+  console.log("Test 29: request cap exhausted skips verifier");
   {
-    const gate = createTestGate();
+    let verifierCallCount = 0;
+    const gate = createTestGate({
+      verifyApproval: () => {
+        verifierCallCount++;
+        return true;
+      },
+    });
     const req = makeRequest();
     const approval1 = makeApproval(req, { approvalId: "first", nonce: "nonce-first-1234567890" });
     const r1 = gate.claim(makeRequestWithApproval(approval1), PAYLOAD_DIGEST);
-    assert(r1.allowed === true, "first allowed");
+    assert(r1.allowed === true, "first claim allowed");
+    assert(verifierCallCount === 1, "verifier called once for first claim");
 
     const approval2 = makeApproval(req, { approvalId: "second", nonce: "nonce-second-123456789" });
     const r2 = gate.claim(makeRequestWithApproval(approval2), PAYLOAD_DIGEST);
-    assert(r2.allowed === false, "second not allowed");
     assert(r2.decision === "request_cap_exhausted", "cap exhausted");
+    assert(verifierCallCount === 1, "verifier still called only once");
   }
 
-  // Test 29: two consecutive synchronous claims, only first allowed
+  // Test 30: two consecutive synchronous claims, only first allowed
   console.log("Test 29: consecutive claims");
   {
     const gate = createTestGate();
