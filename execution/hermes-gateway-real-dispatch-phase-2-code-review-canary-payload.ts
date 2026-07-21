@@ -127,20 +127,13 @@ function containsSecretInValues(obj: Record<string, unknown>): boolean {
   return false;
 }
 
-function checkAccessors(value: unknown, path: string): string | null {
+function checkTopLevelAccessors(value: unknown, path: string): string | null {
   if (value === null || typeof value !== "object") return null;
   try {
     const descriptors = Object.getOwnPropertyDescriptors(value);
     for (const [key, desc] of Object.entries(descriptors)) {
       if (desc.get !== undefined || desc.set !== undefined) {
         return `${path}.${key}`;
-      }
-    }
-    // Recursively check own properties
-    for (const [key, child] of Object.entries(value as object)) {
-      if (child !== null && typeof child === "object") {
-        const result = checkAccessors(child, `${path}.${key}`);
-        if (result !== null) return result;
       }
     }
     return null;
@@ -197,17 +190,8 @@ export function buildHermesPhase2CanaryPayload(
     return { ok: false, decision: "invalid_requirement_id" };
   }
 
-  // Check for circular references
-  try {
-    if (hasCircularReference(request)) {
-      return { ok: false, decision: "circular_reference_detected" };
-    }
-  } catch {
-    return { ok: false, decision: "circular_reference_detected" };
-  }
-
-  // Check for accessors/getters
-  const accessorPath = checkAccessors(request, "request");
+  // Check top-level accessors on request (no recursive traversal)
+  const accessorPath = checkTopLevelAccessors(request, "request");
   if (accessorPath !== null) {
     return { ok: false, decision: "non_plain_object_detected" };
   }

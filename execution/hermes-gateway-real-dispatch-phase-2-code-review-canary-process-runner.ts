@@ -1,7 +1,7 @@
-// Hermes Phase 2 Code Review Canary — POSIX Controlled Process Runner
+// Hermes Phase 2 Code Review Canary — POSIX Process Runner (Round 2)
 // ====================================================================
-// Controlled spawn with isolated env, termination state machine,
-// process-group cleanup verification (SIGTERM → grace → signal 0 → SIGKILL → signal 0).
+// Single, awaitable termination state machine. Process-group cleanup with signal 0.
+// Decision precedence with cleanup failures overriding.
 // Darwin/linux only.
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -62,6 +62,7 @@ export type HermesPhase2CanaryProcessRunnerConfig = Readonly<{
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_TERM_GRACE_MS = 2_000;
+const POST_KILL_CONFIRM_MS = 200;
 const MAX_STDOUT_BYTES = 16_384;
 const MAX_STDERR_BYTES = 16_384;
 const MAX_ARGS = 16;
@@ -78,27 +79,26 @@ const RESERVED_ENV = new Set([
   "HISTFILE", "NO_COLOR",
 ]);
 
+// ── helpers ──
+
 function cleanUpDir(dir: string): boolean {
   try {
-    if (existsSync(dir)) {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-    }
+    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
     return !existsSync(dir);
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-function signalGroup(pid: number, signal: NodeJS.Signals): boolean {
+function signalGroup(pid: number, sig: NodeJS.Signals): "ok" | "esrch" | "error" {
   try {
-    process.kill(-pid, signal);
-    return true;
-  } catch {
-    return false;
+    process.kill(-pid, sig);
+    return "ok";
+  } catch (e: any) {
+    if (e.code === "ESRCH") return "esrch";
+    return "error";
   }
 }
 
-function signal0Check(pid: number): "exists" | "gone" | "error" {
+function signal0Check(pid: number): "gone" | "exists" | "error" {
   try {
     process.kill(-pid, 0);
     return "exists";
@@ -108,153 +108,81 @@ function signal0Check(pid: number): "exists" | "gone" | "error" {
   }
 }
 
-function terminateProcessGroup(
-  pid: number,
-  graceMs: number,
-): Promise<{ termSent: boolean; killSent: boolean; confirmed: boolean }> {
-  const termSent = signalGroup(pid, "SIGTERM");
-  let killSent = false;
-
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const check = signal0Check(pid);
-      if (check === "gone") {
-        resolve({ termSent, killSent, confirmed: true });
-        return;
-      }
-      // Still exists or error — send SIGKILL
-      killSent = signalGroup(pid, "SIGKILL");
-      setTimeout(() => {
-        const finalCheck = signal0Check(pid);
-        resolve({
-          termSent,
-          killSent,
-          confirmed: finalCheck === "gone",
-        });
-      }, 200);
-    }, graceMs);
-  });
-}
-
 function formatResult(
   decision: HermesPhase2CanaryRunnerDecision,
-  overrides: Partial<HermesPhase2CanaryRunnerResult> = {},
+  o: Partial<HermesPhase2CanaryRunnerResult> = {},
 ): HermesPhase2CanaryRunnerResult {
   return {
     decision,
-    exitCode: overrides.exitCode ?? null,
-    signal: overrides.signal ?? null,
-    timedOut: overrides.timedOut ?? false,
-    durationMs: overrides.durationMs ?? 0,
-    stdoutBytes: overrides.stdoutBytes ?? 0,
-    stderrBytes: overrides.stderrBytes ?? 0,
-    stdoutOverflow: overrides.stdoutOverflow ?? false,
-    stderrOverflow: overrides.stderrOverflow ?? false,
-    termSent: overrides.termSent ?? false,
-    killSent: overrides.killSent ?? false,
-    exitObserved: overrides.exitObserved ?? false,
-    closeObserved: overrides.closeObserved ?? false,
-    processGroupCleanupConfirmed: overrides.processGroupCleanupConfirmed ?? false,
-    temporaryCleanupConfirmed: overrides.temporaryCleanupConfirmed ?? false,
+    exitCode: o.exitCode ?? null,
+    signal: o.signal ?? null,
+    timedOut: o.timedOut ?? false,
+    durationMs: o.durationMs ?? 0,
+    stdoutBytes: o.stdoutBytes ?? 0,
+    stderrBytes: o.stderrBytes ?? 0,
+    stdoutOverflow: o.stdoutOverflow ?? false,
+    stderrOverflow: o.stderrOverflow ?? false,
+    termSent: o.termSent ?? false,
+    killSent: o.killSent ?? false,
+    exitObserved: o.exitObserved ?? false,
+    closeObserved: o.closeObserved ?? false,
+    processGroupCleanupConfirmed: o.processGroupCleanupConfirmed ?? false,
+    temporaryCleanupConfirmed: o.temporaryCleanupConfirmed ?? false,
   };
 }
+
+// ── main ──
 
 export async function runHermesPhase2CanaryProcess(
   config: HermesPhase2CanaryProcessRunnerConfig,
 ): Promise<HermesPhase2CanaryRunnerResult> {
-  const platform = process.platform;
-  if (platform !== "linux" && platform !== "darwin") {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
     return formatResult("unsupported_platform");
   }
 
   const {
-    executablePath,
-    allowedExecutablePaths,
-    args,
-    serializedPayload,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    executablePath, allowedExecutablePaths, args,
+    serializedPayload, timeoutMs = DEFAULT_TIMEOUT_MS,
     termGraceMs = DEFAULT_TERM_GRACE_MS,
-    maxStdoutBytes = MAX_STDOUT_BYTES,
-    maxStderrBytes = MAX_STDERR_BYTES,
-    credentialEnvNames = [],
-    sourceEnv = {},
+    maxStdoutBytes = MAX_STDOUT_BYTES, maxStderrBytes = MAX_STDERR_BYTES,
+    credentialEnvNames = [], sourceEnv = {},
   } = config;
 
-  // Validate timeout/grace/limits are finite integers
-  if (
-    typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || !Number.isInteger(timeoutMs) ||
-    timeoutMs < 1000 || timeoutMs > 120_000
-  ) return formatResult("build_error");
-  if (
-    typeof termGraceMs !== "number" || !Number.isFinite(termGraceMs) || !Number.isInteger(termGraceMs) ||
-    termGraceMs < 100 || termGraceMs > 5_000
-  ) return formatResult("build_error");
-  if (
-    typeof maxStdoutBytes !== "number" || !Number.isFinite(maxStdoutBytes) || !Number.isInteger(maxStdoutBytes) ||
-    maxStdoutBytes < 1 || maxStdoutBytes > 16_384
-  ) return formatResult("build_error");
-  if (
-    typeof maxStderrBytes !== "number" || !Number.isFinite(maxStderrBytes) || !Number.isInteger(maxStderrBytes) ||
-    maxStderrBytes < 1 || maxStderrBytes > 16_384
-  ) return formatResult("build_error");
-
-  // Validate args
+  // Config validation
+  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120_000) return formatResult("build_error");
+  if (typeof termGraceMs !== "number" || !Number.isFinite(termGraceMs) || !Number.isInteger(termGraceMs) || termGraceMs < 100 || termGraceMs > 5_000) return formatResult("build_error");
+  if (typeof maxStdoutBytes !== "number" || !Number.isFinite(maxStdoutBytes) || !Number.isInteger(maxStdoutBytes) || maxStdoutBytes < 1 || maxStdoutBytes > 16_384) return formatResult("build_error");
+  if (typeof maxStderrBytes !== "number" || !Number.isFinite(maxStderrBytes) || !Number.isInteger(maxStderrBytes) || maxStderrBytes < 1 || maxStderrBytes > 16_384) return formatResult("build_error");
   if (!Array.isArray(args) || args.length > MAX_ARGS) return formatResult("args_validation_failed");
   let argTotal = 0;
-  for (const arg of args) {
-    if (typeof arg !== "string") return formatResult("args_validation_failed");
-    if (arg.length === 0 || arg.trim().length === 0) return formatResult("args_validation_failed");
-    if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(arg)) return formatResult("args_validation_failed");
-    if (arg.includes("\n") || arg.includes("\r") || arg.includes("\t")) return formatResult("args_validation_failed");
-    const len = Buffer.byteLength(arg, "utf8");
+  for (const a of args) {
+    if (typeof a !== "string" || a.length === 0 || a.trim().length === 0) return formatResult("args_validation_failed");
+    if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\t\n\r]/.test(a)) return formatResult("args_validation_failed");
+    const len = Buffer.byteLength(a, "utf8");
     if (len > MAX_ARG_LEN) return formatResult("args_validation_failed");
     argTotal += len;
     if (argTotal > MAX_ARG_TOTAL) return formatResult("args_validation_failed");
   }
-
-  // Validate allowedExecutablePaths non-empty
-  if (!Array.isArray(allowedExecutablePaths) || allowedExecutablePaths.length === 0) {
-    return formatResult("build_error");
-  }
-
-  // Resolve executable and allowlist
-  if (typeof executablePath !== "string" || executablePath.length === 0 || pathResolve(executablePath) !== executablePath) {
-    return formatResult("invalid_executable_path");
-  }
+  if (!Array.isArray(allowedExecutablePaths) || allowedExecutablePaths.length === 0) return formatResult("build_error");
+  if (typeof executablePath !== "string" || executablePath.length === 0 || pathResolve(executablePath) !== executablePath) return formatResult("invalid_executable_path");
   let canonicalExec: string;
-  try {
-    canonicalExec = realpathSync(executablePath);
-  } catch {
-    return formatResult("executable_not_allowed");
-  }
+  try { canonicalExec = realpathSync(executablePath); } catch { return formatResult("executable_not_allowed"); }
   const normalizedAllowed: string[] = [];
-  for (const allowed of allowedExecutablePaths) {
-    try {
-      normalizedAllowed.push(realpathSync(allowed));
-    } catch {
-      // not found — fail closed
-      return formatResult("executable_not_allowed");
-    }
+  for (const p of allowedExecutablePaths) {
+    try { normalizedAllowed.push(realpathSync(p)); } catch { return formatResult("executable_not_allowed"); }
   }
-  if (!normalizedAllowed.includes(canonicalExec)) {
-    return formatResult("executable_not_allowed");
-  }
-
-  // Validate credential names
+  if (!normalizedAllowed.includes(canonicalExec)) return formatResult("executable_not_allowed");
   if (credentialEnvNames.length > MAX_CREDENTIAL_NAMES) return formatResult("credential_name_invalid");
-  const seenCredentials = new Set<string>();
-  for (const name of credentialEnvNames) {
-    if (!CREDENTIAL_RE.test(name)) return formatResult("credential_name_invalid");
-    if (RESERVED_ENV.has(name)) return formatResult("credential_name_invalid");
-    if (seenCredentials.has(name)) return formatResult("credential_name_invalid");
-    seenCredentials.add(name);
-    // Must exist in sourceEnv and be non-empty
-    if (typeof sourceEnv[name] !== "string" || sourceEnv[name].length === 0) {
-      return formatResult("missing_credential_value");
-    }
+  const seenCreds = new Set<string>();
+  for (const n of credentialEnvNames) {
+    if (!CREDENTIAL_RE.test(n)) return formatResult("credential_name_invalid");
+    if (RESERVED_ENV.has(n)) return formatResult("credential_name_invalid");
+    if (seenCreds.has(n)) return formatResult("credential_name_invalid");
+    seenCreds.add(n);
+    if (typeof sourceEnv[n] !== "string" || sourceEnv[n].length === 0) return formatResult("missing_credential_value");
   }
 
-  // Create isolated temp root
+  // Temp root
   let tempRoot: string;
   try {
     tempRoot = join(tmpdir(), `hermes-canary-${randomUUID()}`);
@@ -266,43 +194,31 @@ export async function runHermesPhase2CanaryProcess(
     mkdirSync(join(tempRoot, "config"));
     mkdirSync(join(tempRoot, "state"));
   } catch {
-    return formatResult("build_error");
+    try { rmSync(tempRoot, { recursive: true, force: true }); } catch {}
+    return existsSync(tempRoot) ? formatResult("temporary_cleanup_failed") : formatResult("build_error");
   }
 
   const workDir = join(tempRoot, "work");
-
-  // Build child env from empty
   const childEnv: Record<string, string> = {
-    HOME: join(tempRoot, "home"),
-    TMPDIR: join(tempRoot, "tmp"),
-    XDG_CACHE_HOME: join(tempRoot, "cache"),
-    XDG_CONFIG_HOME: join(tempRoot, "config"),
-    XDG_STATE_HOME: join(tempRoot, "state"),
-    HISTFILE: "/dev/null",
-    NO_COLOR: "1",
-    LANG: "C.UTF-8",
-    LC_ALL: "C.UTF-8",
+    HOME: join(tempRoot, "home"), TMPDIR: join(tempRoot, "tmp"),
+    XDG_CACHE_HOME: join(tempRoot, "cache"), XDG_CONFIG_HOME: join(tempRoot, "config"),
+    XDG_STATE_HOME: join(tempRoot, "state"), HISTFILE: "/dev/null", NO_COLOR: "1",
+    LANG: "C.UTF-8", LC_ALL: "C.UTF-8",
   };
-  for (const name of credentialEnvNames) {
-    childEnv[name] = sourceEnv[name];
-  }
+  for (const n of credentialEnvNames) childEnv[n] = sourceEnv[n];
 
-  // Spawn child using canonical path
+  // Spawn
   let child: ChildProcess;
   try {
     child = spawn(canonicalExec, args as string[], {
-      shell: false,
-      detached: true,
-      stdio: ["pipe", "pipe", "pipe"],
-      cwd: workDir,
-      env: childEnv,
+      shell: false, detached: true, stdio: ["pipe", "pipe", "pipe"],
+      cwd: workDir, env: childEnv,
     });
   } catch {
     cleanUpDir(tempRoot);
     return formatResult("spawn_failed");
   }
 
-  const startMs = Date.now();
   const pid = child.pid;
   if (pid === undefined) {
     try { child.kill("SIGKILL"); } catch {}
@@ -310,149 +226,143 @@ export async function runHermesPhase2CanaryProcess(
     return formatResult("spawn_failed");
   }
 
-  // State
-  let timedOut = false;
-  let termSent = false;
-  let killSent = false;
-  let exitObserved = false;
-  let closeObserved = false;
-  let exitCode: number | null = null;
-  let signal: string | null = null;
-  let stdoutBytes = 0;
-  let stderrBytes = 0;
-  let stdoutOverflow = false;
-  let stderrOverflow = false;
-  let stdinError = false;
+  // ── shared state ──
+  const startMs = Date.now();
+  let timedOut = false, termSent = false, killSent = false;
+  let exitObserved = false, closeObserved = false;
+  let exitCode: number | null = null, signal: string | null = null;
+  let stdoutBytes = 0, stderrBytes = 0;
+  let stdoutOverflow = false, stderrOverflow = false, stdinError = false;
 
-  // Shared termination function
-  const triggerTermination = async () => {
-    const { termSent: ts, killSent: ks, confirmed } = await terminateProcessGroup(pid, termGraceMs);
-    termSent = ts;
-    killSent = ks;
-    return { termSent: ts, killSent: ks, confirmed };
-  };
+  // ── single termination state machine ──
+  let terminationPromise: Promise<{ termSent: boolean; killSent: boolean; confirmed: boolean }> | null = null;
 
-  // Timeout timer
-  let killTimer: ReturnType<typeof setTimeout> | null = null;
+  function ensureTermination(): typeof terminationPromise {
+    if (terminationPromise !== null) return terminationPromise;
+    terminationPromise = new Promise((resolve) => {
+      const sendTerm = signalGroup(pid, "SIGTERM");
+      termSent = sendTerm !== "error";
+      if (sendTerm === "esrch") {
+        resolve({ termSent, killSent: false, confirmed: true });
+        return;
+      }
+      if (sendTerm === "error") {
+        resolve({ termSent, killSent: false, confirmed: false });
+        return;
+      }
+      setTimeout(() => {
+        const check = signal0Check(pid);
+        if (check === "gone") { resolve({ termSent, killSent: false, confirmed: true }); return; }
+        killSent = signalGroup(pid, "SIGKILL") !== "error";
+        setTimeout(() => {
+          const final = signal0Check(pid);
+          resolve({ termSent, killSent, confirmed: final === "gone" });
+        }, POST_KILL_CONFIRM_MS);
+      }, termGraceMs);
+    });
+    return terminationPromise;
+  }
+
+  // timeout
   const timer = setTimeout(() => {
     timedOut = true;
-    triggerTermination();
+    ensureTermination();
   }, timeoutMs);
 
-  // Stdout
-  child.stdout?.on("data", (chunk: Buffer) => {
-    stdoutBytes += chunk.byteLength;
-    if (stdoutBytes > maxStdoutBytes) {
-      stdoutOverflow = true;
-      triggerTermination();
-    }
+  // stdout/stderr
+  child.stdout?.on("data", (c: Buffer) => {
+    stdoutBytes += c.byteLength;
+    if (stdoutBytes > maxStdoutBytes) { stdoutOverflow = true; ensureTermination(); }
+  });
+  child.stderr?.on("data", (c: Buffer) => {
+    stderrBytes += c.byteLength;
+    if (stderrBytes > maxStderrBytes) { stderrOverflow = true; ensureTermination(); }
   });
 
-  // Stderr
-  child.stderr?.on("data", (chunk: Buffer) => {
-    stderrBytes += chunk.byteLength;
-    if (stderrBytes > maxStderrBytes) {
-      stderrOverflow = true;
-      triggerTermination();
-    }
-  });
-
-  // Write stdin
+  // stdin
   if (child.stdin) {
     if (serializedPayload !== undefined) {
       child.stdin.write(serializedPayload, "utf8", (err) => {
-        if (err) {
-          stdinError = true;
-          triggerTermination();
-        }
+        if (err) { stdinError = true; ensureTermination(); }
         child.stdin?.end();
-        if (err) stdinError = true;
       });
-      child.stdin.on("error", () => {
-        stdinError = true;
-        triggerTermination();
-      });
+      child.stdin.on("error", () => { stdinError = true; ensureTermination(); });
     } else {
       child.stdin.end();
+      child.stdin.on("error", () => { stdinError = true; ensureTermination(); });
     }
-    child.stdin.on("error", () => {
-      stdinError = true;
-      triggerTermination();
-    });
-  } else {
-    // stdin not available
-    if (serializedPayload !== undefined) {
-      stdinError = true;
-      triggerTermination();
-    }
+  } else if (serializedPayload !== undefined) {
+    stdinError = true;
+    ensureTermination();
   }
 
-  // Wait for close
+  // ── wait for close with bounded observation ──
   const result = await new Promise<HermesPhase2CanaryRunnerResult>((resolve) => {
-    child.on("exit", (code, sig) => {
-      exitObserved = true;
-      exitCode = code;
-      signal = sig;
-    });
-
     let settled = false;
     const settle = async () => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      const durationMs = Date.now() - startMs;
+      // Await termination if started
+      const term = terminationPromise !== null ? await terminationPromise : null;
+      if (term) { termSent = term.termSent; killSent = term.killSent; }
 
-      // After close, check descendants via signal 0
-      if (pid !== undefined) {
-        const check = signal0Check(pid);
-        if (check === "exists") {
-          // Descendants still exist — terminate
-          const { confirmed } = await triggerTermination();
-          if (!confirmed) {
-            const tempOk = cleanUpDir(tempRoot);
+      // Check descendants after normal close
+      if (!timedOut && !stdoutOverflow && !stderrOverflow && !stdinError) {
+        const descCheck = signal0Check(pid);
+        if (descCheck === "exists") {
+          const descTerm = await ensureTermination();
+          if (!descTerm?.confirmed) {
+            cleanUpDir(tempRoot);
             return resolve(formatResult("process_group_cleanup_failed", {
-              exitCode, signal, timedOut, durationMs,
+              exitCode, signal, timedOut, durationMs: Date.now() - startMs,
               stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
               termSent, killSent, exitObserved, closeObserved,
-              processGroupCleanupConfirmed: false,
-              temporaryCleanupConfirmed: tempOk,
+              processGroupCleanupConfirmed: false, temporaryCleanupConfirmed: cleanUpDir(tempRoot),
             }));
           }
+        } else if (descCheck === "error") {
+          cleanUpDir(tempRoot);
+          return resolve(formatResult("process_group_cleanup_failed", {
+            exitCode, signal, timedOut, durationMs: Date.now() - startMs,
+            stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
+            termSent, killSent, exitObserved, closeObserved,
+            processGroupCleanupConfirmed: false, temporaryCleanupConfirmed: cleanUpDir(tempRoot),
+          }));
         }
       }
 
+      const durationMs = Date.now() - startMs;
+      const groupCheck = signal0Check(pid);
+      const groupConfirmed = groupCheck === "gone";
+      const tempOk = cleanUpDir(tempRoot);
+
       // Decision precedence
       let decision: HermesPhase2CanaryRunnerDecision;
-      if (stdinError) decision = "stdin_error";
+      if (term !== null && !term.confirmed) decision = "process_group_cleanup_failed";
+      else if (!groupConfirmed) decision = "process_group_cleanup_failed";
+      else if (!tempOk) decision = "temporary_cleanup_failed";
+      else if (!exitObserved) decision = "exit_not_observed";
+      else if (!closeObserved) decision = "close_not_observed";
+      else if (stdinError) decision = "stdin_error";
       else if (stdoutOverflow) decision = "stdout_overflow";
       else if (stderrOverflow) decision = "stderr_overflow";
       else if (timedOut) decision = "timed_out";
-      else if (!exitObserved) decision = "exit_not_observed";
-      else if (!closeObserved) decision = "close_not_observed";
       else decision = "executed";
 
-      const tempOk = cleanUpDir(tempRoot);
-      if (!tempOk && decision === "executed") decision = "temporary_cleanup_failed";
-
-      resolve(formatResult(decision as any, {
-        exitCode, signal, timedOut,
-        durationMs, stdoutBytes, stderrBytes,
-        stdoutOverflow, stderrOverflow,
+      resolve(formatResult(decision, {
+        exitCode, signal, timedOut, durationMs,
+        stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
         termSent, killSent, exitObserved, closeObserved,
-        processGroupCleanupConfirmed: signal0Check(pid ?? 0) === "gone",
+        processGroupCleanupConfirmed: groupConfirmed,
         temporaryCleanupConfirmed: tempOk,
       }));
     };
 
-    child.on("close", () => {
-      closeObserved = true;
-      settle();
-    });
-
-    child.on("error", () => {
-      settle();
-    });
+    child.on("exit", (code, sig) => { exitObserved = true; exitCode = code; signal = sig; });
+    child.on("close", () => { closeObserved = true; settle(); });
+    child.on("error", () => { settle(); });
   });
 
   return result;
