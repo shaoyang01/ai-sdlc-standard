@@ -49,12 +49,11 @@ process.stdin.on("end", () => {
       break;
 
     case "spawn-descendant":
-      // Spawn a background process that outlives this one
+      // Spawn a child that stays in the same process group
       const { spawn } = require("child_process");
       const descendant = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
         stdio: "ignore",
-        detached: true,
-        env: { HOME: process.env.HOME, PATH: process.env.PATH },
+        env: { HOME: process.env.HOME },
       });
       descendant.unref();
       process.stdout.write(JSON.stringify({ status: "ok", descendantPid: descendant.pid }));

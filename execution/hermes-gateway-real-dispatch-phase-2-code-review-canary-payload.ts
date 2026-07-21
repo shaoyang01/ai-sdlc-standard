@@ -1,8 +1,8 @@
 // Hermes Phase 2 Code Review Canary — Synthetic Payload Builder
 // ==============================================================
-// Constructs a fixed synthetic-only payload for the Phase 2 code-review canary.
-// The payload contains no repository content, no real artifacts, and no secrets.
-// Builder returns bounded failure decisions; no raw input is leaked.
+// Fixed synthetic-only payload for the Phase 2 code-review canary.
+// Fail-closed on all reflection: accessors, Proxy traps, circular references.
+// Does not scan structured approval proof, nonce, or operator identity.
 
 import { createHash } from "node:crypto";
 import type { ExecutionRequest } from "./types";
@@ -21,7 +21,8 @@ export type HermesPhase2CanaryPayloadDecision =
   | "circular_reference_detected"
   | "secret_content_detected"
   | "synthetic_patch_too_large"
-  | "serialized_payload_too_large";
+  | "serialized_payload_too_large"
+  | "reflection_failure";
 
 export type HermesPhase2CanaryPayload = Readonly<{
   schemaVersion: 1;
@@ -78,149 +79,226 @@ const SECRET_PATTERNS = [
   /\bsk-[A-Za-z0-9]{32,}\b/,
 ];
 
+const DEFAULT_MAX_SYNTHETIC_PATCH_BYTES = 4096;
+const DEFAULT_MAX_SERIALIZED_PAYLOAD_BYTES = 8192;
+
+function isNonEmptyTrimmedString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value === value.trim();
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") return false;
   if (Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === null || proto === Object.prototype;
+  try {
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || proto === Object.prototype;
+  } catch {
+    return false;
+  }
 }
 
 function hasCircularReference(value: unknown, seen = new WeakSet()): boolean {
-  if (value !== null && typeof value === "object") {
-    if (seen.has(value as object)) return true;
-    seen.add(value as object);
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (hasCircularReference(item, seen)) return true;
+  try {
+    if (value !== null && typeof value === "object") {
+      if (seen.has(value as object)) return true;
+      seen.add(value as object);
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (hasCircularReference(item, seen)) return true;
+        }
+      } else {
+        for (const v of Object.values(value as object)) {
+          if (hasCircularReference(v, seen)) return true;
+        }
       }
-    } else {
-      for (const v of Object.values(value as object)) {
-        if (hasCircularReference(v, seen)) return true;
-      }
+    }
+    return false;
+  } catch {
+    return true; // fail-closed on reflection errors
+  }
+}
+
+function containsSecretInValues(obj: Record<string, unknown>): boolean {
+  for (const v of Object.values(obj)) {
+    if (typeof v === "string") {
+      if (SECRET_PATTERNS.some((p) => p.test(v))) return true;
     }
   }
   return false;
 }
 
-function containsSecretContent(value: unknown): boolean {
-  if (typeof value === "string") {
-    return SECRET_PATTERNS.some((p) => p.test(value));
-  }
-  if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value as object)) {
-      if (containsSecretContent(v)) return true;
+function checkAccessors(value: unknown, path: string): string | null {
+  if (value === null || typeof value !== "object") return null;
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    for (const [key, desc] of Object.entries(descriptors)) {
+      if (desc.get !== undefined || desc.set !== undefined) {
+        return `${path}.${key}`;
+      }
     }
+    // Recursively check own properties
+    for (const [key, child] of Object.entries(value as object)) {
+      if (child !== null && typeof child === "object") {
+        const result = checkAccessors(child, `${path}.${key}`);
+        if (result !== null) return result;
+      }
+    }
+    return null;
+  } catch {
+    return path; // reflection failure = accessor-like
   }
-  return false;
 }
 
-function hasAccessorOrProxy(value: unknown): boolean {
-  if (value === null || typeof value !== "object") return false;
-  // Check for Proxy
-  const proto = Object.getPrototypeOf(value);
-  if (proto === Proxy.prototype) return true;
-  // Check for non-plain prototype
-  if (proto !== null && proto !== Object.prototype && proto !== Array.prototype) return true;
-  // Recursively check
-  if (Array.isArray(value)) {
-    return value.some((v) => hasAccessorOrProxy(v));
-  }
-  return Object.values(value as object).some((v) => hasAccessorOrProxy(v));
+export type PayloadBuilderOptions = Readonly<{
+  maxSyntheticPatchBytes?: number;
+  maxSerializedPayloadBytes?: number;
+}>;
+
+function validateLimit(
+  value: unknown,
+  defaultValue: number,
+): number | null {
+  if (value === undefined) return defaultValue;
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (!Number.isInteger(value) || value <= 0) return null;
+  if (value > defaultValue) return null;
+  return value;
 }
 
-function exactKeyMatch(value: Record<string, unknown>, allowedKeys: Set<string>): string | null {
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) return key;
-  }
-  return null;
-}
-
-/**
- * Build a synthetic canary payload from an ExecutionRequest.
- * Only accepts type=code_review, node=code-review, agent=hermes.
- */
 export function buildHermesPhase2CanaryPayload(
   request: ExecutionRequest,
+  options?: PayloadBuilderOptions,
 ): HermesPhase2CanaryPayloadResult {
-  // Validate request type
-  if (request.type !== "code_review") {
-    return { ok: false, decision: "wrong_request_type" };
-  }
-  if (request.node !== "code-review") {
-    return { ok: false, decision: "wrong_node" };
-  }
-  if (request.agent !== "hermes") {
-    return { ok: false, decision: "wrong_agent" };
+  const maxSyntheticPatchBytes = validateLimit(
+    options?.maxSyntheticPatchBytes, DEFAULT_MAX_SYNTHETIC_PATCH_BYTES);
+  const maxSerializedPayloadBytes = validateLimit(
+    options?.maxSerializedPayloadBytes, DEFAULT_MAX_SERIALIZED_PAYLOAD_BYTES);
+  if (maxSyntheticPatchBytes === null || maxSerializedPayloadBytes === null) {
+    return { ok: false, decision: "reflection_failure" };
   }
 
+  // Validate request type (via safe property access)
+  let reqType: unknown;
+  try { reqType = request.type; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (reqType !== "code_review") return { ok: false, decision: "wrong_request_type" };
+
+  let reqNode: unknown;
+  try { reqNode = request.node; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (reqNode !== "code-review") return { ok: false, decision: "wrong_node" };
+
+  let reqAgent: unknown;
+  try { reqAgent = request.agent; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (reqAgent !== "hermes") return { ok: false, decision: "wrong_agent" };
+
   // Validate requirementId
-  if (typeof request.requirementId !== "string" || !REQUIREMENT_ID_RE.test(request.requirementId)) {
+  let reqId: unknown;
+  try { reqId = request.requirementId; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (typeof reqId !== "string" || !REQUIREMENT_ID_RE.test(reqId)) {
     return { ok: false, decision: "invalid_requirement_id" };
   }
 
-  // Check for accessor/Proxy/non-plain
-  if (hasAccessorOrProxy(request)) {
-    return { ok: false, decision: "non_plain_object_detected" };
-  }
-  if (hasCircularReference(request)) {
+  // Check for circular references
+  try {
+    if (hasCircularReference(request)) {
+      return { ok: false, decision: "circular_reference_detected" };
+    }
+  } catch {
     return { ok: false, decision: "circular_reference_detected" };
   }
 
-  // Validate input
-  if (!isPlainObject(request.input)) {
-    return { ok: false, decision: "invalid_input_shape" };
+  // Check for accessors/getters
+  const accessorPath = checkAccessors(request, "request");
+  if (accessorPath !== null) {
+    return { ok: false, decision: "non_plain_object_detected" };
   }
-  const inputKeys = Object.keys(request.input);
+
+  // Validate input
+  let reqInput: unknown;
+  try { reqInput = request.input; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (!isPlainObject(reqInput)) return { ok: false, decision: "invalid_input_shape" };
+
+  let inputKeys: string[];
+  try { inputKeys = Object.keys(reqInput as Record<string, unknown>); } catch {
+    return { ok: false, decision: "reflection_failure" };
+  }
   if (inputKeys.length !== 1 || inputKeys[0] !== "artifacts") {
     return { ok: false, decision: "invalid_input_shape" };
   }
-  if (!Array.isArray(request.input.artifacts) || request.input.artifacts.length !== 0) {
+  const artifacts = (reqInput as Record<string, unknown>).artifacts;
+  if (!Array.isArray(artifacts) || artifacts.length !== 0) {
     return { ok: false, decision: "invalid_input_shape" };
   }
 
-  // Validate metadata (optional but must be exactly { attempt: 0 } if present)
-  if (request.metadata !== undefined) {
-    if (!isPlainObject(request.metadata)) {
-      return { ok: false, decision: "invalid_metadata_shape" };
+  // Check input for secrets
+  try {
+    if (containsSecretInValues(reqInput as Record<string, unknown>)) {
+      return { ok: false, decision: "secret_content_detected" };
     }
-    const metaKeys = Object.keys(request.metadata);
+  } catch {
+    return { ok: false, decision: "reflection_failure" };
+  }
+
+  // Validate metadata (optional but must be exactly { attempt: 0 } if present)
+  let reqMeta: unknown;
+  try { reqMeta = request.metadata; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (reqMeta !== undefined) {
+    if (!isPlainObject(reqMeta)) return { ok: false, decision: "invalid_metadata_shape" };
+    let metaKeys: string[];
+    try { metaKeys = Object.keys(reqMeta as Record<string, unknown>); } catch {
+      return { ok: false, decision: "reflection_failure" };
+    }
     if (metaKeys.length !== 1 || metaKeys[0] !== "attempt") {
       return { ok: false, decision: "invalid_metadata_shape" };
     }
-    if (request.metadata.attempt !== 0) {
+    if ((reqMeta as Record<string, unknown>).attempt !== 0) {
       return { ok: false, decision: "invalid_metadata_shape" };
+    }
+    // Check metadata for secrets
+    try {
+      if (containsSecretInValues(reqMeta as Record<string, unknown>)) {
+        return { ok: false, decision: "secret_content_detected" };
+      }
+    } catch {
+      return { ok: false, decision: "reflection_failure" };
     }
   }
 
   // Validate operatorApproval
-  if (request.operatorApproval === undefined || request.operatorApproval === null) {
+  let reqApproval: unknown;
+  try { reqApproval = request.operatorApproval; } catch { return { ok: false, decision: "reflection_failure" }; }
+  if (reqApproval === undefined || reqApproval === null) {
     return { ok: false, decision: "invalid_operator_approval" };
   }
-  if (!isPlainObject(request.operatorApproval)) {
-    return { ok: false, decision: "invalid_operator_approval" };
+  if (!isPlainObject(reqApproval)) return { ok: false, decision: "invalid_operator_approval" };
+
+  let approvalKeys: string[];
+  try { approvalKeys = Object.keys(reqApproval as Record<string, unknown>); } catch {
+    return { ok: false, decision: "reflection_failure" };
   }
-  const approvalKeys = Object.keys(request.operatorApproval);
   if (approvalKeys.length !== 1 || approvalKeys[0] !== "hermesPhase2CodeReviewCanary") {
     return { ok: false, decision: "invalid_operator_approval" };
   }
   // Legacy hermesPhase2ShadowEnablement must not be present
-  if ("hermesPhase2ShadowEnablement" in request.operatorApproval) {
+  if ("hermesPhase2ShadowEnablement" in (reqApproval as object)) {
     return { ok: false, decision: "invalid_operator_approval" };
   }
+  // Do NOT scan structured approval fields (proof, nonce, etc.)
 
-  // Check for extra keys on request (only known ExecutionRequest keys)
+  // Check for extra keys on request
   const allowedRequestKeys = new Set([
     "type", "node", "agent", "requirementId", "input", "metadata",
     "skill", "skillValidation", "operatorApproval",
   ]);
-  const extraKey = exactKeyMatch(request as unknown as Record<string, unknown>, allowedRequestKeys);
-  if (extraKey !== null) {
-    return { ok: false, decision: "extra_key_detected" };
+  let requestKeys: string[];
+  try {
+    requestKeys = Object.keys(request as unknown as Record<string, unknown>);
+  } catch {
+    return { ok: false, decision: "reflection_failure" };
   }
-
-  // Check for secret content
-  if (containsSecretContent(request)) {
-    return { ok: false, decision: "secret_content_detected" };
+  for (const key of requestKeys) {
+    if (!allowedRequestKeys.has(key)) {
+      return { ok: false, decision: "extra_key_detected" };
+    }
   }
 
   // Build payload with fixed key order
@@ -235,25 +313,29 @@ export function buildHermesPhase2CanaryPayload(
 
   // Check syntheticPatch byte size
   const syntheticPatchBytes = Buffer.byteLength(payload.syntheticPatch, "utf8");
-  if (syntheticPatchBytes > 4096) {
+  if (syntheticPatchBytes > maxSyntheticPatchBytes) {
     return { ok: false, decision: "synthetic_patch_too_large" };
   }
 
   // Serialize with fixed key order
-  const serializedPayload = JSON.stringify(payload, [
-    "schemaVersion",
-    "fixtureId",
-    "mode",
-    "requestType",
-    "instruction",
-    "syntheticPatch",
-  ]);
+  let serializedPayload: string;
+  try {
+    serializedPayload = JSON.stringify(payload, [
+      "schemaVersion",
+      "fixtureId",
+      "mode",
+      "requestType",
+      "instruction",
+      "syntheticPatch",
+    ]);
+  } catch {
+    return { ok: false, decision: "circular_reference_detected" };
+  }
   const serializedBytes = Buffer.byteLength(serializedPayload, "utf8");
-  if (serializedBytes > 8192) {
+  if (serializedBytes > maxSerializedPayloadBytes) {
     return { ok: false, decision: "serialized_payload_too_large" };
   }
 
-  // Compute SHA-256 digest
   const payloadDigestSha256 = createHash("sha256")
     .update(serializedPayload)
     .digest("hex");
