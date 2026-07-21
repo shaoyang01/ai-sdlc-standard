@@ -2,6 +2,10 @@
 // ====================================================================
 // Single, awaitable termination state machine. Process-group cleanup with signal 0.
 // Bounded exit/close observation after any termination trigger; runner never hangs.
+// Timeout and observation use truly cancelable timers (real setTimeout/clearTimeout
+// in production); no real timer survives runner return.
+// Synchronous stdin on/write/end failures are contained into the single
+// terminationPromise and bounded cleanup; the runner never rejects on them.
 // nonzero_exit decision for non-zero exits with confirmed cleanup.
 // Restricted dependency injection for deterministic tests; production defaults
 // are the real Node implementations. Dependencies never come from request,
@@ -76,6 +80,8 @@ export type HermesPhase2CanaryRunnerDeps = Readonly<{
   signalGroupFn?: (pid: number, sig: NodeJS.Signals) => "ok" | "esrch" | "error";
   signal0CheckFn?: (pid: number) => "gone" | "exists" | "error";
   delayFn?: (ms: number) => Promise<void>;
+  setTimerFn?: (callback: () => void, milliseconds: number) => unknown;
+  clearTimerFn?: (handle: unknown) => void;
   cleanupTempFn?: (dir: string) => boolean;
   nowFn?: () => number;
 }>;
@@ -131,6 +137,14 @@ function defaultSpawnFn(
 
 function defaultDelayFn(ms: number): Promise<void> {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
+function defaultSetTimerFn(callback: () => void, milliseconds: number): unknown {
+  return setTimeout(callback, milliseconds);
+}
+
+function defaultClearTimerFn(handle: unknown): void {
+  clearTimeout(handle as NodeJS.Timeout);
 }
 
 function cleanUpDir(dir: string): boolean {
@@ -206,6 +220,8 @@ export async function runHermesPhase2CanaryProcess(
   const signalGroupFn = deps.signalGroupFn ?? signalGroup;
   const signal0CheckFn = deps.signal0CheckFn ?? signal0Check;
   const delayFn = deps.delayFn ?? defaultDelayFn;
+  const setTimerFn = deps.setTimerFn ?? defaultSetTimerFn;
+  const clearTimerFn = deps.clearTimerFn ?? defaultClearTimerFn;
   const cleanupTempFn = deps.cleanupTempFn ?? cleanUpDir;
   const nowFn = deps.nowFn ?? (() => Date.now());
 
@@ -293,18 +309,24 @@ export async function runHermesPhase2CanaryProcess(
   let stdoutBytes = 0, stderrBytes = 0;
   let stdoutOverflow = false, stderrOverflow = false, stdinError = false;
 
-  // Cancelable logical delay built on the (possibly injected) delayFn.
-  // cancel() settles the logical handle so the runner never awaits a
-  // still-pending underlying delay before returning.
-  function startDelay(ms: number): { promise: Promise<boolean>; cancel: () => void } {
-    let settled = false;
-    let resolveFn!: (fired: boolean) => void;
-    const promise = new Promise<boolean>((r) => { resolveFn = r; });
-    delayFn(ms).then(
-      () => { if (!settled) { settled = true; resolveFn(true); } },
-      () => { if (!settled) { settled = true; resolveFn(false); } },
-    );
-    return { promise, cancel: () => { if (!settled) { settled = true; resolveFn(false); } } };
+  // Truly cancelable timer built on the (possibly injected) setTimerFn/clearTimerFn.
+  // cancel() clears the underlying production timer handle, so no real timer
+  // survives runner return. Firing or cancelling removes the timer from the
+  // internal pending state; cancel is idempotent.
+  function startTimer(ms: number, onFire: () => void): { cancel: () => void } {
+    let pending = true;
+    const handle = setTimerFn(() => {
+      if (!pending) return;
+      pending = false;
+      onFire();
+    }, ms);
+    return {
+      cancel: () => {
+        if (!pending) return;
+        pending = false;
+        clearTimerFn(handle);
+      },
+    };
   }
 
   // ── event hub ──
@@ -341,10 +363,18 @@ export async function runHermesPhase2CanaryProcess(
     return terminationPromise;
   }
 
-  // timeout trigger
-  const timeoutHandle = startDelay(timeoutMs);
-  timeoutHandle.promise.then((fired) => {
-    if (fired) { timedOut = true; ensureTermination(); }
+  // Idempotent stdin failure path: every stdin failure source (synchronous
+  // throw from on/write/end, write callback error, or error event) converges
+  // on the single terminationPromise. The runner never rejects on stdin errors.
+  function noteStdinFailure(): void {
+    stdinError = true;
+    ensureTermination();
+  }
+
+  // timeout trigger (real cancelable timer; created at most once, after spawn)
+  const timeoutTimer = startTimer(timeoutMs, () => {
+    timedOut = true;
+    ensureTermination();
   });
 
   // stdout/stderr overflow triggers
@@ -357,21 +387,33 @@ export async function runHermesPhase2CanaryProcess(
     if (stderrBytes > maxStderrBytes) { stderrOverflow = true; ensureTermination(); }
   });
 
-  // stdin
+  // stdin (each operation individually guarded against synchronous throws)
   if (child.stdin) {
-    if (serializedPayload !== undefined) {
-      child.stdin.write(serializedPayload, "utf8", (err) => {
-        if (err) { stdinError = true; ensureTermination(); }
-        child.stdin?.end();
-      });
-      child.stdin.on("error", () => { stdinError = true; ensureTermination(); });
-    } else {
-      child.stdin.end();
-      child.stdin.on("error", () => { stdinError = true; ensureTermination(); });
+    const stdin = child.stdin;
+    let listenerOk = true;
+    try {
+      stdin.on("error", () => { noteStdinFailure(); });
+    } catch {
+      listenerOk = false;
+      noteStdinFailure();
+    }
+    if (listenerOk) {
+      if (serializedPayload !== undefined) {
+        // The payload is written at most once; no retry on any failure.
+        try {
+          stdin.write(serializedPayload, "utf8", (err) => {
+            if (err) noteStdinFailure();
+            try { stdin.end(); } catch { noteStdinFailure(); }
+          });
+        } catch {
+          noteStdinFailure();
+        }
+      } else {
+        try { stdin.end(); } catch { noteStdinFailure(); }
+      }
     }
   } else if (serializedPayload !== undefined) {
-    stdinError = true;
-    ensureTermination();
+    noteStdinFailure();
   }
 
   // child lifecycle events
@@ -386,7 +428,7 @@ export async function runHermesPhase2CanaryProcess(
     await eventPromise;
     resetEvent();
   }
-  timeoutHandle.cancel();
+  timeoutTimer.cancel();
 
   // Await the unique terminationPromise before returning (if any trigger started it).
   let termOutcome: TermOutcome | null = null;
@@ -396,16 +438,15 @@ export async function runHermesPhase2CanaryProcess(
 
   // ── phase 2: bounded exit/close observation after termination ──
   if (!closeObserved && !childError) {
-    const obsHandle = startDelay(observationMs);
-    while (!closeObserved && !childError) {
-      const winner = await Promise.race([
-        obsHandle.promise,
-        eventPromise.then(() => "event" as const),
-      ]);
-      if (winner === true) break; // observation deadline reached
+    let obsFired = false;
+    let obsResolve!: () => void;
+    const obsPromise = new Promise<void>((r) => { obsResolve = r; });
+    const obsTimer = startTimer(observationMs, () => { obsFired = true; obsResolve(); });
+    while (!closeObserved && !childError && !obsFired) {
+      await Promise.race([obsPromise, eventPromise]);
       resetEvent();
     }
-    obsHandle.cancel();
+    obsTimer.cancel();
   }
 
   // ── process group cleanup confirmation (incl. descendant termination) ──

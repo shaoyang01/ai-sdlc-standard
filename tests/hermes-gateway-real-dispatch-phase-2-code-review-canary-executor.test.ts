@@ -99,12 +99,51 @@ function makeFakeChild(): any {
   return new FakeChild();
 }
 
-// Delays below 5000ms resolve immediately; delays >= 5000ms never resolve.
-// With timeoutMs=10000 the timeout timer stays logically pending forever —
-// every clean injected run therefore also proves the runner returns without
-// awaiting a still-pending delay.
+// Termination delays (TERM grace, post-KILL confirm) resolve immediately.
+// Timeout and observation never use delayFn — they use the injected timer
+// scheduler below, which tracks created/cleared/fired/pending counts and
+// only fires when the test explicitly fires a timer.
 const IMMEDIATE_BELOW_5000 = (ms: number): Promise<void> =>
   ms >= 5000 ? new Promise<void>(() => {}) : Promise.resolve();
+
+// Deterministic timer scheduler: no timer ever fires on its own. Tracks
+// created/cleared/fired counts and the exact number of pending timers.
+function makeTimerScheduler() {
+  let nextId = 1;
+  const timers = new Map<number, { cb: () => void; pending: boolean }>();
+  const stats = { created: 0, cleared: 0, fired: 0 };
+  const setTimerFn = (cb: () => void, _ms: number): unknown => {
+    const id = nextId++;
+    timers.set(id, { cb, pending: true });
+    stats.created++;
+    return id;
+  };
+  const clearTimerFn = (handle: unknown): void => {
+    const t = timers.get(handle as number);
+    if (t && t.pending) { t.pending = false; stats.cleared++; }
+  };
+  const fireOldest = (): boolean => {
+    for (const t of timers.values()) {
+      if (t.pending) { t.pending = false; stats.fired++; t.cb(); return true; }
+    }
+    return false;
+  };
+  const pending = (): number => {
+    let n = 0;
+    for (const t of timers.values()) if (t.pending) n++;
+    return n;
+  };
+  return { setTimerFn, clearTimerFn, fireOldest, pending, stats };
+}
+
+// Tick the event loop until cond() holds (bounded; condition is guaranteed
+// by construction of each scenario).
+async function waitUntil(cond: () => boolean, maxTicks = 200): Promise<boolean> {
+  for (let i = 0; i < maxTicks && !cond(); i++) {
+    await new Promise((r) => setImmediate(r));
+  }
+  return cond();
+}
 
 function makeInjectedDeps(child: any, o?: {
   signal0Seq?: Array<"gone" | "exists" | "error">;
@@ -112,6 +151,7 @@ function makeInjectedDeps(child: any, o?: {
   delayImpl?: (ms: number) => Promise<void>;
 }) {
   const log = { term: 0, kill: 0, signal0Calls: 0, cleanups: 0 };
+  const scheduler = makeTimerScheduler();
   let idx = 0;
   const deps = {
     spawnFn: () => child,
@@ -126,6 +166,8 @@ function makeInjectedDeps(child: any, o?: {
       return v;
     },
     delayFn: o?.delayImpl ?? IMMEDIATE_BELOW_5000,
+    setTimerFn: scheduler.setTimerFn,
+    clearTimerFn: scheduler.clearTimerFn,
     cleanupTempFn: (dir: string) => {
       log.cleanups++;
       try { require("node:fs").rmSync(dir, { recursive: true, force: true }); } catch {}
@@ -133,7 +175,7 @@ function makeInjectedDeps(child: any, o?: {
     },
     nowFn: () => NOW_MS,
   };
-  return { deps, log };
+  return { deps, log, scheduler };
 }
 
 function injectedCfg(deps: any, o?: Record<string, unknown>): any {
@@ -639,12 +681,13 @@ async function test() {
   // ═══════════ RUNNER (injected dependencies, deterministic) ═══════════
   console.log("\n--- Runner (injected) ---");
 
-  // RN1: clean exit 0 → executed; returns despite never-resolving timeout delay; result hygiene
-  console.log("RN1: injected clean exit 0 → executed, no pending delay awaited");
+  // RN1 (A1): clean exit 0 → executed; timeout timer created once, cleared once;
+  // zero pending timers after return; result hygiene
+  console.log("RN1: injected clean exit 0 → executed, timeout timer cleared");
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child);
+    const { deps, log, scheduler } = makeInjectedDeps(child);
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
     child.emit("exit", 0, null);
     child.emit("close");
@@ -658,6 +701,10 @@ async function test() {
     asst(r.processGroupCleanupConfirmed === true, "group confirmed");
     asst(r.temporaryCleanupConfirmed === true, "temp confirmed");
     asst(log.term === 0 && log.kill === 0, "no signals on clean path");
+    asst(scheduler.stats.created === 1, "timeout timer created exactly once");
+    asst(scheduler.stats.cleared === 1, "timeout timer cleared exactly once");
+    asst(scheduler.stats.fired === 0, "timeout timer never fired");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
     asst(
       JSON.stringify(Object.keys(r).sort()) === JSON.stringify([...EXPECTED_RESULT_KEYS].sort()),
       "exact result key set",
@@ -670,16 +717,19 @@ async function test() {
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child, { signal0Seq: ["exists", "gone"] });
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["exists", "gone"] });
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10, maxStderrBytes: 10 }));
     child.stdout.emit("data", Buffer.alloc(100));
     child.stderr.emit("data", Buffer.alloc(100));
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
     const r = await runP;
     asst(r.decision === "exit_not_observed", "exit_not_observed after termination without exit");
     asst(r.stdoutOverflow === true && r.stderrOverflow === true, "both overflow triggers fired");
     asst(log.term === 1, "TERM exactly once across triggers");
     asst(log.kill === 1, "KILL exactly once");
     asst(r.termSent === true && r.killSent === true, "term/kill flags");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
   // RN3: signal-0 error → process_group_cleanup_failed
@@ -687,13 +737,16 @@ async function test() {
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child, { signal0Seq: ["error"] });
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["error"] });
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10 }));
     child.stdout.emit("data", Buffer.alloc(100));
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
     const r = await runP;
     asst(r.decision === "process_group_cleanup_failed", "process_group_cleanup_failed");
     asst(r.processGroupCleanupConfirmed === false, "group not confirmed");
     asst(log.term === 1 && log.kill === 1, "TERM/KILL at most once");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
   // RN4: group still exists after KILL → process_group_cleanup_failed
@@ -701,13 +754,16 @@ async function test() {
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child, { signal0Seq: ["exists"] });
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["exists"] });
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10 }));
     child.stdout.emit("data", Buffer.alloc(100));
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
     const r = await runP;
     asst(r.decision === "process_group_cleanup_failed", "process_group_cleanup_failed");
     asst(r.processGroupCleanupConfirmed === false, "group not confirmed");
     asst(log.kill === 1, "KILL sent exactly once");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
   // RN5: temp cleanup failure overrides overflow
@@ -715,57 +771,70 @@ async function test() {
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps } = makeInjectedDeps(child, { signal0Seq: ["gone"], cleanupOk: false });
+    const { deps, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"], cleanupOk: false });
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10 }));
     child.stdout.emit("data", Buffer.alloc(100));
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
     const r = await runP;
     asst(r.decision === "temporary_cleanup_failed", "temporary_cleanup_failed");
     asst(r.stdoutOverflow === true, "overflow still recorded");
     asst(r.temporaryCleanupConfirmed === false, "temp not confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
-  // RN6: temp cleanup failure overrides timeout
+  // RN6: temp cleanup failure overrides timeout (timeout timer fired via scheduler)
   console.log("RN6: temp cleanup failure overrides timeout");
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps } = makeInjectedDeps(child, {
-      signal0Seq: ["gone"], cleanupOk: false,
-      delayImpl: () => Promise.resolve(), // timeout timer fires immediately
-    });
-    const r = await runHermesPhase2CanaryProcess(injectedCfg(deps));
+    const { deps, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"], cleanupOk: false });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    scheduler.fireOldest(); // timeout timer fires
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
+    const r = await runP;
     asst(r.decision === "temporary_cleanup_failed", "temporary_cleanup_failed");
     asst(r.timedOut === true, "timeout still recorded");
+    asst(scheduler.stats.fired === 2, "timeout + observation timers fired");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
-  // RN7: exit missing after termination → exit_not_observed (timeout trigger)
+  // RN7 (A4): timeout trigger, no exit → observation deadline → exit_not_observed
   console.log("RN7: timeout trigger, no exit → exit_not_observed");
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child, {
-      signal0Seq: ["gone"],
-      delayImpl: () => Promise.resolve(),
-    });
-    const r = await runHermesPhase2CanaryProcess(injectedCfg(deps));
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    scheduler.fireOldest(); // timeout timer fires
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
+    const r = await runP;
     asst(r.decision === "exit_not_observed", "exit_not_observed");
     asst(r.timedOut === true, "timedOut flag");
     asst(r.exitObserved === false && r.closeObserved === false, "no exit/close");
     asst(log.term === 1 && log.kill === 0, "TERM once, KILL not needed");
+    asst(scheduler.stats.fired === 2, "timeout + observation timers fired");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
-  // RN8: exit observed but close missing → close_not_observed
+  // RN8 (A5): exit observed but close missing → observation deadline → close_not_observed
   console.log("RN8: exit without close → close_not_observed");
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const { deps, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
     const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10 }));
     child.emit("exit", 1, null);
     child.stdout.emit("data", Buffer.alloc(100));
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    scheduler.fireOldest(); // observation deadline
     const r = await runP;
     asst(r.decision === "close_not_observed", "close_not_observed");
     asst(r.exitObserved === true && r.closeObserved === false, "exit yes, close no");
+    asst(scheduler.stats.fired === 1, "observation deadline fired");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
   // RN9: parent exits but descendant remains → descendant termination → executed
@@ -784,21 +853,24 @@ async function test() {
     asst(r.processGroupCleanupConfirmed === true, "group confirmed");
   }
 
-  // RN10: timed_out decision via injected deps
+  // RN10 (A2): timeout timer fires → termination completes → timed_out; zero pending timers
   console.log("RN10: timeout with observed exit/close → timed_out");
   {
     const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
     const child = makeFakeChild();
-    const { deps, log } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
-    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { timeoutMs: 1000, observationMs: 5000 }));
-    await new Promise((r2) => setImmediate(r2));
-    await new Promise((r2) => setImmediate(r2));
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    scheduler.fireOldest(); // timeout timer fires
+    await waitUntil(() => log.term === 1); // termination started
     child.emit("exit", null, "SIGTERM");
     child.emit("close");
     const r = await runP;
     asst(r.decision === "timed_out", "timed_out");
     asst(r.timedOut === true, "timedOut flag");
     asst(log.term === 1 && log.kill === 0, "TERM once, KILL not needed");
+    asst(scheduler.stats.created === 1, "only timeout timer created");
+    asst(scheduler.stats.fired === 1, "timeout timer fired once");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
   }
 
   // RN11: stdin error → stdin_error
@@ -819,6 +891,165 @@ async function test() {
     asst(log.term === 1 && log.kill === 0, "TERM once, KILL not needed");
   }
 
+  // ═══════════ TIMER CANCELLATION (injected scheduler) ═══════════
+  console.log("\n--- Timer cancellation (injected) ---");
+
+  // T1 (A3): observation timer created, exit/close arrive before deadline → timer cleared
+  console.log("T1: observation ends early → observation timer cleared");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    const { deps, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { maxStdoutBytes: 10 }));
+    child.stdout.emit("data", Buffer.alloc(100)); // overflow trigger
+    await waitUntil(() => scheduler.stats.created === 2); // observation timer created
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdout_overflow", "stdout_overflow");
+    asst(r.exitObserved === true && r.closeObserved === true, "exit+close observed before deadline");
+    asst(scheduler.stats.created === 2, "timeout + observation timers created");
+    asst(scheduler.stats.cleared === 2, "both timers really cleared");
+    asst(scheduler.stats.fired === 0, "no timer fired");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // ═══════════ STDIN SYNCHRONOUS FAILURES (injected) ═══════════
+  console.log("\n--- Stdin synchronous failures (injected) ---");
+
+  // S1 (B6): stdin.on sync throw → stdin_error, single termination, cleanups confirmed
+  console.log("S1: stdin.on sync throw → stdin_error");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    child.stdin.on = () => { throw new Error("stdin.on sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdin_error", "stdin_error");
+    asst(child.written.length === 0, "no write attempted after listener failure");
+    asst(log.term === 1 && log.kill === 0, "single termination: TERM once, KILL not needed");
+    asst(r.processGroupCleanupConfirmed === true, "group cleanup confirmed");
+    asst(r.temporaryCleanupConfirmed === true, "temp cleanup confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // S2 (B7): stdin.write sync throw → exactly one write attempt, no retry, stdin_error
+  console.log("S2: stdin.write sync throw → stdin_error, no retry");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    let writeCalls = 0;
+    child.stdin.write = () => { writeCalls++; throw new Error("write sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdin_error", "stdin_error");
+    asst(writeCalls === 1, "write attempted exactly once, no retry");
+    asst(log.term === 1 && log.kill === 0, "single termination: TERM once, KILL not needed");
+    asst(r.processGroupCleanupConfirmed === true, "group cleanup confirmed");
+    asst(r.temporaryCleanupConfirmed === true, "temp cleanup confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // S3 (B8): stdin.end sync throw — both the write-callback path and the direct path
+  console.log("S3: stdin.end sync throw → stdin_error, no retry");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    // (a) end throws inside the write callback (payload path)
+    const child = makeFakeChild();
+    let endCalls = 0;
+    child.stdin.end = () => { endCalls++; throw new Error("end sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdin_error", "stdin_error (write-callback end path)");
+    asst(endCalls === 1, "end attempted exactly once, no retry");
+    asst(log.term === 1 && log.kill === 0, "single termination: TERM once, KILL not needed");
+    asst(r.processGroupCleanupConfirmed === true, "group cleanup confirmed");
+    asst(r.temporaryCleanupConfirmed === true, "temp cleanup confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    // (b) end throws on the no-payload direct end path
+    const child = makeFakeChild();
+    child.stdin.end = () => { throw new Error("end sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps, { serializedPayload: undefined }));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdin_error", "stdin_error (direct end path)");
+    asst(log.term === 1 && log.kill === 0, "single termination: TERM once, KILL not needed");
+    asst(r.processGroupCleanupConfirmed === true, "group cleanup confirmed");
+    asst(r.temporaryCleanupConfirmed === true, "temp cleanup confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // S4 (B9): write sync throw + process-group cleanup failure → process_group_cleanup_failed
+  console.log("S4: write sync throw + group cleanup failure → process_group_cleanup_failed");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    child.stdin.write = () => { throw new Error("write sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["error"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "process_group_cleanup_failed", "process_group_cleanup_failed");
+    asst(r.processGroupCleanupConfirmed === false, "group not confirmed");
+    asst(log.term === 1 && log.kill === 1, "TERM/KILL at most once");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // S5 (B10): end sync throw + temporary cleanup failure → temporary_cleanup_failed
+  console.log("S5: end sync throw + temp cleanup failure → temporary_cleanup_failed");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    child.stdin.end = () => { throw new Error("end sync boom"); };
+    const { deps, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"], cleanupOk: false });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "temporary_cleanup_failed", "temporary_cleanup_failed");
+    asst(r.temporaryCleanupConfirmed === false, "temp not confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
+  // S6 (B11): write callback error + error event + end sync throw → one termination, TERM/KILL at most once
+  console.log("S6: combined stdin failure sources → single termination");
+  {
+    const { runHermesPhase2CanaryProcess } = require("../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner");
+    const child = makeFakeChild();
+    child.stdin.write = (_d: string, _e: string, cb: (e?: Error | null) => void) => {
+      cb(new Error("EPIPE"));
+      return false;
+    };
+    child.stdin.end = () => { throw new Error("end sync boom"); };
+    const { deps, log, scheduler } = makeInjectedDeps(child, { signal0Seq: ["gone"] });
+    const runP = runHermesPhase2CanaryProcess(injectedCfg(deps));
+    child.stdin.emit("error", new Error("stdin error event"));
+    child.emit("exit", 0, null);
+    child.emit("close");
+    const r = await runP;
+    asst(r.decision === "stdin_error", "stdin_error");
+    asst(log.term === 1, "TERM at most once across all stdin failure sources");
+    asst(log.kill === 0, "KILL at most once (not needed)");
+    asst(r.processGroupCleanupConfirmed === true, "group cleanup confirmed");
+    asst(r.temporaryCleanupConfirmed === true, "temp cleanup confirmed");
+    asst(scheduler.pending() === 0, "zero pending timers after return");
+  }
+
   // ═══════════ STATIC ═══════════
   console.log("\n--- Static ---");
   {
@@ -833,6 +1064,8 @@ async function test() {
     const rnSrc = readFileSync(resolve(__dirname, "../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner.ts"), "utf8");
     asst(rnSrc.includes("nonzero_exit"), "nonzero_exit decision");
     asst(rnSrc.includes("HermesPhase2CanaryRunnerDeps"), "runner deps injection");
+    asst(rnSrc.includes("setTimerFn") && rnSrc.includes("clearTimerFn"), "injectable timer deps");
+    asst(rnSrc.includes("setTimeout") && rnSrc.includes("clearTimeout"), "production setTimeout/clearTimeout");
   }
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
