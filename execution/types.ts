@@ -18,6 +18,21 @@ export type ExecutionRequestType =
   | "code_review"
   | "bugfix";
 
+export type HermesPhase2CodeReviewCanaryApproval = Readonly<{
+  approvalId: string;
+  operatorIdentityReference: string;
+  phaseId: "phase_2_code_review_canary_one";
+  requestType: "code_review";
+  requestIdentity: string;
+  payloadDigestSha256: string;
+  canarySessionId: string;
+  issuedAtIso: string;
+  expiresAtIso: string;
+  nonce: string;
+  singleUse: true;
+  proof: string;
+}>;
+
 export type ExecutionRequest = Readonly<{
   type: ExecutionRequestType;
   node: string;
@@ -33,6 +48,7 @@ export type ExecutionRequest = Readonly<{
   }>;
   operatorApproval?: Readonly<{
     hermesPhase2ShadowEnablement?: true;
+    hermesPhase2CodeReviewCanary?: HermesPhase2CodeReviewCanaryApproval;
   }>;
 }>;
 
