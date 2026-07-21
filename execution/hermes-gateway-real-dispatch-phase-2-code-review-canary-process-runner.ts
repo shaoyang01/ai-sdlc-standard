@@ -1,10 +1,14 @@
-// Hermes Phase 2 Code Review Canary — POSIX Process Runner (Round 2)
+// Hermes Phase 2 Code Review Canary — POSIX Process Runner (Round 3)
 // ====================================================================
 // Single, awaitable termination state machine. Process-group cleanup with signal 0.
-// Decision precedence with cleanup failures overriding.
+// Bounded exit/close observation after any termination trigger; runner never hangs.
+// nonzero_exit decision for non-zero exits with confirmed cleanup.
+// Restricted dependency injection for deterministic tests; production defaults
+// are the real Node implementations. Dependencies never come from request,
+// payload, approval, or environment variables.
 // Darwin/linux only.
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { realpathSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as pathResolve } from "node:path";
@@ -19,6 +23,7 @@ export type HermesPhase2CanaryRunnerDecision =
   | "stdout_overflow"
   | "stderr_overflow"
   | "timed_out"
+  | "nonzero_exit"
   | "spawn_failed"
   | "executed"
   | "unsupported_platform"
@@ -47,6 +52,34 @@ export type HermesPhase2CanaryRunnerResult = Readonly<{
   temporaryCleanupConfirmed: boolean;
 }>;
 
+/** Minimal structural view of a spawned child; satisfied by node:child_process.ChildProcess. */
+export type HermesPhase2CanarySpawnedChild = {
+  readonly pid?: number;
+  readonly stdout: { on(event: string, listener: (chunk: Buffer) => void): unknown } | null;
+  readonly stderr: { on(event: string, listener: (chunk: Buffer) => void): unknown } | null;
+  readonly stdin: {
+    write(data: string, encoding: string, callback: (err?: Error | null) => void): unknown;
+    end(): unknown;
+    on(event: string, listener: (...args: never[]) => void): unknown;
+  } | null;
+  kill(signal?: string): unknown;
+  on(event: string, listener: (...args: any[]) => void): unknown;
+};
+
+/** Restricted test-only dependencies. Production defaults are the real Node implementations. */
+export type HermesPhase2CanaryRunnerDeps = Readonly<{
+  spawnFn?: (
+    command: string,
+    args: string[],
+    options: { cwd: string; env: Record<string, string> },
+  ) => HermesPhase2CanarySpawnedChild;
+  signalGroupFn?: (pid: number, sig: NodeJS.Signals) => "ok" | "esrch" | "error";
+  signal0CheckFn?: (pid: number) => "gone" | "exists" | "error";
+  delayFn?: (ms: number) => Promise<void>;
+  cleanupTempFn?: (dir: string) => boolean;
+  nowFn?: () => number;
+}>;
+
 export type HermesPhase2CanaryProcessRunnerConfig = Readonly<{
   executablePath: string;
   allowedExecutablePaths: ReadonlyArray<string>;
@@ -54,14 +87,18 @@ export type HermesPhase2CanaryProcessRunnerConfig = Readonly<{
   serializedPayload?: string;
   timeoutMs?: number;
   termGraceMs?: number;
+  observationMs?: number;
   maxStdoutBytes?: number;
   maxStderrBytes?: number;
   credentialEnvNames?: ReadonlyArray<string>;
   sourceEnv?: Readonly<Record<string, string>>;
+  deps?: HermesPhase2CanaryRunnerDeps;
 }>;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_TERM_GRACE_MS = 2_000;
+const DEFAULT_OBSERVATION_MS = 1_000;
+const MAX_OBSERVATION_MS = 5_000;
 const POST_KILL_CONFIRM_MS = 200;
 const MAX_STDOUT_BYTES = 16_384;
 const MAX_STDERR_BYTES = 16_384;
@@ -79,7 +116,22 @@ const RESERVED_ENV = new Set([
   "HISTFILE", "NO_COLOR",
 ]);
 
-// ── helpers ──
+// ── default (production) dependency implementations ──
+
+function defaultSpawnFn(
+  command: string,
+  args: string[],
+  options: { cwd: string; env: Record<string, string> },
+): HermesPhase2CanarySpawnedChild {
+  return spawn(command, args, {
+    shell: false, detached: true, stdio: ["pipe", "pipe", "pipe"],
+    cwd: options.cwd, env: options.env,
+  }) as unknown as HermesPhase2CanarySpawnedChild;
+}
+
+function defaultDelayFn(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
 
 function cleanUpDir(dir: string): boolean {
   try {
@@ -144,13 +196,23 @@ export async function runHermesPhase2CanaryProcess(
     executablePath, allowedExecutablePaths, args,
     serializedPayload, timeoutMs = DEFAULT_TIMEOUT_MS,
     termGraceMs = DEFAULT_TERM_GRACE_MS,
+    observationMs = DEFAULT_OBSERVATION_MS,
     maxStdoutBytes = MAX_STDOUT_BYTES, maxStderrBytes = MAX_STDERR_BYTES,
     credentialEnvNames = [], sourceEnv = {},
+    deps = {},
   } = config;
+
+  const spawnFn = deps.spawnFn ?? defaultSpawnFn;
+  const signalGroupFn = deps.signalGroupFn ?? signalGroup;
+  const signal0CheckFn = deps.signal0CheckFn ?? signal0Check;
+  const delayFn = deps.delayFn ?? defaultDelayFn;
+  const cleanupTempFn = deps.cleanupTempFn ?? cleanUpDir;
+  const nowFn = deps.nowFn ?? (() => Date.now());
 
   // Config validation
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120_000) return formatResult("build_error");
   if (typeof termGraceMs !== "number" || !Number.isFinite(termGraceMs) || !Number.isInteger(termGraceMs) || termGraceMs < 100 || termGraceMs > 5_000) return formatResult("build_error");
+  if (typeof observationMs !== "number" || !Number.isFinite(observationMs) || !Number.isInteger(observationMs) || observationMs < 1 || observationMs > MAX_OBSERVATION_MS) return formatResult("build_error");
   if (typeof maxStdoutBytes !== "number" || !Number.isFinite(maxStdoutBytes) || !Number.isInteger(maxStdoutBytes) || maxStdoutBytes < 1 || maxStdoutBytes > 16_384) return formatResult("build_error");
   if (typeof maxStderrBytes !== "number" || !Number.isFinite(maxStderrBytes) || !Number.isInteger(maxStderrBytes) || maxStderrBytes < 1 || maxStderrBytes > 16_384) return formatResult("build_error");
   if (!Array.isArray(args) || args.length > MAX_ARGS) return formatResult("args_validation_failed");
@@ -182,7 +244,7 @@ export async function runHermesPhase2CanaryProcess(
     if (typeof sourceEnv[n] !== "string" || sourceEnv[n].length === 0) return formatResult("missing_credential_value");
   }
 
-  // Temp root
+  // Temp root (real filesystem; only removal is injectable)
   let tempRoot: string;
   try {
     tempRoot = join(tmpdir(), `hermes-canary-${randomUUID()}`);
@@ -208,68 +270,84 @@ export async function runHermesPhase2CanaryProcess(
   for (const n of credentialEnvNames) childEnv[n] = sourceEnv[n];
 
   // Spawn
-  let child: ChildProcess;
+  let child: HermesPhase2CanarySpawnedChild;
   try {
-    child = spawn(canonicalExec, args as string[], {
-      shell: false, detached: true, stdio: ["pipe", "pipe", "pipe"],
-      cwd: workDir, env: childEnv,
-    });
+    child = spawnFn(canonicalExec, args as string[], { cwd: workDir, env: childEnv });
   } catch {
-    cleanUpDir(tempRoot);
+    cleanupTempFn(tempRoot);
     return formatResult("spawn_failed");
   }
 
   const pid = child.pid;
   if (pid === undefined) {
     try { child.kill("SIGKILL"); } catch {}
-    cleanUpDir(tempRoot);
+    cleanupTempFn(tempRoot);
     return formatResult("spawn_failed");
   }
 
   // ── shared state ──
-  const startMs = Date.now();
+  const startMs = nowFn();
   let timedOut = false, termSent = false, killSent = false;
-  let exitObserved = false, closeObserved = false;
+  let exitObserved = false, closeObserved = false, childError = false;
   let exitCode: number | null = null, signal: string | null = null;
   let stdoutBytes = 0, stderrBytes = 0;
   let stdoutOverflow = false, stderrOverflow = false, stdinError = false;
 
-  // ── single termination state machine ──
-  let terminationPromise: Promise<{ termSent: boolean; killSent: boolean; confirmed: boolean }> | null = null;
+  // Cancelable logical delay built on the (possibly injected) delayFn.
+  // cancel() settles the logical handle so the runner never awaits a
+  // still-pending underlying delay before returning.
+  function startDelay(ms: number): { promise: Promise<boolean>; cancel: () => void } {
+    let settled = false;
+    let resolveFn!: (fired: boolean) => void;
+    const promise = new Promise<boolean>((r) => { resolveFn = r; });
+    delayFn(ms).then(
+      () => { if (!settled) { settled = true; resolveFn(true); } },
+      () => { if (!settled) { settled = true; resolveFn(false); } },
+    );
+    return { promise, cancel: () => { if (!settled) { settled = true; resolveFn(false); } } };
+  }
 
-  function ensureTermination(): typeof terminationPromise {
+  // ── event hub ──
+  let notify: () => void = () => {};
+  let eventPromise: Promise<void> = new Promise<void>((r) => { notify = r; });
+  function resetEvent(): void {
+    eventPromise = new Promise<void>((r) => { notify = r; });
+  }
+
+  // ── single termination state machine (exactly one terminationPromise) ──
+  type TermOutcome = { termSent: boolean; killSent: boolean; confirmed: boolean };
+  let terminationPromise: Promise<TermOutcome> | null = null;
+  let terminationDone = false;
+
+  function ensureTermination(): Promise<TermOutcome> {
     if (terminationPromise !== null) return terminationPromise;
-    terminationPromise = new Promise((resolve) => {
-      const sendTerm = signalGroup(pid, "SIGTERM");
-      termSent = sendTerm !== "error";
-      if (sendTerm === "esrch") {
-        resolve({ termSent, killSent: false, confirmed: true });
-        return;
-      }
-      if (sendTerm === "error") {
-        resolve({ termSent, killSent: false, confirmed: false });
-        return;
-      }
-      setTimeout(() => {
-        const check = signal0Check(pid);
-        if (check === "gone") { resolve({ termSent, killSent: false, confirmed: true }); return; }
-        killSent = signalGroup(pid, "SIGKILL") !== "error";
-        setTimeout(() => {
-          const final = signal0Check(pid);
-          resolve({ termSent, killSent, confirmed: final === "gone" });
-        }, POST_KILL_CONFIRM_MS);
-      }, termGraceMs);
+    terminationPromise = (async (): Promise<TermOutcome> => {
+      const sendTerm = signalGroupFn(pid, "SIGTERM");
+      const termOk = sendTerm !== "error";
+      if (sendTerm === "esrch") return { termSent: termOk, killSent: false, confirmed: true };
+      if (sendTerm === "error") return { termSent: false, killSent: false, confirmed: false };
+      await delayFn(termGraceMs);
+      if (signal0CheckFn(pid) === "gone") return { termSent: termOk, killSent: false, confirmed: true };
+      const killOk = signalGroupFn(pid, "SIGKILL") !== "error";
+      await delayFn(POST_KILL_CONFIRM_MS);
+      return { termSent: termOk, killSent: killOk, confirmed: signal0CheckFn(pid) === "gone" };
+    })();
+    terminationPromise.then((o) => {
+      termSent = o.termSent;
+      killSent = o.killSent;
+      terminationDone = true;
+      notify();
     });
     return terminationPromise;
   }
 
-  // timeout
-  const timer = setTimeout(() => {
-    timedOut = true;
-    ensureTermination();
-  }, timeoutMs);
+  // timeout trigger
+  const timeoutHandle = startDelay(timeoutMs);
+  timeoutHandle.promise.then((fired) => {
+    if (fired) { timedOut = true; ensureTermination(); }
+  });
 
-  // stdout/stderr
+  // stdout/stderr overflow triggers
   child.stdout?.on("data", (c: Buffer) => {
     stdoutBytes += c.byteLength;
     if (stdoutBytes > maxStdoutBytes) { stdoutOverflow = true; ensureTermination(); }
@@ -296,74 +374,78 @@ export async function runHermesPhase2CanaryProcess(
     ensureTermination();
   }
 
-  // ── wait for close with bounded observation ──
-  const result = await new Promise<HermesPhase2CanaryRunnerResult>((resolve) => {
-    let settled = false;
-    const settle = async () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-
-      // Await termination if started
-      const term = terminationPromise !== null ? await terminationPromise : null;
-      if (term) { termSent = term.termSent; killSent = term.killSent; }
-
-      // Check descendants after normal close
-      if (!timedOut && !stdoutOverflow && !stderrOverflow && !stdinError) {
-        const descCheck = signal0Check(pid);
-        if (descCheck === "exists") {
-          const descTerm = await ensureTermination();
-          if (!descTerm?.confirmed) {
-            cleanUpDir(tempRoot);
-            return resolve(formatResult("process_group_cleanup_failed", {
-              exitCode, signal, timedOut, durationMs: Date.now() - startMs,
-              stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
-              termSent, killSent, exitObserved, closeObserved,
-              processGroupCleanupConfirmed: false, temporaryCleanupConfirmed: cleanUpDir(tempRoot),
-            }));
-          }
-        } else if (descCheck === "error") {
-          cleanUpDir(tempRoot);
-          return resolve(formatResult("process_group_cleanup_failed", {
-            exitCode, signal, timedOut, durationMs: Date.now() - startMs,
-            stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
-            termSent, killSent, exitObserved, closeObserved,
-            processGroupCleanupConfirmed: false, temporaryCleanupConfirmed: cleanUpDir(tempRoot),
-          }));
-        }
-      }
-
-      const durationMs = Date.now() - startMs;
-      const groupCheck = signal0Check(pid);
-      const groupConfirmed = groupCheck === "gone";
-      const tempOk = cleanUpDir(tempRoot);
-
-      // Decision precedence
-      let decision: HermesPhase2CanaryRunnerDecision;
-      if (term !== null && !term.confirmed) decision = "process_group_cleanup_failed";
-      else if (!groupConfirmed) decision = "process_group_cleanup_failed";
-      else if (!tempOk) decision = "temporary_cleanup_failed";
-      else if (!exitObserved) decision = "exit_not_observed";
-      else if (!closeObserved) decision = "close_not_observed";
-      else if (stdinError) decision = "stdin_error";
-      else if (stdoutOverflow) decision = "stdout_overflow";
-      else if (stderrOverflow) decision = "stderr_overflow";
-      else if (timedOut) decision = "timed_out";
-      else decision = "executed";
-
-      resolve(formatResult(decision, {
-        exitCode, signal, timedOut, durationMs,
-        stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
-        termSent, killSent, exitObserved, closeObserved,
-        processGroupCleanupConfirmed: groupConfirmed,
-        temporaryCleanupConfirmed: tempOk,
-      }));
-    };
-
-    child.on("exit", (code, sig) => { exitObserved = true; exitCode = code; signal = sig; });
-    child.on("close", () => { closeObserved = true; settle(); });
-    child.on("error", () => { settle(); });
+  // child lifecycle events
+  child.on("exit", (code: number | null, sig: string | null) => {
+    exitObserved = true; exitCode = code; signal = sig; notify();
   });
+  child.on("close", () => { closeObserved = true; notify(); });
+  child.on("error", () => { childError = true; notify(); });
 
-  return result;
+  // ── phase 1: wait for close/error or completed termination ──
+  while (!closeObserved && !childError && !terminationDone) {
+    await eventPromise;
+    resetEvent();
+  }
+  timeoutHandle.cancel();
+
+  // Await the unique terminationPromise before returning (if any trigger started it).
+  let termOutcome: TermOutcome | null = null;
+  if (terminationPromise !== null) {
+    termOutcome = await terminationPromise;
+  }
+
+  // ── phase 2: bounded exit/close observation after termination ──
+  if (!closeObserved && !childError) {
+    const obsHandle = startDelay(observationMs);
+    while (!closeObserved && !childError) {
+      const winner = await Promise.race([
+        obsHandle.promise,
+        eventPromise.then(() => "event" as const),
+      ]);
+      if (winner === true) break; // observation deadline reached
+      resetEvent();
+    }
+    obsHandle.cancel();
+  }
+
+  // ── process group cleanup confirmation (incl. descendant termination) ──
+  const cleanPath = !childError && !timedOut && !stdoutOverflow && !stderrOverflow && !stdinError;
+  let groupConfirmed = termOutcome !== null ? termOutcome.confirmed : false;
+  if (!groupConfirmed) {
+    const check = signal0CheckFn(pid);
+    if (check === "gone") {
+      groupConfirmed = true;
+    } else if (check === "exists" && cleanPath && termOutcome === null) {
+      // Parent exited but descendants remain in the process group: terminate once.
+      termOutcome = await ensureTermination();
+      groupConfirmed = termOutcome.confirmed;
+    }
+    // "exists" after an earlier termination, or "error": stays unconfirmed.
+  }
+
+  // ── temporary cleanup ──
+  const tempOk = cleanupTempFn(tempRoot);
+  const durationMs = nowFn() - startMs;
+
+  // ── decision precedence ──
+  let decision: HermesPhase2CanaryRunnerDecision;
+  if (!groupConfirmed) decision = "process_group_cleanup_failed";
+  else if (!tempOk) decision = "temporary_cleanup_failed";
+  else if (!exitObserved) decision = "exit_not_observed";
+  else if (!closeObserved) decision = "close_not_observed";
+  else if (stdinError) decision = "stdin_error";
+  else if (stdoutOverflow) decision = "stdout_overflow";
+  else if (stderrOverflow) decision = "stderr_overflow";
+  else if (timedOut) decision = "timed_out";
+  else if (exitCode !== 0) decision = "nonzero_exit";
+  else if (childError) decision = "spawn_failed";
+  else decision = "executed";
+
+  return formatResult(decision, {
+    exitCode, signal, timedOut, durationMs,
+    stdoutBytes, stderrBytes, stdoutOverflow, stderrOverflow,
+    termSent, killSent, exitObserved, closeObserved,
+    processGroupCleanupConfirmed: groupConfirmed,
+    temporaryCleanupConfirmed: tempOk,
+  });
 }

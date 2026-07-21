@@ -86,15 +86,52 @@ function isNonEmptyTrimmedString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value === value.trim();
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object") return false;
-  if (Array.isArray(value)) return false;
-  try {
-    const proto = Object.getPrototypeOf(value);
-    return proto === null || proto === Object.prototype;
-  } catch {
-    return false;
+// Note: tsconfig has strict:false, so discriminated-union narrowing is
+// unavailable; this uses a flat shape with explicit reason instead.
+type DescriptorScan = {
+  ok: boolean;
+  keys: string[];
+  values: Record<string, unknown>;
+  reason: "not_object" | "not_plain" | "accessor" | "reflection" | null;
+};
+
+// Fail-closed own-property scan. Every reflection call is try/catch wrapped.
+// Getter/setter descriptors are always rejected; required values are read only
+// from data descriptor .value, never through property access.
+function scanDataDescriptors(value: unknown): DescriptorScan {
+  const fail = (reason: NonNullable<DescriptorScan["reason"]>): DescriptorScan => ({
+    ok: false, keys: [], values: {}, reason,
+  });
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return fail("not_object");
   }
+  let proto: unknown;
+  try { proto = Object.getPrototypeOf(value); } catch {
+    return fail("reflection");
+  }
+  if (proto !== null && proto !== Object.prototype) {
+    return fail("not_plain");
+  }
+  let keys: string[];
+  try { keys = Object.keys(value); } catch {
+    return fail("reflection");
+  }
+  let descriptors: Record<string, PropertyDescriptor>;
+  try { descriptors = Object.getOwnPropertyDescriptors(value); } catch {
+    return fail("reflection");
+  }
+  // `descriptors` is a fresh plain object created by the engine — safe to iterate.
+  for (const key of Object.keys(descriptors)) {
+    const desc = descriptors[key];
+    if (desc.get !== undefined || desc.set !== undefined) {
+      return fail("accessor");
+    }
+  }
+  const values: Record<string, unknown> = {};
+  for (const key of keys) {
+    values[key] = descriptors[key].value;
+  }
+  return { ok: true, keys, values, reason: null };
 }
 
 function hasCircularReference(value: unknown, seen = new WeakSet()): boolean {
@@ -118,28 +155,13 @@ function hasCircularReference(value: unknown, seen = new WeakSet()): boolean {
   }
 }
 
-function containsSecretInValues(obj: Record<string, unknown>): boolean {
-  for (const v of Object.values(obj)) {
+function containsSecretInValues(values: Record<string, unknown>): boolean {
+  for (const v of Object.values(values)) {
     if (typeof v === "string") {
       if (SECRET_PATTERNS.some((p) => p.test(v))) return true;
     }
   }
   return false;
-}
-
-function checkTopLevelAccessors(value: unknown, path: string): string | null {
-  if (value === null || typeof value !== "object") return null;
-  try {
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    for (const [key, desc] of Object.entries(descriptors)) {
-      if (desc.get !== undefined || desc.set !== undefined) {
-        return `${path}.${key}`;
-      }
-    }
-    return null;
-  } catch {
-    return path; // reflection failure = accessor-like
-  }
 }
 
 export type PayloadBuilderOptions = Readonly<{
@@ -170,116 +192,86 @@ export function buildHermesPhase2CanaryPayload(
     return { ok: false, decision: "reflection_failure" };
   }
 
-  // Validate request type (via safe property access)
-  let reqType: unknown;
-  try { reqType = request.type; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (reqType !== "code_review") return { ok: false, decision: "wrong_request_type" };
+  // ── request: descriptor-based scan (fail-closed) ──
+  const reqScan = scanDataDescriptors(request);
+  if (!reqScan.ok) {
+    return {
+      ok: false,
+      decision: reqScan.reason === "reflection" ? "reflection_failure" : "non_plain_object_detected",
+    };
+  }
+  const reqValues = reqScan.values;
 
-  let reqNode: unknown;
-  try { reqNode = request.node; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (reqNode !== "code-review") return { ok: false, decision: "wrong_node" };
+  if (reqValues.type !== "code_review") return { ok: false, decision: "wrong_request_type" };
+  if (reqValues.node !== "code-review") return { ok: false, decision: "wrong_node" };
+  if (reqValues.agent !== "hermes") return { ok: false, decision: "wrong_agent" };
 
-  let reqAgent: unknown;
-  try { reqAgent = request.agent; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (reqAgent !== "hermes") return { ok: false, decision: "wrong_agent" };
-
-  // Validate requirementId
-  let reqId: unknown;
-  try { reqId = request.requirementId; } catch { return { ok: false, decision: "reflection_failure" }; }
+  const reqId = reqValues.requirementId;
   if (typeof reqId !== "string" || !REQUIREMENT_ID_RE.test(reqId)) {
     return { ok: false, decision: "invalid_requirement_id" };
   }
 
-  // Check top-level accessors on request (no recursive traversal)
-  const accessorPath = checkTopLevelAccessors(request, "request");
-  if (accessorPath !== null) {
-    return { ok: false, decision: "non_plain_object_detected" };
-  }
-
-  // Validate input
-  let reqInput: unknown;
-  try { reqInput = request.input; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (!isPlainObject(reqInput)) return { ok: false, decision: "invalid_input_shape" };
-
-  let inputKeys: string[];
-  try { inputKeys = Object.keys(reqInput as Record<string, unknown>); } catch {
-    return { ok: false, decision: "reflection_failure" };
-  }
-  if (inputKeys.length !== 1 || inputKeys[0] !== "artifacts") {
+  // ── input: exactly { artifacts: [] } as data properties ──
+  const inputScan = scanDataDescriptors(reqValues.input);
+  if (!inputScan.ok) {
+    if (inputScan.reason === "reflection") return { ok: false, decision: "reflection_failure" };
+    if (inputScan.reason === "accessor") return { ok: false, decision: "non_plain_object_detected" };
     return { ok: false, decision: "invalid_input_shape" };
   }
-  const artifacts = (reqInput as Record<string, unknown>).artifacts;
+  if (inputScan.keys.length !== 1 || inputScan.keys[0] !== "artifacts") {
+    return { ok: false, decision: "invalid_input_shape" };
+  }
+  const artifacts = inputScan.values.artifacts;
   if (!Array.isArray(artifacts) || artifacts.length !== 0) {
     return { ok: false, decision: "invalid_input_shape" };
   }
+  if (containsSecretInValues(inputScan.values)) {
+    return { ok: false, decision: "secret_content_detected" };
+  }
 
-  // Check input for secrets
-  try {
-    if (containsSecretInValues(reqInput as Record<string, unknown>)) {
+  // ── metadata: optional, exactly { attempt: 0 } as data properties ──
+  const metaRaw = reqValues.metadata;
+  if (metaRaw !== undefined) {
+    const metaScan = scanDataDescriptors(metaRaw);
+    if (!metaScan.ok) {
+      if (metaScan.reason === "reflection") return { ok: false, decision: "reflection_failure" };
+      if (metaScan.reason === "accessor") return { ok: false, decision: "non_plain_object_detected" };
+      return { ok: false, decision: "invalid_metadata_shape" };
+    }
+    if (metaScan.keys.length !== 1 || metaScan.keys[0] !== "attempt") {
+      return { ok: false, decision: "invalid_metadata_shape" };
+    }
+    if (metaScan.values.attempt !== 0) {
+      return { ok: false, decision: "invalid_metadata_shape" };
+    }
+    if (containsSecretInValues(metaScan.values)) {
       return { ok: false, decision: "secret_content_detected" };
     }
-  } catch {
-    return { ok: false, decision: "reflection_failure" };
   }
 
-  // Validate metadata (optional but must be exactly { attempt: 0 } if present)
-  let reqMeta: unknown;
-  try { reqMeta = request.metadata; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (reqMeta !== undefined) {
-    if (!isPlainObject(reqMeta)) return { ok: false, decision: "invalid_metadata_shape" };
-    let metaKeys: string[];
-    try { metaKeys = Object.keys(reqMeta as Record<string, unknown>); } catch {
-      return { ok: false, decision: "reflection_failure" };
-    }
-    if (metaKeys.length !== 1 || metaKeys[0] !== "attempt") {
-      return { ok: false, decision: "invalid_metadata_shape" };
-    }
-    if ((reqMeta as Record<string, unknown>).attempt !== 0) {
-      return { ok: false, decision: "invalid_metadata_shape" };
-    }
-    // Check metadata for secrets
-    try {
-      if (containsSecretInValues(reqMeta as Record<string, unknown>)) {
-        return { ok: false, decision: "secret_content_detected" };
-      }
-    } catch {
-      return { ok: false, decision: "reflection_failure" };
-    }
-  }
-
-  // Validate operatorApproval
-  let reqApproval: unknown;
-  try { reqApproval = request.operatorApproval; } catch { return { ok: false, decision: "reflection_failure" }; }
-  if (reqApproval === undefined || reqApproval === null) {
+  // ── operatorApproval: exactly one data property hermesPhase2CodeReviewCanary ──
+  const approvalRaw = reqValues.operatorApproval;
+  if (approvalRaw === undefined || approvalRaw === null) {
     return { ok: false, decision: "invalid_operator_approval" };
   }
-  if (!isPlainObject(reqApproval)) return { ok: false, decision: "invalid_operator_approval" };
-
-  let approvalKeys: string[];
-  try { approvalKeys = Object.keys(reqApproval as Record<string, unknown>); } catch {
-    return { ok: false, decision: "reflection_failure" };
-  }
-  if (approvalKeys.length !== 1 || approvalKeys[0] !== "hermesPhase2CodeReviewCanary") {
+  const approvalScan = scanDataDescriptors(approvalRaw);
+  if (!approvalScan.ok) {
+    if (approvalScan.reason === "reflection") return { ok: false, decision: "reflection_failure" };
+    if (approvalScan.reason === "accessor") return { ok: false, decision: "non_plain_object_detected" };
     return { ok: false, decision: "invalid_operator_approval" };
   }
-  // Legacy hermesPhase2ShadowEnablement must not be present
-  if ("hermesPhase2ShadowEnablement" in (reqApproval as object)) {
+  if (approvalScan.keys.length !== 1 || approvalScan.keys[0] !== "hermesPhase2CodeReviewCanary") {
     return { ok: false, decision: "invalid_operator_approval" };
   }
-  // Do NOT scan structured approval fields (proof, nonce, etc.)
+  // Canary approval value: existence confirmed via descriptor key only.
+  // Do NOT read, traverse, or scan its internals (proof, nonce, identity, etc.).
 
   // Check for extra keys on request
   const allowedRequestKeys = new Set([
     "type", "node", "agent", "requirementId", "input", "metadata",
     "skill", "skillValidation", "operatorApproval",
   ]);
-  let requestKeys: string[];
-  try {
-    requestKeys = Object.keys(request as unknown as Record<string, unknown>);
-  } catch {
-    return { ok: false, decision: "reflection_failure" };
-  }
-  for (const key of requestKeys) {
+  for (const key of reqScan.keys) {
     if (!allowedRequestKeys.has(key)) {
       return { ok: false, decision: "extra_key_detected" };
     }

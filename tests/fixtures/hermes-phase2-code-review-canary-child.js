@@ -26,6 +26,24 @@ process.stdin.on("end", () => {
       process.exit(1);
       break;
 
+    case "verify-stdin-sha256": {
+      // Exact stdin byte verification: exit 0 only if the SHA-256 of the
+      // complete stdin bytes matches the expected lowercase hex digest.
+      // Never echoes raw stdin. No network, credential, or repo access.
+      const expected = (process.argv[3] || "").toLowerCase();
+      const digest = require("crypto")
+        .createHash("sha256")
+        .update(Buffer.concat(stdinChunks))
+        .digest("hex");
+      if (expected.length === 64 && digest === expected) {
+        process.stdout.write(JSON.stringify({ status: "ok", stdinSha256: "match" }));
+        process.exit(0);
+      }
+      process.stderr.write("stdin sha256 mismatch");
+      process.exit(3);
+      break;
+    }
+
     case "stdout-overflow":
       // Write well over 16384 bytes (default max)
       const bigChunk = Buffer.alloc(20000, "X");
