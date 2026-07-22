@@ -92,11 +92,15 @@ type CompleteRunnerConfigSnapshot = {
 
 // ── Fail-closed plain data record scan (module-internal) ──
 // Accepts only plain objects (Object.prototype or null prototype). Rejects
-// arrays, class instances, accessor descriptors, and any object whose
-// reflection (getPrototypeOf / getOwnPropertyDescriptors, including Proxy
-// traps) throws. Values are read exclusively from data descriptor `.value`;
-// no getter is ever invoked. Returns a fresh plain values object; never
-// leaks the original exception; never touches the registry.
+// arrays, class instances, accessor descriptors, any own "__proto__" key,
+// any symbol key, and any object whose reflection (getPrototypeOf /
+// getOwnPropertyDescriptors, including Proxy traps) throws. Values are read
+// exclusively from data descriptor `.value`; no getter is ever invoked.
+// The returned values object has a null prototype and only own, string-keyed,
+// non-writable data properties defined via Object.defineProperty — an own
+// "__proto__" data property on the input can never pollute it. Returns fail
+// closed on any reflection error; never leaks the original exception; never
+// touches the registry.
 type PlainDataRecordScan =
   | { ok: true; keys: string[]; values: Record<string, unknown> }
   | { ok: false };
@@ -118,15 +122,41 @@ function scanPlainDataRecord(value: unknown): PlainDataRecordScan {
     return { ok: false };
   }
   const keys: string[] = [];
-  const values: Record<string, unknown> = {};
-  for (const key of Object.keys(descriptors)) {
-    const d = descriptors[key];
-    if (typeof d.get === "function" || typeof d.set === "function") {
+  const values = Object.create(null) as Record<string, unknown>;
+  let ownKeys: PropertyKey[];
+  try {
+    ownKeys = Reflect.ownKeys(descriptors);
+  } catch {
+    return { ok: false };
+  }
+  for (const key of ownKeys) {
+    // Symbol keys (data or accessor) fail the whole scan.
+    if (typeof key !== "string") return { ok: false };
+    // An own "__proto__" key never reaches the output object.
+    if (key === "__proto__") return { ok: false };
+    // Read the descriptor entry from the container fail-closed.
+    let wrapper: PropertyDescriptor | undefined;
+    try {
+      wrapper = Object.getOwnPropertyDescriptor(descriptors, key);
+    } catch {
       return { ok: false };
     }
-    if (!("value" in d)) return { ok: false };
+    if (wrapper === undefined) return { ok: false };
+    if ("get" in wrapper || "set" in wrapper) return { ok: false };
+    if (!("value" in wrapper)) return { ok: false };
+    const descriptor = wrapper.value as PropertyDescriptor;
+    if (descriptor === null || typeof descriptor !== "object") return { ok: false };
+    // Any accessor descriptor is rejected — including accessors whose
+    // getter/setter happen to be undefined.
+    if ("get" in descriptor || "set" in descriptor) return { ok: false };
+    if (!("value" in descriptor)) return { ok: false };
     keys.push(key);
-    values[key] = d.value;
+    Object.defineProperty(values, key, {
+      value: descriptor.value,
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
   }
   return { ok: true, keys, values };
 }

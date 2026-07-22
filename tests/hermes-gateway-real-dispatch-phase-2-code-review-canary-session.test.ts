@@ -132,6 +132,18 @@ function assertInvalidDoesNotBurn(label: string, sessionId: string, fn: () => un
   asst(good.ok === true, `${label}: session ID not burned`);
 }
 
+// Creates a true own "__proto__" data property (not the special object
+// literal syntax, which sets the prototype instead).
+function withOwnProtoDataProperty(target: object, value: unknown): object {
+  Object.defineProperty(target, "__proto__", {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
+
 async function test() {
   console.log("Hermes Phase 2 Canary Session Entry Tests");
 
@@ -654,6 +666,11 @@ async function test() {
     asst(source.includes("satisfies CompleteRunnerConfigSnapshot"), "mapped-type snapshot guard present");
     asst(source.includes("RunnerConfigSnapshotField"), "snapshot field mapped type present");
     asst(!source.includes("_SnapshotMustCoverAll"), "old weak guard removed");
+    asst(source.includes("Object.create(null)"), "null-prototype scanner values");
+    asst(source.includes("Reflect.ownKeys"), "Reflect.ownKeys descriptor traversal");
+    asst(source.includes('"__proto__"'), "explicit __proto__ rejection");
+    asst(!source.includes("const values: Record<string, unknown> = {}"), "no plain {} scanner values");
+    asst(!source.includes("values[key] ="), "no plain assignment into scanner values");
   }
 
   // R15: Task A and Task B tests remain passing
@@ -931,6 +948,233 @@ async function test() {
     for (const f of forbiddenFields) {
       asst(!(f in result), `field ${f} absent (top-level)`);
       asst(!json.includes(`"${f}"`), `field name ${f} absent in JSON`);
+    }
+  }
+
+  // R18: Scanner prototype-safety — own "__proto__" data properties and
+  // symbol-keyed properties must fail closed; malicious getters never run
+  console.log("R18: scanner prototype-safety");
+  {
+    const hasOwn = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+
+    // A. top-level own "__proto__" data property carrying a full valid config
+    {
+      const { runner, state } = makeFakeRunner();
+      const payload = {
+        canarySessionId: "session-r18-a",
+        verifyApproval: () => true,
+        now: () => NOW_MS,
+        processRunner: runner,
+        runnerConfig: makeRunnerConfig(),
+      };
+      const cfg = withOwnProtoDataProperty({}, payload);
+      asst(hasOwn(cfg, "__proto__") === true, "A: own __proto__ confirmed");
+      asst(hasOwn(cfg, "canarySessionId") === false, "A: no own canarySessionId");
+      assertInvalidDoesNotBurn("A: top-level __proto__ bypass", "session-r18-a", () =>
+        registerHermesPhase2CodeReviewCanarySession(cfg as any));
+      asst(state.calls === 0, "A: runner never called");
+    }
+
+    // B. top-level "__proto__" payload with getters — getters must never run
+    {
+      const { runner, state } = makeFakeRunner();
+      let sidGetterCalls = 0, rcGetterCalls = 0;
+      const payload: any = {};
+      Object.defineProperty(payload, "canarySessionId", {
+        get() { sidGetterCalls++; return "session-r18-b"; }, enumerable: true,
+      });
+      Object.defineProperty(payload, "runnerConfig", {
+        get() { rcGetterCalls++; return makeRunnerConfig(); }, enumerable: true,
+      });
+      payload.verifyApproval = () => true;
+      payload.now = () => NOW_MS;
+      payload.processRunner = runner;
+      const cfg = withOwnProtoDataProperty({}, payload);
+      asst(hasOwn(cfg, "__proto__") === true, "B: own __proto__ confirmed");
+      assertInvalidDoesNotBurn("B: top-level __proto__ getters", "session-r18-b", () =>
+        registerHermesPhase2CodeReviewCanarySession(cfg as any));
+      asst(sidGetterCalls === 0, "B: canarySessionId getter never called");
+      asst(rcGetterCalls === 0, "B: runnerConfig getter never called");
+      asst(state.calls === 0, "B: runner never called");
+    }
+
+    // C. runnerConfig own "__proto__" carrying the required fields
+    {
+      const { runner, state } = makeFakeRunner();
+      const rcPayload = {
+        executablePath: process.execPath,
+        allowedExecutablePaths: [process.execPath],
+        args: [],
+      };
+      const rc = withOwnProtoDataProperty({}, rcPayload);
+      asst(hasOwn(rc, "__proto__") === true, "C: own __proto__ confirmed");
+      asst(hasOwn(rc, "executablePath") === false, "C: no own executablePath");
+      assertInvalidDoesNotBurn("C: runnerConfig __proto__ bypass", "session-r18-c", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-c",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: runner,
+          runnerConfig: rc as any,
+        }));
+      asst(state.calls === 0, "C: runner never called");
+    }
+
+    // D. runnerConfig "__proto__" payload with getters — none may run
+    {
+      const { runner, state } = makeFakeRunner();
+      let execGetterCalls = 0, allowGetterCalls = 0, argsGetterCalls = 0;
+      const rcPayload: any = {};
+      Object.defineProperty(rcPayload, "executablePath", {
+        get() { execGetterCalls++; return process.execPath; }, enumerable: true,
+      });
+      Object.defineProperty(rcPayload, "allowedExecutablePaths", {
+        get() { allowGetterCalls++; return [process.execPath]; }, enumerable: true,
+      });
+      Object.defineProperty(rcPayload, "args", {
+        get() { argsGetterCalls++; return []; }, enumerable: true,
+      });
+      const rc = withOwnProtoDataProperty({}, rcPayload);
+      asst(hasOwn(rc, "__proto__") === true, "D: own __proto__ confirmed");
+      assertInvalidDoesNotBurn("D: runnerConfig __proto__ getters", "session-r18-d", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-d",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: runner,
+          runnerConfig: rc as any,
+        }));
+      asst(execGetterCalls === 0, "D: executablePath getter never called");
+      asst(allowGetterCalls === 0, "D: allowedExecutablePaths getter never called");
+      asst(argsGetterCalls === 0, "D: args getter never called");
+      asst(state.calls === 0, "D: runner never called");
+    }
+
+    // E. sourceEnv own "__proto__" with credential getter — must fail closed
+    {
+      const { runner, state } = makeFakeRunner();
+      let credGetterCalls = 0;
+      const sePayload: any = {};
+      Object.defineProperty(sePayload, "CRED_A", {
+        get() { credGetterCalls++; return "secret"; }, enumerable: true,
+      });
+      const se = withOwnProtoDataProperty({}, sePayload);
+      asst(hasOwn(se, "__proto__") === true, "E: own __proto__ confirmed");
+      assertInvalidDoesNotBurn("E: sourceEnv __proto__", "session-r18-e", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-e",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: runner,
+          runnerConfig: { ...makeRunnerConfig(), sourceEnv: se as any },
+        }));
+      asst(credGetterCalls === 0, "E: sourceEnv getter never called");
+      asst(state.calls === 0, "E: runner never called");
+    }
+
+    // F. deps own "__proto__" with function getters — must fail closed
+    {
+      const { runner, state } = makeFakeRunner();
+      let nowFnGetterCalls = 0, spawnFnGetterCalls = 0;
+      const depsPayload: any = {};
+      Object.defineProperty(depsPayload, "nowFn", {
+        get() { nowFnGetterCalls++; return () => NOW_MS; }, enumerable: true,
+      });
+      Object.defineProperty(depsPayload, "spawnFn", {
+        get() { spawnFnGetterCalls++; return () => ({}); }, enumerable: true,
+      });
+      const deps = withOwnProtoDataProperty({}, depsPayload);
+      asst(hasOwn(deps, "__proto__") === true, "F: own __proto__ confirmed");
+      assertInvalidDoesNotBurn("F: deps __proto__", "session-r18-f", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-f",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: runner,
+          runnerConfig: { ...makeRunnerConfig(), deps: deps as any },
+        }));
+      asst(nowFnGetterCalls === 0, "F: nowFn getter never called");
+      asst(spawnFnGetterCalls === 0, "F: spawnFn getter never called");
+      asst(state.calls === 0, "F: runner never called");
+    }
+
+    // G. top-level symbol-keyed accessor — symbol getter must never run
+    {
+      const { runner, state } = makeFakeRunner();
+      const sym = Symbol("r18g");
+      let symGetterCalls = 0;
+      const cfg: any = {
+        canarySessionId: "session-r18-g",
+        verifyApproval: () => true,
+        now: () => NOW_MS,
+        processRunner: runner,
+        runnerConfig: makeRunnerConfig(),
+      };
+      Object.defineProperty(cfg, sym, {
+        get() { symGetterCalls++; return 1; }, enumerable: true,
+      });
+      asst(Object.getOwnPropertySymbols(cfg).length === 1, "G: symbol present");
+      assertInvalidDoesNotBurn("G: top-level symbol accessor", "session-r18-g", () =>
+        registerHermesPhase2CodeReviewCanarySession(cfg));
+      asst(symGetterCalls === 0, "G: symbol getter never called");
+      asst(state.calls === 0, "G: runner never called");
+    }
+
+    // H. runnerConfig symbol-keyed accessor
+    {
+      const { runner, state } = makeFakeRunner();
+      const sym = Symbol("r18h");
+      let symGetterCalls = 0;
+      const rc: any = makeRunnerConfig();
+      Object.defineProperty(rc, sym, {
+        get() { symGetterCalls++; return 1; }, enumerable: true,
+      });
+      asst(Object.getOwnPropertySymbols(rc).length === 1, "H: symbol present");
+      assertInvalidDoesNotBurn("H: runnerConfig symbol accessor", "session-r18-h", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-h",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: runner,
+          runnerConfig: rc,
+        }));
+      asst(symGetterCalls === 0, "H: symbol getter never called");
+      asst(state.calls === 0, "H: runner never called");
+    }
+
+    // I. symbol-keyed data property (top-level and runnerConfig)
+    {
+      const { runner, state } = makeFakeRunner();
+      const sym = Symbol("r18i");
+      const cfg: any = {
+        canarySessionId: "session-r18-i",
+        verifyApproval: () => true,
+        now: () => NOW_MS,
+        processRunner: runner,
+        runnerConfig: makeRunnerConfig(),
+      };
+      Object.defineProperty(cfg, sym, {
+        value: "symbol-data", enumerable: true, writable: true, configurable: true,
+      });
+      asst(Object.getOwnPropertySymbols(cfg).length === 1, "I: symbol data present");
+      assertInvalidDoesNotBurn("I: top-level symbol data property", "session-r18-i", () =>
+        registerHermesPhase2CodeReviewCanarySession(cfg));
+      asst(state.calls === 0, "I: runner never called");
+    }
+    {
+      const sym = Symbol("r18i2");
+      const rc: any = makeRunnerConfig();
+      Object.defineProperty(rc, sym, {
+        value: "symbol-data", enumerable: true, writable: true, configurable: true,
+      });
+      assertInvalidDoesNotBurn("I2: runnerConfig symbol data property", "session-r18-i2", () =>
+        registerHermesPhase2CodeReviewCanarySession({
+          canarySessionId: "session-r18-i2",
+          verifyApproval: () => true,
+          now: () => NOW_MS,
+          processRunner: makeFakeRunner().runner,
+          runnerConfig: rc,
+        }));
     }
   }
 
