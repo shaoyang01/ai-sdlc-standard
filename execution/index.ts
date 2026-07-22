@@ -37,3 +37,14 @@ export type {
   ExecutionArtifact,
   ExecutionResult,
 } from "./types";
+export {
+  registerHermesPhase2CodeReviewCanarySession,
+  HERMES_PHASE_2_CODE_REVIEW_CANARY_SESSION_SCOPE,
+} from "./hermes-gateway-real-dispatch-phase-2-code-review-canary-session";
+export type {
+  HermesPhase2CodeReviewCanarySessionEntry,
+  HermesPhase2CanarySessionRegistrationConfig,
+  HermesPhase2CanarySessionRegistrationDecision,
+  HermesPhase2CanarySessionRegistrationResult,
+  HermesPhase2CanarySanitizedResult,
+} from "./hermes-gateway-real-dispatch-phase-2-code-review-canary-session";
