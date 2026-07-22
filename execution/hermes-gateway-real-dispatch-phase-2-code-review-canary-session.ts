@@ -21,6 +21,7 @@ import {
 } from "./hermes-gateway-real-dispatch-phase-2-code-review-canary-executor";
 import type {
   HermesPhase2CanaryProcessRunnerConfig,
+  HermesPhase2CanaryRunnerDeps,
 } from "./hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner";
 
 export const HERMES_PHASE_2_CODE_REVIEW_CANARY_SESSION_SCOPE =
@@ -69,15 +70,43 @@ export type HermesPhase2CanarySessionRegistrationResult =
 // Process restart clears all registered sessions.
 const registeredSessionIds = new Set<string>();
 
+// ── Compile-time snapshot completeness guard ──
+// If HermesPhase2CanaryProcessRunnerConfig gains a new field (other than
+// serializedPayload), this type assertion will fail at compile time until
+// snapshotRunnerConfig is updated to cover it.
+type _SnapshotMustCoverAll = Exclude<
+  keyof HermesPhase2CanaryProcessRunnerConfig,
+  "serializedPayload"
+>;
+type _SnapshotReturnType = ReturnType<typeof snapshotRunnerConfig>;
+type _AssertComplete = _SnapshotMustCoverAll extends keyof _SnapshotReturnType
+  ? true
+  : never;
+const _snapshotCompletenessGuard: _AssertComplete = true;
+void _snapshotCompletenessGuard;
+
 function snapshotRunnerConfig(
   config: HermesPhase2CanaryProcessRunnerConfig,
-): HermesPhase2CanaryProcessRunnerConfig {
+): Readonly<{
+  executablePath: string;
+  allowedExecutablePaths: ReadonlyArray<string>;
+  args: ReadonlyArray<string>;
+  timeoutMs?: number;
+  termGraceMs?: number;
+  observationMs?: number;
+  maxStdoutBytes?: number;
+  maxStderrBytes?: number;
+  credentialEnvNames?: ReadonlyArray<string>;
+  sourceEnv?: Readonly<Record<string, string>>;
+  deps?: HermesPhase2CanaryRunnerDeps;
+}> {
   return Object.freeze({
     executablePath: config.executablePath,
     allowedExecutablePaths: Object.freeze([...config.allowedExecutablePaths]),
     args: Object.freeze([...config.args]),
     timeoutMs: config.timeoutMs,
     termGraceMs: config.termGraceMs,
+    observationMs: config.observationMs,
     maxStdoutBytes: config.maxStdoutBytes,
     maxStderrBytes: config.maxStderrBytes,
     credentialEnvNames: config.credentialEnvNames
@@ -85,6 +114,9 @@ function snapshotRunnerConfig(
       : undefined,
     sourceEnv: config.sourceEnv
       ? Object.freeze({ ...config.sourceEnv })
+      : undefined,
+    deps: config.deps
+      ? Object.freeze({ ...config.deps })
       : undefined,
     // serializedPayload is intentionally NOT copied — it will be set by the executor
   });
@@ -122,83 +154,128 @@ function sanitizeResult(
  * creating a new gate or modifying existing state.
  *
  * Invalid configuration does NOT burn the session ID.
+ *
+ * Fail-closed: any unexpected error during registration returns
+ * invalid_session_configuration without burning the session ID.
  */
 export function registerHermesPhase2CodeReviewCanarySession(
   config: HermesPhase2CanarySessionRegistrationConfig,
 ): HermesPhase2CanarySessionRegistrationResult {
-  // Step 1: Validate canarySessionId basic shape
-  const { canarySessionId } = config;
-  if (
-    typeof canarySessionId !== "string" ||
-    canarySessionId.length === 0 ||
-    canarySessionId !== canarySessionId.trim() ||
-    canarySessionId.length > 128
-  ) {
+  try {
+    // Step 1: Validate canarySessionId basic shape
+    const { canarySessionId } = config;
+    if (
+      typeof canarySessionId !== "string" ||
+      canarySessionId.length === 0 ||
+      canarySessionId !== canarySessionId.trim() ||
+      canarySessionId.length > 128
+    ) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+
+    // Step 2: Check if already registered
+    if (registeredSessionIds.has(canarySessionId)) {
+      return { ok: false, decision: "session_already_registered" };
+    }
+
+    // Step 3: Validate remaining configuration
+    if (typeof config.verifyApproval !== "function") {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (typeof config.now !== "function") {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (typeof config.processRunner !== "function") {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (
+      config.runnerConfig === null ||
+      config.runnerConfig === undefined ||
+      typeof config.runnerConfig !== "object"
+    ) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+
+    // Validate runnerConfig shape
+    const rc = config.runnerConfig;
+    if (typeof rc.executablePath !== "string" || rc.executablePath.length === 0) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (!Array.isArray(rc.allowedExecutablePaths) || rc.allowedExecutablePaths.length === 0) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (!Array.isArray(rc.args)) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.timeoutMs !== undefined && (typeof rc.timeoutMs !== "number" || !Number.isFinite(rc.timeoutMs))) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.termGraceMs !== undefined && (typeof rc.termGraceMs !== "number" || !Number.isFinite(rc.termGraceMs))) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.observationMs !== undefined && (typeof rc.observationMs !== "number" || !Number.isFinite(rc.observationMs))) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.maxStdoutBytes !== undefined && (typeof rc.maxStdoutBytes !== "number" || !Number.isFinite(rc.maxStdoutBytes))) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.maxStderrBytes !== undefined && (typeof rc.maxStderrBytes !== "number" || !Number.isFinite(rc.maxStderrBytes))) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.credentialEnvNames !== undefined && !Array.isArray(rc.credentialEnvNames)) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.sourceEnv !== undefined && (rc.sourceEnv === null || typeof rc.sourceEnv !== "object")) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (rc.deps !== undefined && (rc.deps === null || typeof rc.deps !== "object")) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+
+    // serializedPayload must not be pre-set
+    if ("serializedPayload" in rc) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+
+    // Step 4: Create Task A gate (exactly once)
+    const gateResult = createHermesPhase2CodeReviewCanaryGate({
+      canarySessionId,
+      verifyApproval: config.verifyApproval,
+      now: config.now,
+      maxApprovalTtlMs: config.maxApprovalTtlMs,
+    });
+
+    // Step 5: Gate factory failure
+    if (!gateResult.ok) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+
+    const gate = gateResult.gate;
+    const processRunner = config.processRunner;
+    const runnerConfigSnapshot = snapshotRunnerConfig(rc);
+
+    // Step 6: Create session entry closure
+    const entry: HermesPhase2CodeReviewCanarySessionEntry = {
+      scope: HERMES_PHASE_2_CODE_REVIEW_CANARY_SESSION_SCOPE,
+      execute: async (request: ExecutionRequest): Promise<HermesPhase2CanarySanitizedResult> => {
+        // Pass request directly to Task B executor — no reading, spreading, or cloning
+        const result = await executeHermesPhase2CodeReviewCanary(
+          request,
+          gate,
+          processRunner,
+          runnerConfigSnapshot,
+        );
+        return sanitizeResult(result);
+      },
+    };
+
+    // Step 7: Register session ID
+    registeredSessionIds.add(canarySessionId);
+
+    // Step 8: Return
+    return { ok: true, decision: "session_registered", entry };
+  } catch {
+    // Fail-closed: any unexpected error returns invalid without burning the ID
     return { ok: false, decision: "invalid_session_configuration" };
   }
-
-  // Step 2: Check if already registered
-  if (registeredSessionIds.has(canarySessionId)) {
-    return { ok: false, decision: "session_already_registered" };
-  }
-
-  // Step 3: Validate remaining configuration
-  if (typeof config.verifyApproval !== "function") {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-  if (typeof config.now !== "function") {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-  if (typeof config.processRunner !== "function") {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-  if (
-    config.runnerConfig === null ||
-    config.runnerConfig === undefined ||
-    typeof config.runnerConfig !== "object"
-  ) {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-  // serializedPayload must not be pre-set
-  if ("serializedPayload" in config.runnerConfig) {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-
-  // Step 4: Create Task A gate (exactly once)
-  const gateResult = createHermesPhase2CodeReviewCanaryGate({
-    canarySessionId,
-    verifyApproval: config.verifyApproval,
-    now: config.now,
-    maxApprovalTtlMs: config.maxApprovalTtlMs,
-  });
-
-  // Step 5: Gate factory failure
-  if (!gateResult.ok) {
-    return { ok: false, decision: "invalid_session_configuration" };
-  }
-
-  const gate = gateResult.gate;
-  const processRunner = config.processRunner;
-  const runnerConfigSnapshot = snapshotRunnerConfig(config.runnerConfig);
-
-  // Step 6: Create session entry closure
-  const entry: HermesPhase2CodeReviewCanarySessionEntry = {
-    scope: HERMES_PHASE_2_CODE_REVIEW_CANARY_SESSION_SCOPE,
-    execute: async (request: ExecutionRequest): Promise<HermesPhase2CanarySanitizedResult> => {
-      // Pass request directly to Task B executor — no reading, spreading, or cloning
-      const result = await executeHermesPhase2CodeReviewCanary(
-        request,
-        gate,
-        processRunner,
-        runnerConfigSnapshot,
-      );
-      return sanitizeResult(result);
-    },
-  };
-
-  // Step 7: Register session ID
-  registeredSessionIds.add(canarySessionId);
-
-  // Step 8: Return
-  return { ok: true, decision: "session_registered", entry };
 }
