@@ -18,6 +18,9 @@ import type {
 import {
   buildHermesPhase2CodeReviewCanaryRequestIdentity,
 } from "../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-gate";
+import {
+  buildHermesPhase2CanaryPayload,
+} from "../execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-payload";
 import type {
   HermesPhase2CanaryProcessRunnerConfig,
   HermesPhase2CanaryRunnerResult,
@@ -31,19 +34,21 @@ const NOW_MS = 1700000000000;
 function sha256(s: string) { return require("node:crypto").createHash("sha256").update(s).digest("hex"); }
 
 function makeApproval(req: ExecutionRequest, o?: Partial<HermesPhase2CodeReviewCanaryApproval>): HermesPhase2CodeReviewCanaryApproval {
+  // Every supported override takes real effect; only phaseId, requestType
+  // and singleUse stay fixed.
   return {
     approvalId: o?.approvalId ?? "approval-001",
-    operatorIdentityReference: "op-ref",
+    operatorIdentityReference: o?.operatorIdentityReference ?? "op-ref",
     phaseId: "phase_2_code_review_canary_one",
     requestType: "code_review",
-    requestIdentity: buildHermesPhase2CodeReviewCanaryRequestIdentity(req),
+    requestIdentity: o?.requestIdentity ?? buildHermesPhase2CodeReviewCanaryRequestIdentity(req),
     payloadDigestSha256: o?.payloadDigestSha256 ?? sha256("default"),
     canarySessionId: o?.canarySessionId ?? "test-session",
-    issuedAtIso: new Date(NOW_MS - 60000).toISOString(),
-    expiresAtIso: new Date(NOW_MS + 60000).toISOString(),
+    issuedAtIso: o?.issuedAtIso ?? new Date(NOW_MS - 60000).toISOString(),
+    expiresAtIso: o?.expiresAtIso ?? new Date(NOW_MS + 60000).toISOString(),
     nonce: o?.nonce ?? "nonce-abcdef1234567890",
     singleUse: true,
-    proof: "proof",
+    proof: o?.proof ?? "proof",
   } as HermesPhase2CodeReviewCanaryApproval;
 }
 
@@ -90,6 +95,43 @@ function makeRunnerConfig(): HermesPhase2CanaryProcessRunnerConfig {
   };
 }
 
+// ── invalid-config assertion helpers ──
+
+// Asserts: the call does not throw; result.ok is false; decision is exactly
+// invalid_session_configuration; the result JSON is exactly the minimal
+// failure shape (no raw exception text, no extra fields).
+function assertInvalidWithoutThrow(label: string, fn: () => unknown): void {
+  let r: any;
+  let threw = false;
+  try {
+    r = fn();
+  } catch {
+    threw = true;
+  }
+  asst(!threw, `${label}: does not throw`);
+  asst(r !== null && typeof r === "object" && r.ok === false, `${label}: ok false`);
+  asst(r !== null && typeof r === "object" && r.decision === "invalid_session_configuration", `${label}: exact decision`);
+  asst(
+    r !== null && typeof r === "object" &&
+      JSON.stringify(r) === JSON.stringify({ ok: false, decision: "invalid_session_configuration" }),
+    `${label}: exact minimal failure shape, no error text`,
+  );
+}
+
+// Asserts the invalid call AND that the same (valid) session ID can still be
+// registered afterwards — i.e. the failure did not burn the session ID.
+function assertInvalidDoesNotBurn(label: string, sessionId: string, fn: () => unknown): void {
+  assertInvalidWithoutThrow(label, fn);
+  const good = registerHermesPhase2CodeReviewCanarySession({
+    canarySessionId: sessionId,
+    verifyApproval: () => true,
+    now: () => NOW_MS,
+    processRunner: makeFakeRunner().runner,
+    runnerConfig: makeRunnerConfig(),
+  });
+  asst(good.ok === true, `${label}: session ID not burned`);
+}
+
 async function test() {
   console.log("Hermes Phase 2 Canary Session Entry Tests");
 
@@ -116,37 +158,68 @@ async function test() {
     }
   }
 
-  // R2: Duplicate registration — gate state preserved
-  console.log("R2: duplicate registration with gate state preservation");
+  // R2: Duplicate registration — consumed gate is never reset
+  // Strict order: register original → execute (consumes approval, nonce and
+  // request quota) → duplicate registration attempt with replacement runner
+  // and replacement config → original entry replay is still denied.
+  console.log("R2: duplicate registration after gate consumption");
   {
-    const { runner, state } = makeFakeRunner();
-    const config = {
+    // 1. original runner and replacement runner with separate call counters
+    const { runner: originalRunner, state: originalState } = makeFakeRunner();
+    const { runner: replacementRunner, state: replacementState } = makeFakeRunner();
+
+    // 2. first registration with the original runner
+    const r1 = registerHermesPhase2CodeReviewCanarySession({
       canarySessionId: "session-r2-unique",
       verifyApproval: () => true,
       now: () => NOW_MS,
-      processRunner: runner,
+      processRunner: originalRunner,
       runnerConfig: makeRunnerConfig(),
-    };
-    const r1 = registerHermesPhase2CodeReviewCanarySession(config);
-    asst(r1.ok === true, "first ok");
+    });
+    asst(r1.ok === true, "first registration ok");
+    if (!r1.ok) return;
 
-    const r2 = registerHermesPhase2CodeReviewCanarySession(config);
-    asst(r2.ok === false, "second fails");
-    if (!r2.ok) asst(r2.decision === "session_already_registered", "already registered");
+    // 3. execute a legal request via the original entry
+    const req = makeReq("session-r2-unique");
+    const res1 = await r1.entry.execute(req);
+    // 4. exact executed
+    asst(res1.decision === "executed", "original entry executed");
+    // 5. original runner calls exactly 1
+    asst(originalState.calls === 1, "original runner called once");
+    // 6. gate has now consumed approval, nonce and request quota
 
-    // Prove original entry still works and gate state is preserved
-    if (r1.ok) {
-      const req = makeReq("session-r2-unique");
-      const res1 = await r1.entry.execute(req);
-      asst(res1.decision === "executed", "original entry still executes");
-      asst(state.calls === 1, "runner called once via original entry");
-
-      // Second execute on original entry should be denied (gate state preserved)
-      const res2 = await r1.entry.execute(req);
-      asst(res2.decision === "gate_denied", "gate state preserved — replay denied");
-      asst(res2.gateDecision === "approval_replayed", "approval_replayed on original gate");
-      asst(state.calls === 1, "runner still called once");
+    // 7. duplicate registration: same session ID, replacement runner and a
+    // replacement config (a throwing Proxy — proves the duplicate path never
+    // scans the replacement runnerConfig)
+    const r2 = registerHermesPhase2CodeReviewCanarySession({
+      canarySessionId: "session-r2-unique",
+      verifyApproval: () => true,
+      now: () => NOW_MS,
+      processRunner: replacementRunner,
+      runnerConfig: new Proxy({}, {
+        getPrototypeOf: () => { throw new Error("replacement proxy trap"); },
+      }) as any,
+    });
+    // 8. exact session_already_registered
+    asst(r2.ok === false, "duplicate registration rejected");
+    if (!r2.ok) {
+      asst(r2.decision === "session_already_registered", "exact session_already_registered");
+      // 9. result carries no entry
+      asst(!("entry" in r2), "no entry on duplicate result");
     }
+    // 10. replacement runner calls exactly 0
+    asst(replacementState.calls === 0, "replacement runner never called");
+
+    // 11. execute the same request again via the original entry
+    const res2 = await r1.entry.execute(req);
+    // 12. exact gate_denied
+    asst(res2.decision === "gate_denied", "replay gate_denied after duplicate attempt");
+    // 13. exact approval_replayed — the consumed gate was not reset
+    asst(res2.gateDecision === "approval_replayed", "approval_replayed — gate state preserved");
+    // 14. original runner calls still exactly 1
+    asst(originalState.calls === 1, "original runner still called once");
+    // 15. replacement runner calls still exactly 0
+    asst(replacementState.calls === 0, "replacement runner still never called");
   }
 
   // R3: Invalid registration does not burn ID
@@ -173,77 +246,130 @@ async function test() {
     asst(goodR.ok === true, "valid config succeeds after invalid");
   }
 
-  // R4: Config snapshot — comprehensive field isolation
+  // R4: Config snapshot — comprehensive identity, isolation, freeze, and
+  // exact serializedPayload verification
   console.log("R4: config snapshot isolation (comprehensive)");
   {
     const { runner, state } = makeFakeRunner();
-    const fakeDeps: HermesPhase2CanaryRunnerDeps = {
-      nowFn: () => 42,
-      delayFn: async () => {},
+
+    // All eight optional deps functions provided explicitly
+    const depSpawnFn = () => { throw new Error("unused"); };
+    const depSignalGroupFn = () => "ok" as const;
+    const depSignal0CheckFn = () => "gone" as const;
+    const depDelayFn = async () => {};
+    const depSetTimerFn = (_cb: () => void, _ms: number): unknown => ({});
+    const depClearTimerFn = (_h: unknown) => {};
+    const depCleanupTempFn = (_dir: string) => true;
+    const depNowFn = () => 42;
+    const originalDeps: any = {
+      spawnFn: depSpawnFn,
+      signalGroupFn: depSignalGroupFn,
+      signal0CheckFn: depSignal0CheckFn,
+      delayFn: depDelayFn,
+      setTimerFn: depSetTimerFn,
+      clearTimerFn: depClearTimerFn,
+      cleanupTempFn: depCleanupTempFn,
+      nowFn: depNowFn,
     };
-    const runnerConfig: any = {
+    const originalAllowedExecutablePaths = [process.execPath];
+    const originalArgs = ["original-arg"];
+    const originalCredentialEnvNames = ["ORIG_CRED"];
+    const originalSourceEnv: Record<string, string> = { ORIG_CRED: "original-value" };
+    const originalRunnerConfig: any = {
       executablePath: process.execPath,
-      allowedExecutablePaths: [process.execPath],
-      args: ["original-arg"],
+      allowedExecutablePaths: originalAllowedExecutablePaths,
+      args: originalArgs,
       timeoutMs: 5000,
       termGraceMs: 500,
       observationMs: 2000,
       maxStdoutBytes: 1024,
       maxStderrBytes: 2048,
-      credentialEnvNames: ["ORIG_CRED"],
-      sourceEnv: { ORIG_CRED: "original-value" },
-      deps: fakeDeps,
+      credentialEnvNames: originalCredentialEnvNames,
+      sourceEnv: originalSourceEnv,
+      deps: originalDeps,
     };
+
     const r = registerHermesPhase2CodeReviewCanarySession({
       canarySessionId: "session-r4-unique",
       verifyApproval: () => true,
       now: () => NOW_MS,
       processRunner: runner,
-      runnerConfig,
+      runnerConfig: originalRunnerConfig,
     });
     asst(r.ok === true, "registered");
     if (!r.ok) return;
 
-    // Mutate ALL original config fields
-    runnerConfig.args.push("mutated-arg");
-    runnerConfig.allowedExecutablePaths.push("/mutated/path");
-    runnerConfig.credentialEnvNames.push("MUTATED_CRED");
-    runnerConfig.sourceEnv.MUTATED_CRED = "mutated-value";
-    runnerConfig.sourceEnv.ORIG_CRED = "mutated-original";
-    runnerConfig.executablePath = "/mutated/exec";
-    runnerConfig.timeoutMs = 99999;
-    runnerConfig.termGraceMs = 9999;
-    runnerConfig.observationMs = 9999;
-    runnerConfig.maxStdoutBytes = 1;
-    runnerConfig.maxStderrBytes = 1;
-    runnerConfig.deps = { nowFn: () => 999 };
+    // After registration, before execute: mutate every original reference
+    originalRunnerConfig.executablePath = "/mutated/exec";
+    originalRunnerConfig.timeoutMs = 99999;
+    originalRunnerConfig.termGraceMs = 9999;
+    originalRunnerConfig.observationMs = 9999;
+    originalRunnerConfig.maxStdoutBytes = 1;
+    originalRunnerConfig.maxStderrBytes = 1;
+    originalAllowedExecutablePaths.push("/mutated/path");
+    originalArgs.push("mutated-arg");
+    originalCredentialEnvNames.push("MUTATED_CRED");
+    originalSourceEnv.ORIG_CRED = "mutated-original";
+    originalSourceEnv.NEW_KEY = "mutated-new";
+    originalDeps.nowFn = () => 999;
+    originalDeps.extraKey = () => "extra";
+    originalRunnerConfig.deps = { nowFn: () => -1 };
 
-    // Execute — runner should receive snapshot, not mutated config
+    // Expected payload from the current Task B payload builder
     const req = makeReq("session-r4-unique");
+    const payloadResult = buildHermesPhase2CanaryPayload(req);
+    asst(payloadResult.ok === true, "payload builder ok");
+    if (!payloadResult.ok) return;
+
     const result = await r.entry.execute(req);
     asst(result.decision === "executed", "executed");
     asst(state.calls === 1, "runner called once");
 
-    // Verify runner received the original snapshot values
     const rc = state.lastConfig!;
-    asst(rc.executablePath === process.execPath, "executablePath is snapshot");
-    asst(rc.allowedExecutablePaths.length === 1, "allowedExecutablePaths length is snapshot");
-    asst(rc.allowedExecutablePaths[0] === process.execPath, "allowedExecutablePaths[0] is snapshot");
-    asst(rc.args.length === 1, "args length is snapshot");
-    asst(rc.args[0] === "original-arg", "args[0] is snapshot");
-    asst(rc.timeoutMs === 5000, "timeoutMs is snapshot");
-    asst(rc.termGraceMs === 500, "termGraceMs is snapshot");
-    asst(rc.observationMs === 2000, "observationMs is snapshot");
-    asst(rc.maxStdoutBytes === 1024, "maxStdoutBytes is snapshot");
-    asst(rc.maxStderrBytes === 2048, "maxStderrBytes is snapshot");
-    asst(rc.credentialEnvNames!.length === 1, "credentialEnvNames length is snapshot");
-    asst(rc.credentialEnvNames![0] === "ORIG_CRED", "credentialEnvNames[0] is snapshot");
-    asst(rc.sourceEnv!.ORIG_CRED === "original-value", "sourceEnv value is snapshot");
-    asst(!("MUTATED_CRED" in rc.sourceEnv!), "sourceEnv has no mutated key");
-    asst(rc.deps !== undefined, "deps is present");
-    asst(rc.deps!.nowFn === fakeDeps.nowFn, "deps.nowFn is snapshot reference");
-    asst(rc.serializedPayload !== undefined, "serializedPayload set by executor");
-    asst(rc.serializedPayload!.length > 0, "serializedPayload non-empty");
+    // 1. received config is not the original runnerConfig object
+    asst(rc !== (originalRunnerConfig as any), "receivedConfig is not originalRunnerConfig");
+    // 2. executablePath is the registration-time value
+    asst(rc.executablePath === process.execPath, "executablePath snapshot value");
+    // 3/4. allowedExecutablePaths exact value, not the original array
+    asst(rc.allowedExecutablePaths.length === 1 && rc.allowedExecutablePaths[0] === process.execPath, "allowedExecutablePaths exact snapshot value");
+    asst(rc.allowedExecutablePaths !== (originalAllowedExecutablePaths as any), "allowedExecutablePaths is a new array");
+    // 5/6. args exact value, not the original array
+    asst(rc.args.length === 1 && rc.args[0] === "original-arg", "args exact snapshot value");
+    asst(rc.args !== (originalArgs as any), "args is a new array");
+    // 7. all five numeric configs keep registration-time values
+    asst(rc.timeoutMs === 5000, "timeoutMs snapshot");
+    asst(rc.termGraceMs === 500, "termGraceMs snapshot");
+    asst(rc.observationMs === 2000, "observationMs snapshot");
+    asst(rc.maxStdoutBytes === 1024, "maxStdoutBytes snapshot");
+    asst(rc.maxStderrBytes === 2048, "maxStderrBytes snapshot");
+    // 8/9. credentialEnvNames exact value, not the original array
+    asst(rc.credentialEnvNames!.length === 1 && rc.credentialEnvNames![0] === "ORIG_CRED", "credentialEnvNames exact snapshot value");
+    asst(rc.credentialEnvNames !== (originalCredentialEnvNames as any), "credentialEnvNames is a new array");
+    // 10/11/12. sourceEnv exact value, new object, no post-registration key
+    asst(rc.sourceEnv!.ORIG_CRED === "original-value", "sourceEnv snapshot value");
+    asst(rc.sourceEnv !== (originalSourceEnv as any), "sourceEnv is a new object");
+    asst(!("NEW_KEY" in rc.sourceEnv!), "sourceEnv has no post-registration key");
+    // 13/14. deps is a new object without the post-registration key
+    asst(rc.deps !== (originalDeps as any), "deps is a new object");
+    asst(!("extraKey" in rc.deps!), "deps has no post-registration key");
+    // 15. all eight deps function references are the registration-time originals
+    asst(rc.deps!.spawnFn === depSpawnFn, "deps.spawnFn original reference");
+    asst(rc.deps!.signalGroupFn === depSignalGroupFn, "deps.signalGroupFn original reference");
+    asst(rc.deps!.signal0CheckFn === depSignal0CheckFn, "deps.signal0CheckFn original reference");
+    asst(rc.deps!.delayFn === depDelayFn, "deps.delayFn original reference");
+    asst(rc.deps!.setTimerFn === depSetTimerFn, "deps.setTimerFn original reference");
+    asst(rc.deps!.clearTimerFn === depClearTimerFn, "deps.clearTimerFn original reference");
+    asst(rc.deps!.cleanupTempFn === depCleanupTempFn, "deps.cleanupTempFn original reference");
+    asst(rc.deps!.nowFn === depNowFn, "deps.nowFn original reference");
+    // 16–20. nested snapshot objects are frozen
+    asst(Object.isFrozen(rc.allowedExecutablePaths), "allowedExecutablePaths frozen");
+    asst(Object.isFrozen(rc.args), "args frozen");
+    asst(Object.isFrozen(rc.credentialEnvNames), "credentialEnvNames frozen");
+    asst(Object.isFrozen(rc.sourceEnv), "sourceEnv frozen");
+    asst(Object.isFrozen(rc.deps), "deps frozen");
+
+    // serializedPayload: exact match with the Task B builder output
+    asst(rc.serializedPayload === payloadResult.serializedPayload, "serializedPayload exact match");
   }
 
   // R5: Sequential one-shot
@@ -524,6 +650,10 @@ async function test() {
     asst(!source.includes("reset"), "no reset");
     asst(!source.includes("replace"), "no replace");
     asst(!source.includes("reopen"), "no reopen");
+    asst(source.includes("scanPlainDataRecord"), "plain data record scan present");
+    asst(source.includes("satisfies CompleteRunnerConfigSnapshot"), "mapped-type snapshot guard present");
+    asst(source.includes("RunnerConfigSnapshotField"), "snapshot field mapped type present");
+    asst(!source.includes("_SnapshotMustCoverAll"), "old weak guard removed");
   }
 
   // R15: Task A and Task B tests remain passing
@@ -532,151 +662,276 @@ async function test() {
     asst(true, "verified via npm test");
   }
 
-  // R16: Comprehensive invalid config tests
+  // R16: Comprehensive invalid config tests — fail-closed, no throw, no burn
   console.log("R16: comprehensive invalid config");
   {
-    const validBase = {
+    const base = (sessionId: string) => ({
+      canarySessionId: sessionId,
       verifyApproval: () => true,
       now: () => NOW_MS,
       processRunner: makeFakeRunner().runner,
       runnerConfig: makeRunnerConfig(),
+    });
+    const rcBase = () => makeRunnerConfig() as any;
+    const iterThrowArray = (items: string[]): string[] => {
+      const a = [...items];
+      Object.defineProperty(a, Symbol.iterator, {
+        get() { throw new Error("iterator boom"); },
+        enumerable: false,
+        configurable: true,
+      });
+      return a;
     };
-
-    // 16a: empty session ID
-    const r1 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "" });
-    asst(!r1.ok && r1.decision === "invalid_session_configuration", "empty session ID rejected");
-
-    // 16b: whitespace-padded session ID
-    const r2 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: " padded " });
-    asst(!r2.ok && r2.decision === "invalid_session_configuration", "padded session ID rejected");
-
-    // 16c: session ID too long (>128)
-    const r3 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "x".repeat(129) });
-    asst(!r3.ok && r3.decision === "invalid_session_configuration", "overlong session ID rejected");
-
-    // 16d: non-function verifier
-    const r4 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "session-r16d", verifyApproval: 42 as any });
-    asst(!r4.ok && r4.decision === "invalid_session_configuration", "non-function verifier rejected");
-
-    // 16e: non-function clock
-    const r5 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "session-r16e", now: "not-a-fn" as any });
-    asst(!r5.ok && r5.decision === "invalid_session_configuration", "non-function clock rejected");
-
-    // 16f: non-function processRunner
-    const r6 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "session-r16f", processRunner: null as any });
-    asst(!r6.ok && r6.decision === "invalid_session_configuration", "null processRunner rejected");
-
-    // 16g: null runnerConfig
-    const r7 = registerHermesPhase2CodeReviewCanarySession({ ...validBase, canarySessionId: "session-r16g", runnerConfig: null as any });
-    asst(!r7.ok && r7.decision === "invalid_session_configuration", "null runnerConfig rejected");
-
-    // 16h: runnerConfig with pre-set serializedPayload
-    const r8 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16h",
-      runnerConfig: { ...makeRunnerConfig(), serializedPayload: "injected" } as any,
+    const throwingProxy = () => new Proxy({}, {
+      getPrototypeOf: () => { throw new Error("proxy trap boom"); },
     });
-    asst(!r8.ok && r8.decision === "invalid_session_configuration", "pre-set serializedPayload rejected");
 
-    // 16i: runnerConfig with empty executablePath
-    const r9 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16i",
-      runnerConfig: { ...makeRunnerConfig(), executablePath: "" },
-    });
-    asst(!r9.ok && r9.decision === "invalid_session_configuration", "empty executablePath rejected");
+    // ── session ID shape ──
+    assertInvalidWithoutThrow("empty session ID", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-x0"), canarySessionId: "" }));
+    assertInvalidWithoutThrow("padded session ID", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-x1"), canarySessionId: " padded " }));
+    assertInvalidWithoutThrow("overlong session ID", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-x2"), canarySessionId: "x".repeat(129) }));
 
-    // 16j: runnerConfig with empty allowedExecutablePaths
-    const r10 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16j",
-      runnerConfig: { ...makeRunnerConfig(), allowedExecutablePaths: [] },
+    // ── top-level config (1–7) ──
+    assertInvalidWithoutThrow("top-level null", () =>
+      registerHermesPhase2CodeReviewCanarySession(null as any));
+    assertInvalidWithoutThrow("top-level undefined", () =>
+      registerHermesPhase2CodeReviewCanarySession(undefined as any));
+    assertInvalidWithoutThrow("top-level array", () =>
+      registerHermesPhase2CodeReviewCanarySession([] as any));
+    assertInvalidWithoutThrow("top-level array with full fields", () => {
+      const a: any = ["x"];
+      Object.assign(a, base("session-r16-top-arr"));
+      return registerHermesPhase2CodeReviewCanarySession(a);
     });
-    asst(!r10.ok && r10.decision === "invalid_session_configuration", "empty allowedExecutablePaths rejected");
+    assertInvalidWithoutThrow("top-level class instance", () => {
+      class TopCfg {
+        canarySessionId = "session-r16-top-class";
+        verifyApproval = () => true;
+        now = () => NOW_MS;
+        processRunner = makeFakeRunner().runner;
+        runnerConfig = makeRunnerConfig();
+      }
+      return registerHermesPhase2CodeReviewCanarySession(new TopCfg() as any);
+    });
+    // top-level accessor with a valid session ID — also proves no burn
+    assertInvalidDoesNotBurn("top-level accessor", "session-r16-burn-top", () => {
+      const c: any = base("session-r16-burn-top");
+      Object.defineProperty(c, "verifyApproval", {
+        get() { return () => true; },
+        enumerable: true,
+        configurable: true,
+      });
+      return registerHermesPhase2CodeReviewCanarySession(c);
+    });
+    assertInvalidWithoutThrow("top-level throwing Proxy", () =>
+      registerHermesPhase2CodeReviewCanarySession(throwingProxy() as any));
 
-    // 16k: runnerConfig with non-array args
-    const r11 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16k",
-      runnerConfig: { ...makeRunnerConfig(), args: "not-array" as any },
+    // ── runnerConfig (8–17) ──
+    assertInvalidWithoutThrow("runnerConfig null", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-null"), runnerConfig: null as any }));
+    assertInvalidWithoutThrow("runnerConfig empty object", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-empty"), runnerConfig: {} as any }));
+    assertInvalidWithoutThrow("runnerConfig array", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-arr"), runnerConfig: [] as any }));
+    assertInvalidWithoutThrow("runnerConfig array with fields", () => {
+      const a: any = ["x"];
+      a.executablePath = process.execPath;
+      a.allowedExecutablePaths = [process.execPath];
+      a.args = [];
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-arrf"), runnerConfig: a });
     });
-    asst(!r11.ok && r11.decision === "invalid_session_configuration", "non-array args rejected");
+    assertInvalidWithoutThrow("runnerConfig class instance", () => {
+      class Rc {
+        executablePath = process.execPath;
+        allowedExecutablePaths = [process.execPath];
+        args: string[] = [];
+      }
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-class"), runnerConfig: new Rc() as any });
+    });
+    assertInvalidWithoutThrow("runnerConfig accessor", () => {
+      const rc: any = rcBase();
+      Object.defineProperty(rc, "executablePath", {
+        get() { return process.execPath; },
+        enumerable: true,
+        configurable: true,
+      });
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-acc"), runnerConfig: rc });
+    });
+    // throwing runnerConfig Proxy with a valid session ID — proves no burn
+    assertInvalidDoesNotBurn("runnerConfig throwing Proxy", "session-r16-burn-rc", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-burn-rc"), runnerConfig: throwingProxy() as any }));
+    assertInvalidWithoutThrow("runnerConfig missing args", () => {
+      const rc: any = rcBase();
+      delete rc.args;
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-noargs"), runnerConfig: rc });
+    });
+    assertInvalidWithoutThrow("runnerConfig missing allowedExecutablePaths", () => {
+      const rc: any = rcBase();
+      delete rc.allowedExecutablePaths;
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-rc-noallow"), runnerConfig: rc });
+    });
+    assertInvalidWithoutThrow("serializedPayload undefined key rejected", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-rc-spu"),
+        runnerConfig: { ...rcBase(), serializedPayload: undefined } as any,
+      }));
+    assertInvalidWithoutThrow("serializedPayload pre-set rejected", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-rc-spp"),
+        runnerConfig: { ...rcBase(), serializedPayload: "injected" } as any,
+      }));
 
-    // 16l: runnerConfig with non-finite timeoutMs
-    const r12 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16l",
-      runnerConfig: { ...makeRunnerConfig(), timeoutMs: Infinity },
-    });
-    asst(!r12.ok && r12.decision === "invalid_session_configuration", "infinite timeoutMs rejected");
+    // ── runnerConfig field shape (18–19) ──
+    assertInvalidWithoutThrow("empty executablePath", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-f-exec"), runnerConfig: { ...rcBase(), executablePath: "" } }));
+    assertInvalidWithoutThrow("args non-array", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-f-args"), runnerConfig: { ...rcBase(), args: "not-array" as any } }));
+    assertInvalidWithoutThrow("empty allowedExecutablePaths", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-f-allow"), runnerConfig: { ...rcBase(), allowedExecutablePaths: [] } }));
 
-    // 16m: runnerConfig with non-finite observationMs
-    const r13 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16m",
-      runnerConfig: { ...makeRunnerConfig(), observationMs: NaN },
-    });
-    asst(!r13.ok && r13.decision === "invalid_session_configuration", "NaN observationMs rejected");
+    // ── array copy throws (20–22) ──
+    // args copy throws — also proves no burn for the array-copy category
+    assertInvalidDoesNotBurn("args array copy throws", "session-r16-burn-arr", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-burn-arr"),
+        runnerConfig: { ...rcBase(), args: iterThrowArray(["a"]) },
+      }));
+    assertInvalidWithoutThrow("allowlist array copy throws", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-f-allowiter"),
+        runnerConfig: { ...rcBase(), allowedExecutablePaths: iterThrowArray([process.execPath]) },
+      }));
+    assertInvalidWithoutThrow("credentialEnvNames array copy throws", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-f-crediter"),
+        runnerConfig: { ...rcBase(), credentialEnvNames: iterThrowArray(["CRED_A"]) },
+      }));
 
-    // 16n: runnerConfig with non-object sourceEnv
-    const r14 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16n",
-      runnerConfig: { ...makeRunnerConfig(), sourceEnv: "bad" as any },
+    // ── sourceEnv (23–25) ──
+    assertInvalidWithoutThrow("sourceEnv non-object", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-se-str"), runnerConfig: { ...rcBase(), sourceEnv: "bad" as any } }));
+    assertInvalidWithoutThrow("sourceEnv array", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-se-arr"), runnerConfig: { ...rcBase(), sourceEnv: ["x"] as any } }));
+    assertInvalidWithoutThrow("sourceEnv class instance", () => {
+      class Se { CRED_A = "v"; }
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-se-class"), runnerConfig: { ...rcBase(), sourceEnv: new Se() as any } });
     });
-    asst(!r14.ok && r14.decision === "invalid_session_configuration", "non-object sourceEnv rejected");
+    // throwing sourceEnv Proxy — also proves no burn for the sourceEnv category
+    assertInvalidDoesNotBurn("sourceEnv throwing Proxy", "session-r16-burn-env", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-burn-env"),
+        runnerConfig: { ...rcBase(), sourceEnv: throwingProxy() as any },
+      }));
 
-    // 16o: runnerConfig with non-object deps
-    const r15 = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16o",
-      runnerConfig: { ...makeRunnerConfig(), deps: 123 as any },
+    // ── deps (26–28) ──
+    assertInvalidWithoutThrow("deps non-object", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-de-num"), runnerConfig: { ...rcBase(), deps: 123 as any } }));
+    assertInvalidWithoutThrow("deps array", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-de-arr"), runnerConfig: { ...rcBase(), deps: ["x"] as any } }));
+    assertInvalidWithoutThrow("deps class instance", () => {
+      class De { nowFn = () => 1; }
+      return registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-de-class"), runnerConfig: { ...rcBase(), deps: new De() as any } });
     });
-    asst(!r15.ok && r15.decision === "invalid_session_configuration", "non-object deps rejected");
+    // throwing deps Proxy — also proves no burn for the deps category
+    assertInvalidDoesNotBurn("deps throwing Proxy", "session-r16-burn-deps", () =>
+      registerHermesPhase2CodeReviewCanarySession({
+        ...base("session-r16-burn-deps"),
+        runnerConfig: { ...rcBase(), deps: throwingProxy() as any },
+      }));
 
-    // Verify none of the invalid registrations burned their session IDs
-    const burnCheck = registerHermesPhase2CodeReviewCanarySession({
-      ...validBase, canarySessionId: "session-r16d",
-    });
-    asst(burnCheck.ok === true, "invalid registration did not burn session ID");
+    // ── numeric fields (29) ──
+    assertInvalidWithoutThrow("timeoutMs Infinity", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-n-inf"), runnerConfig: { ...rcBase(), timeoutMs: Infinity } }));
+    assertInvalidWithoutThrow("maxStderrBytes NaN", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-n-nan"), runnerConfig: { ...rcBase(), maxStderrBytes: NaN } }));
+
+    // ── functions (30) ──
+    assertInvalidWithoutThrow("non-function verifier", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-fn-v"), verifyApproval: 42 as any }));
+    assertInvalidWithoutThrow("non-function clock", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-fn-c"), now: "not-a-fn" as any }));
+    assertInvalidWithoutThrow("non-function processRunner", () =>
+      registerHermesPhase2CodeReviewCanarySession({ ...base("session-r16-fn-r"), processRunner: null as any }));
   }
 
-  // R17: Marker leakage — comprehensive
+  // R17: Marker leakage — comprehensive (all approval/config/payload markers)
   console.log("R17: marker leakage");
   {
+    const SESSION = "session-r17-marker-unique";
     const { runner } = makeFakeRunner();
     const r = registerHermesPhase2CodeReviewCanarySession({
-      canarySessionId: "session-r17-unique",
+      canarySessionId: SESSION,
       verifyApproval: () => true,
       now: () => NOW_MS,
       processRunner: runner,
       runnerConfig: {
-        executablePath: process.execPath,
-        allowedExecutablePaths: [process.execPath],
-        args: ["SECRET_ARG_MARKER_R17"],
-        credentialEnvNames: ["SECRET_CRED_NAME_R17"],
-        sourceEnv: { SECRET_CRED_NAME_R17: "SECRET_CRED_VALUE_R17" },
+        executablePath: "/marker/exec-path-r17",
+        allowedExecutablePaths: ["/marker/allowed-path-r17"],
+        args: ["MARKER_ARG_R17"],
+        credentialEnvNames: ["MARKER_CRED_NAME_R17"],
+        sourceEnv: {
+          MARKER_CRED_NAME_R17: "MARKER_CRED_VALUE_R17",
+          MARKER_ENV_EXTRA_R17: "MARKER_ENV_VALUE_R17",
+        },
+        deps: {
+          nowFn: () => NOW_MS,
+          markerDepsExtraR17: "MARKER_DEPS_VALUE_R17",
+        } as any,
       },
     });
+    asst(r.ok === true, "registered with marker config");
     if (!r.ok) return;
-    const req = makeReq("session-r17-unique", {
+    const req = makeReq(SESSION, {
       operatorApproval: {
         hermesPhase2CodeReviewCanary: makeApproval(
-          makeReq("session-r17-unique"),
+          makeReq(SESSION),
           {
-            proof: "SECRET_PROOF_MARKER_R17",
-            nonce: "SECRET_NONCE_MARKER_R17",
-            operatorIdentityReference: "SECRET_OPERATOR_MARKER_R17",
-            canarySessionId: "session-r17-unique",
+            approvalId: "MARKER_APPROVAL_ID_R17",
+            operatorIdentityReference: "MARKER_OPERATOR_R17",
+            proof: "MARKER_PROOF_R17",
+            nonce: "MARKER_NONCE_R17_abcdef123456",
+            canarySessionId: SESSION,
             payloadDigestSha256: KNOWN_PAYLOAD_DIGEST,
           },
         ),
       },
     });
     const result = await r.entry.execute(req);
+    asst(result.decision === "executed", "executed with marker approval");
     const json = JSON.stringify(result);
-    asst(!json.includes("SECRET_PROOF_MARKER_R17"), "no proof marker");
-    asst(!json.includes("SECRET_NONCE_MARKER_R17"), "no nonce marker");
-    asst(!json.includes("SECRET_OPERATOR_MARKER_R17"), "no operator marker");
-    asst(!json.includes("SECRET_ARG_MARKER_R17"), "no args marker");
-    asst(!json.includes("SECRET_CRED_NAME_R17"), "no credential name marker");
-    asst(!json.includes("SECRET_CRED_VALUE_R17"), "no credential value marker");
-    asst(!json.includes("serializedPayload"), "no serializedPayload key");
-    asst(!json.includes("payloadDigestSha256"), "no digest key");
-    asst(!json.includes("session-r17-unique"), "no session ID in result");
-    asst(!json.includes(process.execPath), "no executable path in result");
+
+    // value markers
+    asst(!json.includes("MARKER_APPROVAL_ID_R17"), "no approval ID marker");
+    asst(!json.includes("MARKER_PROOF_R17"), "no proof marker");
+    asst(!json.includes("MARKER_NONCE_R17"), "no nonce marker");
+    asst(!json.includes("MARKER_OPERATOR_R17"), "no operator identity marker");
+    asst(!json.includes(SESSION), "no session ID marker");
+    asst(!json.includes("/marker/exec-path-r17"), "no executable path marker");
+    asst(!json.includes("/marker/allowed-path-r17"), "no allowed path marker");
+    asst(!json.includes("MARKER_ARG_R17"), "no args marker");
+    asst(!json.includes("MARKER_CRED_NAME_R17"), "no credential name marker");
+    asst(!json.includes("MARKER_CRED_VALUE_R17"), "no credential value marker");
+    asst(!json.includes("MARKER_ENV_EXTRA_R17"), "no sourceEnv extra key marker");
+    asst(!json.includes("MARKER_ENV_VALUE_R17"), "no sourceEnv extra value marker");
+    asst(!json.includes("MARKER_DEPS_VALUE_R17"), "no deps extra marker");
+    asst(!json.includes("hermes-phase2-code-review-canary-v1"), "no payload fixture ID");
+    asst(!json.includes("diff --git a/src/utils.ts"), "no synthetic patch fragment");
+
+    // field names must not appear anywhere in the sanitized result
+    const forbiddenFields = [
+      "request", "runnerResult", "serializedPayload", "payloadDigestSha256",
+      "syntheticPatch", "approval", "approvalId", "proof", "nonce",
+      "operatorIdentityReference", "canarySessionId", "runnerConfig",
+      "executablePath", "allowedExecutablePaths", "args",
+      "credentialEnvNames", "sourceEnv", "deps",
+    ];
+    for (const f of forbiddenFields) {
+      asst(!(f in result), `field ${f} absent (top-level)`);
+      asst(!json.includes(`"${f}"`), `field name ${f} absent in JSON`);
+    }
   }
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);

@@ -2,6 +2,9 @@
 // ====================================================
 // Process-local, session-scoped canary request entry.
 // One gate per session. No Gateway/Runtime wiring. No default runner.
+// Fail-closed plain data record validation for all config inputs;
+// mapped-type-guarded complete runnerConfig snapshot (serializedPayload
+// is never snapshotted — only the Task B executor injects it).
 //
 // SCOPE: single_node_process_only
 // - Does NOT share state across Node processes.
@@ -70,56 +73,95 @@ export type HermesPhase2CanarySessionRegistrationResult =
 // Process restart clears all registered sessions.
 const registeredSessionIds = new Set<string>();
 
-// ── Compile-time snapshot completeness guard ──
-// If HermesPhase2CanaryProcessRunnerConfig gains a new field (other than
-// serializedPayload), this type assertion will fail at compile time until
-// snapshotRunnerConfig is updated to cover it.
-type _SnapshotMustCoverAll = Exclude<
+// ── Compile-time snapshot completeness guard (mapped type) ──
+// Every field of HermesPhase2CanaryProcessRunnerConfig except
+// serializedPayload MUST appear explicitly in the snapshot object literal
+// below. If the runner config gains a new field, `satisfies` fails at
+// compile time until snapshotRunnerConfig covers it. Changing only the
+// return type without adding the real property also fails, because the
+// object literal itself is checked against the mapped type.
+type RunnerConfigSnapshotField = Exclude<
   keyof HermesPhase2CanaryProcessRunnerConfig,
   "serializedPayload"
 >;
-type _SnapshotReturnType = ReturnType<typeof snapshotRunnerConfig>;
-type _AssertComplete = _SnapshotMustCoverAll extends keyof _SnapshotReturnType
-  ? true
-  : never;
-const _snapshotCompletenessGuard: _AssertComplete = true;
-void _snapshotCompletenessGuard;
 
-function snapshotRunnerConfig(
-  config: HermesPhase2CanaryProcessRunnerConfig,
-): Readonly<{
+type CompleteRunnerConfigSnapshot = {
+  [K in RunnerConfigSnapshotField]-?:
+    HermesPhase2CanaryProcessRunnerConfig[K] | undefined;
+};
+
+// ── Fail-closed plain data record scan (module-internal) ──
+// Accepts only plain objects (Object.prototype or null prototype). Rejects
+// arrays, class instances, accessor descriptors, and any object whose
+// reflection (getPrototypeOf / getOwnPropertyDescriptors, including Proxy
+// traps) throws. Values are read exclusively from data descriptor `.value`;
+// no getter is ever invoked. Returns a fresh plain values object; never
+// leaks the original exception; never touches the registry.
+type PlainDataRecordScan =
+  | { ok: true; keys: string[]; values: Record<string, unknown> }
+  | { ok: false };
+
+function scanPlainDataRecord(value: unknown): PlainDataRecordScan {
+  if (value === null || typeof value !== "object") return { ok: false };
+  if (Array.isArray(value)) return { ok: false };
+  let proto: unknown;
+  try {
+    proto = Object.getPrototypeOf(value);
+  } catch {
+    return { ok: false };
+  }
+  if (proto !== Object.prototype && proto !== null) return { ok: false };
+  let descriptors: PropertyDescriptorMap;
+  try {
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch {
+    return { ok: false };
+  }
+  const keys: string[] = [];
+  const values: Record<string, unknown> = {};
+  for (const key of Object.keys(descriptors)) {
+    const d = descriptors[key];
+    if (typeof d.get === "function" || typeof d.set === "function") {
+      return { ok: false };
+    }
+    if (!("value" in d)) return { ok: false };
+    keys.push(key);
+    values[key] = d.value;
+  }
+  return { ok: true, keys, values };
+}
+
+function snapshotRunnerConfig(config: {
   executablePath: string;
   allowedExecutablePaths: ReadonlyArray<string>;
   args: ReadonlyArray<string>;
-  timeoutMs?: number;
-  termGraceMs?: number;
-  observationMs?: number;
-  maxStdoutBytes?: number;
-  maxStderrBytes?: number;
-  credentialEnvNames?: ReadonlyArray<string>;
-  sourceEnv?: Readonly<Record<string, string>>;
-  deps?: HermesPhase2CanaryRunnerDeps;
-}> {
-  return Object.freeze({
+  timeoutMs: number | undefined;
+  termGraceMs: number | undefined;
+  observationMs: number | undefined;
+  maxStdoutBytes: number | undefined;
+  maxStderrBytes: number | undefined;
+  credentialEnvNames: ReadonlyArray<string> | undefined;
+  sourceEnv: Readonly<Record<string, string>> | undefined;
+  deps: HermesPhase2CanaryRunnerDeps | undefined;
+}): CompleteRunnerConfigSnapshot {
+  // Every non-serializedPayload field appears explicitly; optional fields
+  // appear as required properties whose value may be undefined.
+  // serializedPayload is intentionally NOT part of the snapshot — it is
+  // injected by the Task B executor at execution time.
+  const completeSnapshot = {
     executablePath: config.executablePath,
-    allowedExecutablePaths: Object.freeze([...config.allowedExecutablePaths]),
-    args: Object.freeze([...config.args]),
+    allowedExecutablePaths: config.allowedExecutablePaths,
+    args: config.args,
     timeoutMs: config.timeoutMs,
     termGraceMs: config.termGraceMs,
     observationMs: config.observationMs,
     maxStdoutBytes: config.maxStdoutBytes,
     maxStderrBytes: config.maxStderrBytes,
-    credentialEnvNames: config.credentialEnvNames
-      ? Object.freeze([...config.credentialEnvNames])
-      : undefined,
-    sourceEnv: config.sourceEnv
-      ? Object.freeze({ ...config.sourceEnv })
-      : undefined,
-    deps: config.deps
-      ? Object.freeze({ ...config.deps })
-      : undefined,
-    // serializedPayload is intentionally NOT copied — it will be set by the executor
-  });
+    credentialEnvNames: config.credentialEnvNames,
+    sourceEnv: config.sourceEnv,
+    deps: config.deps,
+  } satisfies CompleteRunnerConfigSnapshot;
+  return Object.freeze(completeSnapshot);
 }
 
 function sanitizeResult(
@@ -162,8 +204,17 @@ export function registerHermesPhase2CodeReviewCanarySession(
   config: HermesPhase2CanarySessionRegistrationConfig,
 ): HermesPhase2CanarySessionRegistrationResult {
   try {
-    // Step 1: Validate canarySessionId basic shape
-    const { canarySessionId } = config;
+    // Step 1: fail-closed plain data record scan of the top-level config.
+    // The runtime config is treated as unknown: no property is read before
+    // the scan completes; afterwards only data descriptor values are used.
+    const configScan = scanPlainDataRecord(config);
+    if (!configScan.ok) {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    const cv = configScan.values;
+
+    // Step 2: Validate canarySessionId basic shape
+    const canarySessionId = cv.canarySessionId;
     if (
       typeof canarySessionId !== "string" ||
       canarySessionId.length === 0 ||
@@ -173,31 +224,25 @@ export function registerHermesPhase2CodeReviewCanarySession(
       return { ok: false, decision: "invalid_session_configuration" };
     }
 
-    // Step 2: Check if already registered
+    // Step 3: Check if already registered — before any runnerConfig scan,
+    // gate creation, or runner interaction. A consumed gate is never touched.
     if (registeredSessionIds.has(canarySessionId)) {
       return { ok: false, decision: "session_already_registered" };
     }
 
-    // Step 3: Validate remaining configuration
-    if (typeof config.verifyApproval !== "function") {
+    // Step 4: Scan and validate runnerConfig and nested fields
+    const rcScan = scanPlainDataRecord(cv.runnerConfig);
+    if (!rcScan.ok) {
       return { ok: false, decision: "invalid_session_configuration" };
     }
-    if (typeof config.now !== "function") {
-      return { ok: false, decision: "invalid_session_configuration" };
-    }
-    if (typeof config.processRunner !== "function") {
-      return { ok: false, decision: "invalid_session_configuration" };
-    }
-    if (
-      config.runnerConfig === null ||
-      config.runnerConfig === undefined ||
-      typeof config.runnerConfig !== "object"
-    ) {
+    const rc = rcScan.values;
+
+    // serializedPayload must not be pre-set — rejected even as an
+    // explicitly undefined key; only the Task B executor injects it.
+    if ("serializedPayload" in rc) {
       return { ok: false, decision: "invalid_session_configuration" };
     }
 
-    // Validate runnerConfig shape
-    const rc = config.runnerConfig;
     if (typeof rc.executablePath !== "string" || rc.executablePath.length === 0) {
       return { ok: false, decision: "invalid_session_configuration" };
     }
@@ -225,36 +270,78 @@ export function registerHermesPhase2CodeReviewCanarySession(
     if (rc.credentialEnvNames !== undefined && !Array.isArray(rc.credentialEnvNames)) {
       return { ok: false, decision: "invalid_session_configuration" };
     }
-    if (rc.sourceEnv !== undefined && (rc.sourceEnv === null || typeof rc.sourceEnv !== "object")) {
+
+    // sourceEnv: fail-closed scan; snapshot into a fresh frozen object.
+    let sourceEnvSnapshot: Readonly<Record<string, string>> | undefined;
+    if (rc.sourceEnv !== undefined) {
+      const seScan = scanPlainDataRecord(rc.sourceEnv);
+      if (!seScan.ok) {
+        return { ok: false, decision: "invalid_session_configuration" };
+      }
+      sourceEnvSnapshot = Object.freeze({ ...seScan.values } as Record<string, string>);
+    }
+
+    // deps: fail-closed scan; snapshot into a fresh frozen object. Function
+    // values are kept by reference (never cloned); no defaults are added.
+    let depsSnapshot: HermesPhase2CanaryRunnerDeps | undefined;
+    if (rc.deps !== undefined) {
+      const depsScan = scanPlainDataRecord(rc.deps);
+      if (!depsScan.ok) {
+        return { ok: false, decision: "invalid_session_configuration" };
+      }
+      depsSnapshot = Object.freeze({ ...depsScan.values }) as HermesPhase2CanaryRunnerDeps;
+    }
+
+    // Array copies inside the outer fail-closed scope: a throwing iterator
+    // or Proxy trap aborts registration via the outer catch — the session
+    // ID is not burned. Element semantics stay with the Task B runner.
+    const allowedExecutablePaths = Object.freeze([...(rc.allowedExecutablePaths as string[])]);
+    const argsCopy = Object.freeze([...(rc.args as string[])]);
+    const credentialEnvNames = rc.credentialEnvNames !== undefined
+      ? Object.freeze([...(rc.credentialEnvNames as string[])])
+      : undefined;
+
+    // Step 5: Validate functions and maxApprovalTtlMs
+    if (typeof cv.verifyApproval !== "function") {
       return { ok: false, decision: "invalid_session_configuration" };
     }
-    if (rc.deps !== undefined && (rc.deps === null || typeof rc.deps !== "object")) {
+    if (typeof cv.now !== "function") {
+      return { ok: false, decision: "invalid_session_configuration" };
+    }
+    if (typeof cv.processRunner !== "function") {
       return { ok: false, decision: "invalid_session_configuration" };
     }
 
-    // serializedPayload must not be pre-set
-    if ("serializedPayload" in rc) {
-      return { ok: false, decision: "invalid_session_configuration" };
-    }
-
-    // Step 4: Create Task A gate (exactly once)
+    // Step 6: Create Task A gate (exactly once)
     const gateResult = createHermesPhase2CodeReviewCanaryGate({
       canarySessionId,
-      verifyApproval: config.verifyApproval,
-      now: config.now,
-      maxApprovalTtlMs: config.maxApprovalTtlMs,
+      verifyApproval: cv.verifyApproval as HermesPhase2CodeReviewCanaryApprovalVerifier,
+      now: cv.now as () => number,
+      maxApprovalTtlMs: cv.maxApprovalTtlMs as number | undefined,
     });
-
-    // Step 5: Gate factory failure
     if (!gateResult.ok) {
       return { ok: false, decision: "invalid_session_configuration" };
     }
 
     const gate = gateResult.gate;
-    const processRunner = config.processRunner;
-    const runnerConfigSnapshot = snapshotRunnerConfig(rc);
+    const processRunner = cv.processRunner as HermesPhase2CanaryProcessRunner;
 
-    // Step 6: Create session entry closure
+    // Step 7: Create the complete runnerConfig snapshot
+    const runnerConfigSnapshot = snapshotRunnerConfig({
+      executablePath: rc.executablePath,
+      allowedExecutablePaths,
+      args: argsCopy,
+      timeoutMs: rc.timeoutMs as number | undefined,
+      termGraceMs: rc.termGraceMs as number | undefined,
+      observationMs: rc.observationMs as number | undefined,
+      maxStdoutBytes: rc.maxStdoutBytes as number | undefined,
+      maxStderrBytes: rc.maxStderrBytes as number | undefined,
+      credentialEnvNames,
+      sourceEnv: sourceEnvSnapshot,
+      deps: depsSnapshot,
+    });
+
+    // Step 8: Create session entry closure
     const entry: HermesPhase2CodeReviewCanarySessionEntry = {
       scope: HERMES_PHASE_2_CODE_REVIEW_CANARY_SESSION_SCOPE,
       execute: async (request: ExecutionRequest): Promise<HermesPhase2CanarySanitizedResult> => {
@@ -269,13 +356,15 @@ export function registerHermesPhase2CodeReviewCanarySession(
       },
     };
 
-    // Step 7: Register session ID
+    // Step 9: Register session ID (last mutation, after everything succeeded)
     registeredSessionIds.add(canarySessionId);
 
-    // Step 8: Return
+    // Step 10: Return
     return { ok: true, decision: "session_registered", entry };
   } catch {
-    // Fail-closed: any unexpected error returns invalid without burning the ID
+    // Fail-closed: any unexpected error returns invalid without burning the
+    // session ID, without writing the registry, and without leaking the
+    // original error text.
     return { ok: false, decision: "invalid_session_configuration" };
   }
 }
