@@ -432,10 +432,34 @@ async function test() {
   // ── Test 18: Current Status consistency ──
   console.log("Test 18: Current Status consistency");
   const currentStatus = fs.readFileSync("docs/CURRENT_STATUS.md", "utf-8");
-  for (const needle of [
-    "05b064dcce688f0d7f8dbf41f049052534faab54",
-    "snapshot_mode: stage_boundary_reviewed_snapshot",
-    "update_every_commit: false",
+  const CS_SOURCE_HEADING = "## A. Source implementation facts";
+  const CS_GOVERNANCE_HEADING = "## B. Project Controller governance state — not implementation fact";
+  const csLines = currentStatus.split("\n");
+  const headingIndexes = (heading: string): number[] =>
+    csLines.map((line, index) => (line.trim() === heading ? index : -1)).filter((index) => index >= 0);
+  const sectionText = (headingIndex: number): string => {
+    let end = csLines.length;
+    for (let i = headingIndex + 1; i < csLines.length; i++) {
+      if (csLines[i]!.startsWith("## ")) { end = i; break; }
+    }
+    return csLines.slice(headingIndex + 1, end).join("\n");
+  };
+  const srcHeadingIdxs = headingIndexes(CS_SOURCE_HEADING);
+  const govHeadingIdxs = headingIndexes(CS_GOVERNANCE_HEADING);
+  assert(srcHeadingIdxs.length === 1, `source heading exactly once (found ${srcHeadingIdxs.length})`);
+  assert(govHeadingIdxs.length === 1, `governance heading exactly once (found ${govHeadingIdxs.length})`);
+  assert(srcHeadingIdxs[0]! < govHeadingIdxs[0]!, "source heading appears before governance heading");
+  const sourceSection = sectionText(srcHeadingIdxs[0]!);
+  const governanceSection = sectionText(govHeadingIdxs[0]!);
+  const countOccurrences = (text: string, needle: string): number => text.split(needle).length - 1;
+
+  const sourceNeedles = [
+    "`requirement-summary`",
+    "`tech-design`",
+    "`solution-challenge`",
+    "`review`",
+    "`implementation`",
+    "`validation`",
     "PR #31",
     "PR #32",
     "PR #33",
@@ -446,20 +470,63 @@ async function test() {
     "operator_action_authorization: not_granted",
     "rollout_authorization: not_granted",
     "operator_action_executed: false",
-    "rollout_executed: false",
     "task_c_gateway_wiring: false",
     "task_c_runtime_wiring: false",
     "real_canary_executed: false",
+    "rollout_executed: false",
     "phase_3_executed: false",
     "new_capability_migration_required_for_closure: false",
     "external_consumer_risk: unknown",
+  ];
+  for (const needle of sourceNeedles) {
+    assert(sourceSection.includes(needle), `source section contains: ${needle}`);
+    assert(!governanceSection.includes(needle), `governance section must not contain: ${needle}`);
+  }
+  const machineStateMarkers = [
+    "controlled_rollout_plan_exists: true",
+    "controlled_rollout_plan_status: plan_only",
+    "task_c_gateway_wiring: false",
+    "task_c_runtime_wiring: false",
+    "real_canary_executed: false",
+    "rollout_executed: false",
+    "phase_3_executed: false",
+    "new_capability_migration_required_for_closure: false",
+    "external_consumer_risk: unknown",
+  ];
+  for (const marker of machineStateMarkers) {
+    assert(countOccurrences(currentStatus, marker) === 1, `${marker} appears exactly once in Current Status`);
+  }
+
+  const governanceNeedles = [
     "topic_09_status: frozen",
     "task_d_status: hold",
     "document_governance_stage_closed: false",
     "project_mainline_return_status: pending_document_governance_closure",
-    "Source implementation facts",
-    "Project Controller governance state",
-    "not implementation fact",
+  ];
+  for (const needle of governanceNeedles) {
+    assert(governanceSection.includes(needle), `governance section contains: ${needle}`);
+    assert(!sourceSection.includes(needle), `source section must not contain: ${needle}`);
+    assert(countOccurrences(currentStatus, needle) === 1, `${needle} appears exactly once in Current Status`);
+  }
+  assert(governanceSection.includes("不是 Source 代码实现事实"), "governance section states not-implementation-fact semantics");
+  assert(governanceSection.includes("Project Controller"), "governance section names Project Controller");
+
+  // Non-section-specific global boundaries stay whole-file checks.
+  for (const needle of [
+    "05b064dcce688f0d7f8dbf41f049052534faab54",
+    "snapshot_mode: stage_boundary_reviewed_snapshot",
+    "update_every_commit: false",
+    "canonical human-readable current repository status/index",
+    "canonical_machine_runtime_capability_registry",
+    "scoped_system_capability_evidence_review_dataset",
+    "scoped_adapter_request_type_evidence_matrix",
+    "planning_authority: false",
+    "authorization_authority: false",
+    "operator_authority: false",
+    "rollout_authority: false",
+    "publication_authority: false",
+    "recommended_next_pr",
+    "Project Controller sequencing",
   ]) {
     assert(currentStatus.includes(needle), `Current Status contains: ${needle}`);
   }
@@ -582,6 +649,59 @@ async function test() {
     validatorSource.includes("Accepted Root Material Classification"),
     "validator checks the accepted root material classification section"
   );
+  // Section-scoped Current Status implementation structure (combination of
+  // features — a single string must not be enough to pass).
+  assert(
+    validatorSource.includes("CURRENT_STATUS_SOURCE_HEADING") &&
+      validatorSource.includes("CURRENT_STATUS_GOVERNANCE_HEADING"),
+    "validator defines both section heading constants"
+  );
+  assert(
+    validatorSource.includes('"## A. Source implementation facts"') &&
+      validatorSource.includes('"## B. Project Controller governance state — not implementation fact"'),
+    "validator pins both exact section headings"
+  );
+  assert(
+    validatorSource.includes("CURRENT_STATUS_SOURCE_FACT_NEEDLES") &&
+      validatorSource.includes("CURRENT_STATUS_GOVERNANCE_NEEDLES"),
+    "validator keeps separate source and governance marker sets"
+  );
+  assert(
+    validatorSource.includes("section_lines(cs_lines, CURRENT_STATUS_SOURCE_HEADING)") &&
+      validatorSource.includes("section_lines(cs_lines, CURRENT_STATUS_GOVERNANCE_HEADING)"),
+    "validator parses both sections with section-aware extraction"
+  );
+  assert(
+    validatorSource.includes("current-status-section: source heading expected exactly 1, found") &&
+      validatorSource.includes("current-status-section: governance heading expected exactly 1"),
+    "validator checks heading counts"
+  );
+  assert(
+    validatorSource.includes("governance heading must follow source heading"),
+    "validator checks heading order"
+  );
+  assert(
+    validatorSource.includes("missing from source section") &&
+      validatorSource.includes("missing from governance section"),
+    "validator checks markers are present in their own section"
+  );
+  assert(
+    validatorSource.includes("must not appear in governance section") &&
+      validatorSource.includes("must not appear in source section"),
+    "validator checks cross-section exclusion"
+  );
+  assert(
+    validatorSource.includes("must appear exactly once in"),
+    "validator checks whole-file marker uniqueness"
+  );
+  // Section-specific markers must appear exactly once in the validator source
+  // (their single definition site) — no parallel global-contains success path.
+  for (const marker of ["task_c_gateway_wiring: false", "topic_09_status: frozen"]) {
+    assert(
+      countOccurrences(validatorSource, marker) === 1,
+      `validator source defines ${marker} exactly once (section-scoped set only)`
+    );
+  }
   assert(
     !validatorSource.includes("Net::HTTP") &&
       !validatorSource.includes("`git") &&

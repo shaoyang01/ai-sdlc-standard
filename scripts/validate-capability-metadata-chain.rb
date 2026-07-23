@@ -451,12 +451,6 @@ end
   "docs/CURRENT_STATUS.md" => [
     "canonical human-readable current repository status/index",
     "feature/loop-runtime-v1",
-    "`requirement-summary`",
-    "`tech-design`",
-    "`solution-challenge`",
-    "`review`",
-    "`implementation`",
-    "`validation`",
     "canonical_machine_runtime_capability_registry",
     "scoped_system_capability_evidence_review_dataset",
     "scoped_adapter_request_type_evidence_matrix",
@@ -468,28 +462,7 @@ end
     "recommended_next_pr",
     "Project Controller sequencing",
     "stage_boundary_reviewed_snapshot",
-    "update_every_commit: false",
-    "Source implementation facts",
-    "Project Controller governance state",
-    "not implementation fact",
-    "PR #31",
-    "PR #32",
-    "PR #33",
-    "PR #34",
-    "PR #35",
-    "controlled_rollout_plan_exists: true",
-    "controlled_rollout_plan_status: plan_only",
-    "task_c_gateway_wiring: false",
-    "task_c_runtime_wiring: false",
-    "real_canary_executed: false",
-    "rollout_executed: false",
-    "phase_3_executed: false",
-    "new_capability_migration_required_for_closure: false",
-    "external_consumer_risk: unknown",
-    "topic_09_status: frozen",
-    "task_d_status: hold",
-    "document_governance_stage_closed: false",
-    "project_mainline_return_status: pending_document_governance_closure"
+    "update_every_commit: false"
   ],
   "SYSTEM_STATUS.md" => [
     "HISTORICAL SNAPSHOT — NON-AUTHORITATIVE",
@@ -521,6 +494,120 @@ end
   needles.each do |needle|
     unless file_includes(path, needle)
       errors << "authority: #{path} is missing required content #{needle.inspect}"
+    end
+  end
+end
+
+# ── Current Status section-scoped checks ──
+# Source implementation facts and Project Controller governance state are
+# verified strictly inside their own "## A."/"## B." sections. A whole-file
+# include? is never accepted as proof of section membership.
+
+CURRENT_STATUS_SOURCE_HEADING = "## A. Source implementation facts"
+CURRENT_STATUS_GOVERNANCE_HEADING =
+  "## B. Project Controller governance state — not implementation fact"
+
+CURRENT_STATUS_SOURCE_FACT_NEEDLES = [
+  "`requirement-summary`",
+  "`tech-design`",
+  "`solution-challenge`",
+  "`review`",
+  "`implementation`",
+  "`validation`",
+  "PR #31",
+  "PR #32",
+  "PR #33",
+  "PR #34",
+  "PR #35",
+  "controlled_rollout_plan_exists: true",
+  "controlled_rollout_plan_status: plan_only",
+  "task_c_gateway_wiring: false",
+  "task_c_runtime_wiring: false",
+  "real_canary_executed: false",
+  "rollout_executed: false",
+  "phase_3_executed: false",
+  "new_capability_migration_required_for_closure: false",
+  "external_consumer_risk: unknown"
+].freeze
+
+# Machine-state markers (the "key: value" entries above) must additionally
+# be unique across the whole file. Derived from the single definition site
+# so no marker string is ever duplicated in this validator.
+CURRENT_STATUS_SOURCE_UNIQUE_NEEDLES =
+  CURRENT_STATUS_SOURCE_FACT_NEEDLES.select { |needle| needle.include?(": ") }.freeze
+
+CURRENT_STATUS_GOVERNANCE_NEEDLES = [
+  "topic_09_status: frozen",
+  "task_d_status: hold",
+  "document_governance_stage_closed: false",
+  "project_mainline_return_status: pending_document_governance_closure"
+].freeze
+
+def count_occurrences(text, needle)
+  # String#scan with a plain String pattern matches literally.
+  text.scan(needle).length
+end
+
+if File.file?(current_status_path)
+  cs_lines = File.readlines(current_status_path, chomp: true)
+  cs_full_text = cs_lines.join("\n")
+
+  source_heading_count = cs_lines.count { |line| line.strip == CURRENT_STATUS_SOURCE_HEADING }
+  governance_heading_count = cs_lines.count { |line| line.strip == CURRENT_STATUS_GOVERNANCE_HEADING }
+  if source_heading_count != 1
+    errors << "current-status-section: source heading expected exactly 1, found #{source_heading_count}"
+  end
+  if governance_heading_count != 1
+    errors << "current-status-section: governance heading expected exactly 1, " \
+              "found #{governance_heading_count}"
+  end
+
+  if source_heading_count == 1 && governance_heading_count == 1
+    source_heading_index = cs_lines.index { |line| line.strip == CURRENT_STATUS_SOURCE_HEADING }
+    governance_heading_index = cs_lines.index { |line| line.strip == CURRENT_STATUS_GOVERNANCE_HEADING }
+    if source_heading_index > governance_heading_index
+      errors << "current-status-section: governance heading must follow source heading"
+    else
+      source_section_text = section_lines(cs_lines, CURRENT_STATUS_SOURCE_HEADING).join("\n")
+      governance_section_text = section_lines(cs_lines, CURRENT_STATUS_GOVERNANCE_HEADING).join("\n")
+
+      CURRENT_STATUS_SOURCE_FACT_NEEDLES.each do |needle|
+        unless source_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} missing from source section"
+        end
+        if governance_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} must not appear in governance section"
+        end
+      end
+      CURRENT_STATUS_SOURCE_UNIQUE_NEEDLES.each do |needle|
+        occurrences = count_occurrences(cs_full_text, needle)
+        if occurrences != 1
+          errors << "current-status-section: #{needle.inspect} must appear exactly once in " \
+                    "Current Status, found #{occurrences}"
+        end
+      end
+
+      CURRENT_STATUS_GOVERNANCE_NEEDLES.each do |needle|
+        unless governance_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} missing from governance section"
+        end
+        if source_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} must not appear in source section"
+        end
+        occurrences = count_occurrences(cs_full_text, needle)
+        if occurrences != 1
+          errors << "current-status-section: #{needle.inspect} must appear exactly once in " \
+                    "Current Status, found #{occurrences}"
+        end
+      end
+
+      # The governance section must state, in its own heading/body, that these
+      # are Project Controller governance decisions — not implementation fact.
+      unless governance_section_text.include?("Project Controller") &&
+             governance_section_text.include?("不是 Source 代码实现事实")
+        errors << "current-status-section: governance section must state these are " \
+                  "Project Controller decisions, not implementation fact"
+      end
     end
   end
 end
