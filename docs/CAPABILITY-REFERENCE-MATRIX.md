@@ -212,6 +212,59 @@ This path migration does not constitute capability approval, enablement, executi
 | `REPOSITORY_CAPABILITY_INVENTORY.md` | `docs/reports/archive/capabilities/REPOSITORY_CAPABILITY_INVENTORY.md` | `REPOSITORY_CAPABILITY_INVENTORY.md` | shared-inventory | root reference note, minimum 30-day retention | implemented in shared inventory migration PR; effective upon merge |
 | `SKILL_FLOW_INVENTORY_REPORT.md` | `docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md` | `SKILL_FLOW_INVENTORY_REPORT.md` | shared-inventory | root reference note, minimum 30-day retention | implemented in shared inventory migration PR; effective upon merge |
 
+## Accepted Root Material Classification
+
+This section records the Project Controller accepted root placement / retention governance decision for current root material. This classification does not change Git implementation facts. It does not authorize capability enablement, execution, operator action, rollout, or publication. It does not mean external compatibility has been resolved. It does not delete, move, or rename any file. External Risk remains `unknown`; `unknown` has been accepted by the Project Controller as a non-blocking residual risk for document governance closure. Removing any compatibility note still requires a separate governance decision.
+
+### A. KEEP_ROOT_CANONICAL
+
+Files retained at root as canonical entry material:
+
+- `README.md` — Standard Package / product overview; not the canonical current project status.
+- `manifest.yaml` — Standard Package index; not a Runtime manifest or a project status authority.
+- `ROADMAP.md` — long-term roadmap index; does not automatically decide the current execution order.
+- `PORTABILITY.md` — portability policy.
+- `AI_CHANGE_GUARDRAILS.md` — AI-assisted change guardrails policy.
+- `package.json` — Runtime root build and dependency entry.
+- `package-lock.json` — dependency lockfile.
+- `tsconfig.json` — TypeScript compiler configuration.
+- `runtime-capabilities.json` — canonical machine runtime capability registry, scoped to tests/tooling only.
+- `system-capability-review.json` — scoped system evidence/review dataset.
+- `real-agent-adapter-capability-matrix.json` — scoped adapter and ExecutionRequestType evidence.
+
+None of the three root JSON files is a global project status authority, a planning authority, an authorization authority, an operator authority, a rollout authority, or a publication authority.
+
+### B. KEEP_ROOT_COMPATIBILITY
+
+Files retained at root as compatibility reference notes / snapshots:
+
+- `CONTROL_PLANE_AUDIT.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-11T17:12:18Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-11T17:12:18Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `PROJECT_FILE_INVENTORY.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-11T17:12:18Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-11T17:12:18Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `SYSTEM_REVIEW.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-11T17:12:18Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `REPOSITORY_CAPABILITY_INVENTORY.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-18T12:48:51Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `SKILL_FLOW_INVENTORY_REPORT.md` — historical archive reference note; minimum 30-day retention; earliest eligibility review: 2026-08-18T12:48:51Z; no automatic deletion; separate governance decision required; External Risk remains unknown.
+- `SYSTEM_STATUS.md` — historical snapshot compatibility surface; non-authoritative; currently still has repository references; deletion is not authorized; not automatically controlled by the archive-note minimum-retention dates above; any later deletion or relocation requires separate governance.
+- `SYSTEM_CAPABILITY_REVIEW.md` — historical snapshot compatibility surface; non-authoritative; currently still has repository references; deletion is not authorized; not automatically controlled by the archive-note minimum-retention dates above; any later deletion or relocation requires separate governance.
+
+Each earliest eligibility review date is only the earliest time a re-audit is permitted; it is not a deletion date.
+
+### C. DEFER_WITH_EXPLICIT_REASON
+
+Files whose root placement is explicitly deferred:
+
+- `CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md` — original pre-migration cleanup plan; historical plan context; this Matrix is the current path/migration ledger; it is currently not moved, not deleted, and its historical body is not rewritten; its path does not block document governance closure.
+- `HERMES_PHASE_2_CONSOLIDATION.md` — consolidation/governance reference; its current content is converged by 04-F1; root placement is unchanged for now; final path ownership is deferred to a separate structural governance decision; its path does not block document governance closure.
+
+### D. Empty Classifications
+
+- `MOVE_TO_FAMILY_DIRECTORY`: none
+- `ARCHIVE_WITH_REFERENCE_NOTE`: none_new
+- `REMOVE_REFERENCE_NOTE`: none
+
+Reasons: the approved capability migration batches are complete; there is currently no artifact that must be migrated before closure; the compatibility notes have not yet reached, or have not yet passed, a separate removal governance decision; External Risk remains `unknown`; no automatic deletion is allowed.
+
 ## Matrix
 
 | Current Path | Family | Material Type | Authority | Reference Type(s) | In-repository Risk Type(s) | External Risk | Suggested Target | Batch | Root Retention | Redirect Needed | Relationship / Open Decision |

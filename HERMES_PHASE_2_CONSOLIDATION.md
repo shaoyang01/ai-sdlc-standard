@@ -4,9 +4,28 @@
 
 `consolidation_only`
 
-## Current Completed Phase
+Root placement classification: `DEFER_WITH_EXPLICIT_REASON` (see
+`docs/CAPABILITY-REFERENCE-MATRIX.md`, section "Accepted Root Material
+Classification").
 
-The following Hermes Gateway Real Dispatch Phase-2 shadow enablement stages are complete:
+This document is a consolidation/governance reference. It is **not** an
+implementation fact authority, a current project status authority, a planning
+authorization authority, an execution authorization authority, or a rollout
+authorization authority.
+
+## Authority Boundaries
+
+- Current implementation facts: Git commit/tree/diff, tests, PRs, and CI.
+- Current human-readable status: `docs/CURRENT_STATUS.md`.
+- Repository structure and status authority model: `docs/REPOSITORY-STRUCTURE.md`.
+- Capability path and migration ledger: `docs/CAPABILITY-REFERENCE-MATRIX.md`.
+- `SYSTEM_STATUS.md`: historical snapshot — non-authoritative.
+- `SYSTEM_CAPABILITY_REVIEW.md`: historical snapshot — non-authoritative.
+
+## Historical Completed Phase (Shadow Enablement)
+
+Historical: the following Hermes Gateway Real Dispatch Phase-2 shadow
+enablement stages were completed:
 
 - Shadow Enablement Implementation Plan
 - Shadow Enablement Contract
@@ -21,73 +40,56 @@ The following Hermes Gateway Real Dispatch Phase-2 shadow enablement stages are 
 - Shadow Enablement Operator Acceptance
 - Shadow Enablement Controlled Rollout Gate
 
-## Pause Decision
+## Historical Pause Decision (Superseded)
 
-Further Hermes Phase-2 rollout progression is paused after the Controlled Rollout Gate.
-The Controlled Rollout Plan is deferred.
-No new rollout, gate, checklist, runbook, or execution-path artifact should be added until this consolidation is reviewed.
+Historical: after the Controlled Rollout Gate, further Phase-2 rollout
+progression was paused pending this consolidation. That pause decision has
+since been superseded by the merged source facts below; it is retained here
+only as historical context.
 
-## Canonical Sources
+## Current Source Implementation Facts
 
-For future Hermes Phase-2 review and small fixes, treat these files as canonical:
+The following are merged source implementation facts on the fact branch
+(`feature/loop-runtime-v1`):
 
-- `execution/hermes-gateway-real-dispatch-phase-2-shadow-enablement.ts`
-- `execution/gateway.ts`
-- `execution/types.ts`
-- `tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts`
-- `tests/hermes-gateway-real-dispatch-gateway-integration.test.ts`
-- `SYSTEM_STATUS.md`
-- `SYSTEM_CAPABILITY_REVIEW.md`
+- PR #31: the plan-only Controlled Rollout Plan has entered the fact branch.
+- PR #32: Topic 09 Task A — the structured approval gate has entered the fact branch.
+- PR #33: Topic 09 Task B — the fixed synthetic payload, dedicated executor,
+  and POSIX process runner have entered the fact branch.
+- PR #34: Topic 09 Task C — the isolated process-local session entry has
+  entered the fact branch.
 
-All other phase-specific `md`/`json` artifacts are evidence/reference files, not primary review targets unless directly modified.
+Tasks A/B/C are isolated supporting capabilities; they are not an automatic
+execution path of the Gateway or the Runtime:
 
-## Future Prompt Modes
+- There is currently no Task C Gateway wiring.
+- There is currently no Task C Runtime wiring.
+- There is currently no real Hermes canary execution.
+- There is currently no rollout execution.
+- There is currently no Phase 3 execution.
 
-### Small Fix Mode
+The earlier Phase-2 shadow sidecar and the newer code-review canary are
+distinct implementation paths.
 
-Use this mode for targeted changes:
+Capability artifact directory migrations: the approved migration batches are
+complete (see the migration ledger in `docs/CAPABILITY-REFERENCE-MATRIX.md`).
+There is currently no new capability migration that must be executed before
+document governance closure.
 
-- Modify only the files explicitly requested.
-- Do not update global metadata unless a test fails because of it.
-- Do not modify `package.json` unless required.
-- Do not create new artifacts.
-- Do not add tests unless required.
-- Do not move files.
-- Do not change the recommended next PR unless explicitly requested.
+## Project Controller Governance State
 
-### Stage Artifact Mode
+The following is Project Controller governance state. It is not a code
+implementation fact and not a permanent repository capability state:
 
-Use this mode if a future stage artifact is truly needed:
+- Topic 09 is currently frozen.
+- Topic 09 Task D is currently on hold.
+- The document governance stage is not yet closed.
+- Project main-line resumption still waits for Topic 04 closure.
 
-- Require explicit user approval before creating `ts`/`md`/`json`/`test` quartets.
-- Avoid duplicate `md`/`json`/`ts` artifacts when one consolidated artifact can represent the stage.
-- Prevent current/next stage wording drift.
-- Forbid claiming that future artifacts are already present.
+## Historical Minimal E2E Smoke Test Result
 
-## Future Directory Cleanup Proposal
-
-Later, after consolidation is accepted, consider moving evidence files into capability directories:
-
-- `docs/capabilities/hermes/`
-- `docs/capabilities/kimi/`
-- `metadata/capabilities/hermes/`
-- `metadata/capabilities/kimi/`
-
-This cleanup is proposed only; do not move or delete files in this PR.
-
-## Non-goals
-
-- No Runtime changes.
-- No Gateway changes.
-- No Hermes implementation changes.
-- No rollout execution.
-- No feature flag enablement.
-- No file moves in this PR.
-- No deletion of existing evidence files in this PR.
-
-## Minimal E2E Smoke Test Result
-
-The minimal end-to-end SDLC flow smoke test passed in default shadow/mock mode.
+Historical: the minimal end-to-end SDLC flow smoke test passed in default
+shadow/mock mode.
 
 Validated:
 
@@ -100,9 +102,14 @@ Validated:
 - no Hermes final ownership
 - no runtime skill inference for implementation
 
-## Recommended Next Step
+## Non-goals (Unchanged Boundaries)
 
-Review this consolidation, then decide whether to:
+This consolidation does not authorize:
 
-1. Perform the proposed directory cleanup, or
-2. Resume rollout planning with a lighter artifact set.
+- Runtime changes.
+- Gateway changes.
+- Hermes implementation changes.
+- Rollout execution.
+- Feature flag enablement.
+- File moves.
+- Deletion of existing evidence files.
