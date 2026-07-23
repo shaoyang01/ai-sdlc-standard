@@ -432,21 +432,114 @@ async function test() {
   // ── Test 18: Current Status consistency ──
   console.log("Test 18: Current Status consistency");
   const currentStatus = fs.readFileSync("docs/CURRENT_STATUS.md", "utf-8");
-  for (const needle of [
-    "721fd120d3ace9335cb010a48275ace0e2253c57",
-    "controlled_rollout_plan_exists_after_this_change_merges: true",
+  const CS_SOURCE_HEADING = "## A. Source implementation facts";
+  const CS_GOVERNANCE_HEADING = "## B. Project Controller governance state — not implementation fact";
+  const csLines = currentStatus.split("\n");
+  const headingIndexes = (heading: string): number[] =>
+    csLines.map((line, index) => (line.trim() === heading ? index : -1)).filter((index) => index >= 0);
+  const sectionText = (headingIndex: number): string => {
+    let end = csLines.length;
+    for (let i = headingIndex + 1; i < csLines.length; i++) {
+      if (csLines[i]!.startsWith("## ")) { end = i; break; }
+    }
+    return csLines.slice(headingIndex + 1, end).join("\n");
+  };
+  const srcHeadingIdxs = headingIndexes(CS_SOURCE_HEADING);
+  const govHeadingIdxs = headingIndexes(CS_GOVERNANCE_HEADING);
+  assert(srcHeadingIdxs.length === 1, `source heading exactly once (found ${srcHeadingIdxs.length})`);
+  assert(govHeadingIdxs.length === 1, `governance heading exactly once (found ${govHeadingIdxs.length})`);
+  assert(srcHeadingIdxs[0]! < govHeadingIdxs[0]!, "source heading appears before governance heading");
+  const sourceSection = sectionText(srcHeadingIdxs[0]!);
+  const governanceSection = sectionText(govHeadingIdxs[0]!);
+  const countOccurrences = (text: string, needle: string): number => text.split(needle).length - 1;
+
+  const sourceNeedles = [
+    "`requirement-summary`",
+    "`tech-design`",
+    "`solution-challenge`",
+    "`review`",
+    "`implementation`",
+    "`validation`",
+    "PR #31",
+    "PR #32",
+    "PR #33",
+    "PR #34",
+    "PR #35",
+    "controlled_rollout_plan_exists: true",
     "controlled_rollout_plan_status: plan_only",
-    "implementation_authorization_scope: plan_material_only",
     "operator_action_authorization: not_granted",
     "rollout_authorization: not_granted",
     "operator_action_executed: false",
+    "task_c_gateway_wiring: false",
+    "task_c_runtime_wiring: false",
+    "real_canary_executed: false",
     "rollout_executed: false",
-    "initial_rollout_request_type: code_review",
-    "phase_request_caps: 1/5/1/5",
-    "evidence_mode: manual_sanitized_summary_only",
-    "next_governance_decision: separate_operator_action_authorization",
+    "phase_3_executed: false",
+    "new_capability_migration_required_for_closure: false",
+    "external_consumer_risk: unknown",
+  ];
+  for (const needle of sourceNeedles) {
+    assert(sourceSection.includes(needle), `source section contains: ${needle}`);
+    assert(!governanceSection.includes(needle), `governance section must not contain: ${needle}`);
+  }
+  const machineStateMarkers = [
+    "controlled_rollout_plan_exists: true",
+    "controlled_rollout_plan_status: plan_only",
+    "task_c_gateway_wiring: false",
+    "task_c_runtime_wiring: false",
+    "real_canary_executed: false",
+    "rollout_executed: false",
+    "phase_3_executed: false",
+    "new_capability_migration_required_for_closure: false",
+    "external_consumer_risk: unknown",
+  ];
+  for (const marker of machineStateMarkers) {
+    assert(countOccurrences(currentStatus, marker) === 1, `${marker} appears exactly once in Current Status`);
+  }
+
+  const governanceNeedles = [
+    "topic_09_status: frozen",
+    "task_d_status: hold",
+    "document_governance_stage_closed: false",
+    "project_mainline_return_status: pending_document_governance_closure",
+  ];
+  for (const needle of governanceNeedles) {
+    assert(governanceSection.includes(needle), `governance section contains: ${needle}`);
+    assert(!sourceSection.includes(needle), `source section must not contain: ${needle}`);
+    assert(countOccurrences(currentStatus, needle) === 1, `${needle} appears exactly once in Current Status`);
+  }
+  assert(governanceSection.includes("不是 Source 代码实现事实"), "governance section states not-implementation-fact semantics");
+  assert(governanceSection.includes("Project Controller"), "governance section names Project Controller");
+
+  // Non-section-specific global boundaries stay whole-file checks.
+  for (const needle of [
+    "05b064dcce688f0d7f8dbf41f049052534faab54",
+    "snapshot_mode: stage_boundary_reviewed_snapshot",
+    "update_every_commit: false",
+    "canonical human-readable current repository status/index",
+    "canonical_machine_runtime_capability_registry",
+    "scoped_system_capability_evidence_review_dataset",
+    "scoped_adapter_request_type_evidence_matrix",
+    "planning_authority: false",
+    "authorization_authority: false",
+    "operator_authority: false",
+    "rollout_authority: false",
+    "publication_authority: false",
+    "recommended_next_pr",
+    "Project Controller sequencing",
   ]) {
     assert(currentStatus.includes(needle), `Current Status contains: ${needle}`);
+  }
+  // Stale strings are assembled from fragments so this contract file never
+  // carries a live copy of the retired baseline or retired markers.
+  const staleNeedles = [
+    "721fd120" + "d3ace9335cb010a48275ace0e2253c57",
+    "controlled_rollout_plan_exists" + "_after_this_change_merges",
+    "implementation_authorization_scope: plan_material_only",
+    "next_governance_decision: separate_operator_action_authorization",
+  ];
+  for (const stale of staleNeedles) {
+    assert(!currentStatus.includes(stale), `Current Status no longer carries stale candidate-PR content: ${stale}`);
   }
   console.log("");
 
@@ -532,8 +625,12 @@ async function test() {
   const validatorSource = fs.readFileSync("scripts/validate-capability-metadata-chain.rb", "utf-8");
   assert(validatorSource.includes("EXPECTED_CURRENT_STATUS_SOURCE_COMMIT"), "validator defines EXPECTED_CURRENT_STATUS_SOURCE_COMMIT");
   assert(
-    validatorSource.includes('"721fd120d3ace9335cb010a48275ace0e2253c57"'),
-    "validator expected current status commit is 721fd120..."
+    validatorSource.includes('"05b064dcce688f0d7f8dbf41f049052534faab54"'),
+    "validator expected current status commit is 05b064d..."
+  );
+  assert(
+    !validatorSource.includes('"' + staleNeedles[0]! + '"'),
+    "validator no longer uses the retired baseline as the expected commit"
   );
   assert(validatorSource.includes("CURRENT_STATUS_AS_OF_PATTERN"), "validator defines the anchored As-of pattern");
   assert(
@@ -544,6 +641,74 @@ async function test() {
     !validatorSource.includes("07c5d26cc9d11a010cb183934950cdb13cb58d42"),
     "validator no longer uses the old SHA as a CURRENT_STATUS needle"
   );
+  assert(
+    validatorSource.includes("stage_boundary_reviewed_snapshot"),
+    "validator checks the stage-boundary snapshot mode"
+  );
+  assert(
+    validatorSource.includes("Accepted Root Material Classification"),
+    "validator checks the accepted root material classification section"
+  );
+  // Section-scoped Current Status implementation structure (combination of
+  // features — a single string must not be enough to pass).
+  assert(
+    validatorSource.includes("CURRENT_STATUS_SOURCE_HEADING") &&
+      validatorSource.includes("CURRENT_STATUS_GOVERNANCE_HEADING"),
+    "validator defines both section heading constants"
+  );
+  assert(
+    validatorSource.includes('"## A. Source implementation facts"') &&
+      validatorSource.includes('"## B. Project Controller governance state — not implementation fact"'),
+    "validator pins both exact section headings"
+  );
+  assert(
+    validatorSource.includes("CURRENT_STATUS_SOURCE_FACT_NEEDLES") &&
+      validatorSource.includes("CURRENT_STATUS_GOVERNANCE_NEEDLES"),
+    "validator keeps separate source and governance marker sets"
+  );
+  assert(
+    validatorSource.includes("section_lines(cs_lines, CURRENT_STATUS_SOURCE_HEADING)") &&
+      validatorSource.includes("section_lines(cs_lines, CURRENT_STATUS_GOVERNANCE_HEADING)"),
+    "validator parses both sections with section-aware extraction"
+  );
+  assert(
+    validatorSource.includes("current-status-section: source heading expected exactly 1, found") &&
+      validatorSource.includes("current-status-section: governance heading expected exactly 1"),
+    "validator checks heading counts"
+  );
+  assert(
+    validatorSource.includes("governance heading must follow source heading"),
+    "validator checks heading order"
+  );
+  assert(
+    validatorSource.includes("missing from source section") &&
+      validatorSource.includes("missing from governance section"),
+    "validator checks markers are present in their own section"
+  );
+  assert(
+    validatorSource.includes("must not appear in governance section") &&
+      validatorSource.includes("must not appear in source section"),
+    "validator checks cross-section exclusion"
+  );
+  assert(
+    validatorSource.includes("must appear exactly once in"),
+    "validator checks whole-file marker uniqueness"
+  );
+  // Section-specific markers must appear exactly once in the validator source
+  // (their single definition site) — no parallel global-contains success path.
+  for (const marker of ["task_c_gateway_wiring: false", "topic_09_status: frozen"]) {
+    assert(
+      countOccurrences(validatorSource, marker) === 1,
+      `validator source defines ${marker} exactly once (section-scoped set only)`
+    );
+  }
+  assert(
+    !validatorSource.includes("Net::HTTP") &&
+      !validatorSource.includes("`git") &&
+      !validatorSource.includes("%x{") &&
+      !validatorSource.includes("git ls-remote"),
+    "validator does not query the network, Git, or floating branches"
+  );
   const asOfLinePattern = /^- As-of source commit：`([0-9a-f]{40})`$/;
   const asOfMatches = currentStatus
     .split("\n")
@@ -551,8 +716,8 @@ async function test() {
     .filter((match) => match !== null);
   assert(asOfMatches.length === 1, `Current Status has exactly one As-of source commit line (found ${asOfMatches.length})`);
   assert(
-    asOfMatches[0]![1] === "721fd120d3ace9335cb010a48275ace0e2253c57",
-    "the single Current Status As-of SHA is 721fd120..."
+    asOfMatches[0]![1] === "05b064dcce688f0d7f8dbf41f049052534faab54",
+    "the single Current Status As-of SHA is 05b064d..."
   );
   console.log("");
 

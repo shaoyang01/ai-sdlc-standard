@@ -409,7 +409,7 @@ AUTHORITY_ROLES.each do |path, role_scope|
   end
 end
 
-EXPECTED_CURRENT_STATUS_SOURCE_COMMIT = "721fd120d3ace9335cb010a48275ace0e2253c57"
+EXPECTED_CURRENT_STATUS_SOURCE_COMMIT = "05b064dcce688f0d7f8dbf41f049052534faab54"
 CURRENT_STATUS_AS_OF_PATTERN = /\A- As-of source commit：`([0-9a-f]{40})`\z/
 
 current_status_path = File.join(ROOT, "docs/CURRENT_STATUS.md")
@@ -451,12 +451,6 @@ end
   "docs/CURRENT_STATUS.md" => [
     "canonical human-readable current repository status/index",
     "feature/loop-runtime-v1",
-    "`requirement-summary`",
-    "`tech-design`",
-    "`solution-challenge`",
-    "`review`",
-    "`implementation`",
-    "`validation`",
     "canonical_machine_runtime_capability_registry",
     "scoped_system_capability_evidence_review_dataset",
     "scoped_adapter_request_type_evidence_matrix",
@@ -466,7 +460,9 @@ end
     "rollout_authority: false",
     "publication_authority: false",
     "recommended_next_pr",
-    "Project Controller sequencing"
+    "Project Controller sequencing",
+    "stage_boundary_reviewed_snapshot",
+    "update_every_commit: false"
   ],
   "SYSTEM_STATUS.md" => [
     "HISTORICAL SNAPSHOT — NON-AUTHORITATIVE",
@@ -502,11 +498,229 @@ end
   end
 end
 
+# ── Current Status section-scoped checks ──
+# Source implementation facts and Project Controller governance state are
+# verified strictly inside their own "## A."/"## B." sections. A whole-file
+# include? is never accepted as proof of section membership.
+
+CURRENT_STATUS_SOURCE_HEADING = "## A. Source implementation facts"
+CURRENT_STATUS_GOVERNANCE_HEADING =
+  "## B. Project Controller governance state — not implementation fact"
+
+CURRENT_STATUS_SOURCE_FACT_NEEDLES = [
+  "`requirement-summary`",
+  "`tech-design`",
+  "`solution-challenge`",
+  "`review`",
+  "`implementation`",
+  "`validation`",
+  "PR #31",
+  "PR #32",
+  "PR #33",
+  "PR #34",
+  "PR #35",
+  "controlled_rollout_plan_exists: true",
+  "controlled_rollout_plan_status: plan_only",
+  "task_c_gateway_wiring: false",
+  "task_c_runtime_wiring: false",
+  "real_canary_executed: false",
+  "rollout_executed: false",
+  "phase_3_executed: false",
+  "new_capability_migration_required_for_closure: false",
+  "external_consumer_risk: unknown"
+].freeze
+
+# Machine-state markers (the "key: value" entries above) must additionally
+# be unique across the whole file. Derived from the single definition site
+# so no marker string is ever duplicated in this validator.
+CURRENT_STATUS_SOURCE_UNIQUE_NEEDLES =
+  CURRENT_STATUS_SOURCE_FACT_NEEDLES.select { |needle| needle.include?(": ") }.freeze
+
+CURRENT_STATUS_GOVERNANCE_NEEDLES = [
+  "topic_09_status: frozen",
+  "task_d_status: hold",
+  "document_governance_stage_closed: false",
+  "project_mainline_return_status: pending_document_governance_closure"
+].freeze
+
+def count_occurrences(text, needle)
+  # String#scan with a plain String pattern matches literally.
+  text.scan(needle).length
+end
+
+if File.file?(current_status_path)
+  cs_lines = File.readlines(current_status_path, chomp: true)
+  cs_full_text = cs_lines.join("\n")
+
+  source_heading_count = cs_lines.count { |line| line.strip == CURRENT_STATUS_SOURCE_HEADING }
+  governance_heading_count = cs_lines.count { |line| line.strip == CURRENT_STATUS_GOVERNANCE_HEADING }
+  if source_heading_count != 1
+    errors << "current-status-section: source heading expected exactly 1, found #{source_heading_count}"
+  end
+  if governance_heading_count != 1
+    errors << "current-status-section: governance heading expected exactly 1, " \
+              "found #{governance_heading_count}"
+  end
+
+  if source_heading_count == 1 && governance_heading_count == 1
+    source_heading_index = cs_lines.index { |line| line.strip == CURRENT_STATUS_SOURCE_HEADING }
+    governance_heading_index = cs_lines.index { |line| line.strip == CURRENT_STATUS_GOVERNANCE_HEADING }
+    if source_heading_index > governance_heading_index
+      errors << "current-status-section: governance heading must follow source heading"
+    else
+      source_section_text = section_lines(cs_lines, CURRENT_STATUS_SOURCE_HEADING).join("\n")
+      governance_section_text = section_lines(cs_lines, CURRENT_STATUS_GOVERNANCE_HEADING).join("\n")
+
+      CURRENT_STATUS_SOURCE_FACT_NEEDLES.each do |needle|
+        unless source_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} missing from source section"
+        end
+        if governance_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} must not appear in governance section"
+        end
+      end
+      CURRENT_STATUS_SOURCE_UNIQUE_NEEDLES.each do |needle|
+        occurrences = count_occurrences(cs_full_text, needle)
+        if occurrences != 1
+          errors << "current-status-section: #{needle.inspect} must appear exactly once in " \
+                    "Current Status, found #{occurrences}"
+        end
+      end
+
+      CURRENT_STATUS_GOVERNANCE_NEEDLES.each do |needle|
+        unless governance_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} missing from governance section"
+        end
+        if source_section_text.include?(needle)
+          errors << "current-status-section: #{needle.inspect} must not appear in source section"
+        end
+        occurrences = count_occurrences(cs_full_text, needle)
+        if occurrences != 1
+          errors << "current-status-section: #{needle.inspect} must appear exactly once in " \
+                    "Current Status, found #{occurrences}"
+        end
+      end
+
+      # The governance section must state, in its own heading/body, that these
+      # are Project Controller governance decisions — not implementation fact.
+      unless governance_section_text.include?("Project Controller") &&
+             governance_section_text.include?("不是 Source 代码实现事实")
+        errors << "current-status-section: governance section must state these are " \
+                  "Project Controller decisions, not implementation fact"
+      end
+    end
+  end
+end
+
+# ── Accepted Root Material Classification checks ──
+
+CLASSIFICATION_HEADING = "## Accepted Root Material Classification"
+
+EXPECTED_ROOT_CLASSIFICATIONS = {
+  "KEEP_ROOT_CANONICAL" => [
+    "README.md",
+    "manifest.yaml",
+    "ROADMAP.md",
+    "PORTABILITY.md",
+    "AI_CHANGE_GUARDRAILS.md",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "runtime-capabilities.json",
+    "system-capability-review.json",
+    "real-agent-adapter-capability-matrix.json"
+  ].freeze,
+  "KEEP_ROOT_COMPATIBILITY" => [
+    "CONTROL_PLANE_AUDIT.md",
+    "GLOBAL_SYSTEM_CAPABILITY_REVIEW_BEFORE_KIMI_GATEWAY.md",
+    "PROJECT_FILE_INVENTORY.md",
+    "REAL_AGENT_ADAPTER_INTEGRATION_PLAN.md",
+    "SYSTEM_REVIEW.md",
+    "REPOSITORY_CAPABILITY_INVENTORY.md",
+    "SKILL_FLOW_INVENTORY_REPORT.md",
+    "SYSTEM_STATUS.md",
+    "SYSTEM_CAPABILITY_REVIEW.md"
+  ].freeze,
+  "DEFER_WITH_EXPLICIT_REASON" => [
+    "CAPABILITY_ARTIFACT_DIRECTORY_CLEANUP_PLAN.md",
+    "HERMES_PHASE_2_CONSOLIDATION.md"
+  ].freeze
+}.freeze
+
+if File.file?(MATRIX_PATH)
+  matrix_all_lines = File.readlines(MATRIX_PATH, chomp: true)
+  heading_count = matrix_all_lines.count { |line| line.strip == CLASSIFICATION_HEADING }
+  if heading_count != 1
+    errors << "classification: expected exactly 1 #{CLASSIFICATION_HEADING.inspect} section, " \
+              "found #{heading_count}"
+  end
+
+  classification_lines = section_lines(matrix_all_lines, CLASSIFICATION_HEADING)
+  if classification_lines.nil?
+    errors << "classification: missing #{CLASSIFICATION_HEADING.inspect} section content"
+  else
+    # Parse "### <letter>. <CLASSIFICATION_NAME>" sub-sections and collect the
+    # backticked file names listed under each.
+    actual_classification = Hash.new { |hash, key| hash[key] = [] }
+    current_name = nil
+    classification_lines.each do |line|
+      if line.start_with?("### ")
+        header_match = line.match(/\A###\s+[A-Z]\.\s+([A-Z_]+)\s*\z/)
+        current_name = header_match ? header_match[1] : nil
+        next
+      end
+      bullet_match = line.match(/\A-\s+`([^`]+)`/)
+      if bullet_match && current_name
+        actual_classification[current_name] << bullet_match[1]
+      end
+    end
+
+    EXPECTED_ROOT_CLASSIFICATIONS.each do |name, expected_files|
+      actual_files = actual_classification[name]
+      if actual_files.length != expected_files.length || actual_files.sort != expected_files.sort
+        missing = expected_files - actual_files
+        extra = actual_files - expected_files
+        errors << "classification: #{name} must list exactly #{expected_files.length} file(s); " \
+                  "missing #{missing.inspect}, unexpected #{extra.inspect}"
+      end
+    end
+
+    # Every listed file must appear exactly once across the whole section.
+    all_listed = actual_classification.values.flatten
+    EXPECTED_ROOT_CLASSIFICATIONS.values.flatten.each do |file|
+      count = all_listed.count(file)
+      if count != 1
+        errors << "classification: #{file} must appear exactly once in the classification " \
+                  "section, found #{count}"
+      end
+    end
+
+    section_text = classification_lines.join("\n")
+    {
+      "MOVE_TO_FAMILY_DIRECTORY empty classification" => "MOVE_TO_FAMILY_DIRECTORY`: none",
+      "ARCHIVE_WITH_REFERENCE_NOTE empty classification" => "ARCHIVE_WITH_REFERENCE_NOTE`: none_new",
+      "REMOVE_REFERENCE_NOTE empty classification" => "REMOVE_REFERENCE_NOTE`: none",
+      "External Risk unknown retention" => "External Risk remains `unknown`",
+      "non-blocking residual risk acceptance" => "non-blocking residual risk",
+      "no automatic deletion" => "no automatic deletion",
+      "separate governance decision" => "separate governance decision",
+      "first eligibility review date" => "2026-08-11T17:12:18Z",
+      "second eligibility review date" => "2026-08-18T12:48:51Z",
+      "eligibility review is not a deletion date" => "not a deletion date"
+    }.each do |description, needle|
+      unless section_text.include?(needle)
+        errors << "classification: section is missing #{description} (#{needle.inspect})"
+      end
+    end
+  end
+end
+
 if errors.empty?
   puts "capability metadata chain validation ok " \
        "(#{implemented_rows.length} implemented migration rows checked; " \
        "layered status authority v1 verified; " \
-       "current status baseline #{EXPECTED_CURRENT_STATUS_SOURCE_COMMIT} verified)"
+       "current status stage-boundary snapshot #{EXPECTED_CURRENT_STATUS_SOURCE_COMMIT} verified; " \
+       "accepted root material classification verified)"
 else
   warn "capability metadata chain validation failed:"
   errors.each { |error| warn "- #{error}" }

@@ -4,13 +4,26 @@
 
 ## 当前自动校验脚本
 
-当前仓库提供：
+当前仓库提供三个自动校验脚本：
 
 ```bash
 ruby scripts/validate-skill-contracts.rb
+ruby scripts/validate-product-parity-fixtures.rb
+ruby scripts/validate-capability-metadata-chain.rb
 ```
 
-该脚本用于校验标准包内部一致性。
+### A. Portable Standard Package validators
+
+- `validate-skill-contracts.rb`：标准包内部契约一致性验证。
+- `validate-product-parity-fixtures.rb`：标准包 product parity fixture 回归验证。
+
+这两个脚本属于标准包内部契约和 product parity 验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
+
+### B. Repository governance validator
+
+`validate-capability-metadata-chain.rb` 服务本仓库的 capability path、migration ledger、root classification、status authority、Current Status fixed baseline 和 historical compatibility 治理。它已在 ci-standards 执行；read-only、deterministic、no network；不创建第二份 migration registry；不属于下游 portable Standard Package 项目必须执行的 runtime 入口；不表示 capability 被批准、启用、执行或 rollout；不证明 external consumers 不存在。
+
+其覆盖范围包括：Matrix Migration Tracking、target paths/root notes、shared inventory paths、root JSON scoped authority、Repository Structure authority model、Current Status exact reviewed baseline、Accepted Root Material Classification、historical snapshot banners、README authority framing。
 
 ## validate-skill-contracts.rb 检查什么
 
