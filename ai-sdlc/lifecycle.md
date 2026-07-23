@@ -128,6 +128,35 @@
 
 校对代码、规格、业务文档之间的一致性。默认只读，明确授权后才写入。
 
+## Development Path 分流与 Shared Tail 汇合
+
+Specification Gate 之后必须形成 Development Path Decision，遵循 canonical 标准 `ai-sdlc/development-path-governance.md`：
+
+```text
+Specification Gate
+  -> Development Path Decision
+  -> DIRECT_IMPLEMENTATION 或 SPECKIT_PIPELINE_REQUIRED
+  -> Implementation
+  -> Shared Documentation Governance Tail
+  -> Tail Completion Gate
+```
+
+- `DIRECT_IMPLEMENTATION`：不执行完整 SDD Core，直接从技术方案拆任务实现。
+- `SPECKIT_PIPELINE_REQUIRED`：执行完整 Speckit SDD Core。
+- `BLOCKED_NEEDS_REVISION`：返回最早受影响节点重新 Gate，不得进入实现或 Tail。
+
+两条可实现路径在 Implementation 后汇入同一个 Shared Documentation Governance Tail。Tail 位于 Speckit Pipeline Core 之外，包含：
+
+- 实现记录（`03-实现记录`）。
+- 代码审核（`04-代码审核`）与 Fix 或 Re-Gate loop。
+- 测试验收（`05-测试验收`）。
+- business_domain_sync decision 和 conditional execution。
+- Reconcile decision 和 conditional execution。
+- Manifest update。
+- Tail Completion Gate（owner 为 `sdlc-gate-runner`）。
+
+Development Path 与 Tail 的正式语义以 `ai-sdlc/development-path-governance.md` 为准。本任务不声称 Pipeline Skill 已完成后续接入。
+
 ## 裁剪规则
 
 简单需求可以裁剪阶段，但必须说明裁剪原因。
@@ -144,3 +173,5 @@
 - 失败策略
 - 测试方式
 - 副作用边界
+
+阶段裁剪不能裁剪实际实现所需的 `03-实现记录`、`04-代码审核`、`05-测试验收` 以及 business_domain_sync decision、Reconcile decision 和 Tail Completion Gate 等 Tail 决策。

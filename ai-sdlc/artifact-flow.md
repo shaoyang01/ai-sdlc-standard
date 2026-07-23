@@ -14,17 +14,19 @@ Raw Requirement
   -> Requirement Boundary
   -> Technical Specification
   -> Specification Gate Result
-  -> Implementation Plan
-  -> Plan Gate Result
-  -> Tasks
-  -> Task Gate Result
-  -> Code Changes
-  -> Implementation Summary
-  -> Code Review Report
-  -> Fix Summary
-  -> Test Report
-  -> Knowledge Sync Report
+  -> Development Path Decision
+  -> [DIRECT_IMPLEMENTATION] Implementation
+  -> [SPECKIT_PIPELINE_REQUIRED] Speckit SDD Core -> Implementation
+  -> [BLOCKED_NEEDS_REVISION] Earliest Affected Upstream Node -> Re-Gate
+  -> Shared Documentation Governance Tail
+       (03-实现记录 -> 04-代码审核 -> Fix / Re-Gate loop -> 05-测试验收
+        -> business_domain_sync decision / conditional execution
+        -> Reconcile decision / conditional execution
+        -> Manifest update)
+  -> Tail Completion Gate Result
 ```
+
+Development Path 分流与 Shared Tail 汇合的正式语义遵循 `ai-sdlc/development-path-governance.md`。`specs/**` 仍是 Speckit 机器事实源；`library/{requirement_id}/` 仍是人工交接和 Gate 视图，两者不互相替代。Shared Tail 复用现有 Implementation Recorder、Code Review、Test、`sdlc-speckit-sync` 与 `sdlc-speckit-code-doc-reconcile` 能力，不创建重复 artifact rail。Tail 产物必须落盘，不能依赖聊天上下文。
 
 ## 产物要求
 
