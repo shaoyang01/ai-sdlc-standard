@@ -7,12 +7,15 @@
 
 - Repository：`shaoyang01/ai-sdlc-standard`
 - Fact branch：`feature/loop-runtime-v1`
-- As-of source commit：`721fd120d3ace9335cb010a48275ace0e2253c57`
-- 本文件描述的实现事实均以上述固定 source commit 核对，不引用任何未来任务 commit 或 merge commit。
+- As-of source commit：`05b064dcce688f0d7f8dbf41f049052534faab54`
 
-## 本次变更边界
+    snapshot_mode: stage_boundary_reviewed_snapshot
+    update_every_commit: false
 
-本次为 plan-only 静态治理材料、metadata/status/test 同步以及 Current Status baseline validator 修复，不改变 Runtime、Gateway、Graph、routing、feature flags、adapter eligibility、ownership 或实际执行行为。
+- 本文件是在阶段边界经 review 的固定快照，不要求每个 commit 自动更新。
+- 仅在重要 implementation batch、阶段切换、进入 closure 前或 live assertion 被 Git 事实超越时才更新。
+- 每次更新必须重新核对当时的实际事实 HEAD，并同步 metadata-chain validator 的 expected baseline。
+- validator 不访问网络，也不查询浮动 branch；本文件不引用任何未来任务 commit 或未来 merge commit。
 
 ## 产品面
 
@@ -21,36 +24,54 @@
 - **Standard Package**：治理文档、模板、skills 和 validators；canonical entrypoints 为 `README.md`、`manifest.yaml`、`ROADMAP.md`、`PORTABILITY.md`、`AI_CHANGE_GUARDRAILS.md`。
 - **Runtime**：确定性 TypeScript graph 解释器；入口为 `package.json`、`runtime.ts`、`demo.ts`，以及 `core/`、`execution/`、`sdlc_graph/`、`tests/` 和 CI。
 
-## Runtime 当前形态
+## A. Source implementation facts
 
-- 当前 Graph 固定为六个节点：`requirement-summary`、`tech-design`、`solution-challenge`、`review`、`implementation`、`validation`。
-- 执行边界为 shadow-first / default-off：所有真实执行都是 feature-flagged、opt-in。
-- Codex 真实执行保持 feature-flagged，且仅限 `code_generation`。
-- Kimi 真实 Gateway dispatch 保持 feature-flagged，且仅限 `llm_task`。
-- Hermes 保持 default-off、sidecar-bounded，范围为 `review` / `code_review` / `validation`；不拥有 Gateway primary/final result，也不拥有 Runtime `final_status` 或 routing。
-- Controlled Rollout Plan 仅以 plan-only 静态材料形式存在（见下节）；没有已执行的 operator action 或 rollout execution。
+以下为本仓库的 Source 代码实现事实，以上述固定 source commit 核对：
 
-## Controlled Rollout Plan 状态
+1. Repository：`shaoyang01/ai-sdlc-standard`；sole fact branch：`feature/loop-runtime-v1`。
+2. Graph 仍为六节点：`requirement-summary`、`tech-design`、`solution-challenge`、`review`、`implementation`、`validation`。
+3. Runtime/Gateway 继续保持 shadow-first、default-off、feature-flagged 边界；所有真实执行都是 feature-flagged、opt-in。
+4. Codex 真实执行仅限其当前已实现和已验证的请求类型边界（feature-flagged，限 `code_generation`）。
+5. Kimi 真实 Gateway dispatch 继续保持其当前请求类型和 feature flag 边界（feature-flagged，限 `llm_task`）。
+6. Hermes 保持 default-off、sidecar-bounded，范围为 `review` / `code_review` / `validation`；旧 Hermes Phase-2 shadow sidecar 与新 code-review canary 是不同实现路径。
+7. PR #31：plan-only Controlled Rollout Plan 已进入事实分支。
+8. PR #32：Task A structured approval gate 已进入事实分支。
+9. PR #33：Task B fixed synthetic payload、dedicated executor、POSIX process runner 已进入事实分支。
+10. PR #34：Task C isolated process-local session entry 已进入事实分支。
+11. PR #35：Consolidation 与 accepted root classification 已进入事实分支。
+12. Tasks A/B/C 是 isolated supporting capabilities，不是 Gateway 或 Runtime 的自动执行路径；Gateway primary/final result、Runtime `final_status` 和 routing 未被新 canary 接管。
+13. 已批准 capability migration batches 已完成；当前没有 Document Governance closure 前必须执行的新 capability migration。
+14. Accepted root classification 已记录于 `docs/CAPABILITY-REFERENCE-MATRIX.md`。
+15. 七份 root archive reference notes 继续保留；不存在自动删除授权。
+16. External Risk 继续为 `unknown`；`unknown` 已被项目总控接受为 Document Governance closure 的非阻塞残余风险。
+17. `SYSTEM_STATUS.md` 与 `SYSTEM_CAPABILITY_REVIEW.md` 是 historical, non-authoritative snapshots。
+18. `docs/CURRENT_STATUS.md` 不覆盖 Git/tests/PR/CI。
 
-固定事实基线 `721fd120d3ace9335cb010a48275ace0e2253c57` 本身尚无最终计划文件；本变更在合并后创建该 plan-only 材料；PR 未合并前不得把 plan exists 当作事实分支事实。
-
-    controlled_rollout_plan_exists_after_this_change_merges: true
+    controlled_rollout_plan_exists: true
     controlled_rollout_plan_status: plan_only
-    implementation_authorization_scope: plan_material_only
     operator_action_authorization: not_granted
     rollout_authorization: not_granted
     operator_action_executed: false
+    task_c_gateway_wiring: false
+    task_c_runtime_wiring: false
+    real_canary_executed: false
     rollout_executed: false
-    initial_rollout_request_type: code_review
-    phase_request_caps: 1/5/1/5
-    evidence_mode: manual_sanitized_summary_only
-    next_governance_decision: separate_operator_action_authorization
+    phase_3_executed: false
+    new_capability_migration_required_for_closure: false
+    external_consumer_risk: unknown
 
-- 本 PR 只增加静态计划材料；plan exists 不代表 operator action、feature enablement 或 rollout 获批。
-- 三个 Hermes flags 继续默认关闭。
-- 不改变 Runtime、Gateway、Graph、routing、ownership 或执行行为。
-- 计划合并后仍需独立的 operator action 授权；本次直接执行授权仅允许 plan-only replacement 实现。
-- Git、测试、PR 和 CI 始终优先于本文件。
+本部分不得宣称：Hermes Phase 2 整体 ready；Task D 已完成；fake preflight 已执行；real canary 已批准；rollout 已批准；Document Governance 已关闭；项目主线已恢复；external compatibility 已解决；compatibility notes 可以删除。
+
+## B. Project Controller governance state — not implementation fact
+
+    topic_09_status: frozen
+    task_d_status: hold
+    document_governance_stage_closed: false
+    project_mainline_return_status: pending_document_governance_closure
+
+- 这些是 Project Controller 当前治理决定，不是 Source 代码实现事实，也不是永久 capability 状态。
+- Topic 04 closure 不自动解冻 Topic 09。
+- Roadmap 后续优先级必须由 Project Controller 在 closure 后单独决定。
 
 ## Skill inventory
 
@@ -62,6 +83,7 @@
 | 材料 | 角色 |
 | --- | --- |
 | `docs/REPOSITORY-STRUCTURE.md` | 仓库结构权威地图与 layered status authority 模型 |
+| `docs/CAPABILITY-REFERENCE-MATRIX.md` | capability path 与 migration ledger，含 accepted root material classification |
 | `runtime-capabilities.json` | `canonical_machine_runtime_capability_registry`（tests/tooling 专用） |
 | `system-capability-review.json` | `scoped_system_capability_evidence_review_dataset` |
 | `real-agent-adapter-capability-matrix.json` | `scoped_adapter_request_type_evidence_matrix` |

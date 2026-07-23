@@ -433,20 +433,46 @@ async function test() {
   console.log("Test 18: Current Status consistency");
   const currentStatus = fs.readFileSync("docs/CURRENT_STATUS.md", "utf-8");
   for (const needle of [
-    "721fd120d3ace9335cb010a48275ace0e2253c57",
-    "controlled_rollout_plan_exists_after_this_change_merges: true",
+    "05b064dcce688f0d7f8dbf41f049052534faab54",
+    "snapshot_mode: stage_boundary_reviewed_snapshot",
+    "update_every_commit: false",
+    "PR #31",
+    "PR #32",
+    "PR #33",
+    "PR #34",
+    "PR #35",
+    "controlled_rollout_plan_exists: true",
     "controlled_rollout_plan_status: plan_only",
-    "implementation_authorization_scope: plan_material_only",
     "operator_action_authorization: not_granted",
     "rollout_authorization: not_granted",
     "operator_action_executed: false",
     "rollout_executed: false",
-    "initial_rollout_request_type: code_review",
-    "phase_request_caps: 1/5/1/5",
-    "evidence_mode: manual_sanitized_summary_only",
-    "next_governance_decision: separate_operator_action_authorization",
+    "task_c_gateway_wiring: false",
+    "task_c_runtime_wiring: false",
+    "real_canary_executed: false",
+    "phase_3_executed: false",
+    "new_capability_migration_required_for_closure: false",
+    "external_consumer_risk: unknown",
+    "topic_09_status: frozen",
+    "task_d_status: hold",
+    "document_governance_stage_closed: false",
+    "project_mainline_return_status: pending_document_governance_closure",
+    "Source implementation facts",
+    "Project Controller governance state",
+    "not implementation fact",
   ]) {
     assert(currentStatus.includes(needle), `Current Status contains: ${needle}`);
+  }
+  // Stale strings are assembled from fragments so this contract file never
+  // carries a live copy of the retired baseline or retired markers.
+  const staleNeedles = [
+    "721fd120" + "d3ace9335cb010a48275ace0e2253c57",
+    "controlled_rollout_plan_exists" + "_after_this_change_merges",
+    "implementation_authorization_scope: plan_material_only",
+    "next_governance_decision: separate_operator_action_authorization",
+  ];
+  for (const stale of staleNeedles) {
+    assert(!currentStatus.includes(stale), `Current Status no longer carries stale candidate-PR content: ${stale}`);
   }
   console.log("");
 
@@ -532,8 +558,12 @@ async function test() {
   const validatorSource = fs.readFileSync("scripts/validate-capability-metadata-chain.rb", "utf-8");
   assert(validatorSource.includes("EXPECTED_CURRENT_STATUS_SOURCE_COMMIT"), "validator defines EXPECTED_CURRENT_STATUS_SOURCE_COMMIT");
   assert(
-    validatorSource.includes('"721fd120d3ace9335cb010a48275ace0e2253c57"'),
-    "validator expected current status commit is 721fd120..."
+    validatorSource.includes('"05b064dcce688f0d7f8dbf41f049052534faab54"'),
+    "validator expected current status commit is 05b064d..."
+  );
+  assert(
+    !validatorSource.includes('"' + staleNeedles[0]! + '"'),
+    "validator no longer uses the retired baseline as the expected commit"
   );
   assert(validatorSource.includes("CURRENT_STATUS_AS_OF_PATTERN"), "validator defines the anchored As-of pattern");
   assert(
@@ -544,6 +574,21 @@ async function test() {
     !validatorSource.includes("07c5d26cc9d11a010cb183934950cdb13cb58d42"),
     "validator no longer uses the old SHA as a CURRENT_STATUS needle"
   );
+  assert(
+    validatorSource.includes("stage_boundary_reviewed_snapshot"),
+    "validator checks the stage-boundary snapshot mode"
+  );
+  assert(
+    validatorSource.includes("Accepted Root Material Classification"),
+    "validator checks the accepted root material classification section"
+  );
+  assert(
+    !validatorSource.includes("Net::HTTP") &&
+      !validatorSource.includes("`git") &&
+      !validatorSource.includes("%x{") &&
+      !validatorSource.includes("git ls-remote"),
+    "validator does not query the network, Git, or floating branches"
+  );
   const asOfLinePattern = /^- As-of source commit：`([0-9a-f]{40})`$/;
   const asOfMatches = currentStatus
     .split("\n")
@@ -551,8 +596,8 @@ async function test() {
     .filter((match) => match !== null);
   assert(asOfMatches.length === 1, `Current Status has exactly one As-of source commit line (found ${asOfMatches.length})`);
   assert(
-    asOfMatches[0]![1] === "721fd120d3ace9335cb010a48275ace0e2253c57",
-    "the single Current Status As-of SHA is 721fd120..."
+    asOfMatches[0]![1] === "05b064dcce688f0d7f8dbf41f049052534faab54",
+    "the single Current Status As-of SHA is 05b064d..."
   );
   console.log("");
 
