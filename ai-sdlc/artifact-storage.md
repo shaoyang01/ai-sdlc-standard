@@ -73,9 +73,18 @@ library/{requirement_id}/
 | `04-交付总结/` | 建议 | 保存最终交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人；交付总结独立存在，不是 Gate。 |
 | `04-代码审核/` | 实际实现时必需 | 保存 DeepSeek 或其他 Reviewer 的代码审查报告。 |
 | `05-测试验收/` | 实际实现时必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
-| `manifest.md` | 建议 | 保存该需求的产物索引、当前状态和下一步。 |
+| `manifest.md` | 进入实现或 Shared Tail 时必需 | 保存该需求的产物索引、当前状态和下一步。 |
 
 当需求产生实际代码、配置或行为实现时，`03-实现记录`、`04-代码审核`、`05-测试验收` 均为 Shared Documentation Governance Tail 的必需证据，不得因路径是 Direct、修改较小或未进入 Speckit 而静默省略。Development Path 与 Shared Tail 的正式语义遵循 `ai-sdlc/development-path-governance.md`。
+
+### Manifest 必需性
+
+- 一旦需求进入实际代码、配置或行为实现，Manifest 必须存在。
+- 一旦执行 Development Path、进入 Shared Tail 或形成 Tail Completion Gate，Manifest 必须存在。
+- Manifest 承载：当前 Development Path Decision 指针，Tail required、scope、status，当前证据路径和 version 指针，Activity Log，Change History，Re-Gate Records，blocking state。
+- Manifest 不能被 Delivery Summary、Pipeline result、Stage Summary、workflow-status snapshot、聊天结论或单独的 03/04/05 文件替代。
+- 不进入实现的纯文档、纯分析或纯治理事项，可以正式判定 Manifest 为 `not_applicable`，但必须记录明确范围、原因、证据、decision source 和 decision owner。
+- 不要求迁移历史 Manifest；不修改 Artifact Manifest Template；不创建第二份 Manifest schema。
 
 ## Manifest 记录规则
 

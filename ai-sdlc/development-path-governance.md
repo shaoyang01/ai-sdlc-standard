@@ -38,8 +38,7 @@ DIRECT_IMPLEMENTATION
   -> Tail Completion Gate
 
 SPECKIT_PIPELINE_REQUIRED
-  -> Speckit SDD Core
-  -> Implementation
+  -> Speckit SDD Core through Implement
   -> Shared Documentation Governance Tail
   -> Tail Completion Gate
 
@@ -127,9 +126,9 @@ Speckit SDD Core 负责完整 SDD 和受控实现，但不拥有 Shared Tail 最
 
 ## Speckit SDD Core 边界
 
-Speckit SDD Core 指 `sdlc-speckit-pipeline` 运行边界内的完整 SDD 阶段链（Preflight、Domain Route、Specify、Clarify、Plan、Tasks、Analyze、Implement 及其内部 Sync、Reconcile 阶段）。
+Canonical Speckit SDD Core 止于 Implement：它指 `sdlc-speckit-pipeline` 的完整 SDD 阶段链（Preflight、Domain Route、Specify、Clarify、Plan、Tasks、Analyze、Implement）到实现完成为止。Shared Tail 从实现完成后开始；business_domain_sync decision 和 conditional execution 属于 Shared Tail；Reconcile decision 和 conditional execution 属于 Shared Tail。
 
-Shared Tail 位于该运行边界之外：
+Shared Tail 位于该 canonical Core 边界之外：
 
 - 不是 Speckit SDD Core 的组成部分。
 - 不是新的需求理解阶段。
@@ -138,6 +137,16 @@ Shared Tail 位于该运行边界之外：
 - 不允许用文档更新接受方案外代码行为。
 
 Speckit SDD Core 的 Pipeline result、Stage Summary 或 workflow-status snapshot 均不能替代 Shared Tail 与 Tail Completion Gate。
+
+### 当前 Pipeline 实现差异（current implementation gap）
+
+必须诚实区分 canonical 目标与当前实现事实：
+
+- Canonical 目标：Speckit SDD Core through Implement，随后进入 Shared Tail。
+- 当前实现事实：当前 `sdlc-speckit-pipeline` 仍按现有实现串行调度 Implement 之后的 Sync 和 Reconcile。这是当前实现状态，不是 canonical Core 边界。
+- 将当前 Pipeline 编排收敛到 canonical Shared Tail 边界属于后续 Task 07-E；本任务不修改 Pipeline Skill、Contract、references 或执行行为，也不声称 07-E 已实施。
+- 当前 Pipeline 已产生且 current、non-stale、适用范围明确的 Sync 或 Reconcile 结果，可以作为 Shared Tail 候选证据；是否满足 Tail requirement，仍由 Manifest 当前状态和 Tail Completion Gate 判断，不得因此自动重复执行 Sync 或 Reconcile。
+- 当前 Pipeline result 不能替代 Tail Completion Gate。
 
 ## Shared Documentation Governance Tail
 
