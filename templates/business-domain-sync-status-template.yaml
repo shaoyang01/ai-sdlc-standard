@@ -1,30 +1,78 @@
 # Business Domain Sync Status Template
-# Append this block to manifest.md when business_domain sync is configured.
+# Reusable sync status block for manifest.md.
+# Manifest mapping target: documentation_governance_tail.business_domain_sync
+# This block does not replace manifest.md as the status authority.
+# It does not introduce a new Skill or a new sync owner.
 
 business_domain_sync:
-  required: true / false
+  manifest_mapping: documentation_governance_tail.business_domain_sync
+
+  # Decision (five fixed values; always required per implementation path)
+  decision: SYNC_REQUIRED | NOT_REQUIRED | PROPOSAL_REQUIRED | BLOCKED | DUPLICATE_SYNC_BLOCKED
   mode: none | speckit_driven | library_driven | hybrid
+  decision_source: "<skill-or-actor>"
+  decision_artifact: "<decision-artifact-path>"
+  current_sync_owner: sdlc-speckit-sync | none
   source_of_truth:
     - "<source-artifact-path>"
-    - "<source-artifact-path>"
-  pipeline_sync_executed: true / false
-  pipeline_sync_result: synced | proposal | not_required | blocked
-  pipeline_sync_reason: "<reason>"
-  library_sync_executed: true / false
-  library_sync_result: synced | proposal | not_required | blocked
-  library_sync_reason: "<reason>"
+
+  # Execution (conditional; separated from decision)
+  execution_required: true / false
+  execution_status: not_started | in_progress | done | blocked
+  execution_result: not_run | synced | proposal | partial | not_required | blocked
+  execution_artifact: "<execution-artifact-path>"
+  implementation_evidence:
+    - "<evidence-path>"
+  verification_evidence:
+    - "<evidence-path>"
+  target_documents:
+    - "<L1/L2/L4-path>"
+
+  # Existing Sync output to execution_result mapping:
+  #   SYNCED -> synced
+  #   PROPOSED -> proposal
+  #   PARTIAL -> partial
+  #   BLOCKED -> blocked
+  #   not executed -> not_run
+  #   NOT_REQUIRED decision with no execution needed -> not_required
+
+  # Duplicate sync guard
   duplicate_sync_guard: active
-  current_sync_owner: sdlc-speckit-sync | library-driven-sync | none
-  result: synced | proposal | not_required | blocked
-  reason: "<reason>"
+  duplicate_evidence:
+    pipeline_sync_executed: true / false
+    pipeline_sync_result: not_run | synced | proposal | partial | not_required | blocked
+    library_sync_executed: true / false
+    library_sync_result: not_run | synced | proposal | partial | not_required | blocked
+    supplemental_sync_authorized: true / false
+  # When the duplicate guard blocks execution: decision stays
+  # DUPLICATE_SYNC_BLOCKED; execution_result is blocked or not_run depending on
+  # whether execution was actually attempted; blocking reason and duplicate
+  # evidence must be recorded; the decision identity must not be lost.
+
   stable_fact_candidates:
     - fact: "<fact-description>"
       source: "<source-artifact-path>"
       status: proposed | confirmed | synced
-  sync_proposals:
+  synced_facts:
+    - fact: "<fact-description>"
+      target: "<L1/L2/L4-path>"
+      source: "<source-artifact-path>"
+  proposed_updates:
     - target: "<L1/L2/L4-path>"
       fact: "<fact-description>"
       source: "<source-artifact-path>"
       status: proposed
+  skipped_facts:
+    - fact: "<fact-description>"
+      reason: "<reason>"
   blocked_reasons:
     - "<reason>"
+  residual_risks:
+    - "<risk>"
+
+  current: true / false
+  stale_condition: "<condition-that-makes-this-status-stale>"
+
+  # Canonical Tail status for this Tail item (same enum as
+  # documentation_governance_tail.status)
+  tail_item_status: planned | in_progress | blocked | completed | not_required | stale
