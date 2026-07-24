@@ -122,7 +122,7 @@ Manifest Field: `documentation_governance_tail.business_domain_sync`
 - decision_artifact:
 - current_sync_owner: sdlc-speckit-sync / none
 - execution_required: yes/no
-- execution_status:
+- execution_status: not_started / in_progress / done / blocked
 - execution_result: not_run / synced / proposal / partial / not_required / blocked
 - source_of_truth:
 - target_documents:
@@ -158,7 +158,11 @@ Legacy compatibility：历史 Manifest 中的 `## Speckit Sync` 区段允许兼�
 
 本子区段只记录 decision 与结果指针；模板不得执行或替代 Reconcile。
 
-### Entry Coverage
+### entry_coverage_result
+
+Manifest Field: `documentation_governance_tail.entry_coverage_result`
+
+本字段只记录状态、证据和指针，不执行 Entry Coverage，也不创建第二份 Tail 状态。
 
 - status:
 - artifact:
