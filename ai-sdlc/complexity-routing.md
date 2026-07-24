@@ -6,6 +6,14 @@
 
 它只决定研发流程应该轻量还是完整，不替代方案审核，也不降低任何 Gate 要求。
 
+Development Path 由 Current Implementation Scope 或 Delta Scope 自身的复杂度决定。Development Path 与 Shared Documentation Governance Tail 的正式语义遵循 `ai-sdlc/development-path-governance.md`。
+
+需要评估或执行 business_domain_sync、需要记录稳定业务事实或需要评估知识同步，本身不自动触发 `SPECKIT_PIPELINE_REQUIRED`：
+
+- `SIMPLE` 和 `MEDIUM` 可以使用 `DIRECT_IMPLEMENTATION`，并在实现后通过 Shared Documentation Governance Tail 及 `library_driven` 模式的 Sync / Reconcile 完成文档治理。
+- 知识写入的授权、目标、shape 和 entry coverage 仍由 Sync / Reconcile 合同治理，但不单独决定是否进入完整 SDD。
+- 只有当前实现范围自身涉及多模块、跨仓、状态机、DB schema、MQ、schedule、关键数据写入、复杂事务或其他完整 SDD 强触发因素时，才默认进入 Speckit。
+
 输出位置：
 
 - `02-方案审核` 产物中的 Complexity Assessment。
@@ -112,8 +120,9 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 - 定时任务、监听器、异步任务、批处理或流程编排变化。
 - 事务边界、幂等边界、补偿策略、回滚策略复杂。
 - 权限、资金、库存、履约、计费、结算等高影响域。
-- 需要沉淀 `.specify/business_domain/**` 或长期知识库事实。
 - 用户明确要求完整 SDD / Speckit pipeline。
+
+注意：需要沉淀 `.specify/business_domain/**` 或长期知识库事实（business_domain_sync）本身不是自动 `COMPLEX` 触发因素；只有当知识同步需求伴随上述当前实现范围自身的强触发因素时，才默认进入完整 SDD。
 
 开发路径：
 
@@ -193,7 +202,7 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 | Delta Scope | Delta Complexity | Development Path Decision | 说明 |
 | --- | --- | --- | --- |
 | 遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件、局部兼容规则，且 01/02 已覆盖 | `SIMPLE` / `MEDIUM` | `DIRECT_IMPLEMENTATION` | 原需求复杂度只作为 context。 |
-| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、跨模块、状态机或长期知识库沉淀 | `COMPLEX` | `SPECKIT_PIPELINE_REQUIRED` | 理由必须来自 Delta Complexity Triggers。 |
+| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、跨模块、状态机或其他完整 SDD 强触发因素 | `COMPLEX` | `SPECKIT_PIPELINE_REQUIRED` | 理由必须来自 Delta Complexity Triggers；Delta 自身的 business_domain_sync 需求不单独构成触发因素。 |
 | Delta 影响行为但技术方案未更新 | `BLOCKED_UNKNOWN` | `BLOCKED_NEEDS_REVISION` | Earliest Affected Node = `01-技术方案`。 |
 | Delta 已写入方案但方案审核未覆盖 | `BLOCKED_UNKNOWN` | `BLOCKED_NEEDS_REVISION` | Required Re-Gate = `02-方案审核`。 |
 

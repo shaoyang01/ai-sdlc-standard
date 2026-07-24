@@ -69,11 +69,22 @@ library/{requirement_id}/
 | `00-需求资料/` | 可选 | 保存原始需求、截图、飞书导出、测试或业务补充说明。 |
 | `01-技术方案/` | 必需 | 保存面向人工阅读的技术方案，通常由 DeepSeek 或 html-doc-style 生成。 |
 | `02-方案审核/` | 必需 | 保存 Codex 对技术方案的审阅结论，作为开发前 Gate。 |
-| `03-实现记录/` | 建议 | 保存 Codex 实现摘要、涉及模块、验证情况、未完成项和残余风险。 |
-| `04-交付总结/` | 建议 | 保存最终交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人。 |
-| `04-代码审核/` | 按需必需 | 保存 DeepSeek 或其他 Reviewer 的代码审查报告。 |
-| `05-测试验收/` | 按需必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
-| `manifest.md` | 建议 | 保存该需求的产物索引、当前状态和下一步。 |
+| `03-实现记录/` | 实际实现时必需 | 保存 Codex 实现摘要、涉及模块、验证情况、未完成项和残余风险。 |
+| `04-交付总结/` | 建议 | 保存最终交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人；交付总结独立存在，不是 Gate。 |
+| `04-代码审核/` | 实际实现时必需 | 保存 DeepSeek 或其他 Reviewer 的代码审查报告。 |
+| `05-测试验收/` | 实际实现时必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
+| `manifest.md` | 进入实现或 Shared Tail 时必需 | 保存该需求的产物索引、当前状态和下一步。 |
+
+当需求产生实际代码、配置或行为实现时，`03-实现记录`、`04-代码审核`、`05-测试验收` 均为 Shared Documentation Governance Tail 的必需证据，不得因路径是 Direct、修改较小或未进入 Speckit 而静默省略。Development Path 与 Shared Tail 的正式语义遵循 `ai-sdlc/development-path-governance.md`。
+
+### Manifest 必需性
+
+- 一旦需求进入实际代码、配置或行为实现，Manifest 必须存在。
+- 一旦执行 Development Path、进入 Shared Tail 或形成 Tail Completion Gate，Manifest 必须存在。
+- Manifest 承载：当前 Development Path Decision 指针，Tail required、scope、status，当前证据路径和 version 指针，Activity Log，Change History，Re-Gate Records，blocking state。
+- Manifest 不能被 Delivery Summary、Pipeline result、Stage Summary、workflow-status snapshot、聊天结论或单独的 03/04/05 文件替代。
+- 不进入实现的纯文档、纯分析或纯治理事项，可以正式判定 Manifest 为 `not_applicable`，但必须记录明确范围、原因、证据、decision source 和 decision owner。
+- 不要求迁移历史 Manifest；不修改 Artifact Manifest Template；不创建第二份 Manifest schema。
 
 ## Manifest 记录规则
 
@@ -83,6 +94,7 @@ library/{requirement_id}/
 
 - Metadata：需求 ID、仓库、当前阶段、当前状态、关联 `specs/**` 和分支。
 - Development Path Decision：方案审阅后基于复杂度和风险决定直接实现、唤醒 Speckit pipeline，或阻塞返修。
+- Shared Documentation Governance Tail：`manifest.md` 是 Tail 当前状态和证据指针的权威，应记录 Tail required、scope、status、evidence 和 decisions；Tail 语义遵循 `ai-sdlc/development-path-governance.md`。
 - Artifact Index：当前有效产物路径、版本、Gate 结果和更新时间。
 - Activity Log：当天发生的关键动作，供人工追踪和后续日报读取。
 - Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、测试口径等变化事件。
@@ -90,7 +102,7 @@ library/{requirement_id}/
 - Re-Gate Records：变更后从哪个节点重新 Gate、结果是什么、下一步是什么。
 - Stage Summaries：记录不作为 Gate 的阶段性总结，例如测试后的上线准入结论。
 - Speckit Process Products：记录 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md` 的路径、状态和版本；manifest 是状态权威源。
-- Speckit Sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。
+- business_domain_sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。新写统一使用 `business_domain_sync`；旧字段 `Speckit Sync` 只作为历史 Manifest 的兼容读取入口，不要求迁移历史 Manifest。
 
 Activity Log 应记录工作流动作，而不是聊天全文。
 

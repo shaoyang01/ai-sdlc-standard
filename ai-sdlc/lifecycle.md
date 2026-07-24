@@ -128,6 +128,57 @@
 
 校对代码、规格、业务文档之间的一致性。默认只读，明确授权后才写入。
 
+## Development Path 分流与 Shared Tail 汇合
+
+Specification Gate 之后必须形成 Development Path Decision，遵循 canonical 标准 `ai-sdlc/development-path-governance.md`：
+
+```text
+Specification Gate
+  -> Development Path Decision
+       |
+       +-- DIRECT_IMPLEMENTATION
+       |     -> Implementation
+       |          |
+       |          +-----------------------------+
+       |
+       +-- SPECKIT_PIPELINE_REQUIRED
+       |     -> Speckit SDD Core through Implement
+       |          |
+       |          +-----------------------------+
+       |
+       +-- BLOCKED_NEEDS_REVISION
+                 -> Earliest Affected Upstream Node
+                 -> Re-Gate
+
+实现路径汇合：
+    DIRECT_IMPLEMENTATION / Implementation
+    SPECKIT_PIPELINE_REQUIRED / Core through Implement
+                |
+                v
+    Shared Documentation Governance Tail
+                |
+                v
+    Tail Completion Gate
+```
+
+- `DIRECT_IMPLEMENTATION`：不执行完整 SDD Core，直接从技术方案拆任务实现。
+- `SPECKIT_PIPELINE_REQUIRED`：执行 Speckit SDD Core through Implement；canonical Core 止于 Implement，Shared Tail 从 Implement 完成后开始。
+- `BLOCKED_NEEDS_REVISION`：返回最早受影响节点重新 Gate，不得进入实现或 Tail。
+
+Direct 和 Speckit 两条实现路径在 Implementation 后汇入同一个 Shared Documentation Governance Tail；Blocked 路径不汇入 Tail。Tail 位于 canonical Speckit SDD Core 边界之外，包含：
+
+- 实现记录（`03-实现记录`）。
+- 代码审核（`04-代码审核`）与 Fix 或 Re-Gate loop。
+- 测试验收（`05-测试验收`）。
+- business_domain_sync decision 和 conditional execution。
+- Reconcile decision 和 conditional execution。
+- Manifest update。
+- Tail Completion Gate（owner 为 `sdlc-gate-runner`）。
+
+Development Path 与 Tail 的正式语义以 `ai-sdlc/development-path-governance.md` 为准。本任务不声称 Pipeline Skill 已完成后续接入。
+
+Current implementation note：当前 `sdlc-speckit-pipeline` 实现仍按现状串行调度 Implement 之后的 Sync 和 Reconcile，这是待 Task 07-E 收敛的实现差异，不是 canonical Core 边界；当前 Pipeline completion 不能替代 Tail Completion Gate。
+
 ## 裁剪规则
 
 简单需求可以裁剪阶段，但必须说明裁剪原因。
@@ -144,3 +195,5 @@
 - 失败策略
 - 测试方式
 - 副作用边界
+
+阶段裁剪不能裁剪实际实现所需的 `03-实现记录`、`04-代码审核`、`05-测试验收` 以及 business_domain_sync decision、Reconcile decision 和 Tail Completion Gate 等 Tail 决策。

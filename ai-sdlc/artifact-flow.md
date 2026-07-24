@@ -8,23 +8,44 @@
 
 ## 标准产物流
 
+三种 Development Path 是从同一个 Development Path Decision 分叉的互斥分支，不是连续步骤：
+
 ```text
 Raw Requirement
   -> Requirement Understanding
   -> Requirement Boundary
   -> Technical Specification
   -> Specification Gate Result
-  -> Implementation Plan
-  -> Plan Gate Result
-  -> Tasks
-  -> Task Gate Result
-  -> Code Changes
-  -> Implementation Summary
-  -> Code Review Report
-  -> Fix Summary
-  -> Test Report
-  -> Knowledge Sync Report
+  -> Development Path Decision
+       |
+       +-- DIRECT_IMPLEMENTATION
+       |     -> Implementation
+       |          |
+       |          +-----------------------------+
+       |
+       +-- SPECKIT_PIPELINE_REQUIRED
+       |     -> Speckit SDD Core through Implement
+       |          |
+       |          +-----------------------------+
+       |
+       +-- BLOCKED_NEEDS_REVISION
+                 -> Earliest Affected Upstream Node
+                 -> Re-Gate
+                 -> Development Path Decision
+
+实现路径汇合（仅 Direct 和 Speckit 两条实现路径汇入；Blocked 不汇入）：
+
+    DIRECT_IMPLEMENTATION / Implementation
+    SPECKIT_PIPELINE_REQUIRED / Speckit SDD Core through Implement
+                |
+                v
+    Shared Documentation Governance Tail
+                |
+                v
+    Tail Completion Gate Result
 ```
+
+Development Path 分流与 Shared Tail 汇合的正式语义遵循 `ai-sdlc/development-path-governance.md`。`specs/**` 仍是 Speckit 机器事实源；`library/{requirement_id}/` 仍是人工交接和 Gate 视图，两者不互相替代。Shared Tail 复用现有 Implementation Recorder、Code Review、Test、`sdlc-speckit-sync` 与 `sdlc-speckit-code-doc-reconcile` 能力，不创建重复 artifact rail。Tail 产物必须落盘，不能依赖聊天上下文。
 
 ## 产物要求
 

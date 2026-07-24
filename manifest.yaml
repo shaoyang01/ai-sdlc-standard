@@ -21,6 +21,7 @@ entrypoints:
   artifact_versioning: ai-sdlc/artifact-versioning.md
   change_control: ai-sdlc/change-control.md
   complexity_routing: ai-sdlc/complexity-routing.md
+  development_path_governance: ai-sdlc/development-path-governance.md
   standard_package_resolution: ai-sdlc/standard-package-resolution.md
   speckit_generation_source_model: ai-sdlc/speckit-generation-source-model.md
   speckit_dual_rail_isolation: ai-sdlc/speckit-dual-rail-isolation.md
