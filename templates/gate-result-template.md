@@ -47,7 +47,7 @@
 
 ## Documentation Governance Tail Evidence Check
 
-当 Gate Type 为 `documentation_governance_tail_completion` 时必填；其他 Gate Type 可整体标记 `not_applicable`。Gate Runner 只检查和判定证据，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile，不修改生产代码或知识材料。
+当 Gate Type 为 `documentation_governance_tail_completion` 时必填；其他 Gate Type 可整体标记 `not_applicable`。`sdlc-gate-runner` 只检查和判定证据，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile，不修改生产代码或知识材料。
 
 - required_artifacts:
 
