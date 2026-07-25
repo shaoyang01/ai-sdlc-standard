@@ -2345,6 +2345,15 @@ else
   if gate_template.include?("Gate Runner 只检查和判定证据")
     errors << "tail-template: gate-result-template must not use the generic Gate Runner owner phrase"
   end
+  {
+    /^## Development Path Check\s*$/ => 1,
+    /^## Documentation Governance Tail Evidence Check\s*$/ => 1
+  }.each do |pattern, expected_count|
+    actual_count = gate_template.scan(pattern).size
+    unless actual_count == expected_count
+      errors << "tail-template: gate-result-template #{pattern.inspect} count must be #{expected_count} (got #{actual_count})"
+    end
+  end
   [
     "| 03-实现记录 | actual_implementation_required |",
     "| 04-代码审核 | actual_implementation_required |",
@@ -2414,6 +2423,43 @@ else
   end
   if manifest_template.include?("| 05 测试验收 | conditional |")
     errors << "tail-template: 05 测试验收 must not regress to conditional"
+  end
+
+  # entry_coverage_result subsection: fields and semantics must live inside
+  # the dedicated subsection, not anywhere else in the document.
+  entry_heading_pattern = /^### entry_coverage_result\s*$/
+  entry_heading_count = manifest_template.scan(entry_heading_pattern).size
+  unless entry_heading_count == 1
+    errors << "tail-template: manifest ### entry_coverage_result heading count must be 1 (got #{entry_heading_count})"
+  end
+  if entry_heading_count == 1
+    manifest_lines = manifest_template.lines
+    entry_heading_index = manifest_lines.index { |line| line.match?(entry_heading_pattern) }
+    entry_subsection_lines = []
+    manifest_lines[(entry_heading_index + 1)..].each do |line|
+      break if line.start_with?("## ") || line.start_with?("### ")
+      entry_subsection_lines << line
+    end
+    entry_subsection_text = entry_subsection_lines.join
+    {
+      "Manifest Field: `documentation_governance_tail.entry_coverage_result`" => 1,
+      "- status:" => 1,
+      "- artifact:" => 1,
+      "- scope:" => 1,
+      "- evidence:" => 1,
+      "- blocking_items:" => 1,
+      "- current / stale:" => 1
+    }.each do |field, expected_count|
+      actual_count = entry_subsection_lines.count { |line| line.strip == field }
+      unless actual_count == expected_count
+        errors << "tail-template: entry_coverage_result subsection #{field.inspect} count must be #{expected_count} (got #{actual_count})"
+      end
+    end
+    ["PENDING", "FAILED", "BLOCKED", "不能支持 Tail completion"].each do |needle|
+      unless entry_subsection_text.include?(needle)
+        errors << "tail-template: entry_coverage_result subsection missing #{needle.inspect}"
+      end
+    end
   end
 end
 
