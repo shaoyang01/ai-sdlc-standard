@@ -2305,6 +2305,240 @@ plan_contract_guard = File.read(File.join(ROOT, "skill-contracts/known-skills/sd
   errors << "plan contract missing #{t}" unless plan_contract_guard.include?(t)
 end
 
+# ── Tail Template Contract Validation ──
+# Static per-file contract checks for the four Task 07-B1 tail templates.
+# Read-only, deterministic, no network. Every violation enters `errors` and
+# fails the script; no warnings-only paths.
+
+def tail_template_text(relative_path)
+  path = File.join(ROOT, relative_path)
+  unless File.file?(path)
+    return nil
+  end
+  File.read(path)
+end
+
+def tail_require(errors, text, needle, label)
+  errors << "tail-template: #{label} missing #{needle.inspect}" unless text.include?(needle)
+end
+
+# A. Gate Result Template
+gate_template = tail_template_text("templates/gate-result-template.md")
+if gate_template.nil?
+  errors << "tail-template: templates/gate-result-template.md must exist"
+else
+  [
+    "Gate Name:", "Gate Type:", "development_path_entry", "documentation_governance_tail_completion",
+    "Manifest Path:", "Gate Basis:", "Development Path Decision:", "Decision Scope:", "Complexity:",
+    "Development Path Decision Source:", "Development Path Decision Artifact:",
+    "Tail Required:", "Tail Scope:", "Tail Status:",
+    "## Development Path Check", "## Documentation Governance Tail Evidence Check",
+    "required_artifacts", "completed_artifacts", "skipped_items", "blocking_items",
+    "business_domain_sync_decision", "reconcile_decision", "entry_coverage_result", "regate_result",
+    "completion_evidence", "completion_decision_source",
+    "## Tail Completion Decision", "Tail Completion Eligible:", "`sdlc-gate-runner` 只检查和判定证据",
+    "不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`",
+    "不执行 Sync 或 Reconcile",
+    "不修改生产代码或知识材料",
+    "PASS / FAIL / PASS_WITH_RISK"
+  ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
+  if gate_template.include?("Gate Runner 只检查和判定证据")
+    errors << "tail-template: gate-result-template must not use the generic Gate Runner owner phrase"
+  end
+  {
+    /^## Development Path Check\s*$/ => 1,
+    /^## Documentation Governance Tail Evidence Check\s*$/ => 1
+  }.each do |pattern, expected_count|
+    actual_count = gate_template.scan(pattern).size
+    unless actual_count == expected_count
+      errors << "tail-template: gate-result-template #{pattern.inspect} count must be #{expected_count} (got #{actual_count})"
+    end
+  end
+  [
+    "| 03-实现记录 | actual_implementation_required |",
+    "| 04-代码审核 | actual_implementation_required |",
+    "| 05-测试验收 | actual_implementation_required |"
+  ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
+end
+
+# B. Artifact Manifest Template
+manifest_template = tail_template_text("templates/artifact-manifest-template.md")
+if manifest_template.nil?
+  errors << "tail-template: templates/artifact-manifest-template.md must exist"
+else
+  if manifest_template.scan(/^## Documentation Governance Tail\s*$/).size != 1
+    errors << "tail-template: manifest must have exactly one ## Documentation Governance Tail heading"
+  end
+  if manifest_template.scan(/^Canonical Field: `documentation_governance_tail`\s*$/).size != 1
+    errors << "tail-template: manifest must declare Canonical Field: `documentation_governance_tail` exactly once"
+  end
+  tail_heading_index = manifest_template.lines.index { |line| line.match?(/^## Documentation Governance Tail\s*$/) }
+  if tail_heading_index.nil?
+    errors << "tail-template: manifest tail root section not found"
+  else
+    tail_section_lines = []
+    manifest_template.lines[(tail_heading_index + 1)..].each do |line|
+      break if line.start_with?("## ")
+      tail_section_lines << line
+    end
+    tail_section_text = tail_section_lines.join
+    status_count = tail_section_text.scan(/^- status: planned \/ in_progress \/ blocked \/ completed \/ not_required \/ stale\s*$/).size
+    unless status_count == 1
+      errors << "tail-template: manifest tail root section status enum line must appear exactly once (got #{status_count})"
+    end
+  end
+  [
+    "- required: yes/no", "- scope:", "required_artifacts", "completed_artifacts",
+    "skipped_items", "blocking_items", "documentation_governance_tail.business_domain_sync",
+    "business_domain_sync_decision: SYNC_REQUIRED / NOT_REQUIRED / PROPOSAL_REQUIRED / BLOCKED / DUPLICATE_SYNC_BLOCKED",
+    "current_sync_owner: sdlc-speckit-sync / none",
+    "execution_status: not_started / in_progress / done / blocked",
+    "execution_result: not_run / synced / proposal / partial / not_required / blocked",
+    "reconcile_decision", "documentation_governance_tail.entry_coverage_result",
+    "current / stale", "PENDING", "FAILED", "BLOCKED", "regate_result",
+    "completion_evidence", "completion_decision_source", "Tail Completion Gate"
+  ].each { |needle| tail_require(errors, manifest_template, needle, "artifact-manifest-template") }
+  [
+    "| 03 实现记录 | actual_implementation_required |",
+    "| 04 代码审核 | actual_implementation_required |",
+    "| 05 测试验收 | actual_implementation_required |",
+    "| 04 交付总结 | recommended |"
+  ].each { |needle| tail_require(errors, manifest_template, needle, "artifact-manifest-template") }
+  tail_require(errors, manifest_template, "它不是 Gate", "artifact-manifest-template")
+  tail_require(errors, manifest_template, "compatibility read", "artifact-manifest-template")
+  if manifest_template.include?("completion_status")
+    errors << "tail-template: manifest must not define a second completion state (completion_status)"
+  end
+  if manifest_template.include?("library-driven-sync")
+    errors << "tail-template: manifest must not reference forbidden owner library-driven-sync"
+  end
+  if manifest_template.match?(/^## Speckit Sync\s*$/)
+    errors << "tail-template: manifest must not contain a new-write ## Speckit Sync heading"
+  end
+  if manifest_template.include?("| 03 实现记录 | recommended |")
+    errors << "tail-template: 03 实现记录 must not regress to recommended"
+  end
+  if manifest_template.include?("| 04 代码审核 | conditional |")
+    errors << "tail-template: 04 代码审核 must not regress to conditional"
+  end
+  if manifest_template.include?("| 05 测试验收 | conditional |")
+    errors << "tail-template: 05 测试验收 must not regress to conditional"
+  end
+
+  # entry_coverage_result subsection: fields and semantics must live inside
+  # the dedicated subsection, not anywhere else in the document.
+  entry_heading_pattern = /^### entry_coverage_result\s*$/
+  entry_heading_count = manifest_template.scan(entry_heading_pattern).size
+  unless entry_heading_count == 1
+    errors << "tail-template: manifest ### entry_coverage_result heading count must be 1 (got #{entry_heading_count})"
+  end
+  if entry_heading_count == 1
+    manifest_lines = manifest_template.lines
+    entry_heading_index = manifest_lines.index { |line| line.match?(entry_heading_pattern) }
+    entry_subsection_lines = []
+    manifest_lines[(entry_heading_index + 1)..].each do |line|
+      break if line.start_with?("## ") || line.start_with?("### ")
+      entry_subsection_lines << line
+    end
+    entry_subsection_text = entry_subsection_lines.join
+    {
+      "Manifest Field: `documentation_governance_tail.entry_coverage_result`" => 1,
+      "- status:" => 1,
+      "- artifact:" => 1,
+      "- scope:" => 1,
+      "- evidence:" => 1,
+      "- blocking_items:" => 1,
+      "- current / stale:" => 1
+    }.each do |field, expected_count|
+      actual_count = entry_subsection_lines.count { |line| line.strip == field }
+      unless actual_count == expected_count
+        errors << "tail-template: entry_coverage_result subsection #{field.inspect} count must be #{expected_count} (got #{actual_count})"
+      end
+    end
+    ["PENDING", "FAILED", "BLOCKED", "不能支持 Tail completion"].each do |needle|
+      unless entry_subsection_text.include?(needle)
+        errors << "tail-template: entry_coverage_result subsection missing #{needle.inspect}"
+      end
+    end
+  end
+end
+
+# C. Business Domain Sync YAML Template
+sync_yaml_path = File.join(ROOT, "templates/business-domain-sync-status-template.yaml")
+unless File.file?(sync_yaml_path)
+  errors << "tail-template: templates/business-domain-sync-status-template.yaml must exist"
+end
+if File.file?(sync_yaml_path)
+  sync_yaml_text = File.read(sync_yaml_path)
+  begin
+    sync_yaml = YAML.safe_load(sync_yaml_text, permitted_classes: [], aliases: false)
+    unless sync_yaml.is_a?(Hash)
+      errors << "tail-template: sync status template root must be a Hash"
+    end
+    sync_root = sync_yaml.is_a?(Hash) ? sync_yaml["business_domain_sync"] : nil
+    unless sync_root.is_a?(Hash)
+      errors << "tail-template: sync status template business_domain_sync must be a Hash"
+    end
+    if sync_root.is_a?(Hash)
+      expected_scalars = {
+        "manifest_mapping" => "documentation_governance_tail.business_domain_sync",
+        "decision" => "SYNC_REQUIRED | NOT_REQUIRED | PROPOSAL_REQUIRED | BLOCKED | DUPLICATE_SYNC_BLOCKED",
+        "mode" => "none | speckit_driven | library_driven | hybrid",
+        "current_sync_owner" => "sdlc-speckit-sync | none",
+        "execution_status" => "not_started | in_progress | done | blocked",
+        "execution_result" => "not_run | synced | proposal | partial | not_required | blocked",
+        "duplicate_sync_guard" => "active",
+        "tail_item_status" => "planned | in_progress | blocked | completed | not_required | stale"
+      }
+      expected_scalars.each do |key, expected|
+        actual = sync_root[key]
+        unless actual == expected
+          errors << "tail-template: sync status template #{key} must equal #{expected.inspect} (got #{actual.inspect})"
+        end
+      end
+    end
+  rescue Psych::Exception => e
+    errors << "tail-template: sync status template YAML parse failed (#{e.message})"
+  end
+  if sync_yaml_text.include?("library-driven-sync")
+    errors << "tail-template: sync status template must not reference forbidden owner library-driven-sync"
+  end
+end
+
+# D. Library-Driven Sync Decision Template
+library_template = tail_template_text("templates/library-driven-sync-decision-template.md")
+if library_template.nil?
+  errors << "tail-template: templates/library-driven-sync-decision-template.md must exist"
+else
+  {
+    /^## Metadata\s*$/ => 1,
+    /^## Decision Metadata\s*$/ => 0,
+    /^- Requirement ID:/ => 1,
+    /^- Generated By:/ => 1,
+    /^- Date:/ => 1
+  }.each do |pattern, expected_count|
+    actual_count = library_template.scan(pattern).size
+    unless actual_count == expected_count
+      errors << "tail-template: library-driven template #{pattern.inspect} count must be #{expected_count} (got #{actual_count})"
+    end
+  end
+  [
+    "Sync Source Mode: library_driven", "Decision Owner: sdlc-speckit-sync",
+    "Decision Source:", "Decision Artifact:", "Reviewed Artifact:",
+    "Reviewed Artifact Version:", "Gate Artifact Version:",
+    "Sync Need Classification", "SYNC_REQUIRED", "NOT_REQUIRED", "PROPOSAL_REQUIRED",
+    "BLOCKED", "DUPLICATE_SYNC_BLOCKED", "Duplicate Sync Guard",
+    "Execution Status", "not_started / in_progress / done / blocked",
+    "Execution Result", "not_run / synced / proposal / partial / not_required / blocked",
+    "Manifest Mapping", "documentation_governance_tail.business_domain_sync",
+    "Shared Tail Item Status", "Completion Eligibility"
+  ].each { |needle| tail_require(errors, library_template, needle, "library-driven-sync-decision-template") }
+  tail_require(errors, library_template, "不要求 `specs/**` 或 `specs_run_id`", "library-driven-sync-decision-template")
+  if library_template.include?("library-driven-sync")
+    errors << "tail-template: library-driven template must not reference forbidden owner library-driven-sync"
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

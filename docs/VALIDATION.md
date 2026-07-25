@@ -25,6 +25,26 @@ ruby scripts/validate-capability-metadata-chain.rb
 
 其覆盖范围包括：Matrix Migration Tracking、target paths/root notes、shared inventory paths、root JSON scoped authority、Repository Structure authority model、Current Status exact reviewed baseline、Accepted Root Material Classification、historical snapshot banners、README authority framing。
 
+## Tail Template Static Contract Validation
+
+针对四份 Tail 模板的静态合同校验：
+
+- `templates/gate-result-template.md`
+- `templates/artifact-manifest-template.md`
+- `templates/business-domain-sync-status-template.yaml`
+- `templates/library-driven-sync-decision-template.md`
+
+职责划分：
+
+- `validate-skill-contracts.rb` 负责逐文件精确检查：精确字段、固定 pipe-delimited scalar、精确 heading、唯一性计数与 forbidden regression；Tail Completion owner 精确为 `sdlc-gate-runner`；Manifest 只有一个 canonical Tail 根区段；Sync decision、execution status 与 execution result 分离；Library-driven decision 的 Metadata 唯一；legacy `## Speckit Sync` 不得作为新写 heading 存在。
+- expanded parity fixture 负责跨文件语义 parity：`documentation_governance_tail`、`development_path_entry`、`documentation_governance_tail_completion`、`actual_implementation_required` 等跨模板词项及 forbidden 回归。
+
+边界：
+
+- 校验 read-only、deterministic、no network。
+- 不运行 Gate Runner，不执行 Sync，不执行 Reconcile，不读取实例 Manifest，不验证真实需求是否完成 Tail。
+- runtime enforcement 由后续运行时任务覆盖；Sync/Reconcile 输出消费由后续集成任务覆盖；Pipeline 边界由后续集成任务覆盖；实例级场景由后续场景验证覆盖。
+
 ## validate-skill-contracts.rb 检查什么
 
 当前脚本检查：

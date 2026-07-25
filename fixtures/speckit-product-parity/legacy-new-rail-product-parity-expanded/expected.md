@@ -73,3 +73,16 @@ Legacy document write target: none
 - New-Rail enhanced metadata cannot replace baseline traceability.
 - validate-product-parity-fixtures.rb enforces expanded fixture required files/terms/forbidden guard context.
 - validate-skill-contracts.rb enforces PR P static terms and forbidden behavior.
+
+## Tail Template Static Contract Validation
+
+- The four tail templates (gate result, artifact manifest, sync status YAML, library-driven sync decision) share static semantic parity: `documentation_governance_tail`, `development_path_entry`, `documentation_governance_tail_completion`, `required_artifacts`, `completed_artifacts`, `skipped_items`, `blocking_items`, `business_domain_sync_decision`, `reconcile_decision`, `entry_coverage_result`, `regate_result`, `completion_evidence`, `completion_decision_source`, `execution_status`, `execution_result`, `partial`, `actual_implementation_required`, `manifest is status authority`.
+- Tail Completion owner is exactly `sdlc-gate-runner` (must not use a generic Gate Runner owner phrase — forbidden).
+- Manifest has exactly one canonical Tail root section (must not duplicate the `## Documentation Governance Tail` heading — forbidden).
+- A second completion state is not allowed (must not introduce `completion_status` — forbidden).
+- 03 实现记录, 04 代码审核 and 05 测试验收 are `actual_implementation_required` (must not regress to `03 实现记录 | recommended`, `04 代码审核 | conditional` or `05 测试验收 | conditional` — forbidden).
+- 04 交付总结 stays recommended and is not a Gate.
+- Sync decision, execution status and execution result are separate fields with fixed pipe-delimited scalars.
+- Library-driven decision Metadata must be unique (must not keep a second `## Decision Metadata` section — forbidden).
+- Legacy `## Speckit Sync` is compatibility-read only; a real new-write `## Speckit Sync` heading must not exist (must not reintroduce `## Speckit Sync` as a new-write heading — forbidden).
+- This fixture only validates static semantic parity; it does not represent runtime enforcement, real Tail completion, or validated instance scenarios.
