@@ -12,6 +12,8 @@ required_standard_files:
   - ai-sdlc/library-driven-sync-runtime.md
   - ai-sdlc/project-type-contract-artifact-matrix.md
   - templates/agents-rail-routing-addendum.md
+  - templates/gate-result-template.md
+  - templates/artifact-manifest-template.md
   - templates/business-domain-sync-status-template.yaml
   - templates/business-domain-update-proposal-template.md
   - templates/business-domain-reconcile-proposal-template.md
@@ -97,6 +99,25 @@ required_terms:
   - baseline traceability
   - guard context
   - must not
+  - documentation_governance_tail
+  - development_path_entry
+  - documentation_governance_tail_completion
+  - sdlc-gate-runner
+  - actual_implementation_required
+  - required_artifacts
+  - completed_artifacts
+  - skipped_items
+  - blocking_items
+  - business_domain_sync_decision
+  - reconcile_decision
+  - entry_coverage_result
+  - regate_result
+  - completion_evidence
+  - completion_decision_source
+  - execution_status
+  - execution_result
+  - partial
+  - manifest is status authority
 forbidden_terms:
   - legacy Skill fallback in New-Rail
   - read .specify/memory as New-Rail runtime input
@@ -121,6 +142,12 @@ forbidden_terms:
   - Not Applicable without justification
   - filename-versioned companion artifact
   - use chat as source of truth
+  - completion_status
+  - "## Decision Metadata"
+  - "## Speckit Sync"
+  - 03 实现记录 | recommended
+  - 04 代码审核 | conditional
+  - 05 测试验收 | conditional
 expected_outputs:
   - comprehensive parity validation covering PR J–O semantics
 notes: development-time fixture; not target project runtime input
