@@ -19,7 +19,7 @@ Review a technical specification as the global DocFlow Specification Gate. Decid
 6. Treat `library/{requirement_id}/01-技术方案/` as the primary input.
 7. Write or recommend output under `library/{requirement_id}/02-方案审核/`.
 8. Use `PASS`, `FAIL`, or `PASS_WITH_RISK`.
-9. Always output a development path recommendation:
+9. Always output a Development Path Decision:
    - `DIRECT_IMPLEMENTATION`
    - `SPECKIT_PIPELINE_REQUIRED`
    - `BLOCKED_NEEDS_REVISION`
@@ -38,6 +38,7 @@ Use these repository standard files as authoritative rules:
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/change-control.md`
 - `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/development-path-governance.md`
 
 ## Reference Files
 
@@ -116,9 +117,9 @@ Classify complexity first:
 - `COMPLEX`
 - `BLOCKED_UNKNOWN`
 
-Use `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md` as the routing rule.
+Use `${AI_SDLC_STANDARD_HOME}/ai-sdlc/complexity-routing.md` as the routing rule and `${AI_SDLC_STANDARD_HOME}/ai-sdlc/development-path-governance.md` as the canonical Development Path and Shared Documentation Governance Tail standard.
 
-Output exactly one recommendation:
+Output exactly one Development Path Decision:
 
 - `DIRECT_IMPLEMENTATION`
 - `SPECKIT_PIPELINE_REQUIRED`
@@ -126,19 +127,54 @@ Output exactly one recommendation:
 
 Use `BLOCKED_NEEDS_REVISION` whenever the Gate Result is `FAIL`.
 
-Use `SPECKIT_PIPELINE_REQUIRED` for `COMPLEX` changes involving multi-module flow, state machine changes, DB/MQ/schedule/listener/process changes, complex rollback, knowledge sync needs, or explicit user request for full SDD.
+The path is decided only by the complexity of the Current Implementation Scope or Delta Scope itself. Use `SPECKIT_PIPELINE_REQUIRED` only when:
 
-Use `DIRECT_IMPLEMENTATION` only when the specification is complete, Complexity is `SIMPLE` or `MEDIUM`, and implementation can proceed without a full SDD pipeline.
+1. Current Implementation Scope or Delta Scope itself is `COMPLEX` (multi-module or cross-repo work, state machine changes, DB schema, MQ, schedule/listener/process changes, key data writes, complex transactions, complex rollback, or other genuine full-SDD complexity); or
+2. Full SDD Override = `user_requested`; or
+3. A current valid later Gate requires switching paths (Full SDD Override = `later_gate_required`).
+
+business_domain_sync need 本身不自动触发 `SPECKIT_PIPELINE_REQUIRED`。知识同步需要、稳定业务事实记录需要、entry coverage 需要或 Shared Tail 工作本身都不是 Speckit 触发因素。
+
+Use `DIRECT_IMPLEMENTATION` only when the specification is complete, Complexity is `SIMPLE` or `MEDIUM`, and implementation can proceed without a full SDD pipeline. Direct Implementation 不要求"实现不需要 domain knowledge sync"。
+
+### 5.1 Initial Shared Tail Recommendation
+
+Solution Reviewer 只负责给出初始 Shared Documentation Governance Tail 建议，不负责最终 Tail Completion。
+
+每份输出必须包含：
+
+- `Tail Required: yes / no`
+- `Tail Scope: <current implementation scope or delta scope>`
+- `Tail Status: planned / blocked / not_required`
+
+规则：
+
+- 当前范围预计产生代码、配置或行为实现时：`Tail Required: yes`。
+- `DIRECT_IMPLEMENTATION` 或 `SPECKIT_PIPELINE_REQUIRED` 且 Tail Required=yes 时：`Tail Status: planned`。
+- `BLOCKED_NEEDS_REVISION` 时：`Tail Status: blocked`，不得进入实现或执行 Tail；Tail Required 仍按该范围未来是否会产生实际实现判断，不得因当前被阻塞而静默省略未来必需 Tail。
+- 纯文档或纯治理范围、不产生代码、配置或行为实现时：可以 `Tail Required: no` 且 `Tail Status: not_required`，但必须给出明确 basis，不得把普通代码修改误判为纯治理任务。
+- `Tail Scope` 必须来自 Current Implementation Scope 或 Delta Scope，不得用整个历史需求的 Aggregate Scope 替代 Delta Scope。
+
+Solution Reviewer 不得将 Tail 标记为 completed，不作 Tail Completion Gate 判断，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不替 business-domain Sync 或 Reconcile 作专业 decision，不执行 Sync 或 Reconcile，不修改生产代码或知识材料。
 
 ### 6. Output or Write Report
 
-By default, return the review report in the response.
+By default, return the review report in the response (response-only). Response-only 输出必须精确使用：
+
+```text
+Development Path Decision Artifact: not_persisted
+Development Path Decision Artifact Status: not_persisted
+```
+
+response-only 结果仍是本次响应中的审核结论，但不得伪装为 Manifest 可稳定追踪的 persisted evidence；不得虚构路径、版本、文件存在性或 `current` 状态。
 
 When the user explicitly asks to generate an artifact, write:
 
 ```text
 library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 ```
+
+`Development Path Decision Artifact` 必须指向该稳定路径，禁止创建 `_vN.md` 或其他 filename-versioned companion artifact。持久化报告必须记录当前内部 Version，并与被审核技术方案的版本绑定。`Development Path Decision Artifact Status` 使用 `current` / `stale`：只有当方案审核 artifact 位于稳定路径、可读取、未被 replaced、所审核的技术方案版本仍是当前有效版本且自身未 stale 时，才可以标记为 `current`。
 
 If the user asks for HTML or Lark/Feishu output, use `sdlc-docflow-writer` for routing and publishing. Keep this skill responsible for review content only.
 
@@ -149,6 +185,7 @@ Always recommend manifest updates for:
 - Artifact Index: `02 方案审核`
 - Gate Decisions: `方案审核`
 - Development Path Decision
+- Documentation Governance Tail 初始建议（Tail Required / Tail Scope / Tail Status）
 - Activity Log
 - Blocking Issues or Next Step
 
@@ -161,8 +198,24 @@ Every review report must contain:
 - Reviewed Artifact
 - Result
 - Can Continue
-- Development Path Recommendation
-- Recommendation Reason
+- Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
+- Complexity: `SIMPLE` / `MEDIUM` / `COMPLEX` / `BLOCKED_UNKNOWN`
+- Delta Complexity
+- Aggregate Complexity: reference only
+- Complexity Triggers
+- Delta Complexity Triggers
+- Ignored Aggregate Triggers
+- Re-Gate Source
+- Earliest Affected Node
+- Full SDD Override: `none` / `user_requested` / `later_gate_required`
+- Development Path Decision: `DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` / `BLOCKED_NEEDS_REVISION`
+- Development Path Decision Reason
+- Development Path Decision Source: `sdlc-solution-reviewer`
+- Development Path Decision Artifact
+- Development Path Decision Artifact Status: `current` / `stale` / `not_persisted`
+- Tail Required
+- Tail Scope
+- Tail Status
 - Critical / High / Medium / Low
 - Missing Constraint
 - Missing Branch
@@ -174,6 +227,20 @@ Every review report must contain:
 - Required Actions
 - Manifest Update Recommendation
 - Next Step
+
+## Compatibility-Read 规则（历史字段）
+
+旧字段 `Development Path Recommendation` 只允许作为历史 artifact 的 compatibility-read 输入：
+
+- 读取旧 artifact 时，可以把 `Development Path Recommendation` 解释为对应的 canonical `Development Path Decision`。
+- 新写 response、Markdown artifact、Manifest recommendation 和示例不得输出旧字段。
+- 不得双写 Recommendation 和 Decision。
+- 不要求迁移或重写历史 artifact。
+- 不得删除历史兼容读取能力。
+
+## Pipeline 调用边界
+
+当 Development Path Decision 为 `SPECKIT_PIPELINE_REQUIRED` 时：只输出下一步建议并要求另行确认或授权；不得自动调用 `sdlc-speckit-pipeline`；不修改 Pipeline Skill、contract、references 或 runtime。
 
 ## Stop Conditions
 

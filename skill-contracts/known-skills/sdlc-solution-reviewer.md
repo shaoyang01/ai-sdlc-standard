@@ -134,14 +134,23 @@ library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 - Current Change Scope / Delta Scope
 - Original Implemented / Approved Scope
 - Out of Delta Scope
-- Development Path Recommendation
+- Complexity: `SIMPLE` / `MEDIUM` / `COMPLEX` / `BLOCKED_UNKNOWN`
 - Delta Complexity
 - Aggregate Complexity: reference only
+- Complexity Triggers
 - Delta Complexity Triggers
 - Ignored Aggregate Triggers
 - Re-Gate Source
 - Earliest Affected Node
-- Recommendation Reason
+- Full SDD Override: `none` / `user_requested` / `later_gate_required`
+- Development Path Decision: `DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` / `BLOCKED_NEEDS_REVISION`
+- Development Path Decision Reason
+- Development Path Decision Source: `sdlc-solution-reviewer`
+- Development Path Decision Artifact
+- Development Path Decision Artifact Status: `current` / `stale` / `not_persisted`
+- Tail Required: yes / no
+- Tail Scope
+- Tail Status: `planned` / `blocked` / `not_required`
 - Critical / High / Medium / Low
 - Missing Constraint
 - Missing Branch
@@ -154,13 +163,38 @@ library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
 - Manifest Update Recommendation
 - Next Step
 
-开发路径建议规则：
+Development Path 决策合同：
 
-| Recommendation | 使用条件 | 后续动作 |
+- 路径只由 Current Implementation Scope 或 Delta Scope 自身的复杂度决定。
+- business_domain_sync need、知识同步需要、稳定业务事实记录需要、entry coverage 需要或 Shared Tail 工作本身都不是 `SPECKIT_PIPELINE_REQUIRED` 触发因素。
+- `SPECKIT_PIPELINE_REQUIRED` 只允许来自：当前范围自身为 `COMPLEX`、Full SDD Override = `user_requested`、或当前有效的后续 Gate 要求切换（`later_gate_required`）。
+- Direct Implementation 不要求"实现不需要 domain knowledge sync"。
+
+Response-only 合同：
+
+- 默认 response-only 时，`Development Path Decision Artifact` 与 `Development Path Decision Artifact Status` 必须精确为 `not_persisted`。
+- response-only 不得虚构稳定路径、版本、文件存在性或 `current` 状态。
+- 持久化时，`Development Path Decision Artifact` 必须指向 `library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md` 稳定路径，不得创建 filename-versioned companion artifact。
+
+Compatibility-read 合同：
+
+- 旧字段 `Development Path Recommendation` 只允许作为历史 artifact 的 compatibility-read 输入，读取时解释为对应的 canonical `Development Path Decision`。
+- 新写输出不得输出旧字段；不得双写 Recommendation 和 Decision；不要求迁移历史 artifact。
+
+开发路径决策规则：
+
+| Decision | 使用条件 | 后续动作 |
 | --- | --- | --- |
 | `DIRECT_IMPLEMENTATION` | Complexity 为 `SIMPLE` 或 `MEDIUM`，方案完整、边界清楚、无必须完整 SDD 的复杂协作。 | 进入实现，仍需遵守实现记录和代码审核 Gate。 |
-| `SPECKIT_PIPELINE_REQUIRED` | Complexity 为 `COMPLEX`，或用户明确要求完整 SDD，或后续 Gate 判定直接实现过于冒险。 | 唤醒 `sdlc-speckit-pipeline`。 |
+| `SPECKIT_PIPELINE_REQUIRED` | Complexity 为 `COMPLEX`，或用户明确要求完整 SDD，或后续 Gate 判定直接实现过于冒险。 | 唤醒 `sdlc-speckit-pipeline`（仅建议，需另行确认或授权）。 |
 | `BLOCKED_NEEDS_REVISION` | 存在 Critical / 未接受 High / 核心待确认问题 / 方案缺必填行为约束 / Complexity 为 `BLOCKED_UNKNOWN`。 | 回到 `01-技术方案` 更新稳定文件版本并重新审核。 |
+
+初始 Shared Tail 建议合同：
+
+- 预计产生代码、配置或行为实现时 `Tail Required: yes`，可实现路径下 `Tail Status: planned`。
+- `BLOCKED_NEEDS_REVISION` 时 `Tail Status: blocked`，不得进入实现或执行 Tail。
+- 纯文档或纯治理范围可以 `Tail Required: no`、`Tail Status: not_required`，但必须给出明确 basis。
+- Solution Reviewer 只负责初始 Tail 建议，不负责最终 Tail Completion，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不替 Sync 或 Reconcile 作专业 decision，不执行 Sync 或 Reconcile。
 
 Delta Change Mode 规则：
 
@@ -212,7 +246,7 @@ Delta Change Mode 规则：
 - `PASS` 才能直接进入开发路径选择。
 - `PASS_WITH_RISK` 必须记录风险接受说明，才能继续。
 - `FAIL` 必须回到 `01-技术方案`。
-- Development Path Recommendation 必须写入方案审核产物，并建议同步到 `manifest.md`。
+- Development Path Decision 必须写入方案审核产物，并建议同步到 `manifest.md`。
 
 ## Relationship With Other Skills
 

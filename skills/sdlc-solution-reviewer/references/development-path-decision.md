@@ -1,5 +1,19 @@
 # Development Path Decision
 
+## Canonical 路径决定规则
+
+Development Path 只由 Current Implementation Scope 或 Delta Scope 自身的复杂度决定。business_domain_sync need 本身不自动触发 `SPECKIT_PIPELINE_REQUIRED`；knowledge sync need、stable business fact recording、significant documentation sync、更新 `.specify/business_domain/**`、entry coverage need 或 Shared Tail 工作本身都不是 Speckit 触发因素，也不是 Direct Implementation 的排除条件。
+
+允许 `SPECKIT_PIPELINE_REQUIRED` 的条件只有：
+
+1. Current Implementation Scope 或 Delta Scope 本身为 `COMPLEX`；
+2. Full SDD Override = `user_requested`；
+3. 当前有效的后续 Gate 要求切换路径：Full SDD Override = `later_gate_required`。
+
+## Compatibility-Read 边界（Legacy Recommendation）
+
+历史 artifact 中的 `Development Path Recommendation` 只允许 compatibility-read：读取时解释为对应的 canonical `Development Path Decision`。新写 response、Markdown artifact、Manifest recommendation 和示例不得输出旧字段，不得双写 Recommendation 和 Decision，不要求迁移或重写历史 artifact。
+
 ## Recommendations
 
 Output exactly one value:
@@ -47,7 +61,7 @@ Rules:
 - Do not route by aggregate complexity for requirement supplements.
 - Aggregate Requirement Scope is context only.
 - Original DB/MQ/schedule/multi-module/business_domain triggers must be listed as Ignored Aggregate Triggers unless the Delta Scope itself changes them.
-- If Delta Scope itself adds DB schema, MQ, schedule, key data writes, cross-module work, state machine changes, or long-term knowledge sync, Delta Complexity may be COMPLEX.
+- If Delta Scope itself adds DB schema, MQ, schedule, key data writes, cross-module work, or state machine changes, Delta Complexity may be COMPLEX.
 - If the Delta Scope is a missing judgment, field mapping, boundary rule, validation condition, copy text, local query condition, or local compatibility rule, and the 1.1.0 technical specification plus review covers it, default to DIRECT_IMPLEMENTATION.
 - If Delta Scope affects behavior but the technical specification has no updated version, use BLOCKED_NEEDS_REVISION and set Earliest Affected Node to `01-技术方案`.
 - If the solution review does not cover the new Delta Scope, use BLOCKED_NEEDS_REVISION or require a new `02-方案审核`.
@@ -86,8 +100,6 @@ Typical triggers:
 - MQ producer/consumer/retry/idempotency changes.
 - Listener, schedule, process, or async task changes.
 - Complex rollback or compatibility requirements.
-- Significant code/doc sync requirement.
-- Need to update `.specify/business_domain/**`.
 - User explicitly requests full SDD.
 
 For Decision Scope = `DELTA_CHANGE`, these triggers must come from Delta Complexity Triggers, not from Aggregate Complexity.
@@ -117,9 +129,10 @@ Use when:
 - Scope is narrow and well bounded.
 - Technical specification fully defines behavior.
 - No full SDD route is needed.
-- Implementation does not require new domain knowledge sync.
 - Tasks can be safely derived directly from the technical specification.
 - Decision Scope = `DELTA_CHANGE` and the Current Change Scope / Delta Scope is SIMPLE or MEDIUM, reviewed, and does not itself trigger full SDD.
+
+Direct Implementation 不排除需要 business_domain_sync 或知识沉淀评估的实现；这些需求在实现后的 Shared Documentation Governance Tail 中处理，不影响路径选择。
 
 Typical examples:
 
