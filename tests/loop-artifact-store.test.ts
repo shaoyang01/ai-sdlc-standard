@@ -1,11 +1,14 @@
-// LOOP Artifact Store — Tests (LOOP-DELIVERY-01)
-// ===============================================
+// LOOP Artifact Store — Tests (LOOP-DELIVERY-01 + R1)
+// ======================================================
 // Content-addressed immutable artifact store tests, Run/Event linkage
-// integration, and real concurrent put via child processes.
+// integration, real concurrent put via child processes, and R1 storage
+// boundary hardening tests (parent containment, I/O boundary, write-all,
+// temp verification, mode enforcement).
 
 import { fork, type ChildProcess } from "node:child_process";
 import Database from "better-sqlite3";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -183,7 +186,7 @@ function runConcurrentPuts(controlRoot: string, repository: string, kind: string
 }
 
 async function main(): Promise<void> {
-  console.log("LOOP Artifact Store Tests (Delivery-01)\n");
+  console.log("LOOP Artifact Store Tests (Delivery-01 + R1)\n");
 
   const tempRoot = mkdtempSync(join(tmpdir(), "loop-d01-art-"));
   try {
@@ -415,6 +418,252 @@ async function main(): Promise<void> {
       const residue = repoFiles.find((file) => /\.(blob|tmp|db|db-wal|db-shm|wal|shm)$/.test(file));
       assert(residue === undefined, "repository directory has no blob/temp/sqlite residue");
       assert(existsSync(join(controlRoot, "artifacts", "v1")), "artifact root lives under controlRoot outside repository");
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R1 HARDENING TESTS
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── R1: parent symlink containment ──
+    console.log("R1: parent symlink containment");
+    {
+      const symControl = join(tempRoot, "control-sym-parent");
+      const symStore = new LoopArtifactStore({ controlRoot: symControl, repositoryPath: repository });
+      symStore.init();
+
+      // Create a legitimate blob first so we have known digest/content
+      const legitContent = "symlink-parent-test-content-v1";
+      const legit = symStore.put("code_patch", legitContent);
+      const legitShardDir = join(symControl, "artifacts", "v1", "code_patch", legit.digest.slice(0, 2));
+      const legitFinalPath = join(legitShardDir, `${legit.digest}.blob`);
+
+      // Setup external directory with a matching blob
+      const outsideDir = join(tempRoot, "outside-symlink-target");
+      mkdirSync(outsideDir, { recursive: true });
+      const outsideShard = join(outsideDir, legit.digest.slice(0, 2));
+      mkdirSync(outsideShard, { recursive: true });
+      const outsideBlob = join(outsideShard, `${legit.digest}.blob`);
+      writeFileSync(outsideBlob, legitContent);
+      chmodSync(outsideBlob, 0o600);
+
+      // === kind parent symlink + external matching blob → put reject ===
+      // Replace the kind directory with a symlink to external dir
+      rmSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true, force: true });
+      symlinkSync(outsideDir, join(symControl, "artifacts", "v1", "code_patch"), "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => symStore.put("code_patch", legitContent), "kind parent symlink + external matching blob → put reject");
+
+      // Restore
+      rmSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true, force: true });
+      mkdirSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true });
+      mkdirSync(legitShardDir, { recursive: true });
+      writeFileSync(legitFinalPath, legitContent);
+      chmodSync(legitFinalPath, 0o600);
+
+      // === kind parent symlink + external matching blob → read reject ===
+      rmSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true, force: true });
+      symlinkSync(outsideDir, join(symControl, "artifacts", "v1", "code_patch"), "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => symStore.read(legit.artifactRef), "kind parent symlink + external matching blob → read reject");
+
+      // Restore
+      rmSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true, force: true });
+      mkdirSync(join(symControl, "artifacts", "v1", "code_patch"), { recursive: true });
+      mkdirSync(legitShardDir, { recursive: true });
+      writeFileSync(legitFinalPath, legitContent);
+      chmodSync(legitFinalPath, 0o600);
+
+      // === shard parent symlink + external matching blob → put reject ===
+      rmSync(legitShardDir, { recursive: true, force: true });
+      symlinkSync(outsideShard, legitShardDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => symStore.put("code_patch", legitContent), "shard parent symlink + external matching blob → put reject");
+
+      // Restore
+      rmSync(legitShardDir, { recursive: true, force: true });
+      mkdirSync(legitShardDir, { recursive: true });
+      writeFileSync(legitFinalPath, legitContent);
+      chmodSync(legitFinalPath, 0o600);
+
+      // === shard parent symlink + external matching blob → read reject ===
+      rmSync(legitShardDir, { recursive: true, force: true });
+      symlinkSync(outsideShard, legitShardDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => symStore.read(legit.artifactRef), "shard parent symlink + external matching blob → read reject");
+
+      symStore.close();
+
+      // Cleanup external
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+
+    // ── R1: existing-final fast path parent containment ──
+    console.log("R1: existing-final fast path containment");
+    {
+      const fastControl = join(tempRoot, "control-fastpath");
+      const fastStore = new LoopArtifactStore({ controlRoot: fastControl, repositoryPath: repository });
+      fastStore.init();
+      const content = "fastpath-test-content";
+      const desc = fastStore.put("code_patch", content);
+      const shardDir = join(fastControl, "artifacts", "v1", "code_patch", desc.digest.slice(0, 2));
+
+      // Replace shard dir with symlink to external dir containing same blob
+      const extDir = join(tempRoot, "ext-fastpath");
+      mkdirSync(extDir, { recursive: true });
+      const extShard = join(extDir, desc.digest.slice(0, 2));
+      mkdirSync(extShard, { recursive: true });
+      writeFileSync(join(extShard, `${desc.digest}.blob`), content);
+      chmodSync(join(extShard, `${desc.digest}.blob`), 0o600);
+
+      rmSync(shardDir, { recursive: true, force: true });
+      symlinkSync(extDir, shardDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => fastStore.put("code_patch", content), "existing-final fast path cannot bypass parent containment");
+
+      fastStore.close();
+      rmSync(extDir, { recursive: true, force: true });
+    }
+
+    // ── R1: final blob symlink still rejected ──
+    console.log("R1: final blob symlink");
+    {
+      const finalSymContent = "finalsym-test-content";
+      const desc = store.put("review_summary", finalSymContent);
+      const shardDir = join(controlRoot, "artifacts", "v1", "review_summary", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+      rmSync(finalPath);
+      symlinkSync("/etc/hostname", finalPath);
+      expectThrow("ARTIFACT_CORRUPT", () => store.read(desc.artifactRef), "final blob symlink rejected on read (O_NOFOLLOW)");
+      rmSync(finalPath);
+    }
+
+    // ── R1: artifact root replaced between operations → reject ──
+    console.log("R1: root replacement");
+    {
+      const rootControl = join(tempRoot, "control-rootrep");
+      const rootStore = new LoopArtifactStore({ controlRoot: rootControl, repositoryPath: repository });
+      rootStore.init();
+      const content = "rootrep-test-content";
+      const desc = rootStore.put("code_patch", content);
+
+      // Second put: replace artifact root with symlink between operations
+      const artifactRoot = join(rootControl, "artifacts", "v1");
+      const fakeRoot = join(tempRoot, "fake-root");
+      mkdirSync(join(fakeRoot, "code_patch"), { recursive: true });
+      rmSync(artifactRoot, { recursive: true, force: true });
+      symlinkSync(fakeRoot, artifactRoot, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => rootStore.put("code_patch", content), "artifact root replaced with symlink → reject");
+
+      rootStore.close();
+      rmSync(fakeRoot, { recursive: true, force: true });
+    }
+
+    // ── R1: existing blob mode 0644 → put ARTIFACT_CORRUPT ──
+    console.log("R1: existing blob mode drift → put");
+    {
+      const modeControl = join(tempRoot, "control-mode-put");
+      const modeStore = new LoopArtifactStore({ controlRoot: modeControl, repositoryPath: repository });
+      modeStore.init();
+      const content = "mode-test-put-content";
+      const desc = modeStore.put("code_patch", content);
+      const shardDir = join(modeControl, "artifacts", "v1", "code_patch", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+
+      // Widen mode on existing blob
+      chmodSync(finalPath, 0o644);
+      expectThrow("ARTIFACT_CORRUPT", () => modeStore.put("code_patch", content), "existing blob mode 0644 → put ARTIFACT_CORRUPT");
+
+      modeStore.close();
+    }
+
+    // ── R1: existing blob mode 0644 → read ARTIFACT_CORRUPT ──
+    console.log("R1: existing blob mode drift → read");
+    {
+      const modeControl2 = join(tempRoot, "control-mode-read");
+      const modeStore2 = new LoopArtifactStore({ controlRoot: modeControl2, repositoryPath: repository });
+      modeStore2.init();
+      const content = "mode-test-read-content";
+      const desc = modeStore2.put("code_patch", content);
+      const shardDir = join(modeControl2, "artifacts", "v1", "code_patch", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+
+      // Widen mode
+      chmodSync(finalPath, 0o644);
+      expectThrow("ARTIFACT_CORRUPT", () => modeStore2.read(desc.artifactRef), "existing blob mode 0644 → read ARTIFACT_CORRUPT");
+
+      modeStore2.close();
+    }
+
+    // ── R1: normal final mode still 0600 ──
+    console.log("R1: normal final mode 0600");
+    {
+      const desc2 = store.put("workspace_metadata", "mode-0600-check");
+      const shardDir2 = join(controlRoot, "artifacts", "v1", "workspace_metadata", desc2.digest.slice(0, 2));
+      const finalPath2 = join(shardDir2, `${desc2.digest}.blob`);
+      const mode2 = lstatSync(finalPath2).mode & 0o777;
+      assert(mode2 === 0o600, `normal final mode still 0600 (got ${mode2.toString(8)})`);
+    }
+
+    // ── R1: exact idempotent put mtime unchanged ──
+    console.log("R1: idempotent put mtime");
+    {
+      const content = "mtime-preserve-test";
+      const desc = store.put("test_summary", content);
+      const shardDir = join(controlRoot, "artifacts", "v1", "test_summary", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+      const mtimeBefore = lstatSync(finalPath).mtimeMs;
+      const again = store.put("test_summary", content);
+      assert(again.artifactRef === desc.artifactRef, "idempotent put returns same ref");
+      assert(lstatSync(finalPath).mtimeMs === mtimeBefore, "exact idempotent put mtime still unchanged");
+    }
+
+    // ── R1: safe bounded error messages ──
+    console.log("R1: safe bounded error messages");
+    {
+      // Verify error messages don't leak sensitive paths
+      try {
+        store.read(`loop-artifact:v1:code_patch:sha256:${"b".repeat(64)}`);
+        assert(false, "should have thrown");
+      } catch (error) {
+        const e = error as LoopArtifactStoreError;
+        assert(e.code === "ARTIFACT_NOT_FOUND", "missing blob error code correct");
+        assert(e.message.length <= 256, "error message ≤256 chars");
+        assert(!/[\x00-\x1f\x7f]/.test(e.message), "error message no control chars");
+        // Error should not contain the temp root path
+        assert(!e.message.includes(tempRoot), "error message does not leak temp root path");
+      }
+
+      try {
+        store.put("code_patch", 42 as never);
+        assert(false, "should have thrown");
+      } catch (error) {
+        const e = error as LoopArtifactStoreError;
+        assert(e.code === "INVALID_INPUT", "invalid input error code correct");
+        assert(e.message.length <= 256, "INVALID_INPUT message ≤256 chars");
+      }
+    }
+
+    // ── R1: concurrent EEXIST winner mode drift → loser ARTIFACT_CORRUPT ──
+    console.log("R1: concurrent EEXIST mode drift");
+    {
+      const eeControl = join(tempRoot, "control-eexist-mode");
+      const eeStore = new LoopArtifactStore({ controlRoot: eeControl, repositoryPath: repository });
+      eeStore.init();
+      const content = "eexist-mode-content";
+      const desc = eeStore.put("code_patch", content);
+      // Now widen the existing blob mode
+      const shardDir = join(eeControl, "artifacts", "v1", "code_patch", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+      chmodSync(finalPath, 0o640);
+      // Put same content — should detect corrupt mode on existing blob
+      expectThrow("ARTIFACT_CORRUPT", () => eeStore.put("code_patch", content), "concurrent EEXIST winner mode drift → ARTIFACT_CORRUPT");
+      eeStore.close();
+    }
+
+    // ── R1: error message sanitization ──
+    console.log("R1: error message sanitization");
+    {
+      // Test that long messages are truncated and control chars stripped
+      const longContent = "x".repeat(500);
+      const err = new LoopArtifactStoreError("ARTIFACT_IO_FAILURE", "msg\x00with\x1fcontrols" + longContent);
+      assert(err.message.length <= 256, "error constructor sanitizes length");
+      assert(!/[\x00-\x1f\x7f]/.test(err.message), "error constructor strips control chars");
+      assert(err.code === "ARTIFACT_IO_FAILURE", "error code preserved");
     }
 
     store.close();

@@ -184,8 +184,6 @@ type EventRow = {
 };
 
 function rowToEvent(row: EventRow): LoopRunEvent {
-  // Raw persisted scalars are defended before any normalization: retryable
-  // must be exactly null/0/1 and integer scalars must be safe integers.
   return Object.freeze({
     eventId: row.event_id,
     runId: row.run_id,
@@ -220,26 +218,6 @@ function eventToRow(event: LoopRunEvent): EventRow {
     reason_code: event.reasonCode,
     canonical_sha256: sha256Hex(canonicalizeLoopRunEvent(event)),
   };
-}
-
-function eventRowMatches(row: EventRow, event: LoopRunEvent): boolean {
-  const expected = eventToRow(event);
-  return (
-    row.event_id === expected.event_id &&
-    row.run_id === expected.run_id &&
-    row.sequence === expected.sequence &&
-    row.kind === expected.kind &&
-    row.stage === expected.stage &&
-    row.attempt === expected.attempt &&
-    row.created_at === expected.created_at &&
-    row.input_digest === expected.input_digest &&
-    row.output_artifact_ref === expected.output_artifact_ref &&
-    row.output_digest === expected.output_digest &&
-    row.error_code === expected.error_code &&
-    row.retryable === expected.retryable &&
-    row.reason_code === expected.reason_code &&
-    row.canonical_sha256 === expected.canonical_sha256
-  );
 }
 
 export class LoopRunStore {
@@ -289,75 +267,137 @@ export class LoopRunStore {
     return this.db;
   }
 
+  /**
+   * init() tracks the Database connection in a local variable and only assigns
+   * to `this.db` and `this.wasOpened` after all pragma, WAL, and schema
+   * initialization succeeds. On any intermediate failure the local connection
+   * is best-effort closed so no lock lingers.
+   */
   init(): void {
     if (this.db !== null || this.wasOpened) closed();
+
+    let db: Database.Database | null = null;
+    let initError: LoopRunJournalError | null = null;
+
     try {
-      mkdirSync(dirname(this.dbPath), { recursive: true });
-      const db = new Database(this.dbPath);
-      this.ensureWalMode(db);
-      db.pragma("foreign_keys = ON");
-      db.pragma(`busy_timeout = ${this.busyTimeoutMs}`);
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS loop_runs (
-          run_id TEXT PRIMARY KEY,
-          requirement_id TEXT NOT NULL,
-          repository TEXT NOT NULL,
-          repository_path TEXT NOT NULL,
-          base_branch TEXT NOT NULL,
-          expected_base_sha TEXT NOT NULL,
-          task_branch TEXT NOT NULL,
-          control_root TEXT NOT NULL,
-          status TEXT NOT NULL,
-          current_stage TEXT,
-          current_attempt INTEGER NOT NULL,
-          fix_round INTEGER NOT NULL,
-          last_sequence INTEGER NOT NULL,
-          last_event_id TEXT NOT NULL,
-          blocking_reason_code TEXT,
-          failure_reason_code TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          identity_sha256 TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_loop_runs_status ON loop_runs(status);
+      try {
+        mkdirSync(dirname(this.dbPath), { recursive: true });
+      } catch (error) {
+        if (error instanceof LoopRunJournalError) throw error;
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
+      }
 
-        CREATE TABLE IF NOT EXISTS loop_stage_states (
-          run_id TEXT NOT NULL,
-          stage TEXT NOT NULL,
-          status TEXT NOT NULL,
-          attempt INTEGER NOT NULL,
-          updated_at TEXT NOT NULL,
-          PRIMARY KEY (run_id, stage),
-          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_loop_stage_states_run_id ON loop_stage_states(run_id);
+      try {
+        db = new Database(this.dbPath);
+      } catch (error) {
+        if (error instanceof LoopRunJournalError) throw error;
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
+      }
 
-        CREATE TABLE IF NOT EXISTS loop_events (
-          event_id TEXT PRIMARY KEY,
-          run_id TEXT NOT NULL,
-          sequence INTEGER NOT NULL,
-          kind TEXT NOT NULL,
-          stage TEXT,
-          attempt INTEGER NOT NULL,
-          created_at TEXT NOT NULL,
-          input_digest TEXT,
-          output_artifact_ref TEXT,
-          output_digest TEXT,
-          error_code TEXT,
-          retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
-          reason_code TEXT,
-          canonical_sha256 TEXT NOT NULL,
-          UNIQUE (run_id, sequence),
-          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
-      `);
+      try {
+        this.ensureWalMode(db);
+      } catch (error) {
+        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
+        throw initError;
+      }
+
+      try {
+        db.pragma("foreign_keys = ON");
+      } catch (error) {
+        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
+        throw initError;
+      }
+
+      try {
+        db.pragma(`busy_timeout = ${this.busyTimeoutMs}`);
+      } catch (error) {
+        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
+        throw initError;
+      }
+
+      try {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS loop_runs (
+            run_id TEXT PRIMARY KEY,
+            requirement_id TEXT NOT NULL,
+            repository TEXT NOT NULL,
+            repository_path TEXT NOT NULL,
+            base_branch TEXT NOT NULL,
+            expected_base_sha TEXT NOT NULL,
+            task_branch TEXT NOT NULL,
+            control_root TEXT NOT NULL,
+            status TEXT NOT NULL,
+            current_stage TEXT,
+            current_attempt INTEGER NOT NULL,
+            fix_round INTEGER NOT NULL,
+            last_sequence INTEGER NOT NULL,
+            last_event_id TEXT NOT NULL,
+            blocking_reason_code TEXT,
+            failure_reason_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            identity_sha256 TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_loop_runs_status ON loop_runs(status);
+
+          CREATE TABLE IF NOT EXISTS loop_stage_states (
+            run_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            status TEXT NOT NULL,
+            attempt INTEGER NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (run_id, stage),
+            FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_loop_stage_states_run_id ON loop_stage_states(run_id);
+
+          CREATE TABLE IF NOT EXISTS loop_events (
+            event_id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            stage TEXT,
+            attempt INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            input_digest TEXT,
+            output_artifact_ref TEXT,
+            output_digest TEXT,
+            error_code TEXT,
+            retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
+            reason_code TEXT,
+            canonical_sha256 TEXT NOT NULL,
+            UNIQUE (run_id, sequence),
+            FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
+        `);
+      } catch (error) {
+        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
+        throw initError;
+      }
+
+      // All initialization succeeded — publish the connection.
       this.db = db;
       this.wasOpened = true;
     } catch (error) {
-      if (error instanceof LoopRunJournalError) throw error;
-      if (isBusyCode(sqliteErrorCode(error))) busy();
-      storageFailure();
+      // Preserve the original typed error.
+      const originalError: LoopRunJournalError =
+        error instanceof LoopRunJournalError ? error : storageFailure as never;
+
+      // Best-effort close the local connection so no lock lingers.
+      if (db !== null) {
+        try {
+          db.close();
+        } catch {
+          // Cleanup failure must not overwrite the original error.
+        }
+      }
+
+      // Throw the original error (initError captures step-specific errors,
+      // otherwise the caught error which may have been storageFailure-wrapped).
+      throw initError ?? originalError;
     }
   }
 
@@ -408,20 +448,28 @@ export class LoopRunStore {
     busy();
   }
 
+  /**
+   * createRun: first reads the full verified snapshot, then compares the
+   * canonical identity from the verified snapshot with the request identity.
+   * This ensures persisted corruption is detected before any business-logic
+   * comparison.
+   */
   createRun(identity: LoopRunIdentity): LoopRunState {
     const db = this.connection();
     validateLoopRunIdentity(identity);
     const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
     try {
       const snapshot = db.transaction((): LoopRunSnapshot => {
-        const existing = db
-          .prepare("SELECT run_id, identity_sha256 FROM loop_runs WHERE run_id = ?")
-          .get(identity.runId) as { run_id: string; identity_sha256: string } | undefined;
-        if (existing !== undefined) {
-          if (existing.identity_sha256 === identitySha) {
-            return this.snapshotInTransaction(db, identity.runId);
+        // ── corruption-first: read full verified snapshot first ──
+        const existingSnapshot = this.readRunSnapshotInTransaction(db, identity.runId);
+        if (existingSnapshot !== undefined) {
+          // Persisted data has been verified. Now compare canonical identity.
+          const persistedIdentitySha = sha256Hex(canonicalizePersistedIdentity(existingSnapshot.state.identity));
+          if (persistedIdentitySha !== identitySha) {
+            throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
           }
-          throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
+          // Same identity — exact idempotent success.
+          return this.snapshotInTransaction(db, identity.runId);
         }
 
         const createdEvent = createLoopRunCreatedEvent(identity);
@@ -468,46 +516,71 @@ export class LoopRunStore {
       return snapshot.state;
     } catch (error) {
       return this.translateWriterError(error, () => {
-        const existing = db
-          .prepare("SELECT run_id, identity_sha256 FROM loop_runs WHERE run_id = ?")
-          .get(identity.runId) as { run_id: string; identity_sha256: string } | undefined;
-        if (existing !== undefined) {
-          if (existing.identity_sha256 === identitySha) {
-            return this.readSnapshot(identity.runId);
-          }
-          throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
-        }
-        storageFailure();
+        return this.reclassifyCreateRunConstraint(db, identity.runId, identitySha);
       });
     }
   }
 
+  /**
+   * Reclassification callback for createRun constraint violations.
+   * Operates within the safe storage translation boundary.
+   */
+  private reclassifyCreateRunConstraint(
+    db: Database.Database,
+    runId: string,
+    identitySha: string,
+  ): LoopRunSnapshot {
+    try {
+      const existingSnapshot = this.readRunSnapshotInTransaction(db, runId);
+      if (existingSnapshot !== undefined) {
+        const persistedIdentitySha = sha256Hex(canonicalizePersistedIdentity(existingSnapshot.state.identity));
+        if (persistedIdentitySha === identitySha) {
+          return existingSnapshot;
+        }
+        throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
+      }
+      storageFailure();
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      if (isConstraintCode(sqliteErrorCode(error))) storageFailure();
+      storageFailure();
+    }
+  }
+
+  /**
+   * appendEvent: first reads the full verified snapshot of the owning run,
+   * then locates the persisted event within that verified snapshot. This
+   * ensures persisted corruption is detected before any event comparison.
+   */
   appendEvent(event: LoopRunEvent): LoopRunState {
     const db = this.connection();
     validateLoopRunEvent(event);
     const eventRow = eventToRow(event);
     try {
       const snapshot = db.transaction((): LoopRunSnapshot => {
-        const existing = db
-          .prepare("SELECT * FROM loop_events WHERE event_id = ?")
-          .get(event.eventId) as EventRow | undefined;
-        if (existing !== undefined) {
-          if (eventRowMatches(existing, event)) {
+        // ── corruption-first: read full verified snapshot ──
+        const current = this.readRunSnapshotInTransaction(db, event.runId);
+        if (current === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+
+        // ── locate the existing event within the verified snapshot ──
+        const existingEvent = current.events.find((e) => e.eventId === event.eventId);
+        if (existingEvent !== undefined) {
+          // Persisted event has been verified — compare canonical forms.
+          if (canonicalizePersistedEvent(existingEvent) === canonicalizePersistedEvent(event)) {
             return this.snapshotInTransaction(db, event.runId);
           }
           throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
         }
 
-        const current = this.readRunSnapshotInTransaction(db, event.runId);
-        if (current === undefined) {
-          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
-        }
-        const sequenceOwner = db
-          .prepare("SELECT event_id FROM loop_events WHERE run_id = ? AND sequence = ?")
-          .get(event.runId, event.sequence) as { event_id: string } | undefined;
+        // ── check sequence conflict ──
+        const sequenceOwner = current.events.find((e) => e.sequence === event.sequence);
         if (sequenceOwner !== undefined) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
         }
+
         const next = applyLoopRunEvent(current.state, event);
         this.insertEventRow(db, eventRow);
         db.prepare(
@@ -539,23 +612,41 @@ export class LoopRunStore {
       return snapshot.state;
     } catch (error) {
       return this.translateWriterError(error, () => {
-        const existing = db
-          .prepare("SELECT * FROM loop_events WHERE event_id = ?")
-          .get(event.eventId) as EventRow | undefined;
-        if (existing !== undefined) {
-          if (eventRowMatches(existing, event)) {
-            return this.readSnapshot(event.runId);
-          }
-          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
-        }
-        const sequenceOwner = db
-          .prepare("SELECT event_id FROM loop_events WHERE run_id = ? AND sequence = ?")
-          .get(event.runId, event.sequence) as { event_id: string } | undefined;
-        if (sequenceOwner !== undefined) {
-          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
-        }
-        storageFailure();
+        return this.reclassifyAppendEventConstraint(db, event);
       });
+    }
+  }
+
+  /**
+   * Reclassification callback for appendEvent constraint violations.
+   * Operates within the safe storage translation boundary.
+   */
+  private reclassifyAppendEventConstraint(
+    db: Database.Database,
+    event: LoopRunEvent,
+  ): LoopRunSnapshot {
+    try {
+      const current = this.readRunSnapshotInTransaction(db, event.runId);
+      if (current === undefined) {
+        throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+      }
+      const existingEvent = current.events.find((e) => e.eventId === event.eventId);
+      if (existingEvent !== undefined) {
+        if (canonicalizePersistedEvent(existingEvent) === canonicalizePersistedEvent(event)) {
+          return current;
+        }
+        throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
+      }
+      const sequenceOwner = current.events.find((e) => e.sequence === event.sequence);
+      if (sequenceOwner !== undefined) {
+        throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
+      }
+      storageFailure();
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      if (isConstraintCode(sqliteErrorCode(error))) storageFailure();
+      storageFailure();
     }
   }
 
@@ -575,6 +666,11 @@ export class LoopRunStore {
 
   // ── storage error translation ──
 
+  /**
+   * translateWriterError is the single storage translation boundary for
+   * writer operations. The reclassification callback is also guarded within
+   * a safe storage translation — it must not leak raw SQLite exceptions.
+   */
   private translateWriterError(
     error: unknown,
     reclassifyConstraint: () => LoopRunSnapshot,
@@ -583,8 +679,15 @@ export class LoopRunStore {
     const code = sqliteErrorCode(error);
     if (isBusyCode(code)) busy();
     if (isConstraintCode(code)) {
-      const snapshot = reclassifyConstraint();
-      return snapshot.state;
+      try {
+        const snapshot = reclassifyConstraint();
+        return snapshot.state;
+      } catch (reclassifyError) {
+        // Reclassification callback errors are already translated by the
+        // callback itself. Any raw error escaping is translated to STORE_FAILURE.
+        if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
+        storageFailure();
+      }
     }
     storageFailure();
   }
@@ -692,8 +795,6 @@ export class LoopRunStore {
       }
     }
     const first = events[0]!;
-    // The trust root is the complete canonical run_created event derived from
-    // the persisted identity — kind/eventId checks alone are insufficient.
     const expectedFirstEvent = createLoopRunCreatedEvent(identity);
     if (canonicalizePersistedEvent(first) !== canonicalizePersistedEvent(expectedFirstEvent)) {
       corrupt("sequence 1 is not the canonical run_created event");

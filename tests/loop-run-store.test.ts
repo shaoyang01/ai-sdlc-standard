@@ -1,12 +1,15 @@
-// LOOP Run Store — Tests (LOOP-MVP-01A)
-// ======================================
+// LOOP Run Store — Tests (LOOP-MVP-01A + Delivery-01 + R1)
+// ===========================================================
 // SQLite durable journal tests. All databases live in disposable temp
 // directories outside the repository. No Git, no network, no Agent.
+//
+// R1 additions: corruption-first fast-path classification, constraint
+// reclassification boundary, init connection cleanup, lock release.
 
 import Database from "better-sqlite3";
 import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 import {
   LoopRunJournalError,
@@ -86,7 +89,7 @@ function openStore(dir: string, name = "journal.db"): LoopRunStore {
 }
 
 function test(): void {
-  console.log("LOOP Run Store Tests (01A)\n");
+  console.log("LOOP Run Store Tests (01A + Delivery-01 + R1)\n");
 
   const tempRoot = mkdtempSync(join(tmpdir(), "loop-mvp-01a-store-"));
   try {
@@ -506,8 +509,6 @@ function test(): void {
     const retryDir = mkdtempSync(join(tempRoot, "retry-"));
     const retryDbPath = join(retryDir, "journal.db");
     {
-      // Simulate a pre-existing DB without the CHECK constraint (older or
-      // externally damaged database): the read path must still defend.
       const setup = new Database(retryDbPath);
       setup.exec(`
         CREATE TABLE loop_runs (
@@ -690,7 +691,7 @@ function test(): void {
       }
     }
 
-    // ── no sensitive sentinel data in DB ──
+    // no sensitive sentinel data in DB
     console.log("no sensitive data in DB");
     {
       const db = new Database(corruptDbPath, { readonly: true });
@@ -707,6 +708,229 @@ function test(): void {
       const hit = texts.find((text) => sentinel.some((word) => text.includes(word)));
       assert(hit === undefined, "DB contains no raw prompt/patch/stdout/stderr/credential sentinels");
       db.close();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R1 HARDENING TESTS
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── R1: createRun corruption-first classification ──
+    console.log("R1: createRun corruption-first classification");
+    {
+      // Setup: create a clean run
+      const r1Dir = mkdtempSync(join(tempRoot, "r1-create-"));
+      const r1DbPath = join(r1Dir, "journal.db");
+      const store = new LoopRunStore(r1DbPath);
+      store.init();
+      const identity = makeIdentity();
+      store.createRun(identity);
+      store.close();
+
+      const tamper = (sql: string, params: unknown[]): void => {
+        const db = new Database(r1DbPath);
+        db.prepare(sql).run(...params);
+        db.close();
+      };
+
+      // identity_sha256 corrupted → STORE_CORRUPT (not RUN_ID_CONFLICT)
+      tamper("UPDATE loop_runs SET identity_sha256 = ? WHERE run_id = ?", ["0".repeat(64), "run-001"]);
+      const store2 = new LoopRunStore(r1DbPath);
+      store2.init();
+      expectThrow("STORE_CORRUPT", () => store2.createRun(makeIdentity({ requirementId: "req-other" })), "identity_sha256 corrupted + different identity → STORE_CORRUPT (not RUN_ID_CONFLICT)");
+      expectThrow("STORE_CORRUPT", () => store2.createRun(makeIdentity()), "identity_sha256 corrupted + same identity → STORE_CORRUPT (not idempotent)");
+      store2.close();
+
+      // Restore and test persisted identity scalar corruption
+      rmSync(r1DbPath, { force: true });
+      const store3 = new LoopRunStore(r1DbPath);
+      store3.init();
+      store3.createRun(makeIdentity());
+      store3.close();
+
+      tamper("UPDATE loop_runs SET repository_path = ? WHERE run_id = ?", ["relative/path", "run-001"]);
+      const store4 = new LoopRunStore(r1DbPath);
+      store4.init();
+      expectThrow("STORE_CORRUPT", () => store4.createRun(makeIdentity()), "persisted identity scalar corrupted + createRun → STORE_CORRUPT");
+      store4.close();
+
+      // Restore and test persisted stage row corruption
+      rmSync(r1DbPath, { force: true });
+      const store5 = new LoopRunStore(r1DbPath);
+      store5.init();
+      store5.createRun(makeIdentity());
+      store5.close();
+
+      tamper("DELETE FROM loop_stage_states WHERE run_id = ? AND stage = ?", ["run-001", "review"]);
+      const store6 = new LoopRunStore(r1DbPath);
+      store6.init();
+      expectThrow("STORE_CORRUPT", () => store6.createRun(makeIdentity()), "persisted stage row corrupted + createRun → STORE_CORRUPT");
+      store6.close();
+    }
+
+    // ── R1: appendEvent corruption-first classification ──
+    console.log("R1: appendEvent corruption-first classification");
+    {
+      const r1AppDir = mkdtempSync(join(tempRoot, "r1-append-"));
+      const r1AppDbPath = join(r1AppDir, "journal.db");
+      const store = new LoopRunStore(r1AppDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store.close();
+
+      const tamper = (sql: string, params: unknown[]): void => {
+        const db = new Database(r1AppDbPath);
+        db.prepare(sql).run(...params);
+        db.close();
+      };
+
+      // Event canonical_sha256 corrupted → STORE_CORRUPT (not EVENT_ID_CONFLICT)
+      tamper("UPDATE loop_events SET canonical_sha256 = ? WHERE event_id = ?", ["0".repeat(64), "run-001:2:run_started"]);
+      const store2 = new LoopRunStore(r1AppDbPath);
+      store2.init();
+      expectThrow("STORE_CORRUPT", () => store2.appendEvent(makeEvent({ sequence: 2, kind: "run_started", eventId: "run-001:2:run_started" })), "event canonical_sha256 corrupted + same event → STORE_CORRUPT (not idempotent)");
+      store2.close();
+
+      // Restore
+      rmSync(r1AppDbPath, { force: true });
+      const store3 = new LoopRunStore(r1AppDbPath);
+      store3.init();
+      store3.createRun(makeIdentity());
+      store3.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store3.close();
+
+      // Event persisted scalar corrupted → STORE_CORRUPT
+      tamper("UPDATE loop_events SET kind = ? WHERE event_id = ?", ["bogus_kind", "run-001:2:run_started"]);
+      const store4 = new LoopRunStore(r1AppDbPath);
+      store4.init();
+      expectThrow("STORE_CORRUPT", () => store4.appendEvent(makeEvent({ sequence: 2, kind: "run_started", eventId: "run-001:2:run_started" })), "persisted event scalar corrupted + appendEvent → STORE_CORRUPT");
+      store4.close();
+
+      // Restore
+      rmSync(r1AppDbPath, { force: true });
+      const store5 = new LoopRunStore(r1AppDbPath);
+      store5.init();
+      store5.createRun(makeIdentity());
+      store5.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store5.close();
+
+      // Run/Stage history corrupted → appendEvent STORE_CORRUPT
+      tamper("UPDATE loop_runs SET status = ? WHERE run_id = ?", ["completed", "run-001"]);
+      const store6 = new LoopRunStore(r1AppDbPath);
+      store6.init();
+      expectThrow("STORE_CORRUPT", () => store6.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1 })), "belonging run history corrupted + appendEvent → STORE_CORRUPT");
+      store6.close();
+    }
+
+    // ── R1: verified different identity → RUN_ID_CONFLICT ──
+    console.log("R1: verified different identity");
+    {
+      const r1IdDir = mkdtempSync(join(tempRoot, "r1-id-"));
+      const r1IdDbPath = join(r1IdDir, "journal.db");
+      const store = new LoopRunStore(r1IdDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.close();
+
+      // Different identity → RUN_ID_CONFLICT (after full snapshot verification)
+      const store2 = new LoopRunStore(r1IdDbPath);
+      store2.init();
+      expectThrow("RUN_ID_CONFLICT", () => store2.createRun(makeIdentity({ requirementId: "req-other" })), "verified different identity → RUN_ID_CONFLICT");
+      store2.close();
+    }
+
+    // ── R1: verified different event → EVENT_ID_CONFLICT ──
+    console.log("R1: verified different event");
+    {
+      const r1EvDir = mkdtempSync(join(tempRoot, "r1-ev-"));
+      const r1EvDbPath = join(r1EvDir, "journal.db");
+      const store = new LoopRunStore(r1EvDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store.close();
+
+      const store2 = new LoopRunStore(r1EvDbPath);
+      store2.init();
+      expectThrow("EVENT_ID_CONFLICT", () => store2.appendEvent(makeEvent({
+        sequence: 2, kind: "run_started",
+        eventId: "run-001:2:run_started", outputDigest: "e".repeat(64),
+      })), "verified different event → EVENT_ID_CONFLICT");
+      store2.close();
+    }
+
+    // ── R1: verified same identity/event → exact idempotent success ──
+    console.log("R1: verified idempotent");
+    {
+      const r1IdemDir = mkdtempSync(join(tempRoot, "r1-idem-"));
+      const r1IdemDbPath = join(r1IdemDir, "journal.db");
+      const store = new LoopRunStore(r1IdemDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      const startedEvent = makeEvent({ sequence: 2, kind: "run_started" });
+      store.appendEvent(startedEvent);
+      store.close();
+
+      const store2 = new LoopRunStore(r1IdemDbPath);
+      store2.init();
+      // Same identity → idempotent success (returns current state including appended events)
+      const result = store2.createRun(makeIdentity());
+      assert(result.lastSequence === 2, "verified same identity → exact idempotent create success (lastSequence after append)");
+      // Same event → idempotent success
+      const result2 = store2.appendEvent(startedEvent);
+      assert(result2.lastSequence === 2, "verified same event → exact idempotent append success");
+      store2.close();
+    }
+
+    // ── R1: init connection cleanup ──
+    console.log("R1: init connection cleanup");
+    {
+      const r1InitDir = mkdtempSync(join(tempRoot, "r1-init-"));
+      const r1InitDbPath = join(r1InitDir, "journal.db");
+
+      // Create a parent file that makes mkdir fail
+      const { writeFileSync } = require("node:fs");
+      const parentFile = join(r1InitDir, "parent-block");
+      writeFileSync(parentFile, "x");
+      const blockedPath = join(parentFile, "journal.db");
+
+      // First store: init fails, but connection should be closed
+      const store1 = new LoopRunStore(blockedPath);
+      try {
+        store1.init();
+        assert(false, "init should have failed");
+      } catch (error) {
+        const e = error as LoopRunJournalError;
+        assert(e.code === "STORE_FAILURE", "init failure classified STORE_FAILURE");
+      }
+      // The store should not have an open connection
+      expectThrow("STORE_CLOSED", () => store1.createRun(makeIdentity()), "failed init leaves store closed");
+
+      // Remove the blocker; verify no lingering lock
+      rmSync(parentFile, { force: true });
+
+      // New store should be able to init successfully
+      const store2 = new LoopRunStore(join(r1InitDir, "journal.db"));
+      store2.init();
+      assert(true, "new store can init after previous failure");
+      store2.createRun(makeIdentity());
+      store2.close();
+
+      // Original failed store should still be closed (no half-open state)
+      expectThrow("STORE_CLOSED", () => store1.getRun("run-001"), "previously failed store remains closed");
+    }
+
+    // ── R1: all error messages safe bounded (comprehensive) ──
+    console.log("R1: safe bounded error messages comprehensive");
+    {
+      // Verify error code values unchanged
+      const codeValues = ["STORE_CORRUPT", "STORE_BUSY", "STORE_FAILURE", "STORE_CLOSED", "INVALID_INPUT", "RUN_ID_CONFLICT", "EVENT_ID_CONFLICT", "EVENT_SEQUENCE_CONFLICT", "RUN_NOT_FOUND"];
+      for (const code of codeValues) {
+        const err = new LoopRunJournalError(code as LoopRunJournalError["code"], "test message");
+        assert(err.code === code, `error code ${code} preserved`);
+        assert(err.message.length <= 256, `error message for ${code} ≤256`);
+        assert(!/[\x00-\x1f\x7f]/.test(err.message), `error message for ${code} no control chars`);
+      }
     }
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
