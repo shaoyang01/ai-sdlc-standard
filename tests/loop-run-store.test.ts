@@ -631,6 +631,65 @@ function test(): void {
       }
     }
 
+    // ── Delivery-01: options, busy timeout, snapshot, error translation ──
+    console.log("options / snapshot / error translation");
+    {
+      expectThrow("INVALID_INPUT", () => new LoopRunStore(join(tempRoot, "opt.db"), { busyTimeoutMs: 0 }), "busyTimeoutMs 0 rejected");
+      expectThrow("INVALID_INPUT", () => new LoopRunStore(join(tempRoot, "opt.db"), { busyTimeoutMs: 5001 }), "busyTimeoutMs above 5000 rejected");
+      expectThrow("INVALID_INPUT", () => new LoopRunStore(join(tempRoot, "opt.db"), { busyTimeoutMs: 1.5 }), "non-integer busyTimeoutMs rejected");
+      const accepted = new LoopRunStore(join(tempRoot, "opt.db"), { busyTimeoutMs: 1 });
+      accepted.close();
+      assert(true, "busyTimeoutMs 1 accepted");
+    }
+    const snapDir = mkdtempSync(join(tempRoot, "snap-"));
+    {
+      const store = openStore(snapDir);
+      const storeDb = (store as unknown as { db: Database.Database }).db;
+      assert((storeDb.pragma("busy_timeout", { simple: true }) as number) === 2000, "default busy timeout is 2000ms");
+      store.close();
+      const custom = new LoopRunStore(join(snapDir, "custom.db"), { busyTimeoutMs: 1000 });
+      custom.init();
+      const customDb = (custom as unknown as { db: Database.Database }).db;
+      assert((customDb.pragma("busy_timeout", { simple: true }) as number) === 1000, "configured busy timeout applied");
+      custom.close();
+    }
+    {
+      const store = openStore(snapDir);
+      assert(store.getSnapshot("run-missing") === undefined, "getSnapshot missing returns undefined");
+      store.createRun(makeIdentity());
+      const snapshot = store.getSnapshot("run-001")!;
+      assert(snapshot.state.status === "created", "getSnapshot reconstructs state");
+      assert(snapshot.events.length === 1 && snapshot.state.lastSequence === 1, "snapshot state/events consistent");
+      assert(Object.isFrozen(snapshot.state) && Object.isFrozen(snapshot.events), "state and events frozen");
+      assert(store.getRun("run-001")!.status === snapshot.state.status, "getRun consistent with getSnapshot");
+      assert(store.listEvents("run-001").length === snapshot.events.length, "listEvents consistent with getSnapshot");
+      const idempotentCreate = store.createRun(makeIdentity());
+      assert(idempotentCreate.lastSequence === 1 && idempotentCreate.updatedAt === snapshot.state.updatedAt, "idempotent create returns snapshot state");
+      const startedEvent = makeEvent({ sequence: 2, kind: "run_started" });
+      const appended = store.appendEvent(startedEvent);
+      assert(appended.status === "running" && appended.lastSequence === 2, "append returns verified snapshot state");
+      const replayed = store.appendEvent(startedEvent);
+      assert(replayed.lastSequence === 2 && store.listEvents("run-001").length === 2, "idempotent append replay returns snapshot");
+      store.close();
+    }
+    {
+      const { writeFileSync } = require("node:fs");
+      const parentFile = join(snapDir, "parent-file");
+      writeFileSync(parentFile, "x");
+      const failing = new LoopRunStore(join(parentFile, "journal.db"));
+      try {
+        failing.init();
+        assert(false, "init with file parent fails (no error)");
+      } catch (error) {
+        const journalError = error as LoopRunJournalError;
+        assert(journalError.code === "STORE_FAILURE", "init failure classified STORE_FAILURE");
+        assert(journalError.message.length <= 256, "STORE_FAILURE message bounded");
+        assert(!/[\x00-\x1f\x7f]/.test(journalError.message), "STORE_FAILURE message has no control characters");
+        assert(!journalError.message.includes("parent-file"), "STORE_FAILURE message does not leak path");
+        assert(!journalError.message.toLowerCase().includes("sqlite"), "STORE_FAILURE message does not leak raw sqlite text");
+      }
+    }
+
     // ── no sensitive sentinel data in DB ──
     console.log("no sensitive data in DB");
     {

@@ -1,9 +1,10 @@
-// LOOP Executor Kernel — Durable SQLite Run Journal Store (LOOP-MVP-01A)
-// ======================================================================
-// better-sqlite3 backed append-only run journal. Each store instance owns
-// exactly one connection. Only fixed safe scalars are persisted — never raw
-// prompt, patch, stdout, stderr, credentials, environment maps, repository
-// content, JSON payloads, or arbitrary metadata.
+// LOOP Executor Kernel — Durable SQLite Run Journal Store
+// =========================================================
+// better-sqlite3 backed append-only run journal with cross-connection
+// concurrency guarantees. Each store instance owns exactly one connection.
+// Only fixed safe scalars are persisted — never raw prompt, patch, stdout,
+// stderr, credentials, environment maps, repository content, JSON payloads,
+// or arbitrary metadata.
 
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
@@ -15,8 +16,10 @@ import {
   LoopRunJournalError,
   type LoopRunEvent,
   type LoopRunIdentity,
+  type LoopRunSnapshot,
   type LoopRunState,
   type LoopRunStatus,
+  type LoopRunStoreOptions,
   type LoopStageName,
   type LoopStageState,
   type LoopStageStatus,
@@ -31,12 +34,23 @@ import {
   validateLoopRunIdentity,
 } from "./loop-run-state";
 
+const DEFAULT_BUSY_TIMEOUT_MS = 2000;
+const MAX_BUSY_TIMEOUT_MS = 5000;
+
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 function closed(): never {
   throw new LoopRunJournalError("STORE_CLOSED", "loop run store is not open");
+}
+
+function busy(): never {
+  throw new LoopRunJournalError("STORE_BUSY", "run journal storage is busy");
+}
+
+function storageFailure(): never {
+  throw new LoopRunJournalError("STORE_FAILURE", "run journal storage operation failed");
 }
 
 /**
@@ -100,6 +114,34 @@ function asPersistedSafeInteger(value: unknown): number {
     return corrupt("persisted integer scalar is invalid");
   }
   return value;
+}
+
+// ── SQLite error translation boundary ──
+// Structured codes only. Raw SQLite messages, paths, input, event content and
+// credentials are never read, kept, or echoed.
+
+function sqliteErrorCode(error: unknown): string | null {
+  if (error === null || typeof error !== "object") return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function isBusyCode(code: string | null): boolean {
+  return code !== null && (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED"));
+}
+
+function isConstraintCode(code: string | null): boolean {
+  return code !== null && code.startsWith("SQLITE_CONSTRAINT");
+}
+
+/**
+ * Synchronous bounded sleep used for busy retries. Atomics.wait is available
+ * in Node.js main and worker threads.
+ */
+function spinWait(ms: number): void {
+  const buffer = new SharedArrayBuffer(4);
+  const view = new Int32Array(buffer);
+  Atomics.wait(view, 0, 0, ms);
 }
 
 type RunRow = {
@@ -202,10 +244,11 @@ function eventRowMatches(row: EventRow, event: LoopRunEvent): boolean {
 
 export class LoopRunStore {
   private readonly dbPath: string;
+  private readonly busyTimeoutMs: number;
   private db: Database.Database | null = null;
   private wasOpened = false;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options?: LoopRunStoreOptions) {
     if (typeof dbPath !== "string" || dbPath.trim().length === 0 || dbPath !== dbPath.trim()) {
       throw new LoopRunJournalError("INVALID_INPUT", "dbPath must be a trimmed non-empty absolute path");
     }
@@ -218,9 +261,27 @@ export class LoopRunStore {
       }
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
-      // Non-existent path is acceptable; parent is created in init().
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        // Path (or a parent component) does not exist yet; init surfaces any
+        // real storage failure via mkdir/open.
+      } else if (isBusyCode(sqliteErrorCode(error))) {
+        busy();
+      } else {
+        storageFailure();
+      }
+    }
+    const busyTimeoutMs = options?.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
+    if (
+      typeof busyTimeoutMs !== "number" ||
+      !Number.isInteger(busyTimeoutMs) ||
+      busyTimeoutMs < 1 ||
+      busyTimeoutMs > MAX_BUSY_TIMEOUT_MS
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "busyTimeoutMs must be an integer between 1 and 5000");
     }
     this.dbPath = dbPath;
+    this.busyTimeoutMs = busyTimeoutMs;
   }
 
   private connection(): Database.Database {
@@ -230,216 +291,331 @@ export class LoopRunStore {
 
   init(): void {
     if (this.db !== null || this.wasOpened) closed();
-    mkdirSync(dirname(this.dbPath), { recursive: true });
-    const db = new Database(this.dbPath);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
-    db.pragma("busy_timeout = 2000");
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS loop_runs (
-        run_id TEXT PRIMARY KEY,
-        requirement_id TEXT NOT NULL,
-        repository TEXT NOT NULL,
-        repository_path TEXT NOT NULL,
-        base_branch TEXT NOT NULL,
-        expected_base_sha TEXT NOT NULL,
-        task_branch TEXT NOT NULL,
-        control_root TEXT NOT NULL,
-        status TEXT NOT NULL,
-        current_stage TEXT,
-        current_attempt INTEGER NOT NULL,
-        fix_round INTEGER NOT NULL,
-        last_sequence INTEGER NOT NULL,
-        last_event_id TEXT NOT NULL,
-        blocking_reason_code TEXT,
-        failure_reason_code TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        identity_sha256 TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_loop_runs_status ON loop_runs(status);
+    try {
+      mkdirSync(dirname(this.dbPath), { recursive: true });
+      const db = new Database(this.dbPath);
+      this.ensureWalMode(db);
+      db.pragma("foreign_keys = ON");
+      db.pragma(`busy_timeout = ${this.busyTimeoutMs}`);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS loop_runs (
+          run_id TEXT PRIMARY KEY,
+          requirement_id TEXT NOT NULL,
+          repository TEXT NOT NULL,
+          repository_path TEXT NOT NULL,
+          base_branch TEXT NOT NULL,
+          expected_base_sha TEXT NOT NULL,
+          task_branch TEXT NOT NULL,
+          control_root TEXT NOT NULL,
+          status TEXT NOT NULL,
+          current_stage TEXT,
+          current_attempt INTEGER NOT NULL,
+          fix_round INTEGER NOT NULL,
+          last_sequence INTEGER NOT NULL,
+          last_event_id TEXT NOT NULL,
+          blocking_reason_code TEXT,
+          failure_reason_code TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          identity_sha256 TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_loop_runs_status ON loop_runs(status);
 
-      CREATE TABLE IF NOT EXISTS loop_stage_states (
-        run_id TEXT NOT NULL,
-        stage TEXT NOT NULL,
-        status TEXT NOT NULL,
-        attempt INTEGER NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (run_id, stage),
-        FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_loop_stage_states_run_id ON loop_stage_states(run_id);
+        CREATE TABLE IF NOT EXISTS loop_stage_states (
+          run_id TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempt INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, stage),
+          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_loop_stage_states_run_id ON loop_stage_states(run_id);
 
-      CREATE TABLE IF NOT EXISTS loop_events (
-        event_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        sequence INTEGER NOT NULL,
-        kind TEXT NOT NULL,
-        stage TEXT,
-        attempt INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        input_digest TEXT,
-        output_artifact_ref TEXT,
-        output_digest TEXT,
-        error_code TEXT,
-        retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
-        reason_code TEXT,
-        canonical_sha256 TEXT NOT NULL,
-        UNIQUE (run_id, sequence),
-        FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
-    `);
-    this.db = db;
-    this.wasOpened = true;
+        CREATE TABLE IF NOT EXISTS loop_events (
+          event_id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          stage TEXT,
+          attempt INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          input_digest TEXT,
+          output_artifact_ref TEXT,
+          output_digest TEXT,
+          error_code TEXT,
+          retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
+          reason_code TEXT,
+          canonical_sha256 TEXT NOT NULL,
+          UNIQUE (run_id, sequence),
+          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
+      `);
+      this.db = db;
+      this.wasOpened = true;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
   }
 
   close(): void {
     if (this.db === null) return;
     const db = this.db;
     this.db = null;
-    db.close();
+    try {
+      db.close();
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * journal_mode changes are not covered by SQLite's busy handler, so a
+   * concurrent writer can make the WAL pragma fail instantly. Retry briefly
+   * and accept an already-WAL database instead of failing outright.
+   */
+  private ensureWalMode(db: Database.Database): void {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      let mode: string;
+      try {
+        mode = String(db.pragma("journal_mode", { simple: true })).toLowerCase();
+      } catch (error) {
+        if (isBusyCode(sqliteErrorCode(error)) && attempt < 19) {
+          spinWait(50);
+          continue;
+        }
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
+      }
+      if (mode === "wal") return;
+      try {
+        db.pragma("journal_mode = WAL");
+        return;
+      } catch (error) {
+        if (isBusyCode(sqliteErrorCode(error)) && attempt < 19) {
+          spinWait(50);
+          continue;
+        }
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
+      }
+    }
+    busy();
   }
 
   createRun(identity: LoopRunIdentity): LoopRunState {
     const db = this.connection();
     validateLoopRunIdentity(identity);
     const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
-    const existing = db
-      .prepare("SELECT run_id, identity_sha256 FROM loop_runs WHERE run_id = ?")
-      .get(identity.runId) as { run_id: string; identity_sha256: string } | undefined;
-    if (existing !== undefined) {
-      if (existing.identity_sha256 === identitySha) {
-        const state = this.getRun(identity.runId);
-        if (state === undefined) corrupt("run row exists but run cannot be reconstructed");
-        return state;
-      }
-      throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
-    }
+    try {
+      const snapshot = db.transaction((): LoopRunSnapshot => {
+        const existing = db
+          .prepare("SELECT run_id, identity_sha256 FROM loop_runs WHERE run_id = ?")
+          .get(identity.runId) as { run_id: string; identity_sha256: string } | undefined;
+        if (existing !== undefined) {
+          if (existing.identity_sha256 === identitySha) {
+            return this.snapshotInTransaction(db, identity.runId);
+          }
+          throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
+        }
 
-    const createdEvent = createLoopRunCreatedEvent(identity);
-    const state = createInitialLoopRunState(identity);
-    const eventRow = eventToRow(createdEvent);
-    const create = db.transaction(() => {
-      db.prepare(
-        `INSERT INTO loop_runs (
-          run_id, requirement_id, repository, repository_path, base_branch,
-          expected_base_sha, task_branch, control_root, status, current_stage,
-          current_attempt, fix_round, last_sequence, last_event_id,
-          blocking_reason_code, failure_reason_code, created_at, updated_at,
-          identity_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        identity.runId,
-        identity.requirementId,
-        identity.repository,
-        identity.repositoryPath,
-        identity.baseBranch,
-        identity.expectedBaseSha,
-        identity.taskBranch,
-        identity.controlRoot,
-        state.status,
-        null,
-        state.currentAttempt,
-        state.fixRound,
-        state.lastSequence,
-        state.lastEventId,
-        null,
-        null,
-        identity.createdAt,
-        state.updatedAt,
-        identitySha,
-      );
-      const stageInsert = db.prepare(
-        "INSERT INTO loop_stage_states (run_id, stage, status, attempt, updated_at) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const stage of LOOP_STAGE_NAMES) {
-        stageInsert.run(identity.runId, stage, "pending", 0, identity.createdAt);
-      }
-      this.insertEventRow(db, eventRow);
-    });
-    create();
-    return state;
+        const createdEvent = createLoopRunCreatedEvent(identity);
+        const state = createInitialLoopRunState(identity);
+        const eventRow = eventToRow(createdEvent);
+        db.prepare(
+          `INSERT INTO loop_runs (
+            run_id, requirement_id, repository, repository_path, base_branch,
+            expected_base_sha, task_branch, control_root, status, current_stage,
+            current_attempt, fix_round, last_sequence, last_event_id,
+            blocking_reason_code, failure_reason_code, created_at, updated_at,
+            identity_sha256
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          identity.runId,
+          identity.requirementId,
+          identity.repository,
+          identity.repositoryPath,
+          identity.baseBranch,
+          identity.expectedBaseSha,
+          identity.taskBranch,
+          identity.controlRoot,
+          state.status,
+          null,
+          state.currentAttempt,
+          state.fixRound,
+          state.lastSequence,
+          state.lastEventId,
+          null,
+          null,
+          identity.createdAt,
+          state.updatedAt,
+          identitySha,
+        );
+        const stageInsert = db.prepare(
+          "INSERT INTO loop_stage_states (run_id, stage, status, attempt, updated_at) VALUES (?, ?, ?, ?, ?)",
+        );
+        for (const stage of LOOP_STAGE_NAMES) {
+          stageInsert.run(identity.runId, stage, "pending", 0, identity.createdAt);
+        }
+        this.insertEventRow(db, eventRow);
+        return this.snapshotInTransaction(db, identity.runId);
+      }).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      return this.translateWriterError(error, () => {
+        const existing = db
+          .prepare("SELECT run_id, identity_sha256 FROM loop_runs WHERE run_id = ?")
+          .get(identity.runId) as { run_id: string; identity_sha256: string } | undefined;
+        if (existing !== undefined) {
+          if (existing.identity_sha256 === identitySha) {
+            return this.readSnapshot(identity.runId);
+          }
+          throw new LoopRunJournalError("RUN_ID_CONFLICT", "runId already exists with a different identity");
+        }
+        storageFailure();
+      });
+    }
   }
 
   appendEvent(event: LoopRunEvent): LoopRunState {
     const db = this.connection();
     validateLoopRunEvent(event);
     const eventRow = eventToRow(event);
-    const existing = db
-      .prepare("SELECT * FROM loop_events WHERE event_id = ?")
-      .get(event.eventId) as EventRow | undefined;
-    if (existing !== undefined) {
-      if (eventRowMatches(existing, event)) {
-        const state = this.getRun(event.runId);
-        if (state === undefined) corrupt("event exists but its run cannot be reconstructed");
-        return state;
-      }
-      throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
-    }
+    try {
+      const snapshot = db.transaction((): LoopRunSnapshot => {
+        const existing = db
+          .prepare("SELECT * FROM loop_events WHERE event_id = ?")
+          .get(event.eventId) as EventRow | undefined;
+        if (existing !== undefined) {
+          if (eventRowMatches(existing, event)) {
+            return this.snapshotInTransaction(db, event.runId);
+          }
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
+        }
 
-    const apply = db.transaction(() => {
-      const current = this.readRunOrThrow(db, event.runId);
-      const sequenceOwner = db
-        .prepare("SELECT event_id FROM loop_events WHERE run_id = ? AND sequence = ?")
-        .get(event.runId, event.sequence) as { event_id: string } | undefined;
-      if (sequenceOwner !== undefined) {
-        throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
-      }
-      const next = applyLoopRunEvent(current, event);
-      this.insertEventRow(db, eventRow);
-      db.prepare(
-        `UPDATE loop_runs SET
-          status = ?, current_stage = ?, current_attempt = ?, fix_round = ?,
-          last_sequence = ?, last_event_id = ?, blocking_reason_code = ?,
-          failure_reason_code = ?, updated_at = ?
-        WHERE run_id = ?`,
-      ).run(
-        next.status,
-        next.currentStage,
-        next.currentAttempt,
-        next.fixRound,
-        next.lastSequence,
-        next.lastEventId,
-        next.blockingReasonCode,
-        next.failureReasonCode,
-        next.updatedAt,
-        next.identity.runId,
-      );
-      if (event.stage !== null) {
-        const stageState = next.stages[event.stage];
+        const current = this.readRunSnapshotInTransaction(db, event.runId);
+        if (current === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        const sequenceOwner = db
+          .prepare("SELECT event_id FROM loop_events WHERE run_id = ? AND sequence = ?")
+          .get(event.runId, event.sequence) as { event_id: string } | undefined;
+        if (sequenceOwner !== undefined) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
+        }
+        const next = applyLoopRunEvent(current.state, event);
+        this.insertEventRow(db, eventRow);
         db.prepare(
-          "UPDATE loop_stage_states SET status = ?, attempt = ?, updated_at = ? WHERE run_id = ? AND stage = ?",
-        ).run(stageState.status, stageState.attempt, stageState.updatedAt, next.identity.runId, event.stage);
-      }
-    });
-    apply();
-    const state = this.getRun(event.runId);
-    if (state === undefined) corrupt("run missing after append");
-    return state;
+          `UPDATE loop_runs SET
+            status = ?, current_stage = ?, current_attempt = ?, fix_round = ?,
+            last_sequence = ?, last_event_id = ?, blocking_reason_code = ?,
+            failure_reason_code = ?, updated_at = ?
+          WHERE run_id = ?`,
+        ).run(
+          next.status,
+          next.currentStage,
+          next.currentAttempt,
+          next.fixRound,
+          next.lastSequence,
+          next.lastEventId,
+          next.blockingReasonCode,
+          next.failureReasonCode,
+          next.updatedAt,
+          next.identity.runId,
+        );
+        if (event.stage !== null) {
+          const stageState = next.stages[event.stage];
+          db.prepare(
+            "UPDATE loop_stage_states SET status = ?, attempt = ?, updated_at = ? WHERE run_id = ? AND stage = ?",
+          ).run(stageState.status, stageState.attempt, stageState.updatedAt, next.identity.runId, event.stage);
+        }
+        return this.snapshotInTransaction(db, event.runId);
+      }).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      return this.translateWriterError(error, () => {
+        const existing = db
+          .prepare("SELECT * FROM loop_events WHERE event_id = ?")
+          .get(event.eventId) as EventRow | undefined;
+        if (existing !== undefined) {
+          if (eventRowMatches(existing, event)) {
+            return this.readSnapshot(event.runId);
+          }
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
+        }
+        const sequenceOwner = db
+          .prepare("SELECT event_id FROM loop_events WHERE run_id = ? AND sequence = ?")
+          .get(event.runId, event.sequence) as { event_id: string } | undefined;
+        if (sequenceOwner !== undefined) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "sequence already occupied by another event");
+        }
+        storageFailure();
+      });
+    }
+  }
+
+  getSnapshot(runId: string): LoopRunSnapshot | undefined {
+    return this.readSnapshot(runId);
   }
 
   getRun(runId: string): LoopRunState | undefined {
-    const db = this.connection();
-    const row = db.prepare("SELECT * FROM loop_runs WHERE run_id = ?").get(runId) as RunRow | undefined;
-    if (row === undefined) return undefined;
-    return this.reconstructAndVerify(db, row);
+    const snapshot = this.readSnapshot(runId);
+    return snapshot === undefined ? undefined : snapshot.state;
   }
 
   listEvents(runId: string): readonly LoopRunEvent[] {
-    const db = this.connection();
-    const state = this.getRun(runId);
-    if (state === undefined) return Object.freeze([]);
-    const rows = db
-      .prepare("SELECT * FROM loop_events WHERE run_id = ? ORDER BY sequence ASC")
-      .all(runId) as EventRow[];
-    const events = rows.map((row) => rowToEvent(row));
-    for (let index = 0; index < events.length; index += 1) {
-      if (events[index]!.sequence !== index + 1) {
-        corrupt("event sequence is not contiguous from 1");
-      }
+    const snapshot = this.readSnapshot(runId);
+    return snapshot === undefined ? Object.freeze([]) : snapshot.events;
+  }
+
+  // ── storage error translation ──
+
+  private translateWriterError(
+    error: unknown,
+    reclassifyConstraint: () => LoopRunSnapshot,
+  ): LoopRunState {
+    if (error instanceof LoopRunJournalError) throw error;
+    const code = sqliteErrorCode(error);
+    if (isBusyCode(code)) busy();
+    if (isConstraintCode(code)) {
+      const snapshot = reclassifyConstraint();
+      return snapshot.state;
     }
-    return Object.freeze(events);
+    storageFailure();
+  }
+
+  // ── verified snapshot (single read implementation) ──
+
+  private readSnapshot(runId: string): LoopRunSnapshot | undefined {
+    const db = this.connection();
+    try {
+      return db.transaction((): LoopRunSnapshot | undefined => {
+        const row = db.prepare("SELECT * FROM loop_runs WHERE run_id = ?").get(runId) as RunRow | undefined;
+        if (row === undefined) return undefined;
+        return this.verifySnapshotInTransaction(db, row);
+      })() as LoopRunSnapshot | undefined;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  private snapshotInTransaction(db: Database.Database, runId: string): LoopRunSnapshot {
+    const row = db.prepare("SELECT * FROM loop_runs WHERE run_id = ?").get(runId) as RunRow | undefined;
+    if (row === undefined) corrupt("run row missing inside writer transaction");
+    return this.verifySnapshotInTransaction(db, row);
+  }
+
+  private readRunSnapshotInTransaction(db: Database.Database, runId: string): LoopRunSnapshot | undefined {
+    const row = db.prepare("SELECT * FROM loop_runs WHERE run_id = ?").get(runId) as RunRow | undefined;
+    if (row === undefined) return undefined;
+    return this.verifySnapshotInTransaction(db, row);
   }
 
   private insertEventRow(db: Database.Database, row: EventRow): void {
@@ -467,15 +643,7 @@ export class LoopRunStore {
     );
   }
 
-  private readRunOrThrow(db: Database.Database, runId: string): LoopRunState {
-    const row = db.prepare("SELECT * FROM loop_runs WHERE run_id = ?").get(runId) as RunRow | undefined;
-    if (row === undefined) {
-      throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
-    }
-    return this.reconstructAndVerify(db, row);
-  }
-
-  private reconstructAndVerify(db: Database.Database, row: RunRow): LoopRunState {
+  private verifySnapshotInTransaction(db: Database.Database, row: RunRow): LoopRunSnapshot {
     const identity: LoopRunIdentity = Object.freeze({
       runId: row.run_id,
       requirementId: row.requirement_id,
@@ -579,7 +747,7 @@ export class LoopRunStore {
     for (const stage of LOOP_STAGE_NAMES) {
       stageMap[stage] = replayed.stages[stage];
     }
-    return Object.freeze({
+    const state = Object.freeze({
       identity,
       status: replayed.status as LoopRunStatus,
       currentStage: replayed.currentStage,
@@ -592,5 +760,13 @@ export class LoopRunStore {
       updatedAt: replayed.updatedAt,
       stages: Object.freeze(stageMap),
     });
+    const frozenEvents = Object.freeze(events);
+    if (state.lastSequence !== frozenEvents.length) {
+      corrupt("snapshot sequence/event count invariant violated");
+    }
+    if (frozenEvents.length === 0 || frozenEvents[frozenEvents.length - 1]!.eventId !== state.lastEventId) {
+      corrupt("snapshot last-event invariant violated");
+    }
+    return Object.freeze({ state, events: frozenEvents });
   }
 }
