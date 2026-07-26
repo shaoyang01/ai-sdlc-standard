@@ -272,12 +272,15 @@ export class LoopRunStore {
    * to `this.db` and `this.wasOpened` after all pragma, WAL, and schema
    * initialization succeeds. On any intermediate failure the local connection
    * is best-effort closed so no lock lingers.
+   *
+   * Each step directly calls the appropriate typed throw function
+   * (storageFailure, busy, etc.) — no function objects are ever assigned
+   * to variables.
    */
   init(): void {
     if (this.db !== null || this.wasOpened) closed();
 
     let db: Database.Database | null = null;
-    let initError: LoopRunJournalError | null = null;
 
     try {
       try {
@@ -296,27 +299,28 @@ export class LoopRunStore {
         storageFailure();
       }
 
-      try {
-        this.ensureWalMode(db);
-      } catch (error) {
-        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
-        throw initError;
-      }
+      // WAL mode — ensureWalMode already throws properly typed errors
+      this.ensureWalMode(db);
 
+      // foreign_keys pragma
       try {
         db.pragma("foreign_keys = ON");
       } catch (error) {
-        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
-        throw initError;
+        if (error instanceof LoopRunJournalError) throw error;
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
       }
 
+      // busy_timeout pragma
       try {
         db.pragma(`busy_timeout = ${this.busyTimeoutMs}`);
       } catch (error) {
-        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
-        throw initError;
+        if (error instanceof LoopRunJournalError) throw error;
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
       }
 
+      // schema creation
       try {
         db.exec(`
           CREATE TABLE IF NOT EXISTS loop_runs (
@@ -374,30 +378,25 @@ export class LoopRunStore {
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
       } catch (error) {
-        initError = error instanceof LoopRunJournalError ? error : storageFailure as never;
-        throw initError;
+        if (error instanceof LoopRunJournalError) throw error;
+        if (isBusyCode(sqliteErrorCode(error))) busy();
+        storageFailure();
       }
 
       // All initialization succeeded — publish the connection.
       this.db = db;
       this.wasOpened = true;
     } catch (error) {
-      // Preserve the original typed error.
-      const originalError: LoopRunJournalError =
-        error instanceof LoopRunJournalError ? error : storageFailure as never;
-
       // Best-effort close the local connection so no lock lingers.
       if (db !== null) {
-        try {
-          db.close();
-        } catch {
-          // Cleanup failure must not overwrite the original error.
-        }
+        try { db.close(); } catch { /* cleanup failure must not overwrite original error */ }
       }
 
-      // Throw the original error (initError captures step-specific errors,
-      // otherwise the caught error which may have been storageFailure-wrapped).
-      throw initError ?? originalError;
+      // Re-throw the original error (already a properly typed LoopRunJournalError
+      // from one of the step-specific catch blocks, or from ensureWalMode).
+      if (error instanceof LoopRunJournalError) throw error;
+      // Any raw error that somehow escaped → translate to STORE_FAILURE.
+      storageFailure();
     }
   }
 

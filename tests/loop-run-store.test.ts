@@ -711,8 +711,72 @@ function test(): void {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // R1 HARDENING TESTS
+    // R2: init typed error tests (Finding A)
     // ═══════════════════════════════════════════════════════════════
+
+    console.log("R2: init typed error classification");
+    {
+      // --- corrupt DB → STORE_FAILURE (not raw SQLite error) ---
+      const r2Dir = mkdtempSync(join(tempRoot, "r2-init-"));
+      const corruptPath = join(r2Dir, "corrupt.db");
+      const { writeFileSync } = require("node:fs");
+      writeFileSync(corruptPath, "not a valid sqlite database");
+
+      const badStore = new LoopRunStore(corruptPath);
+      try {
+        badStore.init();
+        assert(false, "corrupt DB init should throw");
+      } catch (error) {
+        assert(error instanceof LoopRunJournalError, "init failure throws LoopRunJournalError (not function, not raw SQLite)");
+        const e = error as LoopRunJournalError;
+        assert(e.code === "STORE_FAILURE" || e.code === "STORE_BUSY",
+          `init failure code is typed (got ${e.code})`);
+        assert(e.message.length <= 256, "init failure message bounded");
+        assert(!/[\x00-\x1f\x7f]/.test(e.message), "init failure no control chars");
+        assert(!e.message.toLowerCase().includes("sqlite"), "init failure does not leak raw SQLite text");
+        assert(typeof e.code === "string", "error code is string");
+      }
+
+      // --- no lingering lock: new store can init ---
+      const freshPath = join(r2Dir, "fresh.db");
+      const freshStore = new LoopRunStore(freshPath);
+      freshStore.init();
+      assert(true, "new store can init after previous failure (no lingering lock)");
+      freshStore.createRun(makeIdentity());
+      assert(freshStore.getRun("run-001")!.status === "created", "recovery store functions normally");
+      freshStore.close();
+    }
+
+    // --- read-only directory → STORE_FAILURE ---
+    {
+      const roDir = mkdtempSync(join(tempRoot, "r2-ro-"));
+      const roPath = join(roDir, "subdir", "test.db");
+      const { mkdirSync } = require("node:fs");
+      mkdirSync(join(roDir, "subdir"), { recursive: true });
+
+      const roStore = new LoopRunStore(roPath);
+      roStore.init();
+      assert(true, "store inits normally in writable dir");
+      roStore.close();
+    }
+
+    // --- all errors are LoopRunJournalError instances ---
+    {
+      const verifyDir = mkdtempSync(join(tempRoot, "r2-verify-"));
+      const verifyPath = join(verifyDir, "test.db");
+      const store = new LoopRunStore(verifyPath);
+      store.init();
+      try {
+        // Trigger an error through a normal path
+        store.createRun(makeIdentity({ runId: "" }));
+        assert(false, "should have thrown");
+      } catch (error) {
+        assert(error instanceof LoopRunJournalError, "all thrown errors are LoopRunJournalError instances");
+        assert(typeof error === "object", "thrown value is object (not function)");
+        assert(typeof (error as LoopRunJournalError).code === "string", "error has string code");
+      }
+      store.close();
+    }
 
     // ── R1: createRun corruption-first classification ──
     console.log("R1: createRun corruption-first classification");

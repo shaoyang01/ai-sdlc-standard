@@ -6,24 +6,11 @@
 // content in errors; callers are responsible for storing only approved
 // artifacts. No raw prompt, stdout, stderr, credentials, environment values,
 // or arbitrary metadata.
+//
+// Uses import * as fs so that tests can monkeypatch shared fs methods.
 
 import { createHash, randomUUID } from "node:crypto";
-import {
-  closeSync,
-  constants as fsConstants,
-  existsSync,
-  fstatSync,
-  fsyncSync,
-  linkSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readSync,
-  realpathSync,
-  statSync,
-  unlinkSync,
-  writeSync,
-} from "node:fs";
+import * as fs from "node:fs";
 import { isAbsolute, join, resolve, sep } from "node:path";
 
 export type LoopArtifactKind =
@@ -69,13 +56,10 @@ const MAX_ERROR_MESSAGE_LENGTH = 256;
 const REQUIRED_BLOB_MODE = 0o600;
 const REF_RE = /^loop-artifact:v1:([a-z_]+):sha256:([0-9a-f]{64})$/;
 
-// O_NOFOLLOW is platform-specific; fall back to the macOS value on platforms
-// where Node.js doesn't expose it (the flag is supported on macOS and Linux).
+// O_NOFOLLOW is platform-specific.
 const O_NOFOLLOW: number =
-  (fsConstants as Record<string, number>).O_NOFOLLOW ??
-  0x100;
-
-const O_RDONLY: number = fsConstants.O_RDONLY;
+  (fs.constants as Record<string, number>).O_NOFOLLOW ?? 0x100;
+const O_RDONLY: number = fs.constants.O_RDONLY;
 
 function sanitizeMessage(message: string): string {
   const withoutControl = message.replace(/[\x00-\x1f\x7f-\x9f]/g, " ");
@@ -86,7 +70,6 @@ function sanitizeMessage(message: string): string {
 
 export class LoopArtifactStoreError extends Error {
   readonly code: LoopArtifactStoreErrorCode;
-
   constructor(code: LoopArtifactStoreErrorCode, message: string) {
     super(sanitizeMessage(message));
     this.name = "LoopArtifactStoreError";
@@ -94,30 +77,26 @@ export class LoopArtifactStoreError extends Error {
   }
 }
 
-function invalid(message: string): never {
-  throw new LoopArtifactStoreError("INVALID_INPUT", message);
-}
-
-function closed(): never {
-  throw new LoopArtifactStoreError("ARTIFACT_STORE_CLOSED", "artifact store is not open");
-}
+// ── error helpers ──
 
 const IO_FAILURE_MSG = "artifact storage operation failed";
 const CORRUPT_MSG = "stored artifact is corrupt";
 
+function invalid(message: string): never {
+  throw new LoopArtifactStoreError("INVALID_INPUT", message);
+}
+function closed(): never {
+  throw new LoopArtifactStoreError("ARTIFACT_STORE_CLOSED", "artifact store is not open");
+}
 function ioFailure(): never {
   throw new LoopArtifactStoreError("ARTIFACT_IO_FAILURE", IO_FAILURE_MSG);
 }
-
 function corruptBlob(): never {
   throw new LoopArtifactStoreError("ARTIFACT_CORRUPT", CORRUPT_MSG);
 }
-
-/** Return an error object without throwing — for error-tracking patterns. */
 function ioFailureError(): LoopArtifactStoreError {
   return new LoopArtifactStoreError("ARTIFACT_IO_FAILURE", IO_FAILURE_MSG);
 }
-
 function corruptBlobError(): LoopArtifactStoreError {
   return new LoopArtifactStoreError("ARTIFACT_CORRUPT", CORRUPT_MSG);
 }
@@ -138,92 +117,59 @@ function asAbsolutePath(value: unknown, label: string): string {
 
 function isRealDirectory(path: string): void {
   let stat;
-  try {
-    stat = lstatSync(path);
-  } catch {
-    ioFailure();
-  }
+  try { stat = fs.lstatSync(path); } catch { ioFailure(); }
   if (stat.isSymbolicLink()) corruptBlob();
   if (!stat.isDirectory()) corruptBlob();
 }
 
-/**
- * Verify that a directory path, after realpath resolution, is still within the
- * canonical artifact root. The directory must exist, not be a symlink, and its
- * realpath must start with root + sep.
- */
 function verifyDirectoryContainment(dir: string, root: string): void {
   isRealDirectory(dir);
   let realDir: string;
-  try {
-    realDir = realpathSync(dir);
-  } catch {
-    ioFailure();
-  }
+  try { realDir = fs.realpathSync(dir); } catch { ioFailure(); }
   if (!realDir.startsWith(root + sep)) corruptBlob();
 }
 
-/**
- * Open a final blob with O_NOFOLLOW, verify it is a regular file with mode
- * exactly 0600, and return the fd and stat. The caller owns the fd and must
- * close it.
- */
-function openFinalBlobNoFollow(finalPath: string): { fd: number; stat: ReturnType<typeof fstatSync> } {
+// ── no-follow fd helpers ──
+
+function openFinalBlobNoFollow(finalPath: string): { fd: number; stat: fs.Stats } {
   let fd: number;
   try {
-    fd = openSync(finalPath, O_NOFOLLOW | O_RDONLY);
+    fd = fs.openSync(finalPath, O_NOFOLLOW | O_RDONLY);
   } catch (error) {
     if (error instanceof LoopArtifactStoreError) throw error;
     const code = (error as NodeJS.ErrnoException | null)?.code;
     if (code === "ENOENT") {
       throw new LoopArtifactStoreError("ARTIFACT_NOT_FOUND", "artifact blob does not exist");
     }
-    if (code === "ELOOP" || code === "EMLINK" || code === "ENXIO") {
-      corruptBlob();
-    }
+    if (code === "ELOOP" || code === "EMLINK" || code === "ENXIO") { corruptBlob(); }
     ioFailure();
   }
-
-  let stat: ReturnType<typeof fstatSync>;
-  try {
-    stat = fstatSync(fd);
-  } catch {
-    try { closeSync(fd); } catch { /* best-effort */ }
-    ioFailure();
-  }
-
-  if (!stat.isFile()) {
-    try { closeSync(fd); } catch { /* best-effort */ }
-    corruptBlob();
-  }
-
-  const mode = Number(stat.mode) & 0o777;
-  if (mode !== REQUIRED_BLOB_MODE) {
-    try { closeSync(fd); } catch { /* best-effort */ }
-    corruptBlob();
-  }
-
+  let stat: fs.Stats;
+  try { stat = fs.fstatSync(fd); } catch { tryFsClose(fd); ioFailure(); }
+  if (!stat.isFile()) { tryFsClose(fd); corruptBlob(); }
+  if ((Number(stat.mode) & 0o777) !== REQUIRED_BLOB_MODE) { tryFsClose(fd); corruptBlob(); }
   return { fd, stat };
 }
 
 /**
- * Read and verify bytes from an already-opened fd. The caller must ensure the
- * fd is positioned at offset 0 and that stat.size is trusted (from fstat on
- * the same fd without TOCTOU).
+ * Close an fd. Returns null on success, or a typed error on failure.
+ * Never throws — callers must check the return value.
  */
+function tryFsClose(fd: number): LoopArtifactStoreError | null {
+  try { fs.closeSync(fd); return null; } catch { return ioFailureError(); }
+}
+
+function tryFsUnlink(path: string): LoopArtifactStoreError | null {
+  try { fs.unlinkSync(path); return null; } catch { return ioFailureError(); }
+}
+
 function readAndVerifyFromFd(fd: number, expectedSize: number, expectedDigest: string): Buffer {
   const bytes = Buffer.allocUnsafe(expectedSize);
   let offset = 0;
   while (offset < expectedSize) {
     let bytesRead: number;
-    try {
-      bytesRead = readSync(fd, bytes, offset, expectedSize - offset, offset);
-    } catch {
-      ioFailure();
-    }
-    if (bytesRead <= 0) {
-      corruptBlob();
-    }
+    try { bytesRead = fs.readSync(fd, bytes, offset, expectedSize - offset, offset); } catch { ioFailure(); }
+    if (bytesRead <= 0) { corruptBlob(); }
     offset += bytesRead;
   }
   if (sha256Hex(bytes) !== expectedDigest) corruptBlob();
@@ -248,9 +194,7 @@ export class LoopArtifactStore {
       !Number.isSafeInteger(maxArtifactBytes) ||
       maxArtifactBytes < 1 ||
       maxArtifactBytes > MAX_MAX_ARTIFACT_BYTES
-    ) {
-      invalid("maxArtifactBytes must be a safe positive integer within the allowed bound");
-    }
+    ) { invalid("maxArtifactBytes must be a safe positive integer within the allowed bound"); }
     this.options = Object.freeze({ controlRoot, repositoryPath, maxArtifactBytes });
     this.maxArtifactBytes = maxArtifactBytes;
   }
@@ -261,17 +205,17 @@ export class LoopArtifactStore {
     const repositoryInput = this.options.repositoryPath;
     let repositoryReal: string;
     try {
-      const repositoryStat = statSync(repositoryInput);
+      const repositoryStat = fs.statSync(repositoryInput);
       if (!repositoryStat.isDirectory()) invalid("repositoryPath must be an existing directory");
-      repositoryReal = realpathSync(repositoryInput);
+      repositoryReal = fs.realpathSync(repositoryInput);
     } catch (error) {
       if (error instanceof LoopArtifactStoreError) throw error;
       invalid("repositoryPath must exist and be a directory");
     }
     let controlReal: string;
     try {
-      mkdirSync(controlRootInput, { recursive: true });
-      controlReal = realpathSync(controlRootInput);
+      fs.mkdirSync(controlRootInput, { recursive: true });
+      controlReal = fs.realpathSync(controlRootInput);
     } catch (error) {
       if (error instanceof LoopArtifactStoreError) throw error;
       ioFailure();
@@ -287,7 +231,7 @@ export class LoopArtifactStore {
     }
     const root = join(controlReal, "artifacts", "v1");
     try {
-      const rootStat = lstatSync(root);
+      const rootStat = fs.lstatSync(root);
       if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
         throw new LoopArtifactStoreError("ARTIFACT_CORRUPT", "artifact root is not a plain directory");
       }
@@ -295,20 +239,14 @@ export class LoopArtifactStore {
       if (error instanceof LoopArtifactStoreError) throw error;
       const code = (error as NodeJS.ErrnoException | null)?.code;
       if (code !== "ENOENT") ioFailure();
-      try {
-        mkdirSync(root, { recursive: true });
-      } catch {
-        ioFailure();
-      }
+      try { fs.mkdirSync(root, { recursive: true }); } catch { ioFailure(); }
     }
     this.artifactRoot = root;
     this.wasOpened = true;
     this.assertUsableRoot();
   }
 
-  close(): void {
-    this.artifactRoot = null;
-  }
+  close(): void { this.artifactRoot = null; }
 
   private root(): string {
     if (this.artifactRoot === null) closed();
@@ -318,21 +256,12 @@ export class LoopArtifactStore {
   private assertUsableRoot(): void {
     const root = this.root();
     let stat;
-    try {
-      stat = lstatSync(root);
-    } catch {
-      ioFailure();
-    }
+    try { stat = fs.lstatSync(root); } catch { ioFailure(); }
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
       throw new LoopArtifactStoreError("ARTIFACT_CORRUPT", "artifact root is not a plain directory");
     }
   }
 
-  /**
-   * Derive the shard directory and final blob path for a given kind+digest,
-   * and verify that both are contained lexically within the artifact root.
-   * Full realpath containment verification is performed at access time.
-   */
   private deriveFinalPath(kind: LoopArtifactKind, digest: string): { shardDir: string; finalPath: string } {
     const root = this.root();
     const shardDir = join(root, kind, digest.slice(0, 2));
@@ -346,33 +275,18 @@ export class LoopArtifactStore {
   }
 
   /**
-   * Verify that the kind directory (parent of shard) and the shard directory
-   * are real directories contained within the canonical artifact root. Also
-   * verifies the root itself hasn't been replaced with a symlink.
-   *
-   * Returns the canonical (realpath-resolved) artifact root for use by callers.
+   * Parent containment: verify root, kind dir, and shard dir are real
+   * directories within the canonical root. Called as both pre-check and
+   * post-check before every successful return.
    */
-  private verifyParentContainment(kind: LoopArtifactKind, shardDir: string): string {
+  private verifyParentContainment(kind: LoopArtifactKind, shardDir: string): void {
     const root = this.root();
-    // Verify root itself hasn't been replaced with a symlink
     isRealDirectory(root);
     let rootReal: string;
-    try {
-      rootReal = realpathSync(root);
-    } catch {
-      ioFailure();
-    }
-
+    try { rootReal = fs.realpathSync(root); } catch { ioFailure(); }
     const kindDir = join(root, kind);
-    if (existsSync(kindDir)) {
-      verifyDirectoryContainment(kindDir, rootReal);
-    }
-
-    if (existsSync(shardDir)) {
-      verifyDirectoryContainment(shardDir, rootReal);
-    }
-
-    return rootReal;
+    if (fs.existsSync(kindDir)) { verifyDirectoryContainment(kindDir, rootReal); }
+    if (fs.existsSync(shardDir)) { verifyDirectoryContainment(shardDir, rootReal); }
   }
 
   private validateKind(kind: unknown): LoopArtifactKind {
@@ -383,12 +297,8 @@ export class LoopArtifactStore {
   }
 
   private toContentBytes(content: string | Uint8Array): Buffer {
-    if (typeof content === "string") {
-      return Buffer.from(content, "utf8");
-    }
-    if (content instanceof Uint8Array) {
-      return Buffer.from(content);
-    }
+    if (typeof content === "string") return Buffer.from(content, "utf8");
+    if (content instanceof Uint8Array) return Buffer.from(content);
     invalid("content must be a string or Uint8Array");
   }
 
@@ -398,84 +308,79 @@ export class LoopArtifactStore {
     }
   }
 
-  private fsyncDirectoryBestEffort(dir: string): void {
+  // ── directory fsync (cleanup failure surfaced) ──
+
+  private fsyncDirectoryBestEffort(dir: string): LoopArtifactStoreError | null {
     let fd: number;
-    try {
-      fd = openSync(dir, "r");
-    } catch {
-      ioFailure();
-    }
-    try {
-      fsyncSync(fd);
-    } catch (error) {
+    try { fd = fs.openSync(dir, "r"); } catch { return ioFailureError(); }
+    try { fs.fsyncSync(fd); } catch (error) {
       const code = (error as NodeJS.ErrnoException | null)?.code;
-      if (code === "EINVAL" || code === "ENOTSUP") {
-        // Platform does not support directory fsync; continue.
-      } else {
-        ioFailure();
-      }
-    } finally {
-      try {
-        closeSync(fd);
-      } catch {
-        // Ignore close failure after a handled fsync attempt.
-      }
+      if (code === "EINVAL" || code === "ENOTSUP") { /* platform limitation, continue */ }
+      else { tryFsClose(fd); return ioFailureError(); }
     }
+    return tryFsClose(fd);
   }
 
+  // ── read existing final with cleanup tracking ──
+
   /**
-   * Read an existing final blob using no-follow fd. Returns the verified
-   * size or null if the file does not exist. Throws on corruption or I/O error.
+   * Returns { sizeBytes } on success, null on ENOENT.
+   * Throws on corruption. Cleanup failures are surfaced via the
+   * returned cleanupError out-parameter pattern — but since this is
+   * an internal helper called inside put(), the caller handles cleanup.
    */
-  private readExistingForIdempotent(finalPath: string, digest: string): { sizeBytes: number } | null {
+  private readExistingForIdempotent(
+    finalPath: string,
+    digest: string,
+  ): { sizeBytes: number; closeError: LoopArtifactStoreError | null } | null {
     let fd: number = -1;
     try {
       const result = openFinalBlobNoFollow(finalPath);
       fd = result.fd;
       const expectedSize = Number(result.stat.size);
-      if (expectedSize > this.maxArtifactBytes) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-        corruptBlob();
-      }
+      if (expectedSize > this.maxArtifactBytes) { corruptBlob(); }
       readAndVerifyFromFd(fd, expectedSize, digest);
-      return { sizeBytes: expectedSize };
+      const closeError = tryFsClose(fd);
+      fd = -1;
+      return { sizeBytes: expectedSize, closeError };
     } catch (error) {
+      if (fd !== -1) tryFsClose(fd);
       if (error instanceof LoopArtifactStoreError) {
         if (error.code === "ARTIFACT_NOT_FOUND") return null;
         throw error;
       }
       ioFailure();
-    } finally {
-      if (fd !== -1) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-      }
     }
   }
 
   /**
-   * Verify a final blob using no-follow fd. Returns the verified size or throws.
+   * Verify final blob. Returns { sizeBytes, closeError }.
+   * Throws on corruption or read failure.
    */
-  private verifyFinalBlob(finalPath: string, digest: string): { sizeBytes: number } {
+  private verifyFinalBlob(
+    finalPath: string,
+    digest: string,
+  ): { sizeBytes: number; closeError: LoopArtifactStoreError | null } {
     let fd: number = -1;
     try {
       const result = openFinalBlobNoFollow(finalPath);
       fd = result.fd;
       const expectedSize = Number(result.stat.size);
-      if (expectedSize > this.maxArtifactBytes) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-        corruptBlob();
-      }
+      if (expectedSize > this.maxArtifactBytes) { corruptBlob(); }
       readAndVerifyFromFd(fd, expectedSize, digest);
-      return { sizeBytes: expectedSize };
+      const closeError = tryFsClose(fd);
+      fd = -1;
+      return { sizeBytes: expectedSize, closeError };
     } catch (error) {
+      if (fd !== -1) tryFsClose(fd);
       if (error instanceof LoopArtifactStoreError) throw error;
       ioFailure();
-    } finally {
-      if (fd !== -1) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-      }
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // put
+  // ═══════════════════════════════════════════════════════════════
 
   put(kind: LoopArtifactKind, content: string | Uint8Array): LoopStoredArtifact {
     this.assertUsableRoot();
@@ -486,172 +391,141 @@ export class LoopArtifactStore {
     const artifactRef = `loop-artifact:v1:${canonicalKind}:sha256:${digest}`;
     const { shardDir, finalPath } = this.deriveFinalPath(canonicalKind, digest);
 
-    // ── parent containment: verify kind and shard directories ──
+    // ── parent pre-check ──
     this.verifyParentContainment(canonicalKind, shardDir);
 
     // ── existing final fast path ──
-    if (existsSync(finalPath)) {
+    if (fs.existsSync(finalPath)) {
       const existing = this.readExistingForIdempotent(finalPath, digest);
       if (existing !== null) {
-        // Re-verify parent containment after the read
+        // post-check before return
         this.verifyParentContainment(canonicalKind, shardDir);
+        if (existing.closeError !== null) throw existing.closeError;
         return Object.freeze({ artifactRef, kind: canonicalKind, digest, sizeBytes: existing.sizeBytes });
       }
-      // ENOENT race — the file disappeared between existsSync and open; fall through
     }
 
     // ── create shard directory ──
-    try {
-      mkdirSync(shardDir, { recursive: true });
-    } catch {
-      ioFailure();
-    }
-    // Re-verify shard containment after creation
+    try { fs.mkdirSync(shardDir, { recursive: true }); } catch { ioFailure(); }
     this.verifyParentContainment(canonicalKind, shardDir);
 
     const tempPath = join(shardDir, `.${digest}.${process.pid}.${randomUUID()}.tmp`);
-    let fd: number = -1;
+
+    // Tracking variables — no return inside resource try
     let mainError: LoopArtifactStoreError | null = null;
+    let cleanupError: LoopArtifactStoreError | null = null;
+    let result: LoopStoredArtifact | null = null;
+    let fd: number = -1;
+    let didPublish = false;
 
     try {
-      // ── create temp file (read-write so we can verify before publishing) ──
+      // ── create temp ──
       try {
-        fd = openSync(tempPath, "wx+", REQUIRED_BLOB_MODE);
+        fd = fs.openSync(tempPath, "wx+", REQUIRED_BLOB_MODE);
       } catch (error) {
         if (error instanceof LoopArtifactStoreError) throw error;
-        if (existsSync(finalPath)) {
-          // Another writer may have completed while we were creating temp
+        if (fs.existsSync(finalPath)) {
+          // concurrent winner — read and return
           const existing = this.readExistingForIdempotent(finalPath, digest);
           if (existing !== null) {
-            return Object.freeze({ artifactRef, kind: canonicalKind, digest, sizeBytes: existing.sizeBytes });
+            this.verifyParentContainment(canonicalKind, shardDir);
+            if (existing.closeError !== null) throw existing.closeError;
+            result = Object.freeze({ artifactRef, kind: canonicalKind, digest, sizeBytes: existing.sizeBytes });
+            return result; // jump to finally for temp cleanup (which is no-op since temp wasn't created)
           }
         }
-        ioFailure();
+        mainError = ioFailureError();
+        return; // jump to finally
       }
+      if (mainError !== null) return; // shouldn't happen, but safety
 
-      // ── write-all with partial write handling ──
+      // ── write-all ──
       let offset = 0;
       while (offset < bytes.length) {
         let written: number;
-        try {
-          written = writeSync(fd, bytes, offset, bytes.length - offset, offset);
-        } catch {
-          mainError = ioFailureError();
-          break;
-        }
-        if (written <= 0) {
-          mainError = ioFailureError();
-          break;
-        }
+        try { written = fs.writeSync(fd, bytes, offset, bytes.length - offset, offset); } catch { mainError = ioFailureError(); return; }
+        if (written <= 0) { mainError = ioFailureError(); return; }
         offset += written;
       }
 
-      if (mainError === null) {
-        // ── fsync temp ──
-        try {
-          fsyncSync(fd);
-        } catch {
-          mainError = ioFailureError();
-        }
-      }
+      // ── fsync temp ──
+      try { fs.fsyncSync(fd); } catch { mainError = ioFailureError(); return; }
 
-      // ── pre-publish temp verification (using the still-open fd) ──
-      if (mainError === null) {
-        let tempStat: ReturnType<typeof fstatSync>;
-        try {
-          tempStat = fstatSync(fd);
-        } catch {
-          mainError = ioFailureError();
-        }
-        if (mainError === null) {
-          if (!tempStat!.isFile()) {
-            mainError = corruptBlobError();
-          } else if ((Number(tempStat!.mode) & 0o777) !== REQUIRED_BLOB_MODE) {
-            mainError = corruptBlobError();
-          } else if (tempStat!.size !== bytes.length) {
-            mainError = ioFailureError();
-          }
-        }
-        // Verify temp digest using the fd
-        if (mainError === null) {
-          const verifyBuf = Buffer.allocUnsafe(bytes.length);
-          let verifyOffset = 0;
-          while (verifyOffset < bytes.length) {
-            let bytesRead: number;
-            try {
-              bytesRead = readSync(fd, verifyBuf, verifyOffset, bytes.length - verifyOffset, verifyOffset);
-            } catch {
-              mainError = ioFailureError();
-              break;
-            }
-            if (bytesRead <= 0) {
-              mainError = ioFailureError();
-              break;
-            }
-            verifyOffset += bytesRead;
-          }
-          if (mainError === null && sha256Hex(verifyBuf) !== digest) {
-            mainError = ioFailureError();
-          }
-        }
-      }
+      // ── pre-publish temp verification (same fd) ──
+      let tempStat: fs.Stats;
+      try { tempStat = fs.fstatSync(fd); } catch { mainError = ioFailureError(); return; }
+      if (!tempStat.isFile()) { mainError = corruptBlobError(); return; }
+      if ((Number(tempStat.mode) & 0o777) !== REQUIRED_BLOB_MODE) { mainError = corruptBlobError(); return; }
+      if (tempStat.size !== bytes.length) { mainError = ioFailureError(); return; }
 
-      // ── close temp ──
-      try {
-        closeSync(fd);
-      } catch {
-        if (mainError === null) {
-          mainError = ioFailureError();
-        }
-        // If mainError is already set, preserve it
+      const verifyBuf = Buffer.allocUnsafe(bytes.length);
+      let verifyOffset = 0;
+      while (verifyOffset < bytes.length) {
+        let bytesRead: number;
+        try { bytesRead = fs.readSync(fd, verifyBuf, verifyOffset, bytes.length - verifyOffset, verifyOffset); } catch { mainError = ioFailureError(); return; }
+        if (bytesRead <= 0) { mainError = ioFailureError(); return; }
+        verifyOffset += bytesRead;
       }
+      if (sha256Hex(verifyBuf) !== digest) { mainError = ioFailureError(); return; }
+
+      // ── close temp (before link) ──
+      const tempCloseError = tryFsClose(fd);
       fd = -1;
+      if (tempCloseError !== null) { mainError = tempCloseError; return; }
 
-      // ── if pre-publish verification failed, stop here (don't publish) ──
-      if (mainError !== null) throw mainError;
-
-      // ── hard-link temp to final ──
+      // ── hard-link to final ──
       try {
-        linkSync(tempPath, finalPath);
+        fs.linkSync(tempPath, finalPath);
+        didPublish = true;
       } catch (error) {
-        if (error instanceof LoopArtifactStoreError) throw error;
+        if (error instanceof LoopArtifactStoreError) { mainError = error; return; }
         const code = (error as NodeJS.ErrnoException | null)?.code;
         if (code === "EEXIST") {
-          // Another writer won the race; the existing final blob must be valid.
-          // Fall through to verifyFinalBlob below.
+          // Another writer won — verify their blob
         } else {
           mainError = ioFailureError();
-          throw mainError;
+          return;
         }
       }
 
-      this.fsyncDirectoryBestEffort(shardDir);
-    } finally {
-      // ── temp cleanup ──
-      if (fd !== -1) {
-        try {
-          closeSync(fd);
-        } catch {
-          // Best-effort close of temp fd; preserve mainError.
-        }
+      // ── directory fsync ──
+      const dirSyncError = this.fsyncDirectoryBestEffort(shardDir);
+      if (dirSyncError !== null) { cleanupError = dirSyncError; /* fall through to final verify */ }
+
+      // ── temp unlink (best-effort, preserve mainError) ──
+      const unlinkError = tryFsUnlink(tempPath);
+      if (mainError === null && unlinkError !== null && cleanupError === null) {
+        cleanupError = unlinkError;
       }
-      try {
-        unlinkSync(tempPath);
-      } catch {
-        // Temp may already be gone (successful link) or may fail to unlink.
-        if (mainError === null && existsSync(tempPath)) {
-          mainError = ioFailureError();
-        }
+
+      // ── verify final blob ──
+      this.verifyParentContainment(canonicalKind, shardDir);
+      const verified = this.verifyFinalBlob(finalPath, digest);
+      if (verified.closeError !== null && cleanupError === null) { cleanupError = verified.closeError; }
+
+      // ── parent post-check ──
+      this.verifyParentContainment(canonicalKind, shardDir);
+
+      result = Object.freeze({ artifactRef, kind: canonicalKind, digest, sizeBytes: verified.sizeBytes });
+    } finally {
+      // temp fd cleanup (if still open)
+      if (fd !== -1) tryFsClose(fd);
+      // temp file cleanup (if not yet unlinked and we didn't publish successfully)
+      if (!didPublish && mainError === null) {
+        tryFsUnlink(tempPath); // best-effort temp cleanup
       }
     }
 
+    // ── result decision ──
     if (mainError !== null) throw mainError;
-
-    // ── verify final blob after publish ──
-    this.verifyParentContainment(canonicalKind, shardDir);
-    const verified = this.verifyFinalBlob(finalPath, digest);
-    return Object.freeze({ artifactRef, kind: canonicalKind, digest, sizeBytes: verified.sizeBytes });
+    if (cleanupError !== null) throw cleanupError;
+    if (result === null) ioFailure(); // should be unreachable
+    return result;
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // read
+  // ═══════════════════════════════════════════════════════════════
 
   read(artifactRef: string, expectedDigest?: string): Buffer {
     this.assertUsableRoot();
@@ -670,31 +544,31 @@ export class LoopArtifactStore {
     }
     const { shardDir, finalPath } = this.deriveFinalPath(kind, referenceDigest);
 
-    // ── parent containment verification ──
+    // ── parent pre-check ──
     this.verifyParentContainment(kind, shardDir);
 
-    // ── no-follow fd-based read ──
     let fd: number = -1;
+    let closeError: LoopArtifactStoreError | null = null;
     try {
       const result = openFinalBlobNoFollow(finalPath);
       fd = result.fd;
       const expectedSize = Number(result.stat.size);
-      if (expectedSize > this.maxArtifactBytes) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-        corruptBlob();
-      }
+      if (expectedSize > this.maxArtifactBytes) { corruptBlob(); }
       const bytes = readAndVerifyFromFd(fd, expectedSize, referenceDigest);
+      closeError = tryFsClose(fd);
+      fd = -1;
+
+      // ── parent post-check ──
+      this.verifyParentContainment(kind, shardDir);
+
+      if (closeError !== null) throw closeError;
       return bytes;
     } catch (error) {
+      if (fd !== -1) tryFsClose(fd);
       if (error instanceof LoopArtifactStoreError) throw error;
       ioFailure();
-    } finally {
-      if (fd !== -1) {
-        try { closeSync(fd); } catch { /* best-effort */ }
-      }
     }
   }
 }
 
-// Re-export for tests and integrators.
 export { LOOP_ARTIFACT_KINDS };

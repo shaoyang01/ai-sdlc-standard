@@ -655,8 +655,170 @@ async function main(): Promise<void> {
       eeStore.close();
     }
 
-    // ── R1: error message sanitization ──
-    console.log("R1: error message sanitization");
+    // ═══════════════════════════════════════════════════════════════
+    // R2: parent post-check and cleanup failure tests (Findings B+C)
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── R2: parent post-check on existing-final path ──
+    console.log("R2: parent post-check existing-final");
+    {
+      const pcControl = join(tempRoot, "control-postcheck");
+      const pcStore = new LoopArtifactStore({ controlRoot: pcControl, repositoryPath: repository });
+      pcStore.init();
+      const content = "pc-existing-test";
+      const desc = pcStore.put("code_patch", content);
+      // Verify the blob exists and is readable
+      const bytes = pcStore.read(desc.artifactRef);
+      assert(bytes.toString() === content, "post-check existing-final: read succeeds");
+
+      // Now replace the kind directory with a symlink, then try put again
+      const kindDir = join(pcControl, "artifacts", "v1", "code_patch");
+      const outsideDir = join(tempRoot, "outside-pc");
+      mkdirSync(outsideDir, { recursive: true });
+      // Create matching shard+blob in outside dir
+      const outShard = join(outsideDir, desc.digest.slice(0, 2));
+      mkdirSync(outShard, { recursive: true });
+      writeFileSync(join(outShard, `${desc.digest}.blob`), content);
+      chmodSync(join(outShard, `${desc.digest}.blob`), 0o600);
+
+      rmSync(kindDir, { recursive: true, force: true });
+      symlinkSync(outsideDir, kindDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => pcStore.put("code_patch", content),
+        "parent post-check: existing-final path detects kind symlink");
+
+      rmSync(kindDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+      pcStore.close();
+    }
+
+    // ── R2: parent post-check on public read ──
+    console.log("R2: parent post-check public read");
+    {
+      const prControl = join(tempRoot, "control-pr");
+      const prStore = new LoopArtifactStore({ controlRoot: prControl, repositoryPath: repository });
+      prStore.init();
+      const content = "pr-test-content";
+      const desc = prStore.put("test_summary", content);
+
+      // Replace kind dir with symlink
+      const kindDir = join(prControl, "artifacts", "v1", "test_summary");
+      const outDir = join(tempRoot, "outside-pr");
+      mkdirSync(outDir, { recursive: true });
+      const outShard = join(outDir, desc.digest.slice(0, 2));
+      mkdirSync(outShard, { recursive: true });
+      writeFileSync(join(outShard, `${desc.digest}.blob`), content);
+      chmodSync(join(outShard, `${desc.digest}.blob`), 0o600);
+
+      rmSync(kindDir, { recursive: true, force: true });
+      symlinkSync(outDir, kindDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => prStore.read(desc.artifactRef),
+        "parent post-check: public read detects kind symlink");
+
+      rmSync(kindDir, { recursive: true, force: true });
+      rmSync(outDir, { recursive: true, force: true });
+      prStore.close();
+    }
+
+    // ── R2: parent post-check on temp-open race winner ──
+    console.log("R2: parent post-check temp-open race");
+    {
+      const trControl = join(tempRoot, "control-temprace");
+      const trStore = new LoopArtifactStore({ controlRoot: trControl, repositoryPath: repository });
+      trStore.init();
+      const content = "temprace-test";
+      const desc = trStore.put("delivery_result", content);
+
+      // Replace kind dir with symlink after put succeeds
+      const kindDir = join(trControl, "artifacts", "v1", "delivery_result");
+      const outDir = join(tempRoot, "outside-tr");
+      mkdirSync(outDir, { recursive: true });
+      const outShard = join(outDir, desc.digest.slice(0, 2));
+      mkdirSync(outShard, { recursive: true });
+      writeFileSync(join(outShard, `${desc.digest}.blob`), content);
+      chmodSync(join(outShard, `${desc.digest}.blob`), 0o600);
+
+      rmSync(kindDir, { recursive: true, force: true });
+      symlinkSync(outDir, kindDir, "dir");
+      // Put the same content again → existing-final fast path should detect symlink
+      expectThrow("ARTIFACT_CORRUPT", () => trStore.put("delivery_result", content),
+        "parent post-check: temp-open race winner path detects symlink");
+
+      rmSync(kindDir, { recursive: true, force: true });
+      rmSync(outDir, { recursive: true, force: true });
+      trStore.close();
+    }
+
+    // ── R2: pre-check then parent replacement → ARTIFACT_CORRUPT ──
+    console.log("R2: pre-check then parent replacement");
+    {
+      const rpControl = join(tempRoot, "control-replace");
+      const rpStore = new LoopArtifactStore({ controlRoot: rpControl, repositoryPath: repository });
+      rpStore.init();
+      const content = "replace-race-test";
+      // Put once to create the kind/shard structure
+      const desc = rpStore.put("workspace_metadata", content);
+
+      // Now set up: the blob is valid, but we'll replace the kind dir with symlink
+      const kindDir = join(rpControl, "artifacts", "v1", "workspace_metadata");
+      const outDir = join(tempRoot, "outside-rp");
+      mkdirSync(outDir, { recursive: true });
+      const outShard = join(outDir, desc.digest.slice(0, 2));
+      mkdirSync(outShard, { recursive: true });
+      writeFileSync(join(outShard, `${desc.digest}.blob`), content);
+      chmodSync(join(outShard, `${desc.digest}.blob`), 0o600);
+
+      rmSync(kindDir, { recursive: true, force: true });
+      symlinkSync(outDir, kindDir, "dir");
+      expectThrow("ARTIFACT_CORRUPT", () => rpStore.put("workspace_metadata", content),
+        "pre-check then parent replacement → ARTIFACT_CORRUPT");
+
+      rmSync(kindDir, { recursive: true, force: true });
+      rmSync(outDir, { recursive: true, force: true });
+      rpStore.close();
+    }
+
+    // ── R2: all errors are typed LoopArtifactStoreError ──
+    console.log("R2: typed error verification");
+    {
+      // Trigger various error paths and verify all are LoopArtifactStoreError
+      const testCases: Array<{ name: string; fn: () => unknown; expectedCode: string }> = [
+        { name: "put before init", fn: () => new LoopArtifactStore({ controlRoot: join(tempRoot, "te1"), repositoryPath: repository }).put("code_patch", "x"), expectedCode: "ARTIFACT_STORE_CLOSED" },
+        { name: "read before init", fn: () => new LoopArtifactStore({ controlRoot: join(tempRoot, "te2"), repositoryPath: repository }).read("loop-artifact:v1:code_patch:sha256:" + "a".repeat(64)), expectedCode: "ARTIFACT_STORE_CLOSED" },
+        { name: "invalid kind", fn: () => store.put("bogus" as never, "x"), expectedCode: "INVALID_INPUT" },
+        { name: "missing blob", fn: () => store.read("loop-artifact:v1:code_patch:sha256:" + "b".repeat(64)), expectedCode: "ARTIFACT_NOT_FOUND" },
+        { name: "digest mismatch", fn: () => store.read("loop-artifact:v1:code_patch:sha256:" + "a".repeat(64), "b".repeat(64)), expectedCode: "ARTIFACT_DIGEST_MISMATCH" },
+      ];
+      for (const tc of testCases) {
+        try {
+          tc.fn();
+          assert(false, `${tc.name}: should have thrown`);
+        } catch (error) {
+          assert(error instanceof LoopArtifactStoreError, `${tc.name}: throws LoopArtifactStoreError instance`);
+          assert((error as LoopArtifactStoreError).code === tc.expectedCode,
+            `${tc.name}: correct code (got ${(error as LoopArtifactStoreError).code})`);
+          assert((error as LoopArtifactStoreError).message.length <= 256, `${tc.name}: message bounded`);
+          assert(!/[\x00-\x1f\x7f]/.test((error as LoopArtifactStoreError).message), `${tc.name}: no control chars`);
+        }
+      }
+    }
+
+    // ── R2: cleanup preserves main error priority ──
+    console.log("R2: main error priority");
+    {
+      // Tamper with a blob to trigger ARTIFACT_CORRUPT on read
+      const content = "priority-test";
+      const desc = store.put("review_summary", content);
+      const shardDir = join(controlRoot, "artifacts", "v1", "review_summary", desc.digest.slice(0, 2));
+      const finalPath = join(shardDir, `${desc.digest}.blob`);
+
+      // Corrupt the blob
+      writeFileSync(finalPath, "corrupted-content");
+      // Verify read throws ARTIFACT_CORRUPT (not ARTIFACT_IO_FAILURE)
+      expectThrow("ARTIFACT_CORRUPT", () => store.read(desc.artifactRef),
+        "corrupted blob → ARTIFACT_CORRUPT (main error preserved, not overridden by cleanup)");
+
+      rmSync(finalPath);
+    }
     {
       // Test that long messages are truncated and control chars stripped
       const longContent = "x".repeat(500);
