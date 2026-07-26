@@ -111,10 +111,12 @@ After issue classification:
 1. Decide Gate Result.
 2. Decide Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`.
 3. If Decision Scope = `DELTA_CHANGE`, decide Delta Complexity from Current Change Scope / Delta Scope and keep Aggregate Complexity as reference only.
-4. Decide Development Path Recommendation.
-5. Explain why.
-6. List required fixes before the next stage.
-7. Recommend manifest updates.
+4. Decide Development Path Decision, following the canonical standard `ai-sdlc/development-path-governance.md`: the path is decided only by the complexity of the Current Implementation Scope or Delta Scope itself; business_domain_sync need、knowledge sync need、entry coverage need 或 Shared Tail 工作本身都不是 Speckit 触发因素。
+5. Record the Decision evidence: Development Path Decision Source（`sdlc-solution-reviewer`）、Development Path Decision Artifact（response-only 时为 `not_persisted`）、Development Path Decision Artifact Status（`current` / `stale` / `not_persisted`）。
+6. Give the initial Shared Documentation Governance Tail recommendation: Tail Required、Tail Scope（来自 Current Implementation Scope 或 Delta Scope）、Tail Status（`planned` / `blocked` / `not_required`）。Solution Reviewer 不作 Tail Completion 判断，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile。
+7. Explain why.
+8. List required fixes before the next stage.
+9. Recommend manifest updates.
 
 Never recommend direct implementation when Critical or unaccepted High issues exist.
 Do not route by aggregate complexity for requirement supplements; Development Path Decision must be based on Delta Scope.
