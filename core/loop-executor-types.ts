@@ -129,6 +129,21 @@ export type LoopRunJournalErrorCode =
   | "STORE_CLOSED"
   | "STORE_CORRUPT";
 
+const MAX_ERROR_MESSAGE_LENGTH = 256;
+
+/**
+ * Last-line defense for error messages: strips control characters and bounds
+ * the length. Callers must still avoid echoing external input in the first
+ * place — truncation is never the primary protection for secrets.
+ */
+function sanitizeErrorMessage(message: string): string {
+  const withoutControlCharacters = message.replace(/[\x00-\x1f\x7f-\x9f]/g, " ");
+  if (withoutControlCharacters.length <= MAX_ERROR_MESSAGE_LENGTH) {
+    return withoutControlCharacters;
+  }
+  return withoutControlCharacters.slice(0, MAX_ERROR_MESSAGE_LENGTH);
+}
+
 /**
  * Safe bounded error. The message is a short safe explanation only — it never
  * carries raw input, payload, prompt, patch, stdout, stderr, credential, or
@@ -138,7 +153,7 @@ export class LoopRunJournalError extends Error {
   readonly code: LoopRunJournalErrorCode;
 
   constructor(code: LoopRunJournalErrorCode, message: string) {
-    super(message);
+    super(sanitizeErrorMessage(message));
     this.name = "LoopRunJournalError";
     this.code = code;
   }

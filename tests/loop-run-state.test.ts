@@ -447,6 +447,40 @@ function test(): void {
     );
   }
 
+  // ── safe bounded error messages ──
+  console.log("safe bounded error messages");
+  {
+    const secretKey = `UNIQUE_SECRET_SENTINEL_${"k".repeat(400)}`;
+    const identityWithSecret = { ...makeIdentity(), [secretKey]: 1 };
+    try {
+      validateLoopRunIdentity(identityWithSecret);
+      assert(false, "secret unknown identity key rejected (no error)");
+    } catch (error) {
+      const journalError = error as LoopRunJournalError;
+      assert(journalError.code === "INVALID_INPUT", "unknown identity key classified INVALID_INPUT");
+      assert(!journalError.message.includes("UNIQUE_SECRET_SENTINEL"), "identity error message does not echo unknown key sentinel");
+      assert(journalError.message.length <= 256, "identity error message within bound");
+      assert(!/[\x00-\x1f\x7f]/.test(journalError.message), "identity error message has no control characters");
+    }
+    const promptKey = `RAW_PROMPT_SENTINEL_${"p".repeat(400)}`;
+    const eventWithSecret = { ...makeEvent({ sequence: 2, kind: "run_started" }), [promptKey]: "x" };
+    try {
+      validateLoopRunEvent(eventWithSecret);
+      assert(false, "secret unknown event key rejected (no error)");
+    } catch (error) {
+      const journalError = error as LoopRunJournalError;
+      assert(journalError.code === "INVALID_INPUT", "unknown event key classified INVALID_INPUT");
+      assert(!journalError.message.includes("RAW_PROMPT_SENTINEL"), "event error message does not echo unknown key sentinel");
+      assert(journalError.message.length <= 256, "event error message within bound");
+      assert(!/[\x00-\x1f\x7f]/.test(journalError.message), "event error message has no control characters");
+    }
+    // constructor last-line defense: control characters stripped, length bounded
+    const rawMessage = `prefix${"x".repeat(500)}\u0007SECRET`;
+    const sanitized = new LoopRunJournalError("INVALID_INPUT", rawMessage);
+    assert(sanitized.message.length <= 256, "LoopRunJournalError truncates to fixed max length");
+    assert(!/[\x00-\x1f\x7f]/.test(sanitized.message), "LoopRunJournalError strips control characters");
+  }
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

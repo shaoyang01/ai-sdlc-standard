@@ -39,8 +39,67 @@ function closed(): never {
   throw new LoopRunJournalError("STORE_CLOSED", "loop run store is not open");
 }
 
+/**
+ * STORE_CORRUPT reasons are fixed internal strings only — persisted values
+ * (event ids, stages, digests, raw scalars) are never echoed.
+ */
 function corrupt(message: string): never {
   throw new LoopRunJournalError("STORE_CORRUPT", `persisted run journal is corrupt: ${message}`);
+}
+
+// ── persisted-data validation boundary ──
+// Data read back from SQLite is untrusted: any validation or canonicalization
+// failure while reading persisted rows is STORE_CORRUPT, never INVALID_INPUT.
+// External API input keeps the public INVALID_INPUT semantics.
+
+function validatePersistedIdentity(identity: unknown): void {
+  try {
+    validateLoopRunIdentity(identity);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted identity is invalid");
+    throw error;
+  }
+}
+
+function validatePersistedEvent(event: unknown): void {
+  try {
+    validateLoopRunEvent(event);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted event is invalid");
+    throw error;
+  }
+}
+
+function canonicalizePersistedEvent(event: LoopRunEvent): string {
+  try {
+    return canonicalizeLoopRunEvent(event);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
+    throw error;
+  }
+}
+
+function canonicalizePersistedIdentity(identity: LoopRunIdentity): string {
+  try {
+    return canonicalizeLoopRunIdentity(identity);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted identity canonicalization failed");
+    throw error;
+  }
+}
+
+function asPersistedRetryable(value: unknown): boolean | null {
+  if (value === null) return null;
+  if (value === 0) return false;
+  if (value === 1) return true;
+  return corrupt("persisted retryable is not canonical");
+}
+
+function asPersistedSafeInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    return corrupt("persisted integer scalar is invalid");
+  }
+  return value;
 }
 
 type RunRow = {
@@ -83,19 +142,21 @@ type EventRow = {
 };
 
 function rowToEvent(row: EventRow): LoopRunEvent {
+  // Raw persisted scalars are defended before any normalization: retryable
+  // must be exactly null/0/1 and integer scalars must be safe integers.
   return Object.freeze({
     eventId: row.event_id,
     runId: row.run_id,
-    sequence: row.sequence,
+    sequence: asPersistedSafeInteger(row.sequence),
     kind: row.kind as LoopRunEvent["kind"],
     stage: row.stage as LoopStageName | null,
-    attempt: row.attempt,
+    attempt: asPersistedSafeInteger(row.attempt),
     createdAt: row.created_at,
     inputDigest: row.input_digest,
     outputArtifactRef: row.output_artifact_ref,
     outputDigest: row.output_digest,
     errorCode: row.error_code,
-    retryable: row.retryable === null ? null : row.retryable === 1,
+    retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
   });
 }
@@ -221,7 +282,7 @@ export class LoopRunStore {
         output_artifact_ref TEXT,
         output_digest TEXT,
         error_code TEXT,
-        retryable INTEGER,
+        retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
         reason_code TEXT,
         canonical_sha256 TEXT NOT NULL,
         UNIQUE (run_id, sequence),
@@ -426,8 +487,8 @@ export class LoopRunStore {
       controlRoot: row.control_root,
       createdAt: row.created_at,
     });
-    validateLoopRunIdentity(identity);
-    if (sha256Hex(canonicalizeLoopRunIdentity(identity)) !== row.identity_sha256) {
+    validatePersistedIdentity(identity);
+    if (sha256Hex(canonicalizePersistedIdentity(identity)) !== row.identity_sha256) {
       corrupt("identity hash mismatch");
     }
 
@@ -437,8 +498,9 @@ export class LoopRunStore {
     const canonicalStageSet = new Set<string>(LOOP_STAGE_NAMES);
     const seenStages = new Set<string>();
     for (const stageRow of stageRows) {
-      if (!canonicalStageSet.has(stageRow.stage)) corrupt(`unknown stage row ${stageRow.stage}`);
+      if (!canonicalStageSet.has(stageRow.stage)) corrupt("unknown persisted stage row");
       seenStages.add(stageRow.stage);
+      asPersistedSafeInteger(stageRow.attempt);
     }
     for (const stage of LOOP_STAGE_NAMES) {
       if (!seenStages.has(stage)) corrupt(`missing stage row ${stage}`);
@@ -450,9 +512,9 @@ export class LoopRunStore {
     if (eventRows.length === 0) corrupt("run has no events");
     const events = eventRows.map((eventRow) => {
       const event = rowToEvent(eventRow);
-      validateLoopRunEvent(event);
-      if (sha256Hex(canonicalizeLoopRunEvent(event)) !== eventRow.canonical_sha256) {
-        corrupt(`event ${eventRow.event_id} canonical hash mismatch`);
+      validatePersistedEvent(event);
+      if (sha256Hex(canonicalizePersistedEvent(event)) !== eventRow.canonical_sha256) {
+        corrupt("persisted event canonical hash mismatch");
       }
       return event;
     });
@@ -462,12 +524,19 @@ export class LoopRunStore {
       }
     }
     const first = events[0]!;
-    if (first.kind !== "run_created" || first.eventId !== `${row.run_id}:1:run_created`) {
+    // The trust root is the complete canonical run_created event derived from
+    // the persisted identity — kind/eventId checks alone are insufficient.
+    const expectedFirstEvent = createLoopRunCreatedEvent(identity);
+    if (canonicalizePersistedEvent(first) !== canonicalizePersistedEvent(expectedFirstEvent)) {
       corrupt("sequence 1 is not the canonical run_created event");
     }
     const last = events[events.length - 1]!;
     if (last.eventId !== row.last_event_id) corrupt("last_event_id does not match the last persisted event");
     if (last.sequence !== row.last_sequence) corrupt("last_sequence does not match the last persisted event");
+
+    asPersistedSafeInteger(row.current_attempt);
+    asPersistedSafeInteger(row.fix_round);
+    asPersistedSafeInteger(row.last_sequence);
 
     let replayed = createInitialLoopRunState(identity);
     try {

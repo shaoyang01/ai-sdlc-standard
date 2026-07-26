@@ -349,6 +349,288 @@ function test(): void {
       storeOk.close();
     }
 
+    // ── Finding A: persisted validation error classification ──
+    console.log("persisted error classification");
+    const classDir = mkdtempSync(join(tempRoot, "class-"));
+    const classDbPath = join(classDir, "journal.db");
+    {
+      const store = new LoopRunStore(classDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1 }));
+      store.close();
+
+      const tamper = (sql: string, params: unknown[]): void => {
+        const db = new Database(classDbPath);
+        db.prepare(sql).run(...params);
+        db.close();
+      };
+      const restore = (sql: string, params: unknown[]): void => tamper(sql, params);
+      const expectCorruptBoth = (message: string): void => {
+        const store2 = new LoopRunStore(classDbPath);
+        store2.init();
+        expectThrow("STORE_CORRUPT", () => store2.getRun("run-001"), `${message} (getRun)`);
+        expectThrow("STORE_CORRUPT", () => store2.listEvents("run-001"), `${message} (listEvents consistent)`);
+        store2.close();
+      };
+
+      tamper("UPDATE loop_runs SET repository_path = ? WHERE run_id = ?", ["relative/path", "run-001"]);
+      expectCorruptBoth("persisted relative repository_path classified as STORE_CORRUPT");
+      restore("UPDATE loop_runs SET repository_path = ? WHERE run_id = ?", ["/tmp/loop-store-test/target-repo", "run-001"]);
+
+      tamper("UPDATE loop_runs SET expected_base_sha = ? WHERE run_id = ?", ["not-a-sha", "run-001"]);
+      expectCorruptBoth("persisted invalid expected_base_sha classified as STORE_CORRUPT");
+      restore("UPDATE loop_runs SET expected_base_sha = ? WHERE run_id = ?", ["a".repeat(40), "run-001"]);
+
+      tamper("UPDATE loop_runs SET created_at = ? WHERE run_id = ?", ["not-a-date", "run-001"]);
+      expectCorruptBoth("persisted invalid created_at classified as STORE_CORRUPT");
+      restore("UPDATE loop_runs SET created_at = ? WHERE run_id = ?", [TS, "run-001"]);
+
+      tamper("UPDATE loop_events SET kind = ? WHERE event_id = ?", ["bogus_kind", "run-001:3:stage_started:prepare_workspace"]);
+      expectCorruptBoth("persisted invalid event kind classified as STORE_CORRUPT");
+      restore("UPDATE loop_events SET kind = ? WHERE event_id = ?", ["stage_started", "run-001:3:stage_started:prepare_workspace"]);
+
+      tamper("UPDATE loop_events SET stage = ? WHERE event_id = ?", ["bogus_stage", "run-001:3:stage_started:prepare_workspace"]);
+      expectCorruptBoth("persisted invalid event stage classified as STORE_CORRUPT");
+      restore("UPDATE loop_events SET stage = ? WHERE event_id = ?", ["prepare_workspace", "run-001:3:stage_started:prepare_workspace"]);
+
+      tamper("UPDATE loop_events SET attempt = ? WHERE event_id = ?", [-1, "run-001:3:stage_started:prepare_workspace"]);
+      expectCorruptBoth("persisted invalid event attempt classified as STORE_CORRUPT");
+      restore("UPDATE loop_events SET attempt = ? WHERE event_id = ?", [1, "run-001:3:stage_started:prepare_workspace"]);
+
+      tamper("UPDATE loop_events SET input_digest = ? WHERE event_id = ?", ["zz", "run-001:3:stage_started:prepare_workspace"]);
+      expectCorruptBoth("persisted invalid event digest classified as STORE_CORRUPT");
+      restore("UPDATE loop_events SET input_digest = ? WHERE event_id = ?", [null, "run-001:3:stage_started:prepare_workspace"]);
+
+      tamper("UPDATE loop_events SET attempt = ? WHERE event_id = ?", [1.5, "run-001:3:stage_started:prepare_workspace"]);
+      expectCorruptBoth("non-canonical persisted integer classified as STORE_CORRUPT");
+      restore("UPDATE loop_events SET attempt = ? WHERE event_id = ?", [1, "run-001:3:stage_started:prepare_workspace"]);
+
+      const storeClean = new LoopRunStore(classDbPath);
+      storeClean.init();
+      assert(storeClean.getRun("run-001")!.status === "running", "classification restores cleanly");
+      storeClean.close();
+    }
+
+    // ── Finding B: full canonical run_created trust root ──
+    console.log("full canonical run_created verification");
+    const trustDir = mkdtempSync(join(tempRoot, "trust-"));
+    const trustDbPath = join(trustDir, "journal.db");
+    {
+      const store = new LoopRunStore(trustDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.close();
+
+      const recomputeFirstHash = (): void => {
+        const db = new Database(trustDbPath);
+        const row = db.prepare("SELECT * FROM loop_events WHERE event_id = ?").get("run-001:1:run_created") as Record<string, unknown>;
+        const canonical = JSON.stringify({
+          eventId: row.event_id,
+          runId: row.run_id,
+          sequence: row.sequence,
+          kind: row.kind,
+          stage: row.stage,
+          attempt: row.attempt,
+          createdAt: row.created_at,
+          inputDigest: row.input_digest,
+          outputArtifactRef: row.output_artifact_ref,
+          outputDigest: row.output_digest,
+          errorCode: row.error_code,
+          retryable: row.retryable === null ? null : row.retryable === 1,
+          reasonCode: row.reason_code,
+        });
+        const { createHash } = require("node:crypto");
+        const hash = createHash("sha256").update(canonical, "utf8").digest("hex");
+        db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE event_id = ?").run(hash, "run-001:1:run_created");
+        db.close();
+      };
+      const expectTrustCorrupt = (message: string): void => {
+        const store2 = new LoopRunStore(trustDbPath);
+        store2.init();
+        expectThrow("STORE_CORRUPT", () => store2.getRun("run-001"), message);
+        store2.close();
+      };
+
+      // drift input_digest to a format-valid non-null value and re-sync the hash
+      {
+        const db = new Database(trustDbPath);
+        db.prepare("UPDATE loop_events SET input_digest = ? WHERE event_id = ?").run("f".repeat(64), "run-001:1:run_created");
+        db.close();
+        recomputeFirstHash();
+        expectTrustCorrupt("run_created drift with synced hash rejected (input_digest)");
+      }
+      // restore via fresh DB
+      {
+        rmSync(trustDbPath, { force: true });
+        const store2 = new LoopRunStore(trustDbPath);
+        store2.init();
+        store2.createRun(makeIdentity());
+        store2.close();
+      }
+      // drift createdAt with synced hash
+      {
+        const db = new Database(trustDbPath);
+        db.prepare("UPDATE loop_events SET created_at = ? WHERE event_id = ?").run("2026-07-26T01:00:00.000Z", "run-001:1:run_created");
+        db.close();
+        recomputeFirstHash();
+        expectTrustCorrupt("run_created drift with synced hash rejected (createdAt)");
+      }
+      // drift reason_code with synced hash
+      {
+        rmSync(trustDbPath, { force: true });
+        const store2 = new LoopRunStore(trustDbPath);
+        store2.init();
+        store2.createRun(makeIdentity());
+        store2.close();
+        const db = new Database(trustDbPath);
+        db.prepare("UPDATE loop_events SET reason_code = ? WHERE event_id = ?").run("SOME_REASON", "run-001:1:run_created");
+        db.close();
+        recomputeFirstHash();
+        expectTrustCorrupt("run_created drift with synced hash rejected (reason_code)");
+      }
+      // clean DB still passes
+      {
+        rmSync(trustDbPath, { force: true });
+        const store2 = new LoopRunStore(trustDbPath);
+        store2.init();
+        store2.createRun(makeIdentity());
+        assert(store2.getRun("run-001")!.status === "created", "clean run_created trust root passes");
+        store2.close();
+      }
+    }
+
+    // ── Finding C: raw retryable canonicality ──
+    console.log("raw retryable canonicality");
+    const retryDir = mkdtempSync(join(tempRoot, "retry-"));
+    const retryDbPath = join(retryDir, "journal.db");
+    {
+      // Simulate a pre-existing DB without the CHECK constraint (older or
+      // externally damaged database): the read path must still defend.
+      const setup = new Database(retryDbPath);
+      setup.exec(`
+        CREATE TABLE loop_runs (
+          run_id TEXT PRIMARY KEY,
+          requirement_id TEXT NOT NULL,
+          repository TEXT NOT NULL,
+          repository_path TEXT NOT NULL,
+          base_branch TEXT NOT NULL,
+          expected_base_sha TEXT NOT NULL,
+          task_branch TEXT NOT NULL,
+          control_root TEXT NOT NULL,
+          status TEXT NOT NULL,
+          current_stage TEXT,
+          current_attempt INTEGER NOT NULL,
+          fix_round INTEGER NOT NULL,
+          last_sequence INTEGER NOT NULL,
+          last_event_id TEXT NOT NULL,
+          blocking_reason_code TEXT,
+          failure_reason_code TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          identity_sha256 TEXT NOT NULL
+        );
+        CREATE INDEX idx_loop_runs_status ON loop_runs(status);
+        CREATE TABLE loop_stage_states (
+          run_id TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempt INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, stage),
+          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_loop_stage_states_run_id ON loop_stage_states(run_id);
+        CREATE TABLE loop_events (
+          event_id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          sequence INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          stage TEXT,
+          attempt INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          input_digest TEXT,
+          output_artifact_ref TEXT,
+          output_digest TEXT,
+          error_code TEXT,
+          retryable INTEGER,
+          reason_code TEXT,
+          canonical_sha256 TEXT NOT NULL,
+          UNIQUE (run_id, sequence),
+          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_loop_events_run_id ON loop_events(run_id);
+      `);
+      setup.close();
+
+      const store = new LoopRunStore(retryDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      store.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1, retryable: false }));
+      store.close();
+
+      // raw retryable = 2 without touching canonical hash must be rejected
+      {
+        const db = new Database(retryDbPath);
+        db.prepare("UPDATE loop_events SET retryable = ? WHERE event_id = ?").run(2, "run-001:3:stage_started:prepare_workspace");
+        db.close();
+        const store2 = new LoopRunStore(retryDbPath);
+        store2.init();
+        expectThrow("STORE_CORRUPT", () => store2.getRun("run-001"), "raw retryable=2 rejected via getRun");
+        expectThrow("STORE_CORRUPT", () => store2.listEvents("run-001"), "raw retryable=2 rejected via listEvents");
+        store2.close();
+      }
+      // schema CHECK for new databases
+      {
+        const freshDir = mkdtempSync(join(tempRoot, "retry-fresh-"));
+        const freshStore = new LoopRunStore(join(freshDir, "journal.db"));
+        freshStore.init();
+        const db = new Database(join(freshDir, "journal.db"), { readonly: true });
+        const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'loop_events'").get() as { sql: string }).sql;
+        assert(sql.includes("retryable IS NULL OR retryable IN (0, 1)"), "new schema has retryable CHECK constraint");
+        db.close();
+        freshStore.close();
+      }
+    }
+
+    // ── Finding D: safe bounded error messages ──
+    console.log("safe bounded error messages");
+    const sentinelDir = mkdtempSync(join(tempRoot, "sentinel-"));
+    const sentinelDbPath = join(sentinelDir, "journal.db");
+    {
+      const store = new LoopRunStore(sentinelDbPath);
+      store.init();
+      store.createRun(makeIdentity());
+      store.close();
+
+      const sentinelStage = "UNIQUE_SECRET_SENTINEL_STAGE";
+      const sentinelEventId = "RAW_PROMPT_SENTINEL_EVENT_ID";
+      {
+        const db = new Database(sentinelDbPath);
+        db.prepare("INSERT INTO loop_stage_states (run_id, stage, status, attempt, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+          "run-001", sentinelStage, "pending", 0, TS,
+        );
+        db.prepare("UPDATE loop_events SET event_id = ? WHERE event_id = ?").run(sentinelEventId, "run-001:1:run_created");
+        db.close();
+        const store2 = new LoopRunStore(sentinelDbPath);
+        store2.init();
+        try {
+          store2.getRun("run-001");
+          assert(false, "sentinel corruption throws (no error)");
+        } catch (error) {
+          const journalError = error as LoopRunJournalError;
+          assert(journalError.code === "STORE_CORRUPT", "sentinel corruption classified STORE_CORRUPT");
+          assert(!journalError.message.includes("UNIQUE_SECRET_SENTINEL"), "corrupt message does not echo persisted stage sentinel");
+          assert(!journalError.message.includes("RAW_PROMPT_SENTINEL"), "corrupt message does not echo persisted eventId sentinel");
+          assert(journalError.message.length <= 256, "corrupt message within length bound");
+          assert(!/[\x00-\x1f\x7f]/.test(journalError.message), "corrupt message has no control characters");
+        }
+        store2.close();
+      }
+    }
+
     // ── no sensitive sentinel data in DB ──
     console.log("no sensitive data in DB");
     {

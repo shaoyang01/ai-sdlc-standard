@@ -66,7 +66,8 @@ function requireFields(record: Record<string, unknown>, fields: readonly string[
   }
   for (const key of keys) {
     if (!fields.includes(key)) {
-      throw new LoopRunJournalError("INVALID_INPUT", `${label} has unknown field ${key}`);
+      // Unknown field names are external input and are never echoed.
+      throw new LoopRunJournalError("INVALID_INPUT", `${label} has unknown fields`);
     }
   }
 }
