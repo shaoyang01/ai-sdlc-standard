@@ -136,6 +136,7 @@ function validateExecutable(policy: LoopPosixExecutablePolicy): PinnedExecutable
     if (fa.length > MAX_ARGS) fail("INVALID_INPUT","too many fixed args");
     if (fa.reduce((t,a)=>t+strB(a),0) > MAX_ARGS_TOTAL_B) fail("INVALID_INPUT","fixed args total bytes exceeded");
   }
+  if (po.allowDynamicArgs !== undefined && typeof po.allowDynamicArgs !== "boolean") fail("INVALID_INPUT","allowDynamicArgs must be boolean");
   const ad = po.allowDynamicArgs === true;
   const sm = (po.stdinMode ?? "optional") as string;
   if (sm !== "forbidden" && sm !== "optional" && sm !== "required") fail("INVALID_INPUT","invalid stdinMode");
@@ -229,6 +230,12 @@ function buildEnv(fixedEnv: Record<string,string>, allowedKeys: readonly string[
       env[k] = v;
     }
   }
+  // Final bounds check
+  const keys = Object.keys(env);
+  if (keys.length > MAX_ENV) fail("INVALID_INPUT","too many total env entries");
+  let totalB = 0;
+  for (const k of keys) totalB += strB(k) + strB(env[k]!);
+  if (totalB > MAX_ENV_TOTAL_B) fail("INVALID_INPUT","env total bytes exceeded");
   return env;
 }
 
@@ -344,10 +351,12 @@ export class LoopPosixProcessRunner {
 
     // args
     const dynArgs: string[] = [];
-    if (request.args !== undefined && (request.args as unknown[]).length > 0) {
+    if (request.args !== undefined) {
       vArr(request.args,"args");
-      if (!pe.allowDynamicArgs) fail("INVALID_INPUT","dynamic args not allowed");
-      for (const a of request.args as unknown[]) {
+      const argsArr = request.args as unknown[];
+      if (argsArr.length > 0) {
+        if (!pe.allowDynamicArgs) fail("INVALID_INPUT","dynamic args not allowed");
+        for (const a of argsArr) {
         if (typeof a !== "string") fail("INVALID_INPUT","args must be strings");
         if (a.includes("\x00")) fail("INVALID_INPUT","args NUL rejected");
         if (strB(a) > MAX_ARG_B) fail("INVALID_INPUT","arg too long");
@@ -471,76 +480,133 @@ export class LoopPosixProcessRunner {
     }
 
     // Install child error listener BEFORE pid/stdio checks
-    child.on("error", (e) => {
-      if (settled || closeSeen) return;
-      mainError = typedFail("PROCESS_SPAWN_FAILED","child process error");
-      requestProcessGroupCleanup(mainError);
-    });
+    try {
+      child.on("error", (e) => {
+        if (settled || closeSeen) return;
+        mainError = typedFail("PROCESS_SPAWN_FAILED","child process error");
+        requestProcessGroupCleanup(mainError);
+      });
+    } catch {
+      if (!settled && !closeSeen) {
+        mainError = typedFail("PROCESS_SPAWN_FAILED","child error listener install failed");
+        if (pid !== null) requestProcessGroupCleanup(mainError); else { settled = true; clrTimers(); rejectSettle(mainError); }
+      }
+    }
 
-    // PID check
+    // PID check — invalid PID → immediate bounded settle
     const rawPid = child.pid;
-    if (typeof rawPid !== "number" || !Number.isSafeInteger(rawPid) || rawPid <= 0) {
-      mainError = typedFail("PROCESS_SPAWN_FAILED","invalid child pid");
-      // No valid PID → no cleanup signals possible. Wait for close.
-    } else {
+    if (typeof rawPid === "number" && Number.isSafeInteger(rawPid) && rawPid > 0) {
       pid = rawPid;
+    } else {
+      mainError = typedFail("PROCESS_SPAWN_FAILED","invalid child pid");
+      // No valid PID → cannot send group signals. Settle immediately.
+      if (!settled) { settled = true; clrTimers(); rejectSettle(mainError); }
+      // Keep guarded error listener for late events; return settled promise
     }
 
     // Stdio checks
-    if (!child.stdin || !child.stdout || !child.stderr) {
-      mainError = typedFail("PROCESS_IO_FAILED","missing stdio pipe");
-      if (pid !== null) requestProcessGroupCleanup(mainError);
-      // Fall through to install remaining listeners, then close will settle
+    const stdioOk = child.stdin && child.stdout && child.stderr;
+    if (!stdioOk) {
+      if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","missing stdio pipe");
+      if (pid !== null) {
+        requestProcessGroupCleanup(mainError);
+      } else {
+        // Invalid PID + missing stdio → already settled above, nothing more to do
+      }
     }
 
     // stdout
-    if (child.stdout) {
-      child.stdout.on("data", (chunk: Buffer) => stdoutCol.push(chunk));
-      child.stdout.on("error", () => {
-        if (settled || closeSeen) return;
-        if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout stream error");
-        requestProcessGroupCleanup(mainError);
-      });
+    if (child.stdout && !settled) {
+      try {
+        child.stdout.on("data", (chunk: Buffer) => {
+          if (settled || closeSeen) return;
+          try { stdoutCol.push(chunk); } catch {
+            if (!settled && !closeSeen) {
+              if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout data handling error");
+              requestProcessGroupCleanup(mainError);
+            }
+          }
+        });
+        child.stdout.on("error", () => {
+          if (settled || closeSeen) return;
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout stream error");
+          requestProcessGroupCleanup(mainError);
+        });
+      } catch {
+        if (!settled && !closeSeen) {
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout listener install failed");
+          requestProcessGroupCleanup(mainError);
+        }
+      }
     }
     // stderr
-    if (child.stderr) {
-      child.stderr.on("data", (chunk: Buffer) => stderrCol.push(chunk));
-      child.stderr.on("error", () => {
-        if (settled || closeSeen) return;
-        if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr stream error");
-        requestProcessGroupCleanup(mainError);
-      });
+    if (child.stderr && !settled) {
+      try {
+        child.stderr.on("data", (chunk: Buffer) => {
+          if (settled || closeSeen) return;
+          try { stderrCol.push(chunk); } catch {
+            if (!settled && !closeSeen) {
+              if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr data handling error");
+              requestProcessGroupCleanup(mainError);
+            }
+          }
+        });
+        child.stderr.on("error", () => {
+          if (settled || closeSeen) return;
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr stream error");
+          requestProcessGroupCleanup(mainError);
+        });
+      } catch {
+        if (!settled && !closeSeen) {
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr listener install failed");
+          requestProcessGroupCleanup(mainError);
+        }
+      }
     }
 
     // close
-    child.on("close", (code, signal) => {
-      if (closeSeen) return;
-      closeSeen = true;
-      closeCode = code;
-      closeSignal = signal as NodeJS.Signals | null;
-      settle();
-    });
+    try {
+      child.on("close", (code, signal) => {
+        if (closeSeen) return;
+        closeSeen = true;
+        closeCode = code;
+        closeSignal = signal as NodeJS.Signals | null;
+        settle();
+      });
+    } catch {
+      if (!settled && !closeSeen) {
+        if (!mainError) mainError = typedFail("PROCESS_SPAWN_FAILED","close listener install failed");
+        if (pid !== null) requestProcessGroupCleanup(mainError); else { settled = true; clrTimers(); rejectSettle(mainError); }
+      }
+    }
 
     // stdin
-    if (child.stdin) {
-      child.stdin.on("error", () => {
-        if (settled || closeSeen) return;
-        if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin pipe error");
-        requestProcessGroupCleanup(mainError);
-      });
-      if (stdinBuf !== null) {
-        try { child.stdin.write(stdinBuf); } catch {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin write failed");
+    if (child.stdin && !settled) {
+      try {
+        child.stdin.on("error", () => {
+          if (settled || closeSeen) return;
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin pipe error");
           requestProcessGroupCleanup(mainError);
+        });
+        if (stdinBuf !== null) {
+          try { child.stdin.write(stdinBuf); } catch {
+            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin write failed");
+            if (pid !== null) requestProcessGroupCleanup(mainError);
+          }
+          try { child.stdin.end(); } catch {
+            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
+            if (pid !== null) requestProcessGroupCleanup(mainError);
+          }
+        } else {
+          try { child.stdin.end(); } catch {
+            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
+            if (pid !== null) requestProcessGroupCleanup(mainError);
+          }
         }
-        try { child.stdin.end(); } catch {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
-          requestProcessGroupCleanup(mainError);
-        }
-      } else {
-        try { child.stdin.end(); } catch {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
-          requestProcessGroupCleanup(mainError);
+      } catch {
+        if (!settled && !closeSeen) {
+          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin listener install failed");
+          if (pid !== null) requestProcessGroupCleanup(mainError);
         }
       }
     }
@@ -556,4 +622,5 @@ export class LoopPosixProcessRunner {
 
     return promise;
   }
+}
 }
