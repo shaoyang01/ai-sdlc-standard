@@ -228,12 +228,12 @@ export class LoopPosixProcessRunner{
     try{child.on("close",(code,signal)=>{if(csFlag)return;csFlag=true;cc=code;csig=signal as NodeJS.Signals|null;doSettle()})}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_SPAWN_FAILED","close listen");if(pidOk)reqCleanup(mainErr);else setTimeout(()=>{if(!stFlag){stFlag=true;clrTm();rejS(mainErr)}},0)}}
 
     // stdin
-    if(child.stdin&&!stFlag){try{child.stdin.on("error",()=>{if(stFlag||csFlag)return;if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si err");reqCleanup(mainErr)});if(stdinBuf!==null){try{child.stdin.write(stdinBuf)}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si write");if(pidOk)reqCleanup(mainErr)}try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}else{try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si listen");if(pidOk)reqCleanup(mainErr)}}
+    if(child.stdin&&!stFlag){try{child.stdin.on("error",()=>{if(stFlag||csFlag)return;if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si err");reqCleanup(mainErr)});if(stdinBuf!==null){try{child.stdin.write(stdinBuf)}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si write");if(pidOk)reqCleanup(mainErr)}try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}else{try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si listen");if(pidOk)reqCleanup(mainErr)}}}
+
 
     // timeout
     if(to>0){tms.push(setTimeout(()=>{if(stFlag||csFlag)return;toFlag=true;reqCleanup(null)},to))}
 
     return prom
   }
-}
 }
