@@ -131,6 +131,11 @@ export class LoopGitWorkspaceManager {
     const cr = vAbsPath(identity.controlRoot, "controlRoot");
     const rp = vAbsPath(identity.repositoryPath, "repositoryPath");
     if (rp === cr) fail("INVALID_INPUT", "repoPath equals controlRoot");
+    // Mutual containment: neither path may contain the other
+    const relRC = path.relative(rp, cr);
+    const relCR = path.relative(cr, rp);
+    if (!relRC.startsWith("..") && !path.isAbsolute(relRC)) fail("INVALID_INPUT", "repoPath contains controlRoot");
+    if (!relCR.startsWith("..") && !path.isAbsolute(relCR)) fail("INVALID_INPUT", "controlRoot contains repoPath");
     const canonKey = JSON.stringify([
       "loop-git-workspace-v1", identity.runId, identity.requirementId,
       identity.repository.toLowerCase(), rp, identity.baseBranch,
@@ -147,6 +152,7 @@ export class LoopGitWorkspaceManager {
     await this._valAll(identity);
     let fpB = await this._srcFp(identity.repositoryPath);
     let mainErr: LoopGitWorkspaceError | null = null;
+    let result: LoopGitWorkspaceSnapshot | null = null;
     try {
       const wsPath = this.workspacePathFor(identity);
       await this._ensureDirs(wsPath);
@@ -156,15 +162,18 @@ export class LoopGitWorkspaceManager {
       if (exist.state === "exact") {
         await this._verifyWs(identity, wsPath, exist.taskHead);
         if ((await this._isAnc(wsPath, identity.expectedBaseSha, exist.taskHead)) === false) fail("TASK_BRANCH_CONFLICT", "base not ancestor");
-        return await this._snap(identity, wsPath, "recovered", curBase, false);
+        result = await this._snap(identity, wsPath, "recovered", curBase, false);
+      } else if (exist.state === "branch_only") {
+        result = await this._attachBr(identity, wsPath, exist.taskHead, curBase);
+      } else {
+        result = await this._createWt(identity, wsPath, curBase);
       }
-      if (exist.state === "branch_only") return await this._attachBr(identity, wsPath, exist.taskHead, curBase);
-      return await this._createWt(identity, wsPath, curBase);
+      return result;
     } catch (e) { if (e instanceof LoopGitWorkspaceError) mainErr = e; else mainErr = tf("GIT_COMMAND_FAILED", "git error"); throw mainErr; }
     finally {
-      let fpA = fpB;
-      try { fpA = await this._srcFp(identity.repositoryPath); } catch { /* after-fingerprint failure → drift */ }
-      if (fpB !== fpA) { if (mainErr) throw mainErr; throw tf("SOURCE_WORKSPACE_DRIFT", "source drifted"); }
+      let fpA = fpB; let fpFailed = false;
+      try { fpA = await this._srcFp(identity.repositoryPath); } catch { fpFailed = true; }
+      if (fpFailed || fpB !== fpA) throw tf("SOURCE_WORKSPACE_DRIFT", "source drifted");
     }
   }
 
@@ -189,9 +198,9 @@ export class LoopGitWorkspaceManager {
       await this._verifyWs(identity, wsPath, f.h);
       return await this._snap(identity, wsPath, "inspected", curBase, drifted);
     } finally {
-      let fpA = fpB;
-      try { fpA = await this._srcFp(identity.repositoryPath); } catch {}
-      if (fpB !== fpA) fail("SOURCE_WORKSPACE_DRIFT", "source drifted");
+      let fpA = fpB; let fpFailed = false;
+      try { fpA = await this._srcFp(identity.repositoryPath); } catch { fpFailed = true; }
+      if (fpFailed || fpB !== fpA) fail("SOURCE_WORKSPACE_DRIFT", "source drifted");
     }
   }
 
@@ -216,7 +225,6 @@ export class LoopGitWorkspaceManager {
         const brH = (await this._gitR(identity.repositoryPath, ["rev-parse","--verify",brRef], [0])).stdout.trim();
         if (brH !== expHead) fail("CLEANUP_BLOCKED", "head mismatch");
         if ((await this._isAnc(identity.repositoryPath, identity.expectedBaseSha, expHead)) === false) fail("CLEANUP_BLOCKED", "base not ancestor");
-        // Check not in use by other worktree
         const other = wts.find(w => w.branch === identity.taskBranch && !w.prunable && w.pExists && w.p !== (f ? f.p : ""));
         if (other) fail("CLEANUP_BLOCKED", "branch in use");
       }
@@ -231,16 +239,13 @@ export class LoopGitWorkspaceManager {
       }
 
       await this._verifyWs(identity, wsPath, expHead);
-      // Check clean
       const status = (await this._gitR(wsPath, ["status","--porcelain=v1","-z","--untracked-files=all"], [0])).stdout;
       if (status.length > 0) fail("WORKSPACE_DIRTY", "workspace dirty");
-      // Remove worktree
       await this._git(identity.repositoryPath, ["worktree","remove",wsPath]);
       // Re-read state after remove
       const wts2 = await this._wtList(identity.repositoryPath);
       const f2 = wts2.find(w => w.p === wsPath && !w.prunable && w.pExists);
       if (f2) fail("CLEANUP_BLOCKED", "worktree still registered");
-      // Re-read branch HEAD
       const brH2 = (await this._gitR(identity.repositoryPath, ["rev-parse","--verify",brRef], [0])).stdout.trim();
       if (brH2 !== expHead) fail("CLEANUP_BLOCKED", "head changed");
       const other2 = wts2.find(w => w.branch === identity.taskBranch && !w.prunable && w.pExists);
@@ -252,9 +257,9 @@ export class LoopGitWorkspaceManager {
       }
       return freeze({ workspacePath: wsPath, worktreeRemoved: true, taskBranchDeleted: bDel, taskBranchRetained: bRet, alreadyAbsent: false });
     } finally {
-      let fpA = fpB;
-      try { fpA = await this._srcFp(identity.repositoryPath); } catch {}
-      if (fpB !== fpA) fail("SOURCE_WORKSPACE_DRIFT", "source drifted");
+      let fpA = fpB; let fpFailed = false;
+      try { fpA = await this._srcFp(identity.repositoryPath); } catch { fpFailed = true; }
+      if (fpFailed || fpB !== fpA) fail("SOURCE_WORKSPACE_DRIFT", "source drifted");
     }
   }
 
@@ -272,6 +277,16 @@ export class LoopGitWorkspaceManager {
   }
   private async _git(cwd: string, args: readonly string[]): Promise<string> { return (await this._gitR(cwd, args, [0])).stdout; }
 
+  // check-ref-format: single Runner call, distinguish INVALID_INPUT from GIT_COMMAND_FAILED
+  private async _chkRef(rp: string, branch: string): Promise<void> {
+    const req: LoopPosixProcessRequest = { executableId: this.gitId, cwd: rp, args: ["check-ref-format","--branch",branch], timeoutMs: this.gTo, maxStdoutBytes: this.mxOut, maxStderrBytes: this.mxOut };
+    let r: LoopPosixProcessResult;
+    try { r = await this.runner.run(req); } catch { fail("GIT_COMMAND_FAILED", "runner failed"); }
+    if (r.status !== "exited" || r.exitCode === null || r.exitCode === undefined || !Number.isSafeInteger(r.exitCode) || r.signal !== null || r.stdoutTruncated || r.stderrTruncated) fail("GIT_COMMAND_FAILED", "bad result");
+    if (r.exitCode === 0) return;
+    fail("INVALID_INPUT", "branch invalid");
+  }
+
   // ── Private: validation ──
   private async _valAll(identity: LoopRunIdentity): Promise<void> {
     const rp = vAbsPath(identity.repositoryPath, "repositoryPath");
@@ -283,18 +298,9 @@ export class LoopGitWorkspaceManager {
     if (!relRC.startsWith("..") && !path.isAbsolute(relRC)) fail("INVALID_INPUT", "repoPath contains controlRoot");
     if (!relCR.startsWith("..") && !path.isAbsolute(relCR)) fail("INVALID_INPUT", "controlRoot contains repoPath");
     if (!GH_SLUG_RE.test(identity.repository)) fail("REPOSITORY_INVALID", "slug format");
-    // check-ref-format with proper error classification
-    try { await this._gitR(rp, ["check-ref-format","--branch",identity.baseBranch], [0]); } catch (e) {
-      if (e instanceof LoopGitWorkspaceError && e.code === "GIT_COMMAND_FAILED") {
-        // Distinguish: if we can run another git command, it's a branch format issue
-        try { await this._gitR(rp, ["rev-parse","--is-inside-work-tree"], [0]); fail("INVALID_INPUT", "baseBranch invalid"); } catch { throw e; }
-      }
-    }
-    try { await this._gitR(rp, ["check-ref-format","--branch",identity.taskBranch], [0]); } catch (e) {
-      if (e instanceof LoopGitWorkspaceError && e.code === "GIT_COMMAND_FAILED") {
-        try { await this._gitR(rp, ["rev-parse","--is-inside-work-tree"], [0]); fail("INVALID_INPUT", "taskBranch invalid"); } catch { throw e; }
-      }
-    }
+    // check-ref-format: single execution, distinguish branch-format from infrastructure
+    await this._chkRef(rp, identity.baseBranch);
+    await this._chkRef(rp, identity.taskBranch);
     if (NON_CONTROL.test(identity.baseBranch) || identity.baseBranch.startsWith("-") || identity.baseBranch.includes(" ")) fail("INVALID_INPUT", "baseBranch invalid chars");
     if (NON_CONTROL.test(identity.taskBranch) || identity.taskBranch.startsWith("-") || identity.taskBranch.includes(" ")) fail("INVALID_INPUT", "taskBranch invalid chars");
     if (identity.baseBranch === identity.taskBranch) fail("INVALID_INPUT", "same branch");
@@ -313,13 +319,16 @@ export class LoopGitWorkspaceManager {
     const m = origin.match(ORIGIN_RE); if (!m) fail("REPOSITORY_INVALID", "origin URL unsupported");
     const slug = (m[1] || m[2] || m[3] || "").toLowerCase();
     if (slug !== identity.repository.toLowerCase()) fail("REPOSITORY_MISMATCH", "origin repo mismatch");
-    // Verify expected commit exists — separate classification from GIT_COMMAND_FAILED
+    // Verify expected commit: use direct runner call to distinguish git-failure from infrastructure
     try {
-      const ecCheck = await this._gitR(rp, ["rev-parse","--verify",`${identity.expectedBaseSha}^{commit}`], [0]);
-      if (ecCheck.stdout.trim() !== identity.expectedBaseSha) fail("BASE_SHA_MISMATCH", "expected commit not found");
+      const ecReq: LoopPosixProcessRequest = { executableId: this.gitId, cwd: rp, args: ["rev-parse","--verify",`${identity.expectedBaseSha}^{commit}`], timeoutMs: this.gTo, maxStdoutBytes: this.mxOut, maxStderrBytes: this.mxOut };
+      let ecR: LoopPosixProcessResult;
+      try { ecR = await this.runner.run(ecReq); } catch { fail("GIT_COMMAND_FAILED", "runner failed"); }
+      if (ecR.status !== "exited" || ecR.exitCode === null || ecR.exitCode === undefined || !Number.isSafeInteger(ecR.exitCode) || ecR.signal !== null || ecR.stdoutTruncated || ecR.stderrTruncated) fail("GIT_COMMAND_FAILED", "bad result");
+      if (ecR.exitCode !== 0 || ecR.stdout.trim() !== identity.expectedBaseSha) fail("BASE_SHA_MISMATCH", "expected commit not found");
     } catch (e) {
-      if (e instanceof LoopGitWorkspaceError && e.code === "GIT_COMMAND_FAILED") fail("BASE_SHA_MISMATCH", "expected commit not found");
-      throw e;
+      if (e instanceof LoopGitWorkspaceError && e.code === "GIT_COMMAND_FAILED") throw e; // infrastructure failure → GIT_COMMAND_FAILED
+      throw e; // BASE_SHA_MISMATCH or other
     }
   }
 
