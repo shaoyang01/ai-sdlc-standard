@@ -1,7 +1,18 @@
 // LOOP Executor Kernel — Controlled POSIX Process Runner
+// ========================================================
 // macOS/Linux host process runner with executable allowlist, cwd containment,
-// explicit env, bounded streams, POSIX process-group timeout/cleanup.
-// Final correction: optional args, listener PID cleanup, finalize settlement.
+// explicit env, bounded streams, and POSIX process-group timeout/cleanup.
+//
+// Platform & Security Limitations:
+// 1. Only supports macOS (darwin) and Linux. No Windows fallback.
+// 2. Depends on detached:true to create an independent POSIX process group.
+// 3. Uses negative PID signaling (kill(-pid, sig)) to target the entire group.
+// 4. Does not guarantee network filesystem semantics.
+// 5. cwd containment assumes allowed roots are not replaced by untrusted
+//    processes between validation and spawn. Node/POSIX API does not provide
+//    kernel-level openat-style cwd pinning — this is a known TOCTOU security
+//    assumption, not fully eliminated.
+// 6. No kernel-level fd-based cwd verification is available in Node.js.
 
 import type { ChildProcess } from "node:child_process";
 const childProcess = require("node:child_process") as typeof import("node:child_process");

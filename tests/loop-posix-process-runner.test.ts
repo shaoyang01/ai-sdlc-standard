@@ -14,19 +14,39 @@ async function et(code:string,fn:()=>Promise<unknown>,m:string){try{await fn();o
 const nodeExe=realpathSync(process.execPath);
 function withWatchdog<T>(prom:Promise<T>,ms:number):Promise<T>{return new Promise((res,rej)=>{const t=setTimeout(()=>rej(new Error("WATCHDOG")),ms);prom.then(v=>{clearTimeout(t);res(v)},e=>{clearTimeout(t);rej(e)})})}
 
-// Fake ChildProcess
-function fakeChild(o:{pid?:number|null;stdin?:unknown;stdout?:unknown;stderr?:unknown;onThrow?:boolean;closeThrow?:boolean;writeThrow?:boolean;endThrow?:boolean}):any{
-  const ee=new EventEmitter();
-  const fake:any={pid:o.pid,killed:false};
-  // Default: valid EventEmitters for all streams
-  fake.stdin=o.stdin===undefined?new EventEmitter():o.stdin;
-  fake.stdout=o.stdout===undefined?new EventEmitter():o.stdout;
-  fake.stderr=o.stderr===undefined?new EventEmitter():o.stderr;
-  if(fake.stdin instanceof EventEmitter){(fake.stdin as any).write=o.writeThrow?()=>{throw new Error("WRITE")}:()=>true;(fake.stdin as any).end=o.endThrow?()=>{throw new Error("END")}:()=>{}}
-  fake.on=o.closeThrow?function(){throw new Error("CLOSE")}:ee.on.bind(ee);
-  fake.emit=ee.emit.bind(ee);fake.removeListener=ee.removeListener.bind(ee);
-  if(o.onThrow){fake.on=function(){throw new Error("ON")}}
-  return fake
+// FakeChildProcess — extends EventEmitter so fallback listener and emit share state
+class FakeChildProcess extends EventEmitter {
+  pid: number|null; stdin: any; stdout: any; stderr: any; killed = false;
+  private _onThrow = false; private _closeThrow = false;
+  private _writeThrow = false; private _endThrow = false;
+
+  constructor(o:{pid?:number|null;stdin?:any;stdout?:any;stderr?:any;onThrow?:boolean;closeThrow?:boolean;writeThrow?:boolean;endThrow?:boolean}) {
+    super(); this.pid = o.pid ?? null;
+    this._onThrow = o.onThrow === true; this._closeThrow = o.closeThrow === true;
+    this._writeThrow = o.writeThrow === true; this._endThrow = o.endThrow === true;
+    this.stdin = o.stdin === undefined ? new EventEmitter() : o.stdin;
+    this.stdout = o.stdout === undefined ? new EventEmitter() : o.stdout;
+    this.stderr = o.stderr === undefined ? new EventEmitter() : o.stderr;
+    if (this.stdin instanceof EventEmitter) {
+      (this.stdin as any).write = this._writeThrow ? () => { throw new Error("WRITE") } : () => true;
+      (this.stdin as any).end = this._endThrow ? () => { throw new Error("END") } : () => {};
+    }
+  }
+
+  // Override on() to optionally throw on first install of "error"
+  on(event: string|symbol, listener: (...args: any[]) => void): this {
+    if (this._onThrow && event === "error") {
+      // Throw only once; subsequent fallback via prototype should succeed
+      this._onThrow = false;
+      throw new Error("ON_THROW");
+    }
+    if (this._closeThrow && event === "close") throw new Error("CLOSE_THROW");
+    return super.on(event, listener);
+  }
+}
+
+function fakeChild(o:{pid?:number|null;stdin?:any;stdout?:any;stderr?:any;onThrow?:boolean;closeThrow?:boolean;writeThrow?:boolean;endThrow?:boolean}): FakeChildProcess {
+  return new FakeChildProcess(o)
 }
 
 // Fixtures
@@ -93,17 +113,17 @@ async function main(){
 
     // ═══════════════════════════════════════ 9. Backing-store identity
     console.log("9. Backing store");
-    {const origConcat=Buffer.concat;const oSpawn=cpMod.spawn;const bigBuf=Buffer.alloc(32*1024*1024,65);let retainedChunks:Buffer[]=[];try{
-      Buffer.concat=function(chunks:any,len?:any):any{retainedChunks=chunks.map((c:any)=>Buffer.from(c));return origConcat(chunks,len)};
-      const fc=fakeChild({pid:99999,stdout:new EventEmitter(),stderr:new EventEmitter()});const so=fc.stdout as any;
-      cpMod.spawn=function(){return fc as any}as typeof cpMod.spawn;
+    {const origConcat=Buffer.concat;const oSpawn=cpMod.spawn;const bigBuf=Buffer.alloc(32*1024*1024,65);let observedChunks:Buffer[]=[];try{
+      Buffer.concat=function(chunks:any,len?:any):any{observedChunks=Array.from(chunks);return origConcat(chunks,len)};
+      const fc=fakeChild({pid:99999});const so=fc.stdout as any;
+      cpMod.spawn=function(){return fc as any} as any;
       const r4=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1],defaultMaxStdoutBytes:1,defaultMaxStderrBytes:1});
       const prom=r4.run(mkReq({cwd:c1,executableId:"n",maxStdoutBytes:1,maxStderrBytes:1}));
       so.emit("data",bigBuf);fc.stdout=null;fc.emit("close",0,null);
       const r=await withWatchdog(prom,5000);
       ok(r.stdoutTruncated,"truncated");ok(r.stdoutBytesReceived===bigBuf.length,"bytes recv");
-      ok(retainedChunks.reduce((s,c)=>s+c.length,0)<=1,"retained ≤1");
-      ok(retainedChunks.every(c=>c.buffer!==bigBuf.buffer),"no shared backing");
+      ok(observedChunks.reduce((s,c)=>s+c.length,0)<=1,"retained ≤1");
+      ok(observedChunks.every(c=>c.buffer!==bigBuf.buffer),"no shared backing");
     }finally{Buffer.concat=origConcat;cpMod.spawn=oSpawn}}
 
     // ═══════════════════════════════════════ 10. Invalid PID — sync validation
@@ -111,7 +131,7 @@ async function main(){
     const oSpawn2=cpMod.spawn;
     // Test: fake child with bad PID → immediate PROCESS_SPAWN_FAILED
     // The runner reads pid, rejects immediately, returns rejected promise
-    {const fc=fakeChild({pid:undefined});cpMod.spawn=function(){return fc};const r5=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
+    {const fc=fakeChild({pid:undefined});cpMod.spawn=function(){return fc as any};const r5=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
     let err:any=null;
     await new Promise<void>((res)=>{const t=setTimeout(()=>{res()},3000);r5.run(mkReq({cwd:c1,executableId:"n"})).then(()=>{clearTimeout(t);res()},(e:any)=>{clearTimeout(t);err=e;res()})});
     ok(err!==null,"bad pid rejected");ok(err instanceof LoopPosixProcessRunnerError,"typed");ok(err.code==="PROCESS_SPAWN_FAILED",`code=${err.code}`)}
@@ -135,13 +155,13 @@ async function main(){
     // ═══════════════════════════════════════ 14. Fake ChildProcess fault injection
     console.log("14. Fake child faults");
     // stdout error
-    {const fc=fakeChild({pid:88888,stdout:new EventEmitter(),stderr:new EventEmitter()});const so=fc.stdout as any;let kc=0;const oK=process.kill;try{process.kill=function(...a:unknown[]){kc++;return true}as typeof process.kill;cpMod.spawn=function(){return fc as any}as typeof cpMod.spawn;
+    {const fc=fakeChild({pid:88888,stdout:new EventEmitter(),stderr:new EventEmitter()});const so=fc.stdout as any;let kc=0;const oK=process.kill;try{process.kill=function(...a:unknown[]){kc++;return true}as typeof process.kill;cpMod.spawn=function(){return fc as any} as any;
       const r6=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
       const prom=r6.run(mkReq({cwd:c1,executableId:"n"}));setTimeout(()=>so.emit("error",new Error("E")),50);
       await et("PROCESS_CLEANUP_FAILED",()=>withWatchdog(prom,5000),"so error + TERM fail→CLEANUP");ok(kc>0,"cleanup called")}finally{process.kill=oK;cpMod.spawn=oSpawn2}}
 
     // close after late error
-    {const fc=fakeChild({pid:77777,stdout:new EventEmitter(),stderr:new EventEmitter()});let kc2=0;const oK2=process.kill;try{process.kill=function(...a:unknown[]){kc2++;return true}as typeof process.kill;cpMod.spawn=function(){return fc as any}as typeof cpMod.spawn;
+    {const fc=fakeChild({pid:77777,stdout:new EventEmitter(),stderr:new EventEmitter()});let kc2=0;const oK2=process.kill;try{process.kill=function(...a:unknown[]){kc2++;return true}as typeof process.kill;cpMod.spawn=function(){return fc as any} as any;
       const r7=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
       const prom=r7.run(mkReq({cwd:c1,executableId:"n"}));fc.emit("close",0,null);setTimeout(()=>fc.emit("error",new Error("LATE")),50);
       const r=await withWatchdog(prom,5000);ok(r.status==="exited","close first");ok(kc2===0,"no kill after close")}finally{process.kill=oK2;cpMod.spawn=oSpawn2}}
