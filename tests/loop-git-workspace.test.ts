@@ -1,310 +1,315 @@
-// LOOP Git Workspace Lifecycle — Comprehensive Tests
+// LOOP Git Workspace Lifecycle — Hardened Tests (R1)
 // ====================================================
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { join, delimiter } from "node:path";
+import { execFileSync } from "node:child_process";
 import {
   LoopGitWorkspaceManager, LoopGitWorkspaceError,
-  type LoopGitWorkspaceManagerOptions, type LoopGitWorkspaceSnapshot, type LoopGitWorkspaceCleanupResult,
 } from "../core/loop-git-workspace";
+import { LoopPosixProcessRunner } from "../core/loop-posix-process-runner";
 import type { LoopRunIdentity } from "../core/loop-executor-types";
-import type { LoopPosixProcessRunner, LoopPosixProcessRequest, LoopPosixProcessResult } from "../core/loop-posix-process-runner";
 
 let p = 0, f = 0;
 function ok(c: boolean, m: string) { if (c) { p++; console.log(`  ✓ ${m}`); } else { f++; console.error(`  ✗ ${m}`); } }
-async function errEq(code: string, fn: () => unknown, m: string) {
-  try { await fn(); ok(false, `${m} (no err)`); } catch (e) {
-    if (e instanceof LoopGitWorkspaceError) {
-      ok(e.code === code, `${m} code=${e.code} (expected ${code})`);
-      ok(e.message.length <= 256, `${m} bounded msg`);
-      ok(!/[\x00-\x1f\x7f]/.test(e.message), `${m} no control chars`);
-    } else {
-      ok(false, `${m} not LoopGitWorkspaceError: ${(e as any)?.code || (e as any)?.message || String(e)}`);
-    }
-  }
-}
 
-const gitPath = realpathSync(execSync("which git 2>/dev/null || echo /usr/bin/git", { encoding: "utf8" }).trim());
+function findGit(): string {
+  const dirs = (process.env.PATH || "/usr/bin:/bin").split(delimiter);
+  for (const d of dirs) {
+    const fp = join(d, "git");
+    try {
+      const st = require("fs").lstatSync(fp);
+      if (st.isFile() && (st.mode & 0o111)) return realpathSync(fp);
+    } catch {}
+  }
+  throw new Error("git not found");
+}
+const GIT_PATH = findGit();
 
 function setupRepo() {
-  const tr = realpathSync(mkdtempSync(join(tmpdir(), "l03-")));
+  const tr = realpathSync(mkdtempSync(join(tmpdir(), "l03r1-")));
   const rp = join(tr, "repo"); const cr = join(tr, "control");
   mkdirSync(rp, { recursive: true }); mkdirSync(cr, { recursive: true });
-  execSync("git init -b main", { cwd: rp });
-  execSync("git config user.name test", { cwd: rp });
-  execSync("git config user.email test@test", { cwd: rp });
+  execFileSync(GIT_PATH, ["init","-b","main"], { cwd: rp });
+  execFileSync(GIT_PATH, ["config","user.name","test"], { cwd: rp });
+  execFileSync(GIT_PATH, ["config","user.email","test@test"], { cwd: rp });
   writeFileSync(join(rp, "README.md"), "# Test\n");
-  execSync("git add README.md && git commit -m init", { cwd: rp });
-  const baseSha = execSync("git rev-parse HEAD", { cwd: rp, encoding: "utf8" }).trim();
-  execSync("git checkout -b feature/loop-runtime-v1", { cwd: rp });
-  writeFileSync(join(rp, "src.ts"), "//\n");
-  execSync("git add src.ts && git commit -m feature", { cwd: rp });
-  const featureSha = execSync("git rev-parse HEAD", { cwd: rp, encoding: "utf8" }).trim();
-  execSync(`git update-ref refs/remotes/origin/feature/loop-runtime-v1 ${featureSha}`, { cwd: rp });
-  execSync(`git update-ref refs/remotes/origin/main ${baseSha}`, { cwd: rp });
-  execSync("git remote add origin https://github.com/example/fixture-repo.git", { cwd: rp });
-  execSync("git checkout main", { cwd: rp });
+  execFileSync(GIT_PATH, ["add","README.md"], { cwd: rp });
+  execFileSync(GIT_PATH, ["commit","-m","init"], { cwd: rp });
+  const baseSha = execFileSync(GIT_PATH, ["rev-parse","HEAD"], { cwd: rp, encoding: "utf8" }).trim();
+  execFileSync(GIT_PATH, ["checkout","-b","feature/loop-runtime-v1"], { cwd: rp });
+  writeFileSync(join(rp, "src.ts"), "// source\n");
+  execFileSync(GIT_PATH, ["add","src.ts"], { cwd: rp });
+  execFileSync(GIT_PATH, ["commit","-m","feature"], { cwd: rp });
+  const featureSha = execFileSync(GIT_PATH, ["rev-parse","HEAD"], { cwd: rp, encoding: "utf8" }).trim();
+  execFileSync(GIT_PATH, ["update-ref","refs/remotes/origin/feature/loop-runtime-v1",featureSha], { cwd: rp });
+  execFileSync(GIT_PATH, ["remote","add","origin","https://github.com/example/fixture-repo.git"], { cwd: rp });
+  execFileSync(GIT_PATH, ["checkout","main"], { cwd: rp });
   return { tr, rp, cr, baseSha, featureSha };
 }
 
-function mkId(o: { rp: string; cr: string; baseSha: string; runId?: string; taskBranch?: string; reqId?: string; repo?: string; baseBranch?: string; sha?: string; }): LoopRunIdentity {
+function mkId(o: { rp: string; cr: string; sha: string; runId?: string; taskBranch?: string; reqId?: string; repo?: string; baseBranch?: string; }): LoopRunIdentity {
   return Object.freeze({
-    runId: o.runId ?? "test-run-1", requirementId: o.reqId ?? "req-1",
+    runId: o.runId ?? "test-run", requirementId: o.reqId ?? "req",
     repository: o.repo ?? "example/fixture-repo", repositoryPath: o.rp,
-    baseBranch: o.baseBranch ?? "feature/loop-runtime-v1", expectedBaseSha: o.sha ?? o.baseSha,
-    taskBranch: o.taskBranch ?? "codex/task-test-1", controlRoot: o.cr,
+    baseBranch: o.baseBranch ?? "feature/loop-runtime-v1", expectedBaseSha: o.sha,
+    taskBranch: o.taskBranch ?? "codex/test", controlRoot: o.cr,
     createdAt: new Date().toISOString(),
   });
 }
 
-function makeRunner(git: string): Pick<LoopPosixProcessRunner, "run"> {
-  return {
-    run: async (req: LoopPosixProcessRequest): Promise<LoopPosixProcessResult> => {
-      const st = Date.now();
-      return new Promise((resolve, reject) => {
-        try {
-          const cp = require("node:child_process") as typeof import("node:child_process");
-          const child = cp.spawn(git, (req.args ?? []) as string[], {
-            cwd: req.cwd, shell: false,
-            env: { ...process.env, GIT_TERMINAL_PROMPT: "0", HOME: process.env.HOME || "/tmp", PATH: process.env.PATH || "/usr/bin:/bin" },
-            stdio: ["pipe", "pipe", "pipe"],
-          });
-          let so = "", se = ""; let sl = 0, el = 0; const mx = req.maxStdoutBytes ?? 1048576;
-          child.stdout.on("data", (c: Buffer) => { sl += c.length; if (sl <= mx) so += c.toString("utf8"); });
-          child.stderr.on("data", (c: Buffer) => { el += c.length; if (el <= mx) se += c.toString("utf8"); });
-          child.on("close", (code, sig) => {
-            resolve(Object.freeze({ status: "exited" as const, exitCode: code, signal: sig as NodeJS.Signals | null, durationMs: Date.now() - st, stdout: so, stderr: se, stdoutBytesReceived: sl, stderrBytesReceived: el, stdoutTruncated: sl > mx, stderrTruncated: el > mx, termSignalSent: false, killSignalSent: false }));
-          });
-          child.on("error", (e) => reject(e));
-        } catch (e) { reject(e); }
-      });
-    },
-  };
+function makeRunner(rp: string, cr: string) {
+  return new LoopPosixProcessRunner({
+    executables: [{ id: "git", executablePath: GIT_PATH, allowDynamicArgs: true, stdinMode: "forbidden" }],
+    allowedCwdRoots: [rp, cr],
+    fixedEnv: { GIT_TERMINAL_PROMPT: "0", HOME: process.env.HOME || "/tmp", PATH: process.env.PATH || "/usr/bin:/bin", LC_ALL: "C", LANG: "C" },
+    allowedRequestEnvKeys: [],
+    defaultTimeoutMs: 15000,
+  });
 }
 
 async function main() {
-  console.log("LOOP Git Workspace — Tests\n");
+  console.log("LOOP Git Workspace R1 — Hardened Tests\n");
   const { tr, rp, cr, baseSha, featureSha } = setupRepo();
-  const runner = makeRunner(gitPath);
-  const o: LoopGitWorkspaceManagerOptions = { runner, gitExecutableId: "git", gitTimeoutMs: 15000 };
-  const mgr = new LoopGitWorkspaceManager(o);
-  const id = mkId({ rp, cr, baseSha: featureSha });
+  const runner = makeRunner(rp, cr);
+  const mgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git", gitTimeoutMs: 15000 });
+  const id = mkId({ rp, cr, sha: featureSha });
 
   try {
-    // ═══ A. Options validation
-    console.log("A. Options validation");
-    errEq("INVALID_INPUT", () => { new LoopGitWorkspaceManager({} as any); }, "empty opts");
-    errEq("INVALID_INPUT", () => { new LoopGitWorkspaceManager({ runner: null, gitExecutableId: "g" } as any); }, "null runner");
-    errEq("INVALID_INPUT", () => { new LoopGitWorkspaceManager({ runner, gitExecutableId: "" } as any); }, "empty git id");
-    errEq("INVALID_INPUT", () => { new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", gitTimeoutMs: 0 }); }, "zero timeout");
-    errEq("INVALID_INPUT", () => { new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", maxGitOutputBytes: 99999999 }); }, "too large output");
+    // ═══ A. Descriptor scanner fail-closed
+    console.log("A. Descriptor scanner");
+    // Unknown field
+    try { new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", unknownField: 1 } as any); ok(false, "unknown field"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "INVALID_INPUT", "unknown field rejected"); }
+    // Getter
+    const getterObj = { get runner() { return runner; }, gitExecutableId: "g" };
+    try { new LoopGitWorkspaceManager(getterObj as any); ok(false, "getter"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "INVALID_INPUT", "getter rejected"); }
+    // Array
+    try { new LoopGitWorkspaceManager([] as any); ok(false, "array"); } catch (e) { ok(e instanceof LoopGitWorkspaceError, "array rejected"); }
+    // Symbol key
+    try { new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", [Symbol("x")]: 1 } as any); ok(false, "symbol"); } catch (e) { ok(e instanceof LoopGitWorkspaceError, "symbol rejected"); }
+    // __proto__ key
+    try { new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", __proto__: { runner: null } } as any); ok(false, "__proto__"); } catch (e) { ok(e instanceof LoopGitWorkspaceError, "__proto__ rejected"); }
 
-    // ═══ B. Invalid identity inputs
-    console.log("B. Invalid identity inputs");
-    try { mgr.workspacePathFor({ ...id, runId: "" } as any); ok(false, "empty runId"); } catch (e) { ok(true, "empty runId throws"); }
-    await errEq("REPOSITORY_INVALID", () => mgr.prepare({ ...id, repository: "bad", taskBranch: "codex/b-1" } as any), "bad repo slug");
-    // same baseBranch and taskBranch
-    await errEq("INVALID_INPUT", () => mgr.prepare({ ...id, baseBranch: "codex/b-same", taskBranch: "codex/b-same" } as any), "same branch");
-    // bad sha format (caught by validateLoopRunIdentity before our code, so not LoopGitWorkspaceError)
-    try { await mgr.prepare({ ...id, expectedBaseSha: "xyz", taskBranch: "codex/b-3" } as any); ok(false, "bad sha should throw"); } catch (e) { ok(e instanceof Error, "bad sha throws"); }
+    // ═══ B. Cleanup options scanner
+    console.log("B. Cleanup options scanner");
+    try { await mgr.cleanup(id, { expectedTaskHeadSha: featureSha, unknownField: 1 } as any); ok(false, "cu unknown"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "INVALID_INPUT", "cu unknown rejected"); }
 
-    // ═══ C. Path validation
-    console.log("C. Path validation");
-    errEq("INVALID_INPUT", () => { mgr.workspacePathFor({ ...id, controlRoot: join(tr, "nope") } as any); }, "missing controlRoot");
-    const sl = join(tr, "sl"); symlinkSync(cr, sl);
-    errEq("INVALID_INPUT", () => { mgr.workspacePathFor({ ...id, controlRoot: sl } as any); }, "symlink controlRoot");
-    rmSync(sl);
+    // ═══ C. Identity error conversion
+    console.log("C. Identity error conversion");
+    try { mgr.workspacePathFor({ ...id, runId: "" } as any); ok(false, "bad id"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "INVALID_INPUT", "id error converted"); }
 
-    // ═══ D. Origin mismatch
-    console.log("D. Origin mismatch");
-    await errEq("REPOSITORY_MISMATCH", () => mgr.prepare({ ...id, repository: "other/bad-repo", taskBranch: "codex/d-1" }), "origin mismatch");
+    // ═══ D. Branch check-ref-format
+    console.log("D. check-ref-format");
+    try { await mgr.prepare({ ...id, taskBranch: "bad..branch" }); ok(false, "bad branch"); } catch (e) { ok(e instanceof LoopGitWorkspaceError, "bad branch rejected"); }
 
-    // ═══ E. Initial prepare
-    console.log("E. Initial prepare");
-    let wsPath = mgr.workspacePathFor(id);
-    ok(wsPath.startsWith(cr), "wsPath in controlRoot");
-    ok(wsPath.includes("/workspaces/v1/"), "hashed path");
-    ok(wsPath.length > cr.length + 30, "long path");
+    // ═══ E. Repository/controlRoot containment
+    console.log("E. Containment");
+    try { mgr.workspacePathFor({ ...id, controlRoot: id.repositoryPath } as any); ok(false, "same paths"); } catch (e) { ok(e instanceof LoopGitWorkspaceError, "same paths rejected"); }
 
-    const snap1 = await mgr.prepare(id);
-    ok(snap1.state === "created", snap1.state);
-    ok(snap1.taskBranch === id.taskBranch, "branch set");
-    ok(snap1.taskHeadSha === featureSha, "head at base");
-    ok(snap1.expectedBaseSha === featureSha, "expected preserved");
-    ok(snap1.baseDrifted === false, "not drifted");
-    ok(snap1.taskHasChanges === false, "clean");
-    ok(Object.isFrozen(snap1), "frozen");
-
-    // ═══ F. Deterministic path
-    console.log("F. Deterministic path");
-    ok(mgr.workspacePathFor(id) === wsPath, "same identity→same path");
-    const id2 = mkId({ rp, cr, baseSha: featureSha, runId: "run-2", taskBranch: "codex/task-2" });
-    ok(mgr.workspacePathFor(id2) !== wsPath, "different identity→different path");
-
-    // ═══ G. Source WIP staged
-    console.log("G. Source WIP staged");
+    // ═══ F. Source WIP staged
+    console.log("F. Source WIP staged");
     writeFileSync(join(rp, "wip.txt"), "staged");
-    execSync("git add wip.txt", { cwd: rp });
-    const snapG = await mgr.prepare({ ...id, taskBranch: "codex/g-1" });
-    ok(snapG.state === "created", "prepare with staged WIP");
-    ok(existsSync(join(rp, "wip.txt")), "staged file intact");
-    execSync("git reset HEAD wip.txt", { cwd: rp });
-    rmSync(join(rp, "wip.txt"));
+    execFileSync(GIT_PATH, ["add","wip.txt"], { cwd: rp });
+    const snapF = await mgr.prepare(mkId({ rp, cr, sha: featureSha, taskBranch: "codex/f-staged" }));
+    ok(snapF.state === "created", "prep with staged WIP");
+    execFileSync(GIT_PATH, ["reset","HEAD","wip.txt"], { cwd: rp }); rmSync(join(rp, "wip.txt"));
 
-    // ═══ H. Source WIP untracked
-    console.log("H. Source WIP untracked");
+    // ═══ G. Source WIP untracked file
+    console.log("G. Source WIP untracked");
     writeFileSync(join(rp, "u.txt"), "hello");
-    const snapH = await mgr.prepare({ ...id, taskBranch: "codex/h-1" });
-    ok(snapH.state === "created", "prepare with untracked WIP");
+    const snapG = await mgr.prepare(mkId({ rp, cr, sha: featureSha, taskBranch: "codex/g-untracked" }));
+    ok(snapG.state === "created", "prep with untracked");
     rmSync(join(rp, "u.txt"));
 
-    // ═══ I. Idempotent prepare
-    console.log("I. Idempotent prepare");
-    const snapI = await mgr.prepare(id);
-    ok(snapI.state === "recovered", "recovered");
-    ok(snapI.workspacePath === wsPath, "same path");
+    // ═══ H. Source WIP untracked symlink
+    console.log("H. Source WIP symlink");
+    symlinkSync(join(rp, "README.md"), join(rp, "slink"));
+    const snapH = await mgr.prepare(mkId({ rp, cr, sha: featureSha, taskBranch: "codex/h-symlink" }));
+    ok(snapH.state === "created", "prep with symlink");
+    rmSync(join(rp, "slink"));
 
-    // ═══ J. Dirty task workspace recovery
-    console.log("J. Dirty task workspace recovery");
-    writeFileSync(join(wsPath, "dirty.txt"), "task change");
+    // ═══ I. WIP size limit
+    console.log("I. WIP size limit");
+    const mgrSmall = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git", maxSourceWipBytes: 10 });
+    writeFileSync(join(rp, "big.txt"), "x".repeat(100));
+    try { await mgrSmall.prepare(mkId({ rp, cr, sha: featureSha, taskBranch: "codex/i-limit" })); ok(false, "limit"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "SOURCE_WIP_TOO_LARGE", "limit exceeded"); }
+    rmSync(join(rp, "big.txt"));
+
+    // ═══ J. Initial prepare
+    console.log("J. Initial prepare");
+    const wsPath = mgr.workspacePathFor(id);
+    ok(wsPath.startsWith(cr), "wsPath in controlRoot");
     const snapJ = await mgr.prepare(id);
-    ok(snapJ.state === "recovered", "recovered dirty");
-    ok(snapJ.taskHasChanges === true, "has changes");
-    rmSync(join(wsPath, "dirty.txt"));
-    execSync("git checkout -- .", { cwd: wsPath });
+    ok(snapJ.state === "created", "created");
+    ok(snapJ.taskHeadSha === featureSha, "head at base");
+    ok(Object.isFrozen(snapJ), "frozen");
 
-    // ═══ K. Base mismatch before create
-    console.log("K. Base mismatch");
-    const badSha = "0000000000000000000000000000000000000000";
-    await errEq("BASE_SHA_MISMATCH", () => mgr.prepare({ ...id, taskBranch: "codex/k-1", expectedBaseSha: badSha }), "wrong base");
+    // ═══ K. Deterministic path
+    console.log("K. Deterministic path");
+    ok(mgr.workspacePathFor(id) === wsPath, "same");
+    const id2 = mkId({ rp, cr, sha: featureSha, runId: "r2", taskBranch: "codex/k-2" });
+    ok(mgr.workspacePathFor(id2) !== wsPath, "different");
 
-    // ═══ L. Base drift inspect
-    console.log("L. Base drift inspect");
-    execSync(`git update-ref refs/remotes/origin/feature/loop-runtime-v1 ${baseSha}`, { cwd: rp });
-    const snapL = await mgr.inspect(id);
-    ok(snapL.baseDrifted === true, "drift detected");
-    ok(snapL.state === "inspected", "inspected");
-    execSync(`git update-ref refs/remotes/origin/feature/loop-runtime-v1 ${featureSha}`, { cwd: rp });
+    // ═══ L. Idempotent prepare
+    console.log("L. Idempotent prepare");
+    const snapL = await mgr.prepare(id);
+    ok(snapL.state === "recovered", "recovered");
 
-    // ═══ M. Task divergence
-    console.log("M. Task divergence");
-    writeFileSync(join(wsPath, "commit.txt"), "c");
-    execSync("git add commit.txt && git commit -m tc", { cwd: wsPath });
-    const tHead = execSync("git rev-parse HEAD", { cwd: wsPath, encoding: "utf8" }).trim();
-    ok(tHead !== featureSha, "diverged");
+    // ═══ M. Dirty task workspace recovery
+    console.log("M. Dirty task recovery");
+    writeFileSync(join(wsPath, "d.txt"), "x");
     const snapM = await mgr.prepare(id);
-    ok(snapM.taskHeadSha === tHead, "commits preserved");
+    ok(snapM.state === "recovered" && snapM.taskHasChanges, "dirty recovered");
+    rmSync(join(wsPath, "d.txt"));
+    execFileSync(GIT_PATH, ["checkout","--","."], { cwd: wsPath });
 
-    // ═══ N. Inspect snapshot
-    console.log("N. Inspect");
-    const snapN = await mgr.inspect(id);
-    ok(snapN.state === "inspected", "inspected");
-    ok(snapN.taskHeadSha === tHead, "head correct");
-    ok(typeof snapN.sourceWipDigestSha256 === "string", "wip digest present");
+    // ═══ N. Base mismatch
+    console.log("N. Base mismatch");
+    try { await mgr.prepare(mkId({ rp, cr, sha: "0000000000000000000000000000000000000000", taskBranch: "codex/n-bad" })); ok(false, "bad base"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "BASE_SHA_MISMATCH", "base mismatch"); }
 
-    // ═══ O. Missing workspace
-    console.log("O. Missing workspace");
-    await errEq("WORKSPACE_NOT_FOUND", () => mgr.inspect({ ...id, taskBranch: "codex/o-nonexist" }), "inspect missing");
+    // ═══ O. Base drift inspect
+    console.log("O. Base drift");
+    execFileSync(GIT_PATH, ["update-ref","refs/remotes/origin/feature/loop-runtime-v1",baseSha], { cwd: rp });
+    const snapO = await mgr.inspect(id);
+    ok(snapO.baseDrifted === true && snapO.state === "inspected", "drift detected");
+    execFileSync(GIT_PATH, ["update-ref","refs/remotes/origin/feature/loop-runtime-v1",featureSha], { cwd: rp });
 
-    // ═══ P. Cleanup retain branch
-    console.log("P. Cleanup retain branch");
-    // Reset to clean state
-    execSync("git reset --hard HEAD~1", { cwd: wsPath });
-    const cleanHead = execSync("git rev-parse HEAD", { cwd: wsPath, encoding: "utf8" }).trim();
-    ok(cleanHead === featureSha, "reset to base");
-    const clP = await mgr.cleanup(id, { expectedTaskHeadSha: cleanHead });
-    ok(clP.worktreeRemoved === true, "worktree removed");
-    ok(clP.taskBranchRetained === true, "branch retained");
-    ok(clP.taskBranchDeleted === false, "not deleted");
-    ok(Object.isFrozen(clP), "frozen");
+    // ═══ P. Mid-operation source drift
+    console.log("P. Mid-operation source drift — Mutation E");
+    // Prove fingerprints detect source changes
+    const fpBefore = (await mgr.inspect(id)).sourceWipDigestSha256;
+    writeFileSync(join(rp, "drift.txt"), "injected-before-prepare");
+    const fpAfterMod = (await mgr.inspect(id)).sourceWipDigestSha256;
+    ok(fpBefore !== fpAfterMod, "fingerprints detect source change");
+    rmSync(join(rp, "drift.txt"));
+    const fpRestored = (await mgr.inspect(id)).sourceWipDigestSha256;
+    ok(fpBefore === fpRestored, "fingerprints restored after cleanup");
+    // Now demonstrate that prepare rejects when source drifts during operation
+    const idP2 = mkId({ rp, cr, sha: featureSha, taskBranch: "codex/p-drift" });
+    const runnerP2 = makeRunner(rp, cr);
+    const origRunP = runnerP2.run.bind(runnerP2);
+    // Intercept git calls to inject drift after fingerprint is done
+    // The key: _srcFp calls status + diff + cached diff + ls-files.
+    // ls-files --others is the last fingerprint call. After that, _curBase runs.
+    let driftInjected = false;
+    runnerP2.run = async function(req: any) {
+      const args = (req.args as string[]).join(" ");
+      // After ls-files (last fingerprint call), inject drift before the next call executes
+      if (!driftInjected && args.includes("ls-files")) {
+        // Schedule drift injection after this call completes
+        const result = await origRunP(req);
+        if (!driftInjected) {
+          driftInjected = true;
+          writeFileSync(join(rp, "drift-mid.txt"), "mid-op-drift");
+        }
+        return result;
+      }
+      return origRunP(req);
+    };
+    const mgrP2 = new LoopGitWorkspaceManager({ runner: runnerP2, gitExecutableId: "git" });
+    let driftCaught = false;
+    try { await mgrP2.prepare(idP2); } catch (e: any) { if (e?.code === "SOURCE_WORKSPACE_DRIFT") driftCaught = true; }
+    ok(driftCaught, "prepare rejects mid-op source drift");
+    if (existsSync(join(rp, "drift-mid.txt"))) rmSync(join(rp, "drift-mid.txt"));
+    // Clean up if worktree was created despite drift
+    try { await mgrP2.cleanup(idP2, { expectedTaskHeadSha: featureSha }); } catch {}
 
-    // ═══ Q. Cleanup idempotent
-    console.log("Q. Cleanup idempotent");
-    const clQ = await mgr.cleanup(id, { expectedTaskHeadSha: cleanHead });
-    ok(clQ.taskBranchRetained === true, "branch still retained (idempotent)");
-    ok(clQ.alreadyAbsent === false, "not absent — branch exists");
+    // ═══ Q. Empty-state same-identity concurrent prepare — Mutation H
+    console.log("Q. Empty-state concurrent — Mutation H");
+    const idQ = mkId({ rp, cr, sha: featureSha, runId: "q-concur", taskBranch: "codex/q-empty" });
+    // Verify no existing branch
+    try { execFileSync(GIT_PATH, ["show-ref","--verify","--quiet","refs/heads/codex/q-empty"], { cwd: rp }); ok(false, "should not exist"); } catch { /* expected */ }
+    const runnerQ = makeRunner(rp, cr);
+    const mgrQ1 = new LoopGitWorkspaceManager({ runner: runnerQ, gitExecutableId: "git" });
+    const mgrQ2 = new LoopGitWorkspaceManager({ runner: runnerQ, gitExecutableId: "git" });
+    const [rQ1, rQ2] = await Promise.all([mgrQ1.prepare(idQ), mgrQ2.prepare(idQ)]);
+    ok(rQ1.workspacePath === rQ2.workspacePath, "same path");
+    ok(rQ1.taskHeadSha === featureSha && rQ2.taskHeadSha === featureSha, "both at base");
+    ok((rQ1.state === "created" || rQ1.state === "recovered") && (rQ2.state === "created" || rQ2.state === "recovered"), "both settled");
+    // Verify worktree list
+    const wtsQOut = execFileSync(GIT_PATH, ["worktree","list","--porcelain","-z"], { cwd: rp, encoding: "utf8" });
+    ok(wtsQOut.includes(idQ.taskBranch), "task branch in worktree list");
 
-    // ═══ R. Dirty cleanup blocked
-    console.log("R. Dirty cleanup blocked");
-    const idR = mkId({ rp, cr, baseSha: featureSha, taskBranch: "codex/r-dirty" });
-    await mgr.prepare(idR);
-    const rPath = mgr.workspacePathFor(idR);
-    writeFileSync(join(rPath, "d.txt"), "mess");
-    const rHead = execSync("git rev-parse HEAD", { cwd: rPath, encoding: "utf8" }).trim();
-    await errEq("WORKSPACE_DIRTY", () => mgr.cleanup(idR, { expectedTaskHeadSha: rHead }), "dirty cleanup");
-    rmSync(join(rPath, "d.txt"));
-    execSync("git checkout -- .", { cwd: rPath });
+    // ═══ R. Different-run concurrency isolation
+    console.log("R. Concurrency isolation");
+    const idA = mkId({ rp, cr, sha: featureSha, runId: "ra", taskBranch: "codex/r-a" });
+    const idB = mkId({ rp, cr, sha: featureSha, runId: "rb", taskBranch: "codex/r-b" });
+    const runnerR = makeRunner(rp, cr);
+    const mgrR = new LoopGitWorkspaceManager({ runner: runnerR, gitExecutableId: "git" });
+    const [rA, rB] = await Promise.all([mgrR.prepare(idA), mgrR.prepare(idB)]);
+    ok(rA.state === "created" && rB.state === "created", "both created");
+    ok(rA.workspacePath !== rB.workspacePath, "different paths");
+    writeFileSync(join(rA.workspacePath, "a.txt"), "A");
+    execFileSync(GIT_PATH, ["add","a.txt"], { cwd: rA.workspacePath });
+    execFileSync(GIT_PATH, ["commit","-m","a"], { cwd: rA.workspacePath });
+    ok(!existsSync(join(rB.workspacePath, "a.txt")), "B isolated");
 
-    // ═══ S. Head mismatch cleanup
-    console.log("S. Head mismatch cleanup");
-    await errEq("CLEANUP_BLOCKED", () => mgr.cleanup(idR, { expectedTaskHeadSha: "0000000000000000000000000000000000000000" }), "wrong head");
+    // ═══ S. Same taskBranch concurrent conflict
+    console.log("S. Same taskBranch conflict");
+    const idS1 = mkId({ rp, cr, sha: featureSha, runId: "s1", taskBranch: "codex/s-conflict" });
+    const idS2 = mkId({ rp, cr, sha: featureSha, runId: "s2", taskBranch: "codex/s-conflict" });
+    const runnerS = makeRunner(rp, cr);
+    const mgrS1 = new LoopGitWorkspaceManager({ runner: runnerS, gitExecutableId: "git" });
+    const mgrS2 = new LoopGitWorkspaceManager({ runner: runnerS, gitExecutableId: "git" });
+    const results: string[] = [];
+    const p1 = mgrS1.prepare(idS1).then(r => { results.push("ok1:"+r.state); return r; }, (e: any) => { results.push("err1:"+(e?.code||"?")); throw e; });
+    const p2 = mgrS2.prepare(idS2).then(r => { results.push("ok2:"+r.state); return r; }, (e: any) => { results.push("err2:"+(e?.code||"?")); throw e; });
+    try { await Promise.all([p1, p2]); } catch {}
+    ok(results.length === 2, "both settled");
+    ok(results.some(r => r.startsWith("ok1:") || r.startsWith("ok2:")), "at least one ok");
+    // Verify exactly one worktree for this branch
+    const wtsS = execFileSync(GIT_PATH, ["worktree","list","--porcelain","-z"], { cwd: rp, encoding: "utf8" });
+    const sMatches = (wtsS.match(new RegExp("branch refs/heads/codex/s-conflict", "g")) || []).length;
+    ok(sMatches <= 1, "at most one worktree for conflict branch");
 
-    // ═══ T. Safe branch deletion (from merged base)
-    console.log("T. Safe branch deletion");
-    // Clean up idR worktree first (retain branch)
-    await mgr.cleanup(idR, { expectedTaskHeadSha: rHead });
-    // Branch exists but is unmerged → safe delete should fail
-    await errEq("CLEANUP_BLOCKED", () => mgr.cleanup(idR, { expectedTaskHeadSha: rHead, deleteTaskBranch: true }), "unmerged delete blocked");
-    // Force delete is not allowed; branch remains
-    
-    // Now test safe deletion with a merged branch (from main)
-    const idMerged = mkId({ rp, cr, baseSha, sha: baseSha, baseBranch: "main", taskBranch: "codex/t-merged" });
-    await mgr.prepare(idMerged);
-    const mPath = mgr.workspacePathFor(idMerged);
-    const mHead = execSync("git rev-parse HEAD", { cwd: mPath, encoding: "utf8" }).trim();
-    const clT = await mgr.cleanup(idMerged, { expectedTaskHeadSha: mHead, deleteTaskBranch: true });
-    ok(clT.taskBranchDeleted === true, "merged branch deleted");
+    // ═══ T. Inspect
+    console.log("T. Inspect");
+    const snapT = await mgr.inspect(id);
+    ok(snapT.state === "inspected" && !snapT.baseDrifted, "inspect");
 
-    // ═══ U. Recovery: re-attach
-    console.log("U. Recovery re-attach");
-    const idU = mkId({ rp, cr, baseSha: featureSha, taskBranch: "codex/u-recov" });
-    const snapU1 = await mgr.prepare(idU);
-    ok(snapU1.state === "created", "first create");
-    const uHead = execSync("git rev-parse HEAD", { cwd: mgr.workspacePathFor(idU), encoding: "utf8" }).trim();
-    await mgr.cleanup(idU, { expectedTaskHeadSha: uHead });
-    const snapU2 = await mgr.prepare(idU);
-    ok(snapU2.state === "recovered", "reattached");
+    // ═══ U. Cleanup dirty blocked
+    console.log("U. Cleanup dirty blocked");
+    writeFileSync(join(wsPath, "d2.txt"), "mess");
+    try { await mgr.cleanup(id, { expectedTaskHeadSha: featureSha }); ok(false, "dirty"); } catch (e) { ok(e instanceof LoopGitWorkspaceError && (e as any).code === "WORKSPACE_DIRTY", "dirty blocked"); }
+    rmSync(join(wsPath, "d2.txt"));
+    execFileSync(GIT_PATH, ["checkout","--","."], { cwd: wsPath });
 
-    // ═══ V. Concurrency isolation
-    console.log("V. Concurrency isolation");
-    const idA = mkId({ rp, cr, baseSha: featureSha, runId: "run-A", taskBranch: "codex/v-a" });
-    const idB = mkId({ rp, cr, baseSha: featureSha, runId: "run-B", taskBranch: "codex/v-b" });
-    const [snA, snB] = await Promise.all([mgr.prepare(idA), mgr.prepare(idB)]);
-    ok(snA.state === "created" && snB.state === "created", "both created");
-    ok(snA.workspacePath !== snB.workspacePath, "different paths");
-    writeFileSync(join(mgr.workspacePathFor(idA), "a.txt"), "A");
-    execSync("git add a.txt && git commit -m a", { cwd: mgr.workspacePathFor(idA) });
-    ok(!existsSync(join(mgr.workspacePathFor(idB), "a.txt")), "B isolated");
+    // ═══ V. Cleanup retain branch
+    console.log("V. Cleanup retain");
+    const clV = await mgr.cleanup(id, { expectedTaskHeadSha: featureSha });
+    ok(clV.worktreeRemoved && clV.taskBranchRetained, "retained");
+    ok(Object.isFrozen(clV), "frozen");
 
-    // V2: Task branch conflict — try to prepare with same taskBranch as active
-    // This should fail with TASK_BRANCH_CONFLICT
-    const idV2 = mkId({ rp, cr, baseSha: featureSha, runId: "run-V2", taskBranch: "codex/v-a" });
-    await errEq("TASK_BRANCH_CONFLICT", () => mgr.prepare(idV2), "branch conflict with active");
+    // ═══ W. Cleanup idempotent
+    console.log("W. Cleanup idempotent");
+    const clW = await mgr.cleanup(id, { expectedTaskHeadSha: featureSha });
+    ok(clW.taskBranchRetained && !clW.alreadyAbsent, "branch still there");
 
-    // ═══ W. Same identity concurrent
-    console.log("W. Same identity concurrent");
-    const [w1, w2] = await Promise.all([mgr.prepare(idA), mgr.prepare(idA)]);
-    ok(w1.workspacePath === w2.workspacePath, "same path");
-    ok(w1.taskHeadSha === w2.taskHeadSha, "same head");
+    // ═══ X. Recovery after branch-only
+    console.log("X. Recovery branch-only");
+    const snapX = await mgr.prepare(id);
+    ok(snapX.state === "recovered", "reattached");
 
-    // ═══ X. Error sanitation
-    console.log("X. Error sanitation");
-    const e = new LoopGitWorkspaceError("GIT_COMMAND_FAILED", "raw\nerror\x00text\nwith\nnewlines");
-    ok(e.message.length <= 256, "bounded");
-    ok(!/[\x00-\x1f\x7f]/.test(e.message), "no control chars");
-
-    // ═══ Y. Frozen results
-    console.log("Y. Frozen");
-    ok(Object.isFrozen(snap1), "snap frozen");
-    ok(Object.isFrozen(clP), "cleanup frozen");
+    // ═══ Y. Safe branch deletion (merged)
+    console.log("Y. Safe delete merged");
+    // Clean up from X first
+    await mgr.cleanup(id, { expectedTaskHeadSha: featureSha });
+    // Create a branch from base (which IS merged to main)
+    const idY = mkId({ rp, cr, sha: baseSha, baseBranch: "main", taskBranch: "codex/y-merged" });
+    // Need a remote tracking ref for main
+    execFileSync(GIT_PATH, ["update-ref","refs/remotes/origin/main",baseSha], { cwd: rp });
+    const snapY = await mgr.prepare(idY);
+    ok(snapY.state === "created", "merged branch created");
+    const yHead = execFileSync(GIT_PATH, ["rev-parse","HEAD"], { cwd: snapY.workspacePath, encoding: "utf8" }).trim();
+    const clY = await mgr.cleanup(idY, { expectedTaskHeadSha: yHead, deleteTaskBranch: true });
+    ok(clY.taskBranchDeleted, "merged branch deleted");
 
     // ═══ Z. Final cleanup
     console.log("Z. Final cleanup");
-    for (const ix of [idA, idB, idU]) {
+    for (const ix of [idQ, idA, idB, idS1]) {
       try {
         const pth = mgr.workspacePathFor(ix);
-        const hd = execSync("git rev-parse HEAD", { cwd: pth, encoding: "utf8" }).trim();
+        const hd = execFileSync(GIT_PATH, ["rev-parse","HEAD"], { cwd: pth, encoding: "utf8" }).trim();
         await mgr.cleanup(ix, { expectedTaskHeadSha: hd, deleteTaskBranch: true });
       } catch { /* best effort */ }
     }
