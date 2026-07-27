@@ -231,6 +231,44 @@ async function main() {
     ok(Object.isFrozen(s1), "snap frozen");
     ok(Object.isFrozen(clL), "cleanup frozen");
 
+    // ═══ R. Remote base: missing ref → BASE_SHA_MISMATCH
+    console.log("R. Remote base missing");
+    // Delete the remote tracking ref
+    execFileSync(GP, ["update-ref","-d","refs/remotes/origin/feature/loop-runtime-v1"], { cwd: rp });
+    try { await mgr.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/r-missing" })); ok(false, "should fail"); } catch (e: any) { ok(e?.code === "BASE_SHA_MISMATCH", "missing ref→"+e?.code); }
+    // Restore
+    execFileSync(GP, ["update-ref","refs/remotes/origin/feature/loop-runtime-v1",featSha], { cwd: rp });
+
+    // ═══ S. Prunable/broken worktree detection
+    console.log("S. Prunable/broken worktree");
+    const idS = mkId({ rp, cr, sha: featSha, taskBranch: "codex/s-broken" });
+    const sS = await mgr.prepare(idS);
+    const sPath = sS.workspacePath;
+    // Delete the worktree directory to simulate broken/missing path
+    rmSync(sPath, { recursive: true, force: true });
+    // Now prepare should detect the broken path registration
+    try { await mgr.prepare(idS); ok(false, "should fail"); } catch (e: any) { ok(e?.code === "WORKSPACE_CORRUPT", "broken path→"+e?.code); }
+    // Clean up
+    try { execFileSync(GP, ["worktree","prune"], { cwd: rp }); } catch {}
+    try { execFileSync(GP, ["branch","-D","codex/s-broken"], { cwd: rp }); } catch {}
+
+    // ═══ T. Missing worktree path detection
+    console.log("T. Missing worktree path");
+    // Create worktree, then delete its directory
+    const idT = mkId({ rp, cr, sha: featSha, taskBranch: "codex/t-missing" });
+    const sT = await mgr.prepare(idT);
+    rmSync(sT.workspacePath, { recursive: true, force: true });
+    try { await mgr.prepare(idT); ok(false, "should fail"); } catch (e: any) { ok(e?.code === "WORKSPACE_CORRUPT", "missing path→"+e?.code); }
+    try { execFileSync(GP, ["branch","-D","codex/t-missing"], { cwd: rp }); } catch {}
+
+    // ═══ U. Detached worktree → WORKSPACE_CORRUPT
+    console.log("U. Detached worktree");
+    const idU = mkId({ rp, cr, sha: featSha, taskBranch: "codex/u-detached" });
+    const uPath = mgr.workspacePathFor(idU);
+    execFileSync(GP, ["worktree","add","--detach",uPath,featSha], { cwd: rp });
+    try { await mgr.prepare(idU); ok(false, "should fail"); } catch (e: any) { ok(e?.code === "WORKSPACE_CORRUPT" || e?.code === "TASK_BRANCH_CONFLICT", "detached→"+e?.code); }
+    try { execFileSync(GP, ["worktree","remove","--force",uPath], { cwd: rp }); } catch {}
+
     // ═══ Z. Final cleanup
     console.log("Z. Final cleanup");
     for (const ix of [idH, idA, idB, idI]) {

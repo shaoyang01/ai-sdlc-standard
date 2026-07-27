@@ -214,7 +214,11 @@ export class LoopGitWorkspaceManager {
       const delBr = o.deleteTaskBranch === true;
       const wsPath = this.workspacePathFor(identity);
       const wts = await this._wtList(identity.repositoryPath);
-      const f = wts.find(w => w.p === wsPath && !w.prunable && w.pExists);
+      // Check for corrupt exact-path registrations BEFORE filtering
+      const exactAny = wts.filter(w => w.p === wsPath);
+      if (exactAny.some(w => w.prunable)) fail("WORKSPACE_CORRUPT", "prunable exact path");
+      if (exactAny.some(w => !w.prunable && !w.pExists)) fail("WORKSPACE_CORRUPT", "broken exact path");
+      const f = exactAny.find(w => !w.prunable && w.pExists);
 
       // If branch exists, verify HEAD matches
       const brRef = `refs/heads/${identity.taskBranch}`;
@@ -333,7 +337,13 @@ export class LoopGitWorkspaceManager {
   }
 
   private async _curBase(identity: LoopRunIdentity): Promise<string> {
-    return (await this._gitR(identity.repositoryPath, ["rev-parse","--verify",`refs/remotes/origin/${identity.baseBranch}^{commit}`], [0])).stdout.trim();
+    const ref = `refs/remotes/origin/${identity.baseBranch}^{commit}`;
+    const req: LoopPosixProcessRequest = { executableId: this.gitId, cwd: identity.repositoryPath, args: ["rev-parse","--verify",ref], timeoutMs: this.gTo, maxStdoutBytes: this.mxOut, maxStderrBytes: this.mxOut };
+    let r: LoopPosixProcessResult;
+    try { r = await this.runner.run(req); } catch { fail("GIT_COMMAND_FAILED", "runner failed"); }
+    if (r.status !== "exited" || r.exitCode === null || r.exitCode === undefined || !Number.isSafeInteger(r.exitCode) || r.signal !== null || r.stdoutTruncated || r.stderrTruncated) fail("GIT_COMMAND_FAILED", "bad result");
+    if (r.exitCode !== 0) fail("BASE_SHA_MISMATCH", "remote base not found");
+    return r.stdout.trim();
   }
 
   private async _isAnc(cwd: string, a: string, d: string): Promise<boolean> {
@@ -382,12 +392,16 @@ export class LoopGitWorkspaceManager {
 
   private async _findWt(identity: LoopRunIdentity, wsPath: string): Promise<{state:"exact"|"branch_only"|"none";taskHead:string}> {
     const wts = await this._wtList(identity.repositoryPath);
-    const bw = wts.filter(w => w.branch === identity.taskBranch && !w.prunable);
-    const pw = wts.find(w => w.p === wsPath && !w.prunable);
-    const prunablePw = wts.find(w => w.p === wsPath && w.prunable);
-    if (prunablePw) fail("WORKSPACE_CORRUPT", "prunable exact path");
+    // Check for corrupt exact-path registrations
+    const exactAny = wts.filter(w => w.p === wsPath);
+    if (exactAny.some(w => w.prunable)) fail("WORKSPACE_CORRUPT", "prunable exact path");
+    if (exactAny.some(w => !w.prunable && !w.pExists)) fail("WORKSPACE_CORRUPT", "broken exact path");
+    const pw = exactAny.find(w => !w.prunable && w.pExists);
+    const bw = wts.filter(w => w.branch === identity.taskBranch && !w.prunable && w.pExists);
     if (bw.length > 1) fail("TASK_BRANCH_CONFLICT", "multiple worktrees for branch");
     const b = bw[0] || null;
+    // Check for detached
+    if (pw && pw.detached) fail("WORKSPACE_CORRUPT", "detached HEAD");
     if (b && pw && b.p === pw.p) return { state: "exact", taskHead: b.h };
     if (b && !pw) fail("TASK_BRANCH_CONFLICT", "branch at other path");
     if (!b && pw) fail("WORKTREE_CONFLICT", "path used by other branch");
@@ -395,7 +409,6 @@ export class LoopGitWorkspaceManager {
     const lr = this._safeLstat(wsPath);
     if (lr === "exists") fail("WORKTREE_CONFLICT", "path exists unregistered");
     if (lr === "error") fail("WORKSPACE_IO_FAILED", "lstat failed");
-    // Check branch existence via show-ref
     const brCheck = await this._gitR(identity.repositoryPath, ["show-ref","--verify","--quiet",`refs/heads/${identity.taskBranch}`], [0, 1]);
     if (brCheck.exitCode === 0) {
       const h = (await this._gitR(identity.repositoryPath, ["rev-parse","--verify",`refs/heads/${identity.taskBranch}`], [0])).stdout.trim();
@@ -405,8 +418,9 @@ export class LoopGitWorkspaceManager {
   }
 
   private async _verifyWs(identity: LoopRunIdentity, wsPath: string, expHead: string): Promise<void> {
-    const brOut = (await this._gitR(wsPath, ["symbolic-ref","--quiet","--short","HEAD"], [0])).stdout.trim();
-    if (brOut !== identity.taskBranch) fail("WORKSPACE_CORRUPT", "branch mismatch");
+    const brCheck = await this._gitR(wsPath, ["symbolic-ref","--quiet","--short","HEAD"], [0, 1]);
+    if (brCheck.exitCode !== 0) fail("WORKSPACE_CORRUPT", "detached HEAD");
+    if (brCheck.stdout.trim() !== identity.taskBranch) fail("WORKSPACE_CORRUPT", "branch mismatch");
     const wsHead = (await this._gitR(wsPath, ["rev-parse","--verify","HEAD"], [0])).stdout.trim();
     const brRef = (await this._gitR(identity.repositoryPath, ["rev-parse","--verify",`refs/heads/${identity.taskBranch}`], [0])).stdout.trim();
     if (wsHead !== brRef) fail("WORKSPACE_CORRUPT", "HEAD/ref mismatch");
