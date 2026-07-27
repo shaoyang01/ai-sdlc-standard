@@ -127,7 +127,20 @@ export type LoopRunJournalErrorCode =
   | "EVENT_SEQUENCE_CONFLICT"
   | "TERMINAL_RUN"
   | "STORE_CLOSED"
+  | "STORE_BUSY"
+  | "STORE_FAILURE"
   | "STORE_CORRUPT";
+
+/** Options for LoopRunStore. busyTimeoutMs defaults to 2000 (integer 1..5000). */
+export type LoopRunStoreOptions = Readonly<{
+  busyTimeoutMs?: number;
+}>;
+
+/** A fully verified, immutable read snapshot of one run. */
+export type LoopRunSnapshot = Readonly<{
+  state: LoopRunState;
+  events: readonly LoopRunEvent[];
+}>;
 
 const MAX_ERROR_MESSAGE_LENGTH = 256;
 
