@@ -1,626 +1,228 @@
 // LOOP Executor Kernel — Controlled POSIX Process Runner
-// ========================================================
 // macOS/Linux host process runner with executable allowlist, cwd containment,
-// explicit env, bounded streams, and POSIX process-group timeout/cleanup.
-//
-// R1: Lifecycle state model with mainError/cleanupError separation,
-// single idempotent cleanup entry, post-settle signal guard, typed stdio
-// boundary, copied bounded streams, executable permission mode pinning,
-// runtime input validation.
-//
-// Dependencies on POSIX process-group semantics:
-// - Uses negative PID signaling (kill(-pid, sig)) to target the entire group.
-// - Requires detached:true spawn for reliable process-group ownership.
-// - No Windows support. No network filesystem guarantees.
-// - cwd containment assumes allowed roots are not replaced by untrusted
-//   processes between validation and spawn. Node/POSIX API does not provide
-//   kernel-level openat-style cwd pinning.
+// explicit env, bounded streams, POSIX process-group timeout/cleanup.
+// Final correction: optional args, listener PID cleanup, finalize settlement.
 
 import type { ChildProcess } from "node:child_process";
 const childProcess = require("node:child_process") as typeof import("node:child_process");
 import * as fs from "node:fs";
+import { EventEmitter } from "node:events";
 import { isAbsolute, sep } from "node:path";
 
-// ═══════════════════════════════════════════════════════════════
-// Types
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════ Types
+export type LoopPosixExecutablePolicy = Readonly<{ id: string; executablePath: string; fixedArgs?: readonly string[]; allowDynamicArgs?: boolean; stdinMode?: "forbidden"|"optional"|"required" }>;
+export type LoopPosixProcessRunnerOptions = Readonly<{ executables: readonly LoopPosixExecutablePolicy[]; allowedCwdRoots: readonly string[]; fixedEnv?: Readonly<Record<string,string>>; allowedRequestEnvKeys?: readonly string[]; defaultTimeoutMs?: number; terminationGraceMs?: number; defaultMaxStdoutBytes?: number; defaultMaxStderrBytes?: number; maxStdinBytes?: number }>;
+export type LoopPosixProcessRequest = Readonly<{ executableId: string; args?: readonly string[]; cwd: string; stdin?: string | Uint8Array; env?: Readonly<Record<string,string>>; timeoutMs?: number; maxStdoutBytes?: number; maxStderrBytes?: number }>;
+export type LoopPosixProcessResult = Readonly<{ status: "exited"|"timed_out"; exitCode: number|null; signal: NodeJS.Signals|null; durationMs: number; stdout: string; stderr: string; stdoutBytesReceived: number; stderrBytesReceived: number; stdoutTruncated: boolean; stderrTruncated: boolean; termSignalSent: boolean; killSignalSent: boolean }>;
+export type LoopPosixProcessRunnerErrorCode = "INVALID_INPUT"|"UNSUPPORTED_PLATFORM"|"EXECUTABLE_NOT_ALLOWED"|"EXECUTABLE_INVALID"|"EXECUTABLE_CHANGED"|"CWD_NOT_ALLOWED"|"CWD_INVALID"|"ENV_NOT_ALLOWED"|"PROCESS_SPAWN_FAILED"|"PROCESS_IO_FAILED"|"PROCESS_CLEANUP_FAILED";
 
-export type LoopPosixExecutablePolicy = Readonly<{
-  id: string; executablePath: string; fixedArgs?: readonly string[];
-  allowDynamicArgs?: boolean; stdinMode?: "forbidden" | "optional" | "required";
-}>;
-export type LoopPosixProcessRunnerOptions = Readonly<{
-  executables: readonly LoopPosixExecutablePolicy[];
-  allowedCwdRoots: readonly string[];
-  fixedEnv?: Readonly<Record<string, string>>;
-  allowedRequestEnvKeys?: readonly string[];
-  defaultTimeoutMs?: number; terminationGraceMs?: number;
-  defaultMaxStdoutBytes?: number; defaultMaxStderrBytes?: number;
-  maxStdinBytes?: number;
-}>;
-export type LoopPosixProcessRequest = Readonly<{
-  executableId: string; args?: readonly string[]; cwd: string;
-  stdin?: string | Uint8Array; env?: Readonly<Record<string, string>>;
-  timeoutMs?: number; maxStdoutBytes?: number; maxStderrBytes?: number;
-}>;
-export type LoopPosixProcessResult = Readonly<{
-  status: "exited" | "timed_out"; exitCode: number | null; signal: NodeJS.Signals | null;
-  durationMs: number; stdout: string; stderr: string;
-  stdoutBytesReceived: number; stderrBytesReceived: number;
-  stdoutTruncated: boolean; stderrTruncated: boolean;
-  termSignalSent: boolean; killSignalSent: boolean;
-}>;
-export type LoopPosixProcessRunnerErrorCode =
-  | "INVALID_INPUT" | "UNSUPPORTED_PLATFORM" | "EXECUTABLE_NOT_ALLOWED"
-  | "EXECUTABLE_INVALID" | "EXECUTABLE_CHANGED" | "CWD_NOT_ALLOWED"
-  | "CWD_INVALID" | "ENV_NOT_ALLOWED" | "PROCESS_SPAWN_FAILED"
-  | "PROCESS_IO_FAILED" | "PROCESS_CLEANUP_FAILED";
+// ═══════════════════════════════════════ Constants
+const MAX_MSG=256, EXEC_RE=/^[a-z][a-z0-9_-]{0,63}$/, ENV_KEY_RE=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const DANGER_KEYS=["LD_PRELOAD","LD_LIBRARY_PATH","DYLD_INSERT_LIBRARIES","DYLD_LIBRARY_PATH","NODE_OPTIONS","BASH_ENV","ENV"];
+const MAX_ARGS=128,MAX_ARG_B=4096,MAX_ARGS_TOTAL=32768,MAX_ENV=128,MAX_ENV_VAL=4096,MAX_ENV_TOTAL=32768,MAX_ALLOWED_KEYS=128;
+const DEF_TO=120000,DEF_GRACE=2000,DEF_SO=1048576,DEF_SE=262144,DEF_SI=1048576,MAX_SI=16777216,MAX_OUT=16777216,MIN_TO=100,MAX_TO=600000,MIN_GR=10,MAX_GR=10000;
 
-// ═══════════════════════════════════════════════════════════════
-// Constants
-// ═══════════════════════════════════════════════════════════════
+function sn(msg:string):string{return msg.replace(/[\x00-\x1f\x7f-\x9f]/g," ").slice(0,MAX_MSG)}
+export class LoopPosixProcessRunnerError extends Error{readonly code:LoopPosixProcessRunnerErrorCode;constructor(code:LoopPosixProcessRunnerErrorCode,msg:string){super(sn(msg));this.name="LoopPosixProcessRunnerError";this.code=code}}
+function fail(c:LoopPosixProcessRunnerErrorCode,m:string):never{throw new LoopPosixProcessRunnerError(c,m)}
+function tf(c:LoopPosixProcessRunnerErrorCode,m:string):LoopPosixProcessRunnerError{return new LoopPosixProcessRunnerError(c,m)}
+function vS(v:unknown,l:string):string{if(typeof v!=="string"||v.trim().length===0||v!==v.trim())fail("INVALID_INPUT",`${l} invalid`);return v}
+function vO(v:unknown,l:string):Record<string,unknown>{if(v===null||typeof v!=="object"||Array.isArray(v))fail("INVALID_INPUT",`${l} must be object`);return v as Record<string,unknown>}
+function vA(v:unknown,l:string):unknown[]{if(!Array.isArray(v))fail("INVALID_INPUT",`${l} must be array`);return v}
+function vI(v:unknown,min:number,max:number,l:string):number{if(typeof v!=="number"||!Number.isSafeInteger(v)||v<min||v>max)fail("INVALID_INPUT",`${l} out of range`);return v}
+function sB(s:string):number{return Buffer.byteLength(s,"utf8")}
 
-const MAX_ERROR_MSG = 256;
-const EXEC_ID_RE = /^[a-z][a-z0-9_-]{0,63}$/;
-const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
-const DANGEROUS_ENV_KEYS = ["LD_PRELOAD","LD_LIBRARY_PATH","DYLD_INSERT_LIBRARIES","DYLD_LIBRARY_PATH","NODE_OPTIONS","BASH_ENV","ENV"];
-const MAX_ARGS = 128, MAX_ARG_B = 4096, MAX_ARGS_TOTAL_B = 32768;
-const MAX_ENV = 128, MAX_ENV_VAL_B = 4096, MAX_ENV_TOTAL_B = 32768;
-const MAX_ALLOWED_ENV_KEYS = 128;
-const DEF_TO = 120000, DEF_GRACE = 2000, DEF_SO = 1_048_576, DEF_SE = 262144, DEF_SI = 1_048_576;
-const MAX_SI = 16_777_216, MAX_OUT = 16_777_216;
-const MIN_TO = 100, MAX_TO = 600_000, MIN_GRACE = 10, MAX_GRACE = 10_000;
+// ═══════════════════════════════════════ Executable
+type PExe={id:string;path:string;dev:number;ino:number;perm:number;fixed:readonly string[];dyn:boolean;sm:"forbidden"|"optional"|"required"}
 
-function sanitize(msg: string): string { return msg.replace(/[\x00-\x1f\x7f-\x9f]/g," ").slice(0,MAX_ERROR_MSG); }
-export class LoopPosixProcessRunnerError extends Error {
-  readonly code: LoopPosixProcessRunnerErrorCode;
-  constructor(code: LoopPosixProcessRunnerErrorCode, message: string) { super(sanitize(message)); this.name="LoopPosixProcessRunnerError"; this.code=code; }
+function valExe(p:LoopPosixExecutablePolicy):PExe{
+  const o=vO(p,"policy"),id=vS(o.id,"id");
+  if(!EXEC_RE.test(id))fail("EXECUTABLE_INVALID","id format");
+  const pa=vS(o.executablePath,"path");
+  if(!isAbsolute(pa))fail("EXECUTABLE_INVALID","not absolute");
+  let s:fs.Stats;try{s=fs.lstatSync(pa)}catch{fail("EXECUTABLE_INVALID","not found")}
+  if(s.isSymbolicLink())fail("EXECUTABLE_INVALID","symlink");
+  if(!s.isFile())fail("EXECUTABLE_INVALID","not file");
+  const pm=s.mode&0o7777;if((s.mode&0o111)===0)fail("EXECUTABLE_INVALID","no exec bit");
+  let r:string;try{r=fs.realpathSync(pa)}catch{fail("EXECUTABLE_INVALID","realpath")}
+  if(r!==pa)fail("EXECUTABLE_INVALID","not canonical");
+  const fa:string[]=[];
+  if(o.fixedArgs!==undefined){vA(o.fixedArgs,"fixedArgs");for(const a of o.fixedArgs as unknown[]){if(typeof a!=="string")fail("INVALID_INPUT","arg not string");if(a.includes("\x00"))fail("INVALID_INPUT","NUL");if(sB(a)>MAX_ARG_B)fail("INVALID_INPUT","arg too long");fa.push(a)}if(fa.length>MAX_ARGS)fail("INVALID_INPUT","too many");if(fa.reduce((t,a)=>t+sB(a),0)>MAX_ARGS_TOTAL)fail("INVALID_INPUT","total too large")}
+  if(o.allowDynamicArgs!==undefined&&typeof o.allowDynamicArgs!=="boolean")fail("INVALID_INPUT","dynArgs must be boolean");
+  const ad=o.allowDynamicArgs===true;
+  const sm=(o.stdinMode??"optional")as string;
+  if(sm!=="forbidden"&&sm!=="optional"&&sm!=="required")fail("INVALID_INPUT","stdinMode");
+  return{id,path:pa,dev:s.dev,ino:s.ino,perm:pm,fixed:Object.freeze([...fa]),dyn:ad,sm}
 }
-function fail(code: LoopPosixProcessRunnerErrorCode, msg: string): never { throw new LoopPosixProcessRunnerError(code, msg); }
-function typedFail(code: LoopPosixProcessRunnerErrorCode, msg: string): LoopPosixProcessRunnerError { return new LoopPosixProcessRunnerError(code, msg); }
 
-// ── validation ──
-function vStr(v: unknown, label: string): string {
-  if (typeof v !== "string" || v.trim().length === 0 || v !== v.trim()) fail("INVALID_INPUT", `${label} must be trimmed non-empty string`);
-  return v;
+function revalExe(pe:PExe):void{
+  let s:fs.Stats;try{s=fs.lstatSync(pe.path)}catch{fail("EXECUTABLE_CHANGED","gone")}
+  if(s.isSymbolicLink())fail("EXECUTABLE_CHANGED","symlink");
+  if(!s.isFile())fail("EXECUTABLE_CHANGED","not file");
+  if((s.mode&0o111)===0)fail("EXECUTABLE_CHANGED","no exec");
+  if(s.dev!==pe.dev||s.ino!==pe.ino)fail("EXECUTABLE_CHANGED","inode");
+  if((s.mode&0o7777)!==pe.perm)fail("EXECUTABLE_CHANGED","perm");
+  let r:string;try{r=fs.realpathSync(pe.path)}catch{fail("EXECUTABLE_CHANGED","realpath")}
+  if(r!==pe.path)fail("EXECUTABLE_CHANGED","canonical")
 }
-function vObj(v: unknown, label: string): Record<string, unknown> {
-  if (v === null || typeof v !== "object" || Array.isArray(v)) fail("INVALID_INPUT", `${label} must be a non-null non-array object`);
-  return v as Record<string, unknown>;
+
+// ═══════════════════════════════════════ cwd
+type Root={p:string;d:number;i:number}
+function valRoot(pa:string):Root{
+  if(!isAbsolute(pa))fail("INVALID_INPUT","not absolute");if(pa==="/")fail("INVALID_INPUT","no /");
+  let s:fs.Stats;try{s=fs.lstatSync(pa)}catch{fail("INVALID_INPUT","not found")}
+  if(s.isSymbolicLink())fail("INVALID_INPUT","symlink");if(!s.isDirectory())fail("INVALID_INPUT","not dir");
+  let r:string;try{r=fs.realpathSync(pa)}catch{fail("INVALID_INPUT","realpath")}
+  if(r!==pa)fail("INVALID_INPUT","not canonical");return{p:pa,d:s.dev,i:s.ino}
 }
-function vArr(v: unknown, label: string): unknown[] {
-  if (!Array.isArray(v)) fail("INVALID_INPUT", `${label} must be an array`);
-  return v;
+function revalRoot(rt:Root):void{
+  let s:fs.Stats;try{s=fs.lstatSync(rt.p)}catch{fail("CWD_INVALID","root gone")}
+  if(s.isSymbolicLink())fail("CWD_INVALID","root symlink");if(!s.isDirectory())fail("CWD_INVALID","root not dir");
+  if(s.dev!==rt.d||s.ino!==rt.i)fail("CWD_INVALID","root inode");let r:string;try{r=fs.realpathSync(rt.p)}catch{fail("CWD_INVALID","realpath")}
+  if(r!==rt.p)fail("CWD_INVALID","root canonical")
 }
-function vInt(v: unknown, min: number, max: number, label: string): number {
-  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < min || v > max) fail("INVALID_INPUT", `${label} out of range`);
-  return v;
+function chkCwd(cwd:string,roots:readonly Root[]):Root{
+  if(!isAbsolute(cwd))fail("CWD_INVALID","not absolute");let s:fs.Stats;try{s=fs.lstatSync(cwd)}catch{fail("CWD_INVALID","not found")}
+  if(s.isSymbolicLink())fail("CWD_INVALID","symlink");if(!s.isDirectory())fail("CWD_INVALID","not dir");
+  let r:string;try{r=fs.realpathSync(cwd)}catch{fail("CWD_INVALID","realpath")}
+  if(r!==cwd)fail("CWD_INVALID","not canonical");
+  for(const rt of roots){if(cwd===rt.p||(cwd.startsWith(rt.p+sep))){revalRoot(rt);return rt}}
+  fail("CWD_NOT_ALLOWED","outside root")
 }
-function strB(s: string): number { return Buffer.byteLength(s,"utf8"); }
 
-// ═══════════════════════════════════════════════════════════════
-// Executable identity
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════ Env
+function vEnvKey(k:string):void{if(!ENV_KEY_RE.test(k))fail("INVALID_INPUT","key fmt");if(DANGER_KEYS.some(d=>d===k.toUpperCase()))fail("ENV_NOT_ALLOWED","danger key")}
 
-type PinnedExecutable = {
-  id: string; canonicalPath: string; device: number; inode: number;
-  permissionMode: number; fixedArgs: readonly string[];
-  allowDynamicArgs: boolean; stdinMode: "forbidden"|"optional"|"required";
-};
+function bEnv(fe:Record<string,string>,ak:readonly string[],re:Record<string,string>|undefined):Record<string,string>{
+  const env:Record<string,string>=Object.create(null);
+  for(const[k,v]of Object.entries(fe))env[k]=v;
+  if(re){const al=new Set(ak);for(const[k,v]of Object.entries(re)){if(!al.has(k))fail("ENV_NOT_ALLOWED","key not allowed");if(k in env)fail("ENV_NOT_ALLOWED","override");if(typeof v!=="string"||v.includes("\x00"))fail("INVALID_INPUT","val invalid");if(sB(v)>MAX_ENV_VAL)fail("INVALID_INPUT","val too long");vEnvKey(k);env[k]=v}}
+  const ks=Object.keys(env);if(ks.length>MAX_ENV)fail("INVALID_INPUT","too many env");let tb=0;for(const k of ks)tb+=sB(k)+sB(env[k]!);if(tb>MAX_ENV_TOTAL)fail("INVALID_INPUT","env total too large");return env
+}
 
-function validateExecutable(policy: LoopPosixExecutablePolicy): PinnedExecutable {
-  const po = vObj(policy, "executable policy");
-  const id = vStr(po.id, "executable.id");
-  if (!EXEC_ID_RE.test(id)) fail("EXECUTABLE_INVALID","executable id format invalid");
-  const path = vStr(po.executablePath, "executablePath");
-  if (!isAbsolute(path)) fail("EXECUTABLE_INVALID","executablePath must be absolute");
-  let s: fs.Stats;
-  try { s = fs.lstatSync(path); } catch { fail("EXECUTABLE_INVALID","executable not found"); }
-  if (s.isSymbolicLink()) fail("EXECUTABLE_INVALID","executable must not be symlink");
-  if (!s.isFile()) fail("EXECUTABLE_INVALID","executable must be regular file");
-  const permMode = s.mode & 0o7777;
-  if ((s.mode & 0o111) === 0) fail("EXECUTABLE_INVALID","executable must have executable bit");
-  let real: string;
-  try { real = fs.realpathSync(path); } catch { fail("EXECUTABLE_INVALID","realpath failed"); }
-  if (real !== path) fail("EXECUTABLE_INVALID","executable path must be canonical");
+// ═══════════════════════════════════════ Bounded collector
+class BndCol{br=0;rb=0;private cs:Buffer[]=[];tr=false;constructor(private lm:number){}push(c:Buffer):void{this.br+=c.length;if(!this.tr){const rm=this.lm-this.rb;if(c.length<=rm){this.cs.push(Buffer.from(c));this.rb+=c.length}else{if(rm>0)this.cs.push(Buffer.from(c.subarray(0,rm)));this.rb+=rm;this.tr=true}}}fin():string{return Buffer.concat(this.cs,this.rb).toString("utf8")}}
 
-  const fa: string[] = [];
-  if (po.fixedArgs !== undefined) {
-    vArr(po.fixedArgs,"fixedArgs");
-    for (const a of po.fixedArgs as unknown[]) {
-      if (typeof a !== "string") fail("INVALID_INPUT","fixedArgs items must be strings");
-      if (a.includes("\x00")) fail("INVALID_INPUT","args NUL rejected");
-      if (strB(a) > MAX_ARG_B) fail("INVALID_INPUT","arg too long");
-      fa.push(a);
-    }
-    if (fa.length > MAX_ARGS) fail("INVALID_INPUT","too many fixed args");
-    if (fa.reduce((t,a)=>t+strB(a),0) > MAX_ARGS_TOTAL_B) fail("INVALID_INPUT","fixed args total bytes exceeded");
+// ═══════════════════════════════════════ Runner
+export class LoopPosixProcessRunner{
+  private readonly es:ReadonlyMap<string,PExe>;private readonly rs:readonly Root[];
+  private readonly fe:Readonly<Record<string,string>>;private readonly ak:readonly string[];
+  private readonly dt:number;private readonly gr:number;private readonly ds:number;private readonly de:number;private readonly ms:number;
+
+  constructor(o:LoopPosixProcessRunnerOptions){
+    if(process.platform!=="darwin"&&process.platform!=="linux")fail("UNSUPPORTED_PLATFORM","os");
+    vO(o,"options");const ex=vA(o.executables,"exes")as LoopPosixExecutablePolicy[];if(ex.length===0)fail("INVALID_INPUT","empty");
+    const m=new Map<string,PExe>();const si=new Set<string>();
+    for(const p of ex){const pe=valExe(p);if(si.has(pe.id))fail("INVALID_INPUT","dup");si.add(pe.id);m.set(pe.id,pe)}this.es=m;
+    const rts=vA(o.allowedCwdRoots,"roots")as string[];if(rts.length===0)fail("INVALID_INPUT","no roots");
+    const rl:Root[]=[];const sp=new Set<string>();
+    for(const r of rts){const vr=valRoot(vS(r,"root"));if(!sp.has(vr.p)){sp.add(vr.p);rl.push(vr)}}this.rs=Object.freeze(rl);
+    const fe=o.fixedEnv??{};vO(fe,"fixedEnv");const fo:Record<string,string>=Object.create(null);
+    for(const[k,v]of Object.entries(fe)){vEnvKey(k);if(typeof v!=="string"||v.includes("\x00"))fail("INVALID_INPUT","fe val");if(sB(v)>MAX_ENV_VAL)fail("INVALID_INPUT","fe val long");fo[k]=v}
+    const fk=Object.keys(fo);if(fk.length>MAX_ENV)fail("INVALID_INPUT","fe count");let ft=0;for(const k of fk)ft+=sB(k)+sB(fo[k]!);if(ft>MAX_ENV_TOTAL)fail("INVALID_INPUT","fe total");this.fe=Object.freeze(fo);
+    const aks=o.allowedRequestEnvKeys??[];vA(aks,"akeys");const as=new Set<string>();const al:string[]=[];
+    for(const k of aks as unknown[]){if(typeof k!=="string")fail("INVALID_INPUT","akey");vEnvKey(k);if(as.has(k))fail("INVALID_INPUT","dup akey");as.add(k);al.push(k)}
+    if(al.length>MAX_ALLOWED_KEYS)fail("INVALID_INPUT","too many akeys");this.ak=Object.freeze(al);
+    this.dt=vI(o.defaultTimeoutMs??DEF_TO,MIN_TO,MAX_TO,"dto");this.gr=vI(o.terminationGraceMs??DEF_GRACE,MIN_GR,MAX_GR,"gr");
+    this.ds=vI(o.defaultMaxStdoutBytes??DEF_SO,1,MAX_OUT,"dso");this.de=vI(o.defaultMaxStderrBytes??DEF_SE,1,MAX_OUT,"dse");
+    this.ms=vI(o.maxStdinBytes??DEF_SI,1,MAX_SI,"msi")
   }
-  if (po.allowDynamicArgs !== undefined && typeof po.allowDynamicArgs !== "boolean") fail("INVALID_INPUT","allowDynamicArgs must be boolean");
-  const ad = po.allowDynamicArgs === true;
-  const sm = (po.stdinMode ?? "optional") as string;
-  if (sm !== "forbidden" && sm !== "optional" && sm !== "required") fail("INVALID_INPUT","invalid stdinMode");
 
-  return { id, canonicalPath: path, device: s.dev, inode: s.ino, permissionMode: permMode,
-    fixedArgs: Object.freeze([...fa]), allowDynamicArgs: ad, stdinMode: sm };
-}
+  async run(req:LoopPosixProcessRequest):Promise<LoopPosixProcessResult>{
+    vO(req,"req");const rid=vS(req.executableId,"eid");const pe=this.es.get(rid);if(!pe)fail("EXECUTABLE_NOT_ALLOWED","unknown eid");revalExe(pe);
 
-function revalidateExecutable(pe: PinnedExecutable): void {
-  let s: fs.Stats;
-  try { s = fs.lstatSync(pe.canonicalPath); } catch { fail("EXECUTABLE_CHANGED","executable not found"); }
-  if (s.isSymbolicLink()) fail("EXECUTABLE_CHANGED","executable became symlink");
-  if (!s.isFile()) fail("EXECUTABLE_CHANGED","no longer regular file");
-  if ((s.mode & 0o111) === 0) fail("EXECUTABLE_CHANGED","lost execute bit");
-  if (s.dev !== pe.device || s.ino !== pe.inode) fail("EXECUTABLE_CHANGED","inode/device changed");
-  if ((s.mode & 0o7777) !== pe.permissionMode) fail("EXECUTABLE_CHANGED","permission mode changed");
-  let real: string;
-  try { real = fs.realpathSync(pe.canonicalPath); } catch { fail("EXECUTABLE_CHANGED","realpath failed"); }
-  if (real !== pe.canonicalPath) fail("EXECUTABLE_CHANGED","canonical path changed");
-}
+    // ── args (optional — execution ALWAYS continues) ──
+    const dynArgs:string[]=[];
+    if(req.args!==undefined){vA(req.args,"args");const aa=req.args as unknown[];
+      if(aa.length>0){if(!pe.dyn)fail("INVALID_INPUT","dyn args blocked");
+        for(const a of aa){if(typeof a!=="string")fail("INVALID_INPUT","arg not str");if(a.includes("\x00"))fail("INVALID_INPUT","NUL");if(sB(a)>MAX_ARG_B)fail("INVALID_INPUT","arg long");dynArgs.push(a)}
+        if(dynArgs.length>MAX_ARGS)fail("INVALID_INPUT","many args");if(dynArgs.reduce((t,a)=>t+sB(a),0)>MAX_ARGS_TOTAL)fail("INVALID_INPUT","args total")}}
+    const finalArgs=[...pe.fixed,...dynArgs];
 
-// ═══════════════════════════════════════════════════════════════
-// cwd roots
-// ═══════════════════════════════════════════════════════════════
+    // ── cwd ──
+    const cwd=vS(req.cwd,"cwd");chkCwd(cwd,this.rs);
 
-type CwdRoot = { canonicalPath: string; device: number; inode: number };
+    // ── stdin ──
+    let stdinBuf:Buffer|null=null;
+    if(req.stdin!==undefined){if(pe.sm==="forbidden")fail("INVALID_INPUT","no stdin");if(typeof req.stdin==="string")stdinBuf=Buffer.from(req.stdin,"utf8");else if(req.stdin instanceof Uint8Array)stdinBuf=Buffer.from(req.stdin);else fail("INVALID_INPUT","stdin type");if(stdinBuf.length>this.ms)fail("INVALID_INPUT","stdin big")}else if(pe.sm==="required")fail("INVALID_INPUT","stdin req");
 
-function validateCwdRoot(path: string): CwdRoot {
-  if (!isAbsolute(path)) fail("INVALID_INPUT","cwd root must be absolute");
-  if (path === "/") fail("INVALID_INPUT","cwd root must not be filesystem root");
-  let s: fs.Stats;
-  try { s = fs.lstatSync(path); } catch { fail("INVALID_INPUT","cwd root not found"); }
-  if (s.isSymbolicLink()) fail("INVALID_INPUT","cwd root must not be symlink");
-  if (!s.isDirectory()) fail("INVALID_INPUT","cwd root must be directory");
-  let real: string;
-  try { real = fs.realpathSync(path); } catch { fail("INVALID_INPUT","realpath failed"); }
-  if (real !== path) fail("INVALID_INPUT","cwd root must be canonical");
-  return { canonicalPath: path, device: s.dev, inode: s.ino };
-}
+    // ── env ──
+    const reEnv=req.env!==undefined?vO(req.env,"env")as Record<string,string>:undefined;
+    const env=bEnv(this.fe,this.ak,reEnv);
 
-function revalidateCwdRoot(root: CwdRoot): void {
-  let s: fs.Stats;
-  try { s = fs.lstatSync(root.canonicalPath); } catch { fail("CWD_INVALID","cwd root not found"); }
-  if (s.isSymbolicLink()) fail("CWD_INVALID","cwd root became symlink");
-  if (!s.isDirectory()) fail("CWD_INVALID","cwd root not directory");
-  if (s.dev !== root.device || s.ino !== root.inode) fail("CWD_INVALID","cwd root inode/device changed");
-  let real: string;
-  try { real = fs.realpathSync(root.canonicalPath); } catch { fail("CWD_INVALID","realpath failed"); }
-  if (real !== root.canonicalPath) fail("CWD_INVALID","cwd root canonical path changed");
-}
+    // ── limits ──
+    const to=vI(req.timeoutMs??this.dt,MIN_TO,MAX_TO,"to");const mxo=vI(req.maxStdoutBytes??this.ds,1,MAX_OUT,"mso");const mxe=vI(req.maxStderrBytes??this.de,1,MAX_OUT,"mse");
 
-function checkCwd(cwd: string, roots: readonly CwdRoot[]): CwdRoot {
-  if (!isAbsolute(cwd)) fail("CWD_INVALID","cwd must be absolute");
-  let s: fs.Stats;
-  try { s = fs.lstatSync(cwd); } catch { fail("CWD_INVALID","cwd not found"); }
-  if (s.isSymbolicLink()) fail("CWD_INVALID","cwd must not be symlink");
-  if (!s.isDirectory()) fail("CWD_INVALID","cwd must be directory");
-  let real: string;
-  try { real = fs.realpathSync(cwd); } catch { fail("CWD_INVALID","realpath failed"); }
-  if (real !== cwd) fail("CWD_INVALID","cwd must be canonical");
+    // ═══════════════════════════════════════ Lifecycle state
+    let mainErr:LoopPosixProcessRunnerError|null=null,cleanErr:LoopPosixProcessRunnerError|null=null;
+    let toFlag=false,csFlag=false,stFlag=false,clnStart=false;
+    let tSent=false,kSent=false,cc:number|null=null,csig:NodeJS.Signals|null=null,pid:number|null=null;
+    const tms:ReturnType<typeof setTimeout>[]=[];const clrTm=()=>{for(const t of tms)clearTimeout(t);tms.length=0};
+    let resS:(r:LoopPosixProcessResult)=>void=()=>{},rejS:(e:Error)=>void=()=>{};
+    const prom=new Promise<LoopPosixProcessResult>((rs,rj)=>{resS=rs;rejS=rj});
 
-  for (const root of roots) {
-    if (cwd === root.canonicalPath || (cwd.startsWith(root.canonicalPath + sep))) {
-      revalidateCwdRoot(root);
-      return root;
-    }
-  }
-  fail("CWD_NOT_ALLOWED","cwd not within allowed roots");
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Env
-// ═══════════════════════════════════════════════════════════════
-
-function validateEnvKey(k: string): void {
-  if (!ENV_KEY_RE.test(k)) fail("INVALID_INPUT","env key format invalid");
-  if (DANGEROUS_ENV_KEYS.some(d => d === k.toUpperCase())) fail("ENV_NOT_ALLOWED","dangerous env key");
-}
-
-function buildEnv(fixedEnv: Record<string,string>, allowedKeys: readonly string[], reqEnv: Record<string,string> | undefined): Record<string,string> {
-  const env: Record<string,string> = Object.create(null);
-  for (const [k,v] of Object.entries(fixedEnv)) { env[k] = v; }
-  if (reqEnv) {
-    const allowed = new Set(allowedKeys);
-    for (const [k,v] of Object.entries(reqEnv)) {
-      if (!allowed.has(k)) fail("ENV_NOT_ALLOWED","env key not allowed");
-      if (k in env) fail("ENV_NOT_ALLOWED","cannot override fixed env");
-      if (typeof v !== "string" || v.includes("\x00")) fail("INVALID_INPUT","env value invalid");
-      if (strB(v) > MAX_ENV_VAL_B) fail("INVALID_INPUT","env value too long");
-      validateEnvKey(k);
-      env[k] = v;
-    }
-  }
-  // Final bounds check
-  const keys = Object.keys(env);
-  if (keys.length > MAX_ENV) fail("INVALID_INPUT","too many total env entries");
-  let totalB = 0;
-  for (const k of keys) totalB += strB(k) + strB(env[k]!);
-  if (totalB > MAX_ENV_TOTAL_B) fail("INVALID_INPUT","env total bytes exceeded");
-  return env;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Bounded collector (copied chunks, no shared backing store)
-// ═══════════════════════════════════════════════════════════════
-
-class BoundedCollector {
-  bytesReceived = 0;
-  retainedBytes = 0;
-  private chunks: Buffer[] = [];
-  truncated = false;
-  constructor(private limit: number) {}
-  push(chunk: Buffer): void {
-    this.bytesReceived += chunk.length;
-    if (!this.truncated) {
-      const rem = this.limit - this.retainedBytes;
-      if (chunk.length <= rem) {
-        this.chunks.push(Buffer.from(chunk));
-        this.retainedBytes += chunk.length;
-      } else {
-        if (rem > 0) this.chunks.push(Buffer.from(chunk.subarray(0, rem)));
-        this.retainedBytes += rem;
-        this.truncated = true;
+    const doSettle=():void=>{if(stFlag)return;clrTm();
+      if(cleanErr){stFlag=true;rejS(cleanErr);return}
+      if(mainErr){stFlag=true;rejS(mainErr);return}
+      // Try to finalize — if it throws, convert to PROCESS_IO_FAILED
+      let so="",se="";let sbr=0,ebr=0,str=false,etr=false;
+      try{so=scol.fin();sbr=scol.br;str=scol.tr;se=ecol.fin();ebr=ecol.br;etr=ecol.tr}catch(e){
+        stFlag=true;rejS(tf("PROCESS_IO_FAILED","finalize failed"));return
       }
-    }
-  }
-  finalize(): string {
-    return Buffer.concat(this.chunks, this.retainedBytes).toString("utf8");
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// LoopPosixProcessRunner
-// ═══════════════════════════════════════════════════════════════
-
-export class LoopPosixProcessRunner {
-  private readonly exes: ReadonlyMap<string, PinnedExecutable>;
-  private readonly roots: readonly CwdRoot[];
-  private readonly fEnv: Readonly<Record<string,string>>;
-  private readonly aEnvKeys: readonly string[];
-  private readonly defTo: number;
-  private readonly grace: number;
-  private readonly defSo: number;
-  private readonly defSe: number;
-  private readonly maxSi: number;
-
-  constructor(options: LoopPosixProcessRunnerOptions) {
-    if (process.platform !== "darwin" && process.platform !== "linux") fail("UNSUPPORTED_PLATFORM","macOS/Linux only");
-    vObj(options,"options");
-
-    const exes = vArr(options.executables,"executables") as LoopPosixExecutablePolicy[];
-    if (exes.length === 0) fail("INVALID_INPUT","at least one executable required");
-    const m = new Map<string,PinnedExecutable>();
-    const seen = new Set<string>();
-    for (const p of exes) {
-      const pe = validateExecutable(p);
-      if (seen.has(pe.id)) fail("INVALID_INPUT","duplicate executable id");
-      seen.add(pe.id); m.set(pe.id, pe);
-    }
-    this.exes = m;
-
-    const roots = vArr(options.allowedCwdRoots,"allowedCwdRoots") as string[];
-    if (roots.length === 0) fail("INVALID_INPUT","at least one cwd root required");
-    const rs: CwdRoot[] = []; const sp = new Set<string>();
-    for (const r of roots) { const vr = validateCwdRoot(vStr(r,"cwd root")); if (!sp.has(vr.canonicalPath)) { sp.add(vr.canonicalPath); rs.push(vr); } }
-    this.roots = Object.freeze(rs);
-
-    // Fixed env
-    const fe = options.fixedEnv ?? {};
-    vObj(fe,"fixedEnv");
-    const feo: Record<string,string> = Object.create(null);
-    for (const [k,v] of Object.entries(fe)) {
-      validateEnvKey(k);
-      if (typeof v !== "string" || v.includes("\x00")) fail("INVALID_INPUT","fixed env value invalid");
-      if (strB(v) > MAX_ENV_VAL_B) fail("INVALID_INPUT","fixed env value too long");
-      feo[k] = v;
-    }
-    const feKeys = Object.keys(feo);
-    if (feKeys.length > MAX_ENV) fail("INVALID_INPUT","too many fixed env entries");
-    let feTotal = 0;
-    for (const k of feKeys) feTotal += strB(k) + strB(feo[k]!);
-    if (feTotal > MAX_ENV_TOTAL_B) fail("INVALID_INPUT","fixed env total bytes exceeded");
-    this.fEnv = Object.freeze(feo);
-
-    // Allowed env keys
-    const aeks = options.allowedRequestEnvKeys ?? [];
-    vArr(aeks,"allowedRequestEnvKeys");
-    const aekSet = new Set<string>();
-    const aekList: string[] = [];
-    for (const k of aeks as unknown[]) {
-      if (typeof k !== "string") fail("INVALID_INPUT","allowed env key must be string");
-      validateEnvKey(k);
-      if (aekSet.has(k)) fail("INVALID_INPUT","duplicate allowed env key");
-      aekSet.add(k); aekList.push(k);
-    }
-    if (aekList.length > MAX_ALLOWED_ENV_KEYS) fail("INVALID_INPUT","too many allowed env keys");
-    this.aEnvKeys = Object.freeze(aekList);
-
-    this.defTo = vInt(options.defaultTimeoutMs ?? DEF_TO, MIN_TO, MAX_TO, "defaultTimeoutMs");
-    this.grace = vInt(options.terminationGraceMs ?? DEF_GRACE, MIN_GRACE, MAX_GRACE, "terminationGraceMs");
-    this.defSo = vInt(options.defaultMaxStdoutBytes ?? DEF_SO, 1, MAX_OUT, "defaultMaxStdoutBytes");
-    this.defSe = vInt(options.defaultMaxStderrBytes ?? DEF_SE, 1, MAX_OUT, "defaultMaxStderrBytes");
-    this.maxSi = vInt(options.maxStdinBytes ?? DEF_SI, 1, MAX_SI, "maxStdinBytes");
-  }
-
-  async run(request: LoopPosixProcessRequest): Promise<LoopPosixProcessResult> {
-    vObj(request,"request");
-    const rid = vStr(request.executableId,"executableId");
-    const pe = this.exes.get(rid);
-    if (!pe) fail("EXECUTABLE_NOT_ALLOWED","executable id not registered");
-    revalidateExecutable(pe);
-
-    // args
-    const dynArgs: string[] = [];
-    if (request.args !== undefined) {
-      vArr(request.args,"args");
-      const argsArr = request.args as unknown[];
-      if (argsArr.length > 0) {
-        if (!pe.allowDynamicArgs) fail("INVALID_INPUT","dynamic args not allowed");
-        for (const a of argsArr) {
-        if (typeof a !== "string") fail("INVALID_INPUT","args must be strings");
-        if (a.includes("\x00")) fail("INVALID_INPUT","args NUL rejected");
-        if (strB(a) > MAX_ARG_B) fail("INVALID_INPUT","arg too long");
-        dynArgs.push(a);
-      }
-      if (dynArgs.length > MAX_ARGS) fail("INVALID_INPUT","too many args");
-      if (dynArgs.reduce((t,a)=>t+strB(a),0) > MAX_ARGS_TOTAL_B) fail("INVALID_INPUT","args total bytes exceeded");
-    }
-    const finalArgs = [...pe.fixedArgs, ...dynArgs];
-
-    // cwd
-    const cwd = vStr(request.cwd,"cwd");
-    checkCwd(cwd, this.roots);
-
-    // stdin
-    let stdinBuf: Buffer | null = null;
-    if (request.stdin !== undefined) {
-      if (pe.stdinMode === "forbidden") fail("INVALID_INPUT","stdin not allowed");
-      if (typeof request.stdin === "string") stdinBuf = Buffer.from(request.stdin,"utf8");
-      else if (request.stdin instanceof Uint8Array) stdinBuf = Buffer.from(request.stdin);
-      else fail("INVALID_INPUT","stdin must be string or Uint8Array");
-      if (stdinBuf.length > this.maxSi) fail("INVALID_INPUT","stdin too large");
-    } else if (pe.stdinMode === "required") {
-      fail("INVALID_INPUT","stdin required");
-    }
-
-    // env
-    const reqEnv = request.env !== undefined ? vObj(request.env,"env") as Record<string,string> : undefined;
-    const env = buildEnv(this.fEnv, this.aEnvKeys, reqEnv);
-
-    // limits
-    const to = vInt(request.timeoutMs ?? this.defTo, MIN_TO, MAX_TO, "timeoutMs");
-    const mxo = vInt(request.maxStdoutBytes ?? this.defSo, 1, MAX_OUT, "maxStdoutBytes");
-    const mxe = vInt(request.maxStderrBytes ?? this.defSe, 1, MAX_OUT, "maxStderrBytes");
-
-    // ═══════════════════════════════════════════════════════════
-    // Lifecycle state
-    // ═══════════════════════════════════════════════════════════
-    let mainError: LoopPosixProcessRunnerError | null = null;
-    let cleanupError: LoopPosixProcessRunnerError | null = null;
-    let timedOut = false;
-    let closeSeen = false;
-    let settled = false;
-    let cleanupStarted = false;
-    let termSignalSent = false;
-    let killSignalSent = false;
-    let closeCode: number | null = null;
-    let closeSignal: NodeJS.Signals | null = null;
-    let pid: number | null = null;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const clrTimers = () => { for (const t of timers) clearTimeout(t); timers.length = 0; };
-
-    let resolveSettle: (r: LoopPosixProcessResult) => void = () => {};
-    let rejectSettle: (e: Error) => void = () => {};
-    const promise = new Promise<LoopPosixProcessResult>((res, rej) => { resolveSettle = res; rejectSettle = rej; });
-
-    const settle = (): void => {
-      if (settled) return;
-      settled = true; clrTimers();
-      // Final priority: cleanupError > mainError > timedOut > exited
-      if (cleanupError) { rejectSettle(cleanupError); return; }
-      if (mainError) { rejectSettle(mainError); return; }
-      const dur = Date.now() - startTime;
-      const result: LoopPosixProcessResult = Object.freeze({
-        status: timedOut ? "timed_out" : "exited",
-        exitCode: closeCode, signal: closeSignal, durationMs: dur,
-        stdout: stdoutCol.finalize(), stderr: stderrCol.finalize(),
-        stdoutBytesReceived: stdoutCol.bytesReceived, stderrBytesReceived: stderrCol.bytesReceived,
-        stdoutTruncated: stdoutCol.truncated, stderrTruncated: stderrCol.truncated,
-        termSignalSent, killSignalSent,
-      });
-      resolveSettle(result);
+      const dur=Date.now()-stTime;
+      const result:LoopPosixProcessResult=Object.freeze({status:toFlag?"timed_out":"exited",exitCode:cc,signal:csig,durationMs:dur,stdout:so,stderr:se,stdoutBytesReceived:sbr,stderrBytesReceived:ebr,stdoutTruncated:str,stderrTruncated:etr,termSignalSent:tSent,killSignalSent:kSent});
+      stFlag=true;resS(result)
     };
 
-    // ═══════════════════════════════════════════════════════════
-    // Single idempotent cleanup entry
-    // ═══════════════════════════════════════════════════════════
-    const requestProcessGroupCleanup = (reason: LoopPosixProcessRunnerError | null): void => {
-      if (settled || closeSeen || cleanupStarted) return;
-      cleanupStarted = true;
-
-      const doTerm = (): void => {
-        if (settled || closeSeen || pid === null || pid <= 0) return;
-        try { process.kill(-pid, "SIGTERM"); termSignalSent = true; } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ESRCH") cleanupError = typedFail("PROCESS_CLEANUP_FAILED","TERM signal failed");
-        }
-        timers.push(setTimeout(() => {
-          if (settled || closeSeen) return;
-          if (pid !== null && pid > 0) {
-            try { process.kill(-pid, "SIGKILL"); killSignalSent = true; } catch (e2) {
-              if ((e2 as NodeJS.ErrnoException).code !== "ESRCH") cleanupError = typedFail("PROCESS_CLEANUP_FAILED","KILL signal failed");
-            }
-          }
-          timers.push(setTimeout(() => {
-            if (settled || closeSeen) return;
-            cleanupError = typedFail("PROCESS_CLEANUP_FAILED","cleanup deadline exceeded");
-            settle();
-          }, this.grace));
-        }, this.grace));
-      };
-
-      doTerm();
+    // ═══════════════════════════════════════ Cleanup
+    const reqCleanup=(reason:LoopPosixProcessRunnerError|null):void=>{
+      if(stFlag||csFlag||clnStart)return;clnStart=true;
+      const doT=():void=>{if(stFlag||csFlag||pid===null||pid<=0)return;
+        try{process.kill(-pid,"SIGTERM");tSent=true}catch(e){if((e as NodeJS.ErrnoException).code!=="ESRCH")cleanErr=tf("PROCESS_CLEANUP_FAILED","TERM fail")}
+        tms.push(setTimeout(()=>{if(stFlag||csFlag)return;if(pid!==null&&pid>0){try{process.kill(-pid,"SIGKILL");kSent=true}catch(e2){if((e2 as NodeJS.ErrnoException).code!=="ESRCH")cleanErr=tf("PROCESS_CLEANUP_FAILED","KILL fail")}}
+          tms.push(setTimeout(()=>{if(stFlag||csFlag)return;cleanErr=tf("PROCESS_CLEANUP_FAILED","deadline");doSettle()},this.gr))},this.gr))};
+      doT()
     };
 
-    // ═══════════════════════════════════════════════════════════
-    // Spawn
-    // ═══════════════════════════════════════════════════════════
-    const startTime = Date.now();
-    const stdoutCol = new BoundedCollector(mxo);
-    const stderrCol = new BoundedCollector(mxe);
-    let child: ChildProcess;
+    // ═══════════════════════════════════════ Spawn
+    const stTime=Date.now();const scol=new BndCol(mxo);const ecol=new BndCol(mxe);
+    let child:ChildProcess;
+    try{child=childProcess.spawn(pe.path,finalArgs,{shell:false,detached:true,stdio:["pipe","pipe","pipe"],cwd,env})}catch(e){if(e instanceof LoopPosixProcessRunnerError)throw e;fail("PROCESS_SPAWN_FAILED","spawn")}
 
-    // Spawn (sync throw → PROCESS_SPAWN_FAILED)
-    try {
-      child = childProcess.spawn(pe.canonicalPath, finalArgs, {
-        shell: false, detached: true, stdio: ["pipe","pipe","pipe"], cwd, env,
-      });
-    } catch (e) {
-      if (e instanceof LoopPosixProcessRunnerError) throw e;
-      fail("PROCESS_SPAWN_FAILED","spawn failed");
+    // Read PID first
+    const rawPid=child.pid;const pidOk=typeof rawPid==="number"&&Number.isSafeInteger(rawPid)&&rawPid>0;
+
+    // Install child error listener (with fallback)
+    let errSinkInstalled=false;
+    const guardedHandler=(e:unknown)=>{if(stFlag||csFlag)return;mainErr=tf("PROCESS_SPAWN_FAILED","child err");reqCleanup(mainErr)};
+    try{child.on("error",guardedHandler);errSinkInstalled=true}catch{
+      // Try fallback via EventEmitter.prototype
+      try{(EventEmitter.prototype as any).on.call(child,"error",(e:unknown)=>{if(stFlag||csFlag)return})}catch{/* cannot install any sink */}
     }
 
-    // Install child error listener BEFORE pid/stdio checks
-    try {
-      child.on("error", (e) => {
-        if (settled || closeSeen) return;
-        mainError = typedFail("PROCESS_SPAWN_FAILED","child process error");
-        requestProcessGroupCleanup(mainError);
-      });
-    } catch {
-      if (!settled && !closeSeen) {
-        mainError = typedFail("PROCESS_SPAWN_FAILED","child error listener install failed");
-        if (pid !== null) requestProcessGroupCleanup(mainError); else { settled = true; clrTimers(); rejectSettle(mainError); }
-      }
-    }
+    // Now handle PID
+    if(pidOk){pid=rawPid}else{mainErr=tf("PROCESS_SPAWN_FAILED","bad pid");setTimeout(()=>{if(!stFlag){stFlag=true;clrTm();rejS(mainErr)}},0)}
+    if(!errSinkInstalled&&pidOk){if(!mainErr)mainErr=tf("PROCESS_SPAWN_FAILED","err listener fail");reqCleanup(mainErr)}
 
-    // PID check — invalid PID → immediate bounded settle
-    const rawPid = child.pid;
-    if (typeof rawPid === "number" && Number.isSafeInteger(rawPid) && rawPid > 0) {
-      pid = rawPid;
-    } else {
-      mainError = typedFail("PROCESS_SPAWN_FAILED","invalid child pid");
-      // No valid PID → cannot send group signals. Settle immediately.
-      if (!settled) { settled = true; clrTimers(); rejectSettle(mainError); }
-      // Keep guarded error listener for late events; return settled promise
-    }
-
-    // Stdio checks
-    const stdioOk = child.stdin && child.stdout && child.stderr;
-    if (!stdioOk) {
-      if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","missing stdio pipe");
-      if (pid !== null) {
-        requestProcessGroupCleanup(mainError);
-      } else {
-        // Invalid PID + missing stdio → already settled above, nothing more to do
-      }
-    }
+    // Stdio
+    const sOK=child.stdin&&child.stdout&&child.stderr;
+    if(!sOK){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","missing stdio");if(pidOk)reqCleanup(mainErr);else setTimeout(()=>{if(!stFlag){stFlag=true;clrTm();rejS(mainErr)}},0)}
 
     // stdout
-    if (child.stdout && !settled) {
-      try {
-        child.stdout.on("data", (chunk: Buffer) => {
-          if (settled || closeSeen) return;
-          try { stdoutCol.push(chunk); } catch {
-            if (!settled && !closeSeen) {
-              if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout data handling error");
-              requestProcessGroupCleanup(mainError);
-            }
-          }
-        });
-        child.stdout.on("error", () => {
-          if (settled || closeSeen) return;
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout stream error");
-          requestProcessGroupCleanup(mainError);
-        });
-      } catch {
-        if (!settled && !closeSeen) {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdout listener install failed");
-          requestProcessGroupCleanup(mainError);
-        }
-      }
-    }
+    if(child.stdout&&!stFlag){try{child.stdout.on("data",(c:Buffer)=>{if(stFlag||csFlag)return;try{scol.push(c)}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","so data");reqCleanup(mainErr)}}});child.stdout.on("error",()=>{if(stFlag||csFlag)return;if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","so err");reqCleanup(mainErr)})}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","so listen");reqCleanup(mainErr)}}}
     // stderr
-    if (child.stderr && !settled) {
-      try {
-        child.stderr.on("data", (chunk: Buffer) => {
-          if (settled || closeSeen) return;
-          try { stderrCol.push(chunk); } catch {
-            if (!settled && !closeSeen) {
-              if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr data handling error");
-              requestProcessGroupCleanup(mainError);
-            }
-          }
-        });
-        child.stderr.on("error", () => {
-          if (settled || closeSeen) return;
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr stream error");
-          requestProcessGroupCleanup(mainError);
-        });
-      } catch {
-        if (!settled && !closeSeen) {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stderr listener install failed");
-          requestProcessGroupCleanup(mainError);
-        }
-      }
-    }
+    if(child.stderr&&!stFlag){try{child.stderr.on("data",(c:Buffer)=>{if(stFlag||csFlag)return;try{ecol.push(c)}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","se data");reqCleanup(mainErr)}}});child.stderr.on("error",()=>{if(stFlag||csFlag)return;if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","se err");reqCleanup(mainErr)})}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","se listen");reqCleanup(mainErr)}}}
 
     // close
-    try {
-      child.on("close", (code, signal) => {
-        if (closeSeen) return;
-        closeSeen = true;
-        closeCode = code;
-        closeSignal = signal as NodeJS.Signals | null;
-        settle();
-      });
-    } catch {
-      if (!settled && !closeSeen) {
-        if (!mainError) mainError = typedFail("PROCESS_SPAWN_FAILED","close listener install failed");
-        if (pid !== null) requestProcessGroupCleanup(mainError); else { settled = true; clrTimers(); rejectSettle(mainError); }
-      }
-    }
+    try{child.on("close",(code,signal)=>{if(csFlag)return;csFlag=true;cc=code;csig=signal as NodeJS.Signals|null;doSettle()})}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_SPAWN_FAILED","close listen");if(pidOk)reqCleanup(mainErr);else setTimeout(()=>{if(!stFlag){stFlag=true;clrTm();rejS(mainErr)}},0)}}
 
     // stdin
-    if (child.stdin && !settled) {
-      try {
-        child.stdin.on("error", () => {
-          if (settled || closeSeen) return;
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin pipe error");
-          requestProcessGroupCleanup(mainError);
-        });
-        if (stdinBuf !== null) {
-          try { child.stdin.write(stdinBuf); } catch {
-            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin write failed");
-            if (pid !== null) requestProcessGroupCleanup(mainError);
-          }
-          try { child.stdin.end(); } catch {
-            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
-            if (pid !== null) requestProcessGroupCleanup(mainError);
-          }
-        } else {
-          try { child.stdin.end(); } catch {
-            if (!settled && !closeSeen && !mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin end failed");
-            if (pid !== null) requestProcessGroupCleanup(mainError);
-          }
-        }
-      } catch {
-        if (!settled && !closeSeen) {
-          if (!mainError) mainError = typedFail("PROCESS_IO_FAILED","stdin listener install failed");
-          if (pid !== null) requestProcessGroupCleanup(mainError);
-        }
-      }
-    }
+    if(child.stdin&&!stFlag){try{child.stdin.on("error",()=>{if(stFlag||csFlag)return;if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si err");reqCleanup(mainErr)});if(stdinBuf!==null){try{child.stdin.write(stdinBuf)}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si write");if(pidOk)reqCleanup(mainErr)}try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}else{try{child.stdin.end()}catch{if(!stFlag&&!csFlag&&!mainErr)mainErr=tf("PROCESS_IO_FAILED","si end");if(pidOk)reqCleanup(mainErr)}}}catch{if(!stFlag&&!csFlag){if(!mainErr)mainErr=tf("PROCESS_IO_FAILED","si listen");if(pidOk)reqCleanup(mainErr)}}
 
     // timeout
-    if (to > 0) {
-      timers.push(setTimeout(() => {
-        if (settled || closeSeen) return;
-        timedOut = true;
-        requestProcessGroupCleanup(null);
-      }, to));
-    }
+    if(to>0){tms.push(setTimeout(()=>{if(stFlag||csFlag)return;toFlag=true;reqCleanup(null)},to))}
 
-    return promise;
+    return prom
   }
 }
 }
