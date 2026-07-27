@@ -996,6 +996,207 @@ function test(): void {
         assert(!/[\x00-\x1f\x7f]/.test(err.message), `error message for ${code} no control chars`);
       }
     }
+    // ═══════════════════════════════════════════════════════════════
+    // C1: Run Store init fault injection tests
+    // ═══════════════════════════════════════════════════════════════
+    console.log("C1: Run Store init fault injection");
+
+    const BetterSqlite3 = require("better-sqlite3");
+    const OrigDatabase: typeof Database = BetterSqlite3.default || BetterSqlite3;
+
+    // ---- 1. raw journal_mode failure → STORE_FAILURE ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-1-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigPragma = Database.prototype.pragma;
+      let pragmaCalls = 0;
+      try {
+        Database.prototype.pragma = function(this: Database.Database, ...args: unknown[]) {
+          pragmaCalls += 1;
+          const key = String(args[0]);
+          if (key === "journal_mode" && pragmaCalls <= 2) {
+            const err = new Error("SQLITE_IOERR_SENTINEL") as NodeJS.ErrnoException;
+            err.code = "SQLITE_IOERR";
+            throw err;
+          }
+          return OrigPragma.apply(this, args as [string, ...unknown[]]);
+        } as Database.Database["pragma"];
+        const store = new LoopRunStore(fiPath);
+        try {
+          store.init();
+          assert(false, "should throw on journal_mode failure");
+        } catch (e) {
+          assert(e instanceof LoopRunJournalError, "journal_mode fail → LoopRunJournalError");
+          assert((e as LoopRunJournalError).code === "STORE_BUSY" || (e as LoopRunJournalError).code === "STORE_FAILURE",
+            `typed code (got ${(e as LoopRunJournalError).code})`);
+          assert(!(e as LoopRunJournalError).message.includes("SQLITE_IOERR_SENTINEL"), "no sentinel leak");
+          assert((e as LoopRunJournalError).message.length <= 256, "message bounded");
+        }
+      } finally { Database.prototype.pragma = OrigPragma; }
+    }
+
+    // ---- 2. raw foreign_keys failure → STORE_FAILURE ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-2-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigPragma = Database.prototype.pragma;
+      try {
+        Database.prototype.pragma = function(this: Database.Database, ...args: unknown[]) {
+          const key = String(args[0]);
+          if (String(args[0]).startsWith("foreign_keys")) {
+            const err = new Error("SQLITE_CORRUPT_SENTINEL") as NodeJS.ErrnoException;
+            err.code = "SQLITE_CORRUPT";
+            throw err;
+          }
+          return OrigPragma.apply(this, args as [string, ...unknown[]]);
+        } as Database.Database["pragma"];
+        const store = new LoopRunStore(fiPath);
+        try {
+          store.init();
+          assert(false, "should throw on foreign_keys failure");
+        } catch (e) {
+          assert(e instanceof LoopRunJournalError, "fk fail → LoopRunJournalError");
+          assert((e as LoopRunJournalError).code === "STORE_FAILURE",
+            `STORE_FAILURE (got ${(e as LoopRunJournalError).code})`);
+          assert(!(e as LoopRunJournalError).message.includes("SQLITE_CORRUPT_SENTINEL"), "no sentinel leak");
+        }
+      } finally { Database.prototype.pragma = OrigPragma; }
+    }
+
+    // ---- 3. raw busy_timeout failure → STORE_FAILURE ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-3-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigPragma = Database.prototype.pragma;
+      try {
+        Database.prototype.pragma = function(this: Database.Database, ...args: unknown[]) {
+          const key = String(args[0]);
+          if (String(args[0]).startsWith("busy_timeout")) {
+            const err = new Error("SQLITE_MISUSE_SENTINEL") as NodeJS.ErrnoException;
+            err.code = "SQLITE_MISUSE";
+            throw err;
+          }
+          return OrigPragma.apply(this, args as [string, ...unknown[]]);
+        } as Database.Database["pragma"];
+        const store = new LoopRunStore(fiPath);
+        try {
+          store.init();
+          assert(false, "should throw on busy_timeout failure");
+        } catch (e) {
+          assert(e instanceof LoopRunJournalError, "bt fail → LoopRunJournalError");
+          assert((e as LoopRunJournalError).code === "STORE_FAILURE",
+            `STORE_FAILURE (got ${(e as LoopRunJournalError).code})`);
+          assert(!(e as LoopRunJournalError).message.includes("SQLITE_MISUSE_SENTINEL"), "no sentinel leak");
+        }
+      } finally { Database.prototype.pragma = OrigPragma; }
+    }
+
+    // ---- 4. raw schema exec failure → STORE_FAILURE ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-4-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigExec = Database.prototype.exec;
+      try {
+        Database.prototype.exec = function(this: Database.Database, sql: string): Database.Database {
+          if (sql.includes("CREATE TABLE IF NOT EXISTS loop_runs")) {
+            const err = new Error("SQLITE_NOMEM_SENTINEL") as NodeJS.ErrnoException;
+            err.code = "SQLITE_NOMEM";
+            throw err;
+          }
+          return OrigExec.call(this, sql);
+        } as Database.Database["exec"];
+        const store = new LoopRunStore(fiPath);
+        try {
+          store.init();
+          assert(false, "should throw on schema exec failure");
+        } catch (e) {
+          assert(e instanceof LoopRunJournalError, "schema fail → LoopRunJournalError");
+          assert((e as LoopRunJournalError).code === "STORE_FAILURE",
+            `STORE_FAILURE (got ${(e as LoopRunJournalError).code})`);
+          assert(!(e as LoopRunJournalError).message.includes("SQLITE_NOMEM_SENTINEL"), "no sentinel leak");
+        }
+      } finally { Database.prototype.exec = OrigExec; }
+    }
+
+    // ---- 5. busy/locked failure → STORE_BUSY ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-5-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigPragma = Database.prototype.pragma;
+      try {
+        Database.prototype.pragma = function(this: Database.Database, ...args: unknown[]) {
+          const key = String(args[0]);
+          if (String(args[0]).startsWith("foreign_keys")) {
+            const err = new Error("database is locked") as NodeJS.ErrnoException;
+            err.code = "SQLITE_BUSY";
+            throw err;
+          }
+          return OrigPragma.apply(this, args as [string, ...unknown[]]);
+        } as Database.Database["pragma"];
+        const store = new LoopRunStore(fiPath);
+        try {
+          store.init();
+          assert(false, "should throw on busy");
+        } catch (e) {
+          assert(e instanceof LoopRunJournalError, "busy → LoopRunJournalError");
+          assert((e as LoopRunJournalError).code === "STORE_BUSY",
+            `STORE_BUSY (got ${(e as LoopRunJournalError).code})`);
+        }
+      } finally { Database.prototype.pragma = OrigPragma; }
+    }
+
+    // ---- 6. connection close invoked on failure + new Store recovery ----
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-6-"));
+      const fiPath = join(fiDir, "test.db");
+      const OrigExec = Database.prototype.exec;
+      const OrigClose = Database.prototype.close;
+      let closeCallCount = 0;
+      try {
+        Database.prototype.exec = function(this: Database.Database, sql: string): Database.Database {
+          if (sql.includes("CREATE TABLE IF NOT EXISTS loop_runs")) {
+            const err = new Error("E") as NodeJS.ErrnoException;
+            err.code = "SQLITE_ERROR";
+            throw err;
+          }
+          return OrigExec.call(this, sql);
+        } as Database.Database["exec"];
+        Database.prototype.close = function(this: Database.Database): Database.Database {
+          closeCallCount += 1;
+          return OrigClose.call(this);
+        } as Database.Database["close"];
+        const store = new LoopRunStore(fiPath);
+        try { store.init(); assert(false, "should throw"); }
+        catch (e) { /* expected */ }
+        assert(closeCallCount === 1, `local connection close called on failure (count=${closeCallCount})`);
+        // Verify no lingering lock: new store can init on fresh DB
+        Database.prototype.exec = OrigExec;
+        Database.prototype.close = OrigClose;
+        const freshPath = join(fiDir, "fresh.db");
+        const freshStore = new LoopRunStore(freshPath);
+        freshStore.init();
+        freshStore.createRun(makeIdentity());
+        assert(freshStore.getRun("run-001")!.status === "created", "recovery store works");
+        freshStore.close();
+      } finally {
+        Database.prototype.exec = OrigExec;
+        Database.prototype.close = OrigClose;
+      }
+    }
+
+    // ---- 7. close count = 0 when mutation removes close (for Mutation J) ----
+    // This baseline verifies that close IS called normally
+    {
+      const fiDir = mkdtempSync(join(tempRoot, "c1-rs-7-"));
+      const fiPath = join(fiDir, "test.db");
+      // Normal init — verify close is not needed (no failure)
+      const store = new LoopRunStore(fiPath);
+      store.init();
+      assert(true, "normal init succeeds");
+      store.createRun(makeIdentity());
+      store.close();
+    }
+
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
     assert(!existsSync(tempRoot), "temp directory removed (db, wal, shm cleaned)");

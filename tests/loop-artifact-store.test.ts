@@ -18,6 +18,7 @@ import {
   rmSync,
   symlinkSync,
   writeFileSync,
+  type Stats, type PathLike,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -826,6 +827,243 @@ async function main(): Promise<void> {
       assert(err.message.length <= 256, "error constructor sanitizes length");
       assert(!/[\x00-\x1f\x7f]/.test(err.message), "error constructor strips control chars");
       assert(err.code === "ARTIFACT_IO_FAILURE", "error code preserved");
+	    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // C1: Artifact FS fault injection tests (shared require cache)
+    // ═══════════════════════════════════════════════════════════════
+    console.log("C1: Artifact FS fault injection");
+
+    const fsMod = require("node:fs") as typeof import("node:fs");
+
+    // ---- 1. partial write → write-all succeeds ----
+    {
+      const fiControl = join(tempRoot, "control-fi-1");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origWriteSync = fsMod.writeSync;
+      let writeCount = 0;
+      try {
+        fsMod.writeSync = function(fd: number, buffer: ArrayBufferView, ...args: unknown[]): number {
+          writeCount += 1;
+          if (writeCount === 1) return origWriteSync.call(fsMod, fd, buffer, 0, 3, 0);
+          return origWriteSync.call(fsMod, fd, buffer, ...args);
+        } as typeof fsMod.writeSync;
+        const desc = fiStore.put("code_patch", "HelloWorld123");
+        assert(writeCount > 1, `partial write triggers write-all (writeCount=${writeCount})`);
+        assert(fiStore.read(desc.artifactRef).toString() === "HelloWorld123", "content complete after partial write");
+      } finally { fsMod.writeSync = origWriteSync; fiStore.close(); }
+    }
+
+    // ---- 2. lying write (short write reports full length) → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-2");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origWriteSync = fsMod.writeSync;
+      try {
+        fsMod.writeSync = function(fd: number, buffer: ArrayBufferView, offset: number, length: number, position?: number | null): number {
+          origWriteSync.call(fsMod, fd, (buffer as Buffer).slice(0, 2), 0, 2, position ?? 0);
+          return length; // lie
+        } as typeof fsMod.writeSync;
+        try { fiStore.put("code_patch", "HelloWorld123"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "lying write → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+          assert((e as LoopArtifactStoreError).message.length <= 256, "msg bounded");
+        }
+      } finally { fsMod.writeSync = origWriteSync; fiStore.close(); }
+    }
+
+    // ---- 3. zero-progress write → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-3");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origWriteSync = fsMod.writeSync;
+      try {
+        fsMod.writeSync = function(): number { return 0; } as typeof fsMod.writeSync;
+        try { fiStore.put("code_patch", "Hello"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "zero write → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+        }
+      } finally { fsMod.writeSync = origWriteSync; fiStore.close(); }
+    }
+
+    // ---- 4. temp fsync throws sentinel → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-4");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origFsync = fsMod.fsyncSync;
+      try {
+        fsMod.fsyncSync = function(): void { const e = new Error("SENT_FSYNC") as NodeJS.ErrnoException; e.code = "EIO"; throw e; } as typeof fsMod.fsyncSync;
+        try { fiStore.put("code_patch", "Hello"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "fsync fail → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+          assert(!(e as LoopArtifactStoreError).message.includes("SENT_FSYNC"), "no sentinel leak");
+        }
+      } finally { fsMod.fsyncSync = origFsync; fiStore.close(); }
+    }
+
+    // ---- 5. temp fstat throws → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-5");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origFstat = fsMod.fstatSync;
+      let callCount = 0;
+      try {
+        fsMod.fstatSync = function(fd: number): Stats {
+          callCount += 1;
+          if (callCount === 1) { const e = new Error("SENT_FSTAT") as NodeJS.ErrnoException; e.code = "EIO"; throw e; }
+          return origFstat.call(fsMod, fd);
+        } as typeof fsMod.fstatSync;
+        try { fiStore.put("code_patch", "Hello"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "fstat fail → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+          assert(!(e as LoopArtifactStoreError).message.includes("SENT_FSTAT"), "no sentinel leak");
+        }
+      } finally { fsMod.fstatSync = origFstat; fiStore.close(); }
+    }
+
+    // ---- 6. temp close throws → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-6");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origClose = fsMod.closeSync;
+      let closeCount = 0;
+      try {
+        fsMod.closeSync = function(fd: number): void {
+          closeCount += 1;
+          if (closeCount === 1) { const e = new Error("SENT_CLOSE") as NodeJS.ErrnoException; e.code = "EIO"; throw e; }
+          origClose.call(fsMod, fd);
+        } as typeof fsMod.closeSync;
+        try { fiStore.put("code_patch", "Hello"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "close fail → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+          assert(!(e as LoopArtifactStoreError).message.includes("SENT_CLOSE"), "no sentinel leak");
+        }
+      } finally { fsMod.closeSync = origClose; fiStore.close(); }
+    }
+
+    // ---- 7. own-temp unlink throws → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-7");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origUnlink = fsMod.unlinkSync;
+      try {
+        fsMod.unlinkSync = function(path: PathLike): void {
+          if (String(path).endsWith(".tmp")) { const e = new Error("SENT_UNLINK") as NodeJS.ErrnoException; e.code = "EACCES"; throw e; }
+          origUnlink.call(fsMod, path);
+        } as typeof fsMod.unlinkSync;
+        try { fiStore.put("code_patch", "Hello"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "unlink fail → LoopArtifactStoreError");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+        }
+      } finally { fsMod.unlinkSync = origUnlink; fiStore.close(); }
+    }
+
+    // ---- 8. main error priority: CORRUPT + unlink fail → still CORRUPT ----
+    {
+      const fiControl = join(tempRoot, "control-fi-8");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const desc = fiStore.put("code_patch", "priority");
+      const shardDir = join(fiControl, "artifacts", "v1", "code_patch", desc.digest.slice(0, 2));
+      writeFileSync(join(shardDir, `${desc.digest}.blob`), "tampered");
+      const origUnlink = fsMod.unlinkSync;
+      try {
+        fsMod.unlinkSync = function(path: PathLike): void {
+          if (String(path).endsWith(".tmp")) { const e = new Error("UL") as NodeJS.ErrnoException; e.code = "EACCES"; throw e; }
+          origUnlink.call(fsMod, path);
+        } as typeof fsMod.unlinkSync;
+        try { fiStore.put("code_patch", "priority"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "is typed");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_CORRUPT", `main error preserved (got ${(e as LoopArtifactStoreError).code})`);
+        }
+      } finally { fsMod.unlinkSync = origUnlink; fiStore.close(); }
+    }
+
+    // ---- 9. directory fd close failure → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-9");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const origClose = fsMod.closeSync;
+      let callCount = 0;
+      try {
+        fsMod.closeSync = function(fd: number): void {
+          callCount += 1;
+          if (callCount === 2) { const e = new Error("DIR_CLOSE") as NodeJS.ErrnoException; e.code = "EIO"; throw e; }
+          origClose.call(fsMod, fd);
+        } as typeof fsMod.closeSync;
+        try { fiStore.put("test_summary", "dir-close-test"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "dir close fail → typed");
+          // Could be ARTIFACT_IO_FAILURE from either close failure
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+        }
+      } finally { fsMod.closeSync = origClose; fiStore.close(); }
+    }
+
+    // ---- 10. existing-final fd close failure → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-10");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      fiStore.put("review_summary", "close-test-content");
+      fiStore.close();
+      const fiStore2 = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore2.init();
+      const origClose = fsMod.closeSync;
+      try {
+        fsMod.closeSync = function(): void { const e = new Error("E") as NodeJS.ErrnoException; e.code = "EIO"; throw e; } as typeof fsMod.closeSync;
+        try { fiStore2.put("review_summary", "close-test-content"); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "close fail → typed");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+        }
+      } finally { fsMod.closeSync = origClose; fiStore2.close(); }
+    }
+
+    // ---- 11. public read fd close failure → ARTIFACT_IO_FAILURE ----
+    {
+      const fiControl = join(tempRoot, "control-fi-11");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      const desc = fiStore.put("delivery_result", "read-close-test");
+      const origClose = fsMod.closeSync;
+      try {
+        fsMod.closeSync = function(): void { const e = new Error("E") as NodeJS.ErrnoException; e.code = "EIO"; throw e; } as typeof fsMod.closeSync;
+        try { fiStore.read(desc.artifactRef); assert(false, "should throw"); }
+        catch (e) {
+          assert(e instanceof LoopArtifactStoreError, "read close fail → typed");
+          assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `got ${(e as LoopArtifactStoreError).code}`);
+        }
+      } finally { fsMod.closeSync = origClose; fiStore.close(); }
+    }
+
+    // ---- 12. own-temp residue check: all fault paths clean up temp ----
+    {
+      const fiControl = join(tempRoot, "control-fi-12");
+      const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+      fiStore.init();
+      // Normal put creates no temp residue
+      fiStore.put("workspace_metadata", "clean-test");
+      const v1dir = join(fiControl, "artifacts", "v1");
+      const allFiles = listFilesRecursive(v1dir);
+      const temps = allFiles.filter(f => f.endsWith(".tmp"));
+      assert(temps.length === 0, `no temp residue after normal put (found ${temps.length})`);
+      fiStore.close();
     }
 
     store.close();
