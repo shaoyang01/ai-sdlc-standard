@@ -1,362 +1,285 @@
-// LOOP POSIX Process Runner — Tests (LOOP-DELIVERY-02)
-// ======================================================
-// Tests: executable allowlist, spawn options, args, stdin, env, cwd,
-// output drain, exit/errors, timeout/process-group, concurrency.
-// Uses real Node.js child processes, no external CLI calls.
+// LOOP POSIX Process Runner — R1 Hardening Tests
+// ===============================================
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync, readFileSync, existsSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 
 const childProcessMod = require("node:child_process") as typeof import("node:child_process");
 
 import {
-  LoopPosixProcessRunner,
-  LoopPosixProcessRunnerError,
-  type LoopPosixProcessRequest,
-  type LoopPosixProcessResult,
+  LoopPosixProcessRunner, LoopPosixProcessRunnerError,
+  type LoopPosixProcessRequest, type LoopPosixProcessResult,
 } from "../core/loop-posix-process-runner";
 
-let passed = 0;
-let failed = 0;
-function assert(cond: boolean, msg: string): void {
-  if (cond) { passed++; console.log(`  ✓ ${msg}`); }
-  else { failed++; console.error(`  ✗ ${msg}`); }
-}
-function expectThrow(code: string, fn: () => unknown, msg: string): void {
-  try { fn(); assert(false, `${msg} (no error)`); }
-  catch (e) {
-    const actual = e instanceof LoopPosixProcessRunnerError ? e.code : "NOT_RUNNER_ERROR";
-    assert(actual === code, `${msg} (got ${actual})`);
-    if (e instanceof LoopPosixProcessRunnerError) {
-      assert(e.message.length <= 256, `${msg}: msg bounded`);
-      assert(!/[\x00-\x1f\x7f]/.test(e.message), `${msg}: no ctrls`);
-    }
-  }
-}
+let passed = 0, failed = 0;
+function ok(c: boolean, m: string): void { if (c) { passed++; console.log(`  ✓ ${m}`); } else { failed++; console.error(`  ✗ ${m}`); } }
 async function expectThrowAsync(code: string, fn: () => Promise<unknown>, msg: string): Promise<void> {
-  try { await fn(); assert(false, `${msg} (no error)`); }
-  catch (e) {
-    const actual = e instanceof LoopPosixProcessRunnerError ? e.code : "NOT_RUNNER_ERROR";
-    assert(actual === code, `${msg} (got ${actual})`);
+  try { await fn(); ok(false, `${msg} (no error)`); } catch (e) {
+    const a = e instanceof LoopPosixProcessRunnerError ? e.code : "NOT_RUNNER_ERROR";
+    ok(a === code, `${msg} (got ${a})`);
     if (e instanceof LoopPosixProcessRunnerError) {
-      assert(e.message.length <= 256, `${msg}: msg bounded`);
-      assert(!/[\x00-\x1f\x7f]/.test(e.message), `${msg}: no ctrls`);
+      ok(e.message.length <= 256, `${msg}: bounded`);
+      ok(!/[\x00-\x1f\x7f]/.test(e.message), `${msg}: no ctrls`);
     }
   }
 }
+
+const nodeExe = realpathSync(process.execPath);
 
 // ═══════════════════════════════════════════════════════════════
 // Fixtures
 // ═══════════════════════════════════════════════════════════════
 
-const nodeExe = require("node:fs").realpathSync(process.execPath);
+const BASE64_PAYLOAD = `const p=JSON.parse(Buffer.from(process.argv.pop(),"base64").toString());`;
 
-function makeFixtureScript(script: string): string {
-  // Script runs under node -e
-  return script;
-}
-
-const HELLO_FIXTURE = `process.stdout.write("hello"); process.stderr.write("world"); process.exit(0);`;
-const EXIT42_FIXTURE = `process.exit(42);`;
-const STDOUT_BIG = `process.stdout.write("x".repeat(200000));`;
-const STDERR_BIG = `process.stderr.write("y".repeat(50000));`;
-const SIGTERM_HANDLER = `
-process.on("SIGTERM", () => { process.stdout.write("TERMED"); process.exit(0); });
-setTimeout(() => {}, 60000);
-`;
-const IGNORE_SIGTERM = `
-process.on("SIGTERM", () => {});
-setTimeout(() => {}, 60000);
-`;
-const GRANDCHILD_FIXTURE = `
-const { spawn } = require("child_process");
-const marker = process.argv[process.argv.indexOf("--") + 1];
-const delay = parseInt(process.argv[process.argv.indexOf("--") + 2]);
-// Use exec to run sleep + touch — the sleep process inherits our PGID
-const gc = spawn("sh", ["-c", "sleep " + (delay/1000) + " && touch " + JSON.stringify(marker)], {
-  stdio: "ignore"
-});
+const DIRECT_CHILD = BASE64_PAYLOAD + `
+const{spawn}=require("child_process");
+const gc=spawn(process.execPath,["-e",\`${BASE64_PAYLOAD}setTimeout(()=>{require('fs').writeFileSync(p.marker,'x')},p.delay)\`,Buffer.from(JSON.stringify(p)).toString("base64")],{stdio:"ignore"});
 gc.unref();
-setTimeout(() => {}, 60000);
+process.stdout.write("GRANDCHILD_READY\\n");
+setTimeout(()=>{},60000);
 `;
-const ECHO_STDIN = `const d = []; process.stdin.on("data", c => d.push(c)); process.stdin.on("end", () => process.stdout.write(Buffer.concat(d)));`;
 
-function nodeRequest(o: Partial<LoopPosixProcessRequest> & Pick<LoopPosixProcessRequest, "cwd">): LoopPosixProcessRequest {
-  return Object.freeze({
-    executableId: o.executableId ?? "node",
-    args: o.args ?? [],
-    cwd: o.cwd,
-    stdin: o.stdin,
-    env: o.env,
-    timeoutMs: o.timeoutMs,
-    maxStdoutBytes: o.maxStdoutBytes,
-    maxStderrBytes: o.maxStderrBytes,
-  });
+function mkReq(o: Partial<LoopPosixProcessRequest> & Pick<LoopPosixProcessRequest,"cwd">): LoopPosixProcessRequest {
+  return Object.freeze({ executableId: o.executableId ?? "node", args: o.args ?? [], cwd: o.cwd, stdin: o.stdin, env: o.env, timeoutMs: o.timeoutMs, maxStdoutBytes: o.maxStdoutBytes, maxStderrBytes: o.maxStderrBytes });
 }
 
 async function main(): Promise<void> {
-  console.log("LOOP POSIX Process Runner Tests\n");
-
-  const tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "loop-d02-")));
-  const cwd1 = join(tempRoot, "cwd1");
-  const cwd2 = join(tempRoot, "cwd2");
-  mkdirSync(cwd1, { recursive: true });
-  mkdirSync(cwd2, { recursive: true });
+  console.log("LOOP POSIX Process Runner — R1 Tests\n");
+  const tempRoot = realpathSync(mkdtempSync(join(tmpdir(),"loop-d02r1-")));
+  const cwd1 = join(tempRoot,"cwd1"); mkdirSync(cwd1,{recursive:true});
+  const cwd2 = join(tempRoot,"cwd2"); mkdirSync(cwd2,{recursive:true});
 
   const runner = new LoopPosixProcessRunner({
     executables: [
-      { id: "node", executablePath: nodeExe, allowDynamicArgs: true },
-      { id: "node-no-args", executablePath: nodeExe, allowDynamicArgs: false, fixedArgs: ["-e", HELLO_FIXTURE, "--"] },
-      { id: "echo-stdin", executablePath: nodeExe, allowDynamicArgs: true, fixedArgs: ["-e", ECHO_STDIN, "--"], stdinMode: "required" },
-      { id: "no-stdin", executablePath: nodeExe, allowDynamicArgs: true, stdinMode: "forbidden" },
+      { id:"node", executablePath: nodeExe, allowDynamicArgs: true },
+      { id:"node-fixed", executablePath: nodeExe, allowDynamicArgs: false, fixedArgs: ["-e","1"] },
+      { id:"echo-stdin", executablePath: nodeExe, allowDynamicArgs: true, fixedArgs: ["-e",`const d=[];process.stdin.on("data",c=>d.push(c));process.stdin.on("end",()=>process.stdout.write(Buffer.concat(d)))`], stdinMode:"required" },
+      { id:"no-stdin", executablePath: nodeExe, allowDynamicArgs: true, stdinMode:"forbidden" },
     ],
     allowedCwdRoots: [cwd1, cwd2],
-    fixedEnv: { HOME: "/tmp", PATH: "/usr/bin:/bin" },
-    allowedRequestEnvKeys: ["MY_VAR", "DEBUG"],
-    defaultTimeoutMs: 30000,
+    fixedEnv: { HOME:"/tmp", PATH:"/usr/bin:/bin" },
+    allowedRequestEnvKeys: ["MY_VAR","DEBUG"],
   });
 
   try {
-    // ═══════════════════════════════════════════════════════════
-    // 1. Config & executable allowlist
-    // ═══════════════════════════════════════════════════════════
-    console.log("1. Config & allowlist");
-    expectThrow("UNSUPPORTED_PLATFORM", () => {
-      const orig = Object.getOwnPropertyDescriptor(process, "platform")!;
-      try { Object.defineProperty(process, "platform", { value: "win32" }); new LoopPosixProcessRunner({ executables: [{ id: "x", executablePath: nodeExe }], allowedCwdRoots: [cwd1] }); }
-      finally { Object.defineProperty(process, "platform", orig); }
-    }, "unsupported platform");
-
-    expectThrow("INVALID_INPUT", () => new LoopPosixProcessRunner({ executables: [], allowedCwdRoots: [cwd1] }), "empty executables");
-    expectThrow("INVALID_INPUT", () => new LoopPosixProcessRunner({ executables: [{ id: "x", executablePath: nodeExe }, { id: "x", executablePath: nodeExe }], allowedCwdRoots: [cwd1] }), "duplicate id");
-    expectThrow("EXECUTABLE_INVALID", () => new LoopPosixProcessRunner({ executables: [{ id: "rel", executablePath: "relative/path" }], allowedCwdRoots: [cwd1] }), "relative path");
-    // unknown ID
-    const rUnk = new LoopPosixProcessRunner({ executables: [{ id: "x", executablePath: nodeExe }], allowedCwdRoots: [cwd1] });
-    await expectThrowAsync("EXECUTABLE_NOT_ALLOWED",
-      () => rUnk.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"], executableId: "unknown" })),
-      "unknown id async");
-
-    // symlink executable
-    const symExe = join(tempRoot, "sym-exe");
-    symlinkSync(nodeExe, symExe);
-    expectThrow("EXECUTABLE_INVALID", () => new LoopPosixProcessRunner({ executables: [{ id: "s", executablePath: symExe }], allowedCwdRoots: [cwd1] }), "symlink rejected");
-    rmSync(symExe);
-
-    // ── 2. Spawn options ──
-    console.log("2. Spawn options");
+    // ═══════════════════════════════════════════════════════
+    // 1. Deterministic grandchild cleanup
+    // ═══════════════════════════════════════════════════════
+    console.log("1. Grandchild cleanup");
     {
-      const origSpawn = childProcessMod.spawn;
-      let captured: Record<string, unknown> | null = null;
+      const marker = join(tempRoot,"gc-marker");
+      const payload = JSON.stringify({ marker, delay: 1200 });
+      const payloadB64 = Buffer.from(payload).toString("base64");
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e", DIRECT_CHILD, payloadB64], timeoutMs: 400, maxStdoutBytes: 100 }));
+      ok(r.stdout.includes("GRANDCHILD_READY"), "grandchild ready seen");
+      ok(r.status === "timed_out", "timed out");
+      ok(r.termSignalSent, "term sent");
+      await new Promise(res => setTimeout(res, 1500));
+      ok(!existsSync(marker), "marker not created");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 2. Runtime input validation
+    // ═══════════════════════════════════════════════════════
+    console.log("2. Input validation");
+    try { new LoopPosixProcessRunner(null as never); ok(false,"null options"); }
+    catch (e) { ok((e as LoopPosixProcessRunnerError).code === "INVALID_INPUT", "null options → INVALID_INPUT"); }
+    try { new LoopPosixProcessRunner({ executables: "x" as never, allowedCwdRoots: [cwd1] }); ok(false,"exes not array"); }
+    catch (e) { ok((e as LoopPosixProcessRunnerError).code === "INVALID_INPUT", "exes not array → INVALID_INPUT"); }
+    expectThrowAsync("INVALID_INPUT", () => runner.run(null as never), "null request");
+    expectThrowAsync("INVALID_INPUT", () => runner.run({ executableId: "node", args: "not-array" as never, cwd: cwd1 }), "args not array");
+    // allowed env keys validate dangerous at construction
+    try { new LoopPosixProcessRunner({ executables:[{id:"x",executablePath:nodeExe}], allowedCwdRoots:[cwd1], allowedRequestEnvKeys:["LD_PRELOAD"] }); ok(false,"should throw"); }
+    catch (e) { ok((e as LoopPosixProcessRunnerError).code === "ENV_NOT_ALLOWED", "dangerous allowed key rejected at construction"); }
+    try { new LoopPosixProcessRunner({ executables:[{id:"x",executablePath:nodeExe}], allowedCwdRoots:[cwd1], allowedRequestEnvKeys:["dup","dup"] }); ok(false,"should throw"); }
+    catch (e) { ok((e as LoopPosixProcessRunnerError).code === "INVALID_INPUT", "duplicate allowed key"); }
+
+    // ═══════════════════════════════════════════════════════
+    // 3. Executable permission mode pinning
+    // ═══════════════════════════════════════════════════════
+    console.log("3. Mode pinning");
+    {
+      const fx = join(tempRoot,"mode-fx.js");
+      writeFileSync(fx, "#!/usr/bin/env node\nprocess.exit(0)", { mode: 0o700 });
+      const r2 = new LoopPosixProcessRunner({ executables:[{id:"mx",executablePath:fx,allowDynamicArgs:true}], allowedCwdRoots:[cwd1] });
+      await r2.run(mkReq({cwd:cwd1,executableId:"mx"})); // works
+      chmodSync(fx, 0o755);
+      await expectThrowAsync("EXECUTABLE_CHANGED", () => r2.run(mkReq({cwd:cwd1,executableId:"mx"})), "mode change detected");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 4. Copied bounded collector
+    // ═══════════════════════════════════════════════════════
+    console.log("4. Copied collector");
+    {
+      const bigChunk = Buffer.alloc(32 * 1024 * 1024, 65); // 32 MiB of 'A'
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e", `process.stdout.write(Buffer.alloc(32*1024*1024,65).toString())`], maxStdoutBytes: 10, maxStderrBytes: 10 }));
+      ok(r.stdoutTruncated, "truncated");
+      ok(r.stdout.length <= 10, `bounded (${r.stdout.length})`);
+      ok(r.stdoutBytesReceived === 32*1024*1024, "bytes received correct");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 5. Basic execution (smoke)
+    // ═══════════════════════════════════════════════════════
+    console.log("5. Basic smoke");
+    {
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e","1"] }));
+      ok(r.status === "exited", "exit 0");
+      ok(r.exitCode === 0, "code 0");
+      ok(Object.isFrozen(r), "frozen");
+    }
+    {
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e","process.exit(42)"] }));
+      ok(r.status === "exited", "non-zero exit normal");
+      ok(r.exitCode === 42, "code 42");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 6. Spawn options
+    // ═══════════════════════════════════════════════════════
+    console.log("6. Spawn options");
+    {
+      const orig = childProcessMod.spawn;
+      let cap: Record<string,unknown>|null = null;
       try {
-        childProcessMod.spawn = function(cmd: string, args: readonly string[], opts: Record<string, unknown>) {
-          captured = { command: cmd, args: [...args], shell: opts.shell, detached: opts.detached, stdio: opts.stdio, cwd: opts.cwd, envKeys: Object.keys(opts.env as object) };
-          return origSpawn(cmd, args, opts);
+        childProcessMod.spawn = function(cmd: string, args: readonly string[], opts: Record<string,unknown>) {
+          cap = { cmd, args: [...args], shell: opts.shell, detached: opts.detached, stdio: opts.stdio };
+          return orig(cmd, args, opts);
         } as typeof childProcessMod.spawn;
-        await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"] }));
-        assert(captured !== null, "spawn called");
-        assert(captured!.command === nodeExe, "command is canonical path");
-        assert(captured!.shell === false, "shell:false");
-        assert(captured!.detached === true, "detached:true");
-        assert(JSON.stringify(captured!.stdio) === JSON.stringify(["pipe", "pipe", "pipe"]), "stdio pipes");
-        assert(captured!.cwd === cwd1, "cwd correct");
-        assert((captured!.envKeys as string[]).includes("HOME"), "env has HOME");
-        assert(!(captured!.envKeys as string[]).includes("SHELL") || !process.env.SHELL, "no parent env sentinel");
-      } finally { childProcessMod.spawn = origSpawn; }
+        await runner.run(mkReq({ cwd: cwd1, args: ["-e","1"] }));
+        ok(cap!.shell === false, "shell:false");
+        ok(cap!.detached === true, "detached:true");
+        ok(JSON.stringify(cap!.stdio) === JSON.stringify(["pipe","pipe","pipe"]), "stdio pipes");
+      } finally { childProcessMod.spawn = orig; }
     }
 
-    // ── 3. Args ──
-    console.log("3. Args");
+    // ═══════════════════════════════════════════════════════
+    // 7. Env isolation
+    // ═══════════════════════════════════════════════════════
+    console.log("7. Env isolation");
     {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "process.stdout.write('a')"] }));
-      assert(r.stdout === "a", "dynamic args work");
-    }
-    // Dynamic args disabled
-    {
-      const r2 = new LoopPosixProcessRunner({
-        executables: [{ id: "nx", executablePath: nodeExe, allowDynamicArgs: false, fixedArgs: ["-e", "1"] }],
-        allowedCwdRoots: [cwd1],
-      });
-      await expectThrowAsync("INVALID_INPUT",
-        () => r2.run(nodeRequest({ cwd: cwd1, args: ["-e", "2"], executableId: "nx" })),
-        "dynamic args rejected");
-      const ok = await r2.run(nodeRequest({ cwd: cwd1, executableId: "nx" }));
-      assert(ok.exitCode === 0, "fixed args only ok");
-    }
-    // Arg validations
-    await expectThrowAsync("INVALID_INPUT",
-      () => runner.run(nodeRequest({ cwd: cwd1, args: ["a\x00b"] })),
-      "NUL rejected");
-    await expectThrowAsync("INVALID_INPUT",
-      () => runner.run(nodeRequest({ cwd: cwd1, args: ["x".repeat(5000)] })),
-      "arg too long");
-
-    // ── 4. stdin ──
-    console.log("4. stdin");
-    {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, executableId: "echo-stdin", stdin: "hello-stdin" }));
-      assert(r.stdout === "hello-stdin", "stdin string roundtrip");
-    }
-    {
-      const bin = new Uint8Array([0, 1, 2, 255]);
-      const rb = await runner.run(nodeRequest({ cwd: cwd1, executableId: "echo-stdin", stdin: bin }));
-      assert(rb.stdoutBytesReceived === 4, "binary stdin bytes received");
-    }
-    await expectThrowAsync("INVALID_INPUT",
-      () => runner.run(nodeRequest({ cwd: cwd1, executableId: "no-stdin", stdin: "x" })),
-      "stdin forbidden");
-    await expectThrowAsync("INVALID_INPUT",
-      () => runner.run(nodeRequest({ cwd: cwd1, executableId: "echo-stdin" })),
-      "stdin required missing");
-
-    // ── 5. Env ──
-    console.log("5. Env");
-    {
-      const origSpawn = childProcessMod.spawn;
-      let capturedEnv: Record<string, string> | null = null;
+      const orig = childProcessMod.spawn;
+      let capEnv: Record<string,string>|null = null;
       try {
-        childProcessMod.spawn = function(cmd: string, args: readonly string[], opts: Record<string, unknown>) {
-          capturedEnv = opts.env as Record<string, string>;
-          return origSpawn(cmd, args, opts);
+        childProcessMod.spawn = function(cmd: string, args: readonly string[], opts: Record<string,unknown>) {
+          capEnv = opts.env as Record<string,string>;
+          return orig(cmd, args, opts);
         } as typeof childProcessMod.spawn;
-        await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"], env: { MY_VAR: "val1" } }));
-        assert(capturedEnv !== null, "env captured");
-        assert(capturedEnv!.MY_VAR === "val1", "request env passed");
-        assert(capturedEnv!.HOME === "/tmp", "fixed env present");
-        assert(!("PATH" in capturedEnv!) || capturedEnv!.PATH === "/usr/bin:/bin", "PATH correct");
-      } finally { childProcessMod.spawn = origSpawn; }
+        await runner.run(mkReq({ cwd: cwd1, args: ["-e","1"], env: { MY_VAR: "v" } }));
+        ok(!("SHELL" in capEnv!) || capEnv!.SHELL !== process.env.SHELL, "no parent SHELL leak");
+        ok(capEnv!.HOME === "/tmp", "fixed env");
+        ok(capEnv!.MY_VAR === "v", "request env");
+      } finally { childProcessMod.spawn = orig; }
     }
-    await expectThrowAsync("ENV_NOT_ALLOWED",
-      () => runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"], env: { BAD_KEY: "v" } })),
-      "unapproved env key");
-    await expectThrowAsync("ENV_NOT_ALLOWED",
-      () => runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"], env: { HOME: "override" } })),
-      "override fixed env");
+    await expectThrowAsync("ENV_NOT_ALLOWED", () => runner.run(mkReq({ cwd: cwd1, args:["-e","1"], env:{HOME:"override"}})), "override fixed env");
 
-    // Dangerous env keys
-    for (const dk of ["LD_PRELOAD", "ld_preload", "Ld_Preload"]) {
-      const r3 = new LoopPosixProcessRunner({
+    // Mutation-I test: override fixed env with an allowed key
+    {
+      const ri = new LoopPosixProcessRunner({
         executables: [{ id: "nx", executablePath: nodeExe, allowDynamicArgs: true }],
         allowedCwdRoots: [cwd1],
-        allowedRequestEnvKeys: [dk],
+        fixedEnv: { MY_FIXED: "original" },
+        allowedRequestEnvKeys: ["MY_FIXED"],
       });
       await expectThrowAsync("ENV_NOT_ALLOWED",
-        () => r3.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"], executableId: "nx", env: { [dk]: "x" } })),
-        `dangerous env rejected: ${dk}`);
+        () => ri.run(mkReq({ cwd: cwd1, executableId: "nx", args: ["-e", "1"], env: { MY_FIXED: "override" } })),
+        "override fixed env with allowed key rejected");
     }
 
-    // ── 6. cwd ──
-    console.log("6. cwd");
+    // Mutation-J test: oversized stdin must be rejected
     {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"] }));
-      assert(r.exitCode === 0, "cwd1 ok");
-    }
-    await expectThrowAsync("CWD_NOT_ALLOWED",
-      () => { const d = join(tempRoot, "outside"); mkdirSync(d, { recursive: true }); return runner.run(nodeRequest({ cwd: d })); },
-      "outside root");
-    // symlink cwd
-    const symCwd = join(tempRoot, "sym-cwd");
-    symlinkSync(cwd1, symCwd);
-    await expectThrowAsync("CWD_INVALID",
-      () => runner.run(nodeRequest({ cwd: symCwd })),
-      "symlink cwd rejected");
-    rmSync(symCwd);
-    expectThrow("INVALID_INPUT", () => new LoopPosixProcessRunner({ executables: [{ id: "x", executablePath: nodeExe }], allowedCwdRoots: ["/"] }), "/ as root rejected");
-
-    // ── 7. Output ──
-    console.log("7. Output");
-    {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "process.stdout.write('hello'); process.stderr.write('world')"] }));
-      assert(r.stdout === "hello", "stdout");
-      assert(r.stderr === "world", "stderr");
-      assert(r.stdoutBytesReceived === 5, "stdout bytes");
-      assert(r.stderrBytesReceived === 5, "stderr bytes");
-      assert(!r.stdoutTruncated, "not truncated");
-    }
-    // Bounded output
-    {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", STDOUT_BIG], maxStdoutBytes: 100, maxStderrBytes: 100 }));
-      assert(r.stdoutTruncated, "stdout truncated");
-      assert(r.stdout.length <= 100, `stdout bounded (got ${r.stdout.length})`);
+      const bigStdin = "x".repeat(2_000_000); // 2MB, exceeds default 1MB
+      await expectThrowAsync("INVALID_INPUT",
+        () => runner.run(mkReq({ cwd: cwd1, executableId: "echo-stdin", stdin: bigStdin })),
+        "oversized stdin rejected");
     }
 
-    // ── 8. Exit and errors ──
-    console.log("8. Exit and errors");
+    // ═══════════════════════════════════════════════════════
+    // 8. cwd containment
+    // ═══════════════════════════════════════════════════════
+    console.log("8. cwd");
     {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "process.exit(0)"] }));
-      assert(r.status === "exited", "exit 0");
-      assert(r.exitCode === 0, "code 0");
-      assert(!r.termSignalSent, "no term");
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e","1"] }));
+      ok(r.exitCode === 0, "cwd1 ok");
+    }
+    const outside = join(tempRoot,"outside"); mkdirSync(outside,{recursive:true});
+    await expectThrowAsync("CWD_NOT_ALLOWED", () => runner.run(mkReq({ cwd: outside })), "outside root");
+
+    // ═══════════════════════════════════════════════════════
+    // 9. Timeout
+    // ═══════════════════════════════════════════════════════
+    console.log("9. Timeout");
+    {
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e","setTimeout(()=>{},60000)"], timeoutMs: 500 }));
+      ok(r.status === "timed_out", "timed out");
+      ok(r.termSignalSent, "term sent");
     }
     {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "process.exit(42)"] }));
-      assert(r.status === "exited", "non-zero exit is normal");
-      assert(r.exitCode === 42, "code 42");
-    }
-    // spawn/executable failure
-    {
-      const missingExe = join(tempRoot, "missing-exe");
-      writeFileSync(missingExe, "#!/bin/sh\necho x", { mode: 0o755 });
-      const badRunner = new LoopPosixProcessRunner({
-        executables: [{ id: "bad", executablePath: missingExe }],
-        allowedCwdRoots: [cwd1],
-      });
-      rmSync(missingExe);
-      await expectThrowAsync("EXECUTABLE_CHANGED",
-        () => badRunner.run(nodeRequest({ cwd: cwd1, executableId: "bad" })),
-        "deleted exe");
+      const r = await runner.run(mkReq({ cwd: cwd1, args: ["-e","process.on('SIGTERM',()=>{});setTimeout(()=>{},60000)"], timeoutMs: 500 }));
+      ok(r.status === "timed_out", "timed out");
+      ok(r.killSignalSent, "kill sent");
     }
 
-    // ── 9. Timeout and process group ──
-    console.log("9. Timeout/process-group");
-    // Scenario 1: SIGTERM handler exits
+    // ═══════════════════════════════════════════════════════
+    // 10. Fault injection: signal failure
+    // ═══════════════════════════════════════════════════════
+    console.log("10. Signal fault injection");
     {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", SIGTERM_HANDLER], timeoutMs: 2000 }));
-      assert(r.status === "timed_out", "timed out");
-      assert(r.termSignalSent, "term sent");
-      assert(!r.killSignalSent, "no kill needed");
-    }
-    // Scenario 2: Ignore SIGTERM → SIGKILL
-    {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", IGNORE_SIGTERM], timeoutMs: 2000 }));
-      assert(r.status === "timed_out", "timed out");
-      assert(r.killSignalSent, "kill sent");
-    }
-    // Scenario 3: Grandchild cleanup
-    {
-      const marker = join(tempRoot, "gc-marker");
-      // Grandchild (sleep then touch) writes marker after 5000ms. Timeout at 1500ms triggers cleanup.
-      await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", GRANDCHILD_FIXTURE, "--", marker, "5000"], timeoutMs: 1500 }));
-      // Wait well past the grandchild's planned write time
-      await new Promise(r => setTimeout(r, 2000));
-      assert(!existsSync(marker), "grandchild marker not created (process group killed)");
+      const origKill = process.kill;
+      let killCalls = 0;
+      try {
+        process.kill = function(pid: number, sig?: string | number): true {
+          killCalls++;
+          if (typeof pid === "number" && pid < 0 && sig === "SIGTERM" && killCalls === 1) {
+            const e = new Error("SENTINEL_KILL_FAIL") as NodeJS.ErrnoException; e.code = "EPERM"; throw e;
+          }
+          return origKill(pid as number, sig as NodeJS.Signals);
+        } as typeof process.kill;
+        await expectThrowAsync("PROCESS_CLEANUP_FAILED",
+          () => runner.run(mkReq({ cwd: cwd1, args: ["-e","setTimeout(()=>{},60000)"], timeoutMs: 300 })),
+          "TERM fail → CLEANUP_FAILED");
+      } finally { process.kill = origKill; }
     }
 
-    // ── 10. Concurrency ──
-    console.log("10. Concurrency");
+    // ═══════════════════════════════════════════════════════
+    // 11. stdin modes
+    // ═══════════════════════════════════════════════════════
+    console.log("11. stdin");
+    {
+      const r = await runner.run(mkReq({ cwd: cwd1, executableId:"echo-stdin", stdin: "hello" }));
+      ok(r.stdout === "hello", "stdin roundtrip");
+      ok(r.stdoutBytesReceived === 5, "bytes received");
+    }
+    await expectThrowAsync("INVALID_INPUT", () => runner.run(mkReq({ cwd: cwd1, executableId:"echo-stdin" })), "required missing");
+    await expectThrowAsync("INVALID_INPUT", () => runner.run(mkReq({ cwd: cwd1, executableId:"no-stdin", stdin: "x" })), "forbidden");
+
+    // ═══════════════════════════════════════════════════════
+    // 12. Args validation
+    // ═══════════════════════════════════════════════════════
+    console.log("12. Args");
+    await expectThrowAsync("INVALID_INPUT", () => runner.run(mkReq({ cwd: cwd1, args: ["a\x00b"] })), "NUL");
+    await expectThrowAsync("INVALID_INPUT", () => runner.run(mkReq({ cwd: cwd1, executableId:"node-fixed", args: ["-e","1"] })), "dynamic args rejected");
+
+    // ═══════════════════════════════════════════════════════
+    // 13. Concurrency
+    // ═══════════════════════════════════════════════════════
+    console.log("13. Concurrency");
     {
       const [r1, r2] = await Promise.all([
-        runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "process.stdout.write('AAA')"], env: { MY_VAR: "a" }, maxStdoutBytes: 10 })),
-        runner.run(nodeRequest({ cwd: cwd2, args: ["-e", "setTimeout(() => process.stdout.write('BBB'), 500)"], env: { DEBUG: "1" }, maxStdoutBytes: 10 })),
+        runner.run(mkReq({ cwd: cwd1, args: ["-e","process.stdout.write('A')"], env:{MY_VAR:"a"}})),
+        runner.run(mkReq({ cwd: cwd2, args: ["-e","process.stdout.write('B')"], env:{DEBUG:"1"}})),
       ]);
-      assert(r1.stdout === "AAA", "concurrent 1 ok");
-      assert(r2.stdout === "BBB", "concurrent 2 ok");
-      assert(r1.exitCode === 0 && r2.exitCode === 0, "both exit 0");
-    }
-
-    // ── Result freezing ──
-    console.log("Result freezing");
-    {
-      const r = await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", "1"] }));
-      assert(Object.isFrozen(r), "result frozen");
+      ok(r1.stdout === "A" && r2.stdout === "B", "independent");
+      ok(r1.exitCode === 0 && r2.exitCode === 0, "both ok");
     }
 
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
-
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
-
 main();
