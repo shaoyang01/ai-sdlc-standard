@@ -175,6 +175,67 @@ async function main(){
     console.log("16. Mode pinning");
     {const fx=join(tr,"fx.js");writeFileSync(fx,"#!/usr/bin/env node\nprocess.exit(0)",{mode:0o700});const r9=new LoopPosixProcessRunner({executables:[{id:"m",executablePath:fx,allowDynamicArgs:true}],allowedCwdRoots:[c1]});await r9.run(mkReq({cwd:c1,executableId:"m"}));chmodSync(fx,0o755);await et("EXECUTABLE_CHANGED",()=>r9.run(mkReq({cwd:c1,executableId:"m"})),"mode change")}
 
+    // ═══════════════════════════════════════ 17. Listener fallback (onThrow)
+    console.log("17. Listener fallback");
+    {const fc=fakeChild({pid:55555,onThrow:true});let kc=0;const oK=process.kill;try{process.kill=function(...a:any[]){kc++;if(kc===1)ok(a[0]===-55555,"TERM to -55555");return true}as typeof process.kill;
+      cpMod.spawn=function(){return fc as any} as any;
+      const r10=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
+      const prom=r10.run(mkReq({cwd:c1,executableId:"n"}));
+      setTimeout(()=>fc.emit("close",0,null),100);
+      await et("PROCESS_SPAWN_FAILED",()=>withWatchdog(prom,3000),"listener throw→SPAWN_FAILED");
+      ok(kc>0,"cleanup called");setTimeout(()=>fc.emit("error",new Error("LATE")),50);
+      await new Promise(r=>setTimeout(r,200));ok(true,"late error absorbed")
+    }finally{process.kill=oK;cpMod.spawn=cpMod.spawn}}
+
+    // ═══════════════════════════════════════ 18. Finalize failure
+    console.log("18. Finalize failure");
+    {const oConcat=Buffer.concat;let cc=0;try{Buffer.concat=function(...a:any[]):any{cc++;if(cc===1)throw new Error("FINALIZE_STDOUT_SENTINEL");return (oConcat as any)(...a)};
+      const fc=fakeChild({pid:66666});cpMod.spawn=function(){return fc as any} as any;
+      const r11=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
+      const prom=r11.run(mkReq({cwd:c1,executableId:"n"}));setTimeout(()=>fc.emit("close",0,null),50);
+      await et("PROCESS_IO_FAILED",()=>withWatchdog(prom,3000),"finalize→IO_FAILED");
+    }finally{Buffer.concat=oConcat;cpMod.spawn=cpMod.spawn}}
+
+    // ═══════════════════════════════════════ 19. Cleanup fault matrix
+    console.log("19. Cleanup faults");
+    // TERM failure→CLEANUP_FAILED
+    {const oK2=process.kill;let kc2=0;try{process.kill=function(...a:any[]){kc2++;if(kc2===1){const e=new Error("SENT")as NodeJS.ErrnoException;e.code="EPERM";throw e}return true}as typeof process.kill;
+      const fc=fakeChild({pid:77777});cpMod.spawn=function(){return fc as any} as any;
+      const r12=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
+      const prom=r12.run(mkReq({cwd:c1,executableId:"n",timeoutMs:200}));
+      await et("PROCESS_CLEANUP_FAILED",()=>withWatchdog(prom,5000),"TERM fail→CLEANUP");
+    }finally{process.kill=oK2;cpMod.spawn=cpMod.spawn}}
+
+    // KILL failure
+    {const oK3=process.kill;let kc3=0;try{process.kill=function(...a:any[]){kc3++;if(kc3===2){const e=new Error("SENT")as NodeJS.ErrnoException;e.code="EPERM";throw e}return true}as typeof process.kill;
+      const fc=fakeChild({pid:88888});cpMod.spawn=function(){return fc as any} as any;
+      const r13=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1]});
+      const prom=r13.run(mkReq({cwd:c1,executableId:"n",timeoutMs:200}));
+      await et("PROCESS_CLEANUP_FAILED",()=>withWatchdog(prom,5000),"KILL fail→CLEANUP");
+    }finally{process.kill=oK3;cpMod.spawn=cpMod.spawn}}
+
+    // Cleanup deadline (never closes)
+    {const oK4=process.kill;try{process.kill=function(...a:any[]){return true}as typeof process.kill;
+      const fc=fakeChild({pid:99999});cpMod.spawn=function(){return fc as any} as any;
+      const r14=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1],terminationGraceMs:50});
+      const prom=r14.run(mkReq({cwd:c1,executableId:"n",timeoutMs:100}));
+      await et("PROCESS_CLEANUP_FAILED",()=>withWatchdog(prom,5000),"deadline→CLEANUP");
+    }finally{process.kill=oK4;cpMod.spawn=cpMod.spawn}}
+
+    // ═══════════════════════════════════════ 20. Stderr backing identity
+    console.log("20. Stderr backing");
+    {const oConcat=Buffer.concat;const oSp=cpMod.spawn;const bigBuf=Buffer.alloc(32*1024*1024,66);let obs:Buffer[]=[];try{
+      Buffer.concat=function(c:any,l?:any):any{obs=Array.from(c);return (oConcat as any)(c,l)};
+      const fc=fakeChild({pid:44444});const se=fc.stderr as any;cpMod.spawn=function(){return fc as any} as any;
+      const r15=new LoopPosixProcessRunner({executables:[{id:"n",executablePath:nodeExe}],allowedCwdRoots:[c1],defaultMaxStderrBytes:1});
+      const prom=r15.run(mkReq({cwd:c1,executableId:"n",maxStderrBytes:1}));
+      se.emit("data",bigBuf);fc.stderr=null;fc.emit("close",0,null);
+      const r=await withWatchdog(prom,5000);
+      ok(r.stderrTruncated,"se truncated");ok(r.stderrBytesReceived===bigBuf.length,"se bytes");
+      ok(obs.reduce((s,c)=>s+c.length,0)<=1,"se retained≤1");
+      ok(obs.every(c=>c.buffer!==bigBuf.buffer),"se no shared backing");
+    }finally{Buffer.concat=oConcat;cpMod.spawn=oSp}}
+
   }finally{rmSync(tr,{recursive:true,force:true})}
   console.log(`\nResults: ${p} passed, ${f} failed`);if(f>0)process.exit(1)
 }
