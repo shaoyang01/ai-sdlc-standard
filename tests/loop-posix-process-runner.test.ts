@@ -73,10 +73,10 @@ const GRANDCHILD_FIXTURE = `
 const { spawn } = require("child_process");
 const marker = process.argv[process.argv.indexOf("--") + 1];
 const delay = parseInt(process.argv[process.argv.indexOf("--") + 2]);
-// NOT detached — so grandchild inherits our process group
-const gc = spawn(process.execPath, ["-e",
-  "setTimeout(() => { require('fs').writeFileSync('REPLACEME', 'x'); }, " + delay + ")"
-], { stdio: "ignore" });
+// Use exec to run sleep + touch — the sleep process inherits our PGID
+const gc = spawn("sh", ["-c", "sleep " + (delay/1000) + " && touch " + JSON.stringify(marker)], {
+  stdio: "ignore"
+});
 gc.unref();
 setTimeout(() => {}, 60000);
 `;
@@ -325,9 +325,8 @@ async function main(): Promise<void> {
     // Scenario 3: Grandchild cleanup
     {
       const marker = join(tempRoot, "gc-marker");
-      const script = GRANDCHILD_FIXTURE.replace("REPLACEME", marker);
-      // Grandchild writes marker after 5000ms. Timeout at 1500ms triggers cleanup.
-      await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", script, "--", marker, "5000"], timeoutMs: 1500 }));
+      // Grandchild (sleep then touch) writes marker after 5000ms. Timeout at 1500ms triggers cleanup.
+      await runner.run(nodeRequest({ cwd: cwd1, args: ["-e", GRANDCHILD_FIXTURE, "--", marker, "5000"], timeoutMs: 1500 }));
       // Wait well past the grandchild's planned write time
       await new Promise(r => setTimeout(r, 2000));
       assert(!existsSync(marker), "grandchild marker not created (process group killed)");
