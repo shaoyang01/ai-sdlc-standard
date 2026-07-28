@@ -185,6 +185,36 @@ function mkReq(ctx: Ctx, o: {
   return req;
 }
 
+// ── R2 hunk infrastructure ──
+
+/** Strict unified diff range formatter: count===1 omits comma, all others include it. */
+function formatRange(start: number, count: number): string {
+  return count === 1 ? String(start) : `${start},${count}`;
+}
+
+interface HunkSpec {
+  oldStart: number; oldCount: number;
+  newStart: number; newCount: number;
+  body: string; // body lines with ' '/'+'/'-' prefixes, each ending \n
+}
+
+/** Build a single-file patch with one diff section and multiple @@ hunks. */
+function makeSingleFilePatch(path: string, hunks: HunkSpec[]): string {
+  let s = `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n`;
+  for (const h of hunks) {
+    s += `@@ -${formatRange(h.oldStart, h.oldCount)} +${formatRange(h.newStart, h.newCount)} @@\n${h.body}`;
+  }
+  return s;
+}
+
+/** Wrap a real runner to count invocations. */
+function countingRunner(base: any) {
+  const state = { count: 0 };
+  const orig = base.run.bind(base);
+  (base as any).run = async (req: any) => { state.count++; return orig(req); };
+  return { runner: base, state };
+}
+
 async function main() {
   console.log("LOOP Patch Application — Bounded Multi-File Unified Diff Safety Tests\n");
 
@@ -957,79 +987,204 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // K. Hunk overlap
+  // K. Hunk overlap — single-section multi-hunk matrix
   // ════════════════════════════════════════════════════════════════
   {
-    console.log("K. Hunk overlap");
-    const ctx = await mkCtx("k", "codex/k");
-    const H = (oldSt: number, oldCt: number, newSt: number, newCt: number, body: string) =>
-      `diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -${oldSt}${oldCt>1?",":","}${oldCt>1?oldCt:""}${oldCt===0?",0":""} +${newSt}${newCt>1?",":","}${newCt>1?newCt:""}${newCt===0?",0":""} @@\n${body}`;
-    // Old range partial overlap (second end larger)
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,3,1,3," a\n-b\n+c\n d\n") + H(2,3,2,3," c\n-d\n+e\n f\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "old range partial overlap");
-    // New range partial overlap
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,3,1,3," a\n-b\n+c\n d\n") + H(4,3,3,3," c\n-d\n+e\n f\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "new range partial overlap");
-    // Second range fully contains first
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,1,1,1,"-a\n+b\n") + H(1,3,1,3," a\n-b\n+c\n d\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "second contains first");
-    // Same start
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,2,1,2,"-a\n+b\n") + H(1,3,1,3," a\n-b\n+c\n d\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "same start overlap");
-    // Adjacent non-overlapping (valid)
-    const adj = H(1,2,1,2,"-a\n+b\n") + H(3,1,3,1,"-c\n+d\n");
-    const pAdj = makeDiff("aa\nbb\ncc\n", "AA\nbb\nDD\n", "a.txt");
-    // Generate a real adjacent-hunk patch with a scratch repo
-    const oldAdj = Array.from({ length: 10 }, (_, i) => `L${i}`).join("\n") + "\n";
-    const newAdj = Array.from({ length: 10 }, (_, i) => (i === 1 || i === 3 ? `X${i}` : `L${i}`)).join("\n") + "\n";
-    writeFileSync(join(ctx.snap.workspacePath, "adj.txt"), oldAdj);
-    execFileSync(GP, ["add", "adj.txt"], { cwd: ctx.snap.workspacePath });
-    execFileSync(GP, ["commit", "-q", "-m", "adj"], { cwd: ctx.snap.workspacePath });
-    const snapAdj = await ctx.wsMgr.inspect(ctx.id);
-    const adjPatch = makeDiff(oldAdj, newAdj, "adj.txt");
-    // The diff for changes at lines 2 and 4 (non-contiguous) should produce multiple hunks
-    const rAdj = await ctx.mgr.apply(mkReq({ ...ctx, snap: snapAdj } as Ctx, { patch: adjPatch, allowed: ["adj.txt"] }));
-    ok(rAdj.state === "applied", "adjacent non-overlapping valid");
-    // Count=0 same insertion point
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,0,1,1,"+a\n") + H(1,0,2,1,"+b\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "count=0 same insert point overlap");
-    // Count=0 adjacent to next range (valid)
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: H(1,0,1,1,"+a\n") + H(2,0,2,1,"+b\n"),
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "count=0 adjacent insert");  // Both at start=1 (new) and start=2 — non-overlap in new dimension
-    // Wait — H(1,0,1,1): newStart=1, newCount=1, newEnd=1. H(2,0,2,1): newStart=2 > 1 ✓. Should be accepted. But test expects fail? No — these should be accepted! Let me verify.
-    // Hmm, H(1,0,1,1): newStart=1, newEnd=1 (count==0 means end=start=1). H(2,0,2,1): newStart=2, newEnd=2. 2 <= 1? No, 2 > 1 → ok. Should pass.
-    // Actually the test name says "count=0 adjacent to next" and should pass. But I put assertRejects.
-    // Let me fix: make this a success test.
-    // Use a real patch fixture instead.
-    rmSync(ctx.s.tr, { recursive: true, force: true });
-    {
-      // Count=0 adjacent insert success test
-      const ctxK2 = await mkCtx("k2", "codex/k2");
-      // We need a valid patch with count=0 hunk adjacent to another. Build manually.
-      const goodZero = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -2,0 +3,1 @@\n+z\n@@ -4,1 +6,1 @@\n-x\n+y\n";
-      // old ranges: [2,count=0→end=2] then [4,count=1→end=4] — 4 > 2 ✓
-      // new ranges: [3,count=1→end=3] then [6,count=1→end=6] — 6 > 3 ✓
-      // But these need a file with enough lines. a.txt = 3 lines. Not enough. Skip this test and just verify the overlap check works.
-      ok(true, "count=0 adjacent insert accepted"); // placeholder — the important thing is the reject tests above
-      rmSync(ctxK2.s.tr, { recursive: true, force: true });
+    console.log("K. Hunk overlap (single-section multi-hunk)");
+
+    // ── formatRange unit checks ──
+    ok(formatRange(2, 1) === "2", "formatRange count=1 → bare start");
+    ok(formatRange(2, 0) === "2,0", "formatRange count=0 → start,0");
+    ok(formatRange(2, 3) === "2,3", "formatRange count=3 → start,3");
+
+    // Helper: build a counting-runner Manager and assert runner untouched after reject.
+    async function kReject(
+      label: string, hunks: HunkSpec[], code: string,
+    ): Promise<void> {
+      const ctx = await mkCtx("k-" + label.replace(/\W/g, ""), "codex/k-" + label.replace(/\W/g, ""));
+      const { runner, state } = countingRunner(mkRunner(ctx.s.rp, ctx.s.cr, ctx.s.home));
+      const wsMgr2 = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
+      const mgr2 = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr2, gitExecutableId: "git" });
+      const snap2 = await wsMgr2.inspect(ctx.id);
+      state.count = 0; // reset after inspect; we measure only Manager.apply calls
+      const patch = makeSingleFilePatch("a.txt", hunks);
+      ok(state.count === 0, `${label}: runner count 0 before Manager`);
+      try {
+        await mgr2.apply(mkReq({ ...ctx, snap: snap2 } as Ctx, { patch, allowed: ["a.txt"] }));
+        ok(false, `${label} (no throw)`);
+      } catch (e: any) {
+        ok(e instanceof LoopPatchApplicationError && e.code === code,
+          `${label}→${e?.constructor?.name ?? "?"}:${e?.code ?? "?"}`);
+      }
+      ok(state.count === 0, `${label}: runner count 0 after reject (Git boundary not reached)`);
+      rmSync(ctx.s.tr, { recursive: true, force: true });
     }
-    // End overflow safe integer
-    await assertRejects(() => ctx.mgr.apply(mkReq(ctx, {
-      patch: `diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -${Number.MAX_SAFE_INTEGER},2 +${Number.MAX_SAFE_INTEGER},2 @@\n-a\n+b\n`,
-      allowed: ["a.txt"]
-    })), "PATCH_MALFORMED", "end overflow rejected");
+
+    // K1: Old partial overlap — second oldStart inside first old range, second oldEnd > first oldEnd.
+    //     New ranges strictly non-overlapping.
+    await kReject("K1 old partial overlap", [
+      { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" },
+      { oldStart: 3, oldCount: 5, newStart: 7, newCount: 5, body: " e\n-f\n+F\n g\n h\n i\n" },
+    ], "PATCH_MALFORMED");
+
+    // K2: New partial overlap — second newStart inside first new range, second newEnd > first newEnd.
+    //     Old ranges strictly non-overlapping.
+    await kReject("K2 new partial overlap", [
+      { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" },
+      { oldStart: 7, oldCount: 5, newStart: 3, newCount: 5, body: " g\n-h\n+H\n i\n j\n k\n" },
+    ], "PATCH_MALFORMED");
+
+    // K3: Full containment — second old range fully contains first old range.
+    //     New ranges strictly non-overlapping.
+    await kReject("K3 full containment", [
+      { oldStart: 3, oldCount: 3, newStart: 3, newCount: 3, body: " c\n-d\n+D\n e\n" },
+      { oldStart: 1, oldCount: 7, newStart: 7, newCount: 7, body: " a\n-b\n+B\n c\n-d\n+D\n e\n" },
+    ], "PATCH_MALFORMED");
+
+    // K4: Same start — old ranges share the same oldStart.
+    //     New ranges strictly non-overlapping.
+    await kReject("K4 same start", [
+      { oldStart: 1, oldCount: 2, newStart: 1, newCount: 2, body: "-a\n+A\n b\n" },
+      { oldStart: 1, oldCount: 3, newStart: 5, newCount: 3, body: " a\n-b\n+B\n c\n" },
+    ], "PATCH_MALFORMED");
+
+    // K5: Count=0 same insertion point — two oldCount=0 hunks with same oldStart.
+    //     New ranges strictly increasing.
+    await kReject("K5 count0 same insert", [
+      { oldStart: 2, oldCount: 0, newStart: 3, newCount: 1, body: "+x\n" },
+      { oldStart: 2, oldCount: 0, newStart: 4, newCount: 1, body: "+y\n" },
+    ], "PATCH_MALFORMED");
+
+    // K6: Effective-end overflow — start=MAX_SAFE_INTEGER, count≥2.
+    await kReject("K6 end overflow", [
+      { oldStart: Number.MAX_SAFE_INTEGER, oldCount: 2, newStart: 1, newCount: 2, body: "-a\n+b\n" },
+    ], "PATCH_MALFORMED");
+
+    // ── K7: Real adjacent two-hunk success (Git-applied) ──
+    {
+      console.log("  K7: adjacent two-hunk success");
+      const ctx = await mkCtx("k7", "codex/k7");
+      const ws = ctx.snap.workspacePath;
+      const adjLines = Array.from({ length: 20 }, (_, i) => String(i + 1));
+      const adjOld = adjLines.join("\n") + "\n";
+      writeFileSync(join(ws, "adj.txt"), adjOld);
+      execFileSync(GP, ["add", "adj.txt"], { cwd: ws });
+      execFileSync(GP, ["commit", "-q", "-m", "adj"], { cwd: ws });
+      const snap7 = await ctx.wsMgr.inspect(ctx.id);
+
+      // hunk1: old 1..5, new 1..5, change line 2 → TWO
+      // hunk2: old 6..12, new 6..12, change line 9 → NINE
+      // secondOldStart(6) = firstOldEnd(5) + 1 ✓
+      // secondNewStart(6) = firstNewEnd(5) + 1 ✓
+      const hunk1Body = " 1\n-2\n+TWO\n 3\n 4\n 5\n";
+      const hunk2Body = " 6\n 7\n 8\n-9\n+NINE\n 10\n 11\n 12\n";
+      const adjPatch = makeSingleFilePatch("adj.txt", [
+        { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: hunk1Body },
+        { oldStart: 6, oldCount: 7, newStart: 6, newCount: 7, body: hunk2Body },
+      ]);
+
+      // Assert patch structure: exactly two @@ hunk headers
+      const hunkHeaders = adjPatch.split("\n").filter((l: string) => l.startsWith("@@"));
+      ok(hunkHeaders.length === 2, "K7: patch has exactly 2 @@ hunk headers");
+
+      // Parse ranges and verify adjacency
+      const r1m = /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/.exec(hunkHeaders[0]!);
+      const r2m = /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/.exec(hunkHeaders[1]!);
+      ok(!!r1m && !!r2m, "K7: both hunk headers parse");
+      const firstOldEnd = Number(r1m![1]) + Number(r1m![2]) - 1;
+      const firstNewEnd = Number(r1m![3]) + Number(r1m![4]) - 1;
+      ok(Number(r2m![1]) === firstOldEnd + 1, "K7: secondOldStart = firstOldEnd + 1");
+      ok(Number(r2m![3]) === firstNewEnd + 1, "K7: secondNewStart = firstNewEnd + 1");
+
+      // Capture pre-state
+      const preHead = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ws, encoding: "utf8" }).trim();
+      const preIdx = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
+      const srcHeadBefore = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ctx.s.rp, encoding: "utf8" }).trim();
+      const srcStatusBefore = execFileSync(GP, ["status", "--porcelain"], { cwd: ctx.s.rp, encoding: "utf8" });
+
+      const r7 = await ctx.mgr.apply(mkReq({ ...ctx, snap: snap7 } as Ctx, { patch: adjPatch, allowed: ["adj.txt"] }));
+      ok(r7.state === "applied", "K7: state=applied via real Git");
+
+      const finalContent = readFileSync(join(ws, "adj.txt"), "utf8");
+      ok(finalContent.includes("TWO"), "K7: file contains TWO");
+      ok(finalContent.includes("NINE"), "K7: file contains NINE");
+
+      const postHead = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ws, encoding: "utf8" }).trim();
+      ok(postHead === preHead, "K7: task HEAD unchanged");
+      const postIdx = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
+      ok(postIdx === preIdx, "K7: index unchanged");
+      const srcHeadAfter = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ctx.s.rp, encoding: "utf8" }).trim();
+      const srcStatusAfter = execFileSync(GP, ["status", "--porcelain"], { cwd: ctx.s.rp, encoding: "utf8" });
+      ok(srcHeadAfter === srcHeadBefore && srcStatusAfter === srcStatusBefore, "K7: Source workspace unchanged");
+      rmSync(ctx.s.tr, { recursive: true, force: true });
+    }
+
+    // ── K8: Count=0 adjacent parser acceptance ──
+    {
+      console.log("  K8: count=0 adjacent parser acceptance");
+      const ctx = await mkCtx("k8", "codex/k8");
+      const ws = ctx.snap.workspacePath;
+      // a.txt exists with 3 lines. Use oldStart beyond file length so git apply
+      // --check fails (forward=false, reverse=false → PATCH_NOT_APPLICABLE).
+      // This proves the parser accepted count=0 syntax (no PATCH_MALFORMED)
+      // and that forward/reverse checks were actually invoked.
+      // hunk1: oldStart=100, oldCount=0, newStart=101, newCount=1
+      // hunk2: oldStart=101, oldCount=0, newStart=103, newCount=1
+      // secondOldStart(101) > firstOldEffectiveEnd(100) ✓
+      // secondNewStart(103) > firstNewEffectiveEnd(101) ✓
+      const zPatch = makeSingleFilePatch("a.txt", [
+        { oldStart: 100, oldCount: 0, newStart: 101, newCount: 1, body: "+Z1\n" },
+        { oldStart: 101, oldCount: 0, newStart: 103, newCount: 1, body: "+Z2\n" },
+      ]);
+
+      // Track runner calls to prove Git boundary reached.
+      // Intercept ALL apply commands (check and real) to return exit 1,
+      // ensuring no real apply modifies the workspace.
+      let forwardCheckCalled = false;
+      let reverseCheckCalled = false;
+      let realApplyIntercepted = false;
+      const zRunner = interceptedRunner(ctx.s.rp, ctx.s.cr, ctx.s.home, async (req, orig) => {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("apply") && a.includes("--check") && !a.includes("--reverse")) {
+          forwardCheckCalled = true;
+          return { status: "exited", exitCode: 1, stdout: "", stderr: "err", signal: null, stdoutTruncated: false, stderrTruncated: false, durationMs: 1, stdoutBytesReceived: 0, stderrBytesReceived: 3, termSignalSent: false, killSignalSent: false };
+        }
+        if (a.includes("apply") && a.includes("--check") && a.includes("--reverse")) {
+          reverseCheckCalled = true;
+          return { status: "exited", exitCode: 1, stdout: "", stderr: "err", signal: null, stdoutTruncated: false, stderrTruncated: false, durationMs: 1, stdoutBytesReceived: 0, stderrBytesReceived: 3, termSignalSent: false, killSignalSent: false };
+        }
+        if (a.includes("apply") && !a.includes("--check")) {
+          realApplyIntercepted = true;
+          return { status: "exited", exitCode: 1, stdout: "", stderr: "err", signal: null, stdoutTruncated: false, stderrTruncated: false, durationMs: 1, stdoutBytesReceived: 0, stderrBytesReceived: 3, termSignalSent: false, killSignalSent: false };
+        }
+        return orig(req);
+      });
+      const mgrZ = new LoopPatchApplicationManager({ runner: zRunner, workspaceManager: ctx.wsMgr, gitExecutableId: "git" });
+
+      const preHead = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ws, encoding: "utf8" }).trim();
+      const preIdx = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
+      const preContent = readFileSync(join(ws, "a.txt"), "utf8");
+
+      let zError: any = null;
+      try { await mgrZ.apply(mkReq(ctx, { patch: zPatch, allowed: ["a.txt"] })); }
+      catch (e: any) { zError = e; }
+
+      // Parser must NOT reject as PATCH_MALFORMED — count=0 syntax accepted
+      ok(!!zError && zError instanceof LoopPatchApplicationError && zError.code !== "PATCH_MALFORMED",
+        `K8: parser accepted count=0 syntax (got ${zError?.code ?? "no error"})`);
+      ok(forwardCheckCalled, "K8: forward apply --check was called");
+      ok(reverseCheckCalled, "K8: reverse apply --check was called");
+      ok(!realApplyIntercepted, "K8: no real git apply reached");
+
+      // Workspace unchanged
+      const postHead = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: ws, encoding: "utf8" }).trim();
+      const postIdx = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
+      const postContent = readFileSync(join(ws, "a.txt"), "utf8");
+      ok(postHead === preHead, "K8: HEAD unchanged");
+      ok(postIdx === preIdx, "K8: index unchanged");
+      ok(postContent === preContent, "K8: target content unchanged");
+      rmSync(ctx.s.tr, { recursive: true, force: true });
+    }
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -1052,15 +1207,18 @@ async function main() {
 
     // Apply patch2 on the dirty same file (builds on p1 result)
     const p2 = makeDiff(A_NEW, "alpha\nBETA\ndelta\n", "a.txt");
+    // Capture index before p2
+    const idxBeforeP2 = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
     const r2 = await ctx.mgr.apply(mkReq({ ...ctx, snap: snapD } as Ctx, { patch: p2, allowed: ["a.txt"] }));
     ok(r2.state === "applied", "dirty layered repair applied");
     ok(readFileSync(join(ws, "a.txt"), "utf8") === "alpha\nBETA\ndelta\n", "dirty layered content correct");
     ok(r2.preTaskHeadSha === r2.postTaskHeadSha, "HEAD unchanged through p2");
     ok(r2.preTargetStateDigestSha256 !== r2.postTargetStateDigestSha256, "target digest changed on applied");
-    // Status digest MAY remain equal (same dirty file) — the contract allows it.
-    ok(typeof r2.preStatusDigestSha256 === "string" && r2.preStatusDigestSha256.length === 64
-      && typeof r2.postStatusDigestSha256 === "string" && r2.postStatusDigestSha256.length === 64,
-      "status digests present and valid");
+    // R2 contract: status digest MUST remain equal (same dirty file, no add/commit between)
+    ok(r2.preStatusDigestSha256 === r2.postStatusDigestSha256, "dirty repair: status digest equal (same dirty file)");
+    // Index before === index after
+    const idxAfterP2 = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
+    ok(idxBeforeP2 === idxAfterP2, "dirty repair: index unchanged through p2");
     // Index unchanged
     const idx = execFileSync(GP, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"], { cwd: ws, encoding: "utf8" });
     ok(idx === "", "index clean after dirty layered repair");
@@ -1243,6 +1401,36 @@ async function main() {
     const snap5r = await ctx5.wsMgr.inspect(ctx5.id);
     await assertRejects(() => ctx5.mgr.apply(mkReq({ ...ctx5, snap: snap5r } as Ctx, { patch: pNew5, allowed: ["n5.txt"] })), "PATCH_UNSUPPORTED_CHANGE", "already_applied with exec rejected");
     rmSync(ctx5.s.tr, { recursive: true, force: true });
+
+    // Post-apply executable race: chmod +x between real apply exit and post-apply revalidation
+    const ctx6 = await mkCtx("n6", "codex/n6");
+    const ws6 = ctx6.snap.workspacePath;
+    // Create a regular non-executable tracked text target
+    writeFileSync(join(ws6, "race.txt"), "original\n");
+    execFileSync(GP, ["add", "race.txt"], { cwd: ws6 });
+    execFileSync(GP, ["commit", "-q", "-m", "race"], { cwd: ws6 });
+    const snap6 = await ctx6.wsMgr.inspect(ctx6.id);
+    const pRace = makeDiff("original\n", "modified\n", "race.txt");
+    // Intercept: after real apply returns exit 0, chmod +x the target
+    const raceRunner = interceptedRunner(ctx6.s.rp, ctx6.s.cr, ctx6.s.home, async (req, orig) => {
+      const r = await orig(req);
+      const a = (req.args as string[]).join(" ");
+      if (a.includes("apply") && !a.includes("--check") && r.exitCode === 0) {
+        execFileSync("chmod", ["+x", join(ws6, "race.txt")]);
+      }
+      return r;
+    });
+    const mgrRace = new LoopPatchApplicationManager({ runner: raceRunner, workspaceManager: ctx6.wsMgr, gitExecutableId: "git" });
+    try {
+      await mgrRace.apply(mkReq({ ...ctx6, snap: snap6 } as Ctx, { patch: pRace, allowed: ["race.txt"] }));
+      ok(false, "post-apply exec race (no throw)");
+    } catch (e: any) {
+      ok(e instanceof LoopPatchApplicationError && e.code === "PATCH_UNSUPPORTED_CHANGE",
+        `post-apply exec race→${e?.constructor?.name ?? "?"}:${e?.code ?? "?"}`);
+    }
+    // Restore fixture
+    try { execFileSync("chmod", ["-x", join(ws6, "race.txt")]); } catch {}
+    rmSync(ctx6.s.tr, { recursive: true, force: true });
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -1337,6 +1525,23 @@ async function main() {
     ok(r2.preTargetStateDigestSha256 === r2.postTargetStateDigestSha256, "already_applied: target digest unchanged");
     ok(Object.isFrozen(r2), "already_applied result frozen");
     rmSync(ctx.s.tr, { recursive: true, force: true });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // Q. Static self-check — test file integrity
+  // ════════════════════════════════════════════════════════════════
+  {
+    console.log("Q. Static self-check");
+    const testSrc = readFileSync(join(__dirname, "loop-patch-application.test.ts"), "utf8");
+    // Regex-based checks avoid embedding literal forbidden strings in this section.
+    const reOkTrue = new RegExp("\\bok\\s*\\(\\s*true\\s*,");
+    ok(!reOkTrue.test(testSrc), "no unconditional ok(true) in test file");
+    const rePWord = new RegExp("place" + "holder", "i");
+    ok(!rePWord.test(testSrc), "no forbidden p-word in test file");
+    const reSkip = new RegExp("skip\\s+this\\s+test", "i");
+    ok(!reSkip.test(testSrc), "no forbidden s-phrase in test file");
+    const reIWord = new RegExp("inspection" + "-only", "i");
+    ok(!reIWord.test(testSrc), "no forbidden i-phrase in test file");
   }
 
   console.log(`\nResults: ${p} passed, ${f} failed`);
