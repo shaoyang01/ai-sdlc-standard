@@ -804,6 +804,27 @@ export class LoopGitWorkspaceManager {
 
   // ═══════════════════════════════════════ Private: workspace operations
 
+  // After a successful `git worktree add` (exit 0) on the normal create/attach
+  // path, re-read `git worktree list --porcelain -z`, classify via the shared
+  // _classify(), require an exact-ok registration, and run the three-way HEAD
+  // structural verification using the worktree-list HEAD. Result rules:
+  //   missing/untrusted exact registration → WORKSPACE_IO_FAILED
+  //   typed conflict/corruption            → keeps its typed error
+  //   three-way HEAD mismatch              → WORKSPACE_CORRUPT (in _verifyStructure)
+  //   Runner infrastructure failure        → GIT_COMMAND_FAILED (in _wtList/_verifyStructure)
+  // Reuses _classify — no second classification logic is introduced.
+  private async _verifyPostAdd(
+    identity: LoopRunIdentity, wsPath: string, absentMsg: string,
+  ): Promise<void> {
+    const wts = await this._wtList(identity.repositoryPath);
+    const cls = this._classify(wts, identity.taskBranch, wsPath);
+    if (cls.state !== "exact-ok") {
+      if (cls.errorCode) fail(cls.errorCode as LoopGitWorkspaceErrorCode, cls.errorMsg!);
+      fail("WORKSPACE_IO_FAILED", absentMsg);
+    }
+    await this._verifyStructure(identity, wsPath, cls.taskHead);
+  }
+
   private async _ensureDirs(wsPath: string): Promise<void> {
     const v1 = path.dirname(wsPath), ws = path.dirname(v1);
     for (const d of [ws, v1]) {
@@ -847,7 +868,7 @@ export class LoopGitWorkspaceManager {
       }
       throw tf("WORKSPACE_IO_FAILED", "create failed");
     }
-    await this._verifyStructure(identity, wsPath);
+    await this._verifyPostAdd(identity, wsPath, "no registration after create");
     return await this._snap(identity, wsPath, "created", curBase, false);
   }
 
@@ -877,7 +898,7 @@ export class LoopGitWorkspaceManager {
       }
       throw tf("WORKSPACE_IO_FAILED", "attach failed");
     }
-    await this._verifyStructure(identity, wsPath);
+    await this._verifyPostAdd(identity, wsPath, "no registration after attach");
     return await this._snap(identity, wsPath, "recovered", curBase, false);
   }
 

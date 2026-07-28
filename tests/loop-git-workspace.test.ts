@@ -816,6 +816,439 @@ async function main() {
     ok(!prodSrc.includes(".git/worktrees"), "no direct .git/worktrees access");
   }
 
+  // ════════════════════════════════════════════════════════════════
+  // H. Final Contract Closures (23 checks)
+  // ════════════════════════════════════════════════════════════════
+  {
+    console.log("H. Final Contract Closures");
+    const { tr, rp, cr, baseSha, featSha, home } = setupRepo();
+    const runner = mkRunner(rp, cr, home);
+    const mgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
+
+    // fs patching propagates to the production module's `import * as fs`
+    // (verified: require("node:fs") shares bindings with the ESM namespace).
+    const fsr = require("node:fs");
+
+    // Locate the .git/worktrees admin dir whose gitdir file points at wsPath.
+    function findWtAdmin(wsPath: string): string | null {
+      const base = join(rp, ".git", "worktrees");
+      for (const id of readdirSync(base)) {
+        const gf = join(base, id, "gitdir");
+        if (existsSync(gf) && readFileSync(gf, "utf8").trim() === join(wsPath, ".git")) return id;
+      }
+      return null;
+    }
+    // Corrupt the worktree-list HEAD for wsPath (reused by H1a/H1b).
+    function corruptWtListHead(wsPath: string): void {
+      const id = findWtAdmin(wsPath);
+      if (id) writeFileSync(join(rp, ".git", "worktrees", id, "HEAD"),
+        "0000000000000000000000000000000000000000\n");
+    }
+
+    // ── H1. Create/attach three-way HEAD (normal exit 0 re-reads worktree list) ──
+    {
+      const id = mkId({ rp, cr, sha: featSha, runId: "h1a", taskBranch: "codex/h1a" });
+      const wsPath = mgr.workspacePathFor(id);
+      const rH1a = mkRunner(rp, cr, home);
+      const oH1a = rH1a.run.bind(rH1a);
+      let injected = false;
+      rH1a.run = async function (req: any) {
+        const r = await oH1a(req);
+        const a = (req.args as string[]).join(" ");
+        // After the create `worktree add` succeeds, corrupt the registration HEAD
+        // so the post-add worktree-list re-read observes a mismatch.
+        if (!injected && a.includes("worktree") && a.includes("add") && r.exitCode === 0) {
+          injected = true;
+          corruptWtListHead(wsPath);
+        }
+        return r;
+      };
+      const mH1a = new LoopGitWorkspaceManager({ runner: rH1a, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH1a.prepare(id), "WORKSPACE_CORRUPT",
+        "create exit0 wt-list HEAD mismatch→WORKSPACE_CORRUPT");
+      ok(injected, "create path re-read worktree list after exit 0");
+      try { execFileSync(GP, ["worktree", "remove", "--force", wsPath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h1a"], { cwd: rp }); } catch {}
+    }
+    {
+      const id = mkId({ rp, cr, sha: featSha, runId: "h1b", taskBranch: "codex/h1b" });
+      // First create the branch via a normal prepare, then remove the worktree
+      // (keeping the branch) so the next prepare takes the branch-only attach path.
+      await mgr.prepare(id);
+      const wsPath = mgr.workspacePathFor(id);
+      execFileSync(GP, ["worktree", "remove", wsPath], { cwd: rp });
+      const rH1b = mkRunner(rp, cr, home);
+      const oH1b = rH1b.run.bind(rH1b);
+      let injected = false;
+      rH1b.run = async function (req: any) {
+        const r = await oH1b(req);
+        const a = (req.args as string[]).join(" ");
+        if (!injected && a.includes("worktree") && a.includes("add") && r.exitCode === 0) {
+          injected = true;
+          corruptWtListHead(wsPath);
+        }
+        return r;
+      };
+      const mH1b = new LoopGitWorkspaceManager({ runner: rH1b, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH1b.prepare(id), "WORKSPACE_CORRUPT",
+        "attach exit0 wt-list HEAD mismatch→WORKSPACE_CORRUPT");
+      ok(injected, "attach path re-read worktree list after exit 0");
+      try { execFileSync(GP, ["worktree", "remove", "--force", wsPath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h1b"], { cwd: rp }); } catch {}
+    }
+
+    // ── H2. Prunable matrix (deterministic .git/worktrees registration) ──
+    {
+      // exact prunable, path still exists → WORKSPACE_CORRUPT
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h2a" });
+      const wsPath = mgr.workspacePathFor(id);
+      execFileSync(GP, ["worktree", "add", "-b", "codex/h2a", wsPath, featSha], { cwd: rp });
+      rmSync(join(wsPath, ".git"), { force: true }); // gitdir file gone → prunable, dir remains
+      const lst = execFileSync(GP, ["worktree", "list", "--porcelain", "-z"], { cwd: rp, encoding: "utf8" });
+      ok(lst.includes("prunable"), "H2a fixture emits prunable record");
+      await assertThrowsAsync(() => mgr.prepare(id), "WORKSPACE_CORRUPT",
+        "exact prunable path-exists→WORKSPACE_CORRUPT");
+      rmSync(wsPath, { recursive: true, force: true });
+      try { execFileSync(GP, ["branch", "-D", "codex/h2a"], { cwd: rp }); } catch {}
+    }
+    {
+      // exact prunable, path missing → WORKSPACE_CORRUPT
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h2b" });
+      const wsPath = mgr.workspacePathFor(id);
+      execFileSync(GP, ["worktree", "add", "-b", "codex/h2b", wsPath, featSha], { cwd: rp });
+      rmSync(wsPath, { recursive: true, force: true }); // dir gone → prunable, path missing
+      const lst = execFileSync(GP, ["worktree", "list", "--porcelain", "-z"], { cwd: rp, encoding: "utf8" });
+      ok(lst.includes("prunable"), "H2b fixture emits prunable record");
+      await assertThrowsAsync(() => mgr.prepare(id), "WORKSPACE_CORRUPT",
+        "exact prunable path-missing→WORKSPACE_CORRUPT");
+      try { execFileSync(GP, ["branch", "-D", "codex/h2b"], { cwd: rp }); } catch {}
+    }
+    {
+      // task branch at OTHER path as a prunable record → WORKSPACE_CORRUPT
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h2c" });
+      const otherPath = join(tr, "h2c-other");
+      execFileSync(GP, ["worktree", "add", "-b", "codex/h2c", otherPath, featSha], { cwd: rp });
+      rmSync(otherPath, { recursive: true, force: true }); // other-path registration → prunable
+      const lst = execFileSync(GP, ["worktree", "list", "--porcelain", "-z"], { cwd: rp, encoding: "utf8" });
+      ok(lst.includes("prunable"), "H2c fixture emits prunable record");
+      await assertThrowsAsync(() => mgr.prepare(id), "WORKSPACE_CORRUPT",
+        "other-path prunable task record→WORKSPACE_CORRUPT");
+      try { execFileSync(GP, ["branch", "-D", "codex/h2c"], { cwd: rp }); } catch {}
+    }
+
+    // ── H3. Source WIP fault matrix (deterministic fs/runner injection) ──
+    {
+      // special file (FIFO) → SOURCE_WIP_UNSUPPORTED
+      const fifo = join(rp, "h3a.fifo");
+      execFileSync("mkfifo", [fifo]);
+      const rH3a = mkRunner(rp, cr, home);
+      const oH3a = rH3a.run.bind(rH3a);
+      rH3a.run = async function (req: any) {
+        const r = await oH3a(req);
+        const a = (req.args as string[]).join(" ");
+        // git does not list FIFOs; inject it into the untracked listing so the
+        // fingerprint loop lstat's a real special file on disk.
+        if (a.includes("ls-files") && a.includes("--others"))
+          return { ...r, stdout: "h3a.fifo\x00" };
+        return r;
+      };
+      const mH3a = new LoopGitWorkspaceManager({ runner: rH3a, gitExecutableId: "git" });
+      try {
+        await assertThrowsAsync(() => mH3a.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3a" })),
+          "SOURCE_WIP_UNSUPPORTED", "special file (FIFO)→SOURCE_WIP_UNSUPPORTED");
+      } finally { rmSync(fifo, { force: true }); }
+    }
+    {
+      // untracked lstat failure → WORKSPACE_IO_FAILED
+      const fp = join(rp, "h3b.txt");
+      writeFileSync(fp, "x");
+      const origLstat = fsr.lstatSync;
+      fsr.lstatSync = function (p: any, ...rest: any[]) {
+        if (p === fp) throw Object.assign(new Error("io"), { code: "EIO" });
+        return origLstat.call(fsr, p, ...rest);
+      };
+      const mH3b = new LoopGitWorkspaceManager({ runner: mkRunner(rp, cr, home), gitExecutableId: "git" });
+      try {
+        await assertThrowsAsync(() => mH3b.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3b" })),
+          "WORKSPACE_IO_FAILED", "untracked lstat fail→WORKSPACE_IO_FAILED");
+      } finally { fsr.lstatSync = origLstat; rmSync(fp, { force: true }); }
+    }
+    {
+      // regular-file readFile failure → WORKSPACE_IO_FAILED
+      const fp = join(rp, "h3c.txt");
+      writeFileSync(fp, "x");
+      const origRF = fsr.promises.readFile;
+      fsr.promises.readFile = async function (p: any, ...rest: any[]) {
+        if (p === fp) throw Object.assign(new Error("io"), { code: "EACCES" });
+        return origRF.call(fsr.promises, p, ...rest);
+      };
+      const mH3c = new LoopGitWorkspaceManager({ runner: mkRunner(rp, cr, home), gitExecutableId: "git" });
+      try {
+        await assertThrowsAsync(() => mH3c.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3c" })),
+          "WORKSPACE_IO_FAILED", "regular-file readFile fail→WORKSPACE_IO_FAILED");
+      } finally { fsr.promises.readFile = origRF; rmSync(fp, { force: true }); }
+    }
+    {
+      // symlink readlink failure → WORKSPACE_IO_FAILED
+      const fp = join(rp, "h3d-link");
+      symlinkSync(join(rp, "f.txt"), fp);
+      const origRL = fsr.promises.readlink;
+      fsr.promises.readlink = async function (p: any, ...rest: any[]) {
+        if (p === fp) throw Object.assign(new Error("io"), { code: "EINVAL" });
+        return origRL.call(fsr.promises, p, ...rest);
+      };
+      const mH3d = new LoopGitWorkspaceManager({ runner: mkRunner(rp, cr, home), gitExecutableId: "git" });
+      try {
+        await assertThrowsAsync(() => mH3d.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3d" })),
+          "WORKSPACE_IO_FAILED", "symlink readlink fail→WORKSPACE_IO_FAILED");
+      } finally { fsr.promises.readlink = origRL; rmSync(fp, { force: true }); }
+    }
+    {
+      // fingerprint Git command Runner failure on FIRST fingerprint → GIT_COMMAND_FAILED
+      const rH3e = mkRunner(rp, cr, home);
+      const oH3e = rH3e.run.bind(rH3e);
+      let hit = false;
+      rH3e.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (!hit && a.includes("rev-parse") && a.includes("HEAD") && !a.includes("--git-common-dir")) {
+          hit = true;
+          throw new Error("runner crash on first fingerprint");
+        }
+        return oH3e(req);
+      };
+      const mH3e = new LoopGitWorkspaceManager({ runner: rH3e, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH3e.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3e" })),
+        "GIT_COMMAND_FAILED", "first fingerprint Runner fail→GIT_COMMAND_FAILED");
+    }
+    {
+      // fingerprint Git command Runner failure on FINAL fingerprint → SOURCE_WORKSPACE_DRIFT
+      const rH3f = mkRunner(rp, cr, home);
+      const oH3f = rH3f.run.bind(rH3f);
+      let ls = 0;
+      rH3f.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("ls-files") && a.includes("--others")) ls++;
+        // Fail the first source-repo rev-parse HEAD after the 2nd ls-files
+        // (i.e. the final fingerprint in the drift-recheck finally block).
+        if (ls >= 2 && a.includes("rev-parse") && a.includes("HEAD") &&
+            !a.includes("--git-common-dir") && (req.cwd as string) === rp)
+          throw new Error("runner crash on final fingerprint");
+        return oH3f(req);
+      };
+      const mH3f = new LoopGitWorkspaceManager({ runner: rH3f, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH3f.prepare(mkId({ rp, cr, sha: featSha, taskBranch: "codex/h3f" })),
+        "SOURCE_WORKSPACE_DRIFT", "final fingerprint Runner fail→SOURCE_WORKSPACE_DRIFT");
+    }
+
+    // ── H4. Git structural exit codes ──
+    {
+      // cleanup entry show-ref exit 2 → GIT_COMMAND_FAILED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h4a" });
+      const s = await mgr.prepare(id);
+      const rH4a = mkRunner(rp, cr, home);
+      const oH4a = rH4a.run.bind(rH4a);
+      rH4a.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("show-ref"))
+          return { status: "exited", exitCode: 2, stdout: "", stderr: "fatal", signal: null,
+            timedOut: false, stdoutTruncated: false, stderrTruncated: false, wallMs: 1 };
+        return oH4a(req);
+      };
+      const mH4a = new LoopGitWorkspaceManager({ runner: rH4a, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH4a.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "GIT_COMMAND_FAILED", "cleanup show-ref exit2→GIT_COMMAND_FAILED");
+      try { execFileSync(GP, ["worktree", "remove", "--force", s.workspacePath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h4a"], { cwd: rp }); } catch {}
+    }
+    {
+      // _safeDeleteBranch post-delete show-ref exit 2 → GIT_COMMAND_FAILED
+      const id = mkId({ rp, cr, sha: baseSha, baseBranch: "main", taskBranch: "codex/h4b" });
+      const s = await mgr.prepare(id);
+      const head = s.taskHeadSha;
+      await mgr.cleanup(id, { expectedTaskHeadSha: head }); // remove worktree, keep merged branch
+      const rH4b = mkRunner(rp, cr, home);
+      const oH4b = rH4b.run.bind(rH4b);
+      let del = false;
+      rH4b.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("branch") && a.includes("-d")) { del = true; return oH4b(req); }
+        if (del && a.includes("show-ref"))
+          return { status: "exited", exitCode: 2, stdout: "", stderr: "fatal", signal: null,
+            timedOut: false, stdoutTruncated: false, stderrTruncated: false, wallMs: 1 };
+        return oH4b(req);
+      };
+      const mH4b = new LoopGitWorkspaceManager({ runner: rH4b, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH4b.cleanup(id, { expectedTaskHeadSha: head, deleteTaskBranch: true }),
+        "GIT_COMMAND_FAILED", "post-delete show-ref exit2→GIT_COMMAND_FAILED");
+      try { execFileSync(GP, ["branch", "-D", "codex/h4b"], { cwd: rp }); } catch {}
+    }
+    {
+      // workspace rev-parse --git-common-dir non-zero → WORKSPACE_CORRUPT
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h4c" });
+      await mgr.prepare(id);
+      const wsPath = mgr.workspacePathFor(id);
+      const rH4c = mkRunner(rp, cr, home);
+      const oH4c = rH4c.run.bind(rH4c);
+      rH4c.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("rev-parse") && a.includes("--git-common-dir") && (req.cwd as string) !== rp)
+          return { status: "exited", exitCode: 128, stdout: "", stderr: "fatal", signal: null,
+            timedOut: false, stdoutTruncated: false, stderrTruncated: false, wallMs: 1 };
+        return oH4c(req);
+      };
+      const mH4c = new LoopGitWorkspaceManager({ runner: rH4c, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH4c.inspect(id), "WORKSPACE_CORRUPT",
+        "ws common-dir nonzero→WORKSPACE_CORRUPT");
+      try { execFileSync(GP, ["worktree", "remove", "--force", wsPath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h4c"], { cwd: rp }); } catch {}
+    }
+    {
+      // source vs workspace common-dir point to different real dirs → WORKSPACE_CORRUPT
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h4d" });
+      await mgr.prepare(id);
+      const wsPath = mgr.workspacePathFor(id);
+      const rH4d = mkRunner(rp, cr, home);
+      const oH4d = rH4d.run.bind(rH4d);
+      rH4d.run = async function (req: any) {
+        const a = (req.args as string[]).join(" ");
+        if (a.includes("rev-parse") && a.includes("--git-common-dir") && (req.cwd as string) === rp)
+          return { status: "exited", exitCode: 0, stdout: "/tmp\n", stderr: "", signal: null,
+            timedOut: false, stdoutTruncated: false, stderrTruncated: false, wallMs: 1 };
+        return oH4d(req);
+      };
+      const mH4d = new LoopGitWorkspaceManager({ runner: rH4d, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH4d.inspect(id), "WORKSPACE_CORRUPT",
+        "common-dir different dirs→WORKSPACE_CORRUPT");
+      try { execFileSync(GP, ["worktree", "remove", "--force", wsPath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h4d"], { cwd: rp }); } catch {}
+    }
+
+    // ── H5. Post-remove cleanup race matrix ──
+    {
+      // remove后 task branch re-attached to another valid worktree → CLEANUP_BLOCKED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h5a" });
+      const s = await mgr.prepare(id);
+      const wsPath = s.workspacePath;
+      const other = join(tr, "h5a-other");
+      const rH5a = mkRunner(rp, cr, home);
+      const oH5a = rH5a.run.bind(rH5a);
+      let done = false;
+      rH5a.run = async function (req: any) {
+        const r = await oH5a(req);
+        const a = (req.args as string[]).join(" ");
+        if (!done && a.includes("worktree") && a.includes("remove")) {
+          done = true;
+          execFileSync(GP, ["worktree", "add", other, "codex/h5a"], { cwd: rp });
+        }
+        return r;
+      };
+      const mH5a = new LoopGitWorkspaceManager({ runner: rH5a, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH5a.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "CLEANUP_BLOCKED", "post-remove reattach valid→CLEANUP_BLOCKED");
+      try { execFileSync(GP, ["worktree", "remove", "--force", other], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h5a"], { cwd: rp }); } catch {}
+    }
+    {
+      // remove后 task branch re-attached to a prunable registration → CLEANUP_BLOCKED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h5b" });
+      const s = await mgr.prepare(id);
+      const wsPath = s.workspacePath;
+      const rH5b = mkRunner(rp, cr, home);
+      const oH5b = rH5b.run.bind(rH5b);
+      let done = false;
+      rH5b.run = async function (req: any) {
+        const r = await oH5b(req);
+        const a = (req.args as string[]).join(" ");
+        if (!done && a.includes("worktree") && a.includes("remove")) {
+          done = true;
+          const base = join(rp, ".git", "worktrees", "h5b-residue");
+          mkdirSync(base, { recursive: true });
+          writeFileSync(join(base, "gitdir"), join(tr, "h5b-gone", ".git")); // missing → prunable
+          writeFileSync(join(base, "HEAD"), "ref: refs/heads/codex/h5b\n");
+          writeFileSync(join(base, "commondir"), join(rp, ".git"));
+        }
+        return r;
+      };
+      const mH5b = new LoopGitWorkspaceManager({ runner: rH5b, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH5b.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "CLEANUP_BLOCKED", "post-remove reattach prunable→CLEANUP_BLOCKED");
+      rmSync(join(rp, ".git", "worktrees", "h5b-residue"), { recursive: true, force: true });
+      try { execFileSync(GP, ["branch", "-D", "codex/h5b"], { cwd: rp }); } catch {}
+    }
+    {
+      // remove后 task branch re-attached to a missing/broken registration → CLEANUP_BLOCKED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h5c" });
+      const s = await mgr.prepare(id);
+      const wsPath = s.workspacePath;
+      const rH5c = mkRunner(rp, cr, home);
+      const oH5c = rH5c.run.bind(rH5c);
+      let done = false;
+      rH5c.run = async function (req: any) {
+        const r = await oH5c(req);
+        const a = (req.args as string[]).join(" ");
+        if (!done && a.includes("worktree") && a.includes("remove")) {
+          done = true;
+          const base = join(rp, ".git", "worktrees", "h5c-residue");
+          mkdirSync(base, { recursive: true });
+          writeFileSync(join(base, "gitdir"), join(wsPath, ".git")); // wsPath removed → broken
+          writeFileSync(join(base, "HEAD"), "ref: refs/heads/codex/h5c\n");
+          writeFileSync(join(base, "commondir"), join(rp, ".git"));
+        }
+        return r;
+      };
+      const mH5c = new LoopGitWorkspaceManager({ runner: rH5c, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH5c.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "CLEANUP_BLOCKED", "post-remove reattach broken→CLEANUP_BLOCKED");
+      rmSync(join(rp, ".git", "worktrees", "h5c-residue"), { recursive: true, force: true });
+      try { execFileSync(GP, ["branch", "-D", "codex/h5c"], { cwd: rp }); } catch {}
+    }
+    {
+      // remove后 branch deleted → CLEANUP_BLOCKED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h5d" });
+      const s = await mgr.prepare(id);
+      const rH5d = mkRunner(rp, cr, home);
+      const oH5d = rH5d.run.bind(rH5d);
+      let done = false;
+      rH5d.run = async function (req: any) {
+        const r = await oH5d(req);
+        const a = (req.args as string[]).join(" ");
+        if (!done && a.includes("worktree") && a.includes("remove")) {
+          done = true;
+          execFileSync(GP, ["branch", "-D", "codex/h5d"], { cwd: rp });
+        }
+        return r;
+      };
+      const mH5d = new LoopGitWorkspaceManager({ runner: rH5d, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH5d.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "CLEANUP_BLOCKED", "post-remove branch deleted→CLEANUP_BLOCKED");
+      try { execFileSync(GP, ["branch", "-D", "codex/h5d"], { cwd: rp }); } catch {}
+    }
+    {
+      // remove后 branch HEAD moved → CLEANUP_BLOCKED
+      const id = mkId({ rp, cr, sha: featSha, taskBranch: "codex/h5e" });
+      const s = await mgr.prepare(id);
+      const rH5e = mkRunner(rp, cr, home);
+      const oH5e = rH5e.run.bind(rH5e);
+      let done = false;
+      rH5e.run = async function (req: any) {
+        const r = await oH5e(req);
+        const a = (req.args as string[]).join(" ");
+        if (!done && a.includes("worktree") && a.includes("remove")) {
+          done = true;
+          execFileSync(GP, ["update-ref", "refs/heads/codex/h5e", baseSha], { cwd: rp });
+        }
+        return r;
+      };
+      const mH5e = new LoopGitWorkspaceManager({ runner: rH5e, gitExecutableId: "git" });
+      await assertThrowsAsync(() => mH5e.cleanup(id, { expectedTaskHeadSha: s.taskHeadSha }),
+        "CLEANUP_BLOCKED", "post-remove branch HEAD moved→CLEANUP_BLOCKED");
+      try { execFileSync(GP, ["worktree", "remove", "--force", s.workspacePath], { cwd: rp }); } catch {}
+      try { execFileSync(GP, ["branch", "-D", "codex/h5e"], { cwd: rp }); } catch {}
+    }
+
+    rmSync(tr, { recursive: true, force: true });
+  }
+
   console.log(`\nResults: ${p} passed, ${f} failed`);
   if (f > 0) process.exit(1);
 }
