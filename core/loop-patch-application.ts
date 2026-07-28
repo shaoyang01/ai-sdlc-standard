@@ -15,8 +15,8 @@
 // 2. Filesystem containment assumes the workspace root and its components are
 //    not replaced by untrusted processes between validation and apply. Node's
 //    fs API offers no kernel-level openat-style pinning — the pre/post
-//    target-state digest is a best-effort TOCTOU guard, not an elimination of
-//    all kernel-level TOCTOU races.
+//    target-state digest checking is a best-effort TOCTOU guard, not an
+//    elimination of all kernel-level TOCTOU races.
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -58,11 +58,6 @@ function sn(msg: string): string {
   return msg.replace(/[\x00-\x1f\x7f-\x9f]/g, " ").slice(0, MAX_MSG);
 }
 
-/**
- * Safe bounded error. The message is a short safe explanation only — it never
- * carries the patch, the path whitelist, stdout, stderr, or the original
- * exception text. Control characters are stripped and the length is bounded.
- */
 export class LoopPatchApplicationError extends Error {
   readonly code: LoopPatchApplicationErrorCode;
   constructor(code: LoopPatchApplicationErrorCode, msg: string) {
@@ -115,6 +110,8 @@ export type LoopPatchApplicationResult = Readonly<{
   postTaskHeadSha: string;
   preStatusDigestSha256: string;
   postStatusDigestSha256: string;
+  preTargetStateDigestSha256: string;
+  postTargetStateDigestSha256: string;
 }>;
 
 // ═══════════════════════════════════════ Constants
@@ -124,9 +121,7 @@ const SHA40_RE = /^[0-9a-f]{40}$/;
 const HEX_RE = /^[0-9a-f]{7,64}$/;
 const HUNK_HDR_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
 const NO_NL_MARKER = "\\ No newline at end of file";
-// ASCII whitespace per the path contract: space, tab, CR, LF, VT, FF.
 const ASCII_WS_RE = /[ \t\r\n\v\f]/;
-// Control characters other than the LF/TAB allowed inside patch content.
 const PATCH_CTL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/;
 
 const DEF_GTO = 30000, MIN_GTO = 100, MAX_GTO = 120000;
@@ -174,28 +169,14 @@ function vSha40(s: unknown, nm: string): string {
   return s;
 }
 
-/**
- * Strict plain-data scan. Rejects null, arrays, class instances, getters,
- * setters, symbol keys, own __proto__, unknown fields, and throwing
- * getPrototypeOf/ownKeys/getOwnPropertyDescriptor. Never invokes a getter.
- * Returns a frozen, null-prototype copy of the own data values.
- */
 function scanPlain(v: unknown, allowed: readonly string[], nm: string): Record<string, unknown> {
   if (v === null || typeof v !== "object") fail("INVALID_INPUT", `${nm} must be object`);
   if (Array.isArray(v)) fail("INVALID_INPUT", `${nm} must not be array`);
   let proto: unknown;
-  try {
-    proto = Object.getPrototypeOf(v);
-  } catch {
-    fail("INVALID_INPUT", `${nm} getPrototypeOf threw`);
-  }
+  try { proto = Object.getPrototypeOf(v); } catch { fail("INVALID_INPUT", `${nm} getPrototypeOf threw`); }
   if (proto !== Object.prototype && proto !== null) fail("INVALID_INPUT", `${nm} bad prototype`);
   let keys: Array<string | symbol>;
-  try {
-    keys = Reflect.ownKeys(v) as Array<string | symbol>;
-  } catch {
-    fail("INVALID_INPUT", `${nm} ownKeys threw`);
-  }
+  try { keys = Reflect.ownKeys(v) as Array<string | symbol>; } catch { fail("INVALID_INPUT", `${nm} ownKeys threw`); }
   const out = Object.create(null) as Record<string, unknown>;
   const seen = new Set<string>();
   for (const k of keys) {
@@ -205,11 +186,7 @@ function scanPlain(v: unknown, allowed: readonly string[], nm: string): Record<s
     if (seen.has(k)) fail("INVALID_INPUT", `${nm} duplicate key`);
     seen.add(k);
     let desc: PropertyDescriptor;
-    try {
-      desc = Object.getOwnPropertyDescriptor(v, k)!;
-    } catch {
-      fail("INVALID_INPUT", `${nm} getDescriptor threw`);
-    }
+    try { desc = Object.getOwnPropertyDescriptor(v, k)!; } catch { fail("INVALID_INPUT", `${nm} getDescriptor threw`); }
     if (!desc) fail("INVALID_INPUT", `${nm} missing descriptor`);
     if ("get" in desc || "set" in desc) fail("INVALID_INPUT", `${nm} accessor`);
     if (!("value" in desc)) fail("INVALID_INPUT", `${nm} no value`);
@@ -221,21 +198,10 @@ function scanPlain(v: unknown, allowed: readonly string[], nm: string): Record<s
 }
 
 function validateIdentity(id: unknown): LoopRunIdentity {
-  try {
-    validateLoopRunIdentity(id);
-  } catch {
-    fail("INVALID_INPUT", "identity invalid");
-  }
+  try { validateLoopRunIdentity(id); } catch { fail("INVALID_INPUT", "identity invalid"); }
   return id as LoopRunIdentity;
 }
 
-/**
- * Repo-relative POSIX path policy. Returns the validated path or throws a
- * typed error. `src` selects the error code: whitelist entries and patch paths
- * that fail the structural rules are PATCH_UNSAFE_PATH; a structurally valid
- * patch path that is simply not whitelisted is PATCH_PATH_NOT_ALLOWED (handled
- * by the caller).
- */
 function validateRepoPath(p: unknown, nm: string): string {
   if (typeof p !== "string") fail("PATCH_UNSAFE_PATH", `${nm} not string`);
   if (p.length === 0) fail("PATCH_UNSAFE_PATH", `${nm} empty`);
@@ -257,12 +223,9 @@ function validateRepoPath(p: unknown, nm: string): string {
 
 // ═══════════════════════════════════════ Patch decoding
 
-/** Decode patch bytes to text, enforcing the byte/encoding contract. */
 function decodePatch(patchBytes: unknown, maxPatchBytes: number): string {
   let buf: Buffer;
   if (typeof patchBytes === "string") {
-    // Lossless UTF-8 round-trip: re-encode then decode strictly and require
-    // identity. Unpaired surrogates become U+FFFD and fail the round-trip.
     const enc = Buffer.from(patchBytes, "utf8");
     if (enc.length > maxPatchBytes) fail("PATCH_TOO_LARGE", "patch too large");
     const dec = new TextDecoder("utf-8", { fatal: true }).decode(enc);
@@ -271,11 +234,8 @@ function decodePatch(patchBytes: unknown, maxPatchBytes: number): string {
   } else if (patchBytes instanceof Uint8Array) {
     if (patchBytes.byteLength > maxPatchBytes) fail("PATCH_TOO_LARGE", "patch too large");
     buf = Buffer.from(patchBytes);
-    try {
-      new TextDecoder("utf-8", { fatal: true }).decode(buf);
-    } catch {
-      fail("PATCH_INVALID_ENCODING", "invalid UTF-8");
-    }
+    try { new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+    catch { fail("PATCH_INVALID_ENCODING", "invalid UTF-8"); }
   } else {
     fail("INVALID_INPUT", "patchBytes type");
   }
@@ -292,17 +252,8 @@ function decodePatch(patchBytes: unknown, maxPatchBytes: number): string {
 
 type ParsedSection = Readonly<{ path: string; isNew: boolean }>;
 
-/**
- * Strict unified-diff parser. Accepts only canonical modify and new-file
- * (100644) sections. Rejects binary, rename, copy, delete, mode change,
- * executable, symlink, gitlink and combined diffs fail-closed. Enforces hunk
- * count consistency, monotonic non-overlapping ranges, and the global hunk
- * cap. Returns sections in patch order (no duplicates).
- */
 function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly ParsedSection[] {
   const lines = text.split("\n");
-  // A trailing LF yields a final empty element; anything else is trailing
-  // garbage.
   if (lines[lines.length - 1] !== "") fail("PATCH_MALFORMED", "trailing garbage");
   lines.pop();
   if (lines.length === 0) fail("PATCH_MALFORMED", "empty patch");
@@ -328,8 +279,6 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
     const aPath = validateRepoPath(aTok.slice(2), "header a path");
     const bPath = validateRepoPath(bTok.slice(2), "header b path");
     if (aPath !== bPath) {
-      // A differing a/b path signals a rename or copy. Confirm via the section
-      // metadata; otherwise it is simply a malformed header.
       for (let j = i + 1; j < lines.length; j++) {
         const l = lines[j]!;
         if (l.startsWith("diff --git ") || l.startsWith("--- ")) break;
@@ -346,7 +295,6 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
     seenPaths.add(target);
     i++;
 
-    // ── optional header metadata lines ──
     let isNew = false;
     let sawIndex = false;
     for (;;) {
@@ -391,7 +339,7 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
       break;
     }
 
-    // ── --- / +++ lines ──
+    // --- / +++
     if (i >= lines.length) fail("PATCH_MALFORMED", "missing --- line");
     const minus = lines[i]!;
     if (isNew) {
@@ -410,10 +358,11 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
       fail("PATCH_MALFORMED", "+++ path mismatch");
     i++;
 
-    // ── hunks ──
+    // --- hunks ---
     let hunkCount = 0;
-    let lastOldEnd = -1;
-    let lastNewEnd = -1;
+    let lastOldEnd = 0;
+    let lastNewEnd = 0;
+    let firstHunk = true;
     while (i < lines.length && lines[i]!.startsWith("@@")) {
       const m = HUNK_HDR_RE.exec(lines[i]!);
       if (!m) fail("PATCH_MALFORMED", "hunk header malformed");
@@ -425,8 +374,21 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
         !Number.isSafeInteger(oldStart) || !Number.isSafeInteger(oldCount) ||
         !Number.isSafeInteger(newStart) || !Number.isSafeInteger(newCount)
       ) fail("PATCH_MALFORMED", "hunk count not safe integer");
-      i++;
 
+      // Strict overlap: current start must be strictly greater than previous effective end.
+      const oldEnd = oldCount === 0 ? oldStart : oldStart + oldCount - 1;
+      const newEnd = newCount === 0 ? newStart : newStart + newCount - 1;
+      if (!Number.isSafeInteger(oldEnd) || !Number.isSafeInteger(newEnd))
+        fail("PATCH_MALFORMED", "hunk end overflow");
+      if (!firstHunk) {
+        if (oldStart <= lastOldEnd) fail("PATCH_MALFORMED", "old ranges overlap");
+        if (newStart <= lastNewEnd) fail("PATCH_MALFORMED", "new ranges overlap");
+      }
+      lastOldEnd = oldEnd;
+      lastNewEnd = newEnd;
+      firstHunk = false;
+
+      i++;
       let oldConsumed = 0, newConsumed = 0, adds = 0, rems = 0;
       let prevWasContent = false;
       for (;;) {
@@ -445,7 +407,6 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
         if (tag === "-") { oldConsumed++; rems++; prevWasContent = true; i++; continue; }
         break;
       }
-      // A no-newline marker may trail the final content line once counts are met.
       if (i < lines.length && lines[i] === NO_NL_MARKER) {
         if (!prevWasContent) fail("PATCH_MALFORMED", "no-newline marker misplaced");
         i++;
@@ -453,13 +414,6 @@ function parsePatch(text: string, maxFiles: number, maxHunks: number): readonly 
       if (oldConsumed !== oldCount || newConsumed !== newCount)
         fail("PATCH_MALFORMED", "hunk count mismatch");
       if (adds === 0 && rems === 0) fail("PATCH_MALFORMED", "context-only hunk");
-
-      const oldEnd = oldCount === 0 ? oldStart : oldStart + oldCount - 1;
-      const newEnd = newCount === 0 ? newStart : newStart + newCount - 1;
-      if (oldCount > 0 && oldEnd < lastOldEnd) fail("PATCH_MALFORMED", "old ranges overlap");
-      if (newCount > 0 && newEnd < lastNewEnd) fail("PATCH_MALFORMED", "new ranges overlap");
-      lastOldEnd = oldEnd;
-      lastNewEnd = newEnd;
 
       hunkCount++;
       totalHunks++;
@@ -492,11 +446,9 @@ export class LoopPatchApplicationManager {
       fail("INVALID_INPUT", "unsupported platform");
     const opts = scanPlain(o, MGR_KEYS, "options");
     const rv = opts.runner;
-    if (!rv || typeof (rv as any).run !== "function")
-      fail("INVALID_INPUT", "runner missing run");
+    if (!rv || typeof (rv as any).run !== "function") fail("INVALID_INPUT", "runner missing run");
     const wm = opts.workspaceManager;
-    if (!wm || typeof (wm as any).inspect !== "function")
-      fail("INVALID_INPUT", "workspaceManager missing inspect");
+    if (!wm || typeof (wm as any).inspect !== "function") fail("INVALID_INPUT", "workspaceManager missing inspect");
     this.runner = rv as Pick<LoopPosixProcessRunner, "run">;
     this.wsm = wm as Pick<LoopGitWorkspaceManager, "inspect">;
     this.gitId = vS(opts.gitExecutableId, "gitExecutableId");
@@ -558,42 +510,68 @@ export class LoopPatchApplicationManager {
     const preIndexDigest = await this._indexDigest(workspacePath);
 
     // ── filesystem safety + pre target-state digest ──
-    this._fsCheckAll(workspacePath, sections);
+    this._fsCheckAll(workspacePath, sections, false);
     const preTargetDigest = this._targetStateDigest(workspacePath, sections);
 
-    // ── forward / reverse check ──
+    // ── forward check → revalidate filesystem ──
     const f0 = await this._applyCheck(workspacePath, patchBuf, false);
+    this._fsCheckAll(workspacePath, sections, false);
+    const ptF = this._targetStateDigest(workspacePath, sections);
+    if (ptF !== preTargetDigest) fail("WORKSPACE_DRIFT", "target drift after forward check");
+
+    // ── reverse check → revalidate filesystem ──
     const r0 = await this._applyCheck(workspacePath, patchBuf, true);
+    this._fsCheckAll(workspacePath, sections, false);
+    const ptR = this._targetStateDigest(workspacePath, sections);
+    if (ptR !== preTargetDigest) fail("WORKSPACE_DRIFT", "target drift after reverse check");
 
     if (f0 && r0) fail("PATCH_RECONCILIATION_FAILED", "forward and reverse both apply");
 
     if (!f0 && r0) {
-      // Candidate already_applied — verify nothing changed, no apply.
+      // Candidate already_applied — re-verify everything, no apply.
       const re = await this._inspect(identity);
       this._checkSnapshot(re, workspacePath, taskBranch, expectedTaskHeadSha, expectedPreStatusDigest);
       const reIndex = await this._indexDigest(workspacePath);
       if (reIndex !== preIndexDigest) fail("WORKSPACE_DRIFT", "index changed");
+      this._fsCheckAll(workspacePath, sections, false);
       const reTarget = this._targetStateDigest(workspacePath, sections);
       if (reTarget !== preTargetDigest) fail("WORKSPACE_DRIFT", "target state changed");
       return this._result("already_applied", patchDigest, files,
-        preTaskHeadSha, re.taskHeadSha, preStatusDigest, re.taskStatusDigestSha256);
+        preTaskHeadSha, re.taskHeadSha, preStatusDigest, re.taskStatusDigestSha256,
+        preTargetDigest, reTarget);
     }
 
     if (!f0 && !r0) fail("PATCH_NOT_APPLICABLE", "patch not applicable");
 
-    // ── f0 true: re-verify preconditions, then apply ──
+    // ── f0 true: re-verify preconditions before real apply ──
     const pre2 = await this._inspect(identity);
     this._checkSnapshot(pre2, workspacePath, taskBranch, expectedTaskHeadSha, expectedPreStatusDigest);
     const pre2Index = await this._indexDigest(workspacePath);
     if (pre2Index !== preIndexDigest) fail("WORKSPACE_DRIFT", "index changed before apply");
+    this._fsCheckAll(workspacePath, sections, false);
     const pre2Target = this._targetStateDigest(workspacePath, sections);
     if (pre2Target !== preTargetDigest) fail("WORKSPACE_DRIFT", "target drift before apply");
 
+    // ── real apply ──
     const applyExit = await this._apply(workspacePath, patchBuf);
 
-    // ── post-apply reconciliation ──
+    // ── post-apply: immediate filesystem check + post-apply target digest ──
+    this._fsCheckAll(workspacePath, sections, true);
+    const postApplyTarget = this._targetStateDigest(workspacePath, sections);
+
+    // ── post-apply forward check → revalidate ──
     const f1 = await this._applyCheck(workspacePath, patchBuf, false);
+    this._fsCheckAll(workspacePath, sections, true);
+    const ptF1 = this._targetStateDigest(workspacePath, sections);
+    if (ptF1 !== postApplyTarget) fail("WORKSPACE_DRIFT", "target drift after post forward check");
+
+    // ── post-apply reverse check → revalidate ──
     const r1 = await this._applyCheck(workspacePath, patchBuf, true);
+    this._fsCheckAll(workspacePath, sections, true);
+    const ptR1 = this._targetStateDigest(workspacePath, sections);
+    if (ptR1 !== postApplyTarget) fail("WORKSPACE_DRIFT", "target drift after post reverse check");
+
+    // ── final inspect and state mapping ──
     const post = await this._inspect(identity);
     if (post.taskHeadSha !== preTaskHeadSha) fail("WORKSPACE_DRIFT", "task HEAD changed");
     if (post.workspacePath !== workspacePath || post.taskBranch !== taskBranch)
@@ -602,15 +580,22 @@ export class LoopPatchApplicationManager {
     if (postIndexDigest !== preIndexDigest) fail("WORKSPACE_DRIFT", "index changed after apply");
     const postStatusDigest = post.taskStatusDigestSha256;
 
+    // Use the final target-state digest (post-reverse check) for the result contract.
+    const finalTarget = ptR1;
+
     if (!f1 && r1) {
-      // Fully applied.
-      if (postStatusDigest === preStatusDigest)
-        fail("PATCH_RECONCILIATION_FAILED", "applied but status unchanged");
+      // Fully applied. Contract: target-state must have changed.
+      if (finalTarget === preTargetDigest)
+        fail("PATCH_RECONCILIATION_FAILED", "applied but target-state unchanged");
       return this._result("applied", patchDigest, files,
-        preTaskHeadSha, post.taskHeadSha, preStatusDigest, postStatusDigest);
+        preTaskHeadSha, post.taskHeadSha, preStatusDigest, postStatusDigest,
+        preTargetDigest, finalTarget);
     }
     if (f1 && !r1) {
-      if (applyExit !== 0 && postStatusDigest === preStatusDigest)
+      if (applyExit !== 0 && finalTarget === preTargetDigest
+        && postStatusDigest === preStatusDigest
+        && postIndexDigest === preIndexDigest
+        && post.taskHeadSha === preTaskHeadSha)
         fail("PATCH_APPLY_FAILED", "apply failed without effect");
       fail("PATCH_RECONCILIATION_FAILED", "forward still applies after apply");
     }
@@ -629,11 +614,8 @@ export class LoopPatchApplicationManager {
       timeoutMs: this.gTo, maxStdoutBytes: this.mxOut, maxStderrBytes: this.mxOut,
     };
     let r: LoopPosixProcessResult;
-    try {
-      r = await this.runner.run(req);
-    } catch {
-      fail("GIT_COMMAND_FAILED", "runner failed");
-    }
+    try { r = await this.runner.run(req); }
+    catch { fail("GIT_COMMAND_FAILED", "runner failed"); }
     if (r.status !== "exited") fail("GIT_COMMAND_FAILED", "not exited");
     if (r.exitCode === null || r.exitCode === undefined || !Number.isSafeInteger(r.exitCode))
       fail("GIT_COMMAND_FAILED", "bad exit");
@@ -671,9 +653,8 @@ export class LoopPatchApplicationManager {
 
   private async _inspect(identity: LoopRunIdentity): Promise<LoopGitWorkspaceSnapshot> {
     let snap: LoopGitWorkspaceSnapshot;
-    try {
-      snap = await this.wsm.inspect(identity);
-    } catch (e) {
+    try { snap = await this.wsm.inspect(identity); }
+    catch (e) {
       if (e instanceof LoopPatchApplicationError) throw e;
       fail("GIT_COMMAND_FAILED", "inspect failed");
     }
@@ -694,17 +675,22 @@ export class LoopPatchApplicationManager {
   private _result(
     state: "applied" | "already_applied", patchDigest: string, files: readonly string[],
     preHead: string, postHead: string, preStatus: string, postStatus: string,
+    preTarget: string, postTarget: string,
   ): LoopPatchApplicationResult {
+    if (state === "applied" && preTarget === postTarget)
+      fail("PATCH_RECONCILIATION_FAILED", "applied but target-state invariant violated");
+    if (state === "already_applied" && preTarget !== postTarget)
+      fail("PATCH_RECONCILIATION_FAILED", "already_applied but target-state changed");
     return Object.freeze({
       state, patchDigestSha256: patchDigest, files: Object.freeze([...files]),
       preTaskHeadSha: preHead, postTaskHeadSha: postHead,
       preStatusDigestSha256: preStatus, postStatusDigestSha256: postStatus,
+      preTargetStateDigestSha256: preTarget, postTargetStateDigestSha256: postTarget,
     });
   }
 
   // ═══════════════════════════════════════ Private: filesystem safety
 
-  /** Resolve a repo-relative path inside root, walking each component via lstat. */
   private _resolveInside(root: string, rel: string): string {
     const segs = rel.split("/");
     let cur = root;
@@ -715,11 +701,9 @@ export class LoopPatchApplicationManager {
       if (relNext.startsWith("..") || path.isAbsolute(relNext))
         fail("PATCH_UNSAFE_PATH", "path escapes workspace");
       let st: fs.Stats;
-      try {
-        st = fs.lstatSync(next);
-      } catch (e) {
+      try { st = fs.lstatSync(next); }
+      catch (e) {
         if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-          // Missing component: only the final component may be missing.
           if (k !== segs.length - 1) fail("PATCH_NOT_APPLICABLE", "parent missing");
           return next;
         }
@@ -733,75 +717,67 @@ export class LoopPatchApplicationManager {
     return cur;
   }
 
-  private _fsCheckAll(root: string, sections: readonly ParsedSection[]): void {
+  /**
+   * Full filesystem safety check covering: root, parent components, target,
+   * symlink, directory, special file, regular file, realpath containment,
+   * size, UTF-8, NUL, and executable bit.
+   *
+   * When `postApply` is true, also checks that existing targets are still
+   * regular non-executable text files (catches post-apply corruption).
+   */
+  private _fsCheckAll(root: string, sections: readonly ParsedSection[], postApply: boolean): void {
     let rootSt: fs.Stats;
-    try {
-      rootSt = fs.lstatSync(root);
-    } catch {
-      fail("WORKSPACE_IO_FAILED", "workspace root lstat");
-    }
+    try { rootSt = fs.lstatSync(root); }
+    catch { fail("WORKSPACE_IO_FAILED", "workspace root lstat"); }
     if (rootSt.isSymbolicLink() || !rootSt.isDirectory())
       fail("WORKSPACE_IO_FAILED", "workspace root invalid");
     let realRoot: string;
-    try {
-      realRoot = fs.realpathSync(root);
-    } catch {
-      fail("WORKSPACE_IO_FAILED", "workspace root realpath");
-    }
+    try { realRoot = fs.realpathSync(root); }
+    catch { fail("WORKSPACE_IO_FAILED", "workspace root realpath"); }
     for (const s of sections) {
       const abs = this._resolveInside(root, s.path);
       const relAbs = path.relative(realRoot, abs);
       if (relAbs.startsWith("..") || path.isAbsolute(relAbs))
         fail("PATCH_UNSAFE_PATH", "realpath escapes workspace");
       let st: fs.Stats;
-      try {
-        st = fs.lstatSync(abs);
-      } catch (e) {
+      try { st = fs.lstatSync(abs); }
+      catch (e) {
         if ((e as NodeJS.ErrnoException).code === "ENOENT") {
           if (!s.isNew) fail("PATCH_NOT_APPLICABLE", "modify target missing");
-          continue; // create: target absent is allowed
+          continue; // create: absent is allowed
         }
         fail("WORKSPACE_IO_FAILED", "target lstat failed");
       }
       if (st.isSymbolicLink()) fail("PATCH_SYMLINK", "target symlink");
       if (st.isDirectory()) fail("PATCH_UNSAFE_PATH", "target is directory");
       if (!st.isFile()) fail("PATCH_UNSAFE_PATH", "target special file");
-      // Defense-in-depth: the resolved target's realpath must stay inside the
-      // workspace even though the component walk already rejected symlinks.
+      // Executable bit check: existing targets must be 0644 (no exec bits).
+      if ((st.mode & 0o111) !== 0) fail("PATCH_UNSUPPORTED_CHANGE", "target has exec bit");
+      // Per-target realpath containment (defense-in-depth).
       let realTarget: string;
-      try {
-        realTarget = fs.realpathSync(abs);
-      } catch {
-        fail("WORKSPACE_IO_FAILED", "target realpath failed");
-      }
+      try { realTarget = fs.realpathSync(abs); }
+      catch { fail("WORKSPACE_IO_FAILED", "target realpath failed"); }
       const relTarget = path.relative(realRoot, realTarget);
       if (relTarget.startsWith("..") || path.isAbsolute(relTarget))
         fail("PATCH_UNSAFE_PATH", "target realpath escapes workspace");
       if (st.size > this.mxTgt) fail("PATCH_UNSAFE_PATH", "target too large");
       let content: Buffer;
-      try {
-        content = fs.readFileSync(abs);
-      } catch {
-        fail("WORKSPACE_IO_FAILED", "target read failed");
-      }
+      try { content = fs.readFileSync(abs); }
+      catch { fail("WORKSPACE_IO_FAILED", "target read failed"); }
       if (content.includes(0x00)) fail("PATCH_BINARY", "target NUL byte");
-      try {
-        new TextDecoder("utf-8", { fatal: true }).decode(content);
-      } catch {
-        fail("PATCH_BINARY", "target invalid UTF-8");
-      }
+      try { new TextDecoder("utf-8", { fatal: true }).decode(content); }
+      catch { fail("PATCH_BINARY", "target invalid UTF-8"); }
     }
   }
 
   private _targetStateDigest(root: string, sections: readonly ParsedSection[]): string {
     const h = crypto.createHash("sha256");
-    h.update("loop-patch-target-state-v1");
+    h.update("loop-patch-target-state-v2");
     for (const s of sections) {
       const abs = path.join(root, s.path);
       let st: fs.Stats;
-      try {
-        st = fs.lstatSync(abs);
-      } catch (e) {
+      try { st = fs.lstatSync(abs); }
+      catch (e) {
         if ((e as NodeJS.ErrnoException).code === "ENOENT") {
           h.update(`\x00${s.path}:missing`);
           continue;
@@ -814,11 +790,8 @@ export class LoopPatchApplicationManager {
       h.update(`\x00${s.path}:${kind}:${st.mode}:${st.size}:`);
       if (st.isFile()) {
         let content: Buffer;
-        try {
-          content = fs.readFileSync(abs);
-        } catch {
-          fail("WORKSPACE_IO_FAILED", "target read failed");
-        }
+        try { content = fs.readFileSync(abs); }
+        catch { fail("WORKSPACE_IO_FAILED", "target read failed"); }
         h.update(sha256Hex(content));
       }
     }
