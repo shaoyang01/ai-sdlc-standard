@@ -96,7 +96,9 @@ async function main() {
       Object.defineProperty({ gitExecutableId: "g" }, "runner", { set(v: any) {}, enumerable: true, configurable: true }) as any
     ), "INVALID_INPUT", "setter rejected");
 
-    assertThrows(() => new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", __proto__: {} } as any), "INVALID_INPUT", "__proto__ key rejected");
+    const protoOwn: any = { runner, gitExecutableId: "g" };
+    Object.defineProperty(protoOwn, "__proto__", { value: {}, enumerable: true });
+    assertThrows(() => new LoopGitWorkspaceManager(protoOwn), "INVALID_INPUT", "__proto__ key rejected");
 
     const symDesc = Symbol("test");
     const symObj: any = { runner, gitExecutableId: "g" };
@@ -110,9 +112,10 @@ async function main() {
 
     assertThrows(() => new LoopGitWorkspaceManager({ runner, gitExecutableId: "g", bad: 1 } as any), "INVALID_INPUT", "unknown field rejected");
 
-    // Throwing getPrototypeOf
-    const throwProto = { runner, gitExecutableId: "g" };
-    Object.setPrototypeOf(throwProto, new Proxy({}, { getPrototypeOf() { throw new Error("boom"); } }));
+    // Throwing getPrototypeOf — pass Proxy directly
+    const throwProto = new Proxy({ runner, gitExecutableId: "g" }, {
+      getPrototypeOf() { throw new Error("boom"); }
+    });
     assertThrows(() => new LoopGitWorkspaceManager(throwProto as any), "INVALID_INPUT", "throwing getPrototypeOf");
 
     // Throwing ownKeys
@@ -133,9 +136,9 @@ async function main() {
       { expectedTaskHeadSha: "short", deleteTaskBranch: true },
     ];
     for (const bo of badOpts) {
-      let caught = false;
-      try { await mgr.cleanup(id, bo); } catch (e: any) { caught = e instanceof LoopGitWorkspaceError; }
-      ok(caught, "cleanup opts rejected: " + JSON.stringify(bo).slice(0, 50));
+      let caughtCode = "";
+      try { await mgr.cleanup(id, bo); } catch (e: any) { caughtCode = e?.code ?? ""; }
+      ok(caughtCode === "INVALID_INPUT", "cleanup opts→INVALID_INPUT: " + JSON.stringify(bo).slice(0, 50));
     }
 
     rmSync(tr, { recursive: true, force: true });
@@ -743,19 +746,34 @@ async function main() {
     ok(cl2.taskBranchRetained && !cl2.alreadyAbsent, "idempotent retain");
 
     // F14. Remove后 exact residue → CLEANUP_BLOCKED
-    // Simulated via manual worktree registration corruption
+    // Inject: after worktree remove succeeds, re-create a registration to simulate residue
     const idF14 = mkId({ rp, cr, sha: featSha, taskBranch: "codex/f14" });
     const sF14 = await mgr.prepare(idF14);
     const wsF14 = sF14.workspacePath;
-    // Create a duplicate registration manually
-    const wtDir14 = join(rp, ".git", "worktrees");
-    const existingIds = execFileSync(GP, ["worktree", "list", "--porcelain"], { cwd: rp, encoding: "utf8" })
-      .split("\n").filter(l => l.startsWith("worktree ")).map(l => l.slice(9));
-    // Corrupt: after remove, manually re-add registration
-    // This is hard to test cleanly. Instead, verify via runner injection.
-    // The residue check is in the cleanup code path we already modified.
-    await mgr.cleanup(idF14, { expectedTaskHeadSha: sF14.taskHeadSha });
-    ok(true, "exact residue guard structural");
+    const rF14 = mkRunner(rp, cr, home);
+    const oF14 = rF14.run.bind(rF14);
+    let f14Injected = false;
+    rF14.run = async function (req: any) {
+      const r = await oF14(req);
+      const argsStr = (req.args as string[]).join(" ");
+      if (!f14Injected && argsStr.includes("worktree") && argsStr.includes("remove")) {
+        f14Injected = true;
+        // Simulate residue: re-add a worktree registration pointing to the same path
+        const wtBase = join(rp, ".git", "worktrees", "residue-f14");
+        mkdirSync(wtBase, { recursive: true });
+        writeFileSync(join(wtBase, "gitdir"), join(wsF14, ".git"));
+        writeFileSync(join(wtBase, "HEAD"), `ref: refs/heads/codex/f14\n`);
+        writeFileSync(join(wtBase, "commondir"), join(rp, ".git"));
+      }
+      return r;
+    };
+    const mF14 = new LoopGitWorkspaceManager({ runner: rF14, gitExecutableId: "git" });
+    await assertThrowsAsync(() => mF14.cleanup(idF14, { expectedTaskHeadSha: sF14.taskHeadSha }),
+      "CLEANUP_BLOCKED", "exact residue→CLEANUP_BLOCKED");
+    // Cleanup the injected residue
+    rmSync(join(rp, ".git", "worktrees", "residue-f14"), { recursive: true, force: true });
+    try { execFileSync(GP, ["worktree", "remove", "--force", wsF14], { cwd: rp }); } catch {}
+    try { execFileSync(GP, ["branch", "-D", "codex/f14"], { cwd: rp }); } catch {}
 
     // F15. Remove后 branch HEAD moved → CLEANUP_BLOCKED
     const idF15 = mkId({ rp, cr, sha: featSha, taskBranch: "codex/f15" });
@@ -793,7 +811,7 @@ async function main() {
     ok(!prodSrc.match(/\bclean\b.*-f/) && !prodSrc.includes('"clean"'), "no git clean");
     ok(!prodSrc.match(/\bprune\b/), "no worktree prune");
     ok(!prodSrc.match(/\brepair\b/), "no worktree repair");
-    ok(!prodSrc.includes("--force") || prodSrc.includes('"remove"'), "no worktree remove --force (except literal)");
+    ok(!prodSrc.includes("--force"), "no worktree remove --force");
     ok(!prodSrc.match(/branch.*-D/) && !prodSrc.includes('"-D"'), "no branch -D");
     ok(!prodSrc.includes(".git/worktrees"), "no direct .git/worktrees access");
   }
