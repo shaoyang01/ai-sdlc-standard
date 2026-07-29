@@ -1,45 +1,63 @@
-// LOOP-DELIVERY-04 R5 — Structured Mutation Attribution & Fail-Closed Cleanup
+// LOOP-DELIVERY-04 R6 — Isolated Probe Environment & Verified Cleanup
 // ============================================================================
 // Deterministic, CI-runnable mutation harness for the D04 bounded multi-file
 // patch applier. This is EVIDENCE ONLY: it never changes D04 production
 // behavior, never mutates the real working tree, and never touches the Git
 // index or HEAD of the source repository.
 //
-// R5 changes (relative to R4), per project-controller review (CHANGES REQUIRED):
+// R6 changes (relative to R5), per project-controller review (CHANGES REQUIRED):
+//   * All G/H/L probes run under a fully isolated Git environment: independent
+//     HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1,
+//     GIT_TERMINAL_PROMPT=0. No host ~/.gitconfig, system config, init templates,
+//     hooksPath, or credential helpers are reachable.
+//   * Probe sessions are parent-managed: the parent harness creates a unique
+//     session root (l04-probe-session-{G,H,L}-*) with home/, xdg-config/, and
+//     fixture/ subdirectories, registers it, and is the SOLE authority for
+//     cleanup. The child never creates its own temp root and never deletes the
+//     session root.
+//   * Every direct execFileSync(git, ...) and every LoopPosixProcessRunner
+//     fixedEnv in the probe child uses the same unified PROBE_ENV.
+//   * Each PROBE_RESULT emits six real environment-isolation booleans computed
+//     from the actual process environment (never hard-coded).
+//   * Cleanup is fail-closed: the parent deletes the probe file and session
+//     root in a finally, then verifies deletion with existsSync. Cleanup
+//     failure forces harness_error and blocks the success gate.
+//   * The misleading child-reported fixture_cleanup_complete field is removed.
+//   * Two new self-tests: probe_environment_isolation and probe_cleanup_gate.
+//   * CLI --mode=full (default, CI) and --mode=quick (local lightweight).
+//
+// R5 changes (retained):
 //   * Every mutation declares an explicit evidence mode:
 //       - first_failure    (A,B,C,D,E,F,I,J,K,M,N)
 //       - dedicated_probe  (G,H,L)
-//   * The uncaught-error allowance and message-substring kill rule are REMOVED.
-//     `allowUncaughtLoopPatchError` and `expectedErrorToken` no longer exist.
 //   * G/H/L are killed ONLY via a disposable dedicated probe that directly
 //     catches the real Error object and emits a single structured
 //     `PROBE_RESULT {json}` record. The parent harness re-compares
 //     error_name / error_code / error_message and every scenario assertion
 //     against FIXED expected values; probe exit 0 alone is never trusted.
-//   * `expectedErrorCode` now participates in the comparison logic.
+//   * `expectedErrorCode` participates in the comparison logic.
 //   * Failure paths no longer call process.exit() after the disposable root is
 //     created: main() returns an exit code, cleanup runs in a finally that
 //     spans the whole disposable session, and process.exitCode is set once.
-//   * Three fast failure-path self-tests run BEFORE any baseline/mutation work.
 //
 // How it works:
 //   1. Static self-checks (source-level invariants of this harness).
 //   2. Failure-path self-tests (baseline cleanup, target-mismatch restore,
-//      evidence-mismatch restore) — no network, no full suite.
+//      evidence-mismatch restore, probe env isolation, probe cleanup gate)
+//      — no network, no full suite.
 //   3. Verify the real working tree's production / test / lock files are
 //      byte-identical to HEAD and that the platform is darwin or linux.
 //   4. Build a DISPOSABLE copy of the current HEAD via `git archive HEAD`
 //      expanded into the system temp directory (outside the repo root), with a
 //      read-only symlink to the repo's node_modules.
-//   5. Run the targeted D04 suite once in the disposable copy with NO mutation
-//      to establish the exact baseline (must be 287 passed / 0 failed).
-//   6. For each of the 14 fixed mutations A–N: apply the byte-exact replacement
-//      to the disposable copy's core/loop-patch-application.ts, run the targeted
-//      suite, classify against the declared evidence mode, then restore the
-//      original bytes in a finally block and re-hash to prove restoration.
-//      For G/H/L a dedicated probe runs against the SAME mutated bytes.
+//   5. full mode: Run the targeted D04 suite once with NO mutation to establish
+//      the exact baseline (must be 287 passed / 0 failed).
+//   6. For each mutation (A–N in full, G/H/L only in quick): apply the
+//      byte-exact replacement to the disposable copy, run the targeted suite
+//      (full only) and/or dedicated probe, classify, then restore the original
+//      bytes in a finally block and re-hash to prove restoration.
 //   7. Re-verify the real working tree HEAD / index / file SHAs are unchanged
-//      and remove the disposable copy.
+//      and remove the disposable copy and all probe sessions.
 //
 // Platform & cleanup limitations: supports darwin/linux only; no network.
 // SIGINT/SIGTERM trigger best-effort disposal cleanup (cleanup runs first).
@@ -63,6 +81,16 @@ const PER_RUN_TIMEOUT_MS = 300000; // 5 min per targeted-suite run (baseline ~15
 const PROBE_TIMEOUT_MS = 120000; // 2 min per dedicated probe
 const MAX_EVIDENCE_LEN = 400;
 const PROBE_PREFIX = "PROBE_RESULT";
+
+/** Six environment-isolation boolean fields every G/H/L PROBE_RESULT must carry. */
+const ENV_ISOLATION_FIELDS = [
+  "home_isolated",
+  "xdg_config_isolated",
+  "git_global_config_disabled",
+  "git_system_config_disabled",
+  "git_terminal_prompt_disabled",
+  "probe_root_contained",
+] as const;
 
 type MutStatus = "killed" | "survived" | "invalid" | "harness_error";
 type EvidenceMode = "first_failure" | "dedicated_probe";
@@ -371,6 +399,7 @@ function boolField(obj: Record<string, unknown>, k: string): boolean | null {
 
 interface ProbeCompare {
   killed: boolean;
+  envIsolated: boolean;
   note: string;
   scenarioId: string;
   errorName: string;
@@ -381,8 +410,9 @@ interface ProbeCompare {
 
 /**
  * Independently re-compare a parsed PROBE_RESULT object against the FIXED
- * MutationDef expectations. Probe exit 0 is NOT trusted here: every field and
- * every required scenario assertion must match exactly.
+ * MutationDef expectations. Probe exit 0 is NOT trusted here: every field,
+ * every required scenario assertion, and all six environment-isolation
+ * booleans must match exactly.
  */
 function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompare {
   const scenarioId = strField(obj, "scenario_id") ?? "";
@@ -431,8 +461,20 @@ function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompar
     if (b !== true) problems.push(`assertion ${k} != true`);
   }
 
+  // R6: six environment-isolation assertions common to G/H/L.
+  let envIsolated = true;
+  for (const k of ENV_ISOLATION_FIELDS) {
+    const b = boolField(obj, k);
+    assertions.push(`${k}=${b === null ? "-" : b}`);
+    if (b !== true) {
+      problems.push(`env isolation ${k} != true`);
+      envIsolated = false;
+    }
+  }
+
   return {
     killed: problems.length === 0,
+    envIsolated,
     note: problems.length === 0 ? "probe evidence matched" : problems.join("; ").slice(0, MAX_EVIDENCE_LEN),
     scenarioId,
     errorName,
@@ -440,6 +482,26 @@ function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompar
     errorMessage,
     assertions,
   };
+}
+
+/**
+ * Pure classification of a dedicated-probe kill gate. Used by both the main
+ * loop and the probe_cleanup_gate self-test. Cleanup failure forces
+ * harness_error; environment isolation failure forces invalid.
+ */
+function classifyProbeKill(inp: {
+  probeExitZero: boolean;
+  evidenceMatched: boolean;
+  envIsolated: boolean;
+  fileCleanupComplete: boolean;
+  sessionCleanupComplete: boolean;
+}): { status: MutStatus; note: string } {
+  if (!inp.envIsolated) return { status: "invalid", note: "environment not fully isolated" };
+  if (!inp.fileCleanupComplete || !inp.sessionCleanupComplete)
+    return { status: "harness_error", note: `probe cleanup incomplete: file=${inp.fileCleanupComplete} session=${inp.sessionCleanupComplete}` };
+  if (!inp.probeExitZero) return { status: "invalid", note: "probe exit non-zero" };
+  if (!inp.evidenceMatched) return { status: "invalid", note: "evidence mismatch" };
+  return { status: "killed", note: "all probe kill conditions met" };
 }
 
 // ═══════════════════════════════════════ Output records
@@ -460,6 +522,9 @@ interface MutationRecord {
   probeErrorCode: string;
   probeErrorMessage: string;
   probeAssertions: string;
+  probeEnvironmentIsolated: string;
+  probeFileCleanupComplete: string;
+  probeSessionCleanupComplete: string;
   baselineSha256: string;
   mutatedSha256: string;
   restoredSha256: string;
@@ -484,6 +549,9 @@ function newRecord(m: MutationDef, targetMatches: number, baselineSha: string): 
     probeErrorCode: "not_applicable",
     probeErrorMessage: "not_applicable",
     probeAssertions: "not_applicable",
+    probeEnvironmentIsolated: "not_applicable",
+    probeFileCleanupComplete: "not_applicable",
+    probeSessionCleanupComplete: "not_applicable",
     baselineSha256: baselineSha,
     mutatedSha256: "",
     restoredSha256: "",
@@ -510,6 +578,9 @@ function emitRecord(r: MutationRecord): void {
       `probe_error_code=${r.probeErrorCode}`,
       `probe_error_message=${r.probeErrorMessage === "not_applicable" ? "not_applicable" : JSON.stringify(r.probeErrorMessage)}`,
       `probe_assertions=${r.probeAssertions === "not_applicable" ? "not_applicable" : JSON.stringify(r.probeAssertions)}`,
+      `probe_environment_isolated=${r.probeEnvironmentIsolated}`,
+      `probe_file_cleanup_complete=${r.probeFileCleanupComplete}`,
+      `probe_session_cleanup_complete=${r.probeSessionCleanupComplete}`,
       `baseline_sha256=${r.baselineSha256}`,
       `mutated_sha256=${r.mutatedSha256 === "" ? "-" : r.mutatedSha256}`,
       `restored_sha256=${r.restoredSha256 === "" ? "-" : r.restoredSha256}`,
@@ -523,8 +594,7 @@ function emitRecord(r: MutationRecord): void {
 
 /**
  * Create a fresh temp root, run `work(root)`, and ALWAYS remove the root in a
- * finally. Returns { ok, removed, error }. Used by both the failure-path
- * self-tests and (conceptually) the main disposable session.
+ * finally. Returns { ok, removed, error }. Used by the failure-path self-tests.
  */
 function withDisposableRoot(
   prefix: string,
@@ -560,12 +630,76 @@ function restoreMutatedFile(
   return { restoredSha, identical: restoredSha === originalSha };
 }
 
+// ═══════════════════════════════════════ Parent-managed probe sessions
+
+/** Registry of all probe session roots and probe files created this run. */
+const registeredProbeSessions: string[] = [];
+const registeredProbeFiles: string[] = [];
+
+/**
+ * Pure env builder for a probe session. Returns the isolated environment
+ * variables that the parent passes to the probe child. Deterministic for
+ * given inputs — used by both runProbe and the probe_environment_isolation
+ * self-test.
+ */
+function buildProbeSessionEnv(sessionRoot: string, repoRoot: string): Record<string, string> {
+  const homeDir = path.join(sessionRoot, "home");
+  const xdgConfigDir = path.join(sessionRoot, "xdg-config");
+  const fixtureDir = path.join(sessionRoot, "fixture");
+  return {
+    HOME: homeDir,
+    XDG_CONFIG_HOME: xdgConfigDir,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    LC_ALL: "C",
+    LANG: "C",
+    L04_PROBE_SESSION_ROOT: sessionRoot,
+    L04_PROBE_ROOT: fixtureDir,
+    L04_EXPECTED_HOME: homeDir,
+    L04_EXPECTED_XDG_CONFIG_HOME: xdgConfigDir,
+    L04_REAL_REPO_ROOT: repoRoot,
+  };
+}
+
+/**
+ * Create and register a unique probe session root with home/, xdg-config/,
+ * and fixture/ subdirectories. The parent harness is the sole authority for
+ * cleanup of this directory tree.
+ */
+function createProbeSession(id: string): {
+  sessionRoot: string;
+  homeDir: string;
+  xdgConfigDir: string;
+  fixtureDir: string;
+} {
+  const sessionRoot = fs.mkdtempSync(path.join(os.tmpdir(), `l04-probe-session-${id}-`));
+  const homeDir = path.join(sessionRoot, "home");
+  const xdgConfigDir = path.join(sessionRoot, "xdg-config");
+  const fixtureDir = path.join(sessionRoot, "fixture");
+  fs.mkdirSync(homeDir, { recursive: true });
+  fs.mkdirSync(xdgConfigDir, { recursive: true });
+  fs.mkdirSync(fixtureDir, { recursive: true });
+  registeredProbeSessions.push(sessionRoot);
+  return { sessionRoot, homeDir, xdgConfigDir, fixtureDir };
+}
+
+interface ProbeRunResult {
+  run: RunResult;
+  environmentConfigured: boolean;
+  probeFileCleanupComplete: boolean;
+  probeSessionCleanupComplete: boolean;
+  registeredSessionRoot: string;
+}
+
 // ═══════════════════════════════════════ Failure-path self-tests
 
 interface SelfTestResult {
   baseline_failure_cleanup: boolean;
   target_mismatch_restore_cleanup: boolean;
   evidence_mismatch_restore_cleanup: boolean;
+  probe_environment_isolation: boolean;
+  probe_cleanup_gate: boolean;
 }
 
 /**
@@ -660,11 +794,61 @@ function selfTestEvidenceMismatchRestoreCleanup(): boolean {
   return r.ok === true && r.removed === true;
 }
 
+/**
+ * Self-test 4 (R6): the pure env builder must produce an isolated HOME,
+ * XDG_CONFIG_HOME, disabled global/system Git config, disabled terminal
+ * prompt, HOME different from the host HOME, and correct containment of
+ * session / home / xdg / fixture paths.
+ */
+function selfTestProbeEnvironmentIsolation(): boolean {
+  const sessionRoot = path.join(os.tmpdir(), "l04-st4-env-test");
+  const repoRoot = path.join(os.tmpdir(), "l04-st4-repo");
+  const env = buildProbeSessionEnv(sessionRoot, repoRoot);
+  const sep = path.sep;
+  return (
+    env.HOME === path.join(sessionRoot, "home") &&
+    env.HOME !== (process.env.HOME ?? "") &&
+    env.XDG_CONFIG_HOME === path.join(sessionRoot, "xdg-config") &&
+    env.GIT_CONFIG_GLOBAL === "/dev/null" &&
+    env.GIT_CONFIG_NOSYSTEM === "1" &&
+    env.GIT_TERMINAL_PROMPT === "0" &&
+    env.L04_PROBE_SESSION_ROOT === sessionRoot &&
+    env.L04_PROBE_ROOT === path.join(sessionRoot, "fixture") &&
+    env.L04_EXPECTED_HOME === path.join(sessionRoot, "home") &&
+    env.L04_EXPECTED_XDG_CONFIG_HOME === path.join(sessionRoot, "xdg-config") &&
+    env.L04_REAL_REPO_ROOT === repoRoot &&
+    env.HOME.startsWith(sessionRoot + sep) &&
+    env.XDG_CONFIG_HOME.startsWith(sessionRoot + sep) &&
+    env.L04_PROBE_ROOT.startsWith(sessionRoot + sep)
+  );
+}
+
+/**
+ * Self-test 5 (R6): when all structured evidence is correct and probe exit is
+ * 0, but probe_session_cleanup_complete is false, the kill gate must classify
+ * as harness_error (NOT killed) and the overall success gate must be false.
+ */
+function selfTestProbeCleanupGate(): boolean {
+  const r = classifyProbeKill({
+    probeExitZero: true,
+    evidenceMatched: true,
+    envIsolated: true,
+    fileCleanupComplete: true,
+    sessionCleanupComplete: false,
+  });
+  if (r.status !== "harness_error") return false;
+  // Overall success gate must be false when cleanup fails.
+  const successGate = r.status === "killed";
+  return successGate === false;
+}
+
 function runSelfTests(): SelfTestResult {
   return {
     baseline_failure_cleanup: selfTestBaselineFailureCleanup(),
     target_mismatch_restore_cleanup: selfTestTargetMismatchRestoreCleanup(),
     evidence_mismatch_restore_cleanup: selfTestEvidenceMismatchRestoreCleanup(),
+    probe_environment_isolation: selfTestProbeEnvironmentIsolation(),
+    probe_cleanup_gate: selfTestProbeCleanupGate(),
   };
 }
 
@@ -672,18 +856,19 @@ function runSelfTests(): SelfTestResult {
 
 /**
  * Build the disposable probe TypeScript source for a given mutation. The probe
- * imports the MUTATED production module from the disposable copy, constructs a
- * real temp Git fixture + D03 isolated worktree, drives the exact scenario,
+ * imports the MUTATED production module from the disposable copy, uses the
+ * parent-provided L04_PROBE_ROOT as its fixture root (never creates its own
+ * temp root), drives the exact scenario under a fully isolated Git environment,
  * directly catches the real Error object, and prints a single
- * `PROBE_RESULT {json}` line. It exits 0 only if ALL of its own fixed
- * expectations match; otherwise it exits 1. Fixture + probe cleanup is in a
- * finally. The probe never touches the real repository.
+ * `PROBE_RESULT {json}` line with six real environment-isolation booleans.
+ * It exits 0 only if ALL of its own fixed expectations match; otherwise it
+ * exits 1. The probe never deletes the session root — the parent is the sole
+ * cleanup authority. The probe never touches the real repository.
  */
 function buildProbeSource(m: MutationDef, disp: string): string {
   const common = `
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { delimiter, join, dirname } from "node:path";
@@ -696,6 +881,57 @@ const SCENARIO_ID = ${JSON.stringify(m.probeScenarioId ?? "")};
 const EXP_NAME = ${JSON.stringify(m.expectedErrorName ?? "")};
 const EXP_CODE = ${JSON.stringify(m.expectedErrorCode ?? "")};
 const EXP_MSG = ${JSON.stringify(m.expectedErrorMessage ?? "")};
+
+// ── Environment validation (parent-provided paths) ──
+const SESSION_ROOT = process.env.L04_PROBE_SESSION_ROOT ?? "";
+const PROBE_ROOT = process.env.L04_PROBE_ROOT ?? "";
+const EXPECTED_HOME = process.env.L04_EXPECTED_HOME ?? "";
+const EXPECTED_XDG = process.env.L04_EXPECTED_XDG_CONFIG_HOME ?? "";
+const REAL_REPO_ROOT = process.env.L04_REAL_REPO_ROOT ?? "";
+
+function fail(msg: string): never {
+  console.error("PROBE_FAULT " + msg);
+  process.exitCode = 1;
+  throw new Error(msg);
+}
+
+const envChecks: [string, string][] = [
+  ["L04_PROBE_SESSION_ROOT", SESSION_ROOT],
+  ["L04_PROBE_ROOT", PROBE_ROOT],
+  ["L04_EXPECTED_HOME", EXPECTED_HOME],
+  ["L04_EXPECTED_XDG_CONFIG_HOME", EXPECTED_XDG],
+  ["L04_REAL_REPO_ROOT", REAL_REPO_ROOT],
+];
+for (const [nm, val] of envChecks) {
+  if (!path.isAbsolute(val)) fail("env " + nm + " not absolute: " + val);
+}
+if (!EXPECTED_HOME.startsWith(SESSION_ROOT + "/")) fail("home not contained in session root");
+if (!EXPECTED_XDG.startsWith(SESSION_ROOT + "/")) fail("xdg not contained in session root");
+if (!PROBE_ROOT.startsWith(SESSION_ROOT + "/")) fail("fixture not contained in session root");
+if (PROBE_ROOT === REAL_REPO_ROOT || PROBE_ROOT.startsWith(REAL_REPO_ROOT + "/")) fail("fixture inside real repo");
+
+// ── Isolation evidence (computed from actual environment, never hard-coded) ──
+const home_isolated = process.env.HOME === EXPECTED_HOME;
+const xdg_config_isolated = process.env.XDG_CONFIG_HOME === EXPECTED_XDG;
+const git_global_config_disabled = process.env.GIT_CONFIG_GLOBAL === "/dev/null";
+const git_system_config_disabled = process.env.GIT_CONFIG_NOSYSTEM === "1";
+const git_terminal_prompt_disabled = process.env.GIT_TERMINAL_PROMPT === "0";
+const probe_root_contained =
+  PROBE_ROOT.startsWith(SESSION_ROOT + "/") &&
+  PROBE_ROOT !== REAL_REPO_ROOT &&
+  !PROBE_ROOT.startsWith(REAL_REPO_ROOT + "/");
+
+// ── Unified isolated environment for ALL Git calls ──
+const PROBE_ENV: Record<string, string> = {
+  PATH: process.env.PATH ?? "/usr/bin:/bin",
+  HOME: process.env.HOME ?? "",
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? "",
+  GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL ?? "",
+  GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM ?? "",
+  GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT ?? "",
+  LC_ALL: "C",
+  LANG: "C",
+};
 
 function sha256(d: Buffer | string): string {
   return crypto.createHash("sha256").update(typeof d === "string" ? Buffer.from(d, "utf8") : d).digest("hex");
@@ -712,53 +948,56 @@ const A_OLD = "alpha\\nbeta\\ngamma\\n";
 const A_NEW = "alpha\\nBETA\\ngamma\\n";
 
 function git(cwd: string, args: readonly string[]): string {
-  return execFileSync(GP, args as string[], { cwd, encoding: "utf8" });
+  return execFileSync(GP, args as string[], { cwd, encoding: "utf8", env: PROBE_ENV });
 }
 
 function makeDiff(oldC: string, newC: string, rel: string, scratchRoot: string): string {
   const sc = path.join(scratchRoot, "diff-" + crypto.randomBytes(6).toString("hex"));
   fs.mkdirSync(sc, { recursive: true });
-  execFileSync(GP, ["init", "-q"], { cwd: sc });
-  execFileSync(GP, ["config", "user.name", "t"], { cwd: sc });
-  execFileSync(GP, ["config", "user.email", "t@t"], { cwd: sc });
+  execFileSync(GP, ["init", "-q"], { cwd: sc, env: PROBE_ENV });
+  execFileSync(GP, ["config", "user.name", "t"], { cwd: sc, env: PROBE_ENV });
+  execFileSync(GP, ["config", "user.email", "t@t"], { cwd: sc, env: PROBE_ENV });
   fs.mkdirSync(dirname(join(sc, rel)), { recursive: true });
   fs.writeFileSync(join(sc, rel), oldC);
-  execFileSync(GP, ["add", "-A"], { cwd: sc });
-  execFileSync(GP, ["commit", "-q", "-m", "base"], { cwd: sc });
+  execFileSync(GP, ["add", "-A"], { cwd: sc, env: PROBE_ENV });
+  execFileSync(GP, ["commit", "-q", "-m", "base"], { cwd: sc, env: PROBE_ENV });
   fs.writeFileSync(join(sc, rel), newC);
-  return execFileSync(GP, ["diff", "--no-color", "--", rel], { cwd: sc, encoding: "utf8" });
+  return execFileSync(GP, ["diff", "--no-color", "--", rel], { cwd: sc, encoding: "utf8", env: PROBE_ENV });
 }
 
-interface Fixture { tr: string; rp: string; cr: string; baseSha: string; featSha: string; home: string; }
+interface Fixture { tr: string; rp: string; cr: string; baseSha: string; featSha: string; }
 function setupRepo(root: string): Fixture {
   const tr = fs.realpathSync(root);
   const rp = join(tr, "repo"), cr = join(tr, "ctrl");
   fs.mkdirSync(rp, { recursive: true }); fs.mkdirSync(cr, { recursive: true });
-  execFileSync(GP, ["init", "-b", "main"], { cwd: rp });
-  execFileSync(GP, ["config", "user.name", "t"], { cwd: rp });
-  execFileSync(GP, ["config", "user.email", "t@t"], { cwd: rp });
+  execFileSync(GP, ["init", "-b", "main"], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["config", "user.name", "t"], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["config", "user.email", "t@t"], { cwd: rp, env: PROBE_ENV });
   fs.writeFileSync(join(rp, "a.txt"), A_OLD);
   fs.writeFileSync(join(rp, "b.txt"), "one\\ntwo\\n");
-  execFileSync(GP, ["add", "a.txt", "b.txt"], { cwd: rp });
-  execFileSync(GP, ["commit", "-m", "init"], { cwd: rp });
+  execFileSync(GP, ["add", "a.txt", "b.txt"], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["commit", "-m", "init"], { cwd: rp, env: PROBE_ENV });
   const baseSha = git(rp, ["rev-parse", "HEAD"]).trim();
-  execFileSync(GP, ["checkout", "-b", "feat/loop-runtime-v1"], { cwd: rp });
+  execFileSync(GP, ["checkout", "-b", "feat/loop-runtime-v1"], { cwd: rp, env: PROBE_ENV });
   fs.writeFileSync(join(rp, "c.txt"), "cee\\n");
-  execFileSync(GP, ["add", "c.txt"], { cwd: rp });
-  execFileSync(GP, ["commit", "-m", "feat"], { cwd: rp });
+  execFileSync(GP, ["add", "c.txt"], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["commit", "-m", "feat"], { cwd: rp, env: PROBE_ENV });
   const featSha = git(rp, ["rev-parse", "HEAD"]).trim();
-  execFileSync(GP, ["update-ref", "refs/remotes/origin/feat/loop-runtime-v1", featSha], { cwd: rp });
-  execFileSync(GP, ["update-ref", "refs/remotes/origin/main", baseSha], { cwd: rp });
-  execFileSync(GP, ["remote", "add", "origin", "https://github.com/example/fixture-repo.git"], { cwd: rp });
-  execFileSync(GP, ["checkout", "main"], { cwd: rp });
-  const home = join(tr, "home"); fs.mkdirSync(home, { recursive: true });
-  return { tr, rp, cr, baseSha, featSha, home };
+  execFileSync(GP, ["update-ref", "refs/remotes/origin/feat/loop-runtime-v1", featSha], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["update-ref", "refs/remotes/origin/main", baseSha], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["remote", "add", "origin", "https://github.com/example/fixture-repo.git"], { cwd: rp, env: PROBE_ENV });
+  execFileSync(GP, ["checkout", "main"], { cwd: rp, env: PROBE_ENV });
+  return { tr, rp, cr, baseSha, featSha };
 }
 function mkRunner(f: Fixture) {
   return new LoopPosixProcessRunner({
     executables: [{ id: "git", executablePath: GP, allowDynamicArgs: true, stdinMode: "optional" }],
     allowedCwdRoots: [f.rp, f.cr],
-    fixedEnv: { GIT_TERMINAL_PROMPT: "0", HOME: f.home, PATH: join(GP, ".."), LC_ALL: "C", LANG: "C" },
+    fixedEnv: {
+      GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
+      HOME: process.env.HOME ?? "", XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? "",
+      PATH: join(GP, ".."), LC_ALL: "C", LANG: "C",
+    },
     allowedRequestEnvKeys: [], defaultTimeoutMs: 15000,
   });
 }
@@ -782,68 +1021,56 @@ function mkReq(id: any, snap: any, patch: string, allowed: readonly string[]) {
 function emit(obj: Record<string, unknown>): void {
   console.log("PROBE_RESULT " + JSON.stringify(obj));
 }
-function fail(msg: string): never {
-  console.error("PROBE_FAULT " + msg);
-  process.exitCode = 1;
-  throw new Error(msg);
-}
 `;
 
   if (m.id === "G") {
     return common + `
 async function scenario(): Promise<void> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "l04-probe-g-"));
-  let fixtureCleanupComplete = false;
+  const f = setupRepo(PROBE_ROOT);
+  const runner = mkRunner(f);
+  const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
+  const id = mkId(f, "g", "codex/g");
+  const snap0 = await wsMgr.prepare(id);
+  const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
+  const patch = makeDiff(A_OLD, A_NEW, "a.txt", PROBE_ROOT);
+  const headBefore = git(snap0.workspacePath, ["rev-parse", "HEAD"]).trim();
+
+  const r1 = await mgr.apply(mkReq(id, snap0, patch, ["a.txt"]));
+  const firstApplyState = r1.state;
+
+  // Do NOT commit the first modification. Re-inspect to get the updated
+  // (dirty) pre-status digest, then apply the SAME patch again.
+  const snap1 = await wsMgr.inspect(id);
+  let secondAttempt = "no_error";
+  let errorName = "", errorCode = "", errorMessage = "";
   try {
-    const f = setupRepo(fs.realpathSync(root));
-    const runner = mkRunner(f);
-    const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
-    const id = mkId(f, "g", "codex/g");
-    const snap0 = await wsMgr.prepare(id);
-    const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
-    const patch = makeDiff(A_OLD, A_NEW, "a.txt", root);
-    const headBefore = git(snap0.workspacePath, ["rev-parse", "HEAD"]).trim();
-
-    const r1 = await mgr.apply(mkReq(id, snap0, patch, ["a.txt"]));
-    const firstApplyState = r1.state;
-
-    // Do NOT commit the first modification. Re-inspect to get the updated
-    // (dirty) pre-status digest, then apply the SAME patch again.
-    const snap1 = await wsMgr.inspect(id);
-    let secondAttempt = "no_error";
-    let errorName = "", errorCode = "", errorMessage = "";
-    try {
-      await mgr.apply(mkReq(id, snap1, patch, ["a.txt"]));
-    } catch (e: any) {
-      secondAttempt = "error";
-      errorName = e?.name ?? "";
-      errorCode = e?.code ?? "";
-      errorMessage = e?.message ?? "";
-    }
-    const headAfter = git(snap0.workspacePath, ["rev-parse", "HEAD"]).trim();
-    const workspaceHeadUnchanged = headBefore === headAfter;
-
-    const checksOk =
-      firstApplyState === "applied" &&
-      secondAttempt === "error" &&
-      errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
-      workspaceHeadUnchanged;
-
-    emit({
-      mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
-      first_apply_state: firstApplyState, second_attempt: secondAttempt,
-      error_name: errorName, error_code: errorCode, error_message: errorMessage,
-      workspace_head_unchanged: workspaceHeadUnchanged,
-      first_apply_state_applied: firstApplyState === "applied",
-      second_attempt_error: secondAttempt === "error",
-      fixture_cleanup_complete: true,
-    });
-    fixtureCleanupComplete = true;
-    if (!checksOk) process.exitCode = 1;
-  } finally {
-    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
-    if (!fixtureCleanupComplete) { /* fixture cleanup best-effort in finally */ }
+    await mgr.apply(mkReq(id, snap1, patch, ["a.txt"]));
+  } catch (e: any) {
+    secondAttempt = "error";
+    errorName = e?.name ?? "";
+    errorCode = e?.code ?? "";
+    errorMessage = e?.message ?? "";
   }
+  const headAfter = git(snap0.workspacePath, ["rev-parse", "HEAD"]).trim();
+  const workspaceHeadUnchanged = headBefore === headAfter;
+
+  const checksOk =
+    firstApplyState === "applied" &&
+    secondAttempt === "error" &&
+    errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
+    workspaceHeadUnchanged;
+
+  emit({
+    mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
+    first_apply_state: firstApplyState, second_attempt: secondAttempt,
+    error_name: errorName, error_code: errorCode, error_message: errorMessage,
+    workspace_head_unchanged: workspaceHeadUnchanged,
+    first_apply_state_applied: firstApplyState === "applied",
+    second_attempt_error: secondAttempt === "error",
+    home_isolated, xdg_config_isolated, git_global_config_disabled,
+    git_system_config_disabled, git_terminal_prompt_disabled, probe_root_contained,
+  });
+  if (!checksOk) process.exitCode = 1;
 }
 scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message)); process.exitCode = 1; });
 `;
@@ -852,66 +1079,63 @@ scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message
   if (m.id === "H") {
     return common + `
 async function scenario(): Promise<void> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "l04-probe-h-"));
+  const f = setupRepo(PROBE_ROOT);
+  const runner = mkRunner(f);
+  const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
+  const id = mkId(f, "h", "codex/h");
+  const snap0 = await wsMgr.prepare(id);
+  const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
+  const ws = snap0.workspacePath;
+  const patch = makeDiff(A_OLD, A_NEW, "a.txt", PROBE_ROOT);
+
+  const sourceFileBefore = fs.readFileSync(join(f.rp, "a.txt"));
+  const workspaceFileBefore = fs.readFileSync(join(ws, "a.txt"));
+  const sourceHeadBefore = git(f.rp, ["rev-parse", "HEAD"]).trim();
+  const workspaceHeadBefore = git(ws, ["rev-parse", "HEAD"]).trim();
+  const indexBefore = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
+
+  let errorName = "", errorCode = "", errorMessage = "", attempt = "no_error";
   try {
-    const f = setupRepo(fs.realpathSync(root));
-    const runner = mkRunner(f);
-    const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
-    const id = mkId(f, "h", "codex/h");
-    const snap0 = await wsMgr.prepare(id);
-    const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
-    const ws = snap0.workspacePath;
-    const patch = makeDiff(A_OLD, A_NEW, "a.txt", root);
-
-    const sourceFileBefore = fs.readFileSync(join(f.rp, "a.txt"));
-    const workspaceFileBefore = fs.readFileSync(join(ws, "a.txt"));
-    const sourceHeadBefore = git(f.rp, ["rev-parse", "HEAD"]).trim();
-    const workspaceHeadBefore = git(ws, ["rev-parse", "HEAD"]).trim();
-    const indexBefore = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
-
-    let errorName = "", errorCode = "", errorMessage = "", attempt = "no_error";
-    try {
-      await mgr.apply(mkReq(id, snap0, patch, ["a.txt"]));
-    } catch (e: any) {
-      attempt = "error";
-      errorName = e?.name ?? "";
-      errorCode = e?.code ?? "";
-      errorMessage = e?.message ?? "";
-    }
-
-    const sourceFileAfter = fs.readFileSync(join(f.rp, "a.txt"));
-    const workspaceFileAfter = fs.readFileSync(join(ws, "a.txt"));
-    const sourceHeadAfter = git(f.rp, ["rev-parse", "HEAD"]).trim();
-    const workspaceHeadAfter = git(ws, ["rev-parse", "HEAD"]).trim();
-    const indexAfter = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
-
-    // Under mutation H the real apply is mis-directed to the Source fixture
-    // repository (identity.repositoryPath) instead of the isolated worktree.
-    const sourceFileChanged = !sourceFileBefore.equals(sourceFileAfter) &&
-      sourceFileAfter.toString("utf8") === A_NEW;
-    const workspaceFileUnchanged = workspaceFileBefore.equals(workspaceFileAfter) &&
-      workspaceFileAfter.toString("utf8") === A_OLD;
-    const sourceHeadUnchanged = sourceHeadBefore === sourceHeadAfter;
-    const workspaceHeadUnchanged = workspaceHeadBefore === workspaceHeadAfter;
-    const indexUnchanged = indexBefore === indexAfter;
-
-    const checksOk =
-      attempt === "error" &&
-      errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
-      sourceFileChanged && workspaceFileUnchanged &&
-      sourceHeadUnchanged && workspaceHeadUnchanged && indexUnchanged;
-
-    emit({
-      mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
-      attempt, error_name: errorName, error_code: errorCode, error_message: errorMessage,
-      source_file_changed: sourceFileChanged, workspace_file_unchanged: workspaceFileUnchanged,
-      source_head_unchanged: sourceHeadUnchanged, workspace_head_unchanged: workspaceHeadUnchanged,
-      index_unchanged: indexUnchanged, fixture_cleanup_complete: true,
-    });
-    if (!checksOk) process.exitCode = 1;
-  } finally {
-    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+    await mgr.apply(mkReq(id, snap0, patch, ["a.txt"]));
+  } catch (e: any) {
+    attempt = "error";
+    errorName = e?.name ?? "";
+    errorCode = e?.code ?? "";
+    errorMessage = e?.message ?? "";
   }
+
+  const sourceFileAfter = fs.readFileSync(join(f.rp, "a.txt"));
+  const workspaceFileAfter = fs.readFileSync(join(ws, "a.txt"));
+  const sourceHeadAfter = git(f.rp, ["rev-parse", "HEAD"]).trim();
+  const workspaceHeadAfter = git(ws, ["rev-parse", "HEAD"]).trim();
+  const indexAfter = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
+
+  // Under mutation H the real apply is mis-directed to the Source fixture
+  // repository (identity.repositoryPath) instead of the isolated worktree.
+  const sourceFileChanged = !sourceFileBefore.equals(sourceFileAfter) &&
+    sourceFileAfter.toString("utf8") === A_NEW;
+  const workspaceFileUnchanged = workspaceFileBefore.equals(workspaceFileAfter) &&
+    workspaceFileAfter.toString("utf8") === A_OLD;
+  const sourceHeadUnchanged = sourceHeadBefore === sourceHeadAfter;
+  const workspaceHeadUnchanged = workspaceHeadBefore === workspaceHeadAfter;
+  const indexUnchanged = indexBefore === indexAfter;
+
+  const checksOk =
+    attempt === "error" &&
+    errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
+    sourceFileChanged && workspaceFileUnchanged &&
+    sourceHeadUnchanged && workspaceHeadUnchanged && indexUnchanged;
+
+  emit({
+    mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
+    attempt, error_name: errorName, error_code: errorCode, error_message: errorMessage,
+    source_file_changed: sourceFileChanged, workspace_file_unchanged: workspaceFileUnchanged,
+    source_head_unchanged: sourceHeadUnchanged, workspace_head_unchanged: workspaceHeadUnchanged,
+    index_unchanged: indexUnchanged,
+    home_isolated, xdg_config_isolated, git_global_config_disabled,
+    git_system_config_disabled, git_terminal_prompt_disabled, probe_root_contained,
+  });
+  if (!checksOk) process.exitCode = 1;
 }
 scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message)); process.exitCode = 1; });
 `;
@@ -938,83 +1162,79 @@ function statusDigest(ws: string): string {
   return sha256(out);
 }
 async function scenario(): Promise<void> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "l04-probe-l-"));
+  const f = setupRepo(PROBE_ROOT);
+  const runner = mkRunner(f);
+  const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
+  const id = mkId(f, "l", "codex/l");
+  const snap0 = await wsMgr.prepare(id);
+  const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
+  const ws = snap0.workspacePath;
+
+  // patch1: A_OLD -> A_NEW, applied, NOT committed (workspace stays dirty).
+  const p1 = makeDiff(A_OLD, A_NEW, "a.txt", PROBE_ROOT);
+  const r1 = await mgr.apply(mkReq(id, snap0, p1, ["a.txt"]));
+  const patch1State = r1.state;
+
+  // Re-inspect the dirty workspace.
+  const snapD = await wsMgr.inspect(id);
+
+  // patch2 builds on patch1's result, modifying the SAME dirty file.
+  const p2 = makeDiff(A_NEW, "alpha\\nBETA\\ndelta\\n", "a.txt", PROBE_ROOT);
+  const PATCH2_TARGET = "alpha\\nBETA\\ndelta\\n";
+
+  const preStatus = statusDigest(ws);
+  const preTargetState = targetStateDigest(ws, "a.txt");
+  const preContent = fs.readFileSync(join(ws, "a.txt"));
+  const preContentSha = sha256(preContent);
+  const headBefore = git(ws, ["rev-parse", "HEAD"]).trim();
+  const indexBefore = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
+
+  let patch2Attempt = "no_error";
+  let errorName = "", errorCode = "", errorMessage = "";
   try {
-    const f = setupRepo(fs.realpathSync(root));
-    const runner = mkRunner(f);
-    const wsMgr = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
-    const id = mkId(f, "l", "codex/l");
-    const snap0 = await wsMgr.prepare(id);
-    const mgr = new LoopPatchApplicationManager({ runner, workspaceManager: wsMgr, gitExecutableId: "git" });
-    const ws = snap0.workspacePath;
-
-    // patch1: A_OLD -> A_NEW, applied, NOT committed (workspace stays dirty).
-    const p1 = makeDiff(A_OLD, A_NEW, "a.txt", root);
-    const r1 = await mgr.apply(mkReq(id, snap0, p1, ["a.txt"]));
-    const patch1State = r1.state;
-
-    // Re-inspect the dirty workspace.
-    const snapD = await wsMgr.inspect(id);
-
-    // patch2 builds on patch1's result, modifying the SAME dirty file.
-    const p2 = makeDiff(A_NEW, "alpha\\nBETA\\ndelta\\n", "a.txt", root);
-    const PATCH2_TARGET = "alpha\\nBETA\\ndelta\\n";
-
-    const preStatus = statusDigest(ws);
-    const preTargetState = targetStateDigest(ws, "a.txt");
-    const preContent = fs.readFileSync(join(ws, "a.txt"));
-    const preContentSha = sha256(preContent);
-    const headBefore = git(ws, ["rev-parse", "HEAD"]).trim();
-    const indexBefore = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
-
-    let patch2Attempt = "no_error";
-    let errorName = "", errorCode = "", errorMessage = "";
-    try {
-      await mgr.apply(mkReq(id, snapD, p2, ["a.txt"]));
-    } catch (e: any) {
-      patch2Attempt = "error";
-      errorName = e?.name ?? "";
-      errorCode = e?.code ?? "";
-      errorMessage = e?.message ?? "";
-    }
-
-    const postStatus = statusDigest(ws);
-    const postTargetState = targetStateDigest(ws, "a.txt");
-    const postContent = fs.readFileSync(join(ws, "a.txt"));
-    const postContentSha = sha256(postContent);
-    const headAfter = git(ws, ["rev-parse", "HEAD"]).trim();
-    const indexAfter = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
-
-    const statusDigestEqual = preStatus === postStatus;
-    const targetStateDigestChanged = preTargetState !== postTargetState;
-    const targetContentChanged = preContentSha !== postContentSha;
-    const patch2TargetContentPresent = postContent.toString("utf8") === PATCH2_TARGET;
-    const headUnchanged = headBefore === headAfter;
-    const indexUnchanged = indexBefore === indexAfter;
-
-    const checksOk =
-      patch1State === "applied" && patch2Attempt === "error" &&
-      errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
-      statusDigestEqual && targetStateDigestChanged && targetContentChanged &&
-      patch2TargetContentPresent && headUnchanged && indexUnchanged;
-
-    emit({
-      mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
-      patch1_state: patch1State, patch2_attempt: patch2Attempt,
-      error_name: errorName, error_code: errorCode, error_message: errorMessage,
-      pre_status_digest: preStatus, post_status_digest: postStatus, status_digest_equal: statusDigestEqual,
-      pre_target_state_digest: preTargetState, post_target_state_digest: postTargetState,
-      target_state_digest_changed: targetStateDigestChanged,
-      pre_target_content_sha256: preContentSha, post_target_content_sha256: postContentSha,
-      target_content_changed: targetContentChanged, patch2_target_content_present: patch2TargetContentPresent,
-      head_unchanged: headUnchanged, index_unchanged: indexUnchanged,
-      patch1_state_applied: patch1State === "applied", patch2_attempt_error: patch2Attempt === "error",
-      fixture_cleanup_complete: true,
-    });
-    if (!checksOk) process.exitCode = 1;
-  } finally {
-    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+    await mgr.apply(mkReq(id, snapD, p2, ["a.txt"]));
+  } catch (e: any) {
+    patch2Attempt = "error";
+    errorName = e?.name ?? "";
+    errorCode = e?.code ?? "";
+    errorMessage = e?.message ?? "";
   }
+
+  const postStatus = statusDigest(ws);
+  const postTargetState = targetStateDigest(ws, "a.txt");
+  const postContent = fs.readFileSync(join(ws, "a.txt"));
+  const postContentSha = sha256(postContent);
+  const headAfter = git(ws, ["rev-parse", "HEAD"]).trim();
+  const indexAfter = git(ws, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
+
+  const statusDigestEqual = preStatus === postStatus;
+  const targetStateDigestChanged = preTargetState !== postTargetState;
+  const targetContentChanged = preContentSha !== postContentSha;
+  const patch2TargetContentPresent = postContent.toString("utf8") === PATCH2_TARGET;
+  const headUnchanged = headBefore === headAfter;
+  const indexUnchanged = indexBefore === indexAfter;
+
+  const checksOk =
+    patch1State === "applied" && patch2Attempt === "error" &&
+    errorName === EXP_NAME && errorCode === EXP_CODE && errorMessage === EXP_MSG &&
+    statusDigestEqual && targetStateDigestChanged && targetContentChanged &&
+    patch2TargetContentPresent && headUnchanged && indexUnchanged;
+
+  emit({
+    mutation_id: MUTATION_ID, scenario_id: SCENARIO_ID, status: checksOk ? "expected_error" : "mismatch",
+    patch1_state: patch1State, patch2_attempt: patch2Attempt,
+    error_name: errorName, error_code: errorCode, error_message: errorMessage,
+    pre_status_digest: preStatus, post_status_digest: postStatus, status_digest_equal: statusDigestEqual,
+    pre_target_state_digest: preTargetState, post_target_state_digest: postTargetState,
+    target_state_digest_changed: targetStateDigestChanged,
+    pre_target_content_sha256: preContentSha, post_target_content_sha256: postContentSha,
+    target_content_changed: targetContentChanged, patch2_target_content_present: patch2TargetContentPresent,
+    head_unchanged: headUnchanged, index_unchanged: indexUnchanged,
+    patch1_state_applied: patch1State === "applied", patch2_attempt_error: patch2Attempt === "error",
+    home_isolated, xdg_config_isolated, git_global_config_disabled,
+    git_system_config_disabled, git_terminal_prompt_disabled, probe_root_contained,
+  });
+  if (!checksOk) process.exitCode = 1;
 }
 scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message)); process.exitCode = 1; });
 `;
@@ -1022,15 +1242,34 @@ scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message
 
 /**
  * Run a dedicated probe against the CURRENT mutated bytes in the disposable
- * copy. The probe file is written inside the disposable copy and removed in a
- * finally. Returns the raw RunResult plus the probe file path used.
+ * copy. The parent creates and registers a probe session root, writes the
+ * probe file inside the disposable copy, spawns the child with a fully
+ * isolated environment, and — in a finally — deletes the probe file and the
+ * entire session root, verifying deletion with existsSync. The child never
+ * creates its own temp root and never deletes the session root.
  */
-function runProbe(m: MutationDef, disp: string): RunResult {
+function runProbe(m: MutationDef, disp: string, repoRoot: string): ProbeRunResult {
+  // 1–2. Parent creates session root with home/, xdg-config/, fixture/.
+  const session = createProbeSession(m.id);
+
+  // 3. Parent writes dynamic probe file inside the disposable copy.
   const probeRel = path.join("scripts", `__probe-${m.id}-${crypto.randomBytes(4).toString("hex")}.ts`);
   const probeAbs = path.join(disp, probeRel);
   fs.mkdirSync(path.dirname(probeAbs), { recursive: true });
   fs.writeFileSync(probeAbs, buildProbeSource(m, disp), "utf8");
+  registeredProbeFiles.push(probeAbs);
+
+  // Isolated child environment: session paths + Git config lockdown.
+  const sessionEnv = buildProbeSessionEnv(session.sessionRoot, repoRoot);
+  const childEnv: Record<string, string> = { ...(process.env as Record<string, string>), ...sessionEnv };
+
+  let run: RunResult;
+  let environmentConfigured = true;
+  let probeFileCleanupComplete = false;
+  let probeSessionCleanupComplete = false;
+
   try {
+    // 4. Parent starts child.
     const tsxBin = path.join(disp, "node_modules", ".bin", "tsx");
     const start = Date.now();
     const r = spawnSync(tsxBin, [probeRel], {
@@ -1038,17 +1277,13 @@ function runProbe(m: MutationDef, disp: string): RunResult {
       timeout: PROBE_TIMEOUT_MS,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-      env: {
-        ...process.env,
-        LC_ALL: "C",
-        LANG: "C",
-        GIT_TERMINAL_PROMPT: "0",
-      },
+      env: childEnv,
     });
     const durationMs = Date.now() - start;
+    // 5. Parent saves child stdout, stderr, exit.
     const stdout = r.stdout ?? "";
     const stderr = r.stderr ?? "";
-    return {
+    run = {
       exitCode: r.status,
       signal: r.signal ?? null,
       stdout,
@@ -1058,9 +1293,29 @@ function runProbe(m: MutationDef, disp: string): RunResult {
       timedOut: r.signal === "SIGTERM" && durationMs >= PROBE_TIMEOUT_MS - 1000,
       spawnError: r.error !== undefined,
     };
+  } catch (e) {
+    run = {
+      exitCode: null, signal: null, stdout: "", stderr: String(e),
+      combined: String(e), durationMs: 0, timedOut: false, spawnError: true,
+    };
+    environmentConfigured = false;
   } finally {
+    // 6–9. Parent enters finally, deletes probe file, deletes session root,
+    // then verifies both are actually gone.
     try { fs.rmSync(probeAbs, { force: true }); } catch { /* best-effort */ }
+    probeFileCleanupComplete = !fs.existsSync(probeAbs);
+    try { fs.rmSync(session.sessionRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+    probeSessionCleanupComplete = !fs.existsSync(session.sessionRoot);
   }
+
+  // 10. Return real cleanup results.
+  return {
+    run,
+    environmentConfigured,
+    probeFileCleanupComplete,
+    probeSessionCleanupComplete,
+    registeredSessionRoot: session.sessionRoot,
+  };
 }
 
 // ═══════════════════════════════════════ Static self-checks
@@ -1151,6 +1406,8 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
   const h = byId.get("H")!;
   const l = byId.get("L")!;
 
+  // ── R5 checks (retained) ──
+
   // 1. expectedErrorCode is consumed by compareProbe (not merely declared).
   const errorCodeUsed =
     /m\.expectedErrorCode/.test(code) && /errorCode !== m\.expectedErrorCode/.test(code);
@@ -1171,8 +1428,6 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
 
   // 6. The main disposable failure path does not directly terminate the process.
   //    The ONLY permitted call is the signal handler, which runs cleanup() first.
-  //    Invariant: exactly one such call exists in real code, and cleanup() is
-  //    invoked immediately before it.
   const exitRe = /process\.exit\s*\(/g;
   const exitMatches = code.match(exitRe) ?? [];
   const exitIdx = code.search(exitRe);
@@ -1188,6 +1443,59 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
     /errorCode !== m\.expectedErrorCode/.test(code) &&
     /errorMessage !== m\.expectedErrorMessage/.test(code);
 
+  // ── R6 checks ──
+
+  // Isolate the buildProbeSource function body for child-specific checks.
+  const bpsStart = code.indexOf("function buildProbeSource(");
+  const bpsEnd = code.indexOf("\nfunction runProbe(", bpsStart >= 0 ? bpsStart : 0);
+  const bpsBody = bpsStart >= 0 && bpsEnd > bpsStart ? code.slice(bpsStart, bpsEnd) : "";
+
+  // 9. Probe env explicitly sets HOME.
+  const envSetsHome = /HOME:\s*homeDir/.test(code) || code.includes("HOME: homeDir");
+
+  // 10. Probe env explicitly sets XDG_CONFIG_HOME.
+  const envSetsXdg = /XDG_CONFIG_HOME:\s*xdgConfigDir/.test(code) || code.includes("XDG_CONFIG_HOME: xdgConfigDir");
+
+  // 11. Probe env explicitly sets GIT_CONFIG_GLOBAL.
+  const envSetsGitGlobal = code.includes('GIT_CONFIG_GLOBAL: "/dev/null"');
+
+  // 12. Probe env explicitly sets GIT_CONFIG_NOSYSTEM.
+  const envSetsGitNosystem = code.includes('GIT_CONFIG_NOSYSTEM: "1"');
+
+  // 13. Probe env explicitly sets GIT_TERMINAL_PROMPT.
+  const envSetsGitPrompt = code.includes('GIT_TERMINAL_PROMPT: "0"');
+
+  // 14. Child probe does not call mkdtempSync to create an unknown root;
+  //     it uses the parent-provided L04_PROBE_ROOT instead.
+  const childNoMkdtemp = bpsBody.includes("L04_PROBE_ROOT") && !bpsBody.includes("mkdtemp" + "Sync");
+
+  // 15. All direct Git helpers in the probe child use the unified PROBE_ENV.
+  const gitHelpersIsolated = bpsBody.includes("env: PROBE_ENV");
+
+  // 16. Parent comparison includes the six environment-isolation assertions.
+  const parentComparesEnv =
+    code.includes("ENV_ISOLATION_FIELDS") && /for\s*\(const k of ENV_ISOLATION_FIELDS\)/.test(code);
+
+  // 17. Killed gate includes parent cleanup results.
+  const killedGateCleanup =
+    code.includes("fileCleanupComplete") && code.includes("sessionCleanupComplete");
+
+  // 18. Cleanup booleans are computed AFTER actual deletion (existsSync follows rmSync).
+  const cleanupAfterDelete =
+    /rmSync[\s\S]{0,120}existsSync/.test(code);
+
+  // 19. CLI quick/full argument parsing exists.
+  const cliModeParsing = code.includes("--mode=");
+
+  // 20. Default with no arguments is full mode.
+  const defaultFull = /mode\s*\?\?\s*"full"/.test(code) || code.includes('?? "full"');
+
+  // 21. Quick mode does not execute the full baseline or A–N mutations.
+  const quickSkipsFull = code.includes('mode === "quick"');
+
+  // 22. Child no longer emits the misleading fixture_cleanup_complete field.
+  const childNoFixtureCleanup = !bpsBody.includes("fixture_cleanup" + "_complete");
+
   return [
     { name: "expectedErrorCode_used_in_comparison", ok: errorCodeUsed },
     { name: "no_uncaught_allowance_field", ok: noAllowUncaught },
@@ -1197,7 +1505,38 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
     { name: "no_process_exit_in_harness", ok: noProcessExit },
     { name: "probe_requires_exactly_one_result", ok: exactOneProbe },
     { name: "probe_compares_name_code_message", ok: compareFields },
+    { name: "probe_env_sets_HOME", ok: envSetsHome },
+    { name: "probe_env_sets_XDG_CONFIG_HOME", ok: envSetsXdg },
+    { name: "probe_env_sets_GIT_CONFIG_GLOBAL", ok: envSetsGitGlobal },
+    { name: "probe_env_sets_GIT_CONFIG_NOSYSTEM", ok: envSetsGitNosystem },
+    { name: "probe_env_sets_GIT_TERMINAL_PROMPT", ok: envSetsGitPrompt },
+    { name: "child_no_mkdtempSync", ok: childNoMkdtemp },
+    { name: "git_helpers_use_isolated_env", ok: gitHelpersIsolated },
+    { name: "parent_comparison_includes_env_assertions", ok: parentComparesEnv },
+    { name: "killed_gate_includes_cleanup", ok: killedGateCleanup },
+    { name: "cleanup_computed_after_deletion", ok: cleanupAfterDelete },
+    { name: "cli_mode_parsing_exists", ok: cliModeParsing },
+    { name: "default_mode_is_full", ok: defaultFull },
+    { name: "quick_mode_skips_full_baseline", ok: quickSkipsFull },
+    { name: "child_no_fixture_cleanup_complete", ok: childNoFixtureCleanup },
   ];
+}
+
+// ═══════════════════════════════════════ CLI parsing
+
+function parseCliMode(args: readonly string[]): { mode: "full" | "quick"; error: string } {
+  let mode: string | null = null;
+  for (const arg of args) {
+    if (arg.startsWith("--mode=")) {
+      if (mode !== null) return { mode: "full", error: "duplicate --mode flag" };
+      const val = arg.slice("--mode=".length);
+      if (val !== "full" && val !== "quick") return { mode: "full", error: `unknown mode: ${val}` };
+      mode = val;
+    } else {
+      return { mode: "full", error: `unknown argument: ${arg}` };
+    }
+  }
+  return { mode: (mode ?? "full") as "full" | "quick", error: "" };
 }
 
 // ═══════════════════════════════════════ Main
@@ -1208,6 +1547,13 @@ interface MainOutcome {
 }
 
 async function main(): Promise<MainOutcome> {
+  const cli = parseCliMode(process.argv.slice(2));
+  if (cli.error !== "") {
+    console.error(`HARNESS_ERROR ${cli.error}`);
+    return { code: 1, tempCleanupComplete: false };
+  }
+  const mode = cli.mode;
+
   const platform = process.platform;
   if (platform !== "darwin" && platform !== "linux") {
     console.error(`HARNESS_ERROR unsupported platform: ${platform}`);
@@ -1234,9 +1580,15 @@ async function main(): Promise<MainOutcome> {
   console.log(
     `HARNESS_SELF_TEST baseline_failure_cleanup=${st.baseline_failure_cleanup} ` +
       `target_mismatch_restore_cleanup=${st.target_mismatch_restore_cleanup} ` +
-      `evidence_mismatch_restore_cleanup=${st.evidence_mismatch_restore_cleanup}`,
+      `evidence_mismatch_restore_cleanup=${st.evidence_mismatch_restore_cleanup} ` +
+      `probe_environment_isolation=${st.probe_environment_isolation} ` +
+      `probe_cleanup_gate=${st.probe_cleanup_gate}`,
   );
-  if (!st.baseline_failure_cleanup || !st.target_mismatch_restore_cleanup || !st.evidence_mismatch_restore_cleanup) {
+  if (
+    !st.baseline_failure_cleanup || !st.target_mismatch_restore_cleanup ||
+    !st.evidence_mismatch_restore_cleanup || !st.probe_environment_isolation ||
+    !st.probe_cleanup_gate
+  ) {
     console.error("HARNESS_ERROR failure-path self-test failed — refusing to run baseline/mutations");
     return { code: 1, tempCleanupComplete: false };
   }
@@ -1318,17 +1670,20 @@ async function main(): Promise<MainOutcome> {
     return { code: 1, tempCleanupComplete: !fs.existsSync(tmpRoot) };
   }
 
-  let tempCleanupComplete = false;
+  let disposableRootCleaned = false;
   const cleanup = (): void => {
     try {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
-      tempCleanupComplete = !fs.existsSync(tmpRoot);
+      disposableRootCleaned = !fs.existsSync(tmpRoot);
     } catch {
-      tempCleanupComplete = false;
+      disposableRootCleaned = false;
+    }
+    for (const s of registeredProbeSessions) {
+      try { fs.rmSync(s, { recursive: true, force: true }); } catch { /* best-effort */ }
     }
   };
   const onSignal = (): void => {
-    cleanup(); // cleanup runs FIRST, then exit
+    cleanup();
     process.exit(130);
   };
   process.on("SIGINT", onSignal);
@@ -1341,7 +1696,10 @@ async function main(): Promise<MainOutcome> {
   let baselineExit: number | null = null;
   let baselineDurationMs = 0;
   let sessionCode = 0;
-  const probeSummary = { total: 0, passed: 0, failed: 0, perId: new Map<string, boolean>() };
+  const probeSummary = { total: 0, passed: 0, failed: 0, cleaned: 0, isolated: 0, perId: new Map<string, boolean>() };
+
+  // In quick mode, only G/H/L are processed (probe only, no targeted suite).
+  const mutationsToRun = mode === "quick" ? MUTATIONS.filter((m) => m.evidenceMode === "dedicated_probe") : MUTATIONS;
 
   try {
     // Expand HEAD into the disposable copy. Failures here return a code (the
@@ -1364,32 +1722,34 @@ async function main(): Promise<MainOutcome> {
 
     const dispProd = path.join(disp, PROD_REL);
 
-    // ── Baseline run (no mutation) ──
-    const base = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
-    baselineExit = base.exitCode;
-    baselineDurationMs = base.durationMs;
-    const bp = parseResults(base.combined);
-    baselinePassed = bp.passed;
-    baselineFailed = bp.failed;
-    baselineOk =
-      base.exitCode === 0 &&
-      bp.passed === EXPECTED_BASELINE_PASSED &&
-      bp.failed === EXPECTED_BASELINE_FAILED;
+    // ── Baseline run (full mode only) ──
+    if (mode !== "quick") {
+      const base = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+      baselineExit = base.exitCode;
+      baselineDurationMs = base.durationMs;
+      const bp = parseResults(base.combined);
+      baselinePassed = bp.passed;
+      baselineFailed = bp.failed;
+      baselineOk =
+        base.exitCode === 0 &&
+        bp.passed === EXPECTED_BASELINE_PASSED &&
+        bp.failed === EXPECTED_BASELINE_FAILED;
 
-    console.log(
-      `BASELINE_RESULT passed=${bp.passed ?? "?"} failed=${bp.failed ?? "?"} exit=${base.exitCode ?? "?"}`,
-    );
+      console.log(
+        `BASELINE_RESULT passed=${bp.passed ?? "?"} failed=${bp.failed ?? "?"} exit=${base.exitCode ?? "?"}`,
+      );
 
-    if (!baselineOk) {
-      console.error("HARNESS_ERROR baseline is not exactly 287/0 — refusing to mutate");
-      const ff = firstFailLine(base.combined);
-      if (ff) console.error(`BASELINE_FIRST_FAILURE ${ff}`);
-      sessionCode = 1;
-      throw new Error("BASELINE_FAILED");
+      if (!baselineOk) {
+        console.error("HARNESS_ERROR baseline is not exactly 287/0 — refusing to mutate");
+        const ff = firstFailLine(base.combined);
+        if (ff) console.error(`BASELINE_FIRST_FAILURE ${ff}`);
+        sessionCode = 1;
+        throw new Error("BASELINE_FAILED");
+      }
     }
 
     // ── Run each mutation ──
-    for (const m of MUTATIONS) {
+    for (const m of mutationsToRun) {
       const original = fs.readFileSync(dispProd); // baseline bytes (disposable)
       const originalSha = sha256Buf(original);
       const text = original.toString("utf8");
@@ -1427,13 +1787,14 @@ async function main(): Promise<MainOutcome> {
       try {
         fs.writeFileSync(dispProd, mutatedBytes);
 
-        const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
-        rec.testExit = run.exitCode;
-        rec.durationMs = run.durationMs;
-        const ff = firstFailLine(run.combined);
-        rec.firstFailure = ff ?? "";
-
         if (m.evidenceMode === "first_failure") {
+          // ── first_failure (full mode only; quick mode skips A–F,I–K,M,N) ──
+          const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+          rec.testExit = run.exitCode;
+          rec.durationMs = run.durationMs;
+          const ff = firstFailLine(run.combined);
+          rec.firstFailure = ff ?? "";
+
           const cls = classifyFirstFailure({
             targetMatches,
             mutatedSha: rec.mutatedSha256,
@@ -1444,57 +1805,93 @@ async function main(): Promise<MainOutcome> {
           rec.status = cls.status;
           rec.note = cls.note;
         } else {
-          // dedicated_probe (G/H/L): the targeted suite must actually start and
-          // exit non-zero, but that alone is NOT a kill. A dedicated probe must
-          // then run against the SAME mutated bytes and its structured output
-          // must match the fixed expectations exactly.
+          // ── dedicated_probe (G/H/L) ──
           probeSummary.total++;
-          if (run.spawnError) {
-            rec.status = "invalid";
-            rec.note = "targeted test did not start";
-          } else if (run.timedOut) {
-            rec.status = "invalid";
-            rec.note = "targeted suite timeout";
-          } else if (run.exitCode === 0) {
-            rec.status = "invalid";
-            rec.note = "targeted suite passed under mutation (probe not run)";
-          } else if (looksLikeNonKill(run.combined)) {
-            rec.status = "invalid";
-            rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
-          } else {
-            // Targeted suite started and exited non-zero for a real reason.
-            const probe = runProbe(m, disp);
-            rec.probeExit = probe.exitCode === null ? "null" : String(probe.exitCode);
-            if (probe.spawnError || probe.timedOut || looksLikeNonKill(probe.combined)) {
+
+          if (mode !== "quick") {
+            // Full mode: the targeted suite must actually start and exit non-zero.
+            const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+            rec.testExit = run.exitCode;
+            rec.durationMs = run.durationMs;
+            const ff = firstFailLine(run.combined);
+            rec.firstFailure = ff ?? "";
+
+            if (run.spawnError) {
               rec.status = "invalid";
-              rec.note = probe.spawnError ? "probe did not start" : probe.timedOut ? "probe timeout" : "probe non-kill fault";
-            } else {
-              const parsed = parseProbeResult(probe.combined);
-              if (!parsed.ok || parsed.obj === null) {
-                rec.status = "invalid";
-                rec.note = parsed.note;
-              } else {
-                const cmp = compareProbe(m, parsed.obj);
-                rec.probeScenarioId = cmp.scenarioId === "" ? "-" : cmp.scenarioId;
-                rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
-                rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
-                rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
-                rec.probeAssertions = cmp.assertions.join(",");
-                // Kill requires probe exit 0 AND independent field re-compare.
-                if (probe.exitCode === 0 && cmp.killed) {
-                  rec.status = "killed";
-                  rec.note = "dedicated probe evidence matched";
-                } else {
-                  rec.status = "invalid";
-                  rec.note = probe.exitCode !== 0 ? `probe exit ${probe.exitCode}: ${cmp.note}` : cmp.note;
-                }
-              }
+              rec.note = "targeted test did not start";
+              probeSummary.failed++;
+              probeSummary.perId.set(m.id, false);
+              records.push(rec);
+              emitRecord(rec);
+              continue;
+            } else if (run.timedOut) {
+              rec.status = "invalid";
+              rec.note = "targeted suite timeout";
+              probeSummary.failed++;
+              probeSummary.perId.set(m.id, false);
+              records.push(rec);
+              emitRecord(rec);
+              continue;
+            } else if (run.exitCode === 0) {
+              rec.status = "invalid";
+              rec.note = "targeted suite passed under mutation (probe not run)";
+              probeSummary.failed++;
+              probeSummary.perId.set(m.id, false);
+              records.push(rec);
+              emitRecord(rec);
+              continue;
+            } else if (looksLikeNonKill(run.combined)) {
+              rec.status = "invalid";
+              rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
+              probeSummary.failed++;
+              probeSummary.perId.set(m.id, false);
+              records.push(rec);
+              emitRecord(rec);
+              continue;
             }
           }
+
+          // Run the dedicated probe (both full and quick mode).
+          const probeResult = runProbe(m, disp, repoRoot);
+          rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
+          rec.probeFileCleanupComplete = String(probeResult.probeFileCleanupComplete);
+          rec.probeSessionCleanupComplete = String(probeResult.probeSessionCleanupComplete);
+
+          if (probeResult.run.spawnError || probeResult.run.timedOut || looksLikeNonKill(probeResult.run.combined)) {
+            rec.status = "invalid";
+            rec.note = probeResult.run.spawnError ? "probe did not start" : probeResult.run.timedOut ? "probe timeout" : "probe non-kill fault";
+          } else {
+            const parsed = parseProbeResult(probeResult.run.combined);
+            if (!parsed.ok || parsed.obj === null) {
+              rec.status = "invalid";
+              rec.note = parsed.note;
+            } else {
+              const cmp = compareProbe(m, parsed.obj);
+              rec.probeScenarioId = cmp.scenarioId === "" ? "-" : cmp.scenarioId;
+              rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
+              rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
+              rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
+              rec.probeAssertions = cmp.assertions.join(",");
+              rec.probeEnvironmentIsolated = String(cmp.envIsolated);
+
+              const killCls = classifyProbeKill({
+                probeExitZero: probeResult.run.exitCode === 0,
+                evidenceMatched: cmp.killed,
+                envIsolated: cmp.envIsolated,
+                fileCleanupComplete: probeResult.probeFileCleanupComplete,
+                sessionCleanupComplete: probeResult.probeSessionCleanupComplete,
+              });
+              rec.status = killCls.status;
+              rec.note = killCls.note;
+            }
+          }
+
           const passed = rec.status === "killed";
           probeSummary.perId.set(m.id, passed);
           if (passed) probeSummary.passed++;
           else probeSummary.failed++;
+          if (probeResult.probeFileCleanupComplete && probeResult.probeSessionCleanupComplete) probeSummary.cleaned++;
+          if (rec.probeEnvironmentIsolated === "true") probeSummary.isolated++;
         }
       } catch (e) {
         rec.status = "harness_error";
@@ -1550,7 +1947,48 @@ async function main(): Promise<MainOutcome> {
     realUnchanged = false;
   }
 
+  // ── Aggregate temp cleanup verification ──
+  // TEMP_CLEANUP_COMPLETE aggregates: (1) main disposable root deleted,
+  // (2) all registered probe session roots deleted, (3) all registered probe
+  // files deleted.
+  const allSessionsCleaned = registeredProbeSessions.every((s) => !fs.existsSync(s));
+  const allFilesCleaned = registeredProbeFiles.every((f) => !fs.existsSync(f));
+  const tempCleanupComplete = disposableRootCleaned && allSessionsCleaned && allFilesCleaned;
+
   // ── Summary ──
+  if (mode === "quick") {
+    // Quick mode output.
+    console.log("R6_QUICK_MODE true");
+    for (const id of ["G", "H", "L"]) {
+      const rec = records.find((r) => r.id === id);
+      const passed = rec?.status === "killed";
+      const isolated = rec?.probeEnvironmentIsolated === "true";
+      const cleaned = rec?.probeFileCleanupComplete === "true" && rec?.probeSessionCleanupComplete === "true";
+      console.log(`QUICK_PROBE id=${id} status=${passed ? "passed" : "failed"} isolated=${isolated} cleaned=${cleaned}`);
+    }
+    console.log(
+      `QUICK_PROBE_SUMMARY total=${probeSummary.total} passed=${probeSummary.passed} ` +
+        `failed=${probeSummary.failed} cleaned=${probeSummary.cleaned} isolated=${probeSummary.isolated}`,
+    );
+    console.log(`REAL_WORKTREE_UNCHANGED ${realUnchanged}`);
+    console.log(`TEMP_CLEANUP_COMPLETE ${tempCleanupComplete}`);
+
+    const quickGood =
+      sessionCode === 0 &&
+      probeSummary.total === 3 &&
+      probeSummary.passed === 3 &&
+      probeSummary.failed === 0 &&
+      probeSummary.cleaned === 3 &&
+      probeSummary.isolated === 3 &&
+      records.every((r) => r.restoredByteIdentical) &&
+      realUnchanged &&
+      tempCleanupComplete;
+
+    console.log(`R6_QUICK_MODE_COMPLETE ${quickGood}`);
+    return { code: quickGood ? 0 : 1, tempCleanupComplete };
+  }
+
+  // Full mode output.
   const killed = records.filter((r) => r.status === "killed").length;
   const survived = records.filter((r) => r.status === "survived").length;
   const invalid = records.filter((r) => r.status === "invalid").length;
@@ -1558,7 +1996,8 @@ async function main(): Promise<MainOutcome> {
   const restored = records.filter((r) => r.restoredByteIdentical).length;
 
   console.log(
-    `DEDICATED_PROBE_SUMMARY total=${probeSummary.total} passed=${probeSummary.passed} failed=${probeSummary.failed}`,
+    `DEDICATED_PROBE_SUMMARY total=${probeSummary.total} passed=${probeSummary.passed} ` +
+      `failed=${probeSummary.failed} cleaned=${probeSummary.cleaned} isolated=${probeSummary.isolated}`,
   );
   for (const id of ["G", "H", "L"]) {
     const passed = probeSummary.perId.get(id) === true;
@@ -1585,6 +2024,8 @@ async function main(): Promise<MainOutcome> {
     probeSummary.total === 3 &&
     probeSummary.passed === 3 &&
     probeSummary.failed === 0 &&
+    probeSummary.cleaned === 3 &&
+    probeSummary.isolated === 3 &&
     realUnchanged &&
     tempCleanupComplete;
 
