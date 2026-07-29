@@ -13,6 +13,10 @@
 //
 // No shadow success. No fallback patches. No child_process, Git, or
 // network access. All dependencies are injected.
+//
+// R1: Known-only D04 causeCode, structured prompt failure taxonomy,
+// result immutability, correct INVALID_INPUT/PROMPT_TOO_LARGE/INTERNAL_ERROR
+// classification.
 
 import type { LoopRunIdentity } from "./loop-executor-types";
 import { validateLoopRunIdentity } from "./loop-run-state";
@@ -20,12 +24,15 @@ import type { LoopPosixProcessRunner, LoopPosixProcessResult } from "./loop-posi
 import type { LoopGitWorkspaceManager, LoopGitWorkspaceSnapshot } from "./loop-git-workspace";
 import type { LoopArtifactStore, LoopArtifactKind } from "./loop-artifact-store";
 import type { LoopPatchApplicationManager, LoopPatchApplicationResult } from "./loop-patch-application";
+import { LoopPatchApplicationError } from "./loop-patch-application";
 import {
   buildLoopCodexPrompt,
   DEFAULT_PROMPT_LIMITS,
+  isPromptFailure,
   type LoopCodexImplementationPhase,
   type LoopCodexPromptInput,
   type LoopCodexPromptLimits,
+  type LoopCodexPromptFailureReason,
 } from "./loop-codex-prompt";
 import {
   parseLoopCodexOutput,
@@ -200,6 +207,28 @@ function asTrimmedNonEmpty(v: unknown, label: string): string {
   return v;
 }
 
+/**
+ * Map prompt builder failure reason to adapter error code.
+ * invalid_input → INVALID_INPUT
+ * All size/overflow reasons → PROMPT_TOO_LARGE
+ */
+function mapPromptFailureReason(reason: LoopCodexPromptFailureReason): LoopCodexImplementationErrorCode {
+  switch (reason) {
+    case "invalid_input":
+      return "INVALID_INPUT";
+    case "requirement_too_large":
+    case "design_summary_too_large":
+    case "constraint_too_large":
+    case "too_many_constraints":
+    case "too_many_allowed_paths":
+    case "repair_evidence_too_large":
+    case "prompt_too_large":
+      return "PROMPT_TOO_LARGE";
+    default:
+      return "INTERNAL_ERROR";
+  }
+}
+
 // ═══════════════════════════════════════ Adapter
 
 export class LoopCodexImplementationAdapter {
@@ -260,10 +289,15 @@ export class LoopCodexImplementationAdapter {
     let phase: LoopCodexImplementationPhase = "initial";
     let attempt = 0;
 
+    // ── Validate request ──
+    let req: Record<string, unknown>;
     try {
-      // ── Validate request ──
-      const req = scanPlain(request, REQUEST_KEYS, "request");
+      req = scanPlain(request, REQUEST_KEYS, "request");
+    } catch {
+      return this._fail("initial", 0, "INVALID_INPUT", "invalid request", false);
+    }
 
+    try {
       // Validate identity
       try { validateLoopRunIdentity(req.identity); } catch {
         return this._fail("initial", 0, "INVALID_INPUT", "invalid identity", false);
@@ -271,7 +305,12 @@ export class LoopCodexImplementationAdapter {
       const identity = req.identity as LoopRunIdentity;
 
       // Validate workspace
-      const ws = scanPlain(req.workspace, WORKSPACE_KEYS, "workspace");
+      let ws: Record<string, unknown>;
+      try {
+        ws = scanPlain(req.workspace, WORKSPACE_KEYS, "workspace");
+      } catch {
+        return this._fail("initial", 0, "INVALID_INPUT", "invalid workspace", false);
+      }
       const workspacePath = asTrimmedNonEmpty(ws.workspacePath, "workspacePath");
       const taskBranch = asTrimmedNonEmpty(ws.taskBranch, "taskBranch");
       const expectedTaskHeadSha = asTrimmedNonEmpty(ws.expectedTaskHeadSha, "expectedTaskHeadSha");
@@ -464,15 +503,16 @@ export class LoopCodexImplementationAdapter {
         maxRepairEvidenceBytes: this.maxRepairEvidenceBytes,
       };
 
-      let promptResult;
-      try {
-        promptResult = buildLoopCodexPrompt(promptInput, promptLimits);
-      } catch {
-        return this._fail(phase, attempt, "INTERNAL_ERROR", "prompt build failed", false);
-      }
+      const promptResult = buildLoopCodexPrompt(promptInput, promptLimits);
 
-      if (!promptResult.ok) {
-        return this._fail(phase, attempt, "PROMPT_TOO_LARGE", "prompt too large", false);
+      if (isPromptFailure(promptResult)) {
+        // Map the structured failure reason to the correct error code
+        const reason = promptResult.reason;
+        const mappedCode = mapPromptFailureReason(reason);
+        if (mappedCode === "INTERNAL_ERROR") {
+          return this._fail(phase, attempt, "INTERNAL_ERROR", "prompt build failed", false);
+        }
+        return this._fail(phase, attempt, mappedCode, "prompt build failed: " + reason, false);
       }
 
       const prompt = promptResult.prompt;
@@ -517,12 +557,7 @@ export class LoopCodexImplementationAdapter {
         maxPatchBytes: this.maxPatchBytes,
       };
 
-      let parseResult: LoopCodexOutputResult;
-      try {
-        parseResult = parseLoopCodexOutput(stdoutBytes, outputLimits);
-      } catch {
-        return this._fail(phase, attempt, "CODEX_OUTPUT_INVALID", "output parse failed", true);
-      }
+      const parseResult = parseLoopCodexOutput(stdoutBytes, outputLimits);
 
       if (!parseResult.ok) {
         return this._fail(phase, attempt, "CODEX_OUTPUT_INVALID", "invalid output format", true);
@@ -565,23 +600,28 @@ export class LoopCodexImplementationAdapter {
           artifactRef,
         });
       } catch (e) {
-        const causeCode = (e instanceof Error && "code" in e)
-          ? String((e as Record<string, unknown>).code).slice(0, 64)
-          : undefined;
+        // R1: Known-only D04 causeCode — only expose code from LoopPatchApplicationError instances
+        let causeCode: string | undefined;
+        if (e instanceof LoopPatchApplicationError) {
+          causeCode = e.code;
+        }
+        // Any other exception (plain Error, malicious object with `code`, etc.) must NOT expose causeCode
         return this._fail(phase, attempt, "PATCH_APPLICATION_FAILED", "patch application failed", false,
           causeCode, artifactRef, patchDigestSha256, patchSizeBytes);
       }
 
       // ═══════════════════════════════════════ Success
+      // R1: Construct immutable result — copy and freeze files array, freeze entire result
+      const files = Object.freeze([...applyResult.files]) as readonly string[];
       return freeze({
-        status: "succeeded",
+        status: "succeeded" as const,
         phase,
         attempt,
         patchArtifactRef: artifactRef,
         patchDigestSha256,
         patchSizeBytes,
         applicationState: applyResult.state,
-        files: applyResult.files,
+        files,
         preTaskHeadSha: applyResult.preTaskHeadSha,
         postTaskHeadSha: applyResult.postTaskHeadSha,
         preStatusDigestSha256: applyResult.preStatusDigestSha256,
@@ -590,6 +630,7 @@ export class LoopCodexImplementationAdapter {
         postTargetStateDigestSha256: applyResult.postTargetStateDigestSha256,
       });
     } catch {
+      // Only truly unexpected internal exceptions after public input validation
       return this._fail(phase, attempt, "INTERNAL_ERROR", "unexpected error", false);
     }
   }
@@ -607,7 +648,8 @@ export class LoopCodexImplementationAdapter {
     patchDigestSha256?: string,
     patchSizeBytes?: number,
   ): LoopCodexImplementationFailure {
-    const result: LoopCodexImplementationFailure = {
+    // R1: Construct failure result in one shot with type safety, then freeze
+    const resultObj: Record<string, unknown> = {
       status: "failed",
       phase,
       attempt,
@@ -616,18 +658,18 @@ export class LoopCodexImplementationAdapter {
       safeMessage: safeMessage(message),
     };
     if (causeCode !== undefined) {
-      (result as unknown as Record<string, unknown>).causeCode = causeCode;
+      resultObj.causeCode = causeCode;
     }
     if (patchArtifactRef !== undefined) {
-      (result as unknown as Record<string, unknown>).patchArtifactRef = patchArtifactRef;
+      resultObj.patchArtifactRef = patchArtifactRef;
     }
     if (patchDigestSha256 !== undefined) {
-      (result as unknown as Record<string, unknown>).patchDigestSha256 = patchDigestSha256;
+      resultObj.patchDigestSha256 = patchDigestSha256;
     }
     if (patchSizeBytes !== undefined) {
-      (result as unknown as Record<string, unknown>).patchSizeBytes = patchSizeBytes;
+      resultObj.patchSizeBytes = patchSizeBytes;
     }
-    return freeze(result) as LoopCodexImplementationFailure;
+    return freeze(resultObj) as unknown as LoopCodexImplementationFailure;
   }
 }
 

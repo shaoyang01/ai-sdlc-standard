@@ -9,6 +9,9 @@
 //   <unified diff>
 //   ```
 // It uses the LAST closing fence to avoid being fooled by inner fences.
+//
+// R1: Exact framing — no leading/trailing spaces on opening/closing lines,
+// CR rejection, single opening marker enforcement, precise closing rules.
 
 import { createHash } from "node:crypto";
 
@@ -41,6 +44,7 @@ export type LoopCodexOutputResult =
 const OPENING_MARKER = "```codex-unified-diff";
 const CLOSING_FENCE = "```";
 const LF = "\n".charCodeAt(0);
+const CR = "\r".charCodeAt(0);
 
 // ═══════════════════════════════════════ Helpers
 
@@ -52,6 +56,10 @@ function hasReplacementChar(text: string): boolean {
   return text.includes("\uFFFD");
 }
 
+function hasCR(text: string): boolean {
+  return text.includes("\r");
+}
+
 function isWhitespaceOnly(s: string): boolean {
   return /^[\x20\x09\x0a\x0d]*$/.test(s);
 }
@@ -61,11 +69,15 @@ function isWhitespaceOnly(s: string): boolean {
 /**
  * Parses bounded Codex stdout to extract exactly one multi-file unified diff.
  *
- * Framing rules:
+ * R1 framing rules:
  *  - Opening marker must appear exactly once on its own line.
- *  - The last non-empty line of stdout must be exactly the closing fence.
- *  - Only whitespace before the opening marker.
+ *  - Opening marker line must consist of exactly `\`\`\`codex-unified-diff`
+ *    with no leading spaces, no trailing spaces, and no other characters.
+ *  - Only whitespace before the opening marker on preceding lines (preamble).
+ *  - The last non-empty line of stdout must be exactly the closing fence `\`\`\``.
+ *  - Closing line must have no leading or trailing whitespace.
  *  - Only whitespace after the closing fence.
+ *  - No CR characters anywhere in stdout.
  *  - The extracted patch must be non-empty and end with LF.
  *
  * The parser uses the LAST closing fence line to handle inner markdown fences
@@ -84,7 +96,7 @@ export function parseLoopCodexOutput(
     return { ok: false, reason: "stdout too large" };
   }
 
-  // ── UTF-8 decode ──
+  // ── UTF-8 decode (fatal) ──
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
@@ -97,7 +109,12 @@ export function parseLoopCodexOutput(
     return { ok: false, reason: "replacement character" };
   }
 
-  // ── Find opening marker ──
+  // ── No CR characters ──
+  if (hasCR(text)) {
+    return { ok: false, reason: "CR not allowed" };
+  }
+
+  // ── Find opening marker position ──
   const openIdx = text.indexOf(OPENING_MARKER);
   if (openIdx === -1) {
     return { ok: false, reason: "missing opening marker" };
@@ -115,86 +132,91 @@ export function parseLoopCodexOutput(
     return { ok: false, reason: "non-whitespace preamble" };
   }
 
-  // ── Opening line must be exactly the marker (rest of line whitespace only) ──
+  // ── Opening line must be EXACTLY the marker with no leading/trailing spaces ──
+  // Check: no space/tab before the marker on the same line
+  const lineStart = text.lastIndexOf("\n", openIdx - 1) + 1;
+  if (lineStart !== openIdx) {
+    return { ok: false, reason: "leading whitespace on opening line" };
+  }
+
+  // Find end of opening line
   const openLineEnd = text.indexOf("\n", openIdx);
   if (openLineEnd === -1) {
     return { ok: false, reason: "malformed opening line" };
   }
   const openLine = text.slice(openIdx, openLineEnd);
+  // Must be exactly the marker — no trailing spaces
   if (openLine !== OPENING_MARKER) {
-    return { ok: false, reason: "malformed opening line"};
+    return { ok: false, reason: "malformed opening line" };
   }
 
   // ── Find the LAST closing fence line ──
-  // Search from end of text backwards for the last occurrence of a line
-  // that is exactly "```" (possibly preceded only by whitespace on that line).
-  let lastClosingIdx = -1;
-  let lastClosingLineEnd = -1;
-  let searchPos = text.length;
-
-  while (searchPos > openLineEnd + 1) {
-    // Find previous newline
-    const prevNewline = text.lastIndexOf("\n", searchPos - 1);
-    if (prevNewline === -1) break;
-
-    const lineStart = prevNewline + 1;
-    const lineContent = text.slice(lineStart, searchPos);
-
-    // A line is exactly "```" if trimmed it equals "```" and nothing else non-whitespace
-    const trimmed = lineContent.trimEnd();
-    // Remove trailing \r if any (though CR should already be rejected, be safe)
-    const clean = trimmed.endsWith("\r") ? trimmed.slice(0, -1) : trimmed;
-
-    if (clean === CLOSING_FENCE) {
-      lastClosingIdx = lineStart;
-      // The closing fence line should end at the start of the closing fence plus 3
-      // We need the position of the fence characters themselves
-      const fenceStartInLine = lineContent.indexOf(CLOSING_FENCE);
-      lastClosingLineEnd = lineStart + fenceStartInLine + CLOSING_FENCE.length;
-      break;
-    }
-
-    searchPos = prevNewline;
-  }
-
-  if (lastClosingIdx === -1) {
-    return { ok: false, reason: "missing closing fence" };
-  }
-
-  // ── Last non-empty line check ──
-  // Find the last non-empty line
+  // Search backwards for a line that is EXACTLY "```" (no leading/trailing whitespace)
   const lines = text.split("\n");
-  let lastNonEmptyIdx = -1;
+  let lastClosingLineNum = -1;
+
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i]!.trim().length > 0) {
-      lastNonEmptyIdx = i;
+    const line = lines[i]!;
+    if (line === CLOSING_FENCE) {
+      lastClosingLineNum = i;
       break;
     }
   }
-  if (lastNonEmptyIdx === -1) {
+
+  if (lastClosingLineNum === -1) {
     return { ok: false, reason: "missing closing fence" };
   }
 
-  // The line containing the closing fence must be the last non-empty line
-  const closingLineIdx = text.slice(0, lastClosingIdx).split("\n").length - 1;
-  if (closingLineIdx !== lastNonEmptyIdx) {
+  // ── Closing line must be the last non-empty line ──
+  let lastNonEmptyLineNum = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i]!.length > 0) {
+      lastNonEmptyLineNum = i;
+      break;
+    }
+  }
+  if (lastNonEmptyLineNum === -1) {
+    return { ok: false, reason: "missing closing fence" };
+  }
+  if (lastClosingLineNum !== lastNonEmptyLineNum) {
     return { ok: false, reason: "trailing non-whitespace content" };
   }
 
-  // ── Closing line must be exactly "```" ──
-  const closingLineContent = lines[closingLineIdx]!;
-  if (closingLineContent.trim() !== CLOSING_FENCE) {
+  // ── Closing line must be EXACTLY "```" with no leading/trailing whitespace ──
+  const closingLine = lines[lastClosingLineNum]!;
+  if (closingLine !== CLOSING_FENCE) {
     return { ok: false, reason: "malformed closing line" };
   }
 
-  // ── Trailing text after closing fence must be whitespace-only ──
-  const afterClosing = text.slice(lastClosingLineEnd);
+  // ── Trailing text after closing fence (after the closing line's newline)
+  // must be whitespace-only ──
+  // Find the byte position of the closing line end
+  let closingLineEndPos = 0;
+  for (let i = 0, lineNum = 0; i < text.length && lineNum <= lastClosingLineNum; i++) {
+    if (lineNum === lastClosingLineNum) {
+      closingLineEndPos = i + closingLine.length;
+      break;
+    }
+    if (text[i] === "\n") lineNum++;
+  }
+
+  const afterClosing = text.slice(closingLineEndPos);
   if (!isWhitespaceOnly(afterClosing)) {
     return { ok: false, reason: "non-whitespace trailing text" };
   }
 
   // ── Extract patch between opening line end and closing line start ──
-  const patchText = text.slice(openLineEnd + 1, lastClosingIdx);
+  // Find the byte position of the closing line start
+  let closingLineStartPos = 0;
+  for (let i = 0, lineNum = 0; i < text.length; i++) {
+    if (lineNum === lastClosingLineNum) {
+      closingLineStartPos = i;
+      break;
+    }
+    if (text[i] === "\n") lineNum++;
+  }
+
+  const patchText = text.slice(openLineEnd + 1, closingLineStartPos);
 
   // ── Patch must be non-empty ──
   if (patchText.trim().length === 0) {
