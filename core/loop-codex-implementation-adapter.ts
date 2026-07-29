@@ -199,7 +199,19 @@ function scanPlain(v: unknown, allowed: readonly string[], label: string): Recor
   return out;
 }
 
-function asTrimmedNonEmpty(v: unknown, label: string): string {
+function validateWorkspaceField(
+  v: unknown, label: string, shaPattern?: RegExp,
+): { ok: true; value: string } | { ok: false } {
+  if (typeof v !== "string") return { ok: false };
+  if (v.length === 0) return { ok: false };
+  if (v.trim().length === 0) return { ok: false };
+  if (v !== v.trim()) return { ok: false };
+  if (/[\x00-\x1f\x7f-\x9f]/.test(v)) return { ok: false };
+  if (shaPattern && !shaPattern.test(v)) return { ok: false };
+  return { ok: true, value: v };
+}
+
+function asInternalString(v: unknown, label: string): string {
   if (typeof v !== "string") throw new Error(`${label} must be a string`);
   const t = v.trim();
   if (t.length === 0 || t !== v) throw new Error(`${label} must be trimmed non-empty`);
@@ -272,7 +284,7 @@ export class LoopCodexImplementationAdapter {
     }
     this.patchApplicationManager = pm as Pick<LoopPatchApplicationManager, "apply">;
 
-    this.codexExecutableId = asTrimmedNonEmpty(opts.codexExecutableId, "codexExecutableId");
+    this.codexExecutableId = asInternalString(opts.codexExecutableId, "codexExecutableId");
 
     this.timeoutMs = validateInt(opts.timeoutMs, 100, 600000, 120000, "timeoutMs");
     this.maxPromptBytes = validateInt(opts.maxPromptBytes, 256, 1048576, 65536, "maxPromptBytes");
@@ -311,17 +323,22 @@ export class LoopCodexImplementationAdapter {
       } catch {
         return this._fail("initial", 0, "INVALID_INPUT", "invalid workspace", false);
       }
-      const workspacePath = asTrimmedNonEmpty(ws.workspacePath, "workspacePath");
-      const taskBranch = asTrimmedNonEmpty(ws.taskBranch, "taskBranch");
-      const expectedTaskHeadSha = asTrimmedNonEmpty(ws.expectedTaskHeadSha, "expectedTaskHeadSha");
-      if (!/^[0-9a-f]{40}$/.test(expectedTaskHeadSha)) {
-        return this._fail("initial", 0, "INVALID_INPUT", "invalid taskHeadSha", false);
-      }
-      const expectedPreStatusDigestSha256 = asTrimmedNonEmpty(
-        ws.expectedPreStatusDigestSha256, "expectedPreStatusDigestSha256");
-      if (!/^[0-9a-f]{64}$/.test(expectedPreStatusDigestSha256)) {
-        return this._fail("initial", 0, "INVALID_INPUT", "invalid preStatusDigestSha256", false);
-      }
+      const wpResult = validateWorkspaceField(ws.workspacePath, "workspacePath");
+      if (!wpResult.ok) return this._fail("initial", 0, "INVALID_INPUT", "invalid workspacePath", false);
+      const workspacePath = wpResult.value;
+
+      const tbResult = validateWorkspaceField(ws.taskBranch, "taskBranch");
+      if (!tbResult.ok) return this._fail("initial", 0, "INVALID_INPUT", "invalid taskBranch", false);
+      const taskBranch = tbResult.value;
+
+      const shaResult = validateWorkspaceField(ws.expectedTaskHeadSha, "expectedTaskHeadSha", /^[0-9a-f]{40}$/);
+      if (!shaResult.ok) return this._fail("initial", 0, "INVALID_INPUT", "invalid taskHeadSha", false);
+      const expectedTaskHeadSha = shaResult.value;
+
+      const digestResult = validateWorkspaceField(
+        ws.expectedPreStatusDigestSha256, "expectedPreStatusDigestSha256", /^[0-9a-f]{64}$/);
+      if (!digestResult.ok) return this._fail("initial", 0, "INVALID_INPUT", "invalid preStatusDigestSha256", false);
+      const expectedPreStatusDigestSha256 = digestResult.value;
 
       // Validate phase
       const rawPhase = req.phase;
@@ -358,54 +375,36 @@ export class LoopCodexImplementationAdapter {
         }
       }
 
-      // Validate requirement
-      const requirement = asTrimmedNonEmpty(req.requirement, "requirement");
+      // Validate requirement — minimal type check, Prompt Builder is the content authority
+      const requirement = req.requirement;
+      if (requirement === undefined || requirement === null || typeof requirement !== "string") {
+        return this._fail(phase, attempt, "INVALID_INPUT", "invalid requirement", false);
+      }
 
-      // Validate designSummary (optional)
+      // Validate designSummary (optional) — minimal type check, Prompt Builder is the content authority
       let designSummary: string | undefined;
       if (req.designSummary !== undefined) {
         if (typeof req.designSummary !== "string") {
           return this._fail(phase, attempt, "INVALID_INPUT", "invalid designSummary", false);
         }
-        designSummary = req.designSummary.trim();
+        designSummary = req.designSummary as string;
       }
 
-      // Validate implementationConstraints (optional)
+      // Validate implementationConstraints (optional) — minimal type check, Prompt Builder is the content authority
       let implementationConstraints: readonly string[] | undefined;
       if (req.implementationConstraints !== undefined) {
         if (!Array.isArray(req.implementationConstraints)) {
           return this._fail(phase, attempt, "INVALID_INPUT", "invalid constraints", false);
         }
-        if (req.implementationConstraints.length > 64) {
-          return this._fail(phase, attempt, "INVALID_INPUT", "too many constraints", false);
-        }
-        for (const c of req.implementationConstraints) {
-          if (typeof c !== "string" || c.trim().length === 0) {
-            return this._fail(phase, attempt, "INVALID_INPUT", "empty constraint", false);
-          }
-        }
         implementationConstraints = req.implementationConstraints;
       }
 
-      // Validate allowedPaths
+      // Validate allowedPaths — minimal type check, Prompt Builder is the content authority
       if (!Array.isArray(req.allowedPaths)) {
         return this._fail(phase, attempt, "INVALID_INPUT", "invalid allowedPaths", false);
       }
       if (req.allowedPaths.length === 0) {
         return this._fail(phase, attempt, "INVALID_INPUT", "empty allowedPaths", false);
-      }
-      if (req.allowedPaths.length > 128) {
-        return this._fail(phase, attempt, "INVALID_INPUT", "too many allowedPaths", false);
-      }
-      const seenPaths = new Set<string>();
-      for (const p of req.allowedPaths) {
-        if (typeof p !== "string" || p.trim().length === 0 || p !== p.trim()) {
-          return this._fail(phase, attempt, "INVALID_INPUT", "invalid allowedPath", false);
-        }
-        if (seenPaths.has(p)) {
-          return this._fail(phase, attempt, "INVALID_INPUT", "duplicate allowedPath", false);
-        }
-        seenPaths.add(p);
       }
       const allowedPaths: readonly string[] = req.allowedPaths;
 
@@ -518,6 +517,9 @@ export class LoopCodexImplementationAdapter {
       const prompt = promptResult.prompt;
       const promptBytes = new TextEncoder().encode(prompt);
 
+      // R2: Create and freeze defensive copy of allowedPaths for D04
+      const frozenAllowedPaths = Object.freeze([...allowedPaths]) as readonly string[];
+
       // ═══════════════════════════════════════ Invoke Codex via D02 Runner
       let runnerResult: LoopPosixProcessResult;
       try {
@@ -596,7 +598,7 @@ export class LoopCodexImplementationAdapter {
           },
           patchBytes,
           expectedPatchSha256: patchDigestSha256,
-          allowedPaths,
+          allowedPaths: frozenAllowedPaths,
           artifactRef,
         });
       } catch (e) {
