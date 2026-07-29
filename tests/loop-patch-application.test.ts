@@ -207,6 +207,26 @@ function makeSingleFilePatch(path: string, hunks: HunkSpec[]): string {
   return s;
 }
 
+/** Preflight: verify body lines match declared oldCount / newCount. */
+function assertHunkBodyCounts(label: string, hunk: HunkSpec): void {
+  // Split body into lines; skip the final empty element after trailing \n.
+  const raw = hunk.body.endsWith("\n") ? hunk.body.slice(0, -1).split("\n") : hunk.body.split("\n");
+  let context = 0, removed = 0, added = 0, noNewline = 0;
+  for (const line of raw) {
+    if (line === "\\ No newline at end of file") { noNewline++; continue; }
+    if (line.startsWith(" ")) context++;
+    else if (line.startsWith("-")) removed++;
+    else if (line.startsWith("+")) added++;
+  }
+  const oldConsumed = context + removed;
+  const newConsumed = context + added;
+  ok(oldConsumed === hunk.oldCount,
+    `${label}: oldConsumed=${oldConsumed} (context=${context}+removed=${removed}) == oldCount=${hunk.oldCount}`);
+  ok(newConsumed === hunk.newCount,
+    `${label}: newConsumed=${newConsumed} (context=${context}+added=${added}) == newCount=${hunk.newCount}`);
+  ok(noNewline === 0, `${label}: no-newline marker not present in hunk fixture`);
+}
+
 /** Wrap a real runner to count invocations. */
 function countingRunner(base: any) {
   const state = { count: 0 };
@@ -1022,43 +1042,68 @@ async function main() {
 
     // K1: Old partial overlap — second oldStart inside first old range, second oldEnd > first oldEnd.
     //     New ranges strictly non-overlapping.
-    await kReject("K1 old partial overlap", [
-      { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" },
-      { oldStart: 3, oldCount: 5, newStart: 7, newCount: 5, body: " e\n-f\n+F\n g\n h\n i\n" },
-    ], "PATCH_MALFORMED");
+    {
+      const k1h1: HunkSpec = { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" };
+      const k1h2: HunkSpec = { oldStart: 3, oldCount: 5, newStart: 7, newCount: 5, body: " e\n-f\n+F\n g\n h\n i\n" };
+      assertHunkBodyCounts("K1 hunk1", k1h1);
+      assertHunkBodyCounts("K1 hunk2", k1h2);
+      await kReject("K1 old partial overlap", [k1h1, k1h2], "PATCH_MALFORMED");
+    }
 
     // K2: New partial overlap — second newStart inside first new range, second newEnd > first newEnd.
     //     Old ranges strictly non-overlapping.
-    await kReject("K2 new partial overlap", [
-      { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" },
-      { oldStart: 7, oldCount: 5, newStart: 3, newCount: 5, body: " g\n-h\n+H\n i\n j\n k\n" },
-    ], "PATCH_MALFORMED");
+    {
+      const k2h1: HunkSpec = { oldStart: 1, oldCount: 5, newStart: 1, newCount: 5, body: " a\n-b\n+B\n c\n d\n e\n" };
+      const k2h2: HunkSpec = { oldStart: 7, oldCount: 5, newStart: 3, newCount: 5, body: " g\n-h\n+H\n i\n j\n k\n" };
+      assertHunkBodyCounts("K2 hunk1", k2h1);
+      assertHunkBodyCounts("K2 hunk2", k2h2);
+      await kReject("K2 new partial overlap", [k2h1, k2h2], "PATCH_MALFORMED");
+    }
 
     // K3: Full containment — second old range fully contains first old range.
+    //     hunk1 old 3..5, new 3..5 (oldConsumed=3,newConsumed=3).
+    //     hunk2 old 1..7, new 10..16 (oldConsumed=7,newConsumed=7).
     //     New ranges strictly non-overlapping.
-    await kReject("K3 full containment", [
-      { oldStart: 3, oldCount: 3, newStart: 3, newCount: 3, body: " c\n-d\n+D\n e\n" },
-      { oldStart: 1, oldCount: 7, newStart: 7, newCount: 7, body: " a\n-b\n+B\n c\n-d\n+D\n e\n" },
-    ], "PATCH_MALFORMED");
+    {
+      const k3h1: HunkSpec = { oldStart: 3, oldCount: 3, newStart: 3, newCount: 3, body: " 3\n-4\n+FOUR\n 5\n" };
+      const k3h2: HunkSpec = { oldStart: 1, oldCount: 7, newStart: 10, newCount: 7, body: " 1\n-2\n+TWO\n 3\n 4\n 5\n 6\n 7\n" };
+      assertHunkBodyCounts("K3 hunk1", k3h1);
+      assertHunkBodyCounts("K3 hunk2", k3h2);
+      ok(k3h2.oldStart + k3h2.oldCount - 1 >= k3h1.oldStart + k3h1.oldCount - 1
+        && k3h2.oldStart <= k3h1.oldStart, "K3: hunk2 old range fully contains hunk1 old range");
+      ok(k3h1.newStart + k3h1.newCount - 1 < k3h2.newStart, "K3: new ranges non-overlapping");
+      await kReject("K3 full containment", [k3h1, k3h2], "PATCH_MALFORMED");
+    }
 
     // K4: Same start — old ranges share the same oldStart.
     //     New ranges strictly non-overlapping.
-    await kReject("K4 same start", [
-      { oldStart: 1, oldCount: 2, newStart: 1, newCount: 2, body: "-a\n+A\n b\n" },
-      { oldStart: 1, oldCount: 3, newStart: 5, newCount: 3, body: " a\n-b\n+B\n c\n" },
-    ], "PATCH_MALFORMED");
+    {
+      const k4h1: HunkSpec = { oldStart: 1, oldCount: 2, newStart: 1, newCount: 2, body: "-a\n+A\n b\n" };
+      const k4h2: HunkSpec = { oldStart: 1, oldCount: 3, newStart: 5, newCount: 3, body: " a\n-b\n+B\n c\n" };
+      assertHunkBodyCounts("K4 hunk1", k4h1);
+      assertHunkBodyCounts("K4 hunk2", k4h2);
+      await kReject("K4 same start", [k4h1, k4h2], "PATCH_MALFORMED");
+    }
 
     // K5: Count=0 same insertion point — two oldCount=0 hunks with same oldStart.
     //     New ranges strictly increasing.
-    await kReject("K5 count0 same insert", [
-      { oldStart: 2, oldCount: 0, newStart: 3, newCount: 1, body: "+x\n" },
-      { oldStart: 2, oldCount: 0, newStart: 4, newCount: 1, body: "+y\n" },
-    ], "PATCH_MALFORMED");
+    {
+      const k5h1: HunkSpec = { oldStart: 2, oldCount: 0, newStart: 3, newCount: 1, body: "+x\n" };
+      const k5h2: HunkSpec = { oldStart: 2, oldCount: 0, newStart: 4, newCount: 1, body: "+y\n" };
+      assertHunkBodyCounts("K5 hunk1", k5h1);
+      assertHunkBodyCounts("K5 hunk2", k5h2);
+      await kReject("K5 count0 same insert", [k5h1, k5h2], "PATCH_MALFORMED");
+    }
 
-    // K6: Effective-end overflow — start=MAX_SAFE_INTEGER, count≥2.
-    await kReject("K6 end overflow", [
-      { oldStart: Number.MAX_SAFE_INTEGER, oldCount: 2, newStart: 1, newCount: 2, body: "-a\n+b\n" },
-    ], "PATCH_MALFORMED");
+    // K6: Effective-end overflow — start=MAX_SAFE_INTEGER, count=3.
+    //     (count=2 has a JS precision round-trip: MAX_SAFE_INTEGER+2-1 === MAX_SAFE_INTEGER,
+    //      which is still safe; count=3 reliably produces an unsafe oldEnd.)
+    {
+      const k6h: HunkSpec = { oldStart: Number.MAX_SAFE_INTEGER, oldCount: 3, newStart: 1, newCount: 3, body: "-a\n-b\n-c\n+A\n+B\n+C\n" };
+      assertHunkBodyCounts("K6 overflow", k6h);
+      ok(!Number.isSafeInteger(k6h.oldStart + k6h.oldCount - 1), "K6: old end exceeds safe integer range");
+      await kReject("K6 end overflow", [k6h], "PATCH_MALFORMED");
+    }
 
     // ── K7: Real adjacent two-hunk success (Git-applied) ──
     {
