@@ -1,0 +1,644 @@
+// LOOP Executor Kernel — Codex Multi-File Implementation Adapter
+// ================================================================
+// Standalone LOOP kernel adapter that:
+//   1. Validates the request (fail-closed input validation)
+//   2. Inspects the D03 workspace for drift
+//   3. Reads bounded repair evidence when required
+//   4. Builds a bounded phase-specific prompt
+//   5. Invokes Codex through the injected D02 runner
+//   6. Parses exactly one multi-file unified diff
+//   7. Persists the exact patch bytes through D01 Artifact Store
+//   8. Applies the exact persisted patch through D04 manager
+//   9. Returns explicit succeeded or failed
+//
+// No shadow success. No fallback patches. No child_process, Git, or
+// network access. All dependencies are injected.
+
+import type { LoopRunIdentity } from "./loop-executor-types";
+import { validateLoopRunIdentity } from "./loop-run-state";
+import type { LoopPosixProcessRunner, LoopPosixProcessResult } from "./loop-posix-process-runner";
+import type { LoopGitWorkspaceManager, LoopGitWorkspaceSnapshot } from "./loop-git-workspace";
+import type { LoopArtifactStore, LoopArtifactKind } from "./loop-artifact-store";
+import type { LoopPatchApplicationManager, LoopPatchApplicationResult } from "./loop-patch-application";
+import {
+  buildLoopCodexPrompt,
+  DEFAULT_PROMPT_LIMITS,
+  type LoopCodexImplementationPhase,
+  type LoopCodexPromptInput,
+  type LoopCodexPromptLimits,
+} from "./loop-codex-prompt";
+import {
+  parseLoopCodexOutput,
+  DEFAULT_OUTPUT_LIMITS,
+  type LoopCodexOutputLimits,
+  type LoopCodexOutputResult,
+} from "./loop-codex-output";
+
+// ═══════════════════════════════════════ Types
+
+export type { LoopCodexImplementationPhase };
+
+export interface LoopCodexImplementationWorkspace {
+  readonly workspacePath: string;
+  readonly taskBranch: string;
+  readonly expectedTaskHeadSha: string;
+  readonly expectedPreStatusDigestSha256: string;
+}
+
+export interface LoopCodexImplementationRequest {
+  readonly identity: LoopRunIdentity;
+  readonly workspace: LoopCodexImplementationWorkspace;
+  readonly phase: LoopCodexImplementationPhase;
+  readonly attempt: number;
+  readonly requirement: string;
+  readonly designSummary?: string;
+  readonly implementationConstraints?: readonly string[];
+  readonly allowedPaths: readonly string[];
+  readonly repairEvidenceArtifactRef?: string;
+}
+
+export type LoopCodexImplementationErrorCode =
+  | "INVALID_INPUT"
+  | "WORKSPACE_DRIFT"
+  | "REPAIR_EVIDENCE_REQUIRED"
+  | "REPAIR_EVIDENCE_INVALID"
+  | "PROMPT_TOO_LARGE"
+  | "CODEX_SPAWN_FAILED"
+  | "CODEX_TIMED_OUT"
+  | "CODEX_NON_ZERO_EXIT"
+  | "CODEX_OUTPUT_TOO_LARGE"
+  | "CODEX_OUTPUT_INVALID"
+  | "ARTIFACT_STORE_FAILED"
+  | "PATCH_APPLICATION_FAILED"
+  | "INTERNAL_ERROR";
+
+export type LoopCodexImplementationApplicationState = "applied" | "already_applied";
+
+export interface LoopCodexImplementationSuccess {
+  readonly status: "succeeded";
+  readonly phase: LoopCodexImplementationPhase;
+  readonly attempt: number;
+  readonly patchArtifactRef: string;
+  readonly patchDigestSha256: string;
+  readonly patchSizeBytes: number;
+  readonly applicationState: LoopCodexImplementationApplicationState;
+  readonly files: readonly string[];
+  readonly preTaskHeadSha: string;
+  readonly postTaskHeadSha: string;
+  readonly preStatusDigestSha256: string;
+  readonly postStatusDigestSha256: string;
+  readonly preTargetStateDigestSha256: string;
+  readonly postTargetStateDigestSha256: string;
+}
+
+export interface LoopCodexImplementationFailure {
+  readonly status: "failed";
+  readonly phase: LoopCodexImplementationPhase;
+  readonly attempt: number;
+  readonly errorCode: LoopCodexImplementationErrorCode;
+  readonly retryable: boolean;
+  readonly safeMessage: string;
+  readonly causeCode?: string;
+  readonly patchArtifactRef?: string;
+  readonly patchDigestSha256?: string;
+  readonly patchSizeBytes?: number;
+}
+
+export type LoopCodexImplementationResult =
+  | LoopCodexImplementationSuccess
+  | LoopCodexImplementationFailure;
+
+export interface LoopCodexImplementationAdapterOptions {
+  readonly runner: Pick<LoopPosixProcessRunner, "run">;
+  readonly workspaceManager: Pick<LoopGitWorkspaceManager, "inspect">;
+  readonly artifactStore: Pick<LoopArtifactStore, "read" | "put">;
+  readonly patchApplicationManager: Pick<LoopPatchApplicationManager, "apply">;
+  readonly codexExecutableId: string;
+  readonly timeoutMs?: number;
+  readonly maxPromptBytes?: number;
+  readonly maxStdoutBytes?: number;
+  readonly maxStderrBytes?: number;
+  readonly maxPatchBytes?: number;
+  readonly maxRepairEvidenceBytes?: number;
+}
+
+// ═══════════════════════════════════════ Constants
+
+const MAX_SAFE_MESSAGE = 256;
+const MAX_ATTEMPT = 1_000_000; // Reasonable upper bound — D06 sets the real limit
+const ARTIFACT_REF_RE = /^loop-artifact:v1:([a-z_]+):sha256:([0-9a-f]{64})$/;
+const NON_CONTROL_RE = /[\x00-\x1f\x7f-\x9f]/;
+
+const OPTION_KEYS = [
+  "runner", "workspaceManager", "artifactStore", "patchApplicationManager",
+  "codexExecutableId", "timeoutMs", "maxPromptBytes", "maxStdoutBytes",
+  "maxStderrBytes", "maxPatchBytes", "maxRepairEvidenceBytes",
+];
+
+const REQUEST_KEYS = [
+  "identity", "workspace", "phase", "attempt", "requirement",
+  "designSummary", "implementationConstraints", "allowedPaths",
+  "repairEvidenceArtifactRef",
+];
+
+const WORKSPACE_KEYS = [
+  "workspacePath", "taskBranch", "expectedTaskHeadSha", "expectedPreStatusDigestSha256",
+];
+
+// ═══════════════════════════════════════ Helpers
+
+function safeMessage(msg: string): string {
+  return msg.replace(NON_CONTROL_RE, " ").slice(0, MAX_SAFE_MESSAGE);
+}
+
+function freeze<T extends object>(o: T): Readonly<T> {
+  return Object.freeze(o);
+}
+
+function scanPlain(v: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
+  if (v === null || typeof v !== "object") {
+    throw new Error(`${label} must be an object`);
+  }
+  if (Array.isArray(v)) {
+    throw new Error(`${label} must not be an array`);
+  }
+  let proto: unknown;
+  try { proto = Object.getPrototypeOf(v); } catch {
+    throw new Error(`${label} getPrototypeOf threw`);
+  }
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(`${label} has bad prototype`);
+  }
+  let keys: Array<string | symbol>;
+  try { keys = Reflect.ownKeys(v) as Array<string | symbol>; } catch {
+    throw new Error(`${label} ownKeys threw`);
+  }
+  const out = Object.create(null) as Record<string, unknown>;
+  for (const k of keys) {
+    if (typeof k === "symbol") throw new Error(`${label} has symbol key`);
+    if (k === "__proto__") throw new Error(`${label} has __proto__ key`);
+    if (!allowed.includes(k)) throw new Error(`${label} has unknown key`);
+    let desc: PropertyDescriptor;
+    try { desc = Object.getOwnPropertyDescriptor(v, k)!; } catch {
+      throw new Error(`${label} getDescriptor threw`);
+    }
+    if (!desc) throw new Error(`${label} missing descriptor`);
+    if ("get" in desc || "set" in desc) throw new Error(`${label} has accessor`);
+    if (!("value" in desc)) throw new Error(`${label} no value`);
+    Object.defineProperty(out, k, {
+      value: desc.value, writable: false, enumerable: true, configurable: false,
+    });
+  }
+  return out;
+}
+
+function asTrimmedNonEmpty(v: unknown, label: string): string {
+  if (typeof v !== "string") throw new Error(`${label} must be a string`);
+  const t = v.trim();
+  if (t.length === 0 || t !== v) throw new Error(`${label} must be trimmed non-empty`);
+  if (NON_CONTROL_RE.test(v)) throw new Error(`${label} contains control characters`);
+  return v;
+}
+
+// ═══════════════════════════════════════ Adapter
+
+export class LoopCodexImplementationAdapter {
+  private readonly runner: Pick<LoopPosixProcessRunner, "run">;
+  private readonly workspaceManager: Pick<LoopGitWorkspaceManager, "inspect">;
+  private readonly artifactStore: Pick<LoopArtifactStore, "read" | "put">;
+  private readonly patchApplicationManager: Pick<LoopPatchApplicationManager, "apply">;
+  private readonly codexExecutableId: string;
+  private readonly timeoutMs: number;
+  private readonly maxPromptBytes: number;
+  private readonly maxStdoutBytes: number;
+  private readonly maxStderrBytes: number;
+  private readonly maxPatchBytes: number;
+  private readonly maxRepairEvidenceBytes: number;
+
+  constructor(options: LoopCodexImplementationAdapterOptions) {
+    const opts = scanPlain(options, OPTION_KEYS, "options");
+
+    const rv = opts.runner;
+    if (!rv || typeof (rv as Record<string, unknown>).run !== "function") {
+      throw new Error("runner must have run method");
+    }
+    this.runner = rv as Pick<LoopPosixProcessRunner, "run">;
+
+    const wm = opts.workspaceManager;
+    if (!wm || typeof (wm as Record<string, unknown>).inspect !== "function") {
+      throw new Error("workspaceManager must have inspect method");
+    }
+    this.workspaceManager = wm as Pick<LoopGitWorkspaceManager, "inspect">;
+
+    const ast = opts.artifactStore;
+    if (!ast || typeof (ast as Record<string, unknown>).read !== "function" ||
+        typeof (ast as Record<string, unknown>).put !== "function") {
+      throw new Error("artifactStore must have read and put methods");
+    }
+    this.artifactStore = ast as Pick<LoopArtifactStore, "read" | "put">;
+
+    const pm = opts.patchApplicationManager;
+    if (!pm || typeof (pm as Record<string, unknown>).apply !== "function") {
+      throw new Error("patchApplicationManager must have apply method");
+    }
+    this.patchApplicationManager = pm as Pick<LoopPatchApplicationManager, "apply">;
+
+    this.codexExecutableId = asTrimmedNonEmpty(opts.codexExecutableId, "codexExecutableId");
+
+    this.timeoutMs = validateInt(opts.timeoutMs, 100, 600000, 120000, "timeoutMs");
+    this.maxPromptBytes = validateInt(opts.maxPromptBytes, 256, 1048576, 65536, "maxPromptBytes");
+    this.maxStdoutBytes = validateInt(opts.maxStdoutBytes, 1, 16777216, 1048576, "maxStdoutBytes");
+    this.maxStderrBytes = validateInt(opts.maxStderrBytes, 1, 16777216, 65536, "maxStderrBytes");
+    this.maxPatchBytes = validateInt(opts.maxPatchBytes, 1, 16777216, 1048576, "maxPatchBytes");
+    this.maxRepairEvidenceBytes = validateInt(opts.maxRepairEvidenceBytes, 1, 1048576, 32768, "maxRepairEvidenceBytes");
+  }
+
+  // ═══════════════════════════════════════ Public
+
+  async execute(request: LoopCodexImplementationRequest): Promise<LoopCodexImplementationResult> {
+    // ── Phase tracking for all result paths ──
+    let phase: LoopCodexImplementationPhase = "initial";
+    let attempt = 0;
+
+    try {
+      // ── Validate request ──
+      const req = scanPlain(request, REQUEST_KEYS, "request");
+
+      // Validate identity
+      try { validateLoopRunIdentity(req.identity); } catch {
+        return this._fail("initial", 0, "INVALID_INPUT", "invalid identity", false);
+      }
+      const identity = req.identity as LoopRunIdentity;
+
+      // Validate workspace
+      const ws = scanPlain(req.workspace, WORKSPACE_KEYS, "workspace");
+      const workspacePath = asTrimmedNonEmpty(ws.workspacePath, "workspacePath");
+      const taskBranch = asTrimmedNonEmpty(ws.taskBranch, "taskBranch");
+      const expectedTaskHeadSha = asTrimmedNonEmpty(ws.expectedTaskHeadSha, "expectedTaskHeadSha");
+      if (!/^[0-9a-f]{40}$/.test(expectedTaskHeadSha)) {
+        return this._fail("initial", 0, "INVALID_INPUT", "invalid taskHeadSha", false);
+      }
+      const expectedPreStatusDigestSha256 = asTrimmedNonEmpty(
+        ws.expectedPreStatusDigestSha256, "expectedPreStatusDigestSha256");
+      if (!/^[0-9a-f]{64}$/.test(expectedPreStatusDigestSha256)) {
+        return this._fail("initial", 0, "INVALID_INPUT", "invalid preStatusDigestSha256", false);
+      }
+
+      // Validate phase
+      const rawPhase = req.phase;
+      if (typeof rawPhase !== "string" ||
+          !(["initial", "test_repair", "review_repair"] as string[]).includes(rawPhase)) {
+        return this._fail("initial", 0, "INVALID_INPUT", "invalid phase", false);
+      }
+      phase = rawPhase as LoopCodexImplementationPhase;
+
+      // Validate attempt
+      const rawAttempt = req.attempt;
+      if (typeof rawAttempt !== "number" || !Number.isSafeInteger(rawAttempt) ||
+          rawAttempt < 0 || rawAttempt > MAX_ATTEMPT) {
+        return this._fail(phase, 0, "INVALID_INPUT", "invalid attempt", false);
+      }
+      attempt = rawAttempt;
+
+      // Phase × attempt × evidence rules
+      const rawRef = req.repairEvidenceArtifactRef;
+      if (phase === "initial") {
+        if (attempt !== 0) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "initial attempt must be 0", false);
+        }
+        if (rawRef !== undefined) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "initial must not carry evidence", false);
+        }
+      } else {
+        // repair phase
+        if (attempt < 1) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "repair attempt must be >= 1", false);
+        }
+        if (rawRef === undefined) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_REQUIRED", "repair requires evidence", false);
+        }
+      }
+
+      // Validate requirement
+      const requirement = asTrimmedNonEmpty(req.requirement, "requirement");
+
+      // Validate designSummary (optional)
+      let designSummary: string | undefined;
+      if (req.designSummary !== undefined) {
+        if (typeof req.designSummary !== "string") {
+          return this._fail(phase, attempt, "INVALID_INPUT", "invalid designSummary", false);
+        }
+        designSummary = req.designSummary.trim();
+      }
+
+      // Validate implementationConstraints (optional)
+      let implementationConstraints: readonly string[] | undefined;
+      if (req.implementationConstraints !== undefined) {
+        if (!Array.isArray(req.implementationConstraints)) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "invalid constraints", false);
+        }
+        if (req.implementationConstraints.length > 64) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "too many constraints", false);
+        }
+        for (const c of req.implementationConstraints) {
+          if (typeof c !== "string" || c.trim().length === 0) {
+            return this._fail(phase, attempt, "INVALID_INPUT", "empty constraint", false);
+          }
+        }
+        implementationConstraints = req.implementationConstraints;
+      }
+
+      // Validate allowedPaths
+      if (!Array.isArray(req.allowedPaths)) {
+        return this._fail(phase, attempt, "INVALID_INPUT", "invalid allowedPaths", false);
+      }
+      if (req.allowedPaths.length === 0) {
+        return this._fail(phase, attempt, "INVALID_INPUT", "empty allowedPaths", false);
+      }
+      if (req.allowedPaths.length > 128) {
+        return this._fail(phase, attempt, "INVALID_INPUT", "too many allowedPaths", false);
+      }
+      const seenPaths = new Set<string>();
+      for (const p of req.allowedPaths) {
+        if (typeof p !== "string" || p.trim().length === 0 || p !== p.trim()) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "invalid allowedPath", false);
+        }
+        if (seenPaths.has(p)) {
+          return this._fail(phase, attempt, "INVALID_INPUT", "duplicate allowedPath", false);
+        }
+        seenPaths.add(p);
+      }
+      const allowedPaths: readonly string[] = req.allowedPaths;
+
+      // ═══════════════════════════════════════ D03 Workspace Binding
+      let snapshot: LoopGitWorkspaceSnapshot;
+      try {
+        snapshot = await this.workspaceManager.inspect(identity);
+      } catch {
+        return this._fail(phase, attempt, "WORKSPACE_DRIFT", "workspace inspect failed", false);
+      }
+
+      if (snapshot.workspacePath !== workspacePath ||
+          snapshot.taskBranch !== taskBranch) {
+        return this._fail(phase, attempt, "WORKSPACE_DRIFT", "workspace identity mismatch", false);
+      }
+      if (snapshot.taskHeadSha !== expectedTaskHeadSha) {
+        return this._fail(phase, attempt, "WORKSPACE_DRIFT", "task HEAD mismatch", false);
+      }
+      if (snapshot.taskStatusDigestSha256 !== expectedPreStatusDigestSha256) {
+        return this._fail(phase, attempt, "WORKSPACE_DRIFT", "pre-status digest mismatch", false);
+      }
+      if (snapshot.runId !== identity.runId ||
+          snapshot.repository !== identity.repository ||
+          snapshot.repositoryPath !== identity.repositoryPath) {
+        return this._fail(phase, attempt, "WORKSPACE_DRIFT", "workspace identity mismatch", false);
+      }
+
+      // ═══════════════════════════════════════ Repair Evidence (if needed)
+      let repairEvidenceSummary: string | undefined;
+      if (phase !== "initial") {
+        const artifactRef = req.repairEvidenceArtifactRef as string;
+
+        // Validate artifact ref format for the phase
+        const refMatch = ARTIFACT_REF_RE.exec(artifactRef);
+        if (!refMatch) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "invalid artifact ref format", false);
+        }
+        const refKind = refMatch[1]!;
+        const expectedKind = phase === "test_repair" ? "test_summary" : "review_summary";
+        if (refKind !== expectedKind) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "wrong evidence kind", false);
+        }
+
+        // Read evidence from artifact store
+        let evidenceBytes: Buffer;
+        try {
+          evidenceBytes = this.artifactStore.read(artifactRef);
+        } catch {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence read failed", false);
+        }
+
+        // Validate evidence bytes
+        if (evidenceBytes.length === 0) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "empty evidence", false);
+        }
+        if (evidenceBytes.length > this.maxRepairEvidenceBytes) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence too large", false);
+        }
+
+        // UTF-8 validation
+        let evidenceText: string;
+        try {
+          evidenceText = new TextDecoder("utf-8", { fatal: true }).decode(evidenceBytes);
+        } catch {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence not valid UTF-8", false);
+        }
+        if (evidenceText.includes("\uFFFD")) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence has replacement char", false);
+        }
+        if (evidenceText.includes("\x00")) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence contains NUL", false);
+        }
+        if (NON_CONTROL_RE.test(evidenceText.replace(/[\n\r\t]/g, ""))) {
+          return this._fail(phase, attempt, "REPAIR_EVIDENCE_INVALID", "evidence has control chars", false);
+        }
+
+        repairEvidenceSummary = evidenceText;
+      }
+
+      // ═══════════════════════════════════════ Build Prompt
+      const promptInput: LoopCodexPromptInput = {
+        phase,
+        attempt,
+        requirementId: identity.requirementId,
+        requirement,
+        designSummary,
+        implementationConstraints,
+        allowedPaths,
+        repairEvidenceSummary,
+      };
+
+      const promptLimits: LoopCodexPromptLimits = {
+        ...DEFAULT_PROMPT_LIMITS,
+        maxPromptBytes: this.maxPromptBytes,
+        maxRepairEvidenceBytes: this.maxRepairEvidenceBytes,
+      };
+
+      let promptResult;
+      try {
+        promptResult = buildLoopCodexPrompt(promptInput, promptLimits);
+      } catch {
+        return this._fail(phase, attempt, "INTERNAL_ERROR", "prompt build failed", false);
+      }
+
+      if (!promptResult.ok) {
+        return this._fail(phase, attempt, "PROMPT_TOO_LARGE", "prompt too large", false);
+      }
+
+      const prompt = promptResult.prompt;
+      const promptBytes = new TextEncoder().encode(prompt);
+
+      // ═══════════════════════════════════════ Invoke Codex via D02 Runner
+      let runnerResult: LoopPosixProcessResult;
+      try {
+        runnerResult = await this.runner.run({
+          executableId: this.codexExecutableId,
+          cwd: snapshot.workspacePath,
+          stdin: promptBytes,
+          args: Object.freeze([
+            "exec", "--ephemeral", "--color", "never",
+            "--sandbox", "read-only", "--cd", snapshot.workspacePath, "-",
+          ]),
+          timeoutMs: this.timeoutMs,
+          maxStdoutBytes: this.maxStdoutBytes,
+          maxStderrBytes: this.maxStderrBytes,
+        });
+      } catch {
+        return this._fail(phase, attempt, "CODEX_SPAWN_FAILED", "codex spawn failed", false);
+      }
+
+      // ── Map runner failures ──
+      if (runnerResult.status === "timed_out") {
+        return this._fail(phase, attempt, "CODEX_TIMED_OUT", "codex timed out", true);
+      }
+
+      if (runnerResult.exitCode !== 0) {
+        return this._fail(phase, attempt, "CODEX_NON_ZERO_EXIT", "codex non-zero exit", true);
+      }
+
+      if (runnerResult.stdoutTruncated || runnerResult.stderrTruncated) {
+        return this._fail(phase, attempt, "CODEX_OUTPUT_TOO_LARGE", "codex output truncated", true);
+      }
+
+      // ═══════════════════════════════════════ Parse Output
+      const stdoutBytes = new TextEncoder().encode(runnerResult.stdout);
+      const outputLimits: LoopCodexOutputLimits = {
+        maxStdoutBytes: this.maxStdoutBytes,
+        maxPatchBytes: this.maxPatchBytes,
+      };
+
+      let parseResult: LoopCodexOutputResult;
+      try {
+        parseResult = parseLoopCodexOutput(stdoutBytes, outputLimits);
+      } catch {
+        return this._fail(phase, attempt, "CODEX_OUTPUT_INVALID", "output parse failed", true);
+      }
+
+      if (!parseResult.ok) {
+        return this._fail(phase, attempt, "CODEX_OUTPUT_INVALID", "invalid output format", true);
+      }
+
+      const { patchBytes, patchDigestSha256, patchSizeBytes } = parseResult;
+
+      // ═══════════════════════════════════════ D01 Persist
+      let stored;
+      try {
+        stored = this.artifactStore.put("code_patch", patchBytes);
+      } catch {
+        return this._fail(phase, attempt, "ARTIFACT_STORE_FAILED", "artifact store put failed", false,
+          undefined, undefined, patchDigestSha256, patchSizeBytes);
+      }
+
+      if (stored.kind !== "code_patch" ||
+          stored.digest !== patchDigestSha256 ||
+          stored.sizeBytes !== patchSizeBytes) {
+        return this._fail(phase, attempt, "ARTIFACT_STORE_FAILED", "stored artifact mismatch", false,
+          undefined, undefined, patchDigestSha256, patchSizeBytes);
+      }
+
+      const artifactRef = stored.artifactRef;
+
+      // ═══════════════════════════════════════ D04 Apply
+      let applyResult: LoopPatchApplicationResult;
+      try {
+        applyResult = await this.patchApplicationManager.apply({
+          identity,
+          workspace: {
+            workspacePath,
+            taskBranch,
+            expectedTaskHeadSha,
+            expectedPreStatusDigestSha256,
+          },
+          patchBytes,
+          expectedPatchSha256: patchDigestSha256,
+          allowedPaths,
+          artifactRef,
+        });
+      } catch (e) {
+        const causeCode = (e instanceof Error && "code" in e)
+          ? String((e as Record<string, unknown>).code).slice(0, 64)
+          : undefined;
+        return this._fail(phase, attempt, "PATCH_APPLICATION_FAILED", "patch application failed", false,
+          causeCode, artifactRef, patchDigestSha256, patchSizeBytes);
+      }
+
+      // ═══════════════════════════════════════ Success
+      return freeze({
+        status: "succeeded",
+        phase,
+        attempt,
+        patchArtifactRef: artifactRef,
+        patchDigestSha256,
+        patchSizeBytes,
+        applicationState: applyResult.state,
+        files: applyResult.files,
+        preTaskHeadSha: applyResult.preTaskHeadSha,
+        postTaskHeadSha: applyResult.postTaskHeadSha,
+        preStatusDigestSha256: applyResult.preStatusDigestSha256,
+        postStatusDigestSha256: applyResult.postStatusDigestSha256,
+        preTargetStateDigestSha256: applyResult.preTargetStateDigestSha256,
+        postTargetStateDigestSha256: applyResult.postTargetStateDigestSha256,
+      });
+    } catch {
+      return this._fail(phase, attempt, "INTERNAL_ERROR", "unexpected error", false);
+    }
+  }
+
+  // ═══════════════════════════════════════ Private
+
+  private _fail(
+    phase: LoopCodexImplementationPhase,
+    attempt: number,
+    errorCode: LoopCodexImplementationErrorCode,
+    message: string,
+    retryable: boolean,
+    causeCode?: string,
+    patchArtifactRef?: string,
+    patchDigestSha256?: string,
+    patchSizeBytes?: number,
+  ): LoopCodexImplementationFailure {
+    const result: LoopCodexImplementationFailure = {
+      status: "failed",
+      phase,
+      attempt,
+      errorCode,
+      retryable,
+      safeMessage: safeMessage(message),
+    };
+    if (causeCode !== undefined) {
+      (result as unknown as Record<string, unknown>).causeCode = causeCode;
+    }
+    if (patchArtifactRef !== undefined) {
+      (result as unknown as Record<string, unknown>).patchArtifactRef = patchArtifactRef;
+    }
+    if (patchDigestSha256 !== undefined) {
+      (result as unknown as Record<string, unknown>).patchDigestSha256 = patchDigestSha256;
+    }
+    if (patchSizeBytes !== undefined) {
+      (result as unknown as Record<string, unknown>).patchSizeBytes = patchSizeBytes;
+    }
+    return freeze(result) as LoopCodexImplementationFailure;
+  }
+}
+
+// ═══════════════════════════════════════ Private helpers
+
+function validateInt(
+  value: unknown, min: number, max: number, defaultVal: number, label: string,
+): number {
+  if (value === undefined) return defaultVal;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new Error(`${label} out of range`);
+  }
+  return value;
+}
