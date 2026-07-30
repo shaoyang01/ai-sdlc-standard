@@ -175,14 +175,62 @@ function tailExcerpt(input: string, maxBytes: number): string {
   return decoder.decode(safeTail);
 }
 
+// Descriptor-based plain-data scan helper
+const WS_DIGEST_KEYS = ["task_branch", "task_head_sha", "status_digest_sha256"];
+
+function scanPlain(v: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
+  if (v === null || typeof v !== "object") {
+    throw new Error(`${label} must be a plain object`);
+  }
+  if (Array.isArray(v)) {
+    throw new Error(`${label} must not be an array`);
+  }
+  let proto: unknown;
+  try {
+    proto = Object.getPrototypeOf(v);
+  } catch {
+    throw new Error(`${label} getPrototypeOf threw`);
+  }
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(`${label} has bad prototype`);
+  }
+  let keys: Array<string | symbol>;
+  try {
+    keys = Reflect.ownKeys(v) as Array<string | symbol>;
+  } catch {
+    throw new Error(`${label} ownKeys threw`);
+  }
+  const out = Object.create(null) as Record<string, unknown>;
+  for (const k of keys) {
+    if (typeof k === "symbol") throw new Error(`${label} has symbol key`);
+    if (k === "__proto__") throw new Error(`${label} has __proto__ key`);
+    if (!allowed.includes(k)) throw new Error(`${label} has unknown key '${String(k)}'`);
+    let desc: PropertyDescriptor;
+    try {
+      desc = Object.getOwnPropertyDescriptor(v, k)!;
+    } catch {
+      throw new Error(`${label} getDescriptor threw`);
+    }
+    if (!desc) throw new Error(`${label} missing descriptor`);
+    if ("get" in desc || "set" in desc) throw new Error(`${label} has accessor`);
+    if (!("value" in desc)) throw new Error(`${label} no value`);
+    Object.defineProperty(out, k, {
+      value: desc.value, writable: false, enumerable: true, configurable: false,
+    });
+  }
+  return out;
+}
+
 function validateWorkspaceDigest(
   v: unknown,
   label: string,
 ): { ok: true; value: LoopDeliveryEvidenceWorkspaceDigest } | { ok: false; reason: string } {
-  if (v === null || typeof v !== "object" || Array.isArray(v)) {
-    return { ok: false, reason: `${label} must be plain object` };
+  let o: Record<string, unknown>;
+  try {
+    o = scanPlain(v, WS_DIGEST_KEYS, label);
+  } catch (e) {
+    return { ok: false, reason: `${label}: ${(e as Error).message}` };
   }
-  const o = v as Record<string, unknown>;
 
   const tb = o.task_branch;
   if (typeof tb !== "string" || tb.trim().length === 0 || tb !== tb.trim()) {
@@ -212,24 +260,21 @@ function validateWorkspaceDigest(
   };
 }
 
+const EVIDENCE_INPUT_KEYS = [
+  "phase", "fixRound", "planAttempt", "failedStepId", "outcomeCategory",
+  "exitCode", "signal", "durationMs", "stdoutTruncated", "stderrTruncated",
+  "stdout", "stderr", "workspaceBefore", "workspaceAfter",
+];
+
 function validateInput(
   input: unknown,
 ): { ok: true; value: LoopDeliveryEvidenceInput } | { ok: false; reason: string } {
-  if (input === null || typeof input !== "object" || Array.isArray(input)) {
-    return { ok: false, reason: "input must be plain object" };
-  }
-
-  let proto: unknown;
+  let o: Record<string, unknown>;
   try {
-    proto = Object.getPrototypeOf(input);
-  } catch {
-    return { ok: false, reason: "getPrototypeOf threw" };
+    o = scanPlain(input, EVIDENCE_INPUT_KEYS, "evidence input");
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
   }
-  if (proto !== Object.prototype && proto !== null) {
-    return { ok: false, reason: "input has bad prototype" };
-  }
-
-  const o = input as Record<string, unknown>;
 
   // phase
   const phase = o.phase;
@@ -294,22 +339,16 @@ function validateInput(
     return { ok: false, reason: "stderrTruncated must be boolean" };
   }
 
-  // stdout
+  // stdout (allow NUL, CR, U+FFFD — sanitizer handles them)
   const stdout = o.stdout;
   if (typeof stdout !== "string") {
     return { ok: false, reason: "stdout must be string" };
   }
-  if (stdout.includes(NUL)) {
-    return { ok: false, reason: "stdout contains NUL" };
-  }
 
-  // stderr
+  // stderr (allow NUL, CR, U+FFFD — sanitizer handles them)
   const stderr = o.stderr;
   if (typeof stderr !== "string") {
     return { ok: false, reason: "stderr must be string" };
-  }
-  if (stderr.includes(NUL)) {
-    return { ok: false, reason: "stderr contains NUL" };
   }
 
   // workspaceBefore
@@ -405,11 +444,12 @@ export function buildLoopDeliveryEvidence(
   (evidenceObj.workspace_after as Record<string, unknown>).status_digest_sha256 = v.workspaceAfter.status_digest_sha256;
 
   // Canonical JSON with trailing LF
-  // We use explicit JSON serialization
   const json = JSON.stringify(evidenceObj);
   const text = json + "\n";
   const encoder = new TextEncoder();
-  const bytes = encoder.encode(text);
+  // Defensive copy: create a new independent Uint8Array from the encoded text
+  const rawBytes = encoder.encode(text);
+  const bytes = new Uint8Array(rawBytes);
 
   // Check bounds
   if (bytes.length > maxEvidenceBytes) {
@@ -419,10 +459,11 @@ export function buildLoopDeliveryEvidence(
   const digestSha256 = createHash("sha256").update(bytes).digest("hex");
   const sizeBytes = bytes.length;
 
+  // Return a second independent copy so callers can't mutate the original
   return freeze({
     ok: true,
     text,
-    bytes,
+    bytes: new Uint8Array(bytes),
     digestSha256,
     sizeBytes,
   });
