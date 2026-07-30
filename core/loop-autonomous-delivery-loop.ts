@@ -745,27 +745,29 @@ export class LoopAutonomousDeliveryLoop {
 
     const initialSuccess = initialResult as { status: "continue"; result: LoopCodexImplementationSuccess };
 
-    // Update state from initial success
-    this._addTrace(state, "implementation_initial", "initial", 0, 0, null,
-      "succeeded", null,
-      initialSuccess.result.patchArtifactRef,
-      initialSuccess.result.patchDigestSha256,
-      initialSuccess.result.postStatusDigestSha256,
-    );
+    // Record candidate patchArtifactRef (durable artifact fact, verified format)
     state.patchArtifactRefs.push(initialSuccess.result.patchArtifactRef);
-    for (const f of initialSuccess.result.files) {
-      state.files.add(f);
-    }
-    state.currentTaskHeadSha = initialSuccess.result.postTaskHeadSha;
-    state.currentStatusDigestSha256 = initialSuccess.result.postStatusDigestSha256;
 
-    // Update workspace binding after D05
+    // ── R4: D03 reconciliation FIRST ──
+    // Candidate postTaskHeadSha / postStatusDigestSha256 MUST NOT enter
+    // current verified binding before D03 inspect confirms workspace state.
     const postInitBindResult = await this._bindAndVerifyPostD05(
       frozenIdentity, frozenWorkspace, state,
       initialSuccess.result.postTaskHeadSha,
       initialSuccess.result.postStatusDigestSha256,
     );
     if (!postInitBindResult.ok) return (postInitBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
+
+    // Only after verified D03 reconciliation: add files, write success trace
+    for (const f of initialSuccess.result.files) {
+      state.files.add(f);
+    }
+    this._addTrace(state, "implementation_initial", "initial", 0, 0, null,
+      "succeeded", null,
+      initialSuccess.result.patchArtifactRef,
+      initialSuccess.result.patchDigestSha256,
+      initialSuccess.result.postStatusDigestSha256,
+    );
 
     // ═══════════════════════════════════════ Main Loop
     const mainResult = await this._mainLoop(
@@ -850,7 +852,20 @@ export class LoopAutonomousDeliveryLoop {
 
         const repairSuccess = repairResult as { status: "continue"; result: LoopCodexImplementationSuccess };
 
-        // No-progress check after repair
+        // Record candidate patchArtifactRef (durable artifact fact)
+        state.patchArtifactRefs.push(repairSuccess.result.patchArtifactRef);
+
+        // ── R4: D03 reconciliation FIRST ──
+        // Candidate postTaskHeadSha / postStatusDigestSha256 MUST NOT enter
+        // current verified binding before D03 inspect confirms workspace state.
+        const postRepairBindResult = await this._bindAndVerifyPostD05(
+          identity, workspace, state,
+          repairSuccess.result.postTaskHeadSha,
+          repairSuccess.result.postStatusDigestSha256,
+        );
+        if (!postRepairBindResult.ok) return (postRepairBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
+
+        // No-progress check AFTER reconciliation, using verified binding
         const postRepairNoProgress = this._checkNoProgressPostRepair(
           state, repairSuccess.result, evidenceResult.evidenceDigest, allowedPaths,
         );
@@ -858,21 +873,16 @@ export class LoopAutonomousDeliveryLoop {
           return this._finalizeTerminal(state, "failed", "NO_PROGRESS", postRepairNoProgress);
         }
 
-        // Update state
-        state.patchArtifactRefs.push(repairSuccess.result.patchArtifactRef);
+        // Only after D03 + no-progress: add files and repair_attempt trace
         for (const f of repairSuccess.result.files) {
           state.files.add(f);
         }
-        state.currentTaskHeadSha = repairSuccess.result.postTaskHeadSha;
-        state.currentStatusDigestSha256 = repairSuccess.result.postStatusDigestSha256;
-
-        // Re-bind workspace after repair
-        const postRepairBindResult = await this._bindAndVerifyPostD05(
-          identity, workspace, state,
-          repairSuccess.result.postTaskHeadSha,
+        this._addTrace(state, "repair_attempt",
+          "test_repair", state.totalFixRounds, state.testRepairAttempt, null, "succeeded",
+          null, repairSuccess.result.patchArtifactRef,
+          repairSuccess.result.patchDigestSha256,
           repairSuccess.result.postStatusDigestSha256,
         );
-        if (!postRepairBindResult.ok) return (postRepairBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
 
         // Loop back to run tests again
         continue;
@@ -929,7 +939,20 @@ export class LoopAutonomousDeliveryLoop {
 
         const reviewRepairSuccess = reviewRepairResult as { status: "continue"; result: LoopCodexImplementationSuccess };
 
-        // No-progress check after repair
+        // Record candidate patchArtifactRef (durable artifact fact)
+        state.patchArtifactRefs.push(reviewRepairSuccess.result.patchArtifactRef);
+
+        // ── R4: D03 reconciliation FIRST ──
+        // Candidate postTaskHeadSha / postStatusDigestSha256 MUST NOT enter
+        // current verified binding before D03 inspect confirms workspace state.
+        const postReviewBindResult = await this._bindAndVerifyPostD05(
+          identity, workspace, state,
+          reviewRepairSuccess.result.postTaskHeadSha,
+          reviewRepairSuccess.result.postStatusDigestSha256,
+        );
+        if (!postReviewBindResult.ok) return (postReviewBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
+
+        // No-progress check AFTER reconciliation, using verified binding
         const postRepairNoProgress2 = this._checkNoProgressPostRepair(
           state, reviewRepairSuccess.result, evidenceResult2.evidenceDigest, allowedPaths,
         );
@@ -937,21 +960,16 @@ export class LoopAutonomousDeliveryLoop {
           return this._finalizeTerminal(state, "failed", "NO_PROGRESS", postRepairNoProgress2);
         }
 
-        // Update state
-        state.patchArtifactRefs.push(reviewRepairSuccess.result.patchArtifactRef);
+        // Only after D03 + no-progress: add files and repair_attempt trace
         for (const f of reviewRepairSuccess.result.files) {
           state.files.add(f);
         }
-        state.currentTaskHeadSha = reviewRepairSuccess.result.postTaskHeadSha;
-        state.currentStatusDigestSha256 = reviewRepairSuccess.result.postStatusDigestSha256;
-
-        // Re-bind workspace after repair
-        const postReviewBindResult = await this._bindAndVerifyPostD05(
-          identity, workspace, state,
-          reviewRepairSuccess.result.postTaskHeadSha,
+        this._addTrace(state, "repair_attempt",
+          "review_repair", state.totalFixRounds, state.reviewRepairAttempt, null, "succeeded",
+          null, reviewRepairSuccess.result.patchArtifactRef,
+          reviewRepairSuccess.result.patchDigestSha256,
           reviewRepairSuccess.result.postStatusDigestSha256,
         );
-        if (!postReviewBindResult.ok) return (postReviewBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
 
         // Review repair requires full re-test before re-review — loop back
         continue;
@@ -1579,12 +1597,9 @@ export class LoopAutonomousDeliveryLoop {
     // D05 succeeded
     const success = d05Result as LoopCodexImplementationSuccess;
 
-    this._addTrace(state, "repair_attempt",
-      phase === "initial" ? "initial" : (phase === "test_repair" ? "test_repair" : "review_repair"),
-      state.totalFixRounds, attempt, null, "succeeded",
-      null, success.patchArtifactRef, success.patchDigestSha256,
-      success.postStatusDigestSha256,
-    );
+    // ── R4: Do NOT write repair_attempt "succeeded" trace here ──
+    // The trace must only be written after D03 reconciliation confirms
+    // the workspace binding. Callers are responsible for adding it.
 
     return { status: "continue", result: success };
   }

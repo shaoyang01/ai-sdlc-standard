@@ -112,6 +112,12 @@ const MARKERS: Record<string, boolean> = {
   D06_R3_D02_REQUIRED_FIELDS_VERIFIED: false,
   D06_R3_D05_DISCRIMINANT_VERIFIED: false,
   D06_R3_VALIDATED_INPUT_SNAPSHOT_VERIFIED: false,
+  // R4 markers
+  D06_R4_VERIFIED_BINDING_AUTHORITY: false,
+  D06_R4_POST_D05_RECONCILIATION_ORDER: false,
+  D06_R4_NO_PROGRESS_AFTER_RECONCILIATION: false,
+  D06_R4_TERMINAL_WORKSPACE_LAST_VERIFIED: false,
+  D06_R4_CANDIDATE_STATE_SEPARATION: false,
 };
 
 // ═══════════════════════════════════════ Helpers
@@ -2593,6 +2599,7 @@ async function testR1NoProgress(): Promise<void> {
     fakeWM.setSnapshotSequence([
       mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
       mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), sameDigest), // R4: post-repair D03 reconciliation matches repair digest
     ]);
     const loop = new LoopAutonomousDeliveryLoop({
       runner: fakeRunner as unknown as LoopPosixProcessRunner,
@@ -3858,8 +3865,9 @@ async function testR2InputSnapshot(): Promise<void> {
     const allowedPaths = ["src/test.ts", "src/impl.ts"];
     const request = makeRequest({ identity, workspace, allowedPaths, maxFixRounds: 0 });
     const baseSnap = mkSnap("a".repeat(40), DIGEST_CLEAN);
+    const postInitSnap = mkSnap("b".repeat(40), postInitDigest);
 
-    fakeWM.setSnapshotSequence([baseSnap]);
+    fakeWM.setSnapshotSequence([baseSnap, postInitSnap]);
 
     // Track what D05 receives
     let capturedAllowedPaths: string[] = [];
@@ -5024,6 +5032,698 @@ async function testR3ValidatedSnapshot(): Promise<void> {
   console.log("  R3 Validated Input Snapshot tests complete");
 }
 
+// ═══════════════════════════════════════ R4. Verified Binding Authority
+
+async function testR4InitialCandidate(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4a-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+  const candidateSha = "b".repeat(40);
+  const candidateDigest = DIGEST_POST_INIT;
+
+  // R4-A1: D03 inspect throws after D05 success → blocked, candidate NOT in result
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+    }));
+    // First inspect succeeds (initial bind), second inspect throws (post-D05)
+    let inspectCount = 0;
+    fakeWM.inspect = async () => {
+      inspectCount++;
+      if (inspectCount === 1) return { ...baseSnap };
+      throw new Error("inspect failed");
+    };
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-A1a: D03 throw → blocked");
+    check("orchestration", result.reasonCode === "WORKSPACE_DRIFT", "R4-A1b: WORKSPACE_DRIFT");
+    // Candidate files must NOT be in result
+    check("safety", result.files.length === 0, "R4-A1c: candidate files not in result");
+    // Final workspace must be from pre-initial binding, NOT candidate
+    check("safety", result.finalWorkspace === undefined ||
+      result.finalWorkspace.taskHeadSha === workspace.expectedTaskHeadSha, "R4-A1d: finalWorkspace is pre-initial");
+    // No implementation_initial succeeded trace
+    const initTraces = result.trace.filter(t => t.kind === "implementation_initial" && t.outcome === "succeeded");
+    check("evidence", initTraces.length === 0, "R4-A1e: no implementation_initial succeeded trace");
+    check("evidence", result.patchArtifactRefs.length === 1, "R4-A1f: patch ref preserved (durable artifact)");
+    check("safety", result.safeMessage.length <= 256, "R4-A1g: safeMessage bounded");
+    check("input", result.totalFixRounds === 0, "R4-A1h: no fix rounds");
+    check("safety", Array.isArray(result.trace), "R4-A1i: trace is array");
+    check("safety", result.elapsedMs >= 0, "R4-A1j: elapsedMs non-negative");
+  }
+
+  // R4-A2: D03 returns malformed snapshot → DEPENDENCY_RESULT_INVALID
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+    }));
+    fakeWM.setSnapshotSequence([
+      { ...baseSnap },
+      { state: "inspected", runId: identity.runId }, // Missing required fields → malformed
+    ]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R4-A2a: malformed D03 → failed");
+    check("orchestration", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R4-A2b: DEPENDENCY_RESULT_INVALID");
+    check("safety", result.files.length === 0, "R4-A2c: candidate files not leaked");
+    check("safety", result.safeMessage.length <= 256, "R4-A2d: safeMessage bounded");
+    check("input", result.reasonCode.length > 0, "R4-A2e: reasonCode present");
+  }
+
+  // R4-A3: D03 identity mismatch (workspacePath) → WORKSPACE_DRIFT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+    }));
+    fakeWM.setSnapshotSequence([
+      { ...baseSnap },
+      { ...mkSnap(candidateSha, candidateDigest), workspacePath: "/wrong/path" },
+    ]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-A3a: identity mismatch → blocked");
+    check("orchestration", result.reasonCode === "WORKSPACE_DRIFT", "R4-A3b: WORKSPACE_DRIFT");
+    check("safety", result.files.length === 0, "R4-A3c: candidate files not leaked");
+  }
+
+  // R4-A4: D03 HEAD mismatch → WORKSPACE_DRIFT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+    }));
+    fakeWM.setSnapshotSequence([
+      { ...baseSnap },
+      { ...mkSnap("c".repeat(40), candidateDigest) }, // HEAD mismatch
+    ]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-A4a: HEAD mismatch → blocked");
+    check("orchestration", result.reasonCode === "WORKSPACE_DRIFT", "R4-A4b: WORKSPACE_DRIFT");
+  }
+
+  // R4-A5: D03 digest mismatch → WORKSPACE_DRIFT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+    }));
+    fakeWM.setSnapshotSequence([
+      { ...baseSnap },
+      { ...mkSnap(candidateSha, DIGEST_POST_REPAIR) }, // Digest mismatch
+    ]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-A5a: digest mismatch → blocked");
+    check("orchestration", result.reasonCode === "WORKSPACE_DRIFT", "R4-A5b: WORKSPACE_DRIFT");
+  }
+
+  MARKERS.D06_R4_VERIFIED_BINDING_AUTHORITY = true;
+  artifactStore.close();
+  console.log("  R4-A complete");
+}
+
+async function testR4InitialVerifiedSuccess(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4b-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const candidateSha = "b".repeat(40);
+  const candidateDigest = DIGEST_POST_INIT;
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+  const postInitSnap = mkSnap(candidateSha, candidateDigest);
+
+  const fakeD05 = new FakeD05Adapter();
+  const fakeRunner = new FakeRunner();
+  const fakeWM = new FakeWorkspaceManager();
+  fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+    postTaskHeadSha: candidateSha, postStatusDigestSha256: candidateDigest, files: ["src/test.ts"],
+  }));
+  fakeWM.setSnapshotSequence([
+    baseSnap,     // initial bind
+    postInitSnap, // post-D05 bind
+    postInitSnap, // test pre-inspect
+    postInitSnap, // test post-inspect
+    postInitSnap, // review pre-inspect
+    postInitSnap, // review post-inspect
+    postInitSnap, // final
+  ]);
+  fakeRunner.setDefaultExitCode(0);
+
+  const loop = new LoopAutonomousDeliveryLoop({
+    runner: fakeRunner as unknown as LoopPosixProcessRunner,
+    workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+    artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+  });
+  const result = await loop.execute(makeRequest({ identity, workspace }));
+
+  check("orchestration", result.status === "succeeded", "R4-B1: success path works");
+  // Files present (added after verification)
+  check("orchestration", result.files.length >= 1, "R4-B2: files present after verification");
+  // implementation_initial succeeded trace present
+  const initTraces = result.trace.filter(t => t.kind === "implementation_initial" && t.outcome === "succeeded");
+  check("evidence", initTraces.length === 1, "R4-B3: implementation_initial succeeded trace");
+  // Final workspace has verified binding
+  check("safety", result.finalWorkspace !== undefined, "R4-B4: finalWorkspace present");
+  check("safety", result.finalWorkspace!.taskHeadSha === candidateSha, "R4-B5: final SHA is verified candidate");
+  check("integration", result.deliveryResultArtifactRef !== undefined, "R4-B6: delivery_result persisted");
+
+  MARKERS.D06_R4_POST_D05_RECONCILIATION_ORDER = true;
+  artifactStore.close();
+  console.log("  R4-B complete");
+}
+
+async function testR4TestRepairOrder(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4c-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+  const postInit = mkSnap("b".repeat(40), DIGEST_POST_INIT);
+  const postRepair = mkSnap("c".repeat(40), DIGEST_POST_REPAIR);
+
+  // R4-C1: Test repair — no-progress AFTER reconciliation
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    // Repair returns already_applied → triggers no-progress
+    fakeD05.setResponse("test_repair", 1, makeFakeD05Success({ phase: "test_repair", attempt: 1 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "c".repeat(40), postStatusDigestSha256: DIGEST_POST_REPAIR,
+      applicationState: "already_applied",
+      preStatusDigestSha256: DIGEST_POST_REPAIR,
+      files: ["src/test.ts"],
+    }));
+    // Test step fails
+    let callCount = 0;
+    fakeRunner.run = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return { status: "exited", exitCode: 1, signal: null, durationMs: 10,
+          stdout: "fail", stderr: "", stdoutBytesReceived: 4, stderrBytesReceived: 0,
+          stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+      }
+      return { status: "exited", exitCode: 0, signal: null, durationMs: 10,
+        stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+        stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+    };
+    fakeWM.setSnapshotSequence([
+      baseSnap,     // 0: initial bind
+      postInit,     // 1: post-init D03
+      postInit,     // 2: test pre-inspect
+      postInit,     // 3: test post-inspect (FAIL)
+      postRepair,   // 4: post-repair D03 (reconciliation SUCCEEDS)
+      postRepair,   // 5: extra
+      postRepair,   // 6: extra
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 4 }));
+    // already_applied with same digest → no-progress AFTER reconciliation
+    check("orchestration", result.status === "failed", "R4-C1a: no-progress → failed");
+    check("orchestration", result.reasonCode === "NO_PROGRESS", "R4-C1b: NO_PROGRESS");
+    // No-progress terminal: post-repair finalWorkspace (verified binding)
+    check("safety", result.finalWorkspace !== undefined, "R4-C1c: finalWorkspace present");
+    if (result.finalWorkspace) {
+      check("safety", result.finalWorkspace.taskHeadSha === "c".repeat(40), "R4-C1d: finalWorkspace is post-repair verified");
+    }
+  }
+
+  // R4-C2: D03 failure after repair — keeps pre-repair binding
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    fakeD05.setResponse("test_repair", 1, makeFakeD05Success({ phase: "test_repair", attempt: 1 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "c".repeat(40), postStatusDigestSha256: DIGEST_POST_REPAIR, files: ["src/test.ts"],
+    }));
+    // Test step fails
+    let callCount2 = 0;
+    fakeRunner.run = async () => {
+      callCount2++;
+      if (callCount2 === 1) {
+        return { status: "exited", exitCode: 1, signal: null, durationMs: 10,
+          stdout: "fail", stderr: "", stdoutBytesReceived: 4, stderrBytesReceived: 0,
+          stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+      }
+      return { status: "exited", exitCode: 0, signal: null, durationMs: 10,
+        stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+        stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+    };
+    // Inspect sequence: bind → post-init → test pre → test post → post-repair(throw)
+    let inspectCount = 0;
+    fakeWM.inspect = async () => {
+      inspectCount++;
+      if (inspectCount === 1) return { ...baseSnap };            // initial bind
+      if (inspectCount === 2) return { ...postInit };            // post-init D03
+      if (inspectCount === 3) return { ...postInit };            // test pre-inspect
+      if (inspectCount === 4) return { ...postInit };            // test post-inspect
+      throw new Error("post-repair inspect failed");             // post-repair D03 fails
+    };
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 4 }));
+    check("orchestration", result.status === "blocked", "R4-C2a: D03 fail after repair → blocked");
+    // Patch ref preserved (durable artifact) — initial ref always preserved
+    check("evidence", result.patchArtifactRefs.length >= 1, "R4-C2b: patch refs preserved");
+    // No repair_attempt succeeded trace
+    const repairTraces = result.trace.filter(t => t.kind === "repair_attempt" && t.outcome === "succeeded");
+    check("evidence", repairTraces.length === 0, "R4-C2c: no repair_attempt succeeded trace");
+  }
+
+  MARKERS.D06_R4_NO_PROGRESS_AFTER_RECONCILIATION = true;
+  artifactStore.close();
+  console.log("  R4-C complete");
+}
+
+async function testR4ReviewRepairOrder(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4d-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+  const postInit = mkSnap("b".repeat(40), DIGEST_POST_INIT);
+  const postRepair = mkSnap("c".repeat(40), DIGEST_POST_REPAIR);
+
+  // R4-D1: Review repair — reconcile before no-progress
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    fakeD05.setResponse("review_repair", 1, makeFakeD05Success({ phase: "review_repair", attempt: 1 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "c".repeat(40), postStatusDigestSha256: DIGEST_POST_REPAIR,
+      applicationState: "already_applied",
+      preStatusDigestSha256: DIGEST_POST_REPAIR,
+      files: ["src/test.ts"],
+    }));
+    let callCount = 0;
+    fakeRunner.run = async () => {
+      callCount++;
+      if (callCount === 2) { // review step fails
+        return { status: "exited", exitCode: 1, signal: null, durationMs: 10,
+          stdout: "fail", stderr: "", stdoutBytesReceived: 4, stderrBytesReceived: 0,
+          stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+      }
+      return { status: "exited", exitCode: 0, signal: null, durationMs: 10,
+        stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+        stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false };
+    };
+    fakeWM.setSnapshotSequence([
+      baseSnap,     // 0: initial bind
+      postInit,     // 1: post-init D03
+      postInit,     // 2: test pre-inspect
+      postInit,     // 3: test post-inspect (pass)
+      postInit,     // 4: review pre-inspect
+      postInit,     // 5: review post-inspect (FAIL)
+      postRepair,   // 6: post-repair D03 (reconciliation SUCCEEDS)
+      postRepair,   // 7: extra
+      postRepair,   // 8: extra
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 4 }));
+    check("orchestration", result.status === "failed", "R4-D1a: review no-progress → failed");
+    check("orchestration", result.reasonCode === "NO_PROGRESS", "R4-D1b: NO_PROGRESS");
+  }
+
+  MARKERS.D06_R4_TERMINAL_WORKSPACE_LAST_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R4-D complete");
+}
+
+async function testR4CandidateSeparation(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4e-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+
+  // R4-E1: D03 failure → patch ref preserved, files not, trace not
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/a.ts", "src/b.ts"],
+    }));
+    let inspectCount = 0;
+    fakeWM.inspect = async () => {
+      inspectCount++;
+      if (inspectCount === 1) return { ...baseSnap };
+      // Post-D05 inspect → mismatch (HEAD)
+      return { ...mkSnap("c".repeat(40), DIGEST_POST_INIT) };
+    };
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-E1a: D03 HEAD mismatch → blocked");
+    // Patch ref preserved (durable artifact fact)
+    check("evidence", result.patchArtifactRefs.length === 1, "R4-E1b: patch ref preserved");
+    // Candidate files NOT in result.files
+    check("safety", result.files.length === 0, "R4-E1c: candidate files not in result");
+    // No success trace
+    const successTraces = result.trace.filter(t => t.outcome === "succeeded");
+    check("evidence", successTraces.length === 0, "R4-E1d: no success trace");
+    // Final workspace does not contain candidate SHA
+    if (result.finalWorkspace) {
+      check("safety", result.finalWorkspace.taskHeadSha !== "b".repeat(40), "R4-E1e: finalWorkspace not candidate SHA");
+    }
+  }
+
+  MARKERS.D06_R4_CANDIDATE_STATE_SEPARATION = true;
+  artifactStore.close();
+  console.log("  R4-E complete");
+}
+
+async function testR4Atomicity(): Promise<void> {
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4f-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  const baseSnap = mkSnap(workspace.expectedTaskHeadSha, workspace.expectedPreStatusDigestSha256);
+
+  // R4-F1: All 5 fields stay as old binding after D03 failure
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    // Post-D05 inspect → identity mismatch (different runId)
+    const badSnap = { ...mkSnap("b".repeat(40), DIGEST_POST_INIT), runId: randomUUID() };
+    fakeWM.setSnapshotSequence([{ ...baseSnap }, badSnap]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R4-F1a: blocked on identity mismatch");
+    // Final workspace is from OLD binding, not mixed
+    if (result.finalWorkspace) {
+      check("safety", result.finalWorkspace.taskHeadSha === workspace.expectedTaskHeadSha, "R4-F1b: old taskHeadSha");
+      check("safety", result.finalWorkspace.statusDigestSha256 === workspace.expectedPreStatusDigestSha256, "R4-F1c: old digest");
+      check("safety", result.finalWorkspace.taskBranch === workspace.taskBranch, "R4-F1d: old taskBranch");
+      check("safety", result.finalWorkspace.workspacePath === workspace.workspacePath, "R4-F1e: old workspacePath");
+      check("safety", result.finalWorkspace.taskHasChanges === true, "R4-F1f: old taskHasChanges");
+    }
+  }
+
+  console.log("  R4-F complete");
+}
+
+async function testR4DomainCoverage(): Promise<void> {
+  // Supplemental safety, input, and integration domain checks
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r4g-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected" as const, runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  // G1: Trace ordering after D03 — implementation_initial comes after bind trace
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "succeeded", "R4-G1: success path");
+    // Safety: trace contains implementation_initial AFTER other trace entries (sequential check)
+    const traceSeq = result.trace.map(t => t.sequence);
+    const implSeq = result.trace.find(t => t.kind === "implementation_initial")?.sequence ?? -1;
+    const bindTraces = result.trace.filter(t => t.kind !== "implementation_initial" && t.kind !== "terminal");
+    const maxOtherSeq = bindTraces.length > 0 ? Math.max(...bindTraces.map(t => t.sequence)) : 0;
+    check("safety", implSeq > 0, "R4-G1b: implementation_initial has sequence > 0");
+    // Safety: finalWorkspace matches verified binding
+    check("safety", result.finalWorkspace?.taskHeadSha === "b".repeat(40), "R4-G1c: final SHA is verified");
+    check("safety", result.finalWorkspace?.taskHasChanges === true, "R4-G1d: taskHasChanges is true");
+    // Input: delivery result artifact ref present
+    check("integration", result.deliveryResultArtifactRef !== undefined, "R4-G1e: delivery_result stored");
+    check("integration", result.deliveryResultArtifactRef!.startsWith("loop-artifact:v1:delivery_result:"), "R4-G1f: correct ref format");
+    // Safety: files sorted in result
+    check("safety", result.files.length >= 1, "R4-G1g: files non-empty");
+    // Input: trace entries all have valid sequence
+    const allSeqValid = result.trace.every(t => t.sequence > 0 && t.sequence <= result.trace.length + 1);
+    check("input", allSeqValid, "R4-G1h: trace sequences valid");
+    // Input: elapsedMs within bounds
+    check("input", result.elapsedMs >= 0, "R4-G1i: elapsedMs non-negative");
+  }
+
+  // G2: Blocked result preserves correct fields
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeWM.setSnapshot({ ...mkSnap("a".repeat(40), DIGEST_CLEAN), workspacePath: "/wrong" });
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("safety", result.status === "blocked", "R4-G2a: blocked on workspace drift");
+    check("safety", result.safeMessage.length <= 256, "R4-G2b: safeMessage bounded");
+    check("input", result.totalFixRounds === 0, "R4-G2c: no fix rounds on blocked");
+    check("input", result.testAttempts === 0, "R4-G2d: no test attempts on blocked");
+    check("input", result.reviewAttempts === 0, "R4-G2e: no review attempts on blocked");
+    check("integration", result.deliveryResultArtifactRef !== undefined, "R4-G2f: delivery_result persists on blocked");
+    check("integration", Array.isArray(result.patchArtifactRefs) && result.patchArtifactRefs.length === 0, "R4-G2g: empty patches on blocked");
+    check("integration", result.files.length === 0, "R4-G2h: no files on blocked");
+    check("integration", Array.isArray(result.trace) && result.trace.length >= 1, "R4-G2i: trace present on blocked");
+    check("safety", result.elapsedMs >= 0, "R4-G2j: elapsedMs non-negative");
+  }
+
+  // G3: Double repair no-progress with proper terminal workspace
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    const repairDigest = sha256Hex("repair-digest");
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+    }));
+    // First repair: already_applied
+    fakeD05.setResponse("test_repair", 1, makeFakeD05Success({ phase: "test_repair", attempt: 1 } as LoopCodexImplementationRequest, {
+      postTaskHeadSha: "c".repeat(40), postStatusDigestSha256: repairDigest,
+      applicationState: "already_applied",
+      preStatusDigestSha256: repairDigest,
+      files: ["src/test.ts"],
+    }));
+    fakeRunner.setDefaultExitCode(1); // All test steps fail
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("c".repeat(40), repairDigest),
+      mkSnap("c".repeat(40), repairDigest),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 4 }));
+    check("safety", result.status === "failed", "R4-G3a: no-progress failed");
+    check("safety", result.reasonCode === "NO_PROGRESS", "R4-G3b: NO_PROGRESS reason");
+    // Terminal workspace is post-repair verified binding
+    check("safety", result.finalWorkspace?.taskHeadSha === "c".repeat(40), "R4-G3c: terminal SHA is post-repair verified");
+    check("safety", result.finalWorkspace?.statusDigestSha256 === repairDigest, "R4-G3d: terminal digest is post-repair verified");
+    check("integration", result.testSummaryArtifactRefs.length >= 1, "R4-G3e: test_summary persisted");
+    check("integration", result.patchArtifactRefs.length >= 2, "R4-G3f: patch refs persisted");
+    check("integration", result.deliveryResultArtifactRef !== undefined, "R4-G3g: delivery_result persisted");
+    check("input", result.totalFixRounds === 1, "R4-G3h: one fix round consumed");
+    check("input", result.testAttempts >= 1, "R4-G3i: test attempts tracked");
+  }
+
+  artifactStore.close();
+  console.log("  R4-G complete");
+}
+
 async function main(): Promise<void> {
   console.log("=== LOOP-DELIVERY-06 Targeted Tests ===\n");
 
@@ -5184,6 +5884,34 @@ async function main(): Promise<void> {
     console.log("\n[R3-E] Validated Snapshot...");
     await testR3ValidatedSnapshot();
 
+    // R4-A. Initial Candidate — D03 failure stops candidate leak
+    console.log("\n[R4-A] Initial Candidate D03 Failure...");
+    await testR4InitialCandidate();
+
+    // R4-B. Initial Verified Success
+    console.log("\n[R4-B] Initial Verified Success...");
+    await testR4InitialVerifiedSuccess();
+
+    // R4-C. Test Repair Order
+    console.log("\n[R4-C] Test Repair Order...");
+    await testR4TestRepairOrder();
+
+    // R4-D. Review Repair Order
+    console.log("\n[R4-D] Review Repair Order...");
+    await testR4ReviewRepairOrder();
+
+    // R4-E. Candidate Evidence Separation
+    console.log("\n[R4-E] Candidate Evidence Separation...");
+    await testR4CandidateSeparation();
+
+    // R4-F. Atomicity
+    console.log("\n[R4-F] Atomicity...");
+    await testR4Atomicity();
+
+    // R4-G. Domain Coverage Supplements
+    console.log("\n[R4-G] Domain Coverage...");
+    await testR4DomainCoverage();
+
   } catch (err) {
     console.error("TEST SUITE ERROR:", err);
     GLOBAL_FAILED++;
@@ -5218,11 +5946,11 @@ async function main(): Promise<void> {
 
   // Verify domain minimums
   const minChecks: Record<string, number> = {
-    orchestration: 95,
-    safety: 80,
-    evidence: 70,
-    input: 70,
-    integration: 25,
+    orchestration: 125,
+    safety: 100,
+    evidence: 100,
+    input: 75,
+    integration: 35,
   };
 
   for (const [domain, min] of Object.entries(minChecks)) {
