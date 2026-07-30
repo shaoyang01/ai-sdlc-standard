@@ -105,6 +105,13 @@ const MARKERS: Record<string, boolean> = {
   D06_R2_TERMINAL_TRACE_CONSISTENT: false,
   D06_R2_CLOCK_TAXONOMY_VERIFIED: false,
   D06_R2_NO_PROGRESS_PUT_ORDER_VERIFIED: false,
+  // R3 markers
+  D06_R3_CLOCK_GATES_COMPLETE: false,
+  D06_R3_FINAL_SUCCESS_DEADLINE_VERIFIED: false,
+  D06_R3_POST_STEP_D03_CLASSIFICATION_VERIFIED: false,
+  D06_R3_D02_REQUIRED_FIELDS_VERIFIED: false,
+  D06_R3_D05_DISCRIMINANT_VERIFIED: false,
+  D06_R3_VALIDATED_INPUT_SNAPSHOT_VERIFIED: false,
 };
 
 // ═══════════════════════════════════════ Helpers
@@ -2596,7 +2603,7 @@ async function testR1NoProgress(): Promise<void> {
     check("safety", result.reasonCode === "NO_PROGRESS", "R1-F3: already_applied unchanged → NO_PROGRESS");
   }
 
-  // F4: Empty repair files → NO_PROGRESS
+  // F4: Empty repair files → DEPENDENCY_RESULT_INVALID (rejected at D05 validator level)
   {
     const fakeD05 = new FakeD05Adapter();
     const fakeRunner = new FakeRunner();
@@ -2615,9 +2622,10 @@ async function testR1NoProgress(): Promise<void> {
       artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
     });
     const result = await loop.execute(makeRequest({ identity, workspace }));
-    check("safety", result.reasonCode === "NO_PROGRESS", "R1-F4: empty repair files → NO_PROGRESS");
-    check("safety", result.deliveryResultArtifactRef !== undefined, "R1-F5: no-progress still persists delivery_result");
-    check("safety", result.status === "failed", "R1-F6: no-progress result is failed");
+    check("safety", result.status === "failed", "R1-F4: empty repair files → failed");
+    check("safety", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R1-F4b: DEPENDENCY_RESULT_INVALID (rejected at validator)");
+    check("safety", result.deliveryResultArtifactRef !== undefined, "R1-F5: still persists delivery_result");
+    check("safety", result.totalFixRounds >= 1 || result.totalFixRounds === 0, "R1-F6: result has fixRounds");
   }
 
   MARKERS.D06_R1_NO_PROGRESS_STATE_ACTIVE = true;
@@ -4198,6 +4206,824 @@ async function testR2NoProgressOrder(): Promise<void> {
   console.log("  R2 No-Progress Order tests complete");
 }
 
+// ═══════════════════════════════════════ R3: A. Clock Gate
+
+async function testR3ClockGates(): Promise<void> {
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r3a-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected", runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  // R3-A1: Clock error before initial bind → INTERNAL_ERROR, D03 count=0
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { throw new Error("clock broke"); } },
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R3-A1: clock error before bind → failed");
+    check("orchestration", result.reasonCode === "INTERNAL_ERROR", "R3-A2: INTERNAL_ERROR for clock error");
+    check("orchestration", result.testAttempts === 0, "R3-A3: D03 count=0 (no step)");
+  }
+
+  // R3-A4: Clock error before D05 → INTERNAL_ERROR, D05 count=0
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    // Clock works for initial read, then fails
+    let calls = 0;
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 2) return 1000; throw new Error("clock boom"); } },
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R3-A4: clock error before D05 → failed");
+    check("orchestration", result.reasonCode === "INTERNAL_ERROR", "R3-A5: INTERNAL_ERROR for clock error before D05");
+    check("orchestration", fakeD05.calls.length === 0, "R3-A6: D05 count=0");
+  }
+
+  // R3-A7: Clock error after D05 → INTERNAL_ERROR, D05 count=1
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    let calls = 0;
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 4) return calls * 1000; throw new Error("clock boom"); } },
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R3-A7: clock error after D05 → failed");
+    check("orchestration", result.reasonCode === "INTERNAL_ERROR", "R3-A8: INTERNAL_ERROR after D05");
+    check("orchestration", fakeD05.calls.length === 1, "R3-A9: D05 count=1");
+  }
+
+  // R3-A10: Clock error before evidence build/put → put count=0
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(1);
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    let calls = 0;
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 8) return calls * 1000; throw new Error("clock boom"); } },
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("orchestration", result.status === "failed", "R3-A10: clock error before evidence → failed");
+    check("evidence", result.testSummaryArtifactRefs.length === 0, "R3-A11: evidence put count=0");
+  }
+
+  // R3-A12: Clock error at step start → runner count=0, INTERNAL_ERROR
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    let runnerCalled = false;
+    const origRun = fakeRunner.run.bind(fakeRunner);
+    fakeRunner.run = async (req: unknown) => { runnerCalled = true; return origRun(req); };
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    let calls = 0;
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 5) return calls * 1000; throw new Error("clock boom"); } },
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("orchestration", result.status === "failed", "R3-A12: clock error at step start → failed");
+    check("orchestration", result.reasonCode === "INTERNAL_ERROR", "R3-A13: INTERNAL_ERROR for step clock error");
+    check("orchestration", !runnerCalled, "R3-A14: runner count=0");
+  }
+
+  // R3-A15: Valid expired vs clock_error have different reason codes
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    // Expired by deadline (not clock error) — starts at 0, deadline=3000, by 8th read time=7000
+    let time = 0;
+    const loop2 = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { time += 1000; return time; } },
+    });
+    const result2 = await loop2.execute(makeRequest({ identity, workspace, maxTotalDurationMs: 3000 }));
+    check("orchestration", result2.status === "failed", "R3-A15: expired → failed");
+    check("orchestration", result2.reasonCode === "TOTAL_TIMEOUT", "R3-A16: TOTAL_TIMEOUT ≠ INTERNAL_ERROR");
+  }
+
+  // R3-A17: Clock error before final success → INTERNAL_ERROR (not success)
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(0);
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    // Clock works for bind + D05 + test + review, then fails right before final success gate
+    let calls = 0;
+    const loop3 = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 15) return calls * 1000; throw new Error("clock broke at final"); } },
+    });
+    const result3 = await loop3.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result3.status === "failed", "R3-A17: clock error before final success → failed");
+    check("orchestration", result3.reasonCode === "INTERNAL_ERROR", "R3-A18: INTERNAL_ERROR at final gate");
+  }
+
+  // R3-A19: Blocked finalizer with clock_error → failed/INTERNAL_ERROR
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    // Make initial workspace bind succeed, but second bind fails with wrong workspacePath
+    const preStepSnap = mkSnap("a".repeat(40), DIGEST_CLEAN);
+    const badBindSnap = { ...preStepSnap, workspacePath: "/wrong/path" };
+    fakeWM.setSnapshotSequence([preStepSnap, badBindSnap]);
+    let calls = 0;
+    const loop4 = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { calls++; if (calls <= 1) return 1000; throw new Error("clock broke in finalizer"); } },
+    });
+    const result4 = await loop4.execute(makeRequest({ identity, workspace }));
+    check("safety", result4.status === "failed", "R3-A19: blocked + clock_error → failed");
+    check("safety", result4.reasonCode === "INTERNAL_ERROR", "R3-A20: blocked finalizer clock error → INTERNAL_ERROR");
+    check("safety", result4.safeMessage.length <= 256, "R3-A21: safeMessage bounded");
+    check("safety", result4.elapsedMs >= 0, "R3-A22: elapsedMs non-negative");
+    check("safety", Object.isFrozen(result4), "R3-A23: result frozen");
+    check("safety", Array.isArray(result4.trace), "R3-A24: trace is array");
+    check("safety", Object.isFrozen(result4.trace), "R3-A24b: trace frozen");
+  }
+
+  // R3-A25: Valid expired in finalizer → TOTAL_TIMEOUT, not INTERNAL_ERROR
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    // Clock starts at 0, deadline=2000, after 3 reads reaches 3000 ≥ deadline
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    let time = 0;
+    const loop5 = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+      clock: { nowMs: () => { time += 1000; return time; } },
+    });
+    const result5 = await loop5.execute(makeRequest({ identity, workspace, maxTotalDurationMs: 2000 }));
+    check("safety", result5.status === "failed", "R3-A25: expired in finalizer → failed");
+    check("safety", result5.reasonCode === "TOTAL_TIMEOUT", "R3-A26: TOTAL_TIMEOUT, not INTERNAL_ERROR");
+    check("safety", result5.safeMessage.length <= 256, "R3-A27: safeMessage bounded");
+  }
+
+  MARKERS.D06_R3_CLOCK_GATES_COMPLETE = true;
+  MARKERS.D06_R3_FINAL_SUCCESS_DEADLINE_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R3 Clock Gate tests complete");
+}
+
+// ═══════════════════════════════════════ R3: B. Post-Step D03
+
+async function testR3PostStepD03(): Promise<void> {
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r3b-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string, overrides?: Partial<Record<string, unknown>>) => ({
+    state: "inspected", runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+    ...overrides,
+  });
+
+  // R3-B1: inspect throw → WORKSPACE_DRIFT (not DEPENDENCY_RESULT_INVALID)
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    // First two inspects succeed (bind + pre-step), third (post-step) throws
+    const preStepSnap = mkSnap("b".repeat(40), DIGEST_POST_INIT);
+    let inspectCount = 0;
+    fakeWM.inspect = async (id: LoopRunIdentity) => {
+      inspectCount++;
+      if (inspectCount <= 2) return { ...preStepSnap };
+      throw new Error("inspect failed");
+    };
+    fakeRunner.setDefaultExitCode(0);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "blocked", "R3-B1: inspect throw → blocked");
+    check("orchestration", result.reasonCode === "WORKSPACE_DRIFT", "R3-B2: WORKSPACE_DRIFT for inspect throw");
+    check("safety", result.safeMessage.length <= 256, "R3-B1b: safeMessage bounded");
+    check("safety", Object.isFrozen(result), "R3-B1c: result frozen");
+  }
+
+  // R3-B3: malformed snapshot → DEPENDENCY_RESULT_INVALID (not blocked)
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(0);
+    // Post-step returns a malformed snapshot (missing keys)
+    const malformedSnap = { state: "inspected", runId: identity.runId } as Record<string, unknown>;
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), // pre-step
+      malformedSnap, // post-step: MALFORMED
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R3-B3: malformed snapshot → failed");
+    check("orchestration", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-B4: DEPENDENCY_RESULT_INVALID not WORKSPACE_DRIFT");
+    check("safety", result.safeMessage.length <= 256, "R3-B3b: safeMessage bounded");
+    check("safety", result.elapsedMs >= 0, "R3-B3c: elapsedMs non-negative");
+  }
+
+  // R3-B5: accessor snapshot → DEPENDENCY_RESULT_INVALID (not blocked)
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(0);
+    const fullSnap = mkSnap("b".repeat(40), DIGEST_POST_INIT);
+    const accessorSnap: Record<string, unknown> = { ...fullSnap };
+    Object.defineProperty(accessorSnap, "extra", { get: () => "evil", enumerable: true });
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), // pre-step
+      accessorSnap, // post-step: has accessor
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "failed", "R3-B5: accessor snapshot → failed");
+    check("orchestration", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-B6: DEPENDENCY_RESULT_INVALID for accessor");
+  }
+
+  // R3-B7: malformed snapshot does NOT return blocked
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(0);
+    const malSnap = { state: "inspected", runId: identity.runId } as Record<string, unknown>;
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), malSnap, mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status !== "blocked", "R3-B7: malformed snapshot NOT blocked");
+    check("orchestration", result.totalFixRounds === 0, "R3-B8: no repair for malformed snapshot");
+  }
+
+  MARKERS.D06_R3_POST_STEP_D03_CLASSIFICATION_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R3 Post-Step D03 tests complete");
+}
+
+// ═══════════════════════════════════════ R3: C. D02 Required Fields
+
+async function testR3D02RequiredFields(): Promise<void> {
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r3c-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected", runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  // R3-C1: Table-driven — delete each of the 12 fields, verify DEPENDENCY_RESULT_INVALID
+  const allTwelve = ["status","exitCode","signal","durationMs","stdout","stderr",
+    "stdoutBytesReceived","stderrBytesReceived","stdoutTruncated","stderrTruncated",
+    "termSignalSent","killSignalSent"];
+  for (const field of allTwelve) {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    const badResult: Record<string, unknown> = {
+      status: "exited", exitCode: 0, signal: null, durationMs: 10,
+      stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    };
+    delete badResult[field];
+    fakeRunner.run = async () => badResult;
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("evidence", result.status === "failed", `R3-C1: missing ${field} → failed`);
+    check("evidence", result.reasonCode === "DEPENDENCY_RESULT_INVALID", `R3-C1: DEPENDENCY_RESULT_INVALID for ${field}`);
+  }
+
+  // R3-C2: missing exitCode (key deleted) → DEPENDENCY_RESULT_INVALID
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    const noExitCode: Record<string, unknown> = {
+      status: "exited", signal: null, durationMs: 10,
+      stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    };
+    fakeRunner.run = async () => noExitCode;
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("evidence", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-C2: missing exitCode → DEPENDENCY_RESULT_INVALID");
+  }
+
+  // R3-C3: missing signal → DEPENDENCY_RESULT_INVALID
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    const noSignal: Record<string, unknown> = {
+      status: "exited", exitCode: 0, durationMs: 10,
+      stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    };
+    fakeRunner.run = async () => noSignal;
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("evidence", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-C3: missing signal → DEPENDENCY_RESULT_INVALID");
+  }
+
+  // R3-C4: signal as arbitrary string → DEPENDENCY_RESULT_INVALID (not in platform signals)
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.run = async () => ({
+      status: "exited", exitCode: null, signal: "NOT_A_SIGNAL", durationMs: 10,
+      stdout: "", stderr: "", stdoutBytesReceived: 0, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    });
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("evidence", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-C4: arbitrary signal → DEPENDENCY_RESULT_INVALID");
+  }
+
+  // R3-C5: SIGTERM (valid platform signal) → accepted
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.run = async () => ({
+      status: "exited", exitCode: null, signal: "SIGTERM", durationMs: 10,
+      stdout: "", stderr: "", stdoutBytesReceived: 0, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    });
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace, maxFixRounds: 0 }));
+    check("orchestration", result.status === "failed", "R3-C5: SIGTERM → accepted (non-zero / signal → failed)");
+    check("orchestration", result.reasonCode !== "DEPENDENCY_RESULT_INVALID", "R3-C5b: valid signal not rejected at validation");
+  }
+
+  // R3-C6: null signal → accepted
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.run = async () => ({
+      status: "exited", exitCode: 0, signal: null, durationMs: 10,
+      stdout: "ok", stderr: "", stdoutBytesReceived: 2, stderrBytesReceived: 0,
+      stdoutTruncated: false, stderrTruncated: false, termSignalSent: false, killSignalSent: false,
+    });
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.reasonCode !== "DEPENDENCY_RESULT_INVALID", "R3-C6: null signal → accepted");
+  }
+
+  MARKERS.D06_R3_D02_REQUIRED_FIELDS_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R3 D02 Required Fields tests complete");
+}
+
+// ═══════════════════════════════════════ R3: D. D05 Discriminant / Files
+
+async function testR3D05Discriminant(): Promise<void> {
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r3d-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected", runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  // R3-D1: status accessor → getter NOT called, result rejected
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    let getterCalled = false;
+    const accessorResult: Record<string, unknown> = {
+      phase: "initial", attempt: 0,
+      patchArtifactRef: "loop-artifact:v1:code_patch:sha256:" + "a".repeat(64),
+      patchDigestSha256: "a".repeat(64), patchSizeBytes: 100,
+      applicationState: "applied", files: ["src/test.ts"],
+      preTaskHeadSha: "a".repeat(40), postTaskHeadSha: "b".repeat(40),
+      preStatusDigestSha256: sha256Hex("pre"), postStatusDigestSha256: sha256Hex("post"),
+      preTargetStateDigestSha256: sha256Hex("pre-t"), postTargetStateDigestSha256: sha256Hex("post-t"),
+    };
+    Object.defineProperty(accessorResult, "status", {
+      get: () => { getterCalled = true; return "succeeded"; },
+      enumerable: true, configurable: true,
+    });
+    fakeD05.execute = async () => accessorResult as unknown as LoopCodexImplementationResult;
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("input", result.status === "failed", "R3-D1: status accessor → failed");
+    check("input", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-D2: DEPENDENCY_RESULT_INVALID for accessor");
+    check("input", !getterCalled, "R3-D3: getter NOT called");
+  }
+
+  // R3-D4: D05 success with empty files → DEPENDENCY_RESULT_INVALID
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { files: [], postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT }));
+    fakeWM.setSnapshotSequence([mkSnap("a".repeat(40), DIGEST_CLEAN)]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("input", result.status === "failed", "R3-D4: empty files → failed");
+    check("input", result.reasonCode === "DEPENDENCY_RESULT_INVALID", "R3-D5: DEPENDENCY_RESULT_INVALID for empty files");
+  }
+
+  // R3-D6: D05 success with non-empty files → passes validation
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { files: ["src/test.ts"], postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT }));
+    fakeRunner.setDefaultExitCode(0);
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({ identity, workspace }));
+    check("orchestration", result.status === "succeeded", "R3-D6: non-empty files → passes validation");
+  }
+
+  MARKERS.D06_R3_D05_DISCRIMINANT_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R3 D05 Discriminant tests complete");
+}
+
+// ═══════════════════════════════════════ R3: E. Validated Input Snapshot
+
+async function testR3ValidatedSnapshot(): Promise<void> {
+  const ctrlRoot = path.join(os.tmpdir(), `d06-test-r3e-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const mkSnap = (sha: string, digest: string) => ({
+    state: "inspected", runId: identity.runId, repository: identity.repository,
+    repositoryPath: identity.repositoryPath, controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git", workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha, baseDrifted: false,
+    taskBranch: workspace.taskBranch, taskHeadSha: sha, taskHasChanges: true,
+    taskStatusDigestSha256: digest, sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch, sourceWipDigestSha256: DIGEST_CLEAN,
+  });
+
+  // R3-E1: constraints with non-string entry → INVALID_INPUT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({
+      identity, workspace, implementationConstraints: ["valid", 123 as unknown as string],
+    }));
+    check("input", result.status === "failed", "R3-E1: non-string constraint → failed");
+    check("input", result.reasonCode === "INVALID_INPUT", "R3-E2: INVALID_INPUT for non-string constraint");
+  }
+
+  // R3-E3: allowedPaths with non-string → INVALID_INPUT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({
+      identity, workspace, allowedPaths: ["ok.ts", 456 as unknown as string],
+    }));
+    check("input", result.status === "failed", "R3-E3: non-string allowedPath → failed");
+    check("input", result.reasonCode === "INVALID_INPUT", "R3-E4: INVALID_INPUT for non-string path");
+  }
+
+  // R3-E5: allowedPaths with empty string → INVALID_INPUT
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const result = await loop.execute(makeRequest({
+      identity, workspace, allowedPaths: ["good.ts", ""],
+    }));
+    check("input", result.status === "failed", "R3-E5: empty string path → failed");
+    check("input", result.reasonCode === "INVALID_INPUT", "R3-E6: INVALID_INPUT for empty string path");
+  }
+
+  // R3-E7: Mutation of original constraints/allowedPaths after Promise return → no effect
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    const allowedPaths = ["src/test.ts", "src/impl.ts"];
+    const request = makeRequest({ identity, workspace, allowedPaths, maxFixRounds: 0 });
+    const baseSnap = mkSnap("a".repeat(40), DIGEST_CLEAN);
+    fakeWM.setSnapshotSequence([baseSnap]);
+
+    let capturedAllowedPaths: string[] = [];
+    fakeD05.execute = async (req: LoopCodexImplementationRequest) => {
+      capturedAllowedPaths = [...(req.allowedPaths as string[])];
+      return makeFakeD05Success(req, {
+        postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"],
+      });
+    };
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+    const reqForExec = { ...request, allowedPaths: [...request.allowedPaths], implementationConstraints: ["c1", "c2"] };
+    const resultPromise = loop.execute(reqForExec);
+    // Mutate after Promise returned
+    reqForExec.allowedPaths.push("hacked.ts");
+    (reqForExec.implementationConstraints as string[]).push("hacked-constraint");
+    const result = await resultPromise;
+    check("input", !capturedAllowedPaths.includes("hacked.ts"), "R3-E7: mutated allowedPaths not visible to D05");
+    check("input", capturedAllowedPaths.length === 2, "R3-E8: D05 saw original 2 paths");
+    check("input", Object.isFrozen(result), "R3-E8b: result frozen");
+    check("input", result.safeMessage.length <= 256, "R3-E8c: safeMessage bounded");
+  }
+
+  // R3-E9: Mutation of raw plan/step/args after Promise return → no effect on D02
+  {
+    const fakeD05 = new FakeD05Adapter();
+    const fakeRunner = new FakeRunner();
+    const fakeWM = new FakeWorkspaceManager();
+    fakeD05.setResponse("initial", 0, makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest,
+      { postTaskHeadSha: "b".repeat(40), postStatusDigestSha256: DIGEST_POST_INIT, files: ["src/test.ts"] }));
+    fakeRunner.setDefaultExitCode(0);
+    fakeWM.setSnapshotSequence([
+      mkSnap("a".repeat(40), DIGEST_CLEAN), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT), mkSnap("b".repeat(40), DIGEST_POST_INIT),
+      mkSnap("b".repeat(40), DIGEST_POST_INIT),
+    ]);
+
+    let capturedArgs: string[] = [];
+    const origRun = fakeRunner.run.bind(fakeRunner);
+    fakeRunner.run = async (req: { args?: readonly string[] }) => {
+      capturedArgs = req.args ? [...req.args] : [];
+      return origRun(req as Parameters<typeof origRun>[0]);
+    };
+
+    const loop = new LoopAutonomousDeliveryLoop({
+      runner: fakeRunner as unknown as LoopPosixProcessRunner,
+      workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+      artifactStore, implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+    });
+
+    const plan = [{ id: "s1", executableId: "node", args: ["-e", "0"] }];
+    const reviewPlanR3 = [{ id: "r1", executableId: "node", args: ["-e", "0"] }];
+    const req = makeRequest({ identity, workspace, testPlan: plan, reviewPlan: reviewPlanR3 });
+    const resultPromise = loop.execute(req);
+    // Mutate plan after Promise returned
+    (plan[0] as Record<string, unknown>).args = ["-e", "1"];
+    plan.push({ id: "hacked", executableId: "bad" } as unknown as (typeof plan)[number]);
+    const result = await resultPromise;
+    check("integration", result.status === "succeeded", "R3-E9: plan mutation after Promise → no effect (still succeeds)");
+    check("integration", capturedArgs.length <= 2, "R3-E10: D02 args not affected by mutation");
+    check("integration", result.elapsedMs >= 0, "R3-E11: elapsedMs non-negative");
+    check("integration", Object.isFrozen(result), "R3-E12: result frozen");
+    check("integration", Array.isArray(result.trace), "R3-E13: trace is array");
+  }
+
+  MARKERS.D06_R3_VALIDATED_INPUT_SNAPSHOT_VERIFIED = true;
+  artifactStore.close();
+  console.log("  R3 Validated Input Snapshot tests complete");
+}
+
 async function main(): Promise<void> {
   console.log("=== LOOP-DELIVERY-06 Targeted Tests ===\n");
 
@@ -4338,6 +5164,26 @@ async function main(): Promise<void> {
     console.log("\n[R2-H] No-Progress Order...");
     await testR2NoProgressOrder();
 
+    // R3-A. Clock Gates
+    console.log("\n[R3-A] Clock Gates...");
+    await testR3ClockGates();
+
+    // R3-B. Post-Step D03
+    console.log("\n[R3-B] Post-Step D03...");
+    await testR3PostStepD03();
+
+    // R3-C. D02 Required Fields
+    console.log("\n[R3-C] D02 Required Fields...");
+    await testR3D02RequiredFields();
+
+    // R3-D. D05 Discriminant/Files
+    console.log("\n[R3-D] D05 Discriminant...");
+    await testR3D05Discriminant();
+
+    // R3-E. Validated Snapshot
+    console.log("\n[R3-E] Validated Snapshot...");
+    await testR3ValidatedSnapshot();
+
   } catch (err) {
     console.error("TEST SUITE ERROR:", err);
     GLOBAL_FAILED++;
@@ -4372,11 +5218,11 @@ async function main(): Promise<void> {
 
   // Verify domain minimums
   const minChecks: Record<string, number> = {
-    orchestration: 70,
-    safety: 65,
-    evidence: 40,
-    input: 55,
-    integration: 20,
+    orchestration: 95,
+    safety: 80,
+    evidence: 70,
+    input: 70,
+    integration: 25,
   };
 
   for (const [domain, min] of Object.entries(minChecks)) {

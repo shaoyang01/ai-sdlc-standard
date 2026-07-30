@@ -11,6 +11,7 @@
 // Terminal contract: succeeded / failed / blocked.
 
 import { createHash } from "node:crypto";
+import * as os from "node:os";
 import type { LoopRunIdentity } from "./loop-executor-types";
 import {
   LoopPosixProcessRunnerError,
@@ -253,7 +254,26 @@ const D05_CANONICAL_ERROR_CODES = new Set<string>([
   "INTERNAL_ERROR",
 ]);
 
-// Canonical D04 cause codes (from LoopPatchApplicationErrorCode)
+// Canonical platform signals (from os.constants.signals)
+const PLATFORM_SIGNALS: Set<string> = (() => {
+  const sigs = new Set<string>();
+  try {
+    const signals = (os.constants as Record<string, unknown>).signals;
+    if (signals && typeof signals === "object") {
+      // Collect keys (signal names like SIGTERM, SIGKILL, etc.)
+      for (const k of Object.keys(signals as Record<string, unknown>)) {
+        if (typeof k === "string" && k.startsWith("SIG") && k.length >= 4 && k.length <= 15) {
+          sigs.add(k);
+        }
+      }
+    }
+  } catch {
+    // Fallback: common POSIX signals
+    const fallback = ["SIGABRT","SIGALRM","SIGBUS","SIGCHLD","SIGCONT","SIGFPE","SIGHUP","SIGILL","SIGINT","SIGKILL","SIGPIPE","SIGQUIT","SIGSEGV","SIGSTOP","SIGTERM","SIGTRAP","SIGTSTP","SIGTTIN","SIGTTOU","SIGUSR1","SIGUSR2","SIGSYS","SIGURG","SIGVTALRM","SIGXCPU","SIGXFSZ","SIGWINCH","SIGINFO"];
+    for (const s of fallback) sigs.add(s);
+  }
+  return sigs;
+})();
 const D04_CANONICAL_CAUSE_CODES = new Set<string>([
   "INVALID_INPUT",
   "PATCH_TOO_LARGE",
@@ -584,12 +604,25 @@ export class LoopAutonomousDeliveryLoop {
       if (!Array.isArray(req.implementationConstraints)) {
         return this._validationFailure("failed", "INVALID_INPUT", "invalid implementationConstraints");
       }
-      implementationConstraints = req.implementationConstraints as readonly string[];
+      // Per-item string validation
+      for (let i = 0; i < req.implementationConstraints.length; i++) {
+        if (typeof req.implementationConstraints[i] !== "string") {
+          return this._validationFailure("failed", "INVALID_INPUT", `implementationConstraints[${i}] not a string`);
+        }
+      }
+      implementationConstraints = freeze([...req.implementationConstraints as string[]]) as unknown as readonly string[];
     }
 
     // Validate allowedPaths
     if (!Array.isArray(req.allowedPaths) || req.allowedPaths.length === 0) {
       return this._validationFailure("failed", "INVALID_INPUT", "invalid allowedPaths");
+    }
+    // Per-item string validation (must be non-empty strings)
+    for (let i = 0; i < req.allowedPaths.length; i++) {
+      const p = req.allowedPaths[i];
+      if (typeof p !== "string" || p.length === 0) {
+        return this._validationFailure("failed", "INVALID_INPUT", `allowedPaths[${i}] not a non-empty string`);
+      }
     }
     const allowedPaths: readonly string[] = freeze([...req.allowedPaths as string[]]);
 
@@ -654,8 +687,12 @@ export class LoopAutonomousDeliveryLoop {
     const startMs = clockResult.nowMs;
     const state = createState(maxFixRounds, maxTotalDurationMs, startMs);
 
-    // Check deadline at start
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline at start (tri-state gate)
+    const startDeadlineCheck = this._checkDeadline(state);
+    if (startDeadlineCheck.status === "clock_error") {
+      return this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before start");
+    }
+    if (startDeadlineCheck.status === "expired") {
       return this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before start");
     }
 
@@ -678,20 +715,9 @@ export class LoopAutonomousDeliveryLoop {
       : undefined;
     const frozenAllowedPaths = deepFreeze([...allowedPaths]) as unknown as readonly string[];
 
-    // Deep-freeze plans (each step and args)
-    const frozenTestPlan = deepFreeze(
-      testPlan.map((s) => ({
-        ...s,
-        args: s.args ? [...s.args] : undefined,
-      })),
-    ) as unknown as readonly LoopDeliveryCommandStep[];
-
-    const frozenReviewPlan = deepFreeze(
-      reviewPlan.map((s) => ({
-        ...s,
-        args: s.args ? [...s.args] : undefined,
-      })),
-    ) as unknown as readonly LoopDeliveryCommandStep[];
+    // Use validated plans directly — they are already frozen, validated, and defensively copied
+    const frozenTestPlan = validatedTestPlan;
+    const frozenReviewPlan = validatedReviewPlan;
 
     // ═══════════════════════════════════════ Workspace Binding (initial)
     const initBindResult = await this._bindWorkspace(
@@ -967,9 +993,34 @@ export class LoopAutonomousDeliveryLoop {
     );
 
     for (const step of plan) {
-      // Check deadline before each step
-      const deadlineCheck = this._checkDeadlineBeforeStep(state);
-      if (deadlineCheck) {
+      // Check deadline before each step (tri-state gate)
+      const stepDeadlineCheck = this._checkDeadline(state);
+      if (stepDeadlineCheck.status === "clock_error") {
+        return {
+          failed: true,
+          failure: {
+            stepId: step.id,
+            reasonCode: "INTERNAL_ERROR",
+            reasonMessage: "clock error before step",
+            repairable: false,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
+            outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
+            workspaceBefore: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: state.currentTaskHeadSha,
+              status_digest_sha256: state.currentStatusDigestSha256,
+            },
+            workspaceAfter: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: state.currentTaskHeadSha,
+              status_digest_sha256: state.currentStatusDigestSha256,
+            },
+          },
+        };
+      }
+      if (stepDeadlineCheck.status === "expired") {
         return {
           failed: true,
           failure: {
@@ -1148,9 +1199,27 @@ export class LoopAutonomousDeliveryLoop {
         const postValidation = validateWorkspaceSnapshot(rawPostSnap);
         if (!postValidation.ok) {
           return {
-            blocked: true,
-            blockedResult: await this._finalizeTerminal(state, "blocked", "WORKSPACE_DRIFT",
-              "invalid workspace snapshot after step"),
+            failed: true,
+            failure: {
+              stepId: step.id,
+              reasonCode: "DEPENDENCY_RESULT_INVALID",
+              reasonMessage: "invalid workspace snapshot after step",
+              repairable: false,
+              exitCode: null, signal: null, durationMs: 0,
+              stdoutTruncated: false, stderrTruncated: false,
+              stdout: "", stderr: "",
+              outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
+              workspaceBefore: {
+                task_branch: workspace.taskBranch,
+                task_head_sha: state.currentTaskHeadSha,
+                status_digest_sha256: state.currentStatusDigestSha256,
+              },
+              workspaceAfter: {
+                task_branch: workspace.taskBranch,
+                task_head_sha: state.currentTaskHeadSha,
+                status_digest_sha256: state.currentStatusDigestSha256,
+              },
+            },
           };
         }
         postSnapshot = postValidation.value;
@@ -1409,8 +1478,15 @@ export class LoopAutonomousDeliveryLoop {
     | { status: "blocked" | "failed"; result: LoopAutonomousDeliveryResult }
     | { status: "continue"; result: LoopCodexImplementationSuccess }
   > {
-    // Check deadline before D05
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline before D05 (tri-state gate)
+    const d05PreCheck = this._checkDeadline(state);
+    if (d05PreCheck.status === "clock_error") {
+      return {
+        status: "failed",
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before D05"),
+      };
+    }
+    if (d05PreCheck.status === "expired") {
       return {
         status: "failed",
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before D05"),
@@ -1452,8 +1528,15 @@ export class LoopAutonomousDeliveryLoop {
       };
     }
 
-    // Check deadline after D05
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline after D05 (tri-state gate)
+    const d05PostCheck = this._checkDeadline(state);
+    if (d05PostCheck.status === "clock_error") {
+      return {
+        status: "failed",
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error after D05"),
+      };
+    }
+    if (d05PostCheck.status === "expired") {
       return {
         status: "failed",
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded after D05"),
@@ -1516,8 +1599,15 @@ export class LoopAutonomousDeliveryLoop {
     | { ok: true; artifactRef: string; evidenceDigest: string }
     | { ok: false; result: LoopAutonomousDeliveryResult }
   > {
-    // Check deadline before evidence
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline before evidence (tri-state gate)
+    const evPreCheck = this._checkDeadline(state);
+    if (evPreCheck.status === "clock_error") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before evidence"),
+      };
+    }
+    if (evPreCheck.status === "expired") {
       return {
         ok: false,
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before evidence"),
@@ -1632,8 +1722,15 @@ export class LoopAutonomousDeliveryLoop {
       failure.workspaceAfter.status_digest_sha256,
     );
 
-    // Check deadline after evidence
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline after evidence (tri-state gate)
+    const evPostCheck = this._checkDeadline(state);
+    if (evPostCheck.status === "clock_error") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error after evidence"),
+      };
+    }
+    if (evPostCheck.status === "expired") {
       return {
         ok: false,
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded after evidence"),
@@ -1655,6 +1752,15 @@ export class LoopAutonomousDeliveryLoop {
     allowedPaths: readonly string[],
     state: InternalState,
   ): Promise<LoopAutonomousDeliveryResult> {
+    // ── Gate 1: Check deadline before final inspect ──
+    const preFinalCheck = this._checkDeadline(state);
+    if (preFinalCheck.status === "clock_error") {
+      return await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before final inspect");
+    }
+    if (preFinalCheck.status === "expired") {
+      return await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before final inspect");
+    }
+
     // Final workspace binding
     let finalSnapshot: LoopGitWorkspaceSnapshot;
     try {
@@ -1716,6 +1822,15 @@ export class LoopAutonomousDeliveryLoop {
       taskHasChanges: finalSnapshot.taskHasChanges,
     };
 
+    // ── Gate 2: Check deadline after final inspect, before returning success ──
+    const postFinalCheck = this._checkDeadline(state);
+    if (postFinalCheck.status === "clock_error") {
+      return await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error after final inspect");
+    }
+    if (postFinalCheck.status === "expired") {
+      return await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded after final inspect");
+    }
+
     return await this._finalizeTerminal(state, "succeeded", "DELIVERY_SUCCEEDED",
       "delivery completed successfully", undefined, finalWorkspace);
   }
@@ -1751,15 +1866,6 @@ export class LoopAutonomousDeliveryLoop {
     }
     const remainingMs = state.deadlineMs - nowMs;
     return { status: "active", nowMs, remainingMs };
-  }
-
-  private _isDeadlineExceeded(state: InternalState): boolean {
-    const check = this._checkDeadline(state);
-    return check.status === "expired";
-  }
-
-  private _checkDeadlineBeforeStep(state: InternalState): boolean {
-    return this._isDeadlineExceeded(state);
   }
 
   /**
@@ -1838,8 +1944,8 @@ export class LoopAutonomousDeliveryLoop {
       // Clock error in finalizer: use last known clock, set INTERNAL_ERROR
       nowMs = state.lastClockMs;
       elapsedMs = Math.max(0, nowMs - state.startMs);
-      // Override to INTERNAL_ERROR if clock failed
-      if (status === "succeeded" || (status === "failed" && reasonCode !== "INTERNAL_ERROR")) {
+      // Override to INTERNAL_ERROR if clock failed — covers succeeded, blocked, and non-INTERNAL_ERROR failed
+      if (status !== "failed" || reasonCode !== "INTERNAL_ERROR") {
         status = "failed";
         reasonCode = "INTERNAL_ERROR";
         safeMsg = "clock error in finalizer";
@@ -1951,7 +2057,15 @@ export class LoopAutonomousDeliveryLoop {
     workspace: LoopCodexImplementationWorkspace,
     state: InternalState,
   ): Promise<{ ok: true } | { ok: false; result: LoopAutonomousDeliveryResult }> {
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline before bind (tri-state gate)
+    const bindCheck = this._checkDeadline(state);
+    if (bindCheck.status === "clock_error") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before bind"),
+      };
+    }
+    if (bindCheck.status === "expired") {
       return {
         ok: false,
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before bind"),
@@ -2006,7 +2120,15 @@ export class LoopAutonomousDeliveryLoop {
     expectedPostTaskHeadSha: string,
     expectedPostStatusDigestSha256: string,
   ): Promise<{ ok: true } | { ok: false; result: LoopAutonomousDeliveryResult }> {
-    if (this._isDeadlineExceeded(state)) {
+    // Check deadline post-D05 (tri-state gate)
+    const postD05Check = this._checkDeadline(state);
+    if (postD05Check.status === "clock_error") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error post-D05"),
+      };
+    }
+    if (postD05Check.status === "expired") {
       return {
         ok: false,
         result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded post-D05"),
@@ -2499,22 +2621,34 @@ function validateRunnerResult(
     return { ok: false, reason: (e as Error).message };
   }
 
+  // ── All 12 own data properties MUST be present (hasOwnProperty check) ──
+  for (const key of RUNNER_RESULT_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(r, key)) {
+      return { ok: false, reason: `missing required field: ${key}` };
+    }
+  }
+
   // status: only "exited" or "timed_out"
   if (r.status !== "exited" && r.status !== "timed_out") {
     return { ok: false, reason: "invalid status" };
   }
 
-  // exitCode: safe integer or null
-  if (r.exitCode !== null && r.exitCode !== undefined) {
-    if (typeof r.exitCode !== "number" || !Number.isSafeInteger(r.exitCode)) {
+  // exitCode: safe integer or null (MUST be own property, not undefined)
+  const exitCodeRaw = r.exitCode;
+  if (exitCodeRaw !== null) {
+    if (exitCodeRaw === undefined || typeof exitCodeRaw !== "number" || !Number.isSafeInteger(exitCodeRaw)) {
       return { ok: false, reason: "invalid exitCode" };
     }
   }
 
-  // signal: null or canonical signal string
-  if (r.signal !== null && r.signal !== undefined) {
-    if (typeof r.signal !== "string") {
+  // signal: null or canonical platform signal string (MUST be own property, not undefined)
+  const signalRaw = r.signal;
+  if (signalRaw !== null) {
+    if (signalRaw === undefined || typeof signalRaw !== "string") {
       return { ok: false, reason: "invalid signal" };
+    }
+    if (!PLATFORM_SIGNALS.has(signalRaw)) {
+      return { ok: false, reason: `signal not in platform canonical set: ${signalRaw}` };
     }
   }
 
@@ -2602,13 +2736,42 @@ function validateD05Result(
     return { ok: false, reason: "D05 has bad prototype" };
   }
 
-  const r = result as Record<string, unknown>;
+  // ── Discriminant safety: scan status descriptor BEFORE reading value ──
+  let ownKeys: Array<string | symbol>;
+  try {
+    ownKeys = Reflect.ownKeys(result) as Array<string | symbol>;
+  } catch {
+    return { ok: false, reason: "D05 ownKeys threw" };
+  }
+  for (const k of ownKeys) {
+    if (typeof k === "symbol") return { ok: false, reason: "D05 has symbol key" };
+    if (k === "__proto__") return { ok: false, reason: "D05 has __proto__ key" };
+  }
 
-  if (r.status !== "succeeded" && r.status !== "failed") {
+  // Validate status descriptor (must be data property, not accessor)
+  let statusDesc: PropertyDescriptor;
+  try {
+    statusDesc = Object.getOwnPropertyDescriptor(result, "status")!;
+  } catch {
+    return { ok: false, reason: "D05 getDescriptor threw" };
+  }
+  if (!statusDesc) {
+    return { ok: false, reason: "D05 missing status descriptor" };
+  }
+  if ("get" in statusDesc || "set" in statusDesc) {
+    return { ok: false, reason: "D05 status is accessor" };
+  }
+  if (!("value" in statusDesc)) {
+    return { ok: false, reason: "D05 status no value" };
+  }
+
+  const statusValue = statusDesc.value;
+
+  if (statusValue !== "succeeded" && statusValue !== "failed") {
     return { ok: false, reason: "D05 invalid status" };
   }
 
-  if (r.status === "succeeded") {
+  if (statusValue === "succeeded") {
     // Scan for allowed fields only
     let s: Record<string, unknown>;
     try {
@@ -2647,9 +2810,12 @@ function validateD05Result(
       return { ok: false, reason: "D05 applicationState invalid" };
     }
 
-    // files: unique, trimmed string array (may be empty — no-progress check handles that)
+    // files: unique, trimmed string array (must be non-empty)
     if (!Array.isArray(s.files)) {
       return { ok: false, reason: "D05 files not array" };
+    }
+    if (s.files.length < 1) {
+      return { ok: false, reason: "D05 files empty" };
     }
     const seenFiles = new Set<string>();
     for (const f of s.files) {
