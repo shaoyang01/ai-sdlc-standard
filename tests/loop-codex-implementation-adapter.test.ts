@@ -1,4 +1,4 @@
-// LOOP Codex Implementation Adapter — Targeted Tests (R1)
+// LOOP Codex Implementation Adapter — Targeted Tests (R3)
 // ========================================================
 // Real LoopArtifactStore, LoopGitWorkspaceManager, LoopPatchApplicationManager.
 // Fake/Capturing D02 Codex runner — no real Codex or network calls.
@@ -17,6 +17,15 @@
 //   - Portable Source invariance via process.cwd()
 //   - Fully isolated fixture Git env
 //
+// R3 additions:
+//   - Unified domain assertion helper (evidenceOk) with per-domain counters
+//   - Prompt isolation marker bound to actual assertions
+//   - Failure taxonomy marker bound to actual assertions
+//   - Hostile Git assertions made real (no constant-true)
+//   - Workspace no-side-effect: Codex/put/apply all verified zero
+//   - Pure shouldFailTargetedRun final gate
+//   - Count markers for auditability
+//
 // Stable summary markers:
 //   D05_TARGETED_SUMMARY total=<n> passed=<n> failed=0
 //   D05_TEMP_CLEANUP_COMPLETE true
@@ -24,6 +33,13 @@
 //   D05_GIT_FIXTURE_ENV_ISOLATED true
 //   D05_PROMPT_STRUCTURAL_ISOLATION true
 //   D05_FAILURE_TAXONOMY_COMPLETE true
+//   D05_ADAPTER_INPUT_CONTRACT_ALIGNED true
+//   D05_MARKER_COMPUTATION_DERIVED true
+//   D05_PROMPT_ISOLATION_COUNTS checks=<n> failures=0
+//   D05_FAILURE_TAXONOMY_COUNTS checks=<n> failures=0
+//   D05_ADAPTER_CONTRACT_COUNTS checks=<n> failures=0
+//   D05_GIT_ENV_COUNTS checks=<n> failures=0
+//   D05_MARKER_DERIVATION_COUNTS checks=<n> failures=0
 
 import {
   mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync,
@@ -72,6 +88,45 @@ function ok(c: boolean, m: string): void {
   if (c) { passed++; console.log(`  ✓ ${m}`); }
   else { failed++; console.error(`  ✗ ${m}`); }
 }
+
+// ── R3: Unified domain assertion helper ──
+type EvidenceDomain =
+  | "prompt_isolation"
+  | "failure_taxonomy"
+  | "adapter_contract"
+  | "git_environment"
+  | "marker_derivation";
+
+interface EvidenceCounter {
+  checks: number;
+  failures: number;
+}
+
+const evidenceCounters: Record<EvidenceDomain, EvidenceCounter> = {
+  prompt_isolation: { checks: 0, failures: 0 },
+  failure_taxonomy: { checks: 0, failures: 0 },
+  adapter_contract: { checks: 0, failures: 0 },
+  git_environment: { checks: 0, failures: 0 },
+  marker_derivation: { checks: 0, failures: 0 },
+};
+
+function evidenceOk(
+  domain: EvidenceDomain,
+  condition: boolean,
+  message: string,
+): void {
+  const counter = evidenceCounters[domain];
+  counter.checks++;
+  if (!condition) counter.failures++;
+  ok(condition, message);
+}
+
+// R3: Minimum check thresholds for each domain gate
+const MIN_PROMPT_ISOLATION_CHECKS = 20;
+const MIN_FAILURE_TAXONOMY_CHECKS = 20;
+const MIN_ADAPTER_CONTRACT_CHECKS = 25;
+const MIN_GIT_ENV_CHECKS = 10;
+const MIN_MARKER_DERIVATION_CHECKS = 6;
 
 function sha256Hex(d: string | Uint8Array): string {
   return createHash("sha256").update(d).digest("hex");
@@ -150,6 +205,9 @@ const APPROVED_FIXTURE_GIT_ENV_KEYS = new Set([
   "GIT_TERMINAL_PROMPT", "LC_ALL", "LANG", "PATH", "GIT_TEMPLATE_DIR",
 ]);
 
+// R3: Snapshot of the actual env passed to execFileSync, for hostile Git verification
+let lastFixtureGitEnvSnapshot: Readonly<Record<string, string>> | null = null;
+
 function fixtureGit(args: string[], cwd: string, env: FixtureGitEnv): string {
   // R2: Minimal explicit env — never inherit process.env
   const fullEnv: Record<string, string> = {
@@ -165,6 +223,11 @@ function fixtureGit(args: string[], cwd: string, env: FixtureGitEnv): string {
   if (env.GIT_TEMPLATE_DIR) {
     fullEnv.GIT_TEMPLATE_DIR = env.GIT_TEMPLATE_DIR;
   }
+
+  // R3: Capture frozen snapshot of actual env for test verification
+  const snapshot: Record<string, string> = { ...fullEnv };
+  Object.freeze(snapshot);
+  lastFixtureGitEnvSnapshot = snapshot;
 
   // R2: Verify env keys exactly equal approved set
   fixtureGitCommandCount++;
@@ -331,19 +394,6 @@ let fixtureCount = 0;
 let fixtureGitCommandCount = 0;
 let fixtureGitIsolationCheckCount = 0;
 let fixtureGitIsolationFailureCount = 0;
-let hostileGitEnvironmentTestPassed = false;
-
-let promptIsolationCheckCount = 0;
-let promptIsolationFailureCount = 0;
-
-let failureTaxonomyCheckCount = 0;
-let failureTaxonomyFailureCount = 0;
-
-let adapterInputContractCheckCount = 0;
-let adapterInputContractFailureCount = 0;
-
-let markerDerivationCheckCount = 0;
-let markerDerivationFailureCount = 0;
 
 function makeFixture(): FixtureSetup {
   const tr = realpathSync(mkdtempSync(join(tmpdir(), "d05-")));
@@ -519,23 +569,23 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
 
   // A2.1 Dynamic JSON payload is parseable
   const r1 = buildLoopCodexPrompt(baseInput);
-  ok(r1.ok, "A2.1 prompt ok");
+  evidenceOk("prompt_isolation", r1.ok, "A2.1 prompt ok");
   if (r1.ok) {
     const openIdx = r1.prompt.indexOf(JSON_BOUNDARY_OPEN);
     const closeIdx = r1.prompt.indexOf(JSON_BOUNDARY_CLOSE);
-    ok(openIdx !== -1 && closeIdx !== -1, "A2.1 has JSON boundaries");
+    evidenceOk("prompt_isolation", openIdx !== -1 && closeIdx !== -1, "A2.1 has JSON boundaries");
     const jsonText = r1.prompt.slice(
       openIdx + JSON_BOUNDARY_OPEN.length + 1,
       closeIdx - 1,
     );
     let payload: Record<string, unknown>;
     try { payload = JSON.parse(jsonText); } catch { payload = null as unknown as Record<string, unknown>; }
-    ok(payload !== null, "A2.1 JSON parseable");
+    evidenceOk("prompt_isolation", payload !== null, "A2.1 JSON parseable");
     if (payload) {
-      ok(payload.schema === "loop-codex-implementation-request-v1", "A2.1 schema correct");
-      ok(payload.phase === "initial", "A2.1 phase correct");
-      ok(payload.attempt === 0, "A2.1 attempt correct");
-      ok(payload.requirement_id === "REQ-001", "A2.1 requirement_id correct");
+      evidenceOk("prompt_isolation", payload.schema === "loop-codex-implementation-request-v1", "A2.1 schema correct");
+      evidenceOk("prompt_isolation", payload.phase === "initial", "A2.1 phase correct");
+      evidenceOk("prompt_isolation", payload.attempt === 0, "A2.1 attempt correct");
+      evidenceOk("prompt_isolation", payload.requirement_id === "REQ-001", "A2.1 requirement_id correct");
     }
   }
 
@@ -551,7 +601,7 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
     const phaseIdx = jsonText.indexOf('"phase"');
     const attemptIdx = jsonText.indexOf('"attempt"');
     const reqIdIdx = jsonText.indexOf('"requirement_id"');
-    ok(schemaIdx < phaseIdx && phaseIdx < attemptIdx && attemptIdx < reqIdIdx, "A2.2 property order stable");
+    evidenceOk("prompt_isolation", schemaIdx < phaseIdx && phaseIdx < attemptIdx && attemptIdx < reqIdIdx, "A2.2 property order stable");
   }
 
   // A2.3 Requirement with newlines is JSON-escaped
@@ -559,14 +609,14 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
     ...baseInput,
     requirement: "Line 1\nLine 2\nLine 3",
   });
-  ok(rMulti.ok, "A2.3 multi-line requirement ok");
+  evidenceOk("prompt_isolation", rMulti.ok, "A2.3 multi-line requirement ok");
   if (rMulti.ok) {
-    ok(rMulti.prompt.includes("Line 1\\nLine 2\\nLine 3"), "A2.3 newlines JSON-escaped");
+    evidenceOk("prompt_isolation", rMulti.prompt.includes("Line 1\\nLine 2\\nLine 3"), "A2.3 newlines JSON-escaped");
     // Verify the raw text does NOT contain real newlines inside the JSON (except the outer JSON structure)
     const openIdx = rMulti.prompt.indexOf(JSON_BOUNDARY_OPEN);
     const closeIdx = rMulti.prompt.indexOf(JSON_BOUNDARY_CLOSE);
     const jsonText = rMulti.prompt.slice(openIdx, closeIdx);
-    ok(!jsonText.includes("\nLine 2"), "A2.3 no raw newline in JSON value");
+    evidenceOk("prompt_isolation", !jsonText.includes("\nLine 2"), "A2.3 no raw newline in JSON value");
   }
 
   // A2.4 Evidence heading text cannot generate real headings
@@ -576,16 +626,16 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
     attempt: 1,
     repairEvidenceSummary: "# Fake Heading\n## Another Section\nNormal text",
   });
-  ok(rH.ok, "A2.4 heading-like evidence ok");
+  evidenceOk("prompt_isolation", rH.ok, "A2.4 heading-like evidence ok");
   if (rH.ok) {
     // The prompt static sections should not contain the fake heading as a real markdown heading
-    ok(rH.prompt.includes('"# Fake Heading'), "A2.4 heading text is JSON-escaped as string");
+    evidenceOk("prompt_isolation", rH.prompt.includes('"# Fake Heading'), "A2.4 heading text is JSON-escaped as string");
     // Verify there's no raw "# Fake Heading" outside the JSON boundary
     const openIdx = rH.prompt.indexOf(JSON_BOUNDARY_OPEN);
     const beforeJson = rH.prompt.slice(0, openIdx);
     const afterJson = rH.prompt.slice(rH.prompt.indexOf(JSON_BOUNDARY_CLOSE) + JSON_BOUNDARY_CLOSE.length);
-    ok(!beforeJson.includes("# Fake Heading"), "A2.4 no heading before JSON");
-    ok(!afterJson.includes("# Fake Heading"), "A2.4 no heading after JSON");
+    evidenceOk("prompt_isolation", !beforeJson.includes("# Fake Heading"), "A2.4 no heading before JSON");
+    evidenceOk("prompt_isolation", !afterJson.includes("# Fake Heading"), "A2.4 no heading after JSON");
   }
 
   // A2.5 Constraint with quotes is JSON-escaped
@@ -593,9 +643,9 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
     ...baseInput,
     implementationConstraints: ['Use "strict" mode'],
   });
-  ok(rQ.ok, "A2.5 constraint with quotes ok");
+  evidenceOk("prompt_isolation", rQ.ok, "A2.5 constraint with quotes ok");
   if (rQ.ok) {
-    ok(rQ.prompt.includes('"Use \\"strict\\" mode"'), "A2.5 quotes JSON-escaped in constraint");
+    evidenceOk("prompt_isolation", rQ.prompt.includes('"Use \\"strict\\" mode"'), "A2.5 quotes JSON-escaped in constraint");
   }
 
   // A2.6 Dynamic data only within JSON boundary
@@ -604,30 +654,27 @@ console.log("\n── A2. Structured JSON Prompt (R1) ──");
     const closeIdx = r1.prompt.indexOf(JSON_BOUNDARY_CLOSE);
     const beforeJson = r1.prompt.slice(0, openIdx);
     const afterJson = r1.prompt.slice(closeIdx + JSON_BOUNDARY_CLOSE.length);
-    ok(!beforeJson.includes("REQ-001"), "A2.6 requirementId not before JSON");
-    ok(!beforeJson.includes("src/utils.ts"), "A2.6 allowed paths not before JSON");
-    ok(!afterJson.includes("REQ-001"), "A2.6 requirementId not after JSON");
+    evidenceOk("prompt_isolation", !beforeJson.includes("REQ-001"), "A2.6 requirementId not before JSON");
+    evidenceOk("prompt_isolation", !beforeJson.includes("src/utils.ts"), "A2.6 allowed paths not before JSON");
+    evidenceOk("prompt_isolation", !afterJson.includes("REQ-001"), "A2.6 requirementId not after JSON");
   }
 
   // A2.7 Dynamic fields don't appear outside JSON boundaries
   if (r1.ok) {
     const openIdx = r1.prompt.indexOf(JSON_BOUNDARY_OPEN);
     const beforeJson = r1.prompt.slice(0, openIdx);
-    ok(!beforeJson.includes("Implement a utility function"), "A2.7 requirement not before JSON");
+    evidenceOk("prompt_isolation", !beforeJson.includes("Implement a utility function"), "A2.7 requirement not before JSON");
   }
 
   // A2.8 Same input generates byte-identical prompt
   const r8a = buildLoopCodexPrompt(baseInput);
   const r8b = buildLoopCodexPrompt({ ...baseInput });
-  ok(r8a.ok && r8b.ok && r8a.prompt === r8b.prompt, "A2.8 byte-identical prompt for same input");
+  evidenceOk("prompt_isolation", r8a.ok && r8b.ok && r8a.prompt === r8b.prompt, "A2.8 byte-identical prompt for same input");
 
   // A2.9 No artifact ref in prompt
   if (r1.ok) {
-    ok(!r1.prompt.includes("loop-artifact"), "A2.9 no artifact ref in prompt");
+    evidenceOk("prompt_isolation", !r1.prompt.includes("loop-artifact"), "A2.9 no artifact ref in prompt");
   }
-
-  // R2: Record prompt isolation checks (A2.1-A2.9 + sub-checks)
-  promptIsolationCheckCount += 10;
 }
 
 // ═══════════════════════════════════════
@@ -647,27 +694,27 @@ console.log("\n── A3. Prompt Injection / Control (R1) ──");
 
   // A3.1 allowed path with LF fails
   const rA1 = buildLoopCodexPrompt({ ...baseInput, allowedPaths: ["src/a\nb.ts"] });
-  ok(!rA1.ok && (rA1 as {ok: false; reason: string}).reason === "invalid_input", "A3.1 allowedPath LF fails");
+  evidenceOk("prompt_isolation", !rA1.ok && (rA1 as {ok: false; reason: string}).reason === "invalid_input", "A3.1 allowedPath LF fails");
 
   // A3.2 allowed path with CR fails
   const rA2 = buildLoopCodexPrompt({ ...baseInput, allowedPaths: ["src/a\rb.ts"] });
-  ok(!rA2.ok && (rA2 as {ok: false; reason: string}).reason === "invalid_input", "A3.2 allowedPath CR fails");
+  evidenceOk("prompt_isolation", !rA2.ok && (rA2 as {ok: false; reason: string}).reason === "invalid_input", "A3.2 allowedPath CR fails");
 
   // A3.3 allowed path with TAB fails
   const rA3 = buildLoopCodexPrompt({ ...baseInput, allowedPaths: ["src/a\tb.ts"] });
-  ok(!rA3.ok && (rA3 as {ok: false; reason: string}).reason === "invalid_input", "A3.3 allowedPath TAB fails");
+  evidenceOk("prompt_isolation", !rA3.ok && (rA3 as {ok: false; reason: string}).reason === "invalid_input", "A3.3 allowedPath TAB fails");
 
   // A3.4 constraint with LF fails
   const rA4 = buildLoopCodexPrompt({ ...baseInput, implementationConstraints: ["line1\nline2"] });
-  ok(!rA4.ok && (rA4 as {ok: false; reason: string}).reason === "invalid_input", "A3.4 constraint LF fails");
+  evidenceOk("prompt_isolation", !rA4.ok && (rA4 as {ok: false; reason: string}).reason === "invalid_input", "A3.4 constraint LF fails");
 
   // A3.5 constraint with control characters fails
   const rA5 = buildLoopCodexPrompt({ ...baseInput, implementationConstraints: ["ctrl\x01char"] });
-  ok(!rA5.ok && (rA5 as {ok: false; reason: string}).reason === "invalid_input", "A3.5 constraint control char fails");
+  evidenceOk("prompt_isolation", !rA5.ok && (rA5 as {ok: false; reason: string}).reason === "invalid_input", "A3.5 constraint control char fails");
 
   // A3.6 design with NUL fails
   const rA6 = buildLoopCodexPrompt({ ...baseInput, designSummary: "has\x00nul" });
-  ok(!rA6.ok && (rA6 as {ok: false; reason: string}).reason === "invalid_input", "A3.6 designSummary NUL fails");
+  evidenceOk("prompt_isolation", !rA6.ok && (rA6 as {ok: false; reason: string}).reason === "invalid_input", "A3.6 designSummary NUL fails");
 
   // A3.7 evidence with illegal control chars fails
   const rA7 = buildLoopCodexPrompt({
@@ -676,38 +723,38 @@ console.log("\n── A3. Prompt Injection / Control (R1) ──");
     attempt: 1,
     repairEvidenceSummary: "bad\x01ctrl",
   });
-  ok(!rA7.ok && (rA7 as {ok: false; reason: string}).reason === "invalid_input", "A3.7 evidence control char fails");
+  evidenceOk("prompt_isolation", !rA7.ok && (rA7 as {ok: false; reason: string}).reason === "invalid_input", "A3.7 evidence control char fails");
 
   // A3.8 requirement with normal LF — JSON structure stable (should succeed)
   const rA8 = buildLoopCodexPrompt({ ...baseInput, requirement: "Line 1\nLine 2" });
-  ok(rA8.ok, "A3.8 requirement with LF succeeds");
+  evidenceOk("prompt_isolation", rA8.ok, "A3.8 requirement with LF succeeds");
   if (rA8.ok) {
-    ok(rA8.prompt.includes("Line 1\\nLine 2"), "A3.8 LF JSON-escaped, structure intact");
+    evidenceOk("prompt_isolation", rA8.prompt.includes("Line 1\\nLine 2"), "A3.8 LF JSON-escaped, structure intact");
   }
 
   // A3.9 unknown field fails
   const rA9 = buildLoopCodexPrompt({ ...baseInput, unknownField: "x" } as unknown as LoopCodexPromptInput);
-  ok(!rA9.ok && (rA9 as {ok: false; reason: string}).reason === "invalid_input", "A3.9 unknown field fails");
+  evidenceOk("prompt_isolation", !rA9.ok && (rA9 as {ok: false; reason: string}).reason === "invalid_input", "A3.9 unknown field fails");
 
   // A3.10 accessor fails
   const objA10: Record<string, unknown> = { ...baseInput };
   Object.defineProperty(objA10, "extra", { get() { return "x"; }, enumerable: true });
   const rA10 = buildLoopCodexPrompt(objA10 as unknown as LoopCodexPromptInput);
-  ok(!rA10.ok && (rA10 as {ok: false; reason: string}).reason === "invalid_input", "A3.10 accessor fails");
+  evidenceOk("prompt_isolation", !rA10.ok && (rA10 as {ok: false; reason: string}).reason === "invalid_input", "A3.10 accessor fails");
 
   // A3.11 symbol key fails
   const objA11: Record<string | symbol, unknown> = { ...baseInput };
   objA11[Symbol("bad")] = "x";
   const rA11 = buildLoopCodexPrompt(objA11 as unknown as LoopCodexPromptInput);
-  ok(!rA11.ok && (rA11 as {ok: false; reason: string}).reason === "invalid_input", "A3.11 symbol key fails");
+  evidenceOk("prompt_isolation", !rA11.ok && (rA11 as {ok: false; reason: string}).reason === "invalid_input", "A3.11 symbol key fails");
 
   // A3.12 non-plain object fails
   const rA12 = buildLoopCodexPrompt(null as unknown as LoopCodexPromptInput);
-  ok(!rA12.ok && (rA12 as {ok: false; reason: string}).reason === "invalid_input", "A3.12 null fails");
+  evidenceOk("prompt_isolation", !rA12.ok && (rA12 as {ok: false; reason: string}).reason === "invalid_input", "A3.12 null fails");
 
   // A3.13 array disguise fails
   const rA13 = buildLoopCodexPrompt([] as unknown as LoopCodexPromptInput);
-  ok(!rA13.ok && (rA13 as {ok: false; reason: string}).reason === "invalid_input", "A3.13 array fails");
+  evidenceOk("prompt_isolation", !rA13.ok && (rA13 as {ok: false; reason: string}).reason === "invalid_input", "A3.13 array fails");
 
   // A3.14 __proto__ key as own property fails
   // Use Object.create to produce an object that has __proto__ as an own key
@@ -719,10 +766,7 @@ console.log("\n── A3. Prompt Injection / Control (R1) ──");
   objA14.allowedPaths = ["src/utils.ts"];
   objA14.__proto__ = "malicious";
   const rA14 = buildLoopCodexPrompt(objA14 as unknown as LoopCodexPromptInput);
-  ok(!rA14.ok && (rA14 as {ok: false; reason: string}).reason === "invalid_input", "A3.14 __proto__ fails");
-
-  // R2: Record prompt isolation checks (A3.1-A3.14)
-  promptIsolationCheckCount += 14;
+  evidenceOk("prompt_isolation", !rA14.ok && (rA14 as {ok: false; reason: string}).reason === "invalid_input", "A3.14 __proto__ fails");
 }
 
 // ═══════════════════════════════════════
@@ -895,19 +939,19 @@ async function testFailureTaxonomy(): Promise<void> {
     // C.1 scanPlain failure → INVALID_INPUT
     {
       const r1 = await adapter.execute(null as unknown as LoopCodexImplementationRequest);
-      ok(r1.status === "failed" && r1.errorCode === "INVALID_INPUT", "C.1 null request → INVALID_INPUT");
+      evidenceOk("failure_taxonomy", r1.status === "failed" && r1.errorCode === "INVALID_INPUT", "C.1 null request → INVALID_INPUT");
     }
 
     // C.2 workspace object failure → INVALID_INPUT
     {
       const r2 = await adapter.execute({ ...baseReq, workspace: null as unknown as LoopCodexImplementationWorkspace });
-      ok(r2.status === "failed" && r2.errorCode === "INVALID_INPUT", "C.2 null workspace → INVALID_INPUT");
+      evidenceOk("failure_taxonomy", r2.status === "failed" && r2.errorCode === "INVALID_INPUT", "C.2 null workspace → INVALID_INPUT");
     }
 
     // C.3 prompt invalid reason → INVALID_INPUT
     {
       const r3 = await adapter.execute({ ...baseReq, allowedPaths: []});
-      ok(r3.status === "failed" && r3.errorCode === "INVALID_INPUT", "C.3 empty allowedPaths → INVALID_INPUT");
+      evidenceOk("failure_taxonomy", r3.status === "failed" && r3.errorCode === "INVALID_INPUT", "C.3 empty allowedPaths → INVALID_INPUT");
     }
 
     // C.4 prompt byte overflow → PROMPT_TOO_LARGE
@@ -916,7 +960,7 @@ async function testFailureTaxonomy(): Promise<void> {
         ...baseReq,
         requirement: "x".repeat(20000),
       });
-      ok(r4.status === "failed" && r4.errorCode === "PROMPT_TOO_LARGE", "C.4 oversized requirement → PROMPT_TOO_LARGE");
+      evidenceOk("failure_taxonomy", r4.status === "failed" && r4.errorCode === "PROMPT_TOO_LARGE", "C.4 oversized requirement → PROMPT_TOO_LARGE");
     }
 
     // C.5 evidence wrong kind → REPAIR_EVIDENCE_INVALID
@@ -929,14 +973,11 @@ async function testFailureTaxonomy(): Promise<void> {
         attempt: 1,
         repairEvidenceArtifactRef: reviewStored.artifactRef,
       });
-      ok(r5.status === "failed" && r5.errorCode === "REPAIR_EVIDENCE_INVALID", "C.5 wrong evidence kind → REPAIR_EVIDENCE_INVALID");
+      evidenceOk("failure_taxonomy", r5.status === "failed" && r5.errorCode === "REPAIR_EVIDENCE_INVALID", "C.5 wrong evidence kind → REPAIR_EVIDENCE_INVALID");
     }
 
     // C.6 real unexpected internal exception → INTERNAL_ERROR
     // (We don't fabricate one here — it would require corrupting internal state)
-
-    // R2: Record failure taxonomy checks (C.1-C.5)
-    failureTaxonomyCheckCount += 5;
 
     try { await wsm.cleanup(identity, { expectedTaskHeadSha: snapshot.taskHeadSha, deleteTaskBranch: true }); } catch { /* ok */ }
   } finally {
@@ -2015,224 +2056,160 @@ async function testAdapterInputContract(): Promise<void> {
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: null as unknown as string }));
-      adapterInputContractCheckCount++;
-      const ok2 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok2, "M.2 null requirement → INVALID_INPUT");
-      if (!ok2) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok2b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok2b, "M.2b no side effects for invalid requirement");
-      if (!ok2b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.2 null requirement → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.2 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.2 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.2 D04 apply not called");
     }
 
     // M.3 NUL in requirement → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "has\x00nul" }));
-      adapterInputContractCheckCount++;
-      const ok3 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok3, "M.3 NUL in requirement → INVALID_INPUT");
-      if (!ok3) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok3b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok3b, "M.3b no side effects for NUL requirement");
-      if (!ok3b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.3 NUL in requirement → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.3 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.3 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.3 D04 apply not called");
     }
 
     // M.4 C1 char in requirement → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "bad\x81char" }));
-      adapterInputContractCheckCount++;
-      const ok4 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok4, "M.4 C1 char in requirement → INVALID_INPUT");
-      if (!ok4) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok4b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok4b, "M.4b no side effects");
-      if (!ok4b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.4 C1 char in requirement → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.4 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.4 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.4 D04 apply not called");
     }
 
     // M.5 U+FFFD in requirement → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "bad\uFFFDchar" }));
-      adapterInputContractCheckCount++;
-      const ok5 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok5, "M.5 U+FFFD in requirement → INVALID_INPUT");
-      if (!ok5) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok5b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok5b, "M.5b no side effects");
-      if (!ok5b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.5 U+FFFD in requirement → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.5 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.5 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.5 D04 apply not called");
     }
 
     // M.6 Pure whitespace requirement → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "   \t  " }));
-      adapterInputContractCheckCount++;
-      const ok6 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok6, "M.6 pure whitespace requirement → INVALID_INPUT");
-      if (!ok6) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok6b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok6b, "M.6b no side effects");
-      if (!ok6b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.6 pure whitespace requirement → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.6 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.6 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.6 D04 apply not called");
     }
 
     // M.7 Oversized requirement → PROMPT_TOO_LARGE
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "x".repeat(20000) }));
-      adapterInputContractCheckCount++;
-      const ok7 = r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE";
-      ok(ok7, "M.7 oversized requirement → PROMPT_TOO_LARGE");
-      if (!ok7) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok7b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok7b, "M.7b no side effects for oversized requirement");
-      if (!ok7b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE", "M.7 oversized requirement → PROMPT_TOO_LARGE");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.7 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.7 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.7 D04 apply not called");
     }
 
     // M.9 NUL in designSummary → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ designSummary: "has\x00nul" }));
-      adapterInputContractCheckCount++;
-      const ok9 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok9, "M.9 NUL in designSummary → INVALID_INPUT");
-      if (!ok9) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok9b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok9b, "M.9b no side effects");
-      if (!ok9b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.9 NUL in designSummary → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.9 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.9 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.9 D04 apply not called");
     }
 
     // M.10 Pure whitespace designSummary → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ designSummary: "   " }));
-      adapterInputContractCheckCount++;
-      const ok10 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok10, "M.10 pure whitespace designSummary → INVALID_INPUT");
-      if (!ok10) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok10b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok10b, "M.10b no side effects");
-      if (!ok10b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.10 pure whitespace designSummary → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.10 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.10 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.10 D04 apply not called");
     }
 
     // M.12 Constraint with LF → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ implementationConstraints: ["line1\nline2"] }));
-      adapterInputContractCheckCount++;
-      const ok12 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok12, "M.12 constraint with LF → INVALID_INPUT");
-      if (!ok12) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok12b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok12b, "M.12b no side effects");
-      if (!ok12b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.12 constraint with LF → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.12 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.12 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.12 D04 apply not called");
     }
 
     // M.13 Constraint with TAB → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ implementationConstraints: ["has\ttab"] }));
-      adapterInputContractCheckCount++;
-      const ok13 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok13, "M.13 constraint with TAB → INVALID_INPUT");
-      if (!ok13) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok13b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok13b, "M.13b no side effects");
-      if (!ok13b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.13 constraint with TAB → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.13 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.13 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.13 D04 apply not called");
     }
 
     // M.14 Constraint with control char → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ implementationConstraints: ["ctrl\x01char"] }));
-      adapterInputContractCheckCount++;
-      const ok14 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok14, "M.14 constraint with control char → INVALID_INPUT");
-      if (!ok14) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok14b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok14b, "M.14b no side effects");
-      if (!ok14b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.14 constraint with control char → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.14 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.14 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.14 D04 apply not called");
     }
 
     // M.15 Oversized constraint → PROMPT_TOO_LARGE
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ implementationConstraints: ["x".repeat(3000)] }));
-      adapterInputContractCheckCount++;
-      const ok15 = r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE";
-      ok(ok15, "M.15 oversized constraint → PROMPT_TOO_LARGE");
-      if (!ok15) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok15b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok15b, "M.15b no side effects");
-      if (!ok15b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE", "M.15 oversized constraint → PROMPT_TOO_LARGE");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.15 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.15 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.15 D04 apply not called");
     }
 
     // M.16 Allowed path with space → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ allowedPaths: ["src/app .ts"] }));
-      adapterInputContractCheckCount++;
-      const ok16 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok16, "M.16 allowedPath with space → INVALID_INPUT");
-      if (!ok16) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok16b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok16b, "M.16b no side effects");
-      if (!ok16b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.16 allowedPath with space → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.16 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.16 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.16 D04 apply not called");
     }
 
     // M.17 Allowed path with LF → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ allowedPaths: ["src/a\nb.ts"] }));
-      adapterInputContractCheckCount++;
-      const ok17 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok17, "M.17 allowedPath with LF → INVALID_INPUT");
-      if (!ok17) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok17b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok17b, "M.17b no side effects");
-      if (!ok17b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.17 allowedPath with LF → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.17 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.17 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.17 D04 apply not called");
     }
 
     // M.18 Allowed path with TAB → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ allowedPaths: ["src/a\tb.ts"] }));
-      adapterInputContractCheckCount++;
-      const ok18 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok18, "M.18 allowedPath with TAB → INVALID_INPUT");
-      if (!ok18) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok18b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok18b, "M.18b no side effects");
-      if (!ok18b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.18 allowedPath with TAB → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.18 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.18 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.18 D04 apply not called");
     }
 
     // M.19 Duplicate allowedPath → INVALID_INPUT
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ allowedPaths: ["src/app.ts", "src/app.ts"] }));
-      adapterInputContractCheckCount++;
-      const ok19 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok19, "M.19 duplicate allowedPath → INVALID_INPUT");
-      if (!ok19) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok19b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok19b, "M.19b no side effects");
-      if (!ok19b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "INVALID_INPUT", "M.19 duplicate allowedPath → INVALID_INPUT");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.19 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.19 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.19 D04 apply not called");
     }
 
     // M.20 Too many allowedPaths → PROMPT_TOO_LARGE
@@ -2240,14 +2217,10 @@ async function testAdapterInputContract(): Promise<void> {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const manyPaths = Array.from({ length: 200 }, (_, i) => `src/file${i}.ts`);
       const r = await adapter.execute(makeReq({ allowedPaths: manyPaths }));
-      adapterInputContractCheckCount++;
-      const ok20 = r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE";
-      ok(ok20, "M.20 too many allowedPaths → PROMPT_TOO_LARGE");
-      if (!ok20) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok20b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok20b, "M.20b no side effects");
-      if (!ok20b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "PROMPT_TOO_LARGE", "M.20 too many allowedPaths → PROMPT_TOO_LARGE");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.20 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.20 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.20 D04 apply not called");
     }
 
     // M.21 Wrong kind evidence → REPAIR_EVIDENCE_INVALID
@@ -2259,14 +2232,10 @@ async function testAdapterInputContract(): Promise<void> {
         attempt: 1,
         repairEvidenceArtifactRef: reviewStored.artifactRef,
       }));
-      adapterInputContractCheckCount++;
-      const ok21 = r.status === "failed" && r.errorCode === "REPAIR_EVIDENCE_INVALID";
-      ok(ok21, "M.21 wrong evidence kind → REPAIR_EVIDENCE_INVALID");
-      if (!ok21) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok21b = codexCallCount === 0 && artPutCount === 0 && d04ApplyCount === 0;
-      ok(ok21b, "M.21b no side effects for wrong evidence");
-      if (!ok21b) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "failed" && r.errorCode === "REPAIR_EVIDENCE_INVALID", "M.21 wrong evidence kind → REPAIR_EVIDENCE_INVALID");
+      evidenceOk("adapter_contract", codexCallCount === 0, "M.21 Codex not called");
+      evidenceOk("adapter_contract", artPutCount === 0, "M.21 Artifact Store put not called");
+      evidenceOk("adapter_contract", d04ApplyCount === 0, "M.21 D04 apply not called");
     }
 
     // ── Now run success tests (they modify the workspace) ──
@@ -2275,56 +2244,45 @@ async function testAdapterInputContract(): Promise<void> {
     {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "Line 1\nLine 2\nLine 3" }));
-      adapterInputContractCheckCount++;
-      const ok1 = r.status === "succeeded";
-      ok(ok1, "M.1 multiline requirement succeeds");
-      if (!ok1) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", r.status === "succeeded", "M.1 multiline requirement succeeds");
 
       // R2: Verify prompt contains JSON-escaped multiline
-      adapterInputContractCheckCount++;
       const captured = countingRunner.lastRequest?.stdin;
-      const ok1b = captured !== undefined &&
-        captured instanceof Uint8Array &&
-        new TextDecoder().decode(captured).includes("Line 1\\nLine 2\\nLine 3");
-      ok(ok1b, "M.1b prompt has JSON-escaped multiline");
-      if (!ok1b) adapterInputContractFailureCount++;
+      const capturedText = captured !== undefined && captured instanceof Uint8Array
+        ? new TextDecoder().decode(captured) : "";
+      evidenceOk("adapter_contract", capturedText.includes("Line 1\\nLine 2\\nLine 3"), "M.1b prompt has JSON-escaped multiline");
 
-      adapterInputContractCheckCount++;
-      const ok1c = codexCallCount > 0;
-      ok(ok1c, "M.1c Codex was called for multiline requirement");
-      if (!ok1c) adapterInputContractFailureCount++;
+      // R3: Verify captured prompt JSON is parseable and requirement semantically correct
+      const jsonOpen = capturedText.indexOf(JSON_BOUNDARY_OPEN);
+      const jsonClose = capturedText.indexOf(JSON_BOUNDARY_CLOSE);
+      let parsedReq: Record<string, unknown> | null = null;
+      if (jsonOpen !== -1 && jsonClose !== -1) {
+        try { parsedReq = JSON.parse(capturedText.slice(jsonOpen + JSON_BOUNDARY_OPEN.length + 1, jsonClose - 1)); } catch { parsedReq = null; }
+      }
+      evidenceOk("adapter_contract", parsedReq !== null, "M.1c captured prompt JSON parseable");
+      evidenceOk("adapter_contract", parsedReq !== null && parsedReq.requirement === "Line 1\nLine 2\nLine 3", "M.1d JSON requirement semantically correct");
 
-      if (ok1) await refreshWorkspace();
+      evidenceOk("adapter_contract", codexCallCount > 0, "M.1e Codex was called for multiline requirement");
+
+      if (r.status === "succeeded") await refreshWorkspace();
     }
 
     // M.8 Multiline designSummary succeeds
     {
       codexCallCount = 0;
       const r = await adapter.execute(makeReq({ designSummary: "Summary line 1\nSummary line 2" }));
-      adapterInputContractCheckCount++;
-      const ok8 = r.status === "succeeded";
-      ok(ok8, "M.8 multiline designSummary succeeds");
-      if (!ok8) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok8b = codexCallCount > 0;
-      ok(ok8b, "M.8b Codex called with designSummary");
-      if (!ok8b) adapterInputContractFailureCount++;
-      if (ok8) await refreshWorkspace();
+      evidenceOk("adapter_contract", r.status === "succeeded", "M.8 multiline designSummary succeeds");
+      evidenceOk("adapter_contract", codexCallCount > 0, "M.8b Codex called with designSummary");
+      if (r.status === "succeeded") await refreshWorkspace();
     }
 
     // M.11 Single-line constraint succeeds
     {
       codexCallCount = 0;
       const r = await adapter.execute(makeReq({ implementationConstraints: ["Use strict mode"] }));
-      adapterInputContractCheckCount++;
-      const ok11 = r.status === "succeeded";
-      ok(ok11, "M.11 single-line constraint succeeds");
-      if (!ok11) adapterInputContractFailureCount++;
-      adapterInputContractCheckCount++;
-      const ok11b = codexCallCount > 0;
-      ok(ok11b, "M.11b Codex called with constraint");
-      if (!ok11b) adapterInputContractFailureCount++;
-      if (ok11) await refreshWorkspace();
+      evidenceOk("adapter_contract", r.status === "succeeded", "M.11 single-line constraint succeeds");
+      evidenceOk("adapter_contract", codexCallCount > 0, "M.11b Codex called with constraint");
+      if (r.status === "succeeded") await refreshWorkspace();
     }
 
     // M.22 Input not mutated by adapter
@@ -2332,10 +2290,7 @@ async function testAdapterInputContract(): Promise<void> {
       const paths = ["src/app.ts"];
       const pathsCopy = [...paths];
       await adapter.execute(makeReq({ allowedPaths: pathsCopy }));
-      adapterInputContractCheckCount++;
-      const ok22 = pathsCopy.length === 1 && pathsCopy[0] === "src/app.ts";
-      ok(ok22, "M.22 input allowedPaths not mutated");
-      if (!ok22) adapterInputContractFailureCount++;
+      evidenceOk("adapter_contract", pathsCopy.length === 1 && pathsCopy[0] === "src/app.ts", "M.22 input allowedPaths not mutated");
       await refreshWorkspace();
     }
 
@@ -2343,11 +2298,8 @@ async function testAdapterInputContract(): Promise<void> {
     {
       codexCallCount = 0;
       const r = await adapter.execute(makeReq({ requirement: "  Keep leading spaces  " }));
-      adapterInputContractCheckCount++;
-      const ok23 = r.status === "succeeded";
-      ok(ok23, "M.23 spaces in requirement → Prompt Builder handles trimming");
-      if (!ok23) adapterInputContractFailureCount++;
-      if (ok23) await refreshWorkspace();
+      evidenceOk("adapter_contract", r.status === "succeeded", "M.23 spaces in requirement → Prompt Builder handles trimming");
+      if (r.status === "succeeded") await refreshWorkspace();
     }
 
     try { await wsm.cleanup(identity, { expectedTaskHeadSha: currentHeadSha, deleteTaskBranch: true }); } catch { /* ok */ }
@@ -2402,11 +2354,18 @@ async function testWorkspaceFieldValidation(): Promise<void> {
       put(_k: string, _b: Uint8Array | string) { artPutCount++; return artifactStore.put("code_patch", Buffer.from("x")); },
     };
 
+    const countingPatchManagerN = {
+      async apply(opts: any): Promise<LoopPatchApplicationResult> {
+        d04ApplyCount++;
+        return patchManager.apply(opts);
+      },
+    };
+
     const adapter = new LoopCodexImplementationAdapter({
       runner: countingRunnerAd,
       workspaceManager: wsm,
       artifactStore: countingArtStoreAd,
-      patchApplicationManager: patchManager,
+      patchApplicationManager: countingPatchManagerN,
       codexExecutableId: "fake-codex",
     });
 
@@ -2446,14 +2405,10 @@ async function testWorkspaceFieldValidation(): Promise<void> {
     for (const [label, ws, expectedCode] of testCases) {
       codexCallCount = 0; artPutCount = 0; d04ApplyCount = 0;
       const r = await adapter.execute(baseReq(ws));
-      failureTaxonomyCheckCount++;
-      const okN = r.status === "failed" && r.errorCode === expectedCode;
-      ok(okN, `${label} → ${expectedCode}`);
-      if (!okN) failureTaxonomyFailureCount++;
-      failureTaxonomyCheckCount++;
-      const okNb = codexCallCount === 0 && artPutCount === 0;
-      ok(okNb, `${label} no side effects`);
-      if (!okNb) failureTaxonomyFailureCount++;
+      evidenceOk("failure_taxonomy", r.status === "failed" && r.errorCode === expectedCode, `${label} → ${expectedCode}`);
+      evidenceOk("failure_taxonomy", codexCallCount === 0, `${label} Codex not called`);
+      evidenceOk("failure_taxonomy", artPutCount === 0, `${label} Artifact Store put not called`);
+      evidenceOk("failure_taxonomy", d04ApplyCount === 0, `${label} D04 apply not called`);
     }
 
     try { await wsm.cleanup(identity, { expectedTaskHeadSha: snapshot.taskHeadSha, deleteTaskBranch: true }); } catch { /* ok */ }
@@ -2515,37 +2470,25 @@ async function testInternalErrorBoundary(): Promise<void> {
     // O.1 Null request → INVALID_INPUT (not INTERNAL_ERROR)
     {
       const r = await adapter.execute(null as unknown as LoopCodexImplementationRequest);
-      failureTaxonomyCheckCount++;
-      const ok1 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok1, "O.1 null request → INVALID_INPUT (not INTERNAL_ERROR)");
-      if (!ok1) failureTaxonomyFailureCount++;
+      evidenceOk("failure_taxonomy", r.status === "failed" && r.errorCode === "INVALID_INPUT", "O.1 null request → INVALID_INPUT (not INTERNAL_ERROR)");
     }
 
     // O.2 Null workspace → INVALID_INPUT (not INTERNAL_ERROR)
     {
       const r = await adapter.execute({ ...baseReq, workspace: null as unknown as LoopCodexImplementationWorkspace });
-      failureTaxonomyCheckCount++;
-      const ok2 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok2, "O.2 null workspace → INVALID_INPUT (not INTERNAL_ERROR)");
-      if (!ok2) failureTaxonomyFailureCount++;
+      evidenceOk("failure_taxonomy", r.status === "failed" && r.errorCode === "INVALID_INPUT", "O.2 null workspace → INVALID_INPUT (not INTERNAL_ERROR)");
     }
 
     // O.3 Invalid phase → INVALID_INPUT (not INTERNAL_ERROR)
     {
       const r = await adapter.execute({ ...baseReq, phase: "bogus" as LoopCodexImplementationPhase });
-      failureTaxonomyCheckCount++;
-      const ok3 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok3, "O.3 invalid phase → INVALID_INPUT (not INTERNAL_ERROR)");
-      if (!ok3) failureTaxonomyFailureCount++;
+      evidenceOk("failure_taxonomy", r.status === "failed" && r.errorCode === "INVALID_INPUT", "O.3 invalid phase → INVALID_INPUT (not INTERNAL_ERROR)");
     }
 
     // O.4 Array request → INVALID_INPUT (not INTERNAL_ERROR)
     {
       const r = await adapter.execute([] as unknown as LoopCodexImplementationRequest);
-      failureTaxonomyCheckCount++;
-      const ok4 = r.status === "failed" && r.errorCode === "INVALID_INPUT";
-      ok(ok4, "O.4 array request → INVALID_INPUT (not INTERNAL_ERROR)");
-      if (!ok4) failureTaxonomyFailureCount++;
+      evidenceOk("failure_taxonomy", r.status === "failed" && r.errorCode === "INVALID_INPUT", "O.4 array request → INVALID_INPUT (not INTERNAL_ERROR)");
     }
 
     try { await wsm.cleanup(identity, { expectedTaskHeadSha: snapshot.taskHeadSha, deleteTaskBranch: true }); } catch { /* ok */ }
@@ -2564,42 +2507,68 @@ function computeGate(checkCount: number, failureCount: number, minChecks: number
   return checkCount >= minChecks && failureCount === 0;
 }
 
+// R3: Pure final run gate — any false boolean or failed > 0 must fail the run
+interface FinalEvidenceState {
+  failed: number;
+  sourceUnchanged: boolean;
+  cleanupComplete: boolean;
+  gitFixtureEnvIsolated: boolean;
+  promptStructuralIsolation: boolean;
+  failureTaxonomyComplete: boolean;
+  adapterInputContractAligned: boolean;
+  markerComputationDerived: boolean;
+}
+
+function shouldFailTargetedRun(state: FinalEvidenceState): boolean {
+  return (
+    state.failed > 0 ||
+    !state.sourceUnchanged ||
+    !state.cleanupComplete ||
+    !state.gitFixtureEnvIsolated ||
+    !state.promptStructuralIsolation ||
+    !state.failureTaxonomyComplete ||
+    !state.adapterInputContractAligned ||
+    !state.markerComputationDerived
+  );
+}
+
 function testMarkerComputation(): void {
   // P.1 Zero checks → gate false
-  {
-    const g = computeGate(0, 0, 1);
-    markerDerivationCheckCount++;
-    const ok1 = g === false;
-    ok(ok1, "P.1 zero checks → gate false");
-    if (!ok1) markerDerivationFailureCount++;
-  }
+  evidenceOk("marker_derivation", computeGate(0, 0, 1) === false, "P.1 zero checks → gate false");
 
   // P.2 All passed, enough checks → gate true
-  {
-    const g = computeGate(5, 0, 3);
-    markerDerivationCheckCount++;
-    const ok2 = g === true;
-    ok(ok2, "P.2 all passed, checks ≥ min → gate true");
-    if (!ok2) markerDerivationFailureCount++;
-  }
+  evidenceOk("marker_derivation", computeGate(5, 0, 3) === true, "P.2 all passed, checks ≥ min → gate true");
 
   // P.3 Some failures → gate false
-  {
-    const g = computeGate(5, 2, 3);
-    markerDerivationCheckCount++;
-    const ok3 = g === false;
-    ok(ok3, "P.3 failures present → gate false");
-    if (!ok3) markerDerivationFailureCount++;
-  }
+  evidenceOk("marker_derivation", computeGate(5, 2, 3) === false, "P.3 failures present → gate false");
 
   // P.4 Not enough checks, no failures → gate false
-  {
-    const g = computeGate(2, 0, 5);
-    markerDerivationCheckCount++;
-    const ok4 = g === false;
-    ok(ok4, "P.4 insufficient checks → gate false");
-    if (!ok4) markerDerivationFailureCount++;
-  }
+  evidenceOk("marker_derivation", computeGate(2, 0, 5) === false, "P.4 insufficient checks → gate false");
+
+  // P.5 Negative / illegal counts are defended → false
+  evidenceOk("marker_derivation", computeGate(-1, 0, 1) === false, "P.5a negative check count → gate false");
+  evidenceOk("marker_derivation", computeGate(5, -1, 3) === false, "P.5b negative failure count → gate false");
+
+  // P.6 shouldFailTargetedRun: each boolean field false individually forces failure
+  const allGood: FinalEvidenceState = {
+    failed: 0,
+    sourceUnchanged: true,
+    cleanupComplete: true,
+    gitFixtureEnvIsolated: true,
+    promptStructuralIsolation: true,
+    failureTaxonomyComplete: true,
+    adapterInputContractAligned: true,
+    markerComputationDerived: true,
+  };
+  evidenceOk("marker_derivation", shouldFailTargetedRun(allGood) === false, "P.6 all good → run does not fail");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, failed: 1 }) === true, "P.6 failed>0 → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, sourceUnchanged: false }) === true, "P.6 sourceUnchanged false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, cleanupComplete: false }) === true, "P.6 cleanupComplete false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, gitFixtureEnvIsolated: false }) === true, "P.6 gitFixtureEnvIsolated false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, promptStructuralIsolation: false }) === true, "P.6 promptStructuralIsolation false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, failureTaxonomyComplete: false }) === true, "P.6 failureTaxonomyComplete false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, adapterInputContractAligned: false }) === true, "P.6 adapterInputContractAligned false → run fails");
+  evidenceOk("marker_derivation", shouldFailTargetedRun({ ...allGood, markerComputationDerived: false }) === true, "P.6 markerComputationDerived false → run fails");
 }
 
 // ═══════════════════════════════════════
@@ -2624,7 +2593,7 @@ function testGitEnvIsolation(): void {
       const allApproved = envKeys.every(k => approvedWithOptional.has(k));
       const allPresent = [...approvedWithOptional].filter(k => k !== "GIT_TEMPLATE_DIR" || env.GIT_TEMPLATE_DIR)
         .every(k => envKeys.includes(k));
-      ok(allApproved && allPresent, "Q.1 env keys exactly approved set");
+      evidenceOk("git_environment", allApproved && allPresent, "Q.1 env keys exactly approved set");
     } finally {
       try { rmSync(home, { recursive: true, force: true }); } catch {}
       try { rmSync(xdg, { recursive: true, force: true }); } catch {}
@@ -2632,76 +2601,124 @@ function testGitEnvIsolation(): void {
     }
   }
 
-  // Q.2 No process.env spread in fixtureGit
-  // (Verified by fixtureGit implementation — this test confirms the mechanism)
+  // Q.2 fixtureGit uses minimal explicit env — verified via snapshot
   {
-    ok(true, "Q.2 fixtureGit uses minimal explicit env (verified by implementation)");
+    const tr = realpathSync(mkdtempSync(join(tmpdir(), "d05-q2-")));
+    registerForCleanup(tr);
+    const home = join(tr, "home");
+    const xdg = join(tr, "xdg");
+    const td = join(tr, "git-template");
+    const rp = join(tr, "repo");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(xdg, { recursive: true });
+    mkdirSync(td, { recursive: true });
+    mkdirSync(rp, { recursive: true });
+    const gitEnv = makeFixtureGitEnv(home, xdg, td);
+    fixtureGit(["init", "-b", "main", "--template=" + td], rp, gitEnv);
+    // After fixtureGit call, lastFixtureGitEnvSnapshot must be set
+    evidenceOk("git_environment", lastFixtureGitEnvSnapshot !== null, "Q.2 env snapshot captured after fixtureGit");
+    if (lastFixtureGitEnvSnapshot) {
+      const snapKeys = Object.keys(lastFixtureGitEnvSnapshot);
+      const hostileKeys = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_SSH_COMMAND", "GIT_CEILING_DIRECTORIES"];
+      evidenceOk("git_environment", !snapKeys.some(k => hostileKeys.includes(k)), "Q.2 snapshot contains no hostile keys");
+    }
   }
 
-  // Q.3 Hostile GIT_DIR does not leak
+  // Q.3 Hostile Git env does not leak into fixtureGit
   {
     const tr = realpathSync(mkdtempSync(join(tmpdir(), "d05-hostile-")));
     registerForCleanup(tr);
+    const home = join(tr, "home");
+    const xdg = join(tr, "xdg");
+    const td = join(tr, "git-template");
+    const rp = join(tr, "repo");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(xdg, { recursive: true });
+    mkdirSync(td, { recursive: true });
+    mkdirSync(rp, { recursive: true });
+
+    const gitEnv = makeFixtureGitEnv(home, xdg, td);
+    fixtureGit(["init", "-b", "main", "--template=" + td], rp, gitEnv);
+    fixtureGit(["config", "user.name", "test"], rp, gitEnv);
+    fixtureGit(["config", "user.email", "t@t"], rp, gitEnv);
+    writeFileSync(join(rp, "file.txt"), "hello\n");
+    fixtureGit(["add", "file.txt"], rp, gitEnv);
+    fixtureGit(["commit", "-m", "init"], rp, gitEnv);
+
+    // Save original process.env values
+    const savedEnv: Record<string, string | undefined> = {};
+    const hostileVars = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+      "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+      "GIT_SSH_COMMAND", "GIT_CEILING_DIRECTORIES"];
+    for (const k of hostileVars) {
+      savedEnv[k] = process.env[k];
+    }
+
     try {
-      const home = join(tr, "home");
-      const xdg = join(tr, "xdg");
-      const td = join(tr, "git-template");
-      const rp = join(tr, "repo");
-      mkdirSync(home, { recursive: true });
-      mkdirSync(xdg, { recursive: true });
-      mkdirSync(td, { recursive: true });
-      mkdirSync(rp, { recursive: true });
+      // Set hostile values
+      process.env.GIT_DIR = "/tmp/malicious-git-dir";
+      process.env.GIT_WORK_TREE = "/tmp/malicious-work-tree";
+      process.env.GIT_INDEX_FILE = "/tmp/malicious-index";
+      process.env.GIT_OBJECT_DIRECTORY = "/tmp/malicious-objects";
+      process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = "/tmp/malicious-alt";
+      process.env.GIT_SSH_COMMAND = "evil-command";
+      process.env.GIT_CEILING_DIRECTORIES = "/tmp/malicious-ceiling";
 
-      const gitEnv = makeFixtureGitEnv(home, xdg, td);
-      fixtureGit(["init", "-b", "main", "--template=" + td], rp, gitEnv);
+      // Q.3a: fixtureGit still resolves correct toplevel
+      const topLevel = fixtureGit(["rev-parse", "--show-toplevel"], rp, gitEnv).trim();
+      evidenceOk("git_environment", topLevel === realpathSync(rp), "Q.3a git rev-parse --show-toplevel equals fixture root");
 
-      // Save original process.env values
-      const savedEnv: Record<string, string | undefined> = {};
-      const hostileVars = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
-        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_SSH_COMMAND", "GIT_CEILING_DIRECTORIES"];
-      for (const k of hostileVars) {
-        savedEnv[k] = process.env[k];
-      }
+      // Q.3b: git-dir resolves to fixture .git, not malicious
+      const gitDir = fixtureGit(["rev-parse", "--git-dir"], rp, gitEnv).trim();
+      const resolvedGitDir = gitDir.startsWith("/") ? gitDir : realpathSync(join(rp, gitDir));
+      evidenceOk("git_environment", resolvedGitDir === join(realpathSync(rp), ".git"), "Q.3b git-dir equals fixture .git");
 
-      try {
-        // Set hostile values
-        process.env.GIT_DIR = "/tmp/malicious-git-dir";
-        process.env.GIT_WORK_TREE = "/tmp/malicious-work-tree";
-        process.env.GIT_INDEX_FILE = "/tmp/malicious-index";
-        process.env.GIT_OBJECT_DIRECTORY = "/tmp/malicious-objects";
-        process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = "/tmp/malicious-alt";
-        process.env.GIT_SSH_COMMAND = "evil-command";
-        process.env.GIT_CEILING_DIRECTORIES = "/tmp/malicious-ceiling";
+      // Q.3c: git status succeeds and is empty for clean fixture
+      const statusOut = fixtureGit(["status", "--porcelain=v1"], rp, gitEnv);
+      evidenceOk("git_environment", statusOut.trim() === "", "Q.3c clean fixture status is empty");
 
-        // Run fixtureGit and verify it still works on the correct repo
-        const topLevel = fixtureGit(["rev-parse", "--show-toplevel"], rp, gitEnv).trim();
-        ok(topLevel === realpathSync(rp), "Q.3a git rev-parse works on correct fixture");
+      // Q.3d: snapshot env keys contain no hostile keys
+      const snap = lastFixtureGitEnvSnapshot;
+      evidenceOk("git_environment", snap !== null, "Q.3d snapshot available");
+      if (snap) {
+        const snapKeys = Object.keys(snap);
+        evidenceOk("git_environment", !snapKeys.includes("GIT_DIR"), "Q.3e no GIT_DIR in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_WORK_TREE"), "Q.3f no GIT_WORK_TREE in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_INDEX_FILE"), "Q.3g no GIT_INDEX_FILE in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_OBJECT_DIRECTORY"), "Q.3h no GIT_OBJECT_DIRECTORY in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_ALTERNATE_OBJECT_DIRECTORIES"), "Q.3i no GIT_ALTERNATE_OBJECT_DIRECTORIES in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_SSH_COMMAND"), "Q.3j no GIT_SSH_COMMAND in env");
+        evidenceOk("git_environment", !snapKeys.includes("GIT_CEILING_DIRECTORIES"), "Q.3k no GIT_CEILING_DIRECTORIES in env");
 
-        const gitDir = fixtureGit(["rev-parse", "--git-dir"], rp, gitEnv).trim();
-        ok(!gitDir.includes("malicious"),
-          "Q.3b git-dir is not the malicious path");
+        // Q.3l: env keys only contain approved keys
+        const approvedWithOptional = new Set(APPROVED_FIXTURE_GIT_ENV_KEYS);
+        evidenceOk("git_environment", snapKeys.every(k => approvedWithOptional.has(k)), "Q.3l env only approved keys");
 
-        const statusOut = fixtureGit(["status", "--porcelain=v1"], rp, gitEnv).trim();
-        ok(statusOut === "" || true, "Q.3c git status works on fixture");
-
-        // Verify fixtureGit env does NOT contain hostile vars
-        // (This is verified by the env key check in fixtureGit implementation)
-        ok(true, "Q.3d fixtureGit env excludes hostile vars");
-
-        hostileGitEnvironmentTestPassed = true;
-      } finally {
-        // Restore original env
-        for (const k of hostileVars) {
-          if (savedEnv[k] === undefined) {
-            delete process.env[k];
-          } else {
-            process.env[k] = savedEnv[k];
-          }
-        }
+        // Q.3m: each approved key value matches current FixtureGitEnv
+        evidenceOk("git_environment", snap.HOME === gitEnv.HOME, "Q.3m HOME matches");
+        evidenceOk("git_environment", snap.PATH === gitEnv.PATH, "Q.3n PATH matches");
+        evidenceOk("git_environment", snap.GIT_CONFIG_GLOBAL === gitEnv.GIT_CONFIG_GLOBAL, "Q.3o GIT_CONFIG_GLOBAL matches");
       }
     } finally {
-      // Cleanup handled by registry
+      // Restore original env
+      for (const k of hostileVars) {
+        if (savedEnv[k] === undefined) {
+          delete process.env[k];
+        } else {
+          process.env[k] = savedEnv[k];
+        }
+      }
+      // Q.3p: Verify restoration
+      let restoreOk = true;
+      for (const k of hostileVars) {
+        const expected = savedEnv[k];
+        const actual = process.env[k];
+        if (expected === undefined && actual !== undefined) restoreOk = false;
+        if (expected !== undefined && actual !== expected) restoreOk = false;
+      }
+      evidenceOk("git_environment", restoreOk, "Q.3p process.env restored after hostile test");
     }
   }
 }
@@ -2779,29 +2796,42 @@ async function main(): Promise<void> {
   // ── Run cleanup ──
   cleanupComplete = runCleanup();
 
-  // ── R2: Calculate marker values from real counters ──
-  // Prompt structural isolation: A2 tests verify JSON structure
+  // ── R3: Calculate marker values from unified evidence counters ──
   const promptStructuralIsolation = computeGate(
-    promptIsolationCheckCount, promptIsolationFailureCount, 1);
+    evidenceCounters.prompt_isolation.checks,
+    evidenceCounters.prompt_isolation.failures,
+    MIN_PROMPT_ISOLATION_CHECKS,
+  );
 
-  // Failure taxonomy: C + N + O tests verify error classification
   const failureTaxonomyComplete = computeGate(
-    failureTaxonomyCheckCount, failureTaxonomyFailureCount, 1);
+    evidenceCounters.failure_taxonomy.checks,
+    evidenceCounters.failure_taxonomy.failures,
+    MIN_FAILURE_TAXONOMY_CHECKS,
+  );
 
-  // Git fixture env isolation
+  const hostileGitEnvironmentTestPassed = computeGate(
+    evidenceCounters.git_environment.checks,
+    evidenceCounters.git_environment.failures,
+    MIN_GIT_ENV_CHECKS,
+  );
+
   const gitFixtureEnvIsolated =
     fixtureGitCommandCount > 0 &&
     fixtureGitIsolationCheckCount === fixtureGitCommandCount &&
     fixtureGitIsolationFailureCount === 0 &&
-    hostileGitEnvironmentTestPassed === true;
+    hostileGitEnvironmentTestPassed;
 
-  // Adapter input contract alignment
   const adapterInputContractAligned = computeGate(
-    adapterInputContractCheckCount, adapterInputContractFailureCount, 1);
+    evidenceCounters.adapter_contract.checks,
+    evidenceCounters.adapter_contract.failures,
+    MIN_ADAPTER_CONTRACT_CHECKS,
+  );
 
-  // Marker computation derivation
   const markerComputationDerived = computeGate(
-    markerDerivationCheckCount, markerDerivationFailureCount, 3);
+    evidenceCounters.marker_derivation.checks,
+    evidenceCounters.marker_derivation.failures,
+    MIN_MARKER_DERIVATION_CHECKS,
+  );
 
   // ── Output markers ──
   console.log(`\nD05_TARGETED_SUMMARY total=${passed + failed} passed=${passed} failed=${failed}`);
@@ -2812,17 +2842,25 @@ async function main(): Promise<void> {
   console.log(`D05_FAILURE_TAXONOMY_COMPLETE ${failureTaxonomyComplete}`);
   console.log(`D05_ADAPTER_INPUT_CONTRACT_ALIGNED ${adapterInputContractAligned}`);
   console.log(`D05_MARKER_COMPUTATION_DERIVED ${markerComputationDerived}`);
+  console.log(`D05_PROMPT_ISOLATION_COUNTS checks=${evidenceCounters.prompt_isolation.checks} failures=${evidenceCounters.prompt_isolation.failures}`);
+  console.log(`D05_FAILURE_TAXONOMY_COUNTS checks=${evidenceCounters.failure_taxonomy.checks} failures=${evidenceCounters.failure_taxonomy.failures}`);
+  console.log(`D05_ADAPTER_CONTRACT_COUNTS checks=${evidenceCounters.adapter_contract.checks} failures=${evidenceCounters.adapter_contract.failures}`);
+  console.log(`D05_GIT_ENV_COUNTS checks=${evidenceCounters.git_environment.checks} failures=${evidenceCounters.git_environment.failures}`);
+  console.log(`D05_MARKER_DERIVATION_COUNTS checks=${evidenceCounters.marker_derivation.checks} failures=${evidenceCounters.marker_derivation.failures}`);
 
-  // ── Exit code ──
-  // R2: Fail closed on any marker false
-  if (failed > 0 ||
-      !sourceUnchanged ||
-      !cleanupComplete ||
-      !gitFixtureEnvIsolated ||
-      !promptStructuralIsolation ||
-      !failureTaxonomyComplete ||
-      !adapterInputContractAligned ||
-      !markerComputationDerived) {
+  // ── Exit code via pure final gate ──
+  const finalEvidenceState: FinalEvidenceState = {
+    failed,
+    sourceUnchanged,
+    cleanupComplete,
+    gitFixtureEnvIsolated,
+    promptStructuralIsolation,
+    failureTaxonomyComplete,
+    adapterInputContractAligned,
+    markerComputationDerived,
+  };
+
+  if (shouldFailTargetedRun(finalEvidenceState)) {
     process.exit(1);
   }
 }
