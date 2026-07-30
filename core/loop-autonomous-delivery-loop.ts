@@ -12,7 +12,12 @@
 
 import { createHash } from "node:crypto";
 import type { LoopRunIdentity } from "./loop-executor-types";
-import type { LoopPosixProcessRunner, LoopPosixProcessResult } from "./loop-posix-process-runner";
+import {
+  LoopPosixProcessRunnerError,
+  type LoopPosixProcessRunner,
+  type LoopPosixProcessResult,
+  type LoopPosixProcessRunnerErrorCode,
+} from "./loop-posix-process-runner";
 import type { LoopGitWorkspaceManager, LoopGitWorkspaceSnapshot } from "./loop-git-workspace";
 import type { LoopArtifactStore, LoopStoredArtifact } from "./loop-artifact-store";
 import type {
@@ -22,7 +27,10 @@ import type {
   LoopCodexImplementationSuccess,
   LoopCodexImplementationFailure,
   LoopCodexImplementationWorkspace,
+  LoopCodexImplementationErrorCode,
 } from "./loop-codex-implementation-adapter";
+import type { LoopPatchApplicationErrorCode } from "./loop-patch-application";
+import { validateLoopRunIdentity } from "./loop-run-state";
 import {
   buildLoopDeliveryEvidence,
   type LoopDeliveryEvidenceInput,
@@ -194,21 +202,82 @@ const NUL = "\x00";
 const SHA40_RE = /^[0-9a-f]{40}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
-// Known cause code allowlist
-const KNOWN_CAUSE_CODES = new Set([
-  // D02 runner codes
-  "UNSUPPORTED_PLATFORM", "EXECUTABLE_NOT_ALLOWED", "EXECUTABLE_INVALID",
-  "EXECUTABLE_CHANGED", "CWD_NOT_ALLOWED", "CWD_INVALID",
-  "ENV_NOT_ALLOWED", "PROCESS_SPAWN_FAILED",
-  "PROCESS_IO_FAILED", "PROCESS_CLEANUP_FAILED", "INVALID_INPUT",
-  // D05 codes
-  "INTERNAL_ERROR", "WORKSPACE_DRIFT", "PATCH_APPLICATION_FAILED",
-  "CODEX_SPAWN_FAILED", "PATCH_GENERATION_FAILED", "PATCH_VALIDATION_FAILED",
-  "FILE_ACCESS_FAILED", "TARGET_INVALID",
-  "PRE_STATE_CAPTURE_FAILED", "POST_STATE_CAPTURE_FAILED",
-  // D04 codes
-  "GIT_ERROR", "IMMUTABLE_VIOLATION", "DIGEST_MISMATCH",
-  "RESTORE_FAILED", "CLEANUP_FAILED",
+// Canonical D02 runner error codes (from LoopPosixProcessRunnerErrorCode)
+const D02_CANONICAL_CODES = new Set<string>([
+  "INVALID_INPUT",
+  "UNSUPPORTED_PLATFORM",
+  "EXECUTABLE_NOT_ALLOWED",
+  "EXECUTABLE_INVALID",
+  "EXECUTABLE_CHANGED",
+  "CWD_NOT_ALLOWED",
+  "CWD_INVALID",
+  "ENV_NOT_ALLOWED",
+  "PROCESS_SPAWN_FAILED",
+  "PROCESS_IO_FAILED",
+  "PROCESS_CLEANUP_FAILED",
+]);
+
+// D02 blocked codes → blocked / EXECUTION_BLOCKED
+const D02_BLOCKED_CODES = new Set<string>([
+  "UNSUPPORTED_PLATFORM",
+  "EXECUTABLE_NOT_ALLOWED",
+  "EXECUTABLE_INVALID",
+  "EXECUTABLE_CHANGED",
+  "CWD_NOT_ALLOWED",
+  "CWD_INVALID",
+  "ENV_NOT_ALLOWED",
+  "PROCESS_SPAWN_FAILED",
+]);
+
+// D02 failed codes → failed / INTERNAL_ERROR
+const D02_FAILED_CODES = new Set<string>([
+  "INVALID_INPUT",
+  "PROCESS_IO_FAILED",
+  "PROCESS_CLEANUP_FAILED",
+]);
+
+// Canonical D05 error codes (from LoopCodexImplementationErrorCode)
+const D05_CANONICAL_ERROR_CODES = new Set<string>([
+  "INVALID_INPUT",
+  "WORKSPACE_DRIFT",
+  "REPAIR_EVIDENCE_REQUIRED",
+  "REPAIR_EVIDENCE_INVALID",
+  "PROMPT_TOO_LARGE",
+  "CODEX_SPAWN_FAILED",
+  "CODEX_TIMED_OUT",
+  "CODEX_NON_ZERO_EXIT",
+  "CODEX_OUTPUT_TOO_LARGE",
+  "CODEX_OUTPUT_INVALID",
+  "ARTIFACT_STORE_FAILED",
+  "PATCH_APPLICATION_FAILED",
+  "INTERNAL_ERROR",
+]);
+
+// Canonical D04 cause codes (from LoopPatchApplicationErrorCode)
+const D04_CANONICAL_CAUSE_CODES = new Set<string>([
+  "INVALID_INPUT",
+  "PATCH_TOO_LARGE",
+  "PATCH_INVALID_ENCODING",
+  "PATCH_DIGEST_MISMATCH",
+  "PATCH_MALFORMED",
+  "PATCH_PATH_NOT_ALLOWED",
+  "PATCH_UNSAFE_PATH",
+  "PATCH_UNSUPPORTED_CHANGE",
+  "PATCH_BINARY",
+  "PATCH_SYMLINK",
+  "PATCH_NOT_APPLICABLE",
+  "PATCH_APPLY_FAILED",
+  "PATCH_RECONCILIATION_FAILED",
+  "WORKSPACE_DRIFT",
+  "GIT_COMMAND_FAILED",
+  "WORKSPACE_IO_FAILED",
+]);
+
+// Public causeCode allowlist = D02 ∪ D05 ∪ D04
+const PUBLIC_CAUSE_CODE_ALLOWLIST = new Set<string>([
+  ...D02_CANONICAL_CODES,
+  ...D05_CANONICAL_ERROR_CODES,
+  ...D04_CANONICAL_CAUSE_CODES,
 ]);
 
 // ═══════════════════════════════════════ Helpers
@@ -288,7 +357,7 @@ function validateCauseCode(code: string | null | undefined): string | undefined 
   if (trimmed !== code) return undefined;
   if (NON_CONTROL_RE.test(trimmed)) return undefined;
   if (trimmed.length === 0 || trimmed.length > 128) return undefined;
-  if (!KNOWN_CAUSE_CODES.has(trimmed)) return undefined;
+  if (!PUBLIC_CAUSE_CODE_ALLOWLIST.has(trimmed)) return undefined;
   return trimmed;
 }
 
@@ -359,6 +428,17 @@ function createState(
     lastRepairPreDigest: null,
   };
 }
+
+// ═══════════════════════════════════════ Clock Types
+
+type ClockReadResult =
+  | { ok: true; nowMs: number }
+  | { ok: false };
+
+type DeadlineCheck =
+  | { status: "active"; nowMs: number; remainingMs: number }
+  | { status: "expired"; nowMs: number }
+  | { status: "clock_error" };
 
 // ═══════════════════════════════════════ Main Class
 
@@ -436,31 +516,25 @@ export class LoopAutonomousDeliveryLoop {
       return this._validationFailure("failed", "INVALID_INPUT", "invalid request");
     }
 
-    // Validate identity via plain-data scan + validateLoopRunIdentity
+    // Validate identity via descriptor-based scan + validateLoopRunIdentity
+    const IDENTITY_KEYS = [
+      "runId", "requirementId", "repository", "repositoryPath",
+      "baseBranch", "expectedBaseSha", "taskBranch", "controlRoot", "createdAt",
+    ];
     const identity = req.identity;
-    if (identity === null || typeof identity !== "object" || Array.isArray(identity)) {
+    let scannedIdentity: Record<string, unknown>;
+    try {
+      scannedIdentity = scanPlain(identity, IDENTITY_KEYS, "identity");
+    } catch (e) {
+      return this._validationFailure("failed", "INVALID_INPUT", `invalid identity: ${(e as Error).message}`);
+    }
+    // Run validateLoopRunIdentity which does full validation (types, format, SHA format, ISO timestamp, path checks)
+    try {
+      validateLoopRunIdentity(scannedIdentity);
+    } catch {
       return this._validationFailure("failed", "INVALID_INPUT", "invalid identity");
     }
-    const id = identity as Record<string, unknown>;
-    if (typeof id.runId !== "string" || id.runId.trim().length === 0 ||
-        NON_CONTROL_RE.test(id.runId)) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.runId");
-    }
-    if (typeof id.requirementId !== "string" || id.requirementId.trim().length === 0) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.requirementId");
-    }
-    if (typeof id.repository !== "string" || id.repository.trim().length === 0) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.repository");
-    }
-    if (typeof id.repositoryPath !== "string" || id.repositoryPath.trim().length === 0) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.repositoryPath");
-    }
-    if (typeof id.taskBranch !== "string" || id.taskBranch.trim().length === 0) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.taskBranch");
-    }
-    if (typeof id.controlRoot !== "string" || id.controlRoot.trim().length === 0) {
-      return this._validationFailure("failed", "INVALID_INPUT", "invalid identity.controlRoot");
-    }
+    const id = scannedIdentity;
 
     // Validate workspace
     let wsObj: Record<string, unknown>;
@@ -528,6 +602,7 @@ export class LoopAutonomousDeliveryLoop {
     if (!testPlanValidation.ok) {
       return this._validationFailure("failed", "INVALID_INPUT", (testPlanValidation as { ok: false; reason: string }).reason);
     }
+    const validatedTestPlan = testPlanValidation.plan;
 
     // Validate reviewPlan
     if (!Array.isArray(req.reviewPlan) || req.reviewPlan.length === 0 || req.reviewPlan.length > MAX_PLAN_STEPS) {
@@ -538,10 +613,11 @@ export class LoopAutonomousDeliveryLoop {
     if (!reviewPlanValidation.ok) {
       return this._validationFailure("failed", "INVALID_INPUT", (reviewPlanValidation as { ok: false; reason: string }).reason);
     }
+    const validatedReviewPlan = reviewPlanValidation.plan;
 
     // Check for duplicate step IDs across both plans
     const allStepIds = new Set<string>();
-    for (const step of [...testPlan, ...reviewPlan]) {
+    for (const step of [...validatedTestPlan, ...validatedReviewPlan]) {
       if (allStepIds.has(step.id)) {
         return this._validationFailure("failed", "INVALID_INPUT", "duplicate step ID");
       }
@@ -571,7 +647,7 @@ export class LoopAutonomousDeliveryLoop {
     // ═══════════════════════════════════════ Initialize
 
     // Non-throwing clock read
-    const clockResult = this._tryReadClock(null);
+    const clockResult = this._readClock(null);
     if (!clockResult.ok) {
       return this._validationFailure("failed", "INTERNAL_ERROR", "initial clock read failed");
     }
@@ -583,22 +659,56 @@ export class LoopAutonomousDeliveryLoop {
       return this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before start");
     }
 
+    // ═══════════════════════════════════════ Input Snapshot (before first await)
+    // Deep-copy and freeze all inputs so mutations to the original request
+    // after execute() returns a Promise cannot affect D05/D02 calls.
+
+    const frozenIdentity = deepFreeze({ ...id }) as unknown as LoopRunIdentity;
+    const frozenWorkspace = deepFreeze({
+      workspacePath: wsObj.workspacePath as string,
+      taskBranch: wsObj.taskBranch as string,
+      expectedTaskHeadSha: wsObj.expectedTaskHeadSha as string,
+      expectedPreStatusDigestSha256: wsObj.expectedPreStatusDigestSha256 as string,
+    }) as LoopCodexImplementationWorkspace;
+
+    const frozenRequirement = String(requirement);
+    const frozenDesignSummary = designSummary !== undefined ? String(designSummary) : undefined;
+    const frozenConstraints: readonly string[] | undefined = implementationConstraints
+      ? deepFreeze([...implementationConstraints]) as unknown as readonly string[]
+      : undefined;
+    const frozenAllowedPaths = deepFreeze([...allowedPaths]) as unknown as readonly string[];
+
+    // Deep-freeze plans (each step and args)
+    const frozenTestPlan = deepFreeze(
+      testPlan.map((s) => ({
+        ...s,
+        args: s.args ? [...s.args] : undefined,
+      })),
+    ) as unknown as readonly LoopDeliveryCommandStep[];
+
+    const frozenReviewPlan = deepFreeze(
+      reviewPlan.map((s) => ({
+        ...s,
+        args: s.args ? [...s.args] : undefined,
+      })),
+    ) as unknown as readonly LoopDeliveryCommandStep[];
+
     // ═══════════════════════════════════════ Workspace Binding (initial)
     const initBindResult = await this._bindWorkspace(
-      identity as LoopRunIdentity, workspace, state,
+      frozenIdentity, frozenWorkspace, state,
     );
     if (!initBindResult.ok) return (initBindResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
 
     // ═══════════════════════════════════════ D05 Initial Implementation
     const initialResult = await this._executeImplementation(
-      identity as LoopRunIdentity,
-      workspace,
+      frozenIdentity,
+      frozenWorkspace,
       "initial",
       0,
-      requirement as string,
-      designSummary,
-      implementationConstraints,
-      allowedPaths,
+      frozenRequirement,
+      frozenDesignSummary,
+      frozenConstraints,
+      frozenAllowedPaths,
       undefined,
       state,
     );
@@ -625,7 +735,7 @@ export class LoopAutonomousDeliveryLoop {
 
     // Update workspace binding after D05
     const postInitBindResult = await this._bindAndVerifyPostD05(
-      identity as LoopRunIdentity, workspace, state,
+      frozenIdentity, frozenWorkspace, state,
       initialSuccess.result.postTaskHeadSha,
       initialSuccess.result.postStatusDigestSha256,
     );
@@ -633,14 +743,14 @@ export class LoopAutonomousDeliveryLoop {
 
     // ═══════════════════════════════════════ Main Loop
     const mainResult = await this._mainLoop(
-      identity as LoopRunIdentity,
-      workspace,
-      requirement as string,
-      designSummary,
-      implementationConstraints,
-      allowedPaths,
-      testPlan,
-      reviewPlan,
+      frozenIdentity,
+      frozenWorkspace,
+      frozenRequirement,
+      frozenDesignSummary,
+      frozenConstraints,
+      frozenAllowedPaths,
+      frozenTestPlan,
+      frozenReviewPlan,
       state,
     );
 
@@ -680,7 +790,7 @@ export class LoopAutonomousDeliveryLoop {
             failure.reasonMessage, failure.causeCode);
         }
 
-        // Build and store test evidence
+        // Build and store test evidence (no-progress check now inside _buildAndStoreEvidence)
         const evidenceResult = await this._buildAndStoreEvidence(
           "test", failure, state,
         );
@@ -688,12 +798,6 @@ export class LoopAutonomousDeliveryLoop {
           return (evidenceResult as { ok: false; result: LoopAutonomousDeliveryResult }).result;
         }
         const evidenceRef = evidenceResult.artifactRef;
-
-        // Check no-progress before repair
-        const noProgressCheck = this._checkNoProgress(state, "test", evidenceResult.evidenceDigest);
-        if (noProgressCheck) {
-          return this._finalizeTerminal(state, "failed", "NO_PROGRESS", noProgressCheck);
-        }
 
         // Check fix budget
         if (state.totalFixRounds >= state.maxFixRounds) {
@@ -765,7 +869,7 @@ export class LoopAutonomousDeliveryLoop {
             failure.reasonMessage, failure.causeCode);
         }
 
-        // Build and store review evidence
+        // Build and store review evidence (no-progress check now inside _buildAndStoreEvidence)
         const evidenceResult2 = await this._buildAndStoreEvidence(
           "review", failure, state,
         );
@@ -773,12 +877,6 @@ export class LoopAutonomousDeliveryLoop {
           return (evidenceResult2 as { ok: false; result: LoopAutonomousDeliveryResult }).result;
         }
         const evidenceRef2 = evidenceResult2.artifactRef;
-
-        // Check no-progress before repair
-        const noProgressCheck2 = this._checkNoProgress(state, "review", evidenceResult2.evidenceDigest);
-        if (noProgressCheck2) {
-          return this._finalizeTerminal(state, "failed", "NO_PROGRESS", noProgressCheck2);
-        }
 
         // Check fix budget
         if (state.totalFixRounds >= state.maxFixRounds) {
@@ -965,7 +1063,35 @@ export class LoopAutonomousDeliveryLoop {
       const preTaskHasChanges = snapshot.taskHasChanges;
 
       // Compute effective timeout
-      const remaining = Math.max(0, state.deadlineMs - this._tryReadClockOrFail(state));
+      let remaining: number;
+      try {
+        remaining = Math.max(0, state.deadlineMs - this._readClockOrThrow(state));
+      } catch {
+        // Clock error → fail the step
+        return {
+          failed: true,
+          failure: {
+            stepId: step.id,
+            reasonCode: "INTERNAL_ERROR",
+            reasonMessage: "clock error computing remaining time",
+            repairable: false,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
+            outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
+            workspaceBefore: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: state.currentTaskHeadSha,
+              status_digest_sha256: state.currentStatusDigestSha256,
+            },
+            workspaceAfter: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: state.currentTaskHeadSha,
+              status_digest_sha256: state.currentStatusDigestSha256,
+            },
+          },
+        };
+      }
       if (remaining < MIN_D02_TIMEOUT) {
         return {
           failed: true,
@@ -994,56 +1120,28 @@ export class LoopAutonomousDeliveryLoop {
       const stepTimeout = step.timeoutMs ?? this.defaultStepTimeoutMs;
       const effectiveTimeout = Math.min(stepTimeout, remaining);
 
-      // Execute step via D02
-      let runnerResult: LoopPosixProcessResult;
-      let runnerStarted = false;
+      // Execute step via D02 — capture ALL outcomes
+      let runnerResult: unknown = undefined;
+      let runnerError: unknown = undefined;
+      let runnerReturned = false;
+      const requestedMaxStdout = step.maxStdoutBytes ?? this.defaultMaxStdoutBytes;
+      const requestedMaxStderr = step.maxStderrBytes ?? this.defaultMaxStderrBytes;
       try {
         runnerResult = await this.runner.run({
           executableId: step.executableId,
           args: step.args ? freeze([...step.args]) : undefined,
           cwd: workspace.workspacePath,
           timeoutMs: effectiveTimeout,
-          maxStdoutBytes: step.maxStdoutBytes ?? this.defaultMaxStdoutBytes,
-          maxStderrBytes: step.maxStderrBytes ?? this.defaultMaxStderrBytes,
+          maxStdoutBytes: requestedMaxStdout,
+          maxStderrBytes: requestedMaxStderr,
         });
-        runnerStarted = true;
+        runnerReturned = true;
       } catch (e) {
-        runnerStarted = true;
-        // Classify D02 typed errors
-        return this._classifyRunnerError(e, step.id, phase, state);
+        runnerError = e;
+        runnerReturned = true;
       }
 
-      // Validate D02 result structure
-      const resultValidation = validateRunnerResult(runnerResult);
-      if (!resultValidation.ok) {
-        return {
-          failed: true,
-          failure: {
-            stepId: step.id,
-            reasonCode: "DEPENDENCY_RESULT_INVALID",
-            reasonMessage: "invalid runner result",
-            repairable: false,
-            exitCode: null, signal: null, durationMs: 0,
-            stdoutTruncated: false, stderrTruncated: false,
-            stdout: "", stderr: "",
-            outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
-            workspaceBefore: {
-              task_branch: workspace.taskBranch,
-              task_head_sha: preHeadSha,
-              status_digest_sha256: preStatusDigest,
-            },
-            workspaceAfter: {
-              task_branch: workspace.taskBranch,
-              task_head_sha: preHeadSha,
-              status_digest_sha256: preStatusDigest,
-            },
-          },
-        };
-      }
-
-      const durationMs = runnerResult.durationMs;
-
-      // ── Post-step D03 inspect (mandatory if runner started) ──
+      // ── Mandatory post-step D03 inspect (ALWAYS after runner, regardless of outcome) ──
       let postSnapshot: LoopGitWorkspaceSnapshot;
       try {
         const rawPostSnap = await this.workspaceManager.inspect(identity);
@@ -1064,7 +1162,9 @@ export class LoopAutonomousDeliveryLoop {
         };
       }
 
-      // Verify post-step identity
+      // ── Priority-based post-step classification ──
+
+      // Priority 1: Verify post-step identity binding
       if (postSnapshot.workspacePath !== workspace.workspacePath ||
           postSnapshot.taskBranch !== workspace.taskBranch ||
           postSnapshot.runId !== identity.runId ||
@@ -1081,9 +1181,7 @@ export class LoopAutonomousDeliveryLoop {
       const postStatusDigest = postSnapshot.taskStatusDigestSha256;
       const postTaskHasChanges = postSnapshot.taskHasChanges;
 
-      // ── Priority-based classification (mutation > timeout > truncation > other) ──
-
-      // Priority 1: HEAD change → blocked
+      // Priority 2: HEAD change → blocked
       if (postHeadSha !== preHeadSha) {
         return {
           blocked: true,
@@ -1092,7 +1190,7 @@ export class LoopAutonomousDeliveryLoop {
         };
       }
 
-      // Priority 2: Status digest or taskHasChanges mutation → failed (before timeout/truncation)
+      // Priority 3: Status digest or taskHasChanges mutation → failed
       const mutated = postStatusDigest !== preStatusDigest ||
                       postTaskHasChanges !== preTaskHasChanges;
       if (mutated) {
@@ -1105,13 +1203,9 @@ export class LoopAutonomousDeliveryLoop {
             reasonCode: mutationCode,
             reasonMessage: `${phase} workspace mutated`,
             repairable: false,
-            exitCode: runnerResult.exitCode,
-            signal: runnerResult.signal,
-            durationMs,
-            stdoutTruncated: runnerResult.stdoutTruncated,
-            stderrTruncated: runnerResult.stderrTruncated,
-            stdout: runnerResult.stdout,
-            stderr: runnerResult.stderr,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
             outcomeCategory: mutationCode,
             workspaceBefore: {
               task_branch: workspace.taskBranch,
@@ -1127,8 +1221,36 @@ export class LoopAutonomousDeliveryLoop {
         };
       }
 
-      // Priority 3: Overall deadline
-      if (this._isDeadlineExceeded(state)) {
+      // Priority 4: Clock error → failed
+      const clockCheck = this._checkDeadline(state);
+      if (clockCheck.status === "clock_error") {
+        return {
+          failed: true,
+          failure: {
+            stepId: step.id,
+            reasonCode: "INTERNAL_ERROR",
+            reasonMessage: "clock error after step",
+            repairable: false,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
+            outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
+            workspaceBefore: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: preHeadSha,
+              status_digest_sha256: preStatusDigest,
+            },
+            workspaceAfter: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: postHeadSha,
+              status_digest_sha256: postStatusDigest,
+            },
+          },
+        };
+      }
+
+      // Priority 5: Overall deadline → failed
+      if (clockCheck.status === "expired") {
         return {
           failed: true,
           failure: {
@@ -1136,13 +1258,9 @@ export class LoopAutonomousDeliveryLoop {
             reasonCode: "TOTAL_TIMEOUT",
             reasonMessage: "deadline exceeded after step",
             repairable: false,
-            exitCode: runnerResult.exitCode,
-            signal: runnerResult.signal,
-            durationMs,
-            stdoutTruncated: runnerResult.stdoutTruncated,
-            stderrTruncated: runnerResult.stderrTruncated,
-            stdout: runnerResult.stdout,
-            stderr: runnerResult.stderr,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
             outcomeCategory: isTest ? "TEST_TIMED_OUT" : "REVIEW_TIMED_OUT",
             workspaceBefore: {
               task_branch: workspace.taskBranch,
@@ -1158,13 +1276,48 @@ export class LoopAutonomousDeliveryLoop {
         };
       }
 
-      // Priority 4-7: runner timed_out, truncation, non-zero/signal, success
-      // Step pass criteria: exited, exit 0, no signal, no truncation, no mutation
-      const stepPassed = runnerResult.status === "exited" &&
-        runnerResult.exitCode === 0 &&
-        runnerResult.signal === null &&
-        runnerResult.stdoutTruncated === false &&
-        runnerResult.stderrTruncated === false;
+      // Priority 6: Runner threw → classify typed error
+      if (runnerError !== undefined) {
+        return this._classifyRunnerError(runnerError, step.id, phase, state);
+      }
+
+      // Priority 7: Runner result structure validation
+      const resultValidation = validateRunnerResult(runnerResult, requestedMaxStdout, requestedMaxStderr);
+      if (!resultValidation.ok) {
+        return {
+          failed: true,
+          failure: {
+            stepId: step.id,
+            reasonCode: "DEPENDENCY_RESULT_INVALID",
+            reasonMessage: (resultValidation as { ok: false; reason: string }).reason,
+            repairable: false,
+            exitCode: null, signal: null, durationMs: 0,
+            stdoutTruncated: false, stderrTruncated: false,
+            stdout: "", stderr: "",
+            outcomeCategory: isTest ? "TEST_FAILED" : "REVIEW_FAILED",
+            workspaceBefore: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: preHeadSha,
+              status_digest_sha256: preStatusDigest,
+            },
+            workspaceAfter: {
+              task_branch: workspace.taskBranch,
+              task_head_sha: postHeadSha,
+              status_digest_sha256: postStatusDigest,
+            },
+          },
+        };
+      }
+
+      const validResult = runnerResult as LoopPosixProcessResult;
+      const durationMs = validResult.durationMs;
+
+      // Step classification: timed_out, truncation, non-zero/signal, or pass
+      const stepPassed = validResult.status === "exited" &&
+        validResult.exitCode === 0 &&
+        validResult.signal === null &&
+        validResult.stdoutTruncated === false &&
+        validResult.stderrTruncated === false;
 
       if (stepPassed) {
         this._addTrace(state,
@@ -1180,11 +1333,11 @@ export class LoopAutonomousDeliveryLoop {
       let reasonCode: LoopAutonomousDeliveryReasonCode;
       let repairable: boolean;
 
-      if (runnerResult.status === "timed_out") {
+      if (validResult.status === "timed_out") {
         outcomeCategory = isTest ? "TEST_TIMED_OUT" : "REVIEW_TIMED_OUT";
         reasonCode = isTest ? "TEST_TIMED_OUT" : "REVIEW_TIMED_OUT";
         repairable = true;
-      } else if (runnerResult.stdoutTruncated || runnerResult.stderrTruncated) {
+      } else if (validResult.stdoutTruncated || validResult.stderrTruncated) {
         outcomeCategory = isTest ? "TEST_OUTPUT_TRUNCATED" : "REVIEW_OUTPUT_TRUNCATED";
         reasonCode = isTest ? "TEST_OUTPUT_TRUNCATED" : "REVIEW_OUTPUT_TRUNCATED";
         repairable = true;
@@ -1206,13 +1359,13 @@ export class LoopAutonomousDeliveryLoop {
         reasonCode,
         reasonMessage: `${phase} step ${step.id} failed`,
         repairable,
-        exitCode: runnerResult.exitCode,
-        signal: runnerResult.signal,
+        exitCode: validResult.exitCode,
+        signal: validResult.signal,
         durationMs,
-        stdoutTruncated: runnerResult.stdoutTruncated,
-        stderrTruncated: runnerResult.stderrTruncated,
-        stdout: runnerResult.stdout,
-        stderr: runnerResult.stderr,
+        stdoutTruncated: validResult.stdoutTruncated,
+        stderrTruncated: validResult.stderrTruncated,
+        stdout: validResult.stdout,
+        stderr: validResult.stderr,
         outcomeCategory,
         workspaceBefore: {
           task_branch: workspace.taskBranch,
@@ -1390,6 +1543,7 @@ export class LoopAutonomousDeliveryLoop {
       workspaceAfter: failure.workspaceAfter,
     };
 
+    // Build evidence
     const evidenceBuildResult = buildLoopDeliveryEvidence(
       evidenceInput,
       this.maxEvidenceBytes,
@@ -1401,6 +1555,37 @@ export class LoopAutonomousDeliveryLoop {
         ok: false,
         result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR",
           `evidence build failed: ${(evidenceBuildResult as LoopDeliveryEvidenceFailure).reason}`),
+      };
+    }
+
+    const evidenceDigest = evidenceBuildResult.digestSha256;
+
+    // ── No-progress check BEFORE put ──
+    // Build failure key from phase + evidenceDigest + current workspace status
+    const failureKey = `${phaseName}:${evidenceDigest}:${state.currentStatusDigestSha256}`;
+    if (state.seenFailureKeys.has(failureKey)) {
+      // Duplicate failure — do NOT put evidence, return NO_PROGRESS
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "NO_PROGRESS", "duplicate failure key"),
+      };
+    }
+    // Record key BEFORE put (first occurrence is allowed to put)
+    state.seenFailureKeys.add(failureKey);
+    state.lastEvidenceDigest = evidenceDigest;
+
+    // Check deadline before put
+    const deadlineCheck = this._checkDeadline(state);
+    if (deadlineCheck.status === "clock_error") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "INTERNAL_ERROR", "clock error before evidence put"),
+      };
+    }
+    if (deadlineCheck.status === "expired") {
+      return {
+        ok: false,
+        result: await this._finalizeTerminal(state, "failed", "TOTAL_TIMEOUT", "deadline exceeded before evidence put"),
       };
     }
 
@@ -1537,7 +1722,7 @@ export class LoopAutonomousDeliveryLoop {
 
   // ═══════════════════════════════════════ Private: Clock
 
-  private _tryReadClock(state: InternalState | null): { ok: true; nowMs: number } | { ok: false } {
+  private _readClock(state: InternalState | null): ClockReadResult {
     try {
       const now = this.clock.nowMs();
       if (typeof now !== "number" || !Number.isFinite(now) || !Number.isSafeInteger(now) || now < 0) {
@@ -1555,23 +1740,50 @@ export class LoopAutonomousDeliveryLoop {
     }
   }
 
-  private _tryReadClockOrFail(state: InternalState): number {
-    const result = this._tryReadClock(state);
-    if (!result.ok) {
-      // Return a safe value that won't crash; deadline will catch it
-      return state.deadlineMs; // Will trigger deadline exceeded
+  private _checkDeadline(state: InternalState): DeadlineCheck {
+    const clockResult = this._readClock(state);
+    if (!clockResult.ok) {
+      return { status: "clock_error" };
     }
-    return result.nowMs;
+    const nowMs = clockResult.nowMs;
+    if (nowMs >= state.deadlineMs) {
+      return { status: "expired", nowMs };
+    }
+    const remainingMs = state.deadlineMs - nowMs;
+    return { status: "active", nowMs, remainingMs };
   }
 
   private _isDeadlineExceeded(state: InternalState): boolean {
-    const result = this._tryReadClock(state);
-    if (!result.ok) return true; // fail-closed on clock error
-    return result.nowMs >= state.deadlineMs;
+    const check = this._checkDeadline(state);
+    return check.status === "expired";
   }
 
   private _checkDeadlineBeforeStep(state: InternalState): boolean {
     return this._isDeadlineExceeded(state);
+  }
+
+  /**
+   * Read clock and fail on error. Returns nowMs for valid read.
+   * Throws if clock is bad — caller must handle INTERNAL_ERROR.
+   */
+  private _readClockOrThrow(state: InternalState): number {
+    const result = this._readClock(state);
+    if (!result.ok) {
+      throw new Error("clock error");
+    }
+    return result.nowMs;
+  }
+
+  /**
+   * Safe clock read for traces — returns something non-negative even on error.
+   * Clock errors are caught at structured checkpoints, not in traces.
+   */
+  private _tryReadClockForTrace(state: InternalState): number {
+    const result = this._readClock(state);
+    if (!result.ok) {
+      return Math.max(0, state.lastClockMs);
+    }
+    return result.nowMs;
   }
 
   // ═══════════════════════════════════════ Private: Terminal Finalizers
@@ -1615,9 +1827,24 @@ export class LoopAutonomousDeliveryLoop {
     causeCode?: string,
     finalWorkspace?: LoopDeliveryResultWorkspace,
   ): Promise<LoopAutonomousDeliveryResult> {
-    // Compute elapsed using last valid clock reading
-    const nowMs = this._tryReadClockOrFail(state);
-    const elapsedMs = Math.max(0, nowMs - state.startMs);
+    // Compute elapsed using last valid clock reading (or state.lastClockMs on error)
+    const clockResult2 = this._readClock(state);
+    let nowMs: number;
+    let elapsedMs: number;
+    if (clockResult2.ok) {
+      nowMs = clockResult2.nowMs;
+      elapsedMs = Math.max(0, nowMs - state.startMs);
+    } else {
+      // Clock error in finalizer: use last known clock, set INTERNAL_ERROR
+      nowMs = state.lastClockMs;
+      elapsedMs = Math.max(0, nowMs - state.startMs);
+      // Override to INTERNAL_ERROR if clock failed
+      if (status === "succeeded" || (status === "failed" && reasonCode !== "INTERNAL_ERROR")) {
+        status = "failed";
+        reasonCode = "INTERNAL_ERROR";
+        safeMsg = "clock error in finalizer";
+      }
+    }
 
     // Sanitize cause code
     const sanitizedCauseCode = validateCauseCode(causeCode);
@@ -1670,6 +1897,32 @@ export class LoopAutonomousDeliveryLoop {
       return deepFreeze(finalResult) as unknown as LoopAutonomousDeliveryResult;
     } else {
       // Fail-closed: override to ARTIFACT_STORE_FAILED
+      // Replace the terminal trace entry (exactly one) to reflect the override
+      const traceCopy = [...state.trace];
+      // Remove the last "terminal" entry that was just added
+      for (let i = traceCopy.length - 1; i >= 0; i--) {
+        if (traceCopy[i]!.kind === "terminal") {
+          traceCopy.splice(i, 1);
+          break;
+        }
+      }
+      // Add the replacement terminal entry
+      const terminalElapsed = Math.max(0, (clockResult2.ok ? clockResult2.nowMs : state.lastClockMs) - state.startMs);
+      traceCopy.push(freeze({
+        sequence: state.traceSeq + 1,
+        kind: "terminal" as LoopDeliveryTraceKind,
+        phase: "initial" as const,
+        fixRound: state.totalFixRounds,
+        attempt: 0,
+        stepId: null,
+        outcome: "failed",
+        artifactRef: null,
+        patchArtifactRef: null,
+        patchDigestSha256: null,
+        workspaceStatusDigestSha256: state.currentStatusDigestSha256 || null,
+        elapsedMs: terminalElapsed,
+      }));
+
       const overrideResult: LoopAutonomousDeliveryResult = {
         status: "failed",
         reasonCode: "ARTIFACT_STORE_FAILED",
@@ -1684,7 +1937,7 @@ export class LoopAutonomousDeliveryLoop {
         files: filesArray,
         finalWorkspace: workspaceForResult ? freeze(workspaceForResult) as LoopDeliveryResultWorkspace : undefined,
         elapsedMs,
-        trace: freeze([...state.trace]),
+        trace: freeze(traceCopy),
         // No deliveryResultArtifactRef — only one put attempt
       };
       return deepFreeze(overrideResult) as unknown as LoopAutonomousDeliveryResult;
@@ -1816,48 +2069,30 @@ export class LoopAutonomousDeliveryLoop {
     failed?: boolean;
     failure?: PlanStepFailure;
   }> {
-    // Must use instanceof check — not name/code comparison
-    // Dynamic import not needed; LoopPosixProcessRunnerError is imported at top
-    // We use a branded check: class name + instanceof via prototype chain
-    const err = error as Record<string, unknown> | null | undefined;
-
-    // Check if it's genuinely a LoopPosixProcessRunnerError via instanceof-like check
-    // Since we import the type, we check: is object, has code/name, and has the right prototype
-    let isTypedRunnerError = false;
-    if (err && typeof err === "object" && !Array.isArray(err)) {
-      // Verify it's an Error instance with the right name and has a code
-      if (error instanceof Error && err.name === "LoopPosixProcessRunnerError" && typeof err.code === "string") {
-        isTypedRunnerError = true;
-      }
-    }
+    // Must use real instanceof LoopPosixProcessRunnerError — NOT name/code/prototype comparison
+    const isTypedRunnerError = error instanceof LoopPosixProcessRunnerError;
 
     if (isTypedRunnerError) {
-      const code = err!.code as string;
+      const typedErr = error as LoopPosixProcessRunnerError;
+      const code = typedErr.code;
 
-      // Blocked codes
-      const blockedCodes = [
-        "UNSUPPORTED_PLATFORM", "EXECUTABLE_NOT_ALLOWED", "EXECUTABLE_INVALID",
-        "EXECUTABLE_CHANGED", "CWD_NOT_ALLOWED", "CWD_INVALID",
-        "ENV_NOT_ALLOWED", "PROCESS_SPAWN_FAILED",
-      ];
-
-      if (blockedCodes.includes(code)) {
+      // D02 blocked codes → blocked / EXECUTION_BLOCKED
+      if (D02_BLOCKED_CODES.has(code)) {
         return {
           blocked: true,
           blockedResult: await this._finalizeTerminal(state, "blocked", "EXECUTION_BLOCKED",
-            `runner blocked`, code),
+            `runner blocked: ${code}`, code),
         };
       }
 
-      // Failed codes
-      const failedCodes = ["PROCESS_IO_FAILED", "PROCESS_CLEANUP_FAILED", "INVALID_INPUT"];
-      if (failedCodes.includes(code)) {
+      // D02 failed codes → failed / INTERNAL_ERROR
+      if (D02_FAILED_CODES.has(code)) {
         return {
           failed: true,
           failure: {
             stepId,
             reasonCode: "INTERNAL_ERROR",
-            reasonMessage: "runner failed",
+            reasonMessage: `runner failed: ${code}`,
             repairable: false,
             causeCode: code,
             exitCode: null, signal: null, durationMs: 0,
@@ -1878,7 +2113,7 @@ export class LoopAutonomousDeliveryLoop {
         };
       }
 
-      // Unknown runner code → INTERNAL_ERROR
+      // Unknown D02 code → must NOT map to blocked; treat as INTERNAL_ERROR
       return {
         failed: true,
         failure: {
@@ -1904,7 +2139,7 @@ export class LoopAutonomousDeliveryLoop {
       };
     }
 
-    // Not a typed runner error → INTERNAL_ERROR (spoofing blocked)
+    // Not a LoopPosixProcessRunnerError → INTERNAL_ERROR (reject spoofing via name/code)
     return {
       failed: true,
       failure: {
@@ -2009,7 +2244,7 @@ export class LoopAutonomousDeliveryLoop {
     patchDigestSha256: string | null,
     workspaceStatusDigestSha256?: string | null,
   ): void {
-    const elapsedMs = Math.max(0, this._tryReadClockOrFail(state) - state.startMs);
+    const elapsedMs = Math.max(0, this._tryReadClockForTrace(state) - state.startMs);
     state.traceSeq++;
     state.trace.push(freeze({
       sequence: state.traceSeq,
@@ -2143,8 +2378,9 @@ function validateInt(
 function validatePlan(
   plan: readonly LoopDeliveryCommandStep[],
   label: string,
-): { ok: true } | { ok: false; reason: string } {
+): { ok: true; plan: readonly LoopDeliveryCommandStep[] } | { ok: false; reason: string } {
   const stepIds = new Set<string>();
+  const validated: LoopDeliveryCommandStep[] = [];
 
   for (let i = 0; i < plan.length; i++) {
     const step = plan[i]!;
@@ -2174,6 +2410,7 @@ function validatePlan(
     }
 
     // Validate args
+    let stepArgs: readonly string[] | undefined;
     if (scanned.args !== undefined) {
       if (!Array.isArray(scanned.args)) {
         return { ok: false, reason: `${label}[${i}].args not an array` };
@@ -2182,6 +2419,7 @@ function validatePlan(
         return { ok: false, reason: `${label}[${i}].args too many` };
       }
       let totalBytes = 0;
+      const argsCopy: string[] = [];
       for (let j = 0; j < scanned.args.length; j++) {
         const arg = scanned.args[j]!;
         if (typeof arg !== "string") {
@@ -2195,10 +2433,12 @@ function validatePlan(
           return { ok: false, reason: `${label}[${i}].args[${j}] too long` };
         }
         totalBytes += argBytes;
+        argsCopy.push(arg);
       }
       if (totalBytes > MAX_ARGS_TOTAL_BYTES) {
         return { ok: false, reason: `${label}[${i}].args total too large` };
       }
+      stepArgs = freeze(argsCopy);
     }
 
     // Validate timeoutMs
@@ -2224,9 +2464,19 @@ function validatePlan(
         return { ok: false, reason: `${label}[${i}].maxStderrBytes out of range` };
       }
     }
+
+    // Build validated step (defensive copy)
+    validated.push({
+      id: scanned.id as string,
+      executableId: scanned.executableId as string,
+      args: stepArgs,
+      timeoutMs: scanned.timeoutMs as number | undefined,
+      maxStdoutBytes: scanned.maxStdoutBytes as number | undefined,
+      maxStderrBytes: scanned.maxStderrBytes as number | undefined,
+    });
   }
 
-  return { ok: true };
+  return { ok: true, plan: freeze(validated) };
 }
 
 // ═══════════════════════════════════════ D02 Result Validator
@@ -2239,6 +2489,8 @@ const RUNNER_RESULT_KEYS = [
 
 function validateRunnerResult(
   result: unknown,
+  maxStdoutBytes: number,
+  maxStderrBytes: number,
 ): { ok: true } | { ok: false; reason: string } {
   let r: Record<string, unknown>;
   try {
@@ -2290,6 +2542,23 @@ function validateRunnerResult(
   }
   if (typeof r.termSignalSent !== "boolean" || typeof r.killSignalSent !== "boolean") {
     return { ok: false, reason: "signal sent flags not boolean" };
+  }
+
+  // Byte retention validation
+  const retainedStdoutBytes = Buffer.byteLength(r.stdout as string, "utf8");
+  const retainedStderrBytes = Buffer.byteLength(r.stderr as string, "utf8");
+
+  if (retainedStdoutBytes > maxStdoutBytes) {
+    return { ok: false, reason: "retained stdout exceeds requested max" };
+  }
+  if (retainedStderrBytes > maxStderrBytes) {
+    return { ok: false, reason: "retained stderr exceeds requested max" };
+  }
+  if ((r.stdoutBytesReceived as number) < retainedStdoutBytes) {
+    return { ok: false, reason: "stdoutBytesReceived less than retained bytes" };
+  }
+  if ((r.stderrBytesReceived as number) < retainedStderrBytes) {
+    return { ok: false, reason: "stderrBytesReceived less than retained bytes" };
   }
 
   return { ok: true };
@@ -2435,9 +2704,12 @@ function validateD05Result(
     return { ok: false, reason: `D05 failure attempt mismatch: expected ${expectedAttempt}, got ${String(f.attempt)}` };
   }
 
-  // errorCode must be string
+  // errorCode must be in D05 canonical set
   if (typeof f.errorCode !== "string") {
     return { ok: false, reason: "D05 failure missing errorCode" };
+  }
+  if (!D05_CANONICAL_ERROR_CODES.has(f.errorCode)) {
+    return { ok: false, reason: `D05 errorCode not in canonical set: ${String(f.errorCode)}` };
   }
 
   // retryable must be boolean
@@ -2445,32 +2717,51 @@ function validateD05Result(
     return { ok: false, reason: "D05 retryable not boolean" };
   }
 
-  // safeMessage must be bounded string
+  // safeMessage must be bounded string, no control chars
   if (typeof f.safeMessage !== "string" || f.safeMessage.length > MAX_SAFE_MESSAGE) {
     return { ok: false, reason: "D05 safeMessage invalid" };
   }
+  if (NON_CONTROL_RE.test(f.safeMessage)) {
+    return { ok: false, reason: "D05 safeMessage has control chars" };
+  }
 
-  // Optional causeCode: only known D04 codes
+  // causeCode (if present) must be in D04 canonical set
   if (f.causeCode !== undefined && f.causeCode !== null) {
-    if (typeof f.causeCode !== "string" || !KNOWN_CAUSE_CODES.has(f.causeCode)) {
-      return { ok: false, reason: "D05 causeCode not in allowlist" };
+    if (typeof f.causeCode !== "string" || !D04_CANONICAL_CAUSE_CODES.has(f.causeCode)) {
+      return { ok: false, reason: "D05 causeCode not in D04 canonical set" };
     }
   }
 
-  // Optional patch fields must be consistent
-  if (f.patchArtifactRef !== undefined) {
+  // Optional patch fields: all-or-none
+  const hasRef = f.patchArtifactRef !== undefined;
+  const hasDigest = f.patchDigestSha256 !== undefined;
+  const hasSize = f.patchSizeBytes !== undefined;
+
+  if (hasRef || hasDigest || hasSize) {
+    // All three must be present
+    if (!hasRef || !hasDigest || !hasSize) {
+      return { ok: false, reason: "D05 optional patch fields must be all-or-none" };
+    }
+
+    // patchArtifactRef must be string
     if (typeof f.patchArtifactRef !== "string") {
       return { ok: false, reason: "D05 patchArtifactRef not string" };
     }
-  }
-  if (f.patchDigestSha256 !== undefined) {
+
+    // patchDigestSha256 must be canonical SHA-256
     if (typeof f.patchDigestSha256 !== "string" || !SHA256_RE.test(f.patchDigestSha256)) {
       return { ok: false, reason: "D05 patchDigestSha256 invalid" };
     }
-  }
-  if (f.patchSizeBytes !== undefined) {
-    if (typeof f.patchSizeBytes !== "number" || !Number.isSafeInteger(f.patchSizeBytes)) {
+
+    // patchSizeBytes must be safe positive integer
+    if (typeof f.patchSizeBytes !== "number" || !Number.isSafeInteger(f.patchSizeBytes) || f.patchSizeBytes <= 0) {
       return { ok: false, reason: "D05 patchSizeBytes invalid" };
+    }
+
+    // Ref must match digest
+    const expectedRef = `loop-artifact:v1:code_patch:sha256:${f.patchDigestSha256}`;
+    if (f.patchArtifactRef !== expectedRef) {
+      return { ok: false, reason: "D05 patchArtifactRef does not match digest" };
     }
   }
 
