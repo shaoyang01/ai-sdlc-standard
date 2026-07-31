@@ -62,6 +62,11 @@ const MARKERS: Record<string, boolean> = {
   D08_ARTIFACT_CHAIN_VERIFIED: false,
   D08_NO_EXECUTION_SIDE_EFFECTS: false,
   D08_REGRESSION_MARKERS_PRESERVED: false,
+  D08_R1_ARTIFACT_REF_BINDING_VERIFIED: false,
+  D08_R1_ARTIFACT_DESCRIPTOR_PLAIN_DATA_VERIFIED: false,
+  D08_R1_PRE_SIDE_EFFECT_CLOCK_GATE_VERIFIED: false,
+  D08_R1_IDENTITY_SINGLE_SNAPSHOT_VERIFIED: false,
+  D08_R1_EXTERNAL_OUTPUT_BOUNDS_VERIFIED: false,
 };
 
 function failExit(msg: string): never {
@@ -1227,8 +1232,10 @@ async function main(): Promise<void> {
     check(deepEqual(deadlineKinds, ["normalization_started", "terminal"]), "deadline trace stops before requirement put");
 
     // deadline exceeded after requirement put → ref kept, no further side effects
+    // Fresh-gate read order: 1 start, 2 pre-normalize, 3 post-normalize,
+    // 4 pre-requirement-put, 5 post-requirement-put (expiry fires here).
     let seqB = 0;
-    const seqClockB = { nowMs: () => { seqB += 1; return seqB === 3 ? 1500 : seqB; } };
+    const seqClockB = { nowMs: () => { seqB += 1; return seqB === 5 ? 1500 : seqB; } };
     const dAgent = makeAgent();
     const afterPutResult = newOrchestrator({
       agent: dAgent,
@@ -1348,6 +1355,594 @@ async function main(): Promise<void> {
   }
   markIfClear("D08_REGRESSION_MARKERS_PRESERVED");
 
+  // ═══════════════════════════════════════ 12. R1 stored-artifact ref binding
+  startSection();
+  {
+    console.log("12. R1 stored-artifact descriptor ref/digest/size binding");
+    // Positive control: a canonical descriptor is accepted and the ref is
+    // bound exactly to kind+digest.
+    {
+      const { store, putCalls } = makeRecordingStore();
+      const pos = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store }).execute(makeRequest());
+      check(pos.reasonCode === "DIRECT_READY", "R1 positive descriptor control reaches direct");
+      const expectedRef = `loop-artifact:v1:requirement_summary:sha256:${sha256Hex("")}`;
+      check(typeof pos.requirementArtifactRef === "string" &&
+        /^loop-artifact:v1:requirement_summary:sha256:[0-9a-f]{64}$/.test(pos.requirementArtifactRef),
+        "R1 requirement ref strictly bound to kind/digest format");
+      check(putCalls.length === 5, "R1 positive control put count");
+    }
+    // Adversarial descriptors for the first put (requirement_summary): every
+    // case must fail closed with no forged ref, no further puts, one terminal.
+    const forgedDigest = "f".repeat(64);
+    const refLies: Array<{ name: string; lie: (kind: LoopArtifactKind, bytes: Uint8Array) => unknown }> = [
+      {
+        name: "forged ref (correct kind/digest/size)",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${forgedDigest}`, kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "ref wrong kind",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:technical_design:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "ref empty",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: "", kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "ref missing",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "wrong digest",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          const wrong = d.startsWith("0") ? "1" + d.slice(1) : "0" + d.slice(1);
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${wrong}`, kind, digest: wrong, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "digest uppercase",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex").toUpperCase();
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "digest non-hex",
+        lie: (kind, bytes) => {
+          const d = "z".repeat(64);
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "digest wrong type",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: 42, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "wrong size",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length + 1 };
+        },
+      },
+      {
+        name: "size non-integer",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length + 0.5 };
+        },
+      },
+      {
+        name: "size negative",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: -1 };
+        },
+      },
+      {
+        name: "size wrong type",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: "nope" };
+        },
+      },
+      {
+        name: "kind wrong type",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind: 42, digest: d, sizeBytes: bytes.length };
+        },
+      },
+      {
+        name: "kind wrong value",
+        lie: (kind, bytes) => {
+          const d = createHash("sha256").update(bytes).digest("hex");
+          return { artifactRef: `loop-artifact:v1:code_patch:sha256:${d}`, kind: "code_patch", digest: d, sizeBytes: bytes.length };
+        },
+      },
+    ];
+    for (const c of refLies) {
+      const { store, putCalls } = makeLieStore(c.lie);
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store: store as never }).execute(makeRequest());
+      check(r.route === "failed" && r.reasonCode === "ARTIFACT_STORE_FAILED",
+        `R1 ref binding rejects ${c.name} (${r.reasonCode})`);
+      check(r.requirementArtifactRef === undefined, `R1 no forged ref for ${c.name}`);
+      check(putCalls.length === 1, `R1 no further puts for ${c.name}`);
+      assertTerminalContract(r, "failed", "ARTIFACT_STORE_FAILED");
+    }
+  }
+  markIfClear("D08_R1_ARTIFACT_REF_BINDING_VERIFIED");
+
+  // ═══════════════════════════════════════ 13. R1 descriptor plain-data record
+  startSection();
+  {
+    console.log("13. R1 descriptor must be a plain data record (snapshot, no re-read)");
+    const plainLies: Array<{ name: string; lie: (kind: LoopArtifactKind, bytes: Uint8Array) => unknown }> = [
+      { name: "stored null", lie: () => null },
+      { name: "stored array", lie: () => [] as unknown },
+      { name: "stored class instance", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        class Descriptor {
+          artifactRef = `loop-artifact:v1:${kind}:sha256:${d}`;
+          kind = kind;
+          digest = d;
+          sizeBytes = bytes.length;
+        }
+        return new Descriptor();
+      } },
+      { name: "missing field", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        delete rec.digest;
+        return rec;
+      } },
+      { name: "unknown field", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        return { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length, hacked: 1 };
+      } },
+      { name: "symbol field", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        (rec as Record<symbol, unknown>)[Symbol("x")] = 1;
+        return rec;
+      } },
+      { name: "__proto__ own key", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        Object.defineProperty(rec, "__proto__", { value: 1, enumerable: true, configurable: true });
+        return rec;
+      } },
+      { name: "artifactRef accessor", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { kind, digest: d, sizeBytes: bytes.length };
+        Object.defineProperty(rec, "artifactRef", { get: () => `loop-artifact:v1:${kind}:sha256:${d}`, enumerable: true, configurable: true });
+        return rec;
+      } },
+      { name: "kind accessor", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, digest: d, sizeBytes: bytes.length };
+        Object.defineProperty(rec, "kind", { get: () => kind, enumerable: true, configurable: true });
+        return rec;
+      } },
+      { name: "digest accessor", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, sizeBytes: bytes.length };
+        Object.defineProperty(rec, "digest", { get: () => d, enumerable: true, configurable: true });
+        return rec;
+      } },
+      { name: "sizeBytes accessor", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const rec: Record<string, unknown> = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d };
+        Object.defineProperty(rec, "sizeBytes", { get: () => bytes.length, enumerable: true, configurable: true });
+        return rec;
+      } },
+      { name: "ownKeys trap throw", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const target = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        return new Proxy(target, { ownKeys: () => { throw new Error("ownKeys boom"); } });
+      } },
+      { name: "getPrototypeOf trap throw", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const target = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        return new Proxy(target, { getPrototypeOf: () => { throw new Error("proto boom"); } });
+      } },
+      { name: "getOwnPropertyDescriptor trap throw", lie: (kind, bytes) => {
+        const d = createHash("sha256").update(bytes).digest("hex");
+        const target = { artifactRef: `loop-artifact:v1:${kind}:sha256:${d}`, kind, digest: d, sizeBytes: bytes.length };
+        return new Proxy(target, { getOwnPropertyDescriptor: () => { throw new Error("desc boom"); } });
+      } },
+    ];
+    for (const c of plainLies) {
+      const { store, putCalls } = makeLieStore(c.lie);
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store: store as never }).execute(makeRequest());
+      check(r.route === "failed" && r.reasonCode === "ARTIFACT_STORE_FAILED",
+        `R1 plain-data rejects ${c.name} (${r.reasonCode})`);
+      check(r.requirementArtifactRef === undefined, `R1 no ref for ${c.name}`);
+      check(putCalls.length === 1, `R1 no further puts for ${c.name}`);
+      assertTerminalContract(r, "failed", "ARTIFACT_STORE_FAILED");
+    }
+
+    // orchestration_result malformed overrides the original direct terminal:
+    // durable facts stay, the result ref is never forged, no extra puts.
+    for (const variant of [
+      {
+        name: "orchestration digest accessor",
+        lie: (kind: LoopArtifactKind, bytes: Uint8Array): unknown => {
+          if (kind !== "orchestration_result") return descriptorOf(kind, bytes);
+          const rec: Record<string, unknown> = { artifactRef: "", kind, digest: "", sizeBytes: 0 };
+          Object.defineProperty(rec, "digest", { get: () => "0".repeat(64), enumerable: true, configurable: true });
+          return rec;
+        },
+      },
+      {
+        name: "orchestration extra key",
+        lie: (kind: LoopArtifactKind, bytes: Uint8Array): unknown => {
+          if (kind !== "orchestration_result") return descriptorOf(kind, bytes);
+          return { ...descriptorOf(kind, bytes), forged: true };
+        },
+      },
+    ] as Array<{ name: string; lie: (kind: LoopArtifactKind, bytes: Uint8Array) => unknown }>) {
+      const { store, putCalls } = makeLieStore(variant.lie);
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store: store as never }).execute(makeRequest());
+      check(r.route === "failed" && r.reasonCode === "ARTIFACT_STORE_FAILED",
+        `R1 orchestration malformed → failed/ARTIFACT_STORE_FAILED (${variant.name})`);
+      check(r.requirementArtifactRef !== undefined && r.designArtifactRefs.length === 1 &&
+        r.solutionReviewArtifactRefs.length === 1, `R1 durable chain kept (${variant.name})`);
+      check(r.executorInputArtifactRef !== undefined && r.executorInput !== undefined,
+        `R1 executor durable fact kept (${variant.name})`);
+      check(r.orchestrationResultArtifactRef === undefined, `R1 no forged orchestration ref (${variant.name})`);
+      check(putCalls.length === 5, `R1 no extra put after malformed orchestration (${variant.name})`);
+      check(!traceKinds(r).includes("orchestration_result_stored"), `R1 no stored trace for forged result (${variant.name})`);
+      const terminalTrace = r.trace[r.trace.length - 1]!;
+      check(terminalTrace.artifactRef === null, `R1 terminal ref not forged (${variant.name})`);
+      assertTerminalContract(r, "failed", "ARTIFACT_STORE_FAILED");
+    }
+  }
+  markIfClear("D08_R1_ARTIFACT_DESCRIPTOR_PLAIN_DATA_VERIFIED");
+
+  // ═══════════════════════════════════════ 14. R1 fresh tri-state clock gates
+  startSection();
+  {
+    console.log("14. R1 fresh tri-state clock gates around every dependency and put");
+    // Fresh-gate read order (direct path): 1 start, 2 pre-normalize,
+    // 3 post-normalize, 4 pre-requirement-put, 5 post-requirement-put,
+    // 6 pre-design, 7 post-design, 8 pre-design-put, 9 post-design-put,
+    // 10 pre-review, 11 post-review, 12 pre-review-put, 13 post-review-put,
+    // 14 pre-executor-put, 15 post-executor-put, 16 pre-orchestration-put,
+    // 17 post-orchestration-put.
+    const preCases: Array<{ at: number; name: string; normalize: number; design: number; review: number; puts: number; trace: string[] }> = [
+      { at: 2, name: "pre-normalize", normalize: 0, design: 0, review: 0, puts: 0, trace: ["normalization_started", "terminal"] },
+      { at: 4, name: "pre-requirement-put", normalize: 1, design: 0, review: 0, puts: 0, trace: ["normalization_started", "terminal"] },
+      { at: 6, name: "pre-design", normalize: 1, design: 0, review: 0, puts: 1, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "terminal"] },
+      { at: 8, name: "pre-design-put", normalize: 1, design: 1, review: 0, puts: 1, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "terminal"] },
+      { at: 10, name: "pre-review", normalize: 1, design: 1, review: 0, puts: 2, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "terminal"] },
+      { at: 12, name: "pre-review-put", normalize: 1, design: 1, review: 1, puts: 2, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "terminal"] },
+      { at: 14, name: "pre-executor-put", normalize: 1, design: 1, review: 1, puts: 3, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "review_stored", "terminal"] },
+      { at: 16, name: "pre-orchestration-put", normalize: 1, design: 1, review: 1, puts: 4, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "review_stored", "executor_input_stored", "terminal"] },
+    ];
+    for (const c of preCases) {
+      const { result, agent, reviewer, putCalls } = runGateCase({ expireAt: c.at });
+      check(result.route === "failed" && result.reasonCode === "TOTAL_TIMEOUT",
+        `R1 pre-gate expired at ${c.name} → TOTAL_TIMEOUT`);
+      check(agent.normalizeCalls.length === c.normalize, `R1 ${c.name}: normalize count ${c.normalize}`);
+      check(agent.designCalls.length === c.design, `R1 ${c.name}: design count ${c.design}`);
+      check(reviewer.reviewCalls.length === c.review, `R1 ${c.name}: review count ${c.review}`);
+      check(putCalls.length === c.puts, `R1 ${c.name}: put count ${c.puts}`);
+      check(deepEqual(traceKinds(result), c.trace), `R1 ${c.name}: trace stops before the gated side effect`);
+      check(result.orchestrationResultArtifactRef === undefined, `R1 ${c.name}: no orchestration result`);
+      assertTerminalContract(result, "failed", "TOTAL_TIMEOUT");
+    }
+    const postCases: Array<{ at: number; name: string; puts: number; keepRef: boolean; trace: string[] }> = [
+      { at: 3, name: "post-normalize", puts: 0, keepRef: false, trace: ["normalization_started", "terminal"] },
+      { at: 5, name: "post-requirement-put", puts: 1, keepRef: true, trace: ["normalization_started", "requirement_stored", "terminal"] },
+      { at: 7, name: "post-design", puts: 1, keepRef: false, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "terminal"] },
+      { at: 9, name: "post-design-put", puts: 2, keepRef: true, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "terminal"] },
+      { at: 11, name: "post-review", puts: 2, keepRef: false, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "terminal"] },
+      { at: 13, name: "post-review-put", puts: 3, keepRef: true, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "review_stored", "terminal"] },
+      { at: 15, name: "post-executor-put", puts: 4, keepRef: true, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "review_stored", "executor_input_stored", "terminal"] },
+      { at: 17, name: "post-orchestration-put", puts: 5, keepRef: true, trace: ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "review_stored", "executor_input_stored", "orchestration_result_stored", "terminal"] },
+    ];
+    for (const c of postCases) {
+      const { result, agent, putCalls } = runGateCase({ expireAt: c.at });
+      check(result.route === "failed" && result.reasonCode === "TOTAL_TIMEOUT",
+        `R1 post-gate expired at ${c.name} → TOTAL_TIMEOUT`);
+      check(putCalls.length === c.puts, `R1 ${c.name}: put count ${c.puts}`);
+      check(deepEqual(traceKinds(result), c.trace), `R1 ${c.name}: stored trace then terminal`);
+      if (c.name === "post-requirement-put") {
+        check(result.requirementArtifactRef !== undefined, `R1 ${c.name}: durable requirement ref kept`);
+        check(agent.designCalls.length === 0, `R1 ${c.name}: no next side effect`);
+      }
+      if (c.name === "post-design-put") {
+        check(result.designArtifactRefs.length === 1, `R1 ${c.name}: durable design ref kept`);
+      }
+      if (c.name === "post-review-put") {
+        check(result.solutionReviewArtifactRefs.length === 1, `R1 ${c.name}: durable review ref kept`);
+      }
+      if (c.name === "post-executor-put") {
+        check(result.executorInputArtifactRef !== undefined && result.executorInput !== undefined,
+          `R1 ${c.name}: durable executor input kept`);
+        check(result.orchestrationResultArtifactRef === undefined, `R1 ${c.name}: no orchestration result`);
+      }
+      if (c.name === "post-orchestration-put") {
+        check(result.orchestrationResultArtifactRef !== undefined, `R1 ${c.name}: orchestration result kept`);
+      }
+      assertTerminalContract(result, "failed", "TOTAL_TIMEOUT");
+    }
+    // clock throw and backward at fresh-gate positions
+    {
+      const { result, agent, putCalls } = runGateCase({ throwAt: 2 });
+      check(result.route === "failed" && result.reasonCode === "CLOCK_INVALID", "R1 clock throw at pre-normalize → CLOCK_INVALID");
+      check(agent.normalizeCalls.length === 0 && putCalls.length === 0, "R1 clock throw stops before any side effect");
+      assertTerminalContract(result, "failed", "CLOCK_INVALID");
+    }
+    {
+      const { result, agent, reviewer, putCalls } = runGateCase({ throwAt: 10 });
+      check(result.route === "failed" && result.reasonCode === "CLOCK_INVALID", "R1 clock throw at pre-review → CLOCK_INVALID");
+      check(agent.designCalls.length === 1 && reviewer.reviewCalls.length === 0 && putCalls.length === 2,
+        "R1 clock throw at pre-review leaves design stored, review not called");
+      assertTerminalContract(result, "failed", "CLOCK_INVALID");
+    }
+    {
+      const { result, putCalls } = runGateCase({ backwardAt: 4 });
+      check(result.route === "failed" && result.reasonCode === "CLOCK_INVALID", "R1 backward clock at pre-requirement-put → CLOCK_INVALID");
+      check(putCalls.length === 0, "R1 backward clock stops before requirement put");
+      assertTerminalContract(result, "failed", "CLOCK_INVALID");
+    }
+    {
+      const { result, reviewer, putCalls } = runGateCase({ backwardAt: 12 });
+      check(result.route === "failed" && result.reasonCode === "CLOCK_INVALID", "R1 backward clock at pre-review-put → CLOCK_INVALID");
+      check(reviewer.reviewCalls.length === 1 && putCalls.length === 2, "R1 backward clock leaves review uncalled side-effect-free");
+      assertTerminalContract(result, "failed", "CLOCK_INVALID");
+    }
+  }
+  markIfClear("D08_R1_PRE_SIDE_EFFECT_CLOCK_GATE_VERIFIED");
+
+  // ═══════════════════════════════════════ 15. R1 identity single snapshot
+  startSection();
+  {
+    console.log("15. R1 identity single validated descriptor snapshot");
+    // Proxy get trap returning an altered SHA must never feed canonical data.
+    {
+      const altered = new Proxy(Object.freeze(makeIdentity()), {
+        get(target, prop, receiver): unknown {
+          if (prop === "expectedBaseSha") return "b".repeat(40);
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      const { store, tempRoot } = makeRealStore();
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store }).execute(makeRequest({ identity: altered }));
+      check(r.reasonCode === "DIRECT_READY", "R1 get-trap-altered identity still runs on descriptor values");
+      const payload = readPayload(store, r.requirementArtifactRef!);
+      check(deepEqual(payload.identity, makeIdentity()), "R1 canonical identity comes from descriptor snapshot, not get trap");
+      check(!JSON.stringify(payload).includes("b".repeat(40)), "R1 altered SHA never enters payload");
+      store.close();
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+    // Proxy get trap that throws must never be invoked (and never escape).
+    {
+      const throwingGet = new Proxy(Object.freeze(makeIdentity()), {
+        get(): unknown { throw new Error("get trap boom SECRET-GET"); },
+      });
+      const { store, tempRoot } = makeRealStore();
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store }).execute(makeRequest({ identity: throwingGet }));
+      check(r.reasonCode === "DIRECT_READY", "R1 get-trap-throwing identity succeeds without invoking the trap");
+      check(!r.safeMessage.includes("SECRET-GET"), "R1 no trap text leaks");
+      const payload = readPayload(store, r.requirementArtifactRef!);
+      check(deepEqual(payload.identity, makeIdentity()), "R1 get-trap-throwing identity payload exact");
+      store.close();
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+    // Reflection/accessor/unknown/symbol/class identity → INVALID_INPUT, no deps.
+    const badIdentities: Array<{ name: string; identity: unknown }> = [
+      { name: "ownKeys trap throw", identity: new Proxy(makeIdentity(), { ownKeys: () => { throw new Error("ownKeys"); } }) },
+      { name: "descriptor trap throw", identity: new Proxy(makeIdentity(), { getOwnPropertyDescriptor: () => { throw new Error("desc"); } }) },
+      {
+        name: "accessor field", identity: (() => {
+          const rec = { ...makeIdentity() };
+          Object.defineProperty(rec, "runId", { get: () => "stolen", enumerable: true, configurable: true });
+          return rec;
+        })(),
+      },
+      { name: "unknown field", identity: { ...makeIdentity(), bogus: 1 } },
+      {
+        name: "symbol field", identity: (() => {
+          const rec: Record<string, unknown> = { ...makeIdentity() };
+          (rec as Record<symbol, unknown>)[Symbol("x")] = 1;
+          return rec;
+        })(),
+      },
+      {
+        name: "class instance", identity: (() => {
+          class FakeIdentity { runId = "run-008"; }
+          return new FakeIdentity();
+        })(),
+      },
+      { name: "missing field", identity: (() => { const rec = { ...makeIdentity() }; delete (rec as Record<string, unknown>).createdAt; return rec; })() },
+    ];
+    for (const c of badIdentities) {
+      const agent = makeAgent();
+      const { store, putCalls } = makeRecordingStore();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer(), store }).execute(makeRequest({ identity: c.identity }));
+      check(r.route === "failed" && r.reasonCode === "INVALID_INPUT", `R1 identity ${c.name} → INVALID_INPUT`);
+      check(!r.safeMessage.includes("SECRET"), "R1 identity failure leaks nothing");
+      check(agent.normalizeCalls.length === 0, `R1 identity ${c.name}: normalize not called`);
+      check(putCalls.length === 0, `R1 identity ${c.name}: no artifacts`);
+      assertTerminalContract(r, "failed", "INVALID_INPUT");
+    }
+    // Mutation of the original identity (inside normalize and after execute)
+    // must not change the snapshot payload/input/result.
+    {
+      const req = makeRequest({ identity: { ...makeIdentity() } });
+      const originalIdentity = req.identity as LoopRunIdentity;
+      const mutAgent = makeAgent();
+      mutAgent.normalize = (input: unknown): unknown => {
+        mutAgent.normalizeCalls.push(input);
+        (originalIdentity as { runId: string }).runId = "MUTATED-RUN";
+        return makeSummary();
+      };
+      const { store, tempRoot } = makeRealStore();
+      const r = newOrchestrator({ agent: mutAgent, reviewer: makeReviewer(), store }).execute(req);
+      check(r.reasonCode === "DIRECT_READY", "R1 normalize-internal identity mutation run succeeds");
+      (originalIdentity as { runId: string }).runId = "MUTATED-AFTER";
+      const payload = readPayload(store, r.requirementArtifactRef!);
+      check((payload.identity as { runId: string }).runId === "run-008", "R1 identity mutation never changes canonical payload");
+      const normInput = mutAgent.normalizeCalls[0] as { identity: LoopRunIdentity };
+      check(normInput.identity.runId === "run-008", "R1 identity mutation never changes normalize input");
+      check(!JSON.stringify(payload).includes("MUTATED"), "R1 no mutated identity text in payload");
+      store.close();
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }
+  markIfClear("D08_R1_IDENTITY_SINGLE_SNAPSHOT_VERIFIED");
+
+  // ═══════════════════════════════════════ 16. R1 external output bounds
+  startSection();
+  {
+    console.log("16. R1 external output safe arrays and upfront byte budgets");
+    const capCases: Array<{ name: string; summary?: Record<string, unknown>; design?: Record<string, unknown>; review?: Record<string, unknown>; puts: number; designCalls: number; reviewCalls: number }> = [
+      {
+        name: "summary string array over item cap",
+        summary: makeSummary({ acceptanceCriteria: Array.from({ length: 257 }, (_, i) => `item-${i}`) }),
+        puts: 0, designCalls: 0, reviewCalls: 0,
+      },
+      {
+        name: "design string array over item cap",
+        design: makeDesign({ components: Array.from({ length: 257 }, (_, i) => `core/comp-${i}`) }),
+        puts: 2, designCalls: 1, reviewCalls: 0,
+      },
+      {
+        name: "review findings over root cap",
+        review: makeReview("NEEDS_REVISION", { findings: Array.from({ length: 257 }, (_, i) => ({ code: `C${i}` })) }),
+        puts: 3, designCalls: 1, reviewCalls: 1,
+      },
+    ];
+    for (const c of capCases) {
+      const agent = makeAgent(c.summary, c.design);
+      const reviewer = makeReviewer(c.review);
+      const { store, putCalls } = makeRecordingStore();
+      const r = newOrchestrator({ agent, reviewer, store }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        `R1 ${c.name} → blocked/DEPENDENCY_RESULT_INVALID`);
+      check(agent.designCalls.length === c.designCalls, `R1 ${c.name}: design count`);
+      check(reviewer.reviewCalls.length === c.reviewCalls, `R1 ${c.name}: review count`);
+      check(putCalls.length === c.puts, `R1 ${c.name}: put count`);
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // byte budgets: single item and aggregate across summary/design/review
+    const budgetCases: Array<{ name: string; limits: Record<string, number>; summary?: Record<string, unknown>; design?: Record<string, unknown>; review?: Record<string, unknown>; puts: number }> = [
+      {
+        name: "summary single string over byte budget",
+        limits: makeLimits({ maxAgentOutputBytes: 1024 }),
+        summary: makeSummary({ objective: "x".repeat(2000) }),
+        puts: 0,
+      },
+      {
+        name: "summary aggregate arrays over byte budget",
+        limits: makeLimits({ maxAgentOutputBytes: 1024 }),
+        summary: makeSummary({ acceptanceCriteria: Array.from({ length: 10 }, (_, i) => "a".repeat(150) + String(i)) }),
+        puts: 0,
+      },
+      {
+        name: "design single field over byte budget",
+        limits: makeLimits({ maxAgentOutputBytes: 2048 }),
+        design: makeDesign({ approach: "x".repeat(4000) }),
+        puts: 2,
+      },
+      {
+        name: "design aggregate over byte budget",
+        limits: makeLimits({ maxAgentOutputBytes: 1024 }),
+        design: makeDesign({ components: Array.from({ length: 8 }, (_, i) => `core/comp-${"x".repeat(150)}${i}`) }),
+        puts: 2,
+      },
+      {
+        name: "review finding bytes over budget",
+        limits: makeLimits({ maxAgentOutputBytes: 1024 }),
+        review: makeReview("NEEDS_REVISION", { findings: [{ code: "X", detail: "y".repeat(3000) }] }),
+        puts: 3,
+      },
+    ];
+    for (const c of budgetCases) {
+      const agent = makeAgent(c.summary, c.design);
+      const reviewer = makeReviewer(c.review);
+      const { store, putCalls } = makeRecordingStore();
+      const r = newOrchestrator({ agent, reviewer, store }).execute(makeRequest({ limits: c.limits }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        `R1 ${c.name} → blocked/DEPENDENCY_RESULT_INVALID`);
+      check(putCalls.length === c.puts, `R1 ${c.name}: put count`);
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // safe-array fail-closed: accessor element, sparse, reflection traps
+    const safeArrayCases: Array<{ name: string; summary?: Record<string, unknown>; design?: Record<string, unknown>; review?: Record<string, unknown>; puts: number }> = [
+      {
+        name: "summary accessor element",
+        summary: makeSummary({ constraints: (() => {
+          const arr = new Array(1);
+          Object.defineProperty(arr, "0", { get: () => "x", enumerable: true, configurable: true });
+          return arr;
+        })() }),
+        puts: 0,
+      },
+      {
+        name: "summary sparse array",
+        summary: makeSummary({ constraints: (() => { const arr = new Array(3); arr[0] = "a"; arr[2] = "c"; return arr; })() }),
+        puts: 0,
+      },
+      {
+        name: "summary array ownKeys trap throw",
+        summary: makeSummary({ constraints: new Proxy(["ok"], { ownKeys: () => { throw new Error("boom"); } }) }),
+        puts: 0,
+      },
+      {
+        name: "design allowedPaths element read throw",
+        design: makeDesign({ allowedPaths: new Proxy(["core/a"], { get(target, prop): unknown {
+          if (prop === "0") throw new Error("boom");
+          return Reflect.get(target, prop);
+        } }) }),
+        puts: 2,
+      },
+      {
+        name: "design testPlan array descriptor trap throw",
+        design: makeDesign({ testPlan: new Proxy([makeStep()], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }) }),
+        puts: 2,
+      },
+      {
+        name: "review findings sparse",
+        review: makeReview("NEEDS_REVISION", { findings: (() => { const arr = new Array(2); arr[0] = { code: "A" }; return arr; })() }),
+        puts: 3,
+      },
+      {
+        name: "review finding nested array reflection throw",
+        review: makeReview("NEEDS_REVISION", { findings: [{ code: "A", refs: new Proxy(["x"], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }) }] }),
+        puts: 3,
+      },
+    ];
+    for (const c of safeArrayCases) {
+      const agent = makeAgent(c.summary, c.design);
+      const reviewer = makeReviewer(c.review);
+      const { store, putCalls } = makeRecordingStore();
+      const r = newOrchestrator({ agent, reviewer, store }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        `R1 ${c.name} → blocked/DEPENDENCY_RESULT_INVALID (no escape, no fallback PASS)`);
+      check(putCalls.length === c.puts, `R1 ${c.name}: put count`);
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+  }
+  markIfClear("D08_R1_EXTERNAL_OUTPUT_BOUNDS_VERIFIED");
+
   // ═══════════════════════════════════════ summary
   const total = GLOBAL_PASSED + GLOBAL_FAILED;
   console.log(`\nD08_TARGETED_SUMMARY total=${total} passed=${GLOBAL_PASSED} failed=${GLOBAL_FAILED}`);
@@ -1369,6 +1964,67 @@ async function main(): Promise<void> {
 }
 
 // ═══════════════════════════════════════ helpers
+
+/** Sequence clock with per-read overrides; normal reads return 1..N. */
+function makeSeqClock(overrides: Array<{ at: number; value?: number; throwError?: boolean }>): { nowMs(): number } {
+  let n = 0;
+  return {
+    nowMs: (): number => {
+      n += 1;
+      for (const ov of overrides) {
+        if (ov.at === n) {
+          if (ov.throwError) throw new Error("clock boom");
+          return ov.value as number;
+        }
+      }
+      return n;
+    },
+  };
+}
+
+/** Lie store factory: put returns an arbitrary (possibly hostile) descriptor. */
+function makeLieStore(lie: (kind: LoopArtifactKind, bytes: Uint8Array) => unknown): {
+  store: { put: (kind: LoopArtifactKind, content: string | Uint8Array) => unknown };
+  putCalls: { kind: LoopArtifactKind; content: string | Uint8Array }[];
+} {
+  const putCalls: { kind: LoopArtifactKind; content: string | Uint8Array }[] = [];
+  const store = {
+    put: (kind: LoopArtifactKind, content: string | Uint8Array): unknown => {
+      putCalls.push({ kind, content });
+      const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+      return lie(kind, bytes);
+    },
+  };
+  return { store, putCalls };
+}
+
+/**
+ * R1 clock-gate case runner: a sequence clock over maxTotalDurationMs=1000
+ * with an expiry (5000), a throw, or a backward sample at the given read.
+ * Fresh-gate read order (direct path): 1 start, 2 pre-normalize,
+ * 3 post-normalize, 4 pre-requirement-put, 5 post-requirement-put,
+ * 6 pre-design, 7 post-design, 8 pre-design-put, 9 post-design-put,
+ * 10 pre-review, 11 post-review, 12 pre-review-put, 13 post-review-put,
+ * 14 pre-executor-put, 15 post-executor-put, 16 pre-orchestration-put,
+ * 17 post-orchestration-put.
+ */
+function runGateCase(opts: { expireAt?: number; throwAt?: number; backwardAt?: number }): {
+  result: LoopRequirementDesignResult;
+  agent: FakeAgent;
+  reviewer: ReturnType<typeof makeReviewer>;
+  putCalls: { kind: LoopArtifactKind; content: string | Uint8Array }[];
+} {
+  const overrides: Array<{ at: number; value?: number; throwError?: boolean }> = [];
+  if (opts.expireAt !== undefined) overrides.push({ at: opts.expireAt, value: 5000 });
+  if (opts.throwAt !== undefined) overrides.push({ at: opts.throwAt, throwError: true });
+  if (opts.backwardAt !== undefined) overrides.push({ at: opts.backwardAt, value: 0 });
+  const agent = makeAgent();
+  const reviewer = makeReviewer();
+  const { store, putCalls } = makeRecordingStore();
+  const orch = newOrchestrator({ agent, reviewer, store, clock: makeSeqClock(overrides) });
+  const result = orch.execute(makeRequest({ limits: makeLimits({ maxTotalDurationMs: 1000 }) }));
+  return { result, agent, reviewer, putCalls };
+}
 
 function newLoopDefaultClock(): boolean {
   const { store } = makeRealStore();

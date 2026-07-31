@@ -23,11 +23,18 @@
 // orchestrator is synchronous by contract; dependency exceptions are never
 // propagated. Every path has exactly one terminal trace entry, and the
 // terminal entry is always the last one.
+//
+// R1 hardening: stored-artifact descriptors are validated as untrusted plain
+// data records (exact-key descriptor snapshot, strict ref/digest/size binding);
+// every side effect is guarded by a fresh tri-state clock gate (active /
+// expired / clock_invalid); the identity is captured once through a descriptor
+// snapshot and never re-read from the original object; all external arrays
+// are counted and byte-budgeted before any copy.
 
 import { createHash } from "node:crypto";
 import type { LoopRunIdentity } from "./loop-executor-types";
 import { validateLoopRunIdentity } from "./loop-run-state";
-import type { LoopArtifactKind, LoopArtifactStore, LoopStoredArtifact } from "./loop-artifact-store";
+import type { LoopArtifactKind, LoopArtifactStore } from "./loop-artifact-store";
 import type { LoopDeliveryCommandStep } from "./loop-autonomous-delivery-loop";
 
 // ═══════════════════════════════════════ Types
@@ -195,6 +202,15 @@ const MAX_EXEC_IDS = 32;
 const MAX_DESIGN_ALLOWED_PATHS = 128;
 const MAX_FINDING_DEPTH = 64;
 const MAX_FINDING_NODES = 10000;
+const MAX_OUTPUT_STRING_ARRAY_ITEMS = 256;
+const MAX_REVIEW_FINDINGS = 256;
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+const IDENTITY_KEYS = [
+  "runId", "requirementId", "repository", "repositoryPath", "baseBranch",
+  "expectedBaseSha", "taskBranch", "controlRoot", "createdAt",
+];
+const DESCRIPTOR_KEYS = ["artifactRef", "kind", "digest", "sizeBytes"];
 
 const DEFAULT_MAX_DESIGN_ROUNDS = 2;
 const MIN_MAX_DESIGN_ROUNDS = 1;
@@ -369,18 +385,131 @@ function scanPlainRecord(v: unknown, label: string): Record<string, unknown> {
 }
 
 /**
- * Bounded JSON-safe value scan with cycle protection (depth cap + node
- * budget). Used before canonicalizing reviewer findings so that untrusted
- * output can never break serialization.
+ * Untrusted external-array scan. Rejects non-arrays, symbol/non-canonical own
+ * keys (indices only, in canonical string form), accessor elements, missing
+ * element descriptors, sparse holes (own keys must cover the index range) and
+ * any reflection that throws. The captured length is the only length used by
+ * callers so a lying Proxy can never change the iteration bound mid-scan.
  */
-function isJsonSafeValue(v: unknown, depth: number, budget: { nodes: number }): boolean {
-  if (v === null || typeof v === "string" || typeof v === "boolean") return true;
+function scanExternalArray(v: unknown, label: string): { ok: true; arr: unknown[]; length: number } | { ok: false } {
+  if (!Array.isArray(v)) return { ok: false };
+  let keys: Array<string | symbol>;
+  try { keys = Reflect.ownKeys(v) as Array<string | symbol>; } catch {
+    return { ok: false };
+  }
+  let length: number;
+  try { length = v.length; } catch {
+    return { ok: false };
+  }
+  if (!Number.isSafeInteger(length) || length < 0) return { ok: false };
+  let extraKeys = 0;
+  for (const k of keys) {
+    if (k === "length") {
+      // The canonical array length is an own non-configurable data property
+      // in this runtime; it must be a plain data descriptor matching the
+      // captured length and is otherwise skipped.
+      let desc: PropertyDescriptor | undefined;
+      try { desc = Object.getOwnPropertyDescriptor(v, k); } catch {
+        return { ok: false };
+      }
+      if (!desc || "get" in desc || "set" in desc || !("value" in desc) ||
+          desc.value !== length || desc.configurable !== false) {
+        return { ok: false };
+      }
+      extraKeys += 1;
+      continue;
+    }
+    if (typeof k !== "string") return { ok: false };
+    const idx = Number(k);
+    if (!Number.isSafeInteger(idx) || idx < 0 || idx >= length || String(idx) !== k) {
+      return { ok: false };
+    }
+    let desc: PropertyDescriptor | undefined;
+    try { desc = Object.getOwnPropertyDescriptor(v, k); } catch {
+      return { ok: false };
+    }
+    if (!desc || "get" in desc || "set" in desc || !("value" in desc)) return { ok: false };
+  }
+  if (keys.length - extraKeys > length) return { ok: false };
+  return { ok: true, arr: v, length };
+}
+
+/** Remaining output byte budget shared by all validators of one dependency output. */
+interface OutputBudget { bytes: number }
+
+/** Descriptor snapshot verified against a canonical loop-artifact:v1 binding. */
+interface VerifiedStoredDescriptor {
+  artifactRef: string;
+  kind: LoopArtifactKind;
+  digest: string;
+  sizeBytes: number;
+}
+
+/**
+ * Strict stored-artifact descriptor validation. The put return value is
+ * completely untrusted: it is scanned through property descriptors into a
+ * fresh plain record and never re-read afterwards. Only an exact
+ * kind/digest/size/ref binding — ref strictly equal to
+ * loop-artifact:v1:<kind>:sha256:<digest> — is accepted.
+ */
+function verifyStoredDescriptor(
+  stored: unknown,
+  expectedKind: LoopArtifactKind,
+  expectedDigest: string,
+  expectedSizeBytes: number,
+): VerifiedStoredDescriptor | null {
+  let rec: Record<string, unknown>;
+  try {
+    rec = scanPlain(stored, DESCRIPTOR_KEYS, "stored artifact descriptor");
+  } catch {
+    return null;
+  }
+  for (const key of DESCRIPTOR_KEYS) {
+    if (!(key in rec)) return null;
+  }
+  if (rec.kind !== expectedKind) return null;
+  const digest = rec.digest;
+  if (typeof digest !== "string" || !SHA256_HEX_RE.test(digest) || digest !== expectedDigest) return null;
+  const sizeBytes = rec.sizeBytes;
+  if (typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) return null;
+  if (sizeBytes !== expectedSizeBytes) return null;
+  const artifactRef = rec.artifactRef;
+  if (typeof artifactRef !== "string" || NON_CONTROL_RE.test(artifactRef)) return null;
+  if (artifactRef !== `loop-artifact:v1:${expectedKind}:sha256:${expectedDigest}`) return null;
+  return { artifactRef, kind: rec.kind as LoopArtifactKind, digest, sizeBytes };
+}
+
+/**
+ * Bounded JSON-safe value scan with cycle protection (depth cap + node
+ * budget) and an output byte budget charged for finding keys and string
+ * values. Used before canonicalizing reviewer findings so that untrusted
+ * output can never break serialization or exceed the output budget.
+ */
+function isJsonSafeValue(
+  v: unknown, depth: number, budget: { nodes: number; bytes: number },
+): boolean {
+  if (v === null || typeof v === "boolean") return true;
+  if (typeof v === "string") {
+    const b = utf8Length(v);
+    if (b > budget.bytes) return false;
+    budget.bytes -= b;
+    return true;
+  }
   if (typeof v === "number") return Number.isFinite(v);
   if (Array.isArray(v)) {
     if (depth >= MAX_FINDING_DEPTH) return false;
-    for (const item of v) {
+    const scanned = scanExternalArray(v, "finding array");
+    if (!scanned.ok) return false;
+    for (let i = 0; i < scanned.length; i++) {
       budget.nodes -= 1;
       if (budget.nodes < 0) return false;
+      let item: unknown;
+      try {
+        if (!(i in scanned.arr)) return false;
+        item = scanned.arr[i];
+      } catch {
+        return false;
+      }
       if (!isJsonSafeValue(item, depth + 1, budget)) return false;
     }
     return true;
@@ -392,6 +521,9 @@ function isJsonSafeValue(v: unknown, depth: number, budget: { nodes: number }): 
     for (const key of Object.keys(rec)) {
       budget.nodes -= 1;
       if (budget.nodes < 0) return false;
+      const keyBytes = utf8Length(key);
+      if (keyBytes > budget.bytes) return false;
+      budget.bytes -= keyBytes;
       if (!isJsonSafeValue(rec[key], depth + 1, budget)) return false;
     }
     return true;
@@ -532,42 +664,66 @@ function validateRawRequirement(v: unknown, maxBytes: number): { ok: true; value
   return { ok: true, value: v };
 }
 
-function validateStringArray(v: unknown, label: string): { ok: true; values: string[] } | { ok: false; reason: string } {
-  if (!Array.isArray(v)) return { ok: false, reason: `${label} must be an array` };
+function validateStringArray(
+  v: unknown, label: string, budget: OutputBudget, maxItems: number,
+): { ok: true; values: string[] } | { ok: false; reason: string } {
+  const scanned = scanExternalArray(v, label);
+  if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
+  if (scanned.length > maxItems) return { ok: false, reason: `${label} count exceeds the cap` };
   const values: string[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < v.length; i++) {
-    const item = v[i];
+  for (let i = 0; i < scanned.length; i++) {
+    let item: unknown;
+    try {
+      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
+      item = scanned.arr[i];
+    } catch {
+      return { ok: false, reason: `${label} element read failed` };
+    }
     if (typeof item !== "string") return { ok: false, reason: `${label}[${i}] must be a string` };
     if (item.trim().length === 0) return { ok: false, reason: `${label}[${i}] must be non-empty` };
     if (NON_CONTROL_RE.test(item)) return { ok: false, reason: `${label}[${i}] contains control characters` };
     if (seen.has(item)) return { ok: false, reason: `${label} must be unique` };
     seen.add(item);
+    const itemBytes = utf8Length(item);
+    if (itemBytes > budget.bytes) return { ok: false, reason: `${label} exceeds the output byte budget` };
+    budget.bytes -= itemBytes;
     values.push(item);
   }
   return { ok: true, values };
 }
 
 function validateEnumArray(
-  v: unknown, label: string, allowed: readonly string[],
+  v: unknown, label: string, allowed: readonly string[], budget: OutputBudget,
 ): { ok: true; values: string[] } | { ok: false; reason: string } {
-  if (!Array.isArray(v)) return { ok: false, reason: `${label} must be an array` };
+  const scanned = scanExternalArray(v, label);
+  if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
+  if (scanned.length > MAX_OUTPUT_STRING_ARRAY_ITEMS) return { ok: false, reason: `${label} count exceeds the cap` };
   const values: string[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < v.length; i++) {
-    const item = v[i];
+  for (let i = 0; i < scanned.length; i++) {
+    let item: unknown;
+    try {
+      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
+      item = scanned.arr[i];
+    } catch {
+      return { ok: false, reason: `${label} element read failed` };
+    }
     if (typeof item !== "string") return { ok: false, reason: `${label}[${i}] must be a string` };
     if (item.trim().length === 0) return { ok: false, reason: `${label}[${i}] must be non-empty` };
     if (NON_CONTROL_RE.test(item)) return { ok: false, reason: `${label}[${i}] contains control characters` };
     if (!allowed.includes(item)) return { ok: false, reason: `${label}[${i}] is not a canonical value` };
     if (seen.has(item)) return { ok: false, reason: `${label} must be unique` };
     seen.add(item);
+    const itemBytes = utf8Length(item);
+    if (itemBytes > budget.bytes) return { ok: false, reason: `${label} exceeds the output byte budget` };
+    budget.bytes -= itemBytes;
     values.push(item);
   }
   return { ok: true, values };
 }
 
-function validateRequirementSummary(v: unknown): { ok: true; summary: CanonicalSummary } | { ok: false; reason: string } {
+function validateRequirementSummary(v: unknown, budget: OutputBudget): { ok: true; summary: CanonicalSummary } | { ok: false; reason: string } {
   let rec: Record<string, unknown>;
   try { rec = scanPlain(v, SUMMARY_KEYS, "requirement summary"); } catch {
     return { ok: false, reason: "requirement summary malformed" };
@@ -579,6 +735,9 @@ function validateRequirementSummary(v: unknown): { ok: true; summary: CanonicalS
     if (value.trim().length === 0 || value !== value.trim()) {
       return { ok: false, reason: `requirement summary ${field} must be trimmed non-empty` };
     }
+    const fieldBytes = utf8Length(value);
+    if (fieldBytes > budget.bytes) return { ok: false, reason: `requirement summary ${field} exceeds the output byte budget` };
+    budget.bytes -= fieldBytes;
   }
   if (rec.repositoryScope !== "single_repository" && rec.repositoryScope !== "multi_repository") {
     return { ok: false, reason: "requirement summary repositoryScope invalid" };
@@ -586,15 +745,18 @@ function validateRequirementSummary(v: unknown): { ok: true; summary: CanonicalS
   if (rec.complexity !== "direct" && rec.complexity !== "complex") {
     return { ok: false, reason: "requirement summary complexity invalid" };
   }
+  const fixedBytes = utf8Length(rec.schema as string) + utf8Length(rec.repositoryScope as string) + utf8Length(rec.complexity as string);
+  if (fixedBytes > budget.bytes) return { ok: false, reason: "requirement summary exceeds the output byte budget" };
+  budget.bytes -= fixedBytes;
   const arrays: Record<string, string[]> = Object.create(null) as Record<string, string[]>;
   for (const field of SUMMARY_STRING_ARRAY_FIELDS) {
-    const r = validateStringArray(rec[field], `requirement summary ${field}`);
+    const r = validateStringArray(rec[field], `requirement summary ${field}`, budget, MAX_OUTPUT_STRING_ARRAY_ITEMS);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
     arrays[field] = r.values;
   }
-  const riskFlagsResult = validateEnumArray(rec.riskFlags, "requirement summary riskFlags", RISK_FLAGS);
+  const riskFlagsResult = validateEnumArray(rec.riskFlags, "requirement summary riskFlags", RISK_FLAGS, budget);
   if (!riskFlagsResult.ok) return { ok: false, reason: (riskFlagsResult as { ok: false; reason: string }).reason };
-  const requestedSideEffectsResult = validateEnumArray(rec.requestedSideEffects, "requirement summary requestedSideEffects", REQUESTED_SIDE_EFFECTS);
+  const requestedSideEffectsResult = validateEnumArray(rec.requestedSideEffects, "requirement summary requestedSideEffects", REQUESTED_SIDE_EFFECTS, budget);
   if (!requestedSideEffectsResult.ok) return { ok: false, reason: (requestedSideEffectsResult as { ok: false; reason: string }).reason };
   return {
     ok: true,
@@ -616,39 +778,63 @@ function validateRequirementSummary(v: unknown): { ok: true; summary: CanonicalS
 }
 
 function validatePlan(
-  plan: unknown, label: string, allowedExecutableIds: Set<string>,
+  plan: unknown, label: string, allowedExecutableIds: Set<string>, budget: OutputBudget,
 ): { ok: true; plan: LoopDeliveryCommandStep[] } | { ok: false; reason: string } {
-  if (!Array.isArray(plan) || plan.length < 1 || plan.length > MAX_PLAN_STEPS) {
+  const scanned = scanExternalArray(plan, label);
+  if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
+  if (scanned.length < 1 || scanned.length > MAX_PLAN_STEPS) {
     return { ok: false, reason: `${label} count out of range` };
   }
   const stepIds = new Set<string>();
   const validated: LoopDeliveryCommandStep[] = [];
-  for (let i = 0; i < plan.length; i++) {
-    let scanned: Record<string, unknown>;
-    try { scanned = scanPlain(plan[i], STEP_KEYS, `${label}[${i}]`); } catch {
+  for (let i = 0; i < scanned.length; i++) {
+    let stepValue: unknown;
+    try {
+      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
+      stepValue = scanned.arr[i];
+    } catch {
+      return { ok: false, reason: `${label} element read failed` };
+    }
+    let scannedStep: Record<string, unknown>;
+    try { scannedStep = scanPlain(stepValue, STEP_KEYS, `${label}[${i}]`); } catch {
       return { ok: false, reason: `${label}[${i}] step invalid` };
     }
-    if (typeof scanned.id !== "string" || !STEP_ID_RE.test(scanned.id)) {
+    if (typeof scannedStep.id !== "string" || !STEP_ID_RE.test(scannedStep.id)) {
       return { ok: false, reason: `${label}[${i}].id invalid` };
     }
-    if (stepIds.has(scanned.id)) return { ok: false, reason: `${label}[${i}].id duplicate` };
-    stepIds.add(scanned.id);
-    if (typeof scanned.executableId !== "string" || !allowedExecutableIds.has(scanned.executableId)) {
+    if (stepIds.has(scannedStep.id)) return { ok: false, reason: `${label}[${i}].id duplicate` };
+    stepIds.add(scannedStep.id);
+    const idBytes = utf8Length(scannedStep.id);
+    if (idBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].id exceeds the output byte budget` };
+    budget.bytes -= idBytes;
+    if (typeof scannedStep.executableId !== "string" || !allowedExecutableIds.has(scannedStep.executableId)) {
       return { ok: false, reason: `${label}[${i}].executableId not allowed` };
     }
+    const executableIdBytes = utf8Length(scannedStep.executableId);
+    if (executableIdBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].executableId exceeds the output byte budget` };
+    budget.bytes -= executableIdBytes;
     let args: string[] | undefined;
-    if (scanned.args !== undefined) {
-      if (!Array.isArray(scanned.args) || scanned.args.length > MAX_STEP_ARGS) {
+    if (scannedStep.args !== undefined) {
+      const argsScanned = scanExternalArray(scannedStep.args, `${label}[${i}].args`);
+      if (!argsScanned.ok || argsScanned.length > MAX_STEP_ARGS) {
         return { ok: false, reason: `${label}[${i}].args invalid` };
       }
       let totalBytes = 0;
       const argsCopy: string[] = [];
-      for (let j = 0; j < scanned.args.length; j++) {
-        const arg = scanned.args[j];
+      for (let j = 0; j < argsScanned.length; j++) {
+        let arg: unknown;
+        try {
+          if (!(j in argsScanned.arr)) return { ok: false, reason: `${label}[${i}].args must not be sparse` };
+          arg = argsScanned.arr[j];
+        } catch {
+          return { ok: false, reason: `${label}[${i}].args element read failed` };
+        }
         if (typeof arg !== "string") return { ok: false, reason: `${label}[${i}].args[${j}] not a string` };
         if (arg.includes(NUL)) return { ok: false, reason: `${label}[${i}].args[${j}] contains NUL` };
         const argBytes = utf8Length(arg);
         if (argBytes > MAX_ARG_BYTES) return { ok: false, reason: `${label}[${i}].args[${j}] too long` };
+        if (argBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].args exceeds the output byte budget` };
+        budget.bytes -= argBytes;
         totalBytes += argBytes;
         argsCopy.push(arg);
       }
@@ -656,26 +842,26 @@ function validatePlan(
       args = argsCopy;
     }
     let timeoutMs: number | undefined;
-    if (scanned.timeoutMs !== undefined) {
-      const t = validateInt(scanned.timeoutMs, MIN_STEP_TIMEOUT_MS, MAX_STEP_TIMEOUT_MS, -1, `${label}[${i}].timeoutMs`);
+    if (scannedStep.timeoutMs !== undefined) {
+      const t = validateInt(scannedStep.timeoutMs, MIN_STEP_TIMEOUT_MS, MAX_STEP_TIMEOUT_MS, -1, `${label}[${i}].timeoutMs`);
       if (!t.ok || t.value < 0) return { ok: false, reason: `${label}[${i}].timeoutMs out of range` };
       timeoutMs = t.value;
     }
     let maxStdoutBytes: number | undefined;
-    if (scanned.maxStdoutBytes !== undefined) {
-      const s = validateInt(scanned.maxStdoutBytes, 1, MAX_STEP_OUTPUT_BYTES, -1, `${label}[${i}].maxStdoutBytes`);
+    if (scannedStep.maxStdoutBytes !== undefined) {
+      const s = validateInt(scannedStep.maxStdoutBytes, 1, MAX_STEP_OUTPUT_BYTES, -1, `${label}[${i}].maxStdoutBytes`);
       if (!s.ok || s.value < 0) return { ok: false, reason: `${label}[${i}].maxStdoutBytes out of range` };
       maxStdoutBytes = s.value;
     }
     let maxStderrBytes: number | undefined;
-    if (scanned.maxStderrBytes !== undefined) {
-      const s = validateInt(scanned.maxStderrBytes, 1, MAX_STEP_OUTPUT_BYTES, -1, `${label}[${i}].maxStderrBytes`);
+    if (scannedStep.maxStderrBytes !== undefined) {
+      const s = validateInt(scannedStep.maxStderrBytes, 1, MAX_STEP_OUTPUT_BYTES, -1, `${label}[${i}].maxStderrBytes`);
       if (!s.ok || s.value < 0) return { ok: false, reason: `${label}[${i}].maxStderrBytes out of range` };
       maxStderrBytes = s.value;
     }
     validated.push({
-      id: scanned.id as string,
-      executableId: scanned.executableId as string,
+      id: scannedStep.id as string,
+      executableId: scannedStep.executableId as string,
       args,
       timeoutMs,
       maxStdoutBytes,
@@ -691,7 +877,7 @@ function pathIsWithin(root: string, path: string): boolean {
 
 function validateDesign(
   v: unknown, allowedRoots: readonly string[], deniedPaths: readonly string[],
-  allowedExecutableIds: Set<string>,
+  allowedExecutableIds: Set<string>, budget: OutputBudget,
 ): { ok: true; design: CanonicalDesign } | { ok: false; reason: string } {
   let rec: Record<string, unknown>;
   try { rec = scanPlain(v, DESIGN_KEYS, "technical design"); } catch {
@@ -701,20 +887,37 @@ function validateDesign(
   if (typeof rec.approach !== "string" || rec.approach.trim().length === 0 || rec.approach !== rec.approach.trim()) {
     return { ok: false, reason: "technical design approach must be trimmed non-empty" };
   }
+  const approachBytes = utf8Length(rec.approach as string);
+  if (approachBytes > budget.bytes) return { ok: false, reason: "technical design approach exceeds the output byte budget" };
+  budget.bytes -= approachBytes;
+  const schemaBytes = utf8Length(rec.schema as string);
+  if (schemaBytes > budget.bytes) return { ok: false, reason: "technical design exceeds the output byte budget" };
+  budget.bytes -= schemaBytes;
   const arrays: Record<string, string[]> = Object.create(null) as Record<string, string[]>;
   for (const field of DESIGN_STRING_ARRAY_FIELDS) {
-    const r = validateStringArray(rec[field], `technical design ${field}`);
+    const r = validateStringArray(rec[field], `technical design ${field}`, budget, MAX_OUTPUT_STRING_ARRAY_ITEMS);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
     arrays[field] = r.values;
   }
-  if (!Array.isArray(rec.allowedPaths) || rec.allowedPaths.length < 1 || rec.allowedPaths.length > MAX_DESIGN_ALLOWED_PATHS) {
+  const allowedPathsScanned = scanExternalArray(rec.allowedPaths, "technical design allowedPaths");
+  if (!allowedPathsScanned.ok || allowedPathsScanned.length < 1 || allowedPathsScanned.length > MAX_DESIGN_ALLOWED_PATHS) {
     return { ok: false, reason: "technical design allowedPaths count out of range" };
   }
   const allowedPaths: string[] = [];
   const seenPaths = new Set<string>();
-  for (let i = 0; i < rec.allowedPaths.length; i++) {
-    const r = validateRepoRelativePath(rec.allowedPaths[i], `technical design allowedPaths[${i}]`);
+  for (let i = 0; i < allowedPathsScanned.length; i++) {
+    let pathValue: unknown;
+    try {
+      if (!(i in allowedPathsScanned.arr)) return { ok: false, reason: "technical design allowedPaths must not be sparse" };
+      pathValue = allowedPathsScanned.arr[i];
+    } catch {
+      return { ok: false, reason: "technical design allowedPaths element read failed" };
+    }
+    const r = validateRepoRelativePath(pathValue, `technical design allowedPaths[${i}]`);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
+    const pathBytes = utf8Length(r.value);
+    if (pathBytes > budget.bytes) return { ok: false, reason: "technical design allowedPaths exceeds the output byte budget" };
+    budget.bytes -= pathBytes;
     if (seenPaths.has(r.value)) return { ok: false, reason: "technical design allowedPaths must be unique" };
     seenPaths.add(r.value);
     const path = r.value;
@@ -728,9 +931,9 @@ function validateDesign(
     }
     allowedPaths.push(path);
   }
-  const testPlanResult = validatePlan(rec.testPlan, "testPlan", allowedExecutableIds);
+  const testPlanResult = validatePlan(rec.testPlan, "testPlan", allowedExecutableIds, budget);
   if (!testPlanResult.ok) return { ok: false, reason: (testPlanResult as { ok: false; reason: string }).reason };
-  const reviewPlanResult = validatePlan(rec.reviewPlan, "reviewPlan", allowedExecutableIds);
+  const reviewPlanResult = validatePlan(rec.reviewPlan, "reviewPlan", allowedExecutableIds, budget);
   if (!reviewPlanResult.ok) return { ok: false, reason: (reviewPlanResult as { ok: false; reason: string }).reason };
   // D06 also requires step ids to be unique across both plans — enforce here so
   // the executor input maps losslessly to LoopAutonomousDeliveryRequest.
@@ -748,6 +951,9 @@ function validateDesign(
     if (NON_CONTROL_RE.test(value)) return { ok: false, reason: `technical design ${field} must be a single line` };
     const maxBytes = field === "commitSubject" ? 72 : 120;
     if (utf8Length(value) > maxBytes) return { ok: false, reason: `technical design ${field} exceeds the byte limit` };
+    const fieldBytes = utf8Length(value);
+    if (fieldBytes > budget.bytes) return { ok: false, reason: `technical design ${field} exceeds the output byte budget` };
+    budget.bytes -= fieldBytes;
   }
   return {
     ok: true,
@@ -768,7 +974,7 @@ function validateDesign(
   };
 }
 
-function validateReview(v: unknown): { ok: true; review: CanonicalReview } | { ok: false; reason: string } {
+function validateReview(v: unknown, budget: OutputBudget): { ok: true; review: CanonicalReview } | { ok: false; reason: string } {
   let rec: Record<string, unknown>;
   try { rec = scanPlain(v, REVIEW_KEYS, "solution review"); } catch {
     return { ok: false, reason: "solution review malformed" };
@@ -780,17 +986,29 @@ function validateReview(v: unknown): { ok: true; review: CanonicalReview } | { o
   if (typeof rec.directPathEligible !== "boolean") {
     return { ok: false, reason: "solution review directPathEligible must be a boolean" };
   }
-  if (!Array.isArray(rec.findings)) return { ok: false, reason: "solution review findings must be an array" };
-  const budget = { nodes: MAX_FINDING_NODES };
+  const fixedBytes = utf8Length(rec.schema as string) + utf8Length(rec.status as string);
+  if (fixedBytes > budget.bytes) return { ok: false, reason: "solution review exceeds the output byte budget" };
+  budget.bytes -= fixedBytes;
+  const findingsScanned = scanExternalArray(rec.findings, "solution review findings");
+  if (!findingsScanned.ok) return { ok: false, reason: "solution review findings must be a canonical array" };
+  if (findingsScanned.length > MAX_REVIEW_FINDINGS) return { ok: false, reason: "solution review findings count exceeds the cap" };
+  const budget2 = { nodes: MAX_FINDING_NODES, bytes: budget.bytes };
   const findings: unknown[] = [];
-  for (let i = 0; i < rec.findings.length; i++) {
-    budget.nodes -= 1;
-    if (budget.nodes < 0) return { ok: false, reason: "solution review findings too large" };
+  for (let i = 0; i < findingsScanned.length; i++) {
+    budget2.nodes -= 1;
+    if (budget2.nodes < 0) return { ok: false, reason: "solution review findings too large" };
+    let findingValue: unknown;
+    try {
+      if (!(i in findingsScanned.arr)) return { ok: false, reason: "solution review findings must not be sparse" };
+      findingValue = findingsScanned.arr[i];
+    } catch {
+      return { ok: false, reason: "solution review findings element read failed" };
+    }
     let finding: Record<string, unknown>;
-    try { finding = scanPlainRecord(rec.findings[i], `solution review findings[${i}]`); } catch {
+    try { finding = scanPlainRecord(findingValue, `solution review findings[${i}]`); } catch {
       return { ok: false, reason: "solution review findings item invalid" };
     }
-    if (!isJsonSafeValue(finding, 0, budget)) return { ok: false, reason: "solution review findings item invalid" };
+    if (!isJsonSafeValue(finding, 0, budget2)) return { ok: false, reason: "solution review findings item invalid" };
     findings.push(finding);
   }
   const status = rec.status as CanonicalReview["status"];
@@ -814,17 +1032,18 @@ function validateReview(v: unknown): { ok: true; review: CanonicalReview } | { o
 
 // ═══════════════════════════════════════ Canonical payload builders
 
-function canonicalIdentity(identity: LoopRunIdentity): Record<string, unknown> {
+function canonicalIdentity(identity: object): Record<string, unknown> {
+  const rec = identity as Record<string, unknown>;
   return {
-    runId: identity.runId,
-    requirementId: identity.requirementId,
-    repository: identity.repository,
-    repositoryPath: identity.repositoryPath,
-    baseBranch: identity.baseBranch,
-    expectedBaseSha: identity.expectedBaseSha,
-    taskBranch: identity.taskBranch,
-    controlRoot: identity.controlRoot,
-    createdAt: identity.createdAt,
+    runId: rec.runId,
+    requirementId: rec.requirementId,
+    repository: rec.repository,
+    repositoryPath: rec.repositoryPath,
+    baseBranch: rec.baseBranch,
+    expectedBaseSha: rec.expectedBaseSha,
+    taskBranch: rec.taskBranch,
+    controlRoot: rec.controlRoot,
+    createdAt: rec.createdAt,
   };
 }
 
@@ -1112,6 +1331,15 @@ export class LoopRequirementDesignOrchestrator {
 
     const deadlineExpired = (): boolean => lastClockMs - startMs > maxTotalDurationMs;
 
+    // Fresh tri-state clock gate: every gate takes a NEW clock sample and maps
+    // expired / clock_invalid so that no dependency or put is reached without
+    // a current, valid, monotonic sample.
+    const gate = (): "active" | "expired" | "clock_invalid" => {
+      const reason = readClock();
+      if (reason !== null) return "clock_invalid";
+      return deadlineExpired() ? "expired" : "active";
+    };
+
     // Terminal — exactly one terminal per path, always the last trace entry.
     const terminal = (
       route: LoopRequirementDesignRoute,
@@ -1120,38 +1348,24 @@ export class LoopRequirementDesignOrchestrator {
     ): LoopRequirementDesignResult => {
       // Persist orchestration_result only when the requirement was stored and
       // the terminal is not itself a clock/deadline/put/internal failure —
-      // those stop all further side effects.
+      // those stop all further side effects. A fresh pre-put gate guards this
+      // put even for non-direct routes.
       if (requirementStored && route !== "failed") {
-        if (!deadlineExpired()) {
-          const payload = buildOrchestrationResultPayload(
-            identity, route, reasonCode, designRounds, requirementArtifactRef,
-            designArtifactRefs, solutionReviewArtifactRefs, executorInputArtifactRef,
-            executorInputDigest, elapsedMs,
-          );
-          let stored: LoopStoredArtifact;
-          try {
-            stored = this.artifactStore.put("orchestration_result", payload);
-          } catch {
-            // put threw → failed / ARTIFACT_STORE_FAILED; no further puts.
-            return finish("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
-          }
-          const afterClock = readClock();
-          if (afterClock === "CLOCK_INVALID") {
-            return finish("failed", "CLOCK_INVALID", "clock invalid");
-          }
-          if (deadlineExpired()) {
-            return finish("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-          }
-          if (stored.kind !== "orchestration_result" ||
-              stored.digest !== sha256Hex(payload) ||
-              stored.sizeBytes !== payload.length) {
-            return finish("failed", "ARTIFACT_STORE_FAILED", "stored artifact mismatch");
-          }
-          orchestrationResultArtifactRef = stored.artifactRef;
-          addTrace("orchestration_result_stored", designRounds, "stored", stored.artifactRef);
-        } else {
-          return finish("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-        }
+        const g = gate();
+        if (g === "clock_invalid") return finish("failed", "CLOCK_INVALID", "clock invalid");
+        if (g === "expired") return finish("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+        const payload = buildOrchestrationResultPayload(
+          identity, route, reasonCode, designRounds, requirementArtifactRef,
+          designArtifactRefs, solutionReviewArtifactRefs, executorInputArtifactRef,
+          executorInputDigest, elapsedMs,
+        );
+        const storedPut = putAndVerify("orchestration_result", payload);
+        if (!storedPut.ok) return finish("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
+        orchestrationResultArtifactRef = storedPut.descriptor.artifactRef;
+        addTrace("orchestration_result_stored", designRounds, "stored", storedPut.descriptor.artifactRef);
+        const after = gate();
+        if (after === "clock_invalid") return finish("failed", "CLOCK_INVALID", "clock invalid");
+        if (after === "expired") return finish("failed", "TOTAL_TIMEOUT", "deadline exceeded");
       }
       return finish(route, reasonCode, message);
     };
@@ -1178,22 +1392,33 @@ export class LoopRequirementDesignOrchestrator {
       }) as unknown as LoopRequirementDesignResult;
     };
 
-    // Helper: put with descriptor verification. Clock/deadline after-checks
-    // happen in the caller so a successful put keeps its real ref even when
-    // the run must stop afterwards.
+    // Helper: put with strict descriptor verification. The payload digest is
+    // computed once before the put and reused for the descriptor binding; no
+    // artifactStore.read and no re-serialization happen here. Post-put clock
+    // checks happen in the caller so a successful put keeps its real ref even
+    // when the run must stop afterwards.
     const putAndVerify = (
       kind: LoopArtifactKind, bytes: Uint8Array,
-    ): { ok: true; ref: string; digest: string; sizeBytes: number } | { ok: false } => {
-      let stored: LoopStoredArtifact;
+    ): { ok: true; descriptor: VerifiedStoredDescriptor } | { ok: false } => {
+      const expectedDigest = sha256Hex(bytes);
+      let stored: unknown;
       try {
         stored = this.artifactStore.put(kind, bytes);
       } catch {
         return { ok: false };
       }
-      if (stored.kind !== kind || stored.digest !== sha256Hex(bytes) || stored.sizeBytes !== bytes.length) {
-        return { ok: false };
-      }
-      return { ok: true, ref: stored.artifactRef, digest: stored.digest, sizeBytes: stored.sizeBytes };
+      const descriptor = verifyStoredDescriptor(stored, kind, expectedDigest, bytes.length);
+      if (descriptor === null) return { ok: false };
+      return { ok: true, descriptor };
+    };
+
+    // Fresh gate that maps failures to the terminal contract, or null when the
+    // next side effect may run.
+    const checkGate = (): LoopRequirementDesignResult | null => {
+      const state = gate();
+      if (state === "clock_invalid") return terminal("failed", "CLOCK_INVALID", "clock invalid");
+      if (state === "expired") return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+      return null;
     };
 
     // ═══════════════════════════════════════ request validation
@@ -1204,12 +1429,25 @@ export class LoopRequirementDesignOrchestrator {
       return terminal("failed", "INVALID_INPUT", "invalid request");
     }
 
+    // ═══════════════════════════════════════ identity single snapshot
+    // The identity is untrusted nested input. It is captured exactly once
+    // through a descriptor-based exact-key scan; validateLoopRunIdentity runs
+    // on the safe snapshot, and every later read (payloads, inputs, result)
+    // uses the frozen snapshot — never the original object. Proxy get traps,
+    // accessors and later caller mutation can therefore never feed canonical
+    // data.
+    let identityRecord: Record<string, unknown>;
     try {
-      validateLoopRunIdentity(req.identity);
+      identityRecord = scanPlain(req.identity, IDENTITY_KEYS, "identity");
     } catch {
       return terminal("failed", "INVALID_INPUT", "invalid identity");
     }
-    const identity = deepFreeze(canonicalIdentity(req.identity as LoopRunIdentity)) as unknown as LoopRunIdentity;
+    try {
+      validateLoopRunIdentity(identityRecord);
+    } catch {
+      return terminal("failed", "INVALID_INPUT", "invalid identity");
+    }
+    const identity = deepFreeze(canonicalIdentity(identityRecord)) as unknown as LoopRunIdentity;
 
     const pathPolicyResult = validatePathPolicy(req.pathPolicy);
     if (!pathPolicyResult.ok) return terminal("failed", "INVALID_INPUT", "invalid pathPolicy");
@@ -1250,19 +1488,22 @@ export class LoopRequirementDesignOrchestrator {
 
     // ═══════════════════════════════════════ normalization
     addTrace("normalization_started", 0, "started", null);
-    if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+    {
+      const early = checkGate();
+      if (early !== null) return early;
+    }
     let rawSummary: unknown;
     try {
       rawSummary = this.agent.normalize(normalizeInput);
     } catch {
       return terminal("blocked", "DEPENDENCY_FAILED", "requirement normalization failed");
     }
-    const afterNormalizeClock = readClock();
-    if (afterNormalizeClock === "CLOCK_INVALID") {
-      return terminal("failed", "CLOCK_INVALID", "clock invalid");
+    {
+      const early = checkGate();
+      if (early !== null) return early;
     }
-    if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-    const summaryResult = validateRequirementSummary(rawSummary);
+    const summaryBudget: OutputBudget = { bytes: limits.maxAgentOutputBytes };
+    const summaryResult = validateRequirementSummary(rawSummary, summaryBudget);
     if (!summaryResult.ok) {
       return terminal("blocked", "DEPENDENCY_RESULT_INVALID", "requirement summary malformed");
     }
@@ -1274,27 +1515,24 @@ export class LoopRequirementDesignOrchestrator {
 
     // ═══════════════════════════════════════ requirement artifact
     const requirementPayload = buildRequirementPayload(identity, rawRequirement, summary);
-    if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+    {
+      const early = checkGate();
+      if (early !== null) return early;
+    }
     const requirementPut = putAndVerify("requirement_summary", requirementPayload);
     if (!requirementPut.ok) {
       return terminal("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
     }
-    const afterRequirementClock = readClock();
-    if (afterRequirementClock === "CLOCK_INVALID") {
-      requirementArtifactRef = requirementPut.ref;
-      requirementStored = true;
-      addTrace("requirement_stored", 0, "stored", requirementPut.ref);
-      return terminal("failed", "CLOCK_INVALID", "clock invalid");
-    }
-    if (deadlineExpired()) {
-      requirementArtifactRef = requirementPut.ref;
-      requirementStored = true;
-      addTrace("requirement_stored", 0, "stored", requirementPut.ref);
-      return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-    }
-    requirementArtifactRef = requirementPut.ref;
+    // Durable fact recorded only after descriptor verification. A failed
+    // post-put gate keeps the real ref and stored trace but stops every
+    // following side effect (no orchestration_result is written).
+    requirementArtifactRef = requirementPut.descriptor.artifactRef;
     requirementStored = true;
-    addTrace("requirement_stored", 0, "stored", requirementPut.ref);
+    addTrace("requirement_stored", 0, "stored", requirementPut.descriptor.artifactRef);
+    {
+      const early = checkGate();
+      if (early !== null) return early;
+    }
 
     // ═══════════════════════════════════════ routing
     const route = selectRoute(summary);
@@ -1319,19 +1557,22 @@ export class LoopRequirementDesignOrchestrator {
         previousDesign,
         reviewFindings: deepFreeze([...reviewFindings]) as unknown as unknown[],
       });
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+      {
+        const early = checkGate();
+        if (early !== null) return early;
+      }
       let rawDesign: unknown;
       try {
         rawDesign = this.agent.design(designInput);
       } catch {
         return terminal("blocked", "DEPENDENCY_FAILED", "technical design failed");
       }
-      const afterDesignClock = readClock();
-      if (afterDesignClock === "CLOCK_INVALID") {
-        return terminal("failed", "CLOCK_INVALID", "clock invalid");
+      {
+        const early = checkGate();
+        if (early !== null) return early;
       }
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-      const designResult = validateDesign(rawDesign, allowedRoots, deniedPaths, allowedExecutableIdSet);
+      const designBudget: OutputBudget = { bytes: limits.maxAgentOutputBytes };
+      const designResult = validateDesign(rawDesign, allowedRoots, deniedPaths, allowedExecutableIdSet, designBudget);
       if (!designResult.ok) {
         return terminal("blocked", "DEPENDENCY_RESULT_INVALID", "technical design malformed");
       }
@@ -1341,24 +1582,20 @@ export class LoopRequirementDesignOrchestrator {
         return terminal("blocked", "DEPENDENCY_RESULT_INVALID", "technical design too large");
       }
       const designPayload = buildDesignPayload(identity, requirementArtifactRef, round, design);
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+      {
+        const early = checkGate();
+        if (early !== null) return early;
+      }
       const designPut = putAndVerify("technical_design", designPayload);
       if (!designPut.ok) {
         return terminal("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
       }
-      const afterDesignPutClock = readClock();
-      if (afterDesignPutClock === "CLOCK_INVALID") {
-        designArtifactRefs.push(designPut.ref);
-        addTrace("design_stored", round, "stored", designPut.ref);
-        return terminal("failed", "CLOCK_INVALID", "clock invalid");
+      designArtifactRefs.push(designPut.descriptor.artifactRef);
+      addTrace("design_stored", round, "stored", designPut.descriptor.artifactRef);
+      {
+        const early = checkGate();
+        if (early !== null) return early;
       }
-      if (deadlineExpired()) {
-        designArtifactRefs.push(designPut.ref);
-        addTrace("design_stored", round, "stored", designPut.ref);
-        return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-      }
-      designArtifactRefs.push(designPut.ref);
-      addTrace("design_stored", round, "stored", designPut.ref);
 
       // ═══════════════════════════════════════ solution review
       addTrace("review_started", round, "started", null);
@@ -1368,21 +1605,24 @@ export class LoopRequirementDesignOrchestrator {
         requirement: summary,
         design,
         requirementArtifactRef,
-        designArtifactRef: designPut.ref,
+        designArtifactRef: designPut.descriptor.artifactRef,
       });
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+      {
+        const early = checkGate();
+        if (early !== null) return early;
+      }
       let rawReview: unknown;
       try {
         rawReview = this.reviewer.review(reviewInput);
       } catch {
         return terminal("blocked", "DEPENDENCY_FAILED", "solution review failed");
       }
-      const afterReviewClock = readClock();
-      if (afterReviewClock === "CLOCK_INVALID") {
-        return terminal("failed", "CLOCK_INVALID", "clock invalid");
+      {
+        const early = checkGate();
+        if (early !== null) return early;
       }
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-      const reviewResult = validateReview(rawReview);
+      const reviewBudget: OutputBudget = { bytes: limits.maxAgentOutputBytes };
+      const reviewResult = validateReview(rawReview, reviewBudget);
       if (!reviewResult.ok) {
         return terminal("blocked", "DEPENDENCY_RESULT_INVALID", "solution review malformed");
       }
@@ -1391,46 +1631,43 @@ export class LoopRequirementDesignOrchestrator {
       if (reviewBytes.length > limits.maxAgentOutputBytes) {
         return terminal("blocked", "DEPENDENCY_RESULT_INVALID", "solution review too large");
       }
-      const reviewPayload = buildReviewPayload(identity, designPut.ref, round, review);
-      if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+      const reviewPayload = buildReviewPayload(identity, designPut.descriptor.artifactRef, round, review);
+      {
+        const early = checkGate();
+        if (early !== null) return early;
+      }
       const reviewPut = putAndVerify("solution_review", reviewPayload);
       if (!reviewPut.ok) {
         return terminal("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
       }
-      const afterReviewPutClock = readClock();
-      if (afterReviewPutClock === "CLOCK_INVALID") {
-        solutionReviewArtifactRefs.push(reviewPut.ref);
-        addTrace("review_stored", round, "stored", reviewPut.ref);
-        return terminal("failed", "CLOCK_INVALID", "clock invalid");
+      solutionReviewArtifactRefs.push(reviewPut.descriptor.artifactRef);
+      addTrace("review_stored", round, "stored", reviewPut.descriptor.artifactRef);
+      {
+        const early = checkGate();
+        if (early !== null) return early;
       }
-      if (deadlineExpired()) {
-        solutionReviewArtifactRefs.push(reviewPut.ref);
-        addTrace("review_stored", round, "stored", reviewPut.ref);
-        return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
-      }
-      solutionReviewArtifactRefs.push(reviewPut.ref);
-      addTrace("review_stored", round, "stored", reviewPut.ref);
 
       if (review.status === "PASS") {
         // The executor input object is only exposed when its artifact was
-        // durably persisted — never on a failed put.
+        // durably persisted and its descriptor verified — never on a failed
+        // put or an expired/invalid gate.
         const builtExecutorInput = deepFreeze(buildExecutorInput(identity, summary, design, limits)) as unknown as LoopDirectExecutorInput;
         const executorInputBytes = utf8(JSON.stringify(canonicalExecutorInput(builtExecutorInput)));
-        if (deadlineExpired()) return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+        {
+          const early = checkGate();
+          if (early !== null) return early;
+        }
         const executorInputPut = putAndVerify("executor_input", executorInputBytes);
         if (!executorInputPut.ok) {
           return terminal("failed", "ARTIFACT_STORE_FAILED", "artifact store failed");
         }
         executorInput = builtExecutorInput;
-        executorInputArtifactRef = executorInputPut.ref;
-        executorInputDigest = executorInputPut.digest;
-        addTrace("executor_input_stored", round, "stored", executorInputPut.ref);
-        const afterExecutorInputClock = readClock();
-        if (afterExecutorInputClock === "CLOCK_INVALID") {
-          return terminal("failed", "CLOCK_INVALID", "clock invalid");
-        }
-        if (deadlineExpired()) {
-          return terminal("failed", "TOTAL_TIMEOUT", "deadline exceeded");
+        executorInputArtifactRef = executorInputPut.descriptor.artifactRef;
+        executorInputDigest = executorInputPut.descriptor.digest;
+        addTrace("executor_input_stored", round, "stored", executorInputPut.descriptor.artifactRef);
+        {
+          const early = checkGate();
+          if (early !== null) return early;
         }
         return terminal("direct", "DIRECT_READY", "direct execution input ready");
       }
