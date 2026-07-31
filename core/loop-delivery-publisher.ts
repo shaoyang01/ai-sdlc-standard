@@ -343,7 +343,13 @@ function validateArtifactRef(ref: unknown, expectedKind: string | null, label: s
 // Parse name-status output (-z format: status\0path\0)
 // Only A, M, D are allowed. Reject rename (R), copy (C), unmerged (U),
 // unknown (X), type-change (T). Fail closed on any malformed/incomplete token.
+// Final NUL contract: empty output is a valid empty result; any non-empty
+// output must end with \x00 — a missing final NUL is rejected before any
+// token is parsed (no partial results).
 function parseNameStatusZ(output: string, label: string): Set<string> {
+  if (output.length > 0 && !output.endsWith("\x00")) {
+    throw new Error(`malformed ${label}: missing final NUL`);
+  }
   const paths = new Set<string>();
   const parts = output.split("\x00");
   // Last empty token after final NUL is not a token
@@ -518,8 +524,9 @@ function validateRunnerResult(
 }
 
 function isTypedRunnerError(e: unknown): e is LoopPosixProcessRunnerError {
-  if (!(e instanceof Error)) return false;
-  if (e.name !== "LoopPosixProcessRunnerError") return false;
+  // Real class identity only. A forged plain Error carrying the same `name`
+  // and `code` must NOT be recognized as a D02 typed error.
+  if (!(e instanceof LoopPosixProcessRunnerError)) return false;
   const code = (e as LoopPosixProcessRunnerError).code;
   if (typeof code !== "string" || !D02_CANONICAL_CODES.has(code)) return false;
   return true;
@@ -1675,6 +1682,9 @@ export class LoopDeliveryPublisher {
             this._addTrace(state, "commit", "recovered", null, currentHead, null, null, elapsed);
             return null;
           }
+          // HEAD is an unproven non-precommit SHA — do NOT create a second
+          // commit. Fail closed with the commit-stage reason code.
+          return await this._terminalize(state, "COMMIT_FAILED", safeMessage("recovery commit verification failed"), null);
         }
       }
     }
@@ -2471,7 +2481,9 @@ export class LoopDeliveryPublisher {
         // Propagate typed/malformed errors — callers must handle taxonomy
         throw e;
       }
-      return null;
+      // Unexpected errors (including forged lookalikes): propagate to
+      // the unexpected-error path → INTERNAL_ERROR
+      throw e;
     }
   }
 
@@ -2526,7 +2538,9 @@ export class LoopDeliveryPublisher {
         // Propagate typed/malformed errors — callers must handle taxonomy
         throw e;
       }
-      return null;
+      // Unexpected errors (including forged lookalikes): propagate to
+      // the unexpected-error path → INTERNAL_ERROR
+      throw e;
     }
   }
 
@@ -2612,14 +2626,17 @@ export class LoopDeliveryPublisher {
       return result;
     } catch (e) {
       if (isTypedRunnerError(e)) {
-        // Propagate typed D02 errors so callers can map taxonomy
+        // Real D02 typed error: propagate for taxonomy mapping
         throw e;
       }
       if (e instanceof DependencyResultInvalidError) {
+        // Malformed/truncated dependency result: fail closed
         throw e;
       }
-      // Non-typed errors: return null (generic failure)
-      return null;
+      // Any other unexpected error (including forged lookalikes with
+      // name/code set on a plain Error): propagate to the unexpected-error
+      // path → INTERNAL_ERROR. Never collapse into a generic null here.
+      throw e;
     }
   }
 }
