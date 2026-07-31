@@ -340,6 +340,67 @@ function validateArtifactRef(ref: unknown, expectedKind: string | null, label: s
   return s;
 }
 
+// Parse name-status output (-z format: status\0path\0)
+// Only A, M, D are allowed. Reject rename (R), copy (C), unmerged (U),
+// unknown (X), type-change (T). Fail closed on any malformed/incomplete token.
+function parseNameStatusZ(output: string, label: string): Set<string> {
+  const paths = new Set<string>();
+  const parts = output.split("\x00");
+  // Last empty token after final NUL is not a token
+  const len = parts.length > 0 && parts[parts.length - 1] === "" ? parts.length - 1 : parts.length;
+  for (let i = 0; i < len; i++) {
+    const part = parts[i]!;
+    if (part.length === 1 && /[ACDMRTUX]/.test(part)) {
+      // Status letter — expect path at next position
+      if (i + 1 >= len) {
+        throw new Error(`malformed ${label}: status without path`);
+      }
+      const statusChar = part;
+      const pathToken = parts[i + 1]!;
+      i++; // consume path
+
+      // Reject rename (R), copy (C), unmerged (U), unknown (X), type-change (T)
+      if (/[RCTUX]/.test(statusChar)) {
+        throw new Error(`malformed ${label}: forbidden status '${statusChar}' for path '${pathToken}'`);
+      }
+      // Only A, M, D allowed
+      if (!/[AMD]/.test(statusChar)) {
+        throw new Error(`malformed ${label}: unknown status '${statusChar}' for path '${pathToken}'`);
+      }
+
+      // Validate path: non-empty, no NUL, no backslash, no absolute
+      if (pathToken.length === 0) {
+        throw new Error(`malformed ${label}: empty path after status '${statusChar}'`);
+      }
+      if (pathToken.startsWith("/")) {
+        throw new Error(`malformed ${label}: absolute path '${pathToken}'`);
+      }
+      if (pathToken.includes("\x00")) {
+        throw new Error(`malformed ${label}: NUL in path`);
+      }
+      if (pathToken.includes("\\")) {
+        throw new Error(`malformed ${label}: backslash in path '${pathToken}'`);
+      }
+      // Check for dot segments and traversal
+      const segs = pathToken.split("/");
+      for (const seg of segs) {
+        if (seg.length === 0 || seg === "." || seg === "..") {
+          throw new Error(`malformed ${label}: bad segment in path '${pathToken}'`);
+        }
+      }
+      // Check for duplicate
+      if (paths.has(pathToken)) {
+        throw new Error(`malformed ${label}: duplicate path '${pathToken}'`);
+      }
+      paths.add(pathToken);
+    } else {
+      // Not a valid status letter — malformed token
+      throw new Error(`malformed ${label}: unexpected token '${part.slice(0, 20)}'`);
+    }
+  }
+  return paths;
+}
+
 function validateRepository(repo: string): void {
   if (!GH_SLUG_RE.test(repo)) throw new Error("repository must be owner/repository format");
 }
@@ -462,6 +523,15 @@ function isTypedRunnerError(e: unknown): e is LoopPosixProcessRunnerError {
   const code = (e as LoopPosixProcessRunnerError).code;
   if (typeof code !== "string" || !D02_CANONICAL_CODES.has(code)) return false;
   return true;
+}
+
+// Internal marker for malformed/truncated dependency results — mapped to
+// DEPENDENCY_RESULT_INVALID by the top-level handler. Never exposed publicly.
+class DependencyResultInvalidError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DependencyResultInvalidError";
+  }
 }
 
 function validateWorkspaceSnapshot(
@@ -667,6 +737,25 @@ export class LoopDeliveryPublisher {
       return this._zeroStateResult("INVALID_INPUT", (e as Error).message);
     }
 
+    // Deep-freeze identity before first await — mutations after this
+    // must not affect current invocation
+    let frozenIdentity: LoopRunIdentity;
+    try {
+      frozenIdentity = deepFreeze({
+        runId: identity.runId,
+        requirementId: identity.requirementId,
+        repository: identity.repository,
+        repositoryPath: identity.repositoryPath,
+        baseBranch: identity.baseBranch,
+        expectedBaseSha: identity.expectedBaseSha,
+        taskBranch: identity.taskBranch,
+        controlRoot: identity.controlRoot,
+        createdAt: identity.createdAt,
+      }) as unknown as LoopRunIdentity;
+    } catch (e) {
+      return this._zeroStateResult("INVALID_INPUT", (e as Error).message);
+    }
+
     // Validate commitSubject
     let commitSubject: string;
     try {
@@ -715,7 +804,7 @@ export class LoopDeliveryPublisher {
     // Build internal state
     const state: InternalState = {
       request: freeze({
-        identity,
+        identity: frozenIdentity,
         deliveryResultArtifactRef: deliveryArtifactRef,
         commitSubject,
         prTitle,
@@ -779,8 +868,23 @@ export class LoopDeliveryPublisher {
     try {
       result = await this._executeStateMachine(state);
     } catch (e) {
-      // Catch-all: terminalize with INTERNAL_ERROR
-      result = await this._terminalize(state, "INTERNAL_ERROR", safeMessage("unexpected publisher error"), null);
+      // D02 taxonomy mapping: distinguish typed errors from unexpected exceptions
+      if (e instanceof DependencyResultInvalidError) {
+        // Malformed/truncated dependency result → DEPENDENCY_RESULT_INVALID
+        result = await this._terminalize(state, "DEPENDENCY_RESULT_INVALID", safeMessage(e.message), null);
+      } else if (isTypedRunnerError(e)) {
+        const code = e.code;
+        if (D02_BLOCKED_CODES.has(code)) {
+          result = await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage(e.message), null);
+        } else if (D02_FAILED_CODES.has(code)) {
+          result = await this._terminalize(state, "INTERNAL_ERROR", safeMessage(e.message), null);
+        } else {
+          result = await this._terminalize(state, "INTERNAL_ERROR", safeMessage(e.message), null);
+        }
+      } else {
+        // Non-typed error: unexpected
+        result = await this._terminalize(state, "INTERNAL_ERROR", safeMessage("unexpected publisher error"), null);
+      }
     }
 
     return result;
@@ -1293,73 +1397,62 @@ export class LoopDeliveryPublisher {
     // Parse all paths from all outputs
     const allPaths = new Set<string>();
 
-    // Parse porcelain status (XY path\0 format)
+    // Parse porcelain status (XY path\0 format) — fail closed on any malformed token
     const statusStr = statusResult.stdout;
     const statusTokens = statusStr.split("\x00");
     const stLen = statusTokens.length > 0 && statusTokens[statusTokens.length - 1] === "" ? statusTokens.length - 1 : statusTokens.length;
     for (let i = 0; i < stLen; i++) {
       const token = statusTokens[i]!;
-      // Porcelain v1 -z: first char is index status, second is worktree status
-      // Valid status chars: [ MADRCU?!] for each position
-      // Format: "XY path" — space after the 2 status chars, then path
       if (token.length >= 4 && token[1] !== undefined) {
         const x = token[0]!;
         const y = token[1]!;
-        if (/[. MADRCU?!]/.test(x) && /[. MADRCU?!]/.test(y) && x !== " " && y !== " ") {
-          // Both status chars are valid — this is a status line
-          const spaceIdx = token.indexOf(" ");
-          if (spaceIdx >= 2 && spaceIdx < token.length - 1) {
-            const filePath = token.slice(spaceIdx + 1);
-            if (filePath.length > 0 && !filePath.startsWith("/") && !filePath.includes("\\") && !filePath.includes("\x00")) {
-              // Reject rename (R) and copy (C) — these have scores
-              if (x === "R" || x === "C" || y === "R" || y === "C") continue;
-              allPaths.add(filePath);
-            }
-          }
+        // Both chars must be valid status chars — reject unknown tokens
+        const validX = /[. MADRCU?!]/.test(x);
+        const validY = /[. MADRCU?!]/.test(y);
+        if (!validX || !validY) {
+          // Malformed status: reject instead of skip
+          return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage(`malformed porcelain status: '${x}${y}'`), null);
         }
+        if (x === " " && y === " ") continue; // unmodified
+        // Both chars are valid status chars
+        const spaceIdx = token.indexOf(" ");
+        if (spaceIdx >= 2 && spaceIdx < token.length - 1) {
+          const filePath = token.slice(spaceIdx + 1);
+          if (filePath.length === 0) {
+            return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("malformed porcelain: empty path"), null);
+          }
+          if (filePath.startsWith("/") || filePath.includes("\\") || filePath.includes("\x00")) {
+            return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("malformed porcelain: unsafe path"), null);
+          }
+          // Reject rename (R) and copy (C) — these have scores and indicate complex operations
+          if (x === "R" || x === "C" || y === "R" || y === "C") {
+            return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("porcelain rename/copy rejected"), null);
+          }
+          // Reject unmerged (U)
+          if (x === "U" || y === "U") {
+            return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("porcelain unmerged rejected"), null);
+          }
+          allPaths.add(filePath);
+        } else {
+          // Status line without proper space separator
+          return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("malformed porcelain: bad format"), null);
+        }
+      } else if (token.length > 0) {
+        // Non-empty token that doesn't look like a status line — malformed
+        return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("malformed porcelain: unexpected token"), null);
       }
     }
 
-    // Parse name-status outputs (-z format: status\0path\0)
-    // Only A, M, D are allowed. Reject rename (R), copy (C), unmerged (U), unknown (X), type-change (T).
-    function parseNameStatusZ(output: string): Set<string> {
-      const paths = new Set<string>();
-      const parts = output.split("\x00");
-      // Last empty token after final NUL is not a token
-      const len = parts.length > 0 && parts[parts.length - 1] === "" ? parts.length - 1 : parts.length;
-      for (let i = 0; i < len; i++) {
-        const part = parts[i]!;
-        if (part.length === 1 && /[ACDMRTUX]/.test(part)) {
-          // Status letter
-          if (/[RCTUX]/.test(part)) {
-            // Rename, copy, type-change, unmerged, unknown — all rejected
-            // Signal malformed for staging; will be caught downstream
-            continue;
-          }
-          if (i + 1 < len) {
-            const pathToken = parts[i + 1]!;
-            // Validate path: non-empty, no NUL, no backslash, no absolute
-            if (pathToken.length === 0) continue;
-            if (pathToken.startsWith("/")) continue;
-            if (pathToken.includes("\x00")) continue;
-            if (pathToken.includes("\\")) continue;
-            // Check for dot segments
-            const segs = pathToken.split("/");
-            let bad = false;
-            for (const seg of segs) {
-              if (seg.length === 0 || seg === "." || seg === "..") { bad = true; break; }
-            }
-            if (bad) continue;
-            paths.add(pathToken);
-            i++;
-          }
-        }
-      }
-      return paths;
-    }
+    // Parse name-status outputs using strict module-level parser
 
-    const diffPaths = parseNameStatusZ(diffResult.stdout);
-    const cachedPaths = parseNameStatusZ(cachedDiffResult.stdout);
+    let diffPaths: Set<string>;
+    let cachedPaths: Set<string>;
+    try {
+      diffPaths = parseNameStatusZ(diffResult.stdout, "diff name-status");
+      cachedPaths = parseNameStatusZ(cachedDiffResult.stdout, "cached name-status");
+    } catch (e) {
+      return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage((e as Error).message), null);
+    }
     const othersPaths = new Set(othersResult.stdout.split("\x00").filter(Boolean));
 
     // Collect all changed paths
@@ -1391,7 +1484,12 @@ export class LoopDeliveryPublisher {
     if (postDiffResult === null) {
       return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("post-add diff failed"), null);
     }
-    const postDiffPaths = parseNameStatusZ(postDiffResult.stdout);
+    let postDiffPaths: Set<string>;
+    try {
+      postDiffPaths = parseNameStatusZ(postDiffResult.stdout, "post-add diff");
+    } catch (e) {
+      return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage((e as Error).message), null);
+    }
     if (postDiffPaths.size > 0) {
       return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("unstaged changes after add"), null);
     }
@@ -1419,7 +1517,12 @@ export class LoopDeliveryPublisher {
     if (postCachedResult === null) {
       return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("post-add cached diff failed"), null);
     }
-    const postCachedPaths = parseNameStatusZ(postCachedResult.stdout);
+    let postCachedPaths: Set<string>;
+    try {
+      postCachedPaths = parseNameStatusZ(postCachedResult.stdout, "post-add cached");
+    } catch (e) {
+      return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage((e as Error).message), null);
+    }
 
     // Check cached path set equals delivery files
     for (const p of deliveryFiles) {
@@ -1686,21 +1789,12 @@ export class LoopDeliveryPublisher {
       state, ["diff-tree", "--root", "--no-commit-id", "--name-status", "-z", "-r", "--no-renames", sha], true);
     if (filesResult === null || filesResult.exitCode !== 0) return false;
 
-    const commitFiles = new Set<string>();
-    const parts = filesResult.stdout.split("\x00");
-    const flen = parts.length > 0 && parts[parts.length - 1] === "" ? parts.length - 1 : parts.length;
-    for (let i = 0; i < flen; i++) {
-      const part = parts[i]!;
-      if (part.length === 1 && /[ACDMRTUX]/.test(part)) {
-        if (/[RCTUX]/.test(part)) return false; // Reject rename, copy, type-change, unmerged, unknown
-        if (!/[AMD]/.test(part)) return false; // Only A, M, D allowed
-        if (i + 1 < flen) {
-          const pathToken = parts[i + 1]!;
-          if (pathToken.length === 0) return false;
-          commitFiles.add(pathToken);
-          i++;
-        }
-      }
+    // Read commit files using strict parser
+    let commitFiles: Set<string>;
+    try {
+      commitFiles = parseNameStatusZ(filesResult.stdout, "diff-tree commit");
+    } catch {
+      return false;
     }
 
     const expectedFiles = new Set(state.deliveryFiles!);
@@ -2219,7 +2313,7 @@ export class LoopDeliveryPublisher {
     if (this.clock) {
       try {
         const n = this.clock.nowMs();
-        if (typeof n !== "number" || !Number.isSafeInteger(n)) return null;
+        if (typeof n !== "number" || !Number.isSafeInteger(n) || !isFinite(n)) return null;
         return n;
       } catch {
         return null;
@@ -2233,9 +2327,16 @@ export class LoopDeliveryPublisher {
     if (n === null) {
       state.clockError = true;
       state.deadlineGate = "clock_error";
+      return state.lastClockMs;
     }
-    if (n !== null) state.lastClockMs = n;
-    return n ?? state.lastClockMs;
+    // Detect backward clock movement
+    if (n < state.lastClockMs) {
+      state.clockError = true;
+      state.deadlineGate = "clock_error";
+      return state.lastClockMs;
+    }
+    state.lastClockMs = n;
+    return n;
   }
 
   private _checkGate(state: InternalState): LoopDeliveryPublishResult | null {
@@ -2363,7 +2464,15 @@ export class LoopDeliveryPublisher {
     args: readonly string[],
     allowNonZero: boolean,
   ): Promise<LoopPosixProcessResult | null> {
-    return this._runCommand(state, this.gitExecutableId, args, allowNonZero);
+    try {
+      return await this._runCommand(state, this.gitExecutableId, args, allowNonZero);
+    } catch (e) {
+      if (isTypedRunnerError(e) || e instanceof DependencyResultInvalidError) {
+        // Propagate typed/malformed errors — callers must handle taxonomy
+        throw e;
+      }
+      return null;
+    }
   }
 
   private async _runGitWithStdin(
@@ -2390,12 +2499,15 @@ export class LoopDeliveryPublisher {
       // Validate result
       const val = validateRunnerResult(result, this.maxCommandOutputBytes, this.maxCommandOutputBytes);
       if (!val.ok) {
-        throw new Error(safeMessage(`invalid runner result: ${(val as { ok: false; reason: string }).reason}`));
+        throw new DependencyResultInvalidError(`invalid runner result: ${(val as { ok: false; reason: string }).reason}`);
+      }
+      if (result.stdoutTruncated || result.stderrTruncated) {
+        throw new DependencyResultInvalidError("runner result truncated");
       }
 
       return result;
     } catch (e) {
-      if (isTypedRunnerError(e)) {
+      if (isTypedRunnerError(e) || e instanceof DependencyResultInvalidError) {
         throw e;
       }
       throw new Error(safeMessage(`git command failed`));
@@ -2407,7 +2519,15 @@ export class LoopDeliveryPublisher {
     args: readonly string[],
     allowNonZero: boolean,
   ): Promise<LoopPosixProcessResult | null> {
-    return this._runCommand(state, this.ghExecutableId, args, allowNonZero);
+    try {
+      return await this._runCommand(state, this.ghExecutableId, args, allowNonZero);
+    } catch (e) {
+      if (isTypedRunnerError(e) || e instanceof DependencyResultInvalidError) {
+        // Propagate typed/malformed errors — callers must handle taxonomy
+        throw e;
+      }
+      return null;
+    }
   }
 
   private async _runGhWithStdin(
@@ -2430,12 +2550,15 @@ export class LoopDeliveryPublisher {
 
       const val = validateRunnerResult(result, this.maxCommandOutputBytes, this.maxCommandOutputBytes);
       if (!val.ok) {
-        throw new Error(safeMessage(`invalid runner result: ${(val as { ok: false; reason: string }).reason}`));
+        throw new DependencyResultInvalidError(`invalid runner result: ${(val as { ok: false; reason: string }).reason}`);
+      }
+      if (result.stdoutTruncated || result.stderrTruncated) {
+        throw new DependencyResultInvalidError("runner result truncated");
       }
 
       return result;
     } catch (e) {
-      if (isTypedRunnerError(e)) {
+      if (isTypedRunnerError(e) || e instanceof DependencyResultInvalidError) {
         throw e;
       }
       throw new Error(safeMessage(`gh command failed`));
@@ -2463,27 +2586,39 @@ export class LoopDeliveryPublisher {
         maxStderrBytes: this.maxCommandOutputBytes,
       });
 
-      // Validate result
+      // Validate result — malformed ones are DEPENDENCY_RESULT_INVALID
       const val = validateRunnerResult(result, this.maxCommandOutputBytes, this.maxCommandOutputBytes);
       if (!val.ok) {
+        // Malformed result: fail closed as DEPENDENCY_RESULT_INVALID
+        throw new DependencyResultInvalidError(
+          `malformed runner result: ${(val as { ok: false; reason: string }).reason}`);
+      }
+
+      // Truncated output: fail closed before acting on content
+      if (result.stdoutTruncated || result.stderrTruncated) {
+        throw new DependencyResultInvalidError("runner result truncated");
+      }
+
+      // Non-zero exit when not allowed
+      if (!allowNonZero && result.exitCode !== 0) {
         return null;
       }
 
-      if (!allowNonZero && result.exitCode !== 0) {
+      // timed_out: treat as failure
+      if (result.status === "timed_out") {
         return null;
       }
 
       return result;
     } catch (e) {
       if (isTypedRunnerError(e)) {
-        const code = e.code;
-        if (D02_BLOCKED_CODES.has(code)) {
-          return null;
-        }
-        if (D02_FAILED_CODES.has(code)) {
-          return null;
-        }
+        // Propagate typed D02 errors so callers can map taxonomy
+        throw e;
       }
+      if (e instanceof DependencyResultInvalidError) {
+        throw e;
+      }
+      // Non-typed errors: return null (generic failure)
       return null;
     }
   }
