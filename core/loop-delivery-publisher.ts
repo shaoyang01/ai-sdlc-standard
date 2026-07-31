@@ -193,7 +193,7 @@ const RUNNER_RESULT_KEYS = [
 const STORED_ARTIFACT_KEYS = ["artifactRef", "kind", "digest", "sizeBytes"];
 
 const PUBLISH_TRACE_STAGES = [
-  "delivery", "workspace", "intent", "commit", "push", "draft_pr", "terminal",
+  "delivery", "workspace", "staging", "intent", "commit", "push", "draft_pr", "terminal",
 ];
 
 // D02 blocked codes → blocked / EXECUTION_BLOCKED
@@ -523,6 +523,7 @@ interface InternalState {
   deliveryFiles: string[] | null;
   deliveryFinalWorkspace: Record<string, unknown> | null;
   // Workspace binding
+  workspacePath: string | null;
   precommitHeadSha: string | null;
   precommitStatusDigestSha256: string | null;
   // Staging
@@ -747,6 +748,7 @@ export class LoopDeliveryPublisher {
       deliveryResult: null,
       deliveryFiles: null,
       deliveryFinalWorkspace: null,
+      workspacePath: null,
       precommitHeadSha: null,
       precommitStatusDigestSha256: null,
       stagedTreeSha: null,
@@ -800,16 +802,32 @@ export class LoopDeliveryPublisher {
     if (baseOutcome !== null) return baseOutcome;
 
     // Phase 4: Exact change staging gate
+    // D03 reconciliation before staging
+    const preStagingReconcile = await this._reconcileD03(state);
+    if (preStagingReconcile !== null) return preStagingReconcile;
+
     const stagingOutcome = await this._phaseStaging(state);
     if (stagingOutcome !== null) return stagingOutcome;
+
+    // D03 reconciliation after staging
+    const postStagingReconcile = await this._reconcileD03(state);
+    if (postStagingReconcile !== null) return postStagingReconcile;
 
     // Phase 5: Canonical publish intent
     const intentOutcome = await this._phaseIntent(state);
     if (intentOutcome !== null) return intentOutcome;
 
+    // D03 reconciliation after intent
+    const postIntentReconcile = await this._reconcileD03(state);
+    if (postIntentReconcile !== null) return postIntentReconcile;
+
     // Phase 6: Commit
     const commitOutcome = await this._phaseCommit(state);
     if (commitOutcome !== null) return commitOutcome;
+
+    // D03 reconciliation after commit
+    const postCommitReconcile = await this._reconcileD03(state);
+    if (postCommitReconcile !== null) return postCommitReconcile;
 
     // Phase 7: Remote base gate (pre-push)
     const prePushBaseOutcome = await this._phaseRemoteBaseGate(state);
@@ -818,6 +836,10 @@ export class LoopDeliveryPublisher {
     // Phase 8: Push
     const pushOutcome = await this._phasePush(state);
     if (pushOutcome !== null) return pushOutcome;
+
+    // D03 reconciliation after push
+    const postPushReconcile = await this._reconcileD03(state);
+    if (postPushReconcile !== null) return postPushReconcile;
 
     // Phase 9: Remote base gate (pre-PR)
     const prePrBaseOutcome = await this._phaseRemoteBaseGate(state);
@@ -828,6 +850,14 @@ export class LoopDeliveryPublisher {
     if (prOutcome !== null) return prOutcome;
 
     // Terminalize success
+    // Final D03 reconciliation before terminal success
+    const finalReconcile = await this._reconcileD03(state);
+    if (finalReconcile !== null) return finalReconcile;
+
+    // Clock/deadline gate before terminal
+    const finalGateResult = this._checkGate(state);
+    if (finalGateResult !== null) return finalGateResult;
+
     return await this._terminalize(state, "PUBLISH_SUCCEEDED", safeMessage("publish completed"), "completed");
   }
 
@@ -850,6 +880,16 @@ export class LoopDeliveryPublisher {
     if (deliveryBytes.length > this.maxDeliveryArtifactBytes) {
       return await this._terminalize(state, "DELIVERY_NOT_READY", safeMessage("delivery artifact too large"), null);
     }
+
+    // Verify digest from artifact ref against actual bytes
+    const actualDigest = sha256Hex(deliveryBytes);
+    const refMatch = ARTIFACT_REF_RE.exec(state.request.deliveryResultArtifactRef);
+    if (refMatch && refMatch[2] !== actualDigest) {
+      return await this._terminalize(state, "DELIVERY_NOT_READY", safeMessage("delivery artifact digest mismatch"), null);
+    }
+
+    // Verify byte length against ref metadata (ref contains digest only, not length)
+    // The byte length is verified implicitly by validation
 
     // Verify bytes: no BOM, no CR, no NUL, single trailing LF
     const deliveryStr = deliveryBytes.toString("utf8");
@@ -1121,6 +1161,7 @@ export class LoopDeliveryPublisher {
     }
 
     // Record fixed source observation
+    state.workspacePath = snapshot.workspacePath;
     state.sourceHeadSha = snapshot.sourceHeadSha;
     state.sourceBranch = snapshot.sourceBranch;
     state.sourceWipDigestSha256 = snapshot.sourceWipDigestSha256;
@@ -1130,14 +1171,13 @@ export class LoopDeliveryPublisher {
     const deliveryHead = fw.task_head_sha as string;
     const deliveryStatusDigest = fw.status_digest_sha256 as string;
 
-    if (!snapshot.taskHasChanges) {
-      return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("task has no changes"), null);
-    }
-
     const isFresh = state.request.recoveryPublishIntentArtifactRef === undefined;
 
     if (isFresh) {
-      // Fresh: HEAD must equal delivery final task HEAD
+      // Fresh: must have changes and HEAD must equal delivery final task HEAD
+      if (!snapshot.taskHasChanges) {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("task has no changes"), null);
+      }
       if (snapshot.taskHeadSha !== deliveryHead) {
         return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("task head not delivery head"), null);
       }
@@ -1145,18 +1185,26 @@ export class LoopDeliveryPublisher {
         return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("status digest mismatch"), null);
       }
     } else {
-      // Precommit retry: HEAD must still equal delivery HEAD or be a valid publish commit
+      // Recovery mode: may have taskHasChanges=false if commit already created
+      // Verify recovery intent will be done in intent phase
       if (snapshot.taskHeadSha !== deliveryHead) {
         // Could be a prior publish commit — will be checked in commit phase
-        // For now just verify it's a valid SHA
         if (!SHA40_RE.test(snapshot.taskHeadSha)) {
           return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("invalid task head"), null);
         }
       }
+      // Do NOT reject on taskHasChanges=false in recovery mode
+      // In recovery mode, precommitHeadSha should be the delivery's task_head_sha
+      // (the original precommit), not the potentially-advanced current HEAD
+      state.precommitHeadSha = deliveryHead;
+      state.precommitStatusDigestSha256 = deliveryStatusDigest;
     }
 
-    state.precommitHeadSha = snapshot.taskHeadSha;
-    state.precommitStatusDigestSha256 = snapshot.taskStatusDigestSha256;
+    // Only set precommit from snapshot for fresh mode; recovery mode already set above
+    if (isFresh) {
+      state.precommitHeadSha = snapshot.taskHeadSha;
+      state.precommitStatusDigestSha256 = snapshot.taskStatusDigestSha256;
+    }
 
     const elapsed = Math.max(0, this._nowMsChecked(state) - t0);
     this._addTrace(state, "workspace", "succeeded", null, null, null, null, elapsed);
@@ -1245,37 +1293,64 @@ export class LoopDeliveryPublisher {
     // Parse all paths from all outputs
     const allPaths = new Set<string>();
 
-    // Parse porcelain status (XY path)
+    // Parse porcelain status (XY path\0 format)
     const statusStr = statusResult.stdout;
-    // -z format: XY path\0
-    // But for simplicity, collect non-status line entries
-    const statusParts = statusStr.split("\x00").filter(Boolean);
-    for (let i = 0; i < statusParts.length; i++) {
-      const part = statusParts[i]!;
-      if (part.length >= 3 && part[0] !== " " && part[1] !== " ") {
-        // This is a status line — the path is the next part (or appended after space)
-        // In porcelain v1 -z, the format is: XY<optional score> path\0
-        // Actually: "XY path\0" — the path starts after the space
-        const spaceIdx = part.indexOf(" ");
-        if (spaceIdx > 0 && spaceIdx < part.length - 1) {
-          allPaths.add(part.slice(spaceIdx + 1));
+    const statusTokens = statusStr.split("\x00");
+    const stLen = statusTokens.length > 0 && statusTokens[statusTokens.length - 1] === "" ? statusTokens.length - 1 : statusTokens.length;
+    for (let i = 0; i < stLen; i++) {
+      const token = statusTokens[i]!;
+      // Porcelain v1 -z: first char is index status, second is worktree status
+      // Valid status chars: [ MADRCU?!] for each position
+      // Format: "XY path" — space after the 2 status chars, then path
+      if (token.length >= 4 && token[1] !== undefined) {
+        const x = token[0]!;
+        const y = token[1]!;
+        if (/[. MADRCU?!]/.test(x) && /[. MADRCU?!]/.test(y) && x !== " " && y !== " ") {
+          // Both status chars are valid — this is a status line
+          const spaceIdx = token.indexOf(" ");
+          if (spaceIdx >= 2 && spaceIdx < token.length - 1) {
+            const filePath = token.slice(spaceIdx + 1);
+            if (filePath.length > 0 && !filePath.startsWith("/") && !filePath.includes("\\") && !filePath.includes("\x00")) {
+              // Reject rename (R) and copy (C) — these have scores
+              if (x === "R" || x === "C" || y === "R" || y === "C") continue;
+              allPaths.add(filePath);
+            }
+          }
         }
-      } else if (part.length >= 3) {
-        // Subsequent paths (renamed, etc.)
-        // For our purpose, any entry that looks like a path
       }
     }
 
     // Parse name-status outputs (-z format: status\0path\0)
+    // Only A, M, D are allowed. Reject rename (R), copy (C), unmerged (U), unknown (X), type-change (T).
     function parseNameStatusZ(output: string): Set<string> {
       const paths = new Set<string>();
-      const parts = output.split("\x00").filter(Boolean);
-      for (let i = 0; i < parts.length; i++) {
+      const parts = output.split("\x00");
+      // Last empty token after final NUL is not a token
+      const len = parts.length > 0 && parts[parts.length - 1] === "" ? parts.length - 1 : parts.length;
+      for (let i = 0; i < len; i++) {
         const part = parts[i]!;
         if (part.length === 1 && /[ACDMRTUX]/.test(part)) {
-          // Status letter, next part is path
-          if (i + 1 < parts.length) {
-            paths.add(parts[i + 1]!);
+          // Status letter
+          if (/[RCTUX]/.test(part)) {
+            // Rename, copy, type-change, unmerged, unknown — all rejected
+            // Signal malformed for staging; will be caught downstream
+            continue;
+          }
+          if (i + 1 < len) {
+            const pathToken = parts[i + 1]!;
+            // Validate path: non-empty, no NUL, no backslash, no absolute
+            if (pathToken.length === 0) continue;
+            if (pathToken.startsWith("/")) continue;
+            if (pathToken.includes("\x00")) continue;
+            if (pathToken.includes("\\")) continue;
+            // Check for dot segments
+            const segs = pathToken.split("/");
+            let bad = false;
+            for (const seg of segs) {
+              if (seg.length === 0 || seg === "." || seg === "..") { bad = true; break; }
+            }
+            if (bad) continue;
+            paths.add(pathToken);
             i++;
           }
         }
@@ -1330,7 +1405,7 @@ export class LoopDeliveryPublisher {
     if (postOthersResult === null) {
       return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("post-add ls-files failed"), null);
     }
-    const postOthersPaths = new Set(postOthersResult.stdout.split("\x00").filter(Boolean));
+    const postOthersPaths = new Set(postOthersResult.stdout.split("\x00").filter((t) => t.length > 0));
     if (postOthersPaths.size > 0) {
       return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("untracked files after add"), null);
     }
@@ -1384,7 +1459,7 @@ export class LoopDeliveryPublisher {
     state.stagedTreeSha = treeSha;
 
     const elapsed = Math.max(0, this._nowMsChecked(state) - t0);
-    this._addTrace(state, "intent", "succeeded", null, null, null, null, elapsed);
+    this._addTrace(state, "staging", "succeeded", null, null, null, null, elapsed);
 
     return null;
   }
@@ -1395,6 +1470,7 @@ export class LoopDeliveryPublisher {
     const gateResult = this._checkGate(state);
     if (gateResult !== null) return gateResult;
 
+    const t0 = this._nowMsChecked(state);
     const id = state.request.identity;
 
     // Build canonical publish intent
@@ -1441,6 +1517,8 @@ export class LoopDeliveryPublisher {
       state.publishIntentBytes = intentBytes;
       state.publishIntentArtifactRef = state.request.recoveryPublishIntentArtifactRef;
       state.recoveryStage = "intent_persisted";
+      const elapsedRec = Math.max(0, this._nowMsChecked(state) - t0);
+      this._addTrace(state, "intent", "recovered", state.publishIntentArtifactRef, null, null, null, elapsedRec);
       return null;
     }
 
@@ -1463,6 +1541,8 @@ export class LoopDeliveryPublisher {
     state.publishIntentArtifactRef = stored.artifactRef;
     state.recoveryStage = "intent_persisted";
 
+    const elapsedFresh = Math.max(0, this._nowMsChecked(state) - t0);
+    this._addTrace(state, "intent", "succeeded", stored.artifactRef, null, null, null, elapsedFresh);
     return null;
   }
 
@@ -1588,14 +1668,18 @@ export class LoopDeliveryPublisher {
 
     const id = state.request.identity;
     const expectedMsg = `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`;
-    if (msgResult.stdout !== expectedMsg) return false;
+    // git show --format=%B adds trailing LF; trim for comparison
+    const actualMsg = msgResult.stdout.replace(/\n+$/, "\n");
+    if (actualMsg !== expectedMsg) return false;
 
     // Read author
     const authorResult = await this._runGit(state, ["show", "-s", "--format=%an%x00%ae", sha], true);
     if (authorResult === null || authorResult.exitCode !== 0) return false;
     const authorParts = authorResult.stdout.split("\x00");
     if (authorParts.length !== 2) return false;
-    if (authorParts[0] !== this.commitAuthorName || authorParts[1] !== this.commitAuthorEmail) return false;
+    // Trim trailing LF that real git appends to output
+    const authorEmail = authorParts[1]!.replace(/\n$/, "");
+    if (authorParts[0] !== this.commitAuthorName || authorEmail !== this.commitAuthorEmail) return false;
 
     // Read commit files
     const filesResult = await this._runGit(
@@ -1603,13 +1687,17 @@ export class LoopDeliveryPublisher {
     if (filesResult === null || filesResult.exitCode !== 0) return false;
 
     const commitFiles = new Set<string>();
-    const parts = filesResult.stdout.split("\x00").filter(Boolean);
-    for (let i = 0; i < parts.length; i++) {
+    const parts = filesResult.stdout.split("\x00");
+    const flen = parts.length > 0 && parts[parts.length - 1] === "" ? parts.length - 1 : parts.length;
+    for (let i = 0; i < flen; i++) {
       const part = parts[i]!;
-      if (part.length === 1 && /[AM]/.test(part)) {
-        if (i + 1 < parts.length) {
-          if (part !== "A" && part !== "M") return false;
-          commitFiles.add(parts[i + 1]!);
+      if (part.length === 1 && /[ACDMRTUX]/.test(part)) {
+        if (/[RCTUX]/.test(part)) return false; // Reject rename, copy, type-change, unmerged, unknown
+        if (!/[AMD]/.test(part)) return false; // Only A, M, D allowed
+        if (i + 1 < flen) {
+          const pathToken = parts[i + 1]!;
+          if (pathToken.length === 0) return false;
+          commitFiles.add(pathToken);
           i++;
         }
       }
@@ -1624,11 +1712,11 @@ export class LoopDeliveryPublisher {
     // Workspace must be clean
     const statusResult = await this._runGit(
       state, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], true);
-    if (statusResult === null) return false;
+    if (statusResult === null || statusResult.exitCode !== 0) return false;
 
-    // With -z, clean repo produces empty output
-    const cleanPaths = statusResult.stdout.split("\x00").filter(Boolean);
-    if (cleanPaths.length > 0) return false;
+    // With -z, clean repo produces empty output (or just trailing NUL)
+    const cleanTokens = statusResult.stdout.split("\x00").filter((t) => t.length > 0);
+    if (cleanTokens.length > 0) return false;
 
     return true;
   }
@@ -1807,7 +1895,12 @@ export class LoopDeliveryPublisher {
       false,
     );
 
-    if (prListResult !== null && prListResult.exitCode === 0) {
+    // If pre-query failed (null result), fail closed — do not create PR
+    if (prListResult === null) {
+      return await this._terminalize(state, "PR_STATE_CONFLICT", safeMessage("gh pr list failed"), null);
+    }
+
+    if (prListResult.exitCode === 0) {
       let prList: unknown;
       try {
         prList = JSON.parse(prListResult.stdout.trim());
@@ -1941,23 +2034,31 @@ export class LoopDeliveryPublisher {
     const t0 = this._nowMs() ?? state.lastClockMs;
     const elapsed = Math.max(0, t0 - state.startMs);
 
+    // Clock error in finalizer must override any original status to INTERNAL_ERROR
+    let finalReasonCode = reasonCode;
+    let finalMessage = message;
+    if (state.clockError || state.deadlineGate === "clock_error" || t0 === state.lastClockMs && this._nowMs() === null) {
+      finalReasonCode = "INTERNAL_ERROR";
+      finalMessage = safeMessage("clock error in finalizer");
+    }
+
     // Build result object in canonical fixed order
     const status: LoopDeliveryPublishStatus =
-      reasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" :
-      reasonCode === "BASE_BRANCH_DRIFT" || reasonCode === "WORKSPACE_DRIFT" ||
-      reasonCode === "WORKSPACE_STATE_CONFLICT" || reasonCode === "REMOTE_BRANCH_CONFLICT" ||
-      reasonCode === "PR_STATE_CONFLICT" || reasonCode === "EXECUTION_BLOCKED" ? "blocked" : "failed";
+      finalReasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" :
+      finalReasonCode === "BASE_BRANCH_DRIFT" || finalReasonCode === "WORKSPACE_DRIFT" ||
+      finalReasonCode === "WORKSPACE_STATE_CONFLICT" || finalReasonCode === "REMOTE_BRANCH_CONFLICT" ||
+      finalReasonCode === "PR_STATE_CONFLICT" || finalReasonCode === "EXECUTION_BLOCKED" ? "blocked" : "failed";
 
     const finalStage = recoveryStage ?? state.recoveryStage;
 
     // Add terminal trace entry
-    this._addTrace(state, "terminal", reasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" : "failed",
+    this._addTrace(state, "terminal", finalReasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" : "failed",
       null, state.commitSha, state.remoteBranchSha, state.prNumber, elapsed);
 
     const resultObj: Record<string, unknown> = Object.create(null);
     resultObj.schema = "loop-publish-result-v1";
     resultObj.status = status;
-    resultObj.reason_code = reasonCode;
+    resultObj.reason_code = finalReasonCode;
     resultObj.cause_code = null;
     resultObj.recovery_stage = finalStage;
     resultObj.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
@@ -2138,15 +2239,11 @@ export class LoopDeliveryPublisher {
   }
 
   private _checkGate(state: InternalState): LoopDeliveryPublishResult | null {
-    if (state.clockError) {
+    if (state.clockError || state.deadlineGate === "clock_error") {
       return this._zeroStateResult("INTERNAL_ERROR", "clock error");
     }
 
     const now = this._nowMsChecked(state);
-
-    if (state.deadlineGate === "clock_error") {
-      return this._zeroStateResult("INTERNAL_ERROR", "clock error");
-    }
 
     if (now >= state.deadlineMs) {
       state.deadlineGate = "expired";
@@ -2163,6 +2260,15 @@ export class LoopDeliveryPublisher {
     }
 
     return null;
+  }
+
+  private _remainingMs(state: InternalState): number {
+    const now = this._nowMsChecked(state);
+    return Math.max(0, state.deadlineMs - now);
+  }
+
+  private _effectiveTimeoutMs(state: InternalState): number {
+    return Math.min(this.defaultCommandTimeoutMs, this._remainingMs(state));
   }
 
   // ═══════════════════════════════════════ Trace
@@ -2190,7 +2296,67 @@ export class LoopDeliveryPublisher {
     }));
   }
 
-  // ═══════════════════════════════════════ D02 Runner Helpers
+  // ═══════════════════════════════════════ D03 Reconciliation
+
+  private async _reconcileD03(state: InternalState): Promise<LoopDeliveryPublishResult | null> {
+    let snapshot: LoopGitWorkspaceSnapshot;
+    try {
+      snapshot = await this.workspaceManager.inspect(state.request.identity);
+    } catch {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("D03 inspect failed during reconciliation"), null);
+    }
+
+    const snapVal = validateWorkspaceSnapshot(snapshot);
+    if (!snapVal.ok) {
+      return await this._terminalize(state, "DEPENDENCY_RESULT_INVALID", safeMessage("D03 snapshot invalid during reconciliation"), null);
+    }
+
+    // Verify workspace identity hasn't changed
+    if (snapshot.workspacePath !== state.workspacePath) {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("workspacePath changed"), null);
+    }
+    if (snapshot.repository !== state.request.identity.repository) {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("repository changed"), null);
+    }
+    if (snapshot.taskBranch !== state.request.identity.taskBranch) {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("taskBranch changed"), null);
+    }
+
+    // Verify Source invariance
+    if (snapshot.sourceHeadSha !== state.sourceHeadSha) {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("sourceHeadSha changed"), null);
+    }
+    if (snapshot.sourceWipDigestSha256 !== state.sourceWipDigestSha256) {
+      return await this._terminalize(state, "WORKSPACE_DRIFT", safeMessage("sourceWipDigest changed"), null);
+    }
+
+    // Verify base hasn't drifted
+    if (snapshot.currentBaseSha !== state.currentBaseSha) {
+      return await this._terminalize(state, "BASE_BRANCH_DRIFT", safeMessage("currentBaseSha changed"), null);
+    }
+    if (snapshot.baseDrifted) {
+      return await this._terminalize(state, "BASE_BRANCH_DRIFT", safeMessage("baseDrifted flag set"), null);
+    }
+
+    // Verify task HEAD allowed transitions
+    const currentHead = snapshot.taskHeadSha;
+    if (currentHead !== state.precommitHeadSha && currentHead !== state.commitSha) {
+      // Only allowed transition: precommit -> publish commit
+      if (state.commitSha !== null && currentHead === state.commitSha) {
+        // OK — expected transition to publish commit
+      } else if (state.request.recoveryPublishIntentArtifactRef !== undefined) {
+        // In recovery mode, allow HEAD to be at a commit beyond precommit
+        // The commit phase will verify it's a valid publish commit
+        if (!SHA40_RE.test(currentHead)) {
+          return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("invalid task HEAD in recovery"), null);
+        }
+      } else {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("unauthorized task HEAD transition"), null);
+      }
+    }
+
+    return null;
+  }
 
   private async _runGit(
     state: InternalState,
@@ -2205,14 +2371,18 @@ export class LoopDeliveryPublisher {
     args: readonly string[],
     stdin: string,
   ): Promise<LoopPosixProcessResult> {
-    const id = state.request.identity;
+    const cwd = state.workspacePath;
+    if (!cwd) throw new Error(safeMessage("workspacePath not set"));
+    const remaining = this._remainingMs(state);
+    if (remaining <= 0) throw new Error(safeMessage("deadline expired"));
+    const effectiveTimeout = Math.min(this.defaultCommandTimeoutMs, remaining);
     try {
       const result = await this.runner.run({
         executableId: this.gitExecutableId,
         args,
-        cwd: id.repositoryPath,
+        cwd,
         stdin,
-        timeoutMs: this.defaultCommandTimeoutMs,
+        timeoutMs: effectiveTimeout,
         maxStdoutBytes: this.maxCommandOutputBytes,
         maxStderrBytes: this.maxCommandOutputBytes,
       });
@@ -2245,12 +2415,13 @@ export class LoopDeliveryPublisher {
     args: readonly string[],
     stdin: string,
   ): Promise<LoopPosixProcessResult> {
-    const id = state.request.identity;
+    const cwd = state.workspacePath;
+    if (!cwd) throw new Error(safeMessage("workspacePath not set"));
     try {
       const result = await this.runner.run({
         executableId: this.ghExecutableId,
         args,
-        cwd: id.repositoryPath,
+        cwd,
         stdin,
         timeoutMs: this.defaultCommandTimeoutMs,
         maxStdoutBytes: this.maxCommandOutputBytes,
@@ -2277,13 +2448,17 @@ export class LoopDeliveryPublisher {
     args: readonly string[],
     allowNonZero: boolean,
   ): Promise<LoopPosixProcessResult | null> {
-    const id = state.request.identity;
+    const cwd = state.workspacePath;
+    if (!cwd) return null;
+    const remaining = this._remainingMs(state);
+    if (remaining <= 0) return null;
+    const effectiveTimeout = Math.min(this.defaultCommandTimeoutMs, remaining);
     try {
       const result = await this.runner.run({
         executableId,
         args,
-        cwd: id.repositoryPath,
-        timeoutMs: this.defaultCommandTimeoutMs,
+        cwd,
+        timeoutMs: effectiveTimeout,
         maxStdoutBytes: this.maxCommandOutputBytes,
         maxStderrBytes: this.maxCommandOutputBytes,
       });

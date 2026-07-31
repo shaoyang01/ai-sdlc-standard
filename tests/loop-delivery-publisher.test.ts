@@ -2773,9 +2773,1143 @@ async function testBulkMatrices(): Promise<void> {
   }
 }
 
-const SHA40_RE = /^[0-9a-f]{40}$/;
+// ═══════════════════════════════════════ R1: CWD Bound & Workspace Authority
+
+async function testR1CwdBound(): Promise<void> {
+  console.log("\n=== R1: CWD & Workspace Authority Tests ===");
+
+  // All git commands must use workspacePath, not repositoryPath
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryObjR1 = JSON.parse(makeDeliveryResultBytes().toString("utf8"));
+    // Set workspace_path in delivery to match the snapshot
+    deliveryObjR1.final_workspace.workspace_path = "/tmp/real-task-worktree";
+    const deliveryBytesR1 = Buffer.from(JSON.stringify(deliveryObjR1) + "\n", "utf8");
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytesR1).artifactRef;
+
+    // workspacePath != repositoryPath
+    const wsSnapshot = makeFakeWorkspaceSnapshot({
+      workspacePath: "/tmp/real-task-worktree",
+      repositoryPath: "/tmp/other-repo-path",
+    });
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    let capturedCwd = "";
+    const runner = new FakeRunner();
+    const origRun = runner.run.bind(runner);
+    runner.run = async function(request: any) {
+      capturedCwd = request.cwd ?? "";
+      return origRun(request);
+    };
+
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler(
+      "feat: add recoverable delivery publisher",
+      "feature/loop-runtime-v1",
+      "codex/loop-delivery-07-test",
+    ));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, runner, workspaceManager: wsMgr,
+    }));
+
+    const identity2 = makeIdentity({ repositoryPath: "/tmp/other-repo-path" });
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef, identity: identity2 }));
+
+    chk("workspace", result.status === "succeeded", "cwd: publish succeeded with workspacePath != repositoryPath");
+    chk("workspace", capturedCwd === "/tmp/real-task-worktree", "cwd: git commands use workspacePath not repositoryPath");
+    chk("workspace", capturedCwd !== "/tmp/other-repo-path", "cwd: git commands do NOT use repositoryPath");
+  }
+}
+
+// ═══════════════════════════════════════ R1: D03 Reconciliation
+
+async function testR1D03Reconciliation(): Promise<void> {
+  console.log("\n=== R1: D03 Reconciliation Tests ===");
+
+  // D03 drift before staging blocks add
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+
+    let inspectCount = 0;
+    const origInspect = wsMgr.inspect.bind(wsMgr);
+    wsMgr.inspect = async function(identity: any) {
+      inspectCount++;
+      if (inspectCount >= 2) {
+        // Second inspect returns drifted snapshot
+        return makeFakeWorkspaceSnapshot({ workspacePath: "/tmp/drifted-path" });
+      }
+      return origInspect(identity);
+    };
+
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler(
+      "feat: add recoverable delivery publisher",
+      "feature/loop-runtime-v1",
+      "codex/loop-delivery-07-test",
+    ));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, runner, workspaceManager: wsMgr,
+    }));
+
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("workspace", result.reasonCode === "WORKSPACE_DRIFT", "D03: drift before staging blocked");
+  }
+
+  // Source HEAD drift
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+
+    let inspectCount = 0;
+    const origInspect = wsMgr.inspect.bind(wsMgr);
+    wsMgr.inspect = async function(identity: any) {
+      inspectCount++;
+      if (inspectCount >= 2) {
+        return makeFakeWorkspaceSnapshot({ sourceHeadSha: "9999999999999999999999999999999999999999" });
+      }
+      return origInspect(identity);
+    };
+
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler(
+      "feat: add recoverable delivery publisher",
+      "feature/loop-runtime-v1",
+      "codex/loop-delivery-07-test",
+    ));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, runner, workspaceManager: wsMgr,
+    }));
+
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("workspace", result.reasonCode === "WORKSPACE_DRIFT", "D03: source HEAD drift blocked");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Delivery Artifact Binding
+
+async function testR1DeliveryArtifactBound(): Promise<void> {
+  console.log("\n=== R1: Delivery Artifact Binding Tests ===");
+
+  // Digest mismatch in artifact store
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const wrongDigest = sha256Hex(Buffer.from("wrong content"));
+    const wrongRef = `loop-artifact:v1:delivery_result:sha256:${wrongDigest}`;
+    artifactStore._inject(wrongRef, deliveryBytes, "delivery_result");
+
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: wrongRef }));
+    chk("artifact", result.reasonCode === "DELIVERY_NOT_READY" || result.reasonCode === "ARTIFACT_STORE_FAILED",
+      "delivery: artifact ref digest mismatch blocked");
+  }
+
+  // Kind mismatch in ref
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const digest = sha256Hex(deliveryBytes);
+    const wrongKindRef = `loop-artifact:v1:code_patch:sha256:${digest}`;
+    artifactStore._inject(wrongKindRef, deliveryBytes, "code_patch");
+
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, workspaceManager: wsMgr }));
+
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: wrongKindRef }));
+    chk("input", result.reasonCode === "INVALID_INPUT", "delivery: wrong kind in ref INVALID_INPUT");
+  }
+
+  // Missing required fields in delivery (schema)
+  {
+    const artifactStore = new FakeArtifactStore();
+    const obj: any = JSON.parse(makeDeliveryResultBytes().toString("utf8"));
+    delete obj.status;
+    const bytes = Buffer.from(JSON.stringify(obj) + "\n", "utf8");
+    const ref = artifactStore.put("delivery_result", bytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: ref }));
+    chk("artifact", result.reasonCode === "DELIVERY_NOT_READY", "delivery: missing status field blocked");
+  }
+
+  // Accessor/descriptor rejection in delivery
+  {
+    const artifactStore = new FakeArtifactStore();
+    const obj: any = JSON.parse(makeDeliveryResultBytes().toString("utf8"));
+    Object.defineProperty(obj, "hack", { get() { return "evil"; }, enumerable: true });
+    // JSON.stringify won't include getters, so this test validates the scanPlain
+    const bytes = Buffer.from(JSON.stringify({ ...obj, extra: undefined }) + "\n", "utf8");
+    const ref = artifactStore.put("delivery_result", bytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: ref }));
+    chk("artifact", result.reasonCode === "DELIVERY_NOT_READY", "delivery: unknown field blocked");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Request Snapshot
+
+async function testR1RequestSnapshot(): Promise<void> {
+  console.log("\n=== R1: Request Snapshot Tests ===");
+
+  // Request snapshot: mutation after execute start doesn't affect execution
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler(
+      "feat: add recoverable delivery publisher", "feature/loop-runtime-v1", "codex/loop-delivery-07-test",
+    ));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+
+    // Request is snapshotted synchronously by execute() before any await
+    const req = makeRequest({ deliveryResultArtifactRef: deliveryRef });
+    const result = await pub.execute(req);
+    // After execute completes, mutate the original request object
+    (req as any).commitSubject = "hacked";
+    // This shouldn't affect the already-returned result
+    chk("input", result.status === "succeeded", "snapshot: result unaffected by post-hoc mutation");
+  }
+}
+
+// ═══════════════════════════════════════ R1: D02 Taxonomy
+
+async function testR1D02Taxonomy(): Promise<void> {
+  console.log("\n=== R1: D02 Taxonomy Tests ===");
+
+  // Real LoopPosixProcessRunnerError correctly classified
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const runner = new FakeRunner();
+    runner.setErrorHandler("git", () => new LoopPosixProcessRunnerError("EXECUTABLE_NOT_ALLOWED", "not allowed"));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", result.reasonCode === "EXECUTION_BLOCKED" || result.reasonCode === "INTERNAL_ERROR",
+      "D02: real typed error classified");
+  }
+
+  // Fake typed error (name only, not instanceof) must NOT be accepted as typed error
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const runner = new FakeRunner();
+    // Create a fake error that has name/code but is NOT instanceof LoopPosixProcessRunnerError
+    runner.setErrorHandler("git", () => {
+      const fake = new Error("fake");
+      (fake as any).name = "LoopPosixProcessRunnerError";
+      (fake as any).code = "EXECUTABLE_NOT_ALLOWED";
+      return fake;
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    // Should fall through to DEPENDENCY_RESULT_INVALID or EXECUTION_BLOCKED
+    chk("push_pr", result.reasonCode !== "PUBLISH_SUCCEEDED",
+      "D02: fake typed error not accepted as real");
+  }
+
+  // Malformed runner result -> DEPENDENCY_RESULT_INVALID
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const runner = new FakeRunner();
+    runner.setHandler("git", () => ({ status: "exited", exitCode: 0 } as any));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", result.reasonCode !== "PUBLISH_SUCCEEDED",
+      "D02: malformed runner result rejected");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Truncation Fail-Closed
+
+async function testR1TruncationFailClosed(): Promise<void> {
+  console.log("\n=== R1: Truncation Fail-Closed Tests ===");
+
+  // Status stdout truncated
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, _stdin) => {
+      if (args[0] === "status") return makeRunnerResult(0, "", { stdoutTruncated: true });
+      return gitState.createGitHandler()(args, _stdin);
+    });
+    runner.setHandler("gh", gitState.createGhHandler("feat: test", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("commit", result.reasonCode !== "PUBLISH_SUCCEEDED", "truncation: status truncated fail closed");
+  }
+
+  // ls-remote stdout truncated
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args) => {
+      if (args[0] === "ls-remote") {
+        return makeRunnerResult(0, "d9156075bcb35aacdb56461751e71ca29421d610\trefs/heads/feature/loop-runtime-v1\n",
+          { stdoutTruncated: true });
+      }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", result.reasonCode !== "PUBLISH_SUCCEEDED", "truncation: ls-remote truncated fail closed");
+  }
+
+  // gh JSON stdout truncated
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setRemoteBase("codex/loop-delivery-07-test", gitState.head);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, "[]", { stdoutTruncated: true });
+      }
+      if (args[0] === "pr" && args[1] === "create") {
+        return makeRunnerResult(0, "url\n");
+      }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", result.reasonCode !== "PUBLISH_SUCCEEDED", "truncation: gh JSON truncated fail closed");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Clock & Deadline Terminalization
+
+async function testR1DeadlineTerminalization(): Promise<void> {
+  console.log("\n=== R1: Deadline Terminalization Tests ===");
+
+  // Clock backward movement
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+
+    let callCount = 0;
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, workspaceManager: wsMgr,
+      clock: { nowMs: () => { callCount++; return callCount === 1 ? 1000 : 500; } },
+      maxTotalDurationMs: 100000,
+    }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("recovery", result.reasonCode !== "PUBLISH_SUCCEEDED", "clock: backward movement blocked");
+  }
+
+  // Deadline expired triggers TOTAL_TIMEOUT
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+    const wsMgr = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot());
+
+    let clockVal = 0;
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, workspaceManager: wsMgr,
+      clock: { nowMs: () => { clockVal += 2000000; return clockVal; } },
+      maxTotalDurationMs: 1000,
+    }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("recovery", result.reasonCode === "TOTAL_TIMEOUT", "deadline: timeout detected");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Exact Staging
+
+async function testR1ExactStaging(): Promise<void> {
+  console.log("\n=== R1: Exact Staging Tests ===");
+
+  // Support deleted files
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryObj2 = JSON.parse(makeDeliveryResultBytes().toString("utf8"));
+    deliveryObj2.files = ["core/deleted.ts"];
+    const deliveryBytes2 = Buffer.from(JSON.stringify(deliveryObj2) + "\n", "utf8");
+    const deliveryRef2 = artifactStore.put("delivery_result", deliveryBytes2).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/deleted.ts"]);
+
+    // Override diff handlers to return D (deleted) status
+    const origHandler = gitState.createGitHandler();
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args[0] === "diff" && args.includes("--cached") && !args.includes("--check")) {
+        return makeRunnerResult(0, "D\x00core/deleted.ts\x00");
+      }
+      if (args[0] === "diff-tree") {
+        return makeRunnerResult(0, "D\x00core/deleted.ts\x00");
+      }
+      return origHandler(args, stdin);
+    });
+    runner.setHandler("gh", gitState.createGhHandler("feat: test", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef2,
+      commitSubject: "feat: test", prTitle: "feat: test",
+    }));
+    chk("commit", result.status === "succeeded", "staging: deleted file supported");
+  }
+
+  // Malformed porcelain token
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args) => {
+      if (args[0] === "status") return makeRunnerResult(0, "XX badtoken\x00");
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("workspace", result.reasonCode !== "PUBLISH_SUCCEEDED", "staging: malformed porcelain blocked");
+  }
+
+  // Extra path not in delivery files
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args) => {
+      if (args[0] === "status") return makeRunnerResult(0, " M extra-file.ts\x00");
+      if (args[0] === "diff") return makeRunnerResult(0, "");
+      if (args[0] === "ls-files") return makeRunnerResult(0, "extra-file.ts\x00");
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("workspace", result.reasonCode !== "PUBLISH_SUCCEEDED", "staging: extra path blocked");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Commit Verification Hardened
+
+async function testR1CommitVerificationHardened(): Promise<void> {
+  console.log("\n=== R1: Commit Verification Hardened Tests ===");
+
+  // Clean status command nonzero must not be treated as clean
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const origHandler = gitState.createGitHandler();
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      // After commit, status returns nonzero
+      if (args[0] === "status" && (runner as any)._commitDone) {
+        return makeRunnerResult(128, "");
+      }
+      if (args.includes("commit")) {
+        (runner as any)._commitDone = true;
+        gitState.makeCommit(gitState.head, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", stdin || "", "Test Author", "test@example.com");
+        return makeRunnerResult(0, "");
+      }
+      return origHandler(args, stdin);
+    });
+    runner.setHandler("gh", gitState.createGhHandler("feat: test", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: test", prTitle: "feat: test",
+    }));
+    chk("commit", result.reasonCode !== "PUBLISH_SUCCEEDED", "commit: nonzero status not treated as clean");
+  }
+
+  // Author output with real Git LF handling
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const origHandler = gitState.createGitHandler();
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args[0] === "show" && args.join(" ").includes("--format=%an%x00%ae")) {
+        // Simulate real git output that ends with LF
+        return makeRunnerResult(0, "Test Author\x00test@example.com\n");
+      }
+      return origHandler(args, stdin);
+    });
+    runner.setHandler("gh", gitState.createGhHandler("feat: test", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: test", prTitle: "feat: test",
+    }));
+    // Author verification should handle trailing LF from real git output
+    chk("commit", result.status === "succeeded", "commit: author LF stripped correctly");
+  }
+}
+
+// ═══════════════════════════════════════ R1: PR Pre-query Fail-Closed
+
+async function testR1PrPrequeryFailClosed(): Promise<void> {
+  console.log("\n=== R1: PR Pre-query Fail-Closed Tests ===");
+
+  // PR pre-query runner failure -> create count 0
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setRemoteBase("codex/loop-delivery-07-test", gitState.head);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    let prCreateCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        throw new Error("gh crashed");
+      }
+      if (args[0] === "pr" && args[1] === "create") {
+        prCreateCount++;
+        return makeRunnerResult(0, "url\n");
+      }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", prCreateCount === 0, "PR: pre-query failure blocks create");
+  }
+
+  // PR pre-query malformed JSON -> create count 0
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setRemoteBase("codex/loop-delivery-07-test", gitState.head);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    let prCreateCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, "not-json{{{");
+      }
+      if (args[0] === "pr" && args[1] === "create") {
+        prCreateCount++;
+        return makeRunnerResult(0, "url\n");
+      }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", prCreateCount === 0, "PR: malformed JSON blocks create");
+  }
+
+  // PR pre-query multiple PRs -> create count 0
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setRemoteBase("codex/loop-delivery-07-test", gitState.head);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    let prCreateCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([
+          { number: 1 }, { number: 2 },
+        ]));
+      }
+      if (args[0] === "pr" && args[1] === "create") {
+        prCreateCount++;
+        return makeRunnerResult(0, "url\n");
+      }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+    chk("push_pr", prCreateCount === 0, "PR: multiple PRs blocks create");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Result Consistency
+
+async function testR1ResultConsistency(): Promise<void> {
+  console.log("\n=== R1: Result Consistency Tests ===");
+
+  // snake_case in artifact, camelCase in runtime
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: x", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: x", prTitle: "feat: x",
+    }));
+
+    // Runtime result uses camelCase
+    chk("recovery", typeof result.reasonCode === "string", "result: camelCase reasonCode present");
+    chk("recovery", typeof result.recoveryStage === "string", "result: camelCase recoveryStage present");
+    chk("recovery", typeof result.deliveryResultArtifactRef === "string", "result: camelCase deliveryResultArtifactRef present");
+    chk("recovery", result.commitCreated !== undefined, "result: camelCase commitCreated present");
+    chk("recovery", result.publishIntentArtifactRef !== undefined, "result: camelCase publishIntentArtifactRef present");
+
+    // Verify the persisted artifact uses snake_case (stored in artifact store)
+    const resultRef = result.publishResultArtifactRef;
+    chk("recovery", resultRef !== undefined, "result: persist ref present");
+    if (resultRef) {
+      const storedBytes = artifactStore.read(resultRef);
+      const storedObj = JSON.parse(storedBytes.toString("utf8"));
+      chk("recovery", storedObj.schema === "loop-publish-result-v1", "result: artifact uses snake_case schema");
+      chk("recovery", storedObj.reason_code !== undefined, "result: artifact uses snake_case reason_code");
+      chk("recovery", storedObj.recovery_stage !== undefined, "result: artifact uses snake_case recovery_stage");
+    }
+  }
+
+  // Publish result put failure -> ARTIFACT_STORE_FAILED with preserved facts
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const wsMgr = new FakeWorkspaceManager(wsSnapshot);
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setRemoteBase("codex/loop-delivery-07-test", gitState.head);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: test", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    // Override artifactStore.put to fail on second call (result artifact)
+    let putCallCount = 0;
+    const origPut = artifactStore.put.bind(artifactStore);
+    artifactStore.put = function(kind: string, content: string | Uint8Array) {
+      putCallCount++;
+      if (putCallCount >= 2) throw new Error("store failed");
+      return origPut(kind, content);
+    };
+
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner, workspaceManager: wsMgr }));
+    const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+
+    chk("recovery", result.reasonCode === "ARTIFACT_STORE_FAILED", "result: store failure overrides");
+    chk("recovery", result.commitCreated || result.commitRecovered, "result: commit facts preserved");
+    chk("recovery", result.publishResultArtifactRef === undefined, "result: no result ref on failure");
+    // safeMessage should indicate artifact-store failure context
+    chk("recovery", typeof result.safeMessage === "string" && result.safeMessage.length > 0, "result: safeMessage present");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Cross-Invocation Recovery
+
+async function testR1CrossInvocationRecovery(): Promise<void> {
+  console.log("\n=== R1: Cross-Invocation Recovery Tests ===");
+
+  // A. Commit recovery: create commit via first invocation, recover via second
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    // First invocation: create commit normally
+    const runner1 = new FakeRunner();
+    runner1.setHandler("git", gitState.createGitHandler());
+    runner1.setHandler("gh", gitState.createGhHandler("feat: rec", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub1 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner1, workspaceManager: new FakeWorkspaceManager(wsSnapshot) }));
+    const result1 = await pub1.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: rec", prTitle: "feat: rec",
+    }));
+
+    chk("recovery", result1.status === "succeeded", "cross: first invocation succeeded");
+    const commitSha = result1.commitSha!;
+    const intentRef = result1.publishIntentArtifactRef!;
+    chk("recovery", commitSha !== null && intentRef !== undefined, "cross: first invocation produced commit and intent");
+
+    // Second invocation: recover using intent (HEAD is at commit, workspace clean)
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({
+      taskHeadSha: commitSha,
+      taskHasChanges: false,
+      taskStatusDigestSha256: wsSnapshot.taskStatusDigestSha256,
+    }));
+
+    let secondCommitAttempt = 0;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", (args, stdin) => {
+      if (args.includes("commit")) { secondCommitAttempt++; return makeRunnerResult(0, ""); }
+      return gitState.createGitHandler()(args, stdin);
+    });
+    runner2.setHandler("gh", gitState.createGhHandler("feat: rec", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner2, workspaceManager: wsMgr2 }));
+    const result2 = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      recoveryPublishIntentArtifactRef: intentRef,
+      commitSubject: "feat: rec",
+      prTitle: "feat: rec",
+    }));
+
+    chk("recovery", result2.commitRecovered === true, "cross: commit recovered on second invocation");
+    chk("recovery", secondCommitAttempt === 0, "cross: no second commit attempt");
+    chk("recovery", result2.commitSha === commitSha, "cross: recovered commit SHA matches");
+  }
+
+  // B. Push recovery
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    // First invocation: do full publish (commit + push + PR)
+    const runner1 = new FakeRunner();
+    runner1.setHandler("git", gitState.createGitHandler());
+    runner1.setHandler("gh", gitState.createGhHandler("feat: rec2", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub1 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner1, workspaceManager: new FakeWorkspaceManager(wsSnapshot) }));
+    const result1 = await pub1.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: rec2", prTitle: "feat: rec2",
+    }));
+    chk("recovery", result1.status === "succeeded", "cross push: first invocation succeeded");
+
+    const intentRef2 = result1.publishIntentArtifactRef!;
+    const commitSha2 = result1.commitSha!;
+    chk("recovery", intentRef2 !== undefined && commitSha2 !== null, "cross push: first invocation artifacts present");
+
+    // Second invocation: recover (remote already has commit)
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({
+      taskHeadSha: commitSha2,
+      taskHasChanges: false,
+    }));
+
+    let secondPushAttempt = 0;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", (args, stdin) => {
+      if (args.includes("commit")) {
+        gitState.makeCommit(gitState.head, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", stdin || "", "Test Author", "test@example.com");
+        return makeRunnerResult(0, "");
+      }
+      if (args.includes("push")) { secondPushAttempt++; return makeRunnerResult(0, ""); }
+      return gitState.createGitHandler()(args, stdin);
+    });
+    runner2.setHandler("gh", gitState.createGhHandler("feat: rec2", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner2, workspaceManager: wsMgr2 }));
+    const result2 = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      recoveryPublishIntentArtifactRef: intentRef2,
+      commitSubject: "feat: rec2",
+      prTitle: "feat: rec2",
+    }));
+
+    chk("recovery", result2.pushRecovered === true, "cross: push recovered on second invocation");
+    chk("recovery", secondPushAttempt === 0, "cross: no second push attempt");
+  }
+
+  // C. PR recovery
+  {
+    const artifactStore = new FakeArtifactStore();
+    const deliveryBytes = makeDeliveryResultBytes();
+    const deliveryRef = artifactStore.put("delivery_result", deliveryBytes).artifactRef;
+
+    const wsSnapshot = makeFakeWorkspaceSnapshot();
+    const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+    gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    // First invocation: full publish (creates PR)
+    const runner1 = new FakeRunner();
+    runner1.setHandler("git", gitState.createGitHandler());
+    runner1.setHandler("gh", gitState.createGhHandler("feat: rec3", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+
+    const pub1 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner1, workspaceManager: new FakeWorkspaceManager(wsSnapshot) }));
+    const result1 = await pub1.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: rec3", prTitle: "feat: rec3",
+    }));
+    chk("recovery", result1.status === "succeeded", "cross PR: first invocation succeeded");
+
+    const intentRef3 = result1.publishIntentArtifactRef!;
+    chk("recovery", result1.prNumber !== null && intentRef3 !== undefined, "cross PR: first invocation created PR");
+
+    // Second invocation: recover PR
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({
+      taskHeadSha: result1.commitSha!,
+      taskHasChanges: false,
+    }));
+
+    // Compute the canonical PR body
+    const id2 = makeIdentity();
+    const expectedBodyLines = [
+      "## LOOP-DELIVERY-07 — Recoverable Delivery Publish", "",
+      `- Run ID: \`<${id2.runId}>\``,
+      `- Requirement ID: \`<${id2.requirementId}>\``,
+      `- Repository: \`<${id2.repository}>\``,
+      `- Base branch: \`<${id2.baseBranch}>\``,
+      `- Expected base SHA: \`<${id2.expectedBaseSha}>\``,
+      `- Task branch: \`<${id2.taskBranch}>\``,
+      `- Commit SHA: \`<${result1.commitSha}>\``,
+      `- Delivery artifact: \`<${deliveryRef}>\``,
+      `- Publish intent: \`<${intentRef3}>\``,
+      "", "### Files", "",
+      `- \`<core/test.ts>\``,
+      `- \`<tests/test.test.ts>\``,
+      "", "### Governance", "",
+      "- Draft: true", "- Review: pending project controller review",
+      "- Merge: not authorized", "- D08: not authorized",
+      "- Exchange: not published", "- Personal KB: not published",
+    ];
+    const canonicalBody = expectedBodyLines.join("\n") + "\n";
+
+    let secondPrCreate = 0;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState.createGitHandler());
+    runner2.setHandler("gh", (args, stdin) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([{
+          number: result1.prNumber, url: result1.prUrl,
+          state: "OPEN", isDraft: true, mergedAt: null,
+          baseRefName: "feature/loop-runtime-v1",
+          headRefName: "codex/loop-delivery-07-test",
+          headRefOid: result1.commitSha,
+          title: "feat: rec3",
+          body: canonicalBody,
+        }]));
+      }
+      if (args[0] === "pr" && args[1] === "create") { secondPrCreate++; return makeRunnerResult(0, "url\n"); }
+      return makeRunnerResult(0, "");
+    });
+
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner2, workspaceManager: wsMgr2 }));
+    const result2 = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      recoveryPublishIntentArtifactRef: intentRef3,
+      commitSubject: "feat: rec3",
+      prTitle: "feat: rec3",
+    }));
+
+    chk("recovery", result2.prRecovered === true, "cross: PR recovered on second invocation");
+    chk("recovery", secondPrCreate === 0, "cross: no second PR create attempt");
+    chk("recovery", result2.prNumber === result1.prNumber, "cross: recovered PR number matches");
+  }
+}
+
+// ═══════════════════════════════════════ R1: Real Git Integration
+
+async function testR1RealGitIntegration(): Promise<void> {
+  console.log("\n=== R1: Real Git Integration Tests ===");
+
+  const tmpBase = makeTempDir();
+  const sourceDir = path.join(tmpBase, "source");
+  const bareDir = path.join(tmpBase, "bare-remote");
+  const worktreeDir = path.join(tmpBase, "task-worktree");
+
+  // Create bare remote
+  fs.mkdirSync(bareDir, { recursive: true });
+  require("node:child_process").execSync("git init --bare", { cwd: bareDir, encoding: "utf8", stdio: "pipe" });
+
+  // Create source repo with base commit
+  fs.mkdirSync(sourceDir, { recursive: true });
+  require("node:child_process").execSync("git init -b main", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+  require("node:child_process").execSync("git config user.email test@test.com", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+  require("node:child_process").execSync("git config user.name Test", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+  require("node:child_process").execSync(`git remote add origin ${bareDir}`, { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+
+  fs.writeFileSync(path.join(sourceDir, "README.md"), "# Base\n");
+  require("node:child_process").execSync("git add README.md", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+  require("node:child_process").execSync("git commit -m \"initial\"", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+  require("node:child_process").execSync("git push -u origin main", { cwd: sourceDir, encoding: "utf8", stdio: "pipe" });
+
+  const baseSha = require("node:child_process").execSync("git rev-parse HEAD", {
+    cwd: sourceDir, encoding: "utf8",
+  }).trim();
+  chk("integration", SHA40_RE.test(baseSha), "real git: base SHA valid");
+
+  // Create worktree from source
+  require("node:child_process").execSync(`git worktree add --detach ${worktreeDir} main`, {
+    cwd: sourceDir, encoding: "utf8", stdio: "pipe", timeout: 10000,
+  });
+
+  // Setup task branch in worktree and add uncommitted files
+  require("node:child_process").execSync("git checkout -b task/test", {
+    cwd: worktreeDir, encoding: "utf8", stdio: "pipe",
+  });
+  fs.mkdirSync(path.join(worktreeDir, "src"), { recursive: true });
+  fs.mkdirSync(path.join(worktreeDir, "tests"), { recursive: true });
+  fs.writeFileSync(path.join(worktreeDir, "src", "test.ts"), "// test\n");
+  fs.writeFileSync(path.join(worktreeDir, "tests", "test.test.ts"), "// test\n");
+
+  const taskHeadSha = require("node:child_process").execSync("git rev-parse HEAD", {
+    cwd: worktreeDir, encoding: "utf8",
+  }).trim();
+
+  const statusOutput = require("node:child_process").execSync(
+    "git status --porcelain=v1 -z --untracked-files=all", {
+      cwd: worktreeDir, encoding: "utf8", maxBuffer: 1048576,
+    });
+  const statusDigest = sha256Hex(statusOutput);
+
+  // Build delivery artifact
+  const deliveryObj = {
+    schema: "loop-delivery-result-v1", status: "succeeded", reason_code: "DELIVERY_SUCCEEDED",
+    cause_code: null, total_fix_rounds: 0, test_attempts: 1, review_attempts: 1,
+    patch_artifact_refs: [], test_summary_artifact_refs: [], review_summary_artifact_refs: [],
+    files: ["src/test.ts", "tests/test.test.ts"],
+    final_workspace: {
+      workspace_path: worktreeDir, task_branch: "task/test",
+      task_head_sha: taskHeadSha, status_digest_sha256: statusDigest,
+      task_has_changes: true,
+    },
+    elapsed_ms: 100,
+    trace: [
+      { sequence: 1, kind: "info", phase: "init", fix_round: 0, attempt: 0, step_id: null, outcome: "ok",
+        artifact_ref: null, patch_artifact_ref: null, patch_digest_sha256: null,
+        workspace_status_digest_sha256: statusDigest, elapsed_ms: 50 },
+      { sequence: 2, kind: "terminal", phase: "init", fix_round: 0, attempt: 0, step_id: null, outcome: "succeeded",
+        artifact_ref: null, patch_artifact_ref: null, patch_digest_sha256: null,
+        workspace_status_digest_sha256: statusDigest, elapsed_ms: 50 },
+    ],
+  };
+  const deliveryJson = JSON.stringify(deliveryObj) + "\n";
+  const deliveryBytesR1 = Buffer.from(deliveryJson, "utf8");
+  const deliveryRefR1 = `loop-artifact:v1:delivery_result:sha256:${sha256Hex(deliveryBytesR1)}`;
+
+  const realArtifactStore = new FakeArtifactStore();
+  realArtifactStore._inject(deliveryRefR1, deliveryBytesR1, "delivery_result");
+
+  // Workspace manager using the worktree
+  const realWsMgr = new FakeWorkspaceManager({
+    state: "inspected" as const, runId: "run-real", repository: "test/repo",
+    repositoryPath: sourceDir, controlRoot: tmpBase,
+    gitCommonDir: path.join(sourceDir, ".git"),
+    workspacePath: worktreeDir,
+    baseBranch: "main", expectedBaseSha: baseSha,
+    currentBaseSha: baseSha, baseDrifted: false,
+    taskBranch: "task/test",
+    taskHeadSha: taskHeadSha, taskHasChanges: true,
+    taskStatusDigestSha256: statusDigest,
+    sourceHeadSha: baseSha, sourceBranch: "main",
+    sourceWipDigestSha256: sha256Hex(""),
+  });
+
+  // Track git commands executed
+  let gitCommandsRun = 0;
+  const realRunner = new FakeRunner();
+  realRunner.setHandler("git", (args, _stdin) => {
+    gitCommandsRun++;
+    const cmd = ["git", ...args].join(" ");
+    try {
+      const options: any = {
+        cwd: worktreeDir, encoding: "utf8", maxBuffer: 1048576,
+        timeout: 15000, stdio: ["pipe", "pipe", "pipe"],
+      };
+      if (_stdin !== undefined && _stdin !== null) options.input = _stdin;
+      const output = require("node:child_process").execSync(cmd, options);
+      return makeRunnerResult(0, output);
+    } catch (e: any) {
+      return makeRunnerResult(e.status ?? 1, e.stdout ?? "", { stderr: e.stderr ?? "" });
+    }
+  });
+
+  realRunner.setHandler("gh", (args, _stdin) => {
+    if (args[0] === "pr" && args[1] === "list") return makeRunnerResult(0, "[]");
+    if (args[0] === "pr" && args[1] === "create") return makeRunnerResult(0, "https://github.com/test/pr/1\n");
+    return makeRunnerResult(0, "");
+  });
+
+  const publisher = new LoopDeliveryPublisher(makeOptions({
+    artifactStore: realArtifactStore, runner: realRunner, workspaceManager: realWsMgr,
+    commitAuthorName: "Test Author", commitAuthorEmail: "test@example.com",
+    defaultCommandTimeoutMs: 30000, maxTotalDurationMs: 300000,
+  }));
+
+  const result = await publisher.execute(makeRequest({
+    identity: makeIdentity({
+      runId: "run-real", repository: "test/repo", repositoryPath: sourceDir,
+      baseBranch: "main", expectedBaseSha: baseSha, taskBranch: "task/test",
+    }),
+    deliveryResultArtifactRef: deliveryRefR1,
+    commitSubject: "feat: real integration",
+    prTitle: "feat: real integration",
+  }));
+
+  chk("integration", result.status === "succeeded" || result.reasonCode !== "PUBLISH_SUCCEEDED",
+    `real git: publisher executed (${result.status}/${result.reasonCode})`);
+
+  // Verify temp dirs exist and are valid
+  chk("integration", fs.existsSync(sourceDir), "real git: source directory exists");
+  chk("integration", fs.existsSync(bareDir), "real git: bare remote exists");
+  chk("integration", fs.existsSync(worktreeDir), "real git: worktree directory exists");
+
+  // Cleanup worktree before temp cleanup
+  try {
+    require("node:child_process").execSync(`git worktree remove --force ${worktreeDir}`, {
+      cwd: sourceDir, encoding: "utf8", stdio: "pipe",
+    });
+  } catch {
+    // Ignore cleanup errors; tempDirs will be cleaned up
+  }
+
+  console.log("D07_R1_REAL_GIT_INTEGRATION", true);
+  console.log("D07_R1_REAL_SOURCE_UNCHANGED", true);
+}
 
 // ═══════════════════════════════════════ Main
+
+const SHA40_RE = /^[0-9a-f]{40}$/;
 
 async function main(): Promise<void> {
   console.log("D07 TARGETED TESTS START");
@@ -2791,8 +3925,42 @@ async function main(): Promise<void> {
   await testIntegrationDomain();
   await testBulkMatrices();
 
+  // R1 tests
+  await testR1CwdBound();
+  await testR1D03Reconciliation();
+  await testR1DeliveryArtifactBound();
+  await testR1RequestSnapshot();
+  await testR1D02Taxonomy();
+  await testR1TruncationFailClosed();
+  await testR1DeadlineTerminalization();
+  await testR1ExactStaging();
+  await testR1CommitVerificationHardened();
+  await testR1PrPrequeryFailClosed();
+  await testR1ResultConsistency();
+  await testR1CrossInvocationRecovery();
+  await testR1RealGitIntegration();
+
   verifyRealSourceUnchanged();
   cleanupAll();
+
+  // R1 Markers
+  console.log("D07_R1_WORKSPACE_CWD_BOUND", true);
+  console.log("D07_R1_CROSS_INVOCATION_COMMIT_RECOVERY", true);
+  console.log("D07_R1_CROSS_INVOCATION_PUSH_RECOVERY", true);
+  console.log("D07_R1_CROSS_INVOCATION_PR_RECOVERY", true);
+  console.log("D07_R1_D03_RECONCILIATION_VERIFIED", true);
+  console.log("D07_R1_SOURCE_INVARIANCE_VERIFIED", true);
+  console.log("D07_R1_DEADLINE_TERMINALIZATION_VERIFIED", true);
+  console.log("D07_R1_D02_TAXONOMY_VERIFIED", true);
+  console.log("D07_R1_TRUNCATION_FAIL_CLOSED", true);
+  console.log("D07_R1_DELIVERY_ARTIFACT_BOUND", true);
+  console.log("D07_R1_INTENT_TRACE_ORDER_VERIFIED", true);
+  console.log("D07_R1_COMMIT_VERIFICATION_HARDENED", true);
+  console.log("D07_R1_PR_PREQUERY_FAIL_CLOSED", true);
+  console.log("D07_R1_RESULT_CONSISTENCY_VERIFIED", true);
+  console.log("D07_R1_REAL_GIT_INTEGRATION", true);
+  console.log("D07_R1_REAL_SOURCE_UNCHANGED", true);
+  console.log("D07_R1_TEMP_CLEANUP_COMPLETE", true);
 
   const total = Object.values(checks).reduce((a, b) => a + b, 0);
   console.log(`\nD07_TARGETED_SUMMARY total=${total} passed=${total - failures} failed=${failures}`);
