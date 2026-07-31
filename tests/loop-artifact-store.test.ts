@@ -6,6 +6,7 @@
 // temp verification, mode enforcement).
 
 import { fork, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import {
   chmodSync,
@@ -1064,6 +1065,44 @@ async function main(): Promise<void> {
       const temps = allFiles.filter(f => f.endsWith(".tmp"));
       assert(temps.length === 0, `no temp residue after normal put (found ${temps.length})`);
       fiStore.close();
+    }
+
+    // ── D08: canonical kinds extension (new kinds + old-kind compatibility) ──
+    console.log("D08 canonical kinds extension");
+    {
+      const d08OldKinds = ["code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata"] as const;
+      const d08NewKinds = ["requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result"] as const;
+      const d08Content = '{"d08":"kind-extension"}';
+      const d08Bytes = Buffer.from(d08Content, "utf8");
+      for (const kind of [...d08OldKinds, ...d08NewKinds]) {
+        const desc = store.put(kind, d08Content);
+        assert(desc.kind === kind, `D08 put kind ${kind}`);
+        assert(desc.artifactRef === `loop-artifact:v1:${kind}:sha256:${desc.digest}`, `D08 canonical ref for ${kind}`);
+        assert(desc.digest === createHash("sha256").update(d08Bytes).digest("hex"), `D08 digest exact for ${kind}`);
+        assert(desc.sizeBytes === d08Bytes.length, `D08 size exact for ${kind}`);
+        const readback = store.read(desc.artifactRef, desc.digest);
+        assert(readback.equals(d08Bytes), `D08 exact readback for ${kind}`);
+        const again = store.put(kind, d08Content);
+        assert(again.artifactRef === desc.artifactRef, `D08 idempotent put for ${kind}`);
+      }
+      // new-kind put failure must not be ignored
+      expectThrow("INVALID_INPUT", () => store.put("requirement_summary" as never, 42 as never), "D08 new kind invalid content rejected");
+      // new-kind cleanup failure must not be ignored
+      {
+        const fiControl = join(tempRoot, "control-d08-fi");
+        const fiStore = new LoopArtifactStore({ controlRoot: fiControl, repositoryPath: repository });
+        fiStore.init();
+        const fsMod = require("node:fs") as typeof import("node:fs");
+        const origClose = fsMod.closeSync;
+        try {
+          fsMod.closeSync = function (fd: number): void { const e = new Error("E") as NodeJS.ErrnoException; e.code = "EIO"; throw e; } as typeof fsMod.closeSync;
+          try { fiStore.put("orchestration_result", "d08-cleanup"); assert(false, "D08 new kind cleanup failure should throw"); }
+          catch (e) {
+            assert(e instanceof LoopArtifactStoreError, "D08 new kind cleanup fail → typed");
+            assert((e as LoopArtifactStoreError).code === "ARTIFACT_IO_FAILURE", `D08 new kind cleanup fail code (got ${(e as LoopArtifactStoreError).code})`);
+          }
+        } finally { fsMod.closeSync = origClose; fiStore.close(); }
+      }
     }
 
     store.close();
