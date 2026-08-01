@@ -1,8 +1,12 @@
 # AI-SDLC Implementation Roadmap
 
-> 导航：[架构基线](AI-SDLC-Architecture-Baseline.md) · [决策记录](AI-SDLC-Decision-Records.md) · [工作流设计](AI-SDLC-Workflow-Design.md) · [Agent 规范](AI-SDLC-Agent-Specification.md) · [当前状态](CURRENT_STATUS.md)
+> 导航：[架构基线](AI-SDLC-Architecture-Baseline.md) · [决策记录](AI-SDLC-Decision-Records.md) · [工作流设计](AI-SDLC-Workflow-Design.md) · [Agent 规范](AI-SDLC-Agent-Specification.md) · [自主交付路线](AI-SDLC-Autonomous-Delivery-Roadmap.md) · [当前状态](CURRENT_STATUS.md)
 
 路线图以当前 HEAD 为起点；“已完成”只列代码可验证事实，不把仓库历史声明当作本次重新验证结果。
+
+### 路线分层
+
+本文件继续负责 Phase 1～4 宏观架构演进；LOOP Foundation、D01～D14 的阶段定义由 [AI-SDLC-Autonomous-Delivery-Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) 承担。当前实现状态仍以 Git/PR/CI 和 CURRENT_STATUS 为准。
 
 ## Phase 1：最小可用版本
 

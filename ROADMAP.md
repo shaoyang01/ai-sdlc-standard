@@ -4,6 +4,12 @@
 > Status: draft / portable standard package  
 > Purpose: 跟踪 `ai-sdlc-standard` 从标准包、Prompt Skill、投放脚本到真实项目验证的推进方向。
 
+## 路线文档导航
+
+- [AI-SDLC Autonomous Delivery Roadmap](docs/AI-SDLC-Autonomous-Delivery-Roadmap.md)
+
+职责分工：本文件继续负责 Standard Package、Skill、DocFlow、Speckit 与落地路线；Autonomous Delivery Roadmap 负责 Foundation、D01～D10、Advanced 11～14 的阶段定义；docs/AI-SDLC-Implementation-Roadmap.md 负责 Phase 1～4 宏观架构；docs/CURRENT_STATUS.md 负责阶段状态快照。
+
 ## 定位
 
 本路线图用于跟踪 `ai-sdlc-standard` 从“标准包已建立”到“核心 Skill 与下游工具完成落地”的完整改造过程。
