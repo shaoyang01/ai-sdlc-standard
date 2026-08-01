@@ -40,6 +40,32 @@
 //     created: main() returns an exit code, cleanup runs in a finally that
 //     spans the whole disposable session, and process.exitCode is set once.
 //
+// R8 (Correction R1) changes, per project-controller review (CHANGES REQUIRED):
+//   * Parent independently re-validates every first_failure killed payload:
+//     non-zero integer test_exit, non-empty first_failure containing the FIXED
+//     expectedEvidence token, expected_evidence exactly equal to MutationDef,
+//     valid mutated_sha256 different from baseline, and ALL probe fields in the
+//     single strict not_applicable expression. Forged killed payloads
+//     (test_exit=0/null, empty/wrong evidence, unchanged mutated SHA, restore
+//     mismatch) are rejected into harness_error and block aggregate success.
+//   * G/H/L probe assertions are now structured plain JSON objects with the
+//     FIXED per-scenario key contract (G:3, H:5, L:8 keys). The parent selects
+//     the expected key set itself; missing, extra, false, or wrongly typed
+//     assertion keys are rejected. Assertion JSON is serialized in the fixed
+//     expected key order.
+//   * Worker probe sessions now live INSIDE the pre-registered worker root
+//     (workerRoot/probe-session/<id>/); the parent verifies absolute-path,
+//     normalize/realpath containment and holds the FINAL cleanup authority over
+//     every worker root (recursive force remove + existsSync re-check on every
+//     exit path; failure forces harness_error).
+//   * Workers run in controllable POSIX process groups (detached). On timeout,
+//     signal, or any worker exit the parent terminates the whole group
+//     (SIGTERM, bounded grace, then SIGKILL), re-verifies no residual group
+//     members, and refuses success while any residual child process remains.
+//   * Hidden internal-only selftest child modes (forge/graceful/forced) are
+//     authorized by a random token + parent registry, fail closed for direct
+//     invocation, and never bypass HEAD/root verification.
+//
 // How it works:
 //   1. Static self-checks (source-level invariants of this harness).
 //   2. Failure-path self-tests (baseline cleanup, target-mismatch restore,
@@ -69,6 +95,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 // ═══════════════════════════════════════ Constants
 
@@ -102,6 +129,40 @@ const ENV_ISOLATION_FIELDS = [
   "git_terminal_prompt_disabled",
   "probe_root_contained",
 ] as const;
+
+/**
+ * FIXED per-scenario probe-assertion key contracts (R1). The parent selects the
+ * expected key set from this contract; the worker never declares expected keys
+ * itself. Values must be strictly boolean true; no missing, extra, or nested
+ * entries are accepted.
+ */
+const PROBE_ASSERTION_KEYS: Readonly<Record<string, readonly string[]>> = {
+  G: ["first_apply_state_applied", "second_attempt_error", "workspace_head_unchanged"],
+  H: [
+    "source_file_changed", "workspace_file_unchanged", "source_head_unchanged",
+    "workspace_head_unchanged", "index_unchanged",
+  ],
+  L: [
+    "patch1_state_applied", "patch2_attempt_error", "status_digest_equal",
+    "target_state_digest_changed", "target_content_changed",
+    "patch2_target_content_present", "head_unchanged", "index_unchanged",
+  ],
+};
+
+/** Every probe-related field a first_failure killed payload must carry as exactly "not_applicable". */
+const FIRST_FAILURE_PROBE_FIELDS: readonly string[] = [
+  "probe_exit", "probe_scenario_id", "probe_error_name", "probe_error_code",
+  "probe_error_message", "probe_assertions", "probe_environment_isolated",
+  "probe_file_cleanup_complete", "probe_session_cleanup_complete",
+];
+
+/** Hidden internal-only selftest child authorization (random token + registry). */
+const SELFTEST_TOKEN_ENV = "L04_SELFTEST_TOKEN";
+const SELFTEST_CHILD_TIMEOUT_MS = 60000; // ultimate bound for one selftest child
+const SELFTEST_CHILD_GRACE_MS = 2000; // bounded SIGTERM->SIGKILL escalation for selftest children
+const SELFTEST_KINDS: readonly string[] = ["forge", "graceful", "forced"];
+const SELFTEST_READY_PREFIX = "SELFTEST_READY";
+
 
 type MutStatus = "killed" | "survived" | "invalid" | "harness_error";
 type EvidenceMode = "first_failure" | "dedicated_probe";
@@ -408,6 +469,35 @@ function boolField(obj: Record<string, unknown>, k: string): boolean | null {
   return typeof v === "boolean" ? v : null;
 }
 
+/**
+ * R1: strict plain-object assertion contract. `raw` must be a plain JSON
+ * object (no array/Map/Set/class instance/nested prototype), its key set must
+ * EXACTLY equal the FIXED `keys` contract (no missing, no extra), and every
+ * value must be strictly boolean true. On success the object is re-serialized
+ * in the fixed expected key order (never relying on insertion order).
+ */
+function exactAssertionObject(
+  raw: unknown,
+  keys: readonly string[],
+): { ok: boolean; note: string; object: Record<string, boolean> | null } {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+    return { ok: false, note: "probe assertions not an object", object: null };
+  if (Object.getPrototypeOf(raw) !== Object.prototype)
+    return { ok: false, note: "probe assertions has unknown prototype", object: null };
+  const obj = raw as Record<string, unknown>;
+  const own = Object.keys(obj);
+  if (own.length !== keys.length || !keys.every((k) => own.includes(k)))
+    return { ok: false, note: "probe assertions key set mismatch", object: null };
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v !== "boolean") return { ok: false, note: `probe assertion ${k} not boolean`, object: null };
+    if (v !== true) return { ok: false, note: `probe assertion ${k} not true`, object: null };
+  }
+  const ordered: Record<string, boolean> = {};
+  for (const k of keys) ordered[k] = obj[k] as boolean;
+  return { ok: true, note: "", object: ordered };
+}
+
 interface ProbeCompare {
   killed: boolean;
   envIsolated: boolean;
@@ -416,7 +506,7 @@ interface ProbeCompare {
   errorName: string;
   errorCode: string;
   errorMessage: string;
-  assertions: string[];
+  assertions: Record<string, boolean> | null;
 }
 
 /**
@@ -430,7 +520,6 @@ function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompar
   const errorName = strField(obj, "error_name") ?? "";
   const errorCode = strField(obj, "error_code") ?? "";
   const errorMessage = strField(obj, "error_message") ?? "";
-  const assertions: string[] = [];
   const problems: string[] = [];
 
   if (scenarioId !== m.probeScenarioId) problems.push(`scenario_id mismatch: ${scenarioId}`);
@@ -438,45 +527,32 @@ function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompar
   if (errorCode !== m.expectedErrorCode) problems.push(`error_code mismatch: ${errorCode}`);
   if (errorMessage !== m.expectedErrorMessage) problems.push(`error_message mismatch: ${errorMessage}`);
 
-  // Scenario-specific required boolean assertions (all must be === true).
-  let required: string[] = [];
+  // R1: the scenario assertions are validated against the FIXED key contract
+  // (G:3 / H:5 / L:8) as one plain JSON object with strict boolean values; the
+  // worker never declares the expected key set.
+  const keys = PROBE_ASSERTION_KEYS[m.id] ?? [];
+  const assertionRaw: Record<string, unknown> = {};
+  for (const k of keys) assertionRaw[k] = obj[k];
+  const ex = exactAssertionObject(assertionRaw, keys);
+  if (!ex.ok) problems.push(`assertions: ${ex.note}`);
+
+  // Scenario-specific non-boolean state fields are still compared exactly.
   if (m.id === "G") {
-    required = ["first_apply_state_applied", "second_attempt_error", "workspace_head_unchanged"];
     const fa = strField(obj, "first_apply_state");
     const sa = strField(obj, "second_attempt");
-    assertions.push(`first_apply_state=${fa ?? "-"}`);
-    assertions.push(`second_attempt=${sa ?? "-"}`);
     if (fa !== "applied") problems.push("first_apply_state != applied");
     if (sa !== "error") problems.push("second_attempt != error");
-  } else if (m.id === "H") {
-    required = [
-      "source_file_changed", "workspace_file_unchanged", "source_head_unchanged",
-      "workspace_head_unchanged", "index_unchanged",
-    ];
   } else if (m.id === "L") {
-    required = [
-      "patch1_state_applied", "patch2_attempt_error", "status_digest_equal",
-      "target_state_digest_changed", "target_content_changed",
-      "patch2_target_content_present", "head_unchanged", "index_unchanged",
-    ];
     const p1 = strField(obj, "patch1_state");
     const p2 = strField(obj, "patch2_attempt");
-    assertions.push(`patch1_state=${p1 ?? "-"}`);
-    assertions.push(`patch2_attempt=${p2 ?? "-"}`);
     if (p1 !== "applied") problems.push("patch1_state != applied");
     if (p2 !== "error") problems.push("patch2_attempt != error");
-  }
-  for (const k of required) {
-    const b = boolField(obj, k);
-    assertions.push(`${k}=${b === null ? "-" : b}`);
-    if (b !== true) problems.push(`assertion ${k} != true`);
   }
 
   // R6: six environment-isolation assertions common to G/H/L.
   let envIsolated = true;
   for (const k of ENV_ISOLATION_FIELDS) {
     const b = boolField(obj, k);
-    assertions.push(`${k}=${b === null ? "-" : b}`);
     if (b !== true) {
       problems.push(`env isolation ${k} != true`);
       envIsolated = false;
@@ -491,7 +567,7 @@ function compareProbe(m: MutationDef, obj: Record<string, unknown>): ProbeCompar
     errorName,
     errorCode,
     errorMessage,
-    assertions,
+    assertions: ex.object,
   };
 }
 
@@ -532,7 +608,7 @@ interface MutationRecord {
   probeErrorName: string;
   probeErrorCode: string;
   probeErrorMessage: string;
-  probeAssertions: string;
+  probeAssertions: string | Record<string, boolean>;
   probeEnvironmentIsolated: string;
   probeFileCleanupComplete: string;
   probeSessionCleanupComplete: string;
@@ -656,6 +732,18 @@ const allWorkerProbeFilePaths: string[] = [];
 
 /** Active internal worker child processes, for controlled signal termination. */
 const activeWorkerProcesses = new Set<ChildProcess>();
+
+/** PIDs (== process-group ids) of every worker spawned this run. */
+const allWorkerPgids: number[] = [];
+
+/** Worker process groups that still had members when the worker closed; the
+ *  parent terminates them immediately and re-verifies they are gone before the
+ *  success gate (a lingering group means an orphaned descendant survived). */
+const suspiciousPgids: number[] = [];
+
+/** Any parent-owned cleanup failure recorded this run (blocks success). */
+const cleanupFailures: string[] = [];
+
 let stopping = false;
 
 /**
@@ -686,16 +774,21 @@ function buildProbeSessionEnv(sessionRoot: string, repoRoot: string): Record<str
 
 /**
  * Create and register a unique probe session root with home/, xdg-config/,
- * and fixture/ subdirectories. The parent harness is the sole authority for
- * cleanup of this directory tree.
+ * and fixture/ subdirectories INSIDE the given parent-owned root (the worker
+ * root for full-mode workers, the disposable root for quick mode). The parent
+ * harness is the sole authority for cleanup of this directory tree; a stale
+ * leftover is removed first so the session always starts fresh.
  */
-function createProbeSession(id: string): {
+function createProbeSession(id: string, sessionParentRoot: string): {
   sessionRoot: string;
   homeDir: string;
   xdgConfigDir: string;
   fixtureDir: string;
 } {
-  const sessionRoot = fs.mkdtempSync(path.join(os.tmpdir(), `l04-probe-session-${id}-`));
+  const sessionRoot = path.join(sessionParentRoot, "probe-session", id);
+  if (fs.existsSync(sessionRoot)) {
+    try { fs.rmSync(sessionRoot, { recursive: true, force: true }); } catch { /* stale session: mkdir below fails closed */ }
+  }
   const homeDir = path.join(sessionRoot, "home");
   const xdgConfigDir = path.join(sessionRoot, "xdg-config");
   const fixtureDir = path.join(sessionRoot, "fixture");
@@ -734,6 +827,12 @@ interface SelfTestResult {
   worker_cleanup_failure_blocks_kill: boolean;
   records_ordered_A_to_N: boolean;
   worker_cli_fail_closed: boolean;
+  // R1 checks:
+  parent_first_failure_validation: boolean;
+  structured_probe_assertions: boolean;
+  forged_worker_kill_rejected: boolean;
+  graceful_worker_cleanup: boolean;
+  forced_worker_cleanup: boolean;
 }
 
 /**
@@ -877,6 +976,24 @@ function selfTestProbeCleanupGate(): boolean {
 }
 
 async function runSelfTests(): Promise<SelfTestResult> {
+  const ffTests = [
+    selfTestParentRejectsZeroTestExitKill(),
+    selfTestParentRejectsNullTestExitKill(),
+    selfTestParentRejectsWrongExpectedEvidence(),
+    selfTestParentRejectsEmptyFirstFailure(),
+    selfTestParentRejectsFirstFailureWithoutToken(),
+    selfTestParentRejectsUnchangedMutatedSha(),
+    selfTestParentRejectsRestoreMismatch(),
+  ];
+  const assertionTests = [
+    selfTestParentRejectsMissingProbeAssertion(),
+    selfTestParentRejectsExtraProbeAssertion(),
+    selfTestParentRejectsFalseProbeAssertion(),
+    selfTestParentRejectsWrongProbeAssertionType(),
+    selfTestParentAcceptsExactGAssertionSet(),
+    selfTestParentAcceptsExactHAssertionSet(),
+    selfTestParentAcceptsExactLAssertionSet(),
+  ];
   return {
     baseline_failure_cleanup: selfTestBaselineFailureCleanup(),
     target_mismatch_restore_cleanup: selfTestTargetMismatchRestoreCleanup(),
@@ -893,6 +1010,11 @@ async function runSelfTests(): Promise<SelfTestResult> {
     worker_cleanup_failure_blocks_kill: selfTestWorkerCleanupFailureBlocksKill(),
     records_ordered_A_to_N: selfTestRecordsOrderedAToN(),
     worker_cli_fail_closed: selfTestWorkerCliFailClosed(),
+    parent_first_failure_validation: ffTests.every(Boolean),
+    structured_probe_assertions: assertionTests.every(Boolean),
+    forged_worker_kill_rejected: await selfTestForgedWorkerKillRejected(),
+    graceful_worker_cleanup: await runAbruptCleanupSelftest("graceful"),
+    forced_worker_cleanup: await runAbruptCleanupSelftest("forced"),
   };
 }
 
@@ -1286,19 +1408,29 @@ scenario().catch((e) => { console.error("PROBE_FAULT " + (e?.stack ?? e?.message
 
 /**
  * Run a dedicated probe against the CURRENT mutated bytes in the disposable
- * copy. The parent creates and registers a probe session root, writes the
- * probe file inside the disposable copy, spawns the child with a fully
- * isolated environment, and — in a finally — deletes the probe file and the
- * entire session root, verifying deletion with existsSync. The child never
- * creates its own temp root and never deletes the session root.
+ * copy. The parent creates and registers a probe session root INSIDE the given
+ * parent-owned root (`<parentRoot>/probe-session/<id>/` — the worker root for
+ * full-mode workers, the disposable root for quick mode), writes the probe
+ * file inside the disposable copy, spawns the child with a fully isolated
+ * environment, and — in a finally — deletes the probe file and the entire
+ * session root, verifying deletion with existsSync. The child never creates
+ * its own temp root and never deletes the session root.
  */
-function runProbe(m: MutationDef, disp: string, repoRoot: string): ProbeRunResult {
-  // 1–2. Parent creates session root with home/, xdg-config/, fixture/.
-  const session = createProbeSession(m.id);
+function runProbe(m: MutationDef, disp: string, repoRoot: string, sessionParentRoot: string): ProbeRunResult {
+  if (!path.isAbsolute(sessionParentRoot))
+    throw new Error("probe session parent root not absolute");
+  if (isPathContained(repoRoot, sessionParentRoot))
+    throw new Error("probe session parent root inside real repo");
 
-  // 3. Parent writes dynamic probe file inside the disposable copy.
+  // 1–2. Parent creates session root with home/, xdg-config/, fixture/.
+  const session = createProbeSession(m.id, sessionParentRoot);
+
+  // 3. Parent writes dynamic probe file inside the disposable copy (which is
+  //    itself contained in the session parent root).
   const probeRel = path.join("scripts", `__probe-${m.id}-${crypto.randomBytes(4).toString("hex")}.ts`);
   const probeAbs = path.join(disp, probeRel);
+  if (!isPathContained(sessionParentRoot, probeAbs))
+    throw new Error("probe file outside session parent root");
   fs.mkdirSync(path.dirname(probeAbs), { recursive: true });
   fs.writeFileSync(probeAbs, buildProbeSource(m, disp), "utf8");
   registeredProbeFiles.push(probeAbs);
@@ -1558,6 +1690,7 @@ function selfTestWorkerCliFailClosed(): boolean {
   const head = "a".repeat(40);
   const root = path.join(os.tmpdir(), "l04-st-root");
   const cwd = process.cwd();
+  const token = "a".repeat(48);
   const cases: [string[], string][] = [
     [["--internal-worker", "--mutation=Z", "--expected-head=" + head, "--worker-root=" + root], "invalid mutation id"],
     [["--internal-worker", "--mutation=A", "--worker-root=" + root], "missing expected head"],
@@ -1567,13 +1700,291 @@ function selfTestWorkerCliFailClosed(): boolean {
     [["--mode=full", "--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "unknown internal worker argument"],
     [["--internal-worker", "--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "duplicate --internal-worker flag"],
     [["--internal-worker", "--mutation=A", "--mutation=B", "--expected-head=" + head, "--worker-root=" + root], "duplicate --mutation flag"],
+    [["--internal-worker", "--internal-selftest=forge", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "selftest kind and token must be provided together"],
+    [["--internal-worker", "--selftest-token=" + token, "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "selftest kind and token must be provided together"],
+    [["--internal-worker", "--internal-selftest=bogus", "--selftest-token=" + token, "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "unknown selftest kind"],
+    [["--internal-worker", "--internal-selftest=forge", "--selftest-token=zz", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "invalid selftest token"],
+    [["--internal-worker", "--internal-selftest=forge", "--internal-selftest=forced", "--selftest-token=" + token, "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "duplicate --internal-selftest flag"],
   ];
   for (const [args, expect] of cases) {
     const r = parseWorkerArgs(args);
     if (r.error === "" || !r.error.includes(expect)) return false;
   }
   const good = parseWorkerArgs(["--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root]);
-  return good.error === "" && good.kind === "worker" && good.mutationId === "A";
+  if (good.error !== "" || good.kind !== "worker" || good.mutationId !== "A") return false;
+  const goodSelftest = parseWorkerArgs(["--internal-worker", "--internal-selftest=forge", "--selftest-token=" + token, "--mutation=A", "--expected-head=" + head, "--worker-root=" + root]);
+  return goodSelftest.error === "" && goodSelftest.selftestKind === "forge" && goodSelftest.selftestToken === token;
+}
+
+// ── R1 self-tests (fast, deterministic, no network, no full targeted suite) ──
+// Pure validator tests call the REAL validateWorkerResult; the three
+// process-level tests spawn REAL harness children through the REAL parent
+// spawn/cleanup helpers.
+
+const SAMPLE_WORKER_ROOT = path.join(os.tmpdir(), "l04-st-worker-root");
+
+function sampleProbeAssertions(id: string): Record<string, boolean> {
+  const obj: Record<string, boolean> = {};
+  for (const k of PROBE_ASSERTION_KEYS[id] ?? []) obj[k] = true;
+  return obj;
+}
+
+/** A structurally valid dedicated-probe (G/H/L) worker result sample. */
+function sampleProbeWorkerResult(m: MutationDef): WorkerResult {
+  return sampleWorkerResult(m, {
+    probe_exit: "0",
+    probe_scenario_id: m.probeScenarioId ?? "",
+    probe_error_name: m.expectedErrorName ?? "",
+    probe_error_code: m.expectedErrorCode ?? "",
+    probe_error_message: m.expectedErrorMessage ?? "",
+    probe_assertions: sampleProbeAssertions(m.id),
+    probe_environment_isolated: "true",
+    probe_file_cleanup_complete: "true",
+    probe_session_cleanup_complete: "true",
+    probe_session_root: path.join(SAMPLE_WORKER_ROOT, "probe-session", m.id),
+    probe_file_path: path.join(SAMPLE_WORKER_ROOT, "work", "scripts", "__probe.ts"),
+  });
+}
+
+function selfTestParentRejectsZeroTestExitKill(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { test_exit: 0 }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("test_exit");
+}
+
+function selfTestParentRejectsNullTestExitKill(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { test_exit: null }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("test_exit");
+}
+
+function selfTestParentRejectsWrongExpectedEvidence(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { expected_evidence: "wrong token" }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("expected_evidence");
+}
+
+function selfTestParentRejectsEmptyFirstFailure(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { first_failure: "" }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("first_failure");
+}
+
+function selfTestParentRejectsFirstFailureWithoutToken(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { first_failure: "✗ unrelated failure line" }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("expected evidence token");
+}
+
+function selfTestParentRejectsUnchangedMutatedSha(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { mutated_sha256: "a".repeat(64) }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("unchanged mutated bytes");
+}
+
+function selfTestParentRejectsRestoreMismatch(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const v = validateWorkerResult(sampleWorkerResult(def, { restored_sha256: "c".repeat(64) }), def, "A", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("restored SHA");
+}
+
+function selfTestParentRejectsMissingProbeAssertion(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "G")!;
+  const bad = {
+    ...sampleProbeWorkerResult(def),
+    probe_assertions: { first_apply_state_applied: true, second_attempt_error: true },
+  } as unknown as WorkerResult;
+  const v = validateWorkerResult(bad, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("key set");
+}
+
+function selfTestParentRejectsExtraProbeAssertion(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "G")!;
+  const bad = {
+    ...sampleProbeWorkerResult(def),
+    probe_assertions: {
+      first_apply_state_applied: true, second_attempt_error: true,
+      workspace_head_unchanged: true, extra_key: true,
+    },
+  } as unknown as WorkerResult;
+  const v = validateWorkerResult(bad, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("key set");
+}
+
+function selfTestParentRejectsFalseProbeAssertion(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "G")!;
+  const bad = {
+    ...sampleProbeWorkerResult(def),
+    probe_assertions: {
+      first_apply_state_applied: true, second_attempt_error: false, workspace_head_unchanged: true,
+    },
+  } as unknown as WorkerResult;
+  const v = validateWorkerResult(bad, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v.ok && v.note.includes("not true");
+}
+
+function selfTestParentRejectsWrongProbeAssertionType(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "G")!;
+  const badString = { ...sampleProbeWorkerResult(def), probe_assertions: "yes" } as unknown as WorkerResult;
+  const badArray = { ...sampleProbeWorkerResult(def), probe_assertions: [] } as unknown as WorkerResult;
+  const badNested = {
+    ...sampleProbeWorkerResult(def),
+    probe_assertions: { first_apply_state_applied: true, second_attempt_error: { a: true }, workspace_head_unchanged: true },
+  } as unknown as WorkerResult;
+  const v1 = validateWorkerResult(badString, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  const v2 = validateWorkerResult(badArray, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  const v3 = validateWorkerResult(badNested, def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return !v1.ok && !v2.ok && !v3.ok;
+}
+
+function selfTestParentAcceptsExactGAssertionSet(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "G")!;
+  const v = validateWorkerResult(sampleProbeWorkerResult(def), def, "G", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return v.ok && v.result !== null && v.result.status === "killed" && typeof v.result.probe_assertions === "object";
+}
+
+function selfTestParentAcceptsExactHAssertionSet(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "H")!;
+  const v = validateWorkerResult(sampleProbeWorkerResult(def), def, "H", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return v.ok && v.result !== null && v.result.status === "killed" && typeof v.result.probe_assertions === "object";
+}
+
+function selfTestParentAcceptsExactLAssertionSet(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "L")!;
+  const v = validateWorkerResult(sampleProbeWorkerResult(def), def, "L", SAMPLE_WORKER_ROOT, "a".repeat(64));
+  return v.ok && v.result !== null && v.result.status === "killed" && typeof v.result.probe_assertions === "object";
+}
+
+/**
+ * Build a one-off worker registry with 14 distinct external roots (the
+ * first root is the test target) so the child's real registry/HEAD/root
+ * validation — which must never be bypassed — runs against the true contract.
+ */
+function buildSelftestRegistry(): {
+  roots: string[];
+  root: string;
+  registryPath: string;
+  token: string;
+  expectedHead: string;
+} {
+  const repoRoot = process.cwd();
+  const roots = Array.from({ length: MUTATIONS.length }, () => fs.mkdtempSync(path.join(os.tmpdir(), "l04-st-regroot-")));
+  const root = roots[0]!;
+  const registryPath = path.join(os.tmpdir(), `l04-st-registry-${process.pid}-${crypto.randomBytes(4).toString("hex")}.json`);
+  const token = crypto.randomBytes(24).toString("hex");
+  const expectedHead = gitHeadShaAt(repoRoot);
+  const gitCommonDir = gitCommonDirAt(repoRoot);
+  fs.writeFileSync(registryPath, JSON.stringify({ expectedHead, repoRoot, gitCommonDir, roots }), "utf8");
+  return { roots, root, registryPath, token, expectedHead };
+}
+
+function cleanupSelftestRegistry(roots: readonly string[], registryPath: string): void {
+  for (const r of roots) {
+    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
+  try { fs.rmSync(registryPath, { force: true }); } catch { /* best-effort */ }
+}
+
+/**
+ * Real subprocess forged-result test: a harness child exits 0 after emitting a
+ * structurally valid but semantically forged killed payload (test_exit=0) and
+ * leaves a blocking descendant running. The REAL parent spawn path must reject
+ * the payload (aggregate must not succeed), kill the process group, and delete
+ * the worker root itself.
+ */
+async function selfTestForgedWorkerKillRejected(): Promise<boolean> {
+  const reg = buildSelftestRegistry();
+  try {
+    const def = MUTATIONS.find((m) => m.id === "A")!;
+    const baselineSha = sha256Buf(fs.readFileSync(path.join(process.cwd(), PROD_REL)));
+    let pgid = 0;
+    const outcome = await spawnWorkerProcess(def, reg.root, reg.registryPath, process.cwd(), reg.expectedHead, baselineSha, (p) => { pgid = p; }, { kind: "forge", token: reg.token });
+    await sleepMs(250); // bounded settle for process-tree reaping
+    const rejected = !outcome.ok && finalizeWorkerStatus(outcome) === "harness_error";
+    const rootCleanedByParent = !fs.existsSync(reg.root);
+    const noResidual = !pgidStillAlive(pgid);
+    if (process.env.L04_DEBUG === "1") {
+      console.error(`DBG forge rejected=${rejected} note=${outcome.note} rootCleaned=${rootCleanedByParent} noResidual=${noResidual} pgid=${pgid}`);
+    }
+    return rejected && rootCleanedByParent && noResidual;
+  } finally {
+    cleanupSelftestRegistry(reg.roots, reg.registryPath);
+  }
+}
+
+/**
+ * Real abrupt-cleanup test. The child creates a probe-like resource inside the
+ * worker root, spawns a controlled blocking descendant in the same process
+ * group, announces readiness, then blocks. The parent SIGTERMs the group;
+ * "graceful" expects the child to die on SIGTERM, "forced" expects it to
+ * ignore SIGTERM so the parent must escalate to SIGKILL after the grace
+ * window. In both cases the process tree must end, the parent must remove the
+ * root and resources, and the result must NOT be killed.
+ */
+async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<boolean> {
+  const reg = buildSelftestRegistry();
+  let child: ChildProcess | null = null;
+  try {
+    const spec = directSelftestSpawnArgs([
+      "--internal-worker", `--internal-selftest=${kind}`,
+      `--selftest-token=${reg.token}`, "--mutation=A",
+      `--expected-head=${reg.expectedHead}`, `--worker-root=${reg.root}`,
+    ]);
+    const spawned = spawnHarnessChild(
+      spec.bin,
+      spec.args,
+      {
+        cwd: process.cwd(),
+        env: { ...(process.env as Record<string, string>), [REGISTRY_ENV]: reg.registryPath, [SELFTEST_TOKEN_ENV]: reg.token },
+        timeoutMs: SELFTEST_CHILD_TIMEOUT_MS,
+        graceMs: SELFTEST_CHILD_GRACE_MS,
+      },
+    );
+    child = spawned.child;
+    activeWorkerProcesses.add(child);
+    // Bounded wait for the child's readiness announcement.
+    const readyDeadline = Date.now() + 30000;
+    while (Date.now() < readyDeadline && child.exitCode === null && !spawned.readStdout().includes(SELFTEST_READY_PREFIX)) {
+      await sleepMs(50);
+    }
+    if (!spawned.readStdout().includes(SELFTEST_READY_PREFIX)) return false;
+    // Staged process-group termination: SIGTERM, bounded grace, then — only if
+    // group members still survive — SIGKILL. The need for escalation is itself
+    // the assertion that distinguishes the graceful from the forced case.
+    killProcessGroup(child, "SIGTERM");
+    await sleepMs(SELFTEST_CHILD_GRACE_MS + 250);
+    const escalationNeeded = pgidStillAlive(child.pid ?? -1);
+    if (escalationNeeded) killProcessGroup(child, "SIGKILL");
+    const r = await spawned.done;
+    activeWorkerProcesses.delete(child);
+    await sleepMs(250); // bounded settle for group reaping
+    // Parent-owned cleanup of the pre-registered root.
+    fs.rmSync(reg.root, { recursive: true, force: true });
+    // Mirror the REAL parent gate: a terminated worker can never be a kill.
+    const def = MUTATIONS.find((x) => x.id === "A")!;
+    const notKilled = ((): boolean => {
+      if (r.signal !== null) return true;
+      if (r.code !== 0) return true;
+      const parsed = parseWorkerStdout(r.stdout);
+      if (!parsed.ok) return true;
+      const v = validateWorkerResult(parsed.raw, def, "A", reg.root, sha256Buf(fs.readFileSync(path.join(process.cwd(), PROD_REL))));
+      return !v.ok || v.result === null || v.result.status !== "killed";
+    })();
+    const rootGone = !fs.existsSync(reg.root);
+    const resourceGone = !fs.existsSync(path.join(reg.root, "probe-session", "G"));
+    const treeEnded = !pgidStillAlive(child.pid ?? -1);
+    const escalationMatches = escalationNeeded === (kind === "forced");
+    if (process.env.L04_DEBUG === "1") {
+      console.error(`DBG abrupt kind=${kind} code=${r.code} signal=${r.signal} notKilled=${notKilled} rootGone=${rootGone} resourceGone=${resourceGone} treeEnded=${treeEnded} escalationNeeded=${escalationNeeded} pid=${child.pid} ready=${spawned.readStdout().includes(SELFTEST_READY_PREFIX)}`);
+    }
+    return notKilled && rootGone && resourceGone && treeEnded && escalationMatches;
+  } finally {
+    if (child !== null && child.exitCode === null && child.signalCode === null) {
+      killProcessGroup(child, "SIGKILL");
+    }
+    activeWorkerProcesses.delete(child!);
+    cleanupSelftestRegistry(reg.roots, reg.registryPath);
+  }
 }
 
 /**
@@ -1757,8 +2168,52 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
   const iwBody = iwStart >= 0 && iwEnd > iwStart ? code.slice(iwStart, iwEnd) : "";
   const fullRetainsGHLSuitPlusProbe =
     iwBody.includes("runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS)") &&
-    iwBody.includes("runProbe(m, disp, repoRoot)") &&
+    iwBody.includes("runProbe(m, disp, repoRoot,") &&
     iwBody.includes("dedicated_probe");
+
+  // ── R1 checks (parent semantic re-validation & owned cleanup) ──
+
+  // 39. Parent independently re-validates the first_failure killed payload.
+  const r1FirstFailureSemantics =
+    code.includes("killed with invalid test_exit") &&
+    code.includes("killed with wrong expected_evidence") &&
+    code.includes("killed without expected evidence token") &&
+    code.includes("killed with unchanged mutated bytes") &&
+    code.includes("killed first_failure with non-not_applicable probe field");
+
+  // 40. Structured probe assertions use the FIXED key contract + exact-set validation.
+  const r1StructuredAssertions =
+    code.includes("PROBE_ASSERTION_KEYS") &&
+    code.includes("exactAssertionObject(") &&
+    code.includes("probe assertions key set mismatch");
+
+  // 41. Workers run in controllable POSIX process groups; the parent terminates
+  //     the whole group with SIGTERM and a bounded SIGKILL escalation.
+  const r1ProcessGroupTermination =
+    code.includes("detached: true") &&
+    code.includes("killProcessGroup(") &&
+    code.includes('killProcessGroup(child, "SIGKILL")');
+
+  // 42. Parent owns final worker-root cleanup across EVERY worker exit path.
+  const r1ParentOwnedCleanup =
+    code.includes("parentCleanupWorkerRoot(") &&
+    code.includes("parent worker root cleanup failed");
+
+  // 43. Probe sessions/files are contained inside the worker root.
+  const r1ProbeContainment =
+    code.includes('"probe-session"') &&
+    code.includes("killed probe session outside worker root") &&
+    code.includes("killed probe file outside worker root");
+
+  // 44. Hidden selftest child requires random token + parent registry authorization.
+  const r1SelftestToken =
+    code.includes("--internal-selftest=") &&
+    code.includes("selftest token authorization failed") &&
+    code.includes(SELFTEST_TOKEN_ENV);
+
+  // 45. Residual worker processes block success.
+  const r1ResidualCheck =
+    code.includes("residual worker processes") && code.includes("aliveGroups(");
 
   return [
     { name: "expectedErrorCode_used_in_comparison", ok: errorCodeUsed },
@@ -1799,6 +2254,13 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
     { name: "quick_mode_contract_unchanged", ok: quickModeContractUnchanged },
     { name: "full_retains_14_mutations", ok: fullRetains14Mutations },
     { name: "full_retains_G_H_L_suite_plus_probe", ok: fullRetainsGHLSuitPlusProbe },
+    { name: "r1_parent_first_failure_semantics", ok: r1FirstFailureSemantics },
+    { name: "r1_structured_probe_assertions", ok: r1StructuredAssertions },
+    { name: "r1_process_group_termination", ok: r1ProcessGroupTermination },
+    { name: "r1_parent_owned_root_cleanup", ok: r1ParentOwnedCleanup },
+    { name: "r1_probe_containment", ok: r1ProbeContainment },
+    { name: "r1_selftest_token_authorization", ok: r1SelftestToken },
+    { name: "r1_residual_process_check", ok: r1ResidualCheck },
   ];
 }
 
@@ -1918,7 +2380,7 @@ interface WorkerResult {
   probe_error_name: string;
   probe_error_code: string;
   probe_error_message: string;
-  probe_assertions: string;
+  probe_assertions: string | Record<string, boolean>;
   probe_environment_isolated: string;
   probe_file_cleanup_complete: string;
   probe_session_cleanup_complete: string;
@@ -1956,6 +2418,8 @@ interface ParsedCli {
   mutationId: string;
   expectedHead: string;
   workerRoot: string;
+  selftestKind: string;
+  selftestToken: string;
   error: string;
 }
 
@@ -1963,14 +2427,24 @@ interface ParsedCli {
  * Internal-worker CLI. All arguments are required; duplicates, unknown
  * arguments, out-of-range mutation ids, malformed HEADs and repo-internal
  * roots fail closed. Public --mode flags mixed with worker flags also fail.
+ * The hidden selftest child flags (--internal-selftest + --selftest-token)
+ * are authorized by a random token and fail closed for any direct invocation.
  */
 function parseWorkerArgs(args: readonly string[]): ParsedCli {
-  const result: ParsedCli = { kind: "worker", mode: "full", mutationId: "", expectedHead: "", workerRoot: "", error: "" };
+  const result: ParsedCli = { kind: "worker", mode: "full", mutationId: "", expectedHead: "", workerRoot: "", selftestKind: "", selftestToken: "", error: "" };
   const seen = new Set<string>();
   for (const arg of args) {
     if (arg === "--internal-worker") {
       if (seen.has("marker")) return { ...result, error: "duplicate --internal-worker flag" };
       seen.add("marker");
+    } else if (arg.startsWith("--internal-selftest=")) {
+      if (seen.has("selftest-kind")) return { ...result, error: "duplicate --internal-selftest flag" };
+      seen.add("selftest-kind");
+      result.selftestKind = arg.slice("--internal-selftest=".length);
+    } else if (arg.startsWith("--selftest-token=")) {
+      if (seen.has("selftest-token")) return { ...result, error: "duplicate --selftest-token flag" };
+      seen.add("selftest-token");
+      result.selftestToken = arg.slice("--selftest-token=".length);
     } else if (arg.startsWith("--mutation=")) {
       if (seen.has("mutation")) return { ...result, error: "duplicate --mutation flag" };
       seen.add("mutation");
@@ -2005,6 +2479,13 @@ function parseWorkerArgs(args: readonly string[]): ParsedCli {
   const repo = normalizeForContainment(cwd);
   if (root === repo || root.startsWith(repo + path.sep))
     return { ...result, error: "worker root inside repository" };
+  // Hidden selftest child authorization: kind and token must be paired.
+  if (seen.has("selftest-kind") !== seen.has("selftest-token"))
+    return { ...result, error: "selftest kind and token must be provided together" };
+  if (result.selftestKind !== "" && !SELFTEST_KINDS.includes(result.selftestKind))
+    return { ...result, error: "unknown selftest kind" };
+  if (result.selftestToken !== "" && !/^[0-9a-f]{48}$/.test(result.selftestToken))
+    return { ...result, error: "invalid selftest token" };
   return result;
 }
 
@@ -2012,7 +2493,7 @@ function parseWorkerArgs(args: readonly string[]): ParsedCli {
 function parseCli(args: readonly string[]): ParsedCli {
   if (args.some((a) => a === "--internal-worker")) return parseWorkerArgs(args);
   const publicCli = parseCliMode(args);
-  return { kind: "public", mode: publicCli.mode, mutationId: "", expectedHead: "", workerRoot: "", error: publicCli.error };
+  return { kind: "public", mode: publicCli.mode, mutationId: "", expectedHead: "", workerRoot: "", selftestKind: "", selftestToken: "", error: publicCli.error };
 }
 
 /** All 14 worker roots must be absolute, distinct, and outside the repo + git common dir. */
@@ -2101,7 +2582,6 @@ function validateWorkerResult(
     probe_error_name: strFieldOrNull,
     probe_error_code: strFieldOrNull,
     probe_error_message: strFieldOrNull,
-    probe_assertions: strFieldOrNull,
     probe_environment_isolated: strFieldOrNull,
     probe_file_cleanup_complete: strFieldOrNull,
     probe_session_cleanup_complete: strFieldOrNull,
@@ -2118,6 +2598,13 @@ function validateWorkerResult(
     if (v === undefined) return fail(`missing worker record field: ${k}`);
     if (fn(v) === null) return fail(`worker record field ${k} has wrong type`);
   }
+  // probe_assertions is NOT a plain string: it must be a plain JSON object
+  // (G/H/L) or the single strict not_applicable expression (everywhere else).
+  if (obj.probe_assertions === undefined) return fail("missing worker record field: probe_assertions");
+  if (typeof obj.probe_assertions !== "string" &&
+      (obj.probe_assertions === null || typeof obj.probe_assertions !== "object")) {
+    return fail("worker record field probe_assertions has wrong type");
+  }
   const r: WorkerResult = {
     mutation_id: obj.mutation_id as string,
     status: obj.status as MutStatus,
@@ -2132,7 +2619,7 @@ function validateWorkerResult(
     probe_error_name: obj.probe_error_name as string,
     probe_error_code: obj.probe_error_code as string,
     probe_error_message: obj.probe_error_message as string,
-    probe_assertions: obj.probe_assertions as string,
+    probe_assertions: obj.probe_assertions as string | Record<string, boolean>,
     probe_environment_isolated: obj.probe_environment_isolated as string,
     probe_file_cleanup_complete: obj.probe_file_cleanup_complete as string,
     probe_session_cleanup_complete: obj.probe_session_cleanup_complete as string,
@@ -2171,6 +2658,34 @@ function validateWorkerResult(
   if (!truthy(r.probe_file_cleanup_complete)) return fail("probe_file_cleanup_complete invalid");
   if (!truthy(r.probe_session_cleanup_complete)) return fail("probe_session_cleanup_complete invalid");
 
+  // ── R1: structured probe-assertion contract (plain JSON object with the
+  //    FIXED key set for G/H/L; single strict not_applicable elsewhere) ──
+  if (def.evidenceMode === "dedicated_probe") {
+    const keys = PROBE_ASSERTION_KEYS[def.id];
+    if (keys === undefined) return fail(`no fixed probe assertion contract for mutation ${def.id}`);
+    if (typeof r.probe_assertions === "string") {
+      if (r.probe_assertions !== "not_applicable")
+        return fail("probe assertions must be an object or not_applicable");
+    } else {
+      const ex = exactAssertionObject(r.probe_assertions, keys);
+      if (!ex.ok) return fail(`probe assertions: ${ex.note}`);
+      r.probe_assertions = ex.object!;
+    }
+  } else if (r.probe_assertions !== "not_applicable") {
+    return fail("non-probe mutation must use not_applicable probe assertions");
+  }
+
+  // ── R1: worker-reported probe paths must be contained in the scheduled root
+  //    (absolute, normalize/realpath containment, no `..` escape) ──
+  if (r.probe_session_root !== "") {
+    if (!path.isAbsolute(r.probe_session_root)) return fail("probe_session_root not absolute");
+    if (!isPathContained(expectedRoot, r.probe_session_root)) return fail("probe session outside worker root");
+  }
+  if (r.probe_file_path !== "") {
+    if (!path.isAbsolute(r.probe_file_path)) return fail("probe_file_path not absolute");
+    if (!isPathContained(expectedRoot, r.probe_file_path)) return fail("probe file outside worker root");
+  }
+
   // ── cross-field kill rules ──
   if (r.status === "killed") {
     if (r.target_matches !== 1) return fail("killed with target match count != 1");
@@ -2183,6 +2698,31 @@ function validateWorkerResult(
       if (r.probe_scenario_id !== def.probeScenarioId || r.probe_error_name !== def.expectedErrorName ||
           r.probe_error_code !== def.expectedErrorCode || r.probe_error_message !== def.expectedErrorMessage)
         return fail("killed probe without fixed evidence match");
+      if (r.probe_exit !== "0") return fail("killed probe without zero probe exit");
+      if (typeof r.probe_assertions !== "object" || r.probe_assertions === null)
+        return fail("killed probe without structured assertions");
+      if (r.probe_session_root === "" || !isPathContained(expectedRoot, r.probe_session_root))
+        return fail("killed probe session outside worker root");
+      if (r.probe_file_path === "" || !isPathContained(expectedRoot, r.probe_file_path))
+        return fail("killed probe file outside worker root");
+    } else {
+      // ── R1: parent independently re-validates the first_failure killed
+      //    payload — the worker's own classification is never trusted. ──
+      if (r.test_exit === null || !Number.isInteger(r.test_exit) || r.test_exit <= 0)
+        return fail("killed with invalid test_exit");
+      if (r.first_failure === "") return fail("killed with empty first_failure");
+      if (r.expected_evidence !== def.expectedEvidence) return fail("killed with wrong expected_evidence");
+      if (!r.first_failure.includes(def.expectedEvidence))
+        return fail("killed without expected evidence token");
+      if (r.mutated_sha256 === "" || !SHA64_RE.test(r.mutated_sha256))
+        return fail("killed without valid mutated_sha256");
+      if (r.mutated_sha256 === r.baseline_sha256) return fail("killed with unchanged mutated bytes");
+      if (r.probe_session_root !== "" || r.probe_file_path !== "")
+        return fail("killed first_failure with probe paths");
+      for (const pf of FIRST_FAILURE_PROBE_FIELDS) {
+        if ((r as unknown as Record<string, unknown>)[pf] !== "not_applicable")
+          return fail("killed first_failure with non-not_applicable probe field");
+      }
     }
   }
   return { ok: true, note: "", result: r };
@@ -2415,6 +2955,95 @@ function gitCommonDirAt(repoRoot: string): string {
   return path.isAbsolute(out) ? path.normalize(out) : path.resolve(repoRoot, out);
 }
 
+// ═══════════════════════════════════════ R1: containment, process groups, cleanup
+
+async function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Synchronous bounded sleep (used inside the signal handler). */
+function syncSleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Containment test that survives normalize AND realpath: the resolved child
+ * path must equal the parent or live under it, and — when BOTH paths exist —
+ * the realpath'd child must still be contained (a half-realpath'd comparison
+ * would break on platforms where the temp root itself is a symlink, e.g.
+ * macOS /var -> /private/var). `..` escapes are resolved by normalization and
+ * can never pass.
+ */
+function isPathContained(parent: string, child: string): boolean {
+  const lex = (p: string): string => path.normalize(path.resolve(p));
+  const pLex = lex(parent);
+  const cLex = lex(child);
+  if (cLex !== pLex && !cLex.startsWith(pLex + path.sep)) return false;
+  let pReal: string | null = null;
+  let cReal: string | null = null;
+  try { pReal = path.normalize(fs.realpathSync(parent)); } catch { pReal = null; }
+  try { cReal = path.normalize(fs.realpathSync(child)); } catch { cReal = null; }
+  if (pReal !== null && cReal !== null) {
+    return cReal === pReal || cReal.startsWith(pReal + path.sep);
+  }
+  return true;
+}
+
+/**
+ * Signal an entire POSIX process group. Workers are spawned `detached`, making
+ * each worker a process-group leader, so `-pid` addresses the whole tree
+ * (targeted-suite children, probe children, any controlled descendants).
+ * Returns true when a group member was signalled; false when the group is
+ * already gone (ESRCH) or no pid is available.
+ */
+function killProcessGroup(child: ChildProcess, signal: NodeJS.Signals): boolean {
+  if (child.pid === undefined) return false;
+  try { process.kill(-child.pid, signal); return true; } catch { return false; }
+}
+
+/** Snapshot of `ps` pid/pgid/state lines (darwin + linux supported platforms). */
+function scanProcessGroups(): { pid: number; pgid: number; state: string }[] {
+  const args = process.platform === "darwin" ? ["-axo", "pid=,pgid=,state="] : ["-eo", "pid=,pgid=,state="];
+  const r = spawnSync("ps", args, { encoding: "utf8" });
+  if (r.status !== 0) return [];
+  const out: { pid: number; pgid: number; state: string }[] = [];
+  for (const line of r.stdout.split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 3) continue;
+    const pid = Number(parts[0]);
+    const pgid = Number(parts[1]);
+    if (Number.isInteger(pid) && Number.isInteger(pgid)) out.push({ pid, pgid, state: parts[2] ?? "" });
+  }
+  return out;
+}
+
+/** True when any NON-zombie member of the given process group is still alive. */
+function pgidStillAlive(pgid: number): boolean {
+  return scanProcessGroups().some((p) => p.pgid === pgid && !p.state.includes("Z"));
+}
+
+/** Subset of the given pgids that still have live (non-zombie) members. */
+function aliveGroups(pgids: readonly number[]): number[] {
+  const alive = new Set<number>();
+  for (const p of scanProcessGroups()) {
+    if (pgids.includes(p.pgid) && !p.state.includes("Z")) alive.add(p.pgid);
+  }
+  return [...alive];
+}
+
+/**
+ * R1 parent-owned worker-root cleanup: recursive force remove followed by an
+ * existsSync re-verification. Any failure is reported and forces the outcome
+ * away from killed (the parent never trusts the worker's own cleanup claim).
+ */
+function parentCleanupWorkerRoot(root: string): { ok: boolean; note: string } {
+  try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) {
+    return { ok: false, note: `parent worker root cleanup failed: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN) };
+  }
+  if (fs.existsSync(root)) return { ok: false, note: "parent worker root cleanup incomplete" };
+  return { ok: true, note: "" };
+}
+
 /**
  * Execute ONE mutation inside a worker against the worker's own disposable
  * copy: exact target lookup, byte mutation, full targeted suite, dedicated
@@ -2495,7 +3124,7 @@ async function executeSingleMutation(
             rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
           } else {
             // The targeted suite started and failed for the right reason: run the probe.
-            const probeResult = runProbe(m, disp, repoRoot);
+            const probeResult = runProbe(m, disp, repoRoot, cli.workerRoot);
             probeSessionRoot = probeResult.registeredSessionRoot;
             probeFilePath = probeResult.probeFilePath;
             rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
@@ -2516,7 +3145,7 @@ async function executeSingleMutation(
                 rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
                 rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
                 rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
-                rec.probeAssertions = cmp.assertions.join(",");
+                rec.probeAssertions = cmp.assertions ?? "not_applicable";
                 rec.probeEnvironmentIsolated = String(cmp.envIsolated);
 
                 const killCls = classifyProbeKill({
@@ -2644,9 +3273,224 @@ async function runInternalWorker(cli: ParsedCli): Promise<number> {
 }
 
 /**
+ * Hidden internal-only selftest child mode (R1). Authorized by a random token
+ * (must match argv + env) and the parent worker registry; every real HEAD /
+ * root / protected-file check a regular worker performs is still enforced —
+ * this mode can never bypass verification, and any direct user invocation
+ * fails closed. Modes:
+ *   forge    — emit a structurally valid but semantically forged killed
+ *              WORKER_RESULT (test_exit=0) and exit 0; a blocking descendant
+ *              is intentionally left running so the parent must kill the
+ *              process group and remove the worker root itself.
+ *   graceful — create a probe-like resource + blocking descendant, announce
+ *              SELFTEST_READY, then block until the parent SIGTERMs the group.
+ *   forced   — same, but SIGTERM is ignored so the parent must escalate to
+ *              SIGKILL after its bounded grace window.
+ */
+async function runSelftestChild(cli: ParsedCli): Promise<number> {
+  const m = MUTATIONS.find((x) => x.id === cli.mutationId);
+  if (!m) {
+    console.error("WORKER_FAULT unknown mutation id");
+    return 1;
+  }
+  // Random-token authorization: the argv token must equal the parent env token.
+  if (!/^[0-9a-f]{48}$/.test(cli.selftestToken) || cli.selftestToken !== (process.env[SELFTEST_TOKEN_ENV] ?? "")) {
+    console.error("WORKER_FAULT selftest token authorization failed");
+    return 1;
+  }
+  const { registry, error: regError } = readWorkerRegistry();
+  if (regError !== "") {
+    console.error(`WORKER_FAULT ${regError}`);
+    return 1;
+  }
+  const rootCheck = validateWorkerRoots(registry.roots, registry.repoRoot, registry.gitCommonDir);
+  if (!rootCheck.ok) {
+    console.error(`WORKER_FAULT ${rootCheck.error}`);
+    return 1;
+  }
+  if (registry.expectedHead !== cli.expectedHead) {
+    console.error("WORKER_FAULT registry expected HEAD mismatch");
+    return 1;
+  }
+  if (!registry.roots.includes(cli.workerRoot)) {
+    console.error("WORKER_FAULT worker root not registered by parent");
+    return 1;
+  }
+  // Real HEAD / protected-file verification is NEVER bypassed by this mode.
+  if (gitHeadShaAt(registry.repoRoot) !== cli.expectedHead) {
+    console.error("WORKER_FAULT real local HEAD does not match expected HEAD");
+    return 1;
+  }
+  for (const rel of [PROD_REL, TEST_REL, LOCK_REL]) {
+    const headBytes = gitShowHeadAt(registry.repoRoot, rel, cli.expectedHead);
+    const workBytes = fs.readFileSync(path.join(registry.repoRoot, rel));
+    if (sha256Buf(headBytes) !== sha256Buf(workBytes)) {
+      console.error(`WORKER_FAULT real ${rel} differs from expected HEAD`);
+      return 1;
+    }
+  }
+
+  // Probe-like resource inside the worker root — the parent's cleanup target.
+  const resourceRoot = path.join(cli.workerRoot, "probe-session", "G");
+  fs.mkdirSync(resourceRoot, { recursive: true });
+  fs.writeFileSync(path.join(resourceRoot, "probe-resource.bin"), Buffer.from("selftest:" + cli.selftestToken, "utf8"));
+
+  // Controlled blocking descendant in the SAME process group as this child.
+  const descendant = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
+  descendant.on("error", () => { /* descendant spawn failure is not fatal for the assertions */ });
+
+  if (cli.selftestKind === "forge") {
+    // Exit 0 immediately while the descendant keeps running: the parent must
+    // kill the process group and delete the worker root itself.
+    descendant.unref();
+    const baselineSha = sha256Buf(fs.readFileSync(path.join(registry.repoRoot, PROD_REL)));
+    const forged: WorkerResult = {
+      mutation_id: m.id,
+      status: "killed",
+      evidence_mode: "first_failure",
+      target_matches: 1,
+      test_exit: 0,
+      test_duration_ms: 123,
+      first_failure: "✗ path not allowed (forged)",
+      expected_evidence: "path not allowed",
+      probe_exit: "not_applicable",
+      probe_scenario_id: "not_applicable",
+      probe_error_name: "not_applicable",
+      probe_error_code: "not_applicable",
+      probe_error_message: "not_applicable",
+      probe_assertions: "not_applicable",
+      probe_environment_isolated: "not_applicable",
+      probe_file_cleanup_complete: "not_applicable",
+      probe_session_cleanup_complete: "not_applicable",
+      baseline_sha256: baselineSha,
+      mutated_sha256: "b".repeat(64),
+      restored_sha256: baselineSha,
+      restored_byte_identical: true,
+      note: "selftest forged killed payload",
+      archive_extract_duration_ms: 1,
+      cleanup_duration_ms: 1,
+      worker_root_cleanup_complete: true,
+      probe_session_root: "",
+      probe_file_path: "",
+      worker_root: cli.workerRoot,
+    };
+    console.log(WORKER_RESULT_PREFIX + " " + JSON.stringify(forged));
+    return 0;
+  }
+
+  if (cli.selftestKind === "forced") {
+    // Truly ignore SIGTERM so the parent must escalate to SIGKILL after its
+    // bounded grace window.
+    process.on("SIGTERM", () => {
+      if (process.env.L04_DEBUG === "1") console.error("FORCED_GOT_SIGTERM pid=" + process.pid);
+      /* ignored: the parent must escalate to SIGKILL */
+    });
+  }
+  console.log(SELFTEST_READY_PREFIX + " " + cli.selftestKind);
+  // Keep the event loop alive independently of the blocking descendant: if the
+  // descendant dies (default SIGTERM disposition), the child must STILL survive
+  // until the parent escalates — otherwise an empty loop would exit the child
+  // with code 0 and defeat the forced-cleanup scenario.
+  const loopHold = setInterval(() => { /* intentional no-op loop holder */ }, 1000);
+  await new Promise<void>(() => { /* block until the parent terminates the process group */ });
+  clearInterval(loopHold);
+  return 0;
+}
+
+/**
+ * Internal only: full argv for running THIS harness directly under node with
+ * the tsx loader (no npm/tsx wrapper). Selftest children are spawned this way
+ * so signal semantics belong to the real harness process alone.
+ */
+function directSelftestSpawnArgs(scriptArgs: readonly string[]): { bin: string; args: string[] } {
+  const repoRoot = process.cwd();
+  const preflight = path.join(repoRoot, "node_modules", "tsx", "dist", "preflight.cjs");
+  const loader = pathToFileURL(path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs")).href;
+  return {
+    bin: process.execPath,
+    args: ["--require", preflight, "--import", loader, path.join(repoRoot, "scripts", "loop-delivery-04-mutation-harness.ts"), ...scriptArgs],
+  };
+}
+
+/**
+ * Spawn ONE child (tsx on this same file) inside its OWN POSIX process group
+ * (detached => the child is the group leader). Collects stdout/stderr and
+ * resolves on close. The bounded timeout escalates SIGTERM -> SIGKILL for the
+ * whole group, so no descendant can outlive the bound.
+ */
+interface ChildSpawnResult {
+  child: ChildProcess;
+  done: Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    spawnError: boolean;
+    spawnErrorNote: string;
+  }>;
+  readStdout: () => string;
+}
+
+function spawnHarnessChild(
+  tsxBin: string,
+  args: readonly string[],
+  opts: { cwd: string; env: Record<string, string>; timeoutMs: number; graceMs: number },
+): ChildSpawnResult {
+  const child = spawn(tsxBin, args as string[], {
+    cwd: opts.cwd,
+    env: opts.env,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  let stdout = "";
+  let stderr = "";
+  let timedOut = false;
+  let settled = false;
+  const done = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    spawnError: boolean;
+    spawnErrorNote: string;
+  }>((resolve) => {
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killProcessGroup(child, "SIGTERM");
+      const fallback = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) killProcessGroup(child, "SIGKILL");
+      }, opts.graceMs);
+      fallback.unref();
+    }, opts.timeoutMs);
+    child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
+    child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code: null, signal: null, stdout, stderr, timedOut: false, spawnError: true, spawnErrorNote: e.message });
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, signal, stdout, stderr, timedOut, spawnError: false, spawnErrorNote: "" });
+    });
+  });
+  return { child, done, readStdout: () => stdout };
+}
+
+/**
  * Start ONE internal worker (tsx on this same file) and await its structured
  * WORKER_RESULT. Fail-closed: spawn failure, signal termination, timeout, any
- * nonzero exit, or a structurally invalid result all yield ok=false.
+ * nonzero exit, or a structurally invalid result all yield ok=false. On EVERY
+ * exit path the parent (1) terminates the worker's process group so no
+ * descendant becomes an orphan, (2) performs parent-owned recursive removal of
+ * the pre-registered worker root and re-verifies it with existsSync. The
+ * worker's own cleanup claim is never trusted. `selftest` (internal only)
+ * switches the child into a hidden authorized selftest mode.
  */
 function spawnWorkerProcess(
   m: MutationDef,
@@ -2655,6 +3499,8 @@ function spawnWorkerProcess(
   repoRoot: string,
   expectedHead: string,
   parentBaselineSha: string,
+  onSpawned?: (pid: number) => void,
+  selftest?: { kind: string; token: string },
 ): Promise<WorkerOutcome> {
   return new Promise((resolve) => {
     const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
@@ -2666,68 +3512,59 @@ function spawnWorkerProcess(
       `--expected-head=${expectedHead}`,
       `--worker-root=${workerRoot}`,
     ];
-    let child: ChildProcess;
+    if (selftest !== undefined) {
+      args.push(`--internal-selftest=${selftest.kind}`, `--selftest-token=${selftest.token}`);
+    }
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), [REGISTRY_ENV]: registryPath };
+    if (selftest !== undefined) env[SELFTEST_TOKEN_ENV] = selftest.token;
+    let spawned: ChildSpawnResult;
     try {
-      child = spawn(tsxBin, args, {
+      spawned = spawnHarnessChild(tsxBin, args, {
         cwd: repoRoot,
-        env: { ...(process.env as Record<string, string>), [REGISTRY_ENV]: registryPath },
-        stdio: ["ignore", "pipe", "pipe"],
+        env,
+        timeoutMs: WORKER_TIMEOUT_MS,
+        graceMs: WORKER_SIGNAL_GRACE_MS,
       });
     } catch (e) {
       resolve({ id: m.id, ok: false, note: `worker spawn failure: ${(e as Error).message}`, result: null, exitCode: null, signal: null, timedOut: false, spawnError: true });
       return;
     }
+    const child = spawned.child;
     activeWorkerProcesses.add(child);
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let settled = false;
-    const settle = (outcome: WorkerOutcome): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
+    if (child.pid !== undefined) {
+      allWorkerPgids.push(child.pid);
+      onSpawned?.(child.pid);
+    }
+    spawned.done.then((r) => {
       activeWorkerProcesses.delete(child);
-      resolve(outcome);
-    };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try { child.kill("SIGTERM"); } catch { /* best-effort */ }
-      // Bounded fallback: escalate to SIGKILL shortly after.
-      const fallback = setTimeout(() => {
-        try { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); } catch { /* best-effort */ }
-      }, WORKER_SIGNAL_GRACE_MS);
-      fallback.unref();
-    }, WORKER_TIMEOUT_MS);
-    child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
-    child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
-    child.on("error", (e) => {
-      settle({ id: m.id, ok: false, note: `worker spawn failure: ${e.message}`, result: null, exitCode: null, signal: null, timedOut: false, spawnError: true });
-    });
-    child.on("close", (code, signal) => {
-      if (timedOut) {
-        settle({ id: m.id, ok: false, note: "worker timeout", result: null, exitCode: code, signal: signal ?? null, timedOut: true, spawnError: false });
+      // Process-tree closure: any surviving group member is killed NOW, while
+      // the group still exists (pid/pgid reuse is impossible while members
+      // remain), and recorded for the end-of-run residual verification.
+      if (killProcessGroup(child, "SIGKILL") && child.pid !== undefined) suspiciousPgids.push(child.pid);
+      const finish = (outcome: WorkerOutcome): void => {
+        const clean = parentCleanupWorkerRoot(workerRoot);
+        resolve(
+          clean.ok
+            ? outcome
+            : { id: m.id, ok: false, note: clean.note, result: null, exitCode: outcome.exitCode, signal: outcome.signal, timedOut: outcome.timedOut, spawnError: outcome.spawnError },
+        );
+      };
+      const reject = (note: string): void => {
+        finish({ id: m.id, ok: false, note, result: null, exitCode: r.code, signal: r.signal, timedOut: r.timedOut, spawnError: r.spawnError });
+      };
+      if (r.spawnError) { reject(`worker spawn failure: ${r.spawnErrorNote}`); return; }
+      if (r.timedOut) { reject("worker timeout"); return; }
+      if (r.code !== 0) {
+        const note = r.signal !== null ? `worker terminated by signal (${r.signal})` : `worker exited nonzero (${r.code})`;
+        reject(note);
         return;
       }
-      if (code !== 0) {
-        const note = signal !== null ? `worker terminated by signal (${signal})` : `worker exited nonzero (${code})`;
-        settle({ id: m.id, ok: false, note, result: null, exitCode: code, signal: signal ?? null, timedOut: false, spawnError: false });
-        return;
-      }
-      const parsed = parseWorkerStdout(stdout);
-      if (!parsed.ok) {
-        settle({ id: m.id, ok: false, note: parsed.note, result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
-        return;
-      }
+      const parsed = parseWorkerStdout(r.stdout);
+      if (!parsed.ok) { reject(parsed.note); return; }
       const validated = validateWorkerResult(parsed.raw, m, m.id, workerRoot, parentBaselineSha);
-      if (!validated.ok) {
-        settle({ id: m.id, ok: false, note: validated.note, result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
-        return;
-      }
-      if (!validated.result!.worker_root_cleanup_complete) {
-        settle({ id: m.id, ok: false, note: "worker root cleanup false", result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
-        return;
-      }
-      settle({ id: m.id, ok: true, note: "", result: validated.result, exitCode: code, signal: null, timedOut: false, spawnError: false });
+      if (!validated.ok) { reject(validated.note); return; }
+      if (!validated.result!.worker_root_cleanup_complete) { reject("worker root cleanup false"); return; }
+      finish({ id: m.id, ok: true, note: "", result: validated.result, exitCode: r.code, signal: null, timedOut: false, spawnError: false });
     });
   });
 }
@@ -2770,6 +3607,7 @@ async function main(): Promise<MainOutcome> {
   }
   if (cli.kind === "worker") {
     // Internal worker mode: execute exactly one mutation, emit one WORKER_RESULT.
+    if (cli.selftestKind !== "") return { code: await runSelftestChild(cli), tempCleanupComplete: false };
     return { code: await runInternalWorker(cli), tempCleanupComplete: false };
   }
   const mode = cli.mode;
@@ -2779,6 +3617,45 @@ async function main(): Promise<MainOutcome> {
     console.error(`HARNESS_ERROR unsupported platform: ${platform}`);
     return { code: 1, tempCleanupComplete: false };
   }
+
+  // ── R1: parent-owned cleanup + controlled termination are installed BEFORE
+  //    the self-tests so a SIGINT/SIGTERM during any phase (including the real
+  //    subprocess self-tests) still kills every process group and cleans every
+  //    registered root. ──
+  let tmpRoot = "";
+  let registryPath = "";
+  let disposableRootCleaned = false;
+  const removeAndVerify = (label: string, p: string, recursive: boolean): void => {
+    try { fs.rmSync(p, { recursive, force: true }); } catch { /* existence check below */ }
+    if (fs.existsSync(p)) cleanupFailures.push(`${label}:${p}`);
+  };
+  const cleanup = (): void => {
+    removeAndVerify("disposable-root", tmpRoot, true);
+    disposableRootCleaned = tmpRoot === "" || !fs.existsSync(tmpRoot);
+    for (const s of registeredProbeSessions) removeAndVerify("probe-session", s, true);
+    for (const r of registeredWorkerRoots) removeAndVerify("worker-root", r, true);
+    if (registryPath !== "") removeAndVerify("registry", registryPath, false);
+  };
+  const onSignal = async (): Promise<void> => {
+    // Controlled termination: stop scheduling, SIGTERM every active process
+    // group, bounded grace, SIGKILL survivors, wait for close, then parent
+    // cleanup, then residual-group verification, then exit 130.
+    stopping = true;
+    for (const child of [...activeWorkerProcesses]) killProcessGroup(child, "SIGTERM");
+    const deadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
+    while (Date.now() < deadline && activeWorkerProcesses.size > 0) syncSleep(50);
+    for (const child of [...activeWorkerProcesses]) {
+      if (child.exitCode === null && child.signalCode === null) killProcessGroup(child, "SIGKILL");
+    }
+    const closeDeadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
+    while (Date.now() < closeDeadline && activeWorkerProcesses.size > 0) syncSleep(50);
+    const residual = aliveGroups(allWorkerPgids);
+    if (residual.length > 0) console.error(`HARNESS_ERROR residual worker processes after signal: ${residual.join(",")}`);
+    cleanup();
+    process.exit(130);
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
 
   // ── Static self-checks ──
   let harnessSource = "";
@@ -2797,6 +3674,26 @@ async function main(): Promise<MainOutcome> {
 
   // ── Failure-path self-tests (before any baseline / mutation work) ──
   const st = await runSelfTests();
+  const r1SelftestLine =
+    `parent_rejects_zero_test_exit_kill=${selfTestParentRejectsZeroTestExitKill()} ` +
+    `parent_rejects_null_test_exit_kill=${selfTestParentRejectsNullTestExitKill()} ` +
+    `parent_rejects_wrong_expected_evidence=${selfTestParentRejectsWrongExpectedEvidence()} ` +
+    `parent_rejects_empty_first_failure=${selfTestParentRejectsEmptyFirstFailure()} ` +
+    `parent_rejects_first_failure_without_expected_token=${selfTestParentRejectsFirstFailureWithoutToken()} ` +
+    `parent_rejects_unchanged_mutated_sha=${selfTestParentRejectsUnchangedMutatedSha()} ` +
+    `parent_rejects_restore_mismatch=${selfTestParentRejectsRestoreMismatch()} ` +
+    `parent_rejects_missing_probe_assertion=${selfTestParentRejectsMissingProbeAssertion()} ` +
+    `parent_rejects_extra_probe_assertion=${selfTestParentRejectsExtraProbeAssertion()} ` +
+    `parent_rejects_false_probe_assertion=${selfTestParentRejectsFalseProbeAssertion()} ` +
+    `parent_rejects_wrong_probe_assertion_type=${selfTestParentRejectsWrongProbeAssertionType()} ` +
+    `parent_accepts_exact_G_assertion_set=${selfTestParentAcceptsExactGAssertionSet()} ` +
+    `parent_accepts_exact_H_assertion_set=${selfTestParentAcceptsExactHAssertionSet()} ` +
+    `parent_accepts_exact_L_assertion_set=${selfTestParentAcceptsExactLAssertionSet()} ` +
+    `parent_first_failure_validation=${st.parent_first_failure_validation} ` +
+    `structured_probe_assertions=${st.structured_probe_assertions} ` +
+    `forged_worker_kill_rejected=${st.forged_worker_kill_rejected} ` +
+    `graceful_worker_cleanup=${st.graceful_worker_cleanup} ` +
+    `forced_worker_cleanup=${st.forced_worker_cleanup}`;
   console.log(
     `HARNESS_SELF_TEST baseline_failure_cleanup=${st.baseline_failure_cleanup} ` +
       `target_mismatch_restore_cleanup=${st.target_mismatch_restore_cleanup} ` +
@@ -2812,7 +3709,8 @@ async function main(): Promise<MainOutcome> {
       `worker_result_missing_rejected=${st.worker_result_missing_rejected} ` +
       `worker_cleanup_failure_blocks_kill=${st.worker_cleanup_failure_blocks_kill} ` +
       `records_ordered_A_to_N=${st.records_ordered_A_to_N} ` +
-      `worker_cli_fail_closed=${st.worker_cli_fail_closed}`,
+      `worker_cli_fail_closed=${st.worker_cli_fail_closed} ` +
+      r1SelftestLine,
   );
   if (
     !st.baseline_failure_cleanup || !st.target_mismatch_restore_cleanup ||
@@ -2822,7 +3720,10 @@ async function main(): Promise<MainOutcome> {
     !st.worker_result_unknown_field_rejected || !st.worker_result_malformed_rejected ||
     !st.worker_result_duplicate_rejected || !st.worker_result_missing_rejected ||
     !st.worker_cleanup_failure_blocks_kill || !st.records_ordered_A_to_N ||
-    !st.worker_cli_fail_closed
+    !st.worker_cli_fail_closed ||
+    !st.parent_first_failure_validation || !st.structured_probe_assertions ||
+    !st.forged_worker_kill_rejected || !st.graceful_worker_cleanup ||
+    !st.forced_worker_cleanup
   ) {
     console.error("HARNESS_ERROR failure-path self-test failed — refusing to run baseline/mutations");
     return { code: 1, tempCleanupComplete: false };
@@ -2893,7 +3794,7 @@ async function main(): Promise<MainOutcome> {
   }
 
   // ── Build disposable copy OUTSIDE the repo root via git archive HEAD ──
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "l04-mut-"));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "l04-mut-"));
   const disp = path.join(tmpRoot, "work");
   fs.mkdirSync(disp, { recursive: true });
 
@@ -2901,48 +3802,9 @@ async function main(): Promise<MainOutcome> {
   const relDisp = path.relative(repoRoot, disp);
   if (!relDisp.startsWith("..") && !path.isAbsolute(relDisp)) {
     console.error("HARNESS_ERROR disposable copy is inside repo root");
-    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
-    return { code: 1, tempCleanupComplete: !fs.existsSync(tmpRoot) };
-  }
-
-  let disposableRootCleaned = false;
-  let registryPath = "";
-  const cleanup = (): void => {
-    try {
-      fs.rmSync(tmpRoot, { recursive: true, force: true });
-      disposableRootCleaned = !fs.existsSync(tmpRoot);
-    } catch {
-      disposableRootCleaned = false;
-    }
-    for (const s of registeredProbeSessions) {
-      try { fs.rmSync(s, { recursive: true, force: true }); } catch { /* best-effort */ }
-    }
-    for (const r of registeredWorkerRoots) {
-      try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* best-effort */ }
-    }
-    if (registryPath !== "") {
-      try { fs.rmSync(registryPath, { force: true }); } catch { /* best-effort */ }
-    }
-  };
-  const onSignal = async (): Promise<void> => {
-    // Controlled termination: stop scheduling, SIGTERM active workers, give a
-    // bounded cleanup window, then fallback SIGKILL, then cleanup and exit.
-    stopping = true;
-    for (const child of activeWorkerProcesses) {
-      try { child.kill("SIGTERM"); } catch { /* best-effort */ }
-    }
-    const deadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
-    while (Date.now() < deadline && activeWorkerProcesses.size > 0) {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-    }
-    for (const child of activeWorkerProcesses) {
-      try { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); } catch { /* best-effort */ }
-    }
     cleanup();
-    process.exit(130);
-  };
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
+    return { code: 1, tempCleanupComplete: !fs.existsSync(tmpRoot) && cleanupFailures.length === 0 };
+  }
 
   const records: MutationRecord[] = [];
   let baselineOk = false;
@@ -2951,6 +3813,7 @@ async function main(): Promise<MainOutcome> {
   let baselineExit: number | null = null;
   let baselineDurationMs = 0;
   let sessionCode = 0;
+  let noResidualChildProcess = true;
   const probeSummary = { total: 0, passed: 0, failed: 0, cleaned: 0, isolated: 0, perId: new Map<string, boolean>() };
 
   // In quick mode, only G/H/L are processed (probe only, no targeted suite).
@@ -3109,7 +3972,7 @@ async function main(): Promise<MainOutcome> {
             }
 
             // Run the dedicated probe (both full and quick mode).
-            const probeResult = runProbe(m, disp, repoRoot);
+            const probeResult = runProbe(m, disp, repoRoot, tmpRoot);
             rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
             rec.probeFileCleanupComplete = String(probeResult.probeFileCleanupComplete);
             rec.probeSessionCleanupComplete = String(probeResult.probeSessionCleanupComplete);
@@ -3128,7 +3991,7 @@ async function main(): Promise<MainOutcome> {
                 rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
                 rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
                 rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
-                rec.probeAssertions = cmp.assertions.join(",");
+                rec.probeAssertions = cmp.assertions ?? "not_applicable";
                 rec.probeEnvironmentIsolated = String(cmp.envIsolated);
 
                 const killCls = classifyProbeKill({
@@ -3252,6 +4115,16 @@ async function main(): Promise<MainOutcome> {
         console.error(`HARNESS_ERROR leftover worker roots: ${leakedRoots.join(",")}`);
         sessionCode = 1;
       }
+
+      // R1: process groups that still had members when a worker closed must be
+      // empty again now — any surviving member means an orphaned descendant.
+      const residualGroups = aliveGroups(suspiciousPgids);
+      if (residualGroups.length > 0) {
+        console.error(`HARNESS_ERROR residual worker processes: ${residualGroups.join(",")}`);
+        sessionCode = 1;
+      }
+      noResidualChildProcess = residualGroups.length === 0;
+
       if (sessionCode !== 0) throw new Error("SCHEDULER_FAILED");
 
       // Real scheduler metrics (never hard-coded; from actual execution).
@@ -3301,7 +4174,8 @@ async function main(): Promise<MainOutcome> {
   // TEMP_CLEANUP_COMPLETE aggregates: (1) main disposable root deleted,
   // (2) all registered probe session roots deleted, (3) all registered probe
   // files deleted, (4) all registered worker roots deleted, (5) all
-  // worker-reported probe session/file paths deleted, (6) registry file deleted.
+  // worker-reported probe session/file paths deleted, (6) registry file
+  // deleted, (7) zero parent-owned cleanup failures (R1).
   const allSessionsCleaned = registeredProbeSessions.every((s) => !fs.existsSync(s));
   const allFilesCleaned = registeredProbeFiles.every((f) => !fs.existsSync(f));
   const allWorkerRootsCleaned = registeredWorkerRoots.every((r) => !fs.existsSync(r));
@@ -3311,7 +4185,7 @@ async function main(): Promise<MainOutcome> {
   const tempCleanupComplete =
     disposableRootCleaned && allSessionsCleaned && allFilesCleaned &&
     allWorkerRootsCleaned && allWorkerProbeSessionsCleaned && allWorkerProbeFilesCleaned &&
-    registryCleaned;
+    registryCleaned && cleanupFailures.length === 0;
 
   // ── Summary ──
   if (mode === "quick") {
@@ -3340,7 +4214,12 @@ async function main(): Promise<MainOutcome> {
       probeSummary.isolated === 3 &&
       records.every((r) => r.restoredByteIdentical) &&
       realUnchanged &&
-      tempCleanupComplete;
+      tempCleanupComplete &&
+      st.parent_first_failure_validation &&
+      st.structured_probe_assertions &&
+      st.forged_worker_kill_rejected &&
+      st.graceful_worker_cleanup &&
+      st.forced_worker_cleanup;
 
     console.log(`R6_QUICK_MODE_COMPLETE ${quickGood}`);
     return { code: quickGood ? 0 : 1, tempCleanupComplete };
@@ -3368,6 +4247,21 @@ async function main(): Promise<MainOutcome> {
   console.log(`REAL_WORKTREE_UNCHANGED ${realUnchanged}`);
   console.log(`TEMP_CLEANUP_COMPLETE ${tempCleanupComplete}`);
 
+  // ── R1 aggregate markers (derived from real self-test / full-run state;
+  //    never hard-coded) ──
+  const r1Markers: Record<string, boolean> = {
+    D04_R1_PARENT_FIRST_FAILURE_VALIDATION_VERIFIED: st.parent_first_failure_validation,
+    D04_R1_STRUCTURED_PROBE_ASSERTIONS_VERIFIED: st.structured_probe_assertions,
+    D04_R1_FORGED_WORKER_KILL_REJECTED: st.forged_worker_kill_rejected,
+    D04_R1_GRACEFUL_WORKER_CLEANUP_VERIFIED: st.graceful_worker_cleanup,
+    D04_R1_FORCED_WORKER_CLEANUP_VERIFIED: st.forced_worker_cleanup,
+    D04_R1_PROCESS_TREE_TERMINATION_VERIFIED: st.graceful_worker_cleanup && st.forced_worker_cleanup,
+    D04_R1_ALL_WORKER_ROOTS_CLEANED: allWorkerRootsCleaned,
+    D04_R1_ALL_PROBE_RESOURCES_CLEANED: allWorkerProbeSessionsCleaned && allWorkerProbeFilesCleaned,
+  };
+  for (const [name, ok] of Object.entries(r1Markers)) console.log(`${name} ${ok}`);
+  const r1AllTrue = Object.values(r1Markers).every(Boolean);
+
   const allGood =
     sessionCode === 0 &&
     baselineOk &&
@@ -3384,6 +4278,8 @@ async function main(): Promise<MainOutcome> {
     probeSummary.failed === 0 &&
     probeSummary.cleaned === 3 &&
     probeSummary.isolated === 3 &&
+    r1AllTrue &&
+    noResidualChildProcess &&
     realUnchanged &&
     tempCleanupComplete;
 
