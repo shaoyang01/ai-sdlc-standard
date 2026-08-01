@@ -80,6 +80,21 @@
 //     a failed scan can never be read as "clean", and scan errors are
 //     preserved alongside cleanup errors.
 //
+// R3 (Correction R3) changes, per project-controller review:
+//   * Linux `ps -eo pid=,pgid=,state=` may legitimately emit rows with
+//     pid>0, pgid=0 and a non-empty state (processes not attached to a
+//     positive process group). The row contract now accepts pgid=0: a row is
+//     malformed only when pid<=0, pgid<0, state is empty, or the non-empty
+//     line does not have exactly three fields. pgid=0 rows stay in the parsed
+//     entries and can never match a positive worker/self-test target group.
+//   * New fast fixtures prove the pgid=0 contract (parse, retention,
+//     positive-target isolation, negative/non-integer pgid, pid<=0 and
+//     extra-field rejection) and that scanner execution failures still fail
+//     closed. Scanner diagnostics carry a failure category plus the calling
+//     phase/context, and real self-test failures are logged by distinct
+//     category (readiness / process-scan-execution / pid-pgid-mismatch /
+//     resource-absence / residual-process).
+//
 // How it works:
 //   1. Static self-checks (source-level invariants of this harness).
 //   2. Failure-path self-tests (baseline cleanup, target-mismatch restore,
@@ -850,6 +865,9 @@ interface SelfTestResult {
   // R2 checks:
   r2_ghl_suite_evidence_validation: boolean;
   r2_process_scan_fail_closed: boolean;
+  // R3 checks:
+  r3_linux_pgid_zero_compatibility: boolean;
+  r3_process_scan_fail_closed_retained: boolean;
 }
 
 /**
@@ -1034,6 +1052,8 @@ async function runSelfTests(): Promise<SelfTestResult> {
     forced_worker_cleanup: await runAbruptCleanupSelftest("forced"),
     r2_ghl_suite_evidence_validation: r2GhlSuiteEvidenceValidation(),
     r2_process_scan_fail_closed: r2ScannerFailClosedTests(),
+    r3_linux_pgid_zero_compatibility: r3LinuxPgidZeroCompatibility(),
+    r3_process_scan_fail_closed_retained: r3ScannerFailClosedRetained(),
   };
 }
 
@@ -1943,6 +1963,68 @@ function r2ScannerFailClosedTests(): boolean {
   return true;
 }
 
+// ── R3 self-tests (Correction R3; fast, deterministic, no network) ──
+// Linux `ps -eo pid=,pgid=,state=` can legitimately emit rows with pid>0,
+// pgid=0 and a non-empty state. These fixtures call the REAL parser/helpers
+// and prove the R3 row contract plus retention of the fail-closed scanner
+// execution guarantees.
+
+/**
+ * R3 (3.1): pgid=0 compatibility. A legal `123 0 I` row parses and is
+ * RETAINED in the parsed entries; a live pgid=0 row never satisfies a
+ * positive target-group match and is never reported as an active worker
+ * group; negative pgid, non-integer pgid, pid<=0 and extra fields are all
+ * rejected.
+ */
+function r3LinuxPgidZeroCompatibility(): boolean {
+  // The exact legal contract row `pid>0, pgid=0, state non-empty` parses.
+  const p = parseProcessRows("123 0 I\n");
+  if (!p.ok || p.entries.length !== 1) return false;
+  const row = p.entries[0]!;
+  if (row.pid !== 123 || row.pgid !== 0 || row.state !== "I") return false;
+  // pgid=0 rows are retained in the entries of a mixed scan.
+  const mixed = parseProcessRows("  123 0 I\n  456 456 Z\n  789 789 Ss\n");
+  if (!mixed.ok || mixed.entries.length !== 3) return false;
+  // A live pgid=0 row never matches a positive target pgid (exact equality),
+  // and pgid 0 is never reported as an active group.
+  if (entriesPgidAlive(mixed.entries, 456)) return false; // positive target has only a zombie
+  if (!entriesPgidAlive(mixed.entries, 789)) return false; // positive target has a live member
+  const alive = entriesAlivePgids(mixed.entries, [456, 789]);
+  if (alive.length !== 1 || alive[0] !== 789 || alive.includes(0)) return false;
+  // Negative pgid, non-integer pgid, pid 0 and extra fields are rejected.
+  if (parseProcessRows("  123 -1 S\n").ok) return false;
+  if (parseProcessRows("  123 12.5 S\n").ok) return false;
+  if (parseProcessRows("  0 456 S\n").ok) return false;
+  if (parseProcessRows("  123 456 S extra\n").ok) return false;
+  return true;
+}
+
+/**
+ * R3 (3.2): scanner execution failures remain fail-closed. Spawn error,
+ * signal termination, null status, non-zero status and non-string stdout all
+ * yield ok=false (never "clean"); a failed scan never converts into a clean
+ * "alive=false"; and pgid=0 compatibility does not loosen the malformed-row
+ * gate.
+ */
+function r3ScannerFailClosedRetained(): boolean {
+  const failingRunner: PsRunner = () => ({ status: null, signal: null, stdout: "", error: new Error("ps boom") });
+  const signalRunner: PsRunner = () => ({ status: null, signal: "SIGKILL", stdout: "" });
+  const nullStatusRunner: PsRunner = () => ({ status: null, signal: null, stdout: "" });
+  const nonzeroRunner: PsRunner = () => ({ status: 3, signal: null, stdout: "unused" });
+  const nonStringRunner: PsRunner = () => ({ status: 0, signal: null, stdout: 42 });
+  if (scanProcessGroups(failingRunner, "r3-fixture").ok) return false; // spawn error
+  if (scanProcessGroups(signalRunner, "r3-fixture").ok) return false; // signal termination
+  if (scanProcessGroups(nullStatusRunner, "r3-fixture").ok) return false; // null status
+  if (scanProcessGroups(nonzeroRunner, "r3-fixture").ok) return false; // non-zero status
+  if (scanProcessGroups(nonStringRunner, "r3-fixture").ok) return false; // non-string stdout
+  // A failed scan never reports a clean "alive=false".
+  const failAlive = pgidStillAlive(123, failingRunner, "r3-fixture");
+  if (failAlive.ok || failAlive.alive) return false;
+  // pgid=0 rows do not loosen the malformed-row gate.
+  if (parseProcessRows("  123 0 I\nbroken line\n").ok) return false;
+  return true;
+}
+
 /**
  * Build a one-off worker registry with 14 distinct external roots (the
  * first root is the test target) so the child's real registry/HEAD/root
@@ -1990,8 +2072,11 @@ async function selfTestForgedWorkerKillRejected(): Promise<boolean> {
     await sleepMs(250); // bounded settle for process-tree reaping
     const rejected = !outcome.ok && finalizeWorkerStatus(outcome) === "harness_error";
     const rootCleanedByParent = !fs.existsSync(reg.root);
-    const residualScan = pgidStillAlive(pgid);
+    const residualScan = pgidStillAlive(pgid, undefined, "selftest-forge-residual");
     const noResidual = residualScan.ok && !residualScan.alive; // scan failure fails closed
+    if (!residualScan.ok) {
+      console.error(`SELF_TEST_FAIL category=process-scan-execution detail=${clampLine(`forge ${residualScan.error}`)}`);
+    }
     if (process.env.L04_DEBUG === "1") {
       console.error(`DBG forge rejected=${rejected} note=${outcome.note} rootCleaned=${rootCleanedByParent} noResidual=${noResidual} pgid=${pgid}`);
     }
@@ -2062,6 +2147,12 @@ function parseSelftestReady(stdout: string, expectedKind: string, actualChildPid
 async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<boolean> {
   const reg = buildSelftestRegistry();
   let child: ChildProcess | null = null;
+  // R3: real self-test failures are logged by distinct auditable category
+  // (readiness / process-scan-execution / pid-pgid-mismatch / resource-absence
+  // / residual-process). Snippets are length-limited and control-char-cleaned.
+  const failLog = (category: string, detail: string): void => {
+    console.error(`SELF_TEST_FAIL category=${category} detail=${clampLine(detail)}`);
+  };
   try {
     const spec = directSelftestSpawnArgs([
       "--internal-worker", `--internal-selftest=${kind}`,
@@ -2090,27 +2181,27 @@ async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<bo
       if (ready.ok || ready.note !== "no SELFTEST_READY record") break;
       await sleepMs(50);
     }
-    if (!ready.ok) return false;
+    if (!ready.ok) { failLog("readiness", `kind=${kind} ${ready.note}`); return false; }
     const descendantPid = ready.descendantPid;
     // Real process-scan proof BEFORE signalling: scan succeeded; child and
     // descendant both exist, are non-zombie, and belong to the child's PGID;
     // the probe-like resource exists. Any failure => self-test false.
-    const scanBefore = scanProcessGroups();
+    const scanBefore = scanProcessGroups(undefined, "selftest-abrupt-pre-signal");
     const childRow = scanBefore.ok ? scanBefore.entries.find((p) => p.pid === pid) : undefined;
     const descRow = scanBefore.ok ? scanBefore.entries.find((p) => p.pid === descendantPid) : undefined;
     const resourceExists = fs.existsSync(path.join(reg.root, "probe-session", "G", "probe-resource.bin"));
-    const preVerified =
-      scanBefore.ok && childRow !== undefined && descRow !== undefined &&
-      !childRow.state.includes("Z") && !descRow.state.includes("Z") &&
-      childRow.pgid === pid && descRow.pgid === pid && resourceExists;
-    if (!preVerified) return false;
+    if (!scanBefore.ok) { failLog("process-scan-execution", `kind=${kind} ${scanBefore.error}`); return false; }
+    if (childRow === undefined || descRow === undefined) { failLog("pid-pgid-mismatch", `kind=${kind} child=${pid} descendant=${descendantPid} missing from ps`); return false; }
+    if (childRow.state.includes("Z") || descRow.state.includes("Z")) { failLog("pid-pgid-mismatch", `kind=${kind} child state=${childRow.state} descendant state=${descRow.state}`); return false; }
+    if (childRow.pgid !== pid || descRow.pgid !== pid) { failLog("pid-pgid-mismatch", `kind=${kind} child pgid=${childRow.pgid} descendant pgid=${descRow.pgid} expected ${pid}`); return false; }
+    if (!resourceExists) { failLog("resource-absence", `kind=${kind} probe-resource.bin missing`); return false; }
     // Staged process-group termination: SIGTERM, bounded grace, then — only if
     // a real scan still finds live group members — SIGKILL. The need for
     // escalation is itself the assertion distinguishing graceful from forced.
     killProcessGroup(child, "SIGTERM");
     await sleepMs(SELFTEST_CHILD_GRACE_MS + 250);
-    const afterTerm = pgidStillAlive(pid);
-    if (!afterTerm.ok) return false; // scan failure fails closed
+    const afterTerm = pgidStillAlive(pid, undefined, "selftest-abrupt-after-term");
+    if (!afterTerm.ok) { failLog("process-scan-execution", `kind=${kind} ${afterTerm.error}`); return false; } // scan failure fails closed
     const escalationNeeded = afterTerm.alive;
     if (escalationNeeded) killProcessGroup(child, "SIGKILL");
     const r = await spawned.done;
@@ -2130,14 +2221,22 @@ async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<bo
     })();
     const rootGone = !fs.existsSync(reg.root);
     const resourceGone = !fs.existsSync(path.join(reg.root, "probe-session", "G"));
-    const finalScan = pgidStillAlive(pid);
-    if (!finalScan.ok) return false; // scan failure fails closed
+    const finalScan = pgidStillAlive(pid, undefined, "selftest-abrupt-final");
+    if (!finalScan.ok) { failLog("process-scan-execution", `kind=${kind} ${finalScan.error}`); return false; } // scan failure fails closed
     const noResidual = !finalScan.alive;
     const escalationMatches = escalationNeeded === (kind === "forced");
     if (process.env.L04_DEBUG === "1") {
-      console.error(`DBG abrupt kind=${kind} code=${r.code} signal=${r.signal} notKilled=${notKilled} rootGone=${rootGone} resourceGone=${resourceGone} preVerified=${preVerified} noResidual=${noResidual} escalationNeeded=${escalationNeeded} pid=${pid} descendant=${descendantPid} ready=${ready.ok}`);
+      console.error(`DBG abrupt kind=${kind} code=${r.code} signal=${r.signal} notKilled=${notKilled} rootGone=${rootGone} resourceGone=${resourceGone} preVerified=${scanBefore.ok && childRow !== undefined && descRow !== undefined && !childRow.state.includes("Z") && !descRow.state.includes("Z") && childRow.pgid === pid && descRow.pgid === pid && resourceExists} noResidual=${noResidual} escalationNeeded=${escalationNeeded} pid=${pid} descendant=${descendantPid} ready=${ready.ok}`);
     }
-    return notKilled && rootGone && resourceGone && noResidual && escalationMatches;
+    const ok = notKilled && rootGone && resourceGone && noResidual && escalationMatches;
+    if (!ok) {
+      if (!notKilled) failLog("readiness", `kind=${kind} terminated worker payload still classified killed`);
+      if (!rootGone) failLog("resource-absence", `kind=${kind} worker root not removed`);
+      if (!resourceGone) failLog("resource-absence", `kind=${kind} probe session resource not removed`);
+      if (!noResidual) failLog("residual-process", `kind=${kind} pgid ${pid} still has live members`);
+      if (!escalationMatches) failLog("residual-process", `kind=${kind} escalation observed=${escalationNeeded} expected=${kind === "forced"}`);
+    }
+    return ok;
   } finally {
     if (child !== null && child.exitCode === null && child.signalCode === null) {
       killProcessGroup(child, "SIGKILL");
@@ -3204,19 +3303,26 @@ const realPsRunner: PsRunner = (args) => {
 /**
  * Pure strict parser for `ps -o pid=,pgid=,state=` output. Blank lines are
  * ignored; ANY non-empty line that does not parse into exactly three fields
- * with positive-integer pid/pgid and a non-empty state fails the whole scan.
+ * with a positive-integer pid, a NON-NEGATIVE integer pgid and a non-empty
+ * state fails the whole scan. pgid=0 is legal on Linux (processes not
+ * attached to a positive process group) and is RETAINED in the parsed
+ * entries; it can never satisfy a positive target-group match because
+ * matching is by exact pgid equality, so no caller ever treats it as an
+ * active worker group. Malformed-row snippets in errors are length-limited
+ * and control-character-cleaned; the full process table is never echoed.
  */
 function parseProcessRows(stdout: string): ProcessScan {
   const entries: ProcessRow[] = [];
   for (const line of stdout.split("\n")) {
     if (line.trim() === "") continue;
     const parts = line.trim().split(/\s+/);
-    if (parts.length !== 3) return { ok: false, error: `unparseable ps line: ${clampLine(line)}` };
+    if (parts.length !== 3)
+      return { ok: false, error: `row-parse malformed ps line: ${clampLine(line)}` };
     const pid = Number(parts[0]);
     const pgid = Number(parts[1]);
     const state = parts[2] ?? "";
-    if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(pgid) || pgid <= 0 || state === "")
-      return { ok: false, error: `invalid ps row: ${clampLine(line)}` };
+    if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(pgid) || pgid < 0 || state === "")
+      return { ok: false, error: `row-parse invalid ps row: ${clampLine(line)}` };
     entries.push({ pid, pgid, state });
   }
   return { ok: true, entries };
@@ -3241,37 +3347,43 @@ function entriesAlivePgids(entries: readonly ProcessRow[], wanted: readonly numb
  * Snapshot of `ps` pid/pgid/state lines (darwin + linux supported platforms).
  * Fail-closed: spawn error, signal termination, null/non-zero status,
  * non-string stdout, or any unparseable non-empty line => ok=false with a
- * reportable reason. Never returns a bare `[]` on failure. The runner
- * parameter is an internal test seam; production always uses the real `ps`
- * binary (no shell, no third-party dependencies, no env-controlled bypass).
+ * reportable reason that includes the failure category (scan-execution /
+ * row-parse) and the calling phase/context. Never returns a bare `[]` on
+ * failure. The runner parameter is an internal test seam; production always
+ * uses the real `ps` binary (no shell, no third-party dependencies, no
+ * env-controlled bypass).
  */
-function scanProcessGroups(runner: PsRunner = realPsRunner): ProcessScan {
+function scanProcessGroups(runner: PsRunner = realPsRunner, phase = "process-scan"): ProcessScan {
   const args = process.platform === "darwin" ? ["-axo", "pid=,pgid=,state="] : ["-eo", "pid=,pgid=,state="];
   const r = runner(args);
-  if (r.error !== undefined) return { ok: false, error: `ps spawn error: ${r.error.message}` };
-  if (r.signal !== null) return { ok: false, error: `ps terminated by signal (${r.signal})` };
-  if (r.status === null) return { ok: false, error: "ps status is null" };
-  if (r.status !== 0) return { ok: false, error: `ps exited with status ${r.status}` };
-  if (typeof r.stdout !== "string") return { ok: false, error: "ps stdout is not a string" };
-  return parseProcessRows(r.stdout);
+  if (r.error !== undefined) return { ok: false, error: `${phase}: scan-execution failure (spawn): ${r.error.message}` };
+  if (r.signal !== null) return { ok: false, error: `${phase}: scan-execution failure (signal ${r.signal})` };
+  if (r.status === null) return { ok: false, error: `${phase}: scan-execution failure (null status)` };
+  if (r.status !== 0) return { ok: false, error: `${phase}: scan-execution failure (status ${r.status})` };
+  if (typeof r.stdout !== "string") return { ok: false, error: `${phase}: scan-execution failure (non-string stdout)` };
+  const parsed = parseProcessRows(r.stdout);
+  if (!parsed.ok) return { ok: false, error: `${phase}: ${parsed.error}` };
+  return parsed;
 }
 
 /**
  * Fail-closed "does this process group still have live (non-zombie) members?".
- * A failed scan yields ok=false (never "clean").
+ * A failed scan yields ok=false (never "clean"). `phase` labels the calling
+ * context in diagnostics.
  */
-function pgidStillAlive(pgid: number, runner?: PsRunner): { ok: boolean; alive: boolean; error: string } {
-  const s = scanProcessGroups(runner);
+function pgidStillAlive(pgid: number, runner?: PsRunner, phase = "residual-check"): { ok: boolean; alive: boolean; error: string } {
+  const s = scanProcessGroups(runner, phase);
   if (!s.ok) return { ok: false, alive: false, error: s.error };
   return { ok: true, alive: entriesPgidAlive(s.entries, pgid), error: "" };
 }
 
 /**
  * Fail-closed subset of the given pgids that still have live members. A failed
- * scan yields ok=false (never an empty "no residual" list).
+ * scan yields ok=false (never an empty "no residual" list). `phase` labels the
+ * calling context in diagnostics.
  */
-function aliveGroups(pgids: readonly number[], runner?: PsRunner): { ok: boolean; alive: number[]; error: string } {
-  const s = scanProcessGroups(runner);
+function aliveGroups(pgids: readonly number[], runner?: PsRunner, phase = "residual-check"): { ok: boolean; alive: number[]; error: string } {
+  const s = scanProcessGroups(runner, phase);
   if (!s.ok) return { ok: false, alive: [], error: s.error };
   return { ok: true, alive: entriesAlivePgids(s.entries, pgids), error: "" };
 }
@@ -3906,7 +4018,7 @@ async function main(): Promise<MainOutcome> {
     }
     const closeDeadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
     while (Date.now() < closeDeadline && activeWorkerProcesses.size > 0) syncSleep(50);
-    const residual = aliveGroups(allWorkerPgids);
+    const residual = aliveGroups(allWorkerPgids, undefined, "signal-handler");
     if (!residual.ok) {
       console.error(`HARNESS_ERROR process scan failed after signal: ${residual.error}`);
     } else if (residual.alive.length > 0) {
@@ -3973,6 +4085,8 @@ async function main(): Promise<MainOutcome> {
       `worker_cli_fail_closed=${st.worker_cli_fail_closed} ` +
       `r2_ghl_suite_evidence_validation=${st.r2_ghl_suite_evidence_validation} ` +
       `r2_process_scan_fail_closed=${st.r2_process_scan_fail_closed} ` +
+      `r3_linux_pgid_zero_compatibility=${st.r3_linux_pgid_zero_compatibility} ` +
+      `r3_process_scan_fail_closed_retained=${st.r3_process_scan_fail_closed_retained} ` +
       r1SelftestLine,
   );
   if (
@@ -3987,7 +4101,8 @@ async function main(): Promise<MainOutcome> {
     !st.parent_first_failure_validation || !st.structured_probe_assertions ||
     !st.forged_worker_kill_rejected || !st.graceful_worker_cleanup ||
     !st.forced_worker_cleanup ||
-    !st.r2_ghl_suite_evidence_validation || !st.r2_process_scan_fail_closed
+    !st.r2_ghl_suite_evidence_validation || !st.r2_process_scan_fail_closed ||
+    !st.r3_linux_pgid_zero_compatibility || !st.r3_process_scan_fail_closed_retained
   ) {
     console.error("HARNESS_ERROR failure-path self-test failed — refusing to run baseline/mutations");
     return { code: 1, tempCleanupComplete: false };
@@ -4008,6 +4123,21 @@ async function main(): Promise<MainOutcome> {
   };
   for (const [name, ok] of Object.entries(r2Markers)) console.log(`${name} ${ok}`);
   const r2AllTrue = Object.values(r2Markers).every(Boolean);
+
+  // ── R3 aggregate markers (Correction R3; derived ONLY from the real
+  //    fixture / subprocess self-tests above, never hard-coded) ──
+  const r3PgidZero = st.r3_linux_pgid_zero_compatibility;
+  const r3ScannerFailClosed = st.r3_process_scan_fail_closed_retained;
+  const r3Subprocess = st.forged_worker_kill_rejected && st.graceful_worker_cleanup && st.forced_worker_cleanup;
+  const r3All = r3PgidZero && r3ScannerFailClosed && r3Subprocess;
+  const r3Markers: Record<string, boolean> = {
+    D04_R3_LINUX_PGID_ZERO_COMPATIBILITY_VERIFIED: r3PgidZero,
+    D04_R3_PROCESS_SCAN_FAIL_CLOSED_RETAINED: r3ScannerFailClosed,
+    D04_R3_REAL_SUBPROCESS_TESTS_PASS: r3Subprocess,
+    D04_R3_ALL_CORRECTION_CHECKS_PASS: r3All,
+  };
+  for (const [name, ok] of Object.entries(r3Markers)) console.log(`${name} ${ok}`);
+  const r3AllTrue = Object.values(r3Markers).every(Boolean);
 
   const repoRoot = process.cwd();
   const prodPath = path.join(repoRoot, PROD_REL);
@@ -4400,7 +4530,7 @@ async function main(): Promise<MainOutcome> {
       // be empty again now — any surviving member means an orphaned
       // descendant. A FAILED residual scan is never read as "clean": it forces
       // harness_error while cleanup of every registered root still runs below.
-      const residualGroups = aliveGroups(suspiciousPgids);
+      const residualGroups = aliveGroups(suspiciousPgids, undefined, "full-run-residual");
       if (!residualGroups.ok) {
         console.error(`HARNESS_ERROR process scan failed for residual worker check: ${residualGroups.error}`);
         sessionCode = 1;
@@ -4508,7 +4638,8 @@ async function main(): Promise<MainOutcome> {
       st.forged_worker_kill_rejected &&
       st.graceful_worker_cleanup &&
       st.forced_worker_cleanup &&
-      r2AllTrue;
+      r2AllTrue &&
+      r3AllTrue;
 
     console.log(`R6_QUICK_MODE_COMPLETE ${quickGood}`);
     return { code: quickGood ? 0 : 1, tempCleanupComplete };
@@ -4569,6 +4700,7 @@ async function main(): Promise<MainOutcome> {
     probeSummary.isolated === 3 &&
     r1AllTrue &&
     r2AllTrue &&
+    r3AllTrue &&
     noResidualChildProcess &&
     realUnchanged &&
     tempCleanupComplete;
