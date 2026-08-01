@@ -67,7 +67,8 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 
 // ═══════════════════════════════════════ Constants
 
@@ -81,6 +82,16 @@ const PER_RUN_TIMEOUT_MS = 300000; // 5 min per targeted-suite run (baseline ~15
 const PROBE_TIMEOUT_MS = 120000; // 2 min per dedicated probe
 const MAX_EVIDENCE_LEN = 400;
 const PROBE_PREFIX = "PROBE_RESULT";
+
+// ── R7 bounded-parallel scheduler constants ──
+const MAX_PARALLEL_MUTATIONS = 2; // fixed two-way bound; not overridable by env/CLI/config
+const WORKER_RESULT_PREFIX = "WORKER_RESULT";
+const WORKER_ROOT_PREFIX = "l04-worker-";
+const REGISTRY_ENV = "L04_WORKER_REGISTRY";
+// Parent-side ceiling for ONE internal worker: suite + probe + archive/cleanup headroom.
+const WORKER_TIMEOUT_MS = PER_RUN_TIMEOUT_MS + PROBE_TIMEOUT_MS + 60000;
+const WORKER_SIGNAL_GRACE_MS = 10000; // bounded cleanup window before fallback SIGKILL
+const SHA40_RE = /^[0-9a-f]{40}$/;
 
 /** Six environment-isolation boolean fields every G/H/L PROBE_RESULT must carry. */
 const ENV_ISOLATION_FIELDS = [
@@ -636,6 +647,17 @@ function restoreMutatedFile(
 const registeredProbeSessions: string[] = [];
 const registeredProbeFiles: string[] = [];
 
+/** Registry of all parent-created worker roots (one per mutation A–N). */
+const registeredWorkerRoots: string[] = [];
+
+/** Worker-reported probe session/file paths, re-verified gone by the parent. */
+const allWorkerProbeSessionPaths: string[] = [];
+const allWorkerProbeFilePaths: string[] = [];
+
+/** Active internal worker child processes, for controlled signal termination. */
+const activeWorkerProcesses = new Set<ChildProcess>();
+let stopping = false;
+
 /**
  * Pure env builder for a probe session. Returns the isolated environment
  * variables that the parent passes to the probe child. Deterministic for
@@ -690,6 +712,7 @@ interface ProbeRunResult {
   probeFileCleanupComplete: boolean;
   probeSessionCleanupComplete: boolean;
   registeredSessionRoot: string;
+  probeFilePath: string;
 }
 
 // ═══════════════════════════════════════ Failure-path self-tests
@@ -700,6 +723,17 @@ interface SelfTestResult {
   evidence_mismatch_restore_cleanup: boolean;
   probe_environment_isolation: boolean;
   probe_cleanup_gate: boolean;
+  // R7 bounded-parallel checks (fast, deterministic, no network, no full suite):
+  bounded_scheduler_peak_two: boolean;
+  worker_root_validation: boolean;
+  worker_kill_cannot_be_forged: boolean;
+  worker_result_unknown_field_rejected: boolean;
+  worker_result_malformed_rejected: boolean;
+  worker_result_duplicate_rejected: boolean;
+  worker_result_missing_rejected: boolean;
+  worker_cleanup_failure_blocks_kill: boolean;
+  records_ordered_A_to_N: boolean;
+  worker_cli_fail_closed: boolean;
 }
 
 /**
@@ -829,7 +863,7 @@ function selfTestProbeEnvironmentIsolation(): boolean {
  * as harness_error (NOT killed) and the overall success gate must be false.
  */
 function selfTestProbeCleanupGate(): boolean {
-  const r = classifyProbeKill({
+  const r: { status: MutStatus; note: string } = classifyProbeKill({
     probeExitZero: true,
     evidenceMatched: true,
     envIsolated: true,
@@ -838,17 +872,27 @@ function selfTestProbeCleanupGate(): boolean {
   });
   if (r.status !== "harness_error") return false;
   // Overall success gate must be false when cleanup fails.
-  const successGate = r.status === "killed";
+  const successGate = (r.status as MutStatus) === "killed";
   return successGate === false;
 }
 
-function runSelfTests(): SelfTestResult {
+async function runSelfTests(): Promise<SelfTestResult> {
   return {
     baseline_failure_cleanup: selfTestBaselineFailureCleanup(),
     target_mismatch_restore_cleanup: selfTestTargetMismatchRestoreCleanup(),
     evidence_mismatch_restore_cleanup: selfTestEvidenceMismatchRestoreCleanup(),
     probe_environment_isolation: selfTestProbeEnvironmentIsolation(),
     probe_cleanup_gate: selfTestProbeCleanupGate(),
+    bounded_scheduler_peak_two: await selfTestBoundedSchedulerPeak(),
+    worker_root_validation: selfTestWorkerRootValidation(),
+    worker_kill_cannot_be_forged: selfTestWorkerKillCannotBeForged(),
+    worker_result_unknown_field_rejected: selfTestWorkerResultUnknownFieldRejected(),
+    worker_result_malformed_rejected: selfTestWorkerResultMalformedRejected(),
+    worker_result_duplicate_rejected: selfTestWorkerResultDuplicateRejected(),
+    worker_result_missing_rejected: selfTestWorkerResultMissingRejected(),
+    worker_cleanup_failure_blocks_kill: selfTestWorkerCleanupFailureBlocksKill(),
+    records_ordered_A_to_N: selfTestRecordsOrderedAToN(),
+    worker_cli_fail_closed: selfTestWorkerCliFailClosed(),
   };
 }
 
@@ -1315,6 +1359,7 @@ function runProbe(m: MutationDef, disp: string, repoRoot: string): ProbeRunResul
     probeFileCleanupComplete,
     probeSessionCleanupComplete,
     registeredSessionRoot: session.sessionRoot,
+    probeFilePath: probeAbs,
   };
 }
 
@@ -1384,6 +1429,151 @@ function stripComments(src: string): string {
     i++;
   }
   return out;
+}
+
+// ── R7 self-tests (fast, deterministic, no network, no full targeted suite) ──
+// These functions live inside the static-checker slice window on purpose: the
+// strings they contain must never be mistaken for production evidence.
+
+function sampleWorkerResult(m: MutationDef, overrides: Partial<WorkerResult> = {}): WorkerResult {
+  return {
+    mutation_id: m.id,
+    status: "killed",
+    evidence_mode: m.evidenceMode,
+    target_matches: 1,
+    test_exit: 1,
+    test_duration_ms: 10,
+    first_failure: m.expectedEvidence,
+    expected_evidence: m.expectedEvidence,
+    probe_exit: "not_applicable",
+    probe_scenario_id: "not_applicable",
+    probe_error_name: "not_applicable",
+    probe_error_code: "not_applicable",
+    probe_error_message: "not_applicable",
+    probe_assertions: "not_applicable",
+    probe_environment_isolated: "not_applicable",
+    probe_file_cleanup_complete: "not_applicable",
+    probe_session_cleanup_complete: "not_applicable",
+    baseline_sha256: "a".repeat(64),
+    mutated_sha256: "b".repeat(64),
+    restored_sha256: "a".repeat(64),
+    restored_byte_identical: true,
+    note: "",
+    archive_extract_duration_ms: 1,
+    cleanup_duration_ms: 1,
+    worker_root_cleanup_complete: true,
+    probe_session_root: "",
+    probe_file_path: "",
+    worker_root: path.join(os.tmpdir(), "l04-st-worker-root"),
+    ...overrides,
+  };
+}
+
+function okOutcome(m: MutationDef): WorkerOutcome {
+  const sample = sampleWorkerResult(m);
+  return { id: m.id, ok: true, note: "", result: sample, exitCode: 0, signal: null, timedOut: false, spawnError: false };
+}
+
+/** The REAL bounded runner, driven by 14 fake tasks, must peak at exactly 2. */
+async function selfTestBoundedSchedulerPeak(): Promise<boolean> {
+  const tasks: BoundedTask<string>[] = Array.from({ length: 14 }, (_, i) => ({
+    id: String.fromCharCode(65 + i),
+    run: async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      return "ok";
+    },
+  }));
+  const run = await runBoundedTasks(tasks, MAX_PARALLEL_MUTATIONS, () => false);
+  return run.scheduled === 14 && run.completed === 14 && run.peakConcurrency === 2 && run.failedIds.length === 0;
+}
+
+/** Duplicate and repo-internal worker roots must be rejected; 14 distinct external roots accepted. */
+function selfTestWorkerRootValidation(): boolean {
+  const repo = path.join(os.tmpdir(), "l04-st-repo");
+  const gitDir = path.join(repo, ".git");
+  const roots = Array.from({ length: 14 }, (_, i) => path.join(os.tmpdir(), `l04-st-root-${i}`));
+  const dup = validateWorkerRoots([...roots.slice(0, 13), roots[0]!], repo, gitDir);
+  const inside = validateWorkerRoots([...roots.slice(0, 13), path.join(repo, "work")], repo, gitDir);
+  const good = validateWorkerRoots(roots, repo, gitDir);
+  return !dup.ok && dup.error.includes("not distinct") && !inside.ok && inside.error.includes("inside repository") && good.ok;
+}
+
+/** A structurally failed worker (e.g. nonzero exit) can never finalize as killed. */
+function selfTestWorkerKillCannotBeForged(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const sample = sampleWorkerResult(def);
+  const validated = validateWorkerResult(sample, def, "A", sample.worker_root, "a".repeat(64));
+  const forged = finalizeWorkerStatus({ id: "A", ok: false, note: "worker exited nonzero (1)", result: validated.result, exitCode: 1, signal: null, timedOut: false, spawnError: false });
+  return validated.ok && forged === "harness_error";
+}
+
+function selfTestWorkerResultUnknownFieldRejected(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const sample = sampleWorkerResult(def) as unknown as Record<string, unknown>;
+  sample["sneaky"] = 1;
+  const v = validateWorkerResult(sample, def, "A", path.join(os.tmpdir(), "l04-st-worker-root"), "a".repeat(64));
+  return !v.ok && v.note.includes("unknown worker record field");
+}
+
+function selfTestWorkerResultMalformedRejected(): boolean {
+  const p1 = parseWorkerStdout("WORKER_RESULT {not json");
+  const p2 = parseWorkerStdout("hello\n");
+  const p3 = parseWorkerStdout("WORKER_RESULT {}\nWORKER_RESULT {}\n");
+  return (
+    !p1.ok && p1.note.includes("malformed worker record") &&
+    !p2.ok && p2.note.includes("no worker record") &&
+    !p3.ok && p3.note.includes("multiple worker records")
+  );
+}
+
+function selfTestWorkerResultDuplicateRejected(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const merged = mergeWorkerOutcomes([okOutcome(def), okOutcome(def)], MUTATIONS, "a".repeat(64));
+  return merged.error !== "" && merged.duplicateIds.includes("A");
+}
+
+function selfTestWorkerResultMissingRejected(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const merged = mergeWorkerOutcomes([okOutcome(def)], MUTATIONS, "a".repeat(64));
+  return merged.error !== "" && merged.missingIds.includes("B");
+}
+
+function selfTestWorkerCleanupFailureBlocksKill(): boolean {
+  const def = MUTATIONS.find((m) => m.id === "A")!;
+  const sample = sampleWorkerResult(def, { restored_byte_identical: false });
+  const v = validateWorkerResult(sample, def, "A", sample.worker_root, "a".repeat(64));
+  return !v.ok && v.note.includes("restored byte identity");
+}
+
+/** Shuffled worker outcomes must merge into the fixed A–N record order. */
+function selfTestRecordsOrderedAToN(): boolean {
+  const outcomes: WorkerOutcome[] = [];
+  for (let i = MUTATIONS.length - 1; i >= 0; i--) outcomes.push(okOutcome(MUTATIONS[i]!));
+  const merged = mergeWorkerOutcomes(outcomes, MUTATIONS, "a".repeat(64));
+  return merged.error === "" && merged.records.map((r) => r.id).join("") === "ABCDEFGHIJKLMN";
+}
+
+/** Internal-worker CLI must fail closed on every invalid/duplicate/mixed argument. */
+function selfTestWorkerCliFailClosed(): boolean {
+  const head = "a".repeat(40);
+  const root = path.join(os.tmpdir(), "l04-st-root");
+  const cwd = process.cwd();
+  const cases: [string[], string][] = [
+    [["--internal-worker", "--mutation=Z", "--expected-head=" + head, "--worker-root=" + root], "invalid mutation id"],
+    [["--internal-worker", "--mutation=A", "--worker-root=" + root], "missing expected head"],
+    [["--internal-worker", "--mutation=A", "--expected-head=zz", "--worker-root=" + root], "invalid expected head"],
+    [["--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=relative"], "worker root not absolute"],
+    [["--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + path.join(cwd, "scripts")], "worker root inside repository"],
+    [["--mode=full", "--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "unknown internal worker argument"],
+    [["--internal-worker", "--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root], "duplicate --internal-worker flag"],
+    [["--internal-worker", "--mutation=A", "--mutation=B", "--expected-head=" + head, "--worker-root=" + root], "duplicate --mutation flag"],
+  ];
+  for (const [args, expect] of cases) {
+    const r = parseWorkerArgs(args);
+    if (r.error === "" || !r.error.includes(expect)) return false;
+  }
+  const good = parseWorkerArgs(["--internal-worker", "--mutation=A", "--expected-head=" + head, "--worker-root=" + root]);
+  return good.error === "" && good.kind === "worker" && good.mutationId === "A";
 }
 
 /**
@@ -1496,6 +1686,80 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
   // 22. Child no longer emits the misleading fixture_cleanup_complete field.
   const childNoFixtureCleanup = !bpsBody.includes("fixture_cleanup" + "_complete");
 
+  // ── R7 checks (bounded-parallel scheduler / internal worker) ──
+
+  // 23. The fixed two-way bound is defined and used by the bounded scheduler.
+  const boundedParallelismLimit =
+    /const MAX_PARALLEL_MUTATIONS = 2/.test(code) &&
+    /active\.size < limit/.test(code) &&
+    code.includes("runBoundedTasks(");
+
+  // 24. Internal worker CLI requires --expected-head (missing => fail-closed).
+  const workerRequiresExpectedHead =
+    code.includes('startsWith("--expected-head=")') && code.includes("missing expected head");
+
+  // 25. Internal worker CLI requires a valid A–N mutation id.
+  const workerRequiresValidMutationId =
+    code.includes("MUTATIONS.some((m) => m.id === result.mutationId)") && code.includes("invalid mutation id");
+
+  // 26. Worker roots must be absolute and outside the repository.
+  const workerRequiresExternalRoot =
+    code.includes("!path.isAbsolute(root)") && code.includes("root.startsWith(repoRoot");
+
+  // 27. Worker roots must be distinct (Set-size equality check).
+  const workerRootsDistinct = code.includes("new Set(roots).size !== roots.length");
+
+  // 28. The scheduler gate never exceeds the fixed bound before starting a task.
+  const schedulerNeverExceedsTwo =
+    /while \(next < queue\.length && active\.size < limit\)/.test(code) &&
+    code.includes("MAX_PARALLEL_MUTATIONS");
+
+  // 29. A worker that exits nonzero (or is killed/timed out) can never forge a kill.
+  const workerFailureCannotForgeKill =
+    code.includes("worker exited nonzero") && code.includes('if (!outcome.ok) return "harness_error"');
+
+  // 30. Cleanup failure blocks success: restore-identity and probe-cleanup demotions.
+  const workerCleanupFailureBlocksSuccess =
+    code.includes('!rest.identical && rec.status === "killed"') &&
+    code.includes("!probeResult.probeFileCleanupComplete || !probeResult.probeSessionCleanupComplete");
+
+  // 31. Duplicate worker records are rejected by the merge.
+  const duplicateWorkerRecordRejected =
+    code.includes("seen.has(m.id)") && code.includes("duplicateIds");
+
+  // 32. Missing worker records are rejected by the merge.
+  const missingWorkerRecordRejected =
+    code.includes("missingIds.push(m.id)") && code.includes("missingIds");
+
+  // 33. Malformed worker records are rejected by the stdout parser.
+  const malformedWorkerRecordRejected =
+    code.includes("malformed worker record") && code.includes("JSON.parse");
+
+  // 34. Unknown worker-record fields are rejected by the allowlist validator.
+  const unknownWorkerRecordRejected = code.includes("unknown worker record field");
+
+  // 35. Official records are emitted in the fixed A–N order.
+  const recordsEmittedAToN =
+    code.includes("for (const rec of records) emitRecord(rec)") &&
+    /for \(const m of mutations\)/.test(code);
+
+  // 36. Quick-mode external contract is retained (no full scheduler in quick).
+  const quickModeContractUnchanged =
+    code.includes("R6_QUICK_MODE true") && code.includes("QUICK_PROBE_SUMMARY") && code.includes('mode === "quick"');
+
+  // 37. Full mode retains all 14 mutations (task list built from MUTATIONS).
+  const fullRetains14Mutations =
+    code.includes("MUTATIONS.map((m, i) =>") && code.includes("roots.length !== MUTATIONS.length");
+
+  // 38. G/H/L workers run the full targeted suite PLUS the dedicated probe.
+  const iwStart = code.indexOf("async function runInternalWorker(");
+  const iwEnd = code.indexOf("\nfunction spawnWorkerProcess(", iwStart >= 0 ? iwStart : 0);
+  const iwBody = iwStart >= 0 && iwEnd > iwStart ? code.slice(iwStart, iwEnd) : "";
+  const fullRetainsGHLSuitPlusProbe =
+    iwBody.includes("runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS)") &&
+    iwBody.includes("runProbe(m, disp, repoRoot)") &&
+    iwBody.includes("dedicated_probe");
+
   return [
     { name: "expectedErrorCode_used_in_comparison", ok: errorCodeUsed },
     { name: "no_uncaught_allowance_field", ok: noAllowUncaught },
@@ -1519,6 +1783,22 @@ function runStaticChecks(harnessSource: string): StaticCheck[] {
     { name: "default_mode_is_full", ok: defaultFull },
     { name: "quick_mode_skips_full_baseline", ok: quickSkipsFull },
     { name: "child_no_fixture_cleanup_complete", ok: childNoFixtureCleanup },
+    { name: "bounded_parallelism_limit_enforced", ok: boundedParallelismLimit },
+    { name: "worker_requires_expected_head", ok: workerRequiresExpectedHead },
+    { name: "worker_requires_valid_mutation_id", ok: workerRequiresValidMutationId },
+    { name: "worker_requires_external_root", ok: workerRequiresExternalRoot },
+    { name: "worker_roots_are_distinct", ok: workerRootsDistinct },
+    { name: "scheduler_never_exceeds_two", ok: schedulerNeverExceedsTwo },
+    { name: "worker_failure_cannot_forge_kill", ok: workerFailureCannotForgeKill },
+    { name: "worker_cleanup_failure_blocks_success", ok: workerCleanupFailureBlocksSuccess },
+    { name: "duplicate_worker_record_rejected", ok: duplicateWorkerRecordRejected },
+    { name: "missing_worker_record_rejected", ok: missingWorkerRecordRejected },
+    { name: "malformed_worker_record_rejected", ok: malformedWorkerRecordRejected },
+    { name: "unknown_worker_record_rejected", ok: unknownWorkerRecordRejected },
+    { name: "records_emitted_A_to_N", ok: recordsEmittedAToN },
+    { name: "quick_mode_contract_unchanged", ok: quickModeContractUnchanged },
+    { name: "full_retains_14_mutations", ok: fullRetains14Mutations },
+    { name: "full_retains_G_H_L_suite_plus_probe", ok: fullRetainsGHLSuitPlusProbe },
   ];
 }
 
@@ -1546,11 +1826,951 @@ interface MainOutcome {
   tempCleanupComplete: boolean;
 }
 
+// ═══════════════════════════════════════ R7: bounded-parallel worker runtime
+
+/** A task with a stable id for the fixed-capacity bounded scheduler. */
+interface BoundedTask<T> {
+  readonly id: string;
+  readonly run: () => Promise<T>;
+}
+
+interface BoundedRun<T> {
+  readonly scheduled: number;
+  readonly completed: number;
+  readonly peakConcurrency: number;
+  readonly wallMs: number;
+  readonly results: Map<string, T>;
+  readonly failedIds: readonly string[];
+  readonly failNote: string;
+}
+
+/**
+ * Fixed-capacity bounded scheduler. Never starts more than `limit` concurrent
+ * tasks; the first task failure stops further scheduling while active tasks
+ * drain (so their cleanup results are still collected). Used by BOTH the full
+ * mode scheduler and the bounded-parallelism self-test.
+ */
+async function runBoundedTasks<T>(
+  tasks: readonly BoundedTask<T>[],
+  limit: number,
+  isStopped: () => boolean,
+): Promise<BoundedRun<T>> {
+  const queue = [...tasks];
+  const results = new Map<string, T>();
+  const active = new Map<string, Promise<void>>();
+  const failedIds: string[] = [];
+  let next = 0;
+  let peak = 0;
+  let failNote = "";
+  const wallStart = Date.now();
+
+  const startTask = (task: BoundedTask<T>): void => {
+    const p = (async () => {
+      try {
+        const value = await task.run();
+        results.set(task.id, value);
+      } catch (e) {
+        if (failedIds.length === 0) {
+          failNote = (e instanceof Error ? e.message : String(e)).slice(0, MAX_EVIDENCE_LEN);
+        }
+        failedIds.push(task.id);
+      } finally {
+        active.delete(task.id);
+      }
+    })();
+    active.set(task.id, p);
+    if (active.size > peak) peak = active.size;
+  };
+
+  while (next < queue.length || active.size > 0) {
+    while (next < queue.length && active.size < limit) {
+      if (isStopped() || failedIds.length > 0) break;
+      startTask(queue[next]!);
+      next++;
+    }
+    if (active.size === 0) break;
+    await Promise.race([...active.values()]);
+  }
+
+  return {
+    scheduled: next,
+    completed: results.size,
+    peakConcurrency: peak,
+    wallMs: Date.now() - wallStart,
+    results,
+    failedIds,
+    failNote,
+  };
+}
+
+/** Strictly typed, allowlisted content of one WORKER_RESULT record. */
+interface WorkerResult {
+  mutation_id: string;
+  status: MutStatus;
+  evidence_mode: EvidenceMode;
+  target_matches: number;
+  test_exit: number | null;
+  test_duration_ms: number;
+  first_failure: string;
+  expected_evidence: string;
+  probe_exit: string;
+  probe_scenario_id: string;
+  probe_error_name: string;
+  probe_error_code: string;
+  probe_error_message: string;
+  probe_assertions: string;
+  probe_environment_isolated: string;
+  probe_file_cleanup_complete: string;
+  probe_session_cleanup_complete: string;
+  baseline_sha256: string;
+  mutated_sha256: string;
+  restored_sha256: string;
+  restored_byte_identical: boolean;
+  note: string;
+  archive_extract_duration_ms: number;
+  cleanup_duration_ms: number;
+  worker_root_cleanup_complete: boolean;
+  probe_session_root: string;
+  probe_file_path: string;
+  worker_root: string;
+}
+
+/** Allowlist of every field a worker result may carry; anything else is rejected. */
+const WORKER_RESULT_FIELDS: ReadonlySet<string> = new Set([
+  "mutation_id", "status", "evidence_mode", "target_matches", "test_exit",
+  "test_duration_ms", "first_failure", "expected_evidence", "probe_exit",
+  "probe_scenario_id", "probe_error_name", "probe_error_code", "probe_error_message",
+  "probe_assertions", "probe_environment_isolated", "probe_file_cleanup_complete",
+  "probe_session_cleanup_complete", "baseline_sha256", "mutated_sha256",
+  "restored_sha256", "restored_byte_identical", "note", "archive_extract_duration_ms",
+  "cleanup_duration_ms", "worker_root_cleanup_complete", "probe_session_root",
+  "probe_file_path", "worker_root",
+]);
+
+const WORKER_STATUSES: ReadonlySet<string> = new Set(["killed", "survived", "invalid", "harness_error"]);
+const SHA64_RE = /^[0-9a-f]{64}$/;
+
+interface ParsedCli {
+  kind: "public" | "worker";
+  mode: "full" | "quick";
+  mutationId: string;
+  expectedHead: string;
+  workerRoot: string;
+  error: string;
+}
+
+/**
+ * Internal-worker CLI. All arguments are required; duplicates, unknown
+ * arguments, out-of-range mutation ids, malformed HEADs and repo-internal
+ * roots fail closed. Public --mode flags mixed with worker flags also fail.
+ */
+function parseWorkerArgs(args: readonly string[]): ParsedCli {
+  const result: ParsedCli = { kind: "worker", mode: "full", mutationId: "", expectedHead: "", workerRoot: "", error: "" };
+  const seen = new Set<string>();
+  for (const arg of args) {
+    if (arg === "--internal-worker") {
+      if (seen.has("marker")) return { ...result, error: "duplicate --internal-worker flag" };
+      seen.add("marker");
+    } else if (arg.startsWith("--mutation=")) {
+      if (seen.has("mutation")) return { ...result, error: "duplicate --mutation flag" };
+      seen.add("mutation");
+      result.mutationId = arg.slice("--mutation=".length);
+    } else if (arg.startsWith("--expected-head=")) {
+      if (seen.has("expected-head")) return { ...result, error: "duplicate --expected-head flag" };
+      seen.add("expected-head");
+      result.expectedHead = arg.slice("--expected-head=".length);
+    } else if (arg.startsWith("--worker-root=")) {
+      if (seen.has("worker-root")) return { ...result, error: "duplicate --worker-root flag" };
+      seen.add("worker-root");
+      result.workerRoot = arg.slice("--worker-root=".length);
+    } else {
+      return { ...result, error: `unknown internal worker argument: ${arg}` };
+    }
+  }
+  if (!seen.has("marker")) return { ...result, error: "missing --internal-worker marker" };
+  if (!seen.has("mutation")) return { ...result, error: "missing mutation id" };
+  if (!seen.has("expected-head")) return { ...result, error: "missing expected head" };
+  if (!seen.has("worker-root")) return { ...result, error: "missing worker root" };
+  if (!MUTATIONS.some((m) => m.id === result.mutationId))
+    return { ...result, error: "invalid mutation id" };
+  if (!SHA40_RE.test(result.expectedHead))
+    return { ...result, error: "invalid expected head" };
+  if (!path.isAbsolute(result.workerRoot))
+    return { ...result, error: "worker root not absolute" };
+  const cwd = process.cwd();
+  const normalizeForContainment = (p: string): string => {
+    try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+  };
+  const root = normalizeForContainment(result.workerRoot);
+  const repo = normalizeForContainment(cwd);
+  if (root === repo || root.startsWith(repo + path.sep))
+    return { ...result, error: "worker root inside repository" };
+  return result;
+}
+
+/** Public CLI is unchanged (--mode=full|quick, default full); worker flags mixed in fail closed. */
+function parseCli(args: readonly string[]): ParsedCli {
+  if (args.some((a) => a === "--internal-worker")) return parseWorkerArgs(args);
+  const publicCli = parseCliMode(args);
+  return { kind: "public", mode: publicCli.mode, mutationId: "", expectedHead: "", workerRoot: "", error: publicCli.error };
+}
+
+/** All 14 worker roots must be absolute, distinct, and outside the repo + git common dir. */
+function validateWorkerRoots(
+  roots: readonly string[],
+  repoRoot: string,
+  gitCommonDir: string,
+): { ok: boolean; error: string } {
+  if (roots.length !== MUTATIONS.length)
+    return { ok: false, error: `expected ${MUTATIONS.length} worker roots, got ${roots.length}` };
+  if (new Set(roots).size !== roots.length)
+    return { ok: false, error: "worker roots are not distinct" };
+  for (const root of roots) {
+    if (!path.isAbsolute(root)) return { ok: false, error: `worker root not absolute: ${root}` };
+    if (root === repoRoot || root.startsWith(repoRoot + path.sep))
+      return { ok: false, error: `worker root inside repository: ${root}` };
+    if (gitCommonDir !== "" && (root === gitCommonDir || root.startsWith(gitCommonDir + path.sep)))
+      return { ok: false, error: `worker root inside git common dir: ${root}` };
+  }
+  return { ok: true, error: "" };
+}
+
+interface StdoutParse {
+  ok: boolean;
+  note: string;
+  raw: unknown;
+}
+
+/** Parse EXACTLY ONE `WORKER_RESULT {json}` line from a worker's stdout. */
+function parseWorkerStdout(stdout: string): StdoutParse {
+  const records: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith(WORKER_RESULT_PREFIX + " ")) records.push(t.slice(WORKER_RESULT_PREFIX.length + 1));
+    else if (t === WORKER_RESULT_PREFIX) records.push("");
+  }
+  if (records.length === 0) return { ok: false, note: "no worker record", raw: null };
+  if (records.length !== 1) return { ok: false, note: `multiple worker records: ${records.length}`, raw: null };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(records[0]!);
+  } catch {
+    return { ok: false, note: "malformed worker record JSON", raw: null };
+  }
+  return { ok: true, note: "", raw };
+}
+
+interface ResultValidation {
+  ok: boolean;
+  note: string;
+  result: WorkerResult | null;
+}
+
+function strFieldOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
+/**
+ * Strict allowlist + type + cross-field validation of one worker result.
+ * A result can never be accepted as killed unless targetMatches=1, restored
+ * bytes are identical, and (for G/H/L) cleanup, environment isolation and the
+ * FIXED scenario evidence all match the MutationDef.
+ */
+function validateWorkerResult(
+  raw: unknown,
+  def: MutationDef,
+  expectedId: string,
+  expectedRoot: string,
+  parentBaselineSha: string,
+): ResultValidation {
+  const fail = (note: string): ResultValidation => ({ ok: false, note, result: null });
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return fail("worker record not an object");
+  const obj = raw as Record<string, unknown>;
+  if (Object.getPrototypeOf(obj) !== Object.prototype) return fail("worker record has unknown prototype");
+  for (const k of Object.keys(obj)) {
+    if (!WORKER_RESULT_FIELDS.has(k)) return fail(`unknown worker record field: ${k}`);
+  }
+  const need: Record<string, (v: unknown) => string | null> = {
+    mutation_id: strFieldOrNull,
+    status: strFieldOrNull,
+    evidence_mode: strFieldOrNull,
+    first_failure: strFieldOrNull,
+    expected_evidence: strFieldOrNull,
+    probe_exit: strFieldOrNull,
+    probe_scenario_id: strFieldOrNull,
+    probe_error_name: strFieldOrNull,
+    probe_error_code: strFieldOrNull,
+    probe_error_message: strFieldOrNull,
+    probe_assertions: strFieldOrNull,
+    probe_environment_isolated: strFieldOrNull,
+    probe_file_cleanup_complete: strFieldOrNull,
+    probe_session_cleanup_complete: strFieldOrNull,
+    baseline_sha256: strFieldOrNull,
+    mutated_sha256: strFieldOrNull,
+    restored_sha256: strFieldOrNull,
+    note: strFieldOrNull,
+    probe_session_root: strFieldOrNull,
+    probe_file_path: strFieldOrNull,
+    worker_root: strFieldOrNull,
+  };
+  for (const [k, fn] of Object.entries(need)) {
+    const v = obj[k];
+    if (v === undefined) return fail(`missing worker record field: ${k}`);
+    if (fn(v) === null) return fail(`worker record field ${k} has wrong type`);
+  }
+  const r: WorkerResult = {
+    mutation_id: obj.mutation_id as string,
+    status: obj.status as MutStatus,
+    evidence_mode: obj.evidence_mode as EvidenceMode,
+    target_matches: obj.target_matches as number,
+    test_exit: obj.test_exit as number | null,
+    test_duration_ms: obj.test_duration_ms as number,
+    first_failure: obj.first_failure as string,
+    expected_evidence: obj.expected_evidence as string,
+    probe_exit: obj.probe_exit as string,
+    probe_scenario_id: obj.probe_scenario_id as string,
+    probe_error_name: obj.probe_error_name as string,
+    probe_error_code: obj.probe_error_code as string,
+    probe_error_message: obj.probe_error_message as string,
+    probe_assertions: obj.probe_assertions as string,
+    probe_environment_isolated: obj.probe_environment_isolated as string,
+    probe_file_cleanup_complete: obj.probe_file_cleanup_complete as string,
+    probe_session_cleanup_complete: obj.probe_session_cleanup_complete as string,
+    baseline_sha256: obj.baseline_sha256 as string,
+    mutated_sha256: obj.mutated_sha256 as string,
+    restored_sha256: obj.restored_sha256 as string,
+    restored_byte_identical: obj.restored_byte_identical as boolean,
+    note: obj.note as string,
+    archive_extract_duration_ms: obj.archive_extract_duration_ms as number,
+    cleanup_duration_ms: obj.cleanup_duration_ms as number,
+    worker_root_cleanup_complete: obj.worker_root_cleanup_complete as boolean,
+    probe_session_root: obj.probe_session_root as string,
+    probe_file_path: obj.probe_file_path as string,
+    worker_root: obj.worker_root as string,
+  };
+
+  // ── scalar type checks ──
+  if (!WORKER_STATUSES.has(r.status)) return fail(`unknown worker status: ${r.status}`);
+  if (r.evidence_mode !== def.evidenceMode) return fail("evidence_mode does not match MutationDef");
+  if (r.mutation_id !== expectedId) return fail(`wrong mutation id: ${r.mutation_id}`);
+  if (!Number.isInteger(r.target_matches) || r.target_matches < 0) return fail("target_matches not a non-negative integer");
+  if (r.test_exit !== null && !Number.isInteger(r.test_exit)) return fail("test_exit not an integer or null");
+  if (!Number.isInteger(r.test_duration_ms) || r.test_duration_ms < 0) return fail("test_duration_ms not a non-negative integer");
+  if (!Number.isInteger(r.archive_extract_duration_ms) || r.archive_extract_duration_ms < 0) return fail("archive_extract_duration_ms not a non-negative integer");
+  if (!Number.isInteger(r.cleanup_duration_ms) || r.cleanup_duration_ms < 0) return fail("cleanup_duration_ms not a non-negative integer");
+  if (typeof r.restored_byte_identical !== "boolean") return fail("restored_byte_identical not a boolean");
+  if (typeof r.worker_root_cleanup_complete !== "boolean") return fail("worker_root_cleanup_complete not a boolean");
+  if (r.status !== "harness_error" && !SHA64_RE.test(r.baseline_sha256)) return fail("baseline_sha256 not a valid SHA-256");
+  if (r.status !== "harness_error" && r.baseline_sha256 !== parentBaselineSha) return fail("baseline_sha256 does not match parent baseline");
+  if (r.mutated_sha256 !== "" && !SHA64_RE.test(r.mutated_sha256)) return fail("mutated_sha256 not a valid SHA-256");
+  if (r.restored_sha256 !== "" && !SHA64_RE.test(r.restored_sha256)) return fail("restored_sha256 not a valid SHA-256");
+  if (r.worker_root !== expectedRoot) return fail("worker_root does not match scheduled root");
+  if (!path.isAbsolute(r.worker_root)) return fail("worker_root not absolute");
+  const truthy = (s: string): boolean => s === "true" || s === "false" || s === "not_applicable";
+  if (!truthy(r.probe_environment_isolated)) return fail("probe_environment_isolated invalid");
+  if (!truthy(r.probe_file_cleanup_complete)) return fail("probe_file_cleanup_complete invalid");
+  if (!truthy(r.probe_session_cleanup_complete)) return fail("probe_session_cleanup_complete invalid");
+
+  // ── cross-field kill rules ──
+  if (r.status === "killed") {
+    if (r.target_matches !== 1) return fail("killed with target match count != 1");
+    if (!r.restored_byte_identical) return fail("killed without restored byte identity");
+    if (r.restored_sha256 !== r.baseline_sha256) return fail("killed without restored SHA equal to baseline");
+    if (r.evidence_mode === "dedicated_probe") {
+      if (r.probe_environment_isolated !== "true") return fail("killed probe without environment isolation");
+      if (r.probe_file_cleanup_complete !== "true" || r.probe_session_cleanup_complete !== "true")
+        return fail("killed probe without complete cleanup");
+      if (r.probe_scenario_id !== def.probeScenarioId || r.probe_error_name !== def.expectedErrorName ||
+          r.probe_error_code !== def.expectedErrorCode || r.probe_error_message !== def.expectedErrorMessage)
+        return fail("killed probe without fixed evidence match");
+    }
+  }
+  return { ok: true, note: "", result: r };
+}
+
+interface WorkerOutcome {
+  readonly id: string;
+  readonly ok: boolean;
+  readonly note: string;
+  readonly result: WorkerResult | null;
+  readonly exitCode: number | null;
+  readonly signal: string | null;
+  readonly timedOut: boolean;
+  readonly spawnError: boolean;
+}
+
+/**
+ * The parent never trusts the worker exit code alone AND never lets a
+ * nonzero/signalled/timed-out worker forge a kill: any structurally failed
+ * worker yields harness_error.
+ */
+function finalizeWorkerStatus(outcome: WorkerOutcome): MutStatus {
+  if (!outcome.ok) return "harness_error";
+  return outcome.result!.status;
+}
+
+function buildRecordFromResult(m: MutationDef, r: WorkerResult): MutationRecord {
+  const rec = newRecord(m, r.target_matches, r.baseline_sha256);
+  rec.status = r.status;
+  rec.testExit = r.test_exit;
+  rec.durationMs = r.test_duration_ms;
+  rec.firstFailure = r.first_failure;
+  rec.probeExit = r.probe_exit;
+  rec.probeScenarioId = r.probe_scenario_id;
+  rec.probeErrorName = r.probe_error_name;
+  rec.probeErrorCode = r.probe_error_code;
+  rec.probeErrorMessage = r.probe_error_message;
+  rec.probeAssertions = r.probe_assertions;
+  rec.probeEnvironmentIsolated = r.probe_environment_isolated;
+  rec.probeFileCleanupComplete = r.probe_file_cleanup_complete;
+  rec.probeSessionCleanupComplete = r.probe_session_cleanup_complete;
+  rec.mutatedSha256 = r.mutated_sha256;
+  rec.restoredSha256 = r.restored_sha256;
+  rec.restoredByteIdentical = r.restored_byte_identical;
+  rec.note = r.note;
+  return rec;
+}
+
+interface MergedOutcomes {
+  records: MutationRecord[];
+  error: string;
+  missingIds: string[];
+  duplicateIds: string[];
+  sumTestDurationMs: number;
+  sumArchiveExtractMs: number;
+  sumCleanupMs: number;
+}
+
+/**
+ * Merge per-worker outcomes into official MutationRecords in fixed A–N order.
+ * Missing, duplicate, or unknown-id outcomes are REJECTED (the error is
+ * non-empty and the overall gate fails).
+ */
+function mergeWorkerOutcomes(
+  outcomeList: readonly WorkerOutcome[],
+  mutations: readonly MutationDef[],
+  parentBaselineSha: string,
+): MergedOutcomes {
+  const byId = new Map<string, WorkerOutcome>();
+  const duplicateIds: string[] = [];
+  for (const o of outcomeList) {
+    if (byId.has(o.id)) duplicateIds.push(o.id);
+    else byId.set(o.id, o);
+  }
+  const records: MutationRecord[] = [];
+  const missingIds: string[] = [];
+  const unknownIds = [...byId.keys()].filter((id) => !mutations.some((m) => m.id === id));
+  let sumTest = 0;
+  let sumArchive = 0;
+  let sumCleanup = 0;
+  for (const m of mutations) {
+    const outcome = byId.get(m.id);
+    if (!outcome) {
+      missingIds.push(m.id);
+      continue;
+    }
+    if (!outcome.ok) {
+      const rec = newRecord(m, 0, parentBaselineSha);
+      rec.status = "harness_error";
+      rec.note = outcome.note.slice(0, MAX_EVIDENCE_LEN);
+      records.push(rec);
+      continue;
+    }
+    const r = outcome.result!;
+    sumTest += r.test_duration_ms;
+    sumArchive += r.archive_extract_duration_ms;
+    sumCleanup += r.cleanup_duration_ms;
+    const rec = buildRecordFromResult(m, r);
+    rec.status = finalizeWorkerStatus(outcome);
+    records.push(rec);
+  }
+  const error =
+    missingIds.length > 0 || duplicateIds.length > 0 || unknownIds.length > 0
+      ? `worker record merge failed: missing=${missingIds.join(",")} duplicate=${duplicateIds.join(",")} unknown=${unknownIds.join(",")}`
+      : "";
+  return { records, error, missingIds, duplicateIds, sumTestDurationMs: sumTest, sumArchiveExtractMs: sumArchive, sumCleanupMs: sumCleanup };
+}
+
+function buildWorkerResult(
+  rec: MutationRecord,
+  m: MutationDef,
+  archiveExtractMs: number,
+  probeSessionRoot: string,
+  probeFilePath: string,
+  workerRoot: string,
+): WorkerResult {
+  return {
+    mutation_id: rec.id,
+    status: rec.status,
+    evidence_mode: rec.evidenceMode,
+    target_matches: rec.targetMatches,
+    test_exit: rec.testExit,
+    test_duration_ms: rec.durationMs,
+    first_failure: rec.firstFailure,
+    expected_evidence: rec.expectedEvidence,
+    probe_exit: rec.probeExit,
+    probe_scenario_id: rec.probeScenarioId,
+    probe_error_name: rec.probeErrorName,
+    probe_error_code: rec.probeErrorCode,
+    probe_error_message: rec.probeErrorMessage,
+    probe_assertions: rec.probeAssertions,
+    probe_environment_isolated: rec.probeEnvironmentIsolated,
+    probe_file_cleanup_complete: rec.probeFileCleanupComplete,
+    probe_session_cleanup_complete: rec.probeSessionCleanupComplete,
+    baseline_sha256: rec.baselineSha256,
+    mutated_sha256: rec.mutatedSha256,
+    restored_sha256: rec.restoredSha256,
+    restored_byte_identical: rec.restoredByteIdentical,
+    note: rec.note,
+    archive_extract_duration_ms: archiveExtractMs,
+    cleanup_duration_ms: 0,
+    worker_root_cleanup_complete: false,
+    probe_session_root: probeSessionRoot,
+    probe_file_path: probeFilePath,
+    worker_root: workerRoot,
+  };
+}
+
+function workerHarnessError(m: MutationDef, cli: ParsedCli, note: string): WorkerResult {
+  return {
+    mutation_id: cli.mutationId,
+    status: "harness_error",
+    evidence_mode: m.evidenceMode,
+    target_matches: 0,
+    test_exit: null,
+    test_duration_ms: 0,
+    first_failure: "",
+    expected_evidence: m.expectedEvidence,
+    probe_exit: "not_applicable",
+    probe_scenario_id: "not_applicable",
+    probe_error_name: "not_applicable",
+    probe_error_code: "not_applicable",
+    probe_error_message: "not_applicable",
+    probe_assertions: "not_applicable",
+    probe_environment_isolated: "not_applicable",
+    probe_file_cleanup_complete: "not_applicable",
+    probe_session_cleanup_complete: "not_applicable",
+    baseline_sha256: "",
+    mutated_sha256: "",
+    restored_sha256: "",
+    restored_byte_identical: false,
+    note: note.slice(0, MAX_EVIDENCE_LEN),
+    archive_extract_duration_ms: 0,
+    cleanup_duration_ms: 0,
+    worker_root_cleanup_complete: false,
+    probe_session_root: "",
+    probe_file_path: "",
+    worker_root: cli.workerRoot,
+  };
+}
+
+interface WorkerRegistry {
+  expectedHead: string;
+  repoRoot: string;
+  gitCommonDir: string;
+  roots: string[];
+}
+
+function readWorkerRegistry(): { registry: WorkerRegistry; error: string } {
+  const empty: WorkerRegistry = { expectedHead: "", repoRoot: "", gitCommonDir: "", roots: [] };
+  const regPath = process.env[REGISTRY_ENV] ?? "";
+  if (regPath === "") return { registry: empty, error: "worker registry env missing" };
+  let raw: string;
+  try {
+    raw = fs.readFileSync(regPath, "utf8");
+  } catch (e) {
+    return { registry: empty, error: `worker registry unreadable: ${(e as Error).message}` };
+  }
+  try {
+    const obj = JSON.parse(raw) as WorkerRegistry;
+    if (
+      obj === null || typeof obj !== "object" || !Array.isArray(obj.roots) ||
+      typeof obj.repoRoot !== "string" || typeof obj.gitCommonDir !== "string" ||
+      typeof obj.expectedHead !== "string"
+    ) {
+      return { registry: empty, error: "worker registry malformed" };
+    }
+    return { registry: obj, error: "" };
+  } catch {
+    return { registry: empty, error: "worker registry malformed" };
+  }
+}
+
+function gitHeadShaAt(repoRoot: string): string {
+  const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" });
+  if (r.status !== 0) throw new Error("git rev-parse HEAD failed");
+  return r.stdout.trim();
+}
+
+function gitShowHeadAt(repoRoot: string, rel: string, sha: string): Buffer {
+  const r = spawnSync("git", ["show", `${sha}:${rel}`], { cwd: repoRoot, maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`git show ${sha}:${rel} failed`);
+  return r.stdout as Buffer;
+}
+
+function gitCommonDirAt(repoRoot: string): string {
+  const r = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: repoRoot, encoding: "utf8" });
+  if (r.status !== 0) throw new Error("git rev-parse --git-common-dir failed");
+  const out = r.stdout.trim();
+  return path.isAbsolute(out) ? path.normalize(out) : path.resolve(repoRoot, out);
+}
+
+/**
+ * Execute ONE mutation inside a worker against the worker's own disposable
+ * copy: exact target lookup, byte mutation, full targeted suite, dedicated
+ * probe (G/H/L), then byte-exact restore re-hashed in a finally.
+ */
+async function executeSingleMutation(
+  m: MutationDef,
+  disp: string,
+  repoRoot: string,
+  archiveExtractMs: number,
+  cli: ParsedCli,
+): Promise<WorkerResult> {
+  const dispProd = path.join(disp, PROD_REL);
+  const original = fs.readFileSync(dispProd);
+  const originalSha = sha256Buf(original);
+  const text = original.toString("utf8");
+
+  let targetMatches = 0;
+  let idx = text.indexOf(m.target);
+  while (idx >= 0) {
+    targetMatches++;
+    idx = text.indexOf(m.target, idx + m.target.length);
+  }
+
+  const rec = newRecord(m, targetMatches, originalSha);
+  let probeSessionRoot = "";
+  let probeFilePath = "";
+
+  if (targetMatches !== 1) {
+    rec.status = "invalid";
+    rec.note = `target match count ${targetMatches} != 1`;
+  } else {
+    const mutatedText = text.replace(m.target, m.replacement);
+    const mutatedBytes = Buffer.from(mutatedText, "utf8");
+    rec.mutatedSha256 = sha256Buf(mutatedBytes);
+    if (rec.mutatedSha256 === originalSha) {
+      rec.status = "invalid";
+      rec.note = "replacement did not change bytes";
+    } else {
+      try {
+        fs.writeFileSync(dispProd, mutatedBytes);
+
+        if (m.evidenceMode === "first_failure") {
+          // ── first_failure: full targeted suite, then the existing classifier ──
+          const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+          rec.testExit = run.exitCode;
+          rec.durationMs = run.durationMs;
+          const ff = firstFailLine(run.combined);
+          rec.firstFailure = ff ?? "";
+          const cls = classifyFirstFailure({
+            targetMatches,
+            mutatedSha: rec.mutatedSha256,
+            baselineSha: originalSha,
+            run,
+            expectedEvidence: m.expectedEvidence,
+          });
+          rec.status = cls.status;
+          rec.note = cls.note;
+        } else {
+          // ── dedicated_probe (G/H/L): full targeted suite MUST run first ──
+          const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+          rec.testExit = run.exitCode;
+          rec.durationMs = run.durationMs;
+          const ff = firstFailLine(run.combined);
+          rec.firstFailure = ff ?? "";
+
+          if (run.spawnError) {
+            rec.status = "invalid";
+            rec.note = "targeted test did not start";
+          } else if (run.timedOut) {
+            rec.status = "invalid";
+            rec.note = "targeted suite timeout";
+          } else if (run.exitCode === 0) {
+            rec.status = "invalid";
+            rec.note = "targeted suite passed under mutation (probe not run)";
+          } else if (looksLikeNonKill(run.combined)) {
+            rec.status = "invalid";
+            rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
+          } else {
+            // The targeted suite started and failed for the right reason: run the probe.
+            const probeResult = runProbe(m, disp, repoRoot);
+            probeSessionRoot = probeResult.registeredSessionRoot;
+            probeFilePath = probeResult.probeFilePath;
+            rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
+            rec.probeFileCleanupComplete = String(probeResult.probeFileCleanupComplete);
+            rec.probeSessionCleanupComplete = String(probeResult.probeSessionCleanupComplete);
+
+            if (probeResult.run.spawnError || probeResult.run.timedOut || looksLikeNonKill(probeResult.run.combined)) {
+              rec.status = "invalid";
+              rec.note = probeResult.run.spawnError ? "probe did not start" : probeResult.run.timedOut ? "probe timeout" : "probe non-kill fault";
+            } else {
+              const parsed = parseProbeResult(probeResult.run.combined);
+              if (!parsed.ok || parsed.obj === null) {
+                rec.status = "invalid";
+                rec.note = parsed.note;
+              } else {
+                const cmp = compareProbe(m, parsed.obj);
+                rec.probeScenarioId = cmp.scenarioId === "" ? "-" : cmp.scenarioId;
+                rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
+                rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
+                rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
+                rec.probeAssertions = cmp.assertions.join(",");
+                rec.probeEnvironmentIsolated = String(cmp.envIsolated);
+
+                const killCls = classifyProbeKill({
+                  probeExitZero: probeResult.run.exitCode === 0,
+                  evidenceMatched: cmp.killed,
+                  envIsolated: cmp.envIsolated,
+                  fileCleanupComplete: probeResult.probeFileCleanupComplete,
+                  sessionCleanupComplete: probeResult.probeSessionCleanupComplete,
+                });
+                rec.status = killCls.status;
+                rec.note = killCls.note;
+              }
+            }
+            // Cleanup failure must block a kill even after classification.
+            if (rec.status === "killed" && (!probeResult.probeFileCleanupComplete || !probeResult.probeSessionCleanupComplete)) {
+              rec.status = "harness_error";
+              rec.note = "probe cleanup incomplete after kill";
+            }
+          }
+        }
+      } catch (e) {
+        rec.status = "harness_error";
+        rec.note = `harness fault: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
+      } finally {
+        // Always restore original bytes, then re-read + re-hash to prove identity.
+        try {
+          const rest = restoreMutatedFile(dispProd, original, originalSha);
+          rec.restoredSha256 = rest.restoredSha;
+          rec.restoredByteIdentical = rest.identical;
+          if (!rest.identical && rec.status === "killed") rec.status = "harness_error";
+        } catch (e) {
+          rec.restoredByteIdentical = false;
+          rec.note = `restore failed: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
+          if (rec.status === "killed") rec.status = "harness_error";
+        }
+      }
+    }
+  }
+
+  return buildWorkerResult(rec, m, archiveExtractMs, probeSessionRoot, probeFilePath, cli.workerRoot);
+}
+
+/**
+ * Internal worker entry: validates the expected HEAD and protected files in
+ * the REAL repo, builds its OWN disposable copy via `git archive <expected
+ * HEAD>`, executes exactly one mutation, restores, cleans its own root, and
+ * emits exactly one structured WORKER_RESULT line.
+ */
+async function runInternalWorker(cli: ParsedCli): Promise<number> {
+  const m = MUTATIONS.find((x) => x.id === cli.mutationId);
+  if (!m) {
+    console.error("WORKER_FAULT unknown mutation id");
+    return 1;
+  }
+  const { registry, error: regError } = readWorkerRegistry();
+  if (regError !== "") {
+    console.error(`WORKER_FAULT ${regError}`);
+    return 1;
+  }
+  const rootCheck = validateWorkerRoots(registry.roots, registry.repoRoot, registry.gitCommonDir);
+  if (!rootCheck.ok) {
+    console.error(`WORKER_FAULT ${rootCheck.error}`);
+    return 1;
+  }
+  if (registry.expectedHead !== cli.expectedHead) {
+    console.error("WORKER_FAULT registry expected HEAD mismatch");
+    return 1;
+  }
+  if (!registry.roots.includes(cli.workerRoot)) {
+    console.error("WORKER_FAULT worker root not registered by parent");
+    return 1;
+  }
+
+  let result: WorkerResult | null = null;
+  let cleanupMs = 0;
+  let rootCleanupComplete = false;
+  const cleanupRoot = (): void => {
+    const cStart = Date.now();
+    try { fs.rmSync(cli.workerRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+    cleanupMs = Date.now() - cStart;
+    rootCleanupComplete = !fs.existsSync(cli.workerRoot);
+  };
+
+  try {
+    // ── Real-repo invariants vs the parent-provided expected HEAD ──
+    if (gitHeadShaAt(registry.repoRoot) !== cli.expectedHead) {
+      result = workerHarnessError(m, cli, "real local HEAD does not match expected HEAD");
+    } else {
+      const prodHeadBytes = gitShowHeadAt(registry.repoRoot, PROD_REL, cli.expectedHead);
+      const testHeadBytes = gitShowHeadAt(registry.repoRoot, TEST_REL, cli.expectedHead);
+      const lockHeadBytes = gitShowHeadAt(registry.repoRoot, LOCK_REL, cli.expectedHead);
+      const prodWorkBytes = fs.readFileSync(path.join(registry.repoRoot, PROD_REL));
+      const testWorkBytes = fs.readFileSync(path.join(registry.repoRoot, TEST_REL));
+      const lockWorkBytes = fs.readFileSync(path.join(registry.repoRoot, LOCK_REL));
+      if (sha256Buf(prodHeadBytes) !== sha256Buf(prodWorkBytes)) result = workerHarnessError(m, cli, "real production file differs from expected HEAD");
+      else if (sha256Buf(testHeadBytes) !== sha256Buf(testWorkBytes)) result = workerHarnessError(m, cli, "real test file differs from expected HEAD");
+      else if (sha256Buf(lockHeadBytes) !== sha256Buf(lockWorkBytes)) result = workerHarnessError(m, cli, "real package-lock differs from expected HEAD");
+    }
+    if (result === null) {
+      // ── Build THIS worker's disposable copy from the fixed expected HEAD ──
+      const disp = path.join(cli.workerRoot, "work");
+      fs.mkdirSync(disp, { recursive: true });
+      const aStart = Date.now();
+      const archive = spawnSync("git", ["archive", cli.expectedHead], { cwd: registry.repoRoot, maxBuffer: 256 * 1024 * 1024 });
+      const untar = archive.status === 0 && archive.stdout ? spawnSync("tar", ["-xf", "-"], { cwd: disp, input: archive.stdout, maxBuffer: 256 * 1024 * 1024 }) : null;
+      const archiveExtractMs = Date.now() - aStart;
+      if (archive.status !== 0 || !archive.stdout || untar === null || untar.status !== 0) {
+        result = workerHarnessError(m, cli, "git archive / tar extract failed");
+      } else {
+        fs.symlinkSync(path.join(registry.repoRoot, "node_modules"), path.join(disp, "node_modules"), "dir");
+        result = await executeSingleMutation(m, disp, registry.repoRoot, archiveExtractMs, cli);
+      }
+    }
+  } catch (e) {
+    result = workerHarnessError(m, cli, `worker harness fault: ${(e as Error).message}`);
+  } finally {
+    cleanupRoot();
+  }
+
+  if (result === null) result = workerHarnessError(m, cli, "worker produced no result");
+  result.cleanup_duration_ms = cleanupMs;
+  result.worker_root_cleanup_complete = rootCleanupComplete;
+  console.log(WORKER_RESULT_PREFIX + " " + JSON.stringify(result));
+  return 0;
+}
+
+/**
+ * Start ONE internal worker (tsx on this same file) and await its structured
+ * WORKER_RESULT. Fail-closed: spawn failure, signal termination, timeout, any
+ * nonzero exit, or a structurally invalid result all yield ok=false.
+ */
+function spawnWorkerProcess(
+  m: MutationDef,
+  workerRoot: string,
+  registryPath: string,
+  repoRoot: string,
+  expectedHead: string,
+  parentBaselineSha: string,
+): Promise<WorkerOutcome> {
+  return new Promise((resolve) => {
+    const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
+    const harnessPath = path.join(repoRoot, "scripts", "loop-delivery-04-mutation-harness.ts");
+    const args = [
+      harnessPath,
+      "--internal-worker",
+      `--mutation=${m.id}`,
+      `--expected-head=${expectedHead}`,
+      `--worker-root=${workerRoot}`,
+    ];
+    let child: ChildProcess;
+    try {
+      child = spawn(tsxBin, args, {
+        cwd: repoRoot,
+        env: { ...(process.env as Record<string, string>), [REGISTRY_ENV]: registryPath },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (e) {
+      resolve({ id: m.id, ok: false, note: `worker spawn failure: ${(e as Error).message}`, result: null, exitCode: null, signal: null, timedOut: false, spawnError: true });
+      return;
+    }
+    activeWorkerProcesses.add(child);
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const settle = (outcome: WorkerOutcome): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      activeWorkerProcesses.delete(child);
+      resolve(outcome);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+      // Bounded fallback: escalate to SIGKILL shortly after.
+      const fallback = setTimeout(() => {
+        try { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); } catch { /* best-effort */ }
+      }, WORKER_SIGNAL_GRACE_MS);
+      fallback.unref();
+    }, WORKER_TIMEOUT_MS);
+    child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
+    child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+    child.on("error", (e) => {
+      settle({ id: m.id, ok: false, note: `worker spawn failure: ${e.message}`, result: null, exitCode: null, signal: null, timedOut: false, spawnError: true });
+    });
+    child.on("close", (code, signal) => {
+      if (timedOut) {
+        settle({ id: m.id, ok: false, note: "worker timeout", result: null, exitCode: code, signal: signal ?? null, timedOut: true, spawnError: false });
+        return;
+      }
+      if (code !== 0) {
+        const note = signal !== null ? `worker terminated by signal (${signal})` : `worker exited nonzero (${code})`;
+        settle({ id: m.id, ok: false, note, result: null, exitCode: code, signal: signal ?? null, timedOut: false, spawnError: false });
+        return;
+      }
+      const parsed = parseWorkerStdout(stdout);
+      if (!parsed.ok) {
+        settle({ id: m.id, ok: false, note: parsed.note, result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
+        return;
+      }
+      const validated = validateWorkerResult(parsed.raw, m, m.id, workerRoot, parentBaselineSha);
+      if (!validated.ok) {
+        settle({ id: m.id, ok: false, note: validated.note, result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
+        return;
+      }
+      if (!validated.result!.worker_root_cleanup_complete) {
+        settle({ id: m.id, ok: false, note: "worker root cleanup false", result: null, exitCode: code, signal: null, timedOut: false, spawnError: false });
+        return;
+      }
+      settle({ id: m.id, ok: true, note: "", result: validated.result, exitCode: code, signal: null, timedOut: false, spawnError: false });
+    });
+  });
+}
+
+interface SchedulerOutcome {
+  summary: BoundedRun<WorkerOutcome>;
+  outcomes: Map<string, WorkerOutcome>;
+}
+
+/**
+ * Full-mode bounded scheduler: one internal worker per mutation A–N, at most
+ * MAX_PARALLEL_MUTATIONS concurrent, each with its own pre-registered root.
+ */
+async function runFullScheduler(
+  workerRoots: readonly string[],
+  registryPath: string,
+  repoRoot: string,
+  expectedHead: string,
+  parentBaselineSha: string,
+): Promise<SchedulerOutcome> {
+  const outcomes = new Map<string, WorkerOutcome>();
+  const tasks: BoundedTask<WorkerOutcome>[] = MUTATIONS.map((m, i) => ({
+    id: m.id,
+    run: async () => {
+      const outcome = await spawnWorkerProcess(m, workerRoots[i]!, registryPath, repoRoot, expectedHead, parentBaselineSha);
+      outcomes.set(m.id, outcome);
+      if (!outcome.ok) throw new Error(outcome.note || "worker failure");
+      return outcome;
+    },
+  }));
+  const summary = await runBoundedTasks(tasks, MAX_PARALLEL_MUTATIONS, () => stopping);
+  return { summary, outcomes };
+}
+
 async function main(): Promise<MainOutcome> {
-  const cli = parseCliMode(process.argv.slice(2));
+  const cli = parseCli(process.argv.slice(2));
   if (cli.error !== "") {
     console.error(`HARNESS_ERROR ${cli.error}`);
     return { code: 1, tempCleanupComplete: false };
+  }
+  if (cli.kind === "worker") {
+    // Internal worker mode: execute exactly one mutation, emit one WORKER_RESULT.
+    return { code: await runInternalWorker(cli), tempCleanupComplete: false };
   }
   const mode = cli.mode;
 
@@ -1576,18 +2796,33 @@ async function main(): Promise<MainOutcome> {
   }
 
   // ── Failure-path self-tests (before any baseline / mutation work) ──
-  const st = runSelfTests();
+  const st = await runSelfTests();
   console.log(
     `HARNESS_SELF_TEST baseline_failure_cleanup=${st.baseline_failure_cleanup} ` +
       `target_mismatch_restore_cleanup=${st.target_mismatch_restore_cleanup} ` +
       `evidence_mismatch_restore_cleanup=${st.evidence_mismatch_restore_cleanup} ` +
       `probe_environment_isolation=${st.probe_environment_isolation} ` +
-      `probe_cleanup_gate=${st.probe_cleanup_gate}`,
+      `probe_cleanup_gate=${st.probe_cleanup_gate} ` +
+      `bounded_scheduler_peak_two=${st.bounded_scheduler_peak_two} ` +
+      `worker_root_validation=${st.worker_root_validation} ` +
+      `worker_kill_cannot_be_forged=${st.worker_kill_cannot_be_forged} ` +
+      `worker_result_unknown_field_rejected=${st.worker_result_unknown_field_rejected} ` +
+      `worker_result_malformed_rejected=${st.worker_result_malformed_rejected} ` +
+      `worker_result_duplicate_rejected=${st.worker_result_duplicate_rejected} ` +
+      `worker_result_missing_rejected=${st.worker_result_missing_rejected} ` +
+      `worker_cleanup_failure_blocks_kill=${st.worker_cleanup_failure_blocks_kill} ` +
+      `records_ordered_A_to_N=${st.records_ordered_A_to_N} ` +
+      `worker_cli_fail_closed=${st.worker_cli_fail_closed}`,
   );
   if (
     !st.baseline_failure_cleanup || !st.target_mismatch_restore_cleanup ||
     !st.evidence_mismatch_restore_cleanup || !st.probe_environment_isolation ||
-    !st.probe_cleanup_gate
+    !st.probe_cleanup_gate || !st.bounded_scheduler_peak_two ||
+    !st.worker_root_validation || !st.worker_kill_cannot_be_forged ||
+    !st.worker_result_unknown_field_rejected || !st.worker_result_malformed_rejected ||
+    !st.worker_result_duplicate_rejected || !st.worker_result_missing_rejected ||
+    !st.worker_cleanup_failure_blocks_kill || !st.records_ordered_A_to_N ||
+    !st.worker_cli_fail_closed
   ) {
     console.error("HARNESS_ERROR failure-path self-test failed — refusing to run baseline/mutations");
     return { code: 1, tempCleanupComplete: false };
@@ -1671,6 +2906,7 @@ async function main(): Promise<MainOutcome> {
   }
 
   let disposableRootCleaned = false;
+  let registryPath = "";
   const cleanup = (): void => {
     try {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -1681,8 +2917,27 @@ async function main(): Promise<MainOutcome> {
     for (const s of registeredProbeSessions) {
       try { fs.rmSync(s, { recursive: true, force: true }); } catch { /* best-effort */ }
     }
+    for (const r of registeredWorkerRoots) {
+      try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* best-effort */ }
+    }
+    if (registryPath !== "") {
+      try { fs.rmSync(registryPath, { force: true }); } catch { /* best-effort */ }
+    }
   };
-  const onSignal = (): void => {
+  const onSignal = async (): Promise<void> => {
+    // Controlled termination: stop scheduling, SIGTERM active workers, give a
+    // bounded cleanup window, then fallback SIGKILL, then cleanup and exit.
+    stopping = true;
+    for (const child of activeWorkerProcesses) {
+      try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+    }
+    const deadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
+    while (Date.now() < deadline && activeWorkerProcesses.size > 0) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+    for (const child of activeWorkerProcesses) {
+      try { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); } catch { /* best-effort */ }
+    }
     cleanup();
     process.exit(130);
   };
@@ -1748,176 +3003,271 @@ async function main(): Promise<MainOutcome> {
       }
     }
 
-    // ── Run each mutation ──
-    for (const m of mutationsToRun) {
-      const original = fs.readFileSync(dispProd); // baseline bytes (disposable)
-      const originalSha = sha256Buf(original);
-      const text = original.toString("utf8");
+    if (mode === "quick") {
+      // ── Quick mode (unchanged contract): serial G/H/L probes only, no
+      //    baseline, no scheduler, no full metrics. ──
+      for (const m of mutationsToRun) {
+        const original = fs.readFileSync(dispProd); // baseline bytes (disposable)
+        const originalSha = sha256Buf(original);
+        const text = original.toString("utf8");
 
-      // Count exact target occurrences.
-      let targetMatches = 0;
-      let idx = text.indexOf(m.target);
-      while (idx >= 0) {
-        targetMatches++;
-        idx = text.indexOf(m.target, idx + m.target.length);
-      }
+        // Count exact target occurrences.
+        let targetMatches = 0;
+        let idx = text.indexOf(m.target);
+        while (idx >= 0) {
+          targetMatches++;
+          idx = text.indexOf(m.target, idx + m.target.length);
+        }
 
-      const rec = newRecord(m, targetMatches, originalSha);
+        const rec = newRecord(m, targetMatches, originalSha);
 
-      if (targetMatches !== 1) {
-        rec.status = "invalid";
-        rec.note = `target match count ${targetMatches} != 1`;
-        records.push(rec);
-        emitRecord(rec);
-        continue;
-      }
+        if (targetMatches !== 1) {
+          rec.status = "invalid";
+          rec.note = `target match count ${targetMatches} != 1`;
+          records.push(rec);
+          emitRecord(rec);
+          continue;
+        }
 
-      const mutatedText = text.replace(m.target, m.replacement);
-      const mutatedBytes = Buffer.from(mutatedText, "utf8");
-      rec.mutatedSha256 = sha256Buf(mutatedBytes);
+        const mutatedText = text.replace(m.target, m.replacement);
+        const mutatedBytes = Buffer.from(mutatedText, "utf8");
+        rec.mutatedSha256 = sha256Buf(mutatedBytes);
 
-      if (rec.mutatedSha256 === originalSha) {
-        rec.status = "invalid";
-        rec.note = "replacement did not change bytes";
-        records.push(rec);
-        emitRecord(rec);
-        continue;
-      }
+        if (rec.mutatedSha256 === originalSha) {
+          rec.status = "invalid";
+          rec.note = "replacement did not change bytes";
+          records.push(rec);
+          emitRecord(rec);
+          continue;
+        }
 
-      try {
-        fs.writeFileSync(dispProd, mutatedBytes);
+        try {
+          fs.writeFileSync(dispProd, mutatedBytes);
 
-        if (m.evidenceMode === "first_failure") {
-          // ── first_failure (full mode only; quick mode skips A–F,I–K,M,N) ──
-          const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
-          rec.testExit = run.exitCode;
-          rec.durationMs = run.durationMs;
-          const ff = firstFailLine(run.combined);
-          rec.firstFailure = ff ?? "";
-
-          const cls = classifyFirstFailure({
-            targetMatches,
-            mutatedSha: rec.mutatedSha256,
-            baselineSha: originalSha,
-            run,
-            expectedEvidence: m.expectedEvidence,
-          });
-          rec.status = cls.status;
-          rec.note = cls.note;
-        } else {
-          // ── dedicated_probe (G/H/L) ──
-          probeSummary.total++;
-
-          if (mode !== "quick") {
-            // Full mode: the targeted suite must actually start and exit non-zero.
+          if (m.evidenceMode === "first_failure") {
+            // ── first_failure (quick mode never selects these; kept fail-closed) ──
             const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
             rec.testExit = run.exitCode;
             rec.durationMs = run.durationMs;
             const ff = firstFailLine(run.combined);
             rec.firstFailure = ff ?? "";
 
-            if (run.spawnError) {
-              rec.status = "invalid";
-              rec.note = "targeted test did not start";
-              probeSummary.failed++;
-              probeSummary.perId.set(m.id, false);
-              records.push(rec);
-              emitRecord(rec);
-              continue;
-            } else if (run.timedOut) {
-              rec.status = "invalid";
-              rec.note = "targeted suite timeout";
-              probeSummary.failed++;
-              probeSummary.perId.set(m.id, false);
-              records.push(rec);
-              emitRecord(rec);
-              continue;
-            } else if (run.exitCode === 0) {
-              rec.status = "invalid";
-              rec.note = "targeted suite passed under mutation (probe not run)";
-              probeSummary.failed++;
-              probeSummary.perId.set(m.id, false);
-              records.push(rec);
-              emitRecord(rec);
-              continue;
-            } else if (looksLikeNonKill(run.combined)) {
-              rec.status = "invalid";
-              rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
-              probeSummary.failed++;
-              probeSummary.perId.set(m.id, false);
-              records.push(rec);
-              emitRecord(rec);
-              continue;
-            }
-          }
-
-          // Run the dedicated probe (both full and quick mode).
-          const probeResult = runProbe(m, disp, repoRoot);
-          rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
-          rec.probeFileCleanupComplete = String(probeResult.probeFileCleanupComplete);
-          rec.probeSessionCleanupComplete = String(probeResult.probeSessionCleanupComplete);
-
-          if (probeResult.run.spawnError || probeResult.run.timedOut || looksLikeNonKill(probeResult.run.combined)) {
-            rec.status = "invalid";
-            rec.note = probeResult.run.spawnError ? "probe did not start" : probeResult.run.timedOut ? "probe timeout" : "probe non-kill fault";
+            const cls = classifyFirstFailure({
+              targetMatches,
+              mutatedSha: rec.mutatedSha256,
+              baselineSha: originalSha,
+              run,
+              expectedEvidence: m.expectedEvidence,
+            });
+            rec.status = cls.status;
+            rec.note = cls.note;
           } else {
-            const parsed = parseProbeResult(probeResult.run.combined);
-            if (!parsed.ok || parsed.obj === null) {
-              rec.status = "invalid";
-              rec.note = parsed.note;
-            } else {
-              const cmp = compareProbe(m, parsed.obj);
-              rec.probeScenarioId = cmp.scenarioId === "" ? "-" : cmp.scenarioId;
-              rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
-              rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
-              rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
-              rec.probeAssertions = cmp.assertions.join(",");
-              rec.probeEnvironmentIsolated = String(cmp.envIsolated);
+            // ── dedicated_probe (G/H/L) — probe only in quick mode ──
+            probeSummary.total++;
 
-              const killCls = classifyProbeKill({
-                probeExitZero: probeResult.run.exitCode === 0,
-                evidenceMatched: cmp.killed,
-                envIsolated: cmp.envIsolated,
-                fileCleanupComplete: probeResult.probeFileCleanupComplete,
-                sessionCleanupComplete: probeResult.probeSessionCleanupComplete,
-              });
-              rec.status = killCls.status;
-              rec.note = killCls.note;
+            if (mode !== "quick") {
+              // Full mode: the targeted suite must actually start and exit non-zero.
+              const run = runTsxTest(disp, TEST_REL, PER_RUN_TIMEOUT_MS);
+              rec.testExit = run.exitCode;
+              rec.durationMs = run.durationMs;
+              const ff = firstFailLine(run.combined);
+              rec.firstFailure = ff ?? "";
+
+              if (run.spawnError) {
+                rec.status = "invalid";
+                rec.note = "targeted test did not start";
+                probeSummary.failed++;
+                probeSummary.perId.set(m.id, false);
+                records.push(rec);
+                emitRecord(rec);
+                continue;
+              } else if (run.timedOut) {
+                rec.status = "invalid";
+                rec.note = "targeted suite timeout";
+                probeSummary.failed++;
+                probeSummary.perId.set(m.id, false);
+                records.push(rec);
+                emitRecord(rec);
+                continue;
+              } else if (run.exitCode === 0) {
+                rec.status = "invalid";
+                rec.note = "targeted suite passed under mutation (probe not run)";
+                probeSummary.failed++;
+                probeSummary.perId.set(m.id, false);
+                records.push(rec);
+                emitRecord(rec);
+                continue;
+              } else if (looksLikeNonKill(run.combined)) {
+                rec.status = "invalid";
+                rec.note = "targeted suite non-zero from syntax/module/tool/timeout fault";
+                probeSummary.failed++;
+                probeSummary.perId.set(m.id, false);
+                records.push(rec);
+                emitRecord(rec);
+                continue;
+              }
             }
-          }
 
-          const passed = rec.status === "killed";
-          probeSummary.perId.set(m.id, passed);
-          if (passed) probeSummary.passed++;
-          else probeSummary.failed++;
-          if (probeResult.probeFileCleanupComplete && probeResult.probeSessionCleanupComplete) probeSummary.cleaned++;
-          if (rec.probeEnvironmentIsolated === "true") probeSummary.isolated++;
-        }
-      } catch (e) {
-        rec.status = "harness_error";
-        rec.note = `harness fault: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
-      } finally {
-        // Always restore original bytes, then re-read + re-hash.
-        try {
-          const rest = restoreMutatedFile(dispProd, original, originalSha);
-          rec.restoredSha256 = rest.restoredSha;
-          rec.restoredByteIdentical = rest.identical;
-          if (!rest.identical && rec.status === "killed") rec.status = "harness_error";
+            // Run the dedicated probe (both full and quick mode).
+            const probeResult = runProbe(m, disp, repoRoot);
+            rec.probeExit = probeResult.run.exitCode === null ? "null" : String(probeResult.run.exitCode);
+            rec.probeFileCleanupComplete = String(probeResult.probeFileCleanupComplete);
+            rec.probeSessionCleanupComplete = String(probeResult.probeSessionCleanupComplete);
+
+            if (probeResult.run.spawnError || probeResult.run.timedOut || looksLikeNonKill(probeResult.run.combined)) {
+              rec.status = "invalid";
+              rec.note = probeResult.run.spawnError ? "probe did not start" : probeResult.run.timedOut ? "probe timeout" : "probe non-kill fault";
+            } else {
+              const parsed = parseProbeResult(probeResult.run.combined);
+              if (!parsed.ok || parsed.obj === null) {
+                rec.status = "invalid";
+                rec.note = parsed.note;
+              } else {
+                const cmp = compareProbe(m, parsed.obj);
+                rec.probeScenarioId = cmp.scenarioId === "" ? "-" : cmp.scenarioId;
+                rec.probeErrorName = cmp.errorName === "" ? "-" : cmp.errorName;
+                rec.probeErrorCode = cmp.errorCode === "" ? "-" : cmp.errorCode;
+                rec.probeErrorMessage = cmp.errorMessage === "" ? "-" : cmp.errorMessage;
+                rec.probeAssertions = cmp.assertions.join(",");
+                rec.probeEnvironmentIsolated = String(cmp.envIsolated);
+
+                const killCls = classifyProbeKill({
+                  probeExitZero: probeResult.run.exitCode === 0,
+                  evidenceMatched: cmp.killed,
+                  envIsolated: cmp.envIsolated,
+                  fileCleanupComplete: probeResult.probeFileCleanupComplete,
+                  sessionCleanupComplete: probeResult.probeSessionCleanupComplete,
+                });
+                rec.status = killCls.status;
+                rec.note = killCls.note;
+              }
+            }
+
+            const passed = rec.status === "killed";
+            probeSummary.perId.set(m.id, passed);
+            if (passed) probeSummary.passed++;
+            else probeSummary.failed++;
+            if (probeResult.probeFileCleanupComplete && probeResult.probeSessionCleanupComplete) probeSummary.cleaned++;
+            if (rec.probeEnvironmentIsolated === "true") probeSummary.isolated++;
+          }
         } catch (e) {
-          rec.restoredByteIdentical = false;
-          rec.note = `restore failed: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
-          if (rec.status === "killed") rec.status = "harness_error";
+          rec.status = "harness_error";
+          rec.note = `harness fault: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
+        } finally {
+          // Always restore original bytes, then re-read + re-hash.
+          try {
+            const rest = restoreMutatedFile(dispProd, original, originalSha);
+            rec.restoredSha256 = rest.restoredSha;
+            rec.restoredByteIdentical = rest.identical;
+            if (!rest.identical && rec.status === "killed") rec.status = "harness_error";
+          } catch (e) {
+            rec.restoredByteIdentical = false;
+            rec.note = `restore failed: ${(e as Error).message}`.slice(0, MAX_EVIDENCE_LEN);
+            if (rec.status === "killed") rec.status = "harness_error";
+          }
+        }
+
+        records.push(rec);
+        emitRecord(rec);
+      }
+    } else {
+      // ── Full mode: bounded parallel scheduler over all 14 mutations ──
+      const expectedHead = headBefore; // fixed authorized Source SHA for every worker
+      const parentBaselineSha = sha256Buf(fs.readFileSync(dispProd));
+
+      // Register 14 distinct worker roots (system temp, outside the repo)
+      // BEFORE any worker starts; the parent is the cleanup authority.
+      const workerRoots: string[] = [];
+      for (const m of MUTATIONS) {
+        workerRoots.push(fs.mkdtempSync(path.join(os.tmpdir(), WORKER_ROOT_PREFIX + m.id + "-")));
+      }
+      registeredWorkerRoots.push(...workerRoots);
+      const gitCommonDir = gitCommonDirAt(repoRoot);
+      const rootCheck = validateWorkerRoots(workerRoots, repoRoot, gitCommonDir);
+      if (!rootCheck.ok) {
+        console.error(`HARNESS_ERROR worker root validation failed: ${rootCheck.error}`);
+        sessionCode = 1;
+        throw new Error("WORKER_ROOT_INVALID");
+      }
+      registryPath = path.join(os.tmpdir(), `l04-worker-registry-${process.pid}.json`);
+      try {
+        fs.writeFileSync(registryPath, JSON.stringify({ expectedHead, repoRoot, gitCommonDir, roots: workerRoots }), "utf8");
+      } catch (e) {
+        console.error(`HARNESS_ERROR cannot write worker registry: ${(e as Error).message}`);
+        sessionCode = 1;
+        throw new Error("REGISTRY_WRITE_FAILED");
+      }
+
+      const scheduler = await runFullScheduler(workerRoots, registryPath, repoRoot, expectedHead, parentBaselineSha);
+      const summary = scheduler.summary;
+      console.log(`MUTATION_SCHEDULER mode=bounded_parallel configured_limit=${MAX_PARALLEL_MUTATIONS}`);
+      console.log(`MUTATION_SCHEDULER_SUMMARY scheduled=${summary.scheduled} completed=${summary.completed} peak_concurrency=${summary.peakConcurrency}`);
+
+      const merged = mergeWorkerOutcomes([...scheduler.outcomes.values()], MUTATIONS, parentBaselineSha);
+      if (merged.error !== "" || summary.failedIds.length > 0) {
+        const note = merged.error !== "" ? merged.error : `worker failure: ${summary.failNote}`;
+        console.error(`HARNESS_ERROR scheduler failure: ${note}`);
+        sessionCode = 1;
+        throw new Error("SCHEDULER_FAILED");
+      }
+      records.push(...merged.records);
+      // Official records are emitted in the fixed A–N order, never in async
+      // completion order.
+      for (const rec of records) emitRecord(rec);
+
+      // Probe summary from official records (identical semantics to the serial loop).
+      for (const rec of records) {
+        if (rec.evidenceMode !== "dedicated_probe") continue;
+        probeSummary.total++;
+        const passed = rec.status === "killed";
+        probeSummary.perId.set(rec.id, passed);
+        if (passed) probeSummary.passed++;
+        else probeSummary.failed++;
+        if (rec.probeFileCleanupComplete === "true" && rec.probeSessionCleanupComplete === "true") probeSummary.cleaned++;
+        if (rec.probeEnvironmentIsolated === "true") probeSummary.isolated++;
+      }
+
+      // Worker-reported probe session/file paths must all be gone.
+      for (const o of scheduler.outcomes.values()) {
+        if (!o.ok || o.result === null) continue;
+        if (o.result.probe_session_root !== "") {
+          allWorkerProbeSessionPaths.push(o.result.probe_session_root);
+          if (fs.existsSync(o.result.probe_session_root)) {
+            console.error(`HARNESS_ERROR leftover probe session: ${o.result.probe_session_root}`);
+            sessionCode = 1;
+          }
+        }
+        if (o.result.probe_file_path !== "") {
+          allWorkerProbeFilePaths.push(o.result.probe_file_path);
+          if (fs.existsSync(o.result.probe_file_path)) {
+            console.error(`HARNESS_ERROR leftover probe file: ${o.result.probe_file_path}`);
+            sessionCode = 1;
+          }
         }
       }
 
-      records.push(rec);
-      emitRecord(rec);
+      // Registered worker roots must all be gone (worker self-cleanup verified).
+      const leakedRoots = registeredWorkerRoots.filter((r) => fs.existsSync(r));
+      if (leakedRoots.length > 0) {
+        console.error(`HARNESS_ERROR leftover worker roots: ${leakedRoots.join(",")}`);
+        sessionCode = 1;
+      }
+      if (sessionCode !== 0) throw new Error("SCHEDULER_FAILED");
+
+      // Real scheduler metrics (never hard-coded; from actual execution).
+      console.log(`BASELINE_DURATION_MS ${baselineDurationMs}`);
+      console.log(`MUTATION_WALL_DURATION_MS ${summary.wallMs}`);
+      console.log(`MUTATION_SUM_TEST_DURATION_MS ${merged.sumTestDurationMs}`);
+      console.log(`MUTATION_SUM_ARCHIVE_EXTRACT_DURATION_MS ${merged.sumArchiveExtractMs}`);
+      console.log(`MUTATION_SUM_CLEANUP_DURATION_MS ${merged.sumCleanupMs}`);
     }
   } catch (e) {
-    // Controlled session failure (archive/tar/baseline). cleanup still runs in
-    // the finally below; the code is propagated via sessionCode.
+    // Controlled session failure (archive/tar/baseline/scheduler). cleanup
+    // still runs in the finally below; the code is propagated via sessionCode.
     if (sessionCode === 0) sessionCode = 1;
-    if ((e as Error).message !== "ARCHIVE_FAILED" && (e as Error).message !== "TAR_FAILED" && (e as Error).message !== "BASELINE_FAILED") {
+    const msg = (e as Error).message;
+    if (msg !== "ARCHIVE_FAILED" && msg !== "TAR_FAILED" && msg !== "BASELINE_FAILED" &&
+        msg !== "WORKER_ROOT_INVALID" && msg !== "REGISTRY_WRITE_FAILED" && msg !== "SCHEDULER_FAILED") {
       console.error(`HARNESS_ERROR ${(e as Error).stack ?? (e as Error).message}`);
     }
   } finally {
@@ -1950,10 +3300,18 @@ async function main(): Promise<MainOutcome> {
   // ── Aggregate temp cleanup verification ──
   // TEMP_CLEANUP_COMPLETE aggregates: (1) main disposable root deleted,
   // (2) all registered probe session roots deleted, (3) all registered probe
-  // files deleted.
+  // files deleted, (4) all registered worker roots deleted, (5) all
+  // worker-reported probe session/file paths deleted, (6) registry file deleted.
   const allSessionsCleaned = registeredProbeSessions.every((s) => !fs.existsSync(s));
   const allFilesCleaned = registeredProbeFiles.every((f) => !fs.existsSync(f));
-  const tempCleanupComplete = disposableRootCleaned && allSessionsCleaned && allFilesCleaned;
+  const allWorkerRootsCleaned = registeredWorkerRoots.every((r) => !fs.existsSync(r));
+  const allWorkerProbeSessionsCleaned = allWorkerProbeSessionPaths.every((p) => !fs.existsSync(p));
+  const allWorkerProbeFilesCleaned = allWorkerProbeFilePaths.every((f) => !fs.existsSync(f));
+  const registryCleaned = registryPath === "" || !fs.existsSync(registryPath);
+  const tempCleanupComplete =
+    disposableRootCleaned && allSessionsCleaned && allFilesCleaned &&
+    allWorkerRootsCleaned && allWorkerProbeSessionsCleaned && allWorkerProbeFilesCleaned &&
+    registryCleaned;
 
   // ── Summary ──
   if (mode === "quick") {
