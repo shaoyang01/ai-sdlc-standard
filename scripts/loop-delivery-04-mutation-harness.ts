@@ -66,6 +66,20 @@
 //     authorized by a random token + parent registry, fail closed for direct
 //     invocation, and never bypass HEAD/root verification.
 //
+// R2 (Correction R2) changes, per project-controller review (CHANGES REQUIRED):
+//   * A SHARED killed base contract applies to EVERY G/H/L worker result
+//     (first_failure AND dedicated_probe): target_matches=1, fixed
+//     expected_evidence, non-zero integer test_exit, valid parent baseline
+//     SHA, valid CHANGED mutated SHA, byte-identical restore, scheduled root.
+//   * Selftest children emit a strict single-record SELFTEST_READY {json}
+//     (kind/child_pid/descendant_pid) only after the descendant REALLY spawned;
+//     before signalling, the parent proves child+descendant existence,
+//     non-zombie state, same PGID and the probe resource via a real process
+//     scan. forge never emits a result when the descendant spawn fails.
+//   * The `ps` scanner is fail-closed (discriminated success/failure result);
+//     a failed scan can never be read as "clean", and scan errors are
+//     preserved alongside cleanup errors.
+//
 // How it works:
 //   1. Static self-checks (source-level invariants of this harness).
 //   2. Failure-path self-tests (baseline cleanup, target-mismatch restore,
@@ -833,6 +847,9 @@ interface SelfTestResult {
   forged_worker_kill_rejected: boolean;
   graceful_worker_cleanup: boolean;
   forced_worker_cleanup: boolean;
+  // R2 checks:
+  r2_ghl_suite_evidence_validation: boolean;
+  r2_process_scan_fail_closed: boolean;
 }
 
 /**
@@ -1015,6 +1032,8 @@ async function runSelfTests(): Promise<SelfTestResult> {
     forged_worker_kill_rejected: await selfTestForgedWorkerKillRejected(),
     graceful_worker_cleanup: await runAbruptCleanupSelftest("graceful"),
     forced_worker_cleanup: await runAbruptCleanupSelftest("forced"),
+    r2_ghl_suite_evidence_validation: r2GhlSuiteEvidenceValidation(),
+    r2_process_scan_fail_closed: r2ScannerFailClosedTests(),
   };
 }
 
@@ -1730,7 +1749,7 @@ function sampleProbeAssertions(id: string): Record<string, boolean> {
 }
 
 /** A structurally valid dedicated-probe (G/H/L) worker result sample. */
-function sampleProbeWorkerResult(m: MutationDef): WorkerResult {
+function sampleProbeWorkerResult(m: MutationDef, overrides: Partial<WorkerResult> = {}): WorkerResult {
   return sampleWorkerResult(m, {
     probe_exit: "0",
     probe_scenario_id: m.probeScenarioId ?? "",
@@ -1743,6 +1762,7 @@ function sampleProbeWorkerResult(m: MutationDef): WorkerResult {
     probe_session_cleanup_complete: "true",
     probe_session_root: path.join(SAMPLE_WORKER_ROOT, "probe-session", m.id),
     probe_file_path: path.join(SAMPLE_WORKER_ROOT, "work", "scripts", "__probe.ts"),
+    ...overrides,
   });
 }
 
@@ -1855,6 +1875,74 @@ function selfTestParentAcceptsExactLAssertionSet(): boolean {
   return v.ok && v.result !== null && v.result.status === "killed" && typeof v.result.probe_assertions === "object";
 }
 
+// ── R2 self-tests (fast, deterministic, no network, no full targeted suite) ──
+// The R2 markers below are aggregated ONLY from these real validator tests.
+
+/**
+ * R2 (3.1): the SHARED killed base contract is enforced for EVERY G/H/L killed
+ * payload — including dedicated_probe — via the REAL validateWorkerResult.
+ * Loop over G/H/L: test_exit=0 / test_exit=null / wrong expected_evidence /
+ * empty mutated_sha256 / unchanged mutated_sha256 must all be rejected, and a
+ * legal dedicated-probe killed payload must be accepted.
+ */
+function r2GhlSuiteEvidenceValidation(): boolean {
+  for (const id of ["G", "H", "L"]) {
+    const def = MUTATIONS.find((m) => m.id === id)!;
+    const cases: Array<[Partial<WorkerResult>, string]> = [
+      [{ test_exit: 0 }, "test_exit"],
+      [{ test_exit: null }, "test_exit"],
+      [{ expected_evidence: "wrong token" }, "expected_evidence"],
+      [{ mutated_sha256: "" }, "mutated_sha256"],
+      [{ mutated_sha256: "a".repeat(64) }, "unchanged mutated bytes"],
+    ];
+    for (const [over, expect] of cases) {
+      const v = validateWorkerResult(sampleProbeWorkerResult(def, over), def, id, SAMPLE_WORKER_ROOT, "a".repeat(64));
+      if (v.ok || !v.note.includes(expect)) return false;
+    }
+    const good = validateWorkerResult(sampleProbeWorkerResult(def), def, id, SAMPLE_WORKER_ROOT, "a".repeat(64));
+    if (!good.ok || good.result === null || good.result.status !== "killed") return false;
+  }
+  return true;
+}
+
+/**
+ * R2 (3.3): the scanner is fail-closed. Spawn error, non-zero status, signal
+ * termination, null status, non-string stdout and malformed non-empty lines
+ * must ALL yield ok=false with a reportable reason; valid Linux/Darwin style
+ * rows must parse (blank lines ignored); zombies are not live while a
+ * same-PGID non-zombie member IS live; a failed scan can never be converted
+ * into "clean".
+ */
+function r2ScannerFailClosedTests(): boolean {
+  const failingRunner: PsRunner = () => ({ status: null, signal: null, stdout: "", error: new Error("ps boom") });
+  const nonzeroRunner: PsRunner = () => ({ status: 3, signal: null, stdout: "unused" });
+  const signalRunner: PsRunner = () => ({ status: null, signal: "SIGKILL", stdout: "" });
+  const nullStatusRunner: PsRunner = () => ({ status: null, signal: null, stdout: "" });
+  const nonStringRunner: PsRunner = () => ({ status: 0, signal: null, stdout: 42 });
+  if (scanProcessGroups(failingRunner).ok) return false; // spawn error fail-closed
+  if (scanProcessGroups(nonzeroRunner).ok) return false; // non-zero status fail-closed
+  if (scanProcessGroups(signalRunner).ok) return false; // signal-terminated fail-closed
+  if (scanProcessGroups(nullStatusRunner).ok) return false; // null status fail-closed
+  if (scanProcessGroups(nonStringRunner).ok) return false; // non-string stdout fail-closed
+  // Malformed non-empty lines fail the whole scan.
+  if (parseProcessRows("  123 456 S\nbroken line\n").ok) return false;
+  if (parseProcessRows("  123 456 S\nabc def ghi\n").ok) return false;
+  if (parseProcessRows("  123 456 S\n  123 456\n").ok) return false;
+  // Valid Linux/Darwin style rows parse; blank lines are ignored.
+  const okScan = parseProcessRows("\n  123 999 Z\n  456 123 Z\n  789 456 Ss\n\n");
+  if (!okScan.ok || okScan.entries.length !== 3) return false;
+  // Zombie is not live; a same-PGID non-zombie member IS live.
+  if (entriesPgidAlive(okScan.entries, 999)) return false; // pgid 999 has only a zombie
+  if (!entriesPgidAlive(okScan.entries, 456)) return false; // pgid 456 has live member 789
+  const alive = entriesAlivePgids(okScan.entries, [999, 456, 123]);
+  if (alive.length !== 1 || alive[0] !== 456) return false;
+  // Scan failure cannot convert to clean.
+  const failAlive = pgidStillAlive(123, failingRunner);
+  const failGroups = aliveGroups([123], failingRunner);
+  if (failAlive.ok || failAlive.alive || failGroups.ok || failGroups.alive.length !== 0) return false;
+  return true;
+}
+
 /**
  * Build a one-off worker registry with 14 distinct external roots (the
  * first root is the test target) so the child's real registry/HEAD/root
@@ -1902,7 +1990,8 @@ async function selfTestForgedWorkerKillRejected(): Promise<boolean> {
     await sleepMs(250); // bounded settle for process-tree reaping
     const rejected = !outcome.ok && finalizeWorkerStatus(outcome) === "harness_error";
     const rootCleanedByParent = !fs.existsSync(reg.root);
-    const noResidual = !pgidStillAlive(pgid);
+    const residualScan = pgidStillAlive(pgid);
+    const noResidual = residualScan.ok && !residualScan.alive; // scan failure fails closed
     if (process.env.L04_DEBUG === "1") {
       console.error(`DBG forge rejected=${rejected} note=${outcome.note} rootCleaned=${rootCleanedByParent} noResidual=${noResidual} pgid=${pgid}`);
     }
@@ -1913,13 +2002,62 @@ async function selfTestForgedWorkerKillRejected(): Promise<boolean> {
 }
 
 /**
- * Real abrupt-cleanup test. The child creates a probe-like resource inside the
- * worker root, spawns a controlled blocking descendant in the same process
- * group, announces readiness, then blocks. The parent SIGTERMs the group;
- * "graceful" expects the child to die on SIGTERM, "forced" expects it to
- * ignore SIGTERM so the parent must escalate to SIGKILL after the grace
- * window. In both cases the process tree must end, the parent must remove the
- * root and resources, and the result must NOT be killed.
+ * Strict single-record readiness contract for selftest children (R2): exactly
+ * one `SELFTEST_READY {json}` line whose object contains ONLY kind /
+ * child_pid / descendant_pid. kind must equal the expected graceful/forced
+ * kind; child_pid must be the positive integer pid of the REAL spawned child;
+ * descendant_pid must be a positive integer different from child_pid.
+ * Malformed, duplicate, unknown-field, or pid-mismatched records fail closed.
+ */
+interface ReadyRecord {
+  ok: boolean;
+  note: string;
+  kind: string;
+  childPid: number;
+  descendantPid: number;
+}
+
+function parseSelftestReady(stdout: string, expectedKind: string, actualChildPid: number): ReadyRecord {
+  const noReady = (note: string): ReadyRecord => ({ ok: false, note, kind: "", childPid: 0, descendantPid: 0 });
+  const records: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith(SELFTEST_READY_PREFIX + " ")) records.push(t.slice(SELFTEST_READY_PREFIX.length + 1));
+    else if (t === SELFTEST_READY_PREFIX) records.push("");
+  }
+  if (records.length === 0) return noReady("no SELFTEST_READY record");
+  if (records.length !== 1) return noReady(`duplicate SELFTEST_READY records: ${records.length}`);
+  let obj: unknown;
+  try {
+    obj = JSON.parse(records[0]!);
+  } catch {
+    return noReady("SELFTEST_READY JSON malformed");
+  }
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return noReady("SELFTEST_READY not an object");
+  const o = obj as Record<string, unknown>;
+  const keys = Object.keys(o).sort();
+  if (keys.length !== 3 || keys[0] !== "child_pid" || keys[1] !== "descendant_pid" || keys[2] !== "kind")
+    return noReady("SELFTEST_READY unknown or missing fields");
+  if (o.kind !== expectedKind) return noReady(`SELFTEST_READY kind mismatch: ${String(o.kind)}`);
+  if (typeof o.child_pid !== "number" || !Number.isInteger(o.child_pid) || o.child_pid <= 0 || o.child_pid !== actualChildPid)
+    return noReady("SELFTEST_READY child_pid mismatch");
+  if (typeof o.descendant_pid !== "number" || !Number.isInteger(o.descendant_pid) || o.descendant_pid <= 0 || o.descendant_pid === o.child_pid)
+    return noReady("SELFTEST_READY descendant_pid invalid");
+  return { ok: true, note: "", kind: o.kind as string, childPid: o.child_pid, descendantPid: o.descendant_pid };
+}
+
+/**
+ * Real abrupt-cleanup test (R1 + R2). The child creates a probe-like resource
+ * inside the worker root, spawns a controlled blocking descendant in the same
+ * process group, announces readiness ONLY after the descendant really spawned,
+ * then blocks. The parent strictly parses the readiness record, proves by a
+ * REAL process scan that child + descendant exist non-zombie in the child's
+ * PGID (and the probe resource exists), then SIGTERMs the group; "graceful"
+ * expects the child to die on SIGTERM, "forced" expects it to ignore SIGTERM
+ * so the parent must escalate to SIGKILL after the grace window. In both
+ * cases the process tree must end, the parent must remove the root and
+ * resources, and the result must NOT be killed. ANY process-scan failure
+ * fails the test closed (a failed scan is never treated as "clean").
  */
 async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<boolean> {
   const reg = buildSelftestRegistry();
@@ -1942,18 +2080,38 @@ async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<bo
     );
     child = spawned.child;
     activeWorkerProcesses.add(child);
-    // Bounded wait for the child's readiness announcement.
+    // Strict readiness parse (never a substring match). Early child exit,
+    // malformed, duplicate, unknown-field, or pid-mismatched records fail.
+    const pid = child.pid ?? -1;
     const readyDeadline = Date.now() + 30000;
-    while (Date.now() < readyDeadline && child.exitCode === null && !spawned.readStdout().includes(SELFTEST_READY_PREFIX)) {
+    let ready: ReadyRecord = { ok: false, note: "no SELFTEST_READY record", kind: "", childPid: 0, descendantPid: 0 };
+    while (Date.now() < readyDeadline && child.exitCode === null) {
+      ready = parseSelftestReady(spawned.readStdout(), kind, pid);
+      if (ready.ok || ready.note !== "no SELFTEST_READY record") break;
       await sleepMs(50);
     }
-    if (!spawned.readStdout().includes(SELFTEST_READY_PREFIX)) return false;
+    if (!ready.ok) return false;
+    const descendantPid = ready.descendantPid;
+    // Real process-scan proof BEFORE signalling: scan succeeded; child and
+    // descendant both exist, are non-zombie, and belong to the child's PGID;
+    // the probe-like resource exists. Any failure => self-test false.
+    const scanBefore = scanProcessGroups();
+    const childRow = scanBefore.ok ? scanBefore.entries.find((p) => p.pid === pid) : undefined;
+    const descRow = scanBefore.ok ? scanBefore.entries.find((p) => p.pid === descendantPid) : undefined;
+    const resourceExists = fs.existsSync(path.join(reg.root, "probe-session", "G", "probe-resource.bin"));
+    const preVerified =
+      scanBefore.ok && childRow !== undefined && descRow !== undefined &&
+      !childRow.state.includes("Z") && !descRow.state.includes("Z") &&
+      childRow.pgid === pid && descRow.pgid === pid && resourceExists;
+    if (!preVerified) return false;
     // Staged process-group termination: SIGTERM, bounded grace, then — only if
-    // group members still survive — SIGKILL. The need for escalation is itself
-    // the assertion that distinguishes the graceful from the forced case.
+    // a real scan still finds live group members — SIGKILL. The need for
+    // escalation is itself the assertion distinguishing graceful from forced.
     killProcessGroup(child, "SIGTERM");
     await sleepMs(SELFTEST_CHILD_GRACE_MS + 250);
-    const escalationNeeded = pgidStillAlive(child.pid ?? -1);
+    const afterTerm = pgidStillAlive(pid);
+    if (!afterTerm.ok) return false; // scan failure fails closed
+    const escalationNeeded = afterTerm.alive;
     if (escalationNeeded) killProcessGroup(child, "SIGKILL");
     const r = await spawned.done;
     activeWorkerProcesses.delete(child);
@@ -1972,12 +2130,14 @@ async function runAbruptCleanupSelftest(kind: "graceful" | "forced"): Promise<bo
     })();
     const rootGone = !fs.existsSync(reg.root);
     const resourceGone = !fs.existsSync(path.join(reg.root, "probe-session", "G"));
-    const treeEnded = !pgidStillAlive(child.pid ?? -1);
+    const finalScan = pgidStillAlive(pid);
+    if (!finalScan.ok) return false; // scan failure fails closed
+    const noResidual = !finalScan.alive;
     const escalationMatches = escalationNeeded === (kind === "forced");
     if (process.env.L04_DEBUG === "1") {
-      console.error(`DBG abrupt kind=${kind} code=${r.code} signal=${r.signal} notKilled=${notKilled} rootGone=${rootGone} resourceGone=${resourceGone} treeEnded=${treeEnded} escalationNeeded=${escalationNeeded} pid=${child.pid} ready=${spawned.readStdout().includes(SELFTEST_READY_PREFIX)}`);
+      console.error(`DBG abrupt kind=${kind} code=${r.code} signal=${r.signal} notKilled=${notKilled} rootGone=${rootGone} resourceGone=${resourceGone} preVerified=${preVerified} noResidual=${noResidual} escalationNeeded=${escalationNeeded} pid=${pid} descendant=${descendantPid} ready=${ready.ok}`);
     }
-    return notKilled && rootGone && resourceGone && treeEnded && escalationMatches;
+    return notKilled && rootGone && resourceGone && noResidual && escalationMatches;
   } finally {
     if (child !== null && child.exitCode === null && child.signalCode === null) {
       killProcessGroup(child, "SIGKILL");
@@ -2686,12 +2846,27 @@ function validateWorkerResult(
     if (!isPathContained(expectedRoot, r.probe_file_path)) return fail("probe file outside worker root");
   }
 
-  // ── cross-field kill rules ──
+  // ── R2: SHARED killed base contract — enforced for EVERY killed payload,
+  //    first_failure AND dedicated_probe alike. The full targeted suite must
+  //    have run and failed (non-zero integer test_exit), the mutation must
+  //    have changed real bytes vs the parent baseline, restoration must be
+  //    proven byte-identical, and the payload must reference the scheduled
+  //    root. Any failure rejects the worker result (harness_error) and blocks
+  //    aggregate success. ──
   if (r.status === "killed") {
     if (r.target_matches !== 1) return fail("killed with target match count != 1");
+    if (r.expected_evidence !== def.expectedEvidence) return fail("killed with wrong expected_evidence");
+    if (r.test_exit === null || !Number.isInteger(r.test_exit) || r.test_exit <= 0)
+      return fail("killed with invalid test_exit");
+    if (!SHA64_RE.test(r.baseline_sha256)) return fail("killed without valid baseline_sha256");
+    if (r.baseline_sha256 !== parentBaselineSha) return fail("killed with baseline not equal to parent baseline");
+    if (r.mutated_sha256 === "" || !SHA64_RE.test(r.mutated_sha256)) return fail("killed without valid mutated_sha256");
+    if (r.mutated_sha256 === r.baseline_sha256) return fail("killed with unchanged mutated bytes");
     if (!r.restored_byte_identical) return fail("killed without restored byte identity");
     if (r.restored_sha256 !== r.baseline_sha256) return fail("killed without restored SHA equal to baseline");
+    if (r.worker_root !== expectedRoot) return fail("killed with worker_root not equal to scheduled root");
     if (r.evidence_mode === "dedicated_probe") {
+      // ── dedicated_probe extras on top of the shared base contract ──
       if (r.probe_environment_isolated !== "true") return fail("killed probe without environment isolation");
       if (r.probe_file_cleanup_complete !== "true" || r.probe_session_cleanup_complete !== "true")
         return fail("killed probe without complete cleanup");
@@ -2706,17 +2881,12 @@ function validateWorkerResult(
       if (r.probe_file_path === "" || !isPathContained(expectedRoot, r.probe_file_path))
         return fail("killed probe file outside worker root");
     } else {
-      // ── R1: parent independently re-validates the first_failure killed
-      //    payload — the worker's own classification is never trusted. ──
-      if (r.test_exit === null || !Number.isInteger(r.test_exit) || r.test_exit <= 0)
-        return fail("killed with invalid test_exit");
+      // ── R1/R2: parent independently re-validates the first_failure killed
+      //    payload on top of the shared base contract — the worker's own
+      //    classification is never trusted. ──
       if (r.first_failure === "") return fail("killed with empty first_failure");
-      if (r.expected_evidence !== def.expectedEvidence) return fail("killed with wrong expected_evidence");
       if (!r.first_failure.includes(def.expectedEvidence))
         return fail("killed without expected evidence token");
-      if (r.mutated_sha256 === "" || !SHA64_RE.test(r.mutated_sha256))
-        return fail("killed without valid mutated_sha256");
-      if (r.mutated_sha256 === r.baseline_sha256) return fail("killed with unchanged mutated bytes");
       if (r.probe_session_root !== "" || r.probe_file_path !== "")
         return fail("killed first_failure with probe paths");
       for (const pf of FIRST_FAILURE_PROBE_FIELDS) {
@@ -3001,34 +3171,109 @@ function killProcessGroup(child: ChildProcess, signal: NodeJS.Signals): boolean 
   try { process.kill(-child.pid, signal); return true; } catch { return false; }
 }
 
-/** Snapshot of `ps` pid/pgid/state lines (darwin + linux supported platforms). */
-function scanProcessGroups(): { pid: number; pgid: number; state: string }[] {
-  const args = process.platform === "darwin" ? ["-axo", "pid=,pgid=,state="] : ["-eo", "pid=,pgid=,state="];
-  const r = spawnSync("ps", args, { encoding: "utf8" });
-  if (r.status !== 0) return [];
-  const out: { pid: number; pgid: number; state: string }[] = [];
-  for (const line of r.stdout.split("\n")) {
+/** One strictly parsed `ps` row (pid, pgid, state). */
+interface ProcessRow {
+  pid: number;
+  pgid: number;
+  state: string;
+}
+
+/**
+ * Fail-closed process scan (R2): success carries strictly parsed rows, failure
+ * carries a stable reportable reason. A failed scan is NEVER treated as "no
+ * residual processes" by any caller.
+ */
+type ProcessScan =
+  | { ok: true; entries: readonly ProcessRow[] }
+  | { ok: false; error: string };
+
+/** Raw `ps` invocation result — injectable runner seam for scanner self-tests. */
+interface PsRawResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: unknown;
+  error?: Error;
+}
+type PsRunner = (args: readonly string[]) => PsRawResult;
+
+const realPsRunner: PsRunner = (args) => {
+  const r = spawnSync("ps", [...args], { encoding: "utf8" });
+  return { status: r.status, signal: r.signal ?? null, stdout: r.stdout, error: r.error };
+};
+
+/**
+ * Pure strict parser for `ps -o pid=,pgid=,state=` output. Blank lines are
+ * ignored; ANY non-empty line that does not parse into exactly three fields
+ * with positive-integer pid/pgid and a non-empty state fails the whole scan.
+ */
+function parseProcessRows(stdout: string): ProcessScan {
+  const entries: ProcessRow[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.trim() === "") continue;
     const parts = line.trim().split(/\s+/);
-    if (parts.length < 3) continue;
+    if (parts.length !== 3) return { ok: false, error: `unparseable ps line: ${clampLine(line)}` };
     const pid = Number(parts[0]);
     const pgid = Number(parts[1]);
-    if (Number.isInteger(pid) && Number.isInteger(pgid)) out.push({ pid, pgid, state: parts[2] ?? "" });
+    const state = parts[2] ?? "";
+    if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(pgid) || pgid <= 0 || state === "")
+      return { ok: false, error: `invalid ps row: ${clampLine(line)}` };
+    entries.push({ pid, pgid, state });
   }
-  return out;
+  return { ok: true, entries };
 }
 
-/** True when any NON-zombie member of the given process group is still alive. */
-function pgidStillAlive(pgid: number): boolean {
-  return scanProcessGroups().some((p) => p.pgid === pgid && !p.state.includes("Z"));
+/** Pure: does any NON-zombie row belong to the given pgid? */
+function entriesPgidAlive(entries: readonly ProcessRow[], pgid: number): boolean {
+  return entries.some((p) => p.pgid === pgid && !p.state.includes("Z"));
 }
 
-/** Subset of the given pgids that still have live (non-zombie) members. */
-function aliveGroups(pgids: readonly number[]): number[] {
+/** Pure: wanted pgids that still have live (non-zombie) rows. */
+function entriesAlivePgids(entries: readonly ProcessRow[], wanted: readonly number[]): number[] {
+  const set = new Set(wanted);
   const alive = new Set<number>();
-  for (const p of scanProcessGroups()) {
-    if (pgids.includes(p.pgid) && !p.state.includes("Z")) alive.add(p.pgid);
+  for (const p of entries) {
+    if (set.has(p.pgid) && !p.state.includes("Z")) alive.add(p.pgid);
   }
   return [...alive];
+}
+
+/**
+ * Snapshot of `ps` pid/pgid/state lines (darwin + linux supported platforms).
+ * Fail-closed: spawn error, signal termination, null/non-zero status,
+ * non-string stdout, or any unparseable non-empty line => ok=false with a
+ * reportable reason. Never returns a bare `[]` on failure. The runner
+ * parameter is an internal test seam; production always uses the real `ps`
+ * binary (no shell, no third-party dependencies, no env-controlled bypass).
+ */
+function scanProcessGroups(runner: PsRunner = realPsRunner): ProcessScan {
+  const args = process.platform === "darwin" ? ["-axo", "pid=,pgid=,state="] : ["-eo", "pid=,pgid=,state="];
+  const r = runner(args);
+  if (r.error !== undefined) return { ok: false, error: `ps spawn error: ${r.error.message}` };
+  if (r.signal !== null) return { ok: false, error: `ps terminated by signal (${r.signal})` };
+  if (r.status === null) return { ok: false, error: "ps status is null" };
+  if (r.status !== 0) return { ok: false, error: `ps exited with status ${r.status}` };
+  if (typeof r.stdout !== "string") return { ok: false, error: "ps stdout is not a string" };
+  return parseProcessRows(r.stdout);
+}
+
+/**
+ * Fail-closed "does this process group still have live (non-zombie) members?".
+ * A failed scan yields ok=false (never "clean").
+ */
+function pgidStillAlive(pgid: number, runner?: PsRunner): { ok: boolean; alive: boolean; error: string } {
+  const s = scanProcessGroups(runner);
+  if (!s.ok) return { ok: false, alive: false, error: s.error };
+  return { ok: true, alive: entriesPgidAlive(s.entries, pgid), error: "" };
+}
+
+/**
+ * Fail-closed subset of the given pgids that still have live members. A failed
+ * scan yields ok=false (never an empty "no residual" list).
+ */
+function aliveGroups(pgids: readonly number[], runner?: PsRunner): { ok: boolean; alive: number[]; error: string } {
+  const s = scanProcessGroups(runner);
+  if (!s.ok) return { ok: false, alive: [], error: s.error };
+  return { ok: true, alive: entriesAlivePgids(s.entries, pgids), error: "" };
 }
 
 /**
@@ -3336,8 +3581,20 @@ async function runSelftestChild(cli: ParsedCli): Promise<number> {
   fs.writeFileSync(path.join(resourceRoot, "probe-resource.bin"), Buffer.from("selftest:" + cli.selftestToken, "utf8"));
 
   // Controlled blocking descendant in the SAME process group as this child.
+  // The parent spawned this child detached, so this child is the process-group
+  // leader and a non-detached descendant inherits this child's PGID. The
+  // descendant's REAL spawn must succeed with a valid PID before any readiness
+  // (or forged result) is emitted; a spawn error / missing PID fails closed
+  // and the error event is never swallowed.
   const descendant = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
-  descendant.on("error", () => { /* descendant spawn failure is not fatal for the assertions */ });
+  const descendantPid = await new Promise<number>((resolve) => {
+    descendant.once("spawn", () => resolve(descendant.pid ?? 0));
+    descendant.once("error", () => resolve(0));
+  });
+  if (descendantPid <= 0 || descendantPid === process.pid) {
+    console.error("WORKER_FAULT descendant spawn failed");
+    return 1;
+  }
 
   if (cli.selftestKind === "forge") {
     // Exit 0 immediately while the descendant keeps running: the parent must
@@ -3386,7 +3643,7 @@ async function runSelftestChild(cli: ParsedCli): Promise<number> {
       /* ignored: the parent must escalate to SIGKILL */
     });
   }
-  console.log(SELFTEST_READY_PREFIX + " " + cli.selftestKind);
+  console.log(SELFTEST_READY_PREFIX + " " + JSON.stringify({ kind: cli.selftestKind, child_pid: process.pid, descendant_pid: descendantPid }));
   // Keep the event loop alive independently of the blocking descendant: if the
   // descendant dies (default SIGTERM disposition), the child must STILL survive
   // until the parent escalates — otherwise an empty loop would exit the child
@@ -3650,7 +3907,11 @@ async function main(): Promise<MainOutcome> {
     const closeDeadline = Date.now() + WORKER_SIGNAL_GRACE_MS;
     while (Date.now() < closeDeadline && activeWorkerProcesses.size > 0) syncSleep(50);
     const residual = aliveGroups(allWorkerPgids);
-    if (residual.length > 0) console.error(`HARNESS_ERROR residual worker processes after signal: ${residual.join(",")}`);
+    if (!residual.ok) {
+      console.error(`HARNESS_ERROR process scan failed after signal: ${residual.error}`);
+    } else if (residual.alive.length > 0) {
+      console.error(`HARNESS_ERROR residual worker processes after signal: ${residual.alive.join(",")}`);
+    }
     cleanup();
     process.exit(130);
   };
@@ -3710,6 +3971,8 @@ async function main(): Promise<MainOutcome> {
       `worker_cleanup_failure_blocks_kill=${st.worker_cleanup_failure_blocks_kill} ` +
       `records_ordered_A_to_N=${st.records_ordered_A_to_N} ` +
       `worker_cli_fail_closed=${st.worker_cli_fail_closed} ` +
+      `r2_ghl_suite_evidence_validation=${st.r2_ghl_suite_evidence_validation} ` +
+      `r2_process_scan_fail_closed=${st.r2_process_scan_fail_closed} ` +
       r1SelftestLine,
   );
   if (
@@ -3723,11 +3986,28 @@ async function main(): Promise<MainOutcome> {
     !st.worker_cli_fail_closed ||
     !st.parent_first_failure_validation || !st.structured_probe_assertions ||
     !st.forged_worker_kill_rejected || !st.graceful_worker_cleanup ||
-    !st.forced_worker_cleanup
+    !st.forced_worker_cleanup ||
+    !st.r2_ghl_suite_evidence_validation || !st.r2_process_scan_fail_closed
   ) {
     console.error("HARNESS_ERROR failure-path self-test failed — refusing to run baseline/mutations");
     return { code: 1, tempCleanupComplete: false };
   }
+
+  // ── R2 aggregate markers (Correction R2; derived ONLY from the real
+  //    validator / subprocess self-tests above, never hard-coded) ──
+  const r2GhlEvidence = st.r2_ghl_suite_evidence_validation;
+  const r2DescendantVerified = st.graceful_worker_cleanup && st.forced_worker_cleanup;
+  const r2ScannerFailClosed = st.r2_process_scan_fail_closed;
+  const r2All = r2GhlEvidence && r2DescendantVerified && r2ScannerFailClosed;
+  const r2Markers: Record<string, boolean> = {
+    D04_R2_GHL_SUITE_EVIDENCE_VALIDATION_VERIFIED: r2GhlEvidence,
+    D04_R2_DESCENDANT_SPAWN_VERIFIED: r2DescendantVerified,
+    D04_R2_DESCENDANT_PGID_VERIFIED: r2DescendantVerified,
+    D04_R2_PROCESS_SCAN_FAILURE_FAILS_CLOSED: r2ScannerFailClosed,
+    D04_R2_ALL_CORRECTION_SELFTESTS_PASS: r2All,
+  };
+  for (const [name, ok] of Object.entries(r2Markers)) console.log(`${name} ${ok}`);
+  const r2AllTrue = Object.values(r2Markers).every(Boolean);
 
   const repoRoot = process.cwd();
   const prodPath = path.join(repoRoot, PROD_REL);
@@ -4116,14 +4396,22 @@ async function main(): Promise<MainOutcome> {
         sessionCode = 1;
       }
 
-      // R1: process groups that still had members when a worker closed must be
-      // empty again now — any surviving member means an orphaned descendant.
+      // R1/R2: process groups that still had members when a worker closed must
+      // be empty again now — any surviving member means an orphaned
+      // descendant. A FAILED residual scan is never read as "clean": it forces
+      // harness_error while cleanup of every registered root still runs below.
       const residualGroups = aliveGroups(suspiciousPgids);
-      if (residualGroups.length > 0) {
-        console.error(`HARNESS_ERROR residual worker processes: ${residualGroups.join(",")}`);
+      if (!residualGroups.ok) {
+        console.error(`HARNESS_ERROR process scan failed for residual worker check: ${residualGroups.error}`);
         sessionCode = 1;
+        noResidualChildProcess = false;
+      } else if (residualGroups.alive.length > 0) {
+        console.error(`HARNESS_ERROR residual worker processes: ${residualGroups.alive.join(",")}`);
+        sessionCode = 1;
+        noResidualChildProcess = false;
+      } else {
+        noResidualChildProcess = true;
       }
-      noResidualChildProcess = residualGroups.length === 0;
 
       if (sessionCode !== 0) throw new Error("SCHEDULER_FAILED");
 
@@ -4219,7 +4507,8 @@ async function main(): Promise<MainOutcome> {
       st.structured_probe_assertions &&
       st.forged_worker_kill_rejected &&
       st.graceful_worker_cleanup &&
-      st.forced_worker_cleanup;
+      st.forced_worker_cleanup &&
+      r2AllTrue;
 
     console.log(`R6_QUICK_MODE_COMPLETE ${quickGood}`);
     return { code: quickGood ? 0 : 1, tempCleanupComplete };
@@ -4279,6 +4568,7 @@ async function main(): Promise<MainOutcome> {
     probeSummary.cleaned === 3 &&
     probeSummary.isolated === 3 &&
     r1AllTrue &&
+    r2AllTrue &&
     noResidualChildProcess &&
     realUnchanged &&
     tempCleanupComplete;
