@@ -362,6 +362,24 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
+ * No-throw untrusted array classification (R3). Array.isArray on a revoked
+ * Proxy throws a TypeError; untrusted values must never make that exception
+ * observable. Returns the classification only — "array", "non_array" or
+ * "unclassifiable" when Array.isArray itself threw — and never propagates or
+ * leaks the original exception, and never guesses via instanceof, constructor
+ * or prototype chains.
+ */
+type ArrayClass = "array" | "non_array" | "unclassifiable";
+
+function classifyArray(v: unknown): ArrayClass {
+  try {
+    return Array.isArray(v) ? "array" : "non_array";
+  } catch {
+    return "unclassifiable";
+  }
+}
+
+/**
  * Plain-object scan with an exact key allowlist. Rejects arrays, non-plain
  * prototypes, symbol/__proto__ keys, accessors, missing descriptors and any
  * reflection that throws (Proxy traps). Produces a fresh null-prototype
@@ -371,7 +389,7 @@ function scanPlain(v: unknown, allowed: readonly string[], label: string): Recor
   if (v === null || typeof v !== "object") {
     throw new Error(`${label} must be an object`);
   }
-  if (Array.isArray(v)) {
+  if (classifyArray(v) !== "non_array") {
     throw new Error(`${label} must not be an array`);
   }
   let proto: unknown;
@@ -413,7 +431,7 @@ function scanPlainRecord(v: unknown, label: string): Record<string, unknown> {
   if (v === null || typeof v !== "object") {
     throw new Error(`${label} must be an object`);
   }
-  if (Array.isArray(v)) {
+  if (classifyArray(v) !== "non_array") {
     throw new Error(`${label} must not be an array`);
   }
   let proto: unknown;
@@ -463,10 +481,13 @@ type ArrayScanResult =
   | { ok: false };
 
 function scanExternalArray(v: unknown, itemCap: number): ArrayScanResult {
-  if (!Array.isArray(v)) return { ok: false };
+  if (classifyArray(v) !== "array") return { ok: false };
+  // Compile-time narrowing only — the classification above is the sole
+  // authority; no instanceof/constructor/prototype guessing happens here.
+  const arr = v as unknown[];
   let lengthDesc: PropertyDescriptor | undefined;
   try {
-    lengthDesc = Reflect.getOwnPropertyDescriptor(v, "length");
+    lengthDesc = Reflect.getOwnPropertyDescriptor(arr, "length");
   } catch {
     return { ok: false };
   }
@@ -481,7 +502,7 @@ function scanExternalArray(v: unknown, itemCap: number): ArrayScanResult {
   // any ownKeys call or index read.
   if (length > itemCap) return { ok: false };
   let keys: Array<string | symbol>;
-  try { keys = Reflect.ownKeys(v); } catch {
+  try { keys = Reflect.ownKeys(arr); } catch {
     return { ok: false };
   }
   const snapshot: unknown[] = new Array(length);
@@ -491,7 +512,7 @@ function scanExternalArray(v: unknown, itemCap: number): ArrayScanResult {
       // The canonical array length is an own non-configurable data property;
       // a Proxy must report a matching plain data descriptor or fail closed.
       let desc: PropertyDescriptor | undefined;
-      try { desc = Reflect.getOwnPropertyDescriptor(v, k); } catch {
+      try { desc = Reflect.getOwnPropertyDescriptor(arr, k); } catch {
         return { ok: false };
       }
       if (!desc || "get" in desc || "set" in desc || !("value" in desc) ||
@@ -506,7 +527,7 @@ function scanExternalArray(v: unknown, itemCap: number): ArrayScanResult {
       return { ok: false };
     }
     let desc: PropertyDescriptor | undefined;
-    try { desc = Reflect.getOwnPropertyDescriptor(v, k); } catch {
+    try { desc = Reflect.getOwnPropertyDescriptor(arr, k); } catch {
       return { ok: false };
     }
     if (!desc || "get" in desc || "set" in desc || !("value" in desc)) return { ok: false };
@@ -584,7 +605,11 @@ function canonicalizeJsonSafeValue(
     return v;
   }
   if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
-  if (Array.isArray(v)) {
+  // R3: revoked Proxy values are unclassifiable and fail closed here — they
+  // can never be treated as an array or record and never escape.
+  const kind = classifyArray(v);
+  if (kind === "unclassifiable") return undefined;
+  if (kind === "array") {
     if (depth >= MAX_FINDING_DEPTH) return undefined;
     const scanned = scanExternalArray(v, MAX_FINDING_NODES);
     if (!scanned.ok) return undefined;
@@ -632,6 +657,13 @@ function validateInt(
 function validateRepoRelativePath(v: unknown, label: string): { ok: true; value: string } | { ok: false; reason: string } {
   if (typeof v !== "string") return { ok: false, reason: `${label} must be a string` };
   if (v.length === 0) return { ok: false, reason: `${label} must be non-empty` };
+  // R3: the bounded UTF-8 budget runs before any scale-dependent work — trim,
+  // split and segment allocation — so oversized or invalid-surrogate inputs
+  // fail without materializing a trimmed copy or a segment array. The counter
+  // itself never materializes an encoded copy of the input.
+  const counted = countUtf8Budgeted(v, MAX_PATH_BYTES);
+  if (counted.status === "over_budget") return { ok: false, reason: `${label} exceeds the byte limit` };
+  if (counted.status === "invalid_surrogate") return { ok: false, reason: `${label} contains invalid UTF-16` };
   if (v !== v.trim()) return { ok: false, reason: `${label} must be trimmed` };
   if (v.startsWith("/")) return { ok: false, reason: `${label} must be repository-relative` };
   if (v.includes("\\")) return { ok: false, reason: `${label} must not contain backslash` };
@@ -641,9 +673,6 @@ function validateRepoRelativePath(v: unknown, label: string): { ok: true; value:
     if (segment.length === 0) return { ok: false, reason: `${label} has an empty segment` };
     if (segment === "." || segment === "..") return { ok: false, reason: `${label} has a dot segment` };
   }
-  const counted = countUtf8Budgeted(v, MAX_PATH_BYTES);
-  if (counted.status === "over_budget") return { ok: false, reason: `${label} exceeds the byte limit` };
-  if (counted.status === "invalid_surrogate") return { ok: false, reason: `${label} contains invalid UTF-16` };
   return { ok: true, value: v };
 }
 

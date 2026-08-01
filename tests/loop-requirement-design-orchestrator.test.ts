@@ -70,6 +70,8 @@ const MARKERS: Record<string, boolean> = {
   D08_R2_ARRAY_DESCRIPTOR_SNAPSHOT_VERIFIED: false,
   D08_R2_REQUEST_ARRAY_FAIL_CLOSED_VERIFIED: false,
   D08_R2_PREALLOCATION_BYTE_BUDGET_VERIFIED: false,
+  D08_R3_REVOKED_PROXY_FAIL_CLOSED_VERIFIED: false,
+  D08_R3_PATH_PREALLOCATION_GUARD_VERIFIED: false,
 };
 
 function failExit(msg: string): never {
@@ -287,6 +289,28 @@ function newOrchestrator(deps: {
     artifactStore: deps.store ?? makeRecordingStore().store,
     clock: deps.clock,
   });
+}
+
+/**
+ * R3: runs execute through a try/catch so a contract violation that throws is
+ * recorded as an assertion failure instead of crashing the suite.
+ */
+function tryExecute(orch: LoopRequirementDesignOrchestrator, request: unknown, name: string): LoopRequirementDesignResult | null {
+  try {
+    const result = orch.execute(request);
+    check(true, `${name}: execute did not throw`);
+    return result;
+  } catch (err) {
+    check(false, `${name}: execute threw (${(err as Error).message})`);
+    return null;
+  }
+}
+
+/** Real revoked Proxy (Proxy.revocable + revoke) standing in for hostile input. */
+function revoked<T extends object>(target: T): T {
+  const { proxy, revoke } = Proxy.revocable(target, {});
+  revoke();
+  return proxy as T;
 }
 
 function assertTerminalContract(result: LoopRequirementDesignResult, route: LoopRequirementDesignRoute, reasonCode: string): void {
@@ -2458,6 +2482,225 @@ async function main(): Promise<void> {
     }
   }
   markIfClear("D08_R2_PREALLOCATION_BYTE_BUDGET_VERIFIED");
+
+  // ═══════════════════════════════════════ 20. R3 revoked Proxy fail-closed
+  startSection();
+  {
+    console.log("20. R3 revoked Proxy fail-closed taxonomy (request/dependency/artifact)");
+    const cleanMessage = (r: LoopRequirementDesignResult, name: string): void => {
+      check(r.safeMessage.length > 0 && r.safeMessage.length <= 256, `${name}: safeMessage bounded`);
+      check(!/typeerror|revoked|proxy|boom/i.test(r.safeMessage), `${name}: safeMessage leaks no exception detail`);
+    };
+    // 20.1 request policy arrays (allowedRoots/deniedPaths/allowedExecutableIds)
+    //      → failed/INVALID_INPUT, no normalize/design/reviewer/put, no refs.
+    for (const c of [
+      { name: "allowedRoots", request: makeRequest({ pathPolicy: { allowedRoots: revoked(["core"]), deniedPaths: [] } }) },
+      { name: "deniedPaths", request: makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: revoked(["core/legacy"]) } }) },
+      { name: "allowedExecutableIds", request: makeRequest({ commandPolicy: { allowedExecutableIds: revoked(["node"]) } }) },
+    ]) {
+      const agent = makeAgent();
+      const reviewer = makeReviewer();
+      const { store, putCalls } = makeRecordingStore();
+      const r = tryExecute(newOrchestrator({ agent, reviewer, store }), c.request, `R3 request ${c.name} revoked`);
+      if (r === null) continue;
+      check(r.route === "failed" && r.reasonCode === "INVALID_INPUT",
+        `R3 request ${c.name} revoked → failed/INVALID_INPUT`);
+      check(agent.normalizeCalls.length === 0 && agent.designCalls.length === 0,
+        `R3 request ${c.name} revoked: normalize/design never called`);
+      check(reviewer.reviewCalls.length === 0, `R3 request ${c.name} revoked: review never called`);
+      check(putCalls.length === 0, `R3 request ${c.name} revoked: put count 0`);
+      check(r.requirementArtifactRef === undefined && r.designArtifactRefs.length === 0,
+        `R3 request ${c.name} revoked: no artifact refs`);
+      check(!r.trace.some((t) => t.kind === "requirement_stored"), `R3 request ${c.name} revoked: no stored trace`);
+      assertTerminalContract(r, "failed", "INVALID_INPUT");
+      cleanMessage(r, `R3 request ${c.name} revoked`);
+    }
+    // 20.2 normalize output (top-level and array field) → blocked/DEPENDENCY_RESULT_INVALID,
+    //      no design/reviewer call, nothing stored.
+    {
+      const agentTop = makeAgent(revoked(makeSummary()));
+      const { store: storeTop, putCalls: putsTop } = makeRecordingStore();
+      const r1 = tryExecute(newOrchestrator({ agent: agentTop, reviewer: makeReviewer(), store: storeTop }),
+        makeRequest(), "R3 normalize top-level revoked");
+      if (r1 !== null) {
+        check(r1.route === "blocked" && r1.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          "R3 normalize top-level revoked → blocked/DEPENDENCY_RESULT_INVALID");
+        check(agentTop.designCalls.length === 0, "R3 normalize top-level revoked: design never called");
+        check(putsTop.length === 0, "R3 normalize top-level revoked: put count 0");
+        check(r1.requirementArtifactRef === undefined, "R3 normalize top-level revoked: no requirement ref");
+        assertTerminalContract(r1, "blocked", "DEPENDENCY_RESULT_INVALID");
+        cleanMessage(r1, "R3 normalize top-level revoked");
+      }
+      const agentArr = makeAgent(makeSummary({ acceptanceCriteria: revoked(["store tests"]) }));
+      const { store: storeArr, putCalls: putsArr } = makeRecordingStore();
+      const r2 = tryExecute(newOrchestrator({ agent: agentArr, reviewer: makeReviewer(), store: storeArr }),
+        makeRequest(), "R3 normalize array field revoked");
+      if (r2 !== null) {
+        check(r2.route === "blocked" && r2.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          "R3 normalize array field revoked → blocked/DEPENDENCY_RESULT_INVALID");
+        check(agentArr.designCalls.length === 0, "R3 normalize array revoked: design never called");
+        check(putsArr.length === 0, "R3 normalize array revoked: put count 0");
+        assertTerminalContract(r2, "blocked", "DEPENDENCY_RESULT_INVALID");
+        cleanMessage(r2, "R3 normalize array revoked");
+      }
+    }
+    // 20.3 design output (top-level, allowedPaths, plan, step args)
+    //      → blocked/DEPENDENCY_RESULT_INVALID; the verified requirement ref is kept.
+    for (const [name, design] of [
+      ["top-level", revoked(makeDesign())],
+      ["allowedPaths", makeDesign({ allowedPaths: revoked(["core/a.ts"]) })],
+      ["testPlan", makeDesign({ testPlan: revoked([makeStep()]) })],
+      ["step args", makeDesign({ testPlan: [makeStep({ id: "ok1", args: revoked(["tests/a.ts"]) })] })],
+    ] as Array<[string, Record<string, unknown>]>) {
+      const agent = makeAgent(undefined, design);
+      const { store, putCalls } = makeRecordingStore();
+      const r = tryExecute(newOrchestrator({ agent, reviewer: makeReviewer(), store }),
+        makeRequest(), `R3 design ${name} revoked`);
+      if (r === null) continue;
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        `R3 design ${name} revoked → blocked/DEPENDENCY_RESULT_INVALID`);
+      check(r.requirementArtifactRef !== undefined, `R3 design ${name} revoked: durable requirement ref kept`);
+      // Terminal contract: requirement + orchestration_result puts only — no
+      // design/review/executor puts, and the orchestration result is durably kept.
+      check(putCalls.length === 2, `R3 design ${name} revoked: no put beyond requirement + orchestration_result`);
+      check(r.orchestrationResultArtifactRef !== undefined, `R3 design ${name} revoked: orchestration result kept`);
+      check(r.designArtifactRefs.length === 0, `R3 design ${name} revoked: no design refs`);
+      check(deepEqual(traceKinds(r),
+        ["normalization_started", "requirement_stored", "route_selected", "design_started", "orchestration_result_stored", "terminal"]),
+      `R3 design ${name} revoked: exact trace`);
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      cleanMessage(r, `R3 design ${name} revoked`);
+    }
+    // 20.4 reviewer output (top-level, findings, nested array/object)
+    //      → blocked/DEPENDENCY_RESULT_INVALID; requirement + design refs are kept.
+    for (const [name, review] of [
+      ["top-level", revoked(makeReview("PASS"))],
+      ["findings", makeReview("NEEDS_REVISION", { findings: revoked([{ code: "C1", detail: "x" }]) })],
+      ["nested array", makeReview("NEEDS_REVISION", { findings: [{ code: "C1", relatedPaths: revoked(["core/a.ts"]) }] })],
+      ["nested object", makeReview("NEEDS_REVISION", { findings: [{ code: "C1", nested: revoked({ deep: true }) }] })],
+    ] as Array<[string, Record<string, unknown>]>) {
+      const { store, putCalls } = makeRecordingStore();
+      const r = tryExecute(newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(review), store }),
+        makeRequest(), `R3 reviewer ${name} revoked`);
+      if (r === null) continue;
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        `R3 reviewer ${name} revoked → blocked/DEPENDENCY_RESULT_INVALID`);
+      check(r.requirementArtifactRef !== undefined && r.designArtifactRefs.length === 1,
+        `R3 reviewer ${name} revoked: durable refs kept`);
+      // Terminal contract: requirement + design + orchestration_result puts only —
+      // no review/executor puts after the invalid reviewer output.
+      check(putCalls.length === 3, `R3 reviewer ${name} revoked: no put beyond requirement + design + orchestration_result`);
+      check(r.orchestrationResultArtifactRef !== undefined, `R3 reviewer ${name} revoked: orchestration result kept`);
+      check(r.solutionReviewArtifactRefs.length === 0, `R3 reviewer ${name} revoked: no review refs`);
+      check(deepEqual(traceKinds(r),
+        ["normalization_started", "requirement_stored", "route_selected", "design_started", "design_stored", "review_started", "orchestration_result_stored", "terminal"]),
+      `R3 reviewer ${name} revoked: exact trace`);
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      cleanMessage(r, `R3 reviewer ${name} revoked`);
+    }
+    // 20.5 artifactStore.put returns a revoked descriptor → failed/ARTIFACT_STORE_FAILED,
+    //      no forged ref, no further put.
+    {
+      const { store, putCalls } = makeLieStore((kind, bytes) => revoked(descriptorOf(kind, bytes)));
+      const r = tryExecute(newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store: store as never }),
+        makeRequest(), "R3 store descriptor revoked");
+      if (r !== null) {
+        check(r.route === "failed" && r.reasonCode === "ARTIFACT_STORE_FAILED",
+          "R3 store descriptor revoked → failed/ARTIFACT_STORE_FAILED");
+        check(putCalls.length === 1, "R3 store descriptor revoked: no further put");
+        check(r.requirementArtifactRef === undefined && r.orchestrationResultArtifactRef === undefined,
+          "R3 store descriptor revoked: no forged ref");
+        assertTerminalContract(r, "failed", "ARTIFACT_STORE_FAILED");
+        cleanMessage(r, "R3 store descriptor revoked");
+      }
+    }
+  }
+  markIfClear("D08_R3_REVOKED_PROXY_FAIL_CLOSED_VERIFIED");
+
+  // ═══════════════════════════════════════ 21. R3 path preallocation guard
+  startSection();
+  {
+    console.log("21. R3 path preallocation guard (UTF-8 budget before trim/split)");
+    // The trim/split spy records every receiver string; over-budget and
+    // invalid-surrogate paths must never reach either method, while valid
+    // paths must (positive control). Restored exactly in finally.
+    const origTrim = String.prototype.trim;
+    const origSplit = String.prototype.split;
+    const trimSeen: string[] = [];
+    const splitSeen: string[] = [];
+    try {
+      String.prototype.trim = function (this: string): string {
+        trimSeen.push(String(this));
+        return origTrim.call(this);
+      } as typeof String.prototype.trim;
+      String.prototype.split = function (this: string, separator: string | RegExp, limit?: number): string[] {
+        splitSeen.push(String(this));
+        return origSplit.call(this, separator, limit);
+      } as typeof String.prototype.split;
+
+      // 21.1 slash-heavy oversized path — rejected on byte budget, no trim/split
+      const overPath = "a/".repeat(400); // 800 ASCII bytes > 512
+      const r1 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: [overPath], deniedPaths: [] } }));
+      check(r1.route === "failed" && r1.reasonCode === "INVALID_INPUT",
+        "R3 slash-heavy over-budget path → failed/INVALID_INPUT");
+      check(!trimSeen.includes(overPath), "R3 over-budget path never reached trim");
+      check(!splitSeen.includes(overPath), "R3 over-budget path never reached split");
+      assertTerminalContract(r1, "failed", "INVALID_INPUT");
+
+      // 21.2 lone high surrogate — rejected on invalid UTF-16, no trim/split
+      const highPath = "core/" + "\uD800";
+      const r2 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: [highPath], deniedPaths: [] } }));
+      check(r2.route === "failed" && r2.reasonCode === "INVALID_INPUT",
+        "R3 lone high surrogate path → failed/INVALID_INPUT");
+      check(!trimSeen.includes(highPath), "R3 lone high surrogate path never reached trim");
+      check(!splitSeen.includes(highPath), "R3 lone high surrogate path never reached split");
+      assertTerminalContract(r2, "failed", "INVALID_INPUT");
+
+      // 21.3 lone low surrogate — rejected on invalid UTF-16, no trim/split
+      const lowPath = "core/" + "\uDFFF";
+      const r3 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: [lowPath], deniedPaths: [] } }));
+      check(r3.route === "failed" && r3.reasonCode === "INVALID_INPUT",
+        "R3 lone low surrogate path → failed/INVALID_INPUT");
+      check(!trimSeen.includes(lowPath), "R3 lone low surrogate path never reached trim");
+      check(!splitSeen.includes(lowPath), "R3 lone low surrogate path never reached split");
+      assertTerminalContract(r3, "failed", "INVALID_INPUT");
+
+      // 21.4 exactly at the byte limit (valid multibyte) — accepted, and the
+      //      spy proves the guard order: valid paths DO reach trim/split.
+      //      The default design paths stay under the default roots, so only
+      //      the path budget itself decides acceptance.
+      const atLimit = "core/" + "中".repeat(169); // 5 + 507 = 512 bytes
+      const r4 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: [atLimit, "core", "tests", "docs"], deniedPaths: [] } }));
+      check(r4.reasonCode === "DIRECT_READY", "R3 exact byte-limit multibyte path accepted");
+      check(trimSeen.includes(atLimit), "R3 at-limit path reached trim (positive control)");
+      check(splitSeen.includes(atLimit), "R3 at-limit path reached split (positive control)");
+
+      // 21.5 over by 1 byte — rejected, no trim/split
+      const over1 = atLimit + "a"; // 513 bytes
+      const r5 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: [over1, "core", "tests", "docs"], deniedPaths: [] } }));
+      check(r5.route === "failed" && r5.reasonCode === "INVALID_INPUT",
+        "R3 over-by-1-byte path → failed/INVALID_INPUT");
+      check(!trimSeen.includes(over1), "R3 over-by-1 path never reached trim");
+      check(!splitSeen.includes(over1), "R3 over-by-1 path never reached split");
+      assertTerminalContract(r5, "failed", "INVALID_INPUT");
+
+      // 21.6 normal valid path — accepted (default policy)
+      const r6 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r6.reasonCode === "DIRECT_READY", "R3 normal valid path accepted");
+      check(trimSeen.includes("core"), "R3 normal path reached trim (positive control)");
+    } finally {
+      String.prototype.trim = origTrim;
+      String.prototype.split = origSplit;
+    }
+    check(String.prototype.trim === origTrim, "R3 String.prototype.trim restored exactly");
+    check(String.prototype.split === origSplit, "R3 String.prototype.split restored exactly");
+  }
+  markIfClear("D08_R3_PATH_PREALLOCATION_GUARD_VERIFIED");
 
   // ═══════════════════════════════════════ summary
   const total = GLOBAL_PASSED + GLOBAL_FAILED;
