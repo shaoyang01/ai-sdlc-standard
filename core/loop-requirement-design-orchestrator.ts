@@ -30,6 +30,15 @@
 // expired / clock_invalid); the identity is captured once through a descriptor
 // snapshot and never re-read from the original object; all external arrays
 // are counted and byte-budgeted before any copy.
+//
+// R2 hardening: every untrusted array — request policy arrays and all agent /
+// reviewer output arrays — is captured exactly once through a shared
+// descriptor-snapshot scanner (own length data descriptor → item cap →
+// ownKeys → per-index data descriptors) into a fresh plain snapshot; the
+// original array is never read or returned afterwards, so Proxy traps and
+// caller mutation cannot feed canonical data. Untrusted string budgets use a
+// bounded UTF-8 counter that never materializes a full encoded copy and
+// distinguishes invalid surrogates from over-budget.
 
 import { createHash } from "node:crypto";
 import type { LoopRunIdentity } from "./loop-executor-types";
@@ -275,8 +284,60 @@ function utf8(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-function utf8Length(s: string): number {
-  return utf8(s).length;
+type Utf8BudgetResult =
+  | { status: "valid"; bytes: number }
+  | { status: "over_budget" }
+  | { status: "invalid_surrogate" };
+
+/**
+ * Bounded UTF-8 byte counter. Walks UTF-16 code units directly and never
+ * materializes an encoded copy: ASCII counts 1, U+0080..U+07FF counts 2,
+ * non-surrogate U+0800..U+FFFF counts 3, a valid surrogate pair counts 4
+ * (the consumed low surrogate is skipped). A lone high/low surrogate is
+ * invalid. Counting stops as soon as the remaining budget would be exceeded
+ * and the addition is only performed when the next unit provably fits, so
+ * the accumulator can never overflow.
+ */
+function countUtf8Budgeted(s: string, remaining: number): Utf8BudgetResult {
+  let bytes = 0;
+  for (let i = 0; i < s.length; i++) {
+    const unit = s.charCodeAt(i);
+    let add: number;
+    if (unit < 0x80) {
+      add = 1;
+    } else if (unit < 0x800) {
+      add = 2;
+    } else if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (i + 1 >= s.length) return { status: "invalid_surrogate" };
+      const low = s.charCodeAt(i + 1);
+      if (low < 0xdc00 || low > 0xdfff) return { status: "invalid_surrogate" };
+      add = 4;
+      i += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return { status: "invalid_surrogate" };
+    } else {
+      add = 3;
+    }
+    if (add > remaining - bytes) return { status: "over_budget" };
+    bytes += add;
+  }
+  return { status: "valid", bytes };
+}
+
+/**
+ * Charges the bounded UTF-8 length of every given string against the output
+ * budget. Returns the total charged bytes, or null when any string is
+ * invalid (lone surrogate) or exceeds the remaining budget.
+ */
+function chargeUtf8(strings: readonly string[], budget: OutputBudget): number | null {
+  let total = 0;
+  for (const s of strings) {
+    const counted = countUtf8Budgeted(s, budget.bytes);
+    if (counted.status !== "valid") return null;
+    budget.bytes -= counted.bytes;
+    total += counted.bytes;
+  }
+  return total;
 }
 
 function sha256Hex(bytes: Uint8Array): string {
@@ -385,38 +446,58 @@ function scanPlainRecord(v: unknown, label: string): Record<string, unknown> {
 }
 
 /**
- * Untrusted external-array scan. Rejects non-arrays, symbol/non-canonical own
- * keys (indices only, in canonical string form), accessor elements, missing
- * element descriptors, sparse holes (own keys must cover the index range) and
- * any reflection that throws. The captured length is the only length used by
- * callers so a lying Proxy can never change the iteration bound mid-scan.
+ * Shared untrusted external-array scanner (R2). Captures the array exactly
+ * once through property descriptors in a fixed order — own length data
+ * descriptor → item cap → ownKeys → per-index data descriptors — and returns
+ * a fresh plain snapshot array built exclusively from descriptor values.
+ * The original array is never read afterwards (no length/get/has/iteration
+ * on it) and never returned, so Proxy get/has traps and later caller
+ * mutation can never feed canonical data. The snapshot is only returned when
+ * it is complete: any reflection throw, accessor, hole, non-canonical index,
+ * extra/symbol key, or over-cap length fails closed with no partial snapshot.
+ * Legal plain and frozen arrays keep working; prototype-chain numeric
+ * properties are irrelevant because only own descriptors are consulted.
  */
-function scanExternalArray(v: unknown, label: string): { ok: true; arr: unknown[]; length: number } | { ok: false } {
+type ArrayScanResult =
+  | { ok: true; values: unknown[]; length: number }
+  | { ok: false };
+
+function scanExternalArray(v: unknown, itemCap: number): ArrayScanResult {
   if (!Array.isArray(v)) return { ok: false };
+  let lengthDesc: PropertyDescriptor | undefined;
+  try {
+    lengthDesc = Reflect.getOwnPropertyDescriptor(v, "length");
+  } catch {
+    return { ok: false };
+  }
+  if (!lengthDesc || "get" in lengthDesc || "set" in lengthDesc || !("value" in lengthDesc)) {
+    return { ok: false };
+  }
+  const length = lengthDesc.value;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) {
+    return { ok: false };
+  }
+  // Item cap strictly before ownKeys: over-cap arrays are rejected without
+  // any ownKeys call or index read.
+  if (length > itemCap) return { ok: false };
   let keys: Array<string | symbol>;
-  try { keys = Reflect.ownKeys(v) as Array<string | symbol>; } catch {
+  try { keys = Reflect.ownKeys(v); } catch {
     return { ok: false };
   }
-  let length: number;
-  try { length = v.length; } catch {
-    return { ok: false };
-  }
-  if (!Number.isSafeInteger(length) || length < 0) return { ok: false };
-  let extraKeys = 0;
+  const snapshot: unknown[] = new Array(length);
+  let indexCount = 0;
   for (const k of keys) {
     if (k === "length") {
-      // The canonical array length is an own non-configurable data property
-      // in this runtime; it must be a plain data descriptor matching the
-      // captured length and is otherwise skipped.
+      // The canonical array length is an own non-configurable data property;
+      // a Proxy must report a matching plain data descriptor or fail closed.
       let desc: PropertyDescriptor | undefined;
-      try { desc = Object.getOwnPropertyDescriptor(v, k); } catch {
+      try { desc = Reflect.getOwnPropertyDescriptor(v, k); } catch {
         return { ok: false };
       }
       if (!desc || "get" in desc || "set" in desc || !("value" in desc) ||
           desc.value !== length || desc.configurable !== false) {
         return { ok: false };
       }
-      extraKeys += 1;
       continue;
     }
     if (typeof k !== "string") return { ok: false };
@@ -425,13 +506,17 @@ function scanExternalArray(v: unknown, label: string): { ok: true; arr: unknown[
       return { ok: false };
     }
     let desc: PropertyDescriptor | undefined;
-    try { desc = Object.getOwnPropertyDescriptor(v, k); } catch {
+    try { desc = Reflect.getOwnPropertyDescriptor(v, k); } catch {
       return { ok: false };
     }
     if (!desc || "get" in desc || "set" in desc || !("value" in desc)) return { ok: false };
+    snapshot[idx] = desc.value;
+    indexCount += 1;
   }
-  if (keys.length - extraKeys > length) return { ok: false };
-  return { ok: true, arr: v, length };
+  // Every canonical index 0..length-1 must be an own property; sparse arrays
+  // (including prototype-filled holes) can never satisfy this and fail here.
+  if (indexCount !== length) return { ok: false };
+  return { ok: true, values: snapshot, length };
 }
 
 /** Remaining output byte budget shared by all validators of one dependency output. */
@@ -482,54 +567,56 @@ function verifyStoredDescriptor(
 /**
  * Bounded JSON-safe value scan with cycle protection (depth cap + node
  * budget) and an output byte budget charged for finding keys and string
- * values. Used before canonicalizing reviewer findings so that untrusted
- * output can never break serialization or exceed the output budget.
+ * values. Validates untrusted reviewer finding values through the shared
+ * descriptor-snapshot scanner and REBUILDS them into fresh records/arrays,
+ * so the canonical review retains no reference to any external array or
+ * object (Proxy traps and caller mutation can never reach it afterwards).
+ * Returns undefined for any invalid value (never a partial canonical copy).
  */
-function isJsonSafeValue(
+function canonicalizeJsonSafeValue(
   v: unknown, depth: number, budget: { nodes: number; bytes: number },
-): boolean {
-  if (v === null || typeof v === "boolean") return true;
+): unknown | undefined {
+  if (v === null || typeof v === "boolean") return v;
   if (typeof v === "string") {
-    const b = utf8Length(v);
-    if (b > budget.bytes) return false;
-    budget.bytes -= b;
-    return true;
+    const counted = countUtf8Budgeted(v, budget.bytes);
+    if (counted.status !== "valid") return undefined;
+    budget.bytes -= counted.bytes;
+    return v;
   }
-  if (typeof v === "number") return Number.isFinite(v);
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
   if (Array.isArray(v)) {
-    if (depth >= MAX_FINDING_DEPTH) return false;
-    const scanned = scanExternalArray(v, "finding array");
-    if (!scanned.ok) return false;
+    if (depth >= MAX_FINDING_DEPTH) return undefined;
+    const scanned = scanExternalArray(v, MAX_FINDING_NODES);
+    if (!scanned.ok) return undefined;
+    const out: unknown[] = new Array(scanned.length);
     for (let i = 0; i < scanned.length; i++) {
       budget.nodes -= 1;
-      if (budget.nodes < 0) return false;
-      let item: unknown;
-      try {
-        if (!(i in scanned.arr)) return false;
-        item = scanned.arr[i];
-      } catch {
-        return false;
-      }
-      if (!isJsonSafeValue(item, depth + 1, budget)) return false;
+      if (budget.nodes < 0) return undefined;
+      const item = canonicalizeJsonSafeValue(scanned.values[i], depth + 1, budget);
+      if (item === undefined) return undefined;
+      out[i] = item;
     }
-    return true;
+    return out;
   }
   if (typeof v === "object") {
-    if (depth >= MAX_FINDING_DEPTH) return false;
+    if (depth >= MAX_FINDING_DEPTH) return undefined;
     let rec: Record<string, unknown>;
-    try { rec = scanPlainRecord(v, "finding value"); } catch { return false; }
+    try { rec = scanPlainRecord(v, "finding value"); } catch { return undefined; }
+    const out: Record<string, unknown> = Object.create(null);
     for (const key of Object.keys(rec)) {
       budget.nodes -= 1;
-      if (budget.nodes < 0) return false;
-      const keyBytes = utf8Length(key);
-      if (keyBytes > budget.bytes) return false;
-      budget.bytes -= keyBytes;
-      if (!isJsonSafeValue(rec[key], depth + 1, budget)) return false;
+      if (budget.nodes < 0) return undefined;
+      const keyCounted = countUtf8Budgeted(key, budget.bytes);
+      if (keyCounted.status !== "valid") return undefined;
+      budget.bytes -= keyCounted.bytes;
+      const item = canonicalizeJsonSafeValue(rec[key], depth + 1, budget);
+      if (item === undefined) return undefined;
+      out[key] = item;
     }
-    return true;
+    return out;
   }
   // functions, symbols, undefined
-  return false;
+  return undefined;
 }
 
 function validateInt(
@@ -554,7 +641,9 @@ function validateRepoRelativePath(v: unknown, label: string): { ok: true; value:
     if (segment.length === 0) return { ok: false, reason: `${label} has an empty segment` };
     if (segment === "." || segment === "..") return { ok: false, reason: `${label} has a dot segment` };
   }
-  if (utf8Length(v) > MAX_PATH_BYTES) return { ok: false, reason: `${label} exceeds the byte limit` };
+  const counted = countUtf8Budgeted(v, MAX_PATH_BYTES);
+  if (counted.status === "over_budget") return { ok: false, reason: `${label} exceeds the byte limit` };
+  if (counted.status === "invalid_surrogate") return { ok: false, reason: `${label} contains invalid UTF-16` };
   return { ok: true, value: v };
 }
 
@@ -563,18 +652,20 @@ function validatePathPolicy(v: unknown): { ok: true; allowedRoots: string[]; den
   try { rec = scanPlain(v, PATH_POLICY_KEYS, "pathPolicy"); } catch {
     return { ok: false, reason: "pathPolicy invalid" };
   }
-  if (!Array.isArray(rec.allowedRoots)) return { ok: false, reason: "pathPolicy.allowedRoots must be an array" };
-  if (rec.allowedRoots.length < 1 || rec.allowedRoots.length > MAX_ALLOWED_ROOTS) {
+  // Nested arrays are captured through the shared descriptor-snapshot
+  // scanner; no plain length/index read, `in`, spread or iteration ever
+  // touches the original arrays, and no reflection error can escape.
+  const rootsScanned = scanExternalArray(rec.allowedRoots, MAX_ALLOWED_ROOTS);
+  if (!rootsScanned.ok) return { ok: false, reason: "pathPolicy.allowedRoots must be an array" };
+  if (rootsScanned.length < 1) {
     return { ok: false, reason: "pathPolicy.allowedRoots count out of range" };
   }
-  if (!Array.isArray(rec.deniedPaths)) return { ok: false, reason: "pathPolicy.deniedPaths must be an array" };
-  if (rec.deniedPaths.length > MAX_DENIED_PATHS) {
-    return { ok: false, reason: "pathPolicy.deniedPaths count out of range" };
-  }
+  const deniedScanned = scanExternalArray(rec.deniedPaths, MAX_DENIED_PATHS);
+  if (!deniedScanned.ok) return { ok: false, reason: "pathPolicy.deniedPaths must be an array" };
   const allowedRoots: string[] = [];
   const seenAllowed = new Set<string>();
-  for (let i = 0; i < rec.allowedRoots.length; i++) {
-    const r = validateRepoRelativePath(rec.allowedRoots[i], `pathPolicy.allowedRoots[${i}]`);
+  for (let i = 0; i < rootsScanned.length; i++) {
+    const r = validateRepoRelativePath(rootsScanned.values[i], `pathPolicy.allowedRoots[${i}]`);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
     if (seenAllowed.has(r.value)) return { ok: false, reason: "pathPolicy.allowedRoots must be unique" };
     seenAllowed.add(r.value);
@@ -582,8 +673,8 @@ function validatePathPolicy(v: unknown): { ok: true; allowedRoots: string[]; den
   }
   const deniedPaths: string[] = [];
   const seenDenied = new Set<string>();
-  for (let i = 0; i < rec.deniedPaths.length; i++) {
-    const r = validateRepoRelativePath(rec.deniedPaths[i], `pathPolicy.deniedPaths[${i}]`);
+  for (let i = 0; i < deniedScanned.length; i++) {
+    const r = validateRepoRelativePath(deniedScanned.values[i], `pathPolicy.deniedPaths[${i}]`);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
     if (seenDenied.has(r.value)) return { ok: false, reason: "pathPolicy.deniedPaths must be unique" };
     seenDenied.add(r.value);
@@ -597,14 +688,15 @@ function validateCommandPolicy(v: unknown): { ok: true; allowedExecutableIds: st
   try { rec = scanPlain(v, COMMAND_POLICY_KEYS, "commandPolicy"); } catch {
     return { ok: false, reason: "commandPolicy invalid" };
   }
-  if (!Array.isArray(rec.allowedExecutableIds)) return { ok: false, reason: "commandPolicy.allowedExecutableIds must be an array" };
-  if (rec.allowedExecutableIds.length < 1 || rec.allowedExecutableIds.length > MAX_EXEC_IDS) {
+  const idsScanned = scanExternalArray(rec.allowedExecutableIds, MAX_EXEC_IDS);
+  if (!idsScanned.ok) return { ok: false, reason: "commandPolicy.allowedExecutableIds must be an array" };
+  if (idsScanned.length < 1) {
     return { ok: false, reason: "commandPolicy.allowedExecutableIds count out of range" };
   }
   const allowedExecutableIds: string[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < rec.allowedExecutableIds.length; i++) {
-    const id = rec.allowedExecutableIds[i];
+  for (let i = 0; i < idsScanned.length; i++) {
+    const id = idsScanned.values[i];
     if (typeof id !== "string" || !EXEC_ID_RE.test(id)) {
       return { ok: false, reason: `commandPolicy.allowedExecutableIds[${i}] invalid` };
     }
@@ -660,34 +752,29 @@ function validateRawRequirement(v: unknown, maxBytes: number): { ok: true; value
   if (trimmed.length === 0 || trimmed !== v) return { ok: false, reason: "rawRequirement must be trimmed non-empty" };
   if (v.includes(NUL)) return { ok: false, reason: "rawRequirement must not contain NUL" };
   if (LONE_SURROGATE_RE.test(v)) return { ok: false, reason: "rawRequirement must be valid UTF-8 text" };
-  if (utf8Length(v) > maxBytes) return { ok: false, reason: "rawRequirement exceeds the byte limit" };
+  const counted = countUtf8Budgeted(v, maxBytes);
+  if (counted.status !== "valid") return { ok: false, reason: "rawRequirement exceeds the byte limit" };
   return { ok: true, value: v };
 }
 
 function validateStringArray(
   v: unknown, label: string, budget: OutputBudget, maxItems: number,
 ): { ok: true; values: string[] } | { ok: false; reason: string } {
-  const scanned = scanExternalArray(v, label);
+  const scanned = scanExternalArray(v, maxItems);
   if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
-  if (scanned.length > maxItems) return { ok: false, reason: `${label} count exceeds the cap` };
   const values: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < scanned.length; i++) {
-    let item: unknown;
-    try {
-      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
-      item = scanned.arr[i];
-    } catch {
-      return { ok: false, reason: `${label} element read failed` };
-    }
+    const item = scanned.values[i]!;
     if (typeof item !== "string") return { ok: false, reason: `${label}[${i}] must be a string` };
     if (item.trim().length === 0) return { ok: false, reason: `${label}[${i}] must be non-empty` };
     if (NON_CONTROL_RE.test(item)) return { ok: false, reason: `${label}[${i}] contains control characters` };
     if (seen.has(item)) return { ok: false, reason: `${label} must be unique` };
     seen.add(item);
-    const itemBytes = utf8Length(item);
-    if (itemBytes > budget.bytes) return { ok: false, reason: `${label} exceeds the output byte budget` };
-    budget.bytes -= itemBytes;
+    const counted = countUtf8Budgeted(item, budget.bytes);
+    if (counted.status === "invalid_surrogate") return { ok: false, reason: `${label}[${i}] contains invalid UTF-16` };
+    if (counted.status === "over_budget") return { ok: false, reason: `${label} exceeds the output byte budget` };
+    budget.bytes -= counted.bytes;
     values.push(item);
   }
   return { ok: true, values };
@@ -696,28 +783,22 @@ function validateStringArray(
 function validateEnumArray(
   v: unknown, label: string, allowed: readonly string[], budget: OutputBudget,
 ): { ok: true; values: string[] } | { ok: false; reason: string } {
-  const scanned = scanExternalArray(v, label);
+  const scanned = scanExternalArray(v, MAX_OUTPUT_STRING_ARRAY_ITEMS);
   if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
-  if (scanned.length > MAX_OUTPUT_STRING_ARRAY_ITEMS) return { ok: false, reason: `${label} count exceeds the cap` };
   const values: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < scanned.length; i++) {
-    let item: unknown;
-    try {
-      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
-      item = scanned.arr[i];
-    } catch {
-      return { ok: false, reason: `${label} element read failed` };
-    }
+    const item = scanned.values[i]!;
     if (typeof item !== "string") return { ok: false, reason: `${label}[${i}] must be a string` };
     if (item.trim().length === 0) return { ok: false, reason: `${label}[${i}] must be non-empty` };
     if (NON_CONTROL_RE.test(item)) return { ok: false, reason: `${label}[${i}] contains control characters` };
     if (!allowed.includes(item)) return { ok: false, reason: `${label}[${i}] is not a canonical value` };
     if (seen.has(item)) return { ok: false, reason: `${label} must be unique` };
     seen.add(item);
-    const itemBytes = utf8Length(item);
-    if (itemBytes > budget.bytes) return { ok: false, reason: `${label} exceeds the output byte budget` };
-    budget.bytes -= itemBytes;
+    const counted = countUtf8Budgeted(item, budget.bytes);
+    if (counted.status === "invalid_surrogate") return { ok: false, reason: `${label}[${i}] contains invalid UTF-16` };
+    if (counted.status === "over_budget") return { ok: false, reason: `${label} exceeds the output byte budget` };
+    budget.bytes -= counted.bytes;
     values.push(item);
   }
   return { ok: true, values };
@@ -735,9 +816,8 @@ function validateRequirementSummary(v: unknown, budget: OutputBudget): { ok: tru
     if (value.trim().length === 0 || value !== value.trim()) {
       return { ok: false, reason: `requirement summary ${field} must be trimmed non-empty` };
     }
-    const fieldBytes = utf8Length(value);
-    if (fieldBytes > budget.bytes) return { ok: false, reason: `requirement summary ${field} exceeds the output byte budget` };
-    budget.bytes -= fieldBytes;
+    const charged = chargeUtf8([value], budget);
+    if (charged === null) return { ok: false, reason: `requirement summary ${field} exceeds the output byte budget` };
   }
   if (rec.repositoryScope !== "single_repository" && rec.repositoryScope !== "multi_repository") {
     return { ok: false, reason: "requirement summary repositoryScope invalid" };
@@ -745,9 +825,10 @@ function validateRequirementSummary(v: unknown, budget: OutputBudget): { ok: tru
   if (rec.complexity !== "direct" && rec.complexity !== "complex") {
     return { ok: false, reason: "requirement summary complexity invalid" };
   }
-  const fixedBytes = utf8Length(rec.schema as string) + utf8Length(rec.repositoryScope as string) + utf8Length(rec.complexity as string);
-  if (fixedBytes > budget.bytes) return { ok: false, reason: "requirement summary exceeds the output byte budget" };
-  budget.bytes -= fixedBytes;
+  const fixedBytes = chargeUtf8([
+    rec.schema as string, rec.repositoryScope as string, rec.complexity as string,
+  ], budget);
+  if (fixedBytes === null) return { ok: false, reason: "requirement summary exceeds the output byte budget" };
   const arrays: Record<string, string[]> = Object.create(null) as Record<string, string[]>;
   for (const field of SUMMARY_STRING_ARRAY_FIELDS) {
     const r = validateStringArray(rec[field], `requirement summary ${field}`, budget, MAX_OUTPUT_STRING_ARRAY_ITEMS);
@@ -780,21 +861,15 @@ function validateRequirementSummary(v: unknown, budget: OutputBudget): { ok: tru
 function validatePlan(
   plan: unknown, label: string, allowedExecutableIds: Set<string>, budget: OutputBudget,
 ): { ok: true; plan: LoopDeliveryCommandStep[] } | { ok: false; reason: string } {
-  const scanned = scanExternalArray(plan, label);
+  const scanned = scanExternalArray(plan, MAX_PLAN_STEPS);
   if (!scanned.ok) return { ok: false, reason: `${label} must be a canonical array` };
-  if (scanned.length < 1 || scanned.length > MAX_PLAN_STEPS) {
+  if (scanned.length < 1) {
     return { ok: false, reason: `${label} count out of range` };
   }
   const stepIds = new Set<string>();
   const validated: LoopDeliveryCommandStep[] = [];
   for (let i = 0; i < scanned.length; i++) {
-    let stepValue: unknown;
-    try {
-      if (!(i in scanned.arr)) return { ok: false, reason: `${label} must not be sparse` };
-      stepValue = scanned.arr[i];
-    } catch {
-      return { ok: false, reason: `${label} element read failed` };
-    }
+    const stepValue = scanned.values[i];
     let scannedStep: Record<string, unknown>;
     try { scannedStep = scanPlain(stepValue, STEP_KEYS, `${label}[${i}]`); } catch {
       return { ok: false, reason: `${label}[${i}] step invalid` };
@@ -804,41 +879,32 @@ function validatePlan(
     }
     if (stepIds.has(scannedStep.id)) return { ok: false, reason: `${label}[${i}].id duplicate` };
     stepIds.add(scannedStep.id);
-    const idBytes = utf8Length(scannedStep.id);
-    if (idBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].id exceeds the output byte budget` };
-    budget.bytes -= idBytes;
+    const idBytes = chargeUtf8([scannedStep.id as string], budget);
+    if (idBytes === null) return { ok: false, reason: `${label}[${i}].id exceeds the output byte budget` };
     if (typeof scannedStep.executableId !== "string" || !allowedExecutableIds.has(scannedStep.executableId)) {
       return { ok: false, reason: `${label}[${i}].executableId not allowed` };
     }
-    const executableIdBytes = utf8Length(scannedStep.executableId);
-    if (executableIdBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].executableId exceeds the output byte budget` };
-    budget.bytes -= executableIdBytes;
+    const executableIdBytes = chargeUtf8([scannedStep.executableId as string], budget);
+    if (executableIdBytes === null) return { ok: false, reason: `${label}[${i}].executableId exceeds the output byte budget` };
     let args: string[] | undefined;
     if (scannedStep.args !== undefined) {
-      const argsScanned = scanExternalArray(scannedStep.args, `${label}[${i}].args`);
-      if (!argsScanned.ok || argsScanned.length > MAX_STEP_ARGS) {
+      const argsScanned = scanExternalArray(scannedStep.args, MAX_STEP_ARGS);
+      if (!argsScanned.ok) {
         return { ok: false, reason: `${label}[${i}].args invalid` };
       }
       let totalBytes = 0;
       const argsCopy: string[] = [];
       for (let j = 0; j < argsScanned.length; j++) {
-        let arg: unknown;
-        try {
-          if (!(j in argsScanned.arr)) return { ok: false, reason: `${label}[${i}].args must not be sparse` };
-          arg = argsScanned.arr[j];
-        } catch {
-          return { ok: false, reason: `${label}[${i}].args element read failed` };
-        }
+        const arg = argsScanned.values[j]!;
         if (typeof arg !== "string") return { ok: false, reason: `${label}[${i}].args[${j}] not a string` };
         if (arg.includes(NUL)) return { ok: false, reason: `${label}[${i}].args[${j}] contains NUL` };
-        const argBytes = utf8Length(arg);
+        const argBytes = chargeUtf8([arg], budget);
+        if (argBytes === null) return { ok: false, reason: `${label}[${i}].args exceeds the output byte budget` };
         if (argBytes > MAX_ARG_BYTES) return { ok: false, reason: `${label}[${i}].args[${j}] too long` };
-        if (argBytes > budget.bytes) return { ok: false, reason: `${label}[${i}].args exceeds the output byte budget` };
-        budget.bytes -= argBytes;
+        if (totalBytes > MAX_ARGS_TOTAL_BYTES - argBytes) return { ok: false, reason: `${label}[${i}].args total too large` };
         totalBytes += argBytes;
         argsCopy.push(arg);
       }
-      if (totalBytes > MAX_ARGS_TOTAL_BYTES) return { ok: false, reason: `${label}[${i}].args total too large` };
       args = argsCopy;
     }
     let timeoutMs: number | undefined;
@@ -887,37 +953,28 @@ function validateDesign(
   if (typeof rec.approach !== "string" || rec.approach.trim().length === 0 || rec.approach !== rec.approach.trim()) {
     return { ok: false, reason: "technical design approach must be trimmed non-empty" };
   }
-  const approachBytes = utf8Length(rec.approach as string);
-  if (approachBytes > budget.bytes) return { ok: false, reason: "technical design approach exceeds the output byte budget" };
-  budget.bytes -= approachBytes;
-  const schemaBytes = utf8Length(rec.schema as string);
-  if (schemaBytes > budget.bytes) return { ok: false, reason: "technical design exceeds the output byte budget" };
-  budget.bytes -= schemaBytes;
+  const approachBytes = chargeUtf8([rec.approach as string], budget);
+  if (approachBytes === null) return { ok: false, reason: "technical design approach exceeds the output byte budget" };
+  const schemaBytes = chargeUtf8([rec.schema as string], budget);
+  if (schemaBytes === null) return { ok: false, reason: "technical design exceeds the output byte budget" };
   const arrays: Record<string, string[]> = Object.create(null) as Record<string, string[]>;
   for (const field of DESIGN_STRING_ARRAY_FIELDS) {
     const r = validateStringArray(rec[field], `technical design ${field}`, budget, MAX_OUTPUT_STRING_ARRAY_ITEMS);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
     arrays[field] = r.values;
   }
-  const allowedPathsScanned = scanExternalArray(rec.allowedPaths, "technical design allowedPaths");
-  if (!allowedPathsScanned.ok || allowedPathsScanned.length < 1 || allowedPathsScanned.length > MAX_DESIGN_ALLOWED_PATHS) {
+  const allowedPathsScanned = scanExternalArray(rec.allowedPaths, MAX_DESIGN_ALLOWED_PATHS);
+  if (!allowedPathsScanned.ok || allowedPathsScanned.length < 1) {
     return { ok: false, reason: "technical design allowedPaths count out of range" };
   }
   const allowedPaths: string[] = [];
   const seenPaths = new Set<string>();
   for (let i = 0; i < allowedPathsScanned.length; i++) {
-    let pathValue: unknown;
-    try {
-      if (!(i in allowedPathsScanned.arr)) return { ok: false, reason: "technical design allowedPaths must not be sparse" };
-      pathValue = allowedPathsScanned.arr[i];
-    } catch {
-      return { ok: false, reason: "technical design allowedPaths element read failed" };
-    }
+    const pathValue = allowedPathsScanned.values[i];
     const r = validateRepoRelativePath(pathValue, `technical design allowedPaths[${i}]`);
     if (!r.ok) return { ok: false, reason: (r as { ok: false; reason: string }).reason };
-    const pathBytes = utf8Length(r.value);
-    if (pathBytes > budget.bytes) return { ok: false, reason: "technical design allowedPaths exceeds the output byte budget" };
-    budget.bytes -= pathBytes;
+    const pathBytes = chargeUtf8([r.value], budget);
+    if (pathBytes === null) return { ok: false, reason: "technical design allowedPaths exceeds the output byte budget" };
     if (seenPaths.has(r.value)) return { ok: false, reason: "technical design allowedPaths must be unique" };
     seenPaths.add(r.value);
     const path = r.value;
@@ -950,10 +1007,10 @@ function validateDesign(
     }
     if (NON_CONTROL_RE.test(value)) return { ok: false, reason: `technical design ${field} must be a single line` };
     const maxBytes = field === "commitSubject" ? 72 : 120;
-    if (utf8Length(value) > maxBytes) return { ok: false, reason: `technical design ${field} exceeds the byte limit` };
-    const fieldBytes = utf8Length(value);
-    if (fieldBytes > budget.bytes) return { ok: false, reason: `technical design ${field} exceeds the output byte budget` };
-    budget.bytes -= fieldBytes;
+    const fixedCounted = countUtf8Budgeted(value, maxBytes);
+    if (fixedCounted.status !== "valid") return { ok: false, reason: `technical design ${field} exceeds the byte limit` };
+    const fieldBytes = chargeUtf8([value], budget);
+    if (fieldBytes === null) return { ok: false, reason: `technical design ${field} exceeds the output byte budget` };
   }
   return {
     ok: true,
@@ -986,30 +1043,23 @@ function validateReview(v: unknown, budget: OutputBudget): { ok: true; review: C
   if (typeof rec.directPathEligible !== "boolean") {
     return { ok: false, reason: "solution review directPathEligible must be a boolean" };
   }
-  const fixedBytes = utf8Length(rec.schema as string) + utf8Length(rec.status as string);
-  if (fixedBytes > budget.bytes) return { ok: false, reason: "solution review exceeds the output byte budget" };
-  budget.bytes -= fixedBytes;
-  const findingsScanned = scanExternalArray(rec.findings, "solution review findings");
+  const fixedBytes = chargeUtf8([rec.schema as string, rec.status as string], budget);
+  if (fixedBytes === null) return { ok: false, reason: "solution review exceeds the output byte budget" };
+  const findingsScanned = scanExternalArray(rec.findings, MAX_REVIEW_FINDINGS);
   if (!findingsScanned.ok) return { ok: false, reason: "solution review findings must be a canonical array" };
-  if (findingsScanned.length > MAX_REVIEW_FINDINGS) return { ok: false, reason: "solution review findings count exceeds the cap" };
   const budget2 = { nodes: MAX_FINDING_NODES, bytes: budget.bytes };
   const findings: unknown[] = [];
   for (let i = 0; i < findingsScanned.length; i++) {
     budget2.nodes -= 1;
     if (budget2.nodes < 0) return { ok: false, reason: "solution review findings too large" };
-    let findingValue: unknown;
-    try {
-      if (!(i in findingsScanned.arr)) return { ok: false, reason: "solution review findings must not be sparse" };
-      findingValue = findingsScanned.arr[i];
-    } catch {
-      return { ok: false, reason: "solution review findings element read failed" };
-    }
+    const findingValue = findingsScanned.values[i];
     let finding: Record<string, unknown>;
     try { finding = scanPlainRecord(findingValue, `solution review findings[${i}]`); } catch {
       return { ok: false, reason: "solution review findings item invalid" };
     }
-    if (!isJsonSafeValue(finding, 0, budget2)) return { ok: false, reason: "solution review findings item invalid" };
-    findings.push(finding);
+    const canonical = canonicalizeJsonSafeValue(finding, 0, budget2);
+    if (canonical === undefined) return { ok: false, reason: "solution review findings item invalid" };
+    findings.push(canonical);
   }
   const status = rec.status as CanonicalReview["status"];
   const directPathEligible = rec.directPathEligible as boolean;

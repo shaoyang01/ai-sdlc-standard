@@ -67,6 +67,9 @@ const MARKERS: Record<string, boolean> = {
   D08_R1_PRE_SIDE_EFFECT_CLOCK_GATE_VERIFIED: false,
   D08_R1_IDENTITY_SINGLE_SNAPSHOT_VERIFIED: false,
   D08_R1_EXTERNAL_OUTPUT_BOUNDS_VERIFIED: false,
+  D08_R2_ARRAY_DESCRIPTOR_SNAPSHOT_VERIFIED: false,
+  D08_R2_REQUEST_ARRAY_FAIL_CLOSED_VERIFIED: false,
+  D08_R2_PREALLOCATION_BYTE_BUDGET_VERIFIED: false,
 };
 
 function failExit(msg: string): never {
@@ -1907,10 +1910,13 @@ async function main(): Promise<void> {
         puts: 0,
       },
       {
-        name: "design allowedPaths element read throw",
-        design: makeDesign({ allowedPaths: new Proxy(["core/a"], { get(target, prop): unknown {
-          if (prop === "0") throw new Error("boom");
-          return Reflect.get(target, prop);
+        // R2: element reads go through descriptors only, so a throwing get
+        // trap is never invoked; the fail-closed equivalent is a descriptor
+        // trap that throws (covered below and in the R2 snapshot section).
+        name: "design allowedPaths element descriptor throw",
+        design: makeDesign({ allowedPaths: new Proxy(["core/a"], { getOwnPropertyDescriptor: (t, p) => {
+          if (p === "0") throw new Error("boom");
+          return Reflect.getOwnPropertyDescriptor(t, p);
         } }) }),
         puts: 2,
       },
@@ -1942,6 +1948,516 @@ async function main(): Promise<void> {
     }
   }
   markIfClear("D08_R1_EXTERNAL_OUTPUT_BOUNDS_VERIFIED");
+
+  // ═══════════════════════════════════════ 17. R2 shared array descriptor snapshot
+  startSection();
+  {
+    console.log("17. R2 shared array descriptor snapshot (agent/reviewer outputs)");
+    // 17.1 descriptor.value=A vs plain get=B — snapshot uses A, get trap never invoked
+    {
+      let getCalls = 0;
+      let hasCalls = 0;
+      const constraints = new Proxy(["DESC-CONSTRAINT-A", "DESC-CONSTRAINT-B"], {
+        get(t, p, r): unknown { getCalls += 1; return p === "0" ? "GET-CONSTRAINT-A" : Reflect.get(t, p, r); },
+        has(t, p): boolean { hasCalls += 1; return Reflect.has(t, p); },
+      });
+      const agent = makeAgent(makeSummary({ constraints }));
+      const { store, tempRoot } = makeRealStore();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer(), store }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 descriptor/get mismatch summary accepted via descriptor values");
+      check(getCalls === 0, "R2 index get trap invoked 0 times");
+      check(hasCalls === 0, "R2 has trap never invoked");
+      const payload = readPayload(store, r.requirementArtifactRef!);
+      check(deepEqual((payload.requirement_summary as Record<string, unknown>).constraints,
+        ["DESC-CONSTRAINT-A", "DESC-CONSTRAINT-B"]), "R2 canonical payload uses descriptor snapshot values");
+      check(deepEqual(r.executorInput!.requirement.constraints, ["DESC-CONSTRAINT-A", "DESC-CONSTRAINT-B"]),
+        "R2 executor input uses descriptor snapshot values");
+      store.close();
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+    // 17.2 Proxy get trap throwing on length — scanner must not trigger a plain length get
+    {
+      let getCalls = 0;
+      const constraints = new Proxy(["LEN-0", "LEN-1"], {
+        get(t, p, r): unknown {
+          getCalls += 1;
+          if (p === "length") throw new Error("length get boom");
+          return Reflect.get(t, p, r);
+        },
+      });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 length get trap never invoked (array accepted)");
+      check(getCalls === 0, "R2 length get trap call count 0");
+    }
+    // 17.3 Proxy has trap throwing/forging — scanner must not call has
+    {
+      let hasCalls = 0;
+      const constraints = new Proxy(["HAS-0", "HAS-1"], {
+        has(): boolean { hasCalls += 1; throw new Error("has boom"); },
+      });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 throwing has trap never invoked (array accepted)");
+      check(hasCalls === 0, "R2 has trap call count 0");
+    }
+    // 17.4 Array.prototype numeric property fills a sparse hole — rejected,
+    //      and the prototype is exactly restored (cleanup failure fails the test)
+    {
+      const origProto1 = Object.getOwnPropertyDescriptor(Array.prototype, "1");
+      const origProto7 = Object.getOwnPropertyDescriptor(Array.prototype, "7");
+      const constraints = new Array(3);
+      constraints[0] = "a";
+      constraints[2] = "c";
+      try {
+        Object.defineProperty(Array.prototype, "1", { value: "proto-filled", writable: true, enumerable: true, configurable: true });
+        Object.defineProperty(Array.prototype, "7", { value: "proto-filled-2", writable: true, enumerable: true, configurable: true });
+        const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+        check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          "R2 prototype-filled sparse hole rejected");
+        assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      } finally {
+        if (origProto1 === undefined) delete (Array.prototype as unknown as Record<string, unknown>)["1"];
+        else Object.defineProperty(Array.prototype, "1", origProto1);
+        if (origProto7 === undefined) delete (Array.prototype as unknown as Record<string, unknown>)["7"];
+        else Object.defineProperty(Array.prototype, "7", origProto7);
+      }
+      check(!Object.prototype.hasOwnProperty.call(Array.prototype, "1"), "R2 Array.prototype.1 cleanup restored");
+      check(!Object.prototype.hasOwnProperty.call(Array.prototype, "7"), "R2 Array.prototype.7 cleanup restored");
+      const dense = ["d0", "d1", "d2"];
+      const r2 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: dense })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r2.reasonCode === "DIRECT_READY", "R2 dense array unaffected by prototype numeric property");
+    }
+    // 17.5 index descriptor trap throw — fail-closed
+    {
+      const constraints = new Proxy(["ok"], {
+        getOwnPropertyDescriptor(t, p): PropertyDescriptor | undefined {
+          if (p === "0") throw new Error("index desc boom");
+          return Reflect.getOwnPropertyDescriptor(t, p);
+        },
+      });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 index descriptor trap throw fail-closed");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 17.6 ownKeys trap throw — fail-closed
+    {
+      const constraints = new Proxy(["ok"], { ownKeys: () => { throw new Error("ownKeys boom"); } });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 ownKeys trap throw fail-closed");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 17.7 length = cap + 1 with recording ownKeys trap — rejected BEFORE ownKeys
+    {
+      let ownKeysCalls = 0;
+      const constraints = new Proxy(new Array(257), {
+        ownKeys(t): ArrayLike<string | symbol> { ownKeysCalls += 1; return Reflect.ownKeys(t); },
+      });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 over-cap array rejected");
+      check(ownKeysCalls === 0, "R2 over-cap rejected before ownKeys (0 calls)");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 17.8 huge length — rejection happens before ownKeys, not just at the end
+    {
+      let ownKeysCalls = 0;
+      const huge = new Array(2);
+      huge.length = 4294967295;
+      const constraints = new Proxy(huge, {
+        ownKeys(t): ArrayLike<string | symbol> { ownKeysCalls += 1; return Reflect.ownKeys(t); },
+      });
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 huge length array rejected");
+      check(ownKeysCalls === 0, "R2 huge length rejected before ownKeys (0 calls)");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 17.9 post-snapshot mutation of an agent output array — canonical output
+    //      and artifact payload keep the descriptor snapshot values
+    {
+      const constraints = ["MUT-ORIG-A", "MUT-ORIG-B"];
+      const agent = makeAgent(makeSummary({ constraints }));
+      const { store, tempRoot } = makeRealStore();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer(), store }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 pre-mutation run succeeds");
+      constraints[0] = "MUTATED-AFTER";
+      constraints.push("MUTATED-EXTRA");
+      const payload = readPayload(store, r.requirementArtifactRef!);
+      check(deepEqual((payload.requirement_summary as Record<string, unknown>).constraints,
+        ["MUT-ORIG-A", "MUT-ORIG-B"]), "R2 post-snapshot mutation never reaches canonical payload");
+      check(deepEqual(r.executorInput!.requirement.constraints, ["MUT-ORIG-A", "MUT-ORIG-B"]),
+        "R2 post-snapshot mutation never reaches executor input");
+      store.close();
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+    // 17.10 frozen and plain dense arrays keep working
+    {
+      const frozen = Object.freeze(["frozen-a", "frozen-b"]);
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: frozen })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 frozen array accepted");
+      const plain = ["plain-a", "plain-b", "plain-c"];
+      const r2 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: plain })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r2.reasonCode === "DIRECT_READY", "R2 plain dense array accepted");
+    }
+    // 17.11 sparse / extra string key / symbol key / accessor element — fail-closed
+    {
+      const sparse = new Array(2);
+      sparse[0] = "a";
+      const r1 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: sparse })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r1.route === "blocked" && r1.reasonCode === "DEPENDENCY_RESULT_INVALID", "R2 sparse array rejected");
+      const extraKey = ["a"] as unknown as Record<string, unknown>;
+      extraKey.extra = "x";
+      const r2 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: extraKey })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r2.route === "blocked" && r2.reasonCode === "DEPENDENCY_RESULT_INVALID", "R2 extra string key rejected");
+      const symArr: unknown[] = ["a"];
+      (symArr as unknown as Record<symbol, unknown>)[Symbol("x")] = 1;
+      const r3 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: symArr })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r3.route === "blocked" && r3.reasonCode === "DEPENDENCY_RESULT_INVALID", "R2 symbol key rejected");
+      const accessorArr = new Array(1);
+      Object.defineProperty(accessorArr, "0", { get: () => "x", enumerable: true, configurable: true });
+      const r4 = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: accessorArr })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r4.route === "blocked" && r4.reasonCode === "DEPENDENCY_RESULT_INVALID", "R2 accessor element rejected");
+    }
+    // 17.12 finding nested arrays (relatedPaths/requiredChanges) through the shared scanner
+    {
+      let getCalls = 0;
+      const relatedPaths = new Proxy(["core/a.ts"], {
+        get(t, p, r): unknown { getCalls += 1; return p === "0" ? "hacked/path" : Reflect.get(t, p, r); },
+      });
+      const reviewer = makeReviewer();
+      let call = 0;
+      reviewer.review = (input: unknown): unknown => {
+        reviewer.reviewCalls.push(input);
+        call += 1;
+        return call === 1
+          ? makeReview("NEEDS_REVISION", { findings: [{ code: "C1", message: "m", relatedPaths, requiredChanges: ["change core/a.ts"] }] })
+          : makeReview("PASS");
+      };
+      const r = newOrchestrator({ agent: makeAgent(), reviewer }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 finding nested arrays accepted via descriptor snapshot");
+      check(getCalls === 0, "R2 finding nested array get trap not invoked");
+      const badReview = makeReview("NEEDS_REVISION", {
+        findings: [{ code: "C2", relatedPaths: new Proxy(["x"], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }) }],
+      });
+      const r2 = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(badReview) }).execute(makeRequest());
+      check(r2.route === "blocked" && r2.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 finding nested reflection throw fail-closed");
+      assertTerminalContract(r2, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+  }
+  markIfClear("D08_R2_ARRAY_DESCRIPTOR_SNAPSHOT_VERIFIED");
+
+  // ═══════════════════════════════════════ 18. R2 request nested policy arrays
+  startSection();
+  {
+    console.log("18. R2 request nested arrays (allowedRoots/deniedPaths/allowedExecutableIds)");
+    // Every invalid nested array → failed/INVALID_INPUT, no normalize, no puts.
+    const invalidRequestArrays: Array<{ name: string; request: Record<string, unknown> }> = [
+      { name: "allowedRoots descriptor trap throw", request: makeRequest({ pathPolicy: { allowedRoots: new Proxy(["core"], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }), deniedPaths: [] } }) },
+      { name: "allowedRoots ownKeys trap throw", request: makeRequest({ pathPolicy: { allowedRoots: new Proxy(["core"], { ownKeys: () => { throw new Error("boom"); } }), deniedPaths: [] } }) },
+      { name: "allowedRoots sparse", request: makeRequest({ pathPolicy: { allowedRoots: (() => { const a = new Array(2); a[0] = "core"; return a; })(), deniedPaths: [] } }) },
+      { name: "allowedRoots extra string key", request: makeRequest({ pathPolicy: { allowedRoots: (() => { const a = ["core"] as unknown as Record<string, unknown>; a.extra = "x"; return a; })(), deniedPaths: [] } }) },
+      { name: "allowedRoots symbol key", request: makeRequest({ pathPolicy: { allowedRoots: (() => { const a: unknown[] = ["core"]; (a as unknown as Record<symbol, unknown>)[Symbol("x")] = 1; return a; })(), deniedPaths: [] } }) },
+      { name: "allowedRoots accessor element", request: makeRequest({ pathPolicy: { allowedRoots: (() => { const a = new Array(1); Object.defineProperty(a, "0", { get: () => "core", enumerable: true, configurable: true }); return a; })(), deniedPaths: [] } }) },
+      { name: "allowedRoots over item cap", request: makeRequest({ pathPolicy: { allowedRoots: new Array(65).fill("core"), deniedPaths: [] } }) },
+      { name: "deniedPaths descriptor trap throw", request: makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: new Proxy(["core/legacy"], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }) } }) },
+      { name: "deniedPaths ownKeys trap throw", request: makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: new Proxy(["core/legacy"], { ownKeys: () => { throw new Error("boom"); } }) } }) },
+      { name: "deniedPaths sparse", request: makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: (() => { const a = new Array(2); a[0] = "core/legacy"; return a; })() } }) },
+      { name: "deniedPaths over item cap", request: makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: new Array(65).fill("d") } }) },
+      { name: "allowedExecutableIds descriptor trap throw", request: makeRequest({ commandPolicy: { allowedExecutableIds: new Proxy(["node"], { getOwnPropertyDescriptor: () => { throw new Error("boom"); } }) } }) },
+      { name: "allowedExecutableIds ownKeys trap throw", request: makeRequest({ commandPolicy: { allowedExecutableIds: new Proxy(["node"], { ownKeys: () => { throw new Error("boom"); } }) } }) },
+      { name: "allowedExecutableIds sparse", request: makeRequest({ commandPolicy: { allowedExecutableIds: (() => { const a = new Array(2); a[0] = "node"; return a; })() } }) },
+      { name: "allowedExecutableIds over item cap", request: makeRequest({ commandPolicy: { allowedExecutableIds: new Array(33).fill("x") } }) },
+      { name: "allowedExecutableIds symbol key", request: makeRequest({ commandPolicy: { allowedExecutableIds: (() => { const a: unknown[] = ["node"]; (a as unknown as Record<symbol, unknown>)[Symbol("x")] = 1; return a; })() } }) },
+    ];
+    for (const c of invalidRequestArrays) {
+      const agent = makeAgent();
+      const { store, putCalls } = makeRecordingStore();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer(), store }).execute(c.request);
+      check(r.route === "failed" && r.reasonCode === "INVALID_INPUT",
+        `R2 request ${c.name} → failed/INVALID_INPUT`);
+      check(agent.normalizeCalls.length === 0, `R2 ${c.name}: agent.normalize never called`);
+      check(putCalls.length === 0, `R2 ${c.name}: artifactStore.put count 0`);
+      assertTerminalContract(r, "failed", "INVALID_INPUT");
+    }
+    // prototype numeric property fills a sparse hole in a request array
+    {
+      const origProto0 = Object.getOwnPropertyDescriptor(Array.prototype, "0");
+      const roots = new Array(2);
+      try {
+        Object.defineProperty(Array.prototype, "0", { value: "core", writable: true, enumerable: true, configurable: true });
+        const agent = makeAgent();
+        const r = newOrchestrator({ agent, reviewer: makeReviewer() })
+          .execute(makeRequest({ pathPolicy: { allowedRoots: roots, deniedPaths: [] } }));
+        check(r.route === "failed" && r.reasonCode === "INVALID_INPUT",
+          "R2 request array prototype-filled hole → INVALID_INPUT");
+        check(agent.normalizeCalls.length === 0, "R2 prototype-filled request array: normalize never called");
+        assertTerminalContract(r, "failed", "INVALID_INPUT");
+      } finally {
+        if (origProto0 === undefined) delete (Array.prototype as unknown as Record<string, unknown>)["0"];
+        else Object.defineProperty(Array.prototype, "0", origProto0);
+      }
+      check(!Object.prototype.hasOwnProperty.call(Array.prototype, "0"), "R2 Array.prototype.0 cleanup restored");
+    }
+    // huge-length request array: rejected before ownKeys
+    {
+      let ownKeysCalls = 0;
+      const huge = new Array(1);
+      huge.length = 4294967295;
+      const agent = makeAgent();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: new Proxy(huge, { ownKeys(t): ArrayLike<string | symbol> { ownKeysCalls += 1; return Reflect.ownKeys(t); } }), deniedPaths: [] } }));
+      check(r.route === "failed" && r.reasonCode === "INVALID_INPUT", "R2 huge allowedRoots rejected");
+      check(ownKeysCalls === 0, "R2 huge allowedRoots rejected before ownKeys (0 calls)");
+      check(agent.normalizeCalls.length === 0, "R2 huge allowedRoots: normalize never called");
+    }
+    // allowedRoots descriptor/get mismatch — normalize input uses snapshot values
+    {
+      let getCalls = 0;
+      const roots = new Proxy(["core", "tests", "docs"], {
+        get(t, p, r): unknown { getCalls += 1; return p === "0" ? "hacked" : Reflect.get(t, p, r); },
+      });
+      const agent = makeAgent();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: roots, deniedPaths: [] } }));
+      check(r.reasonCode === "DIRECT_READY", "R2 allowedRoots descriptor snapshot accepted");
+      check(getCalls === 0, "R2 allowedRoots get trap invoked 0 times");
+      const normInput = agent.normalizeCalls[0] as { pathPolicy: { allowedRoots: string[] } };
+      check(deepEqual(normInput.pathPolicy.allowedRoots, ["core", "tests", "docs"]),
+        "R2 normalize input uses descriptor snapshot roots");
+    }
+    // deniedPaths length get trap — never invoked, array accepted
+    {
+      let getCalls = 0;
+      const denied = new Proxy(["core/legacy"], {
+        get(t, p, r): unknown {
+          getCalls += 1;
+          if (p === "length") throw new Error("length boom");
+          return Reflect.get(t, p, r);
+        },
+      });
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: ["core", "tests", "docs"], deniedPaths: denied } }));
+      check(r.reasonCode === "DIRECT_READY", "R2 deniedPaths length get trap never invoked");
+      check(getCalls === 0, "R2 deniedPaths length get trap call count 0");
+    }
+    // deniedPaths descriptor/get mismatch — a lying get must not bypass denial
+    {
+      let getCalls = 0;
+      const denied = new Proxy(["core/legacy"], {
+        get(t, p, r): unknown { getCalls += 1; return p === "0" ? "hacked" : Reflect.get(t, p, r); },
+      });
+      const design = makeDesign({ allowedPaths: ["core/legacy/secret.ts"] });
+      const r = newOrchestrator({ agent: makeAgent(undefined, design), reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: denied } }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 deniedPaths snapshot still denies the design (get trap never read)");
+      check(getCalls === 0, "R2 deniedPaths get trap invoked 0 times");
+    }
+    // allowedRoots mutation inside normalize — design path policy uses the snapshot
+    {
+      const roots = ["core", "tests", "docs"];
+      const mutAgent = makeAgent(undefined, makeDesign({ allowedPaths: ["hacked/outside"] }));
+      mutAgent.normalize = (input: unknown): unknown => {
+        mutAgent.normalizeCalls.push(input);
+        roots.length = 0;
+        roots.push("hacked");
+        return makeSummary();
+      };
+      const r = newOrchestrator({ agent: mutAgent, reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: roots, deniedPaths: [] } }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 allowedRoots snapshot enforced despite in-normalize mutation");
+    }
+    // deniedPaths mutation inside normalize — path policy judgment uses the snapshot
+    {
+      const denied = ["core/legacy", "tests/slow"];
+      const mutAgent = makeAgent(undefined, makeDesign({ allowedPaths: ["core/legacy/secret.ts"] }));
+      mutAgent.normalize = (input: unknown): unknown => {
+        mutAgent.normalizeCalls.push(input);
+        denied.length = 0;
+        return makeSummary();
+      };
+      const r = newOrchestrator({ agent: mutAgent, reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: ["core"], deniedPaths: denied } }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 deniedPaths snapshot enforced despite in-normalize mutation");
+    }
+    // allowedExecutableIds mutation inside normalize — command step check uses the snapshot
+    {
+      const execIds = ["node", "tsx", "npm"];
+      const mutAgent = makeAgent(undefined, makeDesign({ testPlan: [makeStep({ id: "ok1", executableId: "hacked-exec" })] }));
+      mutAgent.normalize = (input: unknown): unknown => {
+        mutAgent.normalizeCalls.push(input);
+        execIds.push("hacked-exec");
+        return makeSummary();
+      };
+      const r = newOrchestrator({ agent: mutAgent, reviewer: makeReviewer() })
+        .execute(makeRequest({ commandPolicy: { allowedExecutableIds: execIds } }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 command step check uses snapshot allowedExecutableIds");
+    }
+    // allowedExecutableIds descriptor/get mismatch — normalize input uses snapshot values
+    {
+      let getCalls = 0;
+      const execIds = new Proxy(["node", "tsx", "npm"], {
+        get(t, p, r): unknown { getCalls += 1; return p === "0" ? "hacked-exec" : Reflect.get(t, p, r); },
+      });
+      const agent = makeAgent();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer() })
+        .execute(makeRequest({ commandPolicy: { allowedExecutableIds: execIds } }));
+      check(r.reasonCode === "DIRECT_READY", "R2 allowedExecutableIds descriptor snapshot accepted");
+      check(getCalls === 0, "R2 allowedExecutableIds get trap invoked 0 times");
+      const normInput = agent.normalizeCalls[0] as { commandPolicy: { allowedExecutableIds: string[] } };
+      check(deepEqual(normInput.commandPolicy.allowedExecutableIds, ["node", "tsx", "npm"]),
+        "R2 normalize input uses descriptor snapshot exec ids");
+    }
+    // post-snapshot caller mutation of request arrays — normalize input unaffected
+    {
+      const roots = ["core", "tests", "docs"];
+      const agent = makeAgent();
+      const r = newOrchestrator({ agent, reviewer: makeReviewer() })
+        .execute(makeRequest({ pathPolicy: { allowedRoots: roots, deniedPaths: [] } }));
+      roots[0] = "hacked";
+      const normInput = agent.normalizeCalls[0] as { pathPolicy: { allowedRoots: string[] } };
+      check(deepEqual(normInput.pathPolicy.allowedRoots, ["core", "tests", "docs"]),
+        "R2 post-snapshot caller mutation not reflected in normalize input");
+    }
+  }
+  markIfClear("D08_R2_REQUEST_ARRAY_FAIL_CLOSED_VERIFIED");
+
+  // ═══════════════════════════════════════ 19. R2 bounded UTF-8 byte budget
+  startSection();
+  {
+    console.log("19. R2 bounded preallocation-free UTF-8 byte budgets");
+    // 19.1 over-budget sentinel never passed to TextEncoder.encode (summary)
+    {
+      const origEncode = TextEncoder.prototype.encode;
+      const sentinel = "R2SENTINEL".repeat(400);
+      let encodeSeen = false;
+      TextEncoder.prototype.encode = function (input?: string, ...rest: unknown[]): Uint8Array {
+        if (typeof input === "string" && input.includes("R2SENTINEL")) {
+          encodeSeen = true;
+          throw new Error("SENTINEL-ENCODED");
+        }
+        return origEncode.call(this, input as string, ...rest);
+      } as typeof TextEncoder.prototype.encode;
+      try {
+        const r = newOrchestrator({ agent: makeAgent(makeSummary({ objective: sentinel })), reviewer: makeReviewer() })
+          .execute(makeRequest({ limits: makeLimits({ maxAgentOutputBytes: 1024 }) }));
+        check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          "R2 over-budget sentinel summary → stable invalid mapping");
+        check(!encodeSeen, "R2 over-budget sentinel never passed to TextEncoder.encode");
+        assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      } finally {
+        TextEncoder.prototype.encode = origEncode;
+      }
+      check(TextEncoder.prototype.encode === origEncode, "R2 TextEncoder.prototype.encode restored");
+    }
+    // 19.2 over-budget sentinel never passed to TextEncoder.encode (step args)
+    {
+      const origEncode = TextEncoder.prototype.encode;
+      let encodeSeen = false;
+      TextEncoder.prototype.encode = function (input?: string, ...rest: unknown[]): Uint8Array {
+        if (typeof input === "string" && input.includes("R2ARG")) {
+          encodeSeen = true;
+          throw new Error("SENTINEL-ENCODED");
+        }
+        return origEncode.call(this, input as string, ...rest);
+      } as typeof TextEncoder.prototype.encode;
+      try {
+        const design = makeDesign({ testPlan: [makeStep({ id: "ok1", args: ["R2ARG".repeat(1200)] })] });
+        const r = newOrchestrator({ agent: makeAgent(undefined, design), reviewer: makeReviewer() })
+          .execute(makeRequest({ limits: makeLimits({ maxAgentOutputBytes: 1024 }) }));
+        check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          "R2 over-budget sentinel args → stable invalid mapping");
+        check(!encodeSeen, "R2 over-budget sentinel args never passed to TextEncoder.encode");
+        assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      } finally {
+        TextEncoder.prototype.encode = origEncode;
+      }
+      check(TextEncoder.prototype.encode === origEncode, "R2 args TextEncoder.prototype.encode restored");
+    }
+    // 19.3 exact multi-byte boundaries (exactly at budget and over by 1 byte)
+    const boundaryCases: Array<{ name: string; arg: string; expectValid: boolean }> = [
+      { name: "ASCII exact 4096", arg: "a".repeat(4096), expectValid: true },
+      { name: "ASCII over by 1", arg: "a".repeat(4097), expectValid: false },
+      { name: "2-byte exact 4096", arg: "é".repeat(2048), expectValid: true },
+      { name: "2-byte over by 1", arg: "é".repeat(2048) + "a", expectValid: false },
+      { name: "3-byte exact 4096", arg: "中".repeat(1365) + "a", expectValid: true },
+      { name: "3-byte over by 1", arg: "中".repeat(1365) + "ab", expectValid: false },
+      { name: "4-byte exact 4096", arg: "𝄞".repeat(1024), expectValid: true },
+      { name: "4-byte over by 1", arg: "𝄞".repeat(1024) + "a", expectValid: false },
+      { name: "mixed multibyte within", arg: "aé中𝄞".repeat(409), expectValid: true },
+      { name: "mixed multibyte over", arg: "aé中𝄞".repeat(410), expectValid: false },
+    ];
+    for (const c of boundaryCases) {
+      const design = makeDesign({ testPlan: [makeStep({ id: "ok1", args: [c.arg] })] });
+      const r = newOrchestrator({ agent: makeAgent(undefined, design), reviewer: makeReviewer() }).execute(makeRequest());
+      if (c.expectValid) {
+        check(r.reasonCode === "DIRECT_READY", `R2 ${c.name} accepted`);
+      } else {
+        check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+          `R2 ${c.name} rejected`);
+        assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+      }
+    }
+    // 19.4 valid surrogate pair accepted; lone surrogates rejected without escaping
+    {
+      const r = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: ["valid pair \u{1D11E} text"] })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r.reasonCode === "DIRECT_READY", "R2 valid surrogate pair accepted");
+      const rHigh = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: ["ok", "lone-\uD800-x"] })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(rHigh.route === "blocked" && rHigh.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 lone high surrogate summary leaf rejected");
+      assertTerminalContract(rHigh, "blocked", "DEPENDENCY_RESULT_INVALID");
+      const rLow = newOrchestrator({ agent: makeAgent(makeSummary({ constraints: ["ok", "lone-\uDFFF-x"] })), reviewer: makeReviewer() }).execute(makeRequest());
+      check(rLow.route === "blocked" && rLow.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 lone low surrogate summary leaf rejected");
+      assertTerminalContract(rLow, "blocked", "DEPENDENCY_RESULT_INVALID");
+      const argDesign = makeDesign({ testPlan: [makeStep({ id: "ok1", args: ["bad-\uD800"] })] });
+      const rArg = newOrchestrator({ agent: makeAgent(undefined, argDesign), reviewer: makeReviewer() }).execute(makeRequest());
+      check(rArg.route === "blocked" && rArg.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 lone surrogate step arg rejected (no exception escapes)");
+      assertTerminalContract(rArg, "blocked", "DEPENDENCY_RESULT_INVALID");
+      const findingReview = makeReview("NEEDS_REVISION", { findings: [{ code: "X", detail: "bad-\uDC00" }] });
+      const rFinding = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(findingReview) }).execute(makeRequest());
+      check(rFinding.route === "blocked" && rFinding.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 lone surrogate finding value rejected");
+      assertTerminalContract(rFinding, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 19.5 multiple individually-legal items rejected when their aggregate
+    //      exceeds the output budget
+    {
+      const design = makeDesign({ testPlan: [makeStep({ id: "ok1", args: Array.from({ length: 10 }, (_, i) => `arg-${"x".repeat(60)}${i}`) })] });
+      const r = newOrchestrator({ agent: makeAgent(undefined, design), reviewer: makeReviewer() })
+        .execute(makeRequest({ limits: makeLimits({ maxAgentOutputBytes: 512 }) }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 aggregate args over output budget rejected");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 19.6 multibyte path boundary through the counter
+    {
+      const valid = makeDesign({ allowedPaths: ["core/" + "é".repeat(253)] });
+      const r1 = newOrchestrator({ agent: makeAgent(undefined, valid), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r1.reasonCode === "DIRECT_READY", "R2 multibyte path within byte limit accepted");
+      const over = makeDesign({ allowedPaths: ["core/" + "é".repeat(254)] });
+      const r2 = newOrchestrator({ agent: makeAgent(undefined, over), reviewer: makeReviewer() }).execute(makeRequest());
+      check(r2.route === "blocked" && r2.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 multibyte path over byte limit rejected");
+      assertTerminalContract(r2, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+    // 19.7 finding nested values charged against the output budget
+    {
+      const review = makeReview("NEEDS_REVISION", { findings: [{ code: "C1", relatedPaths: ["core/" + "x".repeat(3000)] }] });
+      const r = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(review) })
+        .execute(makeRequest({ limits: makeLimits({ maxAgentOutputBytes: 1024 }) }));
+      check(r.route === "blocked" && r.reasonCode === "DEPENDENCY_RESULT_INVALID",
+        "R2 finding relatedPaths over budget rejected");
+      assertTerminalContract(r, "blocked", "DEPENDENCY_RESULT_INVALID");
+    }
+  }
+  markIfClear("D08_R2_PREALLOCATION_BYTE_BUDGET_VERIFIED");
 
   // ═══════════════════════════════════════ summary
   const total = GLOBAL_PASSED + GLOBAL_FAILED;
