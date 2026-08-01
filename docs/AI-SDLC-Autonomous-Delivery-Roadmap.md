@@ -73,6 +73,23 @@
 
 例如：`source_verified` 不自动等于 review PASS；execution 完成不自动等于 merge 授权；CI success 不自动等于 merge authorization。
 
+### Depends On（依赖语义）
+
+**Depends On** 标识履行当前阶段完成合同所需的直接上游阶段或稳定合同（stable request/artifact/evidence contract）。
+
+它不是：
+- 原始 TypeScript import 列表；
+- 全部传递依赖列表；
+- 执行顺序授权；
+- implementation-status 声明；
+- 所有可能最终消费本阶段输出的能力列表。
+
+语义边界：
+
+- 阶段可以依赖另一阶段的稳定 request、artifact 或 evidence 合同，而不执行该阶段；
+- 阶段消费另一阶段的必需输出时，即使不存在 production import，也必须将该上游阶段列入 Depends On；
+- 纯下游实现能力不得作为 planning-only 阶段的依赖列出。
+
 ## Outcome Ladder
 
 - **Foundation-00**：建立 LOOP Executor Kernel 基线；
@@ -95,8 +112,8 @@
 | LOOP-DELIVERY-04 | Bounded Multi-File Patch Application | source_verified | 安全受限的补丁应用与证据 | D02、D03 | `core/loop-patch-application.ts` |
 | LOOP-DELIVERY-05 | Codex Multi-File Implementation Adapter | source_verified | 结构化请求到 Codex 实现与 patch evidence | D01、D02、D03、D04 | `core/loop-codex-implementation-adapter.ts` |
 | LOOP-DELIVERY-06 | Autonomous Test, Fix, and Review Loop | source_verified | 有界测试/修复/审核循环结果与证据 | D01、D02、D03、D05 | `core/loop-autonomous-delivery-loop.ts` |
-| LOOP-DELIVERY-07 | Recoverable Git Delivery Publisher | source_verified | 一个 commit、一次 push、Draft PR 与恢复 | D01、D02、D03 | `core/loop-delivery-publisher.ts` |
-| LOOP-DELIVERY-08 | Requirement and Design Orchestration | source_verified | 自然语言需求到 direct executor input | D01、D04 | `core/loop-requirement-design-orchestrator.ts` |
+| LOOP-DELIVERY-07 | Recoverable Git Delivery Publisher | source_verified | 一个 commit、一次 push、Draft PR 与恢复 | D01、D02、D03、D06 | `core/loop-delivery-publisher.ts` |
+| LOOP-DELIVERY-08 | Requirement and Design Orchestration | source_verified | 自然语言需求到 direct executor input | D01、D06 | `core/loop-requirement-design-orchestrator.ts` |
 | LOOP-DELIVERY-09 | Review and Governance Tail | partially_recovered | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D05～D07 | 无 production module |
 | LOOP-DELIVERY-10 | Real Single-Repository Acceptance and Hardening | recovered | 真实单仓 MVP 验收与硬化 | D01～D09 | 无 production module |
 | LOOP-ADVANCED-11 | Real Review, Feedback, and Re-Gate | recovered | 真实反馈回流与 Re-Gate | D09、D10 | 无 production module |
@@ -222,15 +239,15 @@
 
 - **Definition status**：source_verified
 - **Objective**：提供可恢复的 Git 交付发布：delivery artifact gate、exact staging、publish intent、一个 commit、普通 push、Draft PR、恢复。
-- **Problem closed**：发布动作不可恢复、不可回滚，且缺少 publish intent 记录。
-- **Required inputs**：D01 artifact store、D02 runner、D03 workspace。
+- **Problem closed**：发布流程缺少可恢复、可重入且可核验的阶段事实，部分成功后无法安全续跑。
+- **Required inputs**：D06 succeeded delivery result artifact；D01 artifact store、D02 runner、D03 workspace。
 - **Required outputs**：publish intent/result、commit、remote branch 和 Draft PR facts。
-- **Depends on**：D01、D02、D03。
+- **Depends on**：D01、D02、D03、D06。
 - **In scope**：delivery artifact gate、exact staging、publish intent、一个 commit、普通 push、Draft PR、失败恢复。
-- **Out of scope**：mark Ready、merge、执行业务实现。
+- **Out of scope**：mark Ready、merge、执行业务实现。D07 不提供对 commit、remote branch 或 pull request 的破坏性回滚：它只记录并恢复部分发布进度，不擦除或逆转已创建的远程事实。
 - **Completion contract**：至多产生一个 commit、一次普通 push、一个 Draft PR；fail-closed 且不 force/amend/merge。
 - **Expected evidence**：`core/loop-delivery-publisher.ts` 存在且 fail-closed 语义一致。
-- **Relationship to previous stage**：发布 D06 的交付结果。
+- **Relationship to previous stage**：发布 D06 的交付结果；D07 消费 D06 delivery-result contract 与 evidence，但不执行 D06。
 - **Relationship to next stage**：D08 编排的自然语言需求路径最终落到 D05～D07。
 - **Definition provenance**：Authorized Source tree 可直接验证。
 
@@ -239,14 +256,14 @@
 - **Definition status**：source_verified
 - **Objective**：提供需求与设计编排：自然语言需求归一化、technical design、solution review、路径选择、direct executor input。
 - **Problem closed**：自然语言需求无法确定性路由到 direct 路径，且缺少编排产物。
-- **Required inputs**：D01 artifact store、注入的 agent 与 solution reviewer。
+- **Required inputs**：D01 artifact store、注入的 agent、注入的 solution reviewer；当前 D06 request/command-step contract 作为 design-time 稳定合同，而非被调用的运行时依赖。
 - **Required outputs**：requirement/design/review/executor-input/orchestration artifacts。
-- **Depends on**：D01、D04（补丁能力为 direct 路径预备）。
+- **Depends on**：D01、D06。
 - **In scope**：需求归一化、有界 technical design 轮次、solution review（PASS/NEEDS_REVISION/BLOCKED）、路径选择、direct executor input。
 - **Out of scope**：调用 D03/D05/D06/D07；产生 Git/PR 副作用。
 - **Completion contract**：路由至少区分 direct、Speckit pending、multi-repo pending、paused、blocked、failed；不产生 Git/PR 副作用。
 - **Expected evidence**：`core/loop-requirement-design-orchestrator.ts` 存在且路由语义一致。
-- **Relationship to previous stage**：承接 D01 基础并预备 direct 路径。
+- **Relationship to previous stage**：承接 D01 基础；D08 产出 Direct Executor Input，其可无损映射到当前 D06 `LoopAutonomousDeliveryRequest` contract，并复用 D06 request/command-step contract 作为稳定下游接口；D08 不执行 D06，仅计划与路由。
 - **Relationship to next stage**：D09 承接其自然语言需求路径形成治理闭环。
 - **Definition provenance**：Authorized Source tree 可直接验证。
 
@@ -264,7 +281,7 @@
 - **Expected evidence**：待精确合同恢复后定义；当前不得定义文件白名单或实施 Prompt。
 - **Relationship to previous stage**：承接 D08 自然语言需求路径。
 - **Relationship to next stage**：为 D10 真实单仓验收提供稳定治理边界。
-- **Definition provenance**：早期项目路线材料恢复出高层名称“Review / Governance Tail”与阶段成果；精确合同未恢复。`DIRECT_DELIVERY_COORDINATOR_V1` 仅为 rejected implementation authorization 后保留的 proposed candidate，不是完整 D09，也不得被写成已接受。
+- **Definition provenance**：早期项目路线材料恢复出高层名称“Review / Governance Tail”与阶段成果；精确合同未恢复。`DIRECT_DELIVERY_COORDINATOR_V1` is a proposed candidate and has not been accepted as complete D09，不得被写成已接受。
 
 ## LOOP-DELIVERY-10
 
