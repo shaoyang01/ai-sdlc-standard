@@ -322,7 +322,7 @@ Tail 不得通过修改文档或知识材料，把未批准的代码漂移合法
 | Gate Runner Tail Completion enforcement | implemented | `sdlc-gate-runner` 已执行 `documentation_governance_tail_completion` 门禁与 persisted Gate 边界。 |
 | Speckit Pipeline boundary alignment | implemented | Pipeline fixed Core ends at Implement；Implement 后输出 Shared Tail Handoff；Sync/Reconcile/Tail Gate 位于 Pipeline 外部；不代表 Topic 07 formal closure；不代表 D09 implemented。 |
 | Direct / Speckit / Tail 完整场景验证 | implemented | 标准包开发期 validation-only 场景一致性验证已接入（`fixtures/gate-runner-scenarios` + `scripts/validate-gate-runner-scenarios.rb`）；仅代表 harness 一致性，不运行真实 Gate。 |
-| Topic 07 formal closure | pending | 本任务不关闭 Topic 07。 |
+| Topic 07 formal closure | implemented | Topic 07 formal closure 是标准包治理集成关闭：Gate Runner Development Path Entry enforcement、Gate Runner Tail Completion enforcement、Direct / Speckit / Tail validation-only scenario conformance、Speckit Pipeline boundary alignment 四项均已实现、已进入唯一 Source branch 并通过对应独立 implementation review。closure 不表示任何真实 target-project runtime 执行，不表示任意 requirement Tail completed，不表示 D09 implemented。 |
 
 说明：
 
@@ -331,3 +331,18 @@ Tail 不得通过修改文档或知识材料，把未批准的代码漂移合法
 - 场景验证状态仅代表标准包开发期 validation-only harness：不运行真实 Gate、Manifest、Sync、Reconcile 或 Entry Coverage，不证明 Pipeline boundary、Topic 07 closure 或 D09。
 - 本任务只收敛标准包与 Skill 合同，不实施 D09。
 - D09 尚未实施。
+
+### Topic 07 Formal Closure
+
+Topic 07 formal closure status=`implemented`。closure basis 是状态矩阵中四个前置 implemented rows：Gate Runner Development Path Entry enforcement、Gate Runner Tail Completion enforcement、Direct / Speckit / Tail validation-only scenario conformance、Speckit Pipeline boundary alignment。四项均已进入唯一 Source branch（`feature/loop-runtime-v1`）并通过对应独立 implementation review。Topic 07 closure 是标准包治理集成关闭，由聚合式 Topic 07 Formal Closure validator 建立；它不表示任何真实 target-project runtime 执行，不表示任意 requirement Tail completed，不表示 D09 implemented。
+
+closure 边界：
+
+- Gate Runner 是正式 Gate owner（`development_path_entry` 与 `documentation_governance_tail_completion`）。
+- scenario harness 仍为 validation-only，不获得 runtime、Gate decision、implementation、merge 或 publication authority。
+- Manifest 仍是 Tail 当前状态与证据指针的 authority；Pipeline result 仍不能替代 Tail Completion Gate。
+- closure 不创建 runtime execution fact，不代表真实 target-project runtime 执行。
+- closure 不创建 requirement completion fact，不代表真实 requirement Tail completed。
+- closure 不建立 completion source，不证明任意 requirement 完成 Tail。
+- D09 尚未实施。
+- Exchange/PKB publication 不属于 Source closure。

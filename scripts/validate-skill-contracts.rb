@@ -2613,7 +2613,9 @@ end
 # The validator's own source must not be scanned for content needles.
 gate_runner_combined = gate_runner_scope_text.reject { |rel, _| rel == "scripts/validate-skill-contracts.rb" }.values.join("\n")
 
-# A. Canonical development-path-governance.md current integration matrix
+# A. Canonical development-path-governance.md current integration matrix.
+#    Topic 07 formal closure must be implemented; pending is a closure
+#    regression. D09 must remain not implemented.
 devpath_text = gate_runner_scope_text["ai-sdlc/development-path-governance.md"]
 if devpath_text
   [
@@ -2632,13 +2634,13 @@ if devpath_text
     "| Gate Runner Tail Completion enforcement | implemented |",
     "| Speckit Pipeline boundary alignment | implemented |",
     "| Direct / Speckit / Tail 完整场景验证 | implemented |",
-    "| Topic 07 formal closure | pending |",
+    "| Topic 07 formal closure | implemented |",
     "不实施 D09",
     "D09 尚未实施"
   ].each { |needle| gate_runner_require(errors, devpath_text, needle, "development-path-governance") }
   [
     "| Speckit Pipeline boundary alignment | pending |",
-    "| Topic 07 formal closure | implemented |",
+    "| Topic 07 formal closure | pending |",
     "| D09 | implemented |"
   ].each do |forbidden|
     errors << "gate-runner: development-path-governance contains forbidden matrix status: #{forbidden}" if devpath_text.include?(forbidden)
@@ -3127,13 +3129,14 @@ if gate_scenario_devpath.nil?
   errors << "gate-scenario: ai-sdlc/development-path-governance.md must exist"
 else
   gate_scenario_require(errors, gate_scenario_devpath, "| Direct / Speckit / Tail 完整场景验证 | implemented |", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "| Topic 07 formal closure | implemented |", "development-path-governance")
   gate_scenario_require(errors, gate_scenario_devpath, "validation-only harness", "development-path-governance")
   gate_scenario_require(errors, gate_scenario_devpath, "不运行真实 Gate", "development-path-governance")
   [
-    "| Topic 07 formal closure | implemented |",
+    "| Topic 07 formal closure | pending |",
     "| D09 | implemented |"
   ].each do |forbidden|
-    errors << "gate-scenario: development-path-governance marks pending item implemented: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
+    errors << "gate-scenario: development-path-governance closure regression or D09 implemented: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
   end
 end
 
@@ -3381,11 +3384,11 @@ if pipeline_registry_text
   pipeline_boundary_require(errors, pipeline_registry_text, "Pipeline result cannot replace the Tail Completion Gate", "registry")
 end
 
-# I. Development Path matrix: boundary alignment implemented, formal closure and
-#    D09 still not implemented.
+# I. Development Path matrix: boundary alignment implemented, Topic 07 formal
+#    closure implemented as aggregate state, D09 still not implemented.
 if pipeline_devpath_text
   pipeline_boundary_require(errors, pipeline_devpath_text, "| Speckit Pipeline boundary alignment | implemented |", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "| Topic 07 formal closure | pending |", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "| Topic 07 formal closure | implemented |", "development-path-governance")
   pipeline_boundary_require(errors, pipeline_devpath_text, "D09 尚未实施", "development-path-governance")
   pipeline_boundary_require(errors, pipeline_devpath_text, "Pipeline fixed Core ends at Implement", "development-path-governance")
   pipeline_boundary_require(errors, pipeline_devpath_text, "Implement 后输出 Shared Tail Handoff", "development-path-governance")
@@ -4402,7 +4405,273 @@ end
 errors.concat(r3_side_effect_diags)
 errors.concat(r3_selftest_diags)
 
+# ── Topic 07 Formal Closure Aggregate Validation (TOPIC-07-FORMAL-CLOSURE) ──
+# Aggregate, fail-closed validator for the Topic 07 formal closure state. It
+# reads ai-sdlc/development-path-governance.md and docs/VALIDATION.md, parses
+# the current integration status matrix rows, checks the dedicated closure
+# section, and verifies D09 stays unimplemented. The scenario harness, the
+# Pipeline validator, and the Gate Runner runtime each individually cannot
+# establish the closure; only this aggregate validator can. Negative
+# self-tests use in-memory string deep copies and never modify repository
+# files; unknown exceptions or unrelated errors never count as successful
+# rejection.
+
+TOPIC07_CLOSURE_DEVPATH = "ai-sdlc/development-path-governance.md".freeze
+TOPIC07_CLOSURE_VALIDATION_DOC = "docs/VALIDATION.md".freeze
+TOPIC07_CLOSURE_SECTION_HEADING = "### Topic 07 Formal Closure".freeze
+TOPIC07_CLOSURE_VALIDATION_HEADING = "## Topic 07 Formal Closure Validation".freeze
+
+TOPIC07_CLOSURE_PREREQUISITE_ROWS = [
+  "| Gate Runner Development Path Entry enforcement | implemented |",
+  "| Gate Runner Tail Completion enforcement | implemented |",
+  "| Speckit Pipeline boundary alignment | implemented |",
+  "| Direct / Speckit / Tail 完整场景验证 | implemented |"
+].freeze
+
+TOPIC07_CLOSURE_PREREQUISITE_PENDING_ROWS = [
+  "| Gate Runner Development Path Entry enforcement | pending |",
+  "| Gate Runner Tail Completion enforcement | pending |",
+  "| Speckit Pipeline boundary alignment | pending |",
+  "| Direct / Speckit / Tail 完整场景验证 | pending |"
+].freeze
+
+TOPIC07_CLOSURE_ROW_IMPLEMENTED = "| Topic 07 formal closure | implemented |".freeze
+TOPIC07_CLOSURE_ROW_PENDING = "| Topic 07 formal closure | pending |".freeze
+TOPIC07_CLOSURE_ROW_PATTERN = /^\|\s*Topic 07 formal closure\s*\|/.freeze
+TOPIC07_CLOSURE_ROW_PARSE = /
+  ^\|\s*Topic\s+07\s+formal\s+closure\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|
+/x.freeze
+TOPIC07_CLOSURE_D09_IMPLEMENTED_PATTERN = /^\|\s*D09[^|]*\|\s*implemented\s*\|/.freeze
+
+# Section-scoped boundary needles: the bare presence of a keyword elsewhere in
+# the file never satisfies a section boundary requirement.
+TOPIC07_CLOSURE_SECTION_REQUIRED = {
+  "closure status implemented" => "implemented",
+  "Gate Runner Entry basis" => "Gate Runner Development Path Entry enforcement",
+  "Gate Runner Tail Completion basis" => "Gate Runner Tail Completion enforcement",
+  "scenario validation basis" => "scenario conformance",
+  "Pipeline boundary basis" => "Speckit Pipeline boundary alignment",
+  "scenario authority validation-only" => "validation-only",
+  "Manifest authority" => "Manifest 仍是",
+  "Pipeline result boundary" => "Pipeline result 仍不能替代 Tail Completion Gate",
+  "D09 not implemented" => "D09 尚未实施",
+  "no runtime execution fact" => "不代表真实 target-project runtime 执行",
+  "no requirement completion fact" => "不代表真实 requirement Tail completed"
+}.freeze
+
+TOPIC07_CLOSURE_SECTION_FORBIDDEN_ESCALATION = [
+  "runtime_authority=true",
+  "gate_decision_authority=true",
+  "implementation_authority=true",
+  "merge_authority=true",
+  "publication_authority=true",
+  "scenario harness 获得 runtime authority"
+].freeze
+
+TOPIC07_CLOSURE_VALIDATION_DOC_FORBIDDEN_PENDING = "Topic 07 formal closure 仍 pending".freeze
+
+def topic07_closure_diagnostics(scope)
+  diags = []
+  devpath = scope[TOPIC07_CLOSURE_DEVPATH]
+  validation_doc = scope[TOPIC07_CLOSURE_VALIDATION_DOC]
+
+  if devpath.nil?
+    diags << "topic07-formal-closure: development-path-governance.md missing"
+  end
+  if validation_doc.nil?
+    diags << "topic07-formal-closure: docs/VALIDATION.md missing"
+  end
+  return diags if devpath.nil?
+
+  unless devpath.include?("状态矩阵") && devpath.include?("| 接入项 | 状态 | 说明 |")
+    diags << "topic07-formal-closure: status matrix missing"
+  end
+
+  TOPIC07_CLOSURE_PREREQUISITE_ROWS.each do |row|
+    count = devpath.scan(Regexp.new(Regexp.escape(row))).size
+    if count.zero?
+      diags << "topic07-formal-closure: prerequisite row missing: #{row}"
+    elsif count > 1
+      diags << "topic07-formal-closure: prerequisite row duplicate: #{row}"
+    end
+  end
+  TOPIC07_CLOSURE_PREREQUISITE_PENDING_ROWS.each do |row|
+    if devpath.include?(row)
+      diags << "topic07-formal-closure: prerequisite row not implemented: #{row}"
+    end
+  end
+
+  closure_count = devpath.scan(Regexp.new(Regexp.escape(TOPIC07_CLOSURE_ROW_IMPLEMENTED))).size
+  if closure_count.zero?
+    diags << "topic07-formal-closure: closure row missing"
+  elsif closure_count > 1
+    diags << "topic07-formal-closure: closure row duplicate"
+  end
+  if devpath.include?(TOPIC07_CLOSURE_ROW_PENDING)
+    diags << "topic07-formal-closure: closure row not implemented"
+  end
+  devpath.lines.select { |line| line.match?(TOPIC07_CLOSURE_ROW_PATTERN) }.each do |line|
+    match = line.match(TOPIC07_CLOSURE_ROW_PARSE)
+    next unless match
+
+    status = match[1].to_s.strip
+    explanation = match[2].to_s.strip
+    unless status == "implemented"
+      diags << "topic07-formal-closure: closure row not implemented (status=#{status})"
+    end
+    if status == "implemented" && explanation.empty?
+      diags << "topic07-formal-closure: closure row explanation empty"
+    end
+  end
+
+  if devpath.match?(TOPIC07_CLOSURE_D09_IMPLEMENTED_PATTERN)
+    diags << "topic07-formal-closure: D09 marked implemented"
+  end
+
+  heading_count = devpath.scan(TOPIC07_CLOSURE_SECTION_HEADING).size
+  if heading_count.zero?
+    diags << "topic07-formal-closure: closure dedicated section missing"
+  elsif heading_count > 1
+    diags << "topic07-formal-closure: closure dedicated section duplicate"
+  else
+    section = extract_section(devpath, TOPIC07_CLOSURE_SECTION_HEADING)
+    TOPIC07_CLOSURE_SECTION_REQUIRED.each do |label, needle|
+      unless section.include?(needle)
+        diags << "topic07-formal-closure: closure section required boundary missing: #{label}"
+      end
+    end
+    TOPIC07_CLOSURE_SECTION_FORBIDDEN_ESCALATION.each do |phrase|
+      if section.include?(phrase)
+        diags << "topic07-formal-closure: closure section scenario authority escalated: #{phrase}"
+      end
+    end
+  end
+
+  unless validation_doc.to_s.include?(TOPIC07_CLOSURE_VALIDATION_HEADING)
+    diags << "topic07-formal-closure: Validation doc closure section missing"
+  end
+  if validation_doc.to_s.include?(TOPIC07_CLOSURE_VALIDATION_DOC_FORBIDDEN_PENDING)
+    diags << "topic07-formal-closure: Validation doc keeps stale pending closure wording"
+  end
+
+  diags
+end
+
+# Negative self-tests: every mutation must be rejected by the real closure
+# diagnostics with the expected diagnostic. Mutations operate on in-memory
+# deep copies; the mutation must actually change the text; unknown exceptions
+# or unrelated errors never count as rejection.
+TOPIC07_CLOSURE_SELFTESTS = [
+  {
+    id: "closure_row_reverted_to_pending",
+    desc: "closure row reverted to pending",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub(TOPIC07_CLOSURE_ROW_IMPLEMENTED, TOPIC07_CLOSURE_ROW_PENDING) },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "closure row not implemented"
+  },
+  {
+    id: "entry_enforcement_reverted_to_pending",
+    desc: "Gate Runner Entry enforcement reverted to pending",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub("| Gate Runner Development Path Entry enforcement | implemented |", "| Gate Runner Development Path Entry enforcement | pending |") },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "prerequisite row not implemented"
+  },
+  {
+    id: "tail_enforcement_reverted_to_pending",
+    desc: "Gate Runner Tail Completion enforcement reverted to pending",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub("| Gate Runner Tail Completion enforcement | implemented |", "| Gate Runner Tail Completion enforcement | pending |") },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "prerequisite row not implemented"
+  },
+  {
+    id: "scenario_validation_reverted_to_pending",
+    desc: "Direct / Speckit / Tail scenario validation reverted to pending",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub("| Direct / Speckit / Tail 完整场景验证 | implemented |", "| Direct / Speckit / Tail 完整场景验证 | pending |") },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "prerequisite row not implemented"
+  },
+  {
+    id: "pipeline_boundary_reverted_to_pending",
+    desc: "Speckit Pipeline boundary alignment reverted to pending",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub("| Speckit Pipeline boundary alignment | implemented |", "| Speckit Pipeline boundary alignment | pending |") },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "prerequisite row not implemented"
+  },
+  {
+    id: "d09_marked_implemented",
+    desc: "D09 marked implemented",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text + "\n| D09 | implemented | D09 已实施 |\n" },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "D09 marked implemented"
+  },
+  {
+    id: "closure_section_removed",
+    desc: "dedicated Topic 07 Formal Closure section removed",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text.sub(TOPIC07_CLOSURE_SECTION_HEADING, "") },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "closure dedicated section missing"
+  },
+  {
+    id: "closure_row_duplicated",
+    desc: "second closure row added",
+    scope_file: TOPIC07_CLOSURE_DEVPATH,
+    mutate: ->(text) { text + "\n| Topic 07 formal closure | implemented | duplicate closure row |\n" },
+    run: ->(scope) { topic07_closure_diagnostics(scope) },
+    expect: "closure row duplicate"
+  }
+].freeze
+
+def topic07_closure_self_test_diagnostics(scope)
+  diags = []
+  TOPIC07_CLOSURE_SELFTESTS.each do |test|
+    text = scope[test[:scope_file]]
+    if text.nil?
+      diags << "topic07-formal-closure: self-test #{test[:id]} cannot run: missing scope file #{test[:scope_file]}"
+      next
+    end
+    begin
+      mutated_text = test[:mutate].call(text.dup)
+      if mutated_text == text
+        diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) mutation did not change the text; baseline text must not be treated as mutation output"
+        next
+      end
+      mutated_scope = scope.dup
+      mutated_scope[test[:scope_file]] = mutated_text
+      produced = test[:run].call(mutated_scope)
+      unless produced.any? { |d| d.include?(test[:expect]) }
+        diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
+      end
+    rescue StandardError => e
+      diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
+    end
+  end
+  diags
+end
+
+topic07_closure_scope = {}
+[TOPIC07_CLOSURE_DEVPATH, TOPIC07_CLOSURE_VALIDATION_DOC].each do |rel|
+  path = File.join(ROOT, rel)
+  topic07_closure_scope[rel] = File.read(path) if File.file?(path)
+end
+
+topic07_closure_baseline_diags = topic07_closure_diagnostics(topic07_closure_scope)
+topic07_closure_selftest_diags = []
+if topic07_closure_scope.key?(TOPIC07_CLOSURE_DEVPATH)
+  topic07_closure_selftest_diags = topic07_closure_self_test_diagnostics(topic07_closure_scope)
+end
+
+errors.concat(topic07_closure_baseline_diags)
+errors.concat(topic07_closure_selftest_diags)
+
 if errors.empty?
+  puts "TOPIC07_FORMAL_CLOSURE_VALIDATED true" if topic07_closure_baseline_diags.empty? && topic07_closure_selftest_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
   puts "PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true" if r1_matrix_diags.empty?
