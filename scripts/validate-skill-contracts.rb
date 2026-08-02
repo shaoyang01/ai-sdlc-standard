@@ -2980,7 +2980,7 @@ GATE_SCENARIO_COVERAGE_TAGS = %w[
   direct_tail_sync_authorized direct_tail_sync_unauthorized direct_tail_missing_evidence
   speckit_evidence_reuse pipeline_result_not_gate pure_governance response_only
   persistence_failure readback_mismatch stale_evidence pass_with_risk
-  invalid_risk_acceptance
+  invalid_risk_acceptance precompleted_without_source
 ].freeze
 
 GATE_SCENARIO_FIXED_IDS = %w[
@@ -2988,11 +2988,13 @@ GATE_SCENARIO_FIXED_IDS = %w[
   DPE-04-BLOCKED-REVISION DPE-05-BLOCKED-UNKNOWN DPE-06-STALE-DECISION
   TAIL-D-01-DIRECT-NO-SYNC TAIL-D-02-DIRECT-SYNCED TAIL-D-03-SYNC-NOT-AUTHORIZED
   TAIL-D-04-RECONCILE-INCOMPLETE TAIL-D-05-MISSING-TEST-ACCEPTANCE
+  TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED
   TAIL-S-01-REUSE-CURRENT-EVIDENCE TAIL-S-02-PIPELINE-RESULT-NOT-GATE
   TAIL-S-03-STALE-PIPELINE-EVIDENCE TAIL-G-01-PURE-GOVERNANCE
-  TAIL-G-02-INCOMPLETE-SKIP-BASIS TAIL-P-01-RESPONSE-ONLY TAIL-P-02-WRITE-FAILURE
+  TAIL-G-02-INCOMPLETE-SKIP-BASIS TAIL-G-03-PURE-DOCUMENTATION-MISSING-SKIP-BASIS
+  TAIL-P-01-RESPONSE-ONLY TAIL-P-02-WRITE-FAILURE
   TAIL-P-03-READBACK-MISMATCH TAIL-P-04-PASS-WITH-RISK TAIL-P-05-INCOMPLETE-RISK-ACCEPTANCE
-  TAIL-P-06-CRITICAL-RISK
+  TAIL-P-06-CRITICAL-RISK TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE
 ].freeze
 
 GATE_SCENARIO_MARKERS = %w[
@@ -3007,6 +3009,11 @@ GATE_SCENARIO_MARKERS = %w[
   GATE_RUNNER_STALE_EVIDENCE_FAIL_CLOSED
   GATE_RUNNER_WRONG_ROUTE_FAIL_CLOSED
   GATE_RUNNER_PASS_WITH_RISK_BOUNDARY_VERIFIED
+  GATE_RUNNER_TAIL_IN_PROGRESS_LIFECYCLE_VERIFIED
+  GATE_RUNNER_PRECOMPLETED_WITHOUT_SOURCE_FAIL_CLOSED
+  GATE_RUNNER_NESTED_SCHEMA_FAIL_CLOSED
+  GATE_RUNNER_PURE_DOCUMENTATION_SKIP_BASIS_VERIFIED
+  GATE_RUNNER_SYNC_WRITE_AUTHORIZATION_VERIFIED
   GATE_RUNNER_SELFTESTS_PASS
   TEMP_CLEANUP_COMPLETE
   GATE_RUNNER_SCENARIO_SUMMARY
@@ -3129,6 +3136,60 @@ else
   ].each do |forbidden|
     errors << "gate-scenario: development-path-governance marks pending item implemented: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
   end
+end
+
+# ── Gate Runner Scenario R1 Correction Wiring (Topic 07-P2 R1) ──
+# Static wiring checks for the R1 correction: Tail lifecycle, strict recursive
+# nested schema, pure documentation skip basis, and Sync write authorization.
+# Read-only, deterministic, no network; no scenario algorithm is copied here
+# and the scenario runner is never executed from this validator.
+
+if gate_scenario_fixture_text
+  [
+    "completion_source_present",
+    "completion_source_current",
+    "write_authorized",
+    "tamper_field",
+    "status: in_progress",
+    "status: completed"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_fixture_text, needle, "scenarios.yaml") }
+end
+
+if gate_scenario_runner_text
+  [
+    "ENTRY_INPUT_FIELDS",
+    "TAIL_INPUT_FIELDS",
+    "TAIL_STATUS_VALUES",
+    "completion_source_present",
+    "completion_source_current",
+    "write_authorized",
+    "SYNC_REQUIRED write not authorized",
+    "tail pre-completed state lacks current formal completion source",
+    "invalid entry coverage status",
+    "expected diagnostic",
+    "UNEXPECTED RAISE",
+    'when "High"',
+    'when "Critical"'
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_runner_text, needle, "runner") }
+  # Risk enums must use the canonical case only; lowercase must not reappear.
+  ['when "high"', 'when "critical"'].each do |forbidden|
+    if gate_scenario_runner_text.include?(forbidden)
+      errors << "gate-scenario: runner uses non-canonical risk case #{forbidden}"
+    end
+  end
+end
+
+if gate_scenario_validation_doc
+  [
+    "这三个脚本",
+    "Tail lifecycle",
+    "in_progress",
+    "pre-completed",
+    "nested schema",
+    "write authorization",
+    "pure documentation",
+    "precompleted_without_source"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_validation_doc, needle, "docs/VALIDATION.md") }
 end
 
 if errors.empty?

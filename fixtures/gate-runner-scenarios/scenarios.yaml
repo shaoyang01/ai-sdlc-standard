@@ -60,6 +60,7 @@ required_coverage_tags:
   - stale_evidence
   - pass_with_risk
   - invalid_risk_acceptance
+  - precompleted_without_source
 
 scenarios:
   # ── Development Path Entry ──────────────────────────────────────────────
@@ -383,7 +384,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -402,6 +405,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -434,6 +438,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: PASS
       can_continue: true
@@ -460,7 +465,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -479,6 +486,7 @@ scenarios:
         execution_status: done
         execution_result: synced
         freshness: current
+        write_authorized: true
       reconcile:
         decision: not_required
         execution_required: false
@@ -511,6 +519,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: PASS
       can_continue: true
@@ -537,7 +546,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -556,6 +567,7 @@ scenarios:
         execution_status: not_started
         execution_result: not_run
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -580,7 +592,7 @@ scenarios:
       reuse:
         sync_reconcile_current: false
       completion_evidence:
-        present: false
+        present: true
       reviewed_artifact:
         path: library/REQ-TAIL-D-03/05-测试验收/REQ-TAIL-D-03_测试验收.md
         version: 1.0.0
@@ -588,6 +600,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -599,9 +612,9 @@ scenarios:
       earliest_affected_node: not_applicable
       required_regate: false
       blockers:
-        - SYNC_REQUIRED execution not complete
+        - SYNC_REQUIRED write not authorized
       reused_existing_evidence: false
-      professional_skill_execution_requested: true
+      professional_skill_execution_requested: false
 
   - id: TAIL-D-04-RECONCILE-INCOMPLETE
     coverage_tags: [direct_tail_sync_authorized, direct_tail_missing_evidence]
@@ -615,7 +628,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -634,6 +649,7 @@ scenarios:
         execution_status: done
         execution_result: synced
         freshness: current
+        write_authorized: true
       reconcile:
         decision: required
         execution_required: true
@@ -666,6 +682,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -694,7 +711,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -713,6 +732,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -745,6 +765,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -761,21 +782,21 @@ scenarios:
       reused_existing_evidence: false
       professional_skill_execution_requested: false
 
-  # ── Speckit Tail / Pipeline boundary ────────────────────────────────────
-
-  - id: TAIL-S-01-REUSE-CURRENT-EVIDENCE
-    coverage_tags: [speckit_evidence_reuse]
+  - id: TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED
+    coverage_tags: [direct_tail_sync_authorized]
     gate_type: documentation_governance_tail_completion
     input:
       requirement:
-        id: REQ-TAIL-S-01
+        id: REQ-TAIL-D-06
         manifest_present: true
         manifest_requirement_match: true
       work_kind: actual_implementation
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -794,6 +815,91 @@ scenarios:
         execution_status: not_started
         execution_result: not_run
         freshness: current
+        write_authorized: true
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: PARTIAL
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-06/05-测试验收/REQ-TAIL-D-06_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - SYNC_REQUIRED execution not complete
+      reused_existing_evidence: false
+      professional_skill_execution_requested: true
+
+  # ── Speckit Tail / Pipeline boundary ────────────────────────────────────
+
+  - id: TAIL-S-01-REUSE-CURRENT-EVIDENCE
+    coverage_tags: [speckit_evidence_reuse]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-S-01
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+        write_authorized: true
       reconcile:
         decision: required
         execution_required: true
@@ -826,6 +932,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: PASS
       can_continue: true
@@ -852,7 +959,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: missing
@@ -871,6 +980,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -903,6 +1013,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -931,7 +1042,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -950,6 +1063,7 @@ scenarios:
         execution_status: done
         execution_result: synced
         freshness: stale
+        write_authorized: true
       reconcile:
         decision: not_required
         execution_required: false
@@ -982,6 +1096,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1013,7 +1128,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: not_required
@@ -1059,6 +1176,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1091,6 +1209,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: PASS
       can_continue: true
@@ -1117,7 +1236,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: not_required
@@ -1138,6 +1259,24 @@ scenarios:
           decision_owner: ""
           version_basis: ""
           stale_condition: ""
+        - item: 04-代码审核
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要代码审核
+          evidence: library/REQ-TAIL-G-02/00-需求资料/REQ-TAIL-G-02_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生代码变更时失效
+        - item: 05-测试验收
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要测试验收
+          evidence: library/REQ-TAIL-G-02/00-需求资料/REQ-TAIL-G-02_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生行为实现时失效
       blocking_items: []
       business_domain_sync:
         decision: NOT_REQUIRED
@@ -1145,6 +1284,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1177,6 +1317,117 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - skipped items lack complete basis
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-G-03-PURE-DOCUMENTATION-MISSING-SKIP-BASIS
+    coverage_tags: [pure_governance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-G-03
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: pure_documentation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: not_required
+          version_matches: true
+        - item: 04-代码审核
+          status: not_required
+          version_matches: true
+        - item: 05-测试验收
+          status: not_required
+          version_matches: true
+      skipped_items:
+        - item: 03-实现记录
+          basis: incomplete
+          scope: 纯文档任务，不产生实际代码、配置或行为实现
+          reason: 任务不产生实际实现
+          evidence: ""
+          decision_source: ""
+          decision_owner: ""
+          version_basis: ""
+          stale_condition: ""
+        - item: 04-代码审核
+          basis: complete
+          scope: 纯文档任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要代码审核
+          evidence: library/REQ-TAIL-G-03/00-需求资料/REQ-TAIL-G-03_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生代码变更时失效
+        - item: 05-测试验收
+          basis: complete
+          scope: 纯文档任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要测试验收
+          evidence: library/REQ-TAIL-G-03/00-需求资料/REQ-TAIL-G-03_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生行为实现时失效
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-G-03/manifest.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1207,7 +1458,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1226,6 +1479,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1258,6 +1512,7 @@ scenarios:
         authorized: false
         mode: response_only
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1286,7 +1541,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1305,6 +1562,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1337,6 +1595,7 @@ scenarios:
         authorized: true
         mode: write_failure_injected
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1364,7 +1623,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1383,6 +1644,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1443,7 +1705,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1462,6 +1726,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1477,7 +1742,7 @@ scenarios:
         result: not_applicable
         freshness: current
       risk:
-        level: high
+        level: High
         acceptance: complete
       pipeline:
         status: COMPLETED
@@ -1494,6 +1759,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: PASS_WITH_RISK
       can_continue: true
@@ -1520,7 +1786,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1539,6 +1807,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1554,7 +1823,7 @@ scenarios:
         result: not_applicable
         freshness: current
       risk:
-        level: high
+        level: High
         acceptance: incomplete
       pipeline:
         status: COMPLETED
@@ -1571,6 +1840,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1598,7 +1868,9 @@ scenarios:
       tail:
         required: true
         scope: determined
-        status: completed
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
       artifacts:
         - item: 03-实现记录
           status: current
@@ -1617,6 +1889,7 @@ scenarios:
         execution_status: done
         execution_result: not_required
         freshness: current
+        write_authorized: false
       reconcile:
         decision: not_required
         execution_required: false
@@ -1632,7 +1905,7 @@ scenarios:
         result: not_applicable
         freshness: current
       risk:
-        level: critical
+        level: Critical
         acceptance: incomplete
       pipeline:
         status: COMPLETED
@@ -1649,6 +1922,7 @@ scenarios:
         authorized: true
         mode: real_write
         version: 1.0.0
+        tamper_field: none
     expected:
       result: FAIL
       can_continue: false
@@ -1661,5 +1935,87 @@ scenarios:
       required_regate: false
       blockers:
         - Critical risk cannot be accepted
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE
+    coverage_tags: [precompleted_without_source]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-07
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: completed
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: PARTIAL
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-07/05-测试验收/REQ-TAIL-P-07_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - tail pre-completed state lacks current formal completion source
       reused_existing_evidence: false
       professional_skill_execution_requested: false
