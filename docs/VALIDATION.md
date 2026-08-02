@@ -156,6 +156,62 @@ Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深
 - 不证明 Topic 07 formal closure。
 - 不实施 D09。
 
+## Pipeline Bootstrap Boundary And Tail Entry Eligibility 校验（Topic 07-E R1）
+
+`validate-skill-contracts.rb` 新增 Topic 07-E R1 静态合同校验，覆盖 bootstrap 写权限边界（F-001）与结果/Tail entry eligibility 矩阵（F-002）。
+
+### bootstrap write 不属于 Pipeline
+
+- Pipeline 与 Pipeline Core 不执行 write-mode business-domain bootstrap；`.specify/business_domain/**` 生成不属于 Pipeline，也不是 Preflight side effect。
+- 当前 business-domain 知识缺失时，Pipeline 只做只读 readiness inspection（检查 bootstrap config、项目 profile、既有 business-domain 文档的 current/可路由状态），在 Preflight 阻塞并输出固定 blocker `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`。
+- 实际 bootstrap 位于 Pipeline 外部，需要独立明确授权，不由 Pipeline controller 拥有；独立 bootstrap 完成后必须重新进入 Pipeline Preflight，并重新检查新证据的 freshness、scope 与 ownership。
+- 该 blocker 不得路由到 Shared Tail Sync：首次 business-domain bootstrap 是 Core input readiness 问题；Shared Tail Sync 只处理实现后的稳定事实同步，不能被用来绕过缺失的 Core knowledge input。
+
+### dry-run preview 边界
+
+- Pipeline scope 中任何 bootstrap script invocation 必须显式包含 `--dry-run`，不得包含 `--force`。
+- preview 是只读 readiness command，不产生 target repository knowledge write，被记录为 preview 而不是 bootstrap execution。
+- 缺少 `--dry-run` 的 bootstrap command、或 Pipeline write-mode bootstrap 请求，均属于 Stop Conditions。
+
+### 五行 Result / Tail Entry Eligibility 矩阵
+
+以下矩阵是强制合同，`COMPLETED` 是唯一 Handoff=true 且 Tail Entry=true 的结果：
+
+| Pipeline Result | Core Completion | Shared Tail Handoff Emitted | Tail Entry Eligible | Shared Tail Status | Tail Gate Result | Tail Status Recommendation | Next Step |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| COMPLETED | true | true | true | pending | not_evaluated | in_progress | Shared Documentation Governance Tail |
+| PARTIAL | false | false | false | not_entered | not_applicable | unchanged | remaining Core work |
+| BLOCKED | false | false | false | not_entered | not_applicable | unchanged | earliest affected Core node |
+| REGATE_REQUIRED | false | false | false | not_entered | not_applicable | unchanged | required upstream Re-Gate |
+| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Direct Implementation route |
+
+### 只有 COMPLETED 输出 Shared Tail Handoff
+
+- Shared Tail Handoff section 是 conditional section，只在 `Shared Tail Handoff Emitted=true`（即 Pipeline Result=`COMPLETED`）时输出。
+- 非 COMPLETED 结果只输出 `Core Stop And Route` 诊断；该 section 不是 Tail Handoff，不是 Tail evidence。
+- 非 COMPLETED 结果不得建议 Tail `in_progress`、不得设置 completion source、不得进入 Shared Tail，按结果返回 Core/Development Path next step（remaining Core work / earliest affected Core node / required upstream Re-Gate / Direct Implementation route）。
+- Manifest 建议矩阵同样只对 COMPLETED 建议 Tail status=`in_progress` 与 Tail Gate=`not_evaluated`；非 COMPLETED 保持 Tail status `unchanged`。
+
+### Validator negative self-tests 与 markers
+
+- Validator 使用内存字符串 deep copy 制造负向 self-tests，不修改仓库文件；每个 self-test 绑定预期 diagnostic，未知异常或无关错误不能算成功拒绝。
+- 至少拒绝：bootstrap command 移除 `--dry-run`、增加 `--force`、恢复 active bootstrap wording、Stage Sequence 恢复 bootstrap script execution、BLOCKED Handoff=true、REGATE_REQUIRED Tail status=in_progress、PARTIAL Tail Entry=true、DIRECT next step=Shared Tail、COMPLETED Handoff=false、第六个 primary result、恢复 "Every pipeline result must contain Shared Tail Handoff"、generic Tail status 固定为 in_progress。
+- 成功时由真实断言输出五个 markers：
+
+```text
+PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true
+PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true
+PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true
+PIPELINE_BOUNDARY_TAIL_ENTRY_ELIGIBILITY_FAIL_CLOSED true
+PIPELINE_BOUNDARY_SELFTESTS_PASS true
+```
+
+### 边界
+
+- 该静态校验 read-only、deterministic、no network；不执行真实 bootstrap、不运行真实 Pipeline、不执行 Sync/Reconcile、不运行真实 Tail Gate。
+- CI success 不是 review PASS；Topic 07 formal closure 仍 pending；D09 仍未实施。
+
+
 ## validate-skill-contracts.rb 检查什么
 
 当前脚本检查：

@@ -3208,6 +3208,7 @@ PIPELINE_BOUNDARY_CORE_ORDER = "Preflight, Domain Route, Specify, Clarify, Plan,
 PIPELINE_BOUNDARY_SCOPE_PATHS = [
   "skills/sdlc-speckit-pipeline/SKILL.md",
   "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+  "skills/sdlc-speckit-pipeline/references/activation-and-inputs.md",
   "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md",
   "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
   "skills/sdlc-speckit-pipeline/references/gate-and-regate.md",
@@ -3421,7 +3422,499 @@ end
   end
 end
 
+# ── Pipeline Bootstrap Boundary And Tail Entry Eligibility (Topic 07-E R1) ──
+# Static assertions for the R1 correction:
+#   F-001: write-mode business-domain bootstrap stays outside the Pipeline; the
+#          Pipeline only performs read-only readiness inspection, blocks at
+#          Preflight with INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED, and
+#          re-enters Preflight after an independently authorized bootstrap.
+#   F-002: Shared Tail Handoff emission and Tail entry eligibility are strictly
+#          bound to Core completion; only COMPLETED may emit a Handoff, be Tail
+#          entry eligible, and recommend Tail in_progress.
+# Read-only, deterministic, no network. The negative self-tests use in-memory
+# string deep copies and never modify repository files. Unknown exceptions or
+# unrelated errors never count as successful rejection.
+
+PIPELINE_R1_BOOTSTRAP_SCOPE_PATHS = [
+  "skills/sdlc-speckit-pipeline/SKILL.md",
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+  "skills/sdlc-speckit-pipeline/references/activation-and-inputs.md",
+  "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
+  "skills/sdlc-speckit-pipeline/references/gate-and-regate.md",
+  "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md",
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md"
+].freeze
+
+PIPELINE_R1_SCOPE_PATHS = (PIPELINE_R1_BOOTSTRAP_SCOPE_PATHS + ["docs/VALIDATION.md"]).freeze
+
+PIPELINE_R1_BOOTSTRAP_WRITE_REQUIRED = {
+  "skills/sdlc-speckit-pipeline/SKILL.md" => [
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "stop at Preflight",
+    "independent bootstrap",
+    "re-enter Preflight",
+    "write-mode business-domain bootstrap"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md" => [
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "独立授权",
+    "重新运行 Preflight",
+    "--dry-run",
+    "write-mode business-domain bootstrap"
+  ],
+  "skills/sdlc-speckit-pipeline/references/activation-and-inputs.md" => [
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "readiness input",
+    "independent bootstrap",
+    "Re-run Preflight",
+    "outside the Pipeline",
+    "--dry-run"
+  ],
+  "skills/sdlc-speckit-pipeline/references/stage-sequence.md" => [
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "Read-only readiness inspection"
+  ],
+  "skills/sdlc-speckit-pipeline/references/gate-and-regate.md" => [
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "## Preflight Blocker Route",
+    "Tail Entry Eligible",
+    "independent bootstrap outside the Pipeline",
+    "must not be used to bypass"
+  ],
+  "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md" => [
+    "write-mode business-domain bootstrap",
+    "INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED",
+    "--dry-run",
+    "must not be used to bypass"
+  ]
+}.freeze
+
+PIPELINE_R1_FORBIDDEN_BOOTSTRAP_ACTIVE_WORDING = [
+  "so they can be generated before knowledge routing",
+  "先执行 business-domain bootstrap",
+  "controller plus standard-package bootstrap/audit scripts",
+  "bootstrap scripts 作为 Pipeline 执行器"
+].freeze
+
+BOOTSTRAP_SCRIPT_PATTERN = /bootstrap-[a-z-]+\.sh/.freeze
+PIPELINE_R1_FORCE_GUARD = /
+  must\s+not|
+  must\s+never|
+  without\s+--force|
+  no\s+--force|
+  never\s+include|
+  not\s+include|
+  禁止|
+  不得|
+  不能
+/ix.freeze
+
+PIPELINE_RESULT_MATRIX_HEADER = [
+  "Pipeline Result", "Core Completion", "Shared Tail Handoff Emitted",
+  "Tail Entry Eligible", "Shared Tail Status", "Tail Gate Result",
+  "Tail Status Recommendation", "Next Step"
+].freeze
+
+PIPELINE_RESULT_MATRIX = {
+  "COMPLETED" => {
+    "Core Completion" => "true",
+    "Shared Tail Handoff Emitted" => "true",
+    "Tail Entry Eligible" => "true",
+    "Shared Tail Status" => "pending",
+    "Tail Gate Result" => "not_evaluated",
+    "Tail Status Recommendation" => "in_progress",
+    "Next Step" => "Shared Documentation Governance Tail"
+  },
+  "PARTIAL" => {
+    "Core Completion" => "false",
+    "Shared Tail Handoff Emitted" => "false",
+    "Tail Entry Eligible" => "false",
+    "Shared Tail Status" => "not_entered",
+    "Tail Gate Result" => "not_applicable",
+    "Tail Status Recommendation" => "unchanged",
+    "Next Step" => "remaining Core work"
+  },
+  "BLOCKED" => {
+    "Core Completion" => "false",
+    "Shared Tail Handoff Emitted" => "false",
+    "Tail Entry Eligible" => "false",
+    "Shared Tail Status" => "not_entered",
+    "Tail Gate Result" => "not_applicable",
+    "Tail Status Recommendation" => "unchanged",
+    "Next Step" => "earliest affected Core node"
+  },
+  "REGATE_REQUIRED" => {
+    "Core Completion" => "false",
+    "Shared Tail Handoff Emitted" => "false",
+    "Tail Entry Eligible" => "false",
+    "Shared Tail Status" => "not_entered",
+    "Tail Gate Result" => "not_applicable",
+    "Tail Status Recommendation" => "unchanged",
+    "Next Step" => "required upstream Re-Gate"
+  },
+  "DIRECT_IMPLEMENTATION_RECOMMENDED" => {
+    "Core Completion" => "false",
+    "Shared Tail Handoff Emitted" => "false",
+    "Tail Entry Eligible" => "false",
+    "Shared Tail Status" => "not_entered",
+    "Tail Gate Result" => "not_applicable",
+    "Tail Status Recommendation" => "unchanged",
+    "Next Step" => "Direct Implementation route"
+  }
+}.freeze
+
+PIPELINE_R1_TAIL_ENTRY_REQUIRED = {
+  "skills/sdlc-speckit-pipeline/SKILL.md" => [
+    "Shared Tail Handoff Emitted",
+    "Tail Entry Eligible",
+    "Core Stop And Route",
+    "Tail Status Recommendation"
+  ],
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md" => [
+    "Shared Tail Handoff Emitted",
+    "Core Stop And Route"
+  ],
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md" => [
+    "Shared Tail Handoff Emitted",
+    "Tail Entry Eligible",
+    "## Core Stop And Route",
+    "conditional section",
+    "only when `Shared Tail Handoff Emitted=true`",
+    "never recommends Tail `in_progress`"
+  ]
+}.freeze
+
+PIPELINE_R1_TAIL_ENTRY_FORBIDDEN = [
+  "Every pipeline result must contain",
+  "carry the applicable Tail Handoff state",
+  "- Shared Tail Status: in_progress",
+  "所有结果固定 Tail `in_progress`"
+].freeze
+
+def pipeline_r1_bootstrap_write_diagnostics(scope)
+  diags = []
+  PIPELINE_R1_BOOTSTRAP_WRITE_REQUIRED.each do |rel, needles|
+    text = scope[rel].to_s
+    needles.each do |needle|
+      unless text.include?(needle)
+        diags << "pipeline-boundary-r1: #{rel} missing bootstrap write boundary requirement #{needle.inspect}"
+      end
+    end
+  end
+  PIPELINE_R1_FORBIDDEN_BOOTSTRAP_ACTIVE_WORDING.each do |phrase|
+    scope.each do |rel, text|
+      next unless PIPELINE_R1_BOOTSTRAP_SCOPE_PATHS.include?(rel)
+      if text.include?(phrase)
+        diags << "pipeline-boundary-r1: #{rel} keeps active bootstrap wording that lets the Pipeline bootstrap business-domain: #{phrase}"
+      end
+    end
+  end
+  begin
+    pipeline_r1_contract_meta = contract_yaml(File.join(ROOT, "skill-contracts/known-skills/sdlc-speckit-pipeline.md"))
+    unless pipeline_r1_contract_meta["can_modify_knowledge_base"] == false
+      diags << "pipeline-boundary-r1: contract can_modify_knowledge_base must remain false"
+    end
+  rescue StandardError => e
+    diags << "pipeline-boundary-r1: contract metadata unreadable: #{e.message}"
+  end
+  diags
+end
+
+def pipeline_r1_bootstrap_dry_run_diagnostics(scope)
+  diags = []
+  scope.each do |rel, text|
+    next unless PIPELINE_R1_BOOTSTRAP_SCOPE_PATHS.include?(rel)
+    text.lines.each_with_index do |line, index|
+      next unless line.match?(BOOTSTRAP_SCRIPT_PATTERN)
+      if line.include?("--force") && !line.match?(PIPELINE_R1_FORCE_GUARD)
+        diags << "pipeline-boundary-r1: #{rel}:#{index + 1} bootstrap invocation must not include --force: #{line.strip}"
+      end
+      unless line.include?("--dry-run")
+        diags << "pipeline-boundary-r1: #{rel}:#{index + 1} bootstrap invocation must include --dry-run: #{line.strip}"
+      end
+    end
+  end
+  diags
+end
+
+def parse_pipeline_result_matrix(text)
+  lines = text.lines
+  header_index = lines.index { |line| line.start_with?("| Pipeline Result |") }
+  return nil unless header_index
+
+  header = lines[header_index].split("|").map(&:strip).reject(&:empty?)
+  return nil unless header == PIPELINE_RESULT_MATRIX_HEADER
+
+  labels = []
+  rows = {}
+  ((header_index + 1)...lines.length).each do |i|
+    line = lines[i].strip
+    break unless line.start_with?("|") && line.end_with?("|")
+
+    cells = line.split("|").map(&:strip).reject(&:empty?)
+    next if cells.empty? || cells.length != header.length
+    next if cells.all? { |cell| cell.match?(/\A:?-{1,}:?\z/) }
+
+    labels << cells[0]
+    rows[cells[0]] = header.each_with_index.to_h { |col, idx| [col, cells[idx]] }
+  end
+  return nil if rows.empty?
+
+  { "labels" => labels, "rows" => rows }
+end
+
+def result_matrix_diagnostics(parsed, label)
+  diags = []
+  if parsed.nil? || parsed["rows"].empty?
+    diags << "pipeline-boundary-r1: #{label} missing the five-row Pipeline Result / Tail entry eligibility matrix"
+    return diags
+  end
+
+  rows = parsed["rows"]
+  labels = parsed["labels"]
+  expected_labels = PIPELINE_RESULT_MATRIX.keys
+
+  (expected_labels - labels.uniq).each do |missing_label|
+    diags << "pipeline-boundary-r1: #{label} result matrix missing primary label #{missing_label}"
+  end
+  labels.uniq.each do |result|
+    next if expected_labels.include?(result)
+    diags << "pipeline-boundary-r1: #{label} result matrix must not add extra primary label #{result}"
+  end
+  if rows.key?("CORE_COMPLETED")
+    diags << "pipeline-boundary-r1: #{label} result matrix must not introduce CORE_COMPLETED"
+  end
+  expected_labels.each do |result|
+    count = labels.count(result)
+    unless count == 1
+      diags << "pipeline-boundary-r1: #{label} result matrix label #{result} must appear exactly once (got #{count})"
+    end
+    row = rows[result]
+    next unless row
+    PIPELINE_RESULT_MATRIX[result].each do |col, expected|
+      actual = row[col]
+      unless actual == expected
+        diags << "pipeline-boundary-r1: #{label} matrix cell #{result}.#{col} must be #{expected.inspect} (got #{actual.inspect})"
+      end
+    end
+  end
+
+  completed = rows["COMPLETED"]
+  if completed
+    if completed["Shared Tail Handoff Emitted"] == "true" && completed["Tail Entry Eligible"] != "true"
+      diags << "pipeline-boundary-r1: #{label} COMPLETED with Handoff=true must also be Tail Entry Eligible=true"
+    end
+    unless completed["Next Step"] == "Shared Documentation Governance Tail"
+      diags << "pipeline-boundary-r1: #{label} COMPLETED must route to the Shared Documentation Governance Tail as next step"
+    end
+  end
+
+  (expected_labels - ["COMPLETED"]).each do |result|
+    row = rows[result]
+    next unless row
+    if row["Shared Tail Handoff Emitted"] == "true" || row["Tail Entry Eligible"] == "true"
+      diags << "pipeline-boundary-r1: #{label} non-COMPLETED result #{result} must not emit Shared Tail Handoff or be Tail entry eligible"
+    end
+    if row["Tail Status Recommendation"] == "in_progress"
+      diags << "pipeline-boundary-r1: #{label} non-COMPLETED result #{result} must not recommend Tail in_progress"
+    end
+    if row["Next Step"] == "Shared Documentation Governance Tail"
+      diags << "pipeline-boundary-r1: #{label} non-COMPLETED result #{result} must not route to the Shared Tail as next step"
+    end
+  end
+  diags
+end
+
+def pipeline_r1_tail_entry_diagnostics(scope)
+  diags = []
+  PIPELINE_R1_TAIL_ENTRY_REQUIRED.each do |rel, needles|
+    text = scope[rel].to_s
+    needles.each do |needle|
+      unless text.include?(needle)
+        diags << "pipeline-boundary-r1: #{rel} missing Tail entry eligibility requirement #{needle.inspect}"
+      end
+    end
+  end
+  [
+    "skills/sdlc-speckit-pipeline/SKILL.md",
+    "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+    "skills/sdlc-speckit-pipeline/references/output-and-manifest.md"
+  ].each do |rel|
+    text = scope[rel].to_s
+    PIPELINE_R1_TAIL_ENTRY_FORBIDDEN.each do |phrase|
+      if text.include?(phrase)
+        diags << "pipeline-boundary-r1: #{rel} contains forbidden Tail entry eligibility regression #{phrase.inspect}"
+      end
+    end
+  end
+  diags
+end
+
+# Negative self-tests: every mutation must be rejected by the real assertion
+# functions with the expected diagnostic. Mutations operate on in-memory deep
+# copies; unknown exceptions or unrelated errors never count as rejection.
+PIPELINE_R1_MATRIX_FILE = "skills/sdlc-speckit-pipeline/references/output-and-manifest.md".freeze
+
+PIPELINE_R1_SELFTESTS = [
+  {
+    id: "bootstrap_dry_run_removed",
+    desc: "bootstrap command without --dry-run",
+    scope_file: "skills/sdlc-speckit-pipeline/references/activation-and-inputs.md",
+    mutate: ->(text) { text.sub("--dry-run", "") },
+    run: ->(scope) { pipeline_r1_bootstrap_dry_run_diagnostics(scope) },
+    expect: "bootstrap invocation must include --dry-run"
+  },
+  {
+    id: "bootstrap_force_added",
+    desc: "bootstrap command with --force",
+    scope_file: "skills/sdlc-speckit-pipeline/references/activation-and-inputs.md",
+    mutate: ->(text) { text + "\nRun: scripts/bootstrap-business-domain.sh --force\n" },
+    run: ->(scope) { pipeline_r1_bootstrap_dry_run_diagnostics(scope) },
+    expect: "bootstrap invocation must not include --force"
+  },
+  {
+    id: "bootstrap_active_wording",
+    desc: "active wording lets the Pipeline write bootstrap",
+    scope_file: "skills/sdlc-speckit-pipeline/SKILL.md",
+    mutate: ->(text) { text + "\nso they can be generated before knowledge routing\n" },
+    run: ->(scope) { pipeline_r1_bootstrap_write_diagnostics(scope) },
+    expect: "active bootstrap wording"
+  },
+  {
+    id: "stage_sequence_bootstrap_executor",
+    desc: "stage sequence restores bootstrap script execution",
+    scope_file: "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
+    mutate: ->(text) { text.sub("Read-only readiness inspection", "controller plus standard-package bootstrap/audit scripts") },
+    run: ->(scope) { pipeline_r1_bootstrap_write_diagnostics(scope) },
+    expect: "controller plus standard-package bootstrap/audit scripts"
+  },
+  {
+    id: "matrix_blocked_handoff_true",
+    desc: "BLOCKED Shared Tail Handoff Emitted changed to true",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| BLOCKED | false | false | false |", "| BLOCKED | false | true | false |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "BLOCKED.Shared Tail Handoff Emitted"
+  },
+  {
+    id: "matrix_regate_in_progress",
+    desc: "REGATE_REQUIRED Tail Status Recommendation changed to in_progress",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| REGATE_REQUIRED | false | false | false | not_entered | not_applicable | unchanged |", "| REGATE_REQUIRED | false | false | false | not_entered | not_applicable | in_progress |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "REGATE_REQUIRED.Tail Status Recommendation"
+  },
+  {
+    id: "matrix_partial_tail_entry_true",
+    desc: "PARTIAL Tail Entry Eligible changed to true",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| PARTIAL | false | false | false |", "| PARTIAL | false | false | true |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "PARTIAL.Tail Entry Eligible"
+  },
+  {
+    id: "matrix_direct_next_step_shared_tail",
+    desc: "DIRECT_IMPLEMENTATION_RECOMMENDED next step changed to Shared Tail",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Direct Implementation route |", "| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Shared Documentation Governance Tail |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "DIRECT_IMPLEMENTATION_RECOMMENDED.Next Step"
+  },
+  {
+    id: "matrix_completed_handoff_false",
+    desc: "COMPLETED Shared Tail Handoff Emitted changed to false",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| COMPLETED | true | true | true |", "| COMPLETED | true | false | true |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "COMPLETED.Shared Tail Handoff Emitted"
+  },
+  {
+    id: "matrix_sixth_primary_result",
+    desc: "a sixth primary Pipeline result is added",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text.sub("| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Direct Implementation route |", "| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Direct Implementation route |\n| NEW_RESULT | false | false | false | not_entered | not_applicable | unchanged | remaining Core work |") },
+    run: ->(scope) { result_matrix_diagnostics(parse_pipeline_result_matrix(scope[PIPELINE_R1_MATRIX_FILE]), "self-test") },
+    expect: "extra primary label NEW_RESULT"
+  },
+  {
+    id: "every_result_contains_handoff",
+    desc: "every pipeline result must contain Shared Tail Handoff wording restored",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text + "\nEvery pipeline result must contain Shared Tail Handoff\n" },
+    run: ->(scope) { pipeline_r1_tail_entry_diagnostics(scope) },
+    expect: "Every pipeline result must contain"
+  },
+  {
+    id: "generic_tail_status_in_progress",
+    desc: "generic Tail status fixed to in_progress",
+    scope_file: PIPELINE_R1_MATRIX_FILE,
+    mutate: ->(text) { text + "\n- Shared Tail Status: in_progress\n" },
+    run: ->(scope) { pipeline_r1_tail_entry_diagnostics(scope) },
+    expect: "- Shared Tail Status: in_progress"
+  }
+].freeze
+
+def pipeline_r1_self_test_diagnostics(scope)
+  diags = []
+  PIPELINE_R1_SELFTESTS.each do |test|
+    text = scope[test[:scope_file]]
+    if text.nil?
+      diags << "pipeline-boundary-r1: self-test #{test[:id]} cannot run: missing scope file #{test[:scope_file]}"
+      next
+    end
+    begin
+      mutated_scope = scope.dup
+      mutated_scope[test[:scope_file]] = test[:mutate].call(text.dup)
+      produced = test[:run].call(mutated_scope)
+      unless produced.any? { |d| d.include?(test[:expect]) }
+        diags << "pipeline-boundary-r1: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
+      end
+    rescue StandardError => e
+      diags << "pipeline-boundary-r1: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
+    end
+  end
+  diags
+end
+
+pipeline_r1_scope = {}
+PIPELINE_R1_SCOPE_PATHS.each do |rel|
+  path = File.join(ROOT, rel)
+  if File.file?(path)
+    pipeline_r1_scope[rel] = File.read(path)
+  else
+    errors << "pipeline-boundary-r1: missing scope file #{rel}"
+  end
+end
+
+r1_bootstrap_write_diags = []
+r1_bootstrap_dry_run_diags = []
+r1_matrix_diags = []
+r1_tail_entry_diags = []
+r1_selftest_diags = []
+
+if PIPELINE_R1_SCOPE_PATHS.all? { |rel| File.file?(File.join(ROOT, rel)) }
+  r1_bootstrap_write_diags = pipeline_r1_bootstrap_write_diagnostics(pipeline_r1_scope)
+  r1_bootstrap_dry_run_diags = pipeline_r1_bootstrap_dry_run_diagnostics(pipeline_r1_scope)
+  %w[skills/sdlc-speckit-pipeline/references/output-and-manifest.md docs/VALIDATION.md].each do |rel|
+    parsed = parse_pipeline_result_matrix(pipeline_r1_scope[rel].to_s)
+    r1_matrix_diags.concat(result_matrix_diagnostics(parsed, rel))
+  end
+  r1_tail_entry_diags = pipeline_r1_tail_entry_diagnostics(pipeline_r1_scope)
+  r1_selftest_diags = pipeline_r1_self_test_diagnostics(pipeline_r1_scope)
+end
+
+errors.concat(r1_bootstrap_write_diags)
+errors.concat(r1_bootstrap_dry_run_diags)
+errors.concat(r1_matrix_diags)
+errors.concat(r1_tail_entry_diags)
+errors.concat(r1_selftest_diags)
+
 if errors.empty?
+  puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
+  puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
+  puts "PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true" if r1_matrix_diags.empty?
+  puts "PIPELINE_BOUNDARY_TAIL_ENTRY_ELIGIBILITY_FAIL_CLOSED true" if r1_tail_entry_diags.empty?
+  puts "PIPELINE_BOUNDARY_SELFTESTS_PASS true" if r1_selftest_diags.empty?
   puts "skill contract validation ok"
 else
   warn "skill contract validation failed:"

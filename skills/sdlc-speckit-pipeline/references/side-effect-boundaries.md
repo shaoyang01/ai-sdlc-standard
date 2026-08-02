@@ -63,6 +63,24 @@ belong only to `sdlc-speckit-sync` inside the Shared Tail, and only when:
 The Pipeline Handoff may only hand over target/evidence candidates
 (`candidate_evidence_only=true`); it never performs the knowledge write.
 
+### Bootstrap Write Boundary
+
+The Pipeline does not execute a write-mode business-domain bootstrap. The
+knowledge write prohibition includes bootstrap: bootstrap generates
+`.specify/business_domain/**`, which the Pipeline must not create, overwrite, or
+generate as a Preflight side effect.
+
+A dry-run preview is a read-only readiness command
+(`scripts/bootstrap-business-domain.sh --dry-run`); it must not generate target
+knowledge and must not include `--force`. Actual bootstrap requires independent
+authorization and executes outside the Pipeline; the Pipeline only reports
+`INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` and re-enters Preflight after
+the independent bootstrap evidence is current.
+
+Shared Tail Sync is not a substitute for a missing Core knowledge input:
+`INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` must not be used to bypass the
+first-time bootstrap via `sdlc-speckit-sync`.
+
 ## Reconcile Side Effects
 
 The Pipeline does not execute Reconcile audit or apply. Reconcile belongs to

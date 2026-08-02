@@ -29,6 +29,20 @@ Route Core blockers to the earliest affected node:
 | Cross-artifact inconsistency exists | `sdlc-speckit-analyze` |
 | Code implementation is wrong | `sdlc-speckit-implement` |
 
+## Preflight Blocker Route
+
+Missing current business-domain knowledge is a Core input readiness blocker, not a Tail item:
+
+| Blocker | Core Result | Earliest Affected Node | Tail Entry Eligible | Next Step |
+| --- | --- | --- | --- | --- |
+| `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` | `BLOCKED` | Preflight | false | independent bootstrap outside the Pipeline (with independent authorization), then re-enter Pipeline Preflight |
+
+Do not route this blocker to Shared Tail Sync. First-time business-domain
+bootstrap is a Core input readiness problem; Shared Tail Sync handles stable
+post-implementation fact sync and must not be used to bypass a missing Core
+knowledge input. This blocker does not produce a Shared Tail Handoff and does
+not make Tail entry eligible.
+
 ## Shared Tail Handoff Routes
 
 The following are no longer Pipeline-internal child-stage routes:

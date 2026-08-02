@@ -24,7 +24,7 @@ Do not skip a stage unless its current result already exists, is not stale, and 
 
 | Stage | Primary Skill | Purpose |
 | --- | --- | --- |
-| Preflight | `sdlc-speckit-pipeline` controller plus standard-package bootstrap/audit scripts | Verify Speckit baseline, new-rail runtime redlines, and required business knowledge entry points. |
+| Preflight | `sdlc-speckit-pipeline` controller | Read-only readiness inspection: verify Speckit baseline, new-rail runtime redlines, project profile, bootstrap config, and required business knowledge entry points; missing business-domain knowledge routes to `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` instead of running a write-mode bootstrap. |
 | Domain Route | `sdlc-speckit-pipeline` controller | Decide existing-change, new-flow, integration-change, data-change, or unknown. |
 | Specify | `sdlc-speckit-specify` | Sync approved DocFlow specification into `specs/{feature}/spec.md`. |
 | Clarify | `sdlc-speckit-clarify` | Validate residual questions only. |

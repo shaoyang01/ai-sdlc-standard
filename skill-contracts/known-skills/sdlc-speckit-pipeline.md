@@ -77,6 +77,9 @@ blocking_conditions:
   - runtime execution would require a legacy Skill or legacy .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** input
   - Clarify passed but required Core authorization for continuous execution is missing
   - any stage has unresolved Critical issue
+  - current business-domain knowledge is missing and the independent business-domain bootstrap has not completed
+  - a Pipeline write-mode business-domain bootstrap request is detected
+  - a bootstrap preview command lacks --dry-run
 ```
 
 ## Standard Path Resolution
@@ -160,7 +163,7 @@ blocking_conditions:
 - 缺少方案或方案审核时停止。
 - 缺少 manifest 时可以创建或建议创建，但必须记录 Activity Log。
 - 缺少项目 profile 时，先执行 Speckit project bootstrap。
-- 缺少业务知识库时，先执行 business-domain bootstrap，不能跳过治理检查。
+- 缺少当前 business-domain 知识时，在 Preflight 阻塞并输出 `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`；bootstrap config 只是 readiness input，Pipeline 不生成 knowledge、不执行 write-mode bootstrap；实际 bootstrap 需要 Pipeline 外独立授权，独立 bootstrap 完成后重新运行 Preflight，并重新检查新证据的 freshness、scope 与 ownership；preview 只能使用 `--dry-run`。
 - 缺少 profile 声明为 required 的 project-context 文档时停止。
 - 所需事实只存在于 legacy `.specify/memory/**`、`.specify/workflow/**` 或 `.specify/coding_guide/**` 时停止，要求目标代码证据、business_domain 证据或用户确认。
 
@@ -232,11 +235,16 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md`
 - `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md`
 - Result Scope: Speckit SDD Core
+- Pipeline Result
 - Core Completion
+- Shared Tail Handoff Emitted
+- Tail Entry Eligible
 - Shared Tail Status
-- Tail Completion Gate Result: not_evaluated
+- Tail Completion Gate Result: not_evaluated / not_applicable
 - Completion Source Established: false
-- Shared Tail Handoff
+- Tail Status Recommendation
+- Next Step
+- Shared Tail Handoff（仅当 `Shared Tail Handoff Emitted=true`，即 Pipeline Result=`COMPLETED` 时输出；非 COMPLETED 结果输出 `Core Stop And Route`，该 section 不是 Tail Handoff、不是 Tail evidence）
 - manifest Activity Log 更新建议
 
 `specs/{feature}/route.md` 必须包含 Requirement ID、Feature ID、Route Type、Project Type Profiles、Business Domain Targets、Business Knowledge Read Set、Entry Coverage Surface、Sync Targets、Create-If-Missing Decision、Unresolved Questions、Blocking Items、New-Rail Runtime Check、Source Artifacts 和 Manifest Recommendation。New-Rail Runtime Check 必须明确 `Runtime child skills: sdlc-speckit-* only`、`Legacy Skill usage: none`、`Legacy document runtime input: none`、`Legacy document write target: none`。
@@ -264,6 +272,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 在 Clarify 阶段扩大需求范围。
 - 在 Implement 阶段补造未定义业务规则。
 - 执行 Sync、Reconcile 或 Tail Completion Gate；知识写入、Reconcile apply 与 Tail Gate persistence 不属于 Pipeline。
+- 执行 write-mode business-domain bootstrap；`.specify/business_domain/**` write 不属于 Pipeline，首次 business-domain 生成必须由 Pipeline 外独立授权 bootstrap 完成。
 - 把 Pipeline result 写成 requirement completion 或 formal Tail evidence。
 
 ## Blocking Conditions
@@ -282,6 +291,9 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Clarify 已通过但 Core 连续执行所需授权（实现授权或 Core accepted-risk owner）缺失。
 - Route Type 为 `unknown` 且缺少显式 route 确认。
 - create-if-missing 缺少 L1、L2、L4 id、owner、authorization 或 entry coverage status。
+- 当前 business-domain 知识缺失且独立 bootstrap 未完成（输出 `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`，返回 Preflight）。
+- 检测到 Pipeline write-mode business-domain bootstrap 请求。
+- bootstrap preview 命令缺少 `--dry-run`。
 
 不得因以下原因阻塞 Core：
 

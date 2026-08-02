@@ -121,7 +121,7 @@ Verify:
 - Domain route is known: existing-change, new-flow, integration-change, data-change, or unknown.
 - Route Type `unknown` blocks Specify unless the user explicitly confirms the route type, target business-domain documents, entry coverage surface, and risk owner.
 - When a feature id is known and full SDD proceeds, Domain Route is materialized as `specs/{feature}/route.md`; before that point the pipeline report `Domain Route Summary` is the route artifact source.
-- Required business knowledge inputs are present, or `.specify/business-domain-bootstrap.yaml` exists so they can be generated before knowledge routing.
+- Required business knowledge inputs are present and current. When `.specify/business_domain/**` is missing, inspect `.specify/business-domain-bootstrap.yaml` and the project profile as readiness inputs only; stop at Preflight and report `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`. The Pipeline never runs a write-mode business-domain bootstrap and never auto-generates business-domain knowledge; actual bootstrap happens outside the Pipeline with independent authorization, and the Pipeline must re-enter Preflight after the independent bootstrap evidence is current. Any bootstrap preview must use `scripts/bootstrap-business-domain.sh --dry-run` only and must not include `--force`.
 - Domain Route Summary and New-Rail Runtime Check can be reported before Specify starts.
 
 Stop when project profile, bootstrap configuration, required private documents, explicit overrides, or domain route cannot be determined.
@@ -178,18 +178,33 @@ status authority; manifest is status authority for pipeline status decisions.
 
 Stop if implementation requires undefined behavior, hidden scope change, or unsafe local state.
 
-### 5. Produce Shared Tail Handoff
+### 5. Produce Shared Tail Handoff Or Core Stop And Route
 
-After implementation:
+After implementation, determine the Pipeline result before composing the exit sections.
+
+The Shared Tail Handoff is emitted only when all of the following hold:
+
+- Pipeline Result = `COMPLETED`
+- Core Completion = true
+- Implement completed
+- No Core blocking item
+
+In that case only:
 
 - Read `references/output-and-manifest.md`.
 - Compose the Shared Tail Handoff for the Shared Documentation Governance Tail.
-- Include Requirement ID, Feature ID, Decision Scope, Pipeline Result, Result Scope, Core Completion, implementation result, implementation artifacts, implementation record status, code review status, test acceptance status, existing business_domain_sync decision/artifact/current/scope/execution, existing Reconcile decision/artifact/current/scope/execution, Entry Coverage status, Re-Gate status, blockers, earliest affected node, Tail Status Recommendation, Tail Completion Gate Result, Completion Source Established, next owner, and next step.
+- Include Requirement ID, Feature ID, Decision Scope, Pipeline Result, Result Scope, Core Completion, implementation result, implementation artifacts, implementation record status, code review status, test acceptance status, existing business_domain_sync decision/artifact/current/scope/execution, existing Reconcile decision/artifact/current/scope/execution, Entry Coverage status, Re-Gate status, blockers, earliest affected node, Tail Status Recommendation (`in_progress`), Tail Completion Gate Result (`not_evaluated`), Completion Source Established (`false`), next owner, and next step.
 - Mark every existing Sync/Reconcile pointer as `candidate_evidence_only=true`.
 - Do not call `sdlc-speckit-sync`, `sdlc-speckit-code-doc-reconcile`, or `sdlc-gate-runner` from the Pipeline.
 - Do not decide whether the Shared Tail is complete.
 
 The Handoff is not a formal Gate artifact, not a Manifest, not completion evidence, and not a completion_decision_source.
+
+For `PARTIAL`, `BLOCKED`, `REGATE_REQUIRED`, or `DIRECT_IMPLEMENTATION_RECOMMENDED`:
+
+- Output Core Stop And Route diagnostics instead of a Shared Tail Handoff.
+- `Shared Tail Handoff Emitted=false`, `Tail Entry Eligible=false`, `Shared Tail Status=not_entered`, `Tail Completion Gate Result=not_applicable`, `Tail Status Recommendation=unchanged`, `Completion Source Established=false`.
+- Do not name the diagnostics a Shared Tail Handoff and do not route them into the Shared Tail. They are not Tail evidence.
 
 ### 6. Output Pipeline Result
 
@@ -215,23 +230,27 @@ Report:
 - Code, doc, and knowledge side effects
 - Blocking items and Re-Gate route
 - Manifest update recommendation
-- Next step: Shared Documentation Governance Tail
+- Next step: Shared Documentation Governance Tail when Pipeline Result = `COMPLETED`; otherwise the Core/Development Path next step for the result (remaining Core work, earliest affected Core node, required upstream Re-Gate, or Direct Implementation route)
 
 ## Output Requirements
 
-Every pipeline result must contain:
+Every pipeline report must include the always-present fields:
 
 - Activation Basis
 - New-Rail Runtime Check
 - Domain Route Summary
 - Route Artifact: `specs/{feature}/route.md` when materialized, or Pipeline Domain Route Summary before feature id materialization
 - Source Artifacts
+- Pipeline Result
 - Result Scope: Speckit SDD Core
 - Core Completion
+- Shared Tail Handoff Emitted
+- Tail Entry Eligible
 - Shared Tail Status
-- Tail Completion Gate Result: not_evaluated
+- Tail Completion Gate Result: not_evaluated / not_applicable
 - Completion Source Established: false
-- Shared Tail Handoff
+- Tail Status Recommendation
+- Next Step
 - Stage Timeline
 - Gate Results
 - Produced Or Reused Artifacts
@@ -239,7 +258,11 @@ Every pipeline result must contain:
 - Blocking Or Deferred Items
 - Re-Gate Recommendation
 - Manifest Update Recommendation
-- Next Step
+
+The Shared Tail Handoff section is a conditional section: it is emitted only
+when `Shared Tail Handoff Emitted=true`, which happens only for Pipeline Result
+`COMPLETED`. Non-COMPLETED results emit `Core Stop And Route` instead; that
+section is not a Tail Handoff and not Tail evidence.
 
 ## Stop Conditions
 
@@ -258,3 +281,6 @@ Stop instead of continuing when:
 - A stage would reinterpret approved requirements.
 - Implementation would require unapproved behavior.
 - A Shared Tail blocker (Sync/Reconcile decision or execution pending, Entry Coverage pending, Tail Re-Gate pending, Tail completion pending) must be routed into the Shared Tail Handoff instead of blocking Core stages.
+- Current business-domain knowledge (`.specify/business_domain/**`) is missing and the independent business-domain bootstrap has not completed.
+- A Pipeline write-mode business-domain bootstrap request is detected.
+- A bootstrap preview command lacks `--dry-run`.

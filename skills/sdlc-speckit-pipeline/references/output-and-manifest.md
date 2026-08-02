@@ -85,11 +85,16 @@ Use this structure:
 
 ## Result Scope
 
+- Pipeline Result: COMPLETED / PARTIAL / BLOCKED / REGATE_REQUIRED / DIRECT_IMPLEMENTATION_RECOMMENDED
 - Result Scope: Speckit SDD Core
 - Core Completion: yes / no
-- Shared Tail Status: pending
-- Tail Completion Gate Result: not_evaluated
+- Shared Tail Handoff Emitted: true / false
+- Tail Entry Eligible: true / false
+- Shared Tail Status: pending / not_entered
+- Tail Completion Gate Result: not_evaluated / not_applicable
 - Completion Source Established: false
+- Tail Status Recommendation: in_progress / unchanged
+- Next Step: Shared Documentation Governance Tail (COMPLETED only) or the Core/Development Path next step
 
 ## Stage Timeline
 
@@ -152,6 +157,8 @@ Gate Results list Core stages only. There are no fixed Sync or Reconcile result 
 The Shared Tail Handoff is the Pipeline exit artifact for the Shared
 Documentation Governance Tail. It is not a new Pipeline stage.
 
+The Shared Tail Handoff section is a conditional section: it is emitted only when `Shared Tail Handoff Emitted=true`, which happens only for Pipeline Result `COMPLETED`. It is never a mandatory section of every Pipeline result.
+
 - Requirement ID:
 - Feature ID:
 - Decision Scope:
@@ -180,6 +187,23 @@ evidence, and not a completion_decision_source. It does not prove that Sync or
 Reconcile satisfies the Tail. Existing Sync/Reconcile pointers are candidate
 evidence only (`candidate_evidence_only=true`).
 
+## Core Stop And Route
+
+For Pipeline Result `PARTIAL`, `BLOCKED`, `REGATE_REQUIRED`, or
+`DIRECT_IMPLEMENTATION_RECOMMENDED`, the report outputs `Core Stop And Route`
+diagnostics instead of a Shared Tail Handoff:
+
+- Pipeline Result and stop/route reason.
+- Earliest affected Core node: remaining Core work (PARTIAL), earliest affected Core node (BLOCKED), required upstream Re-Gate (REGATE_REQUIRED), or Direct Implementation route (DIRECT_IMPLEMENTATION_RECOMMENDED).
+- Shared Tail Handoff Emitted: false.
+- Tail Entry Eligible: false.
+- Shared Tail Status: not_entered.
+- Tail Completion Gate Result: not_applicable.
+- Tail Status Recommendation: unchanged.
+- Completion Source Established: false.
+
+`Core Stop And Route` is not a Tail Handoff and not Tail evidence; it never recommends Tail `in_progress` and never routes the requirement into the Shared Tail.
+
 ## Manifest Update Recommendation
 
 - Activity Log:
@@ -191,7 +215,10 @@ evidence only (`candidate_evidence_only=true`).
 
 ## Next Step
 
-- Recommended action: Shared Documentation Governance Tail
+- Recommended action: Shared Documentation Governance Tail when Pipeline Result
+  is `COMPLETED`; otherwise the Core/Development Path next step for the result
+  (remaining Core work, earliest affected Core node, required upstream Re-Gate,
+  or Direct Implementation route).
 ```
 
 ## Pipeline Result Labels
@@ -204,6 +231,24 @@ completion result enum is introduced:
 - `BLOCKED`: a required Core stage cannot proceed.
 - `REGATE_REQUIRED`: approved upstream artifacts must be revised before continuing.
 - `DIRECT_IMPLEMENTATION_RECOMMENDED`: Pipeline was not activated because the reviewed solution supports direct implementation.
+
+### Result And Tail Entry Eligibility Matrix
+
+This matrix is a mandatory contract. Shared Tail Handoff emission and Tail
+entry eligibility are strictly bound to Core completion:
+
+| Pipeline Result | Core Completion | Shared Tail Handoff Emitted | Tail Entry Eligible | Shared Tail Status | Tail Gate Result | Tail Status Recommendation | Next Step |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| COMPLETED | true | true | true | pending | not_evaluated | in_progress | Shared Documentation Governance Tail |
+| PARTIAL | false | false | false | not_entered | not_applicable | unchanged | remaining Core work |
+| BLOCKED | false | false | false | not_entered | not_applicable | unchanged | earliest affected Core node |
+| REGATE_REQUIRED | false | false | false | not_entered | not_applicable | unchanged | required upstream Re-Gate |
+| DIRECT_IMPLEMENTATION_RECOMMENDED | false | false | false | not_entered | not_applicable | unchanged | Direct Implementation route |
+
+`COMPLETED` is the only result with `Shared Tail Handoff Emitted=true` and `Tail
+Entry Eligible=true`. All non-COMPLETED results keep `Shared Tail Status
+=not_entered`, `Tail Status Recommendation=unchanged`, never emit a Shared Tail
+Handoff, and never route to the Shared Tail as next step.
 
 `COMPLETED` must also output:
 
@@ -221,7 +266,11 @@ Pipeline `COMPLETED` must never be interpreted as:
 - Tail Gate passed.
 - Manifest completed.
 
-`PARTIAL` and `BLOCKED` describe Core results only and carry the applicable Tail Handoff state.
+`PARTIAL`, `BLOCKED`, `REGATE_REQUIRED`, and `DIRECT_IMPLEMENTATION_RECOMMENDED`
+describe Core results only and never carry a Shared Tail Handoff; they output
+`Core Stop And Route` diagnostics, leave Tail status `unchanged`, and route to
+the earliest affected Core node or the applicable Core/Development Path next
+step.
 
 ## Manifest Recommendations
 
@@ -259,6 +308,17 @@ After Core `COMPLETED`, recommend only:
 - Tail Completion Gate = `not_evaluated`.
 - completion source absent.
 - Next Step: Shared Documentation Governance Tail.
+
+After any non-COMPLETED result (`PARTIAL`, `BLOCKED`, `REGATE_REQUIRED`, or
+`DIRECT_IMPLEMENTATION_RECOMMENDED`), recommend:
+
+- Pipeline Core result = the actual result.
+- result scope = `speckit_sdd_core`.
+- Tail status keeps `unchanged`; do not recommend Tail `in_progress`.
+- no completion source recommendation.
+- do not recommend entering the Shared Tail; route to the Core/Development Path
+  next step for the result (remaining Core work, earliest affected Core node,
+  required upstream Re-Gate, or Direct Implementation route).
 
 Do not recommend:
 
