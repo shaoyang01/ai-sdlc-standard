@@ -4,18 +4,20 @@
 
 ## 当前自动校验脚本
 
-当前仓库提供三个自动校验脚本：
+当前仓库提供四个自动校验脚本：
 
 ```bash
 ruby scripts/validate-skill-contracts.rb
 ruby scripts/validate-product-parity-fixtures.rb
 ruby scripts/validate-capability-metadata-chain.rb
+ruby scripts/validate-gate-runner-scenarios.rb
 ```
 
 ### A. Portable Standard Package validators
 
 - `validate-skill-contracts.rb`：标准包内部契约一致性验证。
 - `validate-product-parity-fixtures.rb`：标准包 product parity fixture 回归验证。
+- `validate-gate-runner-scenarios.rb`：Gate Runner 两个特殊 Gate 的 validation-only 场景一致性验证。
 
 这两个脚本属于标准包内部契约和 product parity 验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
 
@@ -44,6 +46,66 @@ ruby scripts/validate-capability-metadata-chain.rb
 - 校验 read-only、deterministic、no network。
 - 不运行 Gate Runner，不执行 Sync，不执行 Reconcile，不读取实例 Manifest，不验证真实需求是否完成 Tail。
 - runtime enforcement 由后续运行时任务覆盖；Sync/Reconcile 输出消费由后续集成任务覆盖；Pipeline 边界由后续集成任务覆盖；实例级场景由后续场景验证覆盖。
+
+## Gate Runner Scenario Conformance 校验
+
+`fixtures/gate-runner-scenarios/scenarios.yaml` 与 `scripts/validate-gate-runner-scenarios.rb` 组成标准包开发期 validation-only 场景一致性验证 harness：
+
+```text
+authority=validation_only
+runtime_authority=false
+gate_decision_authority=false
+implementation_authority=false
+merge_authority=false
+publication_authority=false
+```
+
+边界：
+
+- 该 harness 只读、deterministic、no network；不运行真实 Gate、Manifest、Sync、Reconcile 或 Entry Coverage；不修改真实 Manifest 或 `library/**`。
+- 不证明 Pipeline boundary、Topic 07 closure 或 D09；CI success 不是 review PASS。
+- 该 harness 不是 `sdlc-gate-runner`、不是正式 Gate artifact、不是 target project runtime input、不是 Manifest / Sync / Reconcile / D09 owner。
+
+### Schema
+
+- fixture root 只允许 `schema_version`、`authority`、`canonical_sources`、`required_coverage_tags`、`scenarios`。
+- `schema_version=gate-runner-scenario-conformance-v1`、`authority=validation_only`。
+- `canonical_sources` 必须非空、无重复，且均为安全的 repository-relative 普通文件（拒绝绝对路径、反斜杠、`..`、`~`、不存在或非普通文件），至少覆盖 Development Path 标准、Gate Runner Skill/Contract/references 与四份 Tail 模板。
+- `required_coverage_tags` 固定 18 个；未知、重复或未覆盖 tag 均失败。
+- 每个 scenario 只允许 `id`、`coverage_tags`、`gate_type`、`input`、`expected`；ID 全局唯一，格式 `[A-Z0-9-]+`，最大 64。
+- `gate_type` 仅为 `development_path_entry` 或 `documentation_governance_tail_completion`。
+- `expected` 只允许 12 个字段；`result` 仅 `PASS|FAIL|PASS_WITH_RISK`；boolean 字段必须为真 boolean，不适用使用 `not_applicable`。
+- YAML alias 与对象反序列化均拒绝（`YAML.safe_load(permitted_classes: [], aliases: false)`）。
+
+### 场景组
+
+- `DPE-*`：Development Path Entry（direct / speckit / wrong route / blocked revision / blocked unknown / stale decision）。
+- `TAIL-D-*`：Direct 路径 Tail（无 sync、sync 已授权、sync 未授权、Reconcile 不完整、缺 05）。
+- `TAIL-S-*`：Speckit 证据复用与 Pipeline result 边界（current 证据复用、Pipeline COMPLETED 不能替代 Tail Gate、stale pipeline evidence）。
+- `TAIL-G-*`：纯文档/治理任务的 skipped basis（完整通过、不完整失败）。
+- `TAIL-P-*`：persistence 生命周期（response-only、write failure 注入、read-back mismatch、PASS_WITH_RISK 边界、风险接受不完整、Critical）。
+
+Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深比较；marker 只在断言成功后打印。
+
+### Stage B（persistence）
+
+- 每个 persistence 场景在独立 `Dir.mktmpdir` 下模拟稳定路径 `library/<requirement_id>/05-测试验收/<requirement_id>_治理尾段完成门禁.md`。
+- 模拟 report 至少包含 Requirement ID、Gate Type、Version、Gate Artifact Version、Status、Reviewed Artifact/Version、Result、completion_evidence、completion_decision_source。
+- write failure 为确定性注入，不依赖 OS 权限碰运气。
+- read-back mismatch 必须真实改写指定字段后重新读取（真实写盘、真实回读、内容 digest 校验）。
+- filename-versioned companion（`_vN.md`）必须被禁止：binding mismatch 均 formal FAIL。
+- 只有 authorized + write success + 真实回读 match + 无 companion 才能形成 formal PASS/PASS_WITH_RISK；成功时才建议 Manifest completed。
+- 所有临时目录必须清理；清理失败使 runner 失败（`TEMP_CLEANUP_COMPLETE`）。
+
+### Self-test
+
+- 使用内存 deep copy，不修改 repository fixture。
+- 真实制造并期待验证失败：expected PASS/FAIL 被篡改、mandatory tag 缺失、重复 scenario ID、未知 root/scenario field、response-only / write failure / read-back mismatch / stale evidence / wrong route / `_v2.md` companion / Critical 被写成通过（均必须被拒绝，禁止通过）、YAML alias、不安全 canonical source path。
+- 每个 self-test 都必须真实期待验证失败；不得 catch 后无条件通过。
+
+### CI
+
+- `.github/workflows/ci.yml` 仅在 `ci-standards` 增加一次 `ruby scripts/validate-gate-runner-scenarios.rb`；不修改其他 job、trigger、version、permission。
 
 ## validate-skill-contracts.rb 检查什么
 

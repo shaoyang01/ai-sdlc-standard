@@ -321,12 +321,13 @@ Tail 不得通过修改文档或知识材料，把未批准的代码漂移合法
 | Gate Runner Development Path Entry enforcement | implemented | `sdlc-gate-runner` 已执行 `development_path_entry` 门禁与路径路由规则。 |
 | Gate Runner Tail Completion enforcement | implemented | `sdlc-gate-runner` 已执行 `documentation_governance_tail_completion` 门禁与 persisted Gate 边界。 |
 | Speckit Pipeline boundary alignment | pending | Pipeline 编排收敛到 canonical Shared Tail 边界尚未实施。 |
-| Direct / Speckit / Tail 完整场景验证 | pending | 完整场景 fixture 验证尚未完成。 |
+| Direct / Speckit / Tail 完整场景验证 | implemented | 标准包开发期 validation-only 场景一致性验证已接入（`fixtures/gate-runner-scenarios` + `scripts/validate-gate-runner-scenarios.rb`）；仅代表 harness 一致性，不运行真实 Gate。 |
 | Topic 07 formal closure | pending | 本任务不关闭 Topic 07。 |
 
 说明：
 
 - 状态矩阵只是描述，不替代 normative standard。
 - 当前 Git/PR/CI 高于该矩阵；矩阵与仓库当前状态不一致时，以仓库当前状态为准。
+- 场景验证状态仅代表标准包开发期 validation-only harness：不运行真实 Gate、Manifest、Sync、Reconcile 或 Entry Coverage，不证明 Pipeline boundary、Topic 07 closure 或 D09。
 - 本任务只收敛标准包与 Skill 合同，不实施 D09。
 - D09 尚未实施。
