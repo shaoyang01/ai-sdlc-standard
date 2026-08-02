@@ -24,6 +24,45 @@ Do not allow `PASS_WITH_RISK` for Critical issues.
 
 Medium and Low issues do not require risk acceptance, but must be recorded as TODO or follow-up notes.
 
+## Must-Fail Items (No Risk Acceptance Bypass)
+
+以下情况不能被风险接受绕过，必须 `FAIL`：
+
+- 缺少 always-required evidence。
+- stale required evidence。
+- 缺少正式 persisted completion source。
+- required Sync execution 未完成。
+- required Reconcile execution 未完成。
+- required Entry Coverage 未通过。
+- required Re-Gate 未通过。
+- Critical blocking item。
+
+## PASS_WITH_RISK Boundaries
+
+`PASS_WITH_RISK`：
+
+- 只适用于有完整接受记录的 eligible High risk。
+- 不适用于 Critical。
+- 不得豁免 evidence。
+- 不得豁免 persistence。
+- 不得豁免 Re-Gate。
+- 不得豁免 required conditional execution。
+
+## Tail Stale Triggers
+
+以下变化必须使依赖结论 stale，并从最早节点 Re-Gate：
+
+- Development Path Decision。
+- Decision Scope。
+- Tail Scope。
+- implementation files。
+- 03/04/05 Version。
+- Sync decision/result。
+- Reconcile decision/result。
+- Entry Coverage。
+- Manifest Tail status。
+- completion source。
+
 ## Stale Artifact Checks
 
 Read `Replaced Artifact Paths` before accepting a Gate result.
