@@ -27,8 +27,8 @@ Orchestrate the optional full Speckit SDD path after solution review. Treat this
 14. Do not let Implement add unapproved behavior.
 15. Do not let the Shared Tail Handoff present chat fragments, unstable facts, or unauthorized targets as candidate evidence.
 16. Do not let the Shared Tail Handoff rewrite documents to legitimize code drift.
-17. Recommend manifest Activity Log, Gate, and Re-Gate updates after every Core stage. Sync and Reconcile state is owned by the Shared Tail; the Pipeline only recommends Tail status `in_progress` and never recommends Tail completion.
-18. Pipeline result is Speckit SDD Core only. After Core completion, output the Shared Tail Handoff; existing business_domain_sync decisions and Reconcile results are handed over as candidate evidence only (`candidate_evidence_only=true`), never as formal Tail evidence.
+17. Recommend manifest Activity Log, Gate, and Re-Gate updates after every Core stage. Sync and Reconcile state is owned by the Shared Tail. The Pipeline recommends Tail status `in_progress` only when Pipeline Result=`COMPLETED` and Core Completion=true; any non-`COMPLETED` result keeps Tail status `unchanged` and never enters the Shared Tail. The Pipeline never recommends Tail completion.
+18. Pipeline result is Speckit SDD Core only. Only when Pipeline Result=`COMPLETED`, Core Completion=true, Implement completed, and no Core blocking item, output the Shared Tail Handoff; existing business_domain_sync decisions and Reconcile results are handed over as candidate evidence only (`candidate_evidence_only=true`), never as formal Tail evidence. Any non-`COMPLETED` result outputs Core Stop And Route diagnostics instead and never produces a Shared Tail Handoff.
 19. Observe rail routing per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/agents-rail-routing.md`. Pipeline always uses new_rail_sdlc.
 20. Observe shared business-domain governance per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` when the Shared Tail executes Sync writes to `.specify/business_domain/**`; the Pipeline itself never writes `.specify/business_domain/**`.
 21. Observe sync source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`. Sync source mode selection (speckit_driven / library_driven / hybrid) and execution belong to `sdlc-speckit-sync` in the Shared Tail; the Pipeline only transfers existing sync evidence pointers.
@@ -218,13 +218,12 @@ Report:
 - Result Scope: Speckit SDD Core
 - Core Completion
 - Shared Tail Status
-- Tail Completion Gate Result: not_evaluated
+- Tail Completion Gate Result: not_evaluated (`COMPLETED`) / not_applicable (non-`COMPLETED`)
 - Completion Source Established: false
 - Stage Timeline with process product outputs from Implement
 - Produced Or Reused Artifacts, including implementation, workflow-status,
   debug, observability, implementation record, and delivery summary products
-- Shared Tail Handoff
-- Stage timeline
+- Shared Tail Handoff (conditional section, only when Pipeline Result = `COMPLETED`)
 - Stage results
 - Artifacts produced or reused
 - Code, doc, and knowledge side effects

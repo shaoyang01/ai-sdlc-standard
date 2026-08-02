@@ -49,11 +49,28 @@ If Core authorization is missing, stop at the Clarify boundary and report the mi
 
 ## Shared Tail Handoff Boundary
 
-Pipeline Core completion ends at Implement. After Implement, the Pipeline produces a Shared Tail Handoff:
+Pipeline Core ends at Implement. Implement being called or ending does not by
+itself mean Core completion: after Implement, the Pipeline first determines the
+Pipeline Result before composing the exit sections.
+
+A Shared Tail Handoff is produced only when all four success conditions hold:
+
+- Pipeline Result = `COMPLETED`
+- Core Completion = true
+- Implement completed
+- No Core blocking item
+
+In that case only:
 
 - The Handoff is handed to the Shared Documentation Governance Tail.
 - The Pipeline does not call Tail Skills (Sync, Reconcile, Tail Completion Gate) and does not form a Tail completion source.
 - The Handoff is not a new Pipeline stage; it is the Pipeline exit artifact.
+
+For any non-COMPLETED result (`PARTIAL`, `BLOCKED`, `REGATE_REQUIRED`, or
+`DIRECT_IMPLEMENTATION_RECOMMENDED`), the Pipeline outputs `Core Stop And Route`
+diagnostics instead: Implement failure, partial completion, required Re-Gate,
+or non-activation cannot produce a Handoff. Non-COMPLETED results never enter
+the Shared Tail and keep Tail status `unchanged`. `COMPLETED` is the only Tail entry eligible result.
 
 ## Handoff Rule
 
@@ -83,8 +100,11 @@ Preflight and Domain Route must also include a Domain Route Summary:
 When a feature id is known and full SDD proceeds, materialize the Domain Route
 Summary as `specs/{feature}/route.md`. Hand off `route.md` to Specify, Plan,
 and Analyze. Before materialization, hand off the Pipeline
-Domain Route Summary instead. After Implement, hand off the Shared Tail Handoff
-to the Shared Tail; Sync and Reconcile execute there.
+Domain Route Summary instead. After Implement, only a Pipeline Result of
+`COMPLETED` hands off the Shared Tail Handoff to the Shared Tail; Sync and
+Reconcile execute there. Any non-COMPLETED result hands off `Core Stop And
+Route` to the earliest affected Core node instead and never enters the Shared
+Tail.
 
 ## Existing Artifact Reuse
 

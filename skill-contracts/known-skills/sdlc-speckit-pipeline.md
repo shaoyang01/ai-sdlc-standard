@@ -28,7 +28,7 @@ output_artifacts:
   - implementation changes
   - library/{requirement_id}/03-实现记录/*
   - library/{requirement_id}/04-交付总结/*
-  - Shared Tail Handoff
+  - conditional Shared Tail Handoff for COMPLETED result only
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -59,7 +59,7 @@ side_effects:
   - recommend or write new-rail implementation process products
   - recommend or write DocFlow implementation records
   - recommend or write DocFlow delivery summaries
-  - produce Shared Tail Handoff
+  - produce Shared Tail Handoff only when Pipeline Result=`COMPLETED`
   - never read or write .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** during new-rail runtime
 can_modify_code: true
 can_modify_docs: true
@@ -100,7 +100,7 @@ blocking_conditions:
 - 在 Domain Route 阶段输出 Pipeline Domain Route Summary，并在 feature id 已确定且进入 full SDD 时物化 `specs/{feature}/route.md`。
 - 复用已审阅的 `01-技术方案` 和 `02-方案审核`，避免重新解释需求。
 - 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/{feature}/spec.md`。
-- 在 Implement 完成后输出 Shared Tail Handoff，转交既有 Sync/Reconcile 的 candidate evidence pointers。
+- 只有 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff，转交既有 Sync/Reconcile 的 candidate evidence pointers；任何非 `COMPLETED` 结果输出 Core Stop And Route，不生成 Handoff。
 - 在 DocFlow 和 manifest 中形成阶段结果、实现记录、交付总结建议；manifest is status authority。
 - 在 Implement 阶段汇总 `specs/{feature}/implementation.md`、
   `workflow-status.md`、`debug-guide.md` 和 `observability.md` 的产物状态；
@@ -193,7 +193,7 @@ Preflight
 - `Tasks`：任务必须追溯到已审阅方案、plan 或审核修复项。
 - `Analyze`：审计 plan/tasks/specs 一致性，不替代 `sdlc-solution-reviewer`。
 - `Implement`：不得实现方案外行为。Implement 是 Pipeline 的最后一个阶段，Core 精确截止 Implement。
-- Sync / Reconcile / Shared Tail / Tail Completion Gate 不是 Pipeline runtime stage；Implement 完成后 Pipeline 只输出 Shared Tail Handoff。
+- Sync / Reconcile / Shared Tail / Tail Completion Gate 不是 Pipeline runtime stage；Implement 完成后，只有 Pipeline Result=`COMPLETED` 时 Pipeline 才输出 Shared Tail Handoff；任何非 `COMPLETED` 结果只输出 Core Stop And Route。
 
 Clarify 边界确认规则：
 
@@ -301,7 +301,7 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Reconcile apply 授权缺失。
 - Tail 项尚未完成。
 
-Tail blocker（Sync/Reconcile decision/execution pending、Entry Coverage pending、Tail Re-Gate pending、Tail completion pending）只能进入 Shared Tail Handoff，不得把已完成的 Core 伪装成未执行。
+Tail blocker（Sync/Reconcile decision/execution pending、Entry Coverage pending、Tail Re-Gate pending、Tail completion pending）只有在 Core 为 `COMPLETED` 时才能进入 Shared Tail Handoff；Core blocker 导致结果非 `COMPLETED` 时不得生成 Handoff。不得把已完成的 Core 伪装成未执行，也不得声称所有 blockers 都会携带进 Handoff。
 
 ## Gate Requirements
 
@@ -314,5 +314,5 @@ Tail blocker（Sync/Reconcile decision/execution pending、Entry Coverage pendin
 
 - 每一阶段都必须输出结论、风险和下一步确认。
 - 实现完成后必须更新或建议更新 `03-实现记录`。
-- Core 完成后必须输出 Shared Tail Handoff；Handoff 不是正式 Gate artifact，不形成 completion source。
+- 只有 Pipeline Result=`COMPLETED`（Core Completion=true）时输出 Shared Tail Handoff；Handoff 不是正式 Gate artifact，不形成 completion source；非 `COMPLETED` 结果输出 Core Stop And Route。
 - 如果任一阶段发现规格遗漏，必须回到 `01-技术方案` / `02-方案审核` 重新 Gate。

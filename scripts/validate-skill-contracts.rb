@@ -3909,12 +3909,378 @@ errors.concat(r1_matrix_diags)
 errors.concat(r1_tail_entry_diags)
 errors.concat(r1_selftest_diags)
 
+# ── Pipeline Active Runtime Conditionality (Topic 07-E R2) ──
+# Static assertions for the R2 correction. Every active runtime statement in
+# the five active files must strictly obey the five-row Result / Tail Entry
+# Eligibility matrix; a correct matrix never excuses conflicting active
+# wording. Checks are section-scoped: the bare presence of `COMPLETED`
+# somewhere in a file never proves a local statement is conditional.
+#   F-003: SKILL Core Rule recommends Tail in_progress only when Pipeline
+#          Result=COMPLETED and Core Completion=true; the unconditional
+#          "the Pipeline only recommends Tail status in_progress" wording is
+#          forbidden; the generic Output Pipeline Result list must not make the
+#          Shared Tail Handoff a mandatory output.
+#   F-004: Contract Handoff responsibilities, metadata output_artifacts /
+#          side_effects, Flow Contract, Output Contract, Blocking Conditions,
+#          and Gate Requirements are conditional on COMPLETED; non-COMPLETED
+#          results output Core Stop And Route.
+#   F-005: Stage Sequence Handoff requires the four success gates
+#          (COMPLETED / Core Completion / Implement completed / no Core
+#          blocking item); unconditional After-Implement Handoff wording is
+#          forbidden.
+#   F-006: Manifest Side Effects Tail recommendation is conditional on
+#          COMPLETED; generic Manifest Next Step is result-specific; Tail
+#          blockers enter the Handoff only when Core is COMPLETED; blockers are
+#          never claimed to always ride into the Handoff.
+# Read-only, deterministic, no network. Negative self-tests use in-memory
+# string deep copies and never modify repository files; unknown exceptions or
+# unrelated errors never count as successful rejection.
+
+PIPELINE_R2_ACTIVE_PATHS = [
+  "skills/sdlc-speckit-pipeline/SKILL.md",
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+  "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
+  "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md",
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md"
+].freeze
+
+PIPELINE_R2_STAGE_FOUR_GATES = [
+  "Pipeline Result = `COMPLETED`",
+  "Core Completion = true",
+  "Implement completed",
+  "No Core blocking item"
+].freeze
+
+PIPELINE_R2_GENERIC_NEXT_STEP_FIXED = /\A-\s*Next Step: Shared Documentation Governance Tail\.?\z/.freeze
+PIPELINE_R2_ONLY_RECOMMENDS_TAIL_STATUS = /only\s+recommends\s+Tail\s+status/i.freeze
+PIPELINE_R2_MAY_ONLY_RECOMMEND_TAIL_STATUS = /may\s+only\s+recommend\s+Tail\s+status/i.freeze
+PIPELINE_R2_BLOCKERS_RIDE_INTO_HANDOFF = /(?:also|always)\s+carried\s+into\s+the\s+Shared\s+Tail\s+Handoff/i.freeze
+
+PIPELINE_R2_GLOBAL_FORBIDDEN_ACTIVE_WORDING = [
+  "After Core completion, output the Shared Tail Handoff",
+  "After Implement, output the Shared Tail Handoff",
+  "After Implement, the Pipeline produces a Shared Tail Handoff",
+  "After Implement, hand off the Shared Tail Handoff to the Shared Tail",
+  "在 Implement 完成后输出 Shared Tail Handoff",
+  "只输出 Shared Tail Handoff",
+  "Core 完成后必须输出 Shared Tail Handoff",
+  "只能进入 Shared Tail Handoff"
+].freeze
+
+PIPELINE_R2_RESULT_NEXT_STEPS = [
+  "Shared Documentation Governance Tail",
+  "remaining Core work",
+  "earliest affected Core node",
+  "required upstream Re-Gate",
+  "Direct Implementation route"
+].freeze
+
+PIPELINE_R2_NON_COMPLETED_NEXT_STEPS = PIPELINE_R2_RESULT_NEXT_STEPS - ["Shared Documentation Governance Tail"]
+
+def extract_section(text, heading)
+  lines = text.to_s.lines
+  start = lines.index { |line| line.strip == heading }
+  return "" unless start
+
+  section = []
+  ((start + 1)...lines.length).each do |i|
+    line = lines[i]
+    break if line.match?(/^##+\s+\S/) || line.strip == "```"
+    section << line
+  end
+  section.join
+end
+
+def extract_yaml_metadata_fence(text)
+  text.to_s[/```yaml\n(.*?)\n```/m, 1].to_s
+end
+
+def pipeline_r2_active_conditionality_diagnostics(scope)
+  diags = []
+  skill = scope["skills/sdlc-speckit-pipeline/SKILL.md"].to_s
+  contract = scope["skill-contracts/known-skills/sdlc-speckit-pipeline.md"].to_s
+  stage = scope["skills/sdlc-speckit-pipeline/references/stage-sequence.md"].to_s
+  side = scope["skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md"].to_s
+  output = scope["skills/sdlc-speckit-pipeline/references/output-and-manifest.md"].to_s
+
+  PIPELINE_R2_GLOBAL_FORBIDDEN_ACTIVE_WORDING.each do |phrase|
+    [skill, contract, stage, side, output].each_with_index do |text, idx|
+      next unless text.include?(phrase)
+      diags << "pipeline-boundary-r2: #{PIPELINE_R2_ACTIVE_PATHS[idx]} keeps unconditional active wording #{phrase.inspect}"
+    end
+  end
+
+  # F-003: SKILL Core Rules Tail in_progress must be conditional on COMPLETED.
+  core_rules = extract_section(skill, "## Core Rules")
+  if core_rules.match?(PIPELINE_R2_ONLY_RECOMMENDS_TAIL_STATUS)
+    diags << "pipeline-boundary-r2: SKILL Core Rules keep unconditional \"the Pipeline only recommends Tail status in_progress\" wording"
+  end
+  core_rules.lines.each_with_index do |line, index|
+    next unless line.include?("Tail status") && line.include?("in_progress")
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r2: SKILL Core Rules line #{index + 1} recommends Tail in_progress without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-003: SKILL Output Pipeline Result must not list the Handoff as a
+  # mandatory generic output.
+  step_six = extract_section(skill, "### 6. Output Pipeline Result")
+  step_six.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`") || line.include?("conditional")
+    diags << "pipeline-boundary-r2: SKILL Output Pipeline Result line #{index + 1} lists the Shared Tail Handoff as unconditional output: #{line.strip}"
+  end
+
+  # F-004: Contract metadata output_artifacts / side_effects Handoff must be
+  # conditional on COMPLETED.
+  contract_meta_text = extract_yaml_metadata_fence(contract)
+  contract_meta_text.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`") || line.include?("conditional")
+    diags << "pipeline-boundary-r2: contract metadata line #{index + 1} lists Shared Tail Handoff without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-004: Contract Responsibilities Handoff responsibility must be conditional
+  # on COMPLETED.
+  responsibilities = extract_section(contract, "## Responsibilities")
+  if responsibilities.include?("在 Implement 完成后输出 Shared Tail Handoff")
+    diags << "pipeline-boundary-r2: contract Responsibilities keep unconditional \"在 Implement 完成后输出 Shared Tail Handoff\" responsibility"
+  end
+  responsibilities.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r2: contract Responsibilities line #{index + 1} mentions Shared Tail Handoff without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-004: Contract Flow Contract Handoff must be conditional on COMPLETED.
+  flow = extract_section(contract, "## Flow Contract")
+  flow.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r2: contract Flow Contract line #{index + 1} mentions Shared Tail Handoff without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-004: Contract Output Contract must not make the Handoff mandatory.
+  output_contract = extract_section(contract, "## Output Contract")
+  output_contract.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`") || line.include?("仅当")
+    diags << "pipeline-boundary-r2: contract Output Contract line #{index + 1} lists Shared Tail Handoff as unconditional output: #{line.strip}"
+  end
+
+  # F-004: Contract Blocking Conditions must not mask Core blockers via the
+  # Handoff.
+  blocking = extract_section(contract, "## Blocking Conditions")
+  unless blocking.include?("`COMPLETED` 时才能进入 Shared Tail Handoff")
+    diags << "pipeline-boundary-r2: contract Blocking Conditions must allow Tail blockers into the Handoff only when Core is COMPLETED"
+  end
+  unless blocking.include?("不得生成 Handoff")
+    diags << "pipeline-boundary-r2: contract Blocking Conditions must forbid a Handoff when a Core blocker makes the result non-COMPLETED"
+  end
+
+  # F-004: Contract Gate Requirements Handoff must be conditional on COMPLETED.
+  gate_reqs = extract_section(contract, "## Gate Requirements")
+  gate_reqs.lines.each_with_index do |line, index|
+    next unless line.include?("Shared Tail Handoff")
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r2: contract Gate Requirements line #{index + 1} mentions Shared Tail Handoff without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-005: Stage Sequence Handoff Boundary must require the four success gates.
+  boundary = extract_section(stage, "## Shared Tail Handoff Boundary")
+  PIPELINE_R2_STAGE_FOUR_GATES.each do |needle|
+    unless boundary.include?(needle)
+      diags << "pipeline-boundary-r2: stage-sequence Shared Tail Handoff Boundary missing success gate #{needle.inspect}"
+    end
+  end
+  unless boundary.include?("Core Stop And Route")
+    diags << "pipeline-boundary-r2: stage-sequence Shared Tail Handoff Boundary must route non-COMPLETED results to Core Stop And Route"
+  end
+  unless boundary.include?("only Tail entry eligible result")
+    diags << "pipeline-boundary-r2: stage-sequence Shared Tail Handoff Boundary must state COMPLETED is the only Tail entry eligible result"
+  end
+
+  # F-006: Manifest Side Effects Tail recommendation must be conditional on
+  # COMPLETED.
+  manifest_effects = extract_section(side, "## Manifest Side Effects")
+  if manifest_effects.match?(PIPELINE_R2_MAY_ONLY_RECOMMEND_TAIL_STATUS)
+    diags << "pipeline-boundary-r2: Manifest Side Effects keep unconditional \"The Pipeline may only recommend Tail status=in_progress\" wording"
+  end
+  manifest_effects.lines.each_with_index do |line, index|
+    next unless line.include?("in_progress")
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r2: Manifest Side Effects line #{index + 1} mentions Tail in_progress without a COMPLETED condition: #{line.strip}"
+  end
+
+  # F-006: Blocking Or Deferred Items must not claim blockers always ride into
+  # the Handoff and must not carry Tail blockers before Core COMPLETED.
+  blocking_items = extract_section(output, "## Blocking Or Deferred Items")
+  if blocking_items.match?(PIPELINE_R2_BLOCKERS_RIDE_INTO_HANDOFF)
+    diags << "pipeline-boundary-r2: Blocking Or Deferred Items claims blockers always ride into the Shared Tail Handoff"
+  end
+  unless blocking_items.include?("only when Core is `COMPLETED`")
+    diags << "pipeline-boundary-r2: Blocking Or Deferred Items must allow Tail blockers into the Handoff only when Core is COMPLETED"
+  end
+  unless blocking_items.include?("never produces a Handoff")
+    diags << "pipeline-boundary-r2: Blocking Or Deferred Items must state a Core blocker that makes the result non-COMPLETED never produces a Handoff"
+  end
+
+  # F-006: The Shared Tail Handoff section must remain a conditional section,
+  # never a mandatory generic output.
+  handoff_section = extract_section(output, "## Shared Tail Handoff")
+  unless handoff_section.include?("conditional section")
+    diags << "pipeline-boundary-r2: Shared Tail Handoff section must be described as a conditional section"
+  end
+
+  diags
+end
+
+def pipeline_r2_manifest_next_step_diagnostics(scope)
+  diags = []
+  output = scope["skills/sdlc-speckit-pipeline/references/output-and-manifest.md"].to_s
+  side = scope["skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md"].to_s
+
+  # F-006: generic Manifest Update Recommendation must be result-specific and
+  # must never be fixed to the Shared Tail.
+  manifest_recommendation = extract_section(output, "## Manifest Update Recommendation")
+  if manifest_recommendation.lines.any? { |line| line.strip.match?(PIPELINE_R2_GENERIC_NEXT_STEP_FIXED) }
+    diags << "pipeline-boundary-r2: generic Manifest Update Recommendation must not fix Next Step to Shared Documentation Governance Tail"
+  end
+  unless manifest_recommendation.include?("result-specific")
+    diags << "pipeline-boundary-r2: generic Manifest Update Recommendation must be result-specific"
+  end
+  unless manifest_recommendation.include?("Result And Tail Entry Eligibility Matrix")
+    diags << "pipeline-boundary-r2: generic Manifest Update Recommendation must reference the Result And Tail Entry Eligibility Matrix"
+  end
+
+  # F-006: the non-COMPLETED next-step mapping must be complete.
+  PIPELINE_R2_NON_COMPLETED_NEXT_STEPS.each do |needle|
+    unless manifest_recommendation.include?(needle)
+      diags << "pipeline-boundary-r2: generic Manifest Update Recommendation missing non-COMPLETED next step #{needle.inspect}"
+    end
+  end
+
+  # F-006: Manifest Side Effects must carry the full result-specific Manifest
+  # Next Step mapping.
+  manifest_effects = extract_section(side, "## Manifest Side Effects")
+  PIPELINE_R2_RESULT_NEXT_STEPS.each do |needle|
+    unless manifest_effects.include?(needle)
+      diags << "pipeline-boundary-r2: Manifest Side Effects missing result-specific Manifest Next Step #{needle.inspect}"
+    end
+  end
+
+  diags
+end
+
+# R2 negative self-tests: every mutation must be rejected by the real
+# assertion functions with the expected diagnostic. Mutations operate on
+# in-memory deep copies; unknown exceptions or unrelated errors never count as
+# rejection.
+PIPELINE_R2_SELFTESTS = [
+  {
+    id: "skill_unconditional_tail_in_progress",
+    desc: "SKILL Core Rule restored to unconditional Tail in_progress",
+    scope_file: "skills/sdlc-speckit-pipeline/SKILL.md",
+    mutate: ->(text) { text.sub("The Pipeline recommends Tail status `in_progress` only when Pipeline Result=`COMPLETED` and Core Completion=true", "The Pipeline only recommends Tail status `in_progress`") },
+    run: ->(scope) { pipeline_r2_active_conditionality_diagnostics(scope) },
+    expect: "SKILL Core Rules keep unconditional"
+  },
+  {
+    id: "side_effect_unconditional_tail_in_progress",
+    desc: "Manifest Side Effects restored to unconditional in_progress",
+    scope_file: "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md",
+    mutate: ->(text) { text.sub(/Only Pipeline Result=`COMPLETED` \(Core Completion=true\) may recommend Tail\s+status=`in_progress`/, "The Pipeline may only recommend Tail status=`in_progress`") },
+    run: ->(scope) { pipeline_r2_active_conditionality_diagnostics(scope) },
+    expect: "Manifest Side Effects keep unconditional"
+  },
+  {
+    id: "stage_sequence_unconditional_handoff",
+    desc: "Stage Sequence restored to unconditional After-Implement Handoff",
+    scope_file: "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
+    mutate: ->(text) { text.sub("A Shared Tail Handoff is produced only when all four success conditions hold:", "After Implement, the Pipeline produces a Shared Tail Handoff:") },
+    run: ->(scope) { pipeline_r2_active_conditionality_diagnostics(scope) },
+    expect: "After Implement, the Pipeline produces a Shared Tail Handoff"
+  },
+  {
+    id: "contract_unconditional_handoff",
+    desc: "Contract responsibility restored to unconditional Handoff",
+    scope_file: "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+    mutate: ->(text) { text.sub("只有 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff", "在 Implement 完成后输出 Shared Tail Handoff") },
+    run: ->(scope) { pipeline_r2_active_conditionality_diagnostics(scope) },
+    expect: "contract Responsibilities keep unconditional"
+  },
+  {
+    id: "generic_manifest_next_step_shared_tail",
+    desc: "generic Manifest Update Recommendation fixed to Shared Tail",
+    scope_file: "skills/sdlc-speckit-pipeline/references/output-and-manifest.md",
+    mutate: ->(text) { text.sub(/^- Next Step: result-specific next step from the Result And Tail Entry Eligibility Matrix.*$/, "- Next Step: Shared Documentation Governance Tail") },
+    run: ->(scope) { pipeline_r2_manifest_next_step_diagnostics(scope) },
+    expect: "must not fix Next Step to Shared Documentation Governance Tail"
+  },
+  {
+    id: "blocking_items_always_carried_to_handoff",
+    desc: "all blockers claimed to ride into the Handoff",
+    scope_file: "skills/sdlc-speckit-pipeline/references/output-and-manifest.md",
+    mutate: ->(text) { text.sub(/may be carried into the Shared Tail Handoff only when Core is\s+`COMPLETED`/, "are always carried into the Shared Tail Handoff") },
+    run: ->(scope) { pipeline_r2_active_conditionality_diagnostics(scope) },
+    expect: "always ride into the Shared Tail Handoff"
+  }
+].freeze
+
+def pipeline_r2_self_test_diagnostics(scope)
+  diags = []
+  PIPELINE_R2_SELFTESTS.each do |test|
+    text = scope[test[:scope_file]]
+    if text.nil?
+      diags << "pipeline-boundary-r2: self-test #{test[:id]} cannot run: missing scope file #{test[:scope_file]}"
+      next
+    end
+    begin
+      mutated_scope = scope.dup
+      mutated_scope[test[:scope_file]] = test[:mutate].call(text.dup)
+      produced = test[:run].call(mutated_scope)
+      unless produced.any? { |d| d.include?(test[:expect]) }
+        diags << "pipeline-boundary-r2: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
+      end
+    rescue StandardError => e
+      diags << "pipeline-boundary-r2: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
+    end
+  end
+  diags
+end
+
+pipeline_r2_scope = {}
+PIPELINE_R2_ACTIVE_PATHS.each do |rel|
+  path = File.join(ROOT, rel)
+  if File.file?(path)
+    pipeline_r2_scope[rel] = File.read(path)
+  else
+    errors << "pipeline-boundary-r2: missing scope file #{rel}"
+  end
+end
+
+r2_active_diags = []
+r2_next_step_diags = []
+r2_selftest_diags = []
+
+if PIPELINE_R2_ACTIVE_PATHS.all? { |rel| File.file?(File.join(ROOT, rel)) }
+  r2_active_diags = pipeline_r2_active_conditionality_diagnostics(pipeline_r2_scope)
+  r2_next_step_diags = pipeline_r2_manifest_next_step_diagnostics(pipeline_r2_scope)
+  r2_selftest_diags = pipeline_r2_self_test_diagnostics(pipeline_r2_scope)
+end
+
+errors.concat(r2_active_diags)
+errors.concat(r2_next_step_diags)
+errors.concat(r2_selftest_diags)
+
 if errors.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
   puts "PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true" if r1_matrix_diags.empty?
   puts "PIPELINE_BOUNDARY_TAIL_ENTRY_ELIGIBILITY_FAIL_CLOSED true" if r1_tail_entry_diags.empty?
   puts "PIPELINE_BOUNDARY_SELFTESTS_PASS true" if r1_selftest_diags.empty?
+  puts "PIPELINE_BOUNDARY_ACTIVE_RUNTIME_CONDITIONALITY_VERIFIED true" if r2_active_diags.empty?
+  puts "PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true" if r2_next_step_diags.empty?
+  puts "PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true" if r2_selftest_diags.empty?
   puts "skill contract validation ok"
 else
   warn "skill contract validation failed:"

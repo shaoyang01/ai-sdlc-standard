@@ -143,8 +143,9 @@ Gate Results list Core stages only. There are no fixed Sync or Reconcile result 
 ## Blocking Or Deferred Items
 
 - None, or list each item with owner and route. Tail blockers are listed here
-  and also carried into the Shared Tail Handoff; they do not erase Core
-  completion.
+  and may be carried into the Shared Tail Handoff only when Core is `COMPLETED`.
+  A Core blocker that makes the result non-COMPLETED never produces a Handoff.
+  It is never claimed that every blocker rides into the Handoff.
 
 ## Re-Gate Recommendation
 
@@ -211,7 +212,7 @@ diagnostics instead of a Shared Tail Handoff:
 - Route Artifact:
 - Process Products:
 - Change History:
-- Next Step: Shared Documentation Governance Tail
+- Next Step: result-specific next step from the Result And Tail Entry Eligibility Matrix (COMPLETED -> Shared Documentation Governance Tail; PARTIAL -> remaining Core work; BLOCKED -> earliest affected Core node; REGATE_REQUIRED -> required upstream Re-Gate; DIRECT_IMPLEMENTATION_RECOMMENDED -> Direct Implementation route)
 
 ## Next Step
 

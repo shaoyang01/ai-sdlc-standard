@@ -60,8 +60,10 @@ belong only to `sdlc-speckit-sync` inside the Shared Tail, and only when:
 - User authorizes writing.
 - Existing knowledge ownership is clear.
 
-The Pipeline Handoff may only hand over target/evidence candidates
-(`candidate_evidence_only=true`); it never performs the knowledge write.
+The Pipeline Handoff (emitted only when Pipeline Result=`COMPLETED`) may only
+hand over target/evidence candidates (`candidate_evidence_only=true`); it
+never performs the knowledge write. Any non-COMPLETED result produces `Core
+Stop And Route` and no Handoff.
 
 ### Bootstrap Write Boundary
 
@@ -89,9 +91,20 @@ owner (`sdlc-speckit-code-doc-reconcile`) when apply is requested.
 
 ## Manifest Side Effects
 
-The Pipeline may only recommend Tail status=`in_progress`. It must not
-recommend Tail completed and must not set a completion source; Tail completion
-is decided by the Manifest current state and the Tail Completion Gate.
+The Tail status recommendation depends on the actual Pipeline Result:
+
+- Only Pipeline Result=`COMPLETED` (Core Completion=true) may recommend Tail status=`in_progress` with Tail Gate result `not_evaluated`.
+- Any non-COMPLETED result must keep Tail status `unchanged` and must not recommend entering the Shared Tail.
+- No Pipeline result may recommend Tail completed.
+- The Pipeline must not set a completion source; Tail completion is decided by the Manifest current state and the Tail Completion Gate.
+
+The Manifest Next Step must be result-specific:
+
+- COMPLETED -> Shared Documentation Governance Tail.
+- PARTIAL -> remaining Core work.
+- BLOCKED -> earliest affected Core node.
+- REGATE_REQUIRED -> required upstream Re-Gate.
+- DIRECT_IMPLEMENTATION_RECOMMENDED -> Direct Implementation route.
 
 ## Command Side Effects
 

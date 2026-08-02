@@ -137,7 +137,7 @@ Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深
 
 - Pipeline fixed stages 截止 Implement：`Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement` 是唯一 canonical stage order。
 - post-Clarify continuous Core segment 只包含 Plan、Tasks、Analyze、Implement。
-- Shared Tail Handoff required：Implement 完成后必须输出 Shared Tail Handoff。
+- Shared Tail Handoff required（仅当 Pipeline Result=`COMPLETED` 且 Core Completion=true 时）：Implement 后先确定 Pipeline Result，只有 `COMPLETED` 结果输出 Shared Tail Handoff；非 COMPLETED 结果只输出 Core Stop And Route。
 - Pipeline result Core-only：`COMPLETED` 只表示 Speckit SDD Core through Implement 完成，不表示 requirement、Shared Tail、Sync、Reconcile、Tail Gate 或 Manifest 完成。
 - knowledge permission=false：Pipeline 与 Pipeline Core 不得写 knowledge；知识写入只属于 Shared Tail 中的 `sdlc-speckit-sync`。
 - Registry/Contract/Skill 对齐：Contract stage 精确为 Speckit SDD Core through Implement，Registry stage 一致，Contract category 不含 Sync Skill。
@@ -210,6 +210,50 @@ PIPELINE_BOUNDARY_SELFTESTS_PASS true
 
 - 该静态校验 read-only、deterministic、no network；不执行真实 bootstrap、不运行真实 Pipeline、不执行 Sync/Reconcile、不运行真实 Tail Gate。
 - CI success 不是 review PASS；Topic 07 formal closure 仍 pending；D09 仍未实施。
+
+## Pipeline Active Runtime Conditionality 校验（Topic 07-E R2）
+
+`validate-skill-contracts.rb` 新增 Topic 07-E R2 静态合同校验：active runtime 文字必须严格服从五行 Result / Tail Entry Eligibility 矩阵。矩阵正确但 active wording 与矩阵冲突仍会失败；校验使用 section-scoped 解析，不把全文件出现 `COMPLETED` 当作局部语句已条件化的证明。R2 只扫描五个 active runtime 文件：SKILL.md、Pipeline Contract、`stage-sequence.md`、`side-effect-boundaries.md`、`output-and-manifest.md`。
+
+### Active runtime conditionality（F-003 至 F-006）
+
+- SKILL Core Rules：Tail `in_progress` 建议必须带 `COMPLETED` 条件；禁止无条件 "the Pipeline only recommends Tail status in_progress" 表述；Output Pipeline Result 通用输出列表不得把 Shared Tail Handoff 列为 mandatory。
+- Contract Responsibilities / Flow Contract / Output Contract / Gate Requirements：Shared Tail Handoff 表述必须带 `COMPLETED` 条件；禁止 "在 Implement 完成后输出 Shared Tail Handoff"、"只输出 Shared Tail Handoff"、"Core 完成后必须输出 Shared Tail Handoff" 等无条件表述。
+- Contract metadata：`output_artifacts` 中 Handoff 必须表达为 conditional Shared Tail Handoff for COMPLETED result only；`side_effects` 中 produce Handoff 同样必须 conditional。
+- Stage Sequence Handoff Boundary：Handoff 必须满足四项成功条件（Pipeline Result=`COMPLETED`、Core Completion=true、Implement completed、无 Core blocking item）；禁止 "After Implement, the Pipeline produces a Shared Tail Handoff" 与 "After Implement, hand off the Shared Tail Handoff to the Shared Tail"；`COMPLETED` 是唯一 Tail entry eligible 结果。
+- Manifest Side Effects：只有 `COMPLETED` 可建议 Tail `in_progress`；非 `COMPLETED` 保持 `unchanged`；任何结果不得建议 Tail completed；completion source 始终由 Tail Gate 建立。
+- Blocking Or Deferred Items：Tail blockers 只有在 Core `COMPLETED` 后才进入 Handoff；Core blocker 导致非 `COMPLETED` 时不得生成 Handoff；不得声称所有 blockers 均携带进 Handoff。
+
+### 通用 Manifest Next Step 必须 result-specific
+
+- 通用 Manifest Update Recommendation 不得固定 "Next Step: Shared Documentation Governance Tail"，必须使用 result-specific next step（COMPLETED → Shared Documentation Governance Tail；PARTIAL → remaining Core work；BLOCKED → earliest affected Core node；REGATE_REQUIRED → required upstream Re-Gate；DIRECT_IMPLEMENTATION_RECOMMENDED → Direct Implementation route）。
+- 非 `COMPLETED` 的 next-step 映射必须完整：四个非 COMPLETED 结果全部覆盖。
+- 只有 `COMPLETED` 允许输出 Handoff 与建议 Tail `in_progress`；非 `COMPLETED` 保持 Tail status `unchanged` 与 Shared Tail Status `not_entered`。
+
+### R2 negative self-tests 与 markers
+
+Validator 使用内存字符串 deep copy 制造六个 R2 negative self-tests，不修改仓库文件；每个 self-test 绑定预期 diagnostic，未知异常或无关错误不能算成功拒绝：
+
+1. `skill_unconditional_tail_in_progress`：恢复无条件 Tail `in_progress`，必须产生绑定 diagnostic。
+2. `side_effect_unconditional_tail_in_progress`：恢复 Manifest Side Effects 无条件 `in_progress`，必须失败。
+3. `stage_sequence_unconditional_handoff`：恢复 "After Implement, the Pipeline produces a Shared Tail Handoff"，必须失败。
+4. `contract_unconditional_handoff`：恢复无条件 Contract responsibility，必须失败。
+5. `generic_manifest_next_step_shared_tail`：通用 Manifest Update Recommendation 固定为 Shared Tail，必须失败。
+6. `blocking_items_always_carried_to_handoff`：恢复所有 blockers 均携带进 Handoff，必须失败。
+
+成功时由真实断言输出三个 R2 markers：
+
+```text
+PIPELINE_BOUNDARY_ACTIVE_RUNTIME_CONDITIONALITY_VERIFIED true
+PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true
+PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true
+```
+
+### 边界
+
+- 该静态校验 read-only、deterministic、no network；不运行真实 Pipeline、不执行真实 bootstrap、不执行 Sync/Reconcile、不运行真实 Tail Gate。
+- static validation 不运行真实 Pipeline；CI success 不是 review PASS。
+- Topic 07 formal closure 仍 pending；D09 仍未实施。
 
 
 ## validate-skill-contracts.rb 检查什么
