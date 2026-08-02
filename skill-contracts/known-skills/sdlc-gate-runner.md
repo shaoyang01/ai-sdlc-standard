@@ -13,6 +13,7 @@ input_artifacts:
   - library/{requirement_id}/manifest.md
   - current node artifact
   - previous gate artifact when applicable
+  - existing Tail Completion Gate artifact when present (optional)
   - Development Path Decision artifact
   - 03-实现记录
   - 04-代码审核
@@ -54,7 +55,12 @@ blocking_conditions:
   - incomplete required conditional execution
   - required Entry Coverage pending, failed, or blocked
   - required Re-Gate missing
-  - persisted completion Gate artifact missing
+  - response-only cannot formally complete
+  - persistence not authorized for formal completion
+  - authorized persistence failed
+  - persisted artifact read-back failed
+  - persisted artifact binding invalid
+  - formal completion source cannot be established after persistence
   - unresolved blocking item
 ```
 
@@ -67,7 +73,11 @@ blocking_conditions:
 - 根据 `ai-sdlc/phase-gates.md` 检查某一阶段是否允许进入下一阶段（generic Gate）。
 - 执行 Development Path Entry enforcement：检查 `development_path_entry` Gate 的决策、路由与证据。
 - 执行 Tail Completion enforcement：检查 `documentation_governance_tail_completion` Gate 的 Tail 证据、conditional execution 与 completion 边界。
-- 执行 persisted completion-source verification：formal Tail completion 必须依赖当前、non-stale 的 persisted Gate artifact 作为 `completion_decision_source`。
+- 执行 provisional evidence evaluation（阶段 A）：评估外部 Tail evidence，不把本次将生成的 report 当作预先输入。
+- 在用户明确授权时执行 persistence（阶段 B）：写入 Gate report。
+- 写入后执行 read-back verification：回读并验证结构与绑定。
+- 在 read-back 验证通过后执行 formal result establishment：建立 formal result 与 completion_decision_source。
+- 执行 persisted completion-source verification：formal Tail completion 依赖当前、non-stale 的 persisted Gate artifact；该 artifact 可以在首次正式调用中由本次写入并回读验证后建立。
 - 读取 `manifest.md`、节点产物和相关 Gate 产物。
 - 输出 `PASS` / `FAIL` / `PASS_WITH_RISK`。
 - 检查 `PASS_WITH_RISK` 是否有风险接受说明。
@@ -95,11 +105,12 @@ blocking_conditions:
 - 当前阶段对应的节点产物。
 - 对应 Gate 标准或模板。
 - 进入实现检查时：Development Path Decision artifact。
-- Tail Completion 检查时：canonical Documentation Governance Tail section 与相应证据。
+- Tail Completion 检查时：外部 Tail evidence（canonical Documentation Governance Tail section、`03-实现记录`、`04-代码审核`、`05-测试验收`、Sync/Reconcile decisions、conditional execution、Entry Coverage、Re-Gate、risk acceptance、non-stale upstream evidence）。
 
 可选输入：
 
 - 上一个 Gate 结果。
+- existing Gate artifact（Tail Completion 稳定路径已存在时读取当前内部 Version；首次正式运行时允许不存在）。
 - Change History。
 - Replaced Artifact Paths。
 - Re-Gate Records。
@@ -109,6 +120,8 @@ blocking_conditions:
 - Entry Coverage artifact。
 - 风险接受记录。
 
+运行产物：本次 Gate report。不得把“本次将生成的 Gate report”列为首次调用前的必需输入。
+
 缺失输入处理：
 
 - manifest 缺失时，可以建议创建，但不能认定 Gate 通过。
@@ -116,7 +129,10 @@ blocking_conditions:
 - 旧版本已 stale 时，不得继续用旧 Gate 结果放行。
 - `BLOCKED_NEEDS_REVISION` 或 `BLOCKED_UNKNOWN` 不得进入实现或 Tail。
 - actual implementation 缺少 `03-实现记录`、`04-代码审核`、`05-测试验收` 时输出 `FAIL`。
-- formal Tail completion 缺少 persisted completion Gate artifact 时输出 `FAIL`。
+- response-only 无法正式完成时输出 `FAIL`（canonical Result=FAIL、Can Continue=no、Tail Completion Eligible=no）。
+- 用户未授权持久化时无法正式完成。
+- 已授权但写入失败、read-back 失败、persisted binding 无效，或回读后仍无法建立 completion source 时输出 `FAIL`。
+- 首次正式运行时 artifact 尚不存在不属于缺失输入；首次调用可以在授权持久化后创建并回读验证自己的 Gate artifact。
 
 ## Output Contract
 
@@ -199,7 +215,12 @@ Gate Type 为 `development_path_entry` 时必须填写 `## Development Path Chec
 - required conditional execution 未完成。
 - required Entry Coverage 为 pending、failed 或 blocked。
 - required Re-Gate 缺失或未通过。
-- persisted completion Gate artifact 缺失（formal completion）。
+- response-only 无法正式完成。
+- 用户未授权持久化（formal completion）。
+- 已授权但 persistence 失败。
+- persisted artifact read-back 失败。
+- persisted artifact binding 无效。
+- persistence 后仍无法建立 formal completion source。
 - 存在未解决 blocking item。
 
 ## Gate Requirements
@@ -223,4 +244,4 @@ Gate Type 为 `development_path_entry` 时必须填写 `## Development Path Chec
 - `PASS_WITH_RISK` 必须写明风险接受。
 - 变更、返工或规格遗漏必须遵守 `ai-sdlc/change-control.md` 的 Re-Gate 规则。
 - 两个特殊 Gate Type 遵循 `ai-sdlc/development-path-governance.md`；Manifest 是 Tail 状态权威。
-- formal Tail completion 需要当前、non-stale 的 persisted Gate artifact。
+- formal Tail completion 需要当前、non-stale 的 persisted Gate artifact；该 artifact 可以由首次正式调用在授权持久化后写入并回读验证建立，不要求调用开始前已存在。

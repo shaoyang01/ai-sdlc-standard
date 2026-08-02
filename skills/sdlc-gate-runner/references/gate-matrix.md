@@ -13,7 +13,7 @@
 | Test Gate | Knowledge sync or follow-up summary | `05-测试验收` | Test FAIL, Specification Missing without upstream Re-Gate |
 | Knowledge Sync Gate | Speckit Sync or knowledge update | Sync decision and source artifacts | Syncing stale or failed artifacts, missing residual risk note |
 | Development Path Entry Gate | Implementation path | Specification Gate, Development Path Decision, Decision Scope, Complexity, decision source/artifact, Tail required/scope/status | missing/stale/invalid decision, BLOCKED_NEEDS_REVISION, BLOCKED_UNKNOWN, wrong route, missing Re-Gate |
-| Shared Documentation Governance Tail Completion Gate | Tail completed | Manifest Tail, 03/04/05 when actual implementation, Sync decision, Reconcile decision, required conditional execution, applicable Entry Coverage, required Re-Gate, persisted completion Gate artifact | missing/stale evidence, unresolved blocking item, required execution incomplete, failed/pending Entry Coverage, missing persisted completion source |
+| Shared Documentation Governance Tail Completion Gate | Tail completed | Evidence inputs: Manifest Tail, 03/04/05 when actual implementation, Sync decision, Reconcile decision, required conditional execution, applicable Entry Coverage, required Re-Gate, risk acceptance, non-stale upstream evidence. Gate output confirmation: persisted Gate artifact written, read back, and verified; completion source establishment | response-only formal completion, persistence not authorized, write failure, read-back failure, invalid persisted binding, unresolved external evidence failure |
 
 ## Severity Mapping
 
@@ -29,7 +29,7 @@ Use Critical when:
 - Continuing would rely on guessed business behavior.
 - Missing always-required Tail evidence.
 - Required Tail evidence is stale.
-- Missing persisted completion source for formal completion.
+- Formal completion source cannot be established after authorized persistence and read-back.
 - Required conditional execution is incomplete.
 - Invalid Development Path route when implementation entry is requested.
 
@@ -79,15 +79,11 @@ Before implementation, verify Development Path Decision:
 
 ## Tail Completion Checks
 
-Before marking the Tail completed, verify the Shared Documentation Governance Tail Completion Gate:
+Before marking the Tail completed, verify the Shared Documentation Governance Tail Completion Gate. Distinguish evidence inputs from Gate output confirmation:
 
-- Manifest Tail section is the authority for Tail required, scope, and status.
-- `03-实现记录`, `04-代码审核`, and `05-测试验收` are required when there is actual code, configuration, or behavior implementation.
-- business_domain_sync decision and Reconcile decision are current; decision and execution result are separated.
-- Required conditional execution is complete.
-- Entry Coverage applies only when applicable; `PENDING`, `FAILED`, or `BLOCKED` Entry Coverage blocks completion.
-- Required Re-Gate has passed.
-- Formal completion requires a current, non-stale persisted completion Gate artifact.
+- Evidence inputs: Manifest Tail section is the authority for Tail required, scope, and status; `03-实现记录`, `04-代码审核`, and `05-测试验收` are required when there is actual code, configuration, or behavior implementation; business_domain_sync decision and Reconcile decision are current with decision and execution result separated; required conditional execution is complete; Entry Coverage applies only when applicable (`PENDING`, `FAILED`, or `BLOCKED` blocks completion); required Re-Gate has passed; risk acceptance is complete; upstream evidence is not stale.
+- Gate output confirmation: the persisted Gate artifact is written, read back, and verified; completion source establishment happens only after read-back verification. First-run absence of the stable artifact is not an external evidence failure; the first formal run can create and confirm its own Gate artifact.
+- Blocking: response-only formal completion, persistence not authorized, write failure, read-back failure, invalid persisted binding, and unresolved external evidence failure.
 
 ## Node Directory Mapping
 

@@ -2549,6 +2549,46 @@ def gate_runner_require(errors, text, needle, label)
   errors << "gate-runner: #{label} missing #{needle.inspect}" unless text.include?(needle)
 end
 
+# Topic 07-P1 R1: expected full stable paths and two-stage lifecycle markers.
+# The constants are expectations only; the content checks below must verify
+# each target file's actual text, not just compare constant strings.
+TOPIC07_P1_DEVELOPMENT_PATH_ENTRY_STABLE_PATH =
+  "library/{requirement_id}/02-方案审核/{requirement_id}_开发路径准入门禁.md".freeze
+TOPIC07_P1_TAIL_COMPLETION_STABLE_PATH =
+  "library/{requirement_id}/05-测试验收/{requirement_id}_治理尾段完成门禁.md".freeze
+TOPIC07_P1_STABLE_PATH_TARGET_FILES = [
+  "skills/sdlc-gate-runner/SKILL.md",
+  "skills/sdlc-gate-runner/references/gate-workflow.md",
+  "skills/sdlc-gate-runner/references/output-report.md"
+].freeze
+TOPIC07_P1_TWO_STAGE_MARKERS = [
+  "Evidence Evaluation",
+  "Provisional Evidence Result",
+  "Persist And Confirm",
+  "Read Back And Verify",
+  "Formal Gate Result"
+].freeze
+TOPIC07_P1_TWO_STAGE_SEMANTIC_NEEDLES = [
+  "response-only",
+  "Result=FAIL",
+  "Tail Completion Eligible=no",
+  "pre-evaluation failure",
+  "authorized persistence failure",
+  "read-back failure",
+  "read-back success establishes",
+  "after the formal Gate result"
+].freeze
+TOPIC07_P1_TWO_STAGE_FORBIDDEN_NEEDLES = [
+  "persisted Gate artifact must already exist",
+  "first run must fail",
+  "response-only can formal PASS",
+  "read-back verification can be skipped",
+  "Manifest can be completed before read-back",
+  "completion_decision_source can be established when the write failed"
+].freeze
+TOPIC07_P1_FILENAME_VERSION_VARIANT_PATTERN =
+  %r{library/\{requirement_id\}/(?:02-方案审核|05-测试验收)/[^\s`|]*_v(?:N|\d+)\.md}.freeze
+
 gate_runner_scope_paths = [
   "ai-sdlc/development-path-governance.md",
   "skills/sdlc-gate-runner/SKILL.md",
@@ -2672,7 +2712,16 @@ if contract_text
     "incomplete required conditional execution",
     "required Entry Coverage pending, failed, or blocked",
     "required Re-Gate missing",
-    "persisted completion Gate artifact missing",
+    "provisional evidence evaluation",
+    "authorized persistence",
+    "read-back verification",
+    "formal result establishment",
+    "response-only cannot formally complete",
+    "persistence not authorized for formal completion",
+    "authorized persistence failed",
+    "persisted artifact read-back failed",
+    "persisted artifact binding invalid",
+    "formal completion source cannot be established after persistence",
     "unresolved blocking item"
   ].each { |needle| gate_runner_require(errors, contract_text, needle, "gate-runner contract") }
 end
@@ -2736,12 +2785,16 @@ if matrix_text
     "required conditional execution",
     "applicable Entry Coverage",
     "required Re-Gate",
-    "persisted completion Gate artifact",
-    "missing/stale evidence",
-    "unresolved blocking item",
-    "required execution incomplete",
-    "failed/pending Entry Coverage",
-    "missing persisted completion source",
+    "Evidence inputs",
+    "Gate output confirmation",
+    "read-back verification",
+    "completion source establishment",
+    "response-only formal completion",
+    "persistence not authorized",
+    "write failure",
+    "read-back failure",
+    "invalid persisted binding",
+    "unresolved external evidence failure",
     "| Development Path Entry Gate | `02-方案审核/` |",
     "| Tail Completion Gate | `05-测试验收/` |",
     "Missing always-required Tail evidence",
@@ -2755,9 +2808,12 @@ risk_text = gate_runner_scope_text["skills/sdlc-gate-runner/references/risk-and-
 if risk_text
   [
     "不能被风险接受绕过",
-    "缺少 always-required evidence",
-    "stale required evidence",
+    "缺少 always-required external evidence",
+    "stale required external evidence",
     "缺少正式 persisted completion source",
+    "authorized persistence failure",
+    "read-back verification failure",
+    "formal completion source 无法在阶段 B 建立",
     "required Sync execution 未完成",
     "required Reconcile execution 未完成",
     "required Entry Coverage 未通过",
@@ -2837,15 +2893,72 @@ if registry_text
 end
 
 # I. Cross-file invariants
-unless gate_runner_combined.include?("开发路径准入门禁") && gate_runner_combined.include?("治理尾段完成门禁") &&
-       "开发路径准入门禁" != "治理尾段完成门禁"
-  errors << "gate-runner: the two special stable Gate paths must both exist and differ"
+if TOPIC07_P1_DEVELOPMENT_PATH_ENTRY_STABLE_PATH == TOPIC07_P1_TAIL_COMPLETION_STABLE_PATH
+  errors << "gate-runner: the two special stable Gate path expectations must differ"
+end
+if File.basename(TOPIC07_P1_DEVELOPMENT_PATH_ENTRY_STABLE_PATH) == File.basename(TOPIC07_P1_TAIL_COMPLETION_STABLE_PATH)
+  errors << "gate-runner: the two special stable Gate basenames must differ"
+end
+unless gate_runner_combined.include?(TOPIC07_P1_DEVELOPMENT_PATH_ENTRY_STABLE_PATH)
+  errors << "gate-runner: Development Path Entry full stable path must exist in scope"
+end
+unless gate_runner_combined.include?(TOPIC07_P1_TAIL_COMPLETION_STABLE_PATH)
+  errors << "gate-runner: Tail Completion full stable path must exist in scope"
 end
 if gate_runner_combined.include?("completion_status")
   errors << "gate-runner: no second Tail status (completion_status) may be introduced in scope"
 end
 if gate_runner_combined.include?("D09 已实施")
   errors << "gate-runner: D09 must remain not implemented"
+end
+
+# J. R1: two-stage lifecycle, per-file marker order, and full stable path checks
+TOPIC07_P1_STABLE_PATH_TARGET_FILES.each do |rel|
+  text = gate_runner_scope_text[rel]
+  next unless text
+
+  entry_occurrences = text.scan(TOPIC07_P1_DEVELOPMENT_PATH_ENTRY_STABLE_PATH)
+  tail_occurrences = text.scan(TOPIC07_P1_TAIL_COMPLETION_STABLE_PATH)
+
+  unless entry_occurrences.size == 1
+    errors << "gate-runner: #{rel} must contain the Development Path Entry full stable path exactly once (got #{entry_occurrences.size})"
+  end
+  unless tail_occurrences.size == 1
+    errors << "gate-runner: #{rel} must contain the Tail Completion full stable path exactly once (got #{tail_occurrences.size})"
+  end
+
+  if entry_occurrences.size == 1
+    entry_path = entry_occurrences.first
+    errors << "gate-runner: #{rel} Development Path Entry path must contain /02-方案审核/" unless entry_path.include?("/02-方案审核/")
+    errors << "gate-runner: #{rel} Development Path Entry basename must be the 准入门禁 file" unless entry_path.include?("{requirement_id}_开发路径准入门禁.md")
+  end
+  if tail_occurrences.size == 1
+    tail_path = tail_occurrences.first
+    errors << "gate-runner: #{rel} Tail Completion path must contain /05-测试验收/" unless tail_path.include?("/05-测试验收/")
+    errors << "gate-runner: #{rel} Tail Completion basename must be the 完成门禁 file" unless tail_path.include?("{requirement_id}_治理尾段完成门禁.md")
+  end
+
+  if text.match?(TOPIC07_P1_FILENAME_VERSION_VARIANT_PATTERN)
+    errors << "gate-runner: #{rel} contains a filename-versioned variant of a stable Gate path"
+  end
+
+  marker_positions = TOPIC07_P1_TWO_STAGE_MARKERS.map { |marker| text.index(marker) }
+  TOPIC07_P1_TWO_STAGE_MARKERS.each_with_index do |marker, index|
+    if marker_positions[index].nil?
+      errors << "gate-runner: #{rel} missing two-stage marker #{marker.inspect}"
+    end
+  end
+  marker_positions.compact.each_cons(2) do |previous, current|
+    errors << "gate-runner: #{rel} two-stage markers are out of order" unless previous < current
+  end
+
+  TOPIC07_P1_TWO_STAGE_SEMANTIC_NEEDLES.each do |needle|
+    errors << "gate-runner: #{rel} missing two-stage semantic requirement #{needle.inspect}" unless text.include?(needle)
+  end
+
+  TOPIC07_P1_TWO_STAGE_FORBIDDEN_NEEDLES.each do |needle|
+    errors << "gate-runner: #{rel} contains forbidden two-stage regression #{needle.inspect}" if text.include?(needle)
+  end
 end
 
 if errors.empty?
