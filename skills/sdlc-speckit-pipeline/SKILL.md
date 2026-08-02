@@ -7,7 +7,7 @@ version: 0.1.0
 
 # sdlc-speckit-pipeline
 
-Orchestrate the optional full Speckit SDD path after solution review. Treat this skill as the New-Rail Enhanced Speckit Pipeline controller: verify activation, run each child skill in order, stop at every blocking Gate, preserve user confirmation boundaries, and keep implementation, sync, and reconciliation side effects owned by the responsible child skills.
+Orchestrate the optional full Speckit SDD path after solution review. Treat this skill as the New-Rail Enhanced Speckit Pipeline controller: verify activation, run each Core child skill in order, stop at every blocking Gate, preserve user confirmation boundaries, keep implementation side effects owned by the responsible Core child skills, and keep Sync, Reconcile, and the Tail Completion Gate outside the Pipeline in the Shared Documentation Governance Tail.
 
 ## Core Rules
 
@@ -15,23 +15,23 @@ Orchestrate the optional full Speckit SDD path after solution review. Treat this
 2. Do not treat Pipeline as the default path for every requirement.
 3. Require `SPECKIT_PIPELINE_REQUIRED`, explicit user choice, or a later Gate decision that direct implementation is too risky.
 4. Reuse approved `01-技术方案` and `02-方案审核`; do not reinterpret requirements from chat.
-5. Execute stages in order: Preflight, Domain Route, Specify, Clarify, Plan, Tasks, Analyze, Implement, Sync, Reconcile.
+5. Execute stages in order: Preflight, Domain Route, Specify, Clarify, Plan, Tasks, Analyze, Implement. Speckit SDD Core ends exactly at Implement; Sync, Reconcile, and the Shared Documentation Governance Tail are outside the Pipeline runtime boundary.
 6. Stop at every blocking result and route to the earliest affected upstream node.
-7. Ask whether to enter the next stage only before the Clarify boundary. After Clarify passes, run Plan, Tasks, Analyze, Implement, Sync, and Reconcile in order without stage-by-stage transition prompts.
-8. Before entering the post-Clarify continuous execution segment, collect any missing authorization for code implementation, knowledge sync target/write, reconcile apply, or accepted-risk ownership.
+7. Ask whether to enter the next stage only before the Clarify boundary. After Clarify passes, run Plan, Tasks, Analyze, and Implement in order without stage-by-stage transition prompts.
+8. Before entering the post-Clarify continuous Core execution segment, collect any missing authorization required by Core child skills: code implementation authorization and, when a downstream Core Gate depends on it, the accepted-risk owner for risks accepted inside the Core. Sync target/write authorization and Reconcile apply authorization are not Core prerequisites; they are obtained by the Shared Tail skills when needed.
 9. Use only `sdlc-speckit-*` child Skills at runtime; legacy `speckit-*` Skills are development-time fixtures only.
 10. Do not read `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**` as runtime inputs.
 11. Do not bypass child skill contracts, checklists, or stop conditions.
 12. Do not let Clarify expand scope; unresolved core questions must return to solution writing and review.
 13. Do not let Plan or Tasks change approved business behavior.
 14. Do not let Implement add unapproved behavior.
-15. Do not let Sync persist chat fragments, unstable facts, or unauthorized targets.
-16. Do not let Reconcile rewrite documents to legitimize code drift.
-17. Recommend manifest Activity Log, Gate, Re-Gate, Sync, and Reconcile updates after every stage.
-18. Pipeline path defaults to speckit_driven sync for business_domain. After Sync/Reconcile, do not require library_driven sync unless pipeline sync was skipped, Reconcile found missing facts, or user explicitly requests supplemental sync.
+15. Do not let the Shared Tail Handoff present chat fragments, unstable facts, or unauthorized targets as candidate evidence.
+16. Do not let the Shared Tail Handoff rewrite documents to legitimize code drift.
+17. Recommend manifest Activity Log, Gate, and Re-Gate updates after every Core stage. Sync and Reconcile state is owned by the Shared Tail; the Pipeline only recommends Tail status `in_progress` and never recommends Tail completion.
+18. Pipeline result is Speckit SDD Core only. After Core completion, output the Shared Tail Handoff; existing business_domain_sync decisions and Reconcile results are handed over as candidate evidence only (`candidate_evidence_only=true`), never as formal Tail evidence.
 19. Observe rail routing per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/agents-rail-routing.md`. Pipeline always uses new_rail_sdlc.
-20. Observe shared business-domain governance per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` when writing to `.specify/business_domain/**`.
-21. Observe sync source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`. Pipeline Sync uses speckit_driven mode.
+20. Observe shared business-domain governance per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` when the Shared Tail executes Sync writes to `.specify/business_domain/**`; the Pipeline itself never writes `.specify/business_domain/**`.
+21. Observe sync source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-sync-source-modes.md`. Sync source mode selection (speckit_driven / library_driven / hybrid) and execution belong to `sdlc-speckit-sync` in the Shared Tail; the Pipeline only transfers existing sync evidence pointers.
 
 ## Standard Package Resolution
 
@@ -147,8 +147,8 @@ After Preflight, Domain Route, and Specify:
 At Clarify:
 
 - Stop on unresolved core questions.
-- When Clarify passes, collect any missing authorization for implementation, Sync target/write, Reconcile apply, or accepted risk.
-- If authorization is complete, continue through Plan, Tasks, Analyze, Implement, Sync, and Reconcile without asking whether to enter each next stage.
+- When Clarify passes, collect any missing authorization for implementation or accepted-risk ownership required by Core child skills. Sync target/write authorization and Reconcile apply authorization are not Core prerequisites; they are obtained by the Shared Tail skills when needed.
+- If authorization is complete, continue through Plan, Tasks, Analyze, and Implement without asking whether to enter each next stage.
 - If authorization is missing, stop at the Clarify boundary and report exactly what is missing.
 
 ### 4. Execute Implementation Gate
@@ -178,15 +178,18 @@ status authority; manifest is status authority for pipeline status decisions.
 
 Stop if implementation requires undefined behavior, hidden scope change, or unsafe local state.
 
-### 5. Execute Sync And Reconcile
+### 5. Produce Shared Tail Handoff
 
 After implementation:
 
-- Route stable reusable facts to `sdlc-speckit-sync` only with explicit target and write authorization.
-- Route consistency audit to `sdlc-speckit-code-doc-reconcile`.
-- Keep sync failure, partial sync, or reconcile drift visible as post-implementation governance state.
+- Read `references/output-and-manifest.md`.
+- Compose the Shared Tail Handoff for the Shared Documentation Governance Tail.
+- Include Requirement ID, Feature ID, Decision Scope, Pipeline Result, Result Scope, Core Completion, implementation result, implementation artifacts, implementation record status, code review status, test acceptance status, existing business_domain_sync decision/artifact/current/scope/execution, existing Reconcile decision/artifact/current/scope/execution, Entry Coverage status, Re-Gate status, blockers, earliest affected node, Tail Status Recommendation, Tail Completion Gate Result, Completion Source Established, next owner, and next step.
+- Mark every existing Sync/Reconcile pointer as `candidate_evidence_only=true`.
+- Do not call `sdlc-speckit-sync`, `sdlc-speckit-code-doc-reconcile`, or `sdlc-gate-runner` from the Pipeline.
+- Do not decide whether the Shared Tail is complete.
 
-Do not mark the full pipeline complete while Sync or Reconcile has blocking drift.
+The Handoff is not a formal Gate artifact, not a Manifest, not completion evidence, and not a completion_decision_source.
 
 ### 6. Output Pipeline Result
 
@@ -197,16 +200,22 @@ Report:
 - Activation basis
 - New-Rail Runtime Check
 - Domain Route Summary
+- Result Scope: Speckit SDD Core
+- Core Completion
+- Shared Tail Status
+- Tail Completion Gate Result: not_evaluated
+- Completion Source Established: false
 - Stage Timeline with process product outputs from Implement
 - Produced Or Reused Artifacts, including implementation, workflow-status,
   debug, observability, implementation record, and delivery summary products
+- Shared Tail Handoff
 - Stage timeline
 - Stage results
 - Artifacts produced or reused
 - Code, doc, and knowledge side effects
 - Blocking items and Re-Gate route
 - Manifest update recommendation
-- Next step
+- Next step: Shared Documentation Governance Tail
 
 ## Output Requirements
 
@@ -217,6 +226,12 @@ Every pipeline result must contain:
 - Domain Route Summary
 - Route Artifact: `specs/{feature}/route.md` when materialized, or Pipeline Domain Route Summary before feature id materialization
 - Source Artifacts
+- Result Scope: Speckit SDD Core
+- Core Completion
+- Shared Tail Status
+- Tail Completion Gate Result: not_evaluated
+- Completion Source Established: false
+- Shared Tail Handoff
 - Stage Timeline
 - Gate Results
 - Produced Or Reused Artifacts
@@ -234,7 +249,7 @@ Stop instead of continuing when:
 - User full SDD request exists but `01-技术方案` or `02-方案审核` is missing.
 - Development path is `DIRECT_IMPLEMENTATION` and the user did not explicitly choose full SDD.
 - A pre-Clarify stage completed but the user has not confirmed entering the next stage.
-- Clarify passed but required downstream authorization for continuous execution is missing.
+- Clarify passed but required Core authorization for continuous execution (implementation authorization or Core accepted-risk owner) is missing.
 - Runtime execution would require a forbidden legacy Skill or forbidden legacy `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**` input.
 - Route Type is `unknown` and explicit route confirmation is absent.
 - Create-If-Missing applies but L1, L2, L4 id, owner, authorization, or entry coverage status is missing.
@@ -242,5 +257,4 @@ Stop instead of continuing when:
 - A child skill returns `FAIL`, `BLOCKED`, or unresolved Critical issue.
 - A stage would reinterpret approved requirements.
 - Implementation would require unapproved behavior.
-- Sync target or write authorization is unclear.
-- Reconcile finds blocking code, spec, DocFlow, knowledge, or manifest drift.
+- A Shared Tail blocker (Sync/Reconcile decision or execution pending, Entry Coverage pending, Tail Re-Gate pending, Tail completion pending) must be routed into the Shared Tail Handoff instead of blocking Core stages.

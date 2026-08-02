@@ -48,16 +48,19 @@ Stage transition prompts are split by the Clarify boundary:
 | --- | --- | --- |
 | Pre-Clarify | Preflight, Domain Route, Specify | Ask whether to enter the next stage after each successful stage. |
 | Clarify Gate | Clarify | Stop on unresolved core questions. When Clarify passes, enter continuous execution. |
-| Post-Clarify continuous execution | Plan, Tasks, Analyze, Implement, Sync, Reconcile | Execute in order without asking "whether to enter the next stage" between stages. |
+| Post-Clarify Core execution | Plan, Tasks, Analyze, Implement | Execute in order without asking "whether to enter the next stage" between stages. |
 
-Before entering the Post-Clarify continuous execution segment, collect any required write authorization that is not already present:
+Speckit SDD Core ends exactly at Implement. Sync, Reconcile, and the Shared Documentation Governance Tail are outside the Pipeline: they are not Pipeline stages, and the Pipeline does not call Sync, Reconcile, or the Tail Completion Gate.
+
+Before entering the Post-Clarify continuous Core execution segment, collect only the authorizations required by the Core child skills:
 
 - code implementation authorization;
-- Sync target and write authorization for `.specify/business_domain/**`;
-- Reconcile apply authorization, only when apply behavior is requested;
-- accepted-risk owner confirmation when a downstream Gate depends on it.
+- Core accepted-risk owner confirmation when a downstream Core Gate depends on it;
+- any other authorization explicitly required by a Core child Skill contract.
 
-If required authorization is absent, stop at the Clarify boundary and report the missing authorization. Do not continue into the continuous execution segment and then repeatedly ask between downstream stages.
+Sync target and write authorization for `.specify/business_domain/**` and Reconcile apply authorization are not Core prerequisites and are not collected at the Clarify boundary. Tail professional authorization is obtained by the corresponding Skill inside the Shared Tail when it is needed; the Pipeline does not decide in advance on behalf of the Tail owner.
+
+If required Core authorization is absent, stop at the Clarify boundary and report the missing authorization. Do not continue into the continuous execution segment and then repeatedly ask between downstream stages.
 
 ## Domain Route Summary And Artifact
 

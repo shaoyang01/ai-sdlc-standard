@@ -2630,18 +2630,18 @@ if devpath_text
     "| Reconcile public-tail metadata 与 library_driven support | implemented |",
     "| Gate Runner Development Path Entry enforcement | implemented |",
     "| Gate Runner Tail Completion enforcement | implemented |",
-    "| Speckit Pipeline boundary alignment | pending |",
+    "| Speckit Pipeline boundary alignment | implemented |",
     "| Direct / Speckit / Tail 完整场景验证 | implemented |",
     "| Topic 07 formal closure | pending |",
     "不实施 D09",
     "D09 尚未实施"
   ].each { |needle| gate_runner_require(errors, devpath_text, needle, "development-path-governance") }
   [
-    "| Speckit Pipeline boundary alignment | implemented |",
+    "| Speckit Pipeline boundary alignment | pending |",
     "| Topic 07 formal closure | implemented |",
     "| D09 | implemented |"
   ].each do |forbidden|
-    errors << "gate-runner: development-path-governance marks pending item implemented: #{forbidden}" if devpath_text.include?(forbidden)
+    errors << "gate-runner: development-path-governance contains forbidden matrix status: #{forbidden}" if devpath_text.include?(forbidden)
   end
 end
 
@@ -3130,7 +3130,6 @@ else
   gate_scenario_require(errors, gate_scenario_devpath, "validation-only harness", "development-path-governance")
   gate_scenario_require(errors, gate_scenario_devpath, "不运行真实 Gate", "development-path-governance")
   [
-    "| Speckit Pipeline boundary alignment | implemented |",
     "| Topic 07 formal closure | implemented |",
     "| D09 | implemented |"
   ].each do |forbidden|
@@ -3190,6 +3189,236 @@ if gate_scenario_validation_doc
     "pure documentation",
     "precompleted_without_source"
   ].each { |needle| gate_scenario_require(errors, gate_scenario_validation_doc, needle, "docs/VALIDATION.md") }
+end
+
+# ── Pipeline Core Boundary Static Validation (Topic 07-E) ──
+# Static assertions that the Speckit Pipeline runtime boundary converges to
+# Speckit SDD Core through Implement, with Sync / Reconcile / Tail Completion
+# Gate outside the Pipeline and a Shared Tail Handoff after Implement.
+# Read-only, deterministic, no network. It never executes the Pipeline, Sync,
+# Reconcile, or the Tail Completion Gate, and it does not copy the full Tail
+# algorithm or modify any file.
+
+def pipeline_boundary_require(errors, text, needle, label)
+  errors << "pipeline-boundary: #{label} missing #{needle.inspect}" unless text.include?(needle)
+end
+
+PIPELINE_BOUNDARY_CORE_ORDER = "Preflight, Domain Route, Specify, Clarify, Plan, Tasks, Analyze, Implement".freeze
+
+PIPELINE_BOUNDARY_SCOPE_PATHS = [
+  "skills/sdlc-speckit-pipeline/SKILL.md",
+  "skill-contracts/known-skills/sdlc-speckit-pipeline.md",
+  "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md",
+  "skills/sdlc-speckit-pipeline/references/stage-sequence.md",
+  "skills/sdlc-speckit-pipeline/references/gate-and-regate.md",
+  "skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md",
+  "skills/sdlc-speckit-pipeline/references/output-and-manifest.md",
+  "registry/skill-registry.md",
+  "ai-sdlc/development-path-governance.md",
+  "docs/VALIDATION.md"
+].freeze
+
+pipeline_boundary_scope_text = {}
+PIPELINE_BOUNDARY_SCOPE_PATHS.each do |rel|
+  path = File.join(ROOT, rel)
+  if File.file?(path)
+    pipeline_boundary_scope_text[rel] = File.read(path)
+  else
+    errors << "pipeline-boundary: missing scope file #{rel}"
+  end
+end
+
+pipeline_skill_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/SKILL.md"]
+pipeline_contract_text = pipeline_boundary_scope_text["skill-contracts/known-skills/sdlc-speckit-pipeline.md"]
+pipeline_new_rail_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md"]
+pipeline_stage_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/references/stage-sequence.md"]
+pipeline_gate_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/references/gate-and-regate.md"]
+pipeline_side_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/references/side-effect-boundaries.md"]
+pipeline_output_text = pipeline_boundary_scope_text["skills/sdlc-speckit-pipeline/references/output-and-manifest.md"]
+pipeline_registry_text = pipeline_boundary_scope_text["registry/skill-registry.md"]
+pipeline_devpath_text = pipeline_boundary_scope_text["ai-sdlc/development-path-governance.md"]
+pipeline_validation_doc_text = pipeline_boundary_scope_text["docs/VALIDATION.md"]
+
+pipeline_boundary_combined = PIPELINE_BOUNDARY_SCOPE_PATHS.map do |rel|
+  pipeline_boundary_scope_text[rel].to_s
+end.join("\n")
+
+# A. Pipeline SKILL: Core stage order ends exactly at Implement.
+if pipeline_skill_text
+  pipeline_boundary_require(errors, pipeline_skill_text, PIPELINE_BOUNDARY_CORE_ORDER, "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Speckit SDD Core ends exactly at Implement", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Produce Shared Tail Handoff", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Result Scope: Speckit SDD Core", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Tail Completion Gate Result: not_evaluated", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Completion Source Established: false", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "candidate_evidence_only=true", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "are not Core prerequisites", "pipeline SKILL")
+  pipeline_boundary_require(errors, pipeline_skill_text, "Next step: Shared Documentation Governance Tail", "pipeline SKILL")
+  ["Implement, Sync, Reconcile", "Implement, Sync, and Reconcile", "Analyze, Implement, Sync, and Reconcile"].each do |forbidden|
+    if pipeline_skill_text.include?(forbidden)
+      errors << "pipeline-boundary: pipeline SKILL keeps Sync/Reconcile in the Core chain: #{forbidden}"
+    end
+  end
+  if pipeline_skill_text.include?("Execute Sync And Reconcile")
+    errors << "pipeline-boundary: pipeline SKILL still has Execute Sync And Reconcile runtime step"
+  end
+end
+
+# B. Pipeline contract: exact Core-through-Implement stage, no Sync Skill category,
+#    no knowledge write permission, no Tail write/apply authorization prerequisites.
+if pipeline_contract_text
+  pipeline_contract_meta = contract_yaml(File.join(ROOT, "skill-contracts/known-skills/sdlc-speckit-pipeline.md"))
+  unless pipeline_contract_meta["stage"] == "Speckit SDD Core through Implement"
+    errors << "pipeline-boundary: contract stage must be Speckit SDD Core through Implement"
+  end
+  pipeline_contract_categories = pipeline_contract_meta["category"].to_s.split("/").map(&:strip).reject(&:empty?)
+  if pipeline_contract_categories.include?("Sync Skill")
+    errors << "pipeline-boundary: contract category must not include Sync Skill"
+  end
+  unless pipeline_contract_meta["can_modify_knowledge_base"] == false
+    errors << "pipeline-boundary: contract can_modify_knowledge_base must be false"
+  end
+  pipeline_boundary_require(errors, pipeline_contract_text, "Shared Tail Handoff", "pipeline contract")
+  pipeline_boundary_require(errors, pipeline_contract_text, "Sync 目标和写授权、Reconcile apply 授权不作为 Core 前置要求", "pipeline contract")
+  pipeline_boundary_require(errors, pipeline_contract_text, "candidate evidence pointers", "pipeline contract")
+  if pipeline_contract_text.include?("-> Sync\n-> Reconcile")
+    errors << "pipeline-boundary: contract flow still contains Sync and Reconcile stages"
+  end
+end
+
+# C. new-rail-enhanced-pipeline.md: Post-Clarify Core execution ends at Implement
+#    and does not pre-collect Tail write/apply authorization.
+if pipeline_new_rail_text
+  pipeline_boundary_require(errors, pipeline_new_rail_text, "| Post-Clarify Core execution | Plan, Tasks, Analyze, Implement |", "new-rail-enhanced-pipeline")
+  pipeline_boundary_require(errors, pipeline_new_rail_text, "Sync, Reconcile, and the Shared Documentation Governance Tail are outside the Pipeline", "new-rail-enhanced-pipeline")
+  pipeline_boundary_require(errors, pipeline_new_rail_text, "are not Core prerequisites and are not collected at the Clarify boundary", "new-rail-enhanced-pipeline")
+  pipeline_boundary_require(errors, pipeline_new_rail_text, "does not decide in advance on behalf of the Tail owner", "new-rail-enhanced-pipeline")
+  if pipeline_new_rail_text.include?("| Post-Clarify continuous execution | Plan, Tasks, Analyze, Implement, Sync, Reconcile |")
+    errors << "pipeline-boundary: new-rail-enhanced-pipeline keeps Sync/Reconcile in the continuous segment"
+  end
+end
+
+# D. stage-sequence.md: no Sync/Reconcile rows in the runtime stage mapping,
+#    continuous execution ends at Implement, Shared Tail Handoff is the exit.
+if pipeline_stage_text
+  pipeline_boundary_require(errors, pipeline_stage_text, "| Implement | `sdlc-speckit-implement` | Modify code for approved tasks. |", "stage-sequence")
+  pipeline_boundary_require(errors, pipeline_stage_text, "## Shared Tail Handoff Boundary", "stage-sequence")
+  pipeline_boundary_require(errors, pipeline_stage_text, "Do not ask whether to enter a Pipeline-internal Sync or Reconcile stage", "stage-sequence")
+  pipeline_boundary_require(errors, pipeline_stage_text, "candidate_evidence_only=true", "stage-sequence")
+  pipeline_boundary_require(errors, pipeline_stage_text, "decided by the Manifest current state and the Tail Completion Gate", "stage-sequence")
+  ["| Sync | `sdlc-speckit-sync` |", "| Reconcile | `sdlc-speckit-code-doc-reconcile` |"].each do |forbidden|
+    if pipeline_stage_text.include?(forbidden)
+      errors << "pipeline-boundary: stage-sequence keeps Pipeline child-stage mapping #{forbidden}"
+    end
+  end
+end
+
+# E. gate-and-regate.md: Tail blockers route to the Shared Tail Handoff and
+#    never masquerade a completed Core as unexecuted.
+if pipeline_gate_text
+  pipeline_boundary_require(errors, pipeline_gate_text, "## Shared Tail Handoff Routes", "gate-and-regate")
+  pipeline_boundary_require(errors, pipeline_gate_text, "`core_completion`", "gate-and-regate")
+  pipeline_boundary_require(errors, pipeline_gate_text, "`tail_completion`", "gate-and-regate")
+  pipeline_boundary_require(errors, pipeline_gate_text, "earliest affected Core node", "gate-and-regate")
+  pipeline_boundary_require(errors, pipeline_gate_text, "Tail next owner", "gate-and-regate")
+  pipeline_boundary_require(errors, pipeline_gate_text, "must not make a completed Core look unexecuted", "gate-and-regate")
+  ["| Stable knowledge is missing | `sdlc-speckit-sync` |", "| Code and documents drift | `sdlc-speckit-code-doc-reconcile` |"].each do |forbidden|
+    if pipeline_gate_text.include?(forbidden)
+      errors << "pipeline-boundary: gate-and-regate keeps Sync/Reconcile as Pipeline child-stage routes: #{forbidden}"
+    end
+  end
+end
+
+# F. side-effect-boundaries.md: Pipeline and Pipeline Core never write knowledge;
+#    Reconcile belongs to the Shared Tail; Manifest recommendation is in_progress only.
+if pipeline_side_text
+  pipeline_boundary_require(errors, pipeline_side_text, "The Pipeline and its Pipeline Core must not write knowledge", "side-effect-boundaries")
+  pipeline_boundary_require(errors, pipeline_side_text, "belong only to `sdlc-speckit-sync` inside the Shared Tail", "side-effect-boundaries")
+  pipeline_boundary_require(errors, pipeline_side_text, "The Pipeline does not execute Reconcile audit or apply", "side-effect-boundaries")
+  pipeline_boundary_require(errors, pipeline_side_text, "recommend Tail status=`in_progress`", "side-effect-boundaries")
+  pipeline_boundary_require(errors, pipeline_side_text, "must not set a completion source", "side-effect-boundaries")
+end
+
+# G. output-and-manifest.md: Core-only report shape, Handoff required, COMPLETED is
+#    Core-only, Manifest recommendation never suggests Tail completed.
+if pipeline_output_text
+  pipeline_boundary_require(errors, pipeline_output_text, "Result Scope: Speckit SDD Core", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "## Shared Tail Handoff", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Tail Completion Gate Result: not_evaluated", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Completion Source Established: false", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "candidate_evidence_only=true", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Speckit SDD Core through Implement completed without a Core blocking item", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Pipeline `COMPLETED` must never be interpreted as", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Tail completed.", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Do not recommend", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "Pipeline report as Tail Gate", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "## Existing Sync / Reconcile Evidence", "output-and-manifest")
+  pipeline_boundary_require(errors, pipeline_output_text, "automatically decide `NOT_REQUIRED`", "output-and-manifest")
+  if pipeline_output_text.include?("`CORE_COMPLETED`")
+    errors << "pipeline-boundary: output-and-manifest must not introduce a CORE_COMPLETED enum"
+  end
+  if pipeline_output_text.include?("implementation, required sync, and reconcile completed")
+    errors << "pipeline-boundary: output-and-manifest COMPLETED must not require sync and reconcile"
+  end
+end
+
+# H. Registry: stage, knowledge permission, and Tail-external notes.
+if pipeline_registry_text
+  pipeline_registry_entry = fenced_yamls(File.join(ROOT, "registry/skill-registry.md"))
+                             .find { |entry| entry["name"] == "sdlc-speckit-pipeline" }
+  if pipeline_registry_entry.nil?
+    errors << "pipeline-boundary: registry missing sdlc-speckit-pipeline entry"
+  else
+    unless pipeline_registry_entry["stage"] == "Speckit SDD Core through Implement"
+      errors << "pipeline-boundary: registry stage must be Speckit SDD Core through Implement"
+    end
+    unless pipeline_registry_entry["can_modify_knowledge_base"] == false
+      errors << "pipeline-boundary: registry can_modify_knowledge_base must be false"
+    end
+  end
+  pipeline_boundary_require(errors, pipeline_registry_text, "Shared Tail (Sync / Reconcile / Tail Completion Gate) is outside the Pipeline", "registry")
+  pipeline_boundary_require(errors, pipeline_registry_text, "Pipeline result cannot replace the Tail Completion Gate", "registry")
+end
+
+# I. Development Path matrix: boundary alignment implemented, formal closure and
+#    D09 still not implemented.
+if pipeline_devpath_text
+  pipeline_boundary_require(errors, pipeline_devpath_text, "| Speckit Pipeline boundary alignment | implemented |", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "| Topic 07 formal closure | pending |", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "D09 尚未实施", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "Pipeline fixed Core ends at Implement", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "Implement 后输出 Shared Tail Handoff", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "Sync/Reconcile/Tail Gate 位于 Pipeline 外部", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "不代表 Topic 07 formal closure", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "不代表 D09 implemented", "development-path-governance")
+end
+
+# J. docs/VALIDATION.md: Pipeline Core Boundary Static Validation documented.
+if pipeline_validation_doc_text
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "## Pipeline Core Boundary Static Validation", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "Pipeline fixed stages 截止 Implement", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "Shared Tail Handoff required", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "knowledge permission=false", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "old fixed Sync/Reconcile stage chain", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "不运行真实 Pipeline", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "不执行 Sync/Reconcile", "docs/VALIDATION.md")
+  pipeline_boundary_require(errors, pipeline_validation_doc_text, "不运行真实 Tail Gate", "docs/VALIDATION.md")
+end
+
+# K. Cross-file invariants: no CORE_COMPLETED enum, no legacy Pipeline stage chain
+#    anywhere in the Pipeline scope, no Tail completion claim.
+if pipeline_boundary_combined.include?("CORE_COMPLETED")
+  errors << "pipeline-boundary: CORE_COMPLETED enum must not be introduced in the Pipeline scope"
+end
+[
+  "-> Implement\n-> Sync",
+  "Implement -> Sync -> Reconcile",
+  "Analyze -> Implement -> Sync",
+  "Plan, Tasks, Analyze, Implement, Sync, Reconcile"
+].each do |forbidden|
+  if pipeline_boundary_combined.include?(forbidden)
+    errors << "pipeline-boundary: Pipeline scope contains legacy Core chain #{forbidden.inspect}"
+  end
 end
 
 if errors.empty?

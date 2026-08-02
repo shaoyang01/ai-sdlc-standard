@@ -131,6 +131,31 @@ Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深
 
 - `.github/workflows/ci.yml` 仅在 `ci-standards` 增加一次 `ruby scripts/validate-gate-runner-scenarios.rb`；不修改其他 job、trigger、version、permission。
 
+## Pipeline Core Boundary Static Validation
+
+`validate-skill-contracts.rb` 新增 Topic 07-E Pipeline Core Boundary 静态合同校验：
+
+- Pipeline fixed stages 截止 Implement：`Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement` 是唯一 canonical stage order。
+- post-Clarify continuous Core segment 只包含 Plan、Tasks、Analyze、Implement。
+- Shared Tail Handoff required：Implement 完成后必须输出 Shared Tail Handoff。
+- Pipeline result Core-only：`COMPLETED` 只表示 Speckit SDD Core through Implement 完成，不表示 requirement、Shared Tail、Sync、Reconcile、Tail Gate 或 Manifest 完成。
+- knowledge permission=false：Pipeline 与 Pipeline Core 不得写 knowledge；知识写入只属于 Shared Tail 中的 `sdlc-speckit-sync`。
+- Registry/Contract/Skill 对齐：Contract stage 精确为 Speckit SDD Core through Implement，Registry stage 一致，Contract category 不含 Sync Skill。
+- old fixed Sync/Reconcile stage chain 会失败：任何把 Sync 或 Reconcile 保留为 Pipeline runtime stage 的写法都会被静态校验拒绝。
+- Pipeline 不要求 Tail write/apply authorization 进入 Core；Tail 专业授权由 Shared Tail 中对应 Skill 在需要时获取。
+- Pipeline 不建议 Tail completed，不把自身作为 completion source。
+- existing Sync/Reconcile evidence 只能作为 candidate evidence（`candidate_evidence_only=true`）。
+
+边界：
+
+- 校验 read-only、deterministic、no network。
+- 不运行真实 Pipeline。
+- 不执行 Sync/Reconcile。
+- 不运行真实 Tail Gate。
+- 不证明任何 target project 完成 Tail。
+- 不证明 Topic 07 formal closure。
+- 不实施 D09。
+
 ## validate-skill-contracts.rb 检查什么
 
 当前脚本检查：
@@ -1065,10 +1090,10 @@ scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify
 4. clarify 是否只处理残留问题。
 5. plan/tasks 是否没有改变业务行为。
 6. implement 是否按 approved tasks 执行。
-7. sync 是否只沉淀稳定事实。
-8. reconcile 是否能发现 drift。
+7. Pipeline fixed Core 是否截止 Implement，不再把 Sync/Reconcile 作为 Pipeline runtime stage。
+8. Implement 后是否输出 Shared Tail Handoff，且 Sync/Reconcile/Tail Gate 位于 Pipeline 外部。
 9. Clarify 之前是否按节点询问是否进入下一节点。
-10. Clarify 之后是否按 Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile 连续执行，不再询问是否进入下一节点。
+10. Clarify 之后是否按 Plan -> Tasks -> Analyze -> Implement 连续执行到 Core 截止，不再询问是否进入下一节点。
 11. 是否输出 New-Rail Runtime Check 和 Domain Route Summary。
 12. 运行期是否没有调用 legacy `speckit-*` Skill，也没有读取或写入 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**`。
 ```

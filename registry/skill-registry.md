@@ -517,7 +517,7 @@ blocking_conditions:
 ```yaml
 name: sdlc-speckit-pipeline
 category: Workflow Skill
-stage: Full lifecycle
+stage: Speckit SDD Core through Implement
 status: active
 skill_path:
   - skills/sdlc-speckit-pipeline/SKILL.md
@@ -541,10 +541,10 @@ required_checklist:
 side_effects:
   - create or update specs
   - modify code during implement stage
-  - update business knowledge during sync stage
+  - produce Shared Tail Handoff
 can_modify_code: true
 can_modify_docs: true
-can_modify_knowledge_base: true
+can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
   - solution review is missing or failed
@@ -553,10 +553,14 @@ blocking_conditions:
   - any Critical gate issue
   - user refuses phase transition
   - implementation requires undefined business behavior
+  - Clarify passed but required Core authorization for continuous execution is missing
 notes:
   - optional full SDD path after sdlc-solution-reviewer
   - not the default path for every requirement
   - orchestrates child sdlc-speckit-* skills without replacing their contracts
+  - runtime boundary is Speckit SDD Core through Implement
+  - Shared Tail (Sync / Reconcile / Tail Completion Gate) is outside the Pipeline
+  - Pipeline result cannot replace the Tail Completion Gate
 ```
 
 ### sdlc-speckit-checklist
