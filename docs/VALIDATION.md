@@ -4,20 +4,22 @@
 
 ## 当前自动校验脚本
 
-当前仓库提供三个自动校验脚本：
+当前仓库提供四个自动校验脚本：
 
 ```bash
 ruby scripts/validate-skill-contracts.rb
 ruby scripts/validate-product-parity-fixtures.rb
 ruby scripts/validate-capability-metadata-chain.rb
+ruby scripts/validate-gate-runner-scenarios.rb
 ```
 
 ### A. Portable Standard Package validators
 
 - `validate-skill-contracts.rb`：标准包内部契约一致性验证。
 - `validate-product-parity-fixtures.rb`：标准包 product parity fixture 回归验证。
+- `validate-gate-runner-scenarios.rb`：Gate Runner 两个特殊 Gate 的 validation-only 场景一致性验证。
 
-这两个脚本属于标准包内部契约和 product parity 验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
+这三个脚本属于标准包内部契约、product parity 与 Gate Runner scenario 验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
 
 ### B. Repository governance validator
 
@@ -44,6 +46,90 @@ ruby scripts/validate-capability-metadata-chain.rb
 - 校验 read-only、deterministic、no network。
 - 不运行 Gate Runner，不执行 Sync，不执行 Reconcile，不读取实例 Manifest，不验证真实需求是否完成 Tail。
 - runtime enforcement 由后续运行时任务覆盖；Sync/Reconcile 输出消费由后续集成任务覆盖；Pipeline 边界由后续集成任务覆盖；实例级场景由后续场景验证覆盖。
+
+## Gate Runner Scenario Conformance 校验
+
+`fixtures/gate-runner-scenarios/scenarios.yaml` 与 `scripts/validate-gate-runner-scenarios.rb` 组成标准包开发期 validation-only 场景一致性验证 harness：
+
+```text
+authority=validation_only
+runtime_authority=false
+gate_decision_authority=false
+implementation_authority=false
+merge_authority=false
+publication_authority=false
+```
+
+边界：
+
+- 该 harness 只读、deterministic、no network；不运行真实 Gate、Manifest、Sync、Reconcile 或 Entry Coverage；不修改真实 Manifest 或 `library/**`。
+- 不证明 Pipeline boundary、Topic 07 closure 或 D09；CI success 不是 review PASS。
+- 该 harness 不是 `sdlc-gate-runner`、不是正式 Gate artifact、不是 target project runtime input、不是 Manifest / Sync / Reconcile / D09 owner。
+
+### Schema
+
+- fixture root 只允许 `schema_version`、`authority`、`canonical_sources`、`required_coverage_tags`、`scenarios`。
+- `schema_version=gate-runner-scenario-conformance-v1`、`authority=validation_only`。
+- `canonical_sources` 必须非空、无重复，且均为安全的 repository-relative 普通文件（拒绝绝对路径、反斜杠、`..`、`~`、不存在或非普通文件），至少覆盖 Development Path 标准、Gate Runner Skill/Contract/references 与四份 Tail 模板。
+- `required_coverage_tags` 固定 19 个（R1 新增 `precompleted_without_source`）；未知、重复或未覆盖 tag 均失败。
+- 每个 scenario 只允许 `id`、`coverage_tags`、`gate_type`、`input`、`expected`；ID 全局唯一，格式 `[A-Z0-9-]+`，最大 64。
+- `gate_type` 仅为 `development_path_entry` 或 `documentation_governance_tail_completion`。
+- `expected` 只允许 12 个字段；`result` 仅 `PASS|FAIL|PASS_WITH_RISK`；boolean 字段必须为真 boolean，不适用使用 `not_applicable`；`blockers` 不允许重复（重复会先在 schema 层被拒绝）。
+- `input` 按 Gate Type 使用独立、递归、fail-closed nested schema：Development Path Entry 顶层精确 9 字段，Tail 顶层精确 16 字段。每层都拒绝未知字段与缺失必填字段、检查 exact enum、要求 true boolean、校验数组元素类型与唯一性，不允许未识别字段被计算逻辑静默忽略。
+  - Tail `artifacts` 必须精确包含 3 个元素，item 精确覆盖 `03-实现记录` / `04-代码审核` / `05-测试验收` 且无重复；每个元素只允许 `item` / `status` / `version_matches`。
+  - `skipped_items` 每条必须精确包含 `item`、`basis`、`scope`、`reason`、`evidence`、`decision_source`、`decision_owner`、`version_basis`、`stale_condition`；`basis` 仅 `complete|incomplete`；每个 `not_required` / `not_applicable` artifact 必须有唯一对应 skip record。
+  - 风险 level 使用 canonical case：仅 `none` / `High` / `Critical`（小写 `high` / `critical` 被拒绝）。
+  - Entry Coverage status 仅 `PASS|PENDING|FAILED|BLOCKED|not_applicable`；禁止 `status=current`。
+  - `business_domain_sync` 必须包含 `write_authorized`（boolean）；`persistence` 必须包含 `tamper_field`（`none|result|completion_decision_source|version`）。
+- YAML alias 与对象反序列化均拒绝（`YAML.safe_load(permitted_classes: [], aliases: false)`）。
+
+### Tail lifecycle（R1）
+
+- 首次正式 Tail Completion Gate 的正常候选状态是 `tail.status=in_progress`：`in_progress` 本身不构成完成证据，但当所有外部 evidence 完整时，不能仅因 `in_progress` 阻止 Stage A provisional PASS；formal PASS 只在 Stage B 写入并回读验证 Gate artifact 后成立，此后才允许 `tail_completion_eligible=true`、`completion_source_established=true` 与 `manifest_completed_recommendation=true`。
+- `planned` / `blocked` / `stale` / `not_required` 状态 fail-closed。
+- `completed` 不得作为首次完成 Gate 的前置成功条件：当输入 status 已为 `completed` 但没有 current、已绑定的 completion source 时 fail-closed，blocker 明确表示 pre-completed state 缺少 current formal source，且不得重新建议完成（场景 `TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE`）。本轮不实现 existing completed Gate 的重验证成功路径。
+- Response-only、write failure 与 read-back mismatch 场景同样从 `in_progress` 开始，证明失败来自 Stage B 边界而不是预完成状态。
+
+### Sync write authorization（R1）
+
+`business_domain_sync.write_authorized` 与 execution 分离：
+
+- `SYNC_REQUIRED` 且尚未执行、`write_authorized=false`：唯一核心 blocker 为 `SYNC_REQUIRED write not authorized`；`professional_skill_execution_requested=false`，不得请求执行未授权写入（场景 `TAIL-D-03-SYNC-NOT-AUTHORIZED`）。
+- `SYNC_REQUIRED` 且已授权（`write_authorized=true`）但未执行：blocker 为 `SYNC_REQUIRED execution not complete`；`professional_skill_execution_requested=true`（场景 `TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED`）。
+- Sync 已 `done/synced` 时 `write_authorized=true` 表示当前 evidence 记录的原始执行已获授权，不得请求再次执行；当 current/non-stale/scope-matched Pipeline evidence 被复用时不得要求新的写授权、不得重复执行专业 Skill（`reused_existing_evidence=true`、`professional_skill_execution_requested=false`）。不得用 reuse 绕过 stale、scope mismatch 或缺失 evidence。
+
+### 场景组
+
+当前共 25 个场景（22 个 P2 固定场景 + 3 个 R1 新增：`TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED`、`TAIL-G-03-PURE-DOCUMENTATION-MISSING-SKIP-BASIS`、`TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE`）。
+
+- `DPE-*`：Development Path Entry（direct / speckit / wrong route / blocked revision / blocked unknown / stale decision）。
+- `TAIL-D-*`：Direct 路径 Tail（无 sync、sync 已授权、sync 未授权、sync 已授权未执行、Reconcile 不完整、缺 05）。
+- `TAIL-S-*`：Speckit 证据复用与 Pipeline result 边界（current 证据复用、Pipeline COMPLETED 不能替代 Tail Gate、stale pipeline evidence）。
+- `TAIL-G-*`：纯文档/纯治理任务的 skipped basis——`pure_governance` 与 `pure_documentation` 执行同一套完整 skip-basis 校验（完整通过、不完整失败、pure documentation 缺 skip basis 失败）。
+- `TAIL-P-*`：persistence 生命周期与 Tail lifecycle（response-only、write failure 注入、read-back mismatch、PASS_WITH_RISK 边界、风险接受不完整、Critical、pre-completed without source fail-closed）。
+
+Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深比较；marker 只在断言成功后打印。
+
+### Stage B（persistence）
+
+- 每个 persistence 场景在独立 `Dir.mktmpdir` 下模拟稳定路径 `library/<requirement_id>/05-测试验收/<requirement_id>_治理尾段完成门禁.md`。
+- 模拟 report 至少包含 Requirement ID、Gate Type、Version、Gate Artifact Version、Status、Reviewed Artifact/Version、Result、completion_evidence、completion_decision_source。
+- write failure 为确定性注入，不依赖 OS 权限碰运气。
+- read-back mismatch 必须真实改写指定字段后重新读取（真实写盘、真实回读、内容 digest 校验）。
+- filename-versioned companion（`_vN.md`）必须被禁止：binding mismatch 均 formal FAIL。
+- 只有 authorized + write success + 真实回读 match + 无 companion 才能形成 formal PASS/PASS_WITH_RISK；成功时才建议 Manifest completed。
+- 所有临时目录必须清理；清理失败使 runner 失败（`TEMP_CLEANUP_COMPLETE`）。
+
+### Self-test
+
+- 使用内存 deep copy，不修改 repository fixture。
+- 真实制造并期待验证失败：expected PASS/FAIL 被篡改、mandatory tag 缺失、重复 scenario ID、未知 root/scenario field、response-only / write failure / read-back mismatch / stale evidence / wrong route / `_v2.md` companion / Critical 被写成通过（均必须被拒绝，禁止通过）、YAML alias、不安全 canonical source path。
+- R1 新增负向 self-test：unknown nested input field、missing required nested field、invalid work_kind、invalid freshness、Entry Coverage `status=current`、pure documentation 缺 skip basis 被写成 PASS、duplicate artifact item、missing 03/04/05 item、pre-completed without source 被写成 PASS、`write_authorized=false` 被写成 PASS、SYNC authorized but not executed 被写成 PASS、invalid canonical risk case（小写 `high`）、expected blockers 重复、unexpected exception 不得被当作 expected rejection。
+- 每个 self-test 声明 expected diagnostic 或 expected error category：仅当实际 validator 产生预期错误时 self-test 才通过；未知异常、nil error、无关 schema error 或 runner crash 必须使 self-test 失败。
+
+### CI
+
+- `.github/workflows/ci.yml` 仅在 `ci-standards` 增加一次 `ruby scripts/validate-gate-runner-scenarios.rb`；不修改其他 job、trigger、version、permission。
 
 ## validate-skill-contracts.rb 检查什么
 

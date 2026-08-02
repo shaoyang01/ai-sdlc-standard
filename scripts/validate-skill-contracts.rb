@@ -2631,14 +2631,13 @@ if devpath_text
     "| Gate Runner Development Path Entry enforcement | implemented |",
     "| Gate Runner Tail Completion enforcement | implemented |",
     "| Speckit Pipeline boundary alignment | pending |",
-    "| Direct / Speckit / Tail 完整场景验证 | pending |",
+    "| Direct / Speckit / Tail 完整场景验证 | implemented |",
     "| Topic 07 formal closure | pending |",
     "不实施 D09",
     "D09 尚未实施"
   ].each { |needle| gate_runner_require(errors, devpath_text, needle, "development-path-governance") }
   [
     "| Speckit Pipeline boundary alignment | implemented |",
-    "| Direct / Speckit / Tail 完整场景验证 | implemented |",
     "| Topic 07 formal closure | implemented |",
     "| D09 | implemented |"
   ].each do |forbidden|
@@ -2959,6 +2958,238 @@ TOPIC07_P1_STABLE_PATH_TARGET_FILES.each do |rel|
   TOPIC07_P1_TWO_STAGE_FORBIDDEN_NEEDLES.each do |needle|
     errors << "gate-runner: #{rel} contains forbidden two-stage regression #{needle.inspect}" if text.include?(needle)
   end
+end
+
+# ── Gate Runner Scenario Conformance Wiring (Topic 07-P2) ──
+# Static wiring checks for the validation-only scenario harness. The harness
+# itself computes scenario outcomes; this validator only checks that the
+# fixture, runner, docs, CI, and governance matrix stay wired and fail-closed.
+# It does not duplicate the scenario algorithm and does not execute the runner.
+# Read-only, deterministic, no network.
+
+def gate_scenario_require(errors, text, needle, label)
+  errors << "gate-scenario: #{label} missing #{needle.inspect}" unless text.include?(needle)
+end
+
+GATE_SCENARIO_FIXTURE = "fixtures/gate-runner-scenarios/scenarios.yaml".freeze
+GATE_SCENARIO_RUNNER = "scripts/validate-gate-runner-scenarios.rb".freeze
+
+GATE_SCENARIO_COVERAGE_TAGS = %w[
+  development_path_direct development_path_speckit development_path_wrong_route
+  development_path_blocked development_path_stale direct_tail_no_sync
+  direct_tail_sync_authorized direct_tail_sync_unauthorized direct_tail_missing_evidence
+  speckit_evidence_reuse pipeline_result_not_gate pure_governance response_only
+  persistence_failure readback_mismatch stale_evidence pass_with_risk
+  invalid_risk_acceptance precompleted_without_source
+].freeze
+
+GATE_SCENARIO_FIXED_IDS = %w[
+  DPE-01-DIRECT-PASS DPE-02-SPECKIT-PASS DPE-03-WRONG-DIRECT-ROUTE
+  DPE-04-BLOCKED-REVISION DPE-05-BLOCKED-UNKNOWN DPE-06-STALE-DECISION
+  TAIL-D-01-DIRECT-NO-SYNC TAIL-D-02-DIRECT-SYNCED TAIL-D-03-SYNC-NOT-AUTHORIZED
+  TAIL-D-04-RECONCILE-INCOMPLETE TAIL-D-05-MISSING-TEST-ACCEPTANCE
+  TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED
+  TAIL-S-01-REUSE-CURRENT-EVIDENCE TAIL-S-02-PIPELINE-RESULT-NOT-GATE
+  TAIL-S-03-STALE-PIPELINE-EVIDENCE TAIL-G-01-PURE-GOVERNANCE
+  TAIL-G-02-INCOMPLETE-SKIP-BASIS TAIL-G-03-PURE-DOCUMENTATION-MISSING-SKIP-BASIS
+  TAIL-P-01-RESPONSE-ONLY TAIL-P-02-WRITE-FAILURE
+  TAIL-P-03-READBACK-MISMATCH TAIL-P-04-PASS-WITH-RISK TAIL-P-05-INCOMPLETE-RISK-ACCEPTANCE
+  TAIL-P-06-CRITICAL-RISK TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE
+].freeze
+
+GATE_SCENARIO_MARKERS = %w[
+  GATE_RUNNER_SCENARIO_SCHEMA_VALIDATED
+  GATE_RUNNER_ENTRY_SCENARIOS_PASS
+  GATE_RUNNER_DIRECT_TAIL_SCENARIOS_PASS
+  GATE_RUNNER_SPECKIT_REUSE_SCENARIOS_PASS
+  GATE_RUNNER_GOVERNANCE_SCENARIOS_PASS
+  GATE_RUNNER_RESPONSE_ONLY_FAIL_CLOSED
+  GATE_RUNNER_PERSISTENCE_FAILURE_FAIL_CLOSED
+  GATE_RUNNER_READBACK_MISMATCH_FAIL_CLOSED
+  GATE_RUNNER_STALE_EVIDENCE_FAIL_CLOSED
+  GATE_RUNNER_WRONG_ROUTE_FAIL_CLOSED
+  GATE_RUNNER_PASS_WITH_RISK_BOUNDARY_VERIFIED
+  GATE_RUNNER_TAIL_IN_PROGRESS_LIFECYCLE_VERIFIED
+  GATE_RUNNER_PRECOMPLETED_WITHOUT_SOURCE_FAIL_CLOSED
+  GATE_RUNNER_NESTED_SCHEMA_FAIL_CLOSED
+  GATE_RUNNER_PURE_DOCUMENTATION_SKIP_BASIS_VERIFIED
+  GATE_RUNNER_SYNC_WRITE_AUTHORIZATION_VERIFIED
+  GATE_RUNNER_SELFTESTS_PASS
+  TEMP_CLEANUP_COMPLETE
+  GATE_RUNNER_SCENARIO_SUMMARY
+].freeze
+
+gate_scenario_fixture_text = tail_template_text(GATE_SCENARIO_FIXTURE)
+if gate_scenario_fixture_text.nil?
+  errors << "gate-scenario: fixtures/gate-runner-scenarios/scenarios.yaml must exist"
+else
+  [
+    "schema_version: gate-runner-scenario-conformance-v1",
+    "authority: validation_only",
+    "authority=validation_only",
+    "runtime_authority=false",
+    "gate_decision_authority=false",
+    "implementation_authority=false",
+    "merge_authority=false",
+    "publication_authority=false",
+    "canonical_sources:",
+    "required_coverage_tags:",
+    "scenarios:",
+    "ai-sdlc/development-path-governance.md",
+    "skills/sdlc-gate-runner/SKILL.md",
+    "skill-contracts/known-skills/sdlc-gate-runner.md",
+    "skills/sdlc-gate-runner/references/gate-workflow.md",
+    "skills/sdlc-gate-runner/references/gate-matrix.md",
+    "skills/sdlc-gate-runner/references/risk-and-regate.md",
+    "skills/sdlc-gate-runner/references/output-report.md",
+    "templates/gate-result-template.md",
+    "templates/artifact-manifest-template.md",
+    "templates/business-domain-sync-status-template.yaml",
+    "templates/library-driven-sync-decision-template.md",
+    "development_path_entry",
+    "documentation_governance_tail_completion"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_fixture_text, needle, "scenarios.yaml") }
+  GATE_SCENARIO_COVERAGE_TAGS.each do |tag|
+    gate_scenario_require(errors, gate_scenario_fixture_text, "- #{tag}", "scenarios.yaml")
+  end
+  GATE_SCENARIO_FIXED_IDS.each do |fixed_id|
+    gate_scenario_require(errors, gate_scenario_fixture_text, "- id: #{fixed_id}", "scenarios.yaml")
+  end
+end
+
+gate_scenario_runner_text = tail_template_text(GATE_SCENARIO_RUNNER)
+if gate_scenario_runner_text.nil?
+  errors << "gate-scenario: scripts/validate-gate-runner-scenarios.rb must exist"
+else
+  unless File.executable?(File.join(ROOT, GATE_SCENARIO_RUNNER))
+    errors << "gate-scenario: scripts/validate-gate-runner-scenarios.rb must be executable"
+  end
+  [
+    'require "yaml"',
+    'require "tmpdir"',
+    'require "fileutils"',
+    'require "digest"',
+    "aliases: false",
+    "permitted_classes: []",
+    "Dir.mktmpdir",
+    "Digest::SHA256",
+    "authority=validation_only",
+    "runtime_authority=false",
+    "gate_decision_authority=false",
+    "implementation_authority=false",
+    "merge_authority=false",
+    "publication_authority=false"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_runner_text, needle, "runner") }
+  GATE_SCENARIO_MARKERS.each do |marker|
+    gate_scenario_require(errors, gate_scenario_runner_text, marker, "runner")
+  end
+  if gate_scenario_runner_text.match?(/Net::HTTP|OpenURI|open-uri|URI\.open|TCPSocket|Socket\.tcp/)
+    errors << "gate-scenario: runner must not access the network"
+  end
+end
+
+gate_scenario_validation_doc = tail_template_text("docs/VALIDATION.md")
+if gate_scenario_validation_doc.nil?
+  errors << "gate-scenario: docs/VALIDATION.md must exist"
+else
+  [
+    "四个自动校验脚本",
+    "ruby scripts/validate-gate-runner-scenarios.rb",
+    "Gate Runner Scenario Conformance 校验",
+    "gate-runner-scenarios",
+    "authority=validation_only",
+    "runtime_authority=false",
+    "gate_decision_authority=false",
+    "implementation_authority=false",
+    "merge_authority=false",
+    "publication_authority=false",
+    "Dir.mktmpdir",
+    "不运行真实 Gate",
+    "不证明 Pipeline boundary",
+    "ci-standards",
+    "YAML.safe_load(permitted_classes: [], aliases: false)"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_validation_doc, needle, "docs/VALIDATION.md") }
+end
+
+gate_scenario_ci = tail_template_text(".github/workflows/ci.yml")
+if gate_scenario_ci.nil?
+  errors << "gate-scenario: .github/workflows/ci.yml must exist"
+else
+  occurrence_count = gate_scenario_ci.scan("ruby scripts/validate-gate-runner-scenarios.rb").size
+  unless occurrence_count == 1
+    errors << "gate-scenario: ci.yml must run the scenario validator exactly once (got #{occurrence_count})"
+  end
+  gate_scenario_require(errors, gate_scenario_ci, "name: ci-standards", "ci.yml")
+end
+
+gate_scenario_devpath = tail_template_text("ai-sdlc/development-path-governance.md")
+if gate_scenario_devpath.nil?
+  errors << "gate-scenario: ai-sdlc/development-path-governance.md must exist"
+else
+  gate_scenario_require(errors, gate_scenario_devpath, "| Direct / Speckit / Tail 完整场景验证 | implemented |", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "validation-only harness", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "不运行真实 Gate", "development-path-governance")
+  [
+    "| Speckit Pipeline boundary alignment | implemented |",
+    "| Topic 07 formal closure | implemented |",
+    "| D09 | implemented |"
+  ].each do |forbidden|
+    errors << "gate-scenario: development-path-governance marks pending item implemented: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
+  end
+end
+
+# ── Gate Runner Scenario R1 Correction Wiring (Topic 07-P2 R1) ──
+# Static wiring checks for the R1 correction: Tail lifecycle, strict recursive
+# nested schema, pure documentation skip basis, and Sync write authorization.
+# Read-only, deterministic, no network; no scenario algorithm is copied here
+# and the scenario runner is never executed from this validator.
+
+if gate_scenario_fixture_text
+  [
+    "completion_source_present",
+    "completion_source_current",
+    "write_authorized",
+    "tamper_field",
+    "status: in_progress",
+    "status: completed"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_fixture_text, needle, "scenarios.yaml") }
+end
+
+if gate_scenario_runner_text
+  [
+    "ENTRY_INPUT_FIELDS",
+    "TAIL_INPUT_FIELDS",
+    "TAIL_STATUS_VALUES",
+    "completion_source_present",
+    "completion_source_current",
+    "write_authorized",
+    "SYNC_REQUIRED write not authorized",
+    "tail pre-completed state lacks current formal completion source",
+    "invalid entry coverage status",
+    "expected diagnostic",
+    "UNEXPECTED RAISE",
+    'when "High"',
+    'when "Critical"'
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_runner_text, needle, "runner") }
+  # Risk enums must use the canonical case only; lowercase must not reappear.
+  ['when "high"', 'when "critical"'].each do |forbidden|
+    if gate_scenario_runner_text.include?(forbidden)
+      errors << "gate-scenario: runner uses non-canonical risk case #{forbidden}"
+    end
+  end
+end
+
+if gate_scenario_validation_doc
+  [
+    "这三个脚本",
+    "Tail lifecycle",
+    "in_progress",
+    "pre-completed",
+    "nested schema",
+    "write authorization",
+    "pure documentation",
+    "precompleted_without_source"
+  ].each { |needle| gate_scenario_require(errors, gate_scenario_validation_doc, needle, "docs/VALIDATION.md") }
 end
 
 if errors.empty?

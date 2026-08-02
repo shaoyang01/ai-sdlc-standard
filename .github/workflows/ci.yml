@@ -77,6 +77,8 @@ jobs:
 
       - run: ruby scripts/validate-capability-metadata-chain.rb
 
+      - run: ruby scripts/validate-gate-runner-scenarios.rb
+
   loop-patch-mutations:
     name: ci-loop-patch-mutations
     runs-on: ubuntu-24.04

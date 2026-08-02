@@ -1,0 +1,2021 @@
+# Gate Runner Scenario Conformance Fixture (validation-only)
+#
+# authority=validation_only
+# runtime_authority=false
+# gate_decision_authority=false
+# implementation_authority=false
+# merge_authority=false
+# publication_authority=false
+#
+# This fixture is a standard-package development-time conformance oracle. It is
+# not sdlc-gate-runner, not a formal Gate artifact, not a target project
+# runtime input, and not the owner of Manifest / Sync / Reconcile / D09
+# semantics. No scenario creates real Gate, review, merge, or publication
+# facts, and no scenario writes the real manifest or library/**.
+#
+# Loaded with YAML.safe_load(permitted_classes: [], aliases: false): YAML
+# aliases and object deserialization are rejected. canonical_sources must be
+# safe repository-relative regular files.
+#
+# Expected outcomes are asserted by scripts/validate-gate-runner-scenarios.rb
+# which computes the actual outcome independently and deep-compares every
+# expected field.
+
+schema_version: gate-runner-scenario-conformance-v1
+authority: validation_only
+
+canonical_sources:
+  - ai-sdlc/development-path-governance.md
+  - ai-sdlc/phase-gates.md
+  - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
+  - ai-sdlc/change-control.md
+  - skills/sdlc-gate-runner/SKILL.md
+  - skill-contracts/known-skills/sdlc-gate-runner.md
+  - skills/sdlc-gate-runner/references/gate-workflow.md
+  - skills/sdlc-gate-runner/references/gate-matrix.md
+  - skills/sdlc-gate-runner/references/risk-and-regate.md
+  - skills/sdlc-gate-runner/references/output-report.md
+  - templates/gate-result-template.md
+  - templates/artifact-manifest-template.md
+  - templates/business-domain-sync-status-template.yaml
+  - templates/library-driven-sync-decision-template.md
+
+required_coverage_tags:
+  - development_path_direct
+  - development_path_speckit
+  - development_path_wrong_route
+  - development_path_blocked
+  - development_path_stale
+  - direct_tail_no_sync
+  - direct_tail_sync_authorized
+  - direct_tail_sync_unauthorized
+  - direct_tail_missing_evidence
+  - speckit_evidence_reuse
+  - pipeline_result_not_gate
+  - pure_governance
+  - response_only
+  - persistence_failure
+  - readback_mismatch
+  - stale_evidence
+  - pass_with_risk
+  - invalid_risk_acceptance
+  - precompleted_without_source
+
+scenarios:
+  # ── Development Path Entry ──────────────────────────────────────────────
+
+  - id: DPE-01-DIRECT-PASS
+    coverage_tags: [development_path_direct]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-01
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: DIRECT_IMPLEMENTATION
+        decision_scope: FULL_REQUIREMENT
+        complexity: SIMPLE
+        source_present: true
+        artifact_present: true
+        freshness: current
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: direct
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: true
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: direct
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: DPE-02-SPECKIT-PASS
+    coverage_tags: [development_path_speckit]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-02
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: SPECKIT_PIPELINE_REQUIRED
+        decision_scope: FULL_REQUIREMENT
+        complexity: COMPLEX
+        source_present: true
+        artifact_present: true
+        freshness: current
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: speckit
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: true
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: speckit
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: DPE-03-WRONG-DIRECT-ROUTE
+    coverage_tags: [development_path_wrong_route]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-03
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: SPECKIT_PIPELINE_REQUIRED
+        decision_scope: FULL_REQUIREMENT
+        complexity: COMPLEX
+        source_present: true
+        artifact_present: true
+        freshness: current
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: direct
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: false
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: not_applicable
+      earliest_affected_node: 02-方案审核
+      required_regate: false
+      blockers:
+        - "wrong route: SPECKIT_PIPELINE_REQUIRED must not enter direct implementation"
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: DPE-04-BLOCKED-REVISION
+    coverage_tags: [development_path_blocked]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-04
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: BLOCKED_NEEDS_REVISION
+        decision_scope: DELTA_CHANGE
+        complexity: COMPLEX
+        source_present: true
+        artifact_present: true
+        freshness: current
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: speckit
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: false
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: not_applicable
+      earliest_affected_node: 01-技术方案
+      required_regate: true
+      blockers:
+        - BLOCKED_NEEDS_REVISION cannot enter implementation
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: DPE-05-BLOCKED-UNKNOWN
+    coverage_tags: [development_path_blocked]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-05
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: DIRECT_IMPLEMENTATION
+        decision_scope: FULL_REQUIREMENT
+        complexity: BLOCKED_UNKNOWN
+        source_present: true
+        artifact_present: true
+        freshness: current
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: direct
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: false
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: not_applicable
+      earliest_affected_node: 02-方案审核
+      required_regate: false
+      blockers:
+        - BLOCKED_UNKNOWN cannot enter implementation
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: DPE-06-STALE-DECISION
+    coverage_tags: [development_path_stale]
+    gate_type: development_path_entry
+    input:
+      requirement:
+        id: REQ-DPE-06
+        manifest_present: true
+        manifest_requirement_match: true
+      specification_gate:
+        result: PASS
+        risk_acceptance: none
+      development_path:
+        decision: DIRECT_IMPLEMENTATION
+        decision_scope: FULL_REQUIREMENT
+        complexity: SIMPLE
+        source_present: true
+        artifact_present: true
+        freshness: stale
+      reviewed_artifact:
+        path_present: true
+        version_matches: true
+        freshness: current
+      tail_initial:
+        required_determined: true
+        scope_determined: true
+        status_determined: true
+      blocking_change:
+        present: false
+        unresolved: false
+      regate:
+        required: false
+        result: not_applicable
+      risk:
+        level: none
+        acceptance: none
+      requested_route: direct
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: false
+      tail_completion_eligible: not_applicable
+      completion_source_established: false
+      manifest_completed_recommendation: not_applicable
+      route: not_applicable
+      earliest_affected_node: 02-方案审核
+      required_regate: true
+      blockers:
+        - development path decision stale
+        - stale evidence requires Re-Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  # ── Direct Tail ─────────────────────────────────────────────────────────
+
+  - id: TAIL-D-01-DIRECT-NO-SYNC
+    coverage_tags: [direct_tail_no_sync]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-01
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-01/05-测试验收/REQ-TAIL-D-01_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: true
+      completion_source_established: true
+      manifest_completed_recommendation: true
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-D-02-DIRECT-SYNCED
+    coverage_tags: [direct_tail_sync_authorized]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-02
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: done
+        execution_result: synced
+        freshness: current
+        write_authorized: true
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-02/05-测试验收/REQ-TAIL-D-02_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: true
+      completion_source_established: true
+      manifest_completed_recommendation: true
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-D-03-SYNC-NOT-AUTHORIZED
+    coverage_tags: [direct_tail_sync_unauthorized]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-03
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: PARTIAL
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-03/05-测试验收/REQ-TAIL-D-03_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - SYNC_REQUIRED write not authorized
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-D-04-RECONCILE-INCOMPLETE
+    coverage_tags: [direct_tail_sync_authorized, direct_tail_missing_evidence]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-04
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: done
+        execution_result: synced
+        freshness: current
+        write_authorized: true
+      reconcile:
+        decision: required
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-04/05-测试验收/REQ-TAIL-D-04_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - reconcile execution incomplete
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: true
+
+  - id: TAIL-D-05-MISSING-TEST-ACCEPTANCE
+    coverage_tags: [direct_tail_missing_evidence]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-05
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: missing
+          version_matches: false
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-05/05-测试验收/REQ-TAIL-D-05_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: 05-测试验收
+      required_regate: false
+      blockers:
+        - 05-测试验收 missing
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-D-06-SYNC-AUTHORIZED-NOT-EXECUTED
+    coverage_tags: [direct_tail_sync_authorized]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-D-06
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+        write_authorized: true
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: PARTIAL
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-D-06/05-测试验收/REQ-TAIL-D-06_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - SYNC_REQUIRED execution not complete
+      reused_existing_evidence: false
+      professional_skill_execution_requested: true
+
+  # ── Speckit Tail / Pipeline boundary ────────────────────────────────────
+
+  - id: TAIL-S-01-REUSE-CURRENT-EVIDENCE
+    coverage_tags: [speckit_evidence_reuse]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-S-01
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+        write_authorized: true
+      reconcile:
+        decision: required
+        execution_required: true
+        execution_status: not_started
+        execution_result: not_run
+        freshness: current
+      entry_coverage:
+        applicable: true
+        status: PASS
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: true
+      reuse:
+        sync_reconcile_current: true
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-S-01/05-测试验收/REQ-TAIL-S-01_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: true
+      completion_source_established: true
+      manifest_completed_recommendation: true
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: true
+      professional_skill_execution_requested: false
+
+  - id: TAIL-S-02-PIPELINE-RESULT-NOT-GATE
+    coverage_tags: [pipeline_result_not_gate]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-S-02
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: missing
+          version_matches: false
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: true
+      reuse:
+        sync_reconcile_current: true
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-S-02/05-测试验收/REQ-TAIL-S-02_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: 03-实现记录
+      required_regate: false
+      blockers:
+        - 03-实现记录 missing
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-S-03-STALE-PIPELINE-EVIDENCE
+    coverage_tags: [stale_evidence, pipeline_result_not_gate]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-S-03
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: SYNC_REQUIRED
+        execution_required: true
+        execution_status: done
+        execution_result: synced
+        freshness: stale
+        write_authorized: true
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: stale
+        scope_matched: true
+      reuse:
+        sync_reconcile_current: true
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-S-03/05-测试验收/REQ-TAIL-S-03_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: 02-方案审核
+      required_regate: true
+      blockers:
+        - business_domain_sync decision stale
+        - stale evidence requires Re-Gate
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  # ── Pure governance ─────────────────────────────────────────────────────
+
+  - id: TAIL-G-01-PURE-GOVERNANCE
+    coverage_tags: [pure_governance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-G-01
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: pure_governance
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: not_required
+          version_matches: true
+        - item: 04-代码审核
+          status: not_required
+          version_matches: true
+        - item: 05-测试验收
+          status: not_required
+          version_matches: true
+      skipped_items:
+        - item: 03-实现记录
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 任务不产生实际实现
+          evidence: library/REQ-TAIL-G-01/00-需求资料/REQ-TAIL-G-01_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生实际实现时失效
+        - item: 04-代码审核
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要代码审核
+          evidence: library/REQ-TAIL-G-01/00-需求资料/REQ-TAIL-G-01_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生代码变更时失效
+        - item: 05-测试验收
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要测试验收
+          evidence: library/REQ-TAIL-G-01/00-需求资料/REQ-TAIL-G-01_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生行为实现时失效
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-G-01/manifest.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: PASS
+      can_continue: true
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: true
+      completion_source_established: true
+      manifest_completed_recommendation: true
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-G-02-INCOMPLETE-SKIP-BASIS
+    coverage_tags: [pure_governance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-G-02
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: pure_governance
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: not_required
+          version_matches: true
+        - item: 04-代码审核
+          status: not_required
+          version_matches: true
+        - item: 05-测试验收
+          status: not_required
+          version_matches: true
+      skipped_items:
+        - item: 03-实现记录
+          basis: incomplete
+          scope: ""
+          reason: 不需要
+          evidence: ""
+          decision_source: ""
+          decision_owner: ""
+          version_basis: ""
+          stale_condition: ""
+        - item: 04-代码审核
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要代码审核
+          evidence: library/REQ-TAIL-G-02/00-需求资料/REQ-TAIL-G-02_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生代码变更时失效
+        - item: 05-测试验收
+          basis: complete
+          scope: 纯文档治理任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要测试验收
+          evidence: library/REQ-TAIL-G-02/00-需求资料/REQ-TAIL-G-02_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生行为实现时失效
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-G-02/manifest.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - skipped items lack complete basis
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-G-03-PURE-DOCUMENTATION-MISSING-SKIP-BASIS
+    coverage_tags: [pure_governance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-G-03
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: pure_documentation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: not_required
+          version_matches: true
+        - item: 04-代码审核
+          status: not_required
+          version_matches: true
+        - item: 05-测试验收
+          status: not_required
+          version_matches: true
+      skipped_items:
+        - item: 03-实现记录
+          basis: incomplete
+          scope: 纯文档任务，不产生实际代码、配置或行为实现
+          reason: 任务不产生实际实现
+          evidence: ""
+          decision_source: ""
+          decision_owner: ""
+          version_basis: ""
+          stale_condition: ""
+        - item: 04-代码审核
+          basis: complete
+          scope: 纯文档任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要代码审核
+          evidence: library/REQ-TAIL-G-03/00-需求资料/REQ-TAIL-G-03_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生代码变更时失效
+        - item: 05-测试验收
+          basis: complete
+          scope: 纯文档任务，无实际代码、配置或行为实现
+          reason: 无代码变更，不需要测试验收
+          evidence: library/REQ-TAIL-G-03/00-需求资料/REQ-TAIL-G-03_需求资料.md
+          decision_source: sdlc-solution-reviewer
+          decision_owner: REQ-OWNER
+          version_basis: manifest.md v1.0.0
+          stale_condition: 任务范围产生行为实现时失效
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: false
+      reviewed_artifact:
+        path: library/REQ-TAIL-G-03/manifest.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - skipped items lack complete basis
+        - pipeline result cannot substitute Tail evidence or Tail Gate
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  # ── Persistence / Stage B ───────────────────────────────────────────────
+
+  - id: TAIL-P-01-RESPONSE-ONLY
+    coverage_tags: [response_only]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-01
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-01/05-测试验收/REQ-TAIL-P-01_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: false
+        mode: response_only
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - response-only cannot formally complete
+        - persistence not authorized
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-02-WRITE-FAILURE
+    coverage_tags: [persistence_failure]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-02
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-02/05-测试验收/REQ-TAIL-P-02_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: write_failure_injected
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - persistence write failure
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-03-READBACK-MISMATCH
+    coverage_tags: [readback_mismatch]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-03
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-03/05-测试验收/REQ-TAIL-P-03_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: readback_mismatch_injected
+        tamper_field: result
+        version: 1.0.0
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - read-back verification failure
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-04-PASS-WITH-RISK
+    coverage_tags: [pass_with_risk]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-04
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: High
+        acceptance: complete
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-04/05-测试验收/REQ-TAIL-P-04_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: PASS_WITH_RISK
+      can_continue: true
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: true
+      completion_source_established: true
+      manifest_completed_recommendation: true
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers: []
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-05-INCOMPLETE-RISK-ACCEPTANCE
+    coverage_tags: [invalid_risk_acceptance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-05
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: High
+        acceptance: incomplete
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-05/05-测试验收/REQ-TAIL-P-05_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - High risk without complete acceptance
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-06-CRITICAL-RISK
+    coverage_tags: [invalid_risk_acceptance]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-06
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: in_progress
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: Critical
+        acceptance: incomplete
+      pipeline:
+        status: COMPLETED
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-06/05-测试验收/REQ-TAIL-P-06_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - Critical risk cannot be accepted
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
+
+  - id: TAIL-P-07-PRECOMPLETED-WITHOUT-SOURCE
+    coverage_tags: [precompleted_without_source]
+    gate_type: documentation_governance_tail_completion
+    input:
+      requirement:
+        id: REQ-TAIL-P-07
+        manifest_present: true
+        manifest_requirement_match: true
+      work_kind: actual_implementation
+      tail:
+        required: true
+        scope: determined
+        status: completed
+        completion_source_present: false
+        completion_source_current: false
+      artifacts:
+        - item: 03-实现记录
+          status: current
+          version_matches: true
+        - item: 04-代码审核
+          status: current
+          version_matches: true
+        - item: 05-测试验收
+          status: current
+          version_matches: true
+      skipped_items: []
+      blocking_items: []
+      business_domain_sync:
+        decision: NOT_REQUIRED
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+        write_authorized: false
+      reconcile:
+        decision: not_required
+        execution_required: false
+        execution_status: done
+        execution_result: not_required
+        freshness: current
+      entry_coverage:
+        applicable: false
+        status: not_applicable
+        freshness: current
+      regate:
+        required: false
+        result: not_applicable
+        freshness: current
+      risk:
+        level: none
+        acceptance: none
+      pipeline:
+        status: PARTIAL
+        freshness: current
+        scope_matched: false
+      reuse:
+        sync_reconcile_current: false
+      completion_evidence:
+        present: true
+      reviewed_artifact:
+        path: library/REQ-TAIL-P-07/05-测试验收/REQ-TAIL-P-07_测试验收.md
+        version: 1.0.0
+      persistence:
+        authorized: true
+        mode: real_write
+        version: 1.0.0
+        tamper_field: none
+    expected:
+      result: FAIL
+      can_continue: false
+      implementation_entry_eligible: not_applicable
+      tail_completion_eligible: false
+      completion_source_established: false
+      manifest_completed_recommendation: false
+      route: not_applicable
+      earliest_affected_node: not_applicable
+      required_regate: false
+      blockers:
+        - tail pre-completed state lacks current formal completion source
+      reused_existing_evidence: false
+      professional_skill_execution_requested: false
