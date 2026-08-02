@@ -257,7 +257,8 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 修改业务代码。
 - 更新任务状态。
 - 写 DocFlow 实现记录。
-- 输出 Shared Tail Handoff（含既有 Sync/Reconcile candidate evidence pointers）。
+- 仅当 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff（此时 `Shared Tail Handoff Emitted=true`、`Tail Entry Eligible=true`），且仅转交既有 Sync/Reconcile candidate evidence pointers；Handoff 不是 Tail completion evidence，existing Sync/Reconcile 结果只是 candidate evidence。
+- 任何非 `COMPLETED` 结果不输出 Shared Tail Handoff、不产生 Handoff、不进入 Shared Tail，只输出 `Core Stop And Route`（`Shared Tail Handoff Emitted=false`、`Tail Entry Eligible=false`）。
 
 必须显式确认：
 

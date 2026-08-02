@@ -4272,6 +4272,136 @@ errors.concat(r2_active_diags)
 errors.concat(r2_next_step_diags)
 errors.concat(r2_selftest_diags)
 
+# ── Pipeline Contract Side Effect Conditionality (Topic 07-E R3) ──
+# Static assertions for the R3 correction: the prose `## Side Effects` section
+# of the Pipeline Contract must itself be conditional. Other sections of the
+# same file being conditional (metadata, Responsibilities, Flow, Output,
+# Blocking, Gate) never excuses an unconditional Handoff bullet in this
+# section. Checks are section-scoped via extract_section; the bare presence of
+# `COMPLETED` elsewhere in the contract is not evidence for this section.
+# Read-only, deterministic, no network. The negative self-test uses an
+# in-memory string deep copy, verifies the mutation actually changed the text,
+# and never counts unknown exceptions or unrelated errors as rejection.
+
+PIPELINE_R3_CONTRACT_PATH = "skill-contracts/known-skills/sdlc-speckit-pipeline.md".freeze
+PIPELINE_R3_HANDOFF_AMBIGUOUS_PATTERN = /when\s+applicable/i.freeze
+PIPELINE_R3_BLOCKERS_CARRIED_PATTERN = /
+  (?:carried|携带).{0,60}Shared\s+Tail\s+Handoff|
+  Shared\s+Tail\s+Handoff.{0,60}(?:carried|携带)
+/ix.freeze
+
+def pipeline_r3_side_effect_diagnostics(scope)
+  diags = []
+  contract = scope[PIPELINE_R3_CONTRACT_PATH].to_s
+  contract_side_effects = extract_section(contract, "## Side Effects")
+  if contract_side_effects.empty?
+    diags << "pipeline-boundary-r3: contract ## Side Effects section is missing"
+    return diags
+  end
+
+  handoff_lines = contract_side_effects.lines.select { |line| line.include?("Shared Tail Handoff") }
+  if handoff_lines.empty?
+    diags << "pipeline-boundary-r3: contract ## Side Effects Handoff bullet is missing"
+    return diags
+  end
+
+  handoff_lines.each do |line|
+    next if line.include?("`COMPLETED`")
+    diags << "pipeline-boundary-r3: contract ## Side Effects Handoff bullet is unconditional (missing COMPLETED condition): #{line.strip}"
+  end
+
+  unless contract_side_effects.include?("Core Completion=true")
+    diags << "pipeline-boundary-r3: contract ## Side Effects must include the Core Completion=true success condition"
+  end
+  unless contract_side_effects.include?("Implement 完成")
+    diags << "pipeline-boundary-r3: contract ## Side Effects must include the Implement completed success condition"
+  end
+  unless contract_side_effects.include?("无 Core blocking item")
+    diags << "pipeline-boundary-r3: contract ## Side Effects must include the no Core blocking item success condition"
+  end
+  unless contract_side_effects.include?("非 `COMPLETED`")
+    diags << "pipeline-boundary-r3: contract ## Side Effects must include the non-COMPLETED Core Stop route"
+  end
+  unless contract_side_effects.include?("Core Stop And Route")
+    diags << "pipeline-boundary-r3: contract ## Side Effects must route non-COMPLETED results to Core Stop And Route"
+  end
+  if contract_side_effects.match?(PIPELINE_R3_HANDOFF_AMBIGUOUS_PATTERN)
+    diags << "pipeline-boundary-r3: contract ## Side Effects uses ambiguous \"when applicable\" Handoff conditionality"
+  end
+  if contract_side_effects.match?(PIPELINE_R3_BLOCKERS_CARRIED_PATTERN)
+    diags << "pipeline-boundary-r3: contract ## Side Effects carries blockers into the Shared Tail Handoff"
+  end
+  diags
+end
+
+# R3 negative self-test: the mutation must actually change the section text.
+# Only the `## Side Effects` Handoff bullet is replaced; Responsibilities,
+# metadata, and every other section stay untouched. The self-test must be
+# rejected by the real R3 diagnostic function with a diagnostic bound to the
+# Contract prose Side Effects / unconditional Handoff / missing COMPLETED
+# condition; empty diagnostics, nil, unrelated diagnostics, unknown exceptions,
+# or parser exceptions never count as successful rejection.
+PIPELINE_R3_SELFTESTS = [
+  {
+    id: "contract_side_effect_unconditional_handoff",
+    desc: "Contract ## Side Effects Handoff bullet restored to the unconditional old bullet",
+    scope_file: PIPELINE_R3_CONTRACT_PATH,
+    mutate: ->(text) {
+      text.sub(
+        /^- 仅当 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff.*$/,
+        "- 输出 Shared Tail Handoff（含既有 Sync/Reconcile candidate evidence pointers）。"
+      )
+    },
+    run: ->(scope) { pipeline_r3_side_effect_diagnostics(scope) },
+    expect: "Handoff bullet is unconditional"
+  }
+].freeze
+
+def pipeline_r3_self_test_diagnostics(scope)
+  diags = []
+  PIPELINE_R3_SELFTESTS.each do |test|
+    text = scope[test[:scope_file]]
+    if text.nil?
+      diags << "pipeline-boundary-r3: self-test #{test[:id]} cannot run: missing scope file #{test[:scope_file]}"
+      next
+    end
+    begin
+      mutated_text = test[:mutate].call(text.dup)
+      if mutated_text == text
+        diags << "pipeline-boundary-r3: self-test #{test[:id]} (#{test[:desc]}) mutation did not change the text; baseline text must not be treated as mutation output"
+        next
+      end
+      mutated_scope = scope.dup
+      mutated_scope[test[:scope_file]] = mutated_text
+      produced = test[:run].call(mutated_scope)
+      unless produced.any? { |d| d.include?(test[:expect]) }
+        diags << "pipeline-boundary-r3: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
+      end
+    rescue StandardError => e
+      diags << "pipeline-boundary-r3: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
+    end
+  end
+  diags
+end
+
+pipeline_r3_scope = {}
+pipeline_r3_contract_file = File.join(ROOT, PIPELINE_R3_CONTRACT_PATH)
+if File.file?(pipeline_r3_contract_file)
+  pipeline_r3_scope[PIPELINE_R3_CONTRACT_PATH] = File.read(pipeline_r3_contract_file)
+else
+  errors << "pipeline-boundary-r3: missing scope file #{PIPELINE_R3_CONTRACT_PATH}"
+end
+
+r3_side_effect_diags = []
+r3_selftest_diags = []
+if File.file?(pipeline_r3_contract_file)
+  r3_side_effect_diags = pipeline_r3_side_effect_diagnostics(pipeline_r3_scope)
+  r3_selftest_diags = pipeline_r3_self_test_diagnostics(pipeline_r3_scope)
+end
+
+errors.concat(r3_side_effect_diags)
+errors.concat(r3_selftest_diags)
+
 if errors.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
@@ -4281,6 +4411,7 @@ if errors.empty?
   puts "PIPELINE_BOUNDARY_ACTIVE_RUNTIME_CONDITIONALITY_VERIFIED true" if r2_active_diags.empty?
   puts "PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true" if r2_next_step_diags.empty?
   puts "PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true" if r2_selftest_diags.empty?
+  puts "PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true" if r3_side_effect_diags.empty? && r3_selftest_diags.empty?
   puts "skill contract validation ok"
 else
   warn "skill contract validation failed:"

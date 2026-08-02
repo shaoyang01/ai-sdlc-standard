@@ -255,6 +255,52 @@ PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true
 - static validation 不运行真实 Pipeline；CI success 不是 review PASS。
 - Topic 07 formal closure 仍 pending；D09 仍未实施。
 
+## Pipeline Contract Side Effect Conditionality 校验（Topic 07-E R3）
+
+R2 已覆盖 Contract metadata、Responsibilities、Flow Contract、Output Contract、Blocking Conditions 与 Gate Requirements；Contract prose `## Side Effects` 仍含无条件 Handoff bullet，构成合同缺口。R3 补充对该 section 的独立、fail-closed 静态校验。
+
+### Contract prose Side Effects 条件化
+
+- 同文件其他 section（metadata、Responsibilities、Flow、Output、Blocking、Gate）已条件化，不构成 `## Side Effects` 该 section 已条件化；该 section 必须独立满足条件化要求，不得把条件化委托给其他 section。
+- Handoff side effect 需要四项成功条件：Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成、无 Core blocking item。
+- 条件满足时：输出 Shared Tail Handoff、转交既有 Sync/Reconcile candidate evidence pointers、`Shared Tail Handoff Emitted=true`、`Tail Entry Eligible=true`。
+- 条件不满足（任何非 `COMPLETED` 结果）时：不输出 Shared Tail Handoff、输出 `Core Stop And Route`、`Shared Tail Handoff Emitted=false`、`Tail Entry Eligible=false`、不进入 Shared Tail。
+- Handoff 不是 Tail completion evidence；existing Sync/Reconcile 结果只是 candidate evidence。
+- 下列旧表述是被禁止的 regression / negative self-test / old invalid wording，不得作为当前有效合同（active Contract `## Side Effects` 必须 fail-closed）：
+
+```text
+- 输出 Shared Tail Handoff（含既有 Sync/Reconcile candidate evidence pointers）。
+```
+
+### Validator section-scoped 检查
+
+- 独立提取 `## Side Effects`（`extract_section(contract, "## Side Effects")`），只用 section-scoped 内容，不用整个 Contract 文本代替，不以全文件存在 `COMPLETED` 代替局部条件。
+- 检查：Handoff conditional bullet 存在且 Handoff 所在逻辑明确包含 `COMPLETED`；包含 Core Completion=true；包含 Implement completed 或等价明确表达（Implement 完成）；包含 no Core blocking item 或等价明确表达（无 Core blocking item）；包含非 `COMPLETED` → Core Stop And Route；不存在无条件 Handoff bullet。
+- 以下情况必须失败：Handoff bullet 不含 `COMPLETED`；只写“实现完成后输出 Handoff”或“Core 完成后输出 Handoff”；只在 Responsibilities 或 metadata 中存在 `COMPLETED`/conditional；section 没有非 `COMPLETED` 路由；section 允许所有结果输出 Handoff；使用 ambiguous “when applicable”；把 blocker 一并携带进 Handoff。
+- Diagnostic 前缀为 `pipeline-boundary-r3:`，明确区分 section missing / Handoff bullet missing / Handoff bullet unconditional / Core Completion condition missing / Implement completion condition missing / no-blocker condition missing / non-COMPLETED Core Stop route missing，不复用含义模糊的 generic error。
+
+### R3 negative self-test
+
+- self-test ID `contract_side_effect_unconditional_handoff`：只 mutation Contract prose `## Side Effects` 的 Handoff bullet（替换为无条件旧 bullet），不修改 Responsibilities、metadata 或其他 section。
+- self-test 调用真实 R3 diagnostic function；expected diagnostic 绑定 Contract prose Side Effects / unconditional Handoff / missing COMPLETED condition。
+- mutation 必须真实改变文本（`mutated_text != original_text`）；若 `sub` 未改变文本，self-test 失败并输出明确 diagnostic，不得把 baseline 文本当 mutation 结果。
+- 空 diagnostics、nil、无关 diagnostics、未知异常或 parser exception 均不得视为成功拒绝。
+
+### R3 marker
+
+成功时（Contract Side Effects section diagnostic 为空、R3 self-test diagnostic 为空、baseline R1/R2 diagnostics 为空、全局 errors 为空）输出：
+
+```text
+PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
+```
+
+五个 R1 markers、三个 R2 markers 与 `skill contract validation ok` 继续保留并真实输出。
+
+### 边界
+
+- 该静态校验 read-only、deterministic、no network；不运行真实 Pipeline、不执行真实 bootstrap、不执行 Sync/Reconcile、不运行真实 Tail Gate。
+- static validation 不运行真实 Pipeline；CI success 不是 review PASS。
+- Topic 07 formal closure 仍 pending；D09 仍未实施。
 
 ## validate-skill-contracts.rb 检查什么
 
