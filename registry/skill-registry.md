@@ -210,7 +210,7 @@ notes:
 ```yaml
 name: sdlc-gate-runner
 category: Auditor Skill
-stage: All Gates
+stage: All Gates / Development Path Entry / Tail Completion
 status: active
 skill_path:
   - skills/sdlc-gate-runner/SKILL.md
@@ -223,9 +223,12 @@ references:
   - skills/sdlc-gate-runner/references/output-report.md
 required_schema:
   - templates/gate-result-template.md
+  - templates/artifact-manifest-template.md
 required_storage:
+  - ai-sdlc/development-path-governance.md
   - ai-sdlc/phase-gates.md
   - ai-sdlc/artifact-storage.md
+  - ai-sdlc/artifact-versioning.md
   - ai-sdlc/change-control.md
 side_effects:
   - write gate result report when requested
@@ -239,9 +242,25 @@ blocking_conditions:
   - required artifact is missing
   - gate result cannot be determined
   - PASS_WITH_RISK lacks risk acceptance
+  - missing or stale Development Path evidence
+  - invalid route
+  - missing Tail section
+  - actual implementation lacks 03/04/05
+  - missing or blocked Sync decision
+  - missing or blocked Reconcile decision
+  - incomplete required conditional execution
+  - required Entry Coverage pending, failed, or blocked
+  - required Re-Gate missing
+  - persisted completion Gate artifact missing
+  - unresolved blocking item
 notes:
-  - generic gate checker
+  - generic Gate checker
+  - Development Path Entry owner
+  - Tail Completion owner
   - does not replace specialized reviewers such as sdlc-solution-reviewer
+  - does not perform professional Tail work
+  - manifest is the Tail status authority
+  - formal completion requires a persisted current Gate artifact
 ```
 
 ### sdlc-implementation-recorder

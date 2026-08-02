@@ -305,13 +305,28 @@ Tail 不得通过修改文档或知识材料，把未批准的代码漂移合法
 
 ## 当前集成状态边界
 
-Task 07-A 只建立标准层基线。以下接入属于后续有限任务，本任务未实施、也不宣称已完成：
+本小节是 enforcement integration 的状态描述，不是 normative standard。normative standard 以上文全部流程语义为准；状态矩阵只描述各接入项在签署时刻的完成事实。状态矩阵只是描述，不赋予新的强制力。
 
-- Gate 和 Manifest Template convergence。
-- Solution Reviewer output alignment。
-- Gate Runner enforcement。
-- Sync 和 Reconcile public-tail metadata alignment。
-- Speckit Pipeline boundary alignment。
-- Scenario validation。
+### 状态矩阵
 
-在本文件中，normative standard 与 current enforcement integration 必须明确区分：上文全部流程语义为 normative standard；现有 Skill、Template、Validator 与 Pipeline 的当前行为以各自现有文件为准，直到后续接入任务完成。
+| 接入项 | 状态 | 说明 |
+| --- | --- | --- |
+| canonical standard baseline | implemented | 本文件已建立 Development Path 与 Shared Tail 的 canonical 标准基线。 |
+| Gate Result Template convergence | implemented | `templates/gate-result-template.md` 已包含两个特殊 Gate Type 与 Tail sections。 |
+| Artifact Manifest Template convergence | implemented | `templates/artifact-manifest-template.md` 已包含 canonical `documentation_governance_tail`。 |
+| Solution Reviewer Development Path alignment | implemented | `sdlc-solution-reviewer` 已输出 Development Path Decision 及路径路由。 |
+| Solution Reviewer initial Tail recommendation | implemented | `sdlc-solution-reviewer` 已输出初始 Tail required / scope / status 建议。 |
+| Sync public-tail metadata 与 library_driven support | implemented | `sdlc-speckit-sync` 已支持 `library_driven` / `speckit_driven` / `hybrid` 及 public-tail metadata。 |
+| Reconcile public-tail metadata 与 library_driven support | implemented | `sdlc-speckit-code-doc-reconcile` 已支持 `library_driven` 且不强制要求 `specs/**`。 |
+| Gate Runner Development Path Entry enforcement | implemented | `sdlc-gate-runner` 已执行 `development_path_entry` 门禁与路径路由规则。 |
+| Gate Runner Tail Completion enforcement | implemented | `sdlc-gate-runner` 已执行 `documentation_governance_tail_completion` 门禁与 persisted Gate 边界。 |
+| Speckit Pipeline boundary alignment | pending | Pipeline 编排收敛到 canonical Shared Tail 边界尚未实施。 |
+| Direct / Speckit / Tail 完整场景验证 | pending | 完整场景 fixture 验证尚未完成。 |
+| Topic 07 formal closure | pending | 本任务不关闭 Topic 07。 |
+
+说明：
+
+- 状态矩阵只是描述，不替代 normative standard。
+- 当前 Git/PR/CI 高于该矩阵；矩阵与仓库当前状态不一致时，以仓库当前状态为准。
+- 本任务只收敛标准包与 Skill 合同，不实施 D09。
+- D09 尚未实施。
