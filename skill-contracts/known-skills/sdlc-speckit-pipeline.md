@@ -5,8 +5,8 @@
 ```yaml
 name: sdlc-speckit-pipeline
 version: 0.1.0
-category: Workflow Skill / Executor Skill / Sync Skill
-stage: Optional full SDD path after solution review
+category: Workflow Skill
+stage: Speckit SDD Core through Implement
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
@@ -28,7 +28,7 @@ output_artifacts:
   - implementation changes
   - library/{requirement_id}/03-实现记录/*
   - library/{requirement_id}/04-交付总结/*
-  - sync result for .specify/business_domain/**
+  - conditional Shared Tail Handoff for COMPLETED result only
 required_schema:
   - ess/specification-schema.md
   - ess/review-schema.md
@@ -57,13 +57,13 @@ side_effects:
   - modify code during implement stage
   - update task status
   - recommend or write new-rail implementation process products
-  - update .specify/business_domain/** during sync
   - recommend or write DocFlow implementation records
   - recommend or write DocFlow delivery summaries
+  - produce Shared Tail Handoff only when Pipeline Result=`COMPLETED`
   - never read or write .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** during new-rail runtime
 can_modify_code: true
 can_modify_docs: true
-can_modify_knowledge_base: true
+can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
   - solution review is missing
@@ -75,8 +75,11 @@ blocking_conditions:
   - user requested full SDD but solution review is missing
   - implementation requires undefined business behavior
   - runtime execution would require a legacy Skill or legacy .specify/memory/**, .specify/workflow/**, or .specify/coding_guide/** input
-  - Clarify passed but required downstream authorization for continuous execution is missing
+  - Clarify passed but required Core authorization for continuous execution is missing
   - any stage has unresolved Critical issue
+  - current business-domain knowledge is missing and the independent business-domain bootstrap has not completed
+  - a Pipeline write-mode business-domain bootstrap request is detected
+  - a bootstrap preview command lacks --dry-run
 ```
 
 ## Standard Path Resolution
@@ -87,18 +90,18 @@ blocking_conditions:
 
 ## Responsibilities
 
-`sdlc-speckit-pipeline` 是方案审阅后的可选完整 SDD 路径，也是 New-Rail Enhanced Speckit Pipeline 的运行期控制器。
+`sdlc-speckit-pipeline` 是方案审阅后的可选完整 SDD 路径，也是 New-Rail Enhanced Speckit Pipeline 的运行期控制器，运行边界为 Speckit SDD Core through Implement。
 
 它负责：
 
-- 在激活条件满足后串行执行 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile`。
+- 在激活条件满足后串行执行 `Preflight -> Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement`。
 - 在运行期只调度 `sdlc-speckit-*` 子 Skill，不调度 legacy `speckit-*` Skill。
-- 在 Clarify 之前按节点询问是否进入下一节点；Clarify 通过后连续执行 Plan / Tasks / Analyze / Implement / Sync / Reconcile。
+- 在 Clarify 之前按节点询问是否进入下一节点；Clarify 通过后连续执行 Plan / Tasks / Analyze / Implement。
 - 在 Domain Route 阶段输出 Pipeline Domain Route Summary，并在 feature id 已确定且进入 full SDD 时物化 `specs/{feature}/route.md`。
 - 复用已审阅的 `01-技术方案` 和 `02-方案审核`，避免重新解释需求。
 - 将 `sdlc-specification-writer` 的产物同步或派生为 `specs/{feature}/spec.md`。
-- 在实现完成后将稳定业务事实回写到 `.specify/business_domain/**`。
-- 在 DocFlow 和 manifest 中形成阶段结果、实现记录、交付总结、Sync 状态和 Reconcile 结论建议。
+- 只有 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff，转交既有 Sync/Reconcile 的 candidate evidence pointers；任何非 `COMPLETED` 结果输出 Core Stop And Route，不生成 Handoff。
+- 在 DocFlow 和 manifest 中形成阶段结果、实现记录、交付总结建议；manifest is status authority。
 - 在 Implement 阶段汇总 `specs/{feature}/implementation.md`、
   `workflow-status.md`、`debug-guide.md` 和 `observability.md` 的产物状态；
   manifest is status authority。
@@ -113,6 +116,8 @@ blocking_conditions:
 - 直接替代子 Skill 的合同、Gate 或停止条件。
 - 把 legacy Skill 或 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 作为运行期依赖。
 - 在目标项目运行期执行新旧文档对比；旧版内容只能作为标准包开发期 development-time fixture / parity fixture。
+- 执行 Sync、Reconcile 或 Tail Completion Gate；这些属于 Shared Tail，位于 Pipeline 边界之外。
+- 判断 Shared Tail 是否完成；Pipeline result 不能替代 Tail Completion Gate。
 
 ## Activation Contract
 
@@ -158,7 +163,7 @@ blocking_conditions:
 - 缺少方案或方案审核时停止。
 - 缺少 manifest 时可以创建或建议创建，但必须记录 Activity Log。
 - 缺少项目 profile 时，先执行 Speckit project bootstrap。
-- 缺少业务知识库时，先执行 business-domain bootstrap，不能跳过治理检查。
+- 缺少当前 business-domain 知识时，在 Preflight 阻塞并输出 `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`；bootstrap config 只是 readiness input，Pipeline 不生成 knowledge、不执行 write-mode bootstrap；实际 bootstrap 需要 Pipeline 外独立授权，独立 bootstrap 完成后重新运行 Preflight，并重新检查新证据的 freshness、scope 与 ownership；preview 只能使用 `--dry-run`。
 - 缺少 profile 声明为 required 的 project-context 文档时停止。
 - 所需事实只存在于 legacy `.specify/memory/**`、`.specify/workflow/**` 或 `.specify/coding_guide/**` 时停止，要求目标代码证据、business_domain 证据或用户确认。
 
@@ -175,8 +180,6 @@ Preflight
 -> Tasks
 -> Analyze
 -> Implement
--> Sync
--> Reconcile
 ```
 
 阶段规则：
@@ -189,16 +192,16 @@ Preflight
 - `Plan`：不得改变已通过方案的业务边界。
 - `Tasks`：任务必须追溯到已审阅方案、plan 或审核修复项。
 - `Analyze`：审计 plan/tasks/specs 一致性，不替代 `sdlc-solution-reviewer`。
-- `Implement`：不得实现方案外行为。
-- `Sync`：只沉淀稳定事实，不把聊天片段作为事实源。
-- `Reconcile`：默认只读 audit，除非用户明确要求 apply。
+- `Implement`：不得实现方案外行为。Implement 是 Pipeline 的最后一个阶段，Core 精确截止 Implement。
+- Sync / Reconcile / Shared Tail / Tail Completion Gate 不是 Pipeline runtime stage；Implement 完成后，只有 Pipeline Result=`COMPLETED` 时 Pipeline 才输出 Shared Tail Handoff；任何非 `COMPLETED` 结果只输出 Core Stop And Route。
 
 Clarify 边界确认规则：
 
 - Preflight -> Domain Route、Domain Route -> Specify、Specify -> Clarify 都必须询问是否进入下一节点。
-- Clarify 通过后，Plan -> Tasks -> Analyze -> Implement -> Sync -> Reconcile 按顺序连续执行，不再询问是否进入下一节点。
-- 进入连续执行区前，必须已经具备实现授权、Sync 目标和写授权、Reconcile apply 授权（如需 apply）以及风险接受 owner 确认（如适用）。
-- 如果这些授权缺失，停在 Clarify 边界，不进入后续连续执行区。
+- Clarify 通过后，Plan -> Tasks -> Analyze -> Implement 按顺序连续执行，不再询问是否进入下一节点。
+- 进入连续执行区前，必须已经具备实现授权以及 Core 适用的 accepted-risk owner 确认（如适用）。
+- Sync 目标和写授权、Reconcile apply 授权不作为 Core 前置要求；Tail 专业授权由 Shared Tail 中对应 Skill 在需要时获取，Pipeline 不提前代替 Tail owner 作决定。
+- 如果 Core 所需授权缺失，停在 Clarify 边界，不进入后续连续执行区。
 
 ## Output Contract
 
@@ -231,8 +234,18 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - `specs/{feature}/observability.md`
 - `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md`
 - `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md`
-- Sync 目标路径和结果
-- manifest Activity Log / Speckit Sync 更新建议
+- Result Scope: Speckit SDD Core
+- Pipeline Result
+- Core Completion
+- Shared Tail Handoff Emitted
+- Tail Entry Eligible
+- Shared Tail Status
+- Tail Completion Gate Result: not_evaluated / not_applicable
+- Completion Source Established: false
+- Tail Status Recommendation
+- Next Step
+- Shared Tail Handoff（仅当 `Shared Tail Handoff Emitted=true`，即 Pipeline Result=`COMPLETED` 时输出；非 COMPLETED 结果输出 `Core Stop And Route`，该 section 不是 Tail Handoff、不是 Tail evidence）
+- manifest Activity Log 更新建议
 
 `specs/{feature}/route.md` 必须包含 Requirement ID、Feature ID、Route Type、Project Type Profiles、Business Domain Targets、Business Knowledge Read Set、Entry Coverage Surface、Sync Targets、Create-If-Missing Decision、Unresolved Questions、Blocking Items、New-Rail Runtime Check、Source Artifacts 和 Manifest Recommendation。New-Rail Runtime Check 必须明确 `Runtime child skills: sdlc-speckit-* only`、`Legacy Skill usage: none`、`Legacy document runtime input: none`、`Legacy document write target: none`。
 
@@ -243,15 +256,15 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - 写 `specs/**`。
 - 修改业务代码。
 - 更新任务状态。
-- 回写 `.specify/business_domain/**`。
 - 写 DocFlow 实现记录。
+- 仅当 Pipeline Result=`COMPLETED`、Core Completion=true、Implement 完成且无 Core blocking item 时输出 Shared Tail Handoff（此时 `Shared Tail Handoff Emitted=true`、`Tail Entry Eligible=true`），且仅转交既有 Sync/Reconcile candidate evidence pointers；Handoff 不是 Tail completion evidence，existing Sync/Reconcile 结果只是 candidate evidence。
+- 任何非 `COMPLETED` 结果不输出 Shared Tail Handoff、不产生 Handoff、不进入 Shared Tail，只输出 `Core Stop And Route`（`Shared Tail Handoff Emitted=false`、`Tail Entry Eligible=false`）。
 
 必须显式确认：
 
 - Clarify 之前进入下一阶段。
 - 进入 post-Clarify continuous execution 前的实现授权。
-- 进入 post-Clarify continuous execution 前的 Sync 目标和写授权。
-- 进入 post-Clarify continuous execution 前的 `sdlc-speckit-code-doc-reconcile --apply` 授权（仅当需要 apply）。
+- Core 适用的 accepted-risk owner（如适用）。
 
 禁止：
 
@@ -259,7 +272,9 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Clarify 之后继续做 stage-by-stage transition prompt。
 - 在 Clarify 阶段扩大需求范围。
 - 在 Implement 阶段补造未定义业务规则。
-- 在 Sync 阶段沉淀未验证事实。
+- 执行 Sync、Reconcile 或 Tail Completion Gate；知识写入、Reconcile apply 与 Tail Gate persistence 不属于 Pipeline。
+- 执行 write-mode business-domain bootstrap；`.specify/business_domain/**` write 不属于 Pipeline，首次 business-domain 生成必须由 Pipeline 外独立授权 bootstrap 完成。
+- 把 Pipeline result 写成 requirement completion 或 formal Tail evidence。
 
 ## Blocking Conditions
 
@@ -273,11 +288,21 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 - Plan 改变需求边界。
 - Tasks 出现无法追溯到方案或计划的业务任务。
 - Implement 需要猜测业务规则。
-- Sync 目标文档无法判断。
 - 运行期需要 legacy Skill 或 legacy `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 输入。
-- Clarify 已通过但后续连续执行所需授权缺失。
+- Clarify 已通过但 Core 连续执行所需授权（实现授权或 Core accepted-risk owner）缺失。
 - Route Type 为 `unknown` 且缺少显式 route 确认。
 - create-if-missing 缺少 L1、L2、L4 id、owner、authorization 或 entry coverage status。
+- 当前 business-domain 知识缺失且独立 bootstrap 未完成（输出 `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`，返回 Preflight）。
+- 检测到 Pipeline write-mode business-domain bootstrap 请求。
+- bootstrap preview 命令缺少 `--dry-run`。
+
+不得因以下原因阻塞 Core：
+
+- Sync 目标或写授权缺失。
+- Reconcile apply 授权缺失。
+- Tail 项尚未完成。
+
+Tail blocker（Sync/Reconcile decision/execution pending、Entry Coverage pending、Tail Re-Gate pending、Tail completion pending）只有在 Core 为 `COMPLETED` 时才能进入 Shared Tail Handoff；Core blocker 导致结果非 `COMPLETED` 时不得生成 Handoff。不得把已完成的 Core 伪装成未执行，也不得声称所有 blockers 都会携带进 Handoff。
 
 ## Gate Requirements
 
@@ -290,6 +315,5 @@ Any DocFlow requirement artifact produced or updated by this skill must follow
 
 - 每一阶段都必须输出结论、风险和下一步确认。
 - 实现完成后必须更新或建议更新 `03-实现记录`。
-- Sync 完成后必须更新或建议更新 manifest 的 Speckit Sync 区块。
-- Reconcile 完成后必须更新或建议更新 manifest 的 Reconcile 结论。
+- 只有 Pipeline Result=`COMPLETED`（Core Completion=true）时输出 Shared Tail Handoff；Handoff 不是正式 Gate artifact，不形成 completion source；非 `COMPLETED` 结果输出 Core Stop And Route。
 - 如果任一阶段发现规格遗漏，必须回到 `01-技术方案` / `02-方案审核` 重新 Gate。

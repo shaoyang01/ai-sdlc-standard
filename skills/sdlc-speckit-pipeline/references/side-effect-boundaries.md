@@ -2,7 +2,10 @@
 
 ## Pipeline Controller Boundary
 
-The Pipeline controller can coordinate side effects, but child skills own execution details.
+The Pipeline controller coordinates only Core child skills (Preflight, Domain
+Route, Specify, Clarify, Plan, Tasks, Analyze, Implement) and ends after
+Implement. It does not coordinate Tail execution: Sync, Reconcile, and the Tail
+Completion Gate run inside the Shared Documentation Governance Tail.
 
 Do not directly perform child-stage work when a specialized `sdlc-*` skill exists.
 
@@ -24,7 +27,7 @@ If a required fact exists only in a legacy path, stop and request target-code ev
 
 Pre-Clarify stages may ask whether to enter the next stage.
 
-After Clarify passes, Plan, Tasks, Analyze, Implement, Sync, and Reconcile execute as a continuous segment without stage-by-stage transition prompts. Required write authorizations must be collected before entering that segment; otherwise stop at the Clarify boundary.
+After Clarify passes, Plan, Tasks, Analyze, and Implement execute as a continuous Core segment without stage-by-stage transition prompts. The continuous segment does not include Sync or Reconcile. Required Core authorizations (implementation authorization, Core accepted-risk owner) must be collected before entering that segment; otherwise stop at the Clarify boundary.
 
 ## Documentation Side Effects
 
@@ -49,18 +52,59 @@ Before code modification:
 
 ## Knowledge Side Effects
 
-Knowledge writes are allowed only inside `sdlc-speckit-sync` and only when:
+The Pipeline and its Pipeline Core must not write knowledge. Knowledge writes
+belong only to `sdlc-speckit-sync` inside the Shared Tail, and only when:
 
 - Target path is explicit.
 - Facts are stable, reusable, and verified.
 - User authorizes writing.
 - Existing knowledge ownership is clear.
 
+The Pipeline Handoff (emitted only when Pipeline Result=`COMPLETED`) may only
+hand over target/evidence candidates (`candidate_evidence_only=true`); it
+never performs the knowledge write. Any non-COMPLETED result produces `Core
+Stop And Route` and no Handoff.
+
+### Bootstrap Write Boundary
+
+The Pipeline does not execute a write-mode business-domain bootstrap. The
+knowledge write prohibition includes bootstrap: bootstrap generates
+`.specify/business_domain/**`, which the Pipeline must not create, overwrite, or
+generate as a Preflight side effect.
+
+A dry-run preview is a read-only readiness command
+(`scripts/bootstrap-business-domain.sh --dry-run`); it must not generate target
+knowledge and must not include `--force`. Actual bootstrap requires independent
+authorization and executes outside the Pipeline; the Pipeline only reports
+`INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` and re-enters Preflight after
+the independent bootstrap evidence is current.
+
+Shared Tail Sync is not a substitute for a missing Core knowledge input:
+`INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED` must not be used to bypass the
+first-time bootstrap via `sdlc-speckit-sync`.
+
 ## Reconcile Side Effects
 
-Reconcile defaults to read-only audit.
+The Pipeline does not execute Reconcile audit or apply. Reconcile belongs to
+the Shared Tail. Apply authorization is obtained independently by the Reconcile
+owner (`sdlc-speckit-code-doc-reconcile`) when apply is requested.
 
-Apply document or knowledge updates only when the user explicitly requests apply behavior and the responsible target is clear.
+## Manifest Side Effects
+
+The Tail status recommendation depends on the actual Pipeline Result:
+
+- Only Pipeline Result=`COMPLETED` (Core Completion=true) may recommend Tail status=`in_progress` with Tail Gate result `not_evaluated`.
+- Any non-COMPLETED result must keep Tail status `unchanged` and must not recommend entering the Shared Tail.
+- No Pipeline result may recommend Tail completed.
+- The Pipeline must not set a completion source; Tail completion is decided by the Manifest current state and the Tail Completion Gate.
+
+The Manifest Next Step must be result-specific:
+
+- COMPLETED -> Shared Documentation Governance Tail.
+- PARTIAL -> remaining Core work.
+- BLOCKED -> earliest affected Core node.
+- REGATE_REQUIRED -> required upstream Re-Gate.
+- DIRECT_IMPLEMENTATION_RECOMMENDED -> Direct Implementation route.
 
 ## Command Side Effects
 

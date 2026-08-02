@@ -138,13 +138,13 @@ Shared Tail 位于该 canonical Core 边界之外：
 
 Speckit SDD Core 的 Pipeline result、Stage Summary 或 workflow-status snapshot 均不能替代 Shared Tail 与 Tail Completion Gate。
 
-### 当前 Pipeline 实现差异（current implementation gap）
+### 当前 Pipeline 集成状态（Task 07-E 对齐后）
 
 必须诚实区分 canonical 目标与当前实现事实：
 
 - Canonical 目标：Speckit SDD Core through Implement，随后进入 Shared Tail。
-- 当前实现事实：当前 `sdlc-speckit-pipeline` 仍按现有实现串行调度 Implement 之后的 Sync 和 Reconcile。这是当前实现状态，不是 canonical Core 边界。
-- 将当前 Pipeline 编排收敛到 canonical Shared Tail 边界属于后续 Task 07-E；本任务不修改 Pipeline Skill、Contract、references 或执行行为，也不声称 07-E 已实施。
+- 当前实现事实：`sdlc-speckit-pipeline` 的运行边界已收敛为 canonical Shared Tail 边界——fixed Core stage order 精确截止 Implement，Implement 后输出 Shared Tail Handoff；Sync、Reconcile 与 Tail Completion Gate 位于 Pipeline 外部，不属于 Speckit SDD Core。
+- 该对齐由 Task 07-E 实施，只收敛标准包、Pipeline Skill、Contract、references、Registry 与静态校验；它不代表 Topic 07 formal closure，也不代表 D09 implemented。
 - 当前 Pipeline 已产生且 current、non-stale、适用范围明确的 Sync 或 Reconcile 结果，可以作为 Shared Tail 候选证据；是否满足 Tail requirement，仍由 Manifest 当前状态和 Tail Completion Gate 判断，不得因此自动重复执行 Sync 或 Reconcile。
 - 当前 Pipeline result 不能替代 Tail Completion Gate。
 
@@ -320,7 +320,7 @@ Tail 不得通过修改文档或知识材料，把未批准的代码漂移合法
 | Reconcile public-tail metadata 与 library_driven support | implemented | `sdlc-speckit-code-doc-reconcile` 已支持 `library_driven` 且不强制要求 `specs/**`。 |
 | Gate Runner Development Path Entry enforcement | implemented | `sdlc-gate-runner` 已执行 `development_path_entry` 门禁与路径路由规则。 |
 | Gate Runner Tail Completion enforcement | implemented | `sdlc-gate-runner` 已执行 `documentation_governance_tail_completion` 门禁与 persisted Gate 边界。 |
-| Speckit Pipeline boundary alignment | pending | Pipeline 编排收敛到 canonical Shared Tail 边界尚未实施。 |
+| Speckit Pipeline boundary alignment | implemented | Pipeline fixed Core ends at Implement；Implement 后输出 Shared Tail Handoff；Sync/Reconcile/Tail Gate 位于 Pipeline 外部；不代表 Topic 07 formal closure；不代表 D09 implemented。 |
 | Direct / Speckit / Tail 完整场景验证 | implemented | 标准包开发期 validation-only 场景一致性验证已接入（`fixtures/gate-runner-scenarios` + `scripts/validate-gate-runner-scenarios.rb`）；仅代表 harness 一致性，不运行真实 Gate。 |
 | Topic 07 formal closure | pending | 本任务不关闭 Topic 07。 |
 

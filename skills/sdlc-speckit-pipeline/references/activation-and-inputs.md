@@ -29,9 +29,20 @@ Collect:
 - Gate result: `PASS` or accepted `PASS_WITH_RISK`.
 - `.specify/project-governance-profile.yaml` when target repository uses Speckit governance.
 - `.specify/entry-coverage-profile.yaml` when entry coverage or sync is required.
-- `.specify/business-domain-bootstrap.yaml` when `.specify/business_domain/**` has not been generated yet.
+- `.specify/business-domain-bootstrap.yaml` as a readiness input only when `.specify/business_domain/**` has not been generated yet.
 - Project private documents declared in `.specify/project-governance-profile.yaml` when they are required for the current stage.
 - `library/{requirement_id}/manifest.md`, if available.
+
+## Missing Business Domain Knowledge
+
+When current `.specify/business_domain/**` knowledge is missing:
+
+- The bootstrap config is a readiness input only; it does not authorize the Pipeline to generate knowledge.
+- The Pipeline blocks at Preflight and outputs `INDEPENDENT_BUSINESS_DOMAIN_BOOTSTRAP_REQUIRED`.
+- Actual bootstrap happens outside the Pipeline and requires independent authorization; it is not owned by the Pipeline controller.
+- Re-run Preflight after the independent bootstrap evidence is current; re-check freshness, scope, and ownership of the newly generated evidence.
+- Preview commands use `scripts/bootstrap-business-domain.sh --dry-run` only (when project command policy allows preview). Preview must not produce target repository knowledge writes and must not include `--force`.
+- The Pipeline never runs a write-mode business-domain bootstrap and never auto-generates business-domain knowledge as a Preflight side effect.
 
 ## Recommended Inputs
 
