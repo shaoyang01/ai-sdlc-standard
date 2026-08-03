@@ -209,7 +209,7 @@ PIPELINE_BOUNDARY_SELFTESTS_PASS true
 ### 边界
 
 - 该静态校验 read-only、deterministic、no network；不执行真实 bootstrap、不运行真实 Pipeline、不执行 Sync/Reconcile、不运行真实 Tail Gate。
-- CI success 不是 review PASS；Topic 07 formal closure 仍 pending；D09 仍未实施。
+- CI success 不是 review PASS；该 R1 校验不独立建立 Topic 07 formal closure，正式 closure 由聚合式 Topic 07 Formal Closure validator 建立；D09 仍未实施。
 
 ## Pipeline Active Runtime Conditionality 校验（Topic 07-E R2）
 
@@ -253,7 +253,7 @@ PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true
 
 - 该静态校验 read-only、deterministic、no network；不运行真实 Pipeline、不执行真实 bootstrap、不执行 Sync/Reconcile、不运行真实 Tail Gate。
 - static validation 不运行真实 Pipeline；CI success 不是 review PASS。
-- Topic 07 formal closure 仍 pending；D09 仍未实施。
+- 该 R2 校验不独立建立 Topic 07 formal closure，正式 closure 由聚合式 Topic 07 Formal Closure validator 建立；D09 仍未实施。
 
 ## Pipeline Contract Side Effect Conditionality 校验（Topic 07-E R3）
 
@@ -300,7 +300,28 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 
 - 该静态校验 read-only、deterministic、no network；不运行真实 Pipeline、不执行真实 bootstrap、不执行 Sync/Reconcile、不运行真实 Tail Gate。
 - static validation 不运行真实 Pipeline；CI success 不是 review PASS。
-- Topic 07 formal closure 仍 pending；D09 仍未实施。
+- 该 R3 校验不独立建立 Topic 07 formal closure，正式 closure 由聚合式 Topic 07 Formal Closure validator 建立；D09 仍未实施。
+
+## Topic 07 Formal Closure Validation
+
+`validate-skill-contracts.rb` 新增聚合式、fail-closed 的 Topic 07 Formal Closure validator（`topic07_closure_diagnostics`），对 Topic 07 formal closure 状态建立聚合校验。该 validator 读取 `ai-sdlc/development-path-governance.md` 与 `docs/VALIDATION.md`：
+
+- Topic 07 closure 是聚合式状态校验：四个前置 implemented rows 必须精确匹配且各出现一次——P1 Gate Runner Development Path Entry enforcement、P1 Gate Runner Tail Completion enforcement、P2 Direct / Speckit / Tail 完整场景验证（validation-only scenario conformance）、07-E Speckit Pipeline boundary alignment。
+- 五个状态 row（四个前置 + `Topic 07 formal closure`）必须精确匹配且唯一，closure row 说明非空；任何 pending 变体、重复 row、缺失 row 或非 implemented 状态均失败。
+- dedicated closure section（`### Topic 07 Formal Closure`）必须存在且唯一，section 内必须包含四项 basis、`validation-only`、Manifest authority、Pipeline result 不能替代 Tail Completion Gate、D09 尚未实施、不代表真实 target-project runtime 执行、不代表真实 requirement Tail completed 等边界；不使用全文件关键词替代 section-scoped 检查，也不允许 section 提升 scenario harness 的 authority。
+- D09 必须保持未实施；任何 D09 implemented row 均失败。
+- validator 使用 fail-closed diagnostics，前缀 `topic07-formal-closure:`，区分 status matrix missing / prerequisite row missing / prerequisite row not implemented / closure row missing / closure row duplicate / closure row not implemented / closure row explanation empty / closure dedicated section missing / closure section required boundary missing / scenario authority escalated / Manifest authority missing / Pipeline result boundary missing / D09 marked implemented / Validation doc closure section missing 等，不输出 generic failure。
+- negative self-tests 使用内存字符串 deep copy（不修改仓库文件），覆盖：closure row 改回 pending、Gate Runner Entry enforcement 改回 pending、Gate Runner Tail Completion enforcement 改回 pending、scenario validation 改回 pending、Pipeline boundary 改回 pending、D09 标记 implemented、dedicated section 被移除、closure row 被复制。
+- 每个 self-test 声明 ID、mutation 文件与 expected diagnostic，验证 mutation 真实改变文本（mutation effectiveness 必须检查，baseline 文本不得当作 mutation 结果）；nil、空或无关 diagnostics 不能算成功；未知异常和 parser exception 不能算成功拒绝。
+- 成功 marker 为 `TOPIC07_FORMAL_CLOSURE_VALIDATED true`，只在 closure baseline diagnostics 为空、closure self-test diagnostics 为空、全部既有 validator diagnostics 为空且全局 `errors` 为空时输出。
+
+边界：
+
+- scenario harness 单独不能建立 Topic 07 closure；Pipeline validator 单独不能建立 Topic 07 closure；Gate Runner runtime 单独不能建立 Topic 07 closure；closure 只由聚合 validator 建立。
+- closure 校验不运行真实 target-project Gate，不执行真实 Pipeline，不执行 Sync/Reconcile，不运行真实 Tail Gate。
+- closure 不证明任意 requirement Tail completed，不建立 completion source。
+- CI success 不是 implementation review PASS。
+- D09 仍未实施。
 
 ## validate-skill-contracts.rb 检查什么
 
