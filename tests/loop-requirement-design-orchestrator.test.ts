@@ -1338,7 +1338,7 @@ async function main(): Promise<void> {
   // ═══════════════════════════════════════ 11. regression kinds (real D01 store)
   startSection();
   {
-    console.log("11. all ten canonical kinds through the real D01 temp store");
+    console.log("11. all D01–D08 canonical kinds through the real D01 temp store");
     const { store, tempRoot, controlRoot } = makeRealStore();
     const oldKinds = ["code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata"] as const;
     const newKinds = ["requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result"] as const;

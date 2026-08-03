@@ -114,7 +114,7 @@
 | LOOP-DELIVERY-06 | Autonomous Test, Fix, and Review Loop | source_verified | 有界测试/修复/审核循环结果与证据 | D01、D02、D03、D05 | `core/loop-autonomous-delivery-loop.ts` |
 | LOOP-DELIVERY-07 | Recoverable Git Delivery Publisher | source_verified | 一个 commit、一次 push、Draft PR 与恢复 | D01、D02、D03、D06 | `core/loop-delivery-publisher.ts` |
 | LOOP-DELIVERY-08 | Requirement and Design Orchestration | source_verified | 自然语言需求到 direct executor input | D01、D06 | `core/loop-requirement-design-orchestrator.ts` |
-| LOOP-DELIVERY-09 | Review and Governance Tail | partially_recovered | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D05～D07 | 无 production module |
+| LOOP-DELIVERY-09 | Review and Governance Tail | recovered | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D03、D06、D07、Topic 07 Shared Tail 稳定合同 | exact contract accepted；A1 governance-tail-result contract 存在；无 production coordinator；D09 not implemented |
 | LOOP-DELIVERY-10 | Real Single-Repository Acceptance and Hardening | recovered | 真实单仓 MVP 验收与硬化 | D01～D09 | 无 production module |
 | LOOP-ADVANCED-11 | Real Review, Feedback, and Re-Gate | recovered | 真实反馈回流与 Re-Gate | D09、D10 | 无 production module |
 | LOOP-ADVANCED-12 | Complex Requirement and Speckit Delivery | recovered | 复杂需求与 Speckit 共同治理尾部 | D08、D09 | 无 production module |
@@ -269,19 +269,19 @@
 
 ## LOOP-DELIVERY-09
 
-- **Definition status**：partially_recovered
-- **Objective**：Review and Governance Tail——承接 D08 自然语言需求路径，与 D05～D07 的实现、测试、审核、Draft PR evidence 形成治理闭环，支持“自然语言需求到带治理证据 Draft PR”的阶段成果。
-- **Problem closed**（已证明的部分）：自然语言需求路径缺治理收口，导致 Draft PR 缺乏可核验的治理证据闭环。
-- **Required inputs**：D08 orchestration artifacts；D05～D07 的实现/测试/审核/Draft PR evidence。
-- **Required outputs**：带治理证据的 Draft PR 事实集（精确证据集合待恢复）。
-- **Depends on**：D08；D05、D06、D07。
-- **In scope**：治理闭环的定义与编排语义（高层）。
-- **Out of scope**（未恢复项，明确列出）：精确 production module、D08→D05/D06/D07 调用 owner、evidenced Draft PR 必需证据集合、与 Topic 07 Shared Documentation Governance Tail 的复用/边界、Manifest/Sync/Reconcile/Gate owner。
-- **Completion contract**：**pending exact contract recovery**；不得把 shared_tail_status=pending 的 coordinator 写成 D09 completion。
-- **Expected evidence**：待精确合同恢复后定义；当前不得定义文件白名单或实施 Prompt。
-- **Relationship to previous stage**：承接 D08 自然语言需求路径。
+- **Definition status**：recovered
+- **Objective**：Review and Governance Tail——承接 D08 自然语言需求路径（`direct / DIRECT_READY`），与 D06 的实现、测试、审核与 D07 governed publish 形成治理闭环，支持“自然语言需求到带治理证据 Draft PR”的阶段成果。
+- **Problem closed**（已接受的部分）：自然语言需求路径缺治理收口，导致 Draft PR 缺乏可核验的治理证据闭环；已接受的 D09 exact contract 定义了 direct-only 消费、D03 workspace 准备、D06 执行、Tail Completion Gate 先于 D07 publish、D07 governed mode 发布最终治理文件集合等边界。
+- **Required inputs**：D08 `direct / DIRECT_READY` artifacts；D06 delivery result 与 evidence；D07 governed publish 前的治理证据。
+- **Required outputs**：带治理证据的 Draft PR 事实集；A1 阶段建立 `governance_tail_result` 完成结果合同与对应 artifact kind。
+- **Depends on**：D08、D03、D06、D07 与 Topic 07 Shared Documentation Governance Tail 稳定合同。
+- **In scope**（已接受 exact contract）：D09 只消费 D08 `direct / DIRECT_READY` artifacts；D09 调用 D03 准备 workspace；D09 调用 D06 执行实现、测试和内部 review；D05 只能由 D06 内部调用；D09 编排 Topic 07 Shared Documentation Governance Tail；Tail Completion Gate 必须在 D07 publish 之前完成；D07 governed mode 必须发布最终治理文件集合。
+- **Out of scope**：Tail `pending` 或 `in_progress` 不能构成 D09 success；D09 success 不等于 requirement completion、merge authorization 或 publication；A1 只建立完成结果合同与 artifact kind，不实现 production coordinator，不修改 D07 publisher。
+- **Completion contract**：已接受 exact contract 摘要见上；A1 只建立合同，不完成 D09；`governance_tail_result` 只表达 Shared Tail 已正式完成并具备 governed publish 资格，不表达 pending/blocked/failed/部分完成。
+- **Expected evidence**：仍要求未来 production coordinator、governed publisher 与真实证据链；A1 实施不是 D09 production implementation evidence。
+- **Relationship to previous stage**：承接 D08 自然语言需求路径（`direct / DIRECT_READY`）。
 - **Relationship to next stage**：为 D10 真实单仓验收提供稳定治理边界。
-- **Definition provenance**：早期项目路线材料恢复出高层名称“Review / Governance Tail”与阶段成果；精确合同未恢复。`DIRECT_DELIVERY_COORDINATOR_V1` is a proposed candidate and has not been accepted as complete D09，不得被写成已接受。
+- **Definition provenance**：D09 exact contract 已由项目总控接受，记录于本路线；D09-A1 governance-tail-result contract 已实现于 task branch 并 pending 独立 review；accepted exact contract 是 planning 事实，不是 production implementation evidence；D09 production 仍未实施。
 
 ## LOOP-DELIVERY-10
 
@@ -394,12 +394,11 @@
 
 以下项目均标记为 **pending**，不给出未经证明的答案：
 
-- D09 exact contract（pending）；
-- D09 与 Topic 07 Shared Documentation Governance Tail 的复用/边界（pending）；
-- D09 与 D10 的切分（pending）；
 - Advanced 11～14 的精确任务拆解（pending）；
 - Foundation-00 原始历史材料的进一步 provenance（pending）；
 - 是否需要后续 accepted decision 固化 definition statuses（pending）。
+
+已由项目总控接受的 D09 exact contract 记录了 D09 消费边界、Tail Completion Gate 先于 D07 publish、D07 governed mode 发布最终治理文件集合等决定，并定义了 D09 与 Topic 07 Shared Documentation Governance Tail 的边界以及 D09/D10 切分；这些不再作为 open definition recovery items，但 A1 之后的 D09 production implementation 仍保持未实现。
 
 ## Change Rules
 
