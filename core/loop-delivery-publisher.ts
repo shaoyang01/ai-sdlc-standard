@@ -21,15 +21,23 @@ import {
 } from "./loop-posix-process-runner";
 import type { LoopGitWorkspaceManager, LoopGitWorkspaceSnapshot } from "./loop-git-workspace";
 import type { LoopArtifactStore, LoopStoredArtifact } from "./loop-artifact-store";
+import {
+  LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES,
+  parseLoopGovernanceTailResultBytes,
+  type LoopGovernanceTailResult,
+} from "./loop-governance-tail-result";
 
 // ═══════════════════════════════════════ Types
 
 export type LoopDeliveryPublishStatus = "succeeded" | "failed" | "blocked";
 
+export type LoopDeliveryPublishMode = "standalone" | "governed";
+
 export type LoopDeliveryPublishReasonCode =
   | "PUBLISH_SUCCEEDED"
   | "INVALID_INPUT"
   | "DELIVERY_NOT_READY"
+  | "GOVERNANCE_TAIL_NOT_READY"
   | "WORKSPACE_DRIFT"
   | "WORKSPACE_STATE_CONFLICT"
   | "BASE_BRANCH_DRIFT"
@@ -47,6 +55,7 @@ export type LoopDeliveryPublishReasonCode =
 export type LoopDeliveryPublishRecoveryStage =
   | "not_started"
   | "delivery_verified"
+  | "governance_verified"
   | "intent_persisted"
   | "commit_created"
   | "branch_pushed"
@@ -59,6 +68,7 @@ export interface LoopDeliveryPublishRequest {
   readonly commitSubject: string;
   readonly prTitle: string;
   readonly recoveryPublishIntentArtifactRef?: string;
+  readonly governanceTailResultArtifactRef?: string;
 }
 
 export interface LoopDeliveryPublisherOptions {
@@ -96,6 +106,7 @@ export interface LoopDeliveryPublishResult {
   readonly causeCode?: string;
   readonly recoveryStage: LoopDeliveryPublishRecoveryStage;
   readonly deliveryResultArtifactRef: string;
+  readonly governanceTailResultArtifactRef?: string;
   readonly publishIntentArtifactRef?: string;
   readonly publishResultArtifactRef?: string;
   readonly precommitHeadSha?: string;
@@ -154,6 +165,7 @@ const REQUEST_KEYS = [
   "identity", "deliveryResultArtifactRef",
   "commitSubject", "prTitle",
   "recoveryPublishIntentArtifactRef",
+  "governanceTailResultArtifactRef",
 ];
 
 // D06 delivery result fields (canonical)
@@ -450,6 +462,29 @@ function validateAuthorEmail(s: string): void {
   if (atIdx <= 0 || atIdx >= s.length - 1) throw new Error("author email must contain @ not at start or end");
 }
 
+// ═══════════════════════════════════════ Governed Markdown escaping
+
+// Deterministic scalar escaping used ONLY for the governed Draft PR body.
+// Fixed escape order: & → &amp;, \ → &#92;, ` → &#96;, < → &lt;, > → &gt;.
+// No double escaping: each character is replaced exactly once in a single
+// pass. Control characters (NUL, CR, LF, C0, DEL, C1) are rejected.
+function escapeMarkdownScalar(value: string): string {
+  if (NON_CONTROL_RE.test(value)) {
+    throw new Error("governed body value must not contain control characters");
+  }
+  let out = "";
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]!;
+    if (ch === "&") out += "&amp;";
+    else if (ch === "\\") out += "&#92;";
+    else if (ch === "`") out += "&#96;";
+    else if (ch === "<") out += "&lt;";
+    else if (ch === ">") out += "&gt;";
+    else out += ch;
+  }
+  return out;
+}
+
 // ═══════════════════════════════════════ Validators
 
 function validateStoredArtifact(
@@ -590,6 +625,8 @@ interface InternalState {
   traceSeq: number;
   // Stage tracking
   recoveryStage: LoopDeliveryPublishRecoveryStage;
+  // Publish mode: standalone consumes D06 only; governed consumes A1
+  mode: LoopDeliveryPublishMode;
   // Source observation (fixed after first inspect)
   sourceHeadSha: string | null;
   sourceBranch: string | null;
@@ -599,6 +636,14 @@ interface InternalState {
   deliveryResult: Record<string, unknown> | null;
   deliveryFiles: string[] | null;
   deliveryFinalWorkspace: Record<string, unknown> | null;
+  // Governance tail artifact binding (governed mode only)
+  governanceRef: string | null;
+  governanceValue: LoopGovernanceTailResult | null;
+  governanceOrchestrationRef: string | null;
+  governanceExecutorInputRef: string | null;
+  // Effective publish authority (standalone: D06; governed: A1)
+  effectiveFiles: string[] | null;
+  effectiveFinalWorkspace: Record<string, unknown> | null;
   // Workspace binding
   workspacePath: string | null;
   precommitHeadSha: string | null;
@@ -800,6 +845,16 @@ export class LoopDeliveryPublisher {
       }
     }
 
+    // Mode determination: only the presence of the governance-tail ref selects
+    // governed mode. `undefined`/missing property → standalone. Any other value
+    // (null, non-string, empty, malformed, wrong kind) selects governed mode and
+    // is rejected later by the governance phase with GOVERNANCE_TAIL_NOT_READY.
+    // There is no independent `mode` field: a governed request always carries
+    // the ref, and a standalone request never carries it.
+    const mode: LoopDeliveryPublishMode =
+      req.governanceTailResultArtifactRef === undefined ? "standalone" : "governed";
+    const governanceTailRaw = req.governanceTailResultArtifactRef as string | undefined;
+
     // Clock init
     const startMs = this._nowMs();
     if (startMs === null) {
@@ -816,6 +871,7 @@ export class LoopDeliveryPublisher {
         commitSubject,
         prTitle,
         recoveryPublishIntentArtifactRef: recoveryIntentRef,
+        governanceTailResultArtifactRef: governanceTailRaw,
       }),
       options: freeze({
         runner: this.runner,
@@ -837,6 +893,7 @@ export class LoopDeliveryPublisher {
       trace: [],
       traceSeq: 0,
       recoveryStage: "not_started",
+      mode,
       sourceHeadSha: null,
       sourceBranch: null,
       sourceWipDigestSha256: null,
@@ -844,6 +901,12 @@ export class LoopDeliveryPublisher {
       deliveryResult: null,
       deliveryFiles: null,
       deliveryFinalWorkspace: null,
+      governanceRef: null,
+      governanceValue: null,
+      governanceOrchestrationRef: null,
+      governanceExecutorInputRef: null,
+      effectiveFiles: null,
+      effectiveFinalWorkspace: null,
       workspacePath: null,
       precommitHeadSha: null,
       precommitStatusDigestSha256: null,
@@ -904,7 +967,15 @@ export class LoopDeliveryPublisher {
     const deliveryOutcome = await this._phaseDelivery(state);
     if (deliveryOutcome !== null) return deliveryOutcome;
 
-    // Phase 2: Inspect workspace
+    // Phase 2: Governed mode — read and validate the governance-tail artifact (A1).
+    // Standalone mode never enters this phase and never produces a
+    // `governance_tail` trace entry.
+    if (state.mode === "governed") {
+      const governanceOutcome = await this._phaseGovernanceTail(state);
+      if (governanceOutcome !== null) return governanceOutcome;
+    }
+
+    // Phase 3: Inspect workspace
     const wsOutcome = await this._phaseWorkspace(state);
     if (wsOutcome !== null) return wsOutcome;
 
@@ -1206,10 +1277,162 @@ export class LoopDeliveryPublisher {
       status_digest_sha256: finalWs.status_digest_sha256,
       task_has_changes: finalWs.task_has_changes,
     });
+    // Standalone effective authority is D06 itself; governed mode overrides
+    // both with the A1 canonical value in the governance phase.
+    if (state.effectiveFiles === null) {
+      state.effectiveFiles = freeze([...fileList]) as unknown as string[];
+    }
+    if (state.effectiveFinalWorkspace === null) {
+      state.effectiveFinalWorkspace = freeze({
+        workspace_path: finalWs.workspace_path,
+        task_branch: finalWs.task_branch,
+        task_head_sha: finalWs.task_head_sha,
+        status_digest_sha256: finalWs.status_digest_sha256,
+        task_has_changes: finalWs.task_has_changes,
+      });
+    }
 
     const elapsed = Math.max(0, this._nowMsChecked(state) - t0);
     this._addTrace(state, "delivery", "succeeded", null, null, null, null, elapsed);
     state.recoveryStage = "delivery_verified";
+
+    return null;
+  }
+
+  // ═══════════════════════════════════════ Phase: Governance Tail Artifact
+
+  // Governed mode only. Consumes the A1 `loop-governance-tail-result-v1`
+  // artifact that has already entered the Source. Reuses the A1 parser —
+  // never copies or rewrites its validators. Fail-closed with
+  // GOVERNANCE_TAIL_NOT_READY for any governance-specific mismatch:
+  // malformed/wrong-kind ref, oversize bytes, digest mismatch, parser
+  // failure, identity/delivery/implementation-files/workspace binding
+  // mismatch. Artifact Store read/put failures keep ARTIFACT_STORE_FAILED.
+  // Evidence files referenced by A1 are never read or executed.
+  private async _phaseGovernanceTail(state: InternalState): Promise<LoopDeliveryPublishResult | null> {
+    const gateResult = this._checkGate(state);
+    if (gateResult !== null) return gateResult;
+
+    const t0 = this._nowMsChecked(state);
+    const rawRef = state.request.governanceTailResultArtifactRef;
+    const id = state.request.identity;
+
+    // Ref format + exact kind. Any non-string/empty/malformed/wrong-kind
+    // value is a governance-specific failure.
+    let governanceRef: string;
+    try {
+      governanceRef = validateArtifactRef(rawRef, "governance_tail_result", "governanceTailResultArtifactRef");
+    } catch (e) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage((e as Error).message), null);
+    }
+
+    // Read artifact bytes (store failure keeps ARTIFACT_STORE_FAILED)
+    let bytes: Buffer;
+    try {
+      bytes = this.artifactStore.read(governanceRef);
+    } catch {
+      return await this._terminalize(state, "ARTIFACT_STORE_FAILED", safeMessage("failed to read governance tail artifact"), null);
+    }
+
+    // Size gate BEFORE any full copy or parse
+    if (bytes.length > LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail artifact too large"), null);
+    }
+
+    // Digest extracted from the ref must equal the actual bytes SHA-256
+    const refMatch = ARTIFACT_REF_RE.exec(governanceRef);
+    const actualDigest = sha256Hex(bytes);
+    if (refMatch === null || refMatch[2] !== actualDigest) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail artifact digest mismatch"), null);
+    }
+
+    // Reuse the A1 parser on the exact bytes (Buffer is a genuine Uint8Array).
+    // Parser failure fails closed; only the parser-returned canonical frozen
+    // value is ever used afterwards.
+    const parsed = parseLoopGovernanceTailResultBytes(bytes as unknown as Uint8Array);
+    if (!parsed.ok) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail artifact invalid"), null);
+    }
+    const a1 = parsed.value;
+
+    // ── Identity full-field binding (all nine fields, never a subset) ──
+    const ai = a1.identity;
+    if (
+      ai.runId !== id.runId ||
+      ai.requirementId !== id.requirementId ||
+      ai.repository !== id.repository ||
+      ai.repositoryPath !== id.repositoryPath ||
+      ai.baseBranch !== id.baseBranch ||
+      ai.expectedBaseSha !== id.expectedBaseSha ||
+      ai.taskBranch !== id.taskBranch ||
+      ai.controlRoot !== id.controlRoot ||
+      ai.createdAt !== id.createdAt
+    ) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail identity mismatch"), null);
+    }
+
+    // ── Delivery binding ──
+    if (a1.delivery_result_artifact_ref !== state.request.deliveryResultArtifactRef) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail delivery ref mismatch"), null);
+    }
+
+    // ── Implementation files binding: exact array equality with D06 ──
+    const d06Files = state.deliveryFiles!;
+    if (a1.implementation_files.length !== d06Files.length) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail implementation files length mismatch"), null);
+    }
+    for (let i = 0; i < d06Files.length; i++) {
+      if (a1.implementation_files[i] !== d06Files[i]) {
+        return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail implementation files mismatch"), null);
+      }
+    }
+
+    // ── D06/A1 workspace provenance ──
+    // workspace_path / task_branch / task_head_sha / task_has_changes must be
+    // equal; status_digest_sha256 MAY differ (D06 digest is
+    // post-implementation, A1 digest is post-Shared-Tail).
+    const d06Fw = state.deliveryFinalWorkspace!;
+    const a1Fw = a1.final_workspace;
+    if (
+      a1Fw.workspace_path !== d06Fw.workspace_path ||
+      a1Fw.task_branch !== d06Fw.task_branch ||
+      a1Fw.task_head_sha !== d06Fw.task_head_sha ||
+      a1Fw.task_has_changes !== true
+    ) {
+      return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail workspace provenance mismatch"), null);
+    }
+
+    // ── Effective files: A1 canonical `files` order, unchanged ──
+    // A1 parser already guarantees implementation_files ⊆ files and strict
+    // ascending order; re-confirm the subset and never modify the arrays.
+    const a1Files = a1.files;
+    const a1FilesSet = new Set<string>(a1Files);
+    for (const implementationFile of a1.implementation_files) {
+      if (!a1FilesSet.has(implementationFile)) {
+        return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage("governance tail files subset violated"), null);
+      }
+    }
+
+    // ── Store governed facts separately from D06 facts ──
+    state.governanceRef = governanceRef;
+    state.governanceValue = a1;
+    // The orchestration and executor-input refs are evidence chain only;
+    // their bytes are never read.
+    state.governanceOrchestrationRef = a1.orchestration_result_artifact_ref;
+    state.governanceExecutorInputRef = a1.executor_input_artifact_ref;
+    state.effectiveFiles = freeze([...a1Files]) as unknown as string[];
+    state.effectiveFinalWorkspace = freeze({
+      workspace_path: a1Fw.workspace_path,
+      task_branch: a1Fw.task_branch,
+      task_head_sha: a1Fw.task_head_sha,
+      status_digest_sha256: a1Fw.status_digest_sha256,
+      task_has_changes: a1Fw.task_has_changes,
+    });
+    state.recoveryStage = "governance_verified";
+
+    const elapsed = Math.max(0, this._nowMsChecked(state) - t0);
+    const outcome = state.request.recoveryPublishIntentArtifactRef !== undefined ? "recovered" : "succeeded";
+    this._addTrace(state, "governance_tail", outcome, governanceRef, null, null, null, elapsed);
 
     return null;
   }
@@ -1240,7 +1463,7 @@ export class LoopDeliveryPublisher {
     }
 
     const id = state.request.identity;
-    const fw = state.deliveryFinalWorkspace!;
+    const fw = state.effectiveFinalWorkspace!;
 
     // Verify binding
     if (snapshot.workspacePath !== fw.workspace_path) {
@@ -1359,7 +1582,7 @@ export class LoopDeliveryPublisher {
     if (gateResult !== null) return gateResult;
 
     const t0 = this._nowMsChecked(state);
-    const deliveryFiles = state.deliveryFiles!;
+    const effectiveFiles = state.effectiveFiles!;
 
     // Run git status --porcelain=v1 -z --untracked-files=all
     const statusResult = await this._runGit(
@@ -1467,8 +1690,8 @@ export class LoopDeliveryPublisher {
     for (const p of cachedPaths) allPaths.add(p);
     for (const p of othersPaths) allPaths.add(p);
 
-    // Verify exact delivery files
-    const expectedSet = new Set(deliveryFiles);
+    // Verify exact effective files
+    const expectedSet = new Set(effectiveFiles);
     for (const p of allPaths) {
       if (!expectedSet.has(p)) {
         return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("extra path in workspace"), null);
@@ -1476,7 +1699,7 @@ export class LoopDeliveryPublisher {
     }
 
     // Stage exact files
-    const addArgs = ["-c", "core.hooksPath=/dev/null", "add", "--", ...deliveryFiles];
+    const addArgs = ["-c", "core.hooksPath=/dev/null", "add", "--", ...effectiveFiles];
     const addResult = await this._runGit(state, addArgs, false);
     if (addResult === null || addResult.exitCode !== 0) {
       return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage("git add failed"), null);
@@ -1531,8 +1754,8 @@ export class LoopDeliveryPublisher {
       return await this._terminalize(state, "EXECUTION_BLOCKED", safeMessage((e as Error).message), null);
     }
 
-    // Check cached path set equals delivery files
-    for (const p of deliveryFiles) {
+    // Check cached path set equals effective files
+    for (const p of effectiveFiles) {
       if (!postCachedPaths.has(p)) {
         return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("missing file in staging"), null);
       }
@@ -1583,25 +1806,50 @@ export class LoopDeliveryPublisher {
     const t0 = this._nowMsChecked(state);
     const id = state.request.identity;
 
-    // Build canonical publish intent
+    // Build canonical publish intent. Standalone keeps the D07 schema and
+    // byte contract; governed uses the fixed governed schema and field order.
     const intentObj: Record<string, unknown> = Object.create(null);
-    intentObj.schema = "loop-publish-intent-v1";
-    intentObj.run_id = id.runId;
-    intentObj.requirement_id = id.requirementId;
-    intentObj.repository = id.repository;
-    intentObj.base_branch = id.baseBranch;
-    intentObj.expected_base_sha = id.expectedBaseSha;
-    intentObj.task_branch = id.taskBranch;
-    intentObj.precommit_head_sha = state.precommitHeadSha;
-    intentObj.precommit_status_digest_sha256 = state.precommitStatusDigestSha256;
-    intentObj.staged_tree_sha = state.stagedTreeSha;
-    intentObj.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
-    intentObj.files = [...state.deliveryFiles!];
-    intentObj.commit_subject = state.request.commitSubject;
-    intentObj.commit_author_name = this.commitAuthorName;
-    intentObj.commit_author_email = this.commitAuthorEmail;
-    intentObj.pr_title = state.request.prTitle;
-    intentObj.pr_body_schema = "loop-publish-pr-body-v1";
+    if (state.mode === "governed") {
+      intentObj.schema = "loop-governed-publish-intent-v1";
+      intentObj.run_id = id.runId;
+      intentObj.requirement_id = id.requirementId;
+      intentObj.repository = id.repository;
+      intentObj.base_branch = id.baseBranch;
+      intentObj.expected_base_sha = id.expectedBaseSha;
+      intentObj.task_branch = id.taskBranch;
+      intentObj.precommit_head_sha = state.precommitHeadSha;
+      intentObj.precommit_status_digest_sha256 = state.precommitStatusDigestSha256;
+      intentObj.staged_tree_sha = state.stagedTreeSha;
+      intentObj.orchestration_result_artifact_ref = state.governanceOrchestrationRef;
+      intentObj.executor_input_artifact_ref = state.governanceExecutorInputRef;
+      intentObj.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
+      intentObj.governance_tail_result_artifact_ref = state.governanceRef;
+      intentObj.implementation_files = [...(state.governanceValue!.implementation_files as readonly string[])];
+      intentObj.files = [...state.effectiveFiles!];
+      intentObj.commit_subject = state.request.commitSubject;
+      intentObj.commit_author_name = this.commitAuthorName;
+      intentObj.commit_author_email = this.commitAuthorEmail;
+      intentObj.pr_title = state.request.prTitle;
+      intentObj.pr_body_schema = "loop-governed-publish-pr-body-v1";
+    } else {
+      intentObj.schema = "loop-publish-intent-v1";
+      intentObj.run_id = id.runId;
+      intentObj.requirement_id = id.requirementId;
+      intentObj.repository = id.repository;
+      intentObj.base_branch = id.baseBranch;
+      intentObj.expected_base_sha = id.expectedBaseSha;
+      intentObj.task_branch = id.taskBranch;
+      intentObj.precommit_head_sha = state.precommitHeadSha;
+      intentObj.precommit_status_digest_sha256 = state.precommitStatusDigestSha256;
+      intentObj.staged_tree_sha = state.stagedTreeSha;
+      intentObj.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
+      intentObj.files = [...state.effectiveFiles!];
+      intentObj.commit_subject = state.request.commitSubject;
+      intentObj.commit_author_name = this.commitAuthorName;
+      intentObj.commit_author_email = this.commitAuthorEmail;
+      intentObj.pr_title = state.request.prTitle;
+      intentObj.pr_body_schema = "loop-publish-pr-body-v1";
+    }
 
     const intentJson = JSON.stringify(intentObj) + "\n";
     const intentBytes = Buffer.from(intentJson, "utf8");
@@ -1695,8 +1943,11 @@ export class LoopDeliveryPublisher {
     }
     state.commitAttempted = true;
 
-    // Build canonical commit message
-    const commitMsg = `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`;
+    // Build canonical commit message. Standalone keeps the D07 bytes;
+    // governed adds the governance-tail artifact trailer line.
+    const commitMsg = state.mode === "governed"
+      ? `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Governance-Tail-Artifact: ${state.governanceRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`
+      : `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`;
 
     // Execute commit through runner
     let commitResult: LoopPosixProcessResult | null = null;
@@ -1780,7 +2031,9 @@ export class LoopDeliveryPublisher {
     if (msgResult === null || msgResult.exitCode !== 0) return false;
 
     const id = state.request.identity;
-    const expectedMsg = `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`;
+    const expectedMsg = state.mode === "governed"
+      ? `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Governance-Tail-Artifact: ${state.governanceRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`
+      : `${state.request.commitSubject}\n\nLoop-Run-Id: ${id.runId}\nLoop-Delivery-Artifact: ${state.request.deliveryResultArtifactRef}\nLoop-Publish-Intent: ${state.publishIntentArtifactRef}\n`;
     // git show --format=%B adds trailing LF; trim for comparison
     const actualMsg = msgResult.stdout.replace(/\n+$/, "\n");
     if (actualMsg !== expectedMsg) return false;
@@ -1807,7 +2060,7 @@ export class LoopDeliveryPublisher {
       return false;
     }
 
-    const expectedFiles = new Set(state.deliveryFiles!);
+    const expectedFiles = new Set(state.effectiveFiles!);
     if (commitFiles.size !== expectedFiles.size) return false;
     for (const f of commitFiles) {
       if (!expectedFiles.has(f)) return false;
@@ -1957,36 +2210,12 @@ export class LoopDeliveryPublisher {
       return await this._terminalize(state, "REMOTE_BRANCH_CONFLICT", safeMessage("remote sha not commit"), null);
     }
 
-    // Build canonical PR body
-    const bodyLines: string[] = [];
-    bodyLines.push("## LOOP-DELIVERY-07 — Recoverable Delivery Publish");
-    bodyLines.push("");
-    bodyLines.push(`- Run ID: \`<${id.runId}>\``);
-    bodyLines.push(`- Requirement ID: \`<${id.requirementId}>\``);
-    bodyLines.push(`- Repository: \`<${id.repository}>\``);
-    bodyLines.push(`- Base branch: \`<${id.baseBranch}>\``);
-    bodyLines.push(`- Expected base SHA: \`<${id.expectedBaseSha}>\``);
-    bodyLines.push(`- Task branch: \`<${id.taskBranch}>\``);
-    bodyLines.push(`- Commit SHA: \`<${commitSha}>\``);
-    bodyLines.push(`- Delivery artifact: \`<${state.request.deliveryResultArtifactRef}>\``);
-    bodyLines.push(`- Publish intent: \`<${state.publishIntentArtifactRef}>\``);
-    bodyLines.push("");
-    bodyLines.push("### Files");
-    bodyLines.push("");
-    for (const f of state.deliveryFiles!) {
-      bodyLines.push(`- \`<${f}>\``);
-    }
-    bodyLines.push("");
-    bodyLines.push("### Governance");
-    bodyLines.push("");
-    bodyLines.push("- Draft: true");
-    bodyLines.push("- Review: pending project controller review");
-    bodyLines.push("- Merge: not authorized");
-    bodyLines.push("- D08: not authorized");
-    bodyLines.push("- Exchange: not published");
-    bodyLines.push("- Personal KB: not published");
-
-    const canonicalBody = bodyLines.join("\n") + "\n";
+    // Build canonical PR body. Standalone keeps the D07 body bytes (raw
+    // interpolation, no governed escaping helper); governed uses the fixed
+    // governed section order with deterministic scalar escaping.
+    const canonicalBody = state.mode === "governed"
+      ? this._buildGovernedPrBody(state, commitSha)
+      : this._buildStandalonePrBody(state, commitSha);
     const bodySha256 = sha256Hex(canonicalBody);
     state.prBodySha256 = bodySha256;
 
@@ -2127,6 +2356,142 @@ export class LoopDeliveryPublisher {
     return await this._terminalize(state, "PR_CREATE_FAILED", safeMessage("PR create failed"), null);
   }
 
+  // ═══════════════════════════════════════ PR Body Builders
+
+  // Standalone body — byte-identical to the D07 contract. Raw interpolation
+  // only; must never invoke the governed escaping helper.
+  private _buildStandalonePrBody(state: InternalState, commitSha: string): string {
+    const id = state.request.identity;
+    const bodyLines: string[] = [];
+    bodyLines.push("## LOOP-DELIVERY-07 — Recoverable Delivery Publish");
+    bodyLines.push("");
+    bodyLines.push(`- Run ID: \`<${id.runId}>\``);
+    bodyLines.push(`- Requirement ID: \`<${id.requirementId}>\``);
+    bodyLines.push(`- Repository: \`<${id.repository}>\``);
+    bodyLines.push(`- Base branch: \`<${id.baseBranch}>\``);
+    bodyLines.push(`- Expected base SHA: \`<${id.expectedBaseSha}>\``);
+    bodyLines.push(`- Task branch: \`<${id.taskBranch}>\``);
+    bodyLines.push(`- Commit SHA: \`<${commitSha}>\``);
+    bodyLines.push(`- Delivery artifact: \`<${state.request.deliveryResultArtifactRef}>\``);
+    bodyLines.push(`- Publish intent: \`<${state.publishIntentArtifactRef}>\``);
+    bodyLines.push("");
+    bodyLines.push("### Files");
+    bodyLines.push("");
+    for (const f of state.effectiveFiles!) {
+      bodyLines.push(`- \`<${f}>\``);
+    }
+    bodyLines.push("");
+    bodyLines.push("### Governance");
+    bodyLines.push("");
+    bodyLines.push("- Draft: true");
+    bodyLines.push("- Review: pending project controller review");
+    bodyLines.push("- Merge: not authorized");
+    bodyLines.push("- D08: not authorized");
+    bodyLines.push("- Exchange: not published");
+    bodyLines.push("- Personal KB: not published");
+    return bodyLines.join("\n") + "\n";
+  }
+
+  // Governed body — fixed LOOP-DELIVERY-09 section order. Every scalar is
+  // passed through the deterministic Markdown escaping; unknown exception /
+  // runner stdout/stderr text is never written; the seven free-form Decision
+  // Basis fields are never copied verbatim (null evidence renders
+  // `basis recorded in governance-tail artifact`).
+  private _buildGovernedPrBody(state: InternalState, commitSha: string): string {
+    const a1 = state.governanceValue!;
+    const id = state.request.identity;
+    const esc = escapeMarkdownScalar;
+    const evidenceRef = (e: { path: string; version: string; digest_sha256: string } | null): string =>
+      e !== null
+        ? `\`<${esc(e.path)}>\` v\`${esc(e.version)}\` sha256 \`${esc(e.digest_sha256)}\``
+        : "basis recorded in governance-tail artifact";
+
+    const lines: string[] = [];
+    lines.push("## LOOP-DELIVERY-09 — Governed Delivery Publish");
+    lines.push("");
+    lines.push("### Identity And Publish");
+    lines.push("");
+    lines.push(`- Run ID: \`<${esc(id.runId)}>\``);
+    lines.push(`- Requirement ID: \`<${esc(id.requirementId)}>\``);
+    lines.push(`- Repository: \`<${esc(id.repository)}>\``);
+    lines.push(`- Base branch: \`<${esc(id.baseBranch)}>\``);
+    lines.push(`- Expected base SHA: \`<${esc(id.expectedBaseSha)}>\``);
+    lines.push(`- Task branch: \`<${esc(id.taskBranch)}>\``);
+    lines.push(`- Commit SHA: \`<${esc(commitSha)}>\``);
+    lines.push(`- Publish intent: \`<${esc(state.publishIntentArtifactRef!)}>\``);
+    lines.push("");
+    lines.push("### Artifact Chain");
+    lines.push("");
+    lines.push(`- Orchestration result artifact: \`<${esc(a1.orchestration_result_artifact_ref)}>\``);
+    lines.push(`- Executor-input artifact: \`<${esc(a1.executor_input_artifact_ref)}>\``);
+    lines.push(`- Delivery result artifact: \`<${esc(a1.delivery_result_artifact_ref)}>\``);
+    lines.push(`- Governance-tail result artifact: \`<${esc(state.governanceRef!)}>\``);
+    lines.push("");
+    lines.push("### DocFlow Evidence");
+    lines.push("");
+    lines.push(`- Implementation record: ${evidenceRef(a1.docflow.implementation_record)}`);
+    lines.push(`- Code review: ${evidenceRef({ path: a1.docflow.code_review.path, version: a1.docflow.code_review.version, digest_sha256: a1.docflow.code_review.digest_sha256 })} result \`${esc(a1.docflow.code_review.result)}\``);
+    lines.push(`- Test acceptance: ${evidenceRef({ path: a1.docflow.test_acceptance.path, version: a1.docflow.test_acceptance.version, digest_sha256: a1.docflow.test_acceptance.digest_sha256 })} result \`${esc(a1.docflow.test_acceptance.result)}\``);
+    lines.push("");
+    lines.push("### Conditional Governance Evidence");
+    lines.push("");
+    const sync = a1.business_domain_sync;
+    lines.push(`- Sync decision: \`${esc(sync.decision)}\``);
+    lines.push(`- Sync write authorization: \`${sync.write_authorized ? "true" : "false"}\``);
+    lines.push(`- Sync execution status: \`${esc(sync.execution_status)}\``);
+    lines.push(`- Sync evidence: ${evidenceRef(sync.evidence)}`);
+    const reconcile = a1.reconcile;
+    lines.push(`- Reconcile decision: \`${esc(reconcile.decision)}\``);
+    lines.push(`- Reconcile execution status: \`${esc(reconcile.execution_status)}\``);
+    lines.push(`- Reconcile evidence: ${evidenceRef(reconcile.evidence)}`);
+    const entry = a1.entry_coverage;
+    lines.push(`- Entry Coverage status: \`${esc(entry.status)}\``);
+    lines.push(`- Entry Coverage evidence: ${evidenceRef(entry.evidence)}`);
+    const regate = a1.regate;
+    lines.push(`- Re-Gate status: \`${esc(regate.status)}\``);
+    lines.push(`- Re-Gate evidence: ${evidenceRef(regate.evidence)}`);
+    lines.push("");
+    lines.push("### Manifest And Tail Gate");
+    lines.push("");
+    const manifest = a1.manifest;
+    lines.push(`- Manifest path: \`<${esc(manifest.path)}>\``);
+    lines.push(`- Manifest version: \`${esc(manifest.version)}\``);
+    lines.push(`- Manifest digest: \`${esc(manifest.digest_sha256)}\``);
+    lines.push(`- Manifest tail status: \`${esc(manifest.tail_status)}\``);
+    lines.push(`- Completion decision source: ${evidenceRef(manifest.completion_decision_source)}`);
+    const gate = a1.tail_gate;
+    lines.push(`- Tail Gate path: \`<${esc(gate.path)}>\``);
+    lines.push(`- Tail Gate version: \`${esc(gate.version)}\``);
+    lines.push(`- Tail Gate digest: \`${esc(gate.digest_sha256)}\``);
+    lines.push(`- Tail Gate result: \`${esc(gate.result)}\``);
+    lines.push(`- Tail Gate persisted: \`${gate.persisted ? "true" : "false"}\``);
+    lines.push(`- Tail Gate read back verified: \`${gate.read_back_verified ? "true" : "false"}\``);
+    lines.push(`- Tail Gate reviewed manifest version: \`${esc(gate.reviewed_manifest_version)}\``);
+    lines.push("");
+    lines.push("### Implementation Files");
+    lines.push("");
+    for (const f of a1.implementation_files) {
+      lines.push(`- \`<${esc(f)}>\``);
+    }
+    lines.push("");
+    lines.push("### Final Governed Files");
+    lines.push("");
+    for (const f of a1.files) {
+      lines.push(`- \`<${esc(f)}>\``);
+    }
+    lines.push("");
+    lines.push("### Governance");
+    lines.push("");
+    lines.push("- Draft: true");
+    lines.push("- Review: pending project controller review");
+    lines.push("- Merge: not authorized");
+    lines.push("- Requirement completion: not established by this PR");
+    lines.push("- D09 overall: pending coordinator terminal result");
+    lines.push("- Exchange: not published");
+    lines.push("- Personal KB: not published");
+    return lines.join("\n") + "\n";
+  }
+
   // ═══════════════════════════════════════ Terminalize
 
   private async _terminalize(
@@ -2146,7 +2511,7 @@ export class LoopDeliveryPublisher {
       finalMessage = safeMessage("clock error in finalizer");
     }
 
-    // Build result object in canonical fixed order
+    // Build result object in canonical fixed order (per mode)
     const status: LoopDeliveryPublishStatus =
       finalReasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" :
       finalReasonCode === "BASE_BRANCH_DRIFT" || finalReasonCode === "WORKSPACE_DRIFT" ||
@@ -2159,38 +2524,7 @@ export class LoopDeliveryPublisher {
     this._addTrace(state, "terminal", finalReasonCode === "PUBLISH_SUCCEEDED" ? "succeeded" : "failed",
       null, state.commitSha, state.remoteBranchSha, state.prNumber, elapsed);
 
-    const resultObj: Record<string, unknown> = Object.create(null);
-    resultObj.schema = "loop-publish-result-v1";
-    resultObj.status = status;
-    resultObj.reason_code = finalReasonCode;
-    resultObj.cause_code = null;
-    resultObj.recovery_stage = finalStage;
-    resultObj.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
-    resultObj.publish_intent_artifact_ref = state.publishIntentArtifactRef ?? null;
-    resultObj.precommit_head_sha = state.precommitHeadSha ?? null;
-    resultObj.commit_sha = state.commitSha ?? null;
-    resultObj.remote_branch_sha = state.remoteBranchSha ?? null;
-    resultObj.pr_number = state.prNumber ?? null;
-    resultObj.pr_url = state.prUrl ?? null;
-    resultObj.files = state.deliveryFiles ? [...state.deliveryFiles] : [];
-    resultObj.commit_created = state.commitCreated;
-    resultObj.commit_recovered = state.commitRecovered;
-    resultObj.push_created = state.pushCreated;
-    resultObj.push_recovered = state.pushRecovered;
-    resultObj.pr_created = state.prCreated;
-    resultObj.pr_recovered = state.prRecovered;
-    resultObj.pr_body_sha256 = state.prBodySha256 ?? null;
-    resultObj.elapsed_ms = elapsed;
-    resultObj.trace = state.trace.map((te) => ({
-      sequence: te.sequence,
-      stage: te.stage,
-      outcome: te.outcome,
-      artifact_ref: te.artifactRef,
-      commit_sha: te.commitSha,
-      remote_branch_sha: te.remoteBranchSha,
-      pr_number: te.prNumber,
-      elapsed_ms: te.elapsedMs,
-    }));
+    const resultObj = this._buildResultRecord(state, status, finalReasonCode, finalStage, elapsed);
 
     // Persist result artifact (attempt once)
     let resultRef: string | null = null;
@@ -2216,41 +2550,11 @@ export class LoopDeliveryPublisher {
       storeFailed = true;
     }
 
-    // If store failed, override to ARTIFACT_STORE_FAILED
+    // If store failed, override to ARTIFACT_STORE_FAILED. The governed field
+    // set is preserved — never degraded to the standalone field set.
     let finalResult: Record<string, unknown>;
     if (storeFailed) {
-      finalResult = Object.create(null);
-      finalResult.schema = "loop-publish-result-v1";
-      finalResult.status = "failed";
-      finalResult.reason_code = "ARTIFACT_STORE_FAILED";
-      finalResult.cause_code = null;
-      finalResult.recovery_stage = finalStage;
-      finalResult.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
-      finalResult.publish_intent_artifact_ref = state.publishIntentArtifactRef ?? null;
-      finalResult.precommit_head_sha = state.precommitHeadSha ?? null;
-      finalResult.commit_sha = state.commitSha ?? null;
-      finalResult.remote_branch_sha = state.remoteBranchSha ?? null;
-      finalResult.pr_number = state.prNumber ?? null;
-      finalResult.pr_url = state.prUrl ?? null;
-      finalResult.files = state.deliveryFiles ? [...state.deliveryFiles] : [];
-      finalResult.commit_created = state.commitCreated;
-      finalResult.commit_recovered = state.commitRecovered;
-      finalResult.push_created = state.pushCreated;
-      finalResult.push_recovered = state.pushRecovered;
-      finalResult.pr_created = state.prCreated;
-      finalResult.pr_recovered = state.prRecovered;
-      finalResult.pr_body_sha256 = state.prBodySha256 ?? null;
-      finalResult.elapsed_ms = elapsed;
-      finalResult.trace = state.trace.map((te) => ({
-        sequence: te.sequence,
-        stage: te.stage,
-        outcome: te.outcome,
-        artifact_ref: te.artifactRef,
-        commit_sha: te.commitSha,
-        remote_branch_sha: te.remoteBranchSha,
-        pr_number: te.prNumber,
-        elapsed_ms: te.elapsedMs,
-      }));
+      finalResult = this._buildResultRecord(state, "failed", "ARTIFACT_STORE_FAILED", finalStage, elapsed);
       // No publishResultArtifactRef
     } else {
       finalResult = resultObj;
@@ -2282,8 +2586,95 @@ export class LoopDeliveryPublisher {
       elapsedMs: finalResult.elapsed_ms as number,
       trace: freeze((finalResult.trace as LoopDeliveryPublishTraceEntry[]).map((te) => freeze(te))),
     };
+    // The governed runtime result must OWN the governance ref key with the
+    // exact request ref; the standalone runtime result must NOT gain any new
+    // own property (byte/own-key compatibility with the authorized Source).
+    if (state.mode === "governed") {
+      (publishResult as any).governanceTailResultArtifactRef = state.request.governanceTailResultArtifactRef;
+    }
 
     return deepFreeze(publishResult) as LoopDeliveryPublishResult;
+  }
+
+  // Canonical persisted result record in fixed property order.
+  // Standalone: `loop-publish-result-v1` (D07 byte contract).
+  // Governed: `loop-governed-publish-result-v1` with the evidence chain refs.
+  private _buildResultRecord(
+    state: InternalState,
+    status: LoopDeliveryPublishStatus,
+    reasonCode: string,
+    recoveryStage: string,
+    elapsedMs: number,
+  ): Record<string, unknown> {
+    const record: Record<string, unknown> = Object.create(null);
+    const trace = state.trace.map((te) => ({
+      sequence: te.sequence,
+      stage: te.stage,
+      outcome: te.outcome,
+      artifact_ref: te.artifactRef,
+      commit_sha: te.commitSha,
+      remote_branch_sha: te.remoteBranchSha,
+      pr_number: te.prNumber,
+      elapsed_ms: te.elapsedMs,
+    }));
+    if (state.mode === "governed") {
+      record.schema = "loop-governed-publish-result-v1";
+      record.status = status;
+      record.reason_code = reasonCode;
+      record.cause_code = null;
+      record.recovery_stage = recoveryStage;
+      record.orchestration_result_artifact_ref = state.governanceOrchestrationRef ?? null;
+      record.executor_input_artifact_ref = state.governanceExecutorInputRef ?? null;
+      record.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
+      record.governance_tail_result_artifact_ref = state.governanceRef !== null
+        ? state.governanceRef
+        : (typeof state.request.governanceTailResultArtifactRef === "string"
+          ? (state.request.governanceTailResultArtifactRef as string)
+          : null);
+      record.publish_intent_artifact_ref = state.publishIntentArtifactRef ?? null;
+      record.precommit_head_sha = state.precommitHeadSha ?? null;
+      record.commit_sha = state.commitSha ?? null;
+      record.remote_branch_sha = state.remoteBranchSha ?? null;
+      record.pr_number = state.prNumber ?? null;
+      record.pr_url = state.prUrl ?? null;
+      record.implementation_files = state.governanceValue !== null
+        ? [...(state.governanceValue.implementation_files as readonly string[])]
+        : [];
+      record.files = state.effectiveFiles ? [...state.effectiveFiles] : [];
+      record.commit_created = state.commitCreated;
+      record.commit_recovered = state.commitRecovered;
+      record.push_created = state.pushCreated;
+      record.push_recovered = state.pushRecovered;
+      record.pr_created = state.prCreated;
+      record.pr_recovered = state.prRecovered;
+      record.pr_body_sha256 = state.prBodySha256 ?? null;
+      record.elapsed_ms = elapsedMs;
+      record.trace = trace;
+    } else {
+      record.schema = "loop-publish-result-v1";
+      record.status = status;
+      record.reason_code = reasonCode;
+      record.cause_code = null;
+      record.recovery_stage = recoveryStage;
+      record.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
+      record.publish_intent_artifact_ref = state.publishIntentArtifactRef ?? null;
+      record.precommit_head_sha = state.precommitHeadSha ?? null;
+      record.commit_sha = state.commitSha ?? null;
+      record.remote_branch_sha = state.remoteBranchSha ?? null;
+      record.pr_number = state.prNumber ?? null;
+      record.pr_url = state.prUrl ?? null;
+      record.files = state.effectiveFiles ? [...state.effectiveFiles] : [];
+      record.commit_created = state.commitCreated;
+      record.commit_recovered = state.commitRecovered;
+      record.push_created = state.pushCreated;
+      record.push_recovered = state.pushRecovered;
+      record.pr_created = state.prCreated;
+      record.pr_recovered = state.prRecovered;
+      record.pr_body_sha256 = state.prBodySha256 ?? null;
+      record.elapsed_ms = elapsedMs;
+      record.trace = trace;
+    }
+    return record;
   }
 
   private _zeroStateResult(
