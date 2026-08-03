@@ -335,6 +335,21 @@ class FakeWorkspaceManager {
   }
 }
 
+// Workspace manager that returns a DIFFERENT snapshot per inspect call —
+// used to simulate a real workspace mutating between the first inspect and
+// the pre-staging reconciliation. Calls beyond the supplied sequence keep
+// returning the last snapshot.
+class SequencedWorkspaceManager {
+  private calls = 0;
+  constructor(private readonly snapshots: readonly LoopGitWorkspaceSnapshot[]) {}
+
+  async inspect(_identity: any): Promise<LoopGitWorkspaceSnapshot> {
+    const idx = Math.min(this.calls, this.snapshots.length - 1);
+    this.calls++;
+    return this.snapshots[idx]!;
+  }
+}
+
 function makeOptions(overrides: Partial<{
   runner: any; workspaceManager: any; artifactStore: any;
   gitExecutableId: string; ghExecutableId: string;
@@ -5634,6 +5649,43 @@ let a2MarkdownEscapingFlag = false;
 let a2RealSourceUnchangedFlag = false;
 let a2TempCleanupFlag = false;
 
+// A2 scenario-group flags — each is set true ONLY when its scenario group ran
+// to completion with zero failing assertions in that group (failures count
+// unchanged across the group). Each functional marker below is derived from
+// the scenario groups that actually exercise that contract, so a marker can
+// never borrow success from an unrelated scenario. Section-level pass flags
+// additionally require zero failures across the whole section.
+let a2StandaloneSectionPassed = false;
+let a2FreshGoldenPassed = false;
+let a2StandaloneRecoveryPassed = false;
+let a2StandaloneStoreFailurePassed = false;
+let a2PositiveSectionPassed = false;
+let a2PosFreshFlowPassed = false;
+let a2PosStagingPassed = false;
+let a2PosParserPathPassed = false;
+let a2PosStoreFailurePassed = false;
+let a2PosRecoveryPassed = false;
+let a2NegativeSectionPassed = false;
+let a2NegRefBoundaryPassed = false;
+let a2NegStoreReadPassed = false;
+let a2NegA1ContentPassed = false;
+let a2NegIdentityBindingPassed = false;
+let a2NegDeliveryBindingPassed = false;
+let a2NegImplFilesPassed = false;
+let a2NegWorkspaceProvenancePassed = false;
+let a2NegWorkspaceStatePassed = false;
+let a2NegIntentBindingPassed = false;
+let a2NegCommitRecoveryPassed = false;
+let a2NegPrStatePassed = false;
+let a2NegExceptionLeakPassed = false;
+let a2RefBoundaryPassed = false;
+let a2PreA1EmptyFilesPassed = false;
+let a2MarkdownSectionPassed = false;
+let a2MarkdownEscapePassed = false;
+let a2WorkspaceAuthorityPassed = false;
+let a2DriftDigestPassed = false;
+let a2DriftChangesPassed = false;
+
 // ═══════════════════════════════════════ D09-A2 Fixture Helpers
 
 const D09A2_ORCH_REF = `loop-artifact:v1:orchestration_result:sha256:${"1".repeat(64)}`;
@@ -5781,7 +5833,11 @@ function makeDeterministicClock(): { nowMs(): number } {
 // keys, and result-store-failure behavior. All constants captured pre-change.
 async function testA2StandaloneRegression(): Promise<void> {
   console.log("\n=== D09-A2: Standalone Byte Regression Tests ===");
-  let sectionOk = true;
+  // Section failure record: the standalone marker is set true only when zero
+  // assertions fail across this whole section AND every scenario group below
+  // (fresh golden / recovery / store-failure) actually ran and passed.
+  const sectionFailures = failures;
+  const freshGoldenStart = failures;
 
   const artifactStore = new FakeArtifactStore();
   const deliveryRef = artifactStore.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -5838,6 +5894,8 @@ async function testA2StandaloneRegression(): Promise<void> {
   chk("governed", JSON.stringify(Object.keys(result)) === JSON.stringify(D07_STANDALONE_OWN_KEYS), "a2-reg: standalone runtime own keys pinned");
 
   // Recovery: intent byte-identical, recovered flags, trace
+  a2FreshGoldenPassed = failures === freshGoldenStart;
+  const recoveryStart = failures;
   const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: result.commitSha!, taskHasChanges: false }));
   const gitState2 = new FakeGitState(result.commitSha!);
   gitState2.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
@@ -5863,6 +5921,8 @@ async function testA2StandaloneRegression(): Promise<void> {
 
   // Result-store-failure behavior: ARTIFACT_STORE_FAILED, facts preserved,
   // runtime own keys unchanged (no governance key added)
+  a2StandaloneRecoveryPassed = failures === recoveryStart;
+  const storeFailureStart = failures;
   const storeF = new FakeArtifactStore();
   const deliveryRefF = storeF.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
   storeF.failResultPut = true;
@@ -5881,14 +5941,19 @@ async function testA2StandaloneRegression(): Promise<void> {
   chk("governed", JSON.stringify(Object.keys(resultF)) === JSON.stringify(D07_STANDALONE_OWN_KEYS), "a2-reg: store-failure runtime own keys pinned");
   chk("governed", resultF.publishResultArtifactRef === undefined, "a2-reg: store-failure has no result ref");
 
-  if (sectionOk) a2StandaloneByteCompatFlag = true;
+  a2StandaloneStoreFailurePassed = failures === storeFailureStart;
+  a2StandaloneSectionPassed = failures === sectionFailures;
 }
 
 // ═══════════════════════════════════════ D09-A2: Governed Positive
 
 async function testA2GovernedPositive(): Promise<void> {
   console.log("\n=== D09-A2: Governed Positive Tests ===");
-  let sectionOk = true;
+  // Section failure record: every governed-positive marker requires zero
+  // failures across this whole section plus the scenario group(s) that
+  // actually exercise the marker's contract.
+  const sectionFailures = failures;
+  const freshFlowStart = failures;
 
   // ── Valid A1 full fresh flow ──
   const artifactStore = new FakeArtifactStore();
@@ -5963,6 +6028,8 @@ async function testA2GovernedPositive(): Promise<void> {
   chk("governed", resultObj.implementation_files.length === 2 && resultObj.files.length === D09A2_A1_FILES.length, "a2-pos: governed result implementation/files fields");
 
   // ── Exact governed staging: git add received exactly the effective files ──
+  a2PosFreshFlowPassed = failures === freshFlowStart;
+  const stagingStart = failures;
   let addArgs: string[] | null = null;
   const gitStateStaging = makeGovernedGitState(wsSnapshot);
   const runnerStaging = new FakeRunner();
@@ -5991,6 +6058,8 @@ async function testA2GovernedPositive(): Promise<void> {
   }
 
   // ── Buffer and Uint8Array parser inputs both drive governed mode ──
+  a2PosStagingPassed = failures === stagingStart;
+  const parserStart = failures;
   {
     const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
     chk("governed", built.ok === true, "a2-pos: A1 builder ok for Buffer path");
@@ -6005,6 +6074,8 @@ async function testA2GovernedPositive(): Promise<void> {
   }
 
   // ── Result-store-failure facts preservation (governed field set) ──
+  a2PosParserPathPassed = failures === parserStart;
+  const storeFailureStart = failures;
   {
     const storeF = new FakeArtifactStore();
     const envF = makeGovernedEnv(storeF);
@@ -6029,6 +6100,8 @@ async function testA2GovernedPositive(): Promise<void> {
   }
 
   // ── Full governed recovery flow ──
+  a2PosStoreFailurePassed = failures === storeFailureStart;
+  const recoveryStart = failures;
   {
     const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: result.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
     const gitState2 = new FakeGitState(result.commitSha!);
@@ -6056,20 +6129,20 @@ async function testA2GovernedPositive(): Promise<void> {
     chk("governed", recIntent.equals(intentBytes), "a2-pos: governed recovery intent byte-identical");
   }
 
-  if (sectionOk) a2GovernedModeFlag = true;
-  if (sectionOk) a2GovernanceArtifactBindingFlag = true;
-  if (sectionOk) a2FinalWorkspaceAuthorityFlag = true;
-  if (sectionOk) a2GovernedStagingFlag = true;
-  if (sectionOk) a2GovernedIntentResultFlag = true;
-  if (sectionOk) a2GovernedCommitRecoveryFlag = true;
-  if (sectionOk) a2GovernedDraftPrFlag = true;
+  a2PosRecoveryPassed = failures === recoveryStart;
+  a2PositiveSectionPassed = failures === sectionFailures;
 }
 
 // ═══════════════════════════════════════ D09-A2: Governed Negative
 
 async function testA2GovernedNegative(): Promise<void> {
   console.log("\n=== D09-A2: Governed Negative Tests ===");
-  let sectionOk = true;
+  // Section failure record: governance-binding and the other governed markers
+  // require zero failures across this whole section, plus the specific
+  // scenario groups that exercise each marker's contract (recorded at group
+  // boundaries below).
+  const sectionFailures = failures;
+  const negRefBoundaryStart = failures;
 
   // Helper: run a governed request and return the result
   async function runGoverned(
@@ -6125,6 +6198,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 4. missing artifact ──
+  a2NegRefBoundaryPassed = failures === negRefBoundaryStart;
+  const negStoreReadStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6134,6 +6209,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 5. oversize artifact ──
+  a2NegStoreReadPassed = failures === negStoreReadStart;
+  const negA1ContentStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6224,6 +6301,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 12. identity nine-field binding, each field mismatched ──
+  a2NegA1ContentPassed = failures === negA1ContentStart;
+  const negIdentityBindingStart = failures;
   {
     const identityMutations: Array<[string, any]> = [
       ["runId", "run-002"],
@@ -6253,6 +6332,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 13. delivery ref mismatch ──
+  a2NegIdentityBindingPassed = failures === negIdentityBindingStart;
+  const negDeliveryBindingStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6264,6 +6345,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 14. implementation files length mismatch ──
+  a2NegDeliveryBindingPassed = failures === negDeliveryBindingStart;
+  const negImplFilesStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6299,6 +6382,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 17. workspace path mismatch ──
+  a2NegImplFilesPassed = failures === negImplFilesStart;
+  const negWorkspaceProvenanceStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6350,6 +6435,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 21. D03 final status digest mismatch (D03 authority) ──
+  a2NegWorkspaceProvenancePassed = failures === negWorkspaceProvenanceStart;
+  const negWorkspaceStateStart = failures;
   {
     const store = new FakeArtifactStore();
     const { deliveryRef, governanceRef } = makeGovernedEnv(store);
@@ -6398,6 +6485,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 24. standalone intent used for governed recovery ──
+  a2NegWorkspaceStatePassed = failures === negWorkspaceStateStart;
+  const negIntentBindingStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6477,6 +6566,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 27. wrong governed commit message (recovery) ──
+  a2NegIntentBindingPassed = failures === negIntentBindingStart;
+  const negCommitRecoveryStart = failures;
   {
     const store = new FakeArtifactStore();
     const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
@@ -6549,6 +6640,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 29. wrong governed PR body (recovery) ──
+  a2NegCommitRecoveryPassed = failures === negCommitRecoveryStart;
+  const negPrStateStart = failures;
   {
     const store = new FakeArtifactStore();
     const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
@@ -6697,6 +6790,8 @@ async function testA2GovernedNegative(): Promise<void> {
   }
 
   // ── 33. unknown exception text must not leak ──
+  a2NegPrStatePassed = failures === negPrStateStart;
+  const negExceptionLeakStart = failures;
   {
     const store = new FakeArtifactStore();
     const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
@@ -6713,15 +6808,153 @@ async function testA2GovernedNegative(): Promise<void> {
     chk("governed", result.reasonCode === "ARTIFACT_STORE_FAILED", "a2-neg: store throw -> ARTIFACT_STORE_FAILED");
     chk("governed", !result.safeMessage.includes(secret) && !result.safeMessage.includes("inner detail"), "a2-neg: unknown exception text not leaked");
   }
+  a2NegExceptionLeakPassed = failures === negExceptionLeakStart;
 
-  if (sectionOk) a2GovernanceArtifactBindingFlag = true;
+  // ── 34. governed pre-A1 failure must NOT surface D06 files as final files ──
+  // Before A1 verification completes, the governed terminal result must carry
+  // empty implementation_files/files, no fabricated orchestration/executor/
+  // workspace facts, and no commit/push/PR facts. D06 files are D06 facts and
+  // must never be promoted to governed final files.
+  const preA1EmptyFilesStart = failures;
+  {
+    const preValidationInputs: Array<[string, unknown]> = [
+      ["null", null],
+      ["number", 42],
+      ["object", { some: "object" }],
+      ["empty string", ""],
+      ["malformed string", "not-an-artifact-ref"],
+      ["wrong-kind string", `loop-artifact:v1:delivery_result:sha256:${"a".repeat(64)}`],
+    ];
+    for (const [name, raw] of preValidationInputs) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const result = await runGoverned(store, deliveryRef, raw as any);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-preA1: ${name} ref -> GOVERNANCE_TAIL_NOT_READY`);
+      chk("governed", result.status === "failed", `a2-preA1: ${name} ref failed`);
+      // Empty final files — D06 files are never presented as governed files
+      chk("governed", Array.isArray(result.files) && result.files.length === 0, `a2-preA1: ${name} ref runtime files empty`);
+      // No commit/push/PR facts fabricated
+      chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+        result.pushCreated === false && result.pushRecovered === false &&
+        result.prCreated === false && result.prRecovered === false, `a2-preA1: ${name} ref no commit/push/PR facts`);
+      // recovery_stage must not be raised to governance_verified
+      chk("governed", result.recoveryStage === "delivery_verified", `a2-preA1: ${name} ref recoveryStage stays delivery_verified`);
+      // Persisted governed result: empty files, null evidence refs, null governance ref
+      const persisted = JSON.parse(store.read(result.publishResultArtifactRef!).toString("utf8"));
+      chk("governed", persisted.schema === "loop-governed-publish-result-v1", `a2-preA1: ${name} ref persisted schema`);
+      chk("governed", Array.isArray(persisted.implementation_files) && persisted.implementation_files.length === 0, `a2-preA1: ${name} ref persisted implementation_files empty`);
+      chk("governed", Array.isArray(persisted.files) && persisted.files.length === 0, `a2-preA1: ${name} ref persisted files empty`);
+      chk("governed", persisted.orchestration_result_artifact_ref === null && persisted.executor_input_artifact_ref === null, `a2-preA1: ${name} ref persisted evidence refs null`);
+      chk("governed", persisted.governance_tail_result_artifact_ref === null, `a2-preA1: ${name} ref persisted governance ref null`);
+      chk("governed", persisted.commit_created === false && persisted.push_created === false && persisted.pr_created === false, `a2-preA1: ${name} ref persisted no commit/push/PR facts`);
+    }
+
+    // Post-validation failures (validated ref, later digest/A1-content gate):
+    // files stay empty and no commit/push/PR facts appear; the validated ref
+    // is the only governance fact that may be recorded (persisted = validated
+    // string, never a fabricated A1 success).
+    const postValidationCases: Array<[string, () => { store: FakeArtifactStore; deliveryRef: string; ref: string }]> = [
+      ["digest mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+        const bytes = Buffer.from((built as any).bytes);
+        const ref = `loop-artifact:v1:governance_tail_result:sha256:${"0".repeat(64)}`;
+        store._inject(ref, bytes, "governance_tail_result");
+        return { store, deliveryRef, ref };
+      }],
+      ["identity mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const ref = injectValidA1(store, deliveryRef, { identity: { ...makeIdentity(), runId: "run-002" } });
+        return { store, deliveryRef, ref };
+      }],
+    ];
+    for (const [name, build] of postValidationCases) {
+      const { store, deliveryRef, ref } = build();
+      const result = await runGoverned(store, deliveryRef, ref);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-preA1: ${name} -> GOVERNANCE_TAIL_NOT_READY`);
+      chk("governed", Array.isArray(result.files) && result.files.length === 0, `a2-preA1: ${name} runtime files empty`);
+      chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+        result.pushCreated === false && result.pushRecovered === false &&
+        result.prCreated === false && result.prRecovered === false, `a2-preA1: ${name} no commit/push/PR facts`);
+      chk("governed", result.recoveryStage === "delivery_verified", `a2-preA1: ${name} recoveryStage stays delivery_verified`);
+      const persisted = JSON.parse(store.read(result.publishResultArtifactRef!).toString("utf8"));
+      chk("governed", Array.isArray(persisted.files) && persisted.files.length === 0 &&
+        Array.isArray(persisted.implementation_files) && persisted.implementation_files.length === 0, `a2-preA1: ${name} persisted files empty`);
+      chk("governed", persisted.orchestration_result_artifact_ref === null && persisted.executor_input_artifact_ref === null, `a2-preA1: ${name} persisted evidence refs null`);
+      chk("governed", persisted.governance_tail_result_artifact_ref === ref, `a2-preA1: ${name} persisted validated ref kept`);
+    }
+  }
+  a2PreA1EmptyFilesPassed = failures === preA1EmptyFilesStart;
+
+  // ── 35. public governance ref type boundary (runtime own-key/type) ──
+  // Pre-validation raw inputs (null/number/object/empty/malformed/wrong-kind)
+  // must never become an own property of the governed runtime result, and the
+  // value must be undefined — never null/number/object/raw string. Only a
+  // validated ref may appear, exactly as the validated string.
+  const refBoundaryStart = failures;
+  {
+    const preValidationInputs: Array<[string, unknown]> = [
+      ["null", null],
+      ["number", 42],
+      ["object", { some: "object" }],
+      ["empty string", ""],
+      ["malformed string", "not-an-artifact-ref"],
+      ["wrong-kind string", `loop-artifact:v1:delivery_result:sha256:${"a".repeat(64)}`],
+    ];
+    for (const [name, raw] of preValidationInputs) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const result = await runGoverned(store, deliveryRef, raw as any);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-refb: ${name} ref rejected`);
+      chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef") === false, `a2-refb: ${name} ref result does not own governance key`);
+      chk("governed", result.governanceTailResultArtifactRef === undefined, `a2-refb: ${name} ref result value undefined`);
+      chk("governed", Object.keys(result).includes("governanceTailResultArtifactRef") === false, `a2-refb: ${name} ref result own-keys exclude governance key`);
+    }
+
+    // Validated refs that fail a LATER gate still own the key, and the value
+    // is exactly the validated string (never null/number/object/undefined).
+    const validatedRefCases: Array<[string, () => { store: FakeArtifactStore; deliveryRef: string; ref: string }]> = [
+      ["digest mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+        const bytes = Buffer.from((built as any).bytes);
+        const ref = `loop-artifact:v1:governance_tail_result:sha256:${"0".repeat(64)}`;
+        store._inject(ref, bytes, "governance_tail_result");
+        return { store, deliveryRef, ref };
+      }],
+      ["identity mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const ref = injectValidA1(store, deliveryRef, { identity: { ...makeIdentity(), runId: "run-002" } });
+        return { store, deliveryRef, ref };
+      }],
+    ];
+    for (const [name, build] of validatedRefCases) {
+      const { store, deliveryRef, ref } = build();
+      const result = await runGoverned(store, deliveryRef, ref);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-refb: ${name} rejected`);
+      chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef"), `a2-refb: ${name} owns the key`);
+      chk("governed", typeof result.governanceTailResultArtifactRef === "string" && result.governanceTailResultArtifactRef === ref, `a2-refb: ${name} value is exact validated string`);
+      chk("governed", result.governanceTailResultArtifactRef !== null && result.governanceTailResultArtifactRef !== undefined, `a2-refb: ${name} value not null/undefined`);
+    }
+  }
+  a2RefBoundaryPassed = failures === refBoundaryStart;
+
+  a2NegativeSectionPassed = failures === sectionFailures;
 }
 
 // ═══════════════════════════════════════ D09-A2: Markdown Escaping + Workspace Authority
 
 async function testA2MarkdownEscaping(): Promise<void> {
   console.log("\n=== D09-A2: Markdown Escaping And Workspace Authority Tests ===");
-  let sectionOk = true;
+  // Section failure record: the markdown-escaping and final-workspace-authority
+  // markers require zero failures across this whole section plus the specific
+  // scenario groups that exercise each contract.
+  const sectionFailures = failures;
+  const markdownEscapeStart = failures;
 
   // ── Escaping: ampersand / backslash / backtick / angle brackets ──
   // Special characters are allowed by the identity validators, so they flow
@@ -6809,6 +7042,8 @@ async function testA2MarkdownEscaping(): Promise<void> {
   }
 
   // ── Effective final workspace authority (A1 digest, not D06 digest) ──
+  a2MarkdownEscapePassed = failures === markdownEscapeStart;
+  const wsAuthorityStart = failures;
   {
     const store = new FakeArtifactStore();
     const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
@@ -6842,9 +7077,158 @@ async function testA2MarkdownEscaping(): Promise<void> {
     }));
     chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-ws: D03 task HEAD vs effective workspace -> WORKSPACE_STATE_CONFLICT");
   }
+  a2WorkspaceAuthorityPassed = failures === wsAuthorityStart;
 
-  if (sectionOk) a2MarkdownEscapingFlag = true;
-  if (sectionOk) a2FinalWorkspaceAuthorityFlag = true;
+  // ── Pre-staging final workspace DIGEST drift (governed) ──
+  // Bytes change between the first inspect and the pre-staging reconciliation
+  // while task HEAD, workspace path, task branch, changed path set, Source
+  // HEAD/WIP and base all stay identical. Path-set equality cannot prove the
+  // bytes still match the A1 final workspace, so the publisher must fail
+  // closed with WORKSPACE_STATE_CONFLICT BEFORE any git add / commit / push /
+  // PR create / intent put.
+  const driftDigestStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    // First inspect: A1 final digest. Pre-staging inspect: same path/branch/
+    // HEAD/taskHasChanges, different taskStatusDigestSha256.
+    const driftedSnapshot = makeFakeWorkspaceSnapshot({
+      taskStatusDigestSha256: "e".repeat(64),
+      taskHasChanges: true,
+    });
+    const wsMgr = new SequencedWorkspaceManager([wsSnapshot, driftedSnapshot]);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    let addCount = 0;
+    let commitCount = 0;
+    let pushCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args.includes("add")) addCount++;
+      if (args.includes("commit")) commitCount++;
+      if (args.includes("push")) pushCount++;
+      return gitState.createGitHandler()(args, stdin);
+    });
+    let prCreateCount = 0;
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "create") prCreateCount++;
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    // Count only publish-INTENT puts (terminalize may legitimately persist the
+    // failure result artifact — that is not a publish intent put).
+    let intentPutCount = 0;
+    const origPut = store.put.bind(store);
+    (store as any).put = (kind: string, content: string | Uint8Array): LoopStoredArtifact => {
+      const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+      if (bytes.length > 0 && bytes.toString("utf8").includes('"schema":"loop-governed-publish-intent-v1"')) {
+        intentPutCount++;
+      }
+      return origPut(kind, content);
+    };
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: wsMgr, clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-drift: digest drift -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("status digest"), "a2-drift: digest drift diagnostic");
+    chk("governed", addCount === 0, "a2-drift: no git add before drift block");
+    chk("governed", commitCount === 0, "a2-drift: no git commit before drift block");
+    chk("governed", pushCount === 0, "a2-drift: no git push before drift block");
+    chk("governed", prCreateCount === 0, "a2-drift: no gh pr create before drift block");
+    chk("governed", intentPutCount === 0, "a2-drift: no publish intent put before drift block");
+    chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+      result.pushCreated === false && result.pushRecovered === false &&
+      result.prCreated === false && result.prRecovered === false, "a2-drift: commit/push/PR facts all false");
+    chk("governed", JSON.stringify(result.files) === JSON.stringify(D09A2_A1_FILES), "a2-drift: files stay validated A1 final files");
+    chk("governed", typeof result.governanceTailResultArtifactRef === "string" && result.governanceTailResultArtifactRef === governanceRef, "a2-drift: governance ref stays validated string");
+    chk("governed", result.recoveryStage === "governance_verified", "a2-drift: recoveryStage not past governance_verified");
+  }
+  a2DriftDigestPassed = failures === driftDigestStart;
+
+  // ── Pre-staging taskHasChanges drift (true → false, HEAD + digest unchanged) ──
+  // The workspace loses its uncommitted changes between the first inspect and
+  // the pre-staging reconciliation; staging must fail closed before any git
+  // add with WORKSPACE_STATE_CONFLICT.
+  const driftChangesStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const driftedSnapshot = makeFakeWorkspaceSnapshot({
+      taskStatusDigestSha256: "d".repeat(64),
+      taskHasChanges: false,
+    });
+    const wsMgr = new SequencedWorkspaceManager([wsSnapshot, driftedSnapshot]);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    let addCount = 0;
+    let commitCount = 0;
+    let pushCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args.includes("add")) addCount++;
+      if (args.includes("commit")) commitCount++;
+      if (args.includes("push")) pushCount++;
+      return gitState.createGitHandler()(args, stdin);
+    });
+    let prCreateCount = 0;
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "create") prCreateCount++;
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    // Count only publish-INTENT puts (terminalize may legitimately persist the
+    // failure result artifact — that is not a publish intent put).
+    let intentPutCount = 0;
+    const origPut = store.put.bind(store);
+    (store as any).put = (kind: string, content: string | Uint8Array): LoopStoredArtifact => {
+      const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+      if (bytes.length > 0 && bytes.toString("utf8").includes('"schema":"loop-governed-publish-intent-v1"')) {
+        intentPutCount++;
+      }
+      return origPut(kind, content);
+    };
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: wsMgr, clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-drift: changes lost -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("changes lost"), "a2-drift: changes-lost diagnostic");
+    chk("governed", addCount === 0, "a2-drift: changes-lost no git add");
+    chk("governed", commitCount === 0, "a2-drift: changes-lost no git commit");
+    chk("governed", pushCount === 0, "a2-drift: changes-lost no git push");
+    chk("governed", prCreateCount === 0, "a2-drift: changes-lost no gh pr create");
+    chk("governed", intentPutCount === 0, "a2-drift: changes-lost no intent put");
+    chk("governed", result.commitCreated === false && result.pushCreated === false && result.prCreated === false, "a2-drift: changes-lost commit/push/PR facts false");
+  }
+  a2DriftChangesPassed = failures === driftChangesStart;
+  a2MarkdownSectionPassed = failures === sectionFailures;
+
+  // ── Final D09-A2 marker derivation ──
+  // Each functional marker requires: (a) the section(s) that exercise its
+  // contract ran with zero failing assertions (section-level failure counts),
+  // and (b) every scenario group bound to that contract passed. A marker can
+  // never borrow success from an unrelated scenario group, and no marker is
+  // ever set by a hard-coded true.
+  a2StandaloneByteCompatFlag = a2StandaloneSectionPassed && a2FreshGoldenPassed &&
+    a2StandaloneRecoveryPassed && a2StandaloneStoreFailurePassed;
+  a2GovernedModeFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2PosParserPathPassed && a2RefBoundaryPassed;
+  a2GovernanceArtifactBindingFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2NegRefBoundaryPassed && a2NegStoreReadPassed &&
+    a2NegA1ContentPassed && a2NegIdentityBindingPassed && a2NegDeliveryBindingPassed &&
+    a2NegImplFilesPassed && a2NegWorkspaceProvenancePassed && a2NegWorkspaceStatePassed &&
+    a2NegIntentBindingPassed && a2NegCommitRecoveryPassed && a2NegPrStatePassed &&
+    a2NegExceptionLeakPassed && a2PreA1EmptyFilesPassed;
+  a2FinalWorkspaceAuthorityFlag = a2PositiveSectionPassed && a2NegativeSectionPassed && a2MarkdownSectionPassed &&
+    a2PosFreshFlowPassed && a2NegWorkspaceStatePassed && a2WorkspaceAuthorityPassed &&
+    a2DriftDigestPassed && a2DriftChangesPassed;
+  a2GovernedStagingFlag = a2PositiveSectionPassed && a2NegativeSectionPassed && a2PosStagingPassed;
+  a2GovernedIntentResultFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2PreA1EmptyFilesPassed;
+  a2GovernedCommitRecoveryFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosRecoveryPassed && a2NegIntentBindingPassed && a2NegCommitRecoveryPassed;
+  a2GovernedDraftPrFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2NegPrStatePassed;
+  a2MarkdownEscapingFlag = a2MarkdownSectionPassed && a2MarkdownEscapePassed;
 }
 
 const SHA40_RE = /^[0-9a-f]{40}$/;

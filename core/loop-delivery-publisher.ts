@@ -1277,19 +1277,26 @@ export class LoopDeliveryPublisher {
       status_digest_sha256: finalWs.status_digest_sha256,
       task_has_changes: finalWs.task_has_changes,
     });
-    // Standalone effective authority is D06 itself; governed mode overrides
-    // both with the A1 canonical value in the governance phase.
-    if (state.effectiveFiles === null) {
-      state.effectiveFiles = freeze([...fileList]) as unknown as string[];
-    }
-    if (state.effectiveFinalWorkspace === null) {
-      state.effectiveFinalWorkspace = freeze({
-        workspace_path: finalWs.workspace_path,
-        task_branch: finalWs.task_branch,
-        task_head_sha: finalWs.task_head_sha,
-        status_digest_sha256: finalWs.status_digest_sha256,
-        task_has_changes: finalWs.task_has_changes,
-      });
+    // Standalone effective authority is D06 itself. Governed mode only saves
+    // the D06 facts (deliveryResult / deliveryFiles / deliveryFinalWorkspace)
+    // here and establishes its effective authority EXCLUSIVELY from the A1
+    // canonical value after full governance validation — so a governed request
+    // that fails before A1 verification completes can never surface D06 files
+    // as governed final files (implementation_files/files stay empty, and
+    // precommit/workspace facts stay unfabricated).
+    if (state.mode === "standalone") {
+      if (state.effectiveFiles === null) {
+        state.effectiveFiles = freeze([...fileList]) as unknown as string[];
+      }
+      if (state.effectiveFinalWorkspace === null) {
+        state.effectiveFinalWorkspace = freeze({
+          workspace_path: finalWs.workspace_path,
+          task_branch: finalWs.task_branch,
+          task_head_sha: finalWs.task_head_sha,
+          status_digest_sha256: finalWs.status_digest_sha256,
+          task_has_changes: finalWs.task_has_changes,
+        });
+      }
     }
 
     const elapsed = Math.max(0, this._nowMsChecked(state) - t0);
@@ -1325,6 +1332,14 @@ export class LoopDeliveryPublisher {
     } catch (e) {
       return await this._terminalize(state, "GOVERNANCE_TAIL_NOT_READY", safeMessage((e as Error).message), null);
     }
+
+    // Validated governance ref boundary: the value has passed the string /
+    // non-empty / artifact-ref format / exact-kind gates and keeps its
+    // canonical string semantics. From this point on the validated string may
+    // be recorded even when a LATER gate (store read, digest, A1 content)
+    // fails; a raw null/number/object/empty/malformed/wrong-kind input is
+    // never promoted to a validated ref and never leaks into results.
+    state.governanceRef = governanceRef;
 
     // Read artifact bytes (store failure keeps ARTIFACT_STORE_FAILED)
     let bytes: Buffer;
@@ -1414,7 +1429,10 @@ export class LoopDeliveryPublisher {
     }
 
     // ── Store governed facts separately from D06 facts ──
-    state.governanceRef = governanceRef;
+    // governanceRef was recorded at the validated-ref boundary above; the A1
+    // value becomes the verified governance value only now, after EVERY gate
+    // passed (identity, delivery ref, implementation files, provenance,
+    // subset binding). Partially validated A1 values never reach this point.
     state.governanceValue = a1;
     // The orchestration and executor-input refs are evidence chain only;
     // their bytes are never read.
@@ -2586,11 +2604,14 @@ export class LoopDeliveryPublisher {
       elapsedMs: finalResult.elapsed_ms as number,
       trace: freeze((finalResult.trace as LoopDeliveryPublishTraceEntry[]).map((te) => freeze(te))),
     };
-    // The governed runtime result must OWN the governance ref key with the
-    // exact request ref; the standalone runtime result must NOT gain any new
-    // own property (byte/own-key compatibility with the authorized Source).
-    if (state.mode === "governed") {
-      (publishResult as any).governanceTailResultArtifactRef = state.request.governanceTailResultArtifactRef;
+    // The governed runtime result must OWN the governance ref key ONLY when a
+    // validated ref exists, and the value must be exactly the validated
+    // string. Raw null/number/object/empty/malformed/wrong-kind inputs never
+    // surface as an own property (no `undefined` own property either). The
+    // standalone runtime result must NOT gain any new own property
+    // (byte/own-key compatibility with the authorized Source).
+    if (state.mode === "governed" && state.governanceRef !== null) {
+      (publishResult as any).governanceTailResultArtifactRef = state.governanceRef;
     }
 
     return deepFreeze(publishResult) as LoopDeliveryPublishResult;
@@ -2626,11 +2647,11 @@ export class LoopDeliveryPublisher {
       record.orchestration_result_artifact_ref = state.governanceOrchestrationRef ?? null;
       record.executor_input_artifact_ref = state.governanceExecutorInputRef ?? null;
       record.delivery_result_artifact_ref = state.request.deliveryResultArtifactRef;
-      record.governance_tail_result_artifact_ref = state.governanceRef !== null
-        ? state.governanceRef
-        : (typeof state.request.governanceTailResultArtifactRef === "string"
-          ? (state.request.governanceTailResultArtifactRef as string)
-          : null);
+      // Persisted contract: governance_tail_result_artifact_ref is the
+      // validated string or null. Raw malformed/non-string request values are
+      // never written as an artifact ref; pre-validation failures write null;
+      // a validated ref may be written even when a later gate failed.
+      record.governance_tail_result_artifact_ref = state.governanceRef !== null ? state.governanceRef : null;
       record.publish_intent_artifact_ref = state.publishIntentArtifactRef ?? null;
       record.precommit_head_sha = state.precommitHeadSha ?? null;
       record.commit_sha = state.commitSha ?? null;
@@ -2854,6 +2875,38 @@ export class LoopDeliveryPublisher {
         }
       } else {
         return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("unauthorized task HEAD transition"), null);
+      }
+    }
+
+    // Governed pre-staging gate. The first D03 reconciliation before staging
+    // (governed mode, staging not yet started — stagedTreeSha still empty —
+    // and HEAD still at the effective precommit HEAD) re-verifies that the
+    // CURRENT snapshot still matches the A1 final workspace authority. A
+    // matching changed-path set alone cannot prove the bytes still correspond
+    // to the A1 final workspace: bytes may drift while HEAD and the changed
+    // path set stay unchanged. The status digest is therefore re-checked
+    // against the A1 final workspace digest (never the D06 digest) before any
+    // `git add`. Fails closed with WORKSPACE_STATE_CONFLICT with zero write
+    // side-effects. Paths that already entered publish-commit recovery with
+    // HEAD advanced past precommit are excluded by the stage-aware condition
+    // above and keep the existing commit verification contract.
+    if (
+      state.mode === "governed" &&
+      state.stagedTreeSha === null &&
+      snapshot.taskHeadSha === state.precommitHeadSha
+    ) {
+      const finalWs = state.effectiveFinalWorkspace;
+      if (finalWs === null) {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("effective final workspace missing"), null);
+      }
+      if (!snapshot.taskHasChanges) {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("final workspace changes lost"), null);
+      }
+      if (snapshot.taskStatusDigestSha256 !== finalWs.status_digest_sha256) {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("final workspace status digest drift"), null);
+      }
+      if (snapshot.taskHeadSha !== finalWs.task_head_sha) {
+        return await this._terminalize(state, "WORKSPACE_STATE_CONFLICT", safeMessage("final workspace task head drift"), null);
       }
     }
 
