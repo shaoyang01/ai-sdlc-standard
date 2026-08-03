@@ -323,6 +323,29 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 - CI success 不是 implementation review PASS。
 - D09 仍未实施。
 
+## D09-A1 Governance Tail Result Contract Validation
+
+`core/loop-governance-tail-result.ts` 与 `tests/loop-governance-tail-result.test.ts` 组成 D09-A1 governance-tail-result contract 验证：
+
+- **Schema**：固定 `loop-governance-tail-result-v1`，root 只允许 19 个字段且顺序固定；`schema`、`status=completed`、`reason_code=GOVERNANCE_TAIL_COMPLETED`、`blocking_items=[]` 为固定值；不接受任何其他 status 或 reason code。
+- **只表达 completed**：该 artifact 只表达 Shared Documentation Governance Tail 已正式完成并具备 governed publish 资格；不表达 pending、blocked、failed 或部分完成；它是完成证据聚合结果，不是完成判定 owner——Tail Completion Gate 与 Manifest 仍分别拥有正式完成判定和当前状态权威。
+- **Evidence 集合**：docflow 覆盖 `03-实现记录` / `04-代码审核` / `05-测试验收`（review/test 仅 `PASS` 或 `PASS_WITH_RISK`）；`implementation_files` 与 `files` 必须非空、严格升序、无重复且 implementation files 是 files 的子集；所有 Evidence Ref 路径必须出现在 root `files` 中。
+- **Conditional decision 矩阵**：business_domain_sync 只允许 `SYNC_REQUIRED`（write_authorized=true、execution_status=completed、evidence）或 `NOT_REQUIRED`（write_authorized=false、execution_status=not_required、完整 Decision Basis）；reconcile 只允许 `required`/`not_required` 两态；entry_coverage 只允许 `PASS`/`not_applicable`；regate 只允许 `PASS`/`not_required`；not-required/not-applicable 状态必须携带完整 Decision Basis（scope/reason/evidence/decision_source/decision_owner/version_basis/stale_condition）。
+- **Manifest/Tail Gate 绑定**：manifest 文件名必须为 `manifest.md`，`tail_status=completed`；completion_evidence 必须按 path 排序、无重复且包含 docflow 与全部非 null conditional evidence；Tail Gate 必须 `persisted=true`、`read_back_verified=true`、result 为 `PASS`/`PASS_WITH_RISK`、`reviewed_manifest_version=manifest.version`；manifest 与 tail_gate 的 completion_decision_source 必须精确等于 Tail Gate 文件自身的 path/version/digest；Manifest path 与 Tail Gate path 不得相同。
+- **Canonical bytes**：builder 输出 UTF-8、固定 property order、无 BOM、无实际 CR/NUL、精确一个 trailing LF、SHA-256 小写 hex；默认 maxBytes=1048576，超限返回 `too_large`。
+- **Parser round-trip equality**：parser 只接受 Uint8Array，先防御性复制有界 bytes，拒绝 BOM/CR/NUL、缺失或多余 trailing LF，fatal UTF-8 解码，JSON parse 失败返回 `invalid_bytes`，调用与 builder 相同的真实 validator，重建 canonical bytes，只有输入 bytes 与重建 bytes byte-identical 才成功；round-trip 拒绝重复 JSON keys、额外 whitespace、错误 property order、非 canonical 数字格式、缺失/额外字段与非 canonical escaping。
+- **Adversarial 输入**：exact-key scan、拒绝 symbol key、`__proto__`、accessor、非 plain prototype、sparse array、array 额外 own property；一次 descriptor snapshot 后不再读取原对象；Proxy/revoked Proxy 反射失败 fail-closed；限制数组元素数量、单字符串 UTF-8 字节与总 artifact 字节；未知 exception 不传播，失败 diagnostic 安全、有限长。
+- **Artifact Store kind**：`LoopArtifactKind` 与 `LOOP_ARTIFACT_KINDS` 只新增 `governance_tail_result`（canonical ref `loop-artifact:v1:governance_tail_result:sha256:<64hex>`），原十种 D01～D08 kinds 保持不变；新 kind 支持 put/read、idempotent put、blob mode 0600 与并发 put。
+- **测试 markers**：`D09_A1_GOVERNANCE_TAIL_RESULT_SCHEMA_VERIFIED`、`D09_A1_GOVERNANCE_TAIL_RESULT_CANONICAL_BYTES_VERIFIED`、`D09_A1_GOVERNANCE_TAIL_RESULT_FAIL_CLOSED`、`D09_A1_ARTIFACT_KIND_VERIFIED`、`D09_A1_D01_D08_REGRESSION_PRESERVED`、`D09_A1_TEMP_CLEANUP_COMPLETE` 只在对应断言全部成功时输出；summary 格式 `D09_A1_GOVERNANCE_TAIL_RESULT_SUMMARY passed=<N> failed=0`。
+
+边界：
+
+- 本模块与测试不运行真实 Shared Tail，不执行真实 Sync、Reconcile、Entry Coverage 或 Tail Gate，不调用 D03/D06/D07，不创建真实 workspace，不执行真实 Git。
+- 本任务不创建 commit/push/PR 的生产副作用（验收在 task branch 内完成），不建立 requirement completion，不表示 D09 已实现，不表示 merge 或 publication 授权。
+- 跨 artifact 的 identity、digest 与 byte binding 由未来 D09-B 与 D09-A2 执行；A1 只验证 ref 格式。
+- A1 不重新判断 `PASS_WITH_RISK` 的业务风险接受；未来 D09-B 必须在构建 A1 artifact 前确认 Gate 结果确实有效。
+- CI success 不是 implementation review PASS；D09 整体仍未实现。
+
 ## validate-skill-contracts.rb 检查什么
 
 当前脚本检查：

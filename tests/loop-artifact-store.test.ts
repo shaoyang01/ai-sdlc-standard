@@ -27,6 +27,7 @@ import { join } from "node:path";
 import {
   LoopArtifactStore,
   LoopArtifactStoreError,
+  LOOP_ARTIFACT_KINDS,
   type LoopArtifactKind,
 } from "../core/loop-artifact-store";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunIdentity } from "../core/loop-executor-types";
@@ -1103,6 +1104,53 @@ async function main(): Promise<void> {
           }
         } finally { fsMod.closeSync = origClose; fiStore.close(); }
       }
+    }
+
+    // ── D09-A1: governance_tail_result kind (new kind + original kinds unchanged) ──
+    console.log("D09-A1 governance_tail_result kind");
+    {
+      const d09a1OriginalKinds = [
+        "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
+        "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
+      ] as const;
+      assert(LOOP_ARTIFACT_KINDS.length === 11, "kind list extended to exactly 11 entries");
+      assert(
+        d09a1OriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
+        "original ten D01-D08 kinds keep their exact positions",
+      );
+      assert(LOOP_ARTIFACT_KINDS[10] === "governance_tail_result", "governance_tail_result appended as the eleventh kind");
+
+      const d09a1Content = '{"schema":"loop-governance-tail-result-v1","status":"completed"}';
+      const d09a1Bytes = Buffer.from(d09a1Content, "utf8");
+      const tailDesc = store.put("governance_tail_result", d09a1Content);
+      assert(tailDesc.kind === "governance_tail_result", "D09-A1 put kind governance_tail_result");
+      assert(tailDesc.artifactRef === `loop-artifact:v1:governance_tail_result:sha256:${tailDesc.digest}`, "D09-A1 canonical ref format");
+      assert(/^loop-artifact:v1:governance_tail_result:sha256:[0-9a-f]{64}$/.test(tailDesc.artifactRef), "D09-A1 ref matches loop-artifact:v1:governance_tail_result:sha256:<64hex>");
+      assert(tailDesc.digest === createHash("sha256").update(d09a1Bytes).digest("hex"), "D09-A1 digest exact");
+      assert(tailDesc.sizeBytes === d09a1Bytes.length, "D09-A1 size exact");
+      const tailReadback = store.read(tailDesc.artifactRef, tailDesc.digest);
+      assert(tailReadback.equals(d09a1Bytes), "D09-A1 exact readback");
+      const tailAgain = store.put("governance_tail_result", d09a1Content);
+      assert(tailAgain.artifactRef === tailDesc.artifactRef, "D09-A1 idempotent put returns same ref");
+      const tailShardDir = join(controlRoot, "artifacts", "v1", "governance_tail_result", tailDesc.digest.slice(0, 2));
+      const tailFinalPath = join(tailShardDir, `${tailDesc.digest}.blob`);
+      const tailMode = lstatSync(tailFinalPath).mode & 0o777;
+      assert(tailMode === 0o600, `D09-A1 new kind blob mode 0600 (got ${tailMode.toString(8)})`);
+
+      // original ten kinds still behave identically
+      for (const kind of d09a1OriginalKinds) {
+        const desc = store.put(kind, d09a1Content);
+        assert(desc.kind === kind, `D09-A1 original kind ${kind} still put`);
+        assert(desc.artifactRef === `loop-artifact:v1:${kind}:sha256:${desc.digest}`, `D09-A1 original kind ${kind} ref unchanged`);
+      }
+      expectThrow("INVALID_INPUT", () => store.put("governance_tail_result" as never, 42 as never), "D09-A1 invalid content for new kind rejected");
+      expectThrow("INVALID_INPUT", () => store.put("not_a_real_kind" as never, "x"), "D09-A1 invalid kind still rejected");
+
+      // concurrent same-content put on the new kind stays safe
+      const concurrent = await runConcurrentPuts(controlRoot, repository, "governance_tail_result", "concurrent-tail-content", 3);
+      assert(concurrent.every((result) => result.ok === true), "D09-A1 all concurrent new-kind puts succeed");
+      const concurrentRefs = new Set(concurrent.map((result) => result.artifactRef));
+      assert(concurrentRefs.size === 1, "D09-A1 concurrent new-kind descriptors identical");
     }
 
     store.close();
