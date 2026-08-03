@@ -18,6 +18,7 @@ import {
   buildLoopGovernanceTailResult,
   parseLoopGovernanceTailResultBytes,
   LOOP_GOVERNANCE_TAIL_RESULT_SCHEMA,
+  LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES,
   type LoopGovernanceTailResultBuildResult,
 } from "../core/loop-governance-tail-result";
 import {
@@ -53,6 +54,9 @@ const MARKERS: Record<string, boolean> = {
   D09_A1_ARTIFACT_KIND_VERIFIED: false,
   D09_A1_D01_D08_REGRESSION_PRESERVED: false,
   D09_A1_TEMP_CLEANUP_COMPLETE: false,
+  D09_A1_PARSER_UNTRUSTED_BYTES_FAIL_CLOSED_VERIFIED: false,
+  D09_A1_ARRAY_PLAIN_PROTOTYPE_VERIFIED: false,
+  D09_A1_BOUNDED_UTF8_BUDGET_VERIFIED: false,
 };
 
 function markIfClear(marker: string): void {
@@ -253,6 +257,36 @@ function expectParseFailure(
     check(result.reason === expectedReason, `${name}: parser reason ${expectedReason} (got ${result.reason})`);
     if (opts?.diagnostic !== undefined) {
       check(result.diagnostic.includes(opts.diagnostic), `${name}: diagnostic mentions '${opts.diagnostic}' (got '${result.diagnostic}')`);
+    }
+  }
+}
+
+/**
+ * Parser negative-input helper for the untrusted bytes boundary. Explicitly
+ * proves no-throw, binds the exact failure reason, and verifies the
+ * diagnostic stays static, bounded and free of any sentinel exception text.
+ */
+function expectUntrustedBytesRejection(
+  name: string,
+  input: unknown,
+  expectedReason: string,
+  opts?: { sentinel?: string; maxBytes?: number },
+): void {
+  let result: LoopGovernanceTailResultBuildResult;
+  let threw = false;
+  try {
+    result = parseLoopGovernanceTailResultBytes(input as Uint8Array, opts?.maxBytes);
+  } catch {
+    threw = true;
+    result = { ok: false, reason: "invalid_input", diagnostic: "parser threw" };
+  }
+  check(!threw, `${name}: parser must not throw for untrusted bytes`);
+  check(result.ok === false, `${name}: parser fails closed`);
+  if (result.ok === false) {
+    check(result.reason === expectedReason, `${name}: parser reason ${expectedReason} (got ${result.reason})`);
+    check(result.diagnostic.length > 0 && result.diagnostic.length <= 256, `${name}: diagnostic safe bounded length`);
+    if (opts?.sentinel !== undefined && opts.sentinel.length > 0) {
+      check(!result.diagnostic.includes(opts.sentinel), `${name}: diagnostic does not leak sentinel`);
     }
   }
 }
@@ -920,6 +954,392 @@ function sectionD01D08Regression(store: LoopArtifactStore): void {
   markIfClear("D09_A1_D01_D08_REGRESSION_PRESERVED");
 }
 
+// ═══════════════════════════════════════ 8. parser untrusted bytes boundary
+
+function sectionParserUntrustedBytes(): void {
+  startSection();
+  console.log("8. parser untrusted bytes fail-closed snapshot");
+  const built = buildValid();
+  check(built.ok === true, "canonical build ok for parser boundary section");
+  if (built.ok) {
+    const bytes = built.bytes;
+
+    // genuine Uint8Array round trip still succeeds
+    const roundTrip = parseLoopGovernanceTailResultBytes(bytes);
+    check(roundTrip.ok === true, "genuine Uint8Array round trip succeeds");
+    if (roundTrip.ok) {
+      check(roundTrip.digestSha256 === built.digestSha256, "genuine round trip digest identical");
+      check(roundTrip.sizeBytes === bytes.length, "genuine round trip size identical");
+    }
+
+    // Node Buffer keeps compatibility
+    const bufferParse = parseLoopGovernanceTailResultBytes(Buffer.from(bytes));
+    check(bufferParse.ok === true, "Node Buffer input accepted");
+    if (bufferParse.ok) {
+      check(bufferParse.digestSha256 === built.digestSha256, "Buffer parse digest identical");
+    }
+
+    // Proxy-wrapped valid Uint8Array: the design rejects every proxied typed
+    // array — fail closed, never throw.
+    expectUntrustedBytesRejection("proxy-wrapped Uint8Array", new Proxy(bytes, {}), "invalid_input");
+
+    // revoked Proxy: no-throw, fail closed
+    const revocable = Proxy.revocable(bytes, {});
+    const revokedBytes = revocable.proxy;
+    revocable.revoke();
+    expectUntrustedBytesRejection("revoked proxy bytes", revokedBytes, "invalid_input");
+
+    // throwing proxy traps: sentinel must never reach the diagnostic
+    const trapBytes = new Proxy(bytes, {
+      get(_target: object, prop: PropertyKey): unknown {
+        throw new Error("SENTINEL_BYTES_TRAP");
+      },
+      getPrototypeOf(): object {
+        throw new Error("SENTINEL_BYTES_TRAP");
+      },
+    });
+    expectUntrustedBytesRejection("throwing proxy trap bytes", trapBytes, "invalid_input", { sentinel: "SENTINEL_BYTES_TRAP" });
+
+    // other typed arrays / views
+    expectUntrustedBytesRejection("Int8Array input", new Int8Array(bytes), "invalid_input");
+    expectUntrustedBytesRejection("Uint16Array input", new Uint16Array(bytes), "invalid_input");
+    expectUntrustedBytesRejection("DataView input", new DataView(bytes.buffer), "invalid_input");
+
+    // plain objects and Symbol.toStringTag spoofs
+    expectUntrustedBytesRejection("plain object input", {}, "invalid_input");
+    expectUntrustedBytesRejection(
+      "Symbol.toStringTag spoof input",
+      { [Symbol.toStringTag]: "Uint8Array", length: bytes.length, 0: bytes[0] },
+      "invalid_input",
+    );
+
+    // genuine oversized Uint8Array — trusted intrinsic length gates before copy
+    const oversized = new Uint8Array(LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES + 1);
+    expectUntrustedBytesRejection("genuine oversized Uint8Array", oversized, "too_large");
+    expectUntrustedBytesRejection("genuine bytes above caller maxBytes", bytes, "too_large", { maxBytes: bytes.length - 1 });
+  }
+  markIfClear("D09_A1_PARSER_UNTRUSTED_BYTES_FAIL_CLOSED_VERIFIED");
+}
+
+// ═══════════════════════════════════════ 9. plain array prototype enforcement
+
+function sectionArrayPlainPrototype(): void {
+  startSection();
+  console.log("9. plain array prototype enforcement");
+
+  expectBuildFailure(
+    "files custom prototype",
+    (input) => { Object.setPrototypeOf(input.files as object, { extra: 1 }); },
+    "invalid_input",
+    {
+      diagnostic: "files has a non-plain array prototype",
+      effect: (input) => Object.getPrototypeOf(input.files as object) !== Array.prototype,
+    },
+  );
+  expectBuildFailure(
+    "implementation_files custom prototype",
+    (input) => { Object.setPrototypeOf(input.implementation_files as object, { extra: 1 }); },
+    "invalid_input",
+    {
+      diagnostic: "implementation_files has a non-plain array prototype",
+      effect: (input) => Object.getPrototypeOf(input.implementation_files as object) !== Array.prototype,
+    },
+  );
+  expectBuildFailure(
+    "manifest.completion_evidence custom prototype",
+    (input) => { Object.setPrototypeOf((input.manifest as Record<string, unknown>).completion_evidence as object, { extra: 1 }); },
+    "invalid_input",
+    {
+      diagnostic: "manifest.completion_evidence has a non-plain array prototype",
+      effect: (input) => Object.getPrototypeOf((input.manifest as Record<string, unknown>).completion_evidence as object) !== Array.prototype,
+    },
+  );
+  expectBuildFailure(
+    "blocking_items empty array custom prototype",
+    (input) => { Object.setPrototypeOf(input.blocking_items as object, { extra: 1 }); },
+    "invalid_input",
+    {
+      diagnostic: "blocking_items has a non-plain array prototype",
+      effect: (input) => Object.getPrototypeOf(input.blocking_items as object) !== Array.prototype,
+    },
+  );
+  expectBuildFailure(
+    "files null prototype",
+    (input) => { Object.setPrototypeOf(input.files as object, null); },
+    "invalid_input",
+    {
+      diagnostic: "files has a non-plain array prototype",
+      effect: (input) => Object.getPrototypeOf(input.files as object) === null,
+    },
+  );
+
+  // Array subclass — proto is the subclass prototype, not Array.prototype
+  {
+    const input = clone(makeValidInput());
+    class ArraySubclass extends Array {}
+    const sub = new ArraySubclass();
+    sub.push(...(input.files as string[]));
+    check(Array.isArray(sub) === true, "array subclass passes Array.isArray");
+    check(Object.getPrototypeOf(sub) !== Array.prototype, "array subclass mutation actually took effect");
+    input.files = sub;
+    let result: LoopGovernanceTailResultBuildResult;
+    let threw = false;
+    try {
+      result = buildLoopGovernanceTailResult(input);
+    } catch {
+      threw = true;
+      result = { ok: false, reason: "invalid_input", diagnostic: "threw" };
+    }
+    check(!threw, "array subclass does not propagate an exception");
+    check(result.ok === false && result.reason === "invalid_input", "array subclass rejected with invalid_input");
+    if (result.ok === false) {
+      check(result.diagnostic.includes("files has a non-plain array prototype"), "array subclass diagnostic bound");
+    }
+  }
+
+  // getPrototypeOf trap proxy — trap genuinely fires and still fails closed
+  {
+    const input = clone(makeValidInput());
+    const trapState: { fired: boolean } = { fired: false };
+    const proxy = new Proxy(input.files as object, {
+      getPrototypeOf(): object {
+        trapState.fired = true;
+        throw new Error("SENTINEL_PROTO_TRAP");
+      },
+    });
+    check(trapState.fired === false, "getPrototypeOf trap not fired before build");
+    input.files = proxy;
+    let result: LoopGovernanceTailResultBuildResult;
+    let threw = false;
+    try {
+      result = buildLoopGovernanceTailResult(input);
+    } catch {
+      threw = true;
+      result = { ok: false, reason: "invalid_input", diagnostic: "threw" };
+    }
+    check(trapState.fired === true, "getPrototypeOf trap actually fired");
+    check(!threw, "getPrototypeOf trap does not propagate an exception");
+    check(result.ok === false && result.reason === "invalid_input", "getPrototypeOf trap proxy rejected");
+    if (result.ok === false) {
+      check(result.diagnostic.includes("files array prototype reflection failed"), "getPrototypeOf trap diagnostic bound");
+      check(!result.diagnostic.includes("SENTINEL_PROTO_TRAP"), "getPrototypeOf trap sentinel not leaked");
+    }
+  }
+
+  // revoked array proxy — genuinely revoked and still fails closed
+  {
+    const input = clone(makeValidInput());
+    const { proxy, revoke } = Proxy.revocable(input.files as object, {});
+    revoke();
+    let revokedReflectionThrew = false;
+    try {
+      Array.isArray(proxy);
+    } catch {
+      revokedReflectionThrew = true;
+    }
+    check(revokedReflectionThrew, "revoked array proxy is genuinely revoked");
+    input.files = proxy;
+    let result: LoopGovernanceTailResultBuildResult;
+    let threw = false;
+    try {
+      result = buildLoopGovernanceTailResult(input);
+    } catch {
+      threw = true;
+      result = { ok: false, reason: "invalid_input", diagnostic: "threw" };
+    }
+    check(!threw, "revoked array proxy does not propagate an exception");
+    check(result.ok === false && result.reason === "invalid_input", "revoked array proxy rejected");
+    if (result.ok === false) {
+      check(result.diagnostic.includes("files array reflection failed"), "revoked array proxy diagnostic bound");
+    }
+  }
+
+  // existing dense/sparse and extra-property rejections remain
+  expectBuildFailure(
+    "sparse array still rejected",
+    (input) => { (input.files as string[]).length += 1; },
+    "invalid_input",
+    { diagnostic: "files must be a dense array" },
+  );
+  expectBuildFailure(
+    "extra own property still rejected",
+    (input) => { (input.files as string[] & { extra?: number }).extra = 1; },
+    "invalid_input",
+    {
+      diagnostic: "files must not have extra own properties",
+      effect: (input) => "extra" in (input.files as object),
+    },
+  );
+  markIfClear("D09_A1_ARRAY_PLAIN_PROTOTYPE_VERIFIED");
+}
+
+// ═══════════════════════════════════════ 10. bounded UTF-8 byte budget
+
+function sectionBoundedUtf8Budget(): void {
+  startSection();
+  console.log("10. bounded UTF-8 byte budget");
+
+  // 65536 ASCII bytes boundary: passes
+  {
+    const input = clone(makeValidInput());
+    (input.identity as Record<string, unknown>).runId = "a".repeat(65_536);
+    const result = buildLoopGovernanceTailResult(input);
+    check(result.ok === true, "65536 ASCII bytes string passes the per-string bound");
+  }
+  // 65537 ASCII code units: rejected before any scan (fast reject)
+  expectBuildFailure(
+    "65537 ASCII code units rejected",
+    (input) => { (input.identity as Record<string, unknown>).runId = "a".repeat(65_537); },
+    "invalid_input",
+    { diagnostic: "identity.runId exceeds the per-string byte bound" },
+  );
+
+  // exactly 65536-byte multibyte boundary: 32768 × U+00E9 (2 bytes)
+  {
+    const input = clone(makeValidInput());
+    (input.identity as Record<string, unknown>).runId = "\u00E9".repeat(32_768);
+    const result = buildLoopGovernanceTailResult(input);
+    check(result.ok === true, "exactly 65536-byte multibyte string passes");
+  }
+  expectBuildFailure(
+    "multibyte string over per-string bound",
+    (input) => { (input.identity as Record<string, unknown>).runId = "\u00E9".repeat(32_769); },
+    "invalid_input",
+    { diagnostic: "identity.runId exceeds the per-string byte bound" },
+  );
+
+  // valid surrogate pair counts 4 bytes and skips the low surrogate
+  {
+    const input = clone(makeValidInput());
+    (input.identity as Record<string, unknown>).runId = "\uD83D\uDE00".repeat(16_384);
+    const result = buildLoopGovernanceTailResult(input);
+    check(result.ok === true, "valid surrogate pairs at the 65536-byte boundary pass");
+  }
+  expectBuildFailure(
+    "surrogate pairs over per-string bound",
+    (input) => { (input.identity as Record<string, unknown>).runId = "\uD83D\uDE00".repeat(16_385); },
+    "invalid_input",
+    { diagnostic: "identity.runId exceeds the per-string byte bound" },
+  );
+
+  // lone surrogates follow TextEncoder replacement semantics: 3 bytes each
+  {
+    const input = clone(makeValidInput());
+    (input.identity as Record<string, unknown>).runId = "\uD83D".repeat(21_845);
+    const result = buildLoopGovernanceTailResult(input);
+    check(result.ok === true, "lone high surrogates at 65535-byte boundary pass");
+  }
+  expectBuildFailure(
+    "lone high surrogates over per-string bound",
+    (input) => { (input.identity as Record<string, unknown>).runId = "\uD83D".repeat(21_846); },
+    "invalid_input",
+    { diagnostic: "identity.runId exceeds the per-string byte bound" },
+  );
+  {
+    const input = clone(makeValidInput());
+    (input.identity as Record<string, unknown>).runId = "\uDE00".repeat(21_845);
+    const result = buildLoopGovernanceTailResult(input);
+    check(result.ok === true, "lone low surrogates at 65535-byte boundary pass");
+  }
+  expectBuildFailure(
+    "lone low surrogates over per-string bound",
+    (input) => { (input.identity as Record<string, unknown>).runId = "\uDE00".repeat(21_846); },
+    "invalid_input",
+    { diagnostic: "identity.runId exceeds the per-string byte bound" },
+  );
+
+  // control characters keep being rejected (C0, DEL, C1)
+  expectBuildFailure(
+    "C0 control still rejected",
+    (input) => { (input.identity as Record<string, unknown>).runId = "run\u0001bad"; },
+    "invalid_input",
+    { diagnostic: "identity.runId must not contain control characters" },
+  );
+  expectBuildFailure(
+    "DEL still rejected",
+    (input) => { (input.identity as Record<string, unknown>).runId = "run\u007Fbad"; },
+    "invalid_input",
+    { diagnostic: "identity.runId must not contain control characters" },
+  );
+  expectBuildFailure(
+    "C1 control still rejected",
+    (input) => { (input.identity as Record<string, unknown>).runId = "run\u0085bad"; },
+    "invalid_input",
+    { diagnostic: "identity.runId must not contain control characters" },
+  );
+
+  // aggregate budget overflow: too_large with the exact diagnostic
+  {
+    const result = buildLoopGovernanceTailResult(makeValidInput(), 512);
+    check(result.ok === false, "aggregate budget overflow fails closed");
+    if (result.ok === false) {
+      check(result.reason === "too_large", "aggregate overflow reason too_large");
+      check(result.diagnostic.includes("artifact exceeds maxBytes"), "aggregate overflow diagnostic bound");
+    }
+  }
+
+  // ── TextEncoder sentinel: budget rejection must happen before any full
+  //    encode. A throwing TextEncoder would surface as an unexpected failure
+  //    if the budget path still called it; the specific reasons below prove
+  //    the bounded counter rejected the input first.
+  const originalTextEncoder = globalThis.TextEncoder;
+  let encoderRestored = false;
+  try {
+    globalThis.TextEncoder = class {
+      encode(): Uint8Array {
+        throw new Error("SENTINEL_ENCODER");
+      }
+    } as unknown as typeof TextEncoder;
+    {
+      // necessarily over the per-string bound: 70000 ASCII code units
+      const input = clone(makeValidInput());
+      (input.identity as Record<string, unknown>).runId = "a".repeat(70_000);
+      let result: LoopGovernanceTailResultBuildResult;
+      let threw = false;
+      try {
+        result = buildLoopGovernanceTailResult(input);
+      } catch {
+        threw = true;
+        result = { ok: false, reason: "invalid_input", diagnostic: "threw" };
+      }
+      check(!threw, "per-string overflow with sentinel encoder does not throw");
+      check(result.ok === false && result.reason === "invalid_input", "per-string overflow rejected before any full encode");
+      if (result.ok === false) {
+        check(result.diagnostic.includes("exceeds the per-string byte bound"), "per-string overflow diagnostic specific");
+        check(!result.diagnostic.includes("SENTINEL_ENCODER"), "per-string overflow does not leak sentinel");
+      }
+    }
+    {
+      // single strings valid per-string, aggregate budget exceeded
+      let result: LoopGovernanceTailResultBuildResult;
+      let threw = false;
+      try {
+        result = buildLoopGovernanceTailResult(makeValidInput(), 512);
+      } catch {
+        threw = true;
+        result = { ok: false, reason: "invalid_input", diagnostic: "threw" };
+      }
+      check(!threw, "aggregate overflow with sentinel encoder does not throw");
+      check(result.ok === false && result.reason === "too_large", "aggregate overflow rejected before any full encode");
+      if (result.ok === false) {
+        check(result.diagnostic.includes("artifact exceeds maxBytes"), "aggregate overflow diagnostic bound");
+        check(!result.diagnostic.includes("SENTINEL_ENCODER"), "aggregate overflow does not leak sentinel");
+      }
+    }
+  } finally {
+    globalThis.TextEncoder = originalTextEncoder;
+    encoderRestored = true;
+  }
+  check(encoderRestored, "TextEncoder restored unconditionally in finally");
+
+  // after restoration the normal builder still uses the real TextEncoder
+  {
+    const result = buildLoopGovernanceTailResult(makeValidInput());
+    check(result.ok === true, "normal build succeeds after TextEncoder restoration");
+  }
+  markIfClear("D09_A1_BOUNDED_UTF8_BUDGET_VERIFIED");
+}
+
 // ═══════════════════════════════════════ main
 
 function main(): void {
@@ -932,6 +1352,9 @@ function main(): void {
   const { store, tempRoot } = sectionArtifactStoreKind();
   sectionD01D08Regression(store);
   store.close();
+  sectionParserUntrustedBytes();
+  sectionArrayPlainPrototype();
+  sectionBoundedUtf8Budget();
 
   // ── 7. cleanup (including cleanup-failure handling) ──
   startSection();

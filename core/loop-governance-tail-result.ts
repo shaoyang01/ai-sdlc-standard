@@ -297,10 +297,28 @@ function scanPlainObject(value: unknown, allowed: readonly string[], label: stri
 }
 
 function scanPlainArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new ValidationError("invalid_input", `${label} must be an array`);
+  // Array.isArray and the prototype reflection are part of the safe boundary:
+  // revoked array proxies make Array.isArray throw and getPrototypeOf traps
+  // can throw — both fail closed here, never propagating an exception.
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    throw new ValidationError("invalid_input", `${label} array reflection failed`);
+  }
+  if (!isArray) throw new ValidationError("invalid_input", `${label} must be an array`);
+  let proto: unknown;
+  try {
+    proto = Object.getPrototypeOf(value as object);
+  } catch {
+    throw new ValidationError("invalid_input", `${label} array prototype reflection failed`);
+  }
+  if (proto !== Array.prototype) {
+    throw new ValidationError("invalid_input", `${label} has a non-plain array prototype`);
+  }
   let keys: Array<string | symbol>;
   try {
-    keys = Reflect.ownKeys(value);
+    keys = Reflect.ownKeys(value as object);
   } catch {
     throw new ValidationError("invalid_input", `${label} ownKeys reflection failed`);
   }
@@ -346,15 +364,56 @@ function scanPlainArray(value: unknown, label: string): unknown[] {
 
 // ═══════════════════════════════════════ Scalar helpers
 
-function chargeString(value: unknown, label: string, budget: Budget): string {
-  if (typeof value !== "string") throw new ValidationError("invalid_input", `${label} must be a string`);
-  if (CONTROL_RE.test(value)) throw new ValidationError("invalid_input", `${label} must not contain control characters`);
-  const utf8 = new TextEncoder().encode(value);
-  if (utf8.length > MAX_STRING_UTF8_BYTES) {
+// ═══════════════════════════════════════ Bounded UTF-8 byte counting
+// Counts the UTF-8 byte length of a caller string without ever allocating a
+// full byte array (no TextEncoder, no Array.from/split/spread, no
+// input-proportional intermediate). A string beyond 65536 UTF-16 code units
+// can never fit 65536 UTF-8 bytes and is rejected before any scan; shorter
+// strings get a single bounded linear pass that stops the instant the
+// per-string bound is exceeded and rejects C0/DEL/C1 control characters on
+// the way. Lone surrogates follow TextEncoder replacement semantics
+// (U+FFFD → 3 bytes); a valid high+low pair counts 4 bytes and skips the
+// low surrogate.
+
+function countUtf8Bytes(value: string, label: string): number {
+  if (value.length > MAX_STRING_UTF8_BYTES) {
     throw new ValidationError("invalid_input", `${label} exceeds the per-string byte bound`);
   }
-  budget.used += utf8.length;
-  if (budget.used > budget.maxBytes) throw new TooLargeError("artifact exceeds maxBytes");
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      throw new ValidationError("invalid_input", `${label} must not contain control characters`);
+    }
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      const next = index + 1 < value.length ? value.charCodeAt(index + 1) : -1;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        index += 1;
+      } else {
+        bytes += 3;
+      }
+    } else {
+      // Other BMP code units and lone low surrogates both count 3 bytes.
+      bytes += 3;
+    }
+    if (bytes > MAX_STRING_UTF8_BYTES) {
+      throw new ValidationError("invalid_input", `${label} exceeds the per-string byte bound`);
+    }
+  }
+  return bytes;
+}
+
+function chargeString(value: unknown, label: string, budget: Budget): string {
+  if (typeof value !== "string") throw new ValidationError("invalid_input", `${label} must be a string`);
+  const bytes = countUtf8Bytes(value, label);
+  // Aggregate budget gate before any budget mutation — no increment-then-rollback.
+  if (bytes > budget.maxBytes - budget.used) throw new TooLargeError("artifact exceeds maxBytes");
+  budget.used += bytes;
   return value;
 }
 
@@ -923,6 +982,15 @@ export function buildLoopGovernanceTailResult(
   }
 }
 
+// ECMAScript TypedArray intrinsics captured once at module load. Applied via
+// Reflect they read the internal [[TypedArrayName]] and [[ArrayLength]] slots,
+// so callers cannot forge them with `Symbol.toStringTag` spoofing, tampered
+// `length` properties, or Proxy traps; proxy-trap/revoked-proxy reflection
+// fails closed instead of throwing.
+const TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype);
+const TYPED_ARRAY_TAG_GETTER = Object.getOwnPropertyDescriptor(TYPED_ARRAY_PROTOTYPE, Symbol.toStringTag)!.get!;
+const TYPED_ARRAY_BYTELENGTH_GETTER = Object.getOwnPropertyDescriptor(TYPED_ARRAY_PROTOTYPE, "byteLength")!.get!;
+
 export function parseLoopGovernanceTailResultBytes(
   bytes: Uint8Array,
   maxBytes?: number,
@@ -934,13 +1002,32 @@ export function parseLoopGovernanceTailResultBytes(
     if (error instanceof ValidationError) return failure(error.reason, error.message);
     return failure("invalid_input", "unexpected failure while parsing governance tail result bytes");
   }
-  if (!(bytes instanceof Uint8Array)) {
-    return failure("invalid_input", "bytes must be a Uint8Array");
-  }
-  if (bytes.length > max) return failure("too_large", "artifact bytes exceed maxBytes");
+  // Bounded, fail-closed bytes snapshot. Every reflection on the untrusted
+  // input — intrinsic brand/tag, trusted intrinsic byteLength, maxBytes gate,
+  // then one defensive copy — lives inside this boundary. Proxies, revoked
+  // proxies, spoofed tags and trap throws all resolve to a static
+  // `invalid_input` without leaking exception text. The snapshot is the only
+  // bytes object read afterwards.
+  let copy: Uint8Array | null = null;
   try {
-    // Defensive bounded copy — all later checks run on the copy.
-    const copy = new Uint8Array(bytes);
+    const tag = Reflect.apply(TYPED_ARRAY_TAG_GETTER, bytes, []);
+    if (tag !== "Uint8Array") {
+      return failure("invalid_input", "bytes must be a genuine Uint8Array");
+    }
+    const byteLength = Reflect.apply(TYPED_ARRAY_BYTELENGTH_GETTER, bytes, []);
+    if (typeof byteLength !== "number" || !Number.isSafeInteger(byteLength) || byteLength < 0) {
+      return failure("invalid_input", "bytes must be a genuine Uint8Array");
+    }
+    if (byteLength > max) return failure("too_large", "artifact bytes exceed maxBytes");
+    copy = new Uint8Array(bytes);
+    if (copy.length !== byteLength) {
+      return failure("invalid_input", "bytes snapshot length mismatch");
+    }
+  } catch {
+    return failure("invalid_input", "bytes must be a genuine Uint8Array");
+  }
+  try {
+    // All later checks run on the defensive snapshot only.
     if (copy.length >= 3 && copy[0] === 0xef && copy[1] === 0xbb && copy[2] === 0xbf) {
       return failure("invalid_bytes", "artifact bytes must not start with a BOM");
     }
