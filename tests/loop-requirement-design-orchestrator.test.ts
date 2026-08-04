@@ -14,6 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { LoopRequirementDesignOrchestrator } from "../core/loop-requirement-design-orchestrator";
+import {
+  parseLoopDirectExecutorInputBytes,
+  parseLoopOrchestrationResultBytes,
+} from "../core/loop-requirement-design-orchestrator";
 import type {
   LoopRequirementDesignResult,
   LoopRequirementDesignRoute,
@@ -72,6 +76,7 @@ const MARKERS: Record<string, boolean> = {
   D08_R2_PREALLOCATION_BYTE_BUDGET_VERIFIED: false,
   D08_R3_REVOKED_PROXY_FAIL_CLOSED_VERIFIED: false,
   D08_R3_PATH_PREALLOCATION_GUARD_VERIFIED: false,
+  D08_PRODUCER_OWNED_PARSERS_VERIFIED: false,
 };
 
 function failExit(msg: string): never {
@@ -2701,6 +2706,102 @@ async function main(): Promise<void> {
     check(String.prototype.split === origSplit, "R3 String.prototype.split restored exactly");
   }
   markIfClear("D08_R3_PATH_PREALLOCATION_GUARD_VERIFIED");
+
+  // ═══════════════════════════════════════ 22. producer-owned canonical parsers
+  startSection();
+  {
+    console.log("22. producer-owned canonical parsers (real-artifact round-trip, binding, adversarial)");
+    const { store, tempRoot } = makeRealStore();
+    try {
+      const result = newOrchestrator({ agent: makeAgent(), reviewer: makeReviewer(), store }).execute(makeRequest());
+      check(result.route === "direct" && result.reasonCode === "DIRECT_READY", "real D08 direct run for parser tests");
+      const orchRef = result.orchestrationResultArtifactRef!;
+      const execRef = result.executorInputArtifactRef!;
+      const orchBytes = store.read(orchRef);
+      const execBytes = store.read(execRef);
+
+      // real orchestration artifact: parse, bind, byte-identical round trip
+      const po = parseLoopOrchestrationResultBytes(orchBytes, { expectedIdentity: makeIdentity() });
+      check(po.ok, "real orchestration artifact parses");
+      if (po.ok) {
+        check(po.value.route === "direct" && po.value.reasonCode === "DIRECT_READY", "orchestration parsed route/reason");
+        check(po.value.executorInputArtifactRef === execRef, "orchestration parsed executor ref binding");
+        check(po.value.executorInputDigestSha256 === execRef.split(":")[4], "orchestration parsed executor digest binding");
+        check(po.value.requirementArtifactRef === result.requirementArtifactRef, "orchestration parsed requirement ref binding");
+        check(deepEqual(po.value.designArtifactRefs, result.designArtifactRefs), "orchestration parsed design refs binding");
+        check(Buffer.from(po.bytes).equals(Buffer.from(orchBytes)), "orchestration canonical bytes byte-identical round trip");
+        check(po.digestSha256 === createHash("sha256").update(orchBytes).digest("hex"), "orchestration digest unchanged by parsing");
+        check(po.sizeBytes === orchBytes.length, "orchestration size preserved");
+        check(isDeepFrozen(po.value), "orchestration parsed value deeply frozen");
+      }
+
+      // real executor-input artifact: parse, bind, byte-identical round trip
+      const pe = parseLoopDirectExecutorInputBytes(execBytes, { expectedIdentity: makeIdentity() });
+      check(pe.ok, "real executor input artifact parses");
+      if (pe.ok) {
+        check(pe.value.schema === "loop_direct_executor_input_v1", "executor parsed schema");
+        check(pe.value.maxFixRounds === 4, "executor parsed maxFixRounds");
+        check(deepEqual(pe.value.allowedPaths, makeDesign().allowedPaths), "executor parsed allowedPaths");
+        check(pe.value.testPlan.length === 1 && pe.value.reviewPlan.length === 1, "executor parsed plans");
+        check(pe.value.commitSubject === "feat: add bounded artifact store tests", "executor parsed commitSubject");
+        check(Buffer.from(pe.bytes).equals(Buffer.from(execBytes)), "executor canonical bytes byte-identical round trip");
+        check(pe.digestSha256 === createHash("sha256").update(execBytes).digest("hex"), "executor digest unchanged by parsing");
+        check(isDeepFrozen(pe.value), "executor parsed value deeply frozen");
+      }
+
+      // non-direct orchestration artifacts parse too (paused route)
+      {
+        const paused = newOrchestrator({ agent: makeAgent(makeSummary({ ambiguities: ["Which API surface?"] })), reviewer: makeReviewer(), store }).execute(makeRequest());
+        check(paused.route === "paused" && paused.reasonCode === "AMBIGUITY_REQUIRES_INPUT", "paused route produced");
+        const pausedBytes = store.read(paused.orchestrationResultArtifactRef!);
+        const pp = parseLoopOrchestrationResultBytes(pausedBytes, { expectedIdentity: makeIdentity() });
+        check(pp.ok && pp.value.route === "paused" && pp.value.reasonCode === "AMBIGUITY_REQUIRES_INPUT", "non-direct orchestration parses");
+        check(pp.ok && pp.value.executorInputArtifactRef === null && pp.value.executorInputDigestSha256 === null, "non-direct executor refs null");
+      }
+
+      // identity binding mismatch
+      check(!parseLoopOrchestrationResultBytes(orchBytes, { expectedIdentity: makeIdentity({ runId: "other" }) }).ok,
+        "orchestration identity mismatch rejected");
+      check(!parseLoopDirectExecutorInputBytes(execBytes, { expectedIdentity: makeIdentity({ taskBranch: "other" }) }).ok,
+        "executor identity mismatch rejected");
+
+      // adversarial bytes: canonical violations fail closed with typed reasons
+      const tampered = (base: Buffer, mutate: (o: Record<string, unknown>) => void): Buffer => {
+        const o = JSON.parse(base.toString("utf8")) as Record<string, unknown>;
+        mutate(o);
+        return Buffer.from(JSON.stringify(o), "utf8");
+      };
+      const r1 = parseLoopOrchestrationResultBytes(tampered(orchBytes, (o) => { o.route = "sneaky"; }));
+      check(r1.ok === false && r1.reason === "invalid_input", "orchestration non-canonical route rejected");
+      const r2 = parseLoopOrchestrationResultBytes(tampered(orchBytes, (o) => { o.reason_code = "UNKNOWN_REASON"; }));
+      check(r2.ok === false && r2.reason === "invalid_input", "orchestration non-canonical reason rejected");
+      const r3 = parseLoopOrchestrationResultBytes(tampered(orchBytes, (o) => { o.rounds = "1"; }));
+      check(r3.ok === false && r3.reason === "invalid_input", "orchestration non-numeric rounds rejected");
+      const r4 = parseLoopOrchestrationResultBytes(tampered(orchBytes, (o) => {
+        (o.design_artifact_refs as string[])[0] = "loop-artifact:v1:delivery_result:sha256:" + "0".repeat(64);
+      }));
+      check(r4.ok === false && r4.reason === "invalid_input", "orchestration wrong-kind design ref rejected");
+      const r5 = parseLoopOrchestrationResultBytes(tampered(orchBytes, (o) => { o.executor_input_artifact_ref = null; }));
+      check(r5.ok === false && r5.reason === "invalid_input", "orchestration digest without ref rejected");
+      const r6 = parseLoopDirectExecutorInputBytes(tampered(execBytes, (o) => {
+        delete (o.requirement as Record<string, unknown>).acceptanceCriteria;
+      }));
+      check(r6.ok === false && r6.reason === "invalid_input", "executor missing requirement key rejected");
+      const r7 = parseLoopDirectExecutorInputBytes(tampered(execBytes, (o) => {
+        (o.allowedPaths as string[]) = ["core/loop-artifact-store.ts", "core/loop-artifact-store.ts"];
+      }));
+      check(r7.ok === false && r7.reason === "invalid_input", "executor duplicate allowedPaths rejected");
+      const r8 = parseLoopDirectExecutorInputBytes(tampered(execBytes, (o) => { o.maxFixRounds = 99; }));
+      check(r8.ok === false && r8.reason === "invalid_input", "executor out-of-range maxFixRounds rejected");
+      check(!parseLoopOrchestrationResultBytes(Buffer.concat([orchBytes, Buffer.from("\n")])).ok, "orchestration trailing LF rejected");
+      check(!parseLoopDirectExecutorInputBytes(Buffer.from([0xef, 0xbb, 0xbf, ...execBytes])).ok, "executor BOM rejected");
+      check(!parseLoopOrchestrationResultBytes(orchBytes, { maxBytes: 10 }).ok, "orchestration oversize rejected");
+      check(!parseLoopDirectExecutorInputBytes(execBytes.slice(0, execBytes.length - 4)).ok, "executor truncated bytes rejected");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }
+  markIfClear("D08_PRODUCER_OWNED_PARSERS_VERIFIED");
 
   // ═══════════════════════════════════════ summary
   const total = GLOBAL_PASSED + GLOBAL_FAILED;

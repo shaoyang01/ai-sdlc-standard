@@ -11,6 +11,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { randomUUID } from "node:crypto";
 import { LoopAutonomousDeliveryLoop } from "../core/loop-autonomous-delivery-loop";
+import { parseLoopDeliveryResultBytes } from "../core/loop-autonomous-delivery-loop";
 import type {
   LoopAutonomousDeliveryRequest,
   LoopAutonomousDeliveryResult,
@@ -117,6 +118,7 @@ const MARKERS: Record<string, boolean> = {
   D06_R4_POST_D05_RECONCILIATION_ORDER: false,
   D06_R4_NO_PROGRESS_AFTER_RECONCILIATION: false,
   D06_R4_TERMINAL_WORKSPACE_LAST_VERIFIED: false,
+  D06_PRODUCER_OWNED_PARSER_VERIFIED: false,
   D06_R4_CANDIDATE_STATE_SEPARATION: false,
 };
 
@@ -5724,6 +5726,171 @@ async function testR4DomainCoverage(): Promise<void> {
   console.log("  R4-G complete");
 }
 
+
+/** Canonical delivery-result writer mirroring `_persistDeliveryResult` key order. */
+function writeCanonicalDeliveryBytes(
+  status: string,
+  reasonCode: string,
+  finalWorkspace: Record<string, unknown> | null,
+  overrides: Record<string, unknown> = {},
+): Buffer {
+  const obj: Record<string, unknown> = Object.create(null);
+  obj.schema = "loop-delivery-result-v1";
+  obj.status = status;
+  obj.reason_code = reasonCode;
+  obj.cause_code = null;
+  obj.total_fix_rounds = 0;
+  obj.test_attempts = 1;
+  obj.review_attempts = 1;
+  obj.patch_artifact_refs = [];
+  obj.test_summary_artifact_refs = [];
+  obj.review_summary_artifact_refs = [];
+  obj.files = ["src/impl.ts", "src/test.ts"];
+  obj.final_workspace = finalWorkspace;
+  obj.elapsed_ms = 500;
+  obj.trace = [
+    {
+      sequence: 1, kind: "info", phase: "initial", fix_round: 0, attempt: 0,
+      step_id: null, outcome: "ok", artifact_ref: null, patch_artifact_ref: null,
+      patch_digest_sha256: null, workspace_status_digest_sha256: null, elapsed_ms: 250,
+    },
+    {
+      sequence: 2, kind: "terminal", phase: "initial", fix_round: 0, attempt: 0,
+      step_id: null, outcome: status, artifact_ref: null, patch_artifact_ref: null,
+      patch_digest_sha256: null, workspace_status_digest_sha256: null, elapsed_ms: 500,
+    },
+  ];
+  return Buffer.from(JSON.stringify({ ...obj, ...overrides }) + "\n", "utf8");
+}
+
+/** R5: the delivery-result parser is producer-owned — real artifact round-trip, terminals, adversarial bytes. */
+
+function deepEqualStrs(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+async function testR5ProducerOwnedParser(): Promise<void> {
+  const r5FailStart = GLOBAL_FAILED;
+  const fakeD05 = new FakeD05Adapter();
+  const fakeRunner = new FakeRunner();
+  const fakeWM = new FakeWorkspaceManager();
+  const ctrlRoot = path.join(os.tmpdir(), `d06-r5-${randomUUID()}`);
+  registerTempDir(ctrlRoot);
+  fs.mkdirSync(ctrlRoot, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: ctrlRoot, repositoryPath: process.cwd() });
+  artifactStore.init();
+  const loop = new LoopAutonomousDeliveryLoop({
+    runner: fakeRunner as unknown as LoopPosixProcessRunner,
+    workspaceManager: fakeWM as unknown as LoopGitWorkspaceManager,
+    artifactStore,
+    implementationAdapter: fakeD05 as unknown as LoopCodexImplementationAdapter,
+  });
+  const identity = makeIdentity();
+  const workspace = makeWorkspace();
+  const baseSnap: Record<string, unknown> = {
+    state: "inspected",
+    runId: identity.runId,
+    repository: identity.repository,
+    repositoryPath: identity.repositoryPath,
+    controlRoot: identity.controlRoot,
+    gitCommonDir: "/tmp/git",
+    workspacePath: workspace.workspacePath,
+    baseBranch: identity.baseBranch,
+    expectedBaseSha: identity.expectedBaseSha,
+    currentBaseSha: identity.expectedBaseSha,
+    baseDrifted: false,
+    taskBranch: workspace.taskBranch,
+    taskHeadSha: workspace.expectedTaskHeadSha,
+    taskHasChanges: true,
+    taskStatusDigestSha256: workspace.expectedPreStatusDigestSha256,
+    sourceHeadSha: identity.expectedBaseSha,
+    sourceBranch: identity.baseBranch,
+    sourceWipDigestSha256: DIGEST_CLEAN,
+  };
+  const postSnap: Record<string, unknown> = {
+    ...baseSnap,
+    taskHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    taskHasChanges: true,
+    taskStatusDigestSha256: DIGEST_POST_INIT,
+  };
+  fakeWM.setSnapshotSequence([baseSnap, postSnap, postSnap, postSnap, postSnap, postSnap, postSnap]);
+  fakeD05.setDefaultResponse(makeFakeD05Success({ phase: "initial", attempt: 0 } as LoopCodexImplementationRequest, {
+    postTaskHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    postStatusDigestSha256: DIGEST_POST_INIT,
+    files: ["src/test.ts"],
+  }));
+  const result = await loop.execute(makeRequest({ identity, workspace }));
+  check("integration", result.status === "succeeded", "R5: real delivery run succeeded");
+  check("integration", result.deliveryResultArtifactRef !== undefined, "R5: delivery artifact persisted");
+  if (result.deliveryResultArtifactRef !== undefined) {
+    const bytes = Buffer.from(artifactStore.read(result.deliveryResultArtifactRef));
+    const p = parseLoopDeliveryResultBytes(bytes, {
+      expectedMaterial: {
+        workspacePath: result.finalWorkspace!.workspacePath,
+        taskBranch: result.finalWorkspace!.taskBranch,
+        taskHeadSha: result.finalWorkspace!.taskHeadSha,
+        statusDigestSha256: result.finalWorkspace!.statusDigestSha256,
+        taskHasChanges: result.finalWorkspace!.taskHasChanges,
+      },
+    });
+    check("integration", p.ok, "R5: real D06 artifact parses");
+    if (p.ok) {
+      check("integration", p.value.status === "succeeded" && p.value.reasonCode === "DELIVERY_SUCCEEDED", "R5: parsed status/reason");
+      check("integration", p.value.finalWorkspace !== null && p.value.finalWorkspace.taskHeadSha === "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "R5: parsed final workspace");
+      check("integration", deepEqualStrs(p.value.files, result.files), "R5: parsed files match in-memory files");
+      check("integration", p.value.trace.length === result.trace.length, "R5: parsed trace length");
+      check("integration", Buffer.from(p.bytes).equals(bytes), "R5: real artifact byte-identical round trip");
+      check("integration", p.digestSha256 === crypto.createHash("sha256").update(bytes).digest("hex"), "R5: digest unchanged by parsing");
+      check("integration", p.sizeBytes === bytes.length, "R5: size preserved");
+      check("integration", Object.isFrozen(p.value) && Object.isFrozen(p.value.trace), "R5: parsed value frozen");
+    }
+  }
+
+  // canonical terminals: succeeded / failed / blocked parse with exact status/reason
+  const fw = { workspace_path: workspace.workspacePath, task_branch: workspace.taskBranch, task_head_sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", status_digest_sha256: DIGEST_POST_INIT, task_has_changes: true };
+  for (const [status, reason] of [["succeeded", "DELIVERY_SUCCEEDED"], ["failed", "TEST_FAILED"], ["blocked", "WORKSPACE_DRIFT"]] as const) {
+    const bytes = writeCanonicalDeliveryBytes(status, reason, fw as unknown as Record<string, unknown>);
+    const p = parseLoopDeliveryResultBytes(bytes);
+    check("integration", p.ok && p.value.status === status && p.value.reasonCode === reason, `R5: ${status} terminal parses`);
+    check("integration", p.ok && Buffer.from(p.bytes).equals(bytes), `R5: ${status} round trip byte-identical`);
+  }
+  // final_workspace may be null (blocked/failed terminals)
+  {
+    const bytes = writeCanonicalDeliveryBytes("failed", "INTERNAL_ERROR", null);
+    const p = parseLoopDeliveryResultBytes(bytes);
+    check("integration", p.ok && p.value.finalWorkspace === null, "R5: null final workspace parses");
+  }
+  // material binding
+  {
+    const bytes = writeCanonicalDeliveryBytes("succeeded", "DELIVERY_SUCCEEDED", fw as unknown as Record<string, unknown>);
+    const p = parseLoopDeliveryResultBytes(bytes, {
+      expectedMaterial: { workspacePath: "/tmp/wrong", taskBranch: workspace.taskBranch, taskHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", statusDigestSha256: DIGEST_POST_INIT, taskHasChanges: true },
+    });
+    check("integration", p.ok === false && p.reason === "invalid_input", "R5: material binding mismatch rejected");
+  }
+  // adversarial bytes
+  const good = writeCanonicalDeliveryBytes("succeeded", "DELIVERY_SUCCEEDED", fw as unknown as Record<string, unknown>);
+  const badStatus = writeCanonicalDeliveryBytes("sneaky", "DELIVERY_SUCCEEDED", fw as unknown as Record<string, unknown>);
+  const badReason = writeCanonicalDeliveryBytes("succeeded", "UNKNOWN_REASON", fw as unknown as Record<string, unknown>);
+  const badTrace = writeCanonicalDeliveryBytes("succeeded", "DELIVERY_SUCCEEDED", fw as unknown as Record<string, unknown>, {
+    trace: [
+      { sequence: 2, kind: "info", phase: "initial", fix_round: 0, attempt: 0, step_id: null, outcome: "a", artifact_ref: null, patch_artifact_ref: null, patch_digest_sha256: null, workspace_status_digest_sha256: null, elapsed_ms: 100 },
+      { sequence: 1, kind: "terminal", phase: "initial", fix_round: 0, attempt: 0, step_id: null, outcome: "b", artifact_ref: null, patch_artifact_ref: null, patch_digest_sha256: null, workspace_status_digest_sha256: null, elapsed_ms: 200 },
+    ],
+  });
+  check("integration", !parseLoopDeliveryResultBytes(Buffer.concat([good, Buffer.from("\n")])).ok, "R5: doubled trailing LF rejected");
+  check("integration", parseLoopDeliveryResultBytes(badStatus).ok === false, "R5: non-canonical status rejected");
+  check("integration", parseLoopDeliveryResultBytes(badReason).ok === false, "R5: non-canonical reason rejected");
+  check("integration", parseLoopDeliveryResultBytes(badTrace).ok === false, "R5: non-increasing trace sequence rejected");
+  check("integration", parseLoopDeliveryResultBytes(good, { maxBytes: 10 }).ok === false, "R5: oversize rejected");
+  const withBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), good]);
+  check("integration", parseLoopDeliveryResultBytes(withBom).ok === false, "R5: BOM rejected");
+  MARKERS.D06_PRODUCER_OWNED_PARSER_VERIFIED = GLOBAL_FAILED === r5FailStart;
+}
+
+
 async function main(): Promise<void> {
   console.log("=== LOOP-DELIVERY-06 Targeted Tests ===\n");
 
@@ -5911,6 +6078,10 @@ async function main(): Promise<void> {
     // R4-G. Domain Coverage Supplements
     console.log("\n[R4-G] Domain Coverage...");
     await testR4DomainCoverage();
+
+    // R5. Producer-owned delivery-result parser
+    console.log("\n[R5] Producer-owned delivery-result parser...");
+    await testR5ProducerOwnedParser();
 
   } catch (err) {
     console.error("TEST SUITE ERROR:", err);

@@ -3130,3 +3130,578 @@ function validateWorkspaceSnapshot(
     } as LoopGitWorkspaceSnapshot,
   };
 }
+
+// ═══════════════════════════════════════ Additive canonical parsers (D06-owned)
+// =============================================================================
+// The strict canonical parser for the artifact this module produces
+// (`loop-delivery-result-v1`). It is the SINGLE authority for the serialized
+// status/reason/trace vocabulary, canonical key order and canonical bytes of
+// the delivery result artifact — it co-evolves with `_persistDeliveryResult`
+// above and never duplicates another module's schema. No-throw, fail-closed,
+// bounded defensive copy, strict UTF-8, exact keys, canonical property order,
+// canonical-bytes rebuild with byte-identical round-trip, artifact-ref/digest/
+// material binding.
+
+export type LoopCanonicalParseFailureReason = "invalid_input" | "invalid_bytes" | "too_large";
+
+export interface LoopCanonicalParseSuccess<T> {
+  readonly ok: true;
+  readonly value: Readonly<T>;
+  readonly text: string;
+  readonly bytes: Uint8Array;
+  readonly digestSha256: string;
+  readonly sizeBytes: number;
+}
+
+export interface LoopCanonicalParseFailure {
+  readonly ok: false;
+  readonly reason: LoopCanonicalParseFailureReason;
+  readonly diagnostic: string;
+}
+
+export type LoopCanonicalParseResult<T> = LoopCanonicalParseSuccess<T> | LoopCanonicalParseFailure;
+
+/** Canonical value parsed from `loop-delivery-result-v1` bytes. */
+export interface LoopParsedDeliveryFinalWorkspace {
+  readonly workspacePath: string;
+  readonly taskBranch: string;
+  readonly taskHeadSha: string;
+  readonly statusDigestSha256: string;
+  readonly taskHasChanges: boolean;
+}
+
+export interface LoopParsedDeliveryTraceEntry {
+  readonly sequence: number;
+  readonly kind: LoopDeliveryTraceKind;
+  readonly phase: "initial" | "test" | "review" | "test_repair" | "review_repair";
+  readonly fixRound: number;
+  readonly attempt: number;
+  readonly stepId: string | null;
+  readonly outcome: string;
+  readonly artifactRef: string | null;
+  readonly patchArtifactRef: string | null;
+  readonly patchDigestSha256: string | null;
+  readonly workspaceStatusDigestSha256: string | null;
+  readonly elapsedMs: number;
+}
+
+export interface LoopParsedDeliveryResult {
+  readonly schema: "loop-delivery-result-v1";
+  readonly status: LoopAutonomousDeliveryStatus;
+  readonly reasonCode: LoopAutonomousDeliveryReasonCode;
+  readonly causeCode: string | null;
+  readonly totalFixRounds: number;
+  readonly testAttempts: number;
+  readonly reviewAttempts: number;
+  readonly patchArtifactRefs: readonly string[];
+  readonly testSummaryArtifactRefs: readonly string[];
+  readonly reviewSummaryArtifactRefs: readonly string[];
+  readonly files: readonly string[];
+  readonly finalWorkspace: Readonly<LoopParsedDeliveryFinalWorkspace> | null;
+  readonly elapsedMs: number;
+  readonly trace: readonly LoopParsedDeliveryTraceEntry[];
+}
+
+export interface LoopParseDeliveryOptions {
+  readonly maxBytes?: number;
+  readonly expectedMaterial?: Readonly<{
+    readonly workspacePath: string;
+    readonly taskBranch: string;
+    readonly taskHeadSha: string;
+    readonly statusDigestSha256: string;
+    readonly taskHasChanges: boolean;
+  }>;
+}
+
+// Canonical serialized property order produced by `_persistDeliveryResult`.
+const DELIVERY_RESULT_KEYS = [
+  "schema", "status", "reason_code", "cause_code", "total_fix_rounds", "test_attempts", "review_attempts",
+  "patch_artifact_refs", "test_summary_artifact_refs", "review_summary_artifact_refs", "files",
+  "final_workspace", "elapsed_ms", "trace",
+] as const;
+const DELIVERY_FINAL_WORKSPACE_KEYS = [
+  "workspace_path", "task_branch", "task_head_sha", "status_digest_sha256", "task_has_changes",
+] as const;
+const DELIVERY_TRACE_ENTRY_KEYS = [
+  "sequence", "kind", "phase", "fix_round", "attempt", "step_id", "outcome", "artifact_ref",
+  "patch_artifact_ref", "patch_digest_sha256", "workspace_status_digest_sha256", "elapsed_ms",
+] as const;
+
+// Canonical serialized unions of this module (same values as the public types).
+const DELIVERY_STATUS_VALUES: readonly string[] = ["succeeded", "failed", "blocked"];
+const DELIVERY_REASON_CODE_VALUES: readonly string[] = [
+  "DELIVERY_SUCCEEDED", "INVALID_INPUT", "WORKSPACE_DRIFT", "EXECUTION_BLOCKED", "IMPLEMENTATION_FAILED",
+  "TEST_FAILED", "TEST_TIMED_OUT", "TEST_OUTPUT_TRUNCATED", "TEST_WORKSPACE_MUTATED", "REVIEW_FAILED",
+  "REVIEW_TIMED_OUT", "REVIEW_OUTPUT_TRUNCATED", "REVIEW_WORKSPACE_MUTATED", "REPAIR_FAILED",
+  "FIX_BUDGET_EXHAUSTED", "NO_PROGRESS", "TOTAL_TIMEOUT", "ARTIFACT_STORE_FAILED",
+  "DEPENDENCY_RESULT_INVALID", "INTERNAL_ERROR",
+];
+const DELIVERY_TRACE_KIND_VALUES: readonly string[] = [
+  "implementation_initial", "test_plan_start", "test_step_pass", "test_step_fail", "test_plan_end",
+  "review_plan_start", "review_step_pass", "review_step_fail", "review_plan_end", "repair_attempt",
+  "evidence_stored", "terminal", "info",
+];
+const DELIVERY_TRACE_PHASE_VALUES: readonly string[] = ["initial", "test", "review", "test_repair", "review_repair"];
+
+// ═══════════════════════════════════════ Parser toolkit
+
+const PARSER_MAX_ARTIFACT_BYTES_BOUND = 16_777_216;
+const PARSER_MAX_SAFE_MESSAGE_LENGTH = 256;
+const PARSER_REF_RE = /^loop-artifact:v1:([a-z_]+):sha256:([0-9a-f]{64})$/;
+const PARSER_SHA256_RE = /^[0-9a-f]{64}$/;
+const PARSER_SHA40_RE = /^[0-9a-f]{40}$/;
+const PARSER_CONTROL_RE = /[\x00-\x1f\x7f-\x9f]/;
+
+function parserUtf8(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function parserSha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+const PARSER_TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype);
+const PARSER_BYTE_LENGTH_GETTER = Object.getOwnPropertyDescriptor(PARSER_TYPED_ARRAY_PROTOTYPE, "byteLength")!.get!;
+const PARSER_TO_STRING_TAG_GETTER = Object.getOwnPropertyDescriptor(PARSER_TYPED_ARRAY_PROTOTYPE, Symbol.toStringTag)!.get!;
+
+class ParserValidationError extends Error {
+  readonly reason: LoopCanonicalParseFailureReason;
+  readonly diagnostic: string;
+
+  constructor(reason: LoopCanonicalParseFailureReason, diagnostic: string) {
+    super(diagnostic);
+    this.name = "ParserValidationError";
+    this.reason = reason;
+    this.diagnostic = diagnostic;
+  }
+}
+
+function parserValidationFail(reason: LoopCanonicalParseFailureReason, diagnostic: string): never {
+  throw new ParserValidationError(reason, diagnostic);
+}
+
+function parserAsFailure(error: unknown, fallbackDiagnostic: string): LoopCanonicalParseFailure {
+  if (error instanceof ParserValidationError) {
+    return { ok: false, reason: error.reason, diagnostic: error.diagnostic };
+  }
+  return { ok: false, reason: "invalid_input", diagnostic: fallbackDiagnostic };
+}
+
+function parserIsPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  let proto: unknown;
+  try {
+    proto = Object.getPrototypeOf(value);
+  } catch {
+    return false;
+  }
+  return proto === Object.prototype || proto === null;
+}
+
+/** Exact-key descriptor snapshot of a plain record (canonical count and order). */
+function parserScanPlainObject(value: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
+  if (!parserIsPlainRecord(value)) parserValidationFail("invalid_input", `${label} must be a plain object`);
+  let keys: Array<string | symbol>;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    parserValidationFail("invalid_input", `${label} ownKeys reflection failed`);
+  }
+  if (keys.length !== allowed.length) {
+    parserValidationFail("invalid_input", `${label} must have exactly the canonical keys`);
+  }
+  const out = Object.create(null) as Record<string, unknown>;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]!;
+    if (typeof key === "symbol") parserValidationFail("invalid_input", `${label} must not carry symbol keys`);
+    if (key === "__proto__") parserValidationFail("invalid_input", `${label} must not carry __proto__`);
+    if (key !== allowed[i]) {
+      parserValidationFail("invalid_input", `${label} must have the canonical keys in canonical order`);
+    }
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      parserValidationFail("invalid_input", `${label} descriptor reflection failed`);
+    }
+    if (descriptor === undefined) parserValidationFail("invalid_input", `${label} key descriptor is missing`);
+    if (descriptor.get !== undefined || descriptor.set !== undefined) {
+      parserValidationFail("invalid_input", `${label} must not carry accessors`);
+    }
+    if (!("value" in descriptor)) parserValidationFail("invalid_input", `${label} key has no value`);
+    Object.defineProperty(out, key, {
+      value: descriptor.value,
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    });
+  }
+  return out;
+}
+
+/** Dense descriptor-snapshot array scan; sparse/extra-key/over-cap arrays fail. */
+function parserScanPlainArray(value: unknown, label: string, maxItems: number): unknown[] {
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    parserValidationFail("invalid_input", `${label} array reflection failed`);
+  }
+  if (!isArray) parserValidationFail("invalid_input", `${label} must be an array`);
+  let proto: unknown;
+  try {
+    proto = Object.getPrototypeOf(value as object);
+  } catch {
+    parserValidationFail("invalid_input", `${label} array prototype reflection failed`);
+  }
+  if (proto !== Array.prototype) parserValidationFail("invalid_input", `${label} has a non-plain array prototype`);
+  let keys: Array<string | symbol>;
+  try {
+    keys = Reflect.ownKeys(value as object);
+  } catch {
+    parserValidationFail("invalid_input", `${label} ownKeys reflection failed`);
+  }
+  const snapshot = new Map<string | symbol, unknown>();
+  for (const key of keys) {
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      parserValidationFail("invalid_input", `${label} descriptor reflection failed`);
+    }
+    if (descriptor === undefined || descriptor.get !== undefined || descriptor.set !== undefined || !("value" in descriptor)) {
+      parserValidationFail("invalid_input", `${label} has an invalid property descriptor`);
+    }
+    snapshot.set(key, descriptor.value);
+  }
+  const lengthValue = snapshot.get("length");
+  if (typeof lengthValue !== "number" || !Number.isSafeInteger(lengthValue) || lengthValue < 0) {
+    parserValidationFail("invalid_input", `${label} length must be a non-negative safe integer`);
+  }
+  if (lengthValue > maxItems) parserValidationFail("invalid_input", `${label} exceeds the element bound`);
+  let indexCount = 0;
+  for (const key of keys) {
+    if (key === "length") continue;
+    if (typeof key !== "string") parserValidationFail("invalid_input", `${label} must not carry extra own properties`);
+    const idx = Number(key);
+    if (!Number.isSafeInteger(idx) || idx < 0 || idx >= lengthValue || String(idx) !== key) {
+      parserValidationFail("invalid_input", `${label} must not carry extra own properties`);
+    }
+    indexCount += 1;
+  }
+  if (indexCount !== lengthValue) parserValidationFail("invalid_input", `${label} must be a dense array`);
+  const out: unknown[] = new Array(lengthValue);
+  for (let i = 0; i < lengthValue; i++) {
+    out[i] = snapshot.get(String(i));
+  }
+  return out;
+}
+
+function parserResolveMaxBytes(maxBytes: number | undefined, fallback: number): number {
+  const resolved = maxBytes ?? fallback;
+  if (typeof resolved !== "number" || !Number.isSafeInteger(resolved) || resolved < 1 || resolved > PARSER_MAX_ARTIFACT_BYTES_BOUND) {
+    parserValidationFail("invalid_input", "maxBytes must be a safe positive integer within the allowed bound");
+  }
+  return resolved;
+}
+
+/** Bounded defensive copy + byte-level gates for the D06 delivery parser. */
+function parserTakeCanonicalBytes(
+  input: Uint8Array,
+  maxBytes: number,
+  trailingLf: boolean,
+): { bytes: Uint8Array; text: string; parsed: unknown } {
+  if (input === null || typeof input !== "object") parserValidationFail("invalid_input", "bytes must be a Uint8Array");
+  let tag: unknown;
+  let byteLength: unknown;
+  try {
+    tag = PARSER_TO_STRING_TAG_GETTER.call(input);
+    byteLength = PARSER_BYTE_LENGTH_GETTER.call(input);
+  } catch {
+    parserValidationFail("invalid_input", "bytes must be a Uint8Array");
+  }
+  if (tag !== "Uint8Array") parserValidationFail("invalid_input", "bytes must be a Uint8Array");
+  if (typeof byteLength !== "number" || !Number.isSafeInteger(byteLength) || byteLength < 0) {
+    parserValidationFail("invalid_input", "bytes length must be a non-negative safe integer");
+  }
+  if (byteLength > maxBytes) parserValidationFail("too_large", "artifact bytes exceed the size limit");
+  let snapshot: Uint8Array;
+  try {
+    snapshot = new Uint8Array(input);
+  } catch {
+    parserValidationFail("invalid_input", "bytes snapshot failed");
+  }
+  if (snapshot.length !== byteLength) parserValidationFail("invalid_input", "bytes snapshot length mismatch");
+  if (snapshot.length >= 3 && snapshot[0] === 0xef && snapshot[1] === 0xbb && snapshot[2] === 0xbf) {
+    parserValidationFail("invalid_bytes", "artifact bytes must not carry a BOM");
+  }
+  for (let i = 0; i < snapshot.length; i++) {
+    if (snapshot[i] === 0x0d || snapshot[i] === 0x00) parserValidationFail("invalid_bytes", "artifact bytes must not contain CR or NUL");
+  }
+  if (trailingLf) {
+    if (snapshot.length === 0 || snapshot[snapshot.length - 1] !== 0x0a) {
+      parserValidationFail("invalid_bytes", "artifact bytes must end with exactly one LF");
+    }
+    for (let i = 0; i < snapshot.length - 1; i++) {
+      if (snapshot[i] === 0x0a) parserValidationFail("invalid_bytes", "artifact bytes must not contain an embedded LF");
+    }
+  } else {
+    for (let i = 0; i < snapshot.length; i++) {
+      if (snapshot[i] === 0x0a) parserValidationFail("invalid_bytes", "artifact bytes must not contain an LF");
+    }
+  }
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(snapshot);
+  } catch {
+    parserValidationFail("invalid_bytes", "artifact bytes are not strict UTF-8");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parserValidationFail("invalid_bytes", "artifact bytes are not valid JSON");
+  }
+  return { bytes: snapshot, text, parsed };
+}
+
+function parserAsNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+    parserValidationFail("invalid_input", `${label} must be a trimmed non-empty string`);
+  }
+  return value;
+}
+
+function parserAsSafeInt(value: unknown, label: string, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    parserValidationFail("invalid_input", `${label} must be a safe integer within bounds`);
+  }
+  return value;
+}
+
+function parserAsNullableString(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  const s = parserAsNonEmptyString(value, label);
+  if (PARSER_CONTROL_RE.test(s)) parserValidationFail("invalid_input", `${label} must not contain control characters`);
+  return s;
+}
+
+function parserAsSha256(value: unknown, label: string): string {
+  const s = parserAsNonEmptyString(value, label);
+  if (!PARSER_SHA256_RE.test(s)) parserValidationFail("invalid_input", `${label} must be a 64-char lowercase SHA-256 hex`);
+  return s;
+}
+
+function parserAsNullableSha256(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  return parserAsSha256(value, label);
+}
+
+function parserAsSha40(value: unknown, label: string): string {
+  const s = parserAsNonEmptyString(value, label);
+  if (!PARSER_SHA40_RE.test(s)) parserValidationFail("invalid_input", `${label} must be a 40-char lowercase SHA-1 hex`);
+  return s;
+}
+
+function parserArtifactRefOf(value: unknown, label: string, expectedKind: string): { ref: string; kind: string; digest: string } {
+  const s = parserAsNonEmptyString(value, label);
+  const m = PARSER_REF_RE.exec(s);
+  if (m === null || m[1] !== expectedKind) {
+    parserValidationFail("invalid_input", `${label} must be a canonical ${expectedKind} artifact ref`);
+  }
+  return { ref: s, kind: m[1]!, digest: m[2]! };
+}
+
+function parserAsNullableRef(value: unknown, label: string, expectedKind: string): string | null {
+  if (value === null) return null;
+  return parserArtifactRefOf(value, label, expectedKind).ref;
+}
+
+function parserSafeMessageText(value: unknown, label: string): string {
+  if (typeof value !== "string") parserValidationFail("invalid_input", `${label} must be a string`);
+  if (PARSER_CONTROL_RE.test(value)) parserValidationFail("invalid_input", `${label} must not contain control characters`);
+  if (value.length > PARSER_MAX_SAFE_MESSAGE_LENGTH) parserValidationFail("invalid_input", `${label} exceeds the safe length`);
+  return value;
+}
+
+function parserValidatePathArray(value: unknown, label: string): string[] {
+  const arr = parserScanPlainArray(value, label, 4096);
+  const out: string[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const item = parserAsNonEmptyString(arr[i], `${label}[${i}]`);
+    if (item.startsWith("/") || item.includes("\\") || PARSER_CONTROL_RE.test(item)) {
+      parserValidationFail("invalid_input", `${label}[${i}] must be a repository-relative safe path`);
+    }
+    if (item === "." || item === ".." || item.includes("/./") || item.includes("/../")
+      || item.endsWith("/.") || item.endsWith("/..") || item.split("/").includes(".git")) {
+      parserValidationFail("invalid_input", `${label}[${i}] is not a safe repository-relative path`);
+    }
+    if (i > 0 && out[i - 1]! >= item) {
+      parserValidationFail("invalid_input", `${label} must be strictly ascending without duplicates`);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+function parserByteEquals(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function parserRequireRoundTrip(intake: { bytes: Uint8Array; text: string; parsed: unknown }, trailingLf: boolean): void {
+  const rebuilt = parserUtf8(JSON.stringify(intake.parsed) + (trailingLf ? "\n" : ""));
+  if (!parserByteEquals(intake.bytes, rebuilt)) {
+    parserValidationFail("invalid_bytes", "artifact bytes are not canonical (round-trip mismatch)");
+  }
+}
+
+function parserCanonicalParseSuccess<T>(
+  value: Readonly<T>,
+  canonicalText: string,
+  digestSha256: string,
+  sizeBytes: number,
+): LoopCanonicalParseSuccess<T> {
+  return {
+    ok: true,
+    value,
+    text: canonicalText,
+    bytes: parserUtf8(canonicalText),
+    digestSha256,
+    sizeBytes,
+  };
+}
+
+function parserSameMaterial(
+  a: Readonly<{ workspacePath: string; taskBranch: string; taskHeadSha: string; statusDigestSha256: string; taskHasChanges: boolean }>,
+  b: Readonly<{ workspacePath: string; taskBranch: string; taskHeadSha: string; statusDigestSha256: string; taskHasChanges: boolean }>,
+): boolean {
+  return a.workspacePath === b.workspacePath && a.taskBranch === b.taskBranch && a.taskHeadSha === b.taskHeadSha
+    && a.statusDigestSha256 === b.statusDigestSha256 && a.taskHasChanges === b.taskHasChanges;
+}
+
+// ═══════════════════════════════════════ Parser implementation
+
+/**
+ * Strict canonical parser for `loop-delivery-result-v1` (D06 delivery result
+ * artifact). Fail-closed, no-throw. When `expectedMaterial` is provided, the
+ * final workspace must match the expected workspace material exactly.
+ */
+export function parseLoopDeliveryResultBytes(
+  bytes: Uint8Array,
+  options?: Readonly<LoopParseDeliveryOptions>,
+): LoopCanonicalParseResult<LoopParsedDeliveryResult> {
+  try {
+    const maxBytes = parserResolveMaxBytes(options?.maxBytes, DEFAULT_MAX_DELIVERY_RESULT);
+    const intake = parserTakeCanonicalBytes(bytes, maxBytes, true);
+    const rec = parserScanPlainObject(intake.parsed, DELIVERY_RESULT_KEYS, "delivery result");
+    if (rec.schema !== "loop-delivery-result-v1") parserValidationFail("invalid_input", "delivery result schema mismatch");
+    if (typeof rec.status !== "string" || !DELIVERY_STATUS_VALUES.includes(rec.status)) {
+      parserValidationFail("invalid_input", "delivery result status is not canonical");
+    }
+    if (typeof rec.reason_code !== "string" || !DELIVERY_REASON_CODE_VALUES.includes(rec.reason_code)) {
+      parserValidationFail("invalid_input", "delivery result reason_code is not canonical");
+    }
+    const causeCode = parserAsNullableString(rec.cause_code, "delivery result cause_code");
+    const totalFixRounds = parserAsSafeInt(rec.total_fix_rounds, "delivery result total_fix_rounds", 0, 1000);
+    const testAttempts = parserAsSafeInt(rec.test_attempts, "delivery result test_attempts", 0, 1000);
+    const reviewAttempts = parserAsSafeInt(rec.review_attempts, "delivery result review_attempts", 0, 1000);
+    const refList = (raw: unknown, label: string, kind: string): readonly string[] => {
+      const arr = parserScanPlainArray(raw, `delivery result ${label}`, 4096);
+      const out: string[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        out.push(parserArtifactRefOf(arr[i], `delivery result ${label}[${i}]`, kind).ref);
+      }
+      return Object.freeze(out);
+    };
+    const patchRefs = refList(rec.patch_artifact_refs, "patch_artifact_refs", "code_patch");
+    const testSummaryRefs = refList(rec.test_summary_artifact_refs, "test_summary_artifact_refs", "test_summary");
+    const reviewSummaryRefs = refList(rec.review_summary_artifact_refs, "review_summary_artifact_refs", "review_summary");
+    const files = Object.freeze(parserValidatePathArray(rec.files, "delivery result files"));
+    let finalWorkspace: Readonly<LoopParsedDeliveryFinalWorkspace> | null = null;
+    if (rec.final_workspace !== null) {
+      const fw = parserScanPlainObject(rec.final_workspace, DELIVERY_FINAL_WORKSPACE_KEYS, "delivery result final_workspace");
+      const workspacePath = parserAsNonEmptyString(fw.workspace_path, "delivery result final_workspace.workspace_path");
+      const taskBranch = parserAsNonEmptyString(fw.task_branch, "delivery result final_workspace.task_branch");
+      const taskHeadSha = parserAsSha40(fw.task_head_sha, "delivery result final_workspace.task_head_sha");
+      const statusDigest = parserAsSha256(fw.status_digest_sha256, "delivery result final_workspace.status_digest_sha256");
+      if (fw.task_has_changes !== true && fw.task_has_changes !== false) {
+        parserValidationFail("invalid_input", "delivery result final_workspace.task_has_changes must be a boolean");
+      }
+      finalWorkspace = Object.freeze({
+        workspacePath,
+        taskBranch,
+        taskHeadSha,
+        statusDigestSha256: statusDigest,
+        taskHasChanges: fw.task_has_changes as boolean,
+      });
+    }
+    const elapsedMs = parserAsSafeInt(rec.elapsed_ms, "delivery result elapsed_ms", 0, MAX_MAX_TOTAL_DURATION);
+    const traceArr = parserScanPlainArray(rec.trace, "delivery result trace", 4096);
+    const trace: LoopParsedDeliveryTraceEntry[] = [];
+    let lastSequence = 0;
+    for (let i = 0; i < traceArr.length; i++) {
+      const entry = parserScanPlainObject(traceArr[i], DELIVERY_TRACE_ENTRY_KEYS, `delivery result trace[${i}]`);
+      const sequence = parserAsSafeInt(entry.sequence, `delivery result trace[${i}].sequence`, 1, 1_000_000);
+      if (sequence <= lastSequence) parserValidationFail("invalid_input", "delivery result trace sequences must be strictly increasing");
+      lastSequence = sequence;
+      if (typeof entry.kind !== "string" || !DELIVERY_TRACE_KIND_VALUES.includes(entry.kind)) {
+        parserValidationFail("invalid_input", `delivery result trace[${i}].kind is not canonical`);
+      }
+      if (typeof entry.phase !== "string" || !DELIVERY_TRACE_PHASE_VALUES.includes(entry.phase)) {
+        parserValidationFail("invalid_input", `delivery result trace[${i}].phase is not canonical`);
+      }
+      const fixRound = parserAsSafeInt(entry.fix_round, `delivery result trace[${i}].fix_round`, 0, 1000);
+      const attempt = parserAsSafeInt(entry.attempt, `delivery result trace[${i}].attempt`, 0, 1000);
+      const stepId = parserAsNullableString(entry.step_id, `delivery result trace[${i}].step_id`);
+      const outcome = parserSafeMessageText(entry.outcome, `delivery result trace[${i}].outcome`);
+      const artifactRef = parserAsNullableRef(entry.artifact_ref, `delivery result trace[${i}].artifact_ref`, "workspace_metadata");
+      const patchArtifactRef = parserAsNullableRef(entry.patch_artifact_ref, `delivery result trace[${i}].patch_artifact_ref`, "code_patch");
+      const patchDigest = parserAsNullableSha256(entry.patch_digest_sha256, `delivery result trace[${i}].patch_digest_sha256`);
+      const wsDigest = parserAsNullableSha256(entry.workspace_status_digest_sha256, `delivery result trace[${i}].workspace_status_digest_sha256`);
+      const entryElapsed = parserAsSafeInt(entry.elapsed_ms, `delivery result trace[${i}].elapsed_ms`, 0, MAX_MAX_TOTAL_DURATION);
+      trace.push(Object.freeze({
+        sequence,
+        kind: entry.kind as LoopDeliveryTraceKind,
+        phase: entry.phase as "initial" | "test" | "review" | "test_repair" | "review_repair",
+        fixRound,
+        attempt,
+        stepId,
+        outcome,
+        artifactRef,
+        patchArtifactRef,
+        patchDigestSha256: patchDigest,
+        workspaceStatusDigestSha256: wsDigest,
+        elapsedMs: entryElapsed,
+      }));
+    }
+    if (options?.expectedMaterial !== undefined) {
+      if (finalWorkspace === null || !parserSameMaterial(options.expectedMaterial, finalWorkspace)) {
+        parserValidationFail("invalid_input", "delivery result workspace material binding mismatch");
+      }
+    }
+    const value: Readonly<LoopParsedDeliveryResult> = deepFreeze({
+      schema: "loop-delivery-result-v1",
+      status: rec.status as LoopAutonomousDeliveryStatus,
+      reasonCode: rec.reason_code as LoopAutonomousDeliveryReasonCode,
+      causeCode,
+      totalFixRounds,
+      testAttempts,
+      reviewAttempts,
+      patchArtifactRefs: patchRefs,
+      testSummaryArtifactRefs: testSummaryRefs,
+      reviewSummaryArtifactRefs: reviewSummaryRefs,
+      files,
+      finalWorkspace,
+      elapsedMs,
+      trace: Object.freeze(trace),
+    });
+    parserRequireRoundTrip(intake, true);
+    return parserCanonicalParseSuccess(value, JSON.stringify(intake.parsed) + "\n", parserSha256Hex(intake.bytes), intake.bytes.length);
+  } catch (error) {
+    return parserAsFailure(error, "unexpected failure while parsing delivery result");
+  }
+}
