@@ -114,7 +114,7 @@
 | LOOP-DELIVERY-06 | Autonomous Test, Fix, and Review Loop | source_verified | 有界测试/修复/审核循环结果与证据 | D01、D02、D03、D05 | `core/loop-autonomous-delivery-loop.ts` |
 | LOOP-DELIVERY-07 | Recoverable Git Delivery Publisher | source_verified | 一个 commit、一次 push、Draft PR 与恢复 | D01、D02、D03、D06 | `core/loop-delivery-publisher.ts` |
 | LOOP-DELIVERY-08 | Requirement and Design Orchestration | source_verified | 自然语言需求到 direct executor input | D01、D06 | `core/loop-requirement-design-orchestrator.ts` |
-| LOOP-DELIVERY-09 | Review and Governance Tail | recovered | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D03、D06、D07、Topic 07 Shared Tail 稳定合同 | exact contract accepted；A1 governance-tail-result contract 存在；无 production coordinator；D09 not implemented |
+| LOOP-DELIVERY-09 | Review and Governance Tail | recovered | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D03、D06、D07、Topic 07 Shared Tail 稳定合同 | exact contract accepted；A1 governance-tail-result contract 存在；D07 governed mode 存在；D09-B production coordinator 已实现（pending project controller review） |
 | LOOP-DELIVERY-10 | Real Single-Repository Acceptance and Hardening | recovered | 真实单仓 MVP 验收与硬化 | D01～D09 | 无 production module |
 | LOOP-ADVANCED-11 | Real Review, Feedback, and Re-Gate | recovered | 真实反馈回流与 Re-Gate | D09、D10 | 无 production module |
 | LOOP-ADVANCED-12 | Complex Requirement and Speckit Delivery | recovered | 复杂需求与 Speckit 共同治理尾部 | D08、D09 | 无 production module |
@@ -278,12 +278,12 @@
 - **In scope**（已接受 exact contract）：D09 只消费 D08 `direct / DIRECT_READY` artifacts；D09 调用 D03 准备 workspace；D09 调用 D06 执行实现、测试和内部 review；D05 只能由 D06 内部调用；D09 编排 Topic 07 Shared Documentation Governance Tail；Tail Completion Gate 必须在 D07 publish 之前完成；D07 governed mode 必须发布最终治理文件集合。
 - **Out of scope**：Tail `pending` 或 `in_progress` 不能构成 D09 success；D09 success 不等于 requirement completion、merge authorization 或 publication；A1 只建立完成结果合同与 artifact kind，不实现 production coordinator，不修改 D07 publisher。
 - **Completion contract**：已接受 exact contract 摘要见上；A1 只建立合同，不完成 D09；`governance_tail_result` 只表达 Shared Tail 已正式完成并具备 governed publish 资格，不表达 pending/blocked/failed/部分完成。
-- **Expected evidence**：仍要求未来 production coordinator、governed publisher 与真实证据链；A1 实施不是 D09 production implementation evidence。
+- **Expected evidence**：D09-B production coordinator（`core/loop-production-coordinator.ts`）实现 D09 执行链（固定 orchestration artifact → D08 parsers → D03 prepare → D06 execute + read-back → 注入式 Shared Tail → A1 build/store/read-back/parse → D03 post-Tail inspect → D07 governed publish + read-back）；production implementation 本身不是 implementation review PASS。
 - **Relationship to previous stage**：承接 D08 自然语言需求路径（`direct / DIRECT_READY`）。
 - **Relationship to next stage**：为 D10 真实单仓验收提供稳定治理边界。
-- **Definition provenance**：D09 exact contract 已由项目总控接受，记录于本路线；D09-A1 governance-tail-result contract 已进入 Source，且 D09-A1 implementation review 与 post-merge closure 已完成；D07 已存在可选 governed publish mode（D09-A2 candidate，pending 独立 review），governed mode 消费 A1 并以 A1 final governed files 作为发布依据；accepted exact contract 是 planning 事实，不是 production implementation evidence；D09 production 仍未实施。
+- **Definition provenance**：D09 exact contract 已由项目总控接受，记录于本路线；D09-A1 governance-tail-result contract 已进入 Source，且 D09-A1 implementation review 与 post-merge closure 已完成；D07 已存在可选 governed publish mode（D09-A2 candidate，pending 独立 review），governed mode 消费 A1 并以 A1 final governed files 作为发布依据；D09-B production coordinator 实现已提交（pending project controller review）；accepted exact contract 是 planning 事实，implementation review 结果决定 D09 是否通过。
 
-本树能力记录（D09-A2 candidate 对应树）：
+本树能力记录（D09-A2 candidate 与 D09-B production coordinator 对应树）：
 
 - D07 保留 standalone mode（字节级兼容）；
 - D07 存在可选 governed mode；
@@ -292,8 +292,8 @@
 - D07 不执行 Shared Tail；
 - D07 不 mark Ready；
 - D07 不 merge；
-- D09 production coordinator 仍不存在；
-- D09 overall 仍未实现。
+- D09-B production coordinator 存在：固定 orchestration artifact ref 为唯一根输入；四个 additive parsers（orchestration / executor input / delivery / publish result）；注入式 Shared Tail 依赖；A1 由 coordinator 构建与验证；D07 governed publish 始终携带 `governanceTailResultArtifactRef`（无 standalone fallback）；共享 deadline；D06/D07 歧义窗口 blocked 不重放；
+- D09 overall 已实现为有界单次 fail-closed coordinator，仍未获得 implementation review PASS。
 
 ## LOOP-DELIVERY-10
 
@@ -410,7 +410,7 @@
 - Foundation-00 原始历史材料的进一步 provenance（pending）；
 - 是否需要后续 accepted decision 固化 definition statuses（pending）。
 
-已由项目总控接受的 D09 exact contract 记录了 D09 消费边界、Tail Completion Gate 先于 D07 publish、D07 governed mode 发布最终治理文件集合等决定，并定义了 D09 与 Topic 07 Shared Documentation Governance Tail 的边界以及 D09/D10 切分；这些不再作为 open definition recovery items，但 A1 之后的 D09 production implementation 仍保持未实现。
+已由项目总控接受的 D09 exact contract 记录了 D09 消费边界、Tail Completion Gate 先于 D07 publish、D07 governed mode 发布最终治理文件集合等决定，并定义了 D09 与 Topic 07 Shared Documentation Governance Tail 的边界以及 D09/D10 切分；这些不再作为 open definition recovery items。D09-B production coordinator 已实现并提交（pending project controller review），不再标记为未实施。
 
 ## Change Rules
 

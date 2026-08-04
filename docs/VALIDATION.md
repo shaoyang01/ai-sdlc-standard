@@ -343,8 +343,8 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 - 本模块与测试不运行真实 Shared Tail，不执行真实 Sync、Reconcile、Entry Coverage 或 Tail Gate，不调用 D03/D06/D07，不创建真实 workspace，不执行真实 Git。
 - 本任务不创建 commit/push/PR 的生产副作用（验收在 task branch 内完成），不建立 requirement completion，不表示 D09 已实现，不表示 merge 或 publication 授权。
 - 跨 artifact 的 identity、digest 与 byte binding 由未来 D09-B 与 D09-A2 执行；A1 只验证 ref 格式。
-- A1 不重新判断 `PASS_WITH_RISK` 的业务风险接受；未来 D09-B 必须在构建 A1 artifact 前确认 Gate 结果确实有效。
-- CI success 不是 implementation review PASS；D09 整体仍未实现。
+- A1 不重新判断 `PASS_WITH_RISK` 的业务风险接受；D09-B 在构建 A1 artifact 前要求 Tail 结果状态为 `completed` 并携带 completion package（A1 builder 全量验证 package 与 Tail Completion Gate）。
+- CI success 不是 implementation review PASS；D09-B 实现已提交，仍 pending project controller review。
 
 ## D09-A2 Governed Delivery Publisher Validation
 
@@ -369,7 +369,28 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 
 - 本模块与测试不运行真实 Shared Tail，不产生 A1 artifact，不执行 D09-B，不生成 D09 terminal result，不建立 requirement completion，不 mark Ready，不 merge。
 - D09-A2 只实现 governed publish 模式本身；governed 消费已进入 Source 的 A1，不重新判断 Tail Completion Gate。
-- CI success 不是 implementation review PASS；D09 整体仍未实现。
+- CI success 不是 implementation review PASS；D09-B 实现已提交，仍 pending project controller review。
+
+## D09-B Production Coordinator Validation
+
+`core/loop-production-coordinator.ts` 与 `tests/loop-production-coordinator.test.ts` 组成 D09-B production coordinator 验证（pending project controller review）：
+
+- **唯一根输入**：只接受固定 `loop-artifact:v1:orchestration_result:sha256:<digest>` artifact ref；不接受内存 requirement/design/executor-input 对象、浮动 ref 或调用者声称的 route/status；`executor_input` ref 必须从经过验证的 orchestration artifact 取得。
+- **Additive parsers**：导出 `parseLoopOrchestrationResultBytes`、`parseLoopDirectExecutorInputBytes`、`parseLoopDeliveryResultBytes`、`parseLoopDeliveryPublishResultBytes`；均为 bounded defensive copy、strict UTF-8、exact keys、canonical property order、canonical bytes 重建 byte-identical round-trip、artifact-ref/digest/identity/material binding、no-throw、fail-closed；不改变任何既有 artifact bytes，不改变 D08/D06/D07 既有执行结果、公开字段与行为（D07 standalone 与 governed 兼容合同保持）。
+- **执行链**：固定 orchestration ref → D08 parser 验证 `direct / DIRECT_READY` → executor-input parser → D03 prepare（base/source/identity binding，drift 一律 blocked）→ D06 execute（预算 = min(executor 预算, 共享剩余预算)）→ delivery artifact read-back + parser + 与内存结果 files/final workspace 精确绑定 → 注入式 Shared Documentation Governance Tail（typed dependency；coordinator 不重实现 Gate Runner/Sync/Reconcile/Entry Coverage/完整 Tail）→ 仅 `completed / GOVERNANCE_TAIL_COMPLETED` 携带 completion package 进入 A1 → A1 build（真实 builder 全量验证 package）/store descriptor/read-back digest/parse/canonical value comparison → D03 post-Tail inspect 与 A1 final workspace 精确一致 → D07 governed publish（请求始终携带 `governanceTailResultArtifactRef`，无 standalone fallback）→ publish-result read-back + parser（以持久化 facts 为权威）。
+- **Shared Tail 边界**：pending/in_progress/blocked/failed/throw 不进入 A1 或 D07；恶意 accessor/Proxy/额外字段/不一致 completion package 全部 fail-closed；Tail 依赖不构建或存储 A1、不调用 D07、不 commit/push/PR。
+- **A1 ownership**：A1 `implementation_files` 与 D06 files 精确数组相等；A1 `files` 为最终治理文件集合；A1 final workspace 与 post-Tail D03 snapshot 精确一致；Tail Gate `persisted=true`、`read_back_verified=true`、manifest/gate source 精确自绑定；任一验证失败不调用 D07。
+- **Recovery 边界**：本轮无 `production_coordinator_state`/`production_coordinator_result` artifact、无新 Artifact Store kind；无法证明 D06/D07 副作用窗口时 blocked（`DELIVERY_READBACK_AMBIGUOUS`/`PUBLISH_READBACK_AMBIGUOUS`），禁止第二次 implementation/fresh replay；只有已有、经过验证并与同一 identity/material 绑定的 `recoveryPublishIntentArtifactRef` 才进入 D07 既有恢复路径。
+- **Deadline**：deadline = 第一次有效 `execute()` clock sample + `maxTotalDurationMs`（不用 `identity.createdAt`）；所有阶段共享同一 deadline；D06/Shared Tail/D07 只能获得当前剩余预算；clock throw/非有限值/回退 → `CLOCK_INVALID`。
+- **测试 markers**：`D09_B_PARSERS_VERIFIED`、`D09_B_INPUT_FAIL_CLOSED_VERIFIED`、`D09_B_ORCHESTRATION_GATE_VERIFIED`、`D09_B_WORKSPACE_PREPARE_VERIFIED`、`D09_B_DELIVERY_READBACK_VERIFIED`、`D09_B_TAIL_BOUNDARY_VERIFIED`、`D09_B_TAIL_FAIL_CLOSED_VERIFIED`、`D09_B_A1_OWNERSHIP_VERIFIED`、`D09_B_FINAL_WORKSPACE_VERIFIED`、`D09_B_GOVERNED_PUBLISH_VERIFIED`、`D09_B_NO_STANDALONE_FALLBACK_VERIFIED`、`D09_B_AMBIGUOUS_WINDOW_VERIFIED`、`D09_B_DEADLINE_VERIFIED`、`D09_B_CALL_COUNTS_VERIFIED`、`D09_B_NO_READY_MERGE_EXCHANGE_KB_VERIFIED`、`D09_B_REAL_SOURCE_UNCHANGED`、`D09_B_TEMP_CLEANUP_COMPLETE` 只在对应真实断言全部成功时输出；summary 格式 `D09_B_PRODUCTION_COORDINATOR_SUMMARY passed=<N> failed=0`。
+- **Dependency call counts**：测试用计数 fake 证明每个副作用阶段（D03 prepare、D06 execute、Shared Tail、A1 put、D03 inspect、D07 execute）至多调用一次；D09 成功时 trace 顺序固定为 orchestration_verify → executor_input_verify → workspace_prepare → delivery_execute → delivery_readback → governance_tail → a1_build → a1_store_readback → post_tail_inspect → governed_publish → publish_readback → terminal。
+
+边界：
+
+- 本模块与测试不运行真实 Shared Tail、不执行真实 Git/network、不创建真实 workspace；D08 orchestration/executor input 由真实 D08 orchestrator（fake agent/reviewer）与真实 D01 temp store 生成。
+- 测试期间 real Source HEAD/status/diff/staging 保持不变（`D09_B_REAL_SOURCE_UNCHANGED`）；全部临时目录清理成功（`D09_B_TEMP_CLEANUP_COMPLETE`）。
+- 本任务不产生 commit/push/PR 生产副作用，不 mark Ready，不 merge，不 publish Exchange，不修改 Personal KB；不建立 requirement completion；不表示 merge 或 publication 授权。
+- CI success 不是 implementation review PASS；D09 整体仍 pending project controller review。
 
 ## validate-skill-contracts.rb 检查什么
 
