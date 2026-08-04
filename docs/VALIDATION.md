@@ -1651,3 +1651,48 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Verification Alternative
 - Deferred without Accepted By
 - Plan Gate BLOCKED
+
+## D10-A Durable Checkpoint Foundation Validation
+
+`core/loop-delivery-checkpoint.ts`、`core/loop-delivery-checkpoint-store.ts` 与 `tests/loop-delivery-checkpoint.test.ts`、`tests/loop-delivery-checkpoint-store.test.ts` 及 `tests/loop-artifact-store.test.ts` 新增段组成 D10-A durable checkpoint foundation 验证（D10-A 已进入 Source，仍为 Draft PR 状态，未 Ready、未 merge）：
+
+- **Schema 与 artifact authority**：固定 `loop-delivery-checkpoint-v1`；32 个根字段与 identity 九字段固定顺序；builder/parser 为 descriptor-based exact-key、fail-closed、UTF-8、无 BOM/CR/NUL、精确一个 trailing LF、无额外 whitespace、SHA-256 小写 hex、默认最大 1 MiB；parser 只接受真实 Uint8Array、先 size gate 再复制、fatal UTF-8、重建 canonical bytes 且 byte-identical 才成功；每次 checkpoint transition 产生一个 immutable `delivery_checkpoint` artifact（`loop-artifact:v1:delivery_checkpoint:sha256:<64hex>`），artifact 是 immutable authority。
+- **Current-head locator 非业务权威**：SQLite 单表 `loop_delivery_checkpoint_current_head` 只有四个业务列（run_id/generation/checkpoint_artifact_ref/checkpoint_digest_sha256）；locator row 只是定位最新可信 artifact，任何读取都必须 read-back artifact、解析并交叉验证 digest/generation/runId；row 单独不构成 authority；不存储 raw model output、secret、环境变量、stdout/stderr、prompt、patch bytes 或任意 metadata；不创建第二份 checkpoint business-state table。
+- **固定 phase/transition contract**：16 个 phase 固定 vocabulary；非 terminal phase 的 required/nullable facts 矩阵、依赖闭包、workspace observation 矩阵（head/digest/has_changes 允许变化边界）、terminal prefix 规则（blocked/failed 只能携带合法前缀事实、必须携带 terminal reason；completed 为成功 terminal 且不携带 reason）；显式 forward transition graph，禁止 skip/rollback/nonterminal self-transition/terminal continuation；generation 1 必须 `previous_checkpoint_artifact_ref=null`，generation>1 必须携带。
+- **Generation/CAS**：store 自行构建 generation 与 previous ref，不信任调用者；advance 顺序固定（验证 request → 完整验证 expected current → 构建 next → 验证 transition → canonical bytes → Artifact Store put → 验证 descriptor → BEGIN IMMEDIATE → 重读 locator → CAS insert/update → COMMIT → read-back 验证）；WAL、busy_timeout、foreign_keys ON、synchronous FULL；不同 candidate 并发 exactly one `advanced`、其余 `CHECKPOINT_STALE`。
+- **Exact retry**：相同请求在未知响应后重试返回 `confirmed`（current 精确等于确定性构建的 candidate generation/ref/digest），不新写 authority；不同 bytes/ref/digest/previous ref/generation/identity/target repository/task branch/deadline origin 一律不算幂等。
+- **Fork prevention**：transition validator 要求 `next.previous_checkpoint_artifact_ref` 等于 previous generation 的内容寻址 ref（由 previous canonical bytes 推导）；错误 previous ref、generation skip、immutable binding 变更、既有 fact 变更/消失、workspace path 变更全部拒绝；并发 race 后链保持 generation-linear。
+- **Restart/read-back**：关闭第一组 store、以全新 instance 重开同一 control root 与 DB，成功读取同一 current checkpoint 并继续一次合法 transition。
+- **Corruption handling**：row generation/ref/digest 非法、ref/digest 不一致、locator/artifact digest 不一致、artifact 缺失/字节损坏/parser 失败全部 `CHECKPOINT_STORE_CORRUPT`；Artifact Store put 在 CAS 前失败 `CHECKPOINT_ARTIFACT_FAILURE`；Artifact Store read 失败按 persisted 链不一致处理为 `CHECKPOINT_STORE_CORRUPT`；SQLite busy `CHECKPOINT_STORE_BUSY`；未知存储错误 sanitized 为 `CHECKPOINT_STORE_FAILURE`（消息 ≤256 字符、无控制字符、不含 dbPath/runId/artifact bytes/raw SQLite text/secret）。
+- **Orphan artifact boundary**：artifact 已写入但 CAS 失败时允许留下未被引用的 immutable orphan blob，它不得成为 current authority（测试验证 loser blob 存在但 locator 只指向 winner）。
+- **Markers**：`D10_A_CHECKPOINT_SCHEMA_VERIFIED`、`D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED`、`D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED`、`D10_A_CHECKPOINT_CAS_VERIFIED`、`D10_A_CHECKPOINT_FORK_PREVENTION_VERIFIED`、`D10_A_CHECKPOINT_RESTART_VERIFIED`、`D10_A_ARTIFACT_KIND_VERIFIED`、`D10_A_D01_D09_REGRESSION_PRESERVED`、`D10_A_REAL_SOURCE_UNCHANGED`、`D10_A_TEMP_CLEANUP_COMPLETE` 只在对应真实断言全部成功时输出；summary 格式 `D10_A_CHECKPOINT_SUMMARY passed=<N> failed=0` 与 `D10_A_CHECKPOINT_STORE_SUMMARY passed=<N> failed=0`；原十一种 artifact kind 名称与顺序精确保持，新 kind 只追加一次，代表性原 kind put/read/ref 行为不变。
+- **Targeted commands**：
+
+  ```bash
+  npx --no-install tsx tests/loop-delivery-checkpoint.test.ts
+  npx --no-install tsx tests/loop-delivery-checkpoint-store.test.ts
+  npx --no-install tsx tests/loop-artifact-store.test.ts
+  ```
+
+- **Full validation commands**：
+
+  ```bash
+  npm run typecheck
+  npm test
+  npm run test:loop-patch-mutations
+  ruby scripts/validate-skill-contracts.rb
+  ruby scripts/validate-product-parity-fixtures.rb
+  ruby scripts/validate-capability-metadata-chain.rb
+  ruby scripts/validate-gate-runner-scenarios.rb
+  git diff --check
+  ```
+
+- **Source invariance**：D10-A targeted suites 前后记录并精确比较 real Source 的 HEAD、status bytes、unstaged diff digest、staged diff digest，证明测试没有污染当前 Source 状态（`D10_A_REAL_SOURCE_UNCHANGED`）。
+- **Temp cleanup**：全部临时 SQLite DB/WAL/SHM、temporary repositories、Artifact Store roots、worker-process roots 实际删除并验证，无遗留 message listeners，所有 worker 以 exit code 0 退出（`D10_A_TEMP_CLEANUP_COMPLETE`）。
+
+边界：
+
+- D10-A 不运行真实 provider；不运行 Shared Tail；不修改 D08/D06/D07/D09 与 Runtime/Gateway/Graph；不创建 single-repository coordinator；不创建真实 target branch/commit/push/PR；不建立 D10 overall completion。
+- D10-B～D10-F 仍未授权；D10-A 只是 D10-C 跨进程恢复 coordinator 的 checkpoint artifact 与 current-head locator foundation。
+- CI success 不等于 implementation review PASS；Draft PR 不等于 Ready 或 merge authorization。
+- Exchange 与 Personal Knowledge Base 未发布；Roadmap 与 CURRENT_STATUS 未修改。

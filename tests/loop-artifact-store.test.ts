@@ -22,7 +22,7 @@ import {
   type Stats, type PathLike,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   LoopArtifactStore,
@@ -190,6 +190,14 @@ function runConcurrentPuts(controlRoot: string, repository: string, kind: string
 
 async function main(): Promise<void> {
   console.log("LOOP Artifact Store Tests (Delivery-01 + R1)\n");
+
+  // ── D10-A: record real Source state before the suites ──
+  const repoRoot = resolve(__dirname, "..");
+  const git = require("node:child_process").execSync;
+  const recordHead = git("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
+  const recordStatus = git("git status --porcelain=v1 -z --untracked-files=all", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+  const recordDiffDigest = createHash("sha256").update(git("git diff --no-renames", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 })).digest("hex");
+  const recordStagedDigest = createHash("sha256").update(git("git diff --cached --no-renames", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 })).digest("hex");
 
   const tempRoot = mkdtempSync(join(tmpdir(), "loop-d01-art-"));
   try {
@@ -1113,7 +1121,7 @@ async function main(): Promise<void> {
         "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
         "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
       ] as const;
-      assert(LOOP_ARTIFACT_KINDS.length === 11, "kind list extended to exactly 11 entries");
+      assert(LOOP_ARTIFACT_KINDS.length === 12, "kind list extended to exactly 12 entries (11 original + delivery_checkpoint)");
       assert(
         d09a1OriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
         "original ten D01-D08 kinds keep their exact positions",
@@ -1151,6 +1159,83 @@ async function main(): Promise<void> {
       assert(concurrent.every((result) => result.ok === true), "D09-A1 all concurrent new-kind puts succeed");
       const concurrentRefs = new Set(concurrent.map((result) => result.artifactRef));
       assert(concurrentRefs.size === 1, "D09-A1 concurrent new-kind descriptors identical");
+    }
+
+    // ── D10-A: delivery_checkpoint kind extension + D01-D09 regression ──
+    console.log("D10-A delivery_checkpoint kind extension");
+    {
+      const d10aOriginalKinds = [
+        "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
+        "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
+        "governance_tail_result",
+      ] as const;
+      const kindFailuresBefore = failed;
+      assert(LOOP_ARTIFACT_KINDS.length === 12, "kind list extended to exactly 12 entries");
+      assert(
+        d10aOriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
+        "original eleven D01-D09 kinds keep their exact names and order",
+      );
+      assert(LOOP_ARTIFACT_KINDS[11] === "delivery_checkpoint", "delivery_checkpoint appended once at the end");
+      assert(LOOP_ARTIFACT_KINDS.filter((kind) => kind === "delivery_checkpoint").length === 1, "delivery_checkpoint listed exactly once");
+
+      const d10aContent = '{"schema":"loop-delivery-checkpoint-v1","phase":"initialized"}';
+      const d10aBytes = Buffer.from(d10aContent, "utf8");
+      const desc = store.put("delivery_checkpoint", d10aContent);
+      assert(desc.kind === "delivery_checkpoint", "D10-A put kind delivery_checkpoint");
+      assert(desc.artifactRef === `loop-artifact:v1:delivery_checkpoint:sha256:${desc.digest}`, "D10-A canonical ref format");
+      assert(/^loop-artifact:v1:delivery_checkpoint:sha256:[0-9a-f]{64}$/.test(desc.artifactRef), "D10-A ref matches loop-artifact:v1:delivery_checkpoint:sha256:<64hex>");
+      assert(desc.digest === createHash("sha256").update(d10aBytes).digest("hex"), "D10-A digest exact");
+      assert(desc.sizeBytes === d10aBytes.length, "D10-A size exact");
+      const readback = store.read(desc.artifactRef, desc.digest);
+      assert(readback.equals(d10aBytes), "D10-A exact readback");
+      const again = store.put("delivery_checkpoint", d10aContent);
+      assert(again.artifactRef === desc.artifactRef, "D10-A idempotent put returns same ref");
+      const d10aShardDir = join(controlRoot, "artifacts", "v1", "delivery_checkpoint", desc.digest.slice(0, 2));
+      const d10aFinalPath = join(d10aShardDir, `${desc.digest}.blob`);
+      const d10aMode = lstatSync(d10aFinalPath).mode & 0o777;
+      assert(d10aMode === 0o600, "D10-A new kind blob mode 0600");
+      assert(desc.artifactRef === `loop-artifact:v1:delivery_checkpoint:sha256:${desc.digest}`, "D10-A canonical ref confirmed");
+
+      const concurrentCheckpoint = await runConcurrentPuts(controlRoot, repository, "delivery_checkpoint", "concurrent-checkpoint-content", 3);
+      assert(concurrentCheckpoint.every((result) => result.ok === true), "D10-A all concurrent new-kind puts succeed");
+      const concurrentCheckpointRefs = new Set(concurrentCheckpoint.map((result) => result.artifactRef));
+      assert(concurrentCheckpointRefs.size === 1, "D10-A concurrent new-kind descriptors identical");
+
+      const artifactKindOk = failed === kindFailuresBefore;
+      console.log("D10_A_ARTIFACT_KIND_VERIFIED", artifactKindOk);
+
+      // D01-D09 regression: representative original kinds keep put/read/ref
+      const regressionFailuresBefore = failed;
+      for (const kind of ["code_patch", "delivery_result", "workspace_metadata", "orchestration_result", "governance_tail_result"] as const) {
+        const reg = store.put(kind, d10aContent);
+        assert(reg.kind === kind, `D10-A regression kind ${kind} put`);
+        assert(reg.artifactRef === `loop-artifact:v1:${kind}:sha256:${reg.digest}`, `D10-A regression kind ${kind} ref unchanged`);
+        const regRead = store.read(reg.artifactRef, reg.digest);
+        assert(regRead.equals(d10aBytes), `D10-A regression kind ${kind} exact readback`);
+      }
+      expectThrow("INVALID_INPUT", () => store.put("delivery_checkpoint" as never, 42 as never), "D10-A invalid content for new kind rejected");
+      expectThrow("INVALID_INPUT", () => store.put("not_a_real_kind" as never, "x"), "D10-A invalid kind still rejected");
+      const regressionOk = failed === regressionFailuresBefore;
+      console.log("D10_A_D01_D09_REGRESSION_PRESERVED", regressionOk);
+    }
+
+    // ── D10-A: real Source invariance ──
+    {
+      const invarianceFailuresBefore = failed;
+      const currentHead = git("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
+      const currentStatus = git("git status --porcelain=v1 -z --untracked-files=all", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+      const currentDiffDigest = createHash("sha256").update(git("git diff --no-renames", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 })).digest("hex");
+      const currentStagedDigest = createHash("sha256").update(git("git diff --cached --no-renames", { cwd: repoRoot, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 })).digest("hex");
+      const headOk = currentHead === recordHead;
+      const statusOk = currentStatus === recordStatus;
+      const diffOk = currentDiffDigest === recordDiffDigest;
+      const stagedOk = currentStagedDigest === recordStagedDigest;
+      assert(headOk, "D10-A real source HEAD unchanged");
+      assert(statusOk, "D10-A real source status unchanged");
+      assert(diffOk, "D10-A real source unstaged diff unchanged");
+      assert(stagedOk, "D10-A real source staged diff unchanged");
+      const invarianceOk = failed === invarianceFailuresBefore;
+      console.log("D10_A_REAL_SOURCE_UNCHANGED", invarianceOk);
     }
 
     store.close();
