@@ -346,6 +346,31 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 - A1 不重新判断 `PASS_WITH_RISK` 的业务风险接受；未来 D09-B 必须在构建 A1 artifact 前确认 Gate 结果确实有效。
 - CI success 不是 implementation review PASS；D09 整体仍未实现。
 
+## D09-A2 Governed Delivery Publisher Validation
+
+`core/loop-delivery-publisher.ts` 与 `tests/loop-delivery-publisher.test.ts` 组成 D09-A2 governed delivery publish 验证（D09-A2 candidate，pending 独立 review）：
+
+- **Standalone byte compatibility**：governance ref 缺失时，D07 standalone 行为保持字节级兼容——`loop-publish-intent-v1` intent bytes/SHA-256、commit message、`loop-publish-pr-body-v1` PR body/SHA-256、`loop-publish-result-v1` result bytes、recovery intent、trace stages/顺序、runtime own keys 与 result-store-failure 行为均以编辑前固定常量断言；standalone runtime result 不新增值为 `undefined` 的 own property，standalone body 不调用 governed Markdown escaping helper。
+- **A1 parser 复用**：governed 模式从当前 Source 导入 `parseLoopGovernanceTailResultBytes`、`LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES` 与 A1 readonly 类型；不复制 A1 validator；ref 精确匹配 `governance_tail_result` kind；bytes 超限在复制/解析前拒绝；ref digest 与实际 bytes SHA-256 精确相等；parser 失败 fail-closed；只使用 parser 返回的 canonical frozen value；不读取或执行 A1 中的 evidence 文件。
+- **Identity/delivery/files/workspace 交叉绑定**：A1 identity 与 request identity 九字段逐项相等；`A1.delivery_result_artifact_ref === request.deliveryResultArtifactRef`；`A1.implementation_files` 与 D06 delivery files 数组长度、顺序、每个 path 精确相等（不允许 subset/排序/去重）；D06 与 A1 workspace provenance 的 `workspace_path`/`task_branch`/`task_head_sha`/`task_has_changes=true` 相等，`status_digest_sha256` 允许不同；A1 `orchestration_result_artifact_ref` 与 `executor_input_artifact_ref` 只作为 governed evidence chain 保存，不读取其 bytes。
+- **Effective final workspace**：standalone 为 D06 final workspace，governed 为 A1 final workspace；D03 snapshot 必须与 effective final workspace 精确匹配（path/branch/HEAD/status digest/has-changes）；fresh 与 recovery 模式的 precommit HEAD/status digest 均来自 effective authority。
+- **Effective final files**：standalone 为 D06 files，governed 为 A1 files（保持 A1 canonical 顺序，不修改、不追加、不过滤 A1 数组；A1 parser 已保证 implementation_files ⊆ files）。
+- **Exact staging**：standalone 以 D06 files、governed 以 A1 files 为 expected set；保留全部既有 staging 门禁（porcelain status、unstaged/cached name-status、untracked、rename/copy/unmerged/malformed token 拒绝、extra/missing path 拒绝、exact `git add -- <effective files>`、post-add 检查、`git diff --cached --check`、`git write-tree`）；不自动清理 workspace，不 stage effective files 之外的内容。
+- **Governed intent**：schema 固定 `loop-governed-publish-intent-v1`，21 字段固定顺序（schema/run_id/requirement_id/repository/base_branch/expected_base_sha/task_branch/precommit_head_sha/precommit_status_digest_sha256/staged_tree_sha/orchestration_result_artifact_ref/executor_input_artifact_ref/delivery_result_artifact_ref/governance_tail_result_artifact_ref/implementation_files/files/commit_subject/commit_author_name/commit_author_email/pr_title/pr_body_schema）；仍存为 `workspace_metadata`；recovery intent 必须与重建 governed intent byte-identical；standalone intent 不能恢复 governed 模式，governed intent 不能恢复 standalone 模式，更换 governance ref 后旧 intent 失效。
+- **Governed result**：schema 固定 `loop-governed-publish-result-v1`，26 字段固定顺序（含 orchestration/executor/delivery/governance refs、implementation_files、files）；仍存为 `workspace_metadata`；store failure 路径保留 governed 字段集与 commit/push/PR facts，返回 `ARTIFACT_STORE_FAILED`，不退化为 standalone 字段集。
+- **Governed commit/recovery**：commit message 固定四行 trailer（Run-Id/Delivery/Governance-Tail/Publish-Intent）且精确一个 trailing LF；recovery 验证 exactly one parent、parent=effective precommit HEAD、tree=staged tree、message/author/commit files/workspace clean；不创建第二个 commit。
+- **Governed Draft PR evidence**：body 首行固定 `## LOOP-DELIVERY-09 — Governed Delivery Publish`，八章节固定顺序（Identity And Publish / Artifact Chain / DocFlow Evidence / Conditional Governance Evidence / Manifest And Tail Gate / Implementation Files / Final Governed Files / Governance）；Conditional Governance 只列出 evidence path/version/digest 或 `basis recorded in governance-tail artifact`（不复制 Decision Basis 七个 free-form 字段原文）；Governance 章节固定声明（Draft/Review/Merge/Requirement completion/D09 overall/Exchange/Personal KB），不输出 `D08: not authorized`。
+- **Markdown escaping**：只为 governed PR body 做确定性 scalar escaping；拒绝 NUL/CR/LF/C0/DEL/C1；固定转义顺序 `&`→`&amp;`、`\`→`&#92;`、backtick→`&#96;`、`<`→`&lt;`、`>`→`&gt;`；不双重转义；unknown exception、runner stdout/stderr 不写入 body。
+- **Real Source invariance**：测试期间 real Source HEAD/status/diff/staging 保持不变（`D09_A2_REAL_SOURCE_UNCHANGED`）。
+- **Temp cleanup**：全部临时目录清理成功（`D09_A2_TEMP_CLEANUP_COMPLETE`）。
+- **Markers**：`D09_A2_GOVERNED_MODE_VERIFIED`、`D09_A2_STANDALONE_BYTE_COMPATIBILITY_VERIFIED`、`D09_A2_GOVERNANCE_ARTIFACT_BINDING_VERIFIED`、`D09_A2_FINAL_WORKSPACE_AUTHORITY_VERIFIED`、`D09_A2_GOVERNED_STAGING_VERIFIED`、`D09_A2_GOVERNED_INTENT_RESULT_VERIFIED`、`D09_A2_GOVERNED_COMMIT_RECOVERY_VERIFIED`、`D09_A2_GOVERNED_DRAFT_PR_VERIFIED`、`D09_A2_MARKDOWN_ESCAPING_VERIFIED`、`D09_A2_REAL_SOURCE_UNCHANGED`、`D09_A2_TEMP_CLEANUP_COMPLETE` 只在对应真实断言全部成功时输出；负向测试每个 mutation 必须先证明真实生效，未捕获 throw 不算成功拒绝，检查具体 reason 与绑定 diagnostic。
+
+边界：
+
+- 本模块与测试不运行真实 Shared Tail，不产生 A1 artifact，不执行 D09-B，不生成 D09 terminal result，不建立 requirement completion，不 mark Ready，不 merge。
+- D09-A2 只实现 governed publish 模式本身；governed 消费已进入 Source 的 A1，不重新判断 Tail Completion Gate。
+- CI success 不是 implementation review PASS；D09 整体仍未实现。
+
 ## validate-skill-contracts.rb 检查什么
 
 当前脚本检查：

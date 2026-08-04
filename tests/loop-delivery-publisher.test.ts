@@ -23,6 +23,12 @@ import type {
 } from "../core/loop-posix-process-runner";
 import type { LoopGitWorkspaceManager, LoopGitWorkspaceSnapshot } from "../core/loop-git-workspace";
 import type { LoopArtifactStore, LoopStoredArtifact } from "../core/loop-artifact-store";
+import {
+  buildLoopGovernanceTailResult,
+  parseLoopGovernanceTailResultBytes,
+  LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES,
+  type LoopGovernanceTailResultBuildResult,
+} from "../core/loop-governance-tail-result";
 
 // ═══════════════════════════════════════ Domain Counters
 
@@ -91,6 +97,7 @@ function cleanupAll(): void {
   }
   chk("integration", allClean, "all temp dirs cleaned");
   console.log("D07_TEMP_CLEANUP_COMPLETE", allClean);
+  a2TempCleanupFlag = allClean;
 }
 
 // Record real project state
@@ -122,6 +129,7 @@ function verifyRealSourceUnchanged(): void {
   const stagedOk = sha256Hex(stagedResult) === realSourceStagedDigest;
   chk("integration", stagedOk, "real source staged unchanged");
   console.log("D07_REAL_SOURCE_UNCHANGED", headOk && statusOk && diffOk && stagedOk);
+  a2RealSourceUnchangedFlag = headOk && statusOk && diffOk && stagedOk;
 }
 
 // ═══════════════════════════════════════ Fixture Helpers
@@ -193,6 +201,7 @@ class FakeArtifactStore {
   private kindStore = new Map<string, string>(); // ref -> kind
   readCount = 0;
   putCount = 0;
+  failResultPut = false;
 
   read(artifactRef: string): Buffer {
     this.readCount++;
@@ -202,8 +211,14 @@ class FakeArtifactStore {
   }
 
   put(kind: string, content: string | Uint8Array): LoopStoredArtifact {
-    this.putCount++;
     const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+    if (this.failResultPut && bytes.length > 0) {
+      const head = bytes.subarray(0, 80).toString("utf8");
+      if (head.includes('"schema":"loop-publish-result-v1"') || head.includes('"schema":"loop-governed-publish-result-v1"')) {
+        throw new Error("ARTIFACT_STORE_FAILED");
+      }
+    }
+    this.putCount++;
     const digest = sha256Hex(bytes);
     const ref = `loop-artifact:v1:${kind}:sha256:${digest}`;
     this.store.set(ref, Buffer.from(bytes));
@@ -220,6 +235,10 @@ class FakeArtifactStore {
     return this.store.has(ref);
   }
 
+  kindOf(ref: string): string | undefined {
+    return this.kindStore.get(ref);
+  }
+
   _inject(ref: string, bytes: Buffer, kind: string): void {
     this.store.set(ref, Buffer.from(bytes));
     this.kindStore.set(ref, kind);
@@ -229,6 +248,8 @@ class FakeArtifactStore {
 class FakeRunner {
   private handlers: Map<string, (args: string[], stdin?: string) => LoopPosixProcessResult | Promise<LoopPosixProcessResult>> = new Map();
   private errorHandlers: Map<string, () => Error> = new Map();
+  commitMessages: string[] = [];
+  prBodies: string[] = [];
 
   setHandler(executableId: string, handler: (args: string[], stdin?: string) => LoopPosixProcessResult): void {
     this.handlers.set(executableId, handler);
@@ -246,6 +267,12 @@ class FakeRunner {
     const handler = this.handlers.get(request.executableId);
     if (handler) {
       const result = await handler(request.args || [], request.stdin);
+      if (request.executableId === "git" && (request.args || []).includes("commit") && request.stdin) {
+        this.commitMessages.push(request.stdin);
+      }
+      if (request.executableId === "gh" && request.args && request.args[0] === "pr" && request.args[1] === "create" && request.stdin) {
+        this.prBodies.push(request.stdin);
+      }
       return result;
     }
     return makeRunnerResult(0, "");
@@ -308,6 +335,21 @@ class FakeWorkspaceManager {
   }
 }
 
+// Workspace manager that returns a DIFFERENT snapshot per inspect call —
+// used to simulate a real workspace mutating between the first inspect and
+// the pre-staging reconciliation. Calls beyond the supplied sequence keep
+// returning the last snapshot.
+class SequencedWorkspaceManager {
+  private calls = 0;
+  constructor(private readonly snapshots: readonly LoopGitWorkspaceSnapshot[]) {}
+
+  async inspect(_identity: any): Promise<LoopGitWorkspaceSnapshot> {
+    const idx = Math.min(this.calls, this.snapshots.length - 1);
+    this.calls++;
+    return this.snapshots[idx]!;
+  }
+}
+
 function makeOptions(overrides: Partial<{
   runner: any; workspaceManager: any; artifactStore: any;
   gitExecutableId: string; ghExecutableId: string;
@@ -339,6 +381,7 @@ function makeRequest(overrides: Partial<{
   identity: any; deliveryResultArtifactRef: string;
   commitSubject: string; prTitle: string;
   recoveryPublishIntentArtifactRef: string | undefined;
+  governanceTailResultArtifactRef: string | undefined | null;
 }> = {}): LoopDeliveryPublishRequest {
   return {
     identity: overrides.identity ?? makeIdentity(),
@@ -346,6 +389,7 @@ function makeRequest(overrides: Partial<{
     commitSubject: overrides.commitSubject ?? "feat: add recoverable delivery publisher",
     prTitle: overrides.prTitle ?? "feat: add recoverable delivery publisher",
     recoveryPublishIntentArtifactRef: overrides.recoveryPublishIntentArtifactRef,
+    governanceTailResultArtifactRef: overrides.governanceTailResultArtifactRef === undefined ? undefined : (overrides.governanceTailResultArtifactRef as any),
   };
 }
 
@@ -5560,6 +5604,1633 @@ async function testR3NameStatusFinalNul(): Promise<void> {
   r3NameStatusFinalNulFlag = verified;
 }
 
+// ═══════════════════════════════════════ D09-A2 Pinned Baseline Constants
+// Standalone (D07) bytes were captured from the authorized Source BEFORE any
+// change, under the deterministic test fixture + deterministic clock. Governed
+// (D09-A2) bytes are the fixed canonical contract for the same fixture.
+// Base64 avoids any template-literal escaping ambiguity; digests are fixed
+// SHA-256 of the exact bytes. Expected values are constants — never generated
+// from the production helpers under test.
+const D07_INTENT_B64 = "eyJzY2hlbWEiOiJsb29wLXB1Ymxpc2gtaW50ZW50LXYxIiwicnVuX2lkIjoicnVuLTAwMSIsInJlcXVpcmVtZW50X2lkIjoicmVxLTAwMSIsInJlcG9zaXRvcnkiOiJzaGFveWFuZzAxL2FpLXNkbGMtc3RhbmRhcmQiLCJiYXNlX2JyYW5jaCI6ImZlYXR1cmUvbG9vcC1ydW50aW1lLXYxIiwiZXhwZWN0ZWRfYmFzZV9zaGEiOiJkOTE1NjA3NWJjYjM1YWFjZGI1NjQ2MTc1MWU3MWNhMjk0MjFkNjEwIiwidGFza19icmFuY2giOiJjb2RleC9sb29wLWRlbGl2ZXJ5LTA3LXRlc3QiLCJwcmVjb21taXRfaGVhZF9zaGEiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwicHJlY29tbWl0X3N0YXR1c19kaWdlc3Rfc2hhMjU2IjoiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsInN0YWdlZF90cmVlX3NoYSI6ImVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWUiLCJkZWxpdmVyeV9yZXN1bHRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpkZWxpdmVyeV9yZXN1bHQ6c2hhMjU2OjM5NWY3NTlhYTUxMTUzZTVkMjI4MTEwNTA0NDQ3ZDMzZmNkMmMwMWRjNmQ2ZjBhMzI4M2Q4Mjk2YjA0ZDc5YTgiLCJmaWxlcyI6WyJjb3JlL3Rlc3QudHMiLCJ0ZXN0cy90ZXN0LnRlc3QudHMiXSwiY29tbWl0X3N1YmplY3QiOiJmZWF0OiBhZGQgcmVjb3ZlcmFibGUgZGVsaXZlcnkgcHVibGlzaGVyIiwiY29tbWl0X2F1dGhvcl9uYW1lIjoiVGVzdCBBdXRob3IiLCJjb21taXRfYXV0aG9yX2VtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInByX3RpdGxlIjoiZmVhdDogYWRkIHJlY292ZXJhYmxlIGRlbGl2ZXJ5IHB1Ymxpc2hlciIsInByX2JvZHlfc2NoZW1hIjoibG9vcC1wdWJsaXNoLXByLWJvZHktdjEifQo=";
+const D07_INTENT_SHA256 = "0503077a3e04ae70a917aebc8eccc9a9481eafe5afd3831c1affd32ffce4c5f2";
+const D07_COMMIT_MSG_B64 = "ZmVhdDogYWRkIHJlY292ZXJhYmxlIGRlbGl2ZXJ5IHB1Ymxpc2hlcgoKTG9vcC1SdW4tSWQ6IHJ1bi0wMDEKTG9vcC1EZWxpdmVyeS1BcnRpZmFjdDogbG9vcC1hcnRpZmFjdDp2MTpkZWxpdmVyeV9yZXN1bHQ6c2hhMjU2OjM5NWY3NTlhYTUxMTUzZTVkMjI4MTEwNTA0NDQ3ZDMzZmNkMmMwMWRjNmQ2ZjBhMzI4M2Q4Mjk2YjA0ZDc5YTgKTG9vcC1QdWJsaXNoLUludGVudDogbG9vcC1hcnRpZmFjdDp2MTp3b3Jrc3BhY2VfbWV0YWRhdGE6c2hhMjU2OjA1MDMwNzdhM2UwNGFlNzBhOTE3YWViYzhlY2NjOWE5NDgxZWFmZTVhZmQzODMxYzFhZmZkMzJmZmNlNGM1ZjIK";
+const D07_COMMIT_MSG_SHA256 = "d9704a4c0105237495bcc991d01f680b9de16bd41a7706b43506bc7929f60613";
+const D07_PR_BODY_B64 = "IyMgTE9PUC1ERUxJVkVSWS0wNyDigJQgUmVjb3ZlcmFibGUgRGVsaXZlcnkgUHVibGlzaAoKLSBSdW4gSUQ6IGA8cnVuLTAwMT5gCi0gUmVxdWlyZW1lbnQgSUQ6IGA8cmVxLTAwMT5gCi0gUmVwb3NpdG9yeTogYDxzaGFveWFuZzAxL2FpLXNkbGMtc3RhbmRhcmQ+YAotIEJhc2UgYnJhbmNoOiBgPGZlYXR1cmUvbG9vcC1ydW50aW1lLXYxPmAKLSBFeHBlY3RlZCBiYXNlIFNIQTogYDxkOTE1NjA3NWJjYjM1YWFjZGI1NjQ2MTc1MWU3MWNhMjk0MjFkNjEwPmAKLSBUYXNrIGJyYW5jaDogYDxjb2RleC9sb29wLWRlbGl2ZXJ5LTA3LXRlc3Q+YAotIENvbW1pdCBTSEE6IGA8ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMT5gCi0gRGVsaXZlcnkgYXJ0aWZhY3Q6IGA8bG9vcC1hcnRpZmFjdDp2MTpkZWxpdmVyeV9yZXN1bHQ6c2hhMjU2OjM5NWY3NTlhYTUxMTUzZTVkMjI4MTEwNTA0NDQ3ZDMzZmNkMmMwMWRjNmQ2ZjBhMzI4M2Q4Mjk2YjA0ZDc5YTg+YAotIFB1Ymxpc2ggaW50ZW50OiBgPGxvb3AtYXJ0aWZhY3Q6djE6d29ya3NwYWNlX21ldGFkYXRhOnNoYTI1NjowNTAzMDc3YTNlMDRhZTcwYTkxN2FlYmM4ZWNjYzlhOTQ4MWVhZmU1YWZkMzgzMWMxYWZmZDMyZmZjZTRjNWYyPmAKCiMjIyBGaWxlcwoKLSBgPGNvcmUvdGVzdC50cz5gCi0gYDx0ZXN0cy90ZXN0LnRlc3QudHM+YAoKIyMjIEdvdmVybmFuY2UKCi0gRHJhZnQ6IHRydWUKLSBSZXZpZXc6IHBlbmRpbmcgcHJvamVjdCBjb250cm9sbGVyIHJldmlldwotIE1lcmdlOiBub3QgYXV0aG9yaXplZAotIEQwODogbm90IGF1dGhvcml6ZWQKLSBFeGNoYW5nZTogbm90IHB1Ymxpc2hlZAotIFBlcnNvbmFsIEtCOiBub3QgcHVibGlzaGVkCg==";
+const D07_PR_BODY_SHA256 = "342aa2e9e6579d1dee21a5f931bed58a0b52363d69e8b2f2caf1a43c2e312fc8";
+const D07_RESULT_B64 = "eyJzY2hlbWEiOiJsb29wLXB1Ymxpc2gtcmVzdWx0LXYxIiwic3RhdHVzIjoic3VjY2VlZGVkIiwicmVhc29uX2NvZGUiOiJQVUJMSVNIX1NVQ0NFRURFRCIsImNhdXNlX2NvZGUiOm51bGwsInJlY292ZXJ5X3N0YWdlIjoiY29tcGxldGVkIiwiZGVsaXZlcnlfcmVzdWx0X2FydGlmYWN0X3JlZiI6Imxvb3AtYXJ0aWZhY3Q6djE6ZGVsaXZlcnlfcmVzdWx0OnNoYTI1NjozOTVmNzU5YWE1MTE1M2U1ZDIyODExMDUwNDQ0N2QzM2ZjZDJjMDFkYzZkNmYwYTMyODNkODI5NmIwNGQ3OWE4IiwicHVibGlzaF9pbnRlbnRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTp3b3Jrc3BhY2VfbWV0YWRhdGE6c2hhMjU2OjA1MDMwNzdhM2UwNGFlNzBhOTE3YWViYzhlY2NjOWE5NDgxZWFmZTVhZmQzODMxYzFhZmZkMzJmZmNlNGM1ZjIiLCJwcmVjb21taXRfaGVhZF9zaGEiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiY29tbWl0X3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJyZW1vdGVfYnJhbmNoX3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJwcl9udW1iZXIiOjEwMCwicHJfdXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL3NoYW95YW5nMDEvYWktc2RsYy1zdGFuZGFyZC9wdWxsLzEwMCIsImZpbGVzIjpbImNvcmUvdGVzdC50cyIsInRlc3RzL3Rlc3QudGVzdC50cyJdLCJjb21taXRfY3JlYXRlZCI6dHJ1ZSwiY29tbWl0X3JlY292ZXJlZCI6ZmFsc2UsInB1c2hfY3JlYXRlZCI6dHJ1ZSwicHVzaF9yZWNvdmVyZWQiOmZhbHNlLCJwcl9jcmVhdGVkIjp0cnVlLCJwcl9yZWNvdmVyZWQiOmZhbHNlLCJwcl9ib2R5X3NoYTI1NiI6IjM0MmFhMmU5ZTY1NzlkMWRlZTIxYTVmOTMxYmVkNThhMGI1MjM2M2Q2OWU4YjJmMmNhZjFhNDNjMmUzMTJmYzgiLCJlbGFwc2VkX21zIjoxNTYsInRyYWNlIjpbeyJzZXF1ZW5jZSI6MSwic3RhZ2UiOiJkZWxpdmVyeSIsIm91dGNvbWUiOiJzdWNjZWVkZWQiLCJhcnRpZmFjdF9yZWYiOm51bGwsImNvbW1pdF9zaGEiOm51bGwsInJlbW90ZV9icmFuY2hfc2hhIjpudWxsLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjN9LHsic2VxdWVuY2UiOjIsInN0YWdlIjoid29ya3NwYWNlIiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6bnVsbCwicmVtb3RlX2JyYW5jaF9zaGEiOm51bGwsInByX251bWJlciI6bnVsbCwiZWxhcHNlZF9tcyI6M30seyJzZXF1ZW5jZSI6Mywic3RhZ2UiOiJzdGFnaW5nIiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6bnVsbCwicmVtb3RlX2JyYW5jaF9zaGEiOm51bGwsInByX251bWJlciI6bnVsbCwiZWxhcHNlZF9tcyI6MzN9LHsic2VxdWVuY2UiOjQsInN0YWdlIjoiaW50ZW50Iiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6Imxvb3AtYXJ0aWZhY3Q6djE6d29ya3NwYWNlX21ldGFkYXRhOnNoYTI1NjowNTAzMDc3YTNlMDRhZTcwYTkxN2FlYmM4ZWNjYzlhOTQ4MWVhZmU1YWZkMzgzMWMxYWZmZDMyZmZjZTRjNWYyIiwiY29tbWl0X3NoYSI6bnVsbCwicmVtb3RlX2JyYW5jaF9zaGEiOm51bGwsInByX251bWJlciI6bnVsbCwiZWxhcHNlZF9tcyI6M30seyJzZXF1ZW5jZSI6NSwic3RhZ2UiOiJjb21taXQiLCJvdXRjb21lIjoic3VjY2VlZGVkIiwiYXJ0aWZhY3RfcmVmIjpudWxsLCJjb21taXRfc2hhIjoiZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMSIsInJlbW90ZV9icmFuY2hfc2hhIjpudWxsLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjI3fSx7InNlcXVlbmNlIjo2LCJzdGFnZSI6InB1c2giLCJvdXRjb21lIjoic3VjY2VlZGVkIiwiYXJ0aWZhY3RfcmVmIjpudWxsLCJjb21taXRfc2hhIjoiZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMSIsInJlbW90ZV9icmFuY2hfc2hhIjoiZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMSIsInByX251bWJlciI6bnVsbCwiZWxhcHNlZF9tcyI6MTJ9LHsic2VxdWVuY2UiOjcsInN0YWdlIjoiZHJhZnRfcHIiLCJvdXRjb21lIjoic3VjY2VlZGVkIiwiYXJ0aWZhY3RfcmVmIjpudWxsLCJjb21taXRfc2hhIjpudWxsLCJyZW1vdGVfYnJhbmNoX3NoYSI6bnVsbCwicHJfbnVtYmVyIjoxMDAsImVsYXBzZWRfbXMiOjl9LHsic2VxdWVuY2UiOjgsInN0YWdlIjoidGVybWluYWwiLCJvdXRjb21lIjoic3VjY2VlZGVkIiwiYXJ0aWZhY3RfcmVmIjpudWxsLCJjb21taXRfc2hhIjoiZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMSIsInJlbW90ZV9icmFuY2hfc2hhIjoiZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmMSIsInByX251bWJlciI6MTAwLCJlbGFwc2VkX21zIjoxNTZ9XX0K";
+const D07_RESULT_SHA256 = "239cc9ec9cf75d5db97c8a5c8cf2b0468cfcec761fd6f648bec47d4cfd50296c";
+const D07_RECOVERY_INTENT_B64 = "eyJzY2hlbWEiOiJsb29wLXB1Ymxpc2gtaW50ZW50LXYxIiwicnVuX2lkIjoicnVuLTAwMSIsInJlcXVpcmVtZW50X2lkIjoicmVxLTAwMSIsInJlcG9zaXRvcnkiOiJzaGFveWFuZzAxL2FpLXNkbGMtc3RhbmRhcmQiLCJiYXNlX2JyYW5jaCI6ImZlYXR1cmUvbG9vcC1ydW50aW1lLXYxIiwiZXhwZWN0ZWRfYmFzZV9zaGEiOiJkOTE1NjA3NWJjYjM1YWFjZGI1NjQ2MTc1MWU3MWNhMjk0MjFkNjEwIiwidGFza19icmFuY2giOiJjb2RleC9sb29wLWRlbGl2ZXJ5LTA3LXRlc3QiLCJwcmVjb21taXRfaGVhZF9zaGEiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwicHJlY29tbWl0X3N0YXR1c19kaWdlc3Rfc2hhMjU2IjoiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsInN0YWdlZF90cmVlX3NoYSI6ImVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWUiLCJkZWxpdmVyeV9yZXN1bHRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpkZWxpdmVyeV9yZXN1bHQ6c2hhMjU2OjM5NWY3NTlhYTUxMTUzZTVkMjI4MTEwNTA0NDQ3ZDMzZmNkMmMwMWRjNmQ2ZjBhMzI4M2Q4Mjk2YjA0ZDc5YTgiLCJmaWxlcyI6WyJjb3JlL3Rlc3QudHMiLCJ0ZXN0cy90ZXN0LnRlc3QudHMiXSwiY29tbWl0X3N1YmplY3QiOiJmZWF0OiBhZGQgcmVjb3ZlcmFibGUgZGVsaXZlcnkgcHVibGlzaGVyIiwiY29tbWl0X2F1dGhvcl9uYW1lIjoiVGVzdCBBdXRob3IiLCJjb21taXRfYXV0aG9yX2VtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInByX3RpdGxlIjoiZmVhdDogYWRkIHJlY292ZXJhYmxlIGRlbGl2ZXJ5IHB1Ymxpc2hlciIsInByX2JvZHlfc2NoZW1hIjoibG9vcC1wdWJsaXNoLXByLWJvZHktdjEifQo=";
+const D09A2_GOVERNED_INTENT_B64 = "eyJzY2hlbWEiOiJsb29wLWdvdmVybmVkLXB1Ymxpc2gtaW50ZW50LXYxIiwicnVuX2lkIjoicnVuLTAwMSIsInJlcXVpcmVtZW50X2lkIjoicmVxLTAwMSIsInJlcG9zaXRvcnkiOiJzaGFveWFuZzAxL2FpLXNkbGMtc3RhbmRhcmQiLCJiYXNlX2JyYW5jaCI6ImZlYXR1cmUvbG9vcC1ydW50aW1lLXYxIiwiZXhwZWN0ZWRfYmFzZV9zaGEiOiJkOTE1NjA3NWJjYjM1YWFjZGI1NjQ2MTc1MWU3MWNhMjk0MjFkNjEwIiwidGFza19icmFuY2giOiJjb2RleC9sb29wLWRlbGl2ZXJ5LTA3LXRlc3QiLCJwcmVjb21taXRfaGVhZF9zaGEiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwicHJlY29tbWl0X3N0YXR1c19kaWdlc3Rfc2hhMjU2IjoiZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZCIsInN0YWdlZF90cmVlX3NoYSI6ImVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWUiLCJvcmNoZXN0cmF0aW9uX3Jlc3VsdF9hcnRpZmFjdF9yZWYiOiJsb29wLWFydGlmYWN0OnYxOm9yY2hlc3RyYXRpb25fcmVzdWx0OnNoYTI1NjoxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwiZXhlY3V0b3JfaW5wdXRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpleGVjdXRvcl9pbnB1dDpzaGEyNTY6MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsImRlbGl2ZXJ5X3Jlc3VsdF9hcnRpZmFjdF9yZWYiOiJsb29wLWFydGlmYWN0OnYxOmRlbGl2ZXJ5X3Jlc3VsdDpzaGEyNTY6Mzk1Zjc1OWFhNTExNTNlNWQyMjgxMTA1MDQ0NDdkMzNmY2QyYzAxZGM2ZDZmMGEzMjgzZDgyOTZiMDRkNzlhOCIsImdvdmVybmFuY2VfdGFpbF9yZXN1bHRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpnb3Zlcm5hbmNlX3RhaWxfcmVzdWx0OnNoYTI1NjoyNDFlYjdiZjMxZTg5NDgzYmZjYWVmMjIyN2YxNWI4MmIxNDA0MjJlNmFkYjgxNWM3OGQ1MTNkM2JhZmU4MjYyIiwiaW1wbGVtZW50YXRpb25fZmlsZXMiOlsiY29yZS90ZXN0LnRzIiwidGVzdHMvdGVzdC50ZXN0LnRzIl0sImZpbGVzIjpbIjAzLeWunueOsOiusOW9lS9pbXBsZW1lbnRhdGlvbi1yZWNvcmQubWQiLCIwNC3ku6PnoIHlrqHmoLgvY29kZS1yZXZpZXcubWQiLCIwNS3mtYvor5XpqozmlLYvYWNjZXB0YW5jZS5tZCIsIjA1Lea1i+ivlemqjOaUti90YWlsLWdhdGUubWQiLCJjb3JlL3Rlc3QudHMiLCJkb2NzL2VudHJ5LWNvdmVyYWdlLWV2aWRlbmNlLm1kIiwiZG9jcy9tYW5pZmVzdC5tZCIsImRvY3MvcmVnYXRlLWV2aWRlbmNlLm1kIiwiZG9jcy9zeW5jLWV2aWRlbmNlLm1kIiwidGVzdHMvdGVzdC50ZXN0LnRzIl0sImNvbW1pdF9zdWJqZWN0IjoiZmVhdDogZ292ZXJuZWQiLCJjb21taXRfYXV0aG9yX25hbWUiOiJUZXN0IEF1dGhvciIsImNvbW1pdF9hdXRob3JfZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicHJfdGl0bGUiOiJmZWF0OiBnb3Zlcm5lZCIsInByX2JvZHlfc2NoZW1hIjoibG9vcC1nb3Zlcm5lZC1wdWJsaXNoLXByLWJvZHktdjEifQo=";
+const D09A2_GOVERNED_INTENT_SHA256 = "4a2d807e4775f3a008a5722c7e85df96c43b30445a1f0d3e5657a7a7cf867590";
+const D09A2_GOVERNED_COMMIT_MSG_B64 = "ZmVhdDogZ292ZXJuZWQKCkxvb3AtUnVuLUlkOiBydW4tMDAxCkxvb3AtRGVsaXZlcnktQXJ0aWZhY3Q6IGxvb3AtYXJ0aWZhY3Q6djE6ZGVsaXZlcnlfcmVzdWx0OnNoYTI1NjozOTVmNzU5YWE1MTE1M2U1ZDIyODExMDUwNDQ0N2QzM2ZjZDJjMDFkYzZkNmYwYTMyODNkODI5NmIwNGQ3OWE4Ckxvb3AtR292ZXJuYW5jZS1UYWlsLUFydGlmYWN0OiBsb29wLWFydGlmYWN0OnYxOmdvdmVybmFuY2VfdGFpbF9yZXN1bHQ6c2hhMjU2OjI0MWViN2JmMzFlODk0ODNiZmNhZWYyMjI3ZjE1YjgyYjE0MDQyMmU2YWRiODE1Yzc4ZDUxM2QzYmFmZTgyNjIKTG9vcC1QdWJsaXNoLUludGVudDogbG9vcC1hcnRpZmFjdDp2MTp3b3Jrc3BhY2VfbWV0YWRhdGE6c2hhMjU2OjRhMmQ4MDdlNDc3NWYzYTAwOGE1NzIyYzdlODVkZjk2YzQzYjMwNDQ1YTFmMGQzZTU2NTdhN2E3Y2Y4Njc1OTAK";
+const D09A2_GOVERNED_COMMIT_MSG_SHA256 = "6cf35b63e8015f5b03e655a6c52ce38fd896c08456a14a4cc8c120b8c0f035ec";
+const D09A2_GOVERNED_PR_BODY_B64 = "IyMgTE9PUC1ERUxJVkVSWS0wOSDigJQgR292ZXJuZWQgRGVsaXZlcnkgUHVibGlzaAoKIyMjIElkZW50aXR5IEFuZCBQdWJsaXNoCgotIFJ1biBJRDogYDxydW4tMDAxPmAKLSBSZXF1aXJlbWVudCBJRDogYDxyZXEtMDAxPmAKLSBSZXBvc2l0b3J5OiBgPHNoYW95YW5nMDEvYWktc2RsYy1zdGFuZGFyZD5gCi0gQmFzZSBicmFuY2g6IGA8ZmVhdHVyZS9sb29wLXJ1bnRpbWUtdjE+YAotIEV4cGVjdGVkIGJhc2UgU0hBOiBgPGQ5MTU2MDc1YmNiMzVhYWNkYjU2NDYxNzUxZTcxY2EyOTQyMWQ2MTA+YAotIFRhc2sgYnJhbmNoOiBgPGNvZGV4L2xvb3AtZGVsaXZlcnktMDctdGVzdD5gCi0gQ29tbWl0IFNIQTogYDxmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYxPmAKLSBQdWJsaXNoIGludGVudDogYDxsb29wLWFydGlmYWN0OnYxOndvcmtzcGFjZV9tZXRhZGF0YTpzaGEyNTY6NGEyZDgwN2U0Nzc1ZjNhMDA4YTU3MjJjN2U4NWRmOTZjNDNiMzA0NDVhMWYwZDNlNTY1N2E3YTdjZjg2NzU5MD5gCgojIyMgQXJ0aWZhY3QgQ2hhaW4KCi0gT3JjaGVzdHJhdGlvbiByZXN1bHQgYXJ0aWZhY3Q6IGA8bG9vcC1hcnRpZmFjdDp2MTpvcmNoZXN0cmF0aW9uX3Jlc3VsdDpzaGEyNTY6MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMT5gCi0gRXhlY3V0b3ItaW5wdXQgYXJ0aWZhY3Q6IGA8bG9vcC1hcnRpZmFjdDp2MTpleGVjdXRvcl9pbnB1dDpzaGEyNTY6MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMj5gCi0gRGVsaXZlcnkgcmVzdWx0IGFydGlmYWN0OiBgPGxvb3AtYXJ0aWZhY3Q6djE6ZGVsaXZlcnlfcmVzdWx0OnNoYTI1NjozOTVmNzU5YWE1MTE1M2U1ZDIyODExMDUwNDQ0N2QzM2ZjZDJjMDFkYzZkNmYwYTMyODNkODI5NmIwNGQ3OWE4PmAKLSBHb3Zlcm5hbmNlLXRhaWwgcmVzdWx0IGFydGlmYWN0OiBgPGxvb3AtYXJ0aWZhY3Q6djE6Z292ZXJuYW5jZV90YWlsX3Jlc3VsdDpzaGEyNTY6MjQxZWI3YmYzMWU4OTQ4M2JmY2FlZjIyMjdmMTViODJiMTQwNDIyZTZhZGI4MTVjNzhkNTEzZDNiYWZlODI2Mj5gCgojIyMgRG9jRmxvdyBFdmlkZW5jZQoKLSBJbXBsZW1lbnRhdGlvbiByZWNvcmQ6IGA8MDMt5a6e546w6K6w5b2VL2ltcGxlbWVudGF0aW9uLXJlY29yZC5tZD5gIHZgdjFgIHNoYTI1NiBgMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMWAKLSBDb2RlIHJldmlldzogYDwwNC3ku6PnoIHlrqHmoLgvY29kZS1yZXZpZXcubWQ+YCB2YHYxYCBzaGEyNTYgYDIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjJgIHJlc3VsdCBgUEFTU2AKLSBUZXN0IGFjY2VwdGFuY2U6IGA8MDUt5rWL6K+V6aqM5pS2L2FjY2VwdGFuY2UubWQ+YCB2YHYxYCBzaGEyNTYgYDMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzNgIHJlc3VsdCBgUEFTU2AKCiMjIyBDb25kaXRpb25hbCBHb3Zlcm5hbmNlIEV2aWRlbmNlCgotIFN5bmMgZGVjaXNpb246IGBTWU5DX1JFUVVJUkVEYAotIFN5bmMgd3JpdGUgYXV0aG9yaXphdGlvbjogYHRydWVgCi0gU3luYyBleGVjdXRpb24gc3RhdHVzOiBgY29tcGxldGVkYAotIFN5bmMgZXZpZGVuY2U6IGA8ZG9jcy9zeW5jLWV2aWRlbmNlLm1kPmAgdmB2MWAgc2hhMjU2IGA0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0YAotIFJlY29uY2lsZSBkZWNpc2lvbjogYG5vdF9yZXF1aXJlZGAKLSBSZWNvbmNpbGUgZXhlY3V0aW9uIHN0YXR1czogYG5vdF9yZXF1aXJlZGAKLSBSZWNvbmNpbGUgZXZpZGVuY2U6IGJhc2lzIHJlY29yZGVkIGluIGdvdmVybmFuY2UtdGFpbCBhcnRpZmFjdAotIEVudHJ5IENvdmVyYWdlIHN0YXR1czogYFBBU1NgCi0gRW50cnkgQ292ZXJhZ2UgZXZpZGVuY2U6IGA8ZG9jcy9lbnRyeS1jb3ZlcmFnZS1ldmlkZW5jZS5tZD5gIHZgdjFgIHNoYTI1NiBgNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NWAKLSBSZS1HYXRlIHN0YXR1czogYFBBU1NgCi0gUmUtR2F0ZSBldmlkZW5jZTogYDxkb2NzL3JlZ2F0ZS1ldmlkZW5jZS5tZD5gIHZgdjFgIHNoYTI1NiBgNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NmAKCiMjIyBNYW5pZmVzdCBBbmQgVGFpbCBHYXRlCgotIE1hbmlmZXN0IHBhdGg6IGA8ZG9jcy9tYW5pZmVzdC5tZD5gCi0gTWFuaWZlc3QgdmVyc2lvbjogYG1hbmlmZXN0LXYxYAotIE1hbmlmZXN0IGRpZ2VzdDogYDc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzdgCi0gTWFuaWZlc3QgdGFpbCBzdGF0dXM6IGBjb21wbGV0ZWRgCi0gQ29tcGxldGlvbiBkZWNpc2lvbiBzb3VyY2U6IGA8MDUt5rWL6K+V6aqM5pS2L3RhaWwtZ2F0ZS5tZD5gIHZgZ2F0ZS12MWAgc2hhMjU2IGA4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4YAotIFRhaWwgR2F0ZSBwYXRoOiBgPDA1Lea1i+ivlemqjOaUti90YWlsLWdhdGUubWQ+YAotIFRhaWwgR2F0ZSB2ZXJzaW9uOiBgZ2F0ZS12MWAKLSBUYWlsIEdhdGUgZGlnZXN0OiBgODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OGAKLSBUYWlsIEdhdGUgcmVzdWx0OiBgUEFTU2AKLSBUYWlsIEdhdGUgcGVyc2lzdGVkOiBgdHJ1ZWAKLSBUYWlsIEdhdGUgcmVhZCBiYWNrIHZlcmlmaWVkOiBgdHJ1ZWAKLSBUYWlsIEdhdGUgcmV2aWV3ZWQgbWFuaWZlc3QgdmVyc2lvbjogYG1hbmlmZXN0LXYxYAoKIyMjIEltcGxlbWVudGF0aW9uIEZpbGVzCgotIGA8Y29yZS90ZXN0LnRzPmAKLSBgPHRlc3RzL3Rlc3QudGVzdC50cz5gCgojIyMgRmluYWwgR292ZXJuZWQgRmlsZXMKCi0gYDwwMy3lrp7njrDorrDlvZUvaW1wbGVtZW50YXRpb24tcmVjb3JkLm1kPmAKLSBgPDA0LeS7o+eggeWuoeaguC9jb2RlLXJldmlldy5tZD5gCi0gYDwwNS3mtYvor5XpqozmlLYvYWNjZXB0YW5jZS5tZD5gCi0gYDwwNS3mtYvor5XpqozmlLYvdGFpbC1nYXRlLm1kPmAKLSBgPGNvcmUvdGVzdC50cz5gCi0gYDxkb2NzL2VudHJ5LWNvdmVyYWdlLWV2aWRlbmNlLm1kPmAKLSBgPGRvY3MvbWFuaWZlc3QubWQ+YAotIGA8ZG9jcy9yZWdhdGUtZXZpZGVuY2UubWQ+YAotIGA8ZG9jcy9zeW5jLWV2aWRlbmNlLm1kPmAKLSBgPHRlc3RzL3Rlc3QudGVzdC50cz5gCgojIyMgR292ZXJuYW5jZQoKLSBEcmFmdDogdHJ1ZQotIFJldmlldzogcGVuZGluZyBwcm9qZWN0IGNvbnRyb2xsZXIgcmV2aWV3Ci0gTWVyZ2U6IG5vdCBhdXRob3JpemVkCi0gUmVxdWlyZW1lbnQgY29tcGxldGlvbjogbm90IGVzdGFibGlzaGVkIGJ5IHRoaXMgUFIKLSBEMDkgb3ZlcmFsbDogcGVuZGluZyBjb29yZGluYXRvciB0ZXJtaW5hbCByZXN1bHQKLSBFeGNoYW5nZTogbm90IHB1Ymxpc2hlZAotIFBlcnNvbmFsIEtCOiBub3QgcHVibGlzaGVkCg==";
+const D09A2_GOVERNED_PR_BODY_SHA256 = "2d2f81f10b42a26d13938a8c2d568ffd0275fc38234c15c034fde6daab50a0fd";
+const D09A2_GOVERNED_RESULT_B64 = "eyJzY2hlbWEiOiJsb29wLWdvdmVybmVkLXB1Ymxpc2gtcmVzdWx0LXYxIiwic3RhdHVzIjoic3VjY2VlZGVkIiwicmVhc29uX2NvZGUiOiJQVUJMSVNIX1NVQ0NFRURFRCIsImNhdXNlX2NvZGUiOm51bGwsInJlY292ZXJ5X3N0YWdlIjoiY29tcGxldGVkIiwib3JjaGVzdHJhdGlvbl9yZXN1bHRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpvcmNoZXN0cmF0aW9uX3Jlc3VsdDpzaGEyNTY6MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsImV4ZWN1dG9yX2lucHV0X2FydGlmYWN0X3JlZiI6Imxvb3AtYXJ0aWZhY3Q6djE6ZXhlY3V0b3JfaW5wdXQ6c2hhMjU2OjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJkZWxpdmVyeV9yZXN1bHRfYXJ0aWZhY3RfcmVmIjoibG9vcC1hcnRpZmFjdDp2MTpkZWxpdmVyeV9yZXN1bHQ6c2hhMjU2OjM5NWY3NTlhYTUxMTUzZTVkMjI4MTEwNTA0NDQ3ZDMzZmNkMmMwMWRjNmQ2ZjBhMzI4M2Q4Mjk2YjA0ZDc5YTgiLCJnb3Zlcm5hbmNlX3RhaWxfcmVzdWx0X2FydGlmYWN0X3JlZiI6Imxvb3AtYXJ0aWZhY3Q6djE6Z292ZXJuYW5jZV90YWlsX3Jlc3VsdDpzaGEyNTY6MjQxZWI3YmYzMWU4OTQ4M2JmY2FlZjIyMjdmMTViODJiMTQwNDIyZTZhZGI4MTVjNzhkNTEzZDNiYWZlODI2MiIsInB1Ymxpc2hfaW50ZW50X2FydGlmYWN0X3JlZiI6Imxvb3AtYXJ0aWZhY3Q6djE6d29ya3NwYWNlX21ldGFkYXRhOnNoYTI1Njo0YTJkODA3ZTQ3NzVmM2EwMDhhNTcyMmM3ZTg1ZGY5NmM0M2IzMDQ0NWExZjBkM2U1NjU3YTdhN2NmODY3NTkwIiwicHJlY29tbWl0X2hlYWRfc2hhIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImNvbW1pdF9zaGEiOiJmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYxIiwicmVtb3RlX2JyYW5jaF9zaGEiOiJmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYxIiwicHJfbnVtYmVyIjoxMDAsInByX3VybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9zaGFveWFuZzAxL2FpLXNkbGMtc3RhbmRhcmQvcHVsbC8xMDAiLCJpbXBsZW1lbnRhdGlvbl9maWxlcyI6WyJjb3JlL3Rlc3QudHMiLCJ0ZXN0cy90ZXN0LnRlc3QudHMiXSwiZmlsZXMiOlsiMDMt5a6e546w6K6w5b2VL2ltcGxlbWVudGF0aW9uLXJlY29yZC5tZCIsIjA0LeS7o+eggeWuoeaguC9jb2RlLXJldmlldy5tZCIsIjA1Lea1i+ivlemqjOaUti9hY2NlcHRhbmNlLm1kIiwiMDUt5rWL6K+V6aqM5pS2L3RhaWwtZ2F0ZS5tZCIsImNvcmUvdGVzdC50cyIsImRvY3MvZW50cnktY292ZXJhZ2UtZXZpZGVuY2UubWQiLCJkb2NzL21hbmlmZXN0Lm1kIiwiZG9jcy9yZWdhdGUtZXZpZGVuY2UubWQiLCJkb2NzL3N5bmMtZXZpZGVuY2UubWQiLCJ0ZXN0cy90ZXN0LnRlc3QudHMiXSwiY29tbWl0X2NyZWF0ZWQiOnRydWUsImNvbW1pdF9yZWNvdmVyZWQiOmZhbHNlLCJwdXNoX2NyZWF0ZWQiOnRydWUsInB1c2hfcmVjb3ZlcmVkIjpmYWxzZSwicHJfY3JlYXRlZCI6dHJ1ZSwicHJfcmVjb3ZlcmVkIjpmYWxzZSwicHJfYm9keV9zaGEyNTYiOiIyZDJmODFmMTBiNDJhMjZkMTM5MzhhOGMyZDU2OGZmZDAyNzVmYzM4MjM0YzE1YzAzNGZkZTZkYWFiNTBhMGZkIiwiZWxhcHNlZF9tcyI6MTY1LCJ0cmFjZSI6W3sic2VxdWVuY2UiOjEsInN0YWdlIjoiZGVsaXZlcnkiLCJvdXRjb21lIjoic3VjY2VlZGVkIiwiYXJ0aWZhY3RfcmVmIjpudWxsLCJjb21taXRfc2hhIjpudWxsLCJyZW1vdGVfYnJhbmNoX3NoYSI6bnVsbCwicHJfbnVtYmVyIjpudWxsLCJlbGFwc2VkX21zIjozfSx7InNlcXVlbmNlIjoyLCJzdGFnZSI6ImdvdmVybmFuY2VfdGFpbCIsIm91dGNvbWUiOiJzdWNjZWVkZWQiLCJhcnRpZmFjdF9yZWYiOiJsb29wLWFydGlmYWN0OnYxOmdvdmVybmFuY2VfdGFpbF9yZXN1bHQ6c2hhMjU2OjI0MWViN2JmMzFlODk0ODNiZmNhZWYyMjI3ZjE1YjgyYjE0MDQyMmU2YWRiODE1Yzc4ZDUxM2QzYmFmZTgyNjIiLCJjb21taXRfc2hhIjpudWxsLCJyZW1vdGVfYnJhbmNoX3NoYSI6bnVsbCwicHJfbnVtYmVyIjpudWxsLCJlbGFwc2VkX21zIjozfSx7InNlcXVlbmNlIjozLCJzdGFnZSI6IndvcmtzcGFjZSIsIm91dGNvbWUiOiJzdWNjZWVkZWQiLCJhcnRpZmFjdF9yZWYiOm51bGwsImNvbW1pdF9zaGEiOm51bGwsInJlbW90ZV9icmFuY2hfc2hhIjpudWxsLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjN9LHsic2VxdWVuY2UiOjQsInN0YWdlIjoic3RhZ2luZyIsIm91dGNvbWUiOiJzdWNjZWVkZWQiLCJhcnRpZmFjdF9yZWYiOm51bGwsImNvbW1pdF9zaGEiOm51bGwsInJlbW90ZV9icmFuY2hfc2hhIjpudWxsLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjMzfSx7InNlcXVlbmNlIjo1LCJzdGFnZSI6ImludGVudCIsIm91dGNvbWUiOiJzdWNjZWVkZWQiLCJhcnRpZmFjdF9yZWYiOiJsb29wLWFydGlmYWN0OnYxOndvcmtzcGFjZV9tZXRhZGF0YTpzaGEyNTY6NGEyZDgwN2U0Nzc1ZjNhMDA4YTU3MjJjN2U4NWRmOTZjNDNiMzA0NDVhMWYwZDNlNTY1N2E3YTdjZjg2NzU5MCIsImNvbW1pdF9zaGEiOm51bGwsInJlbW90ZV9icmFuY2hfc2hhIjpudWxsLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjN9LHsic2VxdWVuY2UiOjYsInN0YWdlIjoiY29tbWl0Iiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJyZW1vdGVfYnJhbmNoX3NoYSI6bnVsbCwicHJfbnVtYmVyIjpudWxsLCJlbGFwc2VkX21zIjoyN30seyJzZXF1ZW5jZSI6Nywic3RhZ2UiOiJwdXNoIiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJyZW1vdGVfYnJhbmNoX3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJwcl9udW1iZXIiOm51bGwsImVsYXBzZWRfbXMiOjEyfSx7InNlcXVlbmNlIjo4LCJzdGFnZSI6ImRyYWZ0X3ByIiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6bnVsbCwicmVtb3RlX2JyYW5jaF9zaGEiOm51bGwsInByX251bWJlciI6MTAwLCJlbGFwc2VkX21zIjo5fSx7InNlcXVlbmNlIjo5LCJzdGFnZSI6InRlcm1pbmFsIiwib3V0Y29tZSI6InN1Y2NlZWRlZCIsImFydGlmYWN0X3JlZiI6bnVsbCwiY29tbWl0X3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJyZW1vdGVfYnJhbmNoX3NoYSI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZjEiLCJwcl9udW1iZXIiOjEwMCwiZWxhcHNlZF9tcyI6MTY1fV19Cg==";
+const D09A2_GOVERNED_RESULT_SHA256 = "38377b51c5c201127b73ca82cea4ba4079bd92bfcece749aac669135508701ad";
+
+const D07_STANDALONE_TRACE = ["1:delivery:succeeded","2:workspace:succeeded","3:staging:succeeded","4:intent:succeeded","5:commit:succeeded","6:push:succeeded","7:draft_pr:succeeded","8:terminal:succeeded"];
+const D09A2_GOVERNED_TRACE = ["1:delivery:succeeded","2:governance_tail:succeeded","3:workspace:succeeded","4:staging:succeeded","5:intent:succeeded","6:commit:succeeded","7:push:succeeded","8:draft_pr:succeeded","9:terminal:succeeded"];
+const D09A2_GOVERNED_TRACE_RECOVERY = ["1:delivery:succeeded","2:governance_tail:recovered","3:workspace:succeeded","4:staging:succeeded","5:intent:recovered","6:commit:recovered","7:push:recovered","8:draft_pr:recovered","9:terminal:succeeded"];
+const D07_STANDALONE_OWN_KEYS = ["status","reasonCode","safeMessage","causeCode","recoveryStage","deliveryResultArtifactRef","publishIntentArtifactRef","publishResultArtifactRef","precommitHeadSha","commitSha","remoteBranchSha","prNumber","prUrl","files","commitCreated","commitRecovered","pushCreated","pushRecovered","prCreated","prRecovered","prBodySha256","elapsedMs","trace"];
+const D09A2_DELIVERY_REF = "loop-artifact:v1:delivery_result:sha256:395f759aa51153e5d228110504447d33fcd2c01dc6d6f0a3283d8296b04d79a8";
+
+
+// A2 marker flags — set true only when every assertion of the section passed
+let a2GovernedModeFlag = false;
+let a2StandaloneByteCompatFlag = false;
+let a2GovernanceArtifactBindingFlag = false;
+let a2FinalWorkspaceAuthorityFlag = false;
+let a2GovernedStagingFlag = false;
+let a2GovernedIntentResultFlag = false;
+let a2GovernedCommitRecoveryFlag = false;
+let a2GovernedDraftPrFlag = false;
+let a2MarkdownEscapingFlag = false;
+let a2RealSourceUnchangedFlag = false;
+let a2TempCleanupFlag = false;
+
+// A2 scenario-group flags — each is set true ONLY when its scenario group ran
+// to completion with zero failing assertions in that group (failures count
+// unchanged across the group). Each functional marker below is derived from
+// the scenario groups that actually exercise that contract, so a marker can
+// never borrow success from an unrelated scenario. Section-level pass flags
+// additionally require zero failures across the whole section.
+let a2StandaloneSectionPassed = false;
+let a2FreshGoldenPassed = false;
+let a2StandaloneRecoveryPassed = false;
+let a2StandaloneStoreFailurePassed = false;
+let a2PositiveSectionPassed = false;
+let a2PosFreshFlowPassed = false;
+let a2PosStagingPassed = false;
+let a2PosParserPathPassed = false;
+let a2PosStoreFailurePassed = false;
+let a2PosRecoveryPassed = false;
+let a2NegativeSectionPassed = false;
+let a2NegRefBoundaryPassed = false;
+let a2NegStoreReadPassed = false;
+let a2NegA1ContentPassed = false;
+let a2NegIdentityBindingPassed = false;
+let a2NegDeliveryBindingPassed = false;
+let a2NegImplFilesPassed = false;
+let a2NegWorkspaceProvenancePassed = false;
+let a2NegWorkspaceStatePassed = false;
+let a2NegIntentBindingPassed = false;
+let a2NegCommitRecoveryPassed = false;
+let a2NegPrStatePassed = false;
+let a2NegExceptionLeakPassed = false;
+let a2RefBoundaryPassed = false;
+let a2PreA1EmptyFilesPassed = false;
+let a2MarkdownSectionPassed = false;
+let a2MarkdownEscapePassed = false;
+let a2WorkspaceAuthorityPassed = false;
+let a2DriftDigestPassed = false;
+let a2DriftChangesPassed = false;
+
+// ═══════════════════════════════════════ D09-A2 Fixture Helpers
+
+const D09A2_ORCH_REF = `loop-artifact:v1:orchestration_result:sha256:${"1".repeat(64)}`;
+const D09A2_EXEC_REF = `loop-artifact:v1:executor_input:sha256:${"2".repeat(64)}`;
+const D09A2_A1_FILES = [
+  "03-实现记录/implementation-record.md",
+  "04-代码审核/code-review.md",
+  "05-测试验收/acceptance.md",
+  "05-测试验收/tail-gate.md",
+  "core/test.ts",
+  "docs/entry-coverage-evidence.md",
+  "docs/manifest.md",
+  "docs/regate-evidence.md",
+  "docs/sync-evidence.md",
+  "tests/test.test.ts",
+];
+
+function makeA1Input(deliveryRef: string, overrides: Partial<{
+  identity: any; finalWorkspace: any; implementationFiles: string[];
+  files: string[]; deliveryRef: string; orchestrationRef: string;
+  executorRef: string;
+}> = {}): Record<string, unknown> {
+  const sha1 = "1".repeat(64), sha2 = "2".repeat(64), sha3 = "3".repeat(64),
+    sha4 = "4".repeat(64), sha5 = "5".repeat(64), sha6 = "6".repeat(64),
+    sha7 = "7".repeat(64), sha8 = "8".repeat(64);
+  const identity = overrides.identity ?? makeIdentity();
+  const finalWorkspace = overrides.finalWorkspace ?? {
+    workspace_path: "/tmp/test-workspace",
+    task_branch: "codex/loop-delivery-07-test",
+    task_head_sha: "a".repeat(40),
+    status_digest_sha256: "d".repeat(64),
+    task_has_changes: true,
+  };
+  const implementationFiles = overrides.implementationFiles ?? ["core/test.ts", "tests/test.test.ts"];
+  const files = overrides.files ?? D09A2_A1_FILES;
+  return {
+    schema: "loop-governance-tail-result-v1",
+    status: "completed",
+    reason_code: "GOVERNANCE_TAIL_COMPLETED",
+    identity: {
+      runId: identity.runId, requirementId: identity.requirementId,
+      repository: identity.repository, repositoryPath: identity.repositoryPath,
+      baseBranch: identity.baseBranch, expectedBaseSha: identity.expectedBaseSha,
+      taskBranch: identity.taskBranch, controlRoot: identity.controlRoot,
+      createdAt: identity.createdAt,
+    },
+    orchestration_result_artifact_ref: overrides.orchestrationRef ?? D09A2_ORCH_REF,
+    executor_input_artifact_ref: overrides.executorRef ?? D09A2_EXEC_REF,
+    delivery_result_artifact_ref: overrides.deliveryRef ?? deliveryRef,
+    final_workspace: finalWorkspace,
+    implementation_files: implementationFiles,
+    files,
+    docflow: {
+      implementation_record: { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+      code_review: { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2, result: "PASS" },
+      test_acceptance: { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3, result: "PASS" },
+    },
+    business_domain_sync: {
+      decision: "SYNC_REQUIRED", write_authorized: true, execution_status: "completed",
+      evidence: { path: "docs/sync-evidence.md", version: "v1", digest_sha256: sha4 },
+      basis: null,
+    },
+    reconcile: {
+      decision: "not_required", execution_status: "not_required",
+      evidence: null,
+      basis: { scope: "s", reason: "r", evidence: "e", decision_source: "d", decision_owner: "o", version_basis: "v", stale_condition: "n" },
+    },
+    entry_coverage: {
+      status: "PASS",
+      evidence: { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: sha5 },
+      basis: null,
+    },
+    regate: {
+      status: "PASS",
+      evidence: { path: "docs/regate-evidence.md", version: "v1", digest_sha256: sha6 },
+      basis: null,
+    },
+    manifest: {
+      path: "docs/manifest.md", version: "manifest-v1", digest_sha256: sha7,
+      tail_status: "completed",
+      completion_evidence: [
+        { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+        { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2 },
+        { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3 },
+        { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: sha5 },
+        { path: "docs/regate-evidence.md", version: "v1", digest_sha256: sha6 },
+        { path: "docs/sync-evidence.md", version: "v1", digest_sha256: sha4 },
+      ],
+      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+    },
+    tail_gate: {
+      path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8,
+      result: "PASS", persisted: true, read_back_verified: true,
+      reviewed_manifest_version: "manifest-v1",
+      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+    },
+    blocking_items: [],
+    elapsed_ms: 1234,
+  };
+}
+
+// Build a valid A1 artifact (via the real A1 builder) and inject it into the store.
+// Returns the governance artifact ref.
+function injectValidA1(store: FakeArtifactStore, deliveryRef: string, overrides?: Partial<{
+  identity: any; finalWorkspace: any; implementationFiles: string[];
+  files: string[]; deliveryRef: string; orchestrationRef: string;
+  executorRef: string;
+}>): string {
+  const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef, overrides));
+  if (!built.ok) {
+    throw new Error("A1 fixture build failed: " + (built as { diagnostic: string }).diagnostic);
+  }
+  const bytes = Buffer.from((built as any).bytes);
+  const ref = `loop-artifact:v1:governance_tail_result:sha256:${(built as any).digestSha256}`;
+  store._inject(ref, bytes, "governance_tail_result");
+  return ref;
+}
+
+// Standard governed fresh-flow environment: delivery + A1 injected, D03 snapshot
+// bound to the A1 final workspace (status digest d*64), staged A1 files.
+function makeGovernedEnv(store: FakeArtifactStore): { deliveryRef: string; governanceRef: string; wsSnapshot: LoopGitWorkspaceSnapshot } {
+  const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+  const governanceRef = injectValidA1(store, deliveryRef);
+  const wsSnapshot = makeFakeWorkspaceSnapshot({ taskStatusDigestSha256: "d".repeat(64) });
+  return { deliveryRef, governanceRef, wsSnapshot };
+}
+
+function makeGovernedGitState(wsSnapshot: LoopGitWorkspaceSnapshot): FakeGitState {
+  const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+  gitState.setStagedFiles(D09A2_A1_FILES);
+  gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+  return gitState;
+}
+
+function makeDeterministicClock(): { nowMs(): number } {
+  let t = 1000000;
+  return { nowMs: () => { t += 3; return t; } };
+}
+
+// ═══════════════════════════════════════ D09-A2: Standalone Regression
+
+// Fixed pre-change expected values: intent bytes/digest, commit message,
+// PR body/digest, success result bytes, recovery intent, trace, runtime own
+// keys, and result-store-failure behavior. All constants captured pre-change.
+async function testA2StandaloneRegression(): Promise<void> {
+  console.log("\n=== D09-A2: Standalone Byte Regression Tests ===");
+  // Section failure record: the standalone marker is set true only when zero
+  // assertions fail across this whole section AND every scenario group below
+  // (fresh golden / recovery / store-failure) actually ran and passed.
+  const sectionFailures = failures;
+  const freshGoldenStart = failures;
+
+  const artifactStore = new FakeArtifactStore();
+  const deliveryRef = artifactStore.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+  chk("governed", deliveryRef === D09A2_DELIVERY_REF, "a2-reg: delivery fixture ref pinned");
+  const wsSnapshot = makeFakeWorkspaceSnapshot();
+  const gitState = new FakeGitState(wsSnapshot.taskHeadSha);
+  gitState.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+  gitState.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  gitState.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+  const runner = new FakeRunner();
+  runner.setHandler("git", gitState.createGitHandler());
+  runner.setHandler("gh", gitState.createGhHandler("feat: add recoverable delivery publisher", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+  const pub = new LoopDeliveryPublisher(makeOptions({
+    artifactStore, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot),
+    clock: makeDeterministicClock(),
+  }));
+  const result = await pub.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef }));
+
+  // Mode and status
+  chk("governed", result.status === "succeeded" && result.reasonCode === "PUBLISH_SUCCEEDED", "a2-reg: standalone succeeded");
+  chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef") === false, "a2-reg: standalone runtime has no governance key");
+
+  // Intent bytes + digest (fixed constants)
+  const intentBytes = artifactStore.read(result.publishIntentArtifactRef!);
+  const intentText = intentBytes.toString("utf8");
+  chk("governed", intentText === Buffer.from(D07_INTENT_B64, "base64").toString("utf8"), "a2-reg: standalone intent bytes identical");
+  chk("governed", sha256Hex(intentBytes) === D07_INTENT_SHA256, "a2-reg: standalone intent digest pinned");
+  chk("governed", intentText.includes('"schema":"loop-publish-intent-v1"'), "a2-reg: standalone intent schema");
+
+  // Commit message bytes
+  const commitMsg = runner.commitMessages[0]!;
+  chk("governed", commitMsg === Buffer.from(D07_COMMIT_MSG_B64, "base64").toString("utf8"), "a2-reg: standalone commit message identical");
+  chk("governed", sha256Hex(Buffer.from(commitMsg, "utf8")) === D07_COMMIT_MSG_SHA256, "a2-reg: standalone commit message digest pinned");
+  chk("governed", commitMsg.includes("Loop-Publish-Intent:") && !commitMsg.includes("Loop-Governance-Tail-Artifact:"), "a2-reg: standalone commit has no governance trailer");
+
+  // PR body bytes + digest
+  const prBody = runner.prBodies[0]!;
+  chk("governed", prBody === Buffer.from(D07_PR_BODY_B64, "base64").toString("utf8"), "a2-reg: standalone PR body identical");
+  chk("governed", sha256Hex(Buffer.from(prBody, "utf8")) === D07_PR_BODY_SHA256, "a2-reg: standalone PR body digest pinned");
+  chk("governed", prBody.startsWith("## LOOP-DELIVERY-07 — Recoverable Delivery Publish"), "a2-reg: standalone PR body header");
+
+  // Success result artifact bytes + digest (pinned with deterministic clock)
+  const resultBytes = artifactStore.read(result.publishResultArtifactRef!);
+  const resultText = resultBytes.toString("utf8");
+  chk("governed", resultText === Buffer.from(D07_RESULT_B64, "base64").toString("utf8"), "a2-reg: standalone result bytes identical");
+  chk("governed", sha256Hex(resultBytes) === D07_RESULT_SHA256, "a2-reg: standalone result digest pinned");
+
+  // Trace stages + order
+  const traceStages = result.trace.map((t) => `${t.sequence}:${t.stage}:${t.outcome}`);
+  chk("governed", JSON.stringify(traceStages) === JSON.stringify(D07_STANDALONE_TRACE), "a2-reg: standalone trace pinned");
+  chk("governed", result.trace.some((t) => t.stage === "governance_tail") === false, "a2-reg: standalone has no governance_tail trace");
+
+  // Runtime own keys (no new undefined own property)
+  chk("governed", JSON.stringify(Object.keys(result)) === JSON.stringify(D07_STANDALONE_OWN_KEYS), "a2-reg: standalone runtime own keys pinned");
+
+  // Recovery: intent byte-identical, recovered flags, trace
+  a2FreshGoldenPassed = failures === freshGoldenStart;
+  const recoveryStart = failures;
+  const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: result.commitSha!, taskHasChanges: false }));
+  const gitState2 = new FakeGitState(result.commitSha!);
+  gitState2.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+  gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+  gitState2.setRemoteBase("codex/loop-delivery-07-test", result.commitSha!);
+  gitState2.commitLog = gitState.commitLog;
+  gitState2.prList.push(...gitState.prList);
+  const runner2 = new FakeRunner();
+  runner2.setHandler("git", gitState2.createGitHandler());
+  runner2.setHandler("gh", gitState2.createGhHandler("feat: add recoverable delivery publisher", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+  const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+  const result2 = await pub2.execute(makeRequest({
+    deliveryResultArtifactRef: deliveryRef,
+    recoveryPublishIntentArtifactRef: result.publishIntentArtifactRef!,
+  }));
+  chk("governed", result2.status === "succeeded", "a2-reg: standalone recovery succeeded");
+  const recIntent = artifactStore.read(result2.publishIntentArtifactRef!);
+  chk("governed", recIntent.toString("utf8") === Buffer.from(D07_RECOVERY_INTENT_B64, "base64").toString("utf8"), "a2-reg: recovery intent bytes pinned");
+  chk("governed", recIntent.equals(intentBytes), "a2-reg: recovery intent byte-identical to fresh intent");
+  const recTrace = result2.trace.map((t) => `${t.sequence}:${t.stage}:${t.outcome}`);
+  chk("governed", recTrace[3] === "4:intent:recovered" && recTrace[4] === "5:commit:recovered" && recTrace[5] === "6:push:recovered" && recTrace[6] === "7:draft_pr:recovered", "a2-reg: standalone recovery trace recovered stages");
+
+  // Result-store-failure behavior: ARTIFACT_STORE_FAILED, facts preserved,
+  // runtime own keys unchanged (no governance key added)
+  a2StandaloneRecoveryPassed = failures === recoveryStart;
+  const storeFailureStart = failures;
+  const storeF = new FakeArtifactStore();
+  const deliveryRefF = storeF.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+  storeF.failResultPut = true;
+  const wsSnapshotF = makeFakeWorkspaceSnapshot();
+  const gitStateF = new FakeGitState(wsSnapshotF.taskHeadSha);
+  gitStateF.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+  gitStateF.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+  gitStateF.setRemoteBase("feature/loop-runtime-v1", wsSnapshotF.expectedBaseSha);
+  const runnerF = new FakeRunner();
+  runnerF.setHandler("git", gitStateF.createGitHandler());
+  runnerF.setHandler("gh", gitStateF.createGhHandler("feat: add recoverable delivery publisher", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+  const pubF = new LoopDeliveryPublisher(makeOptions({ artifactStore: storeF, runner: runnerF, workspaceManager: new FakeWorkspaceManager(wsSnapshotF), clock: makeDeterministicClock() }));
+  const resultF = await pubF.execute(makeRequest({ deliveryResultArtifactRef: deliveryRefF }));
+  chk("governed", resultF.status === "failed" && resultF.reasonCode === "ARTIFACT_STORE_FAILED", "a2-reg: result-store-failure reason");
+  chk("governed", resultF.commitCreated === true && resultF.pushCreated === true && resultF.prCreated === true, "a2-reg: result-store-failure facts preserved");
+  chk("governed", JSON.stringify(Object.keys(resultF)) === JSON.stringify(D07_STANDALONE_OWN_KEYS), "a2-reg: store-failure runtime own keys pinned");
+  chk("governed", resultF.publishResultArtifactRef === undefined, "a2-reg: store-failure has no result ref");
+
+  a2StandaloneStoreFailurePassed = failures === storeFailureStart;
+  a2StandaloneSectionPassed = failures === sectionFailures;
+}
+
+// ═══════════════════════════════════════ D09-A2: Governed Positive
+
+async function testA2GovernedPositive(): Promise<void> {
+  console.log("\n=== D09-A2: Governed Positive Tests ===");
+  // Section failure record: every governed-positive marker requires zero
+  // failures across this whole section plus the scenario group(s) that
+  // actually exercise the marker's contract.
+  const sectionFailures = failures;
+  const freshFlowStart = failures;
+
+  // ── Valid A1 full fresh flow ──
+  const artifactStore = new FakeArtifactStore();
+  const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(artifactStore);
+  const gitState = makeGovernedGitState(wsSnapshot);
+  const runner = new FakeRunner();
+  runner.setHandler("git", gitState.createGitHandler());
+  runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+  const pub = new LoopDeliveryPublisher(makeOptions({
+    artifactStore, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot),
+    clock: makeDeterministicClock(),
+  }));
+  const result = await pub.execute(makeRequest({
+    deliveryResultArtifactRef: deliveryRef,
+    commitSubject: "feat: governed",
+    prTitle: "feat: governed",
+    governanceTailResultArtifactRef: governanceRef,
+  }));
+
+  chk("governed", result.status === "succeeded" && result.reasonCode === "PUBLISH_SUCCEEDED", "a2-pos: governed fresh flow succeeded");
+  chk("governed", result.governanceTailResultArtifactRef === governanceRef, "a2-pos: governed runtime ref equals request ref");
+  chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef"), "a2-pos: governed runtime owns the key");
+  chk("governed", result.commitCreated === true && result.pushCreated === true && result.prCreated === true, "a2-pos: commit/push/PR created");
+
+  // A1 final files include implementation + governance evidence
+  chk("governed", JSON.stringify(result.files) === JSON.stringify(D09A2_A1_FILES), "a2-pos: governed files are A1 final files");
+  chk("governed", result.files.includes("docs/manifest.md") && result.files.includes("05-测试验收/tail-gate.md"), "a2-pos: A1 files include governance evidence");
+
+  // Governed trace: governance_tail between delivery and workspace
+  const traceStages = result.trace.map((t) => `${t.sequence}:${t.stage}:${t.outcome}`);
+  chk("governed", JSON.stringify(traceStages) === JSON.stringify(D09A2_GOVERNED_TRACE), "a2-pos: governed trace pinned");
+  const govEntry = result.trace.find((t) => t.stage === "governance_tail");
+  chk("governed", govEntry !== undefined && (govEntry as any).artifact_ref === governanceRef && govEntry.outcome === "succeeded", "a2-pos: governance_tail trace entry");
+  chk("governed", result.recoveryStage === "completed", "a2-pos: governed recovery stage completed");
+
+  // Governed intent bytes (fixed constant), store kind workspace_metadata
+  const intentBytes = artifactStore.read(result.publishIntentArtifactRef!);
+  chk("governed", intentBytes.toString("utf8") === Buffer.from(D09A2_GOVERNED_INTENT_B64, "base64").toString("utf8"), "a2-pos: governed intent bytes pinned");
+  chk("governed", sha256Hex(intentBytes) === D09A2_GOVERNED_INTENT_SHA256, "a2-pos: governed intent digest pinned");
+  const intentObj = JSON.parse(intentBytes.toString("utf8"));
+  chk("governed", intentObj.schema === "loop-governed-publish-intent-v1", "a2-pos: governed intent schema");
+  chk("governed", intentObj.pr_body_schema === "loop-governed-publish-pr-body-v1", "a2-pos: governed intent PR body schema");
+  chk("governed", intentObj.orchestration_result_artifact_ref === D09A2_ORCH_REF && intentObj.executor_input_artifact_ref === D09A2_EXEC_REF, "a2-pos: governed intent evidence chain refs");
+  chk("governed", intentObj.governance_tail_result_artifact_ref === governanceRef, "a2-pos: governed intent governance ref");
+  chk("governed", intentObj.delivery_result_artifact_ref === deliveryRef, "a2-pos: governed intent delivery ref");
+  chk("governed", JSON.stringify(intentObj.implementation_files) === JSON.stringify(["core/test.ts", "tests/test.test.ts"]), "a2-pos: governed intent implementation files");
+  chk("governed", JSON.stringify(intentObj.files) === JSON.stringify(D09A2_A1_FILES), "a2-pos: governed intent files");
+  chk("governed", intentObj.precommit_status_digest_sha256 === "d".repeat(64), "a2-pos: governed intent precommit digest from A1 final workspace");
+
+  // Governed intent store kind
+  chk("governed", (artifactStore as any).kindOf(result.publishIntentArtifactRef!) === "workspace_metadata", "a2-pos: governed intent stored as workspace_metadata");
+
+  // Governed commit message (fixed constant) + files
+  const commitMsg = runner.commitMessages[0]!;
+  chk("governed", commitMsg === Buffer.from(D09A2_GOVERNED_COMMIT_MSG_B64, "base64").toString("utf8"), "a2-pos: governed commit message pinned");
+  chk("governed", sha256Hex(Buffer.from(commitMsg, "utf8")) === D09A2_GOVERNED_COMMIT_MSG_SHA256, "a2-pos: governed commit message digest pinned");
+  chk("governed", commitMsg.includes("Loop-Governance-Tail-Artifact: " + governanceRef), "a2-pos: governed commit governance trailer");
+  chk("governed", (commitMsg.match(/Loop-Publish-Intent:/g) ?? []).length === 1, "a2-pos: governed commit single intent line");
+
+  // Draft PR: body pinned + digest, draft created
+  const prBody = runner.prBodies[0]!;
+  chk("governed", prBody === Buffer.from(D09A2_GOVERNED_PR_BODY_B64, "base64").toString("utf8"), "a2-pos: governed PR body pinned");
+  chk("governed", sha256Hex(Buffer.from(prBody, "utf8")) === D09A2_GOVERNED_PR_BODY_SHA256, "a2-pos: governed PR body digest pinned");
+  chk("governed", result.prCreated === true && result.prNumber !== null, "a2-pos: governed Draft PR created");
+
+  // Governed result artifact bytes (pinned) + schema
+  const resultBytes = artifactStore.read(result.publishResultArtifactRef!);
+  chk("governed", resultBytes.toString("utf8") === Buffer.from(D09A2_GOVERNED_RESULT_B64, "base64").toString("utf8"), "a2-pos: governed result bytes pinned");
+  chk("governed", sha256Hex(resultBytes) === D09A2_GOVERNED_RESULT_SHA256, "a2-pos: governed result digest pinned");
+  const resultObj = JSON.parse(resultBytes.toString("utf8"));
+  chk("governed", resultObj.schema === "loop-governed-publish-result-v1", "a2-pos: governed result schema");
+  chk("governed", resultObj.implementation_files.length === 2 && resultObj.files.length === D09A2_A1_FILES.length, "a2-pos: governed result implementation/files fields");
+
+  // ── Exact governed staging: git add received exactly the effective files ──
+  a2PosFreshFlowPassed = failures === freshFlowStart;
+  const stagingStart = failures;
+  let addArgs: string[] | null = null;
+  const gitStateStaging = makeGovernedGitState(wsSnapshot);
+  const runnerStaging = new FakeRunner();
+  runnerStaging.setHandler("git", (args, stdin) => {
+    if (args[0] === "-c" && args.includes("add")) addArgs = args;
+    return gitStateStaging.createGitHandler()(args, stdin);
+  });
+  runnerStaging.setHandler("gh", gitStateStaging.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+  const storeStaging = new FakeArtifactStore();
+  const envStaging = makeGovernedEnv(storeStaging);
+  const pubStaging = new LoopDeliveryPublisher(makeOptions({
+    artifactStore: storeStaging, runner: runnerStaging,
+    workspaceManager: new FakeWorkspaceManager(envStaging.wsSnapshot), clock: makeDeterministicClock(),
+  }));
+  const resultStaging = await pubStaging.execute(makeRequest({
+    deliveryResultArtifactRef: envStaging.deliveryRef,
+    commitSubject: "feat: governed", prTitle: "feat: governed",
+    governanceTailResultArtifactRef: envStaging.governanceRef,
+  }));
+  chk("governed", resultStaging.status === "succeeded", "a2-pos: governed staging flow succeeded");
+  chk("governed", addArgs !== null, "a2-pos: git add observed");
+  if (addArgs !== null) {
+    const ddIdx = addArgs.indexOf("--");
+    const staged = ddIdx >= 0 ? addArgs.slice(ddIdx + 1) : [];
+    chk("governed", JSON.stringify(staged) === JSON.stringify(D09A2_A1_FILES), "a2-pos: git add staged exactly effective files in order");
+  }
+
+  // ── Buffer and Uint8Array parser inputs both drive governed mode ──
+  a2PosStagingPassed = failures === stagingStart;
+  const parserStart = failures;
+  {
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+    chk("governed", built.ok === true, "a2-pos: A1 builder ok for Buffer path");
+    if (built.ok) {
+      const u8 = new Uint8Array((built as any).bytes);
+      const parsed = parseLoopGovernanceTailResultBytes(u8);
+      chk("governed", parsed.ok === true, "a2-pos: Uint8Array parser input succeeds");
+      const buf = Buffer.from((built as any).bytes);
+      const parsedBuf = parseLoopGovernanceTailResultBytes(buf as unknown as Uint8Array);
+      chk("governed", parsedBuf.ok === true && parsedBuf.ok === parsed.ok, "a2-pos: Buffer parser input succeeds identically");
+    }
+  }
+
+  // ── Result-store-failure facts preservation (governed field set) ──
+  a2PosParserPathPassed = failures === parserStart;
+  const storeFailureStart = failures;
+  {
+    const storeF = new FakeArtifactStore();
+    const envF = makeGovernedEnv(storeF);
+    storeF.failResultPut = true;
+    const gitStateF = makeGovernedGitState(envF.wsSnapshot);
+    const runnerF = new FakeRunner();
+    runnerF.setHandler("git", gitStateF.createGitHandler());
+    runnerF.setHandler("gh", gitStateF.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pubF = new LoopDeliveryPublisher(makeOptions({
+      artifactStore: storeF, runner: runnerF,
+      workspaceManager: new FakeWorkspaceManager(envF.wsSnapshot), clock: makeDeterministicClock(),
+    }));
+    const resultF = await pubF.execute(makeRequest({
+      deliveryResultArtifactRef: envF.deliveryRef,
+      commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: envF.governanceRef,
+    }));
+    chk("governed", resultF.status === "failed" && resultF.reasonCode === "ARTIFACT_STORE_FAILED", "a2-pos: governed store failure reason");
+    chk("governed", resultF.commitCreated === true && resultF.pushCreated === true && resultF.prCreated === true, "a2-pos: governed store failure facts preserved");
+    chk("governed", resultF.governanceTailResultArtifactRef === envF.governanceRef, "a2-pos: governed store failure keeps governance ref");
+    chk("governed", Object.prototype.hasOwnProperty.call(resultF, "governanceTailResultArtifactRef"), "a2-pos: governed store failure owns governance key");
+  }
+
+  // ── Full governed recovery flow ──
+  a2PosStoreFailurePassed = failures === storeFailureStart;
+  const recoveryStart = failures;
+  {
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: result.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(result.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.setRemoteBase("codex/loop-delivery-07-test", result.commitSha!);
+    gitState2.commitLog = gitState.commitLog;
+    gitState2.prList.push(...gitState.prList);
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", gitState2.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result2 = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: result.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result2.status === "succeeded", "a2-pos: governed recovery succeeded");
+    chk("governed", result2.commitRecovered === true && result2.pushRecovered === true && result2.prRecovered === true, "a2-pos: governed recovery flags");
+    const recTrace = result2.trace.map((t) => `${t.sequence}:${t.stage}:${t.outcome}`);
+    chk("governed", JSON.stringify(recTrace) === JSON.stringify(D09A2_GOVERNED_TRACE_RECOVERY), "a2-pos: governed recovery trace pinned");
+    const recIntent = artifactStore.read(result2.publishIntentArtifactRef!);
+    chk("governed", recIntent.equals(intentBytes), "a2-pos: governed recovery intent byte-identical");
+  }
+
+  a2PosRecoveryPassed = failures === recoveryStart;
+  a2PositiveSectionPassed = failures === sectionFailures;
+}
+
+// ═══════════════════════════════════════ D09-A2: Governed Negative
+
+async function testA2GovernedNegative(): Promise<void> {
+  console.log("\n=== D09-A2: Governed Negative Tests ===");
+  // Section failure record: governance-binding and the other governed markers
+  // require zero failures across this whole section, plus the specific
+  // scenario groups that exercise each marker's contract (recorded at group
+  // boundaries below).
+  const sectionFailures = failures;
+  const negRefBoundaryStart = failures;
+
+  // Helper: run a governed request and return the result
+  async function runGoverned(
+    store: FakeArtifactStore,
+    deliveryRef: string,
+    governanceRef: string | null | undefined,
+    opts: { wsOverride?: Partial<LoopGitWorkspaceSnapshot>; recoveryIntentRef?: string; gitState?: FakeGitState; ghOverride?: (args: string[], stdin?: string) => any } = {},
+  ): Promise<LoopDeliveryPublishResult> {
+    const wsSnapshot = makeFakeWorkspaceSnapshot({ taskStatusDigestSha256: "d".repeat(64), ...opts.wsOverride });
+    const gitState = opts.gitState ?? makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", opts.ghOverride ?? gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore: store, runner,
+      workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock(),
+    }));
+    return pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: governed",
+      prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: opts.recoveryIntentRef,
+      governanceTailResultArtifactRef: governanceRef as any,
+    }));
+  }
+
+  // ── 1. null governance ref ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const result = await runGoverned(store, deliveryRef, null as any);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: null ref -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.status === "failed", "a2-neg: null ref failed");
+  }
+
+  // ── 2. wrong ref format ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const result = await runGoverned(store, deliveryRef, "not-an-artifact-ref");
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: wrong format -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("loop-artifact:v1 format"), "a2-neg: wrong format diagnostic");
+  }
+
+  // ── 3. wrong artifact kind ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const wrongKindRef = `loop-artifact:v1:delivery_result:sha256:${"a".repeat(64)}`;
+    const result = await runGoverned(store, deliveryRef, wrongKindRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: wrong kind -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("kind must be governance_tail_result"), "a2-neg: wrong kind diagnostic");
+  }
+
+  // ── 4. missing artifact ──
+  a2NegRefBoundaryPassed = failures === negRefBoundaryStart;
+  const negStoreReadStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const missingRef = `loop-artifact:v1:governance_tail_result:sha256:${"b".repeat(64)}`;
+    const result = await runGoverned(store, deliveryRef, missingRef);
+    chk("governed", result.reasonCode === "ARTIFACT_STORE_FAILED", "a2-neg: missing artifact -> ARTIFACT_STORE_FAILED");
+  }
+
+  // ── 5. oversize artifact ──
+  a2NegStoreReadPassed = failures === negStoreReadStart;
+  const negA1ContentStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const bigBytes = Buffer.alloc(LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES + 1, 0x20);
+    const bigRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(bigBytes)}`;
+    store._inject(bigRef, bigBytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, bigRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: oversize -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("too large"), "a2-neg: oversize diagnostic");
+  }
+
+  // ── 6. digest mismatch ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+    const bytes = Buffer.from((built as any).bytes);
+    const wrongRef = `loop-artifact:v1:governance_tail_result:sha256:${"0".repeat(64)}`;
+    store._inject(wrongRef, bytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, wrongRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: digest mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("digest mismatch"), "a2-neg: digest mismatch diagnostic");
+  }
+
+  // ── 7. BOM ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+    const bomBytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from((built as any).bytes)]);
+    const bomRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(bomBytes)}`;
+    store._inject(bomRef, bomBytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, bomRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: BOM -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 8. CR ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+    const crBytes = Buffer.from((built as any).bytes.toString("utf8").replace('"completed"', '"complet\\red"'), "utf8");
+    const crRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(crBytes)}`;
+    store._inject(crRef, crBytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, crRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: CR -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 9. NUL ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+    const nulBytes = Buffer.from((built as any).bytes.toString("utf8").replace('"completed"', '"complet\\x00ed"'), "utf8");
+    const nulRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(nulBytes)}`;
+    store._inject(nulRef, nulBytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, nulRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: NUL -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 10. noncanonical JSON (reordered fields) ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const input = makeA1Input(deliveryRef);
+    const reordered: Record<string, unknown> = {};
+    const keys = Object.keys(input);
+    for (const k of keys.slice(1)) reordered[k] = input[k];
+    reordered.schema = "loop-governance-tail-result-v1";
+    const noncanonical = Buffer.from(JSON.stringify(reordered) + "\n", "utf8");
+    const noncanonicalRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(noncanonical)}`;
+    store._inject(noncanonicalRef, noncanonical, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, noncanonicalRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: noncanonical JSON -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 11. invalid A1 schema ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const input = makeA1Input(deliveryRef);
+    input.status = "pending";
+    const invalidBytes = Buffer.from(JSON.stringify(input) + "\n", "utf8");
+    const invalidRef = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(invalidBytes)}`;
+    store._inject(invalidRef, invalidBytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, invalidRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: invalid schema -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 12. identity nine-field binding, each field mismatched ──
+  a2NegA1ContentPassed = failures === negA1ContentStart;
+  const negIdentityBindingStart = failures;
+  {
+    const identityMutations: Array<[string, any]> = [
+      ["runId", "run-002"],
+      ["requirementId", "req-002"],
+      ["repository", "other/owner-repo"],
+      ["repositoryPath", "/tmp/other-repo"],
+      ["baseBranch", "main"],
+      ["expectedBaseSha", "e".repeat(40)],
+      ["taskBranch", "codex/other-task"],
+      ["controlRoot", "/tmp/other-control"],
+      ["createdAt", "2026-08-01T00:00:00.000Z"],
+    ];
+    for (const [field, value] of identityMutations) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const badIdentity = { ...makeIdentity(), [field]: value };
+      // A1 must stay internally consistent (final_workspace.task_branch follows
+      // identity.taskBranch) so the REQUEST-identity binding is what rejects it.
+      const governanceRef = injectValidA1(store, deliveryRef, {
+        identity: badIdentity,
+        finalWorkspace: { workspace_path: "/tmp/test-workspace", task_branch: badIdentity.taskBranch, task_head_sha: "a".repeat(40), status_digest_sha256: "d".repeat(64), task_has_changes: true },
+      });
+      const result = await runGoverned(store, deliveryRef, governanceRef);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-neg: identity.${field} mismatch -> GOVERNANCE_TAIL_NOT_READY`);
+      chk("governed", result.safeMessage.includes("identity mismatch"), `a2-neg: identity.${field} binding diagnostic`);
+    }
+  }
+
+  // ── 13. delivery ref mismatch ──
+  a2NegIdentityBindingPassed = failures === negIdentityBindingStart;
+  const negDeliveryBindingStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const otherDeliveryRef = store.put("delivery_result", makeDeliveryResultBytes({ test_attempts: 2 })).artifactRef;
+    const governanceRef = injectValidA1(store, deliveryRef, { deliveryRef: otherDeliveryRef });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: delivery ref mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("delivery ref mismatch"), "a2-neg: delivery ref binding diagnostic");
+  }
+
+  // ── 14. implementation files length mismatch ──
+  a2NegDeliveryBindingPassed = failures === negDeliveryBindingStart;
+  const negImplFilesStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const governanceRef = injectValidA1(store, deliveryRef, { implementationFiles: ["core/test.ts"] });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: implementation files length mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("length mismatch"), "a2-neg: implementation files length diagnostic");
+  }
+
+  // ── 15. implementation files order mismatch (parser-enforced rejection) ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const reorderedImpl = ["tests/test.test.ts", "core/test.ts"];
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef, { implementationFiles: reorderedImpl }));
+    chk("governed", built.ok === false, "a2-neg: reordered implementation files provably rejected by A1");
+    const bytes = Buffer.from(JSON.stringify(makeA1Input(deliveryRef, { implementationFiles: reorderedImpl })) + "\n", "utf8");
+    const ref = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(bytes)}`;
+    store._inject(ref, bytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, ref);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: implementation files order mismatch -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 16. implementation file path mismatch ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const swappedFiles = D09A2_A1_FILES.map((f) => (f === "core/test.ts" ? "core/other.ts" : f));
+    const governanceRef = injectValidA1(store, deliveryRef, { implementationFiles: ["core/other.ts", "tests/test.test.ts"], files: swappedFiles });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: implementation file path mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("implementation files mismatch"), "a2-neg: implementation files path diagnostic");
+  }
+
+  // ── 17. workspace path mismatch ──
+  a2NegImplFilesPassed = failures === negImplFilesStart;
+  const negWorkspaceProvenanceStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const governanceRef = injectValidA1(store, deliveryRef, {
+      finalWorkspace: { workspace_path: "/tmp/other-workspace", task_branch: "codex/loop-delivery-07-test", task_head_sha: "a".repeat(40), status_digest_sha256: "d".repeat(64), task_has_changes: true },
+    });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: workspace path mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("provenance mismatch"), "a2-neg: workspace path diagnostic");
+  }
+
+  // ── 18. task branch mismatch (consistent identity+A1, binding rejection) ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const badIdentity = { ...makeIdentity(), taskBranch: "codex/other-task" };
+    const governanceRef = injectValidA1(store, deliveryRef, {
+      identity: badIdentity,
+      finalWorkspace: { workspace_path: "/tmp/test-workspace", task_branch: "codex/other-task", task_head_sha: "a".repeat(40), status_digest_sha256: "d".repeat(64), task_has_changes: true },
+    });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: task branch mismatch -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 19. task HEAD mismatch ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const governanceRef = injectValidA1(store, deliveryRef, {
+      finalWorkspace: { workspace_path: "/tmp/test-workspace", task_branch: "codex/loop-delivery-07-test", task_head_sha: "e".repeat(40), status_digest_sha256: "d".repeat(64), task_has_changes: true },
+    });
+    const result = await runGoverned(store, deliveryRef, governanceRef);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: task HEAD mismatch -> GOVERNANCE_TAIL_NOT_READY");
+    chk("governed", result.safeMessage.includes("provenance mismatch"), "a2-neg: task HEAD diagnostic");
+  }
+
+  // ── 20. task_has_changes mismatch (parser-enforced) ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const badFw = { workspace_path: "/tmp/test-workspace", task_branch: "codex/loop-delivery-07-test", task_head_sha: "a".repeat(40), status_digest_sha256: "d".repeat(64), task_has_changes: false };
+    const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef, { finalWorkspace: badFw }));
+    chk("governed", built.ok === false, "a2-neg: task_has_changes=false provably rejected by A1");
+    const bytes = Buffer.from(JSON.stringify(makeA1Input(deliveryRef, { finalWorkspace: badFw })) + "\n", "utf8");
+    const ref = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(bytes)}`;
+    store._inject(ref, bytes, "governance_tail_result");
+    const result = await runGoverned(store, deliveryRef, ref);
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-neg: task_has_changes mismatch -> GOVERNANCE_TAIL_NOT_READY");
+  }
+
+  // ── 21. D03 final status digest mismatch (D03 authority) ──
+  a2NegWorkspaceProvenancePassed = failures === negWorkspaceProvenanceStart;
+  const negWorkspaceStateStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef } = makeGovernedEnv(store);
+    const result = await runGoverned(store, deliveryRef, governanceRef, {
+      wsOverride: { taskStatusDigestSha256: "b".repeat(64) },
+    });
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: D03 final status digest mismatch -> WORKSPACE_STATE_CONFLICT");
+  }
+
+  // ── 22. extra workspace path ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args[0] === "status") return makeRunnerResult(0, "AM extra/file.ts\x00");
+      return gitState.createGitHandler()(args, stdin);
+    });
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: extra workspace path -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("extra path"), "a2-neg: extra path diagnostic");
+  }
+
+  // ── 23. missing final file ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    gitState.setStagedFiles(D09A2_A1_FILES.filter((f) => f !== "docs/manifest.md"));
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: missing final file -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("missing file"), "a2-neg: missing file diagnostic");
+  }
+
+  // ── 24. standalone intent used for governed recovery ──
+  a2NegWorkspaceStatePassed = failures === negWorkspaceStateStart;
+  const negIntentBindingStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const wsSnapS = makeFakeWorkspaceSnapshot();
+    const gitStateS = new FakeGitState(wsSnapS.taskHeadSha);
+    gitStateS.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitStateS.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitStateS.setRemoteBase("feature/loop-runtime-v1", wsSnapS.expectedBaseSha);
+    const runnerS = new FakeRunner();
+    runnerS.setHandler("git", gitStateS.createGitHandler());
+    runnerS.setHandler("gh", gitStateS.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pubS = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runnerS, workspaceManager: new FakeWorkspaceManager(wsSnapS), clock: makeDeterministicClock() }));
+    const standaloneResult = await pubS.execute(makeRequest({ deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed" }));
+    chk("governed", standaloneResult.status === "succeeded", "a2-neg: standalone intent producer succeeded");
+    const governanceRef = injectValidA1(store, deliveryRef);
+    const result = await runGoverned(store, deliveryRef, governanceRef, {
+      recoveryIntentRef: standaloneResult.publishIntentArtifactRef!,
+      wsOverride: { taskHeadSha: standaloneResult.commitSha!, taskHasChanges: false },
+    });
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: standalone intent for governed -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("recovery intent mismatch"), "a2-neg: standalone-intent mismatch diagnostic");
+  }
+
+  // ── 25. governed intent used for standalone recovery ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed intent producer succeeded");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(["core/test.ts", "tests/test.test.ts"]);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", gitState2.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: governed intent for standalone -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("recovery intent mismatch"), "a2-neg: governed-intent mismatch diagnostic");
+  }
+
+  // ── 26. changed governance ref during recovery ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: first governed flow succeeded");
+    const otherGovRef = injectValidA1(store, deliveryRef, { executorRef: `loop-artifact:v1:executor_input:sha256:${"9".repeat(64)}` });
+    chk("governed", otherGovRef !== governanceRef, "a2-neg: replacement governance ref differs");
+    const result = await runGoverned(store, deliveryRef, otherGovRef, {
+      recoveryIntentRef: governedResult.publishIntentArtifactRef!,
+      wsOverride: { taskHeadSha: governedResult.commitSha!, taskHasChanges: false },
+    });
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-neg: changed governance ref during recovery -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("recovery intent mismatch"), "a2-neg: changed governance ref invalidates intent");
+  }
+
+  // ── 27. wrong governed commit message (recovery) ──
+  a2NegIntentBindingPassed = failures === negIntentBindingStart;
+  const negCommitRecoveryStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow produced commit");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog.map((c) => ({ ...c, message: c.message.replace("feat: governed", "feat: tampered") }));
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", gitState2.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "COMMIT_FAILED", "a2-neg: wrong governed commit message -> COMMIT_FAILED");
+  }
+
+  // ── 28. wrong governed commit files (recovery) ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow 2 produced commit");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog.map((c) => ({ ...c, files: c.files.filter((f) => f.path !== "docs/manifest.md") }));
+    const tamperedFiles = D09A2_A1_FILES.filter((f) => f !== "docs/manifest.md");
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", (args, stdin) => {
+      if (args[0] === "diff-tree") {
+        const parts: string[] = [];
+        for (const f of tamperedFiles) { parts.push("A"); parts.push(f); }
+        return makeRunnerResult(0, parts.join("\x00") + "\x00");
+      }
+      return gitState2.createGitHandler()(args, stdin);
+    });
+    runner2.setHandler("gh", gitState2.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "COMMIT_FAILED", "a2-neg: wrong governed commit files -> COMMIT_FAILED");
+  }
+
+  // ── 29. wrong governed PR body (recovery) ──
+  a2NegCommitRecoveryPassed = failures === negCommitRecoveryStart;
+  const negPrStateStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow 3 produced PR");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([{ ...gitState.prList[0], body: gitState.prList[0].body.replace("Draft: true", "Draft: false") }]));
+      }
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "PR_STATE_CONFLICT", "a2-neg: wrong governed PR body -> PR_STATE_CONFLICT");
+  }
+
+  // ── 30. existing non-draft PR ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow 4 produced PR");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([{ ...gitState.prList[0], isDraft: false }]));
+      }
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "PR_STATE_CONFLICT", "a2-neg: existing non-draft PR -> PR_STATE_CONFLICT");
+  }
+
+  // ── 31. existing PR wrong head SHA ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow 5 produced PR");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([{ ...gitState.prList[0], headRefOid: "f".repeat(40) }]));
+      }
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "PR_STATE_CONFLICT", "a2-neg: existing PR wrong head SHA -> PR_STATE_CONFLICT");
+  }
+
+  // ── 32. multiple PRs ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const governedResult = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", governedResult.status === "succeeded", "a2-neg: governed flow 6 produced PR");
+    const wsMgr2 = new FakeWorkspaceManager(makeFakeWorkspaceSnapshot({ taskHeadSha: governedResult.commitSha!, taskHasChanges: false, taskStatusDigestSha256: "d".repeat(64) }));
+    const gitState2 = new FakeGitState(governedResult.commitSha!);
+    gitState2.setStagedFiles(D09A2_A1_FILES);
+    gitState2.setStagedTree("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    gitState2.setRemoteBase("feature/loop-runtime-v1", wsSnapshot.expectedBaseSha);
+    gitState2.commitLog = gitState.commitLog;
+    const runner2 = new FakeRunner();
+    runner2.setHandler("git", gitState2.createGitHandler());
+    runner2.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "list") {
+        return makeRunnerResult(0, JSON.stringify([gitState.prList[0], { ...gitState.prList[0], number: 999 }]));
+      }
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    const pub2 = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner: runner2, workspaceManager: wsMgr2, clock: makeDeterministicClock() }));
+    const result = await pub2.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      recoveryPublishIntentArtifactRef: governedResult.publishIntentArtifactRef!,
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "PR_STATE_CONFLICT", "a2-neg: multiple PRs -> PR_STATE_CONFLICT");
+  }
+
+  // ── 33. unknown exception text must not leak ──
+  a2NegPrStatePassed = failures === negPrStateStart;
+  const negExceptionLeakStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const secret = "SECRET-LOOP-TEXT-xyz";
+    const brokenStore = new FakeArtifactStore();
+    brokenStore._inject(deliveryRef, makeDeliveryResultBytes(), "delivery_result");
+    const missingRef = `loop-artifact:v1:governance_tail_result:sha256:${"c".repeat(64)}`;
+    const origRead = brokenStore.read.bind(brokenStore);
+    (brokenStore as any).read = (ref: string): Buffer => {
+      if (ref === missingRef) throw new Error(secret + " inner detail");
+      return origRead(ref);
+    };
+    const result = await runGoverned(brokenStore, deliveryRef, missingRef);
+    chk("governed", result.reasonCode === "ARTIFACT_STORE_FAILED", "a2-neg: store throw -> ARTIFACT_STORE_FAILED");
+    chk("governed", !result.safeMessage.includes(secret) && !result.safeMessage.includes("inner detail"), "a2-neg: unknown exception text not leaked");
+  }
+  a2NegExceptionLeakPassed = failures === negExceptionLeakStart;
+
+  // ── 34. governed pre-A1 failure must NOT surface D06 files as final files ──
+  // Before A1 verification completes, the governed terminal result must carry
+  // empty implementation_files/files, no fabricated orchestration/executor/
+  // workspace facts, and no commit/push/PR facts. D06 files are D06 facts and
+  // must never be promoted to governed final files.
+  const preA1EmptyFilesStart = failures;
+  {
+    const preValidationInputs: Array<[string, unknown]> = [
+      ["null", null],
+      ["number", 42],
+      ["object", { some: "object" }],
+      ["empty string", ""],
+      ["malformed string", "not-an-artifact-ref"],
+      ["wrong-kind string", `loop-artifact:v1:delivery_result:sha256:${"a".repeat(64)}`],
+    ];
+    for (const [name, raw] of preValidationInputs) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const result = await runGoverned(store, deliveryRef, raw as any);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-preA1: ${name} ref -> GOVERNANCE_TAIL_NOT_READY`);
+      chk("governed", result.status === "failed", `a2-preA1: ${name} ref failed`);
+      // Empty final files — D06 files are never presented as governed files
+      chk("governed", Array.isArray(result.files) && result.files.length === 0, `a2-preA1: ${name} ref runtime files empty`);
+      // No commit/push/PR facts fabricated
+      chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+        result.pushCreated === false && result.pushRecovered === false &&
+        result.prCreated === false && result.prRecovered === false, `a2-preA1: ${name} ref no commit/push/PR facts`);
+      // recovery_stage must not be raised to governance_verified
+      chk("governed", result.recoveryStage === "delivery_verified", `a2-preA1: ${name} ref recoveryStage stays delivery_verified`);
+      // Persisted governed result: empty files, null evidence refs, null governance ref
+      const persisted = JSON.parse(store.read(result.publishResultArtifactRef!).toString("utf8"));
+      chk("governed", persisted.schema === "loop-governed-publish-result-v1", `a2-preA1: ${name} ref persisted schema`);
+      chk("governed", Array.isArray(persisted.implementation_files) && persisted.implementation_files.length === 0, `a2-preA1: ${name} ref persisted implementation_files empty`);
+      chk("governed", Array.isArray(persisted.files) && persisted.files.length === 0, `a2-preA1: ${name} ref persisted files empty`);
+      chk("governed", persisted.orchestration_result_artifact_ref === null && persisted.executor_input_artifact_ref === null, `a2-preA1: ${name} ref persisted evidence refs null`);
+      chk("governed", persisted.governance_tail_result_artifact_ref === null, `a2-preA1: ${name} ref persisted governance ref null`);
+      chk("governed", persisted.commit_created === false && persisted.push_created === false && persisted.pr_created === false, `a2-preA1: ${name} ref persisted no commit/push/PR facts`);
+    }
+
+    // Post-validation failures (validated ref, later digest/A1-content gate):
+    // files stay empty and no commit/push/PR facts appear; the validated ref
+    // is the only governance fact that may be recorded (persisted = validated
+    // string, never a fabricated A1 success).
+    const postValidationCases: Array<[string, () => { store: FakeArtifactStore; deliveryRef: string; ref: string }]> = [
+      ["digest mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+        const bytes = Buffer.from((built as any).bytes);
+        const ref = `loop-artifact:v1:governance_tail_result:sha256:${"0".repeat(64)}`;
+        store._inject(ref, bytes, "governance_tail_result");
+        return { store, deliveryRef, ref };
+      }],
+      ["identity mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const ref = injectValidA1(store, deliveryRef, { identity: { ...makeIdentity(), runId: "run-002" } });
+        return { store, deliveryRef, ref };
+      }],
+    ];
+    for (const [name, build] of postValidationCases) {
+      const { store, deliveryRef, ref } = build();
+      const result = await runGoverned(store, deliveryRef, ref);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-preA1: ${name} -> GOVERNANCE_TAIL_NOT_READY`);
+      chk("governed", Array.isArray(result.files) && result.files.length === 0, `a2-preA1: ${name} runtime files empty`);
+      chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+        result.pushCreated === false && result.pushRecovered === false &&
+        result.prCreated === false && result.prRecovered === false, `a2-preA1: ${name} no commit/push/PR facts`);
+      chk("governed", result.recoveryStage === "delivery_verified", `a2-preA1: ${name} recoveryStage stays delivery_verified`);
+      const persisted = JSON.parse(store.read(result.publishResultArtifactRef!).toString("utf8"));
+      chk("governed", Array.isArray(persisted.files) && persisted.files.length === 0 &&
+        Array.isArray(persisted.implementation_files) && persisted.implementation_files.length === 0, `a2-preA1: ${name} persisted files empty`);
+      chk("governed", persisted.orchestration_result_artifact_ref === null && persisted.executor_input_artifact_ref === null, `a2-preA1: ${name} persisted evidence refs null`);
+      chk("governed", persisted.governance_tail_result_artifact_ref === ref, `a2-preA1: ${name} persisted validated ref kept`);
+    }
+  }
+  a2PreA1EmptyFilesPassed = failures === preA1EmptyFilesStart;
+
+  // ── 35. public governance ref type boundary (runtime own-key/type) ──
+  // Pre-validation raw inputs (null/number/object/empty/malformed/wrong-kind)
+  // must never become an own property of the governed runtime result, and the
+  // value must be undefined — never null/number/object/raw string. Only a
+  // validated ref may appear, exactly as the validated string.
+  const refBoundaryStart = failures;
+  {
+    const preValidationInputs: Array<[string, unknown]> = [
+      ["null", null],
+      ["number", 42],
+      ["object", { some: "object" }],
+      ["empty string", ""],
+      ["malformed string", "not-an-artifact-ref"],
+      ["wrong-kind string", `loop-artifact:v1:delivery_result:sha256:${"a".repeat(64)}`],
+    ];
+    for (const [name, raw] of preValidationInputs) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const result = await runGoverned(store, deliveryRef, raw as any);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-refb: ${name} ref rejected`);
+      chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef") === false, `a2-refb: ${name} ref result does not own governance key`);
+      chk("governed", result.governanceTailResultArtifactRef === undefined, `a2-refb: ${name} ref result value undefined`);
+      chk("governed", Object.keys(result).includes("governanceTailResultArtifactRef") === false, `a2-refb: ${name} ref result own-keys exclude governance key`);
+    }
+
+    // Validated refs that fail a LATER gate still own the key, and the value
+    // is exactly the validated string (never null/number/object/undefined).
+    const validatedRefCases: Array<[string, () => { store: FakeArtifactStore; deliveryRef: string; ref: string }]> = [
+      ["digest mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const built = buildLoopGovernanceTailResult(makeA1Input(deliveryRef));
+        const bytes = Buffer.from((built as any).bytes);
+        const ref = `loop-artifact:v1:governance_tail_result:sha256:${"0".repeat(64)}`;
+        store._inject(ref, bytes, "governance_tail_result");
+        return { store, deliveryRef, ref };
+      }],
+      ["identity mismatch", () => {
+        const store = new FakeArtifactStore();
+        const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+        const ref = injectValidA1(store, deliveryRef, { identity: { ...makeIdentity(), runId: "run-002" } });
+        return { store, deliveryRef, ref };
+      }],
+    ];
+    for (const [name, build] of validatedRefCases) {
+      const { store, deliveryRef, ref } = build();
+      const result = await runGoverned(store, deliveryRef, ref);
+      chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", `a2-refb: ${name} rejected`);
+      chk("governed", Object.prototype.hasOwnProperty.call(result, "governanceTailResultArtifactRef"), `a2-refb: ${name} owns the key`);
+      chk("governed", typeof result.governanceTailResultArtifactRef === "string" && result.governanceTailResultArtifactRef === ref, `a2-refb: ${name} value is exact validated string`);
+      chk("governed", result.governanceTailResultArtifactRef !== null && result.governanceTailResultArtifactRef !== undefined, `a2-refb: ${name} value not null/undefined`);
+    }
+  }
+  a2RefBoundaryPassed = failures === refBoundaryStart;
+
+  a2NegativeSectionPassed = failures === sectionFailures;
+}
+
+// ═══════════════════════════════════════ D09-A2: Markdown Escaping + Workspace Authority
+
+async function testA2MarkdownEscaping(): Promise<void> {
+  console.log("\n=== D09-A2: Markdown Escaping And Workspace Authority Tests ===");
+  // Section failure record: the markdown-escaping and final-workspace-authority
+  // markers require zero failures across this whole section plus the specific
+  // scenario groups that exercise each contract.
+  const sectionFailures = failures;
+  const markdownEscapeStart = failures;
+
+  // ── Escaping: ampersand / backslash / backtick / angle brackets ──
+  // Special characters are allowed by the identity validators, so they flow
+  // into the governed PR body where deterministic escaping must apply.
+  {
+    const specials: Array<[string, string]> = [
+      ["ampersand", "run&run"],
+      ["backslash", "run\\\\run"],
+      ["backtick", "run\`run"],
+      ["lt", "run<run"],
+      ["gt", "run>run"],
+    ];
+    for (const [name, runIdValue] of specials) {
+      const store = new FakeArtifactStore();
+      const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+      const identity = { ...makeIdentity(), runId: runIdValue };
+      const governanceRef = injectValidA1(store, deliveryRef, { identity });
+      const wsSnapshot = makeFakeWorkspaceSnapshot({ runId: identity.runId, taskStatusDigestSha256: "d".repeat(64) });
+      const gitState = makeGovernedGitState(wsSnapshot);
+      const runner = new FakeRunner();
+      runner.setHandler("git", gitState.createGitHandler());
+      runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+      const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+      const result = await pub.execute(makeRequest({
+        identity,
+        deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+        governanceTailResultArtifactRef: governanceRef,
+      }));
+      chk("governed", result.status === "succeeded", `a2-esc: ${name} flow succeeded`);
+      const body = runner.prBodies[0]!;
+      const escapedMap: Record<string, string> = {
+        ampersand: "&amp;", backslash: "&#92;", backtick: "&#96;", lt: "&lt;", gt: "&gt;",
+      };
+      const escaped = escapedMap[name]!;
+      chk("governed", body.includes(escaped), `a2-esc: ${name} escaped in governed body`);
+      chk("governed", !body.includes("Run ID: `<" + runIdValue + ">`"), `a2-esc: ${name} raw value not embedded unescaped`);
+      chk("governed", body.includes("## LOOP-DELIVERY-09 — Governed Delivery Publish"), `a2-esc: ${name} governed body header`);
+    }
+  }
+
+  // ── Markdown control input is rejected fail-closed before any body text ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const controlInput = makeA1Input(deliveryRef);
+    (controlInput.identity as Record<string, unknown>).runId = "run\u0001ctl";
+    const bytes = Buffer.from(JSON.stringify(controlInput) + "\n", "utf8");
+    const ref = `loop-artifact:v1:governance_tail_result:sha256:${sha256Hex(bytes)}`;
+    store._inject(ref, bytes, "governance_tail_result");
+    const wsSnapshot = makeFakeWorkspaceSnapshot({ taskStatusDigestSha256: "d".repeat(64) });
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: ref,
+    }));
+    chk("governed", result.reasonCode === "GOVERNANCE_TAIL_NOT_READY", "a2-esc: control input rejected");
+    chk("governed", runner.prBodies.length === 0, "a2-esc: no PR body produced for control input");
+  }
+
+  // ── Escaping order: no double escaping ──
+  {
+    const store = new FakeArtifactStore();
+    const deliveryRef = store.put("delivery_result", makeDeliveryResultBytes()).artifactRef;
+    const identity = { ...makeIdentity(), runId: "a&<\\\`b" };
+    const governanceRef = injectValidA1(store, deliveryRef, { identity });
+    const wsSnapshot = makeFakeWorkspaceSnapshot({ runId: identity.runId, taskStatusDigestSha256: "d".repeat(64) });
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      identity,
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.status === "succeeded", "a2-esc: mixed specials flow succeeded");
+    const body = runner.prBodies[0]!;
+    chk("governed", body.includes("a&amp;&lt;&#92;&#96;b"), "a2-esc: ordered single-pass escaping");
+    chk("governed", !body.includes("a&amp;amp;"), "a2-esc: no double escaping");
+  }
+
+  // ── Effective final workspace authority (A1 digest, not D06 digest) ──
+  a2MarkdownEscapePassed = failures === markdownEscapeStart;
+  const wsAuthorityStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    chk("governed", wsSnapshot.taskStatusDigestSha256 === "d".repeat(64), "a2-ws: snapshot bound to A1 final digest");
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.status === "succeeded", "a2-ws: effective workspace (A1 digest) authority accepted");
+    chk("governed", result.precommitHeadSha === "a".repeat(40), "a2-ws: precommit HEAD from effective final workspace");
+  }
+
+  // ── D03 snapshot must match effective workspace: task HEAD mismatch → conflict ──
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef } = makeGovernedEnv(store);
+    const wsSnapshot = makeFakeWorkspaceSnapshot({ taskStatusDigestSha256: "d".repeat(64), taskHeadSha: "e".repeat(40) });
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot), clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-ws: D03 task HEAD vs effective workspace -> WORKSPACE_STATE_CONFLICT");
+  }
+  a2WorkspaceAuthorityPassed = failures === wsAuthorityStart;
+
+  // ── Pre-staging final workspace DIGEST drift (governed) ──
+  // Bytes change between the first inspect and the pre-staging reconciliation
+  // while task HEAD, workspace path, task branch, changed path set, Source
+  // HEAD/WIP and base all stay identical. Path-set equality cannot prove the
+  // bytes still match the A1 final workspace, so the publisher must fail
+  // closed with WORKSPACE_STATE_CONFLICT BEFORE any git add / commit / push /
+  // PR create / intent put.
+  const driftDigestStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    // First inspect: A1 final digest. Pre-staging inspect: same path/branch/
+    // HEAD/taskHasChanges, different taskStatusDigestSha256.
+    const driftedSnapshot = makeFakeWorkspaceSnapshot({
+      taskStatusDigestSha256: "e".repeat(64),
+      taskHasChanges: true,
+    });
+    const wsMgr = new SequencedWorkspaceManager([wsSnapshot, driftedSnapshot]);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    let addCount = 0;
+    let commitCount = 0;
+    let pushCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args.includes("add")) addCount++;
+      if (args.includes("commit")) commitCount++;
+      if (args.includes("push")) pushCount++;
+      return gitState.createGitHandler()(args, stdin);
+    });
+    let prCreateCount = 0;
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "create") prCreateCount++;
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    // Count only publish-INTENT puts (terminalize may legitimately persist the
+    // failure result artifact — that is not a publish intent put).
+    let intentPutCount = 0;
+    const origPut = store.put.bind(store);
+    (store as any).put = (kind: string, content: string | Uint8Array): LoopStoredArtifact => {
+      const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+      if (bytes.length > 0 && bytes.toString("utf8").includes('"schema":"loop-governed-publish-intent-v1"')) {
+        intentPutCount++;
+      }
+      return origPut(kind, content);
+    };
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: wsMgr, clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-drift: digest drift -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("status digest"), "a2-drift: digest drift diagnostic");
+    chk("governed", addCount === 0, "a2-drift: no git add before drift block");
+    chk("governed", commitCount === 0, "a2-drift: no git commit before drift block");
+    chk("governed", pushCount === 0, "a2-drift: no git push before drift block");
+    chk("governed", prCreateCount === 0, "a2-drift: no gh pr create before drift block");
+    chk("governed", intentPutCount === 0, "a2-drift: no publish intent put before drift block");
+    chk("governed", result.commitCreated === false && result.commitRecovered === false &&
+      result.pushCreated === false && result.pushRecovered === false &&
+      result.prCreated === false && result.prRecovered === false, "a2-drift: commit/push/PR facts all false");
+    chk("governed", JSON.stringify(result.files) === JSON.stringify(D09A2_A1_FILES), "a2-drift: files stay validated A1 final files");
+    chk("governed", typeof result.governanceTailResultArtifactRef === "string" && result.governanceTailResultArtifactRef === governanceRef, "a2-drift: governance ref stays validated string");
+    chk("governed", result.recoveryStage === "governance_verified", "a2-drift: recoveryStage not past governance_verified");
+  }
+  a2DriftDigestPassed = failures === driftDigestStart;
+
+  // ── Pre-staging taskHasChanges drift (true → false, HEAD + digest unchanged) ──
+  // The workspace loses its uncommitted changes between the first inspect and
+  // the pre-staging reconciliation; staging must fail closed before any git
+  // add with WORKSPACE_STATE_CONFLICT.
+  const driftChangesStart = failures;
+  {
+    const store = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(store);
+    const driftedSnapshot = makeFakeWorkspaceSnapshot({
+      taskStatusDigestSha256: "d".repeat(64),
+      taskHasChanges: false,
+    });
+    const wsMgr = new SequencedWorkspaceManager([wsSnapshot, driftedSnapshot]);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    let addCount = 0;
+    let commitCount = 0;
+    let pushCount = 0;
+    const runner = new FakeRunner();
+    runner.setHandler("git", (args, stdin) => {
+      if (args.includes("add")) addCount++;
+      if (args.includes("commit")) commitCount++;
+      if (args.includes("push")) pushCount++;
+      return gitState.createGitHandler()(args, stdin);
+    });
+    let prCreateCount = 0;
+    runner.setHandler("gh", (args) => {
+      if (args[0] === "pr" && args[1] === "create") prCreateCount++;
+      return gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test")(args);
+    });
+    // Count only publish-INTENT puts (terminalize may legitimately persist the
+    // failure result artifact — that is not a publish intent put).
+    let intentPutCount = 0;
+    const origPut = store.put.bind(store);
+    (store as any).put = (kind: string, content: string | Uint8Array): LoopStoredArtifact => {
+      const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+      if (bytes.length > 0 && bytes.toString("utf8").includes('"schema":"loop-governed-publish-intent-v1"')) {
+        intentPutCount++;
+      }
+      return origPut(kind, content);
+    };
+    const pub = new LoopDeliveryPublisher(makeOptions({ artifactStore: store, runner, workspaceManager: wsMgr, clock: makeDeterministicClock() }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef, commitSubject: "feat: governed", prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.reasonCode === "WORKSPACE_STATE_CONFLICT", "a2-drift: changes lost -> WORKSPACE_STATE_CONFLICT");
+    chk("governed", result.safeMessage.includes("changes lost"), "a2-drift: changes-lost diagnostic");
+    chk("governed", addCount === 0, "a2-drift: changes-lost no git add");
+    chk("governed", commitCount === 0, "a2-drift: changes-lost no git commit");
+    chk("governed", pushCount === 0, "a2-drift: changes-lost no git push");
+    chk("governed", prCreateCount === 0, "a2-drift: changes-lost no gh pr create");
+    chk("governed", intentPutCount === 0, "a2-drift: changes-lost no intent put");
+    chk("governed", result.commitCreated === false && result.pushCreated === false && result.prCreated === false, "a2-drift: changes-lost commit/push/PR facts false");
+  }
+  a2DriftChangesPassed = failures === driftChangesStart;
+  a2MarkdownSectionPassed = failures === sectionFailures;
+
+  // ── Final D09-A2 marker derivation ──
+  // Each functional marker requires: (a) the section(s) that exercise its
+  // contract ran with zero failing assertions (section-level failure counts),
+  // and (b) every scenario group bound to that contract passed. A marker can
+  // never borrow success from an unrelated scenario group, and no marker is
+  // ever set by a hard-coded true.
+  a2StandaloneByteCompatFlag = a2StandaloneSectionPassed && a2FreshGoldenPassed &&
+    a2StandaloneRecoveryPassed && a2StandaloneStoreFailurePassed;
+  a2GovernedModeFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2PosParserPathPassed && a2RefBoundaryPassed;
+  a2GovernanceArtifactBindingFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2NegRefBoundaryPassed && a2NegStoreReadPassed &&
+    a2NegA1ContentPassed && a2NegIdentityBindingPassed && a2NegDeliveryBindingPassed &&
+    a2NegImplFilesPassed && a2NegWorkspaceProvenancePassed && a2NegWorkspaceStatePassed &&
+    a2NegIntentBindingPassed && a2NegCommitRecoveryPassed && a2NegPrStatePassed &&
+    a2NegExceptionLeakPassed && a2PreA1EmptyFilesPassed;
+  a2FinalWorkspaceAuthorityFlag = a2PositiveSectionPassed && a2NegativeSectionPassed && a2MarkdownSectionPassed &&
+    a2PosFreshFlowPassed && a2NegWorkspaceStatePassed && a2WorkspaceAuthorityPassed &&
+    a2DriftDigestPassed && a2DriftChangesPassed;
+  a2GovernedStagingFlag = a2PositiveSectionPassed && a2NegativeSectionPassed && a2PosStagingPassed;
+  a2GovernedIntentResultFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2PreA1EmptyFilesPassed;
+  a2GovernedCommitRecoveryFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosRecoveryPassed && a2NegIntentBindingPassed && a2NegCommitRecoveryPassed;
+  a2GovernedDraftPrFlag = a2PositiveSectionPassed && a2NegativeSectionPassed &&
+    a2PosFreshFlowPassed && a2NegPrStatePassed;
+  a2MarkdownEscapingFlag = a2MarkdownSectionPassed && a2MarkdownEscapePassed;
+}
+
 const SHA40_RE = /^[0-9a-f]{40}$/;
 
 async function main(): Promise<void> {
@@ -5606,6 +7277,12 @@ async function main(): Promise<void> {
   await testR3TypedErrorClassIdentity();
   await testR3NameStatusFinalNul();
 
+  // D09-A2 governed mode suites
+  await testA2StandaloneRegression();
+  await testA2GovernedPositive();
+  await testA2GovernedNegative();
+  await testA2MarkdownEscaping();
+
   verifyRealSourceUnchanged();
   cleanupAll();
 
@@ -5644,6 +7321,19 @@ async function main(): Promise<void> {
   console.log("D07_R2_REGRESSION_MARKERS_PRESERVED",
     stageAwareVerifiedFlag && d03FullAuthFlag && strictParserFlag && d02TaxonomyFlag &&
     deadlineTermFlag && deliverySchemaFlag && resultConsistentFlag && realIntegrationFlag);
+
+  // D09-A2 Markers — set true only by the corresponding real assertions
+  console.log("D09_A2_GOVERNED_MODE_VERIFIED", a2GovernedModeFlag);
+  console.log("D09_A2_STANDALONE_BYTE_COMPATIBILITY_VERIFIED", a2StandaloneByteCompatFlag);
+  console.log("D09_A2_GOVERNANCE_ARTIFACT_BINDING_VERIFIED", a2GovernanceArtifactBindingFlag);
+  console.log("D09_A2_FINAL_WORKSPACE_AUTHORITY_VERIFIED", a2FinalWorkspaceAuthorityFlag);
+  console.log("D09_A2_GOVERNED_STAGING_VERIFIED", a2GovernedStagingFlag);
+  console.log("D09_A2_GOVERNED_INTENT_RESULT_VERIFIED", a2GovernedIntentResultFlag);
+  console.log("D09_A2_GOVERNED_COMMIT_RECOVERY_VERIFIED", a2GovernedCommitRecoveryFlag);
+  console.log("D09_A2_GOVERNED_DRAFT_PR_VERIFIED", a2GovernedDraftPrFlag);
+  console.log("D09_A2_MARKDOWN_ESCAPING_VERIFIED", a2MarkdownEscapingFlag);
+  console.log("D09_A2_REAL_SOURCE_UNCHANGED", a2RealSourceUnchangedFlag);
+  console.log("D09_A2_TEMP_CLEANUP_COMPLETE", a2TempCleanupFlag);
 
   const total = Object.values(checks).reduce((a, b) => a + b, 0);
   console.log(`\nD07_TARGETED_SUMMARY total=${total} passed=${total - failures} failed=${failures}`);
@@ -5684,6 +7374,18 @@ async function main(): Promise<void> {
   // R3 markers must both be true — a false marker fails the suite
   if (!r3TypedErrorClassIdentityFlag || !r3NameStatusFinalNulFlag) {
     console.error("\nFAIL: one or more R3 markers are false — scenarios did not execute/pass");
+    process.exit(1);
+  }
+
+  // D09-A2 markers must ALL be true — a false marker fails the suite
+  const a2Markers = [
+    a2GovernedModeFlag, a2StandaloneByteCompatFlag, a2GovernanceArtifactBindingFlag,
+    a2FinalWorkspaceAuthorityFlag, a2GovernedStagingFlag, a2GovernedIntentResultFlag,
+    a2GovernedCommitRecoveryFlag, a2GovernedDraftPrFlag, a2MarkdownEscapingFlag,
+    a2RealSourceUnchangedFlag, a2TempCleanupFlag,
+  ];
+  if (a2Markers.some((m) => m !== true)) {
+    console.error("\nFAIL: one or more D09-A2 markers are false — scenarios did not execute/pass");
     process.exit(1);
   }
 

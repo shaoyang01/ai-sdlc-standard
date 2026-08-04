@@ -281,7 +281,19 @@
 - **Expected evidence**：仍要求未来 production coordinator、governed publisher 与真实证据链；A1 实施不是 D09 production implementation evidence。
 - **Relationship to previous stage**：承接 D08 自然语言需求路径（`direct / DIRECT_READY`）。
 - **Relationship to next stage**：为 D10 真实单仓验收提供稳定治理边界。
-- **Definition provenance**：D09 exact contract 已由项目总控接受，记录于本路线；D09-A1 governance-tail-result contract 已实现于 task branch 并 pending 独立 review；accepted exact contract 是 planning 事实，不是 production implementation evidence；D09 production 仍未实施。
+- **Definition provenance**：D09 exact contract 已由项目总控接受，记录于本路线；D09-A1 governance-tail-result contract 已进入 Source，且 D09-A1 implementation review 与 post-merge closure 已完成；D07 已存在可选 governed publish mode（D09-A2 candidate，pending 独立 review），governed mode 消费 A1 并以 A1 final governed files 作为发布依据；accepted exact contract 是 planning 事实，不是 production implementation evidence；D09 production 仍未实施。
+
+本树能力记录（D09-A2 candidate 对应树）：
+
+- D07 保留 standalone mode（字节级兼容）；
+- D07 存在可选 governed mode；
+- governed mode 消费 A1（`loop-governance-tail-result-v1`）；
+- governed mode 以 A1 final governed files 发布；
+- D07 不执行 Shared Tail；
+- D07 不 mark Ready；
+- D07 不 merge；
+- D09 production coordinator 仍不存在；
+- D09 overall 仍未实现。
 
 ## LOOP-DELIVERY-10
 
