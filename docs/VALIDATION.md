@@ -344,11 +344,11 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 - 本任务不创建 commit/push/PR 的生产副作用（验收在 task branch 内完成），不建立 requirement completion，不表示 D09 已实现，不表示 merge 或 publication 授权。
 - 跨 artifact 的 identity、digest 与 byte binding 由未来 D09-B 与 D09-A2 执行；A1 只验证 ref 格式。
 - A1 不重新判断 `PASS_WITH_RISK` 的业务风险接受；D09-B 在构建 A1 artifact 前要求 Tail 结果状态为 `completed` 并携带 completion package（A1 builder 全量验证 package 与 Tail Completion Gate）。
-- CI success 不是 implementation review PASS；D09-B 实现已提交，仍 pending project controller review。
+- CI success 不是 implementation review PASS；D09-B 已通过最终实施审查（D09-B-R1/R2 为历史审查过程）并随 PR #60 合并至事实分支（candidate head `6ac187a`，merge commit `845ff9ee`），post-merge fact-branch verification 通过，D09 Source closure 完成；D10 仍未授权。
 
 ## D09-A2 Governed Delivery Publisher Validation
 
-`core/loop-delivery-publisher.ts` 与 `tests/loop-delivery-publisher.test.ts` 组成 D09-A2 governed delivery publish 验证（D09-A2 candidate，pending 独立 review）：
+`core/loop-delivery-publisher.ts` 与 `tests/loop-delivery-publisher.test.ts` 组成 D09-A2 governed delivery publish 验证（D09-A2 governed publisher 已进入 Source）：
 
 - **Standalone byte compatibility**：governance ref 缺失时，D07 standalone 行为保持字节级兼容——`loop-publish-intent-v1` intent bytes/SHA-256、commit message、`loop-publish-pr-body-v1` PR body/SHA-256、`loop-publish-result-v1` result bytes、recovery intent、trace stages/顺序、runtime own keys 与 result-store-failure 行为均以编辑前固定常量断言；standalone runtime result 不新增值为 `undefined` 的 own property，standalone body 不调用 governed Markdown escaping helper。
 - **A1 parser 复用**：governed 模式从当前 Source 导入 `parseLoopGovernanceTailResultBytes`、`LOOP_GOVERNANCE_TAIL_RESULT_MAX_BYTES` 与 A1 readonly 类型；不复制 A1 validator；ref 精确匹配 `governance_tail_result` kind；bytes 超限在复制/解析前拒绝；ref digest 与实际 bytes SHA-256 精确相等；parser 失败 fail-closed；只使用 parser 返回的 canonical frozen value；不读取或执行 A1 中的 evidence 文件。
@@ -369,11 +369,11 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 
 - 本模块与测试不运行真实 Shared Tail，不产生 A1 artifact，不执行 D09-B，不生成 D09 terminal result，不建立 requirement completion，不 mark Ready，不 merge。
 - D09-A2 只实现 governed publish 模式本身；governed 消费已进入 Source 的 A1，不重新判断 Tail Completion Gate。
-- CI success 不是 implementation review PASS；D09-B 实现已提交，仍 pending project controller review。
+- CI success 不是 implementation review PASS；D09-B 已通过最终实施审查（D09-B-R1/R2 为历史审查过程）并随 PR #60 合并至事实分支（candidate head `6ac187a`，merge commit `845ff9ee`），post-merge fact-branch verification 通过，D09 Source closure 完成；D10 仍未授权。
 
 ## D09-B Production Coordinator Validation
 
-`core/loop-production-coordinator.ts` 与 `tests/loop-production-coordinator.test.ts` 组成 D09-B production coordinator 验证（D09-B candidate，D09-B-R1/R2 correction rounds，pending project controller review）：
+`core/loop-production-coordinator.ts` 与 `tests/loop-production-coordinator.test.ts` 组成 D09-B production coordinator 验证（D09-B 已通过最终实施审查；D09-B-R1/R2 correction rounds 为历史审查过程；PR #60 已合并至事实分支）：
 
 - **唯一根输入**：只接受固定 `loop-artifact:v1:orchestration_result:sha256:<digest>` artifact ref；不接受内存 requirement/design/executor-input 对象、浮动 ref 或调用者声称的 route/status；`executor_input` ref 必须从经过验证的 orchestration artifact 取得；request 不接受 `recoveryPublishIntentArtifactRef`（作为未知字段 fail-closed，D09-B 不承载 publish-intent 跨进程恢复）。
 - **Producer-owned parsers（R1）**：四个 canonical parsers 是 D08/D06/D07 的 additive public contracts，随各 producer 的 canonical builder/常量共同演进：`parseLoopOrchestrationResultBytes`/`parseLoopDirectExecutorInputBytes` 在 `loop-requirement-design-orchestrator.ts`（D08），`parseLoopDeliveryResultBytes` 在 `loop-autonomous-delivery-loop.ts`（D06），`parseLoopDeliveryPublishResultBytes` 在 `loop-delivery-publisher.ts`（D07）；coordinator 只 import/consume，不再定义 parser、不再镜像 producer 的 route/status/reason/trace 枚举与字段顺序；均为 bounded defensive copy、strict UTF-8、exact keys、canonical property order、canonical bytes 重建 byte-identical round-trip、artifact-ref/digest/identity/material binding、no-throw、fail-closed；不改变任何既有 artifact bytes，不改变 D08/D06/D07 既有执行结果、公开字段与行为（D07 standalone 与 governed 兼容合同保持，standalone/governed golden bytes 与 digest 不变）。
@@ -392,7 +392,9 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 - 本模块与测试不运行真实 Shared Tail、不执行真实 Git/network、不创建真实 workspace；D08 orchestration/executor input 由真实 D08 orchestrator（fake agent/reviewer）与真实 D01 temp store 生成；producer parser 回归在 D08/D06/D07 各自测试文件内（真实 producer artifact byte-identical round-trip、digest 不变、golden compatibility、adversarial bytes）。
 - 测试期间 real Source HEAD/status/diff/staging 保持不变（`D09_B_REAL_SOURCE_UNCHANGED`）；全部临时目录清理成功（`D09_B_TEMP_CLEANUP_COMPLETE`）。
 - 本任务不产生 commit/push/PR 生产副作用，不 mark Ready，不 merge，不 publish Exchange，不修改 Personal KB；不建立 requirement completion；不表示 merge 或 publication 授权。
-- CI success 不是 implementation review PASS；D09-B candidate 为 `implemented_pending_project_controller_review`，D09 overall 在项目总控 Review PASS 前保持 `not_yet_established`。
+- CI success 不是 implementation review PASS；D09-B 已通过最终实施审查（历史审查过程：D09-B-R1 集中修复、D09-B-R2 窄范围修复 F-008 order-independent typed record snapshot），PR #60 已合并至事实分支（candidate head `6ac187ac`，merge commit `845ff9ee`），post-merge fact-branch verification 通过，D09 Source closure 完成。
+- CI 可观测性（经 GitHub API 实测）：candidate head `6ac187ac` 的 CI 为 success（workflow run #182，pull_request 事件，check-runs 4 项全部 success）；merge commit `845ff9ee` 的 CI 可独立观测且为 success（workflow run #183，push 事件至 `feature/loop-runtime-v1`，head_sha 精确匹配 merge commit，check-runs 4 项全部 success）；merge SHA 的 legacy commit-status endpoint 无 entries（total_count=0）。
+- D09 Source closure 不等于真实单仓 acceptance；D10 仍未授权（D10 checkpoint、完整崩溃恢复、真实 provider binding 与真实单仓硬化均未完成）；D09 success 不等于 requirement completion、Ready、后续 merge 授权或 publication；Exchange 与 Personal KB 未发布。
 
 ## validate-skill-contracts.rb 检查什么
 
