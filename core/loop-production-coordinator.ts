@@ -74,6 +74,13 @@
 //     (D07).
 // This module only imports and consumes them; it defines no producer schema
 // mirrors, key orders or vocabularies of its own.
+// - F-008 (R2): the coordinator-owned typed records — the request, the
+//   identity, the Shared Tail top-level result and the completion package
+//   root — are order-independent: caller property insertion order is never
+//   part of the public contract. Descriptor values are captured exactly once
+//   and the internal snapshots are rebuilt in fixed field order (frozen,
+//   reference-isolated). The producer-owned canonical artifact parsers
+//   (D08/D06/D07) and the A1 parser remain strictly order-sensitive.
 
 import { createHash } from "node:crypto";
 import { validateLoopRunIdentity } from "./loop-run-state";
@@ -149,7 +156,9 @@ const MIN_PUBLISH_BUDGET_MS = MIN_MAX_TOTAL_DURATION_MS;
 const EMPTY_TASK_STATUS_DIGEST_SHA256 = createHash("sha256").update(new Uint8Array(0)).digest("hex");
 
 // ═══════════════════════════════════════ Snapshot key contracts
-// (coordinator-owned request/identity/Tail contracts — NOT producer schemas)
+// (coordinator-owned request/identity/Tail contracts — NOT producer schemas;
+// F-008: exact-key by membership, order-independent — caller property
+// insertion order is never a contract)
 
 const COORDINATOR_OPTION_KEYS = [
   "artifactStore", "workspaceManager", "deliveryLoop", "publisherFactory", "sharedGovernanceTail",
@@ -194,11 +203,16 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Exact-key descriptor snapshot of a plain record: own keys must equal the
- * allowed keys exactly (count and canonical order); every key must be a data
- * descriptor. Symbols, `__proto__`, accessors, non-plain prototypes and any
- * reflection failure (Proxy traps / revoked Proxies) fail closed. The result
- * is a fresh null-prototype record that shares no reference with the input.
+ * Exact-key descriptor snapshot of a plain record (F-008): own keys must
+ * equal the allowed keys exactly (count and membership — NOT caller
+ * insertion order); every key must be a data descriptor. Symbols,
+ * `__proto__`, accessors, non-plain prototypes and any reflection failure
+ * (Proxy traps / revoked Proxies) fail closed. Descriptor values are
+ * captured exactly once in the input's actual key order, then the snapshot
+ * is rebuilt in the internal `allowed` order — so property insertion order
+ * is never part of the contract, the caller object is never read again (no
+ * getters, no TOCTOU), and the result is a fresh null-prototype record that
+ * shares no reference with the input.
  */
 function scanExactRecord(value: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
   if (!isPlainRecord(value)) throw new Error(`${label} must be a plain object`);
@@ -209,12 +223,15 @@ function scanExactRecord(value: unknown, allowed: readonly string[], label: stri
     throw new Error(`${label} ownKeys reflection failed`);
   }
   if (keys.length !== allowed.length) throw new Error(`${label} must have exactly the canonical keys`);
-  const out = Object.create(null) as Record<string, unknown>;
+  const allowedSet = new Set<string>(allowed);
+  // One-time descriptor capture in the input's actual key order. The
+  // caller's insertion order is a presentation detail, never a contract.
+  const captured = Object.create(null) as Record<string, unknown>;
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i]!;
     if (typeof key === "symbol") throw new Error(`${label} must not carry symbol keys`);
     if (key === "__proto__") throw new Error(`${label} must not carry __proto__`);
-    if (key !== allowed[i]) throw new Error(`${label} must have the canonical keys in canonical order`);
+    if (!allowedSet.has(key)) throw new Error(`${label} contains an unknown key`);
     let descriptor: PropertyDescriptor | undefined;
     try {
       descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -226,8 +243,15 @@ function scanExactRecord(value: unknown, allowed: readonly string[], label: stri
       throw new Error(`${label} must not carry accessors`);
     }
     if (!("value" in descriptor)) throw new Error(`${label} key has no value`);
+    captured[key] = descriptor.value;
+  }
+  // Rebuild in the internal canonical order; the caller's insertion order is
+  // never preserved and never required.
+  const out = Object.create(null) as Record<string, unknown>;
+  for (const key of allowed) {
+    if (!(key in captured)) throw new Error(`${label} is missing the canonical key ${key}`);
     Object.defineProperty(out, key, {
-      value: descriptor.value,
+      value: captured[key],
       writable: false,
       enumerable: true,
       configurable: false,
@@ -1118,9 +1142,11 @@ export class LoopProductionCoordinator {
   /**
    * F-004: descriptor-based exact-key snapshot of the tail result. The
    * top-level keys are exactly `status / reasonCode / safeMessage` (with
-   * `completionPackage` present only for completed results). Accessors,
-   * symbols, `__proto__`, extra/missing keys, non-plain prototypes and
-   * reflection failures are rejected; the completed reason matrix is:
+   * `completionPackage` present only for completed results). F-008: caller
+   * property insertion order is NOT a contract — the snapshot is rebuilt in
+   * the fixed internal order. Accessors, symbols, `__proto__`, extra/missing
+   * keys, non-plain prototypes and reflection failures are rejected; the
+   * completed reason matrix is:
    *   completed ⟺ reasonCode === GOVERNANCE_TAIL_COMPLETED ⟺ package present.
    * All later reads use only the returned frozen snapshot.
    */
@@ -1176,7 +1202,17 @@ export class LoopProductionCoordinator {
     }
   }
 
-  /** Top-level tail result: exactly `status/reasonCode/safeMessage` (+ completionPackage when completed). */
+  /**
+   * Top-level tail result (F-008): exactly `status / reasonCode /
+   * safeMessage` (+ `completionPackage` only for completed results), with
+   * caller insertion order NOT part of the contract. Descriptor values are
+   * captured exactly once in the input's actual key order; unknown keys,
+   * accessors, symbols, `__proto__`, non-plain prototypes and reflection
+   * failures are rejected. The presence of `completionPackage` is decided
+   * from the already-captured `status` value — the original tail object is
+   * never re-read afterwards — and the snapshot is rebuilt in the fixed
+   * internal `TAIL_RESULT_KEYS` order.
+   */
   private scanTailTopLevel(tailResult: unknown): Record<string, unknown> {
     if (!isPlainRecord(tailResult)) throw new Error("tail result is not a plain object");
     let keys: Array<string | symbol>;
@@ -1188,12 +1224,13 @@ export class LoopProductionCoordinator {
     if (keys.length < 3 || keys.length > TAIL_RESULT_KEYS.length) {
       throw new Error("tail result must have exactly the canonical keys");
     }
-    const out = Object.create(null) as Record<string, unknown>;
+    const allowedSet = new Set<string>(TAIL_RESULT_KEYS);
+    const captured = Object.create(null) as Record<string, unknown>;
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]!;
       if (typeof key === "symbol") throw new Error("tail result must not carry symbol keys");
       if (key === "__proto__") throw new Error("tail result must not carry __proto__");
-      if (key !== TAIL_RESULT_KEYS[i]) throw new Error("tail result must have the canonical keys in canonical order");
+      if (!allowedSet.has(key)) throw new Error("tail result contains an unknown key");
       let descriptor: PropertyDescriptor | undefined;
       try {
         descriptor = Object.getOwnPropertyDescriptor(tailResult, key);
@@ -1205,8 +1242,25 @@ export class LoopProductionCoordinator {
         throw new Error("tail result must not carry accessors");
       }
       if (!("value" in descriptor)) throw new Error("tail result key has no value");
+      captured[key] = descriptor.value;
+    }
+    for (const key of ["status", "reasonCode", "safeMessage"]) {
+      if (!(key in captured)) throw new Error(`tail result is missing the canonical key ${key}`);
+    }
+    // The completion-package presence matrix is decided by the captured
+    // status value only; the original object is never re-read.
+    if (captured.status === "completed") {
+      if (!("completionPackage" in captured)) {
+        throw new Error("completed tail result must carry a completion package");
+      }
+    } else if ("completionPackage" in captured) {
+      throw new Error("non-completed tail result must not carry a completion package");
+    }
+    const out = Object.create(null) as Record<string, unknown>;
+    for (const key of TAIL_RESULT_KEYS) {
+      if (!(key in captured)) continue;
       Object.defineProperty(out, key, {
-        value: descriptor.value,
+        value: captured[key],
         writable: false,
         enumerable: true,
         configurable: false,
@@ -1217,11 +1271,13 @@ export class LoopProductionCoordinator {
 
   /**
    * Bounded, descriptor-based, reference-isolated snapshot of the completion
-   * package. The root keys are exactly the A1 Tail-owned fields; every nested
-   * plain record/array is rebuilt fresh with depth/node/array/string bounds;
-   * cycles, accessors, symbols, `__proto__`, non-plain prototypes and
-   * reflection failures are rejected. This is structural safety capture only —
-   * the real A1 builder remains the full semantic validator.
+   * package. The root keys are exactly the A1 Tail-owned fields (F-008:
+   * exact-key by membership — caller insertion order is not a contract; the
+   * snapshot is rebuilt in the fixed `TAIL_PACKAGE_ROOT_KEYS` order); every
+   * nested plain record/array is rebuilt fresh with depth/node/array/string
+   * bounds; cycles, accessors, symbols, `__proto__`, non-plain prototypes
+   * and reflection failures are rejected. This is structural safety capture
+   * only — the real A1 builder remains the full semantic validator.
    */
   private captureTailCompletionPackage(value: unknown): Readonly<LoopGovernanceTailCompletionPackage> {
     const rec = scanExactRecord(value, TAIL_PACKAGE_ROOT_KEYS, "tail completion package");

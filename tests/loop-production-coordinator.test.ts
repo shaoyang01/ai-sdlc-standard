@@ -2411,6 +2411,340 @@ async function sectionClock(): Promise<void> {
   mark("D09_B_DEADLINE_VERIFIED");
 }
 
+// ═══════════════════════════════════════ Section: F-008 order-independent typed records
+
+const IDENTITY_FIELD_ORDER = [
+  "runId", "requirementId", "repository", "repositoryPath", "baseBranch", "expectedBaseSha",
+  "taskBranch", "controlRoot", "createdAt",
+];
+const PACKAGE_ROOT_ORDER = [
+  "final_workspace", "implementation_files", "files", "docflow", "business_domain_sync",
+  "reconcile", "entry_coverage", "regate", "manifest", "tail_gate", "blocking_items", "elapsed_ms",
+];
+
+function buildIdentityInOrder(order: readonly string[]): any {
+  const identity: any = {};
+  for (const field of order) identity[field] = IDENTITY[field];
+  return identity;
+}
+
+function buildTailResultInOrder(order: readonly string[], values: Record<string, unknown>): LoopSharedGovernanceTailResult {
+  const out: Record<string, unknown> = {};
+  for (const key of order) {
+    if (key in values) out[key] = values[key];
+  }
+  return out as unknown as LoopSharedGovernanceTailResult;
+}
+
+function buildPackageInOrder(order: readonly string[], source: any): any {
+  const out: Record<string, unknown> = {};
+  for (const key of order) out[key] = source[key];
+  return out;
+}
+
+function reorderFirstTwoKeys(bytes: Buffer): Buffer {
+  const parsed = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
+  const keys = Object.keys(parsed);
+  if (keys.length < 2) throw new Error("fixture has fewer than two keys");
+  const out: Record<string, unknown> = {};
+  out[keys[1]!] = parsed[keys[1]!];
+  out[keys[0]!] = parsed[keys[0]!];
+  for (let i = 2; i < keys.length; i++) out[keys[i]!] = parsed[keys[i]!];
+  return Buffer.from(JSON.stringify(out) + "\n", "utf8");
+}
+
+async function sectionOrderIndependence(): Promise<void> {
+  startSection("order_independence");
+  console.log("\n=== F-008 Order-Independent Typed Record Snapshots ===");
+
+  // 7.1 reordered request: fields inserted in reversed order are accepted
+  {
+    const { coordinator, delivery, tail, publisher, factory, store } = harness();
+    const reordered = { orchestrationResultArtifactRef: ORCH_REF, identity: IDENTITY };
+    const result = await coordinator.execute(reordered as LoopProductionCoordinatorRequest);
+    chk(result.status === "succeeded", "reordered request accepted (not INVALID_INPUT)");
+    chk(delivery.calls.length === 1 && tail.calls.length === 1 && factory.createCalls.length === 1 && publisher.calls.length === 1,
+      "reordered request runs the expected chain exactly once");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 1, "reordered request A1 put once");
+  }
+
+  // 7.2 reordered identity: fully reversed order and a fixed permutation
+  for (const [label, order] of [
+    ["fully reversed", [...IDENTITY_FIELD_ORDER].reverse()],
+    ["fixed permutation", ["taskBranch", "createdAt", "runId", "controlRoot", "requirementId", "repositoryPath", "baseBranch", "expectedBaseSha", "repository"]],
+  ] as Array<[string, string[]]>) {
+    const { coordinator, delivery, tail, publisher, factory } = harness();
+    const identity = buildIdentityInOrder(order);
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "succeeded", `reordered identity accepted (${label})`);
+    chk(delivery.calls.length === 1, `D06 ran once (${label})`);
+    const d06Identity = delivery.calls[0]!.identity;
+    chk(deepEqual(d06Identity, IDENTITY), `D06 received the correct identity fields (${label})`);
+    chk(d06Identity !== identity, `dependency identity is not the caller object reference (${label})`);
+    chk(Object.isFrozen(d06Identity), `dependency identity is deep frozen (${label})`);
+    chk(deepEqual(Object.keys(d06Identity as any), IDENTITY_FIELD_ORDER), `internal identity field order is fixed (${label})`);
+    chk(tail.calls.length === 1 && deepEqual(tail.calls[0]!.input.identity, IDENTITY), `Tail received the correct identity (${label})`);
+    chk(publisher.calls.length === 1 && deepEqual(publisher.calls[0]!.request.identity, IDENTITY), `D07 received the correct identity (${label})`);
+    chk(factory.createCalls.length === 1, `factory create once (${label})`);
+    // caller mutation after the run cannot change the already-captured snapshot
+    identity.taskBranch = "codex/mutated";
+    identity.expectedBaseSha = "e".repeat(40);
+    chk(d06Identity.taskBranch === "codex/d09b-task" && d06Identity.expectedBaseSha === HEAD0,
+      `post-run caller mutation does not affect the snapshot (${label})`);
+  }
+  // caller mutation during the chain cannot change what dependencies receive
+  {
+    const { coordinator, delivery, tail, publisher } = harness();
+    const identity = buildIdentityInOrder([...IDENTITY_FIELD_ORDER].reverse());
+    const promise = coordinator.execute(makeRequest({ identity }));
+    identity.taskBranch = "codex/mutated-task";
+    identity.repositoryPath = "/tmp/mutated-repo";
+    identity.expectedBaseSha = "e".repeat(40);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    identity.runId = "mutated-run";
+    identity.createdAt = "2099-01-01T00:00:00.000Z";
+    const result = await promise;
+    chk(result.status === "succeeded", "reordered identity run succeeds under caller mutation");
+    const d06Req = delivery.calls[0]!;
+    chk(d06Req.identity.taskBranch === "codex/d09b-task" && d06Req.identity.repositoryPath === IDENTITY.repositoryPath
+      && d06Req.identity.expectedBaseSha === HEAD0 && d06Req.identity.runId === "run-d09b" && d06Req.identity.createdAt === TS,
+      "D06 received the original reordered-identity snapshot");
+    chk(d06Req.identity !== identity, "dependency identity is not the mutated caller object");
+    chk(tail.calls.length === 1 && tail.calls[0]!.input.identity.taskBranch === "codex/d09b-task", "Tail received the original snapshot");
+    chk(publisher.calls.length === 1 && publisher.calls[0]!.request.identity.taskBranch === "codex/d09b-task", "D07 received the original snapshot");
+  }
+
+  // 7.3 reordered completed Tail result: completionPackage-first insertion order
+  {
+    const { coordinator, tail, store, publisher, factory } = harness();
+    tail.result = buildTailResultInOrder(["completionPackage", "safeMessage", "reasonCode", "status"], {
+      completionPackage: makeTailPackage(),
+      safeMessage: "completed",
+      reasonCode: "GOVERNANCE_TAIL_COMPLETED",
+      status: "completed",
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "reordered completed tail result accepted (not GOVERNANCE_TAIL_INVALID)");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 1, "A1 built/put/read-back once");
+    chk(publisher.calls.length === 1, "D07 entered once");
+    chk(factory.createCalls.length === 1, "factory create once");
+    chk(tail.calls.length === 1, "tail called once");
+  }
+
+  // 7.4 reordered non-completed Tail results: pending/in_progress/blocked/failed
+  const tailOrders = [
+    ["safeMessage", "reasonCode", "status"],
+    ["reasonCode", "status", "safeMessage"],
+    ["status", "safeMessage", "reasonCode"],
+  ];
+  const nonCompletedStatuses: Array<[string, string, string]> = [
+    ["pending", "blocked", "GOVERNANCE_TAIL_NOT_COMPLETED"],
+    ["in_progress", "blocked", "GOVERNANCE_TAIL_NOT_COMPLETED"],
+    ["blocked", "blocked", "GOVERNANCE_TAIL_NOT_COMPLETED"],
+    ["failed", "failed", "GOVERNANCE_TAIL_FAILED"],
+  ];
+  for (let i = 0; i < nonCompletedStatuses.length; i++) {
+    const [status, expectedStatus, expectedReason] = nonCompletedStatuses[i]!;
+    const { coordinator, tail, store, publisher, factory } = harness();
+    tail.result = buildTailResultInOrder(tailOrders[i % tailOrders.length]!, {
+      status,
+      reasonCode: "SOME_REASON",
+      safeMessage: "tail not done",
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === expectedStatus && result.reasonCode === expectedReason,
+      `reordered non-completed tail (${status}) maps to ${expectedReason}`);
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, `no A1 put (${status})`);
+    chk(factory.createCalls.length === 0 && publisher.calls.length === 0, `no factory/publisher execute (${status})`);
+  }
+
+  // 7.5 reordered completion package root: reversed root insertion order accepted
+  {
+    const { coordinator, tail, store } = harness();
+    const pkg = makeTailPackage() as any;
+    const reordered = buildPackageInOrder([...PACKAGE_ROOT_ORDER].reverse(), pkg);
+    tail.result = buildTailResultInOrder(["status", "safeMessage", "reasonCode", "completionPackage"], {
+      status: "completed",
+      reasonCode: "GOVERNANCE_TAIL_COMPLETED",
+      safeMessage: "ok",
+      completionPackage: reordered,
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "reordered completion package root accepted");
+    const a1Puts = store.puts.filter((p) => p.kind === "governance_tail_result");
+    chk(a1Puts.length === 1, "A1 put once");
+    if (a1Puts.length === 1) {
+      const parsed = parseLoopGovernanceTailResultBytes(a1Puts[0]!.bytes);
+      chk(parsed.ok && parsed.value.implementation_files.length === 2, "A1 artifact stays canonical");
+    }
+  }
+  // A1 artifact bytes are byte-identical across package root insertion orders
+  {
+    const runAndDigest = async (order: readonly string[]): Promise<string> => {
+      const { coordinator, tail, store } = harness();
+      const pkg = makeTailPackage() as any;
+      tail.result = buildTailResultInOrder(["completionPackage", "safeMessage", "reasonCode", "status"], {
+        completionPackage: buildPackageInOrder(order, pkg),
+        safeMessage: "completed",
+        reasonCode: "GOVERNANCE_TAIL_COMPLETED",
+        status: "completed",
+      });
+      const result = await coordinator.execute(makeRequest());
+      chk(result.status === "succeeded", "package-order run succeeds");
+      const puts = store.puts.filter((p) => p.kind === "governance_tail_result");
+      chk(puts.length === 1, "A1 put once");
+      return sha256Hex(puts[0]!.bytes);
+    };
+    const canonicalDigest = await runAndDigest(PACKAGE_ROOT_ORDER);
+    const reversedDigest = await runAndDigest([...PACKAGE_ROOT_ORDER].reverse());
+    chk(canonicalDigest === reversedDigest, "A1 artifact digest identical across package root insertion orders");
+  }
+  // package snapshot is frozen / reference-isolated: post-run caller mutation
+  // of the reordered package cannot change the A1 artifact
+  {
+    const { coordinator, tail, store } = harness();
+    const pkg = makeTailPackage() as any;
+    const reordered = buildPackageInOrder([...PACKAGE_ROOT_ORDER].reverse(), pkg);
+    tail.result = buildTailResultInOrder(["status", "reasonCode", "safeMessage", "completionPackage"], {
+      status: "completed",
+      reasonCode: "GOVERNANCE_TAIL_COMPLETED",
+      safeMessage: "ok",
+      completionPackage: reordered,
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "reordered package run succeeds before mutation");
+    (reordered.implementation_files as string[]).push("core/evil.ts");
+    (reordered.files as string[]).push("core/evil.ts");
+    reordered.final_workspace.task_head_sha = "e".repeat(40);
+    reordered.final_workspace.status_digest_sha256 = "e".repeat(64);
+    const a1Puts = store.puts.filter((p) => p.kind === "governance_tail_result");
+    chk(a1Puts.length === 1, "A1 stored once");
+    if (a1Puts.length === 1) {
+      const parsed = parseLoopGovernanceTailResultBytes(a1Puts[0]!.bytes);
+      chk(parsed.ok && parsed.value.implementation_files.length === 2 && !parsed.value.implementation_files.includes("core/evil.ts"),
+        "A1 implementation files unaffected by post-run package mutation");
+      chk(parsed.ok && parsed.value.final_workspace.task_head_sha === HEAD1, "A1 final workspace head unaffected");
+    }
+  }
+
+  // 7.6 security regressions: malicious inputs still rejected in reordered shapes
+  {
+    const { coordinator, delivery } = harness();
+    const req: any = { orchestrationResultArtifactRef: ORCH_REF, identity: IDENTITY, extra: 1 };
+    const result = await coordinator.execute(req);
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "reordered request with unknown key rejected");
+    chk(delivery.calls.length === 0, "no D06 for unknown-key reordered request");
+  }
+  {
+    const { coordinator, delivery } = harness();
+    const identity = buildIdentityInOrder([...IDENTITY_FIELD_ORDER].reverse());
+    delete identity.createdAt;
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "reordered identity with missing key rejected");
+    chk(delivery.calls.length === 0, "no D06 for missing-key identity");
+  }
+  {
+    const { coordinator, delivery } = harness();
+    const identity: any = {};
+    let gets = 0;
+    for (const field of [...IDENTITY_FIELD_ORDER].reverse()) {
+      Object.defineProperty(identity, field, { get: () => { gets++; return IDENTITY[field]; }, enumerable: true });
+    }
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "reordered identity accessors rejected");
+    chk(gets === 0, "reordered identity getters never invoked");
+    chk(delivery.calls.length === 0, "no D06 for accessor identity");
+  }
+  {
+    const { coordinator, delivery } = harness();
+    const identity = buildIdentityInOrder([...IDENTITY_FIELD_ORDER].reverse());
+    identity[Symbol("x")] = 1;
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "reordered identity symbol key rejected");
+    chk(delivery.calls.length === 0, "no D06 for identity symbol key");
+  }
+  {
+    const { coordinator, tail } = harness();
+    const tr = buildTailResultInOrder(["completionPackage", "safeMessage", "status", "reasonCode"], {
+      completionPackage: makeTailPackage(),
+      safeMessage: "ok",
+      status: "completed",
+      reasonCode: "GOVERNANCE_TAIL_COMPLETED",
+    }) as any;
+    tr[Symbol("x")] = 1;
+    tail.result = tr;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "reordered tail with symbol key rejected");
+  }
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const pkg = makeTailPackage() as any;
+    const reordered = buildPackageInOrder([...PACKAGE_ROOT_ORDER].reverse(), pkg);
+    reordered.extra = 1;
+    tail.result = buildTailResultInOrder(["status", "reasonCode", "safeMessage", "completionPackage"], {
+      status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: reordered,
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "reordered package with unknown root key rejected");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  {
+    const { coordinator, tail } = harness();
+    const pkg = makeTailPackage() as any;
+    const reordered = buildPackageInOrder([...PACKAGE_ROOT_ORDER].reverse(), pkg);
+    delete reordered.final_workspace;
+    tail.result = buildTailResultInOrder(["status", "reasonCode", "safeMessage", "completionPackage"], {
+      status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: reordered,
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "reordered package with missing root key rejected");
+  }
+
+  // 7.7 artifact order regression: reordered canonical artifact bytes still rejected
+  {
+    const p = parseLoopOrchestrationResultBytes(reorderFirstTwoKeys(ORCH_BYTES), { expectedIdentity: IDENTITY });
+    chk(p.ok === false, "reordered D08 orchestration artifact bytes rejected");
+  }
+  {
+    const p = parseLoopDirectExecutorInputBytes(reorderFirstTwoKeys(EXEC_BYTES), { expectedIdentity: IDENTITY });
+    chk(p.ok === false, "reordered D08 executor-input artifact bytes rejected");
+  }
+  {
+    const p = parseLoopDeliveryResultBytes(reorderFirstTwoKeys(writeDeliveryBytes()), {
+      expectedMaterial: { workspacePath: WORKSPACE_PATH, taskBranch: IDENTITY.taskBranch, taskHeadSha: HEAD1, statusDigestSha256: SD1, taskHasChanges: true },
+    });
+    chk(p.ok === false, "reordered D06 delivery artifact bytes rejected");
+  }
+  {
+    const p = parseLoopDeliveryPublishResultBytes(reorderFirstTwoKeys(writePublishBytes()), {
+      expectedMode: "governed",
+      expectedOrchestrationResultArtifactRef: ORCH_REF,
+      expectedExecutorInputArtifactRef: EXEC_REF,
+      expectedDeliveryResultArtifactRef: DELIVERY_REF,
+      expectedGovernanceTailResultArtifactRef: A1_REF,
+      expectedImplementationFiles: DELIVERY_FILES,
+      expectedFiles: A1_FILES,
+    });
+    chk(p.ok === false, "reordered D07 publish artifact bytes rejected");
+  }
+  {
+    const { coordinator, store } = harness();
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "control run for A1 bytes");
+    const a1Puts = store.puts.filter((p) => p.kind === "governance_tail_result");
+    chk(a1Puts.length === 1, "A1 stored once");
+    if (a1Puts.length === 1) {
+      const p = parseLoopGovernanceTailResultBytes(reorderFirstTwoKeys(a1Puts[0]!.bytes));
+      chk(p.ok === false, "reordered A1 artifact bytes rejected");
+      const p2 = parseLoopGovernanceTailResultBytes(a1Puts[0]!.bytes);
+      chk(p2.ok, "original A1 canonical bytes still parse");
+    }
+  }
+
+  mark("D09_B_ORDER_INDEPENDENT_TYPED_RECORD_SNAPSHOT_VERIFIED");
+}
+
 // ═══════════════════════════════════════ Section: happy path + call counts
 
 async function sectionHappyPath(): Promise<void> {
@@ -2495,6 +2829,7 @@ async function main(): Promise<void> {
   await sectionPublish();
   await sectionPublishChain();
   await sectionClock();
+  await sectionOrderIndependence();
   await sectionHappyPath();
 
   verifyRealSourceUnchanged();
