@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { LoopDeliveryPublisher } from "../core/loop-delivery-publisher";
+import { parseLoopDeliveryPublishResultBytes } from "../core/loop-delivery-publisher";
 import type {
   LoopDeliveryPublishRequest,
   LoopDeliveryPublishResult,
@@ -5681,6 +5682,7 @@ let a2NegExceptionLeakPassed = false;
 let a2RefBoundaryPassed = false;
 let a2PreA1EmptyFilesPassed = false;
 let a2MarkdownSectionPassed = false;
+let a2ProducerOwnedPublishParserFlag = false;
 let a2MarkdownEscapePassed = false;
 let a2WorkspaceAuthorityPassed = false;
 let a2DriftDigestPassed = false;
@@ -7233,6 +7235,142 @@ async function testA2MarkdownEscaping(): Promise<void> {
 
 const SHA40_RE = /^[0-9a-f]{40}$/;
 
+
+// D09-A2 (F-005 / F-007): producer-owned publish-result parser — real governed
+// artifact round-trip, golden standalone/governed compatibility through the
+// parser, full-chain expected-fact binding, adversarial bytes.
+async function testA2ProducerOwnedPublishParser(): Promise<void> {
+  console.log("\n=== D09-A2 Producer-Owned Publish Result Parser ===");
+  const sectionStart = failures;
+  const parserOk = { realGoverned: false, goldenStandalone: false, goldenGoverned: false, tamperFailClosed: true };
+
+  // 1. REAL governed publish run → parse persisted bytes with full-chain expected facts
+  {
+    const artifactStore = new FakeArtifactStore();
+    const { deliveryRef, governanceRef, wsSnapshot } = makeGovernedEnv(artifactStore);
+    const gitState = makeGovernedGitState(wsSnapshot);
+    const runner = new FakeRunner();
+    runner.setHandler("git", gitState.createGitHandler());
+    runner.setHandler("gh", gitState.createGhHandler("feat: governed", "feature/loop-runtime-v1", "codex/loop-delivery-07-test"));
+    const pub = new LoopDeliveryPublisher(makeOptions({
+      artifactStore, runner, workspaceManager: new FakeWorkspaceManager(wsSnapshot),
+      clock: makeDeterministicClock(),
+    }));
+    const result = await pub.execute(makeRequest({
+      deliveryResultArtifactRef: deliveryRef,
+      commitSubject: "feat: governed",
+      prTitle: "feat: governed",
+      governanceTailResultArtifactRef: governanceRef,
+    }));
+    chk("governed", result.status === "succeeded", "a2-parser: real governed publish succeeded");
+    if (result.publishResultArtifactRef) {
+      const bytes = Buffer.from(artifactStore.read(result.publishResultArtifactRef));
+      const a1Bytes = Buffer.from(artifactStore.read(governanceRef));
+      const a1Parsed = parseLoopGovernanceTailResultBytes(a1Bytes);
+      chk("governed", a1Parsed.ok, "a2-parser: persisted A1 parses");
+      if (a1Parsed.ok) {
+        const p = parseLoopDeliveryPublishResultBytes(bytes, {
+          expectedMode: "governed",
+          expectedOrchestrationResultArtifactRef: a1Parsed.value.orchestration_result_artifact_ref,
+          expectedExecutorInputArtifactRef: a1Parsed.value.executor_input_artifact_ref,
+          expectedDeliveryResultArtifactRef: deliveryRef,
+          expectedGovernanceTailResultArtifactRef: governanceRef,
+          expectedImplementationFiles: [...a1Parsed.value.implementation_files],
+          expectedFiles: [...a1Parsed.value.files],
+        });
+        chk("governed", p.ok, "a2-parser: real governed artifact parses with full-chain binding");
+        if (p.ok) {
+          chk("governed", p.value.schema === "loop-governed-publish-result-v1", "a2-parser: governed schema");
+          chk("governed", Buffer.from(p.bytes).equals(bytes), "a2-parser: real governed artifact byte-identical round trip");
+          chk("governed", p.digestSha256 === sha256Hex(bytes), "a2-parser: governed digest unchanged by parsing");
+          chk("governed", Object.isFrozen(p.value) && Object.isFrozen(p.value.trace), "a2-parser: parsed value frozen");
+          parserOk.realGoverned = true;
+        }
+      }
+    }
+  }
+
+  // 2. standalone golden bytes parse (standalone byte compatibility through the parser)
+  {
+    const golden = Buffer.from(D07_RESULT_B64, "base64");
+    chk("governed", sha256Hex(golden) === D07_RESULT_SHA256, "a2-parser: standalone golden digest pinned");
+    const p = parseLoopDeliveryPublishResultBytes(golden, { expectedMode: "standalone" });
+    chk("governed", p.ok, "a2-parser: standalone golden parses");
+    if (p.ok) {
+      chk("governed", p.value.schema === "loop-publish-result-v1", "a2-parser: standalone schema");
+      chk("governed", p.value.deliveryResultArtifactRef === D09A2_DELIVERY_REF, "a2-parser: standalone delivery ref");
+      chk("governed", p.value.orchestrationResultArtifactRef === null && p.value.executorInputArtifactRef === null
+        && p.value.implementationFiles.length === 0, "a2-parser: standalone carries no governed refs");
+      chk("governed", Buffer.from(p.bytes).equals(golden), "a2-parser: standalone golden byte-identical round trip");
+      chk("governed", p.digestSha256 === D07_RESULT_SHA256, "a2-parser: standalone digest unchanged");
+      parserOk.goldenStandalone = true;
+    }
+  }
+
+  // 3. governed golden bytes parse with full-chain expected facts
+  {
+    const golden = Buffer.from(D09A2_GOVERNED_RESULT_B64, "base64");
+    chk("governed", sha256Hex(golden) === D09A2_GOVERNED_RESULT_SHA256, "a2-parser: governed golden digest pinned");
+    const p = parseLoopDeliveryPublishResultBytes(golden, {
+      expectedMode: "governed",
+      expectedOrchestrationResultArtifactRef: "loop-artifact:v1:orchestration_result:sha256:" + "1".repeat(64),
+      expectedExecutorInputArtifactRef: "loop-artifact:v1:executor_input:sha256:" + "2".repeat(64),
+      expectedDeliveryResultArtifactRef: D09A2_DELIVERY_REF,
+      expectedGovernanceTailResultArtifactRef: "loop-artifact:v1:governance_tail_result:sha256:241eb7bf31e89483bfcaef2227f15b82b140422e6adb815c78d513d3bafe8262",
+      expectedImplementationFiles: ["core/test.ts", "tests/test.test.ts"],
+      expectedFiles: [...D09A2_A1_FILES],
+    });
+    chk("governed", p.ok, "a2-parser: governed golden parses with full-chain binding");
+    if (p.ok) {
+      chk("governed", Buffer.from(p.bytes).equals(golden), "a2-parser: governed golden byte-identical round trip");
+      chk("governed", p.digestSha256 === D09A2_GOVERNED_RESULT_SHA256, "a2-parser: governed golden digest unchanged");
+      parserOk.goldenGoverned = true;
+    }
+  }
+
+  // 4. adversarial: every expected fact tamper fails closed; canonical violations rejected
+  {
+    const golden = Buffer.from(D09A2_GOVERNED_RESULT_B64, "base64");
+    const baseOptions: Parameters<typeof parseLoopDeliveryPublishResultBytes>[1] = {
+      expectedMode: "governed",
+      expectedOrchestrationResultArtifactRef: "loop-artifact:v1:orchestration_result:sha256:" + "1".repeat(64),
+      expectedExecutorInputArtifactRef: "loop-artifact:v1:executor_input:sha256:" + "2".repeat(64),
+      expectedDeliveryResultArtifactRef: D09A2_DELIVERY_REF,
+      expectedGovernanceTailResultArtifactRef: "loop-artifact:v1:governance_tail_result:sha256:241eb7bf31e89483bfcaef2227f15b82b140422e6adb815c78d513d3bafe8262",
+      expectedImplementationFiles: ["core/test.ts", "tests/test.test.ts"],
+      expectedFiles: [...D09A2_A1_FILES],
+    };
+    const tamper = (key: string, value: unknown): Buffer => {
+      const obj = JSON.parse(golden.toString("utf8")) as Record<string, unknown>;
+      obj[key] = value;
+      return Buffer.from(JSON.stringify(obj) + "\n", "utf8");
+    };
+    const tampered = [
+      tamper("orchestration_result_artifact_ref", "loop-artifact:v1:orchestration_result:sha256:" + "0".repeat(64)),
+      tamper("executor_input_artifact_ref", "loop-artifact:v1:executor_input:sha256:" + "0".repeat(64)),
+      tamper("delivery_result_artifact_ref", "loop-artifact:v1:delivery_result:sha256:" + "0".repeat(64)),
+      tamper("governance_tail_result_artifact_ref", "loop-artifact:v1:governance_tail_result:sha256:" + "0".repeat(64)),
+      tamper("implementation_files", ["core/test.ts"]),
+      tamper("files", ["core/test.ts"]),
+    ];
+    for (let i = 0; i < tampered.length; i++) {
+      const p = parseLoopDeliveryPublishResultBytes(tampered[i]!, baseOptions);
+      chk("governed", p.ok === false, `a2-parser: tampered expected fact ${i} fails closed`);
+      if (p.ok) parserOk.tamperFailClosed = false;
+    }
+    chk("governed", parseLoopDeliveryPublishResultBytes(tamper("status", "sneaky")).ok === false, "a2-parser: non-canonical status rejected");
+    chk("governed", parseLoopDeliveryPublishResultBytes(tamper("recovery_stage", "sneaky")).ok === false, "a2-parser: non-canonical recovery stage rejected");
+    chk("governed", parseLoopDeliveryPublishResultBytes(tamper("commit_sha", "zz")).ok === false, "a2-parser: malformed commit sha rejected");
+    chk("governed", parseLoopDeliveryPublishResultBytes(Buffer.concat([golden, Buffer.from("\n")])).ok === false, "a2-parser: doubled trailing LF rejected");
+    chk("governed", parseLoopDeliveryPublishResultBytes(golden, { maxBytes: 10 }).ok === false, "a2-parser: oversize rejected");
+  }
+
+  a2ProducerOwnedPublishParserFlag = failures === sectionStart && parserOk.realGoverned
+    && parserOk.goldenStandalone && parserOk.goldenGoverned && parserOk.tamperFailClosed;
+  console.log("D09_A2_PRODUCER_OWNED_PUBLISH_PARSER_VERIFIED", a2ProducerOwnedPublishParserFlag);
+}
+
+
 async function main(): Promise<void> {
   console.log("D07 TARGETED TESTS START");
 
@@ -7282,6 +7420,7 @@ async function main(): Promise<void> {
   await testA2GovernedPositive();
   await testA2GovernedNegative();
   await testA2MarkdownEscaping();
+  await testA2ProducerOwnedPublishParser();
 
   verifyRealSourceUnchanged();
   cleanupAll();
@@ -7332,6 +7471,7 @@ async function main(): Promise<void> {
   console.log("D09_A2_GOVERNED_COMMIT_RECOVERY_VERIFIED", a2GovernedCommitRecoveryFlag);
   console.log("D09_A2_GOVERNED_DRAFT_PR_VERIFIED", a2GovernedDraftPrFlag);
   console.log("D09_A2_MARKDOWN_ESCAPING_VERIFIED", a2MarkdownEscapingFlag);
+  console.log("D09_A2_PRODUCER_OWNED_PUBLISH_PARSER_VERIFIED", a2ProducerOwnedPublishParserFlag);
   console.log("D09_A2_REAL_SOURCE_UNCHANGED", a2RealSourceUnchangedFlag);
   console.log("D09_A2_TEMP_CLEANUP_COMPLETE", a2TempCleanupFlag);
 

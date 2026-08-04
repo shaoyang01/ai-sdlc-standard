@@ -1,9 +1,12 @@
 // LOOP-DELIVERY-09-B — Production Coordinator Targeted Tests
 // ============================================================
 // Tests for LoopProductionCoordinator (fixed orchestration artifact ref →
-// D08 parsers → D03 prepare → D06 execute + read-back → injected Shared
-// Documentation Governance Tail → A1 build/store/read-back/parse → D03
-// post-Tail inspect → D07 governed publish + read-back → D09 succeeded).
+// D08 parsers → D03 prepare → pristine workspace gate → D06 execute +
+// read-back → injected Shared Documentation Governance Tail → immutable Tail
+// snapshot + completed reason gate → pre-A1 cross-binding → A1
+// build/store/read-back/parse + post-A1 defense → D03 post-Tail inspect →
+// publisher factory create(remaining budget) → D07 governed publish →
+// publish-result read-back + full-chain binding → D09 succeeded).
 //
 // Uses a REAL D08 orchestrator (fake agent/reviewer) and a real D01 temp
 // store to produce the fixed orchestration + executor input artifacts; every
@@ -11,6 +14,10 @@
 // no network, no shell, no git side effects. Real Source HEAD/status/diff/
 // staging invariance is verified before and after the suite; all temp dirs
 // are cleaned. All markers are driven by real assertions — never hard-coded.
+//
+// The four canonical parsers are producer-owned contracts (D08/D06/D07);
+// this suite imports them from the producer modules and proves the
+// coordinator no longer defines them.
 
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
@@ -18,17 +25,23 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { LoopRequirementDesignOrchestrator } from "../core/loop-requirement-design-orchestrator";
-import type { LoopDirectExecutorInput } from "../core/loop-requirement-design-orchestrator";
+import {
+  parseLoopDirectExecutorInputBytes,
+  parseLoopOrchestrationResultBytes,
+} from "../core/loop-requirement-design-orchestrator";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import type { LoopArtifactKind, LoopStoredArtifact } from "../core/loop-artifact-store";
 import { LoopGitWorkspaceError } from "../core/loop-git-workspace";
 import type { LoopGitWorkspaceSnapshot } from "../core/loop-git-workspace";
+import { parseLoopDeliveryResultBytes } from "../core/loop-autonomous-delivery-loop";
 import type {
   LoopAutonomousDeliveryResult,
   LoopAutonomousDeliveryRequest,
   LoopDeliveryResultWorkspace,
 } from "../core/loop-autonomous-delivery-loop";
+import { parseLoopDeliveryPublishResultBytes } from "../core/loop-delivery-publisher";
 import type {
+  LoopDeliveryPublisher,
   LoopDeliveryPublishRequest,
   LoopDeliveryPublishResult,
 } from "../core/loop-delivery-publisher";
@@ -39,10 +52,6 @@ import {
 } from "../core/loop-governance-tail-result";
 import {
   LoopProductionCoordinator,
-  parseLoopOrchestrationResultBytes,
-  parseLoopDirectExecutorInputBytes,
-  parseLoopDeliveryResultBytes,
-  parseLoopDeliveryPublishResultBytes,
   type LoopGovernanceTailCompletionPackage,
   type LoopProductionCoordinatorOptions,
   type LoopProductionCoordinatorRequest,
@@ -50,6 +59,7 @@ import {
   type LoopSharedGovernanceTailInput,
   type LoopSharedGovernanceTailResult,
 } from "../core/loop-production-coordinator";
+import * as CoordinatorModule from "../core/loop-production-coordinator";
 
 // ═══════════════════════════════════════ Harness
 
@@ -184,6 +194,10 @@ const SD0 = "0".repeat(64);
 const SD1 = "1".repeat(64);
 const SHA2 = "2".repeat(64);
 const SHA3 = "3".repeat(64);
+// The D03 snapshot digest of a pristine workspace: SHA-256 over the empty
+// `git status --porcelain=v1 -z --untracked-files=all` output.
+const EMPTY_TASK_STATUS_DIGEST = sha256Hex(Buffer.alloc(0));
+const PUBLISH_INTENT_REF = "loop-artifact:v1:workspace_metadata:sha256:" + "f".repeat(64);
 
 let MAIN_TEMP = "";
 let REPO_PATH = "";
@@ -342,7 +356,7 @@ function writePublishBytes(overrides: Record<string, unknown> = {}): Buffer {
   obj.executor_input_artifact_ref = EXEC_REF;
   obj.delivery_result_artifact_ref = DELIVERY_REF;
   obj.governance_tail_result_artifact_ref = A1_REF;
-  obj.publish_intent_artifact_ref = null;
+  obj.publish_intent_artifact_ref = PUBLISH_INTENT_REF;
   obj.precommit_head_sha = HEAD1;
   obj.commit_sha = COMMIT_SHA;
   obj.remote_branch_sha = REMOTE_SHA;
@@ -439,7 +453,7 @@ function makeSnapshot(overrides: Record<string, unknown> = {}): LoopGitWorkspace
     taskBranch: IDENTITY.taskBranch,
     taskHeadSha: HEAD0,
     taskHasChanges: false,
-    taskStatusDigestSha256: SD0,
+    taskStatusDigestSha256: EMPTY_TASK_STATUS_DIGEST,
     sourceHeadSha: IDENTITY.expectedBaseSha,
     sourceBranch: IDENTITY.baseBranch,
     sourceWipDigestSha256: "e".repeat(64),
@@ -543,7 +557,7 @@ class FakeDeliveryLoop {
   }
 }
 
-// ── Fake Publisher ──
+// ── Fake Publisher + Publisher Factory ──
 
 function makePublishResult(overrides: Record<string, unknown> = {}): LoopDeliveryPublishResult {
   const obj: Record<string, unknown> = {
@@ -553,7 +567,7 @@ function makePublishResult(overrides: Record<string, unknown> = {}): LoopDeliver
     causeCode: undefined,
     recoveryStage: "completed",
     deliveryResultArtifactRef: DELIVERY_REF,
-    publishIntentArtifactRef: "loop-artifact:v1:workspace_metadata:sha256:" + "f".repeat(64),
+    publishIntentArtifactRef: PUBLISH_INTENT_REF,
     precommitHeadSha: HEAD1,
     commitSha: COMMIT_SHA,
     remoteBranchSha: REMOTE_SHA,
@@ -622,6 +636,31 @@ class FakePublisher {
     }
     return result as LoopDeliveryPublishResult;
   }
+}
+
+/** F-003: plain-object factory that records the remaining budget passed to create(). */
+interface FakePublisherFactory {
+  createCalls: number[];
+  publisher: FakePublisher;
+  throwOnCreate: boolean;
+  invalidResult: boolean;
+  create(maxTotalDurationMs: number): Pick<LoopDeliveryPublisher, "execute">;
+}
+
+function makeFactory(publisher: FakePublisher): FakePublisherFactory {
+  const factory: FakePublisherFactory = {
+    createCalls: [],
+    publisher,
+    throwOnCreate: false,
+    invalidResult: false,
+    create(maxTotalDurationMs: number): Pick<LoopDeliveryPublisher, "execute"> {
+      factory.createCalls.push(maxTotalDurationMs);
+      if (factory.throwOnCreate) throw new Error("factory exploded");
+      if (factory.invalidResult) return {} as Pick<LoopDeliveryPublisher, "execute">;
+      return factory.publisher;
+    },
+  };
+  return factory;
 }
 
 // ── Fake Shared Tail ──
@@ -719,13 +758,14 @@ function makeOptions(overrides: Record<string, unknown> = {}): LoopProductionCoo
   const workspace = (overrides.workspace as FakeWorkspaceManager) ?? new FakeWorkspaceManager();
   const delivery = (overrides.delivery as FakeDeliveryLoop) ?? new FakeDeliveryLoop(store);
   const publisher = (overrides.publisher as FakePublisher) ?? new FakePublisher(store);
+  const factory = (overrides.factory as FakePublisherFactory) ?? makeFactory(publisher);
   const tail = (overrides.tail as FakeTail) ?? new FakeTail();
   const clock = (overrides.clock as { nowMs(): number }) ?? { nowMs: () => 1_000 };
   return {
     artifactStore: store,
     workspaceManager: workspace,
     deliveryLoop: delivery,
-    publisher,
+    publisherFactory: factory,
     sharedGovernanceTail: tail,
     clock,
     maxTotalDurationMs: (overrides.maxTotalDurationMs as number | undefined) ?? 60_000,
@@ -736,9 +776,6 @@ function makeRequest(overrides: Record<string, unknown> = {}): LoopProductionCoo
   return {
     identity: (overrides.identity as any) ?? IDENTITY,
     orchestrationResultArtifactRef: (overrides.orchestrationResultArtifactRef as string | undefined) ?? ORCH_REF,
-    ...(overrides.recoveryPublishIntentArtifactRef !== undefined
-      ? { recoveryPublishIntentArtifactRef: overrides.recoveryPublishIntentArtifactRef as string }
-      : {}),
   } as LoopProductionCoordinatorRequest;
 }
 
@@ -748,6 +785,7 @@ function harness(overrides: Record<string, unknown> = {}): {
   workspace: FakeWorkspaceManager;
   delivery: FakeDeliveryLoop;
   publisher: FakePublisher;
+  factory: FakePublisherFactory;
   tail: FakeTail;
 } {
   const store = new FakeArtifactStore();
@@ -756,25 +794,38 @@ function harness(overrides: Record<string, unknown> = {}): {
   const workspace = new FakeWorkspaceManager();
   const delivery = new FakeDeliveryLoop(store);
   const publisher = new FakePublisher(store);
+  const factory = makeFactory(publisher);
   const tail = new FakeTail();
   const clock = (overrides.clock as { nowMs(): number } | undefined) ?? { nowMs: () => 1_000 };
   const coordinator = new LoopProductionCoordinator({
     artifactStore: store,
     workspaceManager: workspace,
     deliveryLoop: delivery,
-    publisher,
+    publisherFactory: factory,
     sharedGovernanceTail: tail,
     clock,
     maxTotalDurationMs: (overrides.maxTotalDurationMs as number | undefined) ?? 60_000,
   });
-  return { coordinator, store, workspace, delivery, publisher, tail };
+  return { coordinator, store, workspace, delivery, publisher, factory, tail };
 }
 
-// ═══════════════════════════════════════ Section: parsers
+// ═══════════════════════════════════════ Section: parsers (producer-owned)
 
 async function sectionParsers(): Promise<void> {
   startSection("parsers");
-  console.log("\n=== Parser Contracts ===");
+  console.log("\n=== Producer-Owned Parser Contracts (F-005) ===");
+
+  // the four parsers are exported by their producer modules
+  chk(typeof parseLoopOrchestrationResultBytes === "function", "D08 exports parseLoopOrchestrationResultBytes");
+  chk(typeof parseLoopDirectExecutorInputBytes === "function", "D08 exports parseLoopDirectExecutorInputBytes");
+  chk(typeof parseLoopDeliveryResultBytes === "function", "D06 exports parseLoopDeliveryResultBytes");
+  chk(typeof parseLoopDeliveryPublishResultBytes === "function", "D07 exports parseLoopDeliveryPublishResultBytes");
+
+  // the coordinator no longer defines any of the four parsers (F-005)
+  chk(!("parseLoopOrchestrationResultBytes" in CoordinatorModule), "coordinator no longer defines parseLoopOrchestrationResultBytes");
+  chk(!("parseLoopDirectExecutorInputBytes" in CoordinatorModule), "coordinator no longer defines parseLoopDirectExecutorInputBytes");
+  chk(!("parseLoopDeliveryResultBytes" in CoordinatorModule), "coordinator no longer defines parseLoopDeliveryResultBytes");
+  chk(!("parseLoopDeliveryPublishResultBytes" in CoordinatorModule), "coordinator no longer defines parseLoopDeliveryPublishResultBytes");
 
   // orchestration: real D08 artifact parses and binds identity
   {
@@ -824,6 +875,30 @@ async function sectionParsers(): Promise<void> {
     const p = parseLoopDirectExecutorInputBytes(swapped);
     chk(!p.ok, "executor rejects orchestration-shaped bytes");
   }
+  // executor step with absent optional keys parses (canonical subsequence)
+  {
+    const parsed = JSON.parse(EXEC_BYTES.toString("utf8")) as Record<string, unknown>;
+    const steps = parsed.testPlan as Array<Record<string, unknown>>;
+    const step = { id: steps[0]!.id, executableId: steps[0]!.executableId, timeoutMs: steps[0]!.timeoutMs };
+    parsed.testPlan = [step];
+    parsed.reviewPlan = [{ id: "r-only", executableId: steps[0]!.executableId }];
+    const bytes = Buffer.from(JSON.stringify(parsed), "utf8");
+    const p = parseLoopDirectExecutorInputBytes(bytes);
+    chk(p.ok, "executor steps with absent optional keys parse");
+    if (p.ok) {
+      chk(p.value.testPlan.length === 1 && p.value.testPlan[0]!.args === undefined, "absent args stays absent");
+      chk(p.value.testPlan[0]!.timeoutMs === steps[0]!.timeoutMs, "present timeoutMs kept");
+      chk(p.value.reviewPlan[0]!.id === "r-only", "minimal step parses");
+    }
+  }
+  // executor step optional keys out of canonical order
+  {
+    const parsed = JSON.parse(EXEC_BYTES.toString("utf8")) as Record<string, unknown>;
+    const steps = parsed.testPlan as Array<Record<string, unknown>>;
+    parsed.testPlan = [{ id: steps[0]!.id, executableId: steps[0]!.executableId, maxStdoutBytes: steps[0]!.maxStdoutBytes, args: steps[0]!.args }];
+    const p = parseLoopDirectExecutorInputBytes(Buffer.from(JSON.stringify(parsed), "utf8"));
+    chk(p.ok === false && p.reason === "invalid_input", "executor step key order violation rejected");
+  }
 
   // delivery: canonical fixture parses with material binding
   {
@@ -869,22 +944,25 @@ async function sectionParsers(): Promise<void> {
     chk(p.ok === false && p.reason === "invalid_input", "delivery unsorted files rejected");
   }
 
-  // publish: canonical governed bytes parse with full binding
+  // publish: canonical governed bytes parse with FULL chain binding
   {
     const bytes = writePublishBytes();
     const p = parseLoopDeliveryPublishResultBytes(bytes, {
       expectedMode: "governed",
+      expectedOrchestrationResultArtifactRef: ORCH_REF,
+      expectedExecutorInputArtifactRef: EXEC_REF,
       expectedDeliveryResultArtifactRef: DELIVERY_REF,
       expectedGovernanceTailResultArtifactRef: A1_REF,
+      expectedImplementationFiles: DELIVERY_FILES,
       expectedFiles: A1_FILES,
     });
-    chk(p.ok, "publish governed canonical bytes parse");
+    chk(p.ok, "publish governed canonical bytes parse with full chain binding");
     if (p.ok) {
       chk(p.value.schema === "loop-governed-publish-result-v1", "publish governed schema");
       chk(p.value.prNumber === 42 && p.value.commitSha === COMMIT_SHA, "publish pr/commit facts");
     }
   }
-  // publish standalone schema parses under expectedMode standalone
+  // publish standalone schema parses under expectedMode standalone (golden compatibility)
   {
     const standalone = writePublishBytes({
       schema: "loop-publish-result-v1",
@@ -901,6 +979,10 @@ async function sectionParsers(): Promise<void> {
     const bytes = Buffer.from(JSON.stringify(obj) + "\n", "utf8");
     const p = parseLoopDeliveryPublishResultBytes(bytes, { expectedMode: "standalone" });
     chk(p.ok, "publish standalone schema parses");
+    if (p.ok) {
+      chk(p.value.orchestrationResultArtifactRef === null && p.value.executorInputArtifactRef === null, "standalone carries no governed refs");
+      chk(deepEqual(p.value.files, A1_FILES), "standalone files intact");
+    }
   }
   // publish mode mismatch
   {
@@ -908,7 +990,21 @@ async function sectionParsers(): Promise<void> {
     const p = parseLoopDeliveryPublishResultBytes(bytes, { expectedMode: "standalone" });
     chk(p.ok === false && p.reason === "invalid_input", "publish mode mismatch rejected");
   }
-  // publish ref binding mismatch
+  // publish governed-only expected options against standalone → fail closed
+  {
+    const standalone = writePublishBytes({ schema: "loop-publish-result-v1" });
+    const obj = JSON.parse(standalone.toString("utf8")) as Record<string, unknown>;
+    delete obj.orchestration_result_artifact_ref;
+    delete obj.executor_input_artifact_ref;
+    delete obj.governance_tail_result_artifact_ref;
+    delete obj.implementation_files;
+    const p = parseLoopDeliveryPublishResultBytes(Buffer.from(JSON.stringify(obj) + "\n", "utf8"), {
+      expectedMode: "standalone",
+      expectedOrchestrationResultArtifactRef: ORCH_REF,
+    });
+    chk(p.ok === false && p.reason === "invalid_input", "standalone rejects governed-only expected facts");
+  }
+  // publish governance ref binding mismatch
   {
     const bytes = writePublishBytes();
     const p = parseLoopDeliveryPublishResultBytes(bytes, {
@@ -916,6 +1012,22 @@ async function sectionParsers(): Promise<void> {
       expectedGovernanceTailResultArtifactRef: "loop-artifact:v1:governance_tail_result:sha256:" + "0".repeat(64),
     });
     chk(p.ok === false && p.reason === "invalid_input", "publish governance ref binding mismatch rejected");
+  }
+  // publish orchestration ref binding mismatch
+  {
+    const p = parseLoopDeliveryPublishResultBytes(writePublishBytes(), {
+      expectedMode: "governed",
+      expectedOrchestrationResultArtifactRef: "loop-artifact:v1:orchestration_result:sha256:" + "0".repeat(64),
+    });
+    chk(p.ok === false && p.reason === "invalid_input", "publish orchestration ref binding mismatch rejected");
+  }
+  // publish implementation files binding mismatch
+  {
+    const p = parseLoopDeliveryPublishResultBytes(writePublishBytes(), {
+      expectedMode: "governed",
+      expectedImplementationFiles: ["core/only.ts"],
+    });
+    chk(p.ok === false && p.reason === "invalid_input", "publish implementation files binding mismatch rejected");
   }
   // publish files binding mismatch
   {
@@ -944,6 +1056,7 @@ async function sectionParsers(): Promise<void> {
   }
 
   mark("D09_B_PARSERS_VERIFIED");
+  mark("D09_B_PRODUCER_OWNED_PARSERS_VERIFIED");
 }
 
 // ═══════════════════════════════════════ Section: input domain
@@ -956,15 +1069,14 @@ async function sectionInput(): Promise<void> {
     ["null", null],
     ["array", []],
     ["class instance", new (class { identity = IDENTITY; orchestrationResultArtifactRef = ORCH_REF; })()],
-    ["proxy", new Proxy({ identity: IDENTITY, orchestrationResultArtifactRef: ORCH_REF }, { get: () => { throw new Error("trap"); } })],
+    ["revoked proxy", (() => { const { proxy, revoke } = Proxy.revocable({ identity: IDENTITY, orchestrationResultArtifactRef: ORCH_REF }, {}); revoke(); return proxy; })()],
     ["unknown key", { ...makeRequest(), extra: 1 }],
+    ["recoveryPublishIntentArtifactRef key", { ...makeRequest(), recoveryPublishIntentArtifactRef: "loop-artifact:v1:workspace_metadata:sha256:" + "f".repeat(64) }],
     ["missing identity", { orchestrationResultArtifactRef: ORCH_REF }],
     ["missing ref", { identity: IDENTITY }],
     ["bad ref kind", makeRequest({ orchestrationResultArtifactRef: "loop-artifact:v1:executor_input:sha256:" + "1".repeat(64) })],
     ["malformed ref", makeRequest({ orchestrationResultArtifactRef: "nope" })],
     ["invalid identity", makeRequest({ identity: { ...IDENTITY, runId: "" } })],
-    ["recovery ref wrong kind", makeRequest({ recoveryPublishIntentArtifactRef: "loop-artifact:v1:delivery_result:sha256:" + "1".repeat(64) })],
-    ["recovery ref undefined own key", (() => { const r: any = makeRequest(); r.recoveryPublishIntentArtifactRef = undefined; return r; })()],
   ] as Array<[string, any]>) {
     const { coordinator } = harness();
     const result = await coordinator.execute(req);
@@ -989,6 +1101,19 @@ async function sectionInput(): Promise<void> {
     chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "__proto__ key rejected");
   }
 
+  // request get-trap proxy is captured through descriptors WITHOUT invoking the trap
+  {
+    const { coordinator, delivery } = harness();
+    let gets = 0;
+    const proxyReq = new Proxy({ identity: IDENTITY, orchestrationResultArtifactRef: ORCH_REF }, {
+      get: () => { gets++; return undefined; },
+    });
+    const result = await coordinator.execute(proxyReq);
+    chk(result.status === "succeeded", "request proxy with throwing get trap captured via descriptors");
+    chk(gets === 0, "request proxy get trap never invoked");
+    chk(delivery.calls.length === 1, "D06 ran once for descriptor-captured proxy request");
+  }
+
   // constructor rejects bad options
   {
     let threw = false;
@@ -1008,6 +1133,45 @@ async function sectionInput(): Promise<void> {
     }
     chk(threw, "out-of-range maxTotalDurationMs rejected");
   }
+  // publisher option is rejected: only publisherFactory is accepted
+  {
+    let threw = false;
+    try {
+      new LoopProductionCoordinator({ ...makeOptions(), publisher: { execute: async () => ({}) } } as any);
+    } catch {
+      threw = true;
+    }
+    chk(threw, "publisher option rejected (publisherFactory only)");
+  }
+  // publisherFactory must be a plain dependency object with create
+  {
+    let threw = false;
+    try {
+      new LoopProductionCoordinator({ ...makeOptions(), publisherFactory: {} } as any);
+    } catch {
+      threw = true;
+    }
+    chk(threw, "publisherFactory without create rejected");
+  }
+  {
+    let threw = false;
+    try {
+      new LoopProductionCoordinator({ ...makeOptions(), publisherFactory: { create: 5 } } as any);
+    } catch {
+      threw = true;
+    }
+    chk(threw, "publisherFactory with non-function create rejected");
+  }
+  {
+    let threw = false;
+    try {
+      const factory = new (class { create(): any { return {}; } })();
+      new LoopProductionCoordinator({ ...makeOptions(), publisherFactory: factory } as any);
+    } catch {
+      threw = true;
+    }
+    chk(threw, "publisherFactory must be a plain object (class instance rejected)");
+  }
 
   mark("D09_B_INPUT_FAIL_CLOSED_VERIFIED");
 }
@@ -1024,6 +1188,7 @@ async function sectionOrchestration(): Promise<void> {
     const workspace = new FakeWorkspaceManager();
     const delivery = new FakeDeliveryLoop(store);
     const publisher = new FakePublisher(store);
+    const factory = makeFactory(publisher);
     const tail = new FakeTail();
     const nonDirect = JSON.parse(ORCH_BYTES.toString("utf8")) as Record<string, unknown>;
     nonDirect.route = route;
@@ -1037,7 +1202,7 @@ async function sectionOrchestration(): Promise<void> {
       artifactStore: store,
       workspaceManager: workspace,
       deliveryLoop: delivery,
-      publisher,
+      publisherFactory: factory,
       sharedGovernanceTail: tail,
       clock: { nowMs: () => 1_000 },
       maxTotalDurationMs: 60_000,
@@ -1164,15 +1329,188 @@ async function sectionWorkspace(): Promise<void> {
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "blocked" && result.reasonCode === "WORKSPACE_DRIFT", "snapshot taskBranch mismatch blocked");
   }
-  // recovered state proceeds to success
+  // recovered + pristine state proceeds to success (pristine gate satisfied)
   {
-    const { coordinator, workspace } = harness();
+    const { coordinator, workspace, delivery } = harness();
     workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const });
     const result = await coordinator.execute(makeRequest());
-    chk(result.status === "succeeded", "recovered prepare still succeeds");
+    chk(result.status === "succeeded", "recovered pristine prepare still succeeds");
+    chk(delivery.calls.length === 1, "D06 runs once on recovered pristine workspace");
   }
 
   mark("D09_B_WORKSPACE_PREPARE_VERIFIED");
+}
+
+// ═══════════════════════════════════════ Section: pristine workspace gate (F-001)
+
+async function sectionPristine(): Promise<void> {
+  startSection("pristine");
+  console.log("\n=== Pristine Workspace Gate / No D06 Replay (F-001) ===");
+
+  // created + pristine → D06 once
+  {
+    const { coordinator, delivery } = harness();
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "created pristine workspace succeeds");
+    chk(delivery.calls.length === 1, "D06 called once on created pristine workspace");
+  }
+  // recovered + pristine → D06 once
+  {
+    const { coordinator, workspace, delivery } = harness();
+    workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "recovered pristine workspace succeeds");
+    chk(delivery.calls.length === 1, "D06 called once on recovered pristine workspace");
+  }
+  // recovered + taskHasChanges=true → blocked, zero side effects
+  {
+    const { coordinator, workspace, delivery, tail, publisher, store } = harness();
+    workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const, taskHasChanges: true, taskStatusDigestSha256: SD1 });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "blocked" && result.reasonCode === "WORKSPACE_DRIFT", "dirty recovered workspace blocked");
+    chk(delivery.calls.length === 0, "D06 count 0 on dirty workspace");
+    chk(tail.calls.length === 0 && publisher.calls.length === 0 && store.puts.filter((p) => p.kind === "governance_tail_result").length === 0,
+      "no downstream side effects on dirty workspace");
+  }
+  // recovered + taskHeadSha advanced → blocked
+  {
+    const { coordinator, workspace, delivery } = harness();
+    workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const, taskHeadSha: HEAD1 });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "blocked" && result.reasonCode === "WORKSPACE_DRIFT", "advanced task HEAD blocked");
+    chk(delivery.calls.length === 0, "D06 count 0 on advanced HEAD");
+  }
+  // recovered + non-empty status digest → blocked
+  {
+    const { coordinator, workspace, delivery } = harness();
+    workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const, taskStatusDigestSha256: SD1 });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "blocked" && result.reasonCode === "WORKSPACE_DRIFT", "non-empty status digest blocked");
+    chk(delivery.calls.length === 0, "D06 count 0 on non-empty status digest");
+  }
+  // reentry: first run D06 called then delivery read-back fails; second run on
+  // the same orchestration ref is blocked; cumulative D06 count stays 1
+  {
+    const { coordinator, workspace, delivery, tail, publisher, store } = harness();
+    delivery.artifactBytes = Buffer.concat([writeDeliveryBytes(), Buffer.from("x")]);
+    const r1 = await coordinator.execute(makeRequest());
+    chk(r1.status === "blocked" && r1.reasonCode === "DELIVERY_READBACK_AMBIGUOUS", "first run blocked at delivery read-back");
+    chk(delivery.calls.length === 1, "first run called D06 exactly once");
+    workspace.prepareSnapshot = makeSnapshot({ state: "recovered" as const, taskHeadSha: HEAD1, taskHasChanges: true, taskStatusDigestSha256: SD1 });
+    const r2 = await coordinator.execute(makeRequest());
+    chk(r2.status === "blocked" && r2.reasonCode === "WORKSPACE_DRIFT", "second run blocked on non-pristine workspace");
+    chk(delivery.calls.length === 1, "cumulative D06 count stays 1 across runs");
+    chk(tail.calls.length === 0 && publisher.calls.length === 0 && store.puts.filter((p) => p.kind === "governance_tail_result").length === 0,
+      "no downstream side effects on replay attempt");
+  }
+  // legacy recoveryPublishIntentArtifactRef input → fail-closed, zero side effects
+  {
+    const { coordinator, workspace, delivery, tail, publisher, store } = harness();
+    const req: any = makeRequest();
+    req.recoveryPublishIntentArtifactRef = PUBLISH_INTENT_REF;
+    const result = await coordinator.execute(req);
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "recoveryPublishIntentArtifactRef rejected as unknown key");
+    chk(workspace.prepareCalls === 0 && delivery.calls.length === 0 && tail.calls.length === 0
+      && publisher.calls.length === 0 && store.puts.length === 0, "zero side effects for recovery intent input");
+  }
+
+  mark("D09_B_RECOVERED_WORKSPACE_NO_REPLAY_VERIFIED");
+}
+
+// ═══════════════════════════════════════ Section: identity single snapshot (F-006)
+
+async function sectionIdentity(): Promise<void> {
+  startSection("identity");
+  console.log("\n=== Identity Single Snapshot (F-006) ===");
+
+  // identity field accessors are REJECTED without ever invoking the getter
+  {
+    const { coordinator, delivery } = harness();
+    const identity: any = makeIdentity();
+    let gets = 0;
+    for (const field of ["runId", "requirementId", "repository", "repositoryPath", "baseBranch", "expectedBaseSha", "taskBranch", "controlRoot", "createdAt"]) {
+      Object.defineProperty(identity, field, { get: () => { gets++; return IDENTITY[field]; }, enumerable: true });
+    }
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "identity accessor request rejected");
+    chk(gets === 0, "identity getters never invoked");
+    chk(delivery.calls.length === 0, "no D06 for accessor identity");
+  }
+  // identity symbol key
+  {
+    const { coordinator, delivery } = harness();
+    const identity: any = makeIdentity();
+    identity[Symbol("x")] = 1;
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "identity symbol key rejected");
+    chk(delivery.calls.length === 0, "no D06 for identity symbol key");
+  }
+  // identity __proto__ key
+  {
+    const { coordinator, delivery } = harness();
+    const identity: any = makeIdentity();
+    identity.__proto__ = { evil: true };
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "identity __proto__ rejected");
+    chk(delivery.calls.length === 0, "no D06 for identity __proto__");
+  }
+  // class instance identity
+  {
+    const { coordinator, delivery } = harness();
+    const identity: any = new (class {
+      runId = IDENTITY.runId; requirementId = IDENTITY.requirementId; repository = IDENTITY.repository;
+      repositoryPath = IDENTITY.repositoryPath; baseBranch = IDENTITY.baseBranch; expectedBaseSha = IDENTITY.expectedBaseSha;
+      taskBranch = IDENTITY.taskBranch; controlRoot = IDENTITY.controlRoot; createdAt = IDENTITY.createdAt;
+    })();
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "class instance identity rejected");
+    chk(delivery.calls.length === 0, "no D06 for class instance identity");
+  }
+  // throwing-proxy identity (getPrototypeOf trap)
+  {
+    const { coordinator, delivery } = harness();
+    const identity = new Proxy(makeIdentity(), { getPrototypeOf: () => { throw new Error("trap"); } });
+    const result = await coordinator.execute(makeRequest({ identity }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "throwing proxy identity rejected");
+    chk(delivery.calls.length === 0, "no D06 for throwing proxy identity");
+  }
+  // revoked-proxy identity
+  {
+    const { coordinator, delivery } = harness();
+    const { proxy, revoke } = Proxy.revocable(makeIdentity(), {});
+    revoke();
+    const result = await coordinator.execute(makeRequest({ identity: proxy }));
+    chk(result.status === "failed" && result.reasonCode === "INVALID_INPUT", "revoked proxy identity rejected");
+    chk(delivery.calls.length === 0, "no D06 for revoked proxy identity");
+  }
+  // mutation immediately after execute + during the first await cannot change
+  // what dependencies receive: reference isolation + frozen snapshot
+  {
+    const { coordinator, delivery, tail, publisher } = harness();
+    const identity = makeIdentity();
+    const promise = coordinator.execute(makeRequest({ identity }));
+    identity.taskBranch = "codex/mutated-task";
+    identity.repositoryPath = "/tmp/mutated-repo";
+    identity.expectedBaseSha = "e".repeat(40);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    identity.runId = "mutated-run";
+    identity.createdAt = "2099-01-01T00:00:00.000Z";
+    const result = await promise;
+    chk(result.status === "succeeded", "mutated caller identity run succeeds");
+    chk(delivery.calls.length === 1, "D06 called once");
+    const d06Req = delivery.calls[0]!;
+    chk(d06Req.identity.taskBranch === "codex/d09b-task", "D06 received the original taskBranch snapshot");
+    chk(d06Req.identity.repositoryPath === IDENTITY.repositoryPath, "D06 received the original repositoryPath snapshot");
+    chk(d06Req.identity.expectedBaseSha === HEAD0, "D06 received the original expectedBaseSha snapshot");
+    chk(d06Req.identity.runId === "run-d09b", "D06 received the original runId snapshot");
+    chk(d06Req.identity.createdAt === TS, "D06 received the original createdAt snapshot");
+    chk(d06Req.identity !== identity, "dependency identity is not the caller object reference");
+    chk(Object.isFrozen(d06Req.identity), "dependency identity is frozen");
+    chk(tail.calls.length === 1 && tail.calls[0]!.input.identity.taskBranch === "codex/d09b-task", "Tail received the original identity snapshot");
+    chk(publisher.calls.length === 1 && publisher.calls[0]!.request.identity.taskBranch === "codex/d09b-task", "D07 received the original identity snapshot");
+  }
+
+  mark("D09_B_IDENTITY_SINGLE_SNAPSHOT_VERIFIED");
 }
 
 // ═══════════════════════════════════════ Section: delivery
@@ -1212,7 +1550,7 @@ async function sectionDelivery(): Promise<void> {
   }
   // delivery read-back: artifact bytes not matching the ref digest
   {
-    const { coordinator, delivery, store } = harness();
+    const { coordinator, delivery } = harness();
     delivery.artifactBytes = Buffer.concat([writeDeliveryBytes(), Buffer.from("x")]);
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "blocked" && result.reasonCode === "DELIVERY_READBACK_AMBIGUOUS", "delivery digest mismatch blocked");
@@ -1268,6 +1606,7 @@ async function sectionDelivery(): Promise<void> {
     chk(req.identity.runId === IDENTITY.runId, "delivery identity forwarded");
     chk(req.workspace.workspacePath === WORKSPACE_PATH, "delivery workspace path from prepare");
     chk(req.workspace.expectedTaskHeadSha === HEAD0, "delivery expected head from prepare");
+    chk(req.workspace.expectedPreStatusDigestSha256 === EMPTY_TASK_STATUS_DIGEST, "delivery expected pristine status digest from prepare");
     chk(typeof req.requirement === "string" && req.requirement.includes(IDENTITY.runId) === false, "requirement is a canonical string");
     chk(tail.calls.length === 1, "tail called once");
   }
@@ -1288,33 +1627,34 @@ async function sectionTail(): Promise<void> {
     ["failed", "failed", "GOVERNANCE_TAIL_FAILED"],
   ];
   for (const [status, expectedStatus, expectedReason] of statuses) {
-    const { coordinator, tail, store, publisher } = harness();
+    const { coordinator, tail, store, publisher, factory } = harness();
     tail.result = { status: status as any, reasonCode: "SOME_REASON", safeMessage: "tail not done" };
     const result = await coordinator.execute(makeRequest());
     chk(result.status === expectedStatus && result.reasonCode === expectedReason, `tail ${status} maps to ${expectedReason}`);
     const a1Puts = store.puts.filter((p) => p.kind === "governance_tail_result").length;
     chk(a1Puts === 0, `no A1 put for tail ${status}`);
     chk(publisher.calls.length === 0, `no D07 call for tail ${status}`);
+    chk(factory.createCalls.length === 0, `no factory create for tail ${status}`);
   }
 
   // tail throws
   {
-    const { coordinator, tail, store, publisher } = harness();
+    const { coordinator, tail, store, publisher, factory } = harness();
     tail.throwOnRun = true;
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_FAILED", "tail throw maps to GOVERNANCE_TAIL_FAILED");
     chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put after tail throw");
-    chk(publisher.calls.length === 0, "no D07 call after tail throw");
+    chk(publisher.calls.length === 0 && factory.createCalls.length === 0, "no D07 after tail throw");
   }
 
   // completed without completion package
   {
-    const { coordinator, tail, store, publisher } = harness();
+    const { coordinator, tail, store, publisher, factory } = harness();
     tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok" };
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "completed without package invalid");
     chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put without package");
-    chk(publisher.calls.length === 0, "no D07 call without package");
+    chk(publisher.calls.length === 0 && factory.createCalls.length === 0, "no D07 call without package");
   }
 
   // non-completed with completion package
@@ -1333,46 +1673,31 @@ async function sectionTail(): Promise<void> {
     chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "tail result extra field invalid");
   }
 
-  // malicious proxy tail result (accessor throws)
+  // malicious proxy tail result (accessor throws at await-time)
   {
-    const { coordinator, tail, store, publisher } = harness();
+    const { coordinator, tail, store, publisher, factory } = harness();
     tail.resultIsProxy = true;
     const result = await coordinator.execute(makeRequest());
     // A throwing `get` trap also fires on the promise thenable resolution of
     // the returned value, so the dependency call fails closed like a throw.
     chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_FAILED", "tail proxy result fail-closed");
     chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put after proxy tail result");
-    chk(publisher.calls.length === 0, "no D07 call after proxy tail result");
+    chk(publisher.calls.length === 0 && factory.createCalls.length === 0, "no D07 after proxy tail result");
   }
 
-  // inconsistent completion package: implementation_files ≠ delivery files
-  // (but still a valid subset of the package files, so the A1 builder
-  // accepts and the coordinator's cross-binding must reject it)
+  // malicious accessor inside completion package (snapshot rejects accessors)
   {
-    const { coordinator, tail, publisher, store } = harness();
-    tail.result = {
-      status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok",
-      completionPackage: makeTailPackage({ implementation_files: ["core/d09b.ts"] }),
-    };
+    const { coordinator, tail, publisher, store, factory } = harness();
+    const pkg = makeTailPackage() as any;
+    Object.defineProperty(pkg, "files", { get: () => { throw new Error("trap"); }, enumerable: true });
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
     const result = await coordinator.execute(makeRequest());
-    chk(result.status === "failed" && result.reasonCode === "A1_VERIFICATION_FAILED", "package impl files mismatch fails");
-    chk(publisher.calls.length === 0, "no D07 call after impl files mismatch");
-    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 1, "A1 was built and stored before binding check");
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "package accessor fail-closed");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put after package accessor");
+    chk(publisher.calls.length === 0 && factory.createCalls.length === 0, "no D07 after package accessor");
   }
 
-  // inconsistent completion package: files not a superset of implementation files
-  {
-    const { coordinator, tail, publisher } = harness();
-    tail.result = {
-      status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok",
-      completionPackage: makeTailPackage({ files: ["core/d09b.ts"] }),
-    };
-    const result = await coordinator.execute(makeRequest());
-    chk(result.status === "failed" && result.reasonCode === "A1_BUILD_FAILED", "package files superset violation fails");
-    chk(publisher.calls.length === 0, "no D07 call after superset violation");
-  }
-
-  // tail gate persisted=false
+  // tail gate persisted=false (pre-A1 binding passes; A1 builder rejects)
   {
     const { coordinator, tail, publisher } = harness();
     const pkg = makeTailPackage();
@@ -1414,17 +1739,6 @@ async function sectionTail(): Promise<void> {
     chk(result.status === "failed" && result.reasonCode === "A1_BUILD_FAILED", "completion decision source mismatch fails");
   }
 
-  // malicious accessor inside completion package
-  {
-    const { coordinator, tail, publisher } = harness();
-    const pkg = makeTailPackage() as any;
-    Object.defineProperty(pkg, "files", { get: () => { throw new Error("trap"); }, enumerable: true });
-    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
-    const result = await coordinator.execute(makeRequest());
-    chk(result.status === "failed" && result.reasonCode === "A1_BUILD_FAILED", "package accessor fail-closed");
-    chk(publisher.calls.length === 0, "no D07 call after package accessor");
-  }
-
   // tail input carries the verified chain refs
   {
     const { coordinator, tail } = harness();
@@ -1440,6 +1754,220 @@ async function sectionTail(): Promise<void> {
 
   mark("D09_B_TAIL_BOUNDARY_VERIFIED");
   mark("D09_B_TAIL_FAIL_CLOSED_VERIFIED");
+}
+
+// ═══════════════════════════════════════ Section: tail immutable snapshot (F-004)
+
+async function sectionTailSnapshot(): Promise<void> {
+  startSection("tail_snapshot");
+  console.log("\n=== Tail Immutable Snapshot / Completed Reason Matrix (F-004) ===");
+
+  // completed + wrong reasonCode → invalid
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    tail.result = { status: "completed", reasonCode: "SOME_OTHER_REASON", safeMessage: "ok", completionPackage: makeTailPackage() };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "completed without GOVERNANCE_TAIL_COMPLETED invalid");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put");
+    chk(factory.createCalls.length === 0 && publisher.calls.length === 0, "no D07");
+  }
+  // non-completed + completed reason → invalid
+  for (const status of ["pending", "in_progress", "blocked", "failed"]) {
+    const { coordinator, tail } = harness();
+    tail.result = { status: status as any, reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok" };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", `non-completed (${status}) with completed reason invalid`);
+  }
+  // top-level accessors are REJECTED without ever invoking the getter
+  // (status / reasonCode / safeMessage / package read counts stay 0)
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const tailResult: any = {};
+    let statusGets = 0, reasonGets = 0, safeGets = 0, pkgGets = 0;
+    Object.defineProperty(tailResult, "status", { get: () => { statusGets++; return "completed"; }, enumerable: true });
+    Object.defineProperty(tailResult, "reasonCode", { get: () => { reasonGets++; return "GOVERNANCE_TAIL_COMPLETED"; }, enumerable: true });
+    Object.defineProperty(tailResult, "safeMessage", { get: () => { safeGets++; return "ok"; }, enumerable: true });
+    Object.defineProperty(tailResult, "completionPackage", { get: () => { pkgGets++; return makeTailPackage(); }, enumerable: true });
+    tail.result = tailResult;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "accessor tail result rejected");
+    chk(statusGets === 0 && reasonGets === 0 && safeGets === 0 && pkgGets === 0, "tail result getters never invoked");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, "no A1 put");
+    chk(factory.createCalls.length === 0 && publisher.calls.length === 0, "no D07");
+  }
+  // symbol key on tail result
+  {
+    const { coordinator, tail } = harness();
+    const tr: any = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: makeTailPackage() };
+    tr[Symbol("x")] = 1;
+    tail.result = tr;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "tail result symbol key invalid");
+  }
+  // class instance tail result
+  {
+    const { coordinator, tail } = harness();
+    class TailResult {
+      status = "completed";
+      reasonCode = "GOVERNANCE_TAIL_COMPLETED";
+      safeMessage = "ok";
+      completionPackage = makeTailPackage();
+    }
+    tail.result = new TailResult() as any;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "class instance tail result invalid");
+  }
+  // throwing ownKeys proxy tail result (scan-level reflection failure)
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const evil = new Proxy(
+      { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: makeTailPackage() },
+      { ownKeys: () => { throw new Error("trap"); } },
+    );
+    tail.result = evil as any;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "throwing ownKeys proxy tail result invalid");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  // revoked proxy tail result (await-time fail-closed)
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const { proxy, revoke } = Proxy.revocable(
+      { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: makeTailPackage() },
+      {},
+    );
+    revoke();
+    tail.result = proxy as any;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_FAILED", "revoked proxy tail result fail-closed");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  // mutation after resolve: top-level, nested package array, final workspace
+  // cannot change the snapshot the A1 artifact was built from
+  {
+    const { coordinator, store, tail } = harness();
+    const pkg = makeTailPackage() as any;
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "run succeeds before mutation");
+    (tail.result as any).status = "failed";
+    (pkg.implementation_files as string[]).push("core/evil.ts");
+    (pkg.files as string[]).push("core/evil.ts");
+    pkg.final_workspace.task_head_sha = "e".repeat(40);
+    pkg.final_workspace.status_digest_sha256 = "e".repeat(64);
+    const a1Puts = store.puts.filter((p) => p.kind === "governance_tail_result");
+    chk(a1Puts.length === 1, "A1 stored once");
+    if (a1Puts.length === 1) {
+      const parsed = parseLoopGovernanceTailResultBytes(a1Puts[0]!.bytes);
+      chk(parsed.ok && parsed.value.status === "completed", "A1 still completed");
+      chk(parsed.ok && parsed.value.implementation_files.length === 2 && !parsed.value.implementation_files.includes("core/evil.ts"),
+        "A1 implementation files unaffected by post-resolve mutation");
+      chk(parsed.ok && parsed.value.final_workspace.task_head_sha === HEAD1, "A1 final workspace head unaffected by post-resolve mutation");
+    }
+  }
+  // package root extra key
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const pkg: any = makeTailPackage();
+    pkg.extra = 1;
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "package extra root key invalid");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  // package symbol key
+  {
+    const { coordinator, tail } = harness();
+    const pkg: any = makeTailPackage();
+    pkg[Symbol("x")] = 1;
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "package symbol key invalid");
+  }
+  // package cycle
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const pkg: any = makeTailPackage();
+    pkg.final_workspace.self = pkg.final_workspace;
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "package cycle rejected");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  // nested accessor inside package (final workspace getter)
+  {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    const pkg: any = makeTailPackage();
+    Object.defineProperty(pkg.final_workspace, "task_head_sha", { get: () => { throw new Error("trap"); }, enumerable: true });
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "GOVERNANCE_TAIL_INVALID", "nested package accessor rejected");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+
+  mark("D09_B_TAIL_SNAPSHOT_AND_REASON_BINDING_VERIFIED");
+}
+
+// ═══════════════════════════════════════ Section: pre-A1 cross-binding (F-002)
+
+async function sectionPreA1(): Promise<void> {
+  startSection("pre_a1");
+  console.log("\n=== Pre-A1 Cross-Binding (F-002) ===");
+
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ["impl files length mismatch", { implementation_files: ["core/d09b.ts"] }],
+    ["impl files order mismatch", { implementation_files: ["tests/d09b.test.ts", "core/d09b.ts"] }],
+    ["impl files content mismatch", { implementation_files: ["core/other.ts", "tests/d09b.test.ts"] }],
+    ["workspace path mismatch", { final_workspace: { workspace_path: "/tmp/other-workspace", task_branch: IDENTITY.taskBranch, task_head_sha: HEAD1, status_digest_sha256: SD1, task_has_changes: true } }],
+    ["task branch mismatch", { final_workspace: { workspace_path: WORKSPACE_PATH, task_branch: "codex/other", task_head_sha: HEAD1, status_digest_sha256: SD1, task_has_changes: true } }],
+    ["task head mismatch", { final_workspace: { workspace_path: WORKSPACE_PATH, task_branch: IDENTITY.taskBranch, task_head_sha: "e".repeat(40), status_digest_sha256: SD1, task_has_changes: true } }],
+    ["tail task_has_changes=false", { final_workspace: { workspace_path: WORKSPACE_PATH, task_branch: IDENTITY.taskBranch, task_head_sha: HEAD1, status_digest_sha256: SD1, task_has_changes: false } }],
+    ["final files missing implementation file", { files: ["core/d09b.ts"] }],
+  ];
+  for (const [label, overrides] of cases) {
+    const { coordinator, tail, store, factory, publisher } = harness();
+    tail.result = {
+      status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok",
+      completionPackage: makeTailPackage(overrides),
+    };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "A1_VERIFICATION_FAILED", `pre-A1 binding blocks (${label})`);
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0, `no A1 put (${label})`);
+    chk(factory.createCalls.length === 0 && publisher.calls.length === 0, `no D07 (${label})`);
+  }
+  // D06 taskHasChanges=false → blocked before A1
+  {
+    const { coordinator, delivery, store, factory, publisher } = harness();
+    delivery.result = makeDeliveryResult({
+      finalWorkspace: { workspacePath: WORKSPACE_PATH, taskBranch: IDENTITY.taskBranch, taskHeadSha: HEAD1, statusDigestSha256: SD1, taskHasChanges: false },
+    });
+    delivery.artifactBytes = writeDeliveryBytes({
+      final_workspace: { workspace_path: WORKSPACE_PATH, task_branch: IDENTITY.taskBranch, task_head_sha: HEAD1, status_digest_sha256: SD1, task_has_changes: false },
+    });
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "A1_VERIFICATION_FAILED", "D06 task_has_changes=false blocked pre-A1");
+    chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 0 && factory.createCalls.length === 0 && publisher.calls.length === 0,
+      "zero downstream side effects");
+  }
+  // status digest may differ between D06 and Tail (Shared Tail write) — allowed;
+  // the post-Tail D03 inspect then reports the Tail-written digest
+  {
+    const { coordinator, tail, workspace } = harness();
+    const pkg = makeTailPackage({
+      final_workspace: { workspace_path: WORKSPACE_PATH, task_branch: IDENTITY.taskBranch, task_head_sha: HEAD1, status_digest_sha256: "d".repeat(64), task_has_changes: true },
+    });
+    workspace.inspectSnapshot = makePostTailSnapshot({ taskStatusDigestSha256: "d".repeat(64) });
+    tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: pkg };
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "status digest may differ (Shared Tail write)");
+  }
+
+  mark("D09_B_PRE_A1_BINDING_VERIFIED");
 }
 
 // ═══════════════════════════════════════ Section: A1 ownership
@@ -1558,6 +2086,75 @@ async function sectionPostTail(): Promise<void> {
   mark("D09_B_FINAL_WORKSPACE_VERIFIED");
 }
 
+// ═══════════════════════════════════════ Section: publisher factory (F-003)
+
+async function sectionFactory(): Promise<void> {
+  startSection("factory");
+  console.log("\n=== Publisher Factory Remaining Budget (F-003) ===");
+
+  // initial D09 budget is explicit; upstream stages consume part of it;
+  // the factory receives EXACTLY the remaining budget before D07
+  {
+    let now = 1_000;
+    const clock = { nowMs: () => now };
+    const { coordinator, factory, publisher } = harness({ clock, maxTotalDurationMs: 60_000 });
+    const promise = coordinator.execute(makeRequest());
+    now = 31_000; // consume 30s of the shared budget across D08/D03/D06/Tail/A1/inspect
+    const result = await promise;
+    chk(result.status === "succeeded", "run with consumed budget succeeds");
+    chk(factory.createCalls.length === 1, "factory create called once");
+    chk(publisher.calls.length === 1, "publisher execute called once");
+    if (factory.createCalls.length === 1) {
+      chk(factory.createCalls[0] === 30_000, "factory received exactly the remaining budget before D07");
+      chk(factory.createCalls[0] < 60_000, "factory budget is less than the initial full budget");
+    }
+  }
+  // remaining below the D07 minimum budget → TOTAL_TIMEOUT before any create
+  {
+    let now = 1_000;
+    const clock = { nowMs: () => now };
+    const { coordinator, factory, publisher } = harness({ clock, maxTotalDurationMs: 4_000 });
+    const promise = coordinator.execute(makeRequest());
+    now = 4_600;
+    const result = await promise;
+    chk(result.status === "failed" && result.reasonCode === "TOTAL_TIMEOUT", "insufficient publish budget maps to TOTAL_TIMEOUT");
+    chk(factory.createCalls.length === 0, "no factory create below the minimum budget");
+    chk(publisher.calls.length === 0, "no publish execute below the minimum budget");
+  }
+  // factory throws → fail-closed
+  {
+    const { coordinator, factory, publisher } = harness();
+    factory.throwOnCreate = true;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "PUBLISH_FAILED", "factory throw fail-closed");
+    chk(factory.createCalls.length === 1, "factory attempted once");
+    chk(publisher.calls.length === 0, "no publish execute after factory throw");
+  }
+  // factory returns an invalid publisher (missing execute) → fail-closed
+  {
+    const { coordinator, factory, publisher } = harness();
+    factory.invalidResult = true;
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "failed" && result.reasonCode === "PUBLISH_FAILED", "invalid factory result fail-closed");
+    chk(factory.createCalls.length === 1, "factory attempted once");
+    chk(publisher.calls.length === 0, "no publish execute for invalid factory result");
+  }
+  // counts ≤ 1 per execute; governed request always carries the A1 ref
+  {
+    const { coordinator, factory, publisher } = harness();
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "succeeded", "factory path succeeds");
+    chk(factory.createCalls.length === 1, "factory create exactly once");
+    chk(publisher.calls.length === 1, "publisher execute exactly once");
+    const req = publisher.calls[0]!.request;
+    chk(typeof req.governanceTailResultArtifactRef === "string" && req.governanceTailResultArtifactRef.startsWith("loop-artifact:v1:governance_tail_result:"),
+      "governed request always carries governanceTailResultArtifactRef");
+    chk(req.recoveryPublishIntentArtifactRef === undefined, "no recovery intent is ever forwarded");
+  }
+
+  mark("D09_B_PUBLISHER_REMAINING_BUDGET_VERIFIED");
+}
+
 // ═══════════════════════════════════════ Section: publish
 
 async function sectionPublish(): Promise<void> {
@@ -1649,7 +2246,7 @@ async function sectionPublish(): Promise<void> {
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "blocked" && result.reasonCode === "PUBLISH_READBACK_AMBIGUOUS", "publish parser mismatch blocked");
   }
-  // publish result artifact is standalone schema
+  // publish result artifact is standalone schema → no standalone fallback
   {
     const { coordinator, publisher } = harness();
     const standalone = JSON.parse(writePublishBytes().toString("utf8")) as Record<string, unknown>;
@@ -1661,6 +2258,7 @@ async function sectionPublish(): Promise<void> {
     publisher.publishBytes = Buffer.from(JSON.stringify(standalone) + "\n", "utf8");
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "blocked" && result.reasonCode === "PUBLISH_READBACK_AMBIGUOUS", "standalone publish artifact rejected");
+    chk(publisher.calls.length === 1, "no fresh replay / standalone fallback");
   }
   // publish artifact says not succeeded
   {
@@ -1676,22 +2274,7 @@ async function sectionPublish(): Promise<void> {
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "blocked" && result.reasonCode === "PUBLISH_READBACK_AMBIGUOUS", "commit sha mismatch blocked");
   }
-  // recovered publish path: recovery intent forwarded and result recovered
-  {
-    const { coordinator, publisher } = harness();
-    const recoveryRef = "loop-artifact:v1:workspace_metadata:sha256:" + "f".repeat(64);
-    publisher.result = makePublishResult({
-      commitRecovered: true,
-      pushRecovered: true,
-      prRecovered: true,
-      recoveryStage: "completed",
-    });
-    const result = await coordinator.execute(makeRequest({ recoveryPublishIntentArtifactRef: recoveryRef }));
-    chk(result.status === "succeeded", "recovered publish succeeds");
-    chk(publisher.calls[0]!.request.recoveryPublishIntentArtifactRef === recoveryRef, "recovery intent forwarded to D07");
-    chk(result.commitSha === COMMIT_SHA, "recovered run still surfaces persisted commit sha");
-  }
-  // D07 request recovery intent missing is not forwarded as an own key
+  // no recovery intent is ever forwarded (D09-B has no publish-intent recovery input)
   {
     const { coordinator, publisher } = harness();
     await coordinator.execute(makeRequest());
@@ -1701,6 +2284,52 @@ async function sectionPublish(): Promise<void> {
   mark("D09_B_GOVERNED_PUBLISH_VERIFIED");
   mark("D09_B_NO_STANDALONE_FALLBACK_VERIFIED");
   mark("D09_B_AMBIGUOUS_WINDOW_VERIFIED");
+}
+
+// ═══════════════════════════════════════ Section: publish full-chain binding (F-007)
+
+async function sectionPublishChain(): Promise<void> {
+  startSection("publish_chain");
+  console.log("\n=== Publish Full-Chain Binding (F-007) ===");
+
+  const tamperCases: Array<[string, Record<string, unknown>]> = [
+    ["orchestration ref", { orchestration_result_artifact_ref: "loop-artifact:v1:orchestration_result:sha256:" + "0".repeat(64) }],
+    ["executor ref", { executor_input_artifact_ref: "loop-artifact:v1:executor_input:sha256:" + "1".repeat(64) }],
+    ["delivery ref", { delivery_result_artifact_ref: "loop-artifact:v1:delivery_result:sha256:" + "2".repeat(64) }],
+    ["governance ref", { governance_tail_result_artifact_ref: "loop-artifact:v1:governance_tail_result:sha256:" + "3".repeat(64) }],
+    ["implementation files", { implementation_files: ["core/other.ts", "tests/d09b.test.ts"] }],
+    ["final files", { files: ["core/d09b.ts"] }],
+    ["publish intent", { publish_intent_artifact_ref: "loop-artifact:v1:workspace_metadata:sha256:" + "4".repeat(64) }],
+    ["precommit head sha", { precommit_head_sha: "e".repeat(40) }],
+    ["commit sha", { commit_sha: "e".repeat(40) }],
+    ["remote branch sha", { remote_branch_sha: "e".repeat(40) }],
+    ["pr number", { pr_number: 99 }],
+    ["pr url", { pr_url: "https://github.com/shaoyang01/ai-sdlc-standard/pull/99" }],
+    ["commit created flag", { commit_created: false }],
+    ["commit recovered flag", { commit_recovered: true }],
+    ["push recovered flag", { push_recovered: true }],
+    ["pr recovered flag", { pr_recovered: true }],
+    ["pr body digest", { pr_body_sha256: "9".repeat(64) }],
+    ["mode/schema swap", (() => {
+      const standalone = JSON.parse(writePublishBytes().toString("utf8")) as Record<string, unknown>;
+      standalone.schema = "loop-publish-result-v1";
+      delete standalone.orchestration_result_artifact_ref;
+      delete standalone.executor_input_artifact_ref;
+      delete standalone.governance_tail_result_artifact_ref;
+      delete standalone.implementation_files;
+      return standalone;
+    })() as Record<string, unknown>],
+  ];
+  for (const [label, tamper] of tamperCases) {
+    const { coordinator, publisher, factory } = harness();
+    publisher.publishBytes = writePublishBytes(tamper);
+    const result = await coordinator.execute(makeRequest());
+    chk(result.status === "blocked" && result.reasonCode === "PUBLISH_READBACK_AMBIGUOUS", `tampered publish result blocked (${label})`);
+    chk(publisher.calls.length === 1, `no second publisher execute (${label})`);
+    chk(factory.createCalls.length === 1, `factory created once (${label})`);
+  }
+
+  mark("D09_B_PUBLISH_FULL_CHAIN_BINDING_VERIFIED");
 }
 
 // ═══════════════════════════════════════ Section: deadline / clock
@@ -1769,13 +2398,14 @@ async function sectionClock(): Promise<void> {
   {
     let now = 1_500;
     const clock = { nowMs: () => now };
-    const { coordinator, delivery, tail, publisher } = harness({ clock, maxTotalDurationMs: 1_000 });
+    const { coordinator, delivery, tail, publisher, factory } = harness({ clock, maxTotalDurationMs: 1_000 });
     // identity.createdAt is 2026-08-04T00:00:00.000Z (far in the past). If
     // the deadline were anchored there, the run would be instantly expired;
     // it must be anchored at the first execute() sample (now=1500).
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "succeeded", "deadline anchored at the first execute() clock sample");
     chk(delivery.calls.length === 1 && tail.calls.length === 1 && publisher.calls.length === 1, "all stages ran within budget");
+    chk(factory.createCalls.length === 1, "factory created within the tight budget");
   }
 
   mark("D09_B_DEADLINE_VERIFIED");
@@ -1787,7 +2417,7 @@ async function sectionHappyPath(): Promise<void> {
   startSection("happy");
   console.log("\n=== Governed Production Delivery Happy Path ===");
 
-  const { coordinator, store, workspace, delivery, publisher, tail } = harness();
+  const { coordinator, store, workspace, delivery, publisher, factory, tail } = harness();
   const result = await coordinator.execute(makeRequest());
   chk(result.status === "succeeded", "happy path succeeds");
   chk(result.reasonCode === "DELIVERY_SUCCEEDED", "reason DELIVERY_SUCCEEDED");
@@ -1809,6 +2439,7 @@ async function sectionHappyPath(): Promise<void> {
   chk(workspace.prepareCalls === 1, "prepare called exactly once");
   chk(delivery.calls.length === 1, "delivery called exactly once");
   chk(tail.calls.length === 1, "tail called exactly once");
+  chk(factory.createCalls.length === 1, "publisher factory created exactly once");
   chk(publisher.calls.length === 1, "publisher called exactly once");
   chk(workspace.inspectCalls === 1, "post-tail inspect called exactly once");
   chk(store.puts.filter((p) => p.kind === "governance_tail_result").length === 1, "A1 put exactly once");
@@ -1852,11 +2483,17 @@ async function main(): Promise<void> {
   await sectionInput();
   await sectionOrchestration();
   await sectionWorkspace();
+  await sectionPristine();
+  await sectionIdentity();
   await sectionDelivery();
   await sectionTail();
+  await sectionTailSnapshot();
+  await sectionPreA1();
   await sectionA1();
   await sectionPostTail();
+  await sectionFactory();
   await sectionPublish();
+  await sectionPublishChain();
   await sectionClock();
   await sectionHappyPath();
 
