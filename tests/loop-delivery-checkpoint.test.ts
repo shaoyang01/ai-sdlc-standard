@@ -16,6 +16,7 @@ import {
   canonicalizeLoopDeliveryCheckpoint,
   LOOP_DELIVERY_CHECKPOINT_SCHEMA,
   LOOP_DELIVERY_CHECKPOINT_MAX_BYTES,
+  LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE,
   LOOP_DELIVERY_CHECKPOINT_PHASES,
   LOOP_DELIVERY_CHECKPOINT_MODES,
   LOOP_DELIVERY_CHECKPOINT_TERMINAL_PHASES,
@@ -49,6 +50,7 @@ const MARKERS: Record<string, boolean> = {
   D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED: false,
   D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED: false,
   D10_A_CHECKPOINT_FORK_PREVENTION_VERIFIED: false,
+  D10_A_COMPLETED_REASON_BINDING_VERIFIED: false,
 };
 
 function markIfClear(marker: string): void {
@@ -98,7 +100,7 @@ const FACTS: Record<string, Record<string, unknown>> = {
   R: { remote_branch_sha: COMMIT_SHA },
   P: { pr_number: PR_NUMBER, pr_url: PR_URL, pr_body_sha256: "7".repeat(64) },
   X: { publish_result_artifact_ref: REF_X },
-  T_COMPLETED: { terminal_status: "completed", terminal_reason_code: null },
+  T_COMPLETED: { terminal_status: "completed", terminal_reason_code: LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE },
   T_BLOCKED: { terminal_status: "blocked", terminal_reason_code: "BLOCKED_REASON" },
   T_FAILED: { terminal_status: "failed", terminal_reason_code: "FAILED_REASON" },
 };
@@ -369,9 +371,9 @@ function main(): void {
     check(!buildOk({ ...atPhase("blocked"), terminal_reason_code: null }), "blocked without reason rejected");
     check(!buildOk({ ...atPhase("failed"), terminal_reason_code: null }), "failed without reason rejected");
     check(!buildOk({ ...atPhase("completed"), ...FACTS.T_BLOCKED }), "completed with blocked terminal rejected");
-    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "SOMETHING" }), "completed with reason rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "SOMETHING" }), "completed with alternative reason rejected");
     check(!buildOk({ ...atPhase("initialized"), ...FACTS.T_BLOCKED }), "non-terminal phase with terminal facts rejected");
-    check(!buildOk({ ...atPhase("initialized"), terminal_status: null, terminal_reason_code: "x" }), "reason without terminal status rejected");
+    check(!buildOk({ ...atPhase("initialized"), terminal_status: null, terminal_reason_code: "SOMETHING" }), "reason without terminal status rejected");
     // terminal prefix rules
     check(!buildOk({ ...atPhase("blocked"), ...FACTS.A, ...FACTS.W_TRUE, ...FACTS.T_BLOCKED }), "blocked changed workspace without delivery rejected");
     check(!buildOk({ ...atPhase("blocked"), ...FACTS.A, ...FACTS.W_TRUE, ...FACTS.D, ...FACTS.C, ...FACTS.T_BLOCKED }), "blocked changed workspace with commit rejected");
@@ -393,6 +395,36 @@ function main(): void {
     check(!buildOk({ ...atPhase("d08_completed"), ...FACTS.W_FALSE, ...FACTS.D }), "d08_completed with delivery+workspace facts rejected");
   }
   markIfClear("D10_A_CHECKPOINT_SCHEMA_VERIFIED");
+
+  // ═══════════════════════════════════════════════════════════
+  // 3b. Completed terminal reason binding (D10-A-F-001)
+  // ═══════════════════════════════════════════════════════════
+  startSection();
+  console.log("completed terminal reason binding");
+  {
+    check(
+      buildOk({ ...atPhase("completed"), terminal_reason_code: LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE }),
+      "completed + DELIVERY_COMPLETED accepted",
+    );
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: null }), "completed + null rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "" }), "completed + empty string rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "ANOTHER_CODE" }), "completed + alternative canonical code rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "free text reason" }), "completed + free text rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: " DELIVERY_COMPLETED" }), "completed + leading whitespace rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "DELIVERY_COMPLETED " }), "completed + trailing whitespace rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "DELIVERY\u0000COMPLETED" }), "completed + control character rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_reason_code: "delivery_completed" }), "completed + case variant rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_status: null, terminal_reason_code: LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE }), "completed without terminal status rejected");
+    check(!buildOk({ ...atPhase("completed"), terminal_status: "blocked", terminal_reason_code: LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE }), "completed with wrong terminal status rejected");
+    check(!buildOk({ ...atPhase("initialized"), terminal_status: null, terminal_reason_code: "SOMETHING" }), "non-terminal + non-null reason rejected");
+    check(buildOk({ ...atPhase("blocked"), ...FACTS.T_BLOCKED }), "blocked + valid canonical reason accepted");
+    check(buildOk({ ...atPhase("failed"), ...FACTS.T_FAILED }), "failed + valid canonical reason accepted");
+    check(!buildOk({ ...atPhase("blocked"), terminal_reason_code: "lowercase" }), "blocked + lowercase reason rejected");
+    check(!buildOk({ ...atPhase("blocked"), terminal_reason_code: "WITH SPACES" }), "blocked + free text reason rejected");
+    check(!buildOk({ ...atPhase("blocked"), terminal_reason_code: "X".repeat(65) }), "blocked + over-length reason rejected");
+    check(!buildOk({ ...atPhase("blocked"), terminal_reason_code: "3DIGITS_START" }), "blocked + non-uppercase-start reason rejected");
+  }
+  markIfClear("D10_A_COMPLETED_REASON_BINDING_VERIFIED");
 
   // ═══════════════════════════════════════════════════════════
   // 4. Fixed bindings, ref kinds, PR URL, generation, deadline
@@ -928,6 +960,7 @@ function main(): void {
   console.log("D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED", MARKERS.D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED);
   console.log("D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED", MARKERS.D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED);
   console.log("D10_A_CHECKPOINT_FORK_PREVENTION_VERIFIED", MARKERS.D10_A_CHECKPOINT_FORK_PREVENTION_VERIFIED);
+  console.log("D10_A_COMPLETED_REASON_BINDING_VERIFIED", MARKERS.D10_A_COMPLETED_REASON_BINDING_VERIFIED);
   console.log(`\nD10_A_CHECKPOINT_SUMMARY passed=${passed} failed=${failed}`);
   if (failed > 0) process.exit(1);
 }

@@ -113,6 +113,9 @@ export type LoopDeliveryCheckpointTransitionResult = { readonly ok: true } | Loo
 export const LOOP_DELIVERY_CHECKPOINT_SCHEMA = "loop-delivery-checkpoint-v1" as const;
 export const LOOP_DELIVERY_CHECKPOINT_MAX_BYTES = 1_048_576;
 
+/** The only terminal reason code a `completed` checkpoint may carry (D10-A-F-001). */
+export const LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE = "DELIVERY_COMPLETED" as const;
+
 export const LOOP_DELIVERY_CHECKPOINT_PHASES: readonly LoopDeliveryCheckpointPhase[] = [
   "initialized",
   "d08_completed",
@@ -138,7 +141,6 @@ export const LOOP_DELIVERY_CHECKPOINT_TERMINAL_PHASES: readonly LoopDeliveryChec
 
 const MAX_STRING_UTF8_BYTES = 65_536;
 const MAX_DIAGNOSTIC_LENGTH = 256;
-const MAX_REASON_LENGTH = 256;
 const MAX_REPOSITORY_LENGTH = 200;
 const MIN_MAX_TOTAL_DURATION_MS = 1_000;
 const MAX_MAX_TOTAL_DURATION_MS = 3_600_000;
@@ -149,6 +151,12 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 const REPOSITORY_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REF_RE = /^loop-artifact:v1:([a-z_]+):sha256:([0-9a-f]{64})$/;
 const PR_URL_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([0-9]+)$/;
+
+// Canonical terminal reason code syntax (D10-A-F-001): uppercase start, then
+// uppercase letters/digits/underscore, at most 64 characters total. No free
+// text, no whitespace, no case variants, no control characters, no silent
+// normalization — the code must round-trip byte-for-byte.
+const TERMINAL_REASON_CODE_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 const CHECKPOINT_REF_RE = /^loop-artifact:v1:delivery_checkpoint:sha256:[0-9a-f]{64}$/;
 
@@ -697,8 +705,8 @@ function validateRoot(record: Record<string, unknown>, budget: Budget): LoopDeli
   let terminalReasonCode: string | null = null;
   if (record.terminal_reason_code !== null) {
     const reason = asTrimmedString(record.terminal_reason_code, "terminal_reason_code", budget);
-    if (reason.length > MAX_REASON_LENGTH) {
-      throw new ValidationError("invalid_input", "terminal_reason_code exceeds the length bound");
+    if (!TERMINAL_REASON_CODE_RE.test(reason)) {
+      throw new ValidationError("invalid_input", "terminal_reason_code must be a canonical reason code");
     }
     terminalReasonCode = reason;
   }
@@ -707,10 +715,15 @@ function validateRoot(record: Record<string, unknown>, budget: Budget): LoopDeli
     if (terminalStatus !== null || terminalReasonCode !== null) {
       throw new ValidationError("invalid_input", "non-terminal checkpoints must not carry terminal facts");
     }
-  } else if (canonicalPhase === "completed" && terminalReasonCode !== null) {
+  } else if (
+    canonicalPhase === "completed" &&
+    terminalReasonCode !== LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE
+  ) {
     // Completed is the success terminal: terminal_status is fixed to
-    // "completed" (enforced below) and no failure reason is carried.
-    throw new ValidationError("invalid_input", "completed checkpoints must not carry a terminal reason");
+    // "completed" (enforced below) and the reason is bound to exactly
+    // DELIVERY_COMPLETED — null, empty, alternative canonical codes, free
+    // text, whitespace variants and control characters are all rejected.
+    throw new ValidationError("invalid_input", "completed checkpoints must carry the DELIVERY_COMPLETED terminal reason");
   }
 
   // ── fact consistency ──

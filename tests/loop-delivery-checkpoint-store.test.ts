@@ -27,6 +27,7 @@ import {
   parseLoopDeliveryCheckpointBytes,
   loopDeliveryCheckpointRef,
   LOOP_DELIVERY_CHECKPOINT_SCHEMA,
+  LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE,
   type LoopDeliveryCheckpointPhase,
 } from "../core/loop-delivery-checkpoint";
 import {
@@ -126,7 +127,7 @@ const FACTS: Record<string, Record<string, unknown>> = {
   R: { remote_branch_sha: COMMIT_SHA },
   P: { pr_number: 42, pr_url: PR_URL, pr_body_sha256: "7".repeat(64) },
   X: { publish_result_artifact_ref: REF_X },
-  T_COMPLETED: { terminal_status: "completed", terminal_reason_code: null },
+  T_COMPLETED: { terminal_status: "completed", terminal_reason_code: LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE },
   T_BLOCKED: { terminal_status: "blocked", terminal_reason_code: "BLOCKED_REASON" },
   T_FAILED: { terminal_status: "failed", terminal_reason_code: "FAILED_REASON" },
 };
