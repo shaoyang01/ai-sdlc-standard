@@ -67,6 +67,22 @@ function sanitizeMessage(message: string): string {
 // artifact bytes and credential material are never propagated.
 
 /**
+ * Runtime plain-object guard as a TypeScript type predicate. `typeof` and
+ * `Array.isArray` on a revoked proxy can throw — any reflection failure fails
+ * closed to `false` and the caller rejects the input with the same bounded
+ * INVALID_INPUT diagnostic. After the guard, control flow narrows `unknown`
+ * to `object`, so all later reflection receives only a statically-object
+ * reference.
+ */
+function isPlainObjectRecord(value: unknown): value is object {
+  try {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Descriptor-based snapshot of a public input record. `allowed` is the exact
  * canonical own-key sequence: reordered, extra, missing, symbol and
  * `__proto__` keys, accessors, class instances and non-plain prototypes are
@@ -81,20 +97,13 @@ function snapshotSequence(
   exact: boolean,
   hintKeys: readonly string[],
 ): Record<string, unknown> {
-  // Array.isArray / typeof on a revoked proxy can throw — any reflection
-  // failure fails closed before anything else runs.
-  let notPlain: boolean;
-  try {
-    notPlain = value === null || typeof value !== "object" || Array.isArray(value);
-  } catch {
+  if (!isPlainObjectRecord(value)) {
     throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} must be a plain object`);
   }
-  if (notPlain) {
-    throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} must be a plain object`);
-  }
+  const objectValue: object = value;
   let proto: unknown;
   try {
-    proto = Object.getPrototypeOf(value);
+    proto = Object.getPrototypeOf(objectValue);
   } catch {
     throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} prototype reflection failed`);
   }
@@ -103,7 +112,7 @@ function snapshotSequence(
   }
   let keys: Array<string | symbol>;
   try {
-    keys = Reflect.ownKeys(value);
+    keys = Reflect.ownKeys(objectValue);
   } catch {
     throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} ownKeys reflection failed`);
   }
@@ -139,7 +148,7 @@ function snapshotSequence(
   for (const key of stringKeys) {
     let descriptor: PropertyDescriptor | undefined;
     try {
-      descriptor = Object.getOwnPropertyDescriptor(value, key);
+      descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
     } catch {
       throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} descriptor reflection failed`);
     }
