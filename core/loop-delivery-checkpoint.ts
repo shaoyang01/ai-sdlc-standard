@@ -170,7 +170,11 @@ const REF_KIND_BY_FIELD: Readonly<Record<string, string>> = {
   publish_result_artifact_ref: "workspace_metadata",
 };
 
-const ROOT_KEYS = [
+// Exact canonical key sequences (D10-A-R-001): every public input record is
+// required to carry its own keys in exactly this order — reordered, extra or
+// missing keys are rejected, never silently canonicalized.
+
+export const LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS = [
   "schema", "identity", "mode", "generation", "previous_checkpoint_artifact_ref", "phase",
   "target_repository", "base_branch", "expected_base_sha", "task_branch",
   "source_head_sha", "source_wip_digest_sha256",
@@ -183,10 +187,20 @@ const ROOT_KEYS = [
   "terminal_status", "terminal_reason_code",
 ] as const;
 
-const IDENTITY_KEYS = [
+export const LOOP_DELIVERY_CHECKPOINT_IDENTITY_KEYS = [
   "runId", "requirementId", "repository", "repositoryPath", "baseBranch",
   "expectedBaseSha", "taskBranch", "controlRoot", "createdAt",
 ] as const;
+
+/** Advance body sequence: the full root sequence minus the three store-owned fields. */
+export const LOOP_DELIVERY_CHECKPOINT_BODY_KEYS: readonly string[] =
+  LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS.filter(
+    (key) => key !== "schema" && key !== "generation" && key !== "previous_checkpoint_artifact_ref",
+  );
+
+const ROOT_KEYS = LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS;
+
+const IDENTITY_KEYS = LOOP_DELIVERY_CHECKPOINT_IDENTITY_KEYS;
 
 // ═══════════════════════════════════════ Internal error model
 
@@ -229,6 +243,15 @@ interface Budget {
 
 // ═══════════════════════════════════════ Descriptor-based plain scans
 
+/**
+ * Descriptor-based exact-sequence snapshot of a public input record
+ * (D10-A-R-001/R-003). The own keys must appear in exactly the `allowed`
+ * sequence: reordered keys, extra keys, missing keys, symbol keys,
+ * `__proto__` own keys, accessors, class instances and non-plain prototypes
+ * are all rejected. OwnKeys/descriptor/prototype reflection failures
+ * (including Proxy traps and revoked proxies) fail closed. Getters are never
+ * invoked; the returned record is a fresh plain snapshot.
+ */
 function scanPlainObject(value: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new ValidationError("invalid_input", `${label} must be a plain object`);
@@ -248,11 +271,24 @@ function scanPlainObject(value: unknown, allowed: readonly string[], label: stri
   } catch {
     throw new ValidationError("invalid_input", `${label} ownKeys reflection failed`);
   }
-  const out = Object.create(null) as Record<string, unknown>;
+  const stringKeys: string[] = [];
   for (const key of keys) {
     if (typeof key === "symbol") throw new ValidationError("invalid_input", `${label} has a symbol key`);
     if (key === "__proto__") throw new ValidationError("invalid_input", `${label} has a __proto__ key`);
     if (!allowed.includes(key)) throw new ValidationError("invalid_input", `${label} has an unknown key`);
+    stringKeys.push(key);
+  }
+  // Exact own-key sequence: no silent canonicalization of reordered input.
+  if (stringKeys.length !== allowed.length) {
+    throw new ValidationError("invalid_input", `${label} is missing required keys`);
+  }
+  for (let index = 0; index < stringKeys.length; index += 1) {
+    if (stringKeys[index] !== allowed[index]) {
+      throw new ValidationError("invalid_input", `${label} has keys in the wrong order`);
+    }
+  }
+  const out = Object.create(null) as Record<string, unknown>;
+  for (const key of stringKeys) {
     let descriptor: PropertyDescriptor | undefined;
     try {
       descriptor = Object.getOwnPropertyDescriptor(value, key);

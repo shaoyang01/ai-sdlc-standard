@@ -315,14 +315,17 @@ function main(): void {
         identityKeys.length === 9 && identityKeys.every((key, index) => key === expectedIdentityKeys[index]),
         "identity serialized in the exact fixed 9-key order",
       );
-      // Reordered input is accepted by the builder but canonical output order
-      // is fixed.
+      // Reordered / extra / missing input is rejected (D10-A-R-001): the
+      // builder requires the exact canonical own-key sequence and never
+      // silently canonicalizes.
       const reordered = build(Object.fromEntries(Object.entries(atPhase("d08_completed")).reverse()));
-      check(reordered.ok, "reordered input accepted by builder");
-      if (reordered.ok) {
-        const reorderedKeys = Object.keys(JSON.parse(reordered.text));
-        check(reorderedKeys.every((key, index) => key === expectedRootKeys[index]), "reordered input serialized in canonical order");
-      }
+      check(!reordered.ok, "reordered root input rejected");
+      const reorderedIdentity = build({ ...atPhase("d08_completed"), identity: Object.fromEntries(Object.entries(makeIdentity()).reverse()) });
+      check(!reorderedIdentity.ok, "reordered identity input rejected");
+      check(!build({ ...atPhase("d08_completed"), identity: { ...makeIdentity(), extraIdentityKey: 1 } }).ok, "extra identity key rejected");
+      const missingIdentity = makeIdentity();
+      delete missingIdentity.createdAt;
+      check(!build({ ...atPhase("d08_completed"), identity: missingIdentity }).ok, "missing identity key rejected");
     }
   }
   markIfClear("D10_A_CHECKPOINT_SCHEMA_VERIFIED");
@@ -560,10 +563,9 @@ function main(): void {
       const spoofed = new Uint8Array(4);
       Object.defineProperty(spoofed, Symbol.toStringTag, { value: "Uint8Array" });
       check(parseOk(spoofed) === false, "spoofed toStringTag cannot bypass intrinsic brand checks");
-      // reordered input builds canonical output
+      // reordered input is rejected (never silently canonicalized)
       const reorderedBuild = build(Object.fromEntries(Object.entries(atPhase("initialized")).reverse()));
-      check(reorderedBuild.ok, "reordered input accepted by builder");
-      if (reorderedBuild.ok) check(reorderedBuild.text === text, "reordered input produces identical canonical bytes");
+      check(!reorderedBuild.ok, "reordered input rejected by builder");
     }
   }
   markIfClear("D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED");

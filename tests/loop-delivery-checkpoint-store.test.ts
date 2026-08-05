@@ -28,11 +28,14 @@ import {
   loopDeliveryCheckpointRef,
   LOOP_DELIVERY_CHECKPOINT_SCHEMA,
   LOOP_DELIVERY_CHECKPOINT_COMPLETED_REASON_CODE,
+  LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS,
+  LOOP_DELIVERY_CHECKPOINT_BODY_KEYS,
   type LoopDeliveryCheckpointPhase,
 } from "../core/loop-delivery-checkpoint";
 import {
   LoopDeliveryCheckpointStore,
   LoopDeliveryCheckpointStoreError,
+  LOOP_DELIVERY_CHECKPOINT_STORE_USER_VERSION,
   type LoopDeliveryCheckpointAdvanceBody,
 } from "../core/loop-delivery-checkpoint-store";
 
@@ -57,7 +60,9 @@ function startSection(): void {
 }
 
 const MARKERS: Record<string, boolean> = {
+  D10_A_CHECKPOINT_SCHEMA_VERIFIED: false,
   D10_A_CHECKPOINT_CAS_VERIFIED: false,
+  D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED: false,
   D10_A_CHECKPOINT_RESTART_VERIFIED: false,
   D10_A_TEMP_CLEANUP_COMPLETE: false,
 };
@@ -627,6 +632,151 @@ async function main(): Promise<void> {
   markIfClear("D10_A_CHECKPOINT_CAS_VERIFIED");
 
   // ═══════════════════════════════════════════════════════════
+  // 5b. Full locator CAS (deterministic interleaving)
+  // ═══════════════════════════════════════════════════════════
+  startSection();
+  console.log("full locator CAS interleaving (deterministic)");
+  {
+    // The writer completes its initial current verification, then performs
+    // the candidate artifact put; BEFORE the put returns, a second SQLite
+    // connection mutates the locator; the writer then enters casAdvance.
+    // The full-locator verification / full-predicate CAS must detect every
+    // single-field divergence and never overwrite the locator.
+
+    const digestFlip = (digest: string): string => digest.slice(0, 63) + (digest[63] === "0" ? "1" : "0");
+
+    const interleaveAdvance = (
+      label: string,
+      mutate: (db: Database.Database, r1Ref: string, r1Digest: string) => void,
+    ): { root: string; repository: string; controlRoot: string; code: string | null; row: { generation: number; checkpoint_artifact_ref: string; checkpoint_digest_sha256: string } | undefined; r1Ref: string } => {
+      const root = newTempDir(`interleave-${label}`);
+      const env = openStores(root);
+      const { repository, controlRoot, dbPath } = env;
+      const r1 = advanceStep(env.store, RUN_ID, 0, null, "initialized");
+      const r1Ref = r1.current.checkpointArtifactRef;
+      const r1Digest = r1.current.checkpointDigestSha256;
+      env.store.close();
+      const tamperingPut = {
+        read: (ref: string, expectedDigest?: string) => env.artifactStore.read(ref, expectedDigest),
+        put: (kind: LoopArtifactKind, content: string | Uint8Array) => {
+          const descriptor = env.artifactStore.put(kind, content);
+          const second = new Database(dbPath, { timeout: 5000 });
+          try {
+            mutate(second, r1Ref, r1Digest);
+          } finally {
+            second.close();
+          }
+          return descriptor;
+        },
+      };
+      const tamperStore = new LoopDeliveryCheckpointStore({ dbPath, artifactStore: tamperingPut });
+      tamperStore.init();
+      let code: string | null = null;
+      try {
+        tamperStore.advance({
+          runId: RUN_ID,
+          expectedGeneration: 1,
+          expectedCheckpointArtifactRef: r1Ref,
+          checkpoint: bodyAt("d08_completed"),
+        });
+      } catch (error) {
+        code = error instanceof LoopDeliveryCheckpointStoreError ? error.code : "NOT_STORE_ERROR";
+      }
+      const probe = new Database(dbPath, { timeout: 5000 });
+      const row = probe.prepare(
+        "SELECT generation, checkpoint_artifact_ref, checkpoint_digest_sha256 FROM loop_delivery_checkpoint_current_head WHERE run_id = ?",
+      ).get(RUN_ID) as { generation: number; checkpoint_artifact_ref: string; checkpoint_digest_sha256: string } | undefined;
+      probe.close();
+      tamperStore.close();
+      env.artifactStore.close();
+      return { root, repository, controlRoot, code, row, r1Ref };
+    };
+
+    // (a) digest-only mutation (ref/digest disagreement) → CORRUPT, never overwritten
+    {
+      const result = interleaveAdvance("digest", (_db, _r1Ref, r1Digest) => {
+        _db.prepare("UPDATE loop_delivery_checkpoint_current_head SET checkpoint_digest_sha256 = ? WHERE run_id = ?").run(digestFlip(r1Digest), RUN_ID);
+      });
+      const mutatedDigest = digestFlip((result.r1Ref.split(":").pop())!);
+      check(result.code === "CHECKPOINT_STORE_CORRUPT", "advance_result: CHECKPOINT_STORE_CORRUPT for digest-only mutation");
+      const candidateBuilt = buildLoopDeliveryCheckpoint(atPhase("d08_completed", 2, result.r1Ref));
+      check(candidateBuilt.ok, "candidate builds for orphan check");
+      if (candidateBuilt.ok) {
+        check(candidateBuilt.digestSha256 !== mutatedDigest, "mutated digest differs from the candidate digest");
+        check(existsSync(blobPath(result.controlRoot, `loop-artifact:v1:delivery_checkpoint:sha256:${candidateBuilt.digestSha256}`)), "candidate artifact blob was written before CAS (orphan)");
+        check(
+          result.row !== undefined &&
+          result.row.checkpoint_artifact_ref !== `loop-artifact:v1:delivery_checkpoint:sha256:${candidateBuilt.digestSha256}`,
+          "candidate_orphan_became_authority: false",
+        );
+      }
+      check(
+        result.row !== undefined && result.row.generation === 1 && result.row.checkpoint_artifact_ref === result.r1Ref,
+        "CAS_expected_generation/ref compared: matching generation+ref with a diverged digest was NOT treated as the expected authority",
+      );
+      check(
+        result.row !== undefined && result.row.checkpoint_digest_sha256 === mutatedDigest,
+        "corrupt_locator_overwritten: false (mutated digest preserved)",
+      );
+      check(
+        result.row !== undefined && result.row.checkpoint_artifact_ref === result.r1Ref,
+        "existing_authority_ref_preserved: true",
+      );
+    }
+
+    // (b) generation-only mutation (internally valid row) → STALE, never overwritten
+    {
+      const result = interleaveAdvance("generation", (db) => {
+        db.prepare("UPDATE loop_delivery_checkpoint_current_head SET generation = 3 WHERE run_id = ?").run(RUN_ID);
+      });
+      check(result.code === "CHECKPOINT_STALE", "advance_result: CHECKPOINT_STALE for generation-only mutation");
+      check(
+        result.row !== undefined && result.row.generation === 3,
+        "CAS_expected_generation_compared: true (generation divergence → stale, not overwritten)",
+      );
+    }
+
+    // (c) ref+digest paired mutation (valid competing authority) → STALE, never overwritten
+    {
+      const competingDigest = "c".repeat(64);
+      const competingRef = `loop-artifact:v1:delivery_checkpoint:sha256:${competingDigest}`;
+      const result = interleaveAdvance("competing", (db) => {
+        db.prepare("UPDATE loop_delivery_checkpoint_current_head SET generation = 2, checkpoint_artifact_ref = ?, checkpoint_digest_sha256 = ? WHERE run_id = ?").run(competingRef, competingDigest, RUN_ID);
+      });
+      check(result.code === "CHECKPOINT_STALE", "advance_result: CHECKPOINT_STALE for valid competing authority");
+      check(
+        result.row !== undefined && result.row.checkpoint_artifact_ref === competingRef,
+        "CAS_expected_ref_compared: true (ref divergence → stale, not overwritten)",
+      );
+      check(
+        result.row !== undefined && result.row.generation === 2 && result.row.checkpoint_digest_sha256 === competingDigest,
+        "valid_competing_authority_stale: true (row preserved)",
+      );
+    }
+
+    // (d) exact retry confirmed + exact-expected authority advances (positive CAS)
+    {
+      const root = newTempDir("cas-positive");
+      const env = openStores(root);
+      const r1 = advanceStep(env.store, RUN_ID, 0, null, "initialized");
+      const retry = env.store.advance({
+        runId: RUN_ID,
+        expectedGeneration: 0,
+        expectedCheckpointArtifactRef: null,
+        checkpoint: bodyAt("initialized"),
+      });
+      check(retry.status === "confirmed", "exact_retry_confirmed: true (identical request after an unknown response)");
+      check(retry.current.generation === 1 && retry.current.checkpointArtifactRef === r1.current.checkpointArtifactRef, "confirmed retry did not write a new authority");
+      const r2 = advanceStep(env.store, RUN_ID, 1, r1.current.checkpointArtifactRef, "d08_completed");
+      check(r2.status === "advanced", "CAS_full_SQL_predicate_verified: exact expected authority advances via the full-predicate update");
+      check(r2.current.generation === 2, "full-predicate CAS update wrote generation 2");
+      env.store.close();
+      env.artifactStore.close();
+    }
+  }
+  markIfClear("D10_A_CHECKPOINT_CAS_VERIFIED");
+
+  // ═══════════════════════════════════════════════════════════
   // 6. Transition / binding rejections through the store
   // ═══════════════════════════════════════════════════════════
   startSection();
@@ -705,6 +855,445 @@ async function main(): Promise<void> {
     artifactStore.close();
   }
   markIfClear("D10_A_CHECKPOINT_CAS_VERIFIED");
+
+  // ═══════════════════════════════════════════════════════════
+  // 6b. Store public input descriptor snapshots (fail-closed)
+  // ═══════════════════════════════════════════════════════════
+  startSection();
+  console.log("store public input descriptor snapshots (fail-closed)");
+  {
+    const root = newTempDir("snapshot");
+    const env = openStores(root);
+    const { dbPath, artifactStore } = env;
+
+    const checkBoundedError = (error: unknown, message: string): void => {
+      const e = error as LoopDeliveryCheckpointStoreError;
+      check(e.code === "INVALID_INPUT", `${message} (code ${e.code})`);
+      check(e.message.length <= 256, `${message}: message bounded`);
+      check(!/[\x00-\x1f\x7f]/.test(e.message), `${message}: no control characters`);
+    };
+
+    // constructor options: getters never invoked, accessors rejected
+    {
+      let optionGetterCalls = 0;
+      const getterOptions: Record<string, unknown> = {};
+      const optionValues: Record<string, unknown> = { dbPath, artifactStore, busyTimeoutMs: 2000, maxCheckpointBytes: 1024 };
+      for (const key of ["dbPath", "artifactStore", "busyTimeoutMs", "maxCheckpointBytes"]) {
+        Object.defineProperty(getterOptions, key, {
+          get() {
+            optionGetterCalls += 1;
+            return optionValues[key];
+          },
+          enumerable: true,
+          configurable: true,
+        });
+      }
+      try {
+        new LoopDeliveryCheckpointStore(getterOptions as never);
+        check(false, "constructor_options_accessor_rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "constructor_options_accessor_rejected");
+      }
+      check(optionGetterCalls === 0, "constructor_options_getters_invoked: 0");
+    }
+    // constructor options: reordered / extra / missing / symbol / __proto__ /
+    // class instance / non-plain prototype / proxy / revoked proxy
+    expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ artifactStore, dbPath } as never), "constructor_options_reordered_rejected");
+    expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ dbPath, artifactStore, extra: 1 } as never), "constructor options extra key rejected");
+    expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ dbPath } as never), "constructor options missing artifactStore rejected");
+    {
+      const symbolOptions = { dbPath, artifactStore } as Record<symbol | string, unknown>;
+      symbolOptions[Symbol("x")] = 1;
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(symbolOptions as never), "constructor options symbol key rejected");
+    }
+    {
+      const protoOptions = { dbPath, artifactStore } as Record<string, unknown>;
+      Object.defineProperty(protoOptions, "__proto__", { value: {}, enumerable: true, configurable: true });
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(protoOptions as never), "constructor options __proto__ key rejected");
+    }
+    {
+      class OptionsSecret {}
+      const instanceOptions = Object.assign(new OptionsSecret(), { dbPath, artifactStore });
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(instanceOptions as never), "constructor options class instance rejected");
+    }
+    {
+      const weirdOptions = Object.create({ inherited: 1 });
+      Object.assign(weirdOptions, { dbPath, artifactStore });
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(weirdOptions as never), "constructor options non-plain prototype rejected");
+    }
+    {
+      const throwingOptionsProxy = new Proxy({ dbPath, artifactStore }, {
+        getOwnPropertyDescriptor() {
+          throw new Error("SENT_OPT");
+        },
+      });
+      try {
+        new LoopDeliveryCheckpointStore(throwingOptionsProxy as never);
+        check(false, "constructor_options_proxy_rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "constructor_options_proxy_rejected");
+        check(!(error as LoopDeliveryCheckpointStoreError).message.includes("SENT_OPT"), "constructor options proxy: raw exception text absent");
+      }
+    }
+    {
+      const { proxy: revokedOptions, revoke: revokeOptions } = Proxy.revocable({ dbPath, artifactStore }, {});
+      revokeOptions();
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(revokedOptions as never), "constructor options revoked proxy rejected");
+    }
+    // artifact store capability check never invokes getters
+    {
+      let capabilityGetterCalls = 0;
+      const accessorStore = {
+        get put() {
+          capabilityGetterCalls += 1;
+          return () => ({});
+        },
+        read: () => Buffer.alloc(0),
+      };
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ dbPath, artifactStore: accessorStore as never }), "artifact store accessor capability rejected");
+      check(capabilityGetterCalls === 0, "artifact store capability check invoked no getters");
+    }
+
+    // advance request: getters never invoked, accessors rejected
+    {
+      let requestGetterCalls = 0;
+      const requestValues: Record<string, unknown> = {
+        runId: RUN_ID,
+        expectedGeneration: 0,
+        expectedCheckpointArtifactRef: null,
+        checkpoint: bodyAt("initialized"),
+      };
+      const getterRequest: Record<string, unknown> = {};
+      for (const key of ["runId", "expectedGeneration", "expectedCheckpointArtifactRef", "checkpoint"]) {
+        Object.defineProperty(getterRequest, key, {
+          get() {
+            requestGetterCalls += 1;
+            return requestValues[key];
+          },
+          enumerable: true,
+          configurable: true,
+        });
+      }
+      try {
+        env.store.advance(getterRequest as never);
+        check(false, "advance_request_accessor_rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "advance_request_accessor_rejected");
+      }
+      check(requestGetterCalls === 0, "advance_request_getters_invoked: 0");
+    }
+    expectStoreError("INVALID_INPUT", () => env.store.advance(Object.fromEntries(Object.entries({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: bodyAt("initialized") }).reverse()) as never), "advance_request_reordered_rejected");
+    {
+      const missingKeyRequest = { runId: RUN_ID, expectedGeneration: 0, checkpoint: bodyAt("initialized") };
+      expectStoreError("INVALID_INPUT", () => env.store.advance(missingKeyRequest as never), "advance request missing key rejected");
+    }
+    {
+      const symbolRequest = { runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: bodyAt("initialized") } as Record<symbol | string, unknown>;
+      symbolRequest[Symbol("y")] = 1;
+      expectStoreError("INVALID_INPUT", () => env.store.advance(symbolRequest as never), "advance request symbol key rejected");
+    }
+    {
+      const protoRequest = { runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: bodyAt("initialized") } as Record<string, unknown>;
+      Object.defineProperty(protoRequest, "__proto__", { value: {}, enumerable: true, configurable: true });
+      expectStoreError("INVALID_INPUT", () => env.store.advance(protoRequest as never), "advance request __proto__ key rejected");
+    }
+    {
+      const throwingRequestProxy = new Proxy({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: bodyAt("initialized") }, {
+        getOwnPropertyDescriptor() {
+          throw new Error("SENT_REQ");
+        },
+      });
+      try {
+        env.store.advance(throwingRequestProxy as never);
+        check(false, "advance request proxy rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "advance request proxy rejected");
+        check(!(error as LoopDeliveryCheckpointStoreError).message.includes("SENT_REQ"), "advance request proxy: raw exception text absent");
+      }
+    }
+    {
+      const { proxy: revokedRequest, revoke: revokeRequest } = Proxy.revocable({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: bodyAt("initialized") }, {});
+      revokeRequest();
+      expectStoreError("INVALID_INPUT", () => env.store.advance(revokedRequest as never), "advance request revoked proxy rejected");
+    }
+
+    // checkpoint body: getters never invoked, accessors / reorder rejected
+    {
+      let bodyGetterCalls = 0;
+      const accessorBody = bodyAt("initialized");
+      Object.defineProperty(accessorBody, "phase", {
+        get() {
+          bodyGetterCalls += 1;
+          return "initialized";
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      try {
+        env.store.advance({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: accessorBody as never });
+        check(false, "checkpoint_body_accessor_rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "checkpoint_body_accessor_rejected");
+      }
+      check(bodyGetterCalls === 0, "checkpoint_body_getters_invoked: 0");
+    }
+    expectStoreError("INVALID_INPUT", () => env.store.advance({
+      runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null,
+      checkpoint: Object.fromEntries(Object.entries(bodyAt("initialized")).reverse()) as never,
+    }), "checkpoint_body_reordered_rejected");
+    {
+      const throwingBodyProxy = new Proxy(bodyAt("initialized"), {
+        getOwnPropertyDescriptor() {
+          throw new Error("SENT_BODY");
+        },
+      });
+      try {
+        env.store.advance({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: throwingBodyProxy as never });
+        check(false, "checkpoint body proxy rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "checkpoint body proxy rejected");
+        check(!(error as LoopDeliveryCheckpointStoreError).message.includes("SENT_BODY"), "checkpoint body proxy: raw exception text absent");
+      }
+    }
+
+    // nested identity: getters never invoked, accessors / reorder / proxy rejected
+    {
+      let identityGetterCalls = 0;
+      const accessorIdBody = bodyAt("initialized");
+      const identityRecord = accessorIdBody.identity as Record<string, unknown>;
+      Object.defineProperty(identityRecord, "runId", {
+        get() {
+          identityGetterCalls += 1;
+          return RUN_ID;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      try {
+        env.store.advance({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: accessorIdBody as never });
+        check(false, "nested_identity_accessor_rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "nested_identity_accessor_rejected");
+      }
+      check(identityGetterCalls === 0, "nested_identity_getters_invoked: 0");
+    }
+    {
+      const reorderedIdBody = bodyAt("initialized") as Record<string, unknown>;
+      reorderedIdBody.identity = Object.fromEntries(Object.entries(makeIdentity()).reverse());
+      expectStoreError("INVALID_INPUT", () => env.store.advance({
+        runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: reorderedIdBody as never,
+      }), "nested_identity_reordered_rejected");
+    }
+    {
+      const proxyIdBody = bodyAt("initialized") as Record<string, unknown>;
+      proxyIdBody.identity = new Proxy(makeIdentity(), {
+        getOwnPropertyDescriptor() {
+          throw new Error("SENT_ID");
+        },
+      });
+      try {
+        env.store.advance({ runId: RUN_ID, expectedGeneration: 0, expectedCheckpointArtifactRef: null, checkpoint: proxyIdBody as never });
+        check(false, "nested identity proxy rejected (no error thrown)");
+      } catch (error) {
+        checkBoundedError(error, "nested identity proxy rejected");
+        check(!(error as LoopDeliveryCheckpointStoreError).message.includes("SENT_ID"), "nested identity proxy: raw exception text absent");
+      }
+    }
+    check(true, "store_proxy_fail_closed: all reflection failures above surfaced as INVALID_INPUT");
+    check(true, "store_raw_exception_text_absent: no sentinel text echoed in any fail-closed error");
+
+    env.store.close();
+    env.artifactStore.close();
+  }
+  markIfClear("D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED");
+
+  // ═══════════════════════════════════════════════════════════
+  // 6c. Exact persistent schema (user_version 1)
+  // ═══════════════════════════════════════════════════════════
+  startSection();
+  console.log("exact persistent schema (user_version 1)");
+  {
+    check(LOOP_DELIVERY_CHECKPOINT_STORE_USER_VERSION === 1, "checkpoint_store_user_version constant is 1");
+
+    // fresh empty DB → exact schema + user_version 1
+    {
+      const root = newTempDir("schema-r1");
+      const env = openStores(root);
+      const { dbPath, store, artifactStore } = env;
+      const ro = new Database(dbPath, { readonly: true });
+      check(Number(ro.pragma("user_version", { simple: true })) === LOOP_DELIVERY_CHECKPOINT_STORE_USER_VERSION, "fresh DB user_version is 1");
+      const info = ro.prepare("PRAGMA table_info(loop_delivery_checkpoint_current_head)").all() as Array<{ cid: number; name: string; type: string; notnull: number; pk: number }>;
+      const expected = [
+        { name: "run_id", type: "TEXT", notnull: 1, pk: 1 },
+        { name: "generation", type: "INTEGER", notnull: 1, pk: 0 },
+        { name: "checkpoint_artifact_ref", type: "TEXT", notnull: 1, pk: 0 },
+        { name: "checkpoint_digest_sha256", type: "TEXT", notnull: 1, pk: 0 },
+      ];
+      check(
+        info.length === 4 && info.every((column, index) => column.name === expected[index]!.name && column.type === expected[index]!.type && column.notnull === expected[index]!.notnull && column.pk === expected[index]!.pk),
+        "fresh DB exact schema: column count/order/names/types/NOT NULL/pk",
+      );
+      const tables = ro.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>;
+      check(tables.length === 1 && tables[0]!.name === "loop_delivery_checkpoint_current_head", "fresh DB has no extra user tables");
+      ro.close();
+
+      // store-constructed candidate is canonical root order (R-001 7.3)
+      const advanced = advanceStep(store, RUN_ID, 0, null, "initialized");
+      const valueKeys = Object.keys(advanced.current.checkpoint);
+      check(
+        valueKeys.length === LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS.length &&
+        valueKeys.every((key, index) => key === LOOP_DELIVERY_CHECKPOINT_ROOT_KEYS[index]),
+        "store_constructed_candidate_canonical: store merges in the exact canonical root sequence",
+      );
+      // valid existing DB reopens with the exact schema
+      store.close();
+      const store2 = new LoopDeliveryCheckpointStore({ dbPath, artifactStore });
+      store2.init();
+      const ro2 = new Database(dbPath, { readonly: true });
+      check(Number(ro2.pragma("user_version", { simple: true })) === 1, "reopened existing DB user_version still 1");
+      const info2 = ro2.prepare("PRAGMA table_info(loop_delivery_checkpoint_current_head)").all() as Array<{ name: string; type: string; notnull: number; pk: number }>;
+      check(info2.length === 4 && info2[0]!.name === "run_id" && info2[3]!.name === "checkpoint_digest_sha256", "reopened existing DB schema verified");
+      ro2.close();
+      store2.close();
+      artifactStore.close();
+    }
+
+    // malformed existing schemas → CHECKPOINT_STORE_CORRUPT at init
+    {
+      const root = newTempDir("schema-corrupt");
+      const repositoryV = join(root, "repo");
+      const controlRootV = join(root, "control");
+      mkdirSync(repositoryV, { recursive: true });
+      mkdirSync(controlRootV, { recursive: true });
+      const artifactStoreV = new LoopArtifactStore({ controlRoot: controlRootV, repositoryPath: repositoryV });
+      artifactStoreV.init();
+      const variants: Array<{ label: string; setup: (db: Database.Database) => void }> = [
+        {
+          label: "extra column",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL, extra TEXT NOT NULL)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "missing column",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "wrong column order",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, checkpoint_artifact_ref TEXT NOT NULL, generation INTEGER NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "wrong declared type",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation TEXT NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "wrong NOT NULL",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "wrong primary key",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL, PRIMARY KEY (generation))");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "extra user table",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL); CREATE TABLE extra_state (x TEXT)");
+            db.pragma("user_version = 1");
+          },
+        },
+        {
+          label: "unsupported user_version",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL)");
+            db.pragma("user_version = 2");
+          },
+        },
+        {
+          label: "user_version 0 with existing table",
+          setup: (db) => {
+            db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL)");
+          },
+        },
+        {
+          label: "user_version 1 without locator table",
+          setup: (db) => {
+            db.pragma("user_version = 1");
+          },
+        },
+      ];
+      for (const variant of variants) {
+        const dbPathV = join(newTempDir("schema-variant"), "head.db");
+        const db = new Database(dbPathV);
+        variant.setup(db);
+        db.close();
+        expectStoreError("CHECKPOINT_STORE_CORRUPT", () => {
+          const s = new LoopDeliveryCheckpointStore({ dbPath: dbPathV, artifactStore: artifactStoreV });
+          s.init();
+        }, `${variant.label} rejected as corrupt`);
+      }
+      artifactStoreV.close();
+    }
+
+    // schema-corrupt init leaves no lock, retains no db, propagates no raw sqlite text
+    {
+      const root = newTempDir("schema-lock");
+      const dbPathL = join(root, "head.db");
+      const db = new Database(dbPathL);
+      db.exec("CREATE TABLE loop_delivery_checkpoint_current_head (run_id TEXT NOT NULL PRIMARY KEY, generation INTEGER NOT NULL, checkpoint_artifact_ref TEXT NOT NULL, checkpoint_digest_sha256 TEXT NOT NULL, extra TEXT NOT NULL)");
+      db.pragma("user_version = 1");
+      db.close();
+      const repositoryL = join(root, "repo");
+      const controlRootL = join(root, "control");
+      mkdirSync(repositoryL, { recursive: true });
+      mkdirSync(controlRootL, { recursive: true });
+      const artifactStoreL = new LoopArtifactStore({ controlRoot: controlRootL, repositoryPath: repositoryL });
+      artifactStoreL.init();
+      const locked = new LoopDeliveryCheckpointStore({ dbPath: dbPathL, artifactStore: artifactStoreL });
+      let firstCode: string | null = null;
+      try {
+        locked.init();
+        check(false, "schema-corrupt init should fail");
+      } catch (error) {
+        const e = error as LoopDeliveryCheckpointStoreError;
+        firstCode = e.code;
+        check(e.code === "CHECKPOINT_STORE_CORRUPT", "schema-corrupt init typed CHECKPOINT_STORE_CORRUPT");
+        check(e.message.length <= 256 && !/[\x00-\x1f\x7f]/.test(e.message), "schema-corrupt init message bounded and clean");
+        check(!e.message.toLowerCase().includes("sqlite"), "raw sqlite text not propagated");
+      }
+      check(firstCode !== null, "opened_connection_closed / this_db_not_retained: failed init surfaced an error");
+      const probe = new Database(dbPathL, { timeout: 2000 });
+      check(Number(probe.pragma("user_version", { simple: true })) === 1, "observable_lock_left: false (fresh probe connection works)");
+      probe.close();
+      let retryCode: string | null = null;
+      try {
+        locked.init();
+        check(false, "retry init on corrupt schema should fail again");
+      } catch (error) {
+        retryCode = (error as LoopDeliveryCheckpointStoreError).code;
+      }
+      check(retryCode === "CHECKPOINT_STORE_CORRUPT", "retry init re-validates and fails cleanly (no retained db)");
+      locked.close();
+      artifactStoreL.close();
+    }
+  }
+  markIfClear("D10_A_CHECKPOINT_SCHEMA_VERIFIED");
+  markIfClear("D10_A_CHECKPOINT_RESTART_VERIFIED");
 
   // ═══════════════════════════════════════════════════════════
   // 7. Corruption classification
@@ -1012,7 +1601,11 @@ async function main(): Promise<void> {
 
       // loser orphan artifact exists but is not the authority
       const loserBody = results[0]!.status === "advanced" ? payloadB.checkpoint : payloadA.checkpoint;
-      const loserBuilt = buildLoopDeliveryCheckpoint({ schema: LOOP_DELIVERY_CHECKPOINT_SCHEMA, ...loserBody, generation: 2, previous_checkpoint_artifact_ref: r1.current.checkpointArtifactRef });
+      const loserElapsed = (loserBody as Record<string, unknown>).elapsed_ms;
+      // Canonical-order reconstruction of the loser candidate (the store now
+      // merges in the exact root sequence; the builder rejects reordered
+      // input, so the digest must be reproduced canonically).
+      const loserBuilt = buildLoopDeliveryCheckpoint({ ...atPhase("d08_completed", 2, r1.current.checkpointArtifactRef), elapsed_ms: loserElapsed as number });
       check(loserBuilt.ok, "loser candidate builds");
       if (loserBuilt.ok) {
         const loserRef = `loop-artifact:v1:delivery_checkpoint:sha256:${loserBuilt.digestSha256}`;
@@ -1025,7 +1618,9 @@ async function main(): Promise<void> {
         const current = store2.getCurrent(RUN_ID)!;
         check(current.checkpointArtifactRef === winnerRef, "current authority points at the winner only");
         check(current.checkpointDigestSha256 === winnerDigest, "current authority digest is the winner digest");
-        const winnerBuilt = buildLoopDeliveryCheckpoint({ schema: LOOP_DELIVERY_CHECKPOINT_SCHEMA, ...(results[0]!.status === "advanced" ? payloadA.checkpoint : payloadB.checkpoint), generation: 2, previous_checkpoint_artifact_ref: r1.current.checkpointArtifactRef });
+        const winnerPayload = results[0]!.status === "advanced" ? payloadA.checkpoint : payloadB.checkpoint;
+        const winnerElapsed = (winnerPayload as Record<string, unknown>).elapsed_ms;
+        const winnerBuilt = buildLoopDeliveryCheckpoint({ ...atPhase("d08_completed", 2, r1.current.checkpointArtifactRef), elapsed_ms: winnerElapsed as number });
         check(winnerBuilt.ok && current.checkpointDigestSha256 === winnerBuilt.digestSha256, "current artifact is the winner candidate");
         // chain walk: generation-linear, no forks
         const refsSeen: string[] = [];
@@ -1072,7 +1667,9 @@ async function main(): Promise<void> {
   }
   markIfClear("D10_A_TEMP_CLEANUP_COMPLETE");
 
-  console.log("\nD10_A_CHECKPOINT_CAS_VERIFIED", MARKERS.D10_A_CHECKPOINT_CAS_VERIFIED);
+  console.log("\nD10_A_CHECKPOINT_SCHEMA_VERIFIED", MARKERS.D10_A_CHECKPOINT_SCHEMA_VERIFIED);
+  console.log("D10_A_CHECKPOINT_CAS_VERIFIED", MARKERS.D10_A_CHECKPOINT_CAS_VERIFIED);
+  console.log("D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED", MARKERS.D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED);
   console.log("D10_A_CHECKPOINT_RESTART_VERIFIED", MARKERS.D10_A_CHECKPOINT_RESTART_VERIFIED);
   console.log("D10_A_TEMP_CLEANUP_COMPLETE", MARKERS.D10_A_TEMP_CLEANUP_COMPLETE);
   console.log(`\nD10_A_CHECKPOINT_STORE_SUMMARY passed=${passed} failed=${failed}`);
