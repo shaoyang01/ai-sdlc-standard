@@ -73,7 +73,7 @@ fixtures:
 
   - id: CAPSULE-VALID-SESSION-CONTINUATION
     category: valid
-    description: "Valid SESSION_CONTINUATION capsule carrying only the current delta with DOC_ONLY profile"
+    description: "Valid SESSION_CONTINUATION capsule carrying only the current delta with DOC_ONLY profile, NONE push and UPDATE_DRAFT action"
     capsule: |
       task_id: contract-test-session-continuation
       prompt_mode: SESSION_CONTINUATION
@@ -107,8 +107,8 @@ fixtures:
       git:
         commit_count: 1
         commit_message: "docs: register compact prompt contract validation"
-        push_mode: NORMAL_PUSH
-        pull_request_action: CREATE_DRAFT
+        push_mode: NONE
+        pull_request_action: UPDATE_DRAFT
       forbidden_actions:
         - "merge"
         - "auto-merge"
@@ -507,3 +507,275 @@ fixtures:
         name: "MISSING-STOP-CONDITION Report"
         maximum_lines: 80
         stop_after_report: false
+
+  - id: CAPSULE-NEG-EMPTY-REQUIRED-CHANGES
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "Capsule with an empty delta.required_changes array - fail closed (F03)"
+    capsule: |
+      task_id: contract-test-empty-required-changes
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 required_changes 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "MISSING_REQUIRED_FIELD 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty required changes"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "EMPTY-REQUIRED-CHANGES Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-EMPTY-ACCEPTANCE-CRITERIA
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "Capsule with an empty delta.acceptance_criteria array - fail closed (F03)"
+    capsule: |
+      task_id: contract-test-empty-acceptance-criteria
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 acceptance_criteria 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria: []
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty acceptance criteria"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "EMPTY-ACCEPTANCE-CRITERIA Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-EMPTY-ALLOWED-FILES
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "Capsule with an empty scope.allowed_files array - fail closed (F03)"
+    capsule: |
+      task_id: contract-test-empty-allowed-files
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 allowed_files 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "MISSING_REQUIRED_FIELD 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty allowed files"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "EMPTY-ALLOWED-FILES Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-EMPTY-FORBIDDEN-ACTIONS
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "Capsule with an empty forbidden_actions array - fail closed (F03)"
+    capsule: |
+      task_id: contract-test-empty-forbidden-actions
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 forbidden_actions 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "MISSING_REQUIRED_FIELD 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty forbidden actions"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions: []
+      completion_report:
+        recipient: "<owner-session>"
+        name: "EMPTY-FORBIDDEN-ACTIONS Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-MAXIMUM-LINES-OUT-OF-RANGE
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "Capsule whose completion_report.maximum_lines exceeds the 20-120 contract range (F03)"
+    capsule: |
+      task_id: contract-test-maximum-lines-out-of-range
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "越界的 maximum_lines 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "FIELD_TYPE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test maximum lines out of range"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "MAXIMUM-LINES-OUT-OF-RANGE Report"
+        maximum_lines: 121
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-PUSH-MODE-NO-PUSH
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "Capsule using the removed NO_PUSH enum - the git enum must be exactly NONE | NORMAL_PUSH (F04)"
+    capsule: |
+      task_id: contract-test-push-mode-no-push
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "已删除的 NO_PUSH 枚举必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "FIELD_TYPE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test removed push mode"
+        push_mode: NO_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "PUSH-MODE-NO-PUSH Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-MULTI-DOCUMENT
+    category: negative
+    expected_classification: YAML_DOCUMENT_COUNT_INVALID
+    description: "Capsule text containing two YAML documents separated by --- (F06)"
+    capsule: |
+      task_id: contract-test-multi-document
+      prompt_mode: MICRO_FIX
+      ---
+      task_id: contract-test-multi-document-2
+      prompt_mode: MICRO_FIX
+
+  - id: CAPSULE-NEG-ZERO-DOCUMENT
+    category: negative
+    expected_classification: YAML_DOCUMENT_COUNT_INVALID
+    description: "Capsule text containing no YAML document at all (only a comment) (F06)"
+    capsule: |
+      # no document here

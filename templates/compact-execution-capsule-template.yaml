@@ -44,8 +44,8 @@ validation_profile: "<DOC_ONLY|TYPE_ONLY|LOCAL_BEHAVIOR|PERSISTENCE_CONCURRENCY|
 git:
   commit_count: <0|1>
   commit_message: "<commit-message>"
-  push_mode: "<NORMAL_PUSH|NO_PUSH>"
-  pull_request_action: "<CREATE_DRAFT|NONE>"
+  push_mode: "<NONE|NORMAL_PUSH>"
+  pull_request_action: "<NONE|CREATE_DRAFT|UPDATE_DRAFT>"
 
 forbidden_actions:
   - "<forbidden-action>"

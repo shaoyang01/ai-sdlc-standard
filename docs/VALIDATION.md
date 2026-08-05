@@ -34,13 +34,33 @@ ruby scripts/validate-gate-runner-scenarios.rb
 
 - 十个 whitelist 合同资产均存在；
 - Capsule 根字段与嵌套字段集合精确（unknown key / 缺失必填字段拒绝）；
+- fail-closed 值规则：`delta.required_changes`、`delta.acceptance_criteria`、
+  `scope.allowed_files`、`forbidden_actions` 必须非空（空数组分类为
+  `MISSING_REQUIRED_FIELD`）；`completion_report.maximum_lines` 必须是 20-120
+  的整数（类型错误或越界分类为 `FIELD_TYPE_INVALID`，公共分类）；
 - 受限 YAML 拒绝：duplicate key、anchor、alias、explicit tag、merge key、null、
   `YAML.safe_load(permitted_classes: [], aliases: false)` + AST 级检测；
+- 单 YAML document：零文档与多文档统一分类为 `YAML_DOCUMENT_COUNT_INVALID`
+  （公共分类），在遍历与 `YAML.safe_load` 之前拒绝；
 - 四种 Prompt Mode 名称与 hard limit 预算精确；
 - 五种 Validation Profile 名称与语义键值精确（DOC_ONLY 默认禁止根 `npm test`）；
-- Codex Prompt 模板固定十节顺序与单份 `CODEX_EXECUTION_PROMPT` 输出；
-- Completion Report 模板紧凑预算（`target_lines: 30-80`、`hard_limit_lines: 120`）
-  与必填字段；
+- Git 枚举精确：`push_mode` 仅 `NONE | NORMAL_PUSH`，`pull_request_action` 仅
+  `NONE | CREATE_DRAFT | UPDATE_DRAFT`，`NO_PUSH` 已完全删除；
+- Codex Prompt 模板固定十节顺序与单份 `CODEX_EXECUTION_PROMPT` 输出；模板不含
+  PCE-01-A 专项内容（专项审查请求行、`contract_assets`、`fixture_summary`、
+  固定 `CI_status: not_waited` 等）；
+- Template Value Source Table 一致性：模板全部 `<...>` 占位符与主标准 source
+  table 双向闭合，每个占位符唯一来源（`CAPSULE_FIELD` / `STANDARD_CONSTANT` /
+  `PCE_01_B_PROJECT_MAPPING`），无未知、遗留或重复占位符；
+- Completion Report 模板紧凑预算（`target_lines: 30-80`、`minimum_lines: 20`、
+  `hard_limit_lines: 120`）与公共字段集合（12 字段，无 `contract_assets` /
+  `fixture_summary`）；
+- 主标准跨资产一致性：validator 静态验证主标准声明的 Capsule 字段、Git 枚举、
+  四种 Prompt Mode 预算、五种 Validation Profile、continuation delta-only、
+  Completion Report 20-120 约束、十个固定 section、单份交付、
+  `stop_after_report: true` 与 Template Value Source Table，并与 Capsule /
+  Prompt / Completion Report / Validation Profiles 模板、validator 常量和
+  fixtures 对比防漂移；
 - `fixtures/compact-prompt/contracts.yaml` 正例通过、反例被预期分类拒绝
   （每个反例声明 `expected_classification`）；
 - manifest、ROADMAP、VALIDATION 文档已登记且无超前声明（不声明 Renderer 已可用、

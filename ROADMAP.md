@@ -898,9 +898,11 @@ roots = [
 PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实登记：
 
 - PCE-01-A 只建立 Compact Prompt Contract：合同
-  （`ai-sdlc/compact-prompt-standard.md`）、五种模板、只读 validator
+  （`ai-sdlc/compact-prompt-standard.md`）、四份模板（Execution Capsule、
+  Codex Prompt、Completion Report、Validation Profiles）、只读 validator
   （`scripts/validate-compact-prompt-contracts.rb`）与集中式 fixtures
-  （`fixtures/compact-prompt/contracts.yaml`）。
+  （`fixtures/compact-prompt/contracts.yaml`）。Compact Prompt Standard 是
+  合同，不是第五份模板。
 - Renderer 属于后续 PCE-01-B，尚未实现。
 - 两个项目真实验收属于 PCE-01-C。
 

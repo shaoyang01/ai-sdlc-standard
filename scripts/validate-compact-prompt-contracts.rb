@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# encoding: utf-8
 # frozen_string_literal: true
 
 # Read-only Compact Prompt Contract validator (PCE-01-A).
@@ -21,14 +22,14 @@
 # access, file writes.
 #
 # Public classification codes (contract taxonomy, see
-# ai-sdlc/compact-prompt-standard.md):
+# ai-sdlc/compact-prompt-standard.md section 1.4):
 #   UNKNOWN_KEY, MISSING_REQUIRED_FIELD, DUPLICATE_KEY, YAML_ALIAS,
-#   YAML_ANCHOR, YAML_TAG, YAML_MERGE_KEY, YAML_NULL, INVALID_SHA,
-#   UNSAFE_PATH, MULTIPLE_OBJECTIVES, VALIDATION_UNDERSPECIFIED,
-#   VALIDATION_OVERPROVISIONED, MISSING_STOP_CONDITION
+#   YAML_ANCHOR, YAML_TAG, YAML_MERGE_KEY, YAML_NULL,
+#   YAML_DOCUMENT_COUNT_INVALID, INVALID_SHA, UNSAFE_PATH,
+#   MULTIPLE_OBJECTIVES, VALIDATION_UNDERSPECIFIED,
+#   VALIDATION_OVERPROVISIONED, MISSING_STOP_CONDITION, FIELD_TYPE_INVALID
 # Internal-only codes (not part of the v1 contract taxonomy):
-#   YAML_SYNTAX (unparseable YAML), YAML_UNSUPPORTED (root not a mapping),
-#   FIELD_TYPE_INVALID (type or enum violation not covered by a public code).
+#   YAML_SYNTAX (unparseable YAML), YAML_UNSUPPORTED (root not a mapping).
 
 require "yaml"
 
@@ -62,8 +63,9 @@ COMPLETION_REPORT_KEYS = %w[recipient name maximum_lines stop_after_report].free
 
 PROMPT_MODES = %w[MICRO_FIX SESSION_CONTINUATION BOOTSTRAP RECOVERY].freeze
 VALIDATION_PROFILES = %w[DOC_ONLY TYPE_ONLY LOCAL_BEHAVIOR PERSISTENCE_CONCURRENCY GLOBAL_CONTRACT].freeze
-PUSH_MODES = %w[NORMAL_PUSH NO_PUSH].freeze
-PULL_REQUEST_ACTIONS = %w[CREATE_DRAFT NONE].freeze
+PUSH_MODES = %w[NONE NORMAL_PUSH].freeze
+PULL_REQUEST_ACTIONS = %w[NONE CREATE_DRAFT UPDATE_DRAFT].freeze
+MAXIMUM_LINES_RANGE = (20..120).freeze
 
 # Contract-fixed budgets (ai-sdlc/compact-prompt-standard.md section 2).
 PROMPT_MODE_BUDGETS = {
@@ -93,11 +95,11 @@ SHA40_PATTERN = /\A[0-9a-f]{40}\z/
 
 PUBLIC_CLASSIFICATIONS = %w[
   UNKNOWN_KEY MISSING_REQUIRED_FIELD DUPLICATE_KEY YAML_ALIAS YAML_ANCHOR
-  YAML_TAG YAML_MERGE_KEY YAML_NULL INVALID_SHA UNSAFE_PATH
-  MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED VALIDATION_OVERPROVISIONED
-  MISSING_STOP_CONDITION
+  YAML_TAG YAML_MERGE_KEY YAML_NULL YAML_DOCUMENT_COUNT_INVALID INVALID_SHA
+  UNSAFE_PATH MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED
+  VALIDATION_OVERPROVISIONED MISSING_STOP_CONDITION FIELD_TYPE_INVALID
 ].freeze
-INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED FIELD_TYPE_INVALID].freeze
+INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
 ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
 
 # Fixed Codex prompt template section order.
@@ -108,13 +110,37 @@ CODEX_PROMPT_SECTIONS = [
   "4. Delta",
   "5. Scope 与 Acceptance",
   "6. Validation",
-  "7. Git 与 Draft PR",
+  "7. Git 与 PR",
   "8. Forbidden Actions",
   "9. Completion Report",
   "10. Stop Condition"
 ].freeze
 
+# Public Compact Completion Report fields (standard section 7).
+COMPLETION_REPORT_FIELDS = %w[
+  result pre_HEAD post_HEAD commit changed_files change_summary
+  local_validation remote_branch_HEAD pull_request CI_status
+  scope_violation remaining_findings
+].freeze
+
+# PCE-01-A task-specific content that must never appear in the public
+# Prompt / Completion Report templates (finding F01).
+TASK_SPECIFIC_TEMPLATE_STRINGS = %w[
+  PCE_01_A contract_assets fixture_summary
+  REQUEST_PCE_01_A_SPECIALIZED_REVIEW
+  需要第十一个文件 需要修改现有\ validator 需要修改\ CI\ workflow
+  CI_status:\ not_waited
+].freeze
+
+# Placeholders with no legitimate source (finding F02); must not appear in
+# the public prompt template.
+LEGACY_PLACEHOLDERS = %w[
+  task-branch objective-scope out-of-scope next-phase out-of-scope-tooling
+  scope-escalation-code specialized-review-request-line
+].freeze
+
 errors = []
+prompt_placeholders = nil
 
 def relative(path)
   path.sub("#{ROOT}/", "")
@@ -306,6 +332,7 @@ def validate_capsule_structure(data)
   %w[required_changes acceptance_criteria].each do |key|
     list = delta[key]
     return "FIELD_TYPE_INVALID" unless list.is_a?(Array)
+    return "MISSING_REQUIRED_FIELD" if list.empty?
     list.each do |item|
       return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
     end
@@ -317,6 +344,7 @@ def validate_capsule_structure(data)
   return result if result
   allowed_files = scope["allowed_files"]
   return "FIELD_TYPE_INVALID" unless allowed_files.is_a?(Array)
+  return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
   allowed_files.each do |path|
     return "FIELD_TYPE_INVALID" unless nonempty_string?(path)
     return "UNSAFE_PATH" if unsafe_path?(path)
@@ -337,6 +365,7 @@ def validate_capsule_structure(data)
 
   forbidden_actions = data["forbidden_actions"]
   return "FIELD_TYPE_INVALID" unless forbidden_actions.is_a?(Array)
+  return "MISSING_REQUIRED_FIELD" if forbidden_actions.empty?
   forbidden_actions.each do |item|
     return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
   end
@@ -347,7 +376,8 @@ def validate_capsule_structure(data)
   return result if result
   return "MISSING_REQUIRED_FIELD" unless nonempty_string?(report["recipient"])
   return "MISSING_REQUIRED_FIELD" unless nonempty_string?(report["name"])
-  return "FIELD_TYPE_INVALID" unless positive_integer?(report["maximum_lines"])
+  return "FIELD_TYPE_INVALID" unless report["maximum_lines"].is_a?(Integer)
+  return "FIELD_TYPE_INVALID" unless MAXIMUM_LINES_RANGE.cover?(report["maximum_lines"])
   return "MISSING_STOP_CONDITION" unless report["stop_after_report"] == true
 
   # Validation adequacy heuristics (section 3): insufficient level rejected,
@@ -375,6 +405,11 @@ def restricted_yaml_classification(raw_text)
   rescue Psych::SyntaxError
     return "YAML_SYNTAX"
   end
+  # Fail closed on document count: exactly one YAML document is required.
+  # Zero-document and multi-document inputs are rejected before any later
+  # traversal or YAML.safe_load (finding F06).
+  documents = stream.children
+  return "YAML_DOCUMENT_COUNT_INVALID" unless documents.length == 1
   ast_classification = analyze_ast(stream)
   return ast_classification if ast_classification
 
@@ -440,7 +475,7 @@ def check_asset_exists(path)
 end
 
 def read_asset(path)
-  File.read(File.join(ROOT, path))
+  File.read(File.join(ROOT, path), encoding: "UTF-8")
 end
 
 # ── Asset checks ──
@@ -491,7 +526,7 @@ end
 
 prompt_template_path = "templates/compact-codex-prompt-template.md"
 if File.file?(File.join(ROOT, prompt_template_path))
-  prompt_lines = File.readlines(File.join(ROOT, prompt_template_path), chomp: true)
+  prompt_lines = File.readlines(File.join(ROOT, prompt_template_path), chomp: true, encoding: "UTF-8")
   headings = prompt_lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "") }
   if headings != CODEX_PROMPT_SECTIONS
     errors << "codex prompt template: section headings must be exactly " \
@@ -516,23 +551,175 @@ if File.file?(File.join(ROOT, prompt_template_path))
   if prompt_text.scan("report_to:").any?
     errors << "codex prompt template: must not use report_to"
   end
+  # Finding F01: no task-specific content in the public template.
+  TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
+    if prompt_text.include?(needle)
+      errors << "codex prompt template: task-specific content must not appear (#{needle.inspect})"
+    end
+  end
+  # Finding F02: no placeholders without a legitimate source.
+  LEGACY_PLACEHOLDERS.each do |placeholder|
+    if prompt_text.include?("<#{placeholder}>")
+      errors << "codex prompt template: legacy placeholder without a source must not appear (<#{placeholder}>)"
+    end
+  end
+  prompt_placeholders = prompt_text.scan(/<[^>\n]+>/).uniq
+  duplicate_occurrences = prompt_text.scan(/<[^>\n]+>/).tally.select { |_p, count| count > 1 }
+  unless duplicate_occurrences.empty?
+    errors << "codex prompt template: placeholder(s) appear more than once " \
+              "#{duplicate_occurrences.inspect}"
+  end
 end
 
 report_template_path = "templates/compact-completion-report-template.md"
 if File.file?(File.join(ROOT, report_template_path))
   report_text = read_asset(report_template_path)
-  %w[target_lines:\ 30-80 hard_limit_lines:\ 120].each do |needle|
+  %w[target_lines:\ 30-80 minimum_lines:\ 20 hard_limit_lines:\ 120].each do |needle|
     errors << "completion report template: missing budget #{needle}" unless report_text.include?(needle)
   end
-  %w[
-    result: pre_HEAD: post_HEAD: commit: changed_files: contract_assets:
-    fixture_summary: local_validation: remote_branch_HEAD: Draft_PR:
-    CI_status: scope_violation: remaining_findings:
-    REQUEST_PCE_01_A_SPECIALIZED_REVIEW
-  ].each do |needle|
-    unless report_text.include?(needle)
-      errors << "completion report template: missing required field #{needle}"
+  COMPLETION_REPORT_FIELDS.each do |field|
+    unless report_text.include?("#{field}:")
+      errors << "completion report template: missing required field #{field}"
     end
+  end
+  TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
+    if report_text.include?(needle)
+      errors << "completion report template: task-specific content must not appear (#{needle.inspect})"
+    end
+  end
+end
+
+# ── Standard asset static validation (finding F05) ──
+# The validator must not merely check that the standard file exists; it
+# statically verifies the contract facts the standard declares, then checks
+# cross-asset drift against the capsule/prompt/completion-report/validation
+# profiles templates, validator constants and fixtures.
+
+standard_path = "ai-sdlc/compact-prompt-standard.md"
+standard_text = File.file?(File.join(ROOT, standard_path)) ? read_asset(standard_path) : nil
+if standard_text
+  # Capsule root fields and all nested fields (section 1.2), derived from the
+  # validator constants so the two cannot drift apart.
+  { "root" => ROOT_KEYS,
+    "routing" => ROUTING_KEYS,
+    "baseline" => BASELINE_KEYS,
+    "delta" => DELTA_KEYS,
+    "scope" => SCOPE_KEYS,
+    "git" => GIT_KEYS,
+    "completion_report" => COMPLETION_REPORT_KEYS }.each do |group, keys|
+    keys.each do |key|
+      unless standard_text.include?("#{key}:")
+        errors << "standard: #{group} field #{key.inspect} is not declared"
+      end
+    end
+  end
+
+  # Git enums (finding F04): exact NONE/NORMAL_PUSH and
+  # NONE/CREATE_DRAFT/UPDATE_DRAFT; NO_PUSH must be fully gone.
+  unless standard_text.include?("NONE | NORMAL_PUSH")
+    errors << "standard: push_mode enum NONE | NORMAL_PUSH is not declared"
+  end
+  unless standard_text.include?("NONE | CREATE_DRAFT | UPDATE_DRAFT")
+    errors << "standard: pull_request_action enum NONE | CREATE_DRAFT | UPDATE_DRAFT is not declared"
+  end
+  if standard_text.include?("NO_PUSH")
+    errors << "standard: NO_PUSH must be fully removed (finding F04)"
+  end
+
+  # Four prompt modes with exact budgets (section 2).
+  PROMPT_MODE_BUDGETS.each do |mode, budget|
+    row = "| `#{mode}` | #{budget["hard_limit_lines"]} | #{budget["hard_limit_bytes"]} |"
+    unless standard_text.include?(row)
+      errors << "standard: prompt mode budget row #{row.inspect} is missing"
+    end
+  end
+
+  # Five validation profiles (section 3).
+  VALIDATION_PROFILES.each do |profile|
+    unless standard_text.include?("| `#{profile}` |")
+      errors << "standard: validation profile #{profile} is not declared"
+    end
+  end
+
+  # Continuation delta-only (section 4).
+  unless standard_text.include?("continuation 只携带当前 delta")
+    errors << "standard: continuation delta-only rule is missing"
+  end
+
+  # Completion report 20-120 line constraint (section 7).
+  %w[minimum_lines:\ 20 hard_limit_lines:\ 120].each do |needle|
+    unless standard_text.include?(needle)
+      errors << "standard: completion report budget #{needle} is missing"
+    end
+  end
+
+  # Ten fixed prompt section headings (section 5).
+  CODEX_PROMPT_SECTIONS.each do |section|
+    unless standard_text.include?("#{section}\n")
+      errors << "standard: fixed prompt section #{section.inspect} is missing"
+    end
+  end
+
+  # One execution material per delivery (section 8).
+  unless standard_text.include?("一次只能交付一份执行材料")
+    errors << "standard: single-material delivery rule is missing"
+  end
+
+  # stop_after_report: true (section 1.2).
+  unless standard_text.include?("stop_after_report: true")
+    errors << "standard: stop_after_report: true contract marker is missing"
+  end
+
+  # Template Value Source Table (section 6, finding F02).
+  unless standard_text.include?("## 6. Template Value Source Table")
+    errors << "standard: Template Value Source Table section is missing"
+  end
+
+  # Public classification table (section 1.4) must cover every public code.
+  PUBLIC_CLASSIFICATIONS.each do |code|
+    unless standard_text.include?("| `#{code}` |")
+      errors << "standard: public classification #{code} is not documented"
+    end
+  end
+
+  # Completion report public field set (section 7) must match the template
+  # field set exactly (finding F01).
+  COMPLETION_REPORT_FIELDS.each do |field|
+    unless standard_text.include?("#{field}:")
+      errors << "standard: completion report field #{field} is not declared"
+    end
+  end
+
+  # Template Value Source Table consistency with the prompt template
+  # (finding F02): every placeholder has exactly one source row, the table
+  # and the template placeholder sets are identical, no unknown or leftover
+  # placeholders, no duplicate rows.
+  table_rows = standard_text.scan(
+    /^\| `?<([^>`]+)>`? \| (CAPSULE_FIELD|STANDARD_CONSTANT|PCE_01_B_PROJECT_MAPPING)/
+  )
+  table_placeholders = table_rows.map { |row| "<#{row[0]}>" }
+  table_placeholder_set = table_placeholders.uniq
+  unless standard_text.include?("| `delivery_type` | STANDARD_CONSTANT")
+    errors << "standard: source table must bind delivery_type to STANDARD_CONSTANT"
+  end
+  unless standard_text.include?("STANDARD_CONSTANT") && standard_text.include?("PCE_01_B_PROJECT_MAPPING")
+    errors << "standard: source table must declare STANDARD_CONSTANT and PCE_01_B_PROJECT_MAPPING sources"
+  end
+  duplicate_rows = table_placeholders.tally.select { |_p, count| count > 1 }
+  unless duplicate_rows.empty?
+    errors << "standard: source table placeholder row(s) duplicated #{duplicate_rows.inspect}"
+  end
+  if prompt_placeholders
+    unknown = prompt_placeholders - table_placeholder_set
+    unless unknown.empty?
+      errors << "source table: template placeholder(s) without a source row #{unknown.inspect}"
+    end
+    leftover = table_placeholder_set - prompt_placeholders
+    unless leftover.empty?
+      errors << "source table: placeholder row(s) not present in the template #{leftover.inspect}"
+    end
+  else
+    errors << "source table: prompt template placeholders were not extracted (template missing?)"
   end
 end
 
@@ -675,6 +862,11 @@ if errors.empty?
        "#{PROMPT_MODES.length} prompt modes with exact budgets; " \
        "#{VALIDATION_PROFILES.length} validation profiles; " \
        "codex prompt template #{CODEX_PROMPT_SECTIONS.length}-section order; " \
+       "#{prompt_placeholders ? prompt_placeholders.length : 0} prompt placeholders closed " \
+       "against the Template Value Source Table; " \
+       "standard asset statically verified (fields, git enums, budgets, profiles, " \
+       "continuation delta-only, completion report budget, sections, single material, " \
+       "stop_after_report, public classifications); " \
        "no premature claims)"
 else
   warn "compact prompt contract validation failed:"
