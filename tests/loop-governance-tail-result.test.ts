@@ -936,7 +936,10 @@ function sectionD01D08Regression(store: LoopArtifactStore): void {
     "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
     "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
   ] as const;
-  check(LOOP_ARTIFACT_KINDS.length === 11, "kind list has exactly 11 entries");
+  check(
+    LOOP_ARTIFACT_KINDS.length === 12,
+    "kind list has exactly 12 entries (11 existing + delivery_checkpoint)",
+  );
   check(
     originalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
     "original ten kinds keep their positions",

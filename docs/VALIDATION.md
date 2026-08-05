@@ -1651,3 +1651,68 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
 - Verification Alternative
 - Deferred without Accepted By
 - Plan Gate BLOCKED
+
+## D10-A Durable Checkpoint Foundation Validation
+
+本节定义并验证 D10-A durable checkpoint foundation 的最终有效实现合同。`core/loop-delivery-checkpoint.ts`、`core/loop-delivery-checkpoint-store.ts` 与 `tests/loop-delivery-checkpoint.test.ts`、`tests/loop-delivery-checkpoint-store.test.ts` 及 `tests/loop-artifact-store.test.ts` 新增段组成 D10-A durable checkpoint foundation 验证；经 R1（`5de7ab0`）、R2（`e735993`）、R3（`b5f08b5`）三个追加提交修正后，以下合同均为最终状态：
+
+- **Schema 与 artifact authority**：固定 `loop-delivery-checkpoint-v1`；32 个根字段与 identity 九字段固定顺序；builder/parser 为 descriptor-based exact-key、fail-closed、UTF-8、无 BOM/CR/NUL、精确一个 trailing LF、无额外 whitespace、SHA-256 小写 hex、默认最大 1 MiB；parser 只接受真实 Uint8Array、先 size gate 再复制、fatal UTF-8、重建 canonical bytes 且 byte-identical 才成功；每次 checkpoint transition 产生一个 immutable `delivery_checkpoint` artifact（`loop-artifact:v1:delivery_checkpoint:sha256:<64hex>`），artifact 是 immutable authority。
+- **Current-head locator 非业务权威**：SQLite 单表 `loop_delivery_checkpoint_current_head` 只有四个业务列（run_id/generation/checkpoint_artifact_ref/checkpoint_digest_sha256）；locator row 只是定位最新可信 artifact，任何读取都必须 read-back artifact、解析并交叉验证 digest/generation/runId；row 单独不构成 authority；不存储 raw model output、secret、环境变量、stdout/stderr、prompt、patch bytes 或任意 metadata；不创建第二份 checkpoint business-state table。
+- **固定 phase/transition contract**：16 个 phase 固定 vocabulary；非 terminal phase 的 required/nullable facts 矩阵、依赖闭包、workspace observation 矩阵（head/digest/has_changes 允许变化边界）、terminal prefix 规则（blocked/failed 只能携带合法前缀事实、必须携带 canonical terminal reason；completed 为成功 terminal，terminal_status 固定为 `completed` 且 terminal reason 精确绑定 `DELIVERY_COMPLETED` —— null、空字符串、其他 canonical code、自由文本、大小写变体、前后空格、控制字符全部拒绝）；`terminal_reason_code` 必须符合 canonical code 语法 `^[A-Z][A-Z0-9_]{0,63}$`（trimmed、non-empty、无控制字符、固定长度上限、无 silent normalization），non-terminal 时精确为 `null`；显式 forward transition graph，禁止 skip/rollback/nonterminal self-transition/terminal continuation；generation 1 必须 `previous_checkpoint_artifact_ref=null`，generation>1 必须携带。
+- **Generation/CAS**：store 自行构建 generation 与 previous ref，不信任调用者；advance 顺序固定（验证 request → 完整验证 expected current → 构建 next → 验证 transition → canonical bytes → Artifact Store put → 验证 descriptor → BEGIN IMMEDIATE → 重读 locator → CAS insert/update → COMMIT → read-back 验证）；WAL、busy_timeout、foreign_keys ON、synchronous FULL；不同 candidate 并发 exactly one `advanced`、其余 `CHECKPOINT_STALE`。
+- **Exact retry**：相同请求在未知响应后重试返回 `confirmed`（current 精确等于确定性构建的 candidate generation/ref/digest），不新写 authority；不同 bytes/ref/digest/previous ref/generation/identity/target repository/task branch/deadline origin 一律不算幂等。
+- **Fork prevention**：transition validator 要求 `next.previous_checkpoint_artifact_ref` 等于 previous generation 的内容寻址 ref（由 previous canonical bytes 推导）；错误 previous ref、generation skip、immutable binding 变更、既有 fact 变更/消失、workspace path 变更全部拒绝；并发 race 后链保持 generation-linear。
+- **Restart/read-back**：关闭第一组 store、以全新 instance 重开同一 control root 与 DB，成功读取同一 current checkpoint 并继续一次合法 transition。
+- **Corruption handling**：row generation/ref/digest 非法、ref/digest 不一致、locator/artifact digest 不一致、artifact 缺失/字节损坏/parser 失败全部 `CHECKPOINT_STORE_CORRUPT`；Artifact Store put 在 CAS 前失败 `CHECKPOINT_ARTIFACT_FAILURE`；Artifact Store read 失败按 persisted 链不一致处理为 `CHECKPOINT_STORE_CORRUPT`；存储边界统一分类（D10-A-R3-002，详见 R3 SQLite classification record）——`SQLITE_BUSY`/`SQLITE_LOCKED` 前缀 → `CHECKPOINT_STORE_BUSY`、`SQLITE_NOTADB`/`SQLITE_CORRUPT` 前缀 → `CHECKPOINT_STORE_CORRUPT`、其余存储失败 → `CHECKPOINT_STORE_FAILURE`（消息 ≤256 字符、无控制字符、不含 dbPath/runId/artifact bytes/raw SQLite text/secret）。
+- **Orphan artifact boundary**：artifact 已写入但 CAS 失败时允许留下未被引用的 immutable orphan blob，它不得成为 current authority（测试验证 loser blob 存在但 locator 只指向 winner）。
+- **严格公共输入 key 合同（最终）**：以下公共输入各自有 exact own-key sequence，全部 fail-closed——`checkpoint_root` 为 exact 32-key sequence、`checkpoint_identity` 与嵌套 `identity` 为 exact 9-key sequence、`advance_request` 为 exact 4-key sequence（runId/expectedGeneration/expectedCheckpointArtifactRef/checkpoint）、`checkpoint_body` 为 exact `BODY_KEYS` sequence（root 32-key 删除 schema/generation/previous_checkpoint_artifact_ref 后的 29-key 顺序）；reordered、extra、missing、symbol、`__proto__`、accessor、class instance、non-plain prototype、Proxy reflection failure、revoked Proxy 全部拒绝；getter 调用次数为 0，raw exception text/path/artifact bytes 永不回显，诊断 bounded 且无控制字符。constructor options 不在此列——它不要求 exact full sequence（见下一条）。原构建时"乱序输入被静默 canonicalize"契约按 D10-A-R-001 移除——乱序输入现在被拒绝。
+- **Constructor options 最终合同（D10-A-R3-001）**：canonical sequence 为 dbPath/artifactStore/busyTimeoutMs/maxCheckpointBytes；dbPath 与 artifactStore 为 required keys，busyTimeoutMs 与 maxCheckpointBytes 为 optional keys；sequence rule 是 order-preserving subsequence——每个 required key 必须在场，所有 present keys 的 canonical index 严格递增（重复 key 的 index 不严格递增，同样被拒）。以下四种形式都合法进入 scalar validation：
+
+  ```typescript
+  { dbPath, artifactStore }
+
+  { dbPath, artifactStore, busyTimeoutMs }
+
+  { dbPath, artifactStore, maxCheckpointBytes }
+
+  { dbPath, artifactStore, busyTimeoutMs, maxCheckpointBytes }
+  ```
+
+  `{ dbPath, artifactStore, maxCheckpointBytes, busyTimeoutMs }` 因 actual keys 的 canonical index 不严格递增（`maxCheckpointBytes` 的 index 3 先于 `busyTimeoutMs` 的 index 2）而被拒绝。无效 `maxCheckpointBytes`（`0`、`1_048_577`、`1.5`）会通过 key-sequence 层并在 scalar validator 中被拒绝（safe integer 且落在 1..1048576），而不是被 prefix-order 规则提前拒绝。
+- **D10-A-R1 hardening record**（commit `5de7ab0e8ab1fc2a0b52def27c6782fca9f4c6f0`，message `fix: harden durable checkpoint validation and CAS`）：root/identity exact own-key sequence；store 对 advance request/body/identity 执行 descriptor snapshot；getter-zero、accessor/symbol/`__proto__`/Proxy fail-closed；store 主动按 canonical root 顺序构造完整 checkpoint 对象（advance body 必须精确为 root sequence 删除 schema/generation/previous_checkpoint_artifact_ref 后的顺序），并在构建成功后从可信 frozen checkpoint 读取 identity.runId 做 cross-binding；locator CAS 升级为 generation/ref/digest 全字段 authority——事务内重读 locator 后先完整验证（generation 正安全整数、ref canonical、digest lowercase SHA-256、ref 内 digest 与 locator digest 一致、run_id 与操作目标一致），UPDATE 使用 generation/ref/digest 三列完整 WHERE 谓词，`changes !== 1` 时重读并分类（exact candidate → confirmed、valid changed authority → stale、missing/malformed/disagreement → corrupt），损坏 locator 永不被覆盖；确定性交错测试（writer 完成 initial verification → candidate put → put 返回前第二 SQLite connection 修改 locator digest → 进入 casAdvance）证明 digest-only 突变被归类 `CHECKPOINT_STORE_CORRUPT`、`corrupt_locator_overwritten=false`、`candidate_orphan_became_authority=false`、`existing_authority_ref_preserved=true`，generation-only 与 ref+digest 成对突变归类 `CHECKPOINT_STALE`，candidate orphan 永不成为 authority；持久 schema 固定 `user_version=1` 与 exact 四列 schema（列名/顺序/声明类型/NOT NULL/PK 精确验证），只有严格 fresh empty DB（user_version 0 且无 user tables）才创建表（显式 `CREATE TABLE`，无 `IF NOT EXISTS`），任何非精确 existing schema（user_version 0 + 表已存在、user_version 1 缺表、unsupported version、多余 user table、列序/类型/NOT NULL/PK 偏差）在 init 时 `CHECKPOINT_STORE_CORRUPT` 且不迁移不自动修复；失败 init 关闭已打开连接、不保留 this.db、不留 observable lock、不回显 raw SQLite text。constructor options 的 required-key subsequence 与 non-SQLite 文件分类属于 R3 才最终修正的合同，不作为 R1 已完整实现的内容。
+- **D10-A-R2 narrowing record**（commit `e735993c37f4fd4c2a47589551c0993413e21854`，message `fix: restore checkpoint snapshot type narrowing`）：R1 runtime tests 已通过，但 post-commit `npm run typecheck` 曾产生 `TS2345`——`snapshotSequence` 中 `unknown` 未被 TypeScript 控制流收窄，后续 reflection 调用无法静态通过；R2 增加 plain-object type predicate（`isPlainObjectRecord`），guard 成功后建立 `objectValue: object`，`Object.getPrototypeOf`、`Reflect.ownKeys`、`Object.getOwnPropertyDescriptor` 只接收该 object reference；getter-zero、Proxy/revoked Proxy、accessor rejection、bounded errors 等 runtime 合同未改变；R2 exact-head typecheck 与 CI 已通过。该历史是普通追加提交，不是 amend 或 squash。
+- **D10-A-R3 constructor contract record**（commit `b5f08b5b2843f3772d6337fb5e8e0cdbc50ee654`，message `fix: complete checkpoint store boundary contracts`）：constructor options 从错误的 canonical prefix 修正为 required-key、order-preserving canonical subsequence——`required_only_accepted=true`、`busy_only_accepted=true`、`max_only_accepted=true`、`both_optional_accepted=true`、`max_before_busy_rejected=true`、`max_scalar_validation_reached=true`；advance request、body 与 identity 仍然是 exact sequence，不因本次修正改为 subsequence。
+- **D10-A-R3 SQLite classification record**（同 commit `b5f08b5b2843f3772d6337fb5e8e0cdbc50ee654`，D10-A-R3-002）：统一 translator 的最终分类——`SQLITE_BUSY`/`SQLITE_LOCKED` 前缀 → `CHECKPOINT_STORE_BUSY`；`SQLITE_NOTADB` 或 `SQLITE_CORRUPT` 前缀 → `CHECKPOINT_STORE_CORRUPT`；其他存储失败 → `CHECKPOINT_STORE_FAILURE`。该分类覆盖 init-path 全部操作：`new Database`/open、journal_mode read、journal_mode = WAL、foreign_keys、busy_timeout、synchronous、user_version、sqlite_master、table_info、schema creation、schema read-back。non-SQLite existing file（普通非 SQLite 文件作为 DB 路径）分类为 `CHECKPOINT_STORE_CORRUPT`，且 raw SQLite message 不传播（`raw_SQLite_message_propagated=false`）、database path 不传播（`database_path_propagated=false`）、文件不被覆盖（`file_overwritten=false`）、连接不保留（`connection_retained=false`）、不留 observable lock（`observable_lock_left=false`）、fresh-instance retry 仍为 `CHECKPOINT_STORE_CORRUPT`。不得写成 `CHECKPOINT_STORE_FAILURE || CHECKPOINT_STORE_BUSY`，也不得把 unknown/corrupt DB 情形笼统归入 generic failure。
+- **Markers**：`D10_A_CHECKPOINT_SCHEMA_VERIFIED` 涵盖 strict root 与 identity ordering、exact persistent schema、`user_version=1`、malformed 与 non-SQLite DB corruption classification；`D10_A_CHECKPOINT_CANONICAL_BYTES_VERIFIED` 涵盖 canonical JSON/UTF-8/exact trailing LF/最大 1 MiB 字节合同；`D10_A_CHECKPOINT_FAIL_CLOSED_VERIFIED` 涵盖 constructor required-key subsequence、constructor optional-key combinations、scalar reachability、advance request/body/identity exact sequence、getter zero、Proxy 与 revoked Proxy、bounded sanitized diagnostics；`D10_A_CHECKPOINT_CAS_VERIFIED` 涵盖 generation/ref/digest comparison、full SQL CAS predicate、deterministic digest mutation interleaving、orphan non-authority；`D10_A_CHECKPOINT_FORK_PREVENTION_VERIFIED`、`D10_A_CHECKPOINT_RESTART_VERIFIED`（valid close/reopen、exact existing schema、failed init no lock、non-SQLite corrupt path fresh-instance retry）、`D10_A_ARTIFACT_KIND_VERIFIED`、`D10_A_D01_D09_REGRESSION_PRESERVED`、`D10_A_REAL_SOURCE_UNCHANGED`、`D10_A_TEMP_CLEANUP_COMPLETE`、`D10_A_COMPLETED_REASON_BINDING_VERIFIED` 只在对应真实断言全部成功时输出；summary 格式 `D10_A_CHECKPOINT_SUMMARY passed=<N> failed=0` 与 `D10_A_CHECKPOINT_STORE_SUMMARY passed=<N> failed=0`；原十一种 artifact kind 名称与顺序精确保持，新 kind 只追加一次，代表性原 kind put/read/ref 行为不变；markers 由真实断言计算，不是 hardcoded。
+- **Targeted commands**：
+
+  ```bash
+  npx --no-install tsx tests/loop-delivery-checkpoint.test.ts
+  npx --no-install tsx tests/loop-delivery-checkpoint-store.test.ts
+  npx --no-install tsx tests/loop-artifact-store.test.ts
+  npx --no-install tsx tests/loop-governance-tail-result.test.ts
+  ```
+
+- **Full validation commands**：
+
+  ```bash
+  npm run typecheck
+  npm test
+  npm run test:loop-patch-mutations
+  ruby scripts/validate-skill-contracts.rb
+  ruby scripts/validate-product-parity-fixtures.rb
+  ruby scripts/validate-capability-metadata-chain.rb
+  ruby scripts/validate-gate-runner-scenarios.rb
+  git diff --check
+  ```
+
+- **Source invariance**：D10-A targeted suites 前后记录并精确比较 real Source 的 HEAD、status bytes、unstaged diff digest、staged diff digest，证明测试没有污染当前 Source 状态（`D10_A_REAL_SOURCE_UNCHANGED`）。
+- **Temp cleanup**：全部临时 SQLite DB/WAL/SHM、temporary repositories、Artifact Store roots、worker-process roots 实际删除并验证，无遗留 message listeners，所有 worker 以 exit code 0 退出（`D10_A_TEMP_CLEANUP_COMPLETE`）。
+
+边界：
+
+- 本节验证证据本身不构成 Ready、merge、D10-B～D10-F、真实 provider、目标仓库副作用或 publication 授权。
+- D10-A 不运行真实 provider；不运行 Shared Tail；不修改 D08/D06/D07/D09 与 Runtime/Gateway/Graph；不创建 single-repository coordinator；不创建真实 target branch/commit/push/PR；不建立 D10 overall completion。
+- D10-B～D10-F 仍未授权（`D10_B_to_D10_F_authorized=false`）；Global Review Protocol 现在未授权（`Global_Review_Protocol_authorized_now=false`）；publication 未授权（`publication_authorized=false`）；D10-A 只是 D10-C 跨进程恢复 coordinator 的 checkpoint artifact 与 current-head locator foundation。
+- CI success 不等于 implementation review PASS；Draft PR 不等于 Ready 或 merge authorization。
+- Exchange 与 Personal Knowledge Base 未发布；Roadmap 与 CURRENT_STATUS 未修改。

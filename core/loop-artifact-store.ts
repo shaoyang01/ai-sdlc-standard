@@ -22,12 +22,13 @@ export type LoopArtifactKind =
   | "solution_review"
   | "executor_input"
   | "orchestration_result"
-  | "governance_tail_result";
+  | "governance_tail_result"
+  | "delivery_checkpoint";
 
 const LOOP_ARTIFACT_KINDS: readonly LoopArtifactKind[] = [
   "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
   "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
-  "governance_tail_result",
+  "governance_tail_result", "delivery_checkpoint",
 ];
 
 export type LoopStoredArtifact = Readonly<{ artifactRef: string; kind: LoopArtifactKind; digest: string; sizeBytes: number }>;
