@@ -455,7 +455,7 @@ detect_module_globs() {
   if [[ -z "${modules}" ]]; then
     printf '.\n'
   else
-    printf '%s' "${modules}" | sed '/^$/d'
+    printf '%s' "${modules}" | sed '/^$/d' | sort -u
   fi
 }
 
