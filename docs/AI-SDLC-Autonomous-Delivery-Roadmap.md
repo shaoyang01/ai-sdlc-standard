@@ -115,7 +115,7 @@
 | LOOP-DELIVERY-07 | Recoverable Git Delivery Publisher | source_verified | 一个 commit、一次 push、Draft PR 与恢复 | D01、D02、D03、D06 | `core/loop-delivery-publisher.ts` |
 | LOOP-DELIVERY-08 | Requirement and Design Orchestration | source_verified | 自然语言需求到 direct executor input | D01、D06 | `core/loop-requirement-design-orchestrator.ts` |
 | LOOP-DELIVERY-09 | Review and Governance Tail | source_verified | 自然语言需求到带治理证据 Draft PR 的治理闭环 | D08、D03、D06、D07、Topic 07 Shared Tail 稳定合同 | exact contract accepted；A1 governance-tail-result contract 已进入 Source；D07 governed mode 已进入 Source；D09-B production coordinator 已通过最终实施审查并随 PR #60 合并至事实分支（merge commit `845ff9ee`），post-merge fact-branch verification 已通过 |
-| LOOP-DELIVERY-10 | Real Single-Repository Acceptance and Hardening | recovered | 真实单仓 MVP 验收与硬化 | D01～D09 | 无 production module |
+| LOOP-DELIVERY-10 | Real Single-Repository Acceptance and Hardening | recovered | 真实单仓 MVP 验收与硬化 | D01～D09 | D10-A durable checkpoint foundation 已进入 Source；candidate 55d1215c；merge commit 65bedd33；post-merge fact-branch verification PASS；D10-B～D10-F 尚未完成 |
 | LOOP-ADVANCED-11 | Real Review, Feedback, and Re-Gate | recovered | 真实反馈回流与 Re-Gate | D09、D10 | 无 production module |
 | LOOP-ADVANCED-12 | Complex Requirement and Speckit Delivery | recovered | 复杂需求与 Speckit 共同治理尾部 | D08、D09 | 无 production module |
 | LOOP-ADVANCED-13 | Multi-Repository Autonomous Delivery | recovered | 跨仓自主交付协调 | D10 | 无 production module |
@@ -306,10 +306,25 @@
 - **In scope**：真实 repository、真实 Draft PR、失败恢复、可信 evidence、运行边界。
 - **Out of scope**：自动扩展到多仓、企业平台或无人监督高风险操作。
 - **Completion contract**：真实单仓需求跑通 D01～D09 闭环并产出硬化证据。
-- **Expected evidence**：真实仓库验收记录与硬化证据（创建时尚未存在）。
+- **Expected evidence**：D10-A foundation evidence 已存在；真实单仓 acceptance/hardening evidence 仍待 D10-B～D10-F。
 - **Relationship to previous stage**：在 D09 治理闭环之上做真实验收。
 - **Relationship to next stage**：为 Advanced 11～14 提供稳定基础。
 - **Definition provenance**：早期项目路线材料恢复出高层名称“Real Acceptance and Hardening”。
+
+D10-A Source-closure record：
+
+- capability：
+  - immutable delivery_checkpoint artifact；
+  - generation-linear SQLite current-head locator；
+  - full generation/ref/digest CAS；
+  - restart、corruption 与 fail-closed evidence。
+- candidate_HEAD：55d1215c9c205f6b475a9e502b040e4e7336a192
+- merge_commit：65bedd33b1c205e404eb51e8fae7dcabcfecf7e7
+- post_merge_verification：PASS
+- D10_overall_definition_status：recovered
+- D10_overall_completed：false
+- real_single_repository_acceptance_completed：false
+- D10_B_to_D10_F_completed：false
 
 ## LOOP-ADVANCED-11
 
