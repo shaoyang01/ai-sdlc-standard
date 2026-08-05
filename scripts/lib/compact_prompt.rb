@@ -477,7 +477,7 @@ module CompactPrompt
         return diags
       end
       commands.each do |id, spec|
-        unless id.match?(CompactPrompt::COMMAND_ID_PATTERN)
+        unless id.is_a?(String) && id.match?(CompactPrompt::COMMAND_ID_PATTERN)
           diags << ["POLICY_SCHEMA_INVALID", "commands", "command id #{id.inspect} must match [A-Z][A-Z0-9_]{0,63}"]
           next
         end
@@ -735,6 +735,10 @@ module CompactPrompt
         if token.start_with?("<!-- WHEN")
           return ["TEMPLATE_CONDITIONAL_INVALID", "template", "conditional blocks must not nest"] if depth.positive?
           match = token.match(WHEN_PATTERN)
+          unless match
+            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
+                    "malformed WHEN marker #{token.inspect} (expected <!-- WHEN <field>=<value> -->)"]
+          end
           field = match[1]
           value = match[2]
           unless CONDITIONAL_FIELDS.key?(field) && CONDITIONAL_FIELDS[field].include?(value)
@@ -1057,6 +1061,11 @@ module CompactPrompt
 
       stdout.write(prompt)
       EXIT_OK
+    rescue StandardError
+      # Fail closed: never emit a backtrace or unstable environment text.
+      stderr.write(Diagnostics.format("INTERNAL_ERROR", "internal",
+                                      "unexpected internal error; no backtrace emitted"))
+      EXIT_RENDER_OR_BUDGET
     end
   end
 end
