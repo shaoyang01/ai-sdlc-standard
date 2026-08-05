@@ -65,6 +65,13 @@ entrypoints:
   specs_archive_cleanup_proposal_template: templates/specs-archive-cleanup-proposal-template.md
   library_driven_sync_decision_template: templates/library-driven-sync-decision-template.md
   project_type_contract_artifact_matrix_template: templates/project-type-contract-artifact-matrix-template.yaml
+  compact_prompt_standard: ai-sdlc/compact-prompt-standard.md
+  compact_execution_capsule_template: templates/compact-execution-capsule-template.yaml
+  compact_codex_prompt_template: templates/compact-codex-prompt-template.md
+  compact_completion_report_template: templates/compact-completion-report-template.md
+  compact_validation_profiles: templates/compact-validation-profiles.yaml
+  compact_prompt_contract_validator: scripts/validate-compact-prompt-contracts.rb
+  compact_prompt_fixtures: fixtures/compact-prompt/contracts.yaml
   registry: registry/skill-registry.md
 skills:
   sdlc_code_review_excellence:

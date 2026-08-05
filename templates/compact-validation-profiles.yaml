@@ -1,0 +1,23 @@
+# Compact Validation Profiles v1
+#
+# 合同：ai-sdlc/compact-prompt-standard.md（PCE-01-A）第 3 节。
+# 必须且只能定义五种 Validation Profile；每个 profile 的语义键值精确固定。
+#
+# 规则：
+# - 验证等级不足必须拒绝（DOC_ONLY 不允许代码类路径变更）。
+# - 验证等级过重必须拒绝（PERSISTENCE_CONCURRENCY / GLOBAL_CONTRACT
+#   必须至少包含一个代码类路径变更）。
+# - 项目只映射路径类别和命令 ID；Capsule 不接受自由 shell command。
+# - 普通文档任务不得默认映射到根 npm test。
+
+validation_profiles:
+  DOC_ONLY:
+    root_npm_test: forbidden_by_default
+  TYPE_ONLY:
+    require_typecheck: true
+  LOCAL_BEHAVIOR:
+    require_focused_tests: true
+  PERSISTENCE_CONCURRENCY:
+    require_focused_persistence_and_concurrency_tests: true
+  GLOBAL_CONTRACT:
+    allow_full_suite_when_contract_really_shared: true

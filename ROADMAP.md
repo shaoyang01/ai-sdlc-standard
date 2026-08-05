@@ -893,6 +893,19 @@ roots = [
 | WMS / 业务专业 Skills | 外部专业 Skill | 不纳入本标准包改造；不新增 `sdlc-*` 包装 Skill | - | - |
 | `work-journal-agent` | 产品仓库 | 远期互斥数据源模式 | 中 | 9 |
 
+## PCE-01: Compact Prompt Standard and Lightweight Renderer
+
+PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实登记：
+
+- PCE-01-A 只建立 Compact Prompt Contract：合同
+  （`ai-sdlc/compact-prompt-standard.md`）、四份模板（Execution Capsule、
+  Codex Prompt、Completion Report、Validation Profiles）、只读 validator
+  （`scripts/validate-compact-prompt-contracts.rb`）与集中式 fixtures
+  （`fixtures/compact-prompt/contracts.yaml`）。Compact Prompt Standard 是
+  合同，不是第五份模板。
+- Renderer 属于后续 PCE-01-B，尚未实现。
+- 两个项目真实验收属于 PCE-01-C。
+
 ## 近期执行顺序
 
 1. [x] 完成本路线图，并吸收外部 v1.0 文档暴露的路线图缺口。
