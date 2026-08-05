@@ -1,0 +1,509 @@
+# Compact Prompt Contract Fixtures (validation-only)
+#
+# authority=validation_only
+# runtime_authority=false
+# implementation_authority=false
+# merge_authority=false
+# publication_authority=false
+#
+# This fixture is a development-time conformance oracle for the PCE-01-A
+# Compact Prompt Contract. It is not a prompt renderer, not a project profile
+# resolver, not a command executor, and not an owner of any execution fact.
+# No fixture executes commands, writes files, or touches the network.
+#
+# Each fixture's `capsule` is the verbatim raw YAML text of a capsule. The
+# validator parses and classifies that text itself, so parse-level defects
+# (duplicate keys, aliases, anchors, tags, merge keys, null) can be expressed
+# faithfully. Every negative fixture declares the exact expected
+# classification so the validator can prove it fails for the intended reason.
+#
+# No fixture contains real secrets, private knowledge-base content, full
+# historical prompts, or executable shell commands.
+
+schema_version: compact-prompt-contracts-v1
+authority: validation_only
+
+fixtures:
+  - id: CAPSULE-VALID-MICRO-FIX
+    category: valid
+    description: "Valid MICRO_FIX capsule with a code change and LOCAL_BEHAVIOR profile"
+    capsule: |
+      task_id: contract-test-micro-fix
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "修复 runtime v1 的 bootstrap glob 去重"
+      delta:
+        open_findings:
+          - id: FIX-1
+            status: OPEN
+        required_changes:
+          - scripts/validate-compact-prompt-contracts.rb
+        acceptance_criteria:
+          - "ruby scripts/validate-compact-prompt-contracts.rb 通过"
+        preserved_closed_findings:
+          - id: FIX-0
+            status: CLOSED
+      scope:
+        allowed_files:
+          - scripts/validate-compact-prompt-contracts.rb
+        maximum_changed_files: 3
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "fix: deduplicate bootstrap globs"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+        - "force push"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONTRACT-TEST MICRO-FIX Implementation Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-VALID-SESSION-CONTINUATION
+    category: valid
+    description: "Valid SESSION_CONTINUATION capsule carrying only the current delta with DOC_ONLY profile"
+    capsule: |
+      task_id: contract-test-session-continuation
+      prompt_mode: SESSION_CONTINUATION
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: 42
+      objective: "续写 compact prompt contract 的验证文档登记"
+      delta:
+        open_findings:
+          - id: CONT-1
+            status: OPEN
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "docs/VALIDATION.md 登记 validate-compact-prompt-contracts.rb"
+        preserved_closed_findings:
+          - id: CONT-0
+            status: CLOSED
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: register compact prompt contract validation"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "merge"
+        - "auto-merge"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONTRACT-TEST SESSION-CONTINUATION Implementation Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-UNKNOWN-KEY
+    category: negative
+    expected_classification: UNKNOWN_KEY
+    description: "Capsule with an extra root key not defined by the contract"
+    capsule: |
+      task_id: contract-test-unknown-key
+      prompt_mode: MICRO_FIX
+      unexpected_key: value
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "unknown key 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "UNKNOWN_KEY 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unknown key"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "UNKNOWN-KEY Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-MISSING-REQUIRED-FIELD
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "Capsule missing the completion_report block"
+    capsule: |
+      task_id: contract-test-missing-field
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺失必填字段必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "MISSING_REQUIRED_FIELD 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test missing field"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+
+  - id: CAPSULE-NEG-DUPLICATE-KEY
+    category: negative
+    expected_classification: DUPLICATE_KEY
+    description: "Capsule with a duplicated root key"
+    capsule: |
+      task_id: contract-test-duplicate-key
+      task_id: contract-test-duplicate-key-again
+      prompt_mode: MICRO_FIX
+
+  - id: CAPSULE-NEG-YAML-ALIAS
+    category: negative
+    expected_classification: YAML_ALIAS
+    description: "Capsule text using a YAML alias"
+    capsule: |
+      a: &x 1
+      b: *x
+
+  - id: CAPSULE-NEG-YAML-ANCHOR
+    category: negative
+    expected_classification: YAML_ANCHOR
+    description: "Capsule text using a YAML anchor even without an alias"
+    capsule: |
+      a: &x 1
+      b: 2
+
+  - id: CAPSULE-NEG-YAML-TAG
+    category: negative
+    expected_classification: YAML_TAG
+    description: "Capsule text using an explicit YAML tag"
+    capsule: |
+      a: !!str 1
+
+  - id: CAPSULE-NEG-YAML-MERGE-KEY
+    category: negative
+    expected_classification: YAML_MERGE_KEY
+    description: "Capsule text using a YAML merge key"
+    capsule: |
+      child:
+        <<: {k: 1}
+
+  - id: CAPSULE-NEG-YAML-NULL
+    category: negative
+    expected_classification: YAML_NULL
+    description: "Capsule text containing a null value"
+    capsule: |
+      task_id: contract-test-null
+      prompt_mode: null
+
+  - id: CAPSULE-NEG-INVALID-SHA
+    category: negative
+    expected_classification: INVALID_SHA
+    description: "Capsule with a baseline.head that is not a 40-char lowercase hex SHA"
+    capsule: |
+      task_id: contract-test-invalid-sha
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8
+        pull_request: none
+      objective: "非法 Git SHA 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "INVALID_SHA 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test invalid sha"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "INVALID-SHA Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-UNSAFE-PATH
+    category: negative
+    expected_classification: UNSAFE_PATH
+    description: "Capsule with a traversal path in scope.allowed_files"
+    capsule: |
+      task_id: contract-test-unsafe-path
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "不安全路径必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - ../secrets.md
+        acceptance_criteria:
+          - "UNSAFE_PATH 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - ../secrets.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unsafe path"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "UNSAFE-PATH Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-VALIDATION-UNDERSPECIFIED
+    category: negative
+    expected_classification: VALIDATION_UNDERSPECIFIED
+    description: "DOC_ONLY profile with a code path change - validation level is insufficient"
+    capsule: |
+      task_id: contract-test-underspecified
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "验证等级不足必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - core/loop-runtime.ts
+        acceptance_criteria:
+          - "VALIDATION_UNDERSPECIFIED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.ts
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test underspecified validation"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "UNDERSPECIFIED Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-VALIDATION-OVERPROVISIONED
+    category: negative
+    expected_classification: VALIDATION_OVERPROVISIONED
+    description: "GLOBAL_CONTRACT profile with only documentation changes - validation level is overprovisioned"
+    capsule: |
+      task_id: contract-test-overprovisioned
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "验证等级过重必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "VALIDATION_OVERPROVISIONED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test overprovisioned validation"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "OVERPROVISIONED Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-MULTIPLE-OBJECTIVES
+    category: negative
+    expected_classification: MULTIPLE_OBJECTIVES
+    description: "Capsule whose objective is a list of two objectives"
+    capsule: |
+      task_id: contract-test-multiple-objectives
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective:
+        - "目标一"
+        - "目标二"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "MULTIPLE_OBJECTIVES 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test multiple objectives"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "MULTIPLE-OBJECTIVES Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-MISSING-STOP-CONDITION
+    category: negative
+    expected_classification: MISSING_STOP_CONDITION
+    description: "Capsule whose completion_report.stop_after_report is false"
+    capsule: |
+      task_id: contract-test-missing-stop-condition
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺失停止条件必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "MISSING_STOP_CONDITION 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test missing stop condition"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "MISSING-STOP-CONDITION Report"
+        maximum_lines: 80
+        stop_after_report: false

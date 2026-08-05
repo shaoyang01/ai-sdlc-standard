@@ -1,0 +1,57 @@
+# Compact Execution Capsule v1 — Template
+#
+# 合同：ai-sdlc/compact-prompt-standard.md（PCE-01-A）
+# 本文件是固定形状模板；实例必须满足 1.2/1.3 节全部值规则。
+# 一个 Capsule 只能表达一个目标；不接受自由 shell command。
+# 加载方式：YAML.safe_load(permitted_classes: [], aliases: false)。
+
+task_id: "<task-id>"
+prompt_mode: "<MICRO_FIX|SESSION_CONTINUATION|BOOTSTRAP|RECOVERY>"
+
+routing:
+  recipient: "<recipient>"
+  paste_location: "<paste-location>"
+  report_back_to: "<report-back-to>"
+  next_hop_after_report: "<next-hop-after-report>"
+
+baseline:
+  repository: "<owner/name>"
+  branch: "<fact-branch>"
+  head: "<40-char-lowercase-hex-sha>"
+  pull_request: "<none|PR-number>"
+
+objective: "<single-objective>"
+
+delta:
+  open_findings:
+    - id: "<finding-id>"
+      status: OPEN
+  required_changes:
+    - "<repository-relative-path>"
+  acceptance_criteria:
+    - "<acceptance-criterion>"
+  preserved_closed_findings:
+    - id: "<finding-id>"
+      status: CLOSED
+
+scope:
+  allowed_files:
+    - "<repository-relative-path>"
+  maximum_changed_files: <positive-integer>
+
+validation_profile: "<DOC_ONLY|TYPE_ONLY|LOCAL_BEHAVIOR|PERSISTENCE_CONCURRENCY|GLOBAL_CONTRACT>"
+
+git:
+  commit_count: <0|1>
+  commit_message: "<commit-message>"
+  push_mode: "<NORMAL_PUSH|NO_PUSH>"
+  pull_request_action: "<CREATE_DRAFT|NONE>"
+
+forbidden_actions:
+  - "<forbidden-action>"
+
+completion_report:
+  recipient: "<completion-report-recipient>"
+  name: "<completion-report-name>"
+  maximum_lines: <positive-integer>
+  stop_after_report: true

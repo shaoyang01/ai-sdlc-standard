@@ -4,7 +4,8 @@
 
 ## 当前自动校验脚本
 
-当前仓库提供四个自动校验脚本：
+当前仓库原有四个自动校验脚本，另新增 Compact Prompt Contract 校验脚本
+（见「Compact Prompt Contract Validation」）：
 
 ```bash
 ruby scripts/validate-skill-contracts.rb
@@ -26,6 +27,36 @@ ruby scripts/validate-gate-runner-scenarios.rb
 `validate-capability-metadata-chain.rb` 服务本仓库的 capability path、migration ledger、root classification、status authority、Current Status fixed baseline 和 historical compatibility 治理。它已在 ci-standards 执行；read-only、deterministic、no network；不创建第二份 migration registry；不属于下游 portable Standard Package 项目必须执行的 runtime 入口；不表示 capability 被批准、启用、执行或 rollout；不证明 external consumers 不存在。
 
 其覆盖范围包括：Matrix Migration Tracking、target paths/root notes、shared inventory paths、root JSON scoped authority、Repository Structure authority model、Current Status exact reviewed baseline、Accepted Root Material Classification、historical snapshot banners、README authority framing。
+
+## Compact Prompt Contract Validation
+
+`ruby scripts/validate-compact-prompt-contracts.rb` 校验 PCE-01-A Compact Prompt Contract：
+
+- 十个 whitelist 合同资产均存在；
+- Capsule 根字段与嵌套字段集合精确（unknown key / 缺失必填字段拒绝）；
+- 受限 YAML 拒绝：duplicate key、anchor、alias、explicit tag、merge key、null、
+  `YAML.safe_load(permitted_classes: [], aliases: false)` + AST 级检测；
+- 四种 Prompt Mode 名称与 hard limit 预算精确；
+- 五种 Validation Profile 名称与语义键值精确（DOC_ONLY 默认禁止根 `npm test`）；
+- Codex Prompt 模板固定十节顺序与单份 `CODEX_EXECUTION_PROMPT` 输出；
+- Completion Report 模板紧凑预算（`target_lines: 30-80`、`hard_limit_lines: 120`）
+  与必填字段；
+- `fixtures/compact-prompt/contracts.yaml` 正例通过、反例被预期分类拒绝
+  （每个反例声明 `expected_classification`）；
+- manifest、ROADMAP、VALIDATION 文档已登记且无超前声明（不声明 Renderer 已可用、
+  个人知识库已接入、PCE-01 全部完成、source_verified、GRP-01 启动、D10-B 恢复
+  或 PCE-01-B 尚无命令）。
+
+边界：
+
+- 该 validator read-only、deterministic、no network、no filesystem writes、
+  no shell execution。
+- 不实现 Prompt renderer、不做 Git 操作、不执行 capsule 内命令、不做 Token
+  计算、不做项目 profile resolution。
+- Renderer 属于后续 PCE-01-B；两个项目真实验收属于 PCE-01-C；本段验证不构成
+  Ready、merge 或 publication 授权。
+- 本段不超前声明：Renderer 已可用、个人知识库已接入、PCE-01 全部完成、
+  source_verified、GRP-01 启动、D10-B 恢复或 PCE-01-B 尚无命令。
 
 ## Tail Template Static Contract Validation
 
