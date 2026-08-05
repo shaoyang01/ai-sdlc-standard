@@ -903,7 +903,12 @@ PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实�
   （`scripts/validate-compact-prompt-contracts.rb`）与集中式 fixtures
   （`fixtures/compact-prompt/contracts.yaml`）。Compact Prompt Standard 是
   合同，不是第五份模板。
-- Renderer 属于后续 PCE-01-B，尚未实现。
+- PCE-01-B 实现 Lightweight Renderer and Validator：共享库
+  （`scripts/lib/compact_prompt.rb`）、CLI（`scripts/ai-sdlc-prompt.rb`
+  validate/compile）、项目 policy（`.ai-sdlc/prompt-policy.yaml`）、renderer
+  fixtures（`fixtures/compact-prompt/renderer.yaml`）、确定性渲染、Git
+  named-ref 只读核验与 line/byte budget gate；no-network、无 Git 写自动化、
+  无 Token 计算、无远程包发布。
 - 两个项目真实验收属于 PCE-01-C。
 
 ## 近期执行顺序

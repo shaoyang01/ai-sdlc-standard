@@ -1,0 +1,1879 @@
+# Compact Prompt Renderer Fixtures (validation-only)
+#
+# authority=validation_only
+# runtime_authority=false
+# implementation_authority=false
+# merge_authority=false
+# publication_authority=false
+#
+# These fixtures exercise the PCE-01-B CLI service
+# (scripts/ai-sdlc-prompt.rb + scripts/lib/compact_prompt.rb) with injected
+# synthetic git state and in-memory capsule/policy/template text. No
+# filesystem writes, no shell, no network, no real remote access.
+#
+# `default_policy` is the standard-library project policy used unless a
+# fixture provides its own `policy`. `git_state` supplies the synthetic
+# checkout-independent named-ref state. `template` overrides the repository
+# prompt template (used to prove template binding failures fail closed).
+#
+# Expected contract:
+#   - validate success: stdout exactly "compact execution capsule valid\n",
+#     stderr empty, exit 0
+#   - compile success: stdout is exactly one CODEX_EXECUTION_PROMPT with the
+#     fixed ten-section order, zero unresolved placeholders, zero conditional
+#     markers, single trailing LF, valid UTF-8, exit 0; byte-identical on
+#     repeated runs
+#   - any failure: stdout empty, stderr only stable diagnostics, exit per the
+#     CLI contract (2 CLI_OR_INPUT, 3 CONTRACT_OR_POLICY, 4 GIT_BASELINE,
+#     5 RENDER_OR_BUDGET)
+
+schema_version: compact-prompt-renderer-fixtures-v1
+authority: validation_only
+
+default_policy: |
+  schema: compact-prompt-project-policy-v1
+  project_id: fixture-project
+  repository: acme/widgets
+  fact_branch: feature/runtime-v1
+  commands:
+    LIB_SYNTAX: {argv: [ruby, -c, scripts/lib/compact_prompt.rb]}
+    CLI_SYNTAX: {argv: [ruby, -c, scripts/ai-sdlc-prompt.rb]}
+    VALIDATOR_SYNTAX: {argv: [ruby, -c, scripts/validate-compact-prompt-contracts.rb]}
+    COMPACT_CONTRACTS: {argv: [ruby, scripts/validate-compact-prompt-contracts.rb]}
+    SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+    CAPABILITY_METADATA: {argv: [ruby, scripts/validate-capability-metadata-chain.rb]}
+    TYPECHECK: {argv: [npm, run, typecheck]}
+    ROOT_NPM_TEST: {argv: [npm, test]}
+    LOOP_MUTATIONS: {argv: [npm, run, test:loop-patch-mutations]}
+    GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+  validation_profiles:
+    DOC_ONLY:
+      required_command_ids: [SKILL_CONTRACTS, CAPABILITY_METADATA, GIT_DIFF_CHECK]
+      forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+    TYPE_ONLY:
+      required_command_ids: [TYPECHECK, GIT_DIFF_CHECK]
+      forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+    LOCAL_BEHAVIOR:
+      required_command_ids:
+        - LIB_SYNTAX
+        - CLI_SYNTAX
+        - VALIDATOR_SYNTAX
+        - COMPACT_CONTRACTS
+        - SKILL_CONTRACTS
+        - CAPABILITY_METADATA
+        - GIT_DIFF_CHECK
+      forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+    PERSISTENCE_CONCURRENCY:
+      required_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS, GIT_DIFF_CHECK]
+      forbidden_command_ids: []
+    GLOBAL_CONTRACT:
+      required_command_ids:
+        - LIB_SYNTAX
+        - CLI_SYNTAX
+        - VALIDATOR_SYNTAX
+        - COMPACT_CONTRACTS
+        - SKILL_CONTRACTS
+        - CAPABILITY_METADATA
+        - TYPECHECK
+        - ROOT_NPM_TEST
+        - LOOP_MUTATIONS
+        - GIT_DIFF_CHECK
+      forbidden_command_ids: []
+
+fixtures:
+  - id: RENDER-VALID-VALIDATE-BASIC
+    category: valid
+    command: validate
+    description: "Valid MICRO_FIX capsule passes validate with exact stdout/stderr/exit"
+    capsule: |
+      task_id: fixture-basic
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "修复 fixture 的 bootstrap glob 去重"
+      delta:
+        open_findings:
+          - id: FIX-1
+            status: OPEN
+        required_changes:
+          - scripts/validate-compact-prompt-contracts.rb
+        acceptance_criteria:
+          - "ruby scripts/validate-compact-prompt-contracts.rb 通过"
+        preserved_closed_findings:
+          - id: FIX-0
+            status: CLOSED
+      scope:
+        allowed_files:
+          - scripts/validate-compact-prompt-contracts.rb
+        maximum_changed_files: 3
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "fix: deduplicate bootstrap globs"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+        - "force push"
+      completion_report:
+        recipient: "owner-session"
+        name: "FIXTURE Implementation Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-MICRO-FIX
+    category: valid
+    command: compile
+    description: "Valid MICRO_FIX capsule compiles to one deterministic prompt with CREATE_DRAFT"
+    capsule: |
+      task_id: fixture-basic
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "修复 fixture 的 bootstrap glob 去重"
+      delta:
+        open_findings:
+          - id: FIX-1
+            status: OPEN
+        required_changes:
+          - scripts/validate-compact-prompt-contracts.rb
+        acceptance_criteria:
+          - "ruby scripts/validate-compact-prompt-contracts.rb 通过"
+        preserved_closed_findings:
+          - id: FIX-0
+            status: CLOSED
+      scope:
+        allowed_files:
+          - scripts/validate-compact-prompt-contracts.rb
+        maximum_changed_files: 3
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "fix: deduplicate bootstrap globs"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+        - "force push"
+      completion_report:
+        recipient: "owner-session"
+        name: "FIXTURE Implementation Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-SESSION-CONTINUATION
+    category: valid
+    command: compile
+    description: "SESSION_CONTINUATION capsule compiles; git combination 1/NONE/NONE"
+    capsule: |
+      task_id: fixture-continuation
+      prompt_mode: SESSION_CONTINUATION
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 续接执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "续写 fixture 的验证文档登记"
+      delta:
+        open_findings:
+          - id: CONT-1
+            status: OPEN
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "docs/VALIDATION.md 登记 fixture 验证"
+        preserved_closed_findings:
+          - id: CONT-0
+            status: CLOSED
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: register fixture validation"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "CONTINUATION Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-BOOTSTRAP
+    category: valid
+    command: compile
+    description: "BOOTSTRAP capsule compiles with TYPE_ONLY profile"
+    capsule: |
+      task_id: fixture-bootstrap
+      prompt_mode: BOOTSTRAP
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "bootstrap fixture 的 renderer"
+      delta:
+        open_findings: []
+        required_changes:
+          - core/loop-runtime.ts
+        acceptance_criteria:
+          - "typecheck 通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.ts
+        maximum_changed_files: 5
+      validation_profile: TYPE_ONLY
+      git:
+        commit_count: 1
+        commit_message: "feat: bootstrap renderer"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "BOOTSTRAP Report"
+        maximum_lines: 100
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-RECOVERY
+    category: valid
+    command: compile
+    description: "RECOVERY capsule compiles with PERSISTENCE_CONCURRENCY profile"
+    capsule: |
+      task_id: fixture-recovery
+      prompt_mode: RECOVERY
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 恢复会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: 42
+      objective: "恢复 fixture 的持久化并发状态"
+      delta:
+        open_findings:
+          - id: REC-1
+            status: OPEN
+        required_changes:
+          - core/loop-runtime.ts
+        acceptance_criteria:
+          - "持久化并发测试通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.ts
+        maximum_changed_files: 2
+      validation_profile: PERSISTENCE_CONCURRENCY
+      git:
+        commit_count: 1
+        commit_message: "fix: recover persistence state"
+        push_mode: NORMAL_PUSH
+        pull_request_action: UPDATE_DRAFT
+      forbidden_actions:
+        - "force push"
+      completion_report:
+        recipient: "owner-session"
+        name: "RECOVERY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "git@github.com:acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-UPDATE-DRAFT
+    category: valid
+    command: compile
+    description: "git combination 1/NORMAL_PUSH/UPDATE_DRAFT with positive PR number"
+    capsule: |
+      task_id: fixture-update-draft
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 续接执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: 42
+      objective: "更新 fixture 的 Draft PR"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "更新 PR 说明"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: update draft"
+        push_mode: NORMAL_PUSH
+        pull_request_action: UPDATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UPDATE-DRAFT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-NO-COMMIT-NO-PUSH
+    category: valid
+    command: compile
+    description: "git combination 0/NONE/NONE renders no commit/push/PR claims"
+    capsule: |
+      task_id: fixture-no-git
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "只输出分析结果，不提交"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "不产生 git 操作"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "NO-GIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "ssh://git@github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-COMPILE-EMPTY-FINDINGS
+    category: valid
+    command: compile
+    description: "Empty findings render as none bullets"
+    capsule: |
+      task_id: fixture-empty-findings
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 findings 渲染为 none"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "none 渲染"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "EMPTY-FINDINGS Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-NEG-COMPILE-LINE-LIMIT
+    category: negative
+    command: compile
+    description: "MICRO_FIX prompt exceeding 120 logical lines fails with empty stdout"
+    capsule: |
+      task_id: fixture-line-limit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "超行数限制必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - path-000.md
+          - path-001.md
+          - path-002.md
+          - path-003.md
+          - path-004.md
+          - path-005.md
+          - path-006.md
+          - path-007.md
+          - path-008.md
+          - path-009.md
+          - path-010.md
+          - path-011.md
+          - path-012.md
+          - path-013.md
+          - path-014.md
+          - path-015.md
+          - path-016.md
+          - path-017.md
+          - path-018.md
+          - path-019.md
+          - path-020.md
+          - path-021.md
+          - path-022.md
+          - path-023.md
+          - path-024.md
+          - path-025.md
+          - path-026.md
+          - path-027.md
+          - path-028.md
+          - path-029.md
+          - path-030.md
+          - path-031.md
+          - path-032.md
+          - path-033.md
+          - path-034.md
+          - path-035.md
+          - path-036.md
+          - path-037.md
+          - path-038.md
+          - path-039.md
+          - path-040.md
+          - path-041.md
+          - path-042.md
+          - path-043.md
+          - path-044.md
+          - path-045.md
+          - path-046.md
+          - path-047.md
+          - path-048.md
+          - path-049.md
+          - path-050.md
+          - path-051.md
+          - path-052.md
+          - path-053.md
+          - path-054.md
+          - path-055.md
+          - path-056.md
+          - path-057.md
+          - path-058.md
+          - path-059.md
+          - path-060.md
+          - path-061.md
+          - path-062.md
+          - path-063.md
+          - path-064.md
+          - path-065.md
+          - path-066.md
+          - path-067.md
+          - path-068.md
+          - path-069.md
+          - path-070.md
+          - path-071.md
+          - path-072.md
+          - path-073.md
+          - path-074.md
+          - path-075.md
+          - path-076.md
+          - path-077.md
+          - path-078.md
+          - path-079.md
+          - path-080.md
+          - path-081.md
+          - path-082.md
+          - path-083.md
+          - path-084.md
+          - path-085.md
+          - path-086.md
+          - path-087.md
+          - path-088.md
+          - path-089.md
+          - path-090.md
+          - path-091.md
+          - path-092.md
+          - path-093.md
+          - path-094.md
+          - path-095.md
+          - path-096.md
+          - path-097.md
+          - path-098.md
+          - path-099.md
+          - path-100.md
+        acceptance_criteria:
+          - "PROMPT_LINE_LIMIT_EXCEEDED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - path-000.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "LINE-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "PROMPT_LINE_LIMIT_EXCEEDED\toutput"
+
+  - id: RENDER-NEG-COMPILE-BYTE-LIMIT
+    category: negative
+    command: compile
+    description: "MICRO_FIX prompt exceeding 32768 UTF-8 bytes fails with empty stdout"
+    capsule: |
+      task_id: fixture-byte-limit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本超字节限制验证重复文本"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "PROMPT_BYTE_LIMIT_EXCEEDED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "BYTE-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+        CAPABILITY_METADATA: {argv: [ruby, scripts/validate-capability-metadata-chain.rb]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS, CAPABILITY_METADATA, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "PROMPT_BYTE_LIMIT_EXCEEDED\toutput"
+
+  - id: RENDER-NEG-COMPILE-CREATE-WITH-PR-NUMBER
+    category: negative
+    command: compile
+    description: "CREATE_DRAFT with a positive PR number is a conditional mismatch"
+    capsule: |
+      task_id: fixture-create-with-pr
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: 42
+      objective: "CREATE_DRAFT 与 PR 编号不匹配必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test create with pr"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CREATE-WITH-PR Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\tbaseline.pull_request"
+
+  - id: RENDER-NEG-COMPILE-UPDATE-WITHOUT-PR
+    category: negative
+    command: compile
+    description: "UPDATE_DRAFT with pull_request=none is a conditional mismatch"
+    capsule: |
+      task_id: fixture-update-without-pr
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "UPDATE_DRAFT 缺少 PR 编号必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test update without pr"
+        push_mode: NORMAL_PUSH
+        pull_request_action: UPDATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UPDATE-WITHOUT-PR Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\tbaseline.pull_request"
+
+  - id: RENDER-NEG-CAPSULE-INVALID
+    category: negative
+    command: validate
+    description: "Capsule contract violation fails validate with an A classification"
+    capsule: |
+      task_id: fixture-invalid-capsule
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 required_changes 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "MISSING_REQUIRED_FIELD 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test invalid capsule"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "INVALID-CAPSULE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "MISSING_REQUIRED_FIELD\tcapsule"
+
+  - id: RENDER-NEG-POLICY-UNKNOWN-KEY
+    category: negative
+    command: validate
+    description: "Policy with an unknown root key is rejected"
+    capsule: |
+      task_id: fixture-policy-unknown-key
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "policy unknown key 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_SCHEMA_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test policy unknown key"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "POLICY-UNKNOWN-KEY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      extra_key: value
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_SCHEMA_INVALID\troot"
+
+  - id: RENDER-NEG-POLICY-MISSING-PROFILE
+    category: negative
+    command: validate
+    description: "Policy missing a validation profile is rejected"
+    capsule: |
+      task_id: fixture-policy-missing-profile
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "policy 缺失 profile 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_PROFILE_MAPPING_MISSING 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test policy missing profile"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "POLICY-MISSING-PROFILE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_PROFILE_MAPPING_MISSING\tvalidation_profiles"
+
+  - id: RENDER-NEG-POLICY-UNKNOWN-COMMAND-ID
+    category: negative
+    command: validate
+    description: "Policy profile referencing an unregistered command id is rejected"
+    capsule: |
+      task_id: fixture-policy-unknown-id
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "policy 未登记命令 ID 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_COMMAND_ID_UNKNOWN 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test policy unknown id"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "POLICY-UNKNOWN-ID Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS, NO_SUCH_ID]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_COMMAND_ID_UNKNOWN\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-POLICY-CONFLICT
+    category: negative
+    command: validate
+    description: "Policy with required/forbidden overlap is rejected"
+    capsule: |
+      task_id: fixture-policy-conflict
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "policy 命令冲突必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_COMMAND_CONFLICT 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test policy conflict"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "POLICY-CONFLICT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: [SKILL_CONTRACTS]
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_COMMAND_CONFLICT\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-POLICY-DOC-ONLY-NPM-TEST
+    category: negative
+    command: validate
+    description: "DOC_ONLY requiring ROOT_NPM_TEST is rejected"
+    capsule: |
+      task_id: fixture-policy-doc-only-npm
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "DOC_ONLY 根 npm test 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test doc only npm"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "DOC-ONLY-NPM Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        ROOT_NPM_TEST: {argv: [npm, test]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [ROOT_NPM_TEST]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [ROOT_NPM_TEST]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [ROOT_NPM_TEST]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [ROOT_NPM_TEST]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [ROOT_NPM_TEST]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-GIT-REPOSITORY-MISMATCH
+    category: negative
+    command: validate
+    description: "Origin identity not matching capsule baseline.repository is rejected"
+    capsule: |
+      task_id: fixture-git-repo-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "repository 身份不匹配必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "REPOSITORY_IDENTITY_MISMATCH 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test repo mismatch"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "REPO-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/other/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "REPOSITORY_IDENTITY_MISMATCH\tremote.origin.url"
+
+  - id: RENDER-NEG-GIT-UNSUPPORTED-ORIGIN
+    category: negative
+    command: validate
+    description: "Non-github.com origin URLs are rejected"
+    capsule: |
+      task_id: fixture-git-unsupported-origin
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "非 github.com origin 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "REPOSITORY_IDENTITY_MISMATCH 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unsupported origin"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UNSUPPORTED-ORIGIN Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "file:///tmp/evil-repo.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "REPOSITORY_IDENTITY_MISMATCH\tremote.origin.url"
+
+  - id: RENDER-NEG-GIT-FACT-BRANCH-MISMATCH
+    category: negative
+    command: validate
+    description: "Capsule baseline.branch not equal to policy fact_branch is rejected"
+    capsule: |
+      task_id: fixture-git-branch-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "fact branch 不匹配必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "FACT_BRANCH_MISMATCH 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test branch mismatch"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "BRANCH-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: other-branch
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "FACT_BRANCH_MISMATCH\tbaseline.branch"
+
+  - id: RENDER-NEG-GIT-LOCAL-REF-MISSING
+    category: negative
+    command: validate
+    description: "Missing local named ref for the fact branch is rejected"
+    capsule: |
+      task_id: fixture-git-local-ref-missing
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "本地 named ref 缺失必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "BASELINE_REF_MISSING 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test local ref missing"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "LOCAL-REF-MISSING Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "BASELINE_REF_MISSING\trefs/heads/feature/runtime-v1"
+
+  - id: RENDER-NEG-GIT-ORIGIN-TRACKING-MISMATCH
+    category: negative
+    command: validate
+    description: "Origin tracking ref head not equal to capsule baseline.head is rejected"
+    capsule: |
+      task_id: fixture-git-origin-tracking-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "origin tracking ref 不匹配必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "BASELINE_HEAD_MISMATCH 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test tracking mismatch"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "TRACKING-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "BASELINE_HEAD_MISMATCH\trefs/remotes/origin/feature/runtime-v1"
+
+  - id: RENDER-NEG-TEMPLATE-UNKNOWN-PLACEHOLDER
+    category: negative
+    command: compile
+    description: "Template with an unknown placeholder is rejected before rendering"
+    capsule: |
+      task_id: fixture-template-unknown
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "未知占位符必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_PLACEHOLDER_UNKNOWN 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unknown placeholder"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UNKNOWN-PLACEHOLDER Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      # Broken Template
+
+      delivery_type: CODEX_EXECUTION_PROMPT
+      <bogus>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_PLACEHOLDER_UNKNOWN\ttemplate"
+
+  - id: RENDER-NEG-TEMPLATE-CONDITIONAL-MISSING
+    category: negative
+    command: compile
+    description: "Template missing a legal conditional block is rejected"
+    capsule: |
+      task_id: fixture-template-conditional-missing
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺失条件块必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test conditional missing"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CONDITIONAL-MISSING Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      # Broken Template
+
+      <!-- WHEN git.commit_count=1 -->
+      commit
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-TEMPLATE-CONDITIONAL-NESTED
+    category: negative
+    command: compile
+    description: "Nested conditional blocks are rejected"
+    capsule: |
+      task_id: fixture-template-conditional-nested
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "嵌套条件块必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test conditional nested"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CONDITIONAL-NESTED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      # Broken Template
+
+      <!-- WHEN git.commit_count=1 -->
+      commit
+      <!-- WHEN git.push_mode=NONE -->
+      nested
+      <!-- ENDWHEN -->
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-TEMPLATE-CONDITIONAL-UNBALANCED
+    category: negative
+    command: compile
+    description: "Unbalanced conditional markers are rejected"
+    capsule: |
+      task_id: fixture-template-conditional-unbalanced
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "不平衡条件标记必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test conditional unbalanced"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CONDITIONAL-UNBALANCED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      # Broken Template
+
+      <!-- WHEN git.commit_count=1 -->
+      commit
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"

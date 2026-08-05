@@ -63,9 +63,32 @@ ruby scripts/validate-gate-runner-scenarios.rb
   fixtures 对比防漂移；
 - `fixtures/compact-prompt/contracts.yaml` 正例通过、反例被预期分类拒绝
   （每个反例声明 `expected_classification`）；
-- manifest、ROADMAP、VALIDATION 文档已登记且无超前声明（不声明 Renderer 已可用、
-  个人知识库已接入、PCE-01 全部完成、source_verified、GRP-01 启动、D10-B 恢复
-  或 PCE-01-B 尚无命令）。
+- `fixtures/compact-prompt/renderer.yaml`（PCE-01-B）以注入式 synthetic Git
+  state 与内存文本运行 CLI service：valid validate/compile 的精确
+  stdout/stderr/exit、repeated byte-identical 确定性、UTF-8/LF/单末尾 LF、
+  四种 Mode、line/byte 超限 stdout empty、Git 组合 0/NONE/NONE 与
+  1/NORMAL_PUSH/CREATE_DRAFT、1/NORMAL_PUSH/UPDATE_DRAFT、1/NONE/NONE、
+  CREATE/UPDATE 与 PR 编号不匹配、policy unknown key / missing profile /
+  unknown ID / required-forbidden conflict / DOC_ONLY 根 `npm test`、
+  repository / fact branch / 本地 named ref / origin tracking ref mismatch、
+  模板 unknown placeholder / source-table drift / 条件标记缺失、嵌套、
+  不平衡，以及 compile failure 不输出部分 Prompt；
+- manifest、ROADMAP、VALIDATION、PORTABILITY 文档已登记且无超前声明（不声明
+  PCE-01-C、personal knowledge base 接入、PCE-01 全部完成、source_verified、
+  GRP-01 启动、D10-B 恢复）。
+
+PCE-01-B 边界（如实记录）：
+
+- `scripts/ai-sdlc-prompt.rb` 只负责 argv、真实文件读取、stdout/stderr 与
+  exit codes；全部合同逻辑在 `scripts/lib/compact_prompt.rb` 共享库。
+- contract validator 与 renderer fixtures 验证均 read-only、deterministic、
+  no network、no filesystem writes、no shell（fixtures 注入 synthetic Git
+  state，不访问真实远端、不创建真实 Git repository）。
+- 运行时 Git gate 使用 `Open3.capture3` 固定 argv（无 shell、无 fetch、无
+  ls-remote）；remote-tracking ref 仅代表预先 fetch 后的本地缓存，
+  `git_fetch_performed=false`、`live_GitHub_HEAD_guaranteed=false`。
+- 不实现 Token 计算、JSON、stdin、inspect、`--output`、clipboard、网络
+  请求、LLM、Git 写自动化或远程包发布。
 
 边界：
 

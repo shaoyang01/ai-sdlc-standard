@@ -1,0 +1,68 @@
+# Compact Prompt Project Policy (PCE-01-B)
+#
+# 合同：ai-sdlc/compact-prompt-standard.md（PCE-01-B 章节）
+# 本文件是 ai-sdlc-standard 标准库自身的 project policy；目标项目使用各自
+# 的 <git-root>/.ai-sdlc/prompt-policy.yaml。
+# policy 只映射命令 ID，不内嵌可执行命令文本；Renderer 只渲染命令，不执行
+# 项目验证命令。
+
+schema: compact-prompt-project-policy-v1
+project_id: ai-sdlc-standard
+repository: shaoyang01/ai-sdlc-standard
+fact_branch: feature/loop-runtime-v1
+
+commands:
+  LIB_SYNTAX:
+    argv: [ruby, -c, scripts/lib/compact_prompt.rb]
+  CLI_SYNTAX:
+    argv: [ruby, -c, scripts/ai-sdlc-prompt.rb]
+  VALIDATOR_SYNTAX:
+    argv: [ruby, -c, scripts/validate-compact-prompt-contracts.rb]
+  COMPACT_CONTRACTS:
+    argv: [ruby, scripts/validate-compact-prompt-contracts.rb]
+  SKILL_CONTRACTS:
+    argv: [ruby, scripts/validate-skill-contracts.rb]
+  CAPABILITY_METADATA:
+    argv: [ruby, scripts/validate-capability-metadata-chain.rb]
+  TYPECHECK:
+    argv: [npm, run, typecheck]
+  ROOT_NPM_TEST:
+    argv: [npm, test]
+  LOOP_MUTATIONS:
+    argv: [npm, run, test:loop-patch-mutations]
+  GIT_DIFF_CHECK:
+    argv: [git, diff, --check]
+
+validation_profiles:
+  DOC_ONLY:
+    required_command_ids: [SKILL_CONTRACTS, CAPABILITY_METADATA, GIT_DIFF_CHECK]
+    forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+  TYPE_ONLY:
+    required_command_ids: [TYPECHECK, GIT_DIFF_CHECK]
+    forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+  LOCAL_BEHAVIOR:
+    required_command_ids:
+      - LIB_SYNTAX
+      - CLI_SYNTAX
+      - VALIDATOR_SYNTAX
+      - COMPACT_CONTRACTS
+      - SKILL_CONTRACTS
+      - CAPABILITY_METADATA
+      - GIT_DIFF_CHECK
+    forbidden_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS]
+  PERSISTENCE_CONCURRENCY:
+    required_command_ids: [ROOT_NPM_TEST, LOOP_MUTATIONS, GIT_DIFF_CHECK]
+    forbidden_command_ids: []
+  GLOBAL_CONTRACT:
+    required_command_ids:
+      - LIB_SYNTAX
+      - CLI_SYNTAX
+      - VALIDATOR_SYNTAX
+      - COMPACT_CONTRACTS
+      - SKILL_CONTRACTS
+      - CAPABILITY_METADATA
+      - TYPECHECK
+      - ROOT_NPM_TEST
+      - LOOP_MUTATIONS
+      - GIT_DIFF_CHECK
+    forbidden_command_ids: []

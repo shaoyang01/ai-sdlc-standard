@@ -2,7 +2,8 @@
 # encoding: utf-8
 # frozen_string_literal: true
 
-# Read-only Compact Prompt Contract validator (PCE-01-A).
+# Read-only Compact Prompt Contract validator (PCE-01-A contracts + PCE-01-B
+# renderer fixtures).
 #
 # Boundaries:
 #   read_only: true
@@ -11,463 +12,33 @@
 #   filesystem_writes: false
 #   shell_execution: false
 #
-# Verifies the ten PCE-01-A whitelist contract assets, the fixed capsule
-# shape, restricted-YAML rejections, exact prompt-mode budgets, exact
+# Verifies the compact prompt contract assets, the fixed capsule shape,
+# restricted-YAML rejections, exact prompt-mode budgets, exact
 # validation-profile semantics, the fixed Codex prompt template section
-# order, the completion report template, the centralized fixtures, and that
-# manifest / ROADMAP / VALIDATION register facts without premature claims.
+# order and conditional blocks, the completion report template, the
+# centralized A contract fixtures, the B renderer fixtures (with injected
+# synthetic git state and in-memory text), and that manifest / ROADMAP /
+# VALIDATION / PORTABILITY register facts without premature claims.
 #
-# Not implemented here: prompt renderer, git operations, command execution
-# from capsule content, token counting, project profile resolution, network
-# access, file writes.
+# This file requires scripts/lib/compact_prompt.rb and must not duplicate
+# schema, budget, enum, placeholder or renderer logic.
 #
-# Public classification codes (contract taxonomy, see
-# ai-sdlc/compact-prompt-standard.md section 1.4):
-#   UNKNOWN_KEY, MISSING_REQUIRED_FIELD, DUPLICATE_KEY, YAML_ALIAS,
-#   YAML_ANCHOR, YAML_TAG, YAML_MERGE_KEY, YAML_NULL,
-#   YAML_DOCUMENT_COUNT_INVALID, INVALID_SHA, UNSAFE_PATH,
-#   MULTIPLE_OBJECTIVES, VALIDATION_UNDERSPECIFIED,
-#   VALIDATION_OVERPROVISIONED, MISSING_STOP_CONDITION, FIELD_TYPE_INVALID
-# Internal-only codes (not part of the v1 contract taxonomy):
-#   YAML_SYNTAX (unparseable YAML), YAML_UNSUPPORTED (root not a mapping).
+# Not implemented here: prompt renderer execution, git operations, command
+# execution from capsule content, token counting, project profile
+# resolution, network access, file writes.
 
-require "yaml"
+require_relative "lib/compact_prompt"
 
-ROOT = File.expand_path("..", __dir__)
-
-WHITELIST_ASSETS = %w[
-  ai-sdlc/compact-prompt-standard.md
-  templates/compact-execution-capsule-template.yaml
-  templates/compact-codex-prompt-template.md
-  templates/compact-completion-report-template.md
-  templates/compact-validation-profiles.yaml
-  scripts/validate-compact-prompt-contracts.rb
-  fixtures/compact-prompt/contracts.yaml
-  manifest.yaml
-  ROADMAP.md
-  docs/VALIDATION.md
-].freeze
-
-# ── Capsule schema ──
-
-ROOT_KEYS = %w[
-  task_id prompt_mode routing baseline objective delta scope validation_profile
-  git forbidden_actions completion_report
-].freeze
-ROUTING_KEYS = %w[recipient paste_location report_back_to next_hop_after_report].freeze
-BASELINE_KEYS = %w[repository branch head pull_request].freeze
-DELTA_KEYS = %w[open_findings required_changes acceptance_criteria preserved_closed_findings].freeze
-SCOPE_KEYS = %w[allowed_files maximum_changed_files].freeze
-GIT_KEYS = %w[commit_count commit_message push_mode pull_request_action].freeze
-COMPLETION_REPORT_KEYS = %w[recipient name maximum_lines stop_after_report].freeze
-
-PROMPT_MODES = %w[MICRO_FIX SESSION_CONTINUATION BOOTSTRAP RECOVERY].freeze
-VALIDATION_PROFILES = %w[DOC_ONLY TYPE_ONLY LOCAL_BEHAVIOR PERSISTENCE_CONCURRENCY GLOBAL_CONTRACT].freeze
-PUSH_MODES = %w[NONE NORMAL_PUSH].freeze
-PULL_REQUEST_ACTIONS = %w[NONE CREATE_DRAFT UPDATE_DRAFT].freeze
-MAXIMUM_LINES_RANGE = (20..120).freeze
-
-# Contract-fixed budgets (ai-sdlc/compact-prompt-standard.md section 2).
-PROMPT_MODE_BUDGETS = {
-  "MICRO_FIX" => { "hard_limit_lines" => 120, "hard_limit_bytes" => 32_768 },
-  "SESSION_CONTINUATION" => { "hard_limit_lines" => 220, "hard_limit_bytes" => 65_536 },
-  "BOOTSTRAP" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 98_304 },
-  "RECOVERY" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 98_304 }
-}.freeze
-
-# Contract-fixed validation profile semantics
-# (ai-sdlc/compact-prompt-standard.md section 3).
-PROFILE_SEMANTICS = {
-  "DOC_ONLY" => { "root_npm_test" => "forbidden_by_default" },
-  "TYPE_ONLY" => { "require_typecheck" => true },
-  "LOCAL_BEHAVIOR" => { "require_focused_tests" => true },
-  "PERSISTENCE_CONCURRENCY" => { "require_focused_persistence_and_concurrency_tests" => true },
-  "GLOBAL_CONTRACT" => { "allow_full_suite_when_contract_really_shared" => true }
-}.freeze
-
-# v1 path-category heuristics (implementation constants, not project profile
-# resolution; project-level mapping belongs to PCE-01-B).
-DOCUMENTATION_EXTENSIONS = %w[.md .markdown .yaml .yml .json .txt].freeze
-CODE_EXTENSIONS = %w[.ts .tsx .js .jsx .rb .py .go .java .sh].freeze
-
-OWNER_NAME_PATTERN = %r{\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z}
-SHA40_PATTERN = /\A[0-9a-f]{40}\z/
-
-PUBLIC_CLASSIFICATIONS = %w[
-  UNKNOWN_KEY MISSING_REQUIRED_FIELD DUPLICATE_KEY YAML_ALIAS YAML_ANCHOR
-  YAML_TAG YAML_MERGE_KEY YAML_NULL YAML_DOCUMENT_COUNT_INVALID INVALID_SHA
-  UNSAFE_PATH MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED
-  VALIDATION_OVERPROVISIONED MISSING_STOP_CONDITION FIELD_TYPE_INVALID
-].freeze
-INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
-ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
-
-# Fixed Codex prompt template section order.
-CODEX_PROMPT_SECTIONS = [
-  "1. 路由",
-  "2. Exact Baseline",
-  "3. 唯一目标",
-  "4. Delta",
-  "5. Scope 与 Acceptance",
-  "6. Validation",
-  "7. Git 与 PR",
-  "8. Forbidden Actions",
-  "9. Completion Report",
-  "10. Stop Condition"
-].freeze
-
-# Public Compact Completion Report fields (standard section 7).
-COMPLETION_REPORT_FIELDS = %w[
-  result pre_HEAD post_HEAD commit changed_files change_summary
-  local_validation remote_branch_HEAD pull_request CI_status
-  scope_violation remaining_findings
-].freeze
-
-# PCE-01-A task-specific content that must never appear in the public
-# Prompt / Completion Report templates (finding F01).
-TASK_SPECIFIC_TEMPLATE_STRINGS = %w[
-  PCE_01_A contract_assets fixture_summary
-  REQUEST_PCE_01_A_SPECIALIZED_REVIEW
-  需要第十一个文件 需要修改现有\ validator 需要修改\ CI\ workflow
-  CI_status:\ not_waited
-].freeze
-
-# Placeholders with no legitimate source (finding F02); must not appear in
-# the public prompt template.
-LEGACY_PLACEHOLDERS = %w[
-  task-branch objective-scope out-of-scope next-phase out-of-scope-tooling
-  scope-escalation-code specialized-review-request-line
-].freeze
+ROOT = CompactPrompt::ROOT
 
 errors = []
 prompt_placeholders = nil
+fixture_count = 0
+renderer_fixture_count = 0
+renderer_assertion_count = 0
 
 def relative(path)
   path.sub("#{ROOT}/", "")
-end
-
-def unsafe_path?(path)
-  return true if path.empty?
-  return true if path.start_with?("/", "~")
-  return true if path.match?(/\A[A-Za-z]:\//) # Windows drive-root absolute path
-  return true if path.include?("\\") || path.include?("://")
-  path.split("/").include?("..")
-end
-
-def path_extension(path)
-  File.extname(path.to_s).downcase
-end
-
-# ── Restricted-YAML pipeline ──
-# Returns [data, classification]. data is the parsed capsule Hash when no
-# classification was found, nil otherwise. The pipeline is deterministic and
-# performs no I/O beyond reading the caller-provided text.
-
-def analyze_ast(stream)
-  # Pass 1: aliases and merge keys. An alias defeats every later check even
-  # when the same text also defines an anchor.
-  stream.children.each do |document|
-    root = document.root
-    next if root.nil?
-    found = walk_ast_pass1(root)
-    return found if found
-  end
-  # Pass 2: anchors, explicit tags, duplicate keys.
-  stream.children.each do |document|
-    root = document.root
-    next if root.nil?
-    found = walk_ast_pass2(root)
-    return found if found
-  end
-  nil
-end
-
-def walk_ast_pass1(node)
-  case node
-  when Psych::Nodes::Alias
-    "YAML_ALIAS"
-  when Psych::Nodes::Mapping
-    node.children.each_slice(2) do |key_node, _value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "<<"
-        return "YAML_MERGE_KEY"
-      end
-    end
-    node.children.each do |child|
-      found = walk_ast_pass1(child)
-      return found if found
-    end
-    nil
-  when Psych::Nodes::Sequence
-    node.children.each do |child|
-      found = walk_ast_pass1(child)
-      return found if found
-    end
-    nil
-  when Psych::Nodes::Document
-    node.root ? walk_ast_pass1(node.root) : nil
-  else
-    nil
-  end
-end
-
-def walk_ast_pass2(node)
-  case node
-  when Psych::Nodes::Scalar
-    return "YAML_ANCHOR" if node.anchor
-    return "YAML_TAG" if node.tag
-    nil
-  when Psych::Nodes::Mapping
-    return "YAML_ANCHOR" if node.anchor
-    return "YAML_TAG" if node.tag
-    keys = []
-    node.children.each_slice(2) do |key_node, value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar)
-        keys << key_node.value
-        found = walk_ast_pass2(key_node)
-        return found if found
-      end
-      found = walk_ast_pass2(value_node)
-      return found if found
-    end
-    return "DUPLICATE_KEY" if keys.uniq.length != keys.length
-    nil
-  when Psych::Nodes::Sequence
-    return "YAML_ANCHOR" if node.anchor
-    return "YAML_TAG" if node.tag
-    node.children.each do |child|
-      found = walk_ast_pass2(child)
-      return found if found
-    end
-    nil
-  when Psych::Nodes::Document
-    node.root ? walk_ast_pass2(node.root) : nil
-  else
-    nil
-  end
-end
-
-def reject_nulls(node)
-  case node
-  when Hash
-    node.each_value { |value| return true if reject_nulls(value) }
-  when Array
-    node.each { |value| return true if reject_nulls(value) }
-  when nil
-    return true
-  end
-  false
-end
-
-def check_exact_keys(data, allowed)
-  unknown = data.keys - allowed
-  return "UNKNOWN_KEY" unless unknown.empty?
-  missing = allowed - data.keys
-  return "MISSING_REQUIRED_FIELD" unless missing.empty?
-  nil
-end
-
-def nonempty_string?(value)
-  value.is_a?(String) && !value.empty?
-end
-
-def positive_integer?(value)
-  value.is_a?(Integer) && value >= 1
-end
-
-# Structural value validation for capsule instances. Returns a classification
-# code or nil. Nested key sets are exact; unknown keys, missing required
-# fields, unsafe paths, invalid SHAs, multiple objectives and missing stop
-# conditions each map to their public classification.
-def validate_capsule_structure(data)
-  return "YAML_UNSUPPORTED" unless data.is_a?(Hash)
-
-  result = check_exact_keys(data, ROOT_KEYS)
-  return result if result
-
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(data["task_id"])
-  return "FIELD_TYPE_INVALID" unless PROMPT_MODES.include?(data["prompt_mode"])
-
-  routing = data["routing"]
-  return "FIELD_TYPE_INVALID" unless routing.is_a?(Hash)
-  result = check_exact_keys(routing, ROUTING_KEYS)
-  return result if result
-  ROUTING_KEYS.each do |key|
-    return "MISSING_REQUIRED_FIELD" unless nonempty_string?(routing[key])
-  end
-
-  baseline = data["baseline"]
-  return "FIELD_TYPE_INVALID" unless baseline.is_a?(Hash)
-  result = check_exact_keys(baseline, BASELINE_KEYS)
-  return result if result
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(baseline["repository"])
-  return "FIELD_TYPE_INVALID" unless baseline["repository"].match?(OWNER_NAME_PATTERN)
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(baseline["branch"])
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(baseline["head"])
-  return "INVALID_SHA" unless baseline["head"].match?(SHA40_PATTERN)
-  pr = baseline["pull_request"]
-  return "FIELD_TYPE_INVALID" unless pr == "none" || (pr.is_a?(Integer) && pr >= 1)
-
-  objective = data["objective"]
-  return "MULTIPLE_OBJECTIVES" unless objective.is_a?(String)
-  return "MISSING_REQUIRED_FIELD" if objective.empty?
-
-  delta = data["delta"]
-  return "FIELD_TYPE_INVALID" unless delta.is_a?(Hash)
-  result = check_exact_keys(delta, DELTA_KEYS)
-  return result if result
-
-  %w[open_findings preserved_closed_findings].each do |key|
-    findings = delta[key]
-    return "FIELD_TYPE_INVALID" unless findings.is_a?(Array)
-    findings.each do |item|
-      return "FIELD_TYPE_INVALID" unless item.is_a?(Hash)
-      result = check_exact_keys(item, %w[id status])
-      return result if result
-      return "MISSING_REQUIRED_FIELD" unless nonempty_string?(item["id"])
-      expected_status = key == "open_findings" ? "OPEN" : "CLOSED"
-      return "FIELD_TYPE_INVALID" unless item["status"] == expected_status
-    end
-  end
-
-  %w[required_changes acceptance_criteria].each do |key|
-    list = delta[key]
-    return "FIELD_TYPE_INVALID" unless list.is_a?(Array)
-    return "MISSING_REQUIRED_FIELD" if list.empty?
-    list.each do |item|
-      return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
-    end
-  end
-
-  scope = data["scope"]
-  return "FIELD_TYPE_INVALID" unless scope.is_a?(Hash)
-  result = check_exact_keys(scope, SCOPE_KEYS)
-  return result if result
-  allowed_files = scope["allowed_files"]
-  return "FIELD_TYPE_INVALID" unless allowed_files.is_a?(Array)
-  return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
-  allowed_files.each do |path|
-    return "FIELD_TYPE_INVALID" unless nonempty_string?(path)
-    return "UNSAFE_PATH" if unsafe_path?(path)
-  end
-  return "FIELD_TYPE_INVALID" unless positive_integer?(scope["maximum_changed_files"])
-
-  profile = data["validation_profile"]
-  return "FIELD_TYPE_INVALID" unless VALIDATION_PROFILES.include?(profile)
-
-  git = data["git"]
-  return "FIELD_TYPE_INVALID" unless git.is_a?(Hash)
-  result = check_exact_keys(git, GIT_KEYS)
-  return result if result
-  return "FIELD_TYPE_INVALID" unless git["commit_count"].is_a?(Integer) && [0, 1].include?(git["commit_count"])
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(git["commit_message"])
-  return "FIELD_TYPE_INVALID" unless PUSH_MODES.include?(git["push_mode"])
-  return "FIELD_TYPE_INVALID" unless PULL_REQUEST_ACTIONS.include?(git["pull_request_action"])
-
-  forbidden_actions = data["forbidden_actions"]
-  return "FIELD_TYPE_INVALID" unless forbidden_actions.is_a?(Array)
-  return "MISSING_REQUIRED_FIELD" if forbidden_actions.empty?
-  forbidden_actions.each do |item|
-    return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
-  end
-
-  report = data["completion_report"]
-  return "FIELD_TYPE_INVALID" unless report.is_a?(Hash)
-  result = check_exact_keys(report, COMPLETION_REPORT_KEYS)
-  return result if result
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(report["recipient"])
-  return "MISSING_REQUIRED_FIELD" unless nonempty_string?(report["name"])
-  return "FIELD_TYPE_INVALID" unless report["maximum_lines"].is_a?(Integer)
-  return "FIELD_TYPE_INVALID" unless MAXIMUM_LINES_RANGE.cover?(report["maximum_lines"])
-  return "MISSING_STOP_CONDITION" unless report["stop_after_report"] == true
-
-  # Validation adequacy heuristics (section 3): insufficient level rejected,
-  # overprovisioned level rejected, plain documentation tasks never map to a
-  # root test suite by default.
-  changed_extensions = delta["required_changes"].map { |path| path_extension(path) }
-  has_code = changed_extensions.any? { |ext| CODE_EXTENSIONS.include?(ext) }
-  case profile
-  when "DOC_ONLY"
-    return "VALIDATION_UNDERSPECIFIED" if has_code
-  when "PERSISTENCE_CONCURRENCY", "GLOBAL_CONTRACT"
-    return "VALIDATION_OVERPROVISIONED" unless has_code
-  end
-
-  nil
-end
-
-# Restricted-YAML stage only: returns the parsed data when clean, otherwise a
-# classification String. Templates go through this stage (placeholder values
-# are allowed there); capsule instances additionally run
-# validate_capsule_structure.
-def restricted_yaml_classification(raw_text)
-  begin
-    stream = Psych.parse_stream(raw_text)
-  rescue Psych::SyntaxError
-    return "YAML_SYNTAX"
-  end
-  # Fail closed on document count: exactly one YAML document is required.
-  # Zero-document and multi-document inputs are rejected before any later
-  # traversal or YAML.safe_load (finding F06).
-  documents = stream.children
-  return "YAML_DOCUMENT_COUNT_INVALID" unless documents.length == 1
-  ast_classification = analyze_ast(stream)
-  return ast_classification if ast_classification
-
-  begin
-    data = YAML.safe_load(raw_text, permitted_classes: [], aliases: false)
-  rescue Psych::BadAlias
-    return "YAML_ALIAS"
-  rescue Psych::DisallowedClass
-    return "YAML_TAG"
-  rescue Psych::Exception
-    return "YAML_UNSUPPORTED"
-  end
-  return "YAML_NULL" if reject_nulls(data)
-  return "YAML_UNSUPPORTED" if data.nil?
-
-  data
-end
-
-# Full capsule pipeline: restricted YAML parsing plus structural validation.
-# Returns a classification code or nil when the capsule is valid.
-def classify_capsule(raw_text)
-  data = restricted_yaml_classification(raw_text)
-  return data if data.is_a?(String)
-
-  validate_capsule_structure(data)
-end
-
-# Shape-only check for the capsule template: exact key sets plus the two
-# contract markers report_back_to and stop_after_report: true. Placeholder
-# values are allowed; value rules apply to capsule instances only.
-def template_shape_error(data)
-  return "template root must be a mapping" unless data.is_a?(Hash)
-  result = check_exact_keys(data, ROOT_KEYS)
-  return "template root keys must be exactly #{ROOT_KEYS.inspect} (#{result})" if result
-  {
-    "routing" => ROUTING_KEYS,
-    "baseline" => BASELINE_KEYS,
-    "delta" => DELTA_KEYS,
-    "scope" => SCOPE_KEYS,
-    "git" => GIT_KEYS,
-    "completion_report" => COMPLETION_REPORT_KEYS
-  }.each do |key, allowed|
-    section = data[key]
-    unless section.is_a?(Hash)
-      return "template #{key} must be a mapping"
-    end
-    result = check_exact_keys(section, allowed)
-    if result
-      return "template #{key} keys must be exactly #{allowed.inspect} (#{result})"
-    end
-  end
-  unless data["routing"].key?("report_back_to")
-    return "template routing must use report_back_to (report_to is forbidden)"
-  end
-  unless data["completion_report"]["stop_after_report"] == true
-    return "template completion_report.stop_after_report must be true"
-  end
-  nil
 end
 
 def check_asset_exists(path)
@@ -480,34 +51,34 @@ end
 
 # ── Asset checks ──
 
-WHITELIST_ASSETS.each { |path| check_asset_exists(path) }
+CompactPrompt::WHITELIST_ASSETS.each { |path| check_asset_exists(path) }
 
 capsule_template_path = "templates/compact-execution-capsule-template.yaml"
 if File.file?(File.join(ROOT, capsule_template_path))
-  template_data = restricted_yaml_classification(read_asset(capsule_template_path))
-  if template_data.is_a?(String)
-    errors << "capsule template: rejected by restricted-YAML rules (#{template_data})"
+  template_data, classification = CompactPrompt::RestrictedYAML.parse(read_asset(capsule_template_path))
+  if classification
+    errors << "capsule template: rejected by restricted-YAML rules (#{classification})"
   else
-    shape_error = template_shape_error(template_data)
+    shape_error = CompactPrompt::Template.capsule_template_shape_error(template_data)
     errors << "capsule template: #{shape_error}" if shape_error
   end
 end
 
 profiles_path = "templates/compact-validation-profiles.yaml"
 if File.file?(File.join(ROOT, profiles_path))
-  profiles_data = restricted_yaml_classification(read_asset(profiles_path))
-  if profiles_data.is_a?(String)
-    errors << "validation profiles template: rejected by restricted-YAML rules (#{profiles_data})"
+  profiles_data, classification = CompactPrompt::RestrictedYAML.parse(read_asset(profiles_path))
+  if classification
+    errors << "validation profiles template: rejected by restricted-YAML rules (#{classification})"
   else
     unless profiles_data.is_a?(Hash) && profiles_data.keys == ["validation_profiles"]
       errors << "validation profiles template: root must contain exactly validation_profiles"
     end
     profiles = profiles_data.is_a?(Hash) ? profiles_data["validation_profiles"] : nil
-    unless profiles.is_a?(Hash) && profiles.keys.sort == VALIDATION_PROFILES.sort
-      errors << "validation profiles template: profile set must be exactly #{VALIDATION_PROFILES.inspect}"
+    unless profiles.is_a?(Hash) && profiles.keys.sort == CompactPrompt::VALIDATION_PROFILES.sort
+      errors << "validation profiles template: profile set must be exactly #{CompactPrompt::VALIDATION_PROFILES.inspect}"
     end
     if profiles.is_a?(Hash)
-      PROFILE_SEMANTICS.each do |name, semantics|
+      CompactPrompt::PROFILE_SEMANTICS.each do |name, semantics|
         profile = profiles[name]
         if profile.is_a?(Hash) && profile.keys.sort == semantics.keys.sort
           semantics.each do |key, expected|
@@ -525,49 +96,61 @@ if File.file?(File.join(ROOT, profiles_path))
 end
 
 prompt_template_path = "templates/compact-codex-prompt-template.md"
+prompt_template_text = nil
 if File.file?(File.join(ROOT, prompt_template_path))
-  prompt_lines = File.readlines(File.join(ROOT, prompt_template_path), chomp: true, encoding: "UTF-8")
-  headings = prompt_lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "") }
-  if headings != CODEX_PROMPT_SECTIONS
+  headings = File.readlines(File.join(ROOT, prompt_template_path), chomp: true, encoding: "UTF-8")
+              .grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "") }
+  if headings != CompactPrompt::CODEX_PROMPT_SECTIONS
     errors << "codex prompt template: section headings must be exactly " \
-              "#{CODEX_PROMPT_SECTIONS.inspect}, found #{headings.inspect}"
+              "#{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}, found #{headings.inspect}"
   end
-  prompt_text = prompt_lines.join("\n")
-  delivery_count = prompt_text.scan("delivery_type: CODEX_EXECUTION_PROMPT").length
+  prompt_template_text = read_asset(prompt_template_path)
+  delivery_count = prompt_template_text.scan("delivery_type: CODEX_EXECUTION_PROMPT").length
   errors << "codex prompt template: delivery_type: CODEX_EXECUTION_PROMPT must appear exactly once " \
             "(found #{delivery_count})" unless delivery_count == 1
   errors << "codex prompt template: must generate exactly one CODEX_EXECUTION_PROMPT material" \
-    unless prompt_text.scan(/^delivery_type:/).length == 1
+    unless prompt_template_text.scan(/^delivery_type:/).length == 1
   %w[recipient: paste_location: purpose: report_back_to: next_hop_after_report:].each do |needle|
-    unless prompt_text.include?(needle)
+    unless prompt_template_text.include?(needle)
       errors << "codex prompt template: routing header is missing #{needle}"
     end
   end
   %w[completion_report_recipient: completion_report_name: stop_after_report:\ true].each do |needle|
-    unless prompt_text.include?(needle)
+    unless prompt_template_text.include?(needle)
       errors << "codex prompt template: footer is missing #{needle}"
     end
   end
-  if prompt_text.scan("report_to:").any?
+  if prompt_template_text.scan("report_to:").any?
     errors << "codex prompt template: must not use report_to"
   end
   # Finding F01: no task-specific content in the public template.
-  TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
-    if prompt_text.include?(needle)
+  CompactPrompt::TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
+    if prompt_template_text.include?(needle)
       errors << "codex prompt template: task-specific content must not appear (#{needle.inspect})"
     end
   end
   # Finding F02: no placeholders without a legitimate source.
-  LEGACY_PLACEHOLDERS.each do |placeholder|
-    if prompt_text.include?("<#{placeholder}>")
+  CompactPrompt::LEGACY_PLACEHOLDERS.each do |placeholder|
+    if prompt_template_text.include?("<#{placeholder}>")
       errors << "codex prompt template: legacy placeholder without a source must not appear (<#{placeholder}>)"
     end
   end
-  prompt_placeholders = prompt_text.scan(/<[^>\n]+>/).uniq
-  duplicate_occurrences = prompt_text.scan(/<[^>\n]+>/).tally.select { |_p, count| count > 1 }
+  prompt_placeholders = CompactPrompt::Template.placeholders(prompt_template_text)
+  duplicate_occurrences = CompactPrompt::Template.placeholder_counts(prompt_template_text)
+                           .select { |_p, count| count > 1 }
   unless duplicate_occurrences.empty?
     errors << "codex prompt template: placeholder(s) appear more than once " \
               "#{duplicate_occurrences.inspect}"
+  end
+  # Finding PCE-01-B: conditional blocks must be exactly one non-nested block
+  # per legal value.
+  conditional_error = CompactPrompt::Template.conditional_error(prompt_template_text)
+  if conditional_error
+    errors << "codex prompt template: #{conditional_error[2]}"
+  end
+  unknown_placeholders = prompt_placeholders - CompactPrompt::PLACEHOLDER_SOURCES.keys
+  unless unknown_placeholders.empty?
+    errors << "codex prompt template: unknown placeholder(s) not in the source table #{unknown_placeholders.inspect}"
   end
 end
 
@@ -577,12 +160,12 @@ if File.file?(File.join(ROOT, report_template_path))
   %w[target_lines:\ 30-80 minimum_lines:\ 20 hard_limit_lines:\ 120].each do |needle|
     errors << "completion report template: missing budget #{needle}" unless report_text.include?(needle)
   end
-  COMPLETION_REPORT_FIELDS.each do |field|
+  CompactPrompt::COMPLETION_REPORT_FIELDS.each do |field|
     unless report_text.include?("#{field}:")
       errors << "completion report template: missing required field #{field}"
     end
   end
-  TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
+  CompactPrompt::TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
     if report_text.include?(needle)
       errors << "completion report template: task-specific content must not appear (#{needle.inspect})"
     end
@@ -600,13 +183,13 @@ standard_text = File.file?(File.join(ROOT, standard_path)) ? read_asset(standard
 if standard_text
   # Capsule root fields and all nested fields (section 1.2), derived from the
   # validator constants so the two cannot drift apart.
-  { "root" => ROOT_KEYS,
-    "routing" => ROUTING_KEYS,
-    "baseline" => BASELINE_KEYS,
-    "delta" => DELTA_KEYS,
-    "scope" => SCOPE_KEYS,
-    "git" => GIT_KEYS,
-    "completion_report" => COMPLETION_REPORT_KEYS }.each do |group, keys|
+  { "root" => CompactPrompt::ROOT_KEYS,
+    "routing" => CompactPrompt::ROUTING_KEYS,
+    "baseline" => CompactPrompt::BASELINE_KEYS,
+    "delta" => CompactPrompt::DELTA_KEYS,
+    "scope" => CompactPrompt::SCOPE_KEYS,
+    "git" => CompactPrompt::GIT_KEYS,
+    "completion_report" => CompactPrompt::COMPLETION_REPORT_KEYS }.each do |group, keys|
     keys.each do |key|
       unless standard_text.include?("#{key}:")
         errors << "standard: #{group} field #{key.inspect} is not declared"
@@ -627,7 +210,7 @@ if standard_text
   end
 
   # Four prompt modes with exact budgets (section 2).
-  PROMPT_MODE_BUDGETS.each do |mode, budget|
+  CompactPrompt::PROMPT_MODE_BUDGETS.each do |mode, budget|
     row = "| `#{mode}` | #{budget["hard_limit_lines"]} | #{budget["hard_limit_bytes"]} |"
     unless standard_text.include?(row)
       errors << "standard: prompt mode budget row #{row.inspect} is missing"
@@ -635,7 +218,7 @@ if standard_text
   end
 
   # Five validation profiles (section 3).
-  VALIDATION_PROFILES.each do |profile|
+  CompactPrompt::VALIDATION_PROFILES.each do |profile|
     unless standard_text.include?("| `#{profile}` |")
       errors << "standard: validation profile #{profile} is not declared"
     end
@@ -654,7 +237,7 @@ if standard_text
   end
 
   # Ten fixed prompt section headings (section 5).
-  CODEX_PROMPT_SECTIONS.each do |section|
+  CompactPrompt::CODEX_PROMPT_SECTIONS.each do |section|
     unless standard_text.include?("#{section}\n")
       errors << "standard: fixed prompt section #{section.inspect} is missing"
     end
@@ -676,7 +259,7 @@ if standard_text
   end
 
   # Public classification table (section 1.4) must cover every public code.
-  PUBLIC_CLASSIFICATIONS.each do |code|
+  CompactPrompt::PUBLIC_CLASSIFICATIONS.each do |code|
     unless standard_text.include?("| `#{code}` |")
       errors << "standard: public classification #{code} is not documented"
     end
@@ -684,7 +267,7 @@ if standard_text
 
   # Completion report public field set (section 7) must match the template
   # field set exactly (finding F01).
-  COMPLETION_REPORT_FIELDS.each do |field|
+  CompactPrompt::COMPLETION_REPORT_FIELDS.each do |field|
     unless standard_text.include?("#{field}:")
       errors << "standard: completion report field #{field} is not declared"
     end
@@ -723,10 +306,9 @@ if standard_text
   end
 end
 
-# ── Fixtures ──
+# ── A contract fixtures ──
 
 fixtures_path = "fixtures/compact-prompt/contracts.yaml"
-fixture_count = 0
 if File.file?(File.join(ROOT, fixtures_path))
   begin
     fixtures_data = YAML.safe_load(read_asset(fixtures_path), permitted_classes: [], aliases: false)
@@ -771,7 +353,10 @@ if File.file?(File.join(ROOT, fixtures_path))
           errors << "#{label} #{id}: capsule must be a non-empty raw YAML string"
           next
         end
-        classification = classify_capsule(capsule_text)
+        data, classification = CompactPrompt::RestrictedYAML.parse(capsule_text)
+        if classification.nil?
+          classification = CompactPrompt::Capsule.validate(data)
+        end
         if category == "valid"
           if classification
             errors << "#{label} #{id}: expected PASS but was rejected as #{classification}"
@@ -780,7 +365,7 @@ if File.file?(File.join(ROOT, fixtures_path))
           end
         else
           expected = fixture["expected_classification"]
-          unless PUBLIC_CLASSIFICATIONS.include?(expected)
+          unless CompactPrompt::PUBLIC_CLASSIFICATIONS.include?(expected)
             errors << "#{label} #{id}: expected_classification must be a public classification " \
                       "(got #{expected.inspect})"
             next
@@ -804,24 +389,253 @@ if File.file?(File.join(ROOT, fixtures_path))
   end
 end
 
+# ── B renderer fixtures ──
+# Fixtures run the CLI service with injected synthetic git state and
+# in-memory capsule/policy/template text; no filesystem writes, no shell, no
+# network. Compile-success fixtures are run twice to prove byte-identical
+# deterministic output.
+
+require "stringio"
+
+class RendererFixtureGitState
+  def initialize(spec)
+    @root = spec["root"] || "/synthetic/repo"
+    @origin_url = spec["origin_url"]
+    @refs = spec["refs"] || {}
+    @tracked = spec["tracked"] || []
+  end
+
+  def repository_root(_cwd)
+    @root
+  end
+
+  def origin_url(_root)
+    @origin_url
+  end
+
+  def tracked?(_root, path)
+    @tracked.include?(path)
+  end
+
+  def ref_head(_root, ref)
+    @refs[ref]
+  end
+end
+
+def run_renderer_fixture(fixture, default_policy, real_template)
+  command = fixture["command"]
+  capsule_text = fixture["capsule"]
+  policy_text = fixture["policy"] || default_policy
+  template_text = fixture["template"] || real_template
+  git_state = RendererFixtureGitState.new(fixture["git_state"] || {})
+
+  out = StringIO.new
+  err = StringIO.new
+  exit_code = CompactPrompt::CLI.main(
+    [command, "capsule.yaml"],
+    cwd: "/synthetic/repo",
+    stdout: out,
+    stderr: err,
+    git_state: git_state,
+    capsule_text: capsule_text,
+    policy_text: policy_text,
+    template_text: template_text
+  )
+  [exit_code, out.string, err.string]
+end
+
+def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
+  counts[:assertions] += 1
+  expected_exit = expected["exit"]
+  if exit_code != expected_exit
+    errors << "renderer fixture #{id}: expected exit #{expected_exit} but got #{exit_code} " \
+              "(stderr: #{err.inspect})"
+    return
+  end
+  stdout_mode = expected["stdout"] || "empty"
+  stderr_mode = expected["stderr"] || "empty"
+  case stdout_mode
+  when "exact"
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: stdout mismatch expected #{expected['stdout_exact'].inspect} " \
+              "got #{out.inspect}" unless out == expected["stdout_exact"]
+  when "empty"
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: stdout must be empty, got #{out.inspect}" unless out.empty?
+  when "prompt"
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must end with a single LF" \
+      unless out.end_with?("\n") && !out.end_with?("\n\n")
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must be valid UTF-8" unless out.valid_encoding?
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must contain exactly one delivery_type" \
+      unless out.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must have zero unresolved placeholders" \
+      if out.match?(/<[^>\n]+>/)
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must have zero conditional markers" \
+      if out.include?("<!-- WHEN") || out.include?("<!-- ENDWHEN")
+    counts[:assertions] += 1
+    headings = out.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
+    errors << "renderer fixture #{id}: prompt stdout section order mismatch #{headings.inspect}" \
+      unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
+  else
+    errors << "renderer fixture #{id}: unknown stdout mode #{stdout_mode.inspect}"
+  end
+  case stderr_mode
+  when "exact"
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: stderr mismatch expected #{expected['stderr_exact'].inspect} " \
+              "got #{err.inspect}" unless err == expected["stderr_exact"]
+  when "empty"
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: stderr must be empty, got #{err.inspect}" unless err.empty?
+  when "contains"
+    counts[:assertions] += 1
+    expected["stderr_contains"].each do |needle|
+      errors << "renderer fixture #{id}: stderr must contain #{needle.inspect}, got #{err.inspect}" \
+        unless err.include?(needle)
+    end
+  else
+    errors << "renderer fixture #{id}: unknown stderr mode #{stderr_mode.inspect}"
+  end
+end
+
+renderer_fixtures_path = "fixtures/compact-prompt/renderer.yaml"
+if File.file?(File.join(ROOT, renderer_fixtures_path))
+  begin
+    rf_data = YAML.safe_load(read_asset(renderer_fixtures_path), permitted_classes: [], aliases: false)
+    unless rf_data.is_a?(Hash) && rf_data.keys.sort == %w[authority default_policy fixtures schema_version].sort
+      errors << "renderer fixtures: root keys must be exactly " \
+                "schema_version/authority/default_policy/fixtures"
+    end
+    if rf_data.is_a?(Hash)
+      unless rf_data["schema_version"] == "compact-prompt-renderer-fixtures-v1"
+        errors << "renderer fixtures: schema_version must be compact-prompt-renderer-fixtures-v1"
+      end
+      unless rf_data["authority"] == "validation_only"
+        errors << "renderer fixtures: authority must be validation_only"
+      end
+      unless rf_data["default_policy"].is_a?(String) && !rf_data["default_policy"].empty?
+        errors << "renderer fixtures: default_policy must be a non-empty raw YAML string"
+      end
+    end
+    default_policy = rf_data.is_a?(Hash) ? rf_data["default_policy"] : nil
+    fixtures = rf_data.is_a?(Hash) ? rf_data["fixtures"] : nil
+    unless fixtures.is_a?(Array)
+      errors << "renderer fixtures: fixtures must be an array"
+    else
+      seen_ids = Hash.new(0)
+      fixtures.each_with_index do |fixture, index|
+        label = "renderer fixtures[#{index}]"
+        unless fixture.is_a?(Hash)
+          errors << "#{label}: must be a mapping"
+          next
+        end
+        allowed_fixture_keys = %w[
+          id category description command capsule policy git_state expected template
+        ]
+        unknown = fixture.keys - allowed_fixture_keys
+        errors << "#{label}: unknown key(s) #{unknown.inspect}" unless unknown.empty?
+        id = fixture["id"]
+        unless id.is_a?(String) && id.match?(/\A[A-Z0-9-]+\z/) && id.length <= 64
+          errors << "#{label}: id must match [A-Z0-9-]+ up to 64 chars"
+          next
+        end
+        seen_ids[id] += 1
+        category = fixture["category"]
+        unless %w[valid negative].include?(category)
+          errors << "#{label} #{id}: category must be valid or negative"
+          next
+        end
+        command = fixture["command"]
+        unless %w[validate compile].include?(command)
+          errors << "#{label} #{id}: command must be validate or compile"
+          next
+        end
+        capsule_text = fixture["capsule"]
+        unless capsule_text.is_a?(String) && !capsule_text.empty?
+          errors << "#{label} #{id}: capsule must be a non-empty raw YAML string"
+          next
+        end
+        expected = fixture["expected"]
+        unless expected.is_a?(Hash)
+          errors << "#{label} #{id}: expected must be a mapping"
+          next
+        end
+        allowed_expected_keys = %w[exit stdout stdout_exact stderr stderr_contains]
+        unknown = expected.keys - allowed_expected_keys
+        errors << "#{label} #{id}: expected unknown key(s) #{unknown.inspect}" unless unknown.empty?
+        unless expected.keys.include?("exit") && expected.keys.include?("stdout") && expected.keys.include?("stderr")
+          errors << "#{label} #{id}: expected must have exit/stdout/stderr"
+          next
+        end
+        unless expected["exit"].is_a?(Integer) && [0, 2, 3, 4, 5].include?(expected["exit"])
+          errors << "#{label} #{id}: expected.exit must be 0|2|3|4|5"
+          next
+        end
+        if expected["stdout"] == "exact" && !expected["stdout_exact"].is_a?(String)
+          errors << "#{label} #{id}: stdout mode exact requires stdout_exact"
+          next
+        end
+        if expected["stderr"] == "contains" &&
+           (!expected["stderr_contains"].is_a?(Array) || expected["stderr_contains"].empty?)
+          errors << "#{label} #{id}: stderr mode contains requires non-empty stderr_contains"
+          next
+        end
+
+        exit_code, out, err = run_renderer_fixture(fixture, default_policy, prompt_template_text)
+        counts = { assertions: 0 }
+        assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
+        renderer_assertion_count += counts[:assertions]
+
+        # Determinism: compile-success fixtures must be byte-identical on a
+        # second run with the same inputs.
+        if category == "valid" && command == "compile" && exit_code.zero?
+          _exit2, out2, _err2 = run_renderer_fixture(fixture, default_policy, prompt_template_text)
+          renderer_assertion_count += 1
+          unless out == out2
+            errors << "renderer fixture #{id}: repeated compile must be byte-identical"
+          end
+        end
+        renderer_fixture_count += 1
+      end
+      duplicates = seen_ids.select { |_id, count| count > 1 }.keys
+      unless duplicates.empty?
+        errors << "renderer fixtures: duplicate fixture id(s) #{duplicates.inspect}"
+      end
+    end
+  rescue Psych::Exception => e
+    errors << "renderer fixtures: file does not parse as YAML (#{e.class})"
+  end
+end
+
 # ── Documentation registration without premature claims ──
 
 manifest_path = "manifest.yaml"
 roadmap_path = "ROADMAP.md"
 validation_doc_path = "docs/VALIDATION.md"
+portability_doc_path = "PORTABILITY.md"
 
 {
   manifest_path => %w[
     compact_prompt_standard compact_execution_capsule_template
     compact_codex_prompt_template compact_completion_report_template
     compact_validation_profiles compact_prompt_contract_validator
-    compact_prompt_fixtures
+    compact_prompt_fixtures compact_prompt_shared_library
+    compact_prompt_cli compact_prompt_renderer_fixtures
+    compact_prompt_project_policy
   ],
   roadmap_path => %w[
     Compact\ Prompt\ Standard\ and\ Lightweight\ Renderer PCE-01-A PCE-01-B PCE-01-C
   ],
   validation_doc_path => [
     "ruby scripts/validate-compact-prompt-contracts.rb", "read-only", "deterministic", "no network"
+  ],
+  portability_doc_path => %w[
+    compact prompt no\ network portable
   ]
 }.each do |path, needles|
   next unless File.file?(File.join(ROOT, path))
@@ -833,20 +647,22 @@ validation_doc_path = "docs/VALIDATION.md"
   end
 end
 
-# Premature claims that must not appear anywhere in the three registration
-# documents (PCE-01-A section 13).
+# Premature claims that must not appear anywhere in the registration
+# documents. PCE-01-B may declare the renderer implemented, but must not
+# claim PCE-01-C, personal-knowledge-base integration, PCE-01 overall
+# completion, source_verified, GRP-01 start or D10-B recovery.
 FORBIDDEN_PREMATURE_CLAIMS = [
-  "Renderer 已实现",
-  "renderer implemented",
   "PCE-01 已完成",
   "PCE-01 complete",
   "PCE-01 source_verified",
+  "PCE-01-C 已完成",
+  "PCE-01-C 已实现",
   "GRP-01 已启动",
   "D10-B 已恢复",
   "PCE-01-B 命令"
 ].freeze
 
-[manifest_path, roadmap_path, validation_doc_path].each do |path|
+[manifest_path, roadmap_path, validation_doc_path, portability_doc_path].each do |path|
   next unless File.file?(File.join(ROOT, path))
   text = read_asset(path)
   FORBIDDEN_PREMATURE_CLAIMS.each do |claim|
@@ -858,10 +674,13 @@ end
 
 if errors.empty?
   puts "compact prompt contract validation ok " \
-       "(#{WHITELIST_ASSETS.length} whitelist assets; #{fixture_count} fixtures verified; " \
-       "#{PROMPT_MODES.length} prompt modes with exact budgets; " \
-       "#{VALIDATION_PROFILES.length} validation profiles; " \
-       "codex prompt template #{CODEX_PROMPT_SECTIONS.length}-section order; " \
+       "(#{CompactPrompt::WHITELIST_ASSETS.length} whitelist assets; " \
+       "#{fixture_count} contract fixtures; #{renderer_fixture_count} renderer fixtures " \
+       "(#{renderer_assertion_count} assertions); " \
+       "#{CompactPrompt::PROMPT_MODES.length} prompt modes with exact budgets; " \
+       "#{CompactPrompt::VALIDATION_PROFILES.length} validation profiles; " \
+       "codex prompt template #{CompactPrompt::CODEX_PROMPT_SECTIONS.length}-section order " \
+       "with #{CompactPrompt::Template::CONDITIONAL_FIELDS.values.flatten.length} conditional blocks; " \
        "#{prompt_placeholders ? prompt_placeholders.length : 0} prompt placeholders closed " \
        "against the Template Value Source Table; " \
        "standard asset statically verified (fields, git enums, budgets, profiles, " \

@@ -148,3 +148,19 @@ skills/sdlc-docflow-writer/
 - 不要在标准包中写死本机路径。
 - 不要让标准包直接执行命令。
 - 不要把业务仓库的临时事实写成本标准的通用规则。
+
+## Compact Prompt（PCE-01）可移植边界
+
+- `scripts/ai-sdlc-prompt.rb` 与 `scripts/lib/compact_prompt.rb` 是标准包
+  自带能力（validate/compile），可被多个 Agent 工具复用；contract validator
+  与 renderer fixtures 均 read-only、deterministic、no network、no
+  filesystem writes、no shell。
+- 运行时 Git gate 只做 checkout-independent 的 named-ref 只读核验
+  （`Open3.capture3` 固定 argv，无 shell、无 fetch、无 ls-remote）；
+  remote-tracking ref 仅代表上游预先 fetch 后的本地缓存，
+  `git_fetch_performed=false`、`live_GitHub_HEAD_guaranteed=false`。
+- 项目验证命令由目标仓库的 `.ai-sdlc/prompt-policy.yaml` 映射，标准包不
+  内嵌、不执行项目命令；Capsule 不接受自由 shell command。
+- portable 边界：不依赖特定 Agent 配置目录、不写死本机路径、不访问网络、
+  不执行 Git 写操作、不做 Token 计算；渲染输出仅由 Capsule、policy 与
+  标准包模板字节决定（byte-identical）。
