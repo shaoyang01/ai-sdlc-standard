@@ -40,10 +40,14 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 /** Fixed persistent schema version of the locator DB (D10-A-R-004). */
 export const LOOP_DELIVERY_CHECKPOINT_STORE_USER_VERSION = 1 as const;
 
-// Exact public-input key sequences (D10-A-R-001/R-003). Constructor options
-// may appear as a canonical subsequence prefix (optional fields omittable);
-// the advance request and checkpoint body must appear exactly as listed.
+// Exact public-input key sequences (D10-A-R-001/R-003, D10-A-R3-001). The
+// advance request and checkpoint body must appear exactly as listed; the
+// constructor options appear as an order-preserving subsequence of
+// OPTION_KEYS: dbPath and artifactStore are required, busyTimeoutMs and
+// maxCheckpointBytes are independently omittable, and every present key
+// keeps its relative OPTION_KEYS order (no canonical-prefix requirement).
 const OPTION_KEYS: readonly string[] = ["dbPath", "artifactStore", "busyTimeoutMs", "maxCheckpointBytes"];
+const OPTION_REQUIRED_KEYS: readonly string[] = ["dbPath", "artifactStore"];
 const ADVANCE_REQUEST_KEYS: readonly string[] = ["runId", "expectedGeneration", "expectedCheckpointArtifactRef", "checkpoint"];
 const STORE_OWNED_BODY_KEYS: readonly string[] = ["schema", "generation", "previous_checkpoint_artifact_ref"];
 
@@ -86,15 +90,19 @@ function isPlainObjectRecord(value: unknown): value is object {
  * Descriptor-based snapshot of a public input record. `allowed` is the exact
  * canonical own-key sequence: reordered, extra, missing, symbol and
  * `__proto__` keys, accessors, class instances and non-plain prototypes are
- * all rejected. When `exact` is false the keys must be a canonical prefix of
- * `allowed` (used for constructor options where trailing optional fields may
- * be omitted). `hintKeys` get a dedicated "must not carry" diagnostic.
+ * all rejected. When `requiredKeys` is null the keys must equal `allowed`
+ * exactly (advance request, checkpoint body, nested identity); otherwise the
+ * keys must be an order-preserving subsequence of `allowed` that contains
+ * every `requiredKeys` entry — the constructor-options mode (D10-A-R3-001),
+ * where optional keys may be omitted independently and every present key
+ * keeps its relative `allowed` order. `hintKeys` get a dedicated "must not
+ * carry" diagnostic.
  */
 function snapshotSequence(
   value: unknown,
   allowed: readonly string[],
   label: string,
-  exact: boolean,
+  requiredKeys: readonly string[] | null,
   hintKeys: readonly string[],
 ): Record<string, unknown> {
   if (!isPlainObjectRecord(value)) {
@@ -132,16 +140,31 @@ function snapshotSequence(
     }
     stringKeys.push(key);
   }
-  if (exact) {
+  if (requiredKeys === null) {
     if (stringKeys.length !== allowed.length) {
       throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} is missing required keys`);
     }
-  } else if (stringKeys.length < 2) {
-    throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} is missing required keys`);
-  }
-  for (let index = 0; index < stringKeys.length; index += 1) {
-    if (stringKeys[index] !== allowed[index]) {
-      throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} has keys in the wrong order`);
+    for (let index = 0; index < stringKeys.length; index += 1) {
+      if (stringKeys[index] !== allowed[index]) {
+        throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} has keys in the wrong order`);
+      }
+    }
+  } else {
+    // Constructor-options canonical subsequence (D10-A-R3-001): every
+    // required key is present and the OPTION_KEYS indices of the present
+    // keys are strictly increasing (duplicate keys therefore also fail).
+    for (const requiredKey of requiredKeys) {
+      if (!stringKeys.includes(requiredKey)) {
+        throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} is missing required keys`);
+      }
+    }
+    let previousIndex = -1;
+    for (const key of stringKeys) {
+      const allowedIndex = allowed.indexOf(key);
+      if (allowedIndex <= previousIndex) {
+        throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", `${label} has keys in the wrong order`);
+      }
+      previousIndex = allowedIndex;
     }
   }
   const out = Object.create(null) as Record<string, unknown>;
@@ -223,6 +246,26 @@ function isConstraintCode(code: string | null): boolean {
 
 function isCorruptCode(code: string | null): boolean {
   return code !== null && (code === "SQLITE_NOTADB" || code.startsWith("SQLITE_CORRUPT"));
+}
+
+/**
+ * Unified bounded/sanitized SQLite error translator (D10-A-R3-002): every
+ * storage boundary classifies busy/locked → CHECKPOINT_STORE_BUSY,
+ * SQLITE_NOTADB/SQLITE_CORRUPT* → CHECKPOINT_STORE_CORRUPT, and anything
+ * else → CHECKPOINT_STORE_FAILURE. Instance-state-free so every init helper
+ * shares one classification path; raw SQLite messages, paths, run ids, refs,
+ * artifact bytes and credentials are never propagated.
+ */
+function classifyStorageError(error: unknown): never {
+  if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
+  const code = sqliteErrorCode(error);
+  if (isBusyCode(code)) {
+    throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
+  }
+  if (isCorruptCode(code)) {
+    throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_CORRUPT", "persisted checkpoint storage is corrupt");
+  }
+  throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
 }
 
 function spinWait(ms: number): void {
@@ -324,11 +367,12 @@ export class LoopDeliveryCheckpointStore {
   private wasOpened = false;
 
   constructor(options: LoopDeliveryCheckpointStoreOptions) {
-    // Descriptor-based snapshot of the public options record (R-003 9.1):
-    // keys must appear as a canonical prefix of dbPath/artifactStore/
-    // busyTimeoutMs/maxCheckpointBytes; getters are never invoked; any
+    // Descriptor-based snapshot of the public options record (R-003 9.1,
+    // D10-A-R3-001): keys must appear as an order-preserving subsequence of
+    // dbPath/artifactStore/busyTimeoutMs/maxCheckpointBytes with dbPath and
+    // artifactStore always required; getters are never invoked; any
     // reflection failure fails closed as INVALID_INPUT.
-    const snapshot = snapshotSequence(options, OPTION_KEYS, "options", false, []);
+    const snapshot = snapshotSequence(options, OPTION_KEYS, "options", OPTION_REQUIRED_KEYS, []);
     const dbPath = snapshot.dbPath;
     if (typeof dbPath !== "string" || dbPath.trim().length === 0 || dbPath !== dbPath.trim()) {
       throw new LoopDeliveryCheckpointStoreError("INVALID_INPUT", "dbPath must be a trimmed non-empty absolute path");
@@ -376,21 +420,13 @@ export class LoopDeliveryCheckpointStore {
       try {
         mkdirSync(dirname(this.dbPath), { recursive: true });
       } catch (error) {
-        if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        classifyStorageError(error);
       }
 
       try {
         db = new Database(this.dbPath);
       } catch (error) {
-        if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        classifyStorageError(error);
       }
 
       this.ensureWalMode(db);
@@ -398,31 +434,19 @@ export class LoopDeliveryCheckpointStore {
       try {
         db.pragma("foreign_keys = ON");
       } catch (error) {
-        if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        classifyStorageError(error);
       }
 
       try {
         db.pragma(`busy_timeout = ${this.busyTimeoutMs}`);
       } catch (error) {
-        if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        classifyStorageError(error);
       }
 
       try {
         db.pragma("synchronous = FULL");
       } catch (error) {
-        if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        classifyStorageError(error);
       }
 
       // ── Exact persistent schema gate (D10-A-R-004) ──
@@ -563,10 +587,9 @@ export class LoopDeliveryCheckpointStore {
           spinWait(50);
           continue;
         }
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        // busy retry exhausted or non-busy code: unified classification
+        // (busy → BUSY, NOTADB/CORRUPT → CORRUPT, other → FAILURE).
+        classifyStorageError(error);
       }
       if (mode === "wal") return;
       try {
@@ -577,10 +600,8 @@ export class LoopDeliveryCheckpointStore {
           spinWait(50);
           continue;
         }
-        if (isBusyCode(sqliteErrorCode(error))) {
-          throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-        }
-        throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+        // busy retry exhausted or non-busy code: unified classification.
+        classifyStorageError(error);
       }
     }
     throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
@@ -605,7 +626,7 @@ export class LoopDeliveryCheckpointStore {
     // Descriptor-based exact-sequence snapshot of the whole request record
     // (R-003 9.2): getters are never invoked and reflection failures fail
     // closed as INVALID_INPUT before any value is read.
-    const snapshot = snapshotSequence(request, ADVANCE_REQUEST_KEYS, "advance request", true, []);
+    const snapshot = snapshotSequence(request, ADVANCE_REQUEST_KEYS, "advance request", null, []);
     const runId = this.validateRunId(snapshot.runId);
     const expectedGeneration = snapshot.expectedGeneration;
     if (typeof expectedGeneration !== "number" || !Number.isSafeInteger(expectedGeneration) || expectedGeneration < 0) {
@@ -626,7 +647,7 @@ export class LoopDeliveryCheckpointStore {
       snapshot.checkpoint,
       LOOP_DELIVERY_CHECKPOINT_BODY_KEYS,
       "checkpoint body",
-      true,
+      null,
       STORE_OWNED_BODY_KEYS,
     );
     // Nested identity: descriptor-based exact nine-field snapshot before any
@@ -634,7 +655,7 @@ export class LoopDeliveryCheckpointStore {
     // accessed through property paths afterwards — cross-binding reads the
     // trusted frozen checkpoint built by the builder.
     if (body.identity !== null && body.identity !== undefined) {
-      body.identity = snapshotSequence(body.identity, LOOP_DELIVERY_CHECKPOINT_IDENTITY_KEYS, "identity", true, []);
+      body.identity = snapshotSequence(body.identity, LOOP_DELIVERY_CHECKPOINT_IDENTITY_KEYS, "identity", null, []);
     }
     return Object.freeze({
       runId,
@@ -1017,14 +1038,8 @@ export class LoopDeliveryCheckpointStore {
   }
 
   private translateStorageError(error: unknown): never {
-    if (error instanceof LoopDeliveryCheckpointStoreError) throw error;
-    const code = sqliteErrorCode(error);
-    if (isBusyCode(code)) {
-      throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_BUSY", "checkpoint store is busy");
-    }
-    if (isCorruptCode(code)) {
-      throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_CORRUPT", "persisted checkpoint storage is corrupt");
-    }
-    throw new LoopDeliveryCheckpointStoreError("CHECKPOINT_STORE_FAILURE", "checkpoint storage operation failed");
+    // Single classification path (D10-A-R3-002): delegated to the shared
+    // instance-state-free translator used by every init boundary.
+    return classifyStorageError(error);
   }
 }

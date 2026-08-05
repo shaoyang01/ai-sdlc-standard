@@ -13,7 +13,7 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -954,6 +954,122 @@ async function main(): Promise<void> {
       check(capabilityGetterCalls === 0, "artifact store capability check invoked no getters");
     }
 
+    // constructor options canonical subsequence (D10-A-R3-001): dbPath and
+    // artifactStore are required; busyTimeoutMs and maxCheckpointBytes are
+    // independently omittable, and every present key keeps its relative
+    // OPTION_KEYS order.
+    {
+      // options_required_only_accepted
+      {
+        const s = new LoopDeliveryCheckpointStore({ dbPath, artifactStore });
+        s.init();
+        check(s.getCurrent(RUN_ID) === undefined, "options_required_only_accepted: required-only options construct and init");
+        s.close();
+      }
+      // options_busy_only_accepted
+      {
+        const s = new LoopDeliveryCheckpointStore({ dbPath, artifactStore, busyTimeoutMs: 1500 });
+        s.init();
+        check(s.getCurrent(RUN_ID) === undefined, "options_busy_only_accepted: busyTimeoutMs-only options construct and init");
+        s.close();
+      }
+      // options_max_only_accepted
+      {
+        const s = new LoopDeliveryCheckpointStore({ dbPath, artifactStore, maxCheckpointBytes: 65536 });
+        s.init();
+        check(s.getCurrent(RUN_ID) === undefined, "options_max_only_accepted: maxCheckpointBytes-only options construct and init");
+        s.close();
+      }
+      // options_both_optional_accepted
+      {
+        const s = new LoopDeliveryCheckpointStore({ dbPath, artifactStore, busyTimeoutMs: 1500, maxCheckpointBytes: 65536 });
+        s.init();
+        check(s.getCurrent(RUN_ID) === undefined, "options_both_optional_accepted: both optional options construct and init");
+        s.close();
+      }
+
+      // options_max_before_busy_rejected: present optional keys must keep
+      // their OPTION_KEYS relative order (maxCheckpointBytes before
+      // busyTimeoutMs is a reorder, not a subsequence).
+      {
+        const reordered = Object.create(Object.prototype) as Record<string, unknown>;
+        reordered.dbPath = dbPath;
+        reordered.artifactStore = artifactStore;
+        reordered.maxCheckpointBytes = 65536;
+        reordered.busyTimeoutMs = 1500;
+        expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(reordered as never), "options_max_before_busy_rejected");
+      }
+      // options_missing_dbPath_rejected / options_missing_artifactStore_rejected
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ artifactStore, busyTimeoutMs: 1500 } as never), "options_missing_dbPath_rejected");
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ dbPath, busyTimeoutMs: 1500 } as never), "options_missing_artifactStore_rejected");
+      // options_extra_key_rejected
+      expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore({ dbPath, artifactStore, busyTimeoutMs: 1500, unknown: 1 } as never), "options_extra_key_rejected");
+
+      // options_accessor_rejected_without_getter_invocation: a subsequence
+      // input carrying an accessor never executes the getter.
+      {
+        let subsequenceGetterCalls = 0;
+        const accessorOptions: Record<string, unknown> = { dbPath, artifactStore };
+        Object.defineProperty(accessorOptions, "maxCheckpointBytes", {
+          get() {
+            subsequenceGetterCalls += 1;
+            return 65536;
+          },
+          enumerable: true,
+          configurable: true,
+        });
+        expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(accessorOptions as never), "options_accessor_rejected_without_getter_invocation");
+        check(subsequenceGetterCalls === 0, "options accessor getter invocations stayed 0");
+      }
+      // options_proxy_reflection_failure_rejected
+      {
+        const subsequenceProxy = new Proxy({ dbPath, artifactStore, maxCheckpointBytes: 65536 }, {
+          getOwnPropertyDescriptor() {
+            throw new Error("SENT_R3_OPT");
+          },
+        });
+        try {
+          new LoopDeliveryCheckpointStore(subsequenceProxy as never);
+          check(false, "options_proxy_reflection_failure_rejected (no error thrown)");
+        } catch (error) {
+          checkBoundedError(error, "options_proxy_reflection_failure_rejected");
+          check(!(error as LoopDeliveryCheckpointStoreError).message.includes("SENT_R3_OPT"), "options proxy reflection failure: raw exception text absent");
+        }
+      }
+      // options_revoked_proxy_rejected
+      {
+        const { proxy: revokedSubsequence, revoke: revokeSubsequence } = Proxy.revocable({ dbPath, artifactStore, maxCheckpointBytes: 65536 }, {});
+        revokeSubsequence();
+        expectStoreError("INVALID_INPUT", () => new LoopDeliveryCheckpointStore(revokedSubsequence as never), "options_revoked_proxy_rejected");
+      }
+
+      // scalar reachability (D10-A-R3-001 6.3): subsequence inputs that pass
+      // key-sequence validation must reach the maxCheckpointBytes scalar
+      // validator, proven by its dedicated static diagnostic (the key-order
+      // layer can never produce it).
+      for (const scalarCase of [0, 1_048_577, 1.5] as const) {
+        const label =
+          scalarCase === 0 ? "maxCheckpointBytes_zero_reaches_scalar_validation"
+          : scalarCase === 1_048_577 ? "maxCheckpointBytes_over_bound_reaches_scalar_validation"
+          : "maxCheckpointBytes_fraction_reaches_scalar_validation";
+        const scalarOptions: Record<string, unknown> = { dbPath, artifactStore };
+        // maxCheckpointBytes is inserted after artifactStore: every present
+        // key keeps the canonical subsequence order (no busyTimeoutMs, which
+        // after maxCheckpointBytes would itself be a rejected reorder), so
+        // the input passes key validation and must reach the scalar
+        // validator.
+        scalarOptions.maxCheckpointBytes = scalarCase;
+        try {
+          new LoopDeliveryCheckpointStore(scalarOptions as never);
+          check(false, `${label} (no error thrown)`);
+        } catch (error) {
+          const e = error as LoopDeliveryCheckpointStoreError;
+          check(e.code === "INVALID_INPUT", `${label} code INVALID_INPUT (got ${e.code})`);
+          check(e.message === "maxCheckpointBytes must be a safe integer in 1..1048576", `${label}: controlled static diagnostic comes from the scalar validator`);
+        }
+      }
+    }
+
     // advance request: getters never invoked, accessors rejected
     {
       let requestGetterCalls = 0;
@@ -1291,6 +1407,83 @@ async function main(): Promise<void> {
       locked.close();
       artifactStoreL.close();
     }
+
+    // non-SQLite existing DB file → CHECKPOINT_STORE_CORRUPT (D10-A-R3-002):
+    // SQLITE_NOTADB is corruption classification, never an overwrite, a
+    // migration or a generic failure. Two fresh store instances prove the
+    // classification is repeatable and failed init leaves no observable lock.
+    {
+      const root = newTempDir("notadb");
+      const corruptPath = join(root, "head.db");
+      writeFileSync(corruptPath, "not a valid sqlite database");
+      const repositoryN = join(root, "repo");
+      const controlRootN = join(root, "control");
+      mkdirSync(repositoryN, { recursive: true });
+      mkdirSync(controlRootN, { recursive: true });
+      const artifactStoreN = new LoopArtifactStore({ controlRoot: controlRootN, repositoryPath: repositoryN });
+      artifactStoreN.init();
+
+      const store1 = new LoopDeliveryCheckpointStore({ dbPath: corruptPath, artifactStore: artifactStoreN });
+      try {
+        store1.init();
+        check(false, "non_SQLite_existing_DB_result: CHECKPOINT_STORE_CORRUPT (no error thrown)");
+      } catch (error) {
+        const e = error as LoopDeliveryCheckpointStoreError;
+        check(
+          e instanceof LoopDeliveryCheckpointStoreError && e.code === "CHECKPOINT_STORE_CORRUPT",
+          `non_SQLite_existing_DB_result: CHECKPOINT_STORE_CORRUPT (got ${e instanceof LoopDeliveryCheckpointStoreError ? e.code : "NOT_STORE_ERROR"})`,
+        );
+        check(e.message.length <= 256 && !/[\x00-\x1f\x7f]/.test(e.message), "corrupt classification message bounded and clean");
+        check(!e.message.toLowerCase().includes("sqlite"), "SQLITE_NOTADB_raw_message_propagated: false");
+        check(!e.message.includes("file is not a database"), "raw SQLITE_NOTADB diagnostic absent");
+        check(!e.message.includes(corruptPath) && !e.message.includes("head.db"), "database_path_propagated: false");
+      }
+      // corrupt_init_connection_closed: the store instance is closed after the
+      // failed init and remains permanently closed (no retained db).
+      store1.close();
+      expectStoreError("CHECKPOINT_STORE_CLOSED", () => store1.getCurrent(RUN_ID), "corrupt_init_connection_closed: instance closed after failed init");
+      // corrupt_init_lock_left: false — an independent raw SQLite connection
+      // can still open the path (a controlled probe whose own failure never
+      // reaches the markers or error output).
+      {
+        let probeOpened = false;
+        try {
+          const probe = new Database(corruptPath, { timeout: 2000 });
+          probeOpened = true;
+          probe.close();
+        } catch {
+          // Controlled probe failure: raw SQLite text must never propagate.
+        }
+        check(probeOpened, "corrupt_init_lock_left: false (independent connection opens the path)");
+      }
+      // corrupt_init_retry_result: a second fresh instance on the same corrupt
+      // path classifies identically — the file was neither overwritten nor
+      // treated as a fresh DB (half_initialized_state_left: false).
+      const store2 = new LoopDeliveryCheckpointStore({ dbPath: corruptPath, artifactStore: artifactStoreN });
+      let secondCode: string | null = null;
+      try {
+        store2.init();
+        check(false, "corrupt_init_retry_result: CHECKPOINT_STORE_CORRUPT (no error thrown)");
+      } catch (error) {
+        secondCode = error instanceof LoopDeliveryCheckpointStoreError ? error.code : "NOT_STORE_ERROR";
+      }
+      check(secondCode === "CHECKPOINT_STORE_CORRUPT", `corrupt_init_retry_result: CHECKPOINT_STORE_CORRUPT (got ${secondCode})`);
+      check(readFileSync(corruptPath, "utf8") === "not a valid sqlite database", "half_initialized_state_left: false (corrupt file never overwritten)");
+      // observable_lock_left: false — the retry left no lock either.
+      {
+        let probeOpened = false;
+        try {
+          const probe = new Database(corruptPath, { timeout: 2000 });
+          probeOpened = true;
+          probe.close();
+        } catch {
+          // Controlled probe failure: raw SQLite text must never propagate.
+        }
+        check(probeOpened, "observable_lock_left: false (independent connection opens the path after retry)");
+      }
+      store2.close();
+      artifactStoreN.close();
+    }
   }
   markIfClear("D10_A_CHECKPOINT_SCHEMA_VERIFIED");
   markIfClear("D10_A_CHECKPOINT_RESTART_VERIFIED");
@@ -1505,7 +1698,9 @@ async function main(): Promise<void> {
     }
     artifactStoreB.close();
 
-    // corrupted DB file → typed sanitized error, no lingering lock
+    // corrupted DB file → CHECKPOINT_STORE_CORRUPT (D10-A-R3-002), sanitized
+    // and without a lingering lock; FAILURE/BUSY are not acceptable for a
+    // non-SQLite file.
     const corruptPath = join(root, "corrupt.db");
     writeFileSync(corruptPath, "not a valid sqlite database");
     const artifactStoreC = new LoopArtifactStore({ controlRoot, repositoryPath: repository });
@@ -1516,7 +1711,7 @@ async function main(): Promise<void> {
       check(false, "corrupt DB init should fail");
     } catch (error) {
       const e = error as LoopDeliveryCheckpointStoreError;
-      check(e.code === "CHECKPOINT_STORE_FAILURE" || e.code === "CHECKPOINT_STORE_BUSY", "corrupt DB init typed error");
+      check(e.code === "CHECKPOINT_STORE_CORRUPT", "corrupt DB init classified CHECKPOINT_STORE_CORRUPT");
       check(e.message.length <= 256 && !/[\x00-\x1f\x7f]/.test(e.message), "corrupt DB init message bounded and clean");
       check(!e.message.toLowerCase().includes("sqlite"), "corrupt DB init message does not leak raw sqlite text");
     }
