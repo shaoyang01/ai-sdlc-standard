@@ -1877,3 +1877,144 @@ fixtures:
       stderr: contains
       stderr_contains:
         - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-TEMPLATE-MALFORMED-WHEN
+    category: negative
+    command: compile
+    description: "Malformed WHEN marker without '=' is rejected without a backtrace"
+    capsule: |
+      task_id: fixture-template-malformed-when
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "malformed WHEN 标记必须被稳定拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test malformed when"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "MALFORMED-WHEN Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      # Broken Template
+
+      <!-- WHEN no equals sign -->
+      text
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-POLICY-NUMERIC-COMMAND-ID
+    category: negative
+    command: validate
+    description: "Policy with a numeric command id is rejected without a backtrace"
+    capsule: |
+      task_id: fixture-policy-numeric-id
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "数字命令 ID 必须被稳定拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_SCHEMA_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test numeric command id"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "NUMERIC-ID Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        123: {argv: [ruby, x.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        TYPE_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_SCHEMA_INVALID\tcommands"

@@ -520,7 +520,7 @@ module CompactPrompt
           diags << ["POLICY_PROFILE_MAPPING_MISSING", "validation_profiles.#{name}", "profile mapping missing"]
           next
         end
-        unless profile.keys.sort == PROFILE_KEYS.sort
+        unless profile.keys.all? { |key| key.is_a?(String) } && profile.keys.sort == PROFILE_KEYS.sort
           diags << ["POLICY_SCHEMA_INVALID", "validation_profiles.#{name}",
                     "must have exactly required_command_ids and forbidden_command_ids"]
           next
