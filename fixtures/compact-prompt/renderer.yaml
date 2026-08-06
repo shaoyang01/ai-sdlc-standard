@@ -4750,6 +4750,645 @@ fixtures:
       stderr_contains:
         - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
 
+  # ── F05-C: inert ordinary comments must not bypass the cross-section gate ──
+  # A WHEN block's body runs from the matched WHEN comment to its paired
+  # ENDWHEN; ordinary comments inside the body stay inert for pairing but
+  # never shorten the body, so a section heading placed after an ordinary
+  # comment still fails closed on validate and compile. Ordinary comments
+  # within a single section keep working.
+
+  - id: RENDER-NEG-STRUCTURE-CROSS-SECTION-INERT-COMMENT-VALIDATE
+    category: negative
+    command: validate
+    description: "An inert comment between WHEN and a section heading must not bypass cross-section rejection (validate)"
+    capsule: |
+      task_id: fixture-cross-section-inert
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "普通注释不得缩短跨节检查范围"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test cross section inert"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CROSS-SECTION-INERT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      <!-- WHEN git.commit_count=1 -->
+      <!-- ordinary inert comment -->
+      ## 6. Validation
+      正文
+      <!-- ENDWHEN -->
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=0 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-CROSS-SECTION-INERT-COMMENT-COMPILE
+    category: negative
+    command: compile
+    description: "An inert comment between WHEN and a section heading must not bypass cross-section rejection (compile, selected value hits the block)"
+    capsule: |
+      task_id: fixture-cross-section-inert
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "普通注释不得缩短跨节检查范围"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test cross section inert"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "CROSS-SECTION-INERT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      <!-- WHEN git.commit_count=1 -->
+      <!-- ordinary inert comment -->
+      ## 6. Validation
+      正文
+      <!-- ENDWHEN -->
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=0 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-VALID-STRUCTURE-SAME-SECTION-ORDINARY-VALIDATE
+    category: valid
+    command: validate
+    description: "An ordinary comment inside a single-section conditional block keeps validate passing"
+    capsule: |
+      task_id: fixture-same-section-ordinary
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "同节普通注释不干扰 pairing"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "validate 通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test same section ordinary"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SAME-SECTION-ORDINARY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.commit_count=0 -->
+      <!-- 普通注释 -->
+      x
+      <!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-VALID-STRUCTURE-SAME-SECTION-ORDINARY-COMPILE
+    category: valid
+    command: compile
+    description: "An ordinary comment inside a single-section conditional block compiles byte-identically"
+    capsule: |
+      task_id: fixture-same-section-ordinary
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "同节普通注释不干扰 pairing"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "compile 通过且 byte-identical"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test same section ordinary"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SAME-SECTION-ORDINARY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.commit_count=0 -->
+      <!-- 普通注释 -->
+      x
+      <!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-STRUCTURE-MULTIPLE-ORDINARY-VALIDATE
+    category: valid
+    command: validate
+    description: "Multiple ordinary comments inside one conditional block preserve pairing (validate)"
+    capsule: |
+      task_id: fixture-multiple-ordinary
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "多个普通注释保持配对"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "validate 通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test multiple ordinary"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "MULTIPLE-ORDINARY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.commit_count=0 -->
+      <!-- 普通注释一 -->
+      <!-- 普通注释二 -->
+      x
+      <!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-VALID-STRUCTURE-MULTIPLE-ORDINARY-COMPILE
+    category: valid
+    command: compile
+    description: "Multiple ordinary comments inside one conditional block preserve pairing and compile byte-identically"
+    capsule: |
+      task_id: fixture-multiple-ordinary
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "多个普通注释保持配对"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "compile 通过且 byte-identical"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test multiple ordinary"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "MULTIPLE-ORDINARY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
+      <!-- WHEN git.commit_count=0 -->
+      <!-- 普通注释一 -->
+      <!-- 普通注释二 -->
+      x
+      <!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
+      <!-- WHEN git.push_mode=NONE -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=CREATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=UPDATE_DRAFT -->x<!-- ENDWHEN -->
+      <!-- WHEN git.pull_request_action=NONE -->x<!-- ENDWHEN -->
+      <recipient>
+      <paste-location>
+      <purpose>
+      <report-back-to>
+      <next-hop-after-report>
+      <repository>
+      <fact-branch>
+      <fact-head>
+      <pull-request>
+      <objective>
+      <open-findings>
+      <required-changes>
+      <acceptance-criteria>
+      <preserved-closed-findings>
+      <allowed-files>
+      <maximum-changed-files>
+      <validation-profile>
+      <required-commands>
+      <forbidden-commands>
+      <commit-count>
+      <commit-message>
+      <push-mode>
+      <pull-request-action>
+      <forbidden-actions>
+      <completion-report-name>
+      <completion-report-maximum-lines>
+      <completion-report-recipient>
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
   # ── F06: injection-safe canonical rendering ──
 
   - id: RENDER-VALID-COMPILE-YAML-BLOCK-ROUNDTRIP

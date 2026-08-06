@@ -931,18 +931,33 @@ module CompactPrompt
         tokens << [Regexp.last_match.begin(0), Regexp.last_match[0]]
       end
 
+      # Marker pairing uses only marker-bearing comments (finding F05-C):
+      # ordinary comments stay inert and never participate in pairing, but
+      # they remain inside a WHEN block's body text. A WHEN block's body
+      # runs from the matched WHEN comment's end to its paired ENDWHEN
+      # comment's start, so an ordinary comment placed between them cannot
+      # shorten the cross-section scan.
+      markers = tokens.select { |_pos, token| token.include?("WHEN") || token.include?("ENDWHEN") }
+
       depth = 0
+      when_stack = [] # [body_start, field, value]
       blocks = []
-      tokens.each_with_index do |(pos, token), index|
-        # Plain comments without WHEN/ENDWHEN are inert.
-        next unless token.include?("WHEN") || token.include?("ENDWHEN")
+      markers.each do |pos, token|
         if token.include?("ENDWHEN")
           unless token == ENDWHEN_MARKER
             return ["TEMPLATE_CONDITIONAL_INVALID", "template",
                     "malformed ENDWHEN marker #{token.inspect} (expected exactly #{ENDWHEN_MARKER.inspect})"]
           end
-          return ["TEMPLATE_CONDITIONAL_INVALID", "template", "ENDWHEN without matching WHEN"] if depth.zero?
+          if depth.zero? || when_stack.empty?
+            return ["TEMPLATE_CONDITIONAL_INVALID", "template", "ENDWHEN without matching WHEN"]
+          end
+          body_start, field, value = when_stack.pop
           depth -= 1
+          body = text[body_start...pos]
+          if body.match?(/^## /)
+            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
+                    "conditional #{field}=#{value} must not span sections"]
+          end
         else
           return ["TEMPLATE_CONDITIONAL_INVALID", "template", "conditional blocks must not nest"] if depth.positive?
           match = token.match(/\A<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->\z/)
@@ -956,12 +971,7 @@ module CompactPrompt
             return ["TEMPLATE_CONDITIONAL_INVALID", "template",
                     "conditional #{field}=#{value} is not an allowed field/value"]
           end
-          end_pos = tokens[index + 1] ? tokens[index + 1][0] : text.length
-          body = text[(pos + token.length)...end_pos]
-          if body.match?(/^## /)
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "conditional #{field}=#{value} must not span sections"]
-          end
+          when_stack << [pos + token.length, field, value]
           blocks << [field, value]
           depth += 1
         end

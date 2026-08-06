@@ -95,11 +95,16 @@ ruby scripts/validate-gate-runner-scenarios.rb
   fragment（`<!-- malformed > WHEN ... -->` / `<!-- malformed > ENDWHEN -->`
   在 validate 与 compile 双路径均 fail closed），未闭合 comment 扫至 EOF
   fail closed，相邻独立 comments 不跨越匹配，无 WHEN/ENDWHEN 的普通注释
-  inert；binding gate 的非空返回值在 contract validator 中真实加入 errors
-  （非 call-and-ignore），F05-A guard 在 validator 内以内存模板证明
-  duplicate 合法 placeholder 返回 `TEMPLATE_PLACEHOLDER_DUPLICATE` 且消费
-  路径被静态锁定；14+5 个 validate/compile 路径 fixtures 锁定 stdout empty
-  + 稳定 diagnostic + exit 3 + 无 backtrace；
+  inert；marker pairing 只基于 marker-bearing comments，合法 WHEN 的 body
+  从该 WHEN comment 末尾延伸至配对 ENDWHEN comment 起点，中间普通注释不得
+  缩短 body 检查范围（F05-C：普通注释后放置的 section heading 依然触发
+  cross-section fail closed，validate 与 compile 双路径均有负向 fixture；
+  同节普通注释与多个普通注释保持 pairing 并继续通过，正向 fixture 锁定
+  byte-identical）；binding gate 的非空返回值在 contract validator 中真实
+  加入 errors（非 call-and-ignore），F05-A guard 在 validator 内以内存模板
+  证明 duplicate 合法 placeholder 返回 `TEMPLATE_PLACEHOLDER_DUPLICATE` 且
+  消费路径被静态锁定；14+11 个 validate/compile 路径 fixtures 锁定 stdout
+  empty + 稳定 diagnostic + exit 3 + 无 backtrace；
 - PCE-01-B 专项加固（F06 YAML context encoding）：渲染器按输出上下文区分
   `render_yaml_scalar`（fenced YAML block 内确定性 YAML 双引号 scalar，
   `\\` `\"` `\r` `\n` `\t` `\0` `\xNN` 与 `\u003C`/`\u003E` 转义）、
