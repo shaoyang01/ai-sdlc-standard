@@ -72,6 +72,10 @@ entrypoints:
   compact_validation_profiles: templates/compact-validation-profiles.yaml
   compact_prompt_contract_validator: scripts/validate-compact-prompt-contracts.rb
   compact_prompt_fixtures: fixtures/compact-prompt/contracts.yaml
+  compact_prompt_shared_library: scripts/lib/compact_prompt.rb
+  compact_prompt_cli: scripts/ai-sdlc-prompt.rb
+  compact_prompt_renderer_fixtures: fixtures/compact-prompt/renderer.yaml
+  compact_prompt_project_policy: .ai-sdlc/prompt-policy.yaml
   registry: registry/skill-registry.md
 skills:
   sdlc_code_review_excellence:

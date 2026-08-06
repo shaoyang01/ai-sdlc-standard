@@ -79,6 +79,14 @@ jobs:
 
       - run: ruby scripts/validate-gate-runner-scenarios.rb
 
+      - run: ruby -c scripts/lib/compact_prompt.rb
+
+      - run: ruby -c scripts/ai-sdlc-prompt.rb
+
+      - run: ruby -c scripts/validate-compact-prompt-contracts.rb
+
+      - run: ruby scripts/validate-compact-prompt-contracts.rb
+
   loop-patch-mutations:
     name: ci-loop-patch-mutations
     runs-on: ubuntu-24.04

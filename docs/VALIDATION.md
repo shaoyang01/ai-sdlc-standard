@@ -63,9 +63,86 @@ ruby scripts/validate-gate-runner-scenarios.rb
   fixtures 对比防漂移；
 - `fixtures/compact-prompt/contracts.yaml` 正例通过、反例被预期分类拒绝
   （每个反例声明 `expected_classification`）；
-- manifest、ROADMAP、VALIDATION 文档已登记且无超前声明（不声明 Renderer 已可用、
-  个人知识库已接入、PCE-01 全部完成、source_verified、GRP-01 启动、D10-B 恢复
-  或 PCE-01-B 尚无命令）。
+- `fixtures/compact-prompt/renderer.yaml`（PCE-01-B）以注入式 synthetic Git
+  state 与内存文本运行 CLI service：valid validate/compile 的精确
+  stdout/stderr/exit、repeated byte-identical 确定性、UTF-8/LF/单末尾 LF、
+  四种 Mode、line/byte 超限 stdout empty、Git 组合 0/NONE/NONE 与
+  1/NORMAL_PUSH/CREATE_DRAFT、1/NORMAL_PUSH/UPDATE_DRAFT、1/NONE/NONE、
+  CREATE/UPDATE 与 PR 编号不匹配、policy unknown key / missing profile /
+  unknown ID / required-forbidden conflict / DOC_ONLY 根 `npm test`、
+  repository / fact branch / 本地 named ref / origin tracking ref mismatch、
+  模板 unknown placeholder / source-table drift / 条件标记缺失、嵌套、
+  不平衡，以及 compile failure 不输出部分 Prompt；
+- PCE-01-B 专项加固（F02-F07）以 fixtures 锁定：repository identity
+  三方闭合（origin == capsule baseline.repository == policy repository，
+  大小写不敏感；policy/Capsule mismatch、policy/origin mismatch 失败，
+  仅大小写不同通过）；origin 严格锁定三种 github.com 形式并拒绝
+  credential/query/fragment/额外路径/控制字符（固定通用 message，stderr
+  exact 锁定不泄漏 secret）；exact named-ref gate（branch validity 经
+  `git check-ref-format --branch`，head 经 `git show-ref --verify --hash`
+  精确全 ref；`@{1}`、`.lock`、trailing dot、double slash、非法 branch 与
+  缺失 exact ref 均失败）；运行时 template binding 闭合（27 占位符精确集合、
+  恰好一次、无 unknown/missing/duplicate/source-set drift，CLI 与 validator
+  共用同一 validator）；
+- PCE-01-B 专项加固（F05 template structure gate）：共享 structure gate 由
+  CLI validate、CLI compile 与 contract validator 共同调用，fail closed
+  检查固定十节精确顺序（缺节、重复节、额外编号节、乱序均失败）、任意行首
+  `delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`（missing /
+  duplicate / wrong 均失败）、完整严格 WHEN/ENDWHEN marker 扫描（malformed、
+  unknown field/value、unpaired、nested、duplicate、跨节以及不匹配合法 token
+  正则的 WHEN-like 文本全部失败，绝不静默忽略）；marker scanner 按完整
+  HTML comment `<!-- ... -->` 扫描，comment body 内普通 `>` 不得截断
+  fragment（`<!-- malformed > WHEN ... -->` / `<!-- malformed > ENDWHEN -->`
+  在 validate 与 compile 双路径均 fail closed），未闭合 comment 扫至 EOF
+  fail closed，相邻独立 comments 不跨越匹配，无 WHEN/ENDWHEN 的普通注释
+  inert；marker pairing 只基于 marker-bearing comments，合法 WHEN 的 body
+  从该 WHEN comment 末尾延伸至配对 ENDWHEN comment 起点，中间普通注释不得
+  缩短 body 检查范围（F05-C：普通注释后放置的 section heading 依然触发
+  cross-section fail closed，validate 与 compile 双路径均有负向 fixture；
+  同节普通注释与多个普通注释保持 pairing 并继续通过，正向 fixture 锁定
+  byte-identical）；binding gate 的非空返回值在 contract validator 中真实
+  加入 errors（非 call-and-ignore），F05-A guard 在 validator 内以内存模板
+  证明 duplicate 合法 placeholder 返回 `TEMPLATE_PLACEHOLDER_DUPLICATE` 且
+  消费路径被静态锁定；14+11 个 validate/compile 路径 fixtures 锁定 stdout
+  empty + 稳定 diagnostic + exit 3 + 无 backtrace；
+- PCE-01-B 专项加固（F06 YAML context encoding）：渲染器按输出上下文区分
+  `render_yaml_scalar`（fenced YAML block 内确定性 YAML 双引号 scalar，
+  `\\` `\"` `\r` `\n` `\t` `\0` `\xNN` 与 `\u003C`/`\u003E` 转义）、
+  `render_prose_scalar`、`render_list_item`、`render_finding`；成功 compile
+  输出的路由 / Exact Baseline / Git 与 PR / Completion Report footer 四个
+  fenced YAML block 全部以
+  `YAML.safe_load(permitted_classes: [], aliases: false)` 独立解析，断言
+  字段值与类型与 Capsule/Standard 常量精确一致（整数保持 YAML integer、
+  boolean 保持 YAML boolean、字符串 `"none"` 不解析为 null），覆盖 `#`、
+  `: `、双引号、反斜杠、leading/trailing whitespace、Unicode、以 `*`/`!`/`{`/
+  `[` 开头、multiline、CR/LF/tab、第二 delivery_type、heading-like、
+  placeholder-like、WHEN/ENDWHEN-like 文本，重复 compile byte-identical；
+  injection-safe canonical rendering（多行、CR/LF/tab、
+  第二 delivery_type、heading-like、placeholder-like、conditional-marker-like
+  输入均无法破坏输出）；diagnostics registry
+  （45 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
+  双向一致、每个 code 有输出点、CLI 无裸失败 exit 常量；unknown key 含
+  tab/LF/CR 转义、template missing、injected internal failure、malformed
+  origin 不泄漏 secret 均锁定 stdout/stderr/exit）；
+- manifest、ROADMAP、VALIDATION、PORTABILITY 文档已登记且无超前声明（不声明
+  PCE-01-C、personal knowledge base 接入、PCE-01 全部完成、source_verified、
+  GRP-01 启动、D10-B 恢复）。
+
+PCE-01-B 边界（如实记录）：
+
+- `scripts/ai-sdlc-prompt.rb` 只负责 argv、真实文件读取、stdout/stderr 与
+  exit codes；全部合同逻辑在 `scripts/lib/compact_prompt.rb` 共享库。
+- contract validator 与 renderer fixtures 验证均 read-only、deterministic、
+  no network、no filesystem writes、no shell（fixtures 注入 synthetic Git
+  state，不访问真实远端、不创建真实 Git repository）。
+- 运行时 Git gate 使用 `Open3.capture3` 固定 argv（无 shell、无 fetch、无
+  ls-remote）；branch validity 以 `git check-ref-format --branch` 为权威，
+  head 以 `git show-ref --verify --hash` 精确全 ref 查找，不以
+  `git rev-parse <ref>` 作为 named-ref authority；remote-tracking ref 仅代表
+  预先 fetch 后的本地缓存，`git_fetch_performed=false`、
+  `live_GitHub_HEAD_guaranteed=false`。
+- 不实现 Token 计算、JSON、stdin、inspect、`--output`、clipboard、网络
+  请求、LLM、Git 写自动化或远程包发布。
 
 边界：
 
