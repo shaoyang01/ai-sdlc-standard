@@ -576,6 +576,62 @@ module CompactPrompt
     end
   end
 
+  # ── Injection-safe single-line encoding (finding F06) ──
+  #
+  # Every Capsule/Policy user string that enters a rendered prompt passes
+  # through Safety.encode first. The encoding is deterministic, preserves
+  # semantics (never silently drops characters) and renders CR, LF, tab,
+  # NUL, other control characters plus `<`, `>`, `&` as visible escapes so
+  # no second delivery_type, heading/YAML control line, extra material,
+  # placeholder, WHEN/ENDWHEN marker or raw CR byte can be injected.
+
+  module Safety
+    module_function
+
+    # Deterministic visible single-line escape:
+    #   CR -> \r  LF -> \n  TAB -> \t  NUL -> \0
+    #   other C0 controls and DEL -> \xNN (uppercase hex)
+    #   < -> \<  > -> \>  & -> \&
+    def encode(value)
+      value.to_s.each_char.map do |ch|
+        case ch
+        when "\r" then "\\r"
+        when "\n" then "\\n"
+        when "\t" then "\\t"
+        when "\0" then "\\0"
+        when "<" then "\\<"
+        when ">" then "\\>"
+        when "&" then "\\&"
+        else
+          ch.ord < 0x20 || ch.ord == 0x7f ? format("\\x%02X", ch.ord) : ch
+        end
+      end.join
+    end
+  end
+
+  # ── Git branch-name rules (finding F04) ──
+  #
+  # Deterministic pure-Ruby approximation of git check-ref-format core
+  # rules. The real GitAdapter shells out to `git check-ref-format --branch`
+  # (the authority); synthetic git state used by renderer fixtures applies
+  # these same rules so branch validity is expressed identically without a
+  # git binary. Exact full-ref lookup is a separate concern
+  # (`exact_ref_head` / show-ref).
+
+  module GitNames
+    module_function
+
+    def valid_branch?(name)
+      return false unless name.is_a?(String) && !name.empty?
+      return false if name.start_with?("/") || name.end_with?("/")
+      return false if name.include?("//") || name.include?("..") || name.include?("@{")
+      return false if name.end_with?(".") || name.end_with?(".lock")
+      return false if name == "@"
+      return false if name.match?(/[\x00-\x1f\x7f ~^:?*\[\\]/)
+      true
+    end
+  end
+
   # ── Checkout-independent read-only Git adapter ──
 
   class GitAdapter
@@ -597,27 +653,72 @@ module CompactPrompt
       status.success?
     end
 
-    def ref_head(root, ref)
-      out, _err, status = Open3.capture3("git", "-C", root, "rev-parse", "--verify", "--quiet", ref)
-      status.success? ? out.strip : nil
+    # Branch-name validity is decided by `git check-ref-format --branch`
+    # with a fixed argv (no shell, no network, no reflog/revision
+    # expression interpretation). `git rev-parse <ref>` is never used as a
+    # named-ref authority (finding F04).
+    def branch_valid?(name)
+      out, _err, status = Open3.capture3("git", "check-ref-format", "--branch", name)
+      status.success? && out.strip == name
+    end
+
+    # Exact full-ref lookup only: `git show-ref --verify --hash` resolves
+    # refs/heads/<branch> and refs/remotes/origin/<branch> as literal refs,
+    # never as revision expressions (finding F04).
+    def exact_ref_head(root, ref)
+      out, _err, status = Open3.capture3("git", "-C", root, "show-ref", "--verify", "--hash", ref)
+      status.success? && out.strip.match?(CompactPrompt::SHA40_PATTERN) ? out.strip : nil
     end
   end
 
   module GitBaseline
     module_function
 
+    # Locked origin forms (finding F03): only these three github.com forms
+    # with an optional trailing `.git` are accepted. Owner and repo are
+    # restricted to GitHub's character set, which excludes `?`, `#`, `@`,
+    # `:`, `/`, whitespace and all control characters, so userinfo, query,
+    # fragment, extra path segments, file URLs, custom SSH aliases and
+    # ambiguous scp-like URLs cannot reach identity extraction.
     GITHUB_ORIGIN_PATTERNS = [
-      %r{\Ahttps://github\.com/([^/]+)/([^/]+?)(?:\.git)?\z},
-      %r{\Agit@github\.com:([^/]+)/([^/]+?)(?:\.git)?\z},
-      %r{\Assh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?\z}
+      %r{\Ahttps://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\.git\z},
+      %r{\Ahttps://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\z},
+      %r{\Agit@github\.com:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\.git\z},
+      %r{\Agit@github\.com:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\z},
+      %r{\Assh://git@github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\.git\z},
+      %r{\Assh://git@github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)\z}
     ].freeze
 
-    def normalize_origin(url)
+    # Fixed generic message: never echoes the URL, suspect segments,
+    # username, password, token, query or fragment (finding F03).
+    ORIGIN_UNSUPPORTED_MESSAGE =
+      "origin url is not a supported github.com url (https://github.com/<owner>/<repo>[.git], " \
+      "git@github.com:<owner>/<repo>[.git], ssh://git@github.com/<owner>/<repo>[.git])"
+
+    # Fixed generic message for the three-way closure; no concrete identity
+    # values are echoed (finding F02/F03).
+    IDENTITY_MISMATCH_MESSAGE =
+      "capsule baseline.repository, policy repository and normalized origin identity must agree"
+
+    # Returns [owner, repo] or nil. Control characters are rejected before
+    # any pattern matching; the anchored patterns then guarantee that the
+    # extracted identity can never contain a URL part.
+    def parse_origin(url)
+      return nil unless url.is_a?(String) && !url.empty?
+      return nil if url.match?(/[\x00-\x1f\x7f]/)
       GITHUB_ORIGIN_PATTERNS.each do |pattern|
         match = url.match(pattern)
         return [match[1], match[2]] if match
       end
       nil
+    end
+
+    # GitHub owner/repo identity comparison is case-insensitive
+    # (finding F02). `repo` is validated as owner/name upstream in both
+    # Capsule and Policy validation.
+    def identity_match?(identity, repo)
+      repo.is_a?(String) && !repo.empty? &&
+        identity.map(&:downcase) == repo.downcase.split("/", 2)
     end
 
     # Returns [code, path, message] or nil when the baseline preflight passes.
@@ -631,15 +732,17 @@ module CompactPrompt
 
       origin = git_state.origin_url(root)
       return ["REPOSITORY_IDENTITY_MISMATCH", "remote.origin.url", "origin url is missing"] if origin.nil?
-      identity = normalize_origin(origin)
+      identity = parse_origin(origin)
       if identity.nil?
-        return ["REPOSITORY_IDENTITY_MISMATCH", "remote.origin.url",
-                "origin url is not a supported github.com url (https/git@/ssh://git@github.com)"]
+        return ["REPOSITORY_IDENTITY_MISMATCH", "remote.origin.url", ORIGIN_UNSUPPORTED_MESSAGE]
       end
+
+      # Three-way closure (finding F02): normalized origin identity ==
+      # capsule baseline.repository == policy.repository.
       capsule_repo = capsule.dig("baseline", "repository").to_s
-      unless identity.map(&:downcase) == capsule_repo.downcase.split("/")
-        return ["REPOSITORY_IDENTITY_MISMATCH", "remote.origin.url",
-                "origin identity #{identity.join('/')} does not match capsule baseline.repository #{capsule_repo}"]
+      policy_repo = policy["repository"].to_s
+      unless identity_match?(identity, capsule_repo) && identity_match?(identity, policy_repo)
+        return ["REPOSITORY_IDENTITY_MISMATCH", "repository", IDENTITY_MISMATCH_MESSAGE]
       end
 
       capsule_branch = capsule.dig("baseline", "branch")
@@ -648,9 +751,18 @@ module CompactPrompt
                 "capsule baseline.branch #{capsule_branch.inspect} must equal policy fact_branch #{policy['fact_branch'].inspect}"]
       end
 
+      # Exact named-ref gate (finding F04): branch validity comes from
+      # check-ref-format and heads from exact full-ref show-ref lookups;
+      # rev-parse is never an authority here.
+      branch = policy["fact_branch"]
+      unless git_state.branch_valid?(branch)
+        return ["FACT_BRANCH_INVALID", "policy.fact_branch",
+                "fact_branch is not a valid git branch name (git check-ref-format)"]
+      end
+
       expected_head = capsule.dig("baseline", "head")
-      ["refs/heads/#{capsule_branch}", "refs/remotes/origin/#{capsule_branch}"].each do |ref|
-        actual = git_state.ref_head(root, ref)
+      ["refs/heads/#{branch}", "refs/remotes/origin/#{branch}"].each do |ref|
+        actual = git_state.exact_ref_head(root, ref)
         return ["BASELINE_REF_MISSING", ref, "ref does not exist"] if actual.nil?
         unless actual == expected_head
           return ["BASELINE_HEAD_MISMATCH", ref,
@@ -716,6 +828,32 @@ module CompactPrompt
       end
       unless data["completion_report"]["stop_after_report"] == true
         return "template completion_report.stop_after_report must be true"
+      end
+      nil
+    end
+
+    # Returns [code, path, message] or nil when the placeholder set is
+    # exactly the 27 registered PLACEHOLDER_SOURCES, each placeholder
+    # appears exactly once and no unknown, missing, duplicate or
+    # source-set drift exists (finding F05). This is the single
+    # template-binding validator shared by CLI validate, CLI compile and
+    # the contract validator.
+    def binding_error(text)
+      present = placeholders(text)
+      unknown = present - CompactPrompt::PLACEHOLDER_SOURCES.keys
+      unless unknown.empty?
+        return ["TEMPLATE_PLACEHOLDER_UNKNOWN", "template",
+                "unknown placeholder(s) not in the source table #{unknown.sort.join(', ')}"]
+      end
+      missing = CompactPrompt::PLACEHOLDER_SOURCES.keys - present
+      unless missing.empty?
+        return ["TEMPLATE_PLACEHOLDER_MISSING", "template",
+                "placeholder(s) missing from the template #{missing.sort.join(', ')}"]
+      end
+      duplicates = placeholder_counts(text).select { |_placeholder, count| count > 1 }
+      unless duplicates.empty?
+        return ["TEMPLATE_PLACEHOLDER_DUPLICATE", "template",
+                "placeholder(s) appear more than once #{duplicates.keys.sort.join(', ')}"]
       end
       nil
     end
@@ -796,32 +934,29 @@ module CompactPrompt
       path.split(".").reduce(data) { |acc, key| acc.is_a?(Hash) ? acc[key] : nil }
     end
 
+    # Context-safe renderers (finding F06): every Capsule/Policy user string
+    # is encoded with Safety.encode before it enters the template. Findings
+    # render id and status through the same single-line encoder.
+
     def render_list(values)
       return "  none" if values.nil? || values.empty?
       values.map do |item|
         case item
         when Hash
-          "  - #{item['id']} (#{item['status']})"
+          "  - #{CompactPrompt::Safety.encode(item['id'])} (#{CompactPrompt::Safety.encode(item['status'])})"
         else
-          "  - #{item}"
+          "  - #{CompactPrompt::Safety.encode(item)}"
         end
       end.join("\n")
     end
 
     def render_command_list(argv_list)
       return "  none" if argv_list.nil? || argv_list.empty?
-      argv_list.map { |argv| "  - #{Shellwords.join(argv)}" }.join("\n")
+      argv_list.map { |argv| "  - #{CompactPrompt::Safety.encode(Shellwords.join(argv))}" }.join("\n")
     end
 
     def render_scalar(value)
-      case value
-      when Integer
-        value.to_s
-      when true, false
-        value.to_s
-      else
-        value.to_s
-      end
+      CompactPrompt::Safety.encode(value)
     end
 
     # Returns [text, nil] or [nil, [code, path, message]].
@@ -869,18 +1004,39 @@ module CompactPrompt
       [expanded, nil]
     end
 
+    # Canonical output verifier (finding F06): the rendered text must be
+    # valid UTF-8, free of CR bytes, contain exactly one `^delivery_type:`
+    # with value CODEX_EXECUTION_PROMPT, keep the fixed ten sections, have
+    # zero unresolved placeholders and zero conditional markers, and end
+    # with exactly one trailing LF. The budget gate runs on this canonical
+    # output afterwards.
     def verify_output(text)
-      return ["RENDER_INCOMPLETE", "output", "must contain exactly one delivery_type: CODEX_EXECUTION_PROMPT"] \
-        unless text.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
-      return ["RENDER_INCOMPLETE", "output", "unresolved placeholder(s) remain"] \
-        if text.match?(Template::PLACEHOLDER_PATTERN)
-      if text.include?("<!-- WHEN") || text.include?("<!-- ENDWHEN")
+      return ["RENDER_INCOMPLETE", "output", "output is not valid UTF-8"] unless text.valid_encoding?
+      return ["RENDER_INCOMPLETE", "output", "output must not contain CR bytes"] if text.include?("\r")
+      delivery_lines = text.scan(/^delivery_type:/)
+      unless delivery_lines.length == 1 &&
+             text.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
+        return ["RENDER_INCOMPLETE", "output",
+                "must contain exactly one delivery_type: CODEX_EXECUTION_PROMPT"]
+      end
+      # A leftover placeholder is one of the 27 registered template inputs
+      # still present verbatim; user text is escaped to `\<...\>` so it can
+      # never match. Conditional markers must not appear unescaped either
+      # (`\<!-- ...` from encoded user text is inert).
+      unresolved = CompactPrompt::PLACEHOLDER_SOURCES.keys.select { |p| text.include?(p) }
+      unless unresolved.empty?
+        return ["RENDER_INCOMPLETE", "output", "unresolved placeholder(s) remain"]
+      end
+      if text.match?(/(?<!\\)<!-- WHEN/) || text.match?(/(?<!\\)<!-- ENDWHEN/)
         return ["RENDER_INCOMPLETE", "output", "conditional markers remain after rendering"]
       end
       headings = text.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
       unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
         return ["RENDER_INCOMPLETE", "output",
                 "section order must be exactly #{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}"]
+      end
+      unless text.end_with?("\n") && !text.end_with?("\n\n")
+        return ["RENDER_INCOMPLETE", "output", "output must end with exactly one LF"]
       end
       nil
     end
@@ -905,13 +1061,141 @@ module CompactPrompt
     end
   end
 
-  # ── Diagnostics ──
+  # ── Diagnostics registry and shape (finding F07) ──
+  #
+  # Single registry of every public B diagnostic code with its exit
+  # category and stable meaning. All CLI failure exits resolve through
+  # Diagnostics.exit_for, so the exit map cannot drift from the registry.
 
   module Diagnostics
     module_function
 
+    # code => { "exit" => int, "category" => string, "meaning" => string }
+    REGISTRY = {
+      # exit 2 — CLI_OR_INPUT
+      "CLI_USAGE_INVALID" => { "exit" => 2, "category" => "CLI_OR_INPUT",
+                               "meaning" => "argv is not validate|compile <capsule.yaml>" },
+      "INPUT_FILE_INVALID" => { "exit" => 2, "category" => "CLI_OR_INPUT",
+                                "meaning" => "capsule file does not exist or is not a file" },
+      "INPUT_ENCODING_INVALID" => { "exit" => 2, "category" => "CLI_OR_INPUT",
+                                    "meaning" => "capsule text is not valid UTF-8" },
+      # exit 3 — CONTRACT_OR_POLICY (capsule public classifications,
+      # restricted-YAML rejections, policy and template binding failures)
+      "UNKNOWN_KEY" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                         "meaning" => "contract-undefined key present" },
+      "MISSING_REQUIRED_FIELD" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                    "meaning" => "required field missing, empty scalar or empty array" },
+      "DUPLICATE_KEY" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                           "meaning" => "duplicate key in the same mapping" },
+      "YAML_ALIAS" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                        "meaning" => "YAML alias (*name) present" },
+      "YAML_ANCHOR" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                         "meaning" => "YAML anchor (&name) present" },
+      "YAML_TAG" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                      "meaning" => "explicit YAML tag present" },
+      "YAML_MERGE_KEY" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                            "meaning" => "merge key (<<) present" },
+      "YAML_NULL" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                       "meaning" => "null / ~ / empty scalar value present" },
+      "YAML_DOCUMENT_COUNT_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                         "meaning" => "restricted YAML is not exactly one document" },
+      "YAML_SYNTAX" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                         "meaning" => "restricted YAML does not parse" },
+      "YAML_UNSUPPORTED" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                              "meaning" => "restricted YAML rejected by safe-load" },
+      "INVALID_SHA" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                         "meaning" => "baseline.head is not a 40-hex lowercase SHA" },
+      "UNSAFE_PATH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                         "meaning" => "path is absolute, backslashed, .., ~ or empty" },
+      "MULTIPLE_OBJECTIVES" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                 "meaning" => "objective is not a single non-empty scalar" },
+      "VALIDATION_UNDERSPECIFIED" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                       "meaning" => "validation level insufficient for changes" },
+      "VALIDATION_OVERPROVISIONED" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                        "meaning" => "validation level overprovisioned for changes" },
+      "MISSING_STOP_CONDITION" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                    "meaning" => "completion_report.stop_after_report is not true" },
+      "FIELD_TYPE_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                "meaning" => "field type or enum out of range" },
+      "POLICY_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                 "meaning" => "policy file not found at git root" },
+      "POLICY_SCHEMA_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                   "meaning" => "policy schema, key, type or enum violation" },
+      "POLICY_PROFILE_MAPPING_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                            "meaning" => "validation profile mapping missing or empty" },
+      "POLICY_COMMAND_ID_UNKNOWN" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                       "meaning" => "command id not registered in commands" },
+      "POLICY_COMMAND_CONFLICT" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                     "meaning" => "duplicate or required/forbidden overlap in profile" },
+      "DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                              "meaning" => "DOC_ONLY must not require root npm test" },
+      "TEMPLATE_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                   "meaning" => "prompt template file not found" },
+      "TEMPLATE_PLACEHOLDER_UNKNOWN" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                          "meaning" => "template placeholder has no source row" },
+      "TEMPLATE_PLACEHOLDER_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                          "meaning" => "registered placeholder absent from template" },
+      "TEMPLATE_PLACEHOLDER_DUPLICATE" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                            "meaning" => "registered placeholder appears more than once" },
+      "TEMPLATE_SOURCE_BINDING_MISMATCH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                              "meaning" => "placeholder source not resolvable" },
+      "TEMPLATE_CONDITIONAL_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                          "meaning" => "conditional block missing, duplicate, nested or malformed" },
+      # exit 4 — GIT_BASELINE
+      "GIT_REPOSITORY_NOT_FOUND" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                      "meaning" => "cwd is not inside a git repository" },
+      "POLICY_NOT_TRACKED" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                "meaning" => "policy file is not tracked by git" },
+      "REPOSITORY_IDENTITY_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                          "meaning" => "origin/capsule/policy repository identity not closed" },
+      "FACT_BRANCH_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                  "meaning" => "capsule baseline.branch != policy fact_branch" },
+      "FACT_BRANCH_INVALID" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                 "meaning" => "fact_branch fails git check-ref-format" },
+      "BASELINE_REF_MISSING" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                  "meaning" => "exact full ref does not exist" },
+      "BASELINE_HEAD_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                    "meaning" => "exact ref head != capsule baseline.head" },
+      # exit 5 — RENDER_OR_BUDGET
+      "RENDER_INCOMPLETE" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
+                               "meaning" => "canonical output verification failed" },
+      "PROMPT_LINE_LIMIT_EXCEEDED" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
+                                        "meaning" => "logical line count exceeds mode hard limit" },
+      "PROMPT_BYTE_LIMIT_EXCEEDED" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
+                                        "meaning" => "UTF-8 byte count exceeds mode hard limit" },
+      "INTERNAL_ERROR" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
+                            "meaning" => "fail-closed internal/render error; no backtrace emitted" }
+    }.freeze
+
+    def registered_codes
+      REGISTRY.keys
+    end
+
+    # Every failure exit resolves through the registry; an unregistered
+    # code fails closed to INTERNAL_ERROR's exit (5).
+    def exit_for(code)
+      entry = REGISTRY[code]
+      entry ? entry["exit"] : REGISTRY.fetch("INTERNAL_ERROR")["exit"]
+    end
+
+    # Deterministic visible escape for diagnostic fields: tab, CR, LF, NUL
+    # and other control characters become \t \r \n \0 \xNN so the strict
+    # three-field tab-separated shape always holds (finding F07).
+    def escape_field(value)
+      value.to_s.each_char.map do |ch|
+        case ch
+        when "\t" then "\\t"
+        when "\n" then "\\n"
+        when "\r" then "\\r"
+        when "\0" then "\\0"
+        else
+          ch.ord < 0x20 || ch.ord == 0x7f ? format("\\x%02X", ch.ord) : ch
+        end
+      end.join
+    end
+
     def format(code, path, message)
-      "#{code}\t#{path}\t#{message}\n"
+      "#{escape_field(code)}\t#{escape_field(path)}\t#{escape_field(message)}\n"
     end
 
     # Multiple diagnostics are sorted by code, path, message; never include
@@ -927,25 +1211,23 @@ module CompactPrompt
     module_function
 
     EXIT_OK = 0
-    EXIT_CLI_OR_INPUT = 2
-    EXIT_CONTRACT_OR_POLICY = 3
-    EXIT_GIT_BASELINE = 4
-    EXIT_RENDER_OR_BUDGET = 5
+    # All failure exits resolve through Diagnostics.exit_for(REGISTRY);
+    # no other exit constants exist so the exit map cannot drift.
 
     TEMPLATE_REL_PATH = "templates/compact-codex-prompt-template.md".freeze
     POLICY_REL_PATH = ".ai-sdlc/prompt-policy.yaml".freeze
     VALIDATE_SUCCESS = "compact execution capsule valid\n".freeze
 
     # Entry point used by scripts/ai-sdlc-prompt.rb. Injectable parameters
-    # (git_state, capsule_text, policy_text, template_text) exist so the
-    # contract validator can run fixtures with synthetic git state and
-    # in-memory text without any filesystem writes.
+    # (git_state, capsule_text, policy_text, template_text, template_path)
+    # exist so the contract validator can run fixtures with synthetic git
+    # state and in-memory text without any filesystem writes.
     def main(argv, cwd:, stdout:, stderr:, git_state: nil,
-             capsule_text: nil, policy_text: nil, template_text: nil)
+             capsule_text: nil, policy_text: nil, template_text: nil, template_path: nil)
       unless argv.length == 2 && %w[validate compile].include?(argv[0])
         stderr.write(Diagnostics.format("CLI_USAGE_INVALID", "argv",
                                         "usage: ai-sdlc-prompt.rb validate|compile <capsule.yaml>"))
-        return EXIT_CLI_OR_INPUT
+        return Diagnostics.exit_for("CLI_USAGE_INVALID")
       end
       command, capsule_path = argv
 
@@ -954,36 +1236,36 @@ module CompactPrompt
         full = File.expand_path(capsule_path, cwd)
         unless File.file?(full)
           stderr.write(Diagnostics.format("INPUT_FILE_INVALID", capsule_path, "capsule file not found"))
-          return EXIT_CLI_OR_INPUT
+          return Diagnostics.exit_for("INPUT_FILE_INVALID")
         end
         begin
           text = File.read(full, encoding: "UTF-8")
         rescue ArgumentError, EncodingError
           stderr.write(Diagnostics.format("INPUT_ENCODING_INVALID", capsule_path, "capsule file is not valid UTF-8"))
-          return EXIT_CLI_OR_INPUT
+          return Diagnostics.exit_for("INPUT_ENCODING_INVALID")
         end
       end
       unless text.valid_encoding?
         stderr.write(Diagnostics.format("INPUT_ENCODING_INVALID", capsule_path, "capsule text is not valid UTF-8"))
-        return EXIT_CLI_OR_INPUT
+        return Diagnostics.exit_for("INPUT_ENCODING_INVALID")
       end
 
       data, classification = CompactPrompt::RestrictedYAML.parse(text)
       if classification
         stderr.write(Diagnostics.format(classification, "capsule", "restricted YAML rejection"))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for(classification)
       end
       code = CompactPrompt::Capsule.validate(data)
       if code
         stderr.write(Diagnostics.format(code, "capsule", "capsule contract violation"))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for(code)
       end
 
       gs = git_state || CompactPrompt::GitAdapter.new
       root = gs.repository_root(cwd)
       if root.nil?
         stderr.write(Diagnostics.format("GIT_REPOSITORY_NOT_FOUND", "git", "cwd is not inside a git repository"))
-        return EXIT_GIT_BASELINE
+        return Diagnostics.exit_for("GIT_REPOSITORY_NOT_FOUND")
       end
 
       ptext = policy_text
@@ -991,56 +1273,58 @@ module CompactPrompt
         policy_path = File.join(root, POLICY_REL_PATH)
         unless File.file?(policy_path)
           stderr.write(Diagnostics.format("POLICY_FILE_MISSING", POLICY_REL_PATH, "policy file not found"))
-          return EXIT_CONTRACT_OR_POLICY
+          return Diagnostics.exit_for("POLICY_FILE_MISSING")
         end
         begin
           ptext = File.read(policy_path, encoding: "UTF-8")
         rescue ArgumentError, EncodingError
           stderr.write(Diagnostics.format("POLICY_SCHEMA_INVALID", POLICY_REL_PATH, "policy file is not valid UTF-8"))
-          return EXIT_CONTRACT_OR_POLICY
+          return Diagnostics.exit_for("POLICY_SCHEMA_INVALID")
         end
       end
       unless ptext.valid_encoding?
         stderr.write(Diagnostics.format("POLICY_SCHEMA_INVALID", POLICY_REL_PATH, "policy text is not valid UTF-8"))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for("POLICY_SCHEMA_INVALID")
       end
       pdata, pclass = CompactPrompt::RestrictedYAML.parse(ptext)
       if pclass
         stderr.write(Diagnostics.format("POLICY_SCHEMA_INVALID", POLICY_REL_PATH, "policy rejected: #{pclass}"))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for("POLICY_SCHEMA_INVALID")
       end
       pdiags = CompactPrompt::Policy.validate(pdata)
       unless pdiags.empty?
         stderr.write(CompactPrompt::Diagnostics.render(pdiags))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for(pdiags.first[0])
       end
 
       ttext = template_text
       if ttext.nil?
-        template_path = File.join(CompactPrompt::ROOT, TEMPLATE_REL_PATH)
+        template_path = File.join(CompactPrompt::ROOT, TEMPLATE_REL_PATH) if template_path.nil?
         unless File.file?(template_path)
           stderr.write(Diagnostics.format("TEMPLATE_FILE_MISSING", TEMPLATE_REL_PATH, "template file not found"))
-          return EXIT_CONTRACT_OR_POLICY
+          return Diagnostics.exit_for("TEMPLATE_FILE_MISSING")
         end
         ttext = File.read(template_path, encoding: "UTF-8")
       end
-      unknown_placeholders = CompactPrompt::Template.placeholders(ttext) -
-                             CompactPrompt::PLACEHOLDER_SOURCES.keys
-      unless unknown_placeholders.empty?
-        stderr.write(Diagnostics.format("TEMPLATE_PLACEHOLDER_UNKNOWN", "template",
-                                        "unknown placeholder(s) #{unknown_placeholders.join(', ')}"))
-        return EXIT_CONTRACT_OR_POLICY
-      end
+      # Template structure first (conditional blocks), then the single
+      # template-binding validator shared by validate, compile and the
+      # contract validator (finding F05): exact 27-placeholder set,
+      # exactly-once occurrences, no unknown/missing/duplicate drift.
       cerr = CompactPrompt::Template.conditional_error(ttext)
       if cerr
         stderr.write(CompactPrompt::Diagnostics.format(*cerr))
-        return EXIT_CONTRACT_OR_POLICY
+        return Diagnostics.exit_for(cerr[0])
+      end
+      berr = CompactPrompt::Template.binding_error(ttext)
+      if berr
+        stderr.write(CompactPrompt::Diagnostics.format(*berr))
+        return Diagnostics.exit_for(berr[0])
       end
 
       gerr = CompactPrompt::GitBaseline.check(data, pdata, gs, cwd)
       if gerr
         stderr.write(CompactPrompt::Diagnostics.format(*gerr))
-        return EXIT_GIT_BASELINE
+        return Diagnostics.exit_for(gerr[0])
       end
 
       if command == "validate"
@@ -1051,12 +1335,12 @@ module CompactPrompt
       prompt, rerr = CompactPrompt::Renderer.render(data, pdata, ttext)
       if rerr
         stderr.write(CompactPrompt::Diagnostics.format(*rerr))
-        return EXIT_RENDER_OR_BUDGET
+        return Diagnostics.exit_for(rerr[0])
       end
       berr = CompactPrompt::Budget.check(prompt, data["prompt_mode"])
       if berr
         stderr.write(CompactPrompt::Diagnostics.format(*berr))
-        return EXIT_RENDER_OR_BUDGET
+        return Diagnostics.exit_for(berr[0])
       end
 
       stdout.write(prompt)
@@ -1065,7 +1349,7 @@ module CompactPrompt
       # Fail closed: never emit a backtrace or unstable environment text.
       stderr.write(Diagnostics.format("INTERNAL_ERROR", "internal",
                                       "unexpected internal error; no backtrace emitted"))
-      EXIT_RENDER_OR_BUDGET
+      Diagnostics.exit_for("INTERNAL_ERROR")
     end
   end
 end

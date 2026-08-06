@@ -73,6 +73,23 @@ ruby scripts/validate-gate-runner-scenarios.rb
   repository / fact branch / 本地 named ref / origin tracking ref mismatch、
   模板 unknown placeholder / source-table drift / 条件标记缺失、嵌套、
   不平衡，以及 compile failure 不输出部分 Prompt；
+- PCE-01-B 专项加固（F02-F07）以 fixtures 锁定：repository identity
+  三方闭合（origin == capsule baseline.repository == policy repository，
+  大小写不敏感；policy/Capsule mismatch、policy/origin mismatch 失败，
+  仅大小写不同通过）；origin 严格锁定三种 github.com 形式并拒绝
+  credential/query/fragment/额外路径/控制字符（固定通用 message，stderr
+  exact 锁定不泄漏 secret）；exact named-ref gate（branch validity 经
+  `git check-ref-format --branch`，head 经 `git show-ref --verify --hash`
+  精确全 ref；`@{1}`、`.lock`、trailing dot、double slash、非法 branch 与
+  缺失 exact ref 均失败）；运行时 template binding 闭合（27 占位符精确集合、
+  恰好一次、无 unknown/missing/duplicate/source-set drift，CLI 与 validator
+  共用同一 validator）；injection-safe canonical rendering（多行、CR/LF/tab、
+  第二 delivery_type、heading-like、placeholder-like、conditional-marker-like
+  输入均无法破坏输出；重复 compile byte-identical）；diagnostics registry
+  （44 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
+  双向一致、每个 code 有输出点、CLI 无裸失败 exit 常量；unknown key 含
+  tab/LF/CR 转义、template missing、injected internal failure、malformed
+  origin 不泄漏 secret 均锁定 stdout/stderr/exit）；
 - manifest、ROADMAP、VALIDATION、PORTABILITY 文档已登记且无超前声明（不声明
   PCE-01-C、personal knowledge base 接入、PCE-01 全部完成、source_verified、
   GRP-01 启动、D10-B 恢复）。
@@ -85,8 +102,11 @@ PCE-01-B 边界（如实记录）：
   no network、no filesystem writes、no shell（fixtures 注入 synthetic Git
   state，不访问真实远端、不创建真实 Git repository）。
 - 运行时 Git gate 使用 `Open3.capture3` 固定 argv（无 shell、无 fetch、无
-  ls-remote）；remote-tracking ref 仅代表预先 fetch 后的本地缓存，
-  `git_fetch_performed=false`、`live_GitHub_HEAD_guaranteed=false`。
+  ls-remote）；branch validity 以 `git check-ref-format --branch` 为权威，
+  head 以 `git show-ref --verify --hash` 精确全 ref 查找，不以
+  `git rev-parse <ref>` 作为 named-ref authority；remote-tracking ref 仅代表
+  预先 fetch 后的本地缓存，`git_fetch_performed=false`、
+  `live_GitHub_HEAD_guaranteed=false`。
 - 不实现 Token 计算、JSON、stdin、inspect、`--output`、clipboard、网络
   请求、LLM、Git 写自动化或远程包发布。
 

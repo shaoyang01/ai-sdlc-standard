@@ -157,6 +157,10 @@ skills/sdlc-docflow-writer/
   filesystem writes、no shell。
 - 运行时 Git gate 只做 checkout-independent 的 named-ref 只读核验
   （`Open3.capture3` 固定 argv，无 shell、无 fetch、无 ls-remote）；
+  branch validity 以 `git check-ref-format --branch` 为权威，head 以
+  `git show-ref --verify --hash` 精确全 ref 查找（不以 `rev-parse` 为
+  authority）；origin 只接受三种锁定 github.com 形式且 identity 与
+  Capsule/policy 三方闭合，diagnostics 不回显 credential；
   remote-tracking ref 仅代表上游预先 fetch 后的本地缓存，
   `git_fetch_performed=false`、`live_GitHub_HEAD_guaranteed=false`。
 - 项目验证命令由目标仓库的 `.ai-sdlc/prompt-policy.yaml` 映射，标准包不

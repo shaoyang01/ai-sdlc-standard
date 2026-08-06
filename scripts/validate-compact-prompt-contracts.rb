@@ -136,11 +136,12 @@ if File.file?(File.join(ROOT, prompt_template_path))
     end
   end
   prompt_placeholders = CompactPrompt::Template.placeholders(prompt_template_text)
-  duplicate_occurrences = CompactPrompt::Template.placeholder_counts(prompt_template_text)
-                           .select { |_p, count| count > 1 }
-  unless duplicate_occurrences.empty?
-    errors << "codex prompt template: placeholder(s) appear more than once " \
-              "#{duplicate_occurrences.inspect}"
+  # Finding F05: single template-binding validator shared with the CLI —
+  # exact 27-placeholder set, exactly-once occurrences, no unknown,
+  # missing, duplicate or source-set drift.
+  binding_error = CompactPrompt::Template.binding_error(prompt_template_text)
+  if binding_error
+    errors << "codex prompt template: #{binding_error[2]}"
   end
   # Finding PCE-01-B: conditional blocks must be exactly one non-nested block
   # per legal value.
@@ -403,6 +404,8 @@ class RendererFixtureGitState
     @origin_url = spec["origin_url"]
     @refs = spec["refs"] || {}
     @tracked = spec["tracked"] || []
+    @branch_valid = spec["branch_valid"]
+    @raise_on = spec["raise_on"] || []
   end
 
   def repository_root(_cwd)
@@ -410,6 +413,7 @@ class RendererFixtureGitState
   end
 
   def origin_url(_root)
+    raise "injected internal failure" if @raise_on.include?("origin_url")
     @origin_url
   end
 
@@ -417,7 +421,17 @@ class RendererFixtureGitState
     @tracked.include?(path)
   end
 
-  def ref_head(_root, ref)
+  # Synthetic branch validity (finding F04): explicit `branch_valid: false`
+  # overrides, otherwise the same deterministic GitNames rules the adapter
+  # approximates with `git check-ref-format --branch`.
+  def branch_valid?(name)
+    return false if @branch_valid == false
+    CompactPrompt::GitNames.valid_branch?(name)
+  end
+
+  # Synthetic exact full-ref lookup (finding F04): only literal full refs,
+  # never revision expressions.
+  def exact_ref_head(_root, ref)
     @refs[ref]
   end
 end
@@ -426,7 +440,8 @@ def run_renderer_fixture(fixture, default_policy, real_template)
   command = fixture["command"]
   capsule_text = fixture["capsule"]
   policy_text = fixture["policy"] || default_policy
-  template_text = fixture["template"] || real_template
+  template_text = fixture["template"] || (fixture["template_path"] ? nil : real_template)
+  template_path = fixture["template_path"]
   git_state = RendererFixtureGitState.new(fixture["git_state"] || {})
 
   out = StringIO.new
@@ -439,7 +454,8 @@ def run_renderer_fixture(fixture, default_policy, real_template)
     git_state: git_state,
     capsule_text: capsule_text,
     policy_text: policy_text,
-    template_text: template_text
+    template_text: template_text,
+    template_path: template_path
   )
   [exit_code, out.string, err.string]
 end
@@ -469,14 +485,19 @@ def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
     counts[:assertions] += 1
     errors << "renderer fixture #{id}: prompt stdout must be valid UTF-8" unless out.valid_encoding?
     counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must not contain CR" if out.include?("\r")
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must contain exactly one delivery_type line" \
+      unless out.scan(/^delivery_type:/).length == 1
+    counts[:assertions] += 1
     errors << "renderer fixture #{id}: prompt stdout must contain exactly one delivery_type" \
       unless out.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
     counts[:assertions] += 1
     errors << "renderer fixture #{id}: prompt stdout must have zero unresolved placeholders" \
-      if out.match?(/<[^>\n]+>/)
+      if CompactPrompt::PLACEHOLDER_SOURCES.keys.any? { |p| out.include?(p) }
     counts[:assertions] += 1
     errors << "renderer fixture #{id}: prompt stdout must have zero conditional markers" \
-      if out.include?("<!-- WHEN") || out.include?("<!-- ENDWHEN")
+      if out.match?(/(?<!\\)<!-- WHEN/) || out.match?(/(?<!\\)<!-- ENDWHEN/)
     counts[:assertions] += 1
     headings = out.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
     errors << "renderer fixture #{id}: prompt stdout section order mismatch #{headings.inspect}" \
@@ -535,7 +556,7 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           next
         end
         allowed_fixture_keys = %w[
-          id category description command capsule policy git_state expected template
+          id category description command capsule policy git_state expected template template_path
         ]
         unknown = fixture.keys - allowed_fixture_keys
         errors << "#{label}: unknown key(s) #{unknown.inspect}" unless unknown.empty?
@@ -565,7 +586,7 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           errors << "#{label} #{id}: expected must be a mapping"
           next
         end
-        allowed_expected_keys = %w[exit stdout stdout_exact stderr stderr_contains]
+        allowed_expected_keys = %w[exit stdout stdout_exact stderr stderr_exact stderr_contains]
         unknown = expected.keys - allowed_expected_keys
         errors << "#{label} #{id}: expected unknown key(s) #{unknown.inspect}" unless unknown.empty?
         unless expected.keys.include?("exit") && expected.keys.include?("stdout") && expected.keys.include?("stderr")
@@ -609,6 +630,62 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
     end
   rescue Psych::Exception => e
     errors << "renderer fixtures: file does not parse as YAML (#{e.class})"
+  end
+end
+
+# ── F07 diagnostics registry static proof ──
+# The registry is the single source of truth for B diagnostic codes, exit
+# categories and stable meanings. This block proves:
+#   a) every registered code has at least one literal emit site in the
+#      shared library (the implementation can actually emit all codes);
+#   b) every literal code emitted from the library is registered (no
+#      unregistered branch reaches an exit);
+#   c) the standard's section 14 table and the registry agree in both
+#      directions (code set and exit numbers);
+#   d) the CLI has no bare failure-return constant — EXIT_OK is the only
+#      exit constant, all failure exits resolve via Diagnostics.exit_for.
+
+lib_text = read_asset("scripts/lib/compact_prompt.rb")
+registry = CompactPrompt::Diagnostics::REGISTRY
+
+emit_sites = lib_text.scan(
+  /Diagnostics\.(?:format|exit_for)\("([A-Z][A-Z0-9_]{2,})"|\["([A-Z][A-Z0-9_]{2,})",|return "([A-Z][A-Z0-9_]{2,})"|return \[nil, "([A-Z][A-Z0-9_]{2,})"/
+).flatten.compact.uniq - %w[CAPSULE_FIELD PCE_01_B_PROJECT_MAPPING STANDARD_CONSTANT]
+missing_emit_sites = registry.keys - emit_sites
+unless missing_emit_sites.empty?
+  errors << "diagnostics: registered code(s) without a literal emit site in the shared library " \
+            "#{missing_emit_sites.inspect}"
+end
+unregistered_emits = emit_sites - registry.keys
+unless unregistered_emits.empty?
+  errors << "diagnostics: literal code(s) emitted without a registry entry #{unregistered_emits.inspect}"
+end
+
+bare_returns = lib_text.scan(/return EXIT_[A-Z_]+/).uniq - ["return EXIT_OK"]
+unless bare_returns.empty?
+  errors << "diagnostics: bare failure-return constant(s) #{bare_returns.inspect} bypass the registry"
+end
+exit_constants = lib_text.scan(/EXIT_[A-Z_]+ = /).uniq
+unless exit_constants == ["EXIT_OK = "]
+  errors << "diagnostics: unexpected exit constant(s) #{exit_constants.inspect}"
+end
+
+if standard_text
+  standard_table = standard_text.scan(
+    /^\| `([A-Z][A-Z0-9_]{2,})` \| ([0-5]) \|/
+  ).to_h
+  registry.each do |code, entry|
+    row_exit = standard_table[code]
+    unless row_exit
+      errors << "standard: registered diagnostic #{code} is missing from the section 14 table"
+      next
+    end
+    unless row_exit.to_i == entry["exit"]
+      errors << "standard: #{code} table exit #{row_exit} does not match registry exit #{entry['exit']}"
+    end
+  end
+  (standard_table.keys - registry.keys).each do |code|
+    errors << "standard: diagnostic #{code} in the section 14 table is not registered"
   end
 end
 

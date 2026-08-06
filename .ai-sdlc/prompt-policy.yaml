@@ -29,7 +29,7 @@ commands:
   ROOT_NPM_TEST:
     argv: [npm, test]
   LOOP_MUTATIONS:
-    argv: [npm, run, test:loop-patch-mutations]
+    argv: [npm, run, "test:loop-patch-mutations"]
   GIT_DIFF_CHECK:
     argv: [git, diff, --check]
 

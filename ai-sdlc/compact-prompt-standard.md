@@ -376,28 +376,45 @@ ls-remote。核验顺序：
 
 1. cwd 属于 Git repository（`git rev-parse --show-toplevel`）；
 2. policy 文件已被 Git 跟踪（`git ls-files --error-unmatch`）；
-3. origin 规范化后与 Capsule `baseline.repository` 做 GitHub identity 大小写
-   不敏感比较；origin 只接受 `https://github.com/<owner>/<repo>[.git]`、
+3. origin 解析并做三方 identity 闭合：归一化 origin identity == Capsule
+   `baseline.repository` == policy `repository`，三方均按 GitHub owner/repo
+   大小写不敏感比较。origin 只接受锁定三种形式：
+   `https://github.com/<owner>/<repo>[.git]`、
    `git@github.com:<owner>/<repo>[.git]`、
-   `ssh://git@github.com/<owner>/<repo>[.git]`；拒绝非 github.com、HTTPS
-   credential、query、fragment、额外路径、本地路径、file URL、自定义 SSH
-   alias 与歧义 scp-like URL；
+   `ssh://git@github.com/<owner>/<repo>[.git]`；提取 identity 前显式拒绝
+   userinfo、query（`?`）、fragment（`#`）、控制字符、额外路径、本地路径、
+   file URL、自定义 SSH alias 与歧义 scp-like URL。无效 origin 与三方不闭合
+   统一为 `REPOSITORY_IDENTITY_MISMATCH`，使用固定通用 message，不得回显
+   URL、可疑 segment、用户名、密码、token、query 或 fragment；
 4. Capsule `baseline.branch` == policy `fact_branch`；
-5. `refs/heads/<fact_branch>` 与 `refs/remotes/origin/<fact_branch>` 均精确
-   等于 Capsule `baseline.head`。
+5. `policy.fact_branch` 必须通过 `git check-ref-format --branch`（branch
+   validity 权威；不得以 `git rev-parse <ref>` 作为 named-ref authority，
+   因为它会按 revision expression 解释）；不合法统一为
+   `FACT_BRANCH_INVALID`；
+6. `refs/heads/<fact_branch>` 与 `refs/remotes/origin/<fact_branch>` 均经
+   `git show-ref --verify --hash` 精确全 ref 查找（exact full-ref lookup，
+   无 shell、无网络、无 revision expression），必须精确等于 Capsule
+   `baseline.head`；缺失为 `BASELINE_REF_MISSING`，不一致为
+   `BASELINE_HEAD_MISMATCH`。
 
 不得要求当前 checkout branch 等于事实分支；current checkout 与 current HEAD
 均不是 baseline authority。remote-tracking ref 仅代表上游预先 fetch 后的本地
 缓存，不得声称在线确认 GitHub 最新 HEAD（`git_fetch_performed=false`、
-`live_GitHub_HEAD_guaranteed=false`）。origin 拒绝统一为
-`REPOSITORY_IDENTITY_MISMATCH`，diagnostic 不得回显 credential。禁止
-checkout、branch、update-ref、reset、rebase、commit、push 或 PR 操作。
+`live_GitHub_HEAD_guaranteed=false`）。禁止 checkout、branch、update-ref、
+reset、rebase、commit、push 或 PR 操作。
 
 ## 13. Renderer（PCE-01-B）
 
 只使用 Template Value Source Table 登记的 27 个占位符与来源
 `CAPSULE_FIELD | STANDARD_CONSTANT | PCE_01_B_PROJECT_MAPPING`；保持固定十
 节顺序，只生成一份 `CODEX_EXECUTION_PROMPT`。
+
+模板绑定在共享库有唯一 template-binding validator（CLI validate、CLI
+compile 与 contract validator 共同调用），运行时证明：模板占位符集合精确等于
+27 个 `PLACEHOLDER_SOURCES`；每个占位符恰好出现一次；无 unknown、missing、
+duplicate 或 source-set drift；条件结构（见下）有效。绑定失败为
+`TEMPLATE_PLACEHOLDER_UNKNOWN` / `TEMPLATE_PLACEHOLDER_MISSING` /
+`TEMPLATE_PLACEHOLDER_DUPLICATE`，stdout 为空，exit 3。
 
 模板只允许非嵌套标记 `<!-- WHEN <field>=<value> -->` 与 `<!-- ENDWHEN -->`。
 条件字段和值只能是：
@@ -414,36 +431,87 @@ git.pull_request_action=NONE|CREATE_DRAFT|UPDATE_DRAFT
 `CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
 正整数。
 
-列表按 Capsule 输入顺序渲染为紧凑 bullets；空 findings 渲染为 `none`。输出
-固定 UTF-8、LF、一个末尾 LF；不含时间、用户、主机或随机值；相同 Capsule、
-policy 与 Standard Package bytes 必须 byte-identical。输出前验证：一份
-material、一个 delivery_type、零未解析 placeholder、零条件标记、十节顺序
-正确。
+列表按 Capsule 输入顺序渲染为紧凑 bullets；空 findings 渲染为 `none`。所有
+Capsule/Policy 用户字符串（YAML header scalar、prose scalar、list item、
+finding id/status）必须经集中、确定性的单行安全编码后进入模板：CR、LF、tab、
+NUL、其他控制字符以及 `<`、`>`、`&` 编为可见转义（`\r` `\n` `\t` `\0` `\xNN`
+`\<` `\>` `\&`），保留语义、不静默删除；因此注入的第二 `delivery_type`、
+heading/YAML 控制行、额外材料、占位符、WHEN/ENDWHEN 标记或 CR 字节无法形成。
+输出固定 UTF-8、LF、恰好一个末尾 LF；不含 CR、时间、用户、主机或随机值；
+相同 Capsule、policy 与 Standard Package bytes 必须 byte-identical。
+
+输出前验证（canonical output verifier）：有效 UTF-8；不含 CR；任意
+`^delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`；零未解析占位符
+（27 个已登记占位符均不再以原样出现）；零未转义条件标记；十节顺序正确；恰好
+一个末尾 LF。budget gate 在此 canonical 输出上执行。
 
 ## 14. Diagnostics 与 Budget（PCE-01-B）
 
-diagnostics 格式精确为 `<CODE>\t<field-or-source-path>\t<short-message>`；
-多条按 code、path、message 排序；不得包含 secret、credential、backtrace 或
-不稳定环境文本。Capsule 继续复用 A 公共分类。B 稳定码至少包括：
+diagnostics 格式精确为 `<CODE>\t<field-or-source-path>\t<short-message>`，每条以单个
+LF 结尾；多条按 code、path、message 排序。`path` 与 `message` 中的 tab、CR、LF、
+NUL 及控制字符必须经确定性可见转义（`\t` `\r` `\n` `\0` `\xNN`），保证三字段
+形状稳定。diagnostic 不得包含 secret、credential、backtrace、origin 原文或不稳定
+环境文本。Capsule 复用 A 公共分类（第 1.4 节），其 exit 映射与全部 B 稳定码在
+以下 registry 表中集中定义（validator 静态证明 registry 与标准双向一致、每个
+code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 
-```text
-CLI_USAGE_INVALID, INPUT_FILE_INVALID, INPUT_ENCODING_INVALID
-POLICY_FILE_MISSING, POLICY_NOT_TRACKED, POLICY_SCHEMA_INVALID
-POLICY_PROFILE_MAPPING_MISSING, POLICY_COMMAND_ID_UNKNOWN
-POLICY_COMMAND_CONFLICT, DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN
-GIT_REPOSITORY_NOT_FOUND, REPOSITORY_IDENTITY_MISMATCH
-FACT_BRANCH_MISMATCH, BASELINE_REF_MISSING, BASELINE_HEAD_MISMATCH
-TEMPLATE_PLACEHOLDER_UNKNOWN, TEMPLATE_SOURCE_BINDING_MISMATCH
-TEMPLATE_CONDITIONAL_INVALID, RENDER_INCOMPLETE
-PROMPT_LINE_LIMIT_EXCEEDED, PROMPT_BYTE_LIMIT_EXCEEDED
-INTERNAL_ERROR
-```
+| code | exit | 类别 | 含义 |
+| --- | --- | --- | --- |
+| `CLI_USAGE_INVALID` | 2 | CLI_OR_INPUT | argv 不是 validate\|compile <capsule.yaml> |
+| `INPUT_FILE_INVALID` | 2 | CLI_OR_INPUT | capsule 文件不存在或不是普通文件 |
+| `INPUT_ENCODING_INVALID` | 2 | CLI_OR_INPUT | capsule 文本不是有效 UTF-8 |
+| `UNKNOWN_KEY` | 3 | CONTRACT_OR_POLICY | 出现合同未定义的键 |
+| `MISSING_REQUIRED_FIELD` | 3 | CONTRACT_OR_POLICY | 必填字段缺失、标量为空或数组为空 |
+| `DUPLICATE_KEY` | 3 | CONTRACT_OR_POLICY | 同一 mapping 内重复键 |
+| `YAML_ALIAS` | 3 | CONTRACT_OR_POLICY | 存在 YAML alias（*name） |
+| `YAML_ANCHOR` | 3 | CONTRACT_OR_POLICY | 存在 YAML anchor（&name） |
+| `YAML_TAG` | 3 | CONTRACT_OR_POLICY | 存在显式 YAML tag |
+| `YAML_MERGE_KEY` | 3 | CONTRACT_OR_POLICY | 存在 merge key（<<） |
+| `YAML_NULL` | 3 | CONTRACT_OR_POLICY | 存在 null / ~ / 空标量 |
+| `YAML_DOCUMENT_COUNT_INVALID` | 3 | CONTRACT_OR_POLICY | 受限 YAML 不是恰好一个 document |
+| `YAML_SYNTAX` | 3 | CONTRACT_OR_POLICY | 受限 YAML 无法解析 |
+| `YAML_UNSUPPORTED` | 3 | CONTRACT_OR_POLICY | 受限 YAML 被 safe-load 拒绝 |
+| `INVALID_SHA` | 3 | CONTRACT_OR_POLICY | baseline.head 不是 40 位小写十六进制 |
+| `UNSAFE_PATH` | 3 | CONTRACT_OR_POLICY | 绝对路径、反斜杠、..、~ 或空路径 |
+| `MULTIPLE_OBJECTIVES` | 3 | CONTRACT_OR_POLICY | objective 不是单个非空标量 |
+| `VALIDATION_UNDERSPECIFIED` | 3 | CONTRACT_OR_POLICY | 验证等级不足 |
+| `VALIDATION_OVERPROVISIONED` | 3 | CONTRACT_OR_POLICY | 验证等级过重 |
+| `MISSING_STOP_CONDITION` | 3 | CONTRACT_OR_POLICY | completion_report.stop_after_report 不为 true |
+| `FIELD_TYPE_INVALID` | 3 | CONTRACT_OR_POLICY | 字段类型错误或枚举越界 |
+| `POLICY_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | git root 下找不到 policy 文件 |
+| `POLICY_SCHEMA_INVALID` | 3 | CONTRACT_OR_POLICY | policy schema、键、类型或枚举违规 |
+| `POLICY_PROFILE_MAPPING_MISSING` | 3 | CONTRACT_OR_POLICY | profile 映射缺失或 required 为空 |
+| `POLICY_COMMAND_ID_UNKNOWN` | 3 | CONTRACT_OR_POLICY | 命令 ID 未在 commands 登记 |
+| `POLICY_COMMAND_CONFLICT` | 3 | CONTRACT_OR_POLICY | 重复或 required/forbidden 交集 |
+| `DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN` | 3 | CONTRACT_OR_POLICY | DOC_ONLY 不得要求根 npm test |
+| `TEMPLATE_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | 找不到 prompt 模板文件 |
+| `TEMPLATE_PLACEHOLDER_UNKNOWN` | 3 | CONTRACT_OR_POLICY | 模板占位符无来源行 |
+| `TEMPLATE_PLACEHOLDER_MISSING` | 3 | CONTRACT_OR_POLICY | 已登记占位符在模板中缺失 |
+| `TEMPLATE_PLACEHOLDER_DUPLICATE` | 3 | CONTRACT_OR_POLICY | 已登记占位符出现多次 |
+| `TEMPLATE_SOURCE_BINDING_MISMATCH` | 3 | CONTRACT_OR_POLICY | 占位符来源不可解析 |
+| `TEMPLATE_CONDITIONAL_INVALID` | 3 | CONTRACT_OR_POLICY | 条件块缺失、重复、嵌套或畸形 |
+| `GIT_REPOSITORY_NOT_FOUND` | 4 | GIT_BASELINE | cwd 不在 git repository 内 |
+| `POLICY_NOT_TRACKED` | 4 | GIT_BASELINE | policy 文件未被 git 跟踪 |
+| `REPOSITORY_IDENTITY_MISMATCH` | 4 | GIT_BASELINE | origin/capsule/policy 三方 identity 不闭合 |
+| `FACT_BRANCH_MISMATCH` | 4 | GIT_BASELINE | capsule baseline.branch != policy fact_branch |
+| `FACT_BRANCH_INVALID` | 4 | GIT_BASELINE | fact_branch 未通过 git check-ref-format |
+| `BASELINE_REF_MISSING` | 4 | GIT_BASELINE | 精确全 ref 不存在 |
+| `BASELINE_HEAD_MISMATCH` | 4 | GIT_BASELINE | 精确 ref head != capsule baseline.head |
+| `RENDER_INCOMPLETE` | 5 | RENDER_OR_BUDGET | canonical 输出验证失败 |
+| `PROMPT_LINE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | 逻辑行数超过 Mode 硬限制 |
+| `PROMPT_BYTE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | UTF-8 字节数超过 Mode 硬限制 |
+| `INTERNAL_ERROR` | 5 | RENDER_OR_BUDGET | fail-closed 内部/渲染错误；不输出 backtrace |
+
+`TEMPLATE_FILE_MISSING` 固定 exit 3。
+`INTERNAL_ERROR` 固定 exit 5（fail-closed internal/render 类别）。未登记 code 的
+失败一律 fail closed 到 `INTERNAL_ERROR`（exit 5）；CLI 不得有绕过 registry 的裸
+exit 常量（`EXIT_OK` 除外）。
 
 budget gate 按 logical line count 与 UTF-8 byte count 同时检查四种 Mode 的
-hard limit（见第 2 节）；`completion_report.maximum_lines` 继续验证 20-120
-并原值渲染。超限分类为 `PROMPT_LINE_LIMIT_EXCEEDED` 或
-`PROMPT_BYTE_LIMIT_EXCEEDED`。不得自动升级 Mode、扩大限制、声称 Token 计数
-或输出部分 Prompt。
+hard limit（见第 2 节），且始终在 canonical 渲染输出上执行（第 13 节）；
+`completion_report.maximum_lines` 继续验证 20-120 并原值渲染。超限分类为
+`PROMPT_LINE_LIMIT_EXCEEDED` 或 `PROMPT_BYTE_LIMIT_EXCEEDED`。不得自动升级
+Mode、扩大限制、声称 Token 计数或输出部分 Prompt。
 
 ## 15. 边界（PCE-01-B）
 
