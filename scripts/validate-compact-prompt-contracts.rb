@@ -148,8 +148,13 @@ if File.file?(File.join(ROOT, prompt_template_path))
   end
   # Finding F05: single template-binding validator shared with the CLI —
   # exact 27-placeholder set, exactly-once occurrences, no unknown,
-  # missing, duplicate or source-set drift.
+  # missing, duplicate or source-set drift. The non-nil result must be
+  # appended to errors so the shared gate really blocks the contract
+  # validator (finding F05-A) — never call-and-ignore.
   binding_error = CompactPrompt::Template.binding_error(prompt_template_text)
+  if binding_error
+    errors << "codex prompt template: #{binding_error[2]}"
+  end
   unknown_placeholders = prompt_placeholders - CompactPrompt::PLACEHOLDER_SOURCES.keys
   unless unknown_placeholders.empty?
     errors << "codex prompt template: unknown placeholder(s) not in the source table #{unknown_placeholders.inspect}"
@@ -859,6 +864,31 @@ FORBIDDEN_PREMATURE_CLAIMS = [
       errors << "documentation: #{path} contains premature claim #{claim.inspect}"
     end
   end
+end
+
+# ── F05-A binding-gate blocking proof ──
+# The contract validator must not merely call the shared template-binding
+# gate and ignore its result. Two in-memory proofs (no files, no shell, no
+# template mutation): a duplicated registered placeholder makes the shared
+# gate return TEMPLATE_PLACEHOLDER_DUPLICATE, and the validator source
+# itself appends the non-nil binding_error to errors — a future
+# call-and-ignore regression is statically caught.
+binding_dup_template = prompt_template_text && prompt_template_text.sub("<recipient>", "<recipient><recipient>")
+binding_dup_error = binding_dup_template &&
+                    CompactPrompt::Template.binding_error(binding_dup_template)
+if binding_dup_template.nil?
+  # Prompt template file missing: the main flow already reports it; do not
+  # emit a misleading duplicate-placeholder message here.
+elsif !(binding_dup_error && binding_dup_error[0] == "TEMPLATE_PLACEHOLDER_DUPLICATE")
+  errors << "F05-A guard: duplicated registered placeholder must yield " \
+            "TEMPLATE_PLACEHOLDER_DUPLICATE from the shared binding gate"
+end
+validator_source = read_asset("scripts/validate-compact-prompt-contracts.rb")
+unless validator_source.match?(
+  /binding_error = CompactPrompt::Template\.binding_error\(prompt_template_text\)\n\s+if binding_error\n\s+errors <</
+)
+  errors << "F05-A guard: contract validator must append binding_error to errors " \
+            "(call-and-ignore regression detected)"
 end
 
 if errors.empty?

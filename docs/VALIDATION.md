@@ -90,8 +90,16 @@ ruby scripts/validate-gate-runner-scenarios.rb
   `delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`（missing /
   duplicate / wrong 均失败）、完整严格 WHEN/ENDWHEN marker 扫描（malformed、
   unknown field/value、unpaired、nested、duplicate、跨节以及不匹配合法 token
-  正则的 WHEN-like 文本全部失败，绝不静默忽略）；14 个 validate 路径
-  fixtures 锁定 stdout empty + 稳定 diagnostic + exit 3 + 无 backtrace；
+  正则的 WHEN-like 文本全部失败，绝不静默忽略）；marker scanner 按完整
+  HTML comment `<!-- ... -->` 扫描，comment body 内普通 `>` 不得截断
+  fragment（`<!-- malformed > WHEN ... -->` / `<!-- malformed > ENDWHEN -->`
+  在 validate 与 compile 双路径均 fail closed），未闭合 comment 扫至 EOF
+  fail closed，相邻独立 comments 不跨越匹配，无 WHEN/ENDWHEN 的普通注释
+  inert；binding gate 的非空返回值在 contract validator 中真实加入 errors
+  （非 call-and-ignore），F05-A guard 在 validator 内以内存模板证明
+  duplicate 合法 placeholder 返回 `TEMPLATE_PLACEHOLDER_DUPLICATE` 且消费
+  路径被静态锁定；14+5 个 validate/compile 路径 fixtures 锁定 stdout empty
+  + 稳定 diagnostic + exit 3 + 无 backtrace；
 - PCE-01-B 专项加固（F06 YAML context encoding）：渲染器按输出上下文区分
   `render_yaml_scalar`（fenced YAML block 内确定性 YAML 双引号 scalar，
   `\\` `\"` `\r` `\n` `\t` `\0` `\xNN` 与 `\u003C`/`\u003E` 转义）、

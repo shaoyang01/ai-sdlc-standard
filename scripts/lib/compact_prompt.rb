@@ -910,23 +910,32 @@ module CompactPrompt
       nil
     end
 
-    # Complete strict scan of every WHEN/ENDWHEN-like HTML-comment fragment.
-    # The scanner intentionally matches the substring WHEN|ENDWHEN inside any
-    # comment-like fragment (up to the first `>`), so malformed closings,
-    # WHENX-like tokens, unknown fields and unbalanced markers can never be
-    # silently ignored because they fail the legal-token regex (finding F05).
+    # Complete strict scan of every WHEN/ENDWHEN-bearing HTML comment
+    # (finding F05-B). The scanner consumes full comments `<!-- ... -->`;
+    # a plain `>` inside a comment body never ends the fragment, malformed
+    # closings, WHENX-like tokens, unknown fields and unbalanced markers
+    # can never be silently ignored because they fail the legal-token
+    # regex.
     def marker_error(text)
-      # Scans every WHEN/ENDWHEN-like HTML-comment fragment up to the first
-      # `>` — or to the end of the text when the closing `>` is missing —
-      # so unterminated fragments are never silently ignored (finding F05).
+      # Scans every complete HTML comment (finding F05-B): a fragment ends
+      # at the first full `-->`, never at a plain `>` inside the comment
+      # body, so `<!-- malformed > WHEN ... -->` cannot be truncated into
+      # silence. A comment with no closing `-->` scans to EOF and fails
+      # closed. Adjacent independent comments are matched one at a time;
+      # each comment's body is then checked for WHEN/ENDWHEN and must be an
+      # exact legal marker — malformed, unknown field/value, unpaired,
+      # nested, duplicate and cross-section markers all fail closed, and
+      # the seven legal blocks cannot mask an extra malformed marker.
       tokens = []
-      text.to_enum(:scan, /<!--[^>]*?(?:WHEN|ENDWHEN)[^>]*?(?:>|\z)/).each do
+      text.to_enum(:scan, /<!--.*?(?:-->|\z)/m).each do
         tokens << [Regexp.last_match.begin(0), Regexp.last_match[0]]
       end
 
       depth = 0
       blocks = []
       tokens.each_with_index do |(pos, token), index|
+        # Plain comments without WHEN/ENDWHEN are inert.
+        next unless token.include?("WHEN") || token.include?("ENDWHEN")
         if token.include?("ENDWHEN")
           unless token == ENDWHEN_MARKER
             return ["TEMPLATE_CONDITIONAL_INVALID", "template",
