@@ -409,10 +409,20 @@ reset、rebase、commit、push 或 PR 操作。
 `CAPSULE_FIELD | STANDARD_CONSTANT | PCE_01_B_PROJECT_MAPPING`；保持固定十
 节顺序，只生成一份 `CODEX_EXECUTION_PROMPT`。
 
+模板结构在共享库有唯一 template-structure gate（CLI validate、CLI compile
+与 contract validator 共同调用），fail closed 检查：固定十节 heading 精确且
+顺序精确，不得缺节、重复节或出现额外编号节；任意行首 `delivery_type:` 恰好
+一行且值精确为 `CODEX_EXECUTION_PROMPT`（missing、duplicate、wrong 均失败）；
+模板内全部 `WHEN` / `ENDWHEN` 类 HTML marker 被完整扫描——只有精确合法
+marker 才被接受，malformed、unknown field/value、unpaired、nested、
+duplicate、跨节 marker 全部失败，任何不匹配合法 token 正则的 WHEN-like /
+ENDWHEN-like 文本不得被静默忽略。结构失败为 `TEMPLATE_STRUCTURE_INVALID` /
+`TEMPLATE_CONDITIONAL_INVALID`，stdout 为空，exit 3。
+
 模板绑定在共享库有唯一 template-binding validator（CLI validate、CLI
 compile 与 contract validator 共同调用），运行时证明：模板占位符集合精确等于
 27 个 `PLACEHOLDER_SOURCES`；每个占位符恰好出现一次；无 unknown、missing、
-duplicate 或 source-set drift；条件结构（见下）有效。绑定失败为
+duplicate 或 source-set drift。绑定失败为
 `TEMPLATE_PLACEHOLDER_UNKNOWN` / `TEMPLATE_PLACEHOLDER_MISSING` /
 `TEMPLATE_PLACEHOLDER_DUPLICATE`，stdout 为空，exit 3。
 
@@ -431,14 +441,24 @@ git.pull_request_action=NONE|CREATE_DRAFT|UPDATE_DRAFT
 `CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
 正整数。
 
-列表按 Capsule 输入顺序渲染为紧凑 bullets；空 findings 渲染为 `none`。所有
-Capsule/Policy 用户字符串（YAML header scalar、prose scalar、list item、
-finding id/status）必须经集中、确定性的单行安全编码后进入模板：CR、LF、tab、
-NUL、其他控制字符以及 `<`、`>`、`&` 编为可见转义（`\r` `\n` `\t` `\0` `\xNN`
-`\<` `\>` `\&`），保留语义、不静默删除；因此注入的第二 `delivery_type`、
+列表按 Capsule 输入顺序渲染为紧凑 bullets；空 findings 渲染为 `none`。渲染器
+按输出上下文区分并集中实现四种 renderer（finding F06）：`render_yaml_scalar`
+处理 fenced YAML block（路由 / Exact Baseline / Git 与 PR / Completion Report
+footer）中的字符串，用确定性 YAML 双引号 scalar——反斜杠、双引号、CR、LF、
+tab、NUL 及其他控制字符编为 YAML 转义（`\\` `\"` `\r` `\n` `\t` `\0` `\xNN`），
+`<` / `>` 编为 `\u003C` / `\u003E` 以保持合法 YAML 且不形成占位符或条件标记；
+整数与 boolean 保持 YAML 原生类型（bare），字符串 `"none"` 保持带引号
+（不得解析为 null）。`render_prose_scalar` 处理模板正文单行字符串，
+`render_list_item` 处理 prose 列表项，`render_finding` 处理 finding id/status，
+三者统一使用集中式可见单行编码（CR、LF、tab、NUL、其他控制字符以及 `<`、
+`>`、`&` 编为 `\r` `\n` `\t` `\0` `\xNN` `\<` `\>` `\&`）。所有编码保留语义、
+不静默删除任何字符，原单行注入防护不得弱化；因此注入的第二 `delivery_type`、
 heading/YAML 控制行、额外材料、占位符、WHEN/ENDWHEN 标记或 CR 字节无法形成。
-输出固定 UTF-8、LF、恰好一个末尾 LF；不含 CR、时间、用户、主机或随机值；
-相同 Capsule、policy 与 Standard Package bytes 必须 byte-identical。
+成功 compile 输出的每一个 fenced YAML block 都可用
+`YAML.safe_load(permitted_classes: [], aliases: false)` 独立解析，字段值与
+类型与原 Capsule/Standard 常量精确一致。输出固定 UTF-8、LF、恰好一个末尾
+LF；不含 CR、时间、用户、主机或随机值；相同 Capsule、policy 与 Standard
+Package bytes 必须 byte-identical。
 
 输出前验证（canonical output verifier）：有效 UTF-8；不含 CR；任意
 `^delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`；零未解析占位符
@@ -489,6 +509,7 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `TEMPLATE_PLACEHOLDER_MISSING` | 3 | CONTRACT_OR_POLICY | 已登记占位符在模板中缺失 |
 | `TEMPLATE_PLACEHOLDER_DUPLICATE` | 3 | CONTRACT_OR_POLICY | 已登记占位符出现多次 |
 | `TEMPLATE_SOURCE_BINDING_MISMATCH` | 3 | CONTRACT_OR_POLICY | 占位符来源不可解析 |
+| `TEMPLATE_STRUCTURE_INVALID` | 3 | CONTRACT_OR_POLICY | 模板十节形状或 delivery_type 身份违规 |
 | `TEMPLATE_CONDITIONAL_INVALID` | 3 | CONTRACT_OR_POLICY | 条件块缺失、重复、嵌套或畸形 |
 | `GIT_REPOSITORY_NOT_FOUND` | 4 | GIT_BASELINE | cwd 不在 git repository 内 |
 | `POLICY_NOT_TRACKED` | 4 | GIT_BASELINE | policy 文件未被 git 跟踪 |

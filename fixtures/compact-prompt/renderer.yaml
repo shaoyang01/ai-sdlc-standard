@@ -1672,8 +1672,18 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
-      # Minimal structurally-complete template: every legal conditional
-      # block present exactly once, then an unknown placeholder.
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
       <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
       <!-- WHEN git.commit_count=0 -->x<!-- ENDWHEN -->
       <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
@@ -1739,7 +1749,17 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
-      # Broken Template
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
 
       <!-- WHEN git.commit_count=1 -->
       commit
@@ -1801,7 +1821,17 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
-      # Broken Template
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
 
       <!-- WHEN git.commit_count=1 -->
       commit
@@ -1866,7 +1896,17 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
-      # Broken Template
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
 
       <!-- WHEN git.commit_count=1 -->
       commit
@@ -1927,7 +1967,17 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
-      # Broken Template
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
 
       <!-- WHEN no equals sign -->
       text
@@ -2855,6 +2905,18 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
       <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
       <!-- WHEN git.commit_count=0 -->x<!-- ENDWHEN -->
       <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
@@ -2945,6 +3007,18 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
     template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
       <!-- WHEN git.commit_count=1 -->x<!-- ENDWHEN -->
       <!-- WHEN git.commit_count=0 -->x<!-- ENDWHEN -->
       <!-- WHEN git.push_mode=NORMAL_PUSH -->x<!-- ENDWHEN -->
@@ -2994,7 +3068,1140 @@ fixtures:
       stderr_contains:
         - "TEMPLATE_PLACEHOLDER_DUPLICATE\ttemplate"
 
+  # ── F05: template structure gate (sections / delivery_type / markers) ──
+  # All fixtures run the `validate` path: the shared structure gate must
+  # fail closed with stdout empty, a stable diagnostic and exit 3, before
+  # any rendering happens.
+
+  - id: RENDER-NEG-STRUCTURE-SECTION-REORDER
+    category: negative
+    command: validate
+    description: "Reordered fixed sections are rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 3. 唯一目标
+      ## 2. Exact Baseline
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-SECTION-MISSING
+    category: negative
+    command: validate
+    description: "A missing fixed section is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 10. Stop Condition
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-SECTION-DUPLICATE
+    category: negative
+    command: validate
+    description: "A duplicated section heading is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+      ## 1. 路由
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-SECTION-EXTRA
+    category: negative
+    command: validate
+    description: "An extra numbered section is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+      ## 11. Extra Section
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-DELIVERY-WRONG
+    category: negative
+    command: validate
+    description: "A wrong delivery_type value is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: WRONG_VALUE
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-DELIVERY-DUPLICATE
+    category: negative
+    command: validate
+    description: "A duplicated delivery_type line is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-DELIVERY-MISSING
+    category: negative
+    command: validate
+    description: "A missing delivery_type line is rejected by the structure gate"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_STRUCTURE_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_STRUCTURE_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-MALFORMED
+    category: negative
+    command: validate
+    description: "A malformed WHEN marker without '=' is rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN no equals sign -->
+      text
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-ENDWHEN-MALFORMED
+    category: negative
+    command: validate
+    description: "A malformed ENDWHEN marker is rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- ENDWHEN broken -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-UNKNOWN
+    category: negative
+    command: validate
+    description: "An unknown WHEN field/value is rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=9 -->
+      text
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-UNPAIRED
+    category: negative
+    command: validate
+    description: "A WHEN marker without its ENDWHEN is rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->
+      commit
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-ENDWHEN-UNPAIRED
+    category: negative
+    command: validate
+    description: "An ENDWHEN marker without its WHEN is rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-NESTED
+    category: negative
+    command: validate
+    description: "Nested WHEN markers are rejected by the marker scan"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1 -->
+      commit
+      <!-- WHEN git.push_mode=NONE -->
+      nested
+      <!-- ENDWHEN -->
+      <!-- ENDWHEN -->
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-LIKE-MISMATCH
+    category: negative
+    command: validate
+    description: "WHEN-like text not matching the legal token regex is never silently ignored"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHENX git.commit_count=1 -->
+      text
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
+  - id: RENDER-NEG-STRUCTURE-WHEN-UNTERMINATED
+    category: negative
+    command: validate
+    description: "An unterminated WHEN-like fragment without a closing '>' is never silently ignored"
+    capsule: |
+      task_id: fixture-structure-gate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构 gate 必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "TEMPLATE_CONDITIONAL_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test structure gate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "STRUCTURE-GATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    template: |
+      ## 1. 路由
+      delivery_type: CODEX_EXECUTION_PROMPT
+      ## 2. Exact Baseline
+      ## 3. 唯一目标
+      ## 4. Delta
+      ## 5. Scope 与 Acceptance
+      ## 6. Validation
+      ## 7. Git 与 PR
+      ## 8. Forbidden Actions
+      ## 9. Completion Report
+      ## 10. Stop Condition
+
+      <!-- WHEN git.commit_count=1
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "TEMPLATE_CONDITIONAL_INVALID\ttemplate"
+
   # ── F06: injection-safe canonical rendering ──
+
+  - id: RENDER-VALID-COMPILE-YAML-BLOCK-ROUNDTRIP
+    category: valid
+    command: compile
+    description: "Every fenced YAML block of the output safe_loads with the exact Capsule values and types preserved"
+    capsule: |
+      task_id: fixture-yaml-roundtrip
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: "Codex #1"
+        paste_location: "acme/widgets: 新\"会话\"\r\n\t路径"
+        report_back_to: "  leading"
+        next_hop_after_report: "trailing  "
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "第一行\n第二行 ## 4. Delta <!-- WHEN git.commit_count=1 --> <recipient> delivery_type: CODEX_EXECUTION_PROMPT"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "四个 YAML block 均可 safe_load 且值类型精确"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "*star !bang {brace [bracket"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-会话"
+        name: "name\"quoted\"\\with\\backslash"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+    yaml_blocks:
+      routing:
+        fields:
+          delivery_type: {value: CODEX_EXECUTION_PROMPT, type: string}
+          recipient: {value: "Codex #1", type: string}
+          paste_location: {value: "acme/widgets: 新\"会话\"\r\n\t路径", type: string}
+          purpose: {value: "第一行\n第二行 ## 4. Delta <!-- WHEN git.commit_count=1 --> <recipient> delivery_type: CODEX_EXECUTION_PROMPT", type: string}
+          report_back_to: {value: "  leading", type: string}
+          next_hop_after_report: {value: "trailing  ", type: string}
+      baseline:
+        fields:
+          repository: {value: acme/widgets, type: string}
+          fact_branch: {value: feature/runtime-v1, type: string}
+          expected_fact_HEAD: {value: "7c21cc8bb9649188505dafea1402049c74bd9be7", type: string}
+          pull_request: {value: none, type: string}
+      git:
+        fields:
+          commit_count: {value: 1, type: integer}
+          commit_message: {value: "*star !bang {brace [bracket", type: string}
+          push_mode: {value: NORMAL_PUSH, type: string}
+          pull_request_action: {value: CREATE_DRAFT, type: string}
+      completion_report:
+        fields:
+          completion_report_recipient: {value: "owner-会话", type: string}
+          completion_report_name: {value: "name\"quoted\"\\with\\backslash", type: string}
+          stop_after_report: {value: true, type: boolean}
 
   - id: RENDER-VALID-COMPILE-INJECTION-MULTILINE
     category: valid

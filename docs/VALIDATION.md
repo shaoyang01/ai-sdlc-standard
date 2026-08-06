@@ -83,10 +83,31 @@ ruby scripts/validate-gate-runner-scenarios.rb
   精确全 ref；`@{1}`、`.lock`、trailing dot、double slash、非法 branch 与
   缺失 exact ref 均失败）；运行时 template binding 闭合（27 占位符精确集合、
   恰好一次、无 unknown/missing/duplicate/source-set drift，CLI 与 validator
-  共用同一 validator）；injection-safe canonical rendering（多行、CR/LF/tab、
+  共用同一 validator）；
+- PCE-01-B 专项加固（F05 template structure gate）：共享 structure gate 由
+  CLI validate、CLI compile 与 contract validator 共同调用，fail closed
+  检查固定十节精确顺序（缺节、重复节、额外编号节、乱序均失败）、任意行首
+  `delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`（missing /
+  duplicate / wrong 均失败）、完整严格 WHEN/ENDWHEN marker 扫描（malformed、
+  unknown field/value、unpaired、nested、duplicate、跨节以及不匹配合法 token
+  正则的 WHEN-like 文本全部失败，绝不静默忽略）；14 个 validate 路径
+  fixtures 锁定 stdout empty + 稳定 diagnostic + exit 3 + 无 backtrace；
+- PCE-01-B 专项加固（F06 YAML context encoding）：渲染器按输出上下文区分
+  `render_yaml_scalar`（fenced YAML block 内确定性 YAML 双引号 scalar，
+  `\\` `\"` `\r` `\n` `\t` `\0` `\xNN` 与 `\u003C`/`\u003E` 转义）、
+  `render_prose_scalar`、`render_list_item`、`render_finding`；成功 compile
+  输出的路由 / Exact Baseline / Git 与 PR / Completion Report footer 四个
+  fenced YAML block 全部以
+  `YAML.safe_load(permitted_classes: [], aliases: false)` 独立解析，断言
+  字段值与类型与 Capsule/Standard 常量精确一致（整数保持 YAML integer、
+  boolean 保持 YAML boolean、字符串 `"none"` 不解析为 null），覆盖 `#`、
+  `: `、双引号、反斜杠、leading/trailing whitespace、Unicode、以 `*`/`!`/`{`/
+  `[` 开头、multiline、CR/LF/tab、第二 delivery_type、heading-like、
+  placeholder-like、WHEN/ENDWHEN-like 文本，重复 compile byte-identical；
+  injection-safe canonical rendering（多行、CR/LF/tab、
   第二 delivery_type、heading-like、placeholder-like、conditional-marker-like
-  输入均无法破坏输出；重复 compile byte-identical）；diagnostics registry
-  （44 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
+  输入均无法破坏输出）；diagnostics registry
+  （45 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
   双向一致、每个 code 有输出点、CLI 无裸失败 exit 常量；unknown key 含
   tab/LF/CR 转义、template missing、injected internal failure、malformed
   origin 不泄漏 secret 均锁定 stdout/stderr/exit）；

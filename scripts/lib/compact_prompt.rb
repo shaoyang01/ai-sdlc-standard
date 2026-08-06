@@ -540,7 +540,9 @@ module CompactPrompt
         %w[required_command_ids forbidden_command_ids].each do |list_key|
           list = profile[list_key]
           next unless list.is_a?(Array)
-          duplicates = list.tally.select { |_id, count| count > 1 }.keys
+          # Ruby 2.6-compatible occurrence count (Array#tally is 2.7+).
+          list_counts = list.each_with_object(Hash.new(0)) { |id, h| h[id] += 1 }
+          duplicates = list_counts.select { |_id, count| count > 1 }.keys
           unless duplicates.empty?
             diags << ["POLICY_COMMAND_CONFLICT", "validation_profiles.#{name}.#{list_key}",
                       "duplicate id(s) #{duplicates.join(', ')}"]
@@ -779,7 +781,6 @@ module CompactPrompt
   module Template
     module_function
 
-    WHEN_PATTERN = /<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->/
     ENDWHEN_MARKER = "<!-- ENDWHEN -->"
     BLOCK_PATTERN = /<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->(.*?)<!-- ENDWHEN -->/m
     # Placeholder extraction excludes HTML-comment markers (WHEN/ENDWHEN).
@@ -795,8 +796,9 @@ module CompactPrompt
       text.scan(PLACEHOLDER_PATTERN).uniq
     end
 
+    # Ruby 2.6-compatible occurrence count (Array#tally is 2.7+).
     def placeholder_counts(text)
-      text.scan(PLACEHOLDER_PATTERN).tally
+      text.scan(PLACEHOLDER_PATTERN).each_with_object(Hash.new(0)) { |placeholder, counts| counts[placeholder] += 1 }
     end
 
     # Shape-only check for the capsule template: exact key sets plus the two
@@ -858,24 +860,86 @@ module CompactPrompt
       nil
     end
 
-    # Returns [code, path, message] or nil when the conditional structure is
-    # exactly one non-nested block per legal value with no cross-section
-    # blocks and no unbalanced markers.
-    def conditional_error(text)
+    # ── Template structure gate (finding F05) ──
+    #
+    # One shared fail-closed gate for the fixed ten-section shape, the
+    # single line-start `delivery_type: CODEX_EXECUTION_PROMPT` and the
+    # complete strict WHEN/ENDWHEN marker scan. Called by CLI validate,
+    # CLI compile and the contract validator — the logic is never
+    # duplicated across the CLI and the validator.
+
+    # Fixed ten sections, exact order, no missing/duplicate/extra numbered
+    # section.
+    def section_error(text)
+      headings = text.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
+      unknown = headings - CompactPrompt::CODEX_PROMPT_SECTIONS
+      unless unknown.empty?
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "numbered section(s) not in the fixed ten-section list #{unknown.inspect}"]
+      end
+      missing = CompactPrompt::CODEX_PROMPT_SECTIONS - headings
+      unless missing.empty?
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "fixed section(s) missing from the template #{missing.inspect}"]
+      end
+      counts = headings.each_with_object(Hash.new(0)) { |heading, h| h[heading] += 1 }
+      duplicates = counts.select { |_heading, count| count > 1 }
+      unless duplicates.empty?
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "section heading(s) appear more than once #{duplicates.keys.inspect}"]
+      end
+      unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "section order must be exactly #{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}"]
+      end
+      nil
+    end
+
+    # Exactly one line starting with `delivery_type:` and its value must be
+    # precisely `CODEX_EXECUTION_PROMPT`.
+    def delivery_type_error(text)
+      lines = text.lines.grep(/\Adelivery_type:/)
+      unless lines.length == 1
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "template must contain exactly one line starting with delivery_type: (found #{lines.length})"]
+      end
+      unless lines.first.strip == "delivery_type: CODEX_EXECUTION_PROMPT"
+        return ["TEMPLATE_STRUCTURE_INVALID", "template",
+                "the single delivery_type line must be exactly `delivery_type: CODEX_EXECUTION_PROMPT`"]
+      end
+      nil
+    end
+
+    # Complete strict scan of every WHEN/ENDWHEN-like HTML-comment fragment.
+    # The scanner intentionally matches the substring WHEN|ENDWHEN inside any
+    # comment-like fragment (up to the first `>`), so malformed closings,
+    # WHENX-like tokens, unknown fields and unbalanced markers can never be
+    # silently ignored because they fail the legal-token regex (finding F05).
+    def marker_error(text)
+      # Scans every WHEN/ENDWHEN-like HTML-comment fragment up to the first
+      # `>` — or to the end of the text when the closing `>` is missing —
+      # so unterminated fragments are never silently ignored (finding F05).
       tokens = []
-      text.to_enum(:scan, /<!-- WHEN [^>]+ -->|<!-- ENDWHEN -->/).each do
+      text.to_enum(:scan, /<!--[^>]*?(?:WHEN|ENDWHEN)[^>]*?(?:>|\z)/).each do
         tokens << [Regexp.last_match.begin(0), Regexp.last_match[0]]
       end
 
       depth = 0
       blocks = []
       tokens.each_with_index do |(pos, token), index|
-        if token.start_with?("<!-- WHEN")
+        if token.include?("ENDWHEN")
+          unless token == ENDWHEN_MARKER
+            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
+                    "malformed ENDWHEN marker #{token.inspect} (expected exactly #{ENDWHEN_MARKER.inspect})"]
+          end
+          return ["TEMPLATE_CONDITIONAL_INVALID", "template", "ENDWHEN without matching WHEN"] if depth.zero?
+          depth -= 1
+        else
           return ["TEMPLATE_CONDITIONAL_INVALID", "template", "conditional blocks must not nest"] if depth.positive?
-          match = token.match(WHEN_PATTERN)
+          match = token.match(/\A<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->\z/)
           unless match
             return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "malformed WHEN marker #{token.inspect} (expected <!-- WHEN <field>=<value> -->)"]
+                    "malformed WHEN marker #{token.inspect} (expected exactly <!-- WHEN <field>=<value> -->)"]
           end
           field = match[1]
           value = match[2]
@@ -891,14 +955,13 @@ module CompactPrompt
           end
           blocks << [field, value]
           depth += 1
-        else
-          return ["TEMPLATE_CONDITIONAL_INVALID", "template", "ENDWHEN without matching WHEN"] if depth.zero?
-          depth -= 1
         end
       end
       return ["TEMPLATE_CONDITIONAL_INVALID", "template", "WHEN without matching ENDWHEN"] unless depth.zero?
 
-      counts = blocks.tally
+      # A template with no conditional blocks at all still fails closed:
+      # every legal field/value must appear exactly once.
+      counts = blocks.each_with_object(Hash.new(0)) { |block, h| h[block] += 1 }
       CONDITIONAL_FIELDS.each do |field, values|
         values.each do |value|
           next if counts[[field, value]] == 1
@@ -907,6 +970,19 @@ module CompactPrompt
         end
       end
       nil
+    end
+
+    # Single shared template-structure gate: section shape, delivery_type
+    # identity and the strict marker scan, in that order.
+    def structure_error(text)
+      section_error(text) || delivery_type_error(text) || marker_error(text)
+    end
+
+    # Backwards-compatible conditional gate: the strict marker scan is the
+    # single implementation, reused by the structure gate and by
+    # Renderer.render's defensive pre-check.
+    def conditional_error(text)
+      marker_error(text)
     end
 
     # Expands conditional blocks: each group keeps only the block whose value
@@ -934,29 +1010,110 @@ module CompactPrompt
       path.split(".").reduce(data) { |acc, key| acc.is_a?(Hash) ? acc[key] : nil }
     end
 
-    # Context-safe renderers (finding F06): every Capsule/Policy user string
-    # is encoded with Safety.encode before it enters the template. Findings
-    # render id and status through the same single-line encoder.
+    # Context-safe renderers (finding F06): the renderer is split by output
+    # context so one scalar encoder is never reused for every context.
+    #
+    #   render_yaml_scalar — values inside fenced YAML blocks (routing /
+    #     baseline / git / footer): deterministic double-quoted YAML scalar
+    #     that round-trips through YAML.safe_load to the exact original
+    #     Capsule value; integers/booleans render bare to keep YAML typing,
+    #     the string "none" stays quoted so it never parses as null.
+    #   render_prose_scalar — single-line strings in the template body
+    #     outside YAML blocks (visible Safety.encode, no second material /
+    #     heading / placeholder / marker can form).
+    #   render_list_item — one string bullet inside a prose list.
+    #   render_finding — one finding bullet (id + status).
+    #
+    # Every Capsule/Policy user string still passes through Safety or the
+    # YAML encoder first, so single-line injection protection is never
+    # weakened.
+
+    YAML_FENCE_OPEN = /\A```yaml\s*\z/
+    YAML_FENCE_CLOSE = /\A```\s*\z/
+
+    # Maps every template placeholder to :yaml (inside a fenced YAML block)
+    # or :prose (template body), based on the raw template text. Placeholder
+    # lines never sit inside conditional blocks, so the map is stable.
+    def placeholder_contexts(template_text)
+      contexts = {}
+      in_yaml = false
+      template_text.each_line do |line|
+        if YAML_FENCE_OPEN.match?(line)
+          in_yaml = true
+          next
+        elsif YAML_FENCE_CLOSE.match?(line)
+          in_yaml = false
+          next
+        end
+        CompactPrompt::PLACEHOLDER_SOURCES.keys.each do |placeholder|
+          contexts[placeholder] = in_yaml ? :yaml : :prose if line.include?(placeholder)
+        end
+      end
+      contexts
+    end
+
+    # Deterministic YAML double-quoted scalar. Backslash and double quote
+    # use YAML escapes; CR/LF/tab/NUL and other control characters become
+    # \r \n \t \0 \xNN; `<`/`>` become \u003C/\u003E so placeholder-like
+    # and conditional-marker-like text stays valid YAML and can never form
+    # a second delivery_type, heading or material. No character is ever
+    # silently dropped: YAML.safe_load of the quoted scalar equals the
+    # original Capsule string.
+    def render_yaml_scalar(value)
+      case value
+      when Integer, TrueClass, FalseClass
+        value.to_s
+      else
+        escaped = value.to_s.each_char.map do |ch|
+          case ch
+          when "\\" then "\\\\"
+          when '"' then '\\"'
+          when "\r" then "\\r"
+          when "\n" then "\\n"
+          when "\t" then "\\t"
+          when "\0" then "\\0"
+          when "<" then "\\u003C"
+          when ">" then "\\u003E"
+          else
+            # C0 controls, DEL and C1 controls (0x80-0x9F) become \xNN so
+            # no control byte can reach the output verbatim.
+            ch.ord < 0x20 || ch.ord == 0x7f || (ch.ord >= 0x80 && ch.ord <= 0x9f) ? format("\\x%02X", ch.ord) : ch
+          end
+        end.join
+        "\"#{escaped}\""
+      end
+    end
+
+    # Prose context: single-line visible escape, identical to Safety.encode.
+    def render_prose_scalar(value)
+      CompactPrompt::Safety.encode(value)
+    end
+
+    # One string bullet inside a prose list (single-line visible escape).
+    def render_list_item(item)
+      CompactPrompt::Safety.encode(item)
+    end
+
+    # One finding bullet: `id (status)`, both single-line visible escapes.
+    def render_finding(id, status)
+      "#{CompactPrompt::Safety.encode(id)} (#{CompactPrompt::Safety.encode(status)})"
+    end
 
     def render_list(values)
       return "  none" if values.nil? || values.empty?
       values.map do |item|
         case item
         when Hash
-          "  - #{CompactPrompt::Safety.encode(item['id'])} (#{CompactPrompt::Safety.encode(item['status'])})"
+          "  - #{render_finding(item['id'], item['status'])}"
         else
-          "  - #{CompactPrompt::Safety.encode(item)}"
+          "  - #{render_list_item(item)}"
         end
       end.join("\n")
     end
 
     def render_command_list(argv_list)
       return "  none" if argv_list.nil? || argv_list.empty?
-      argv_list.map { |argv| "  - #{CompactPrompt::Safety.encode(Shellwords.join(argv))}" }.join("\n")
-    end
-
-    def render_scalar(value)
-      CompactPrompt::Safety.encode(value)
+      argv_list.map { |argv| "  - #{render_list_item(Shellwords.join(argv))}" }.join("\n")
     end
 
     # Returns [text, nil] or [nil, [code, path, message]].
@@ -977,6 +1134,7 @@ module CompactPrompt
 
       expanded = Template.render_conditionals(template_text, capsule)
 
+      contexts = placeholder_contexts(template_text)
       profile = capsule["validation_profile"]
       Template.placeholders(expanded).each do |placeholder|
         source, path = CompactPrompt::PLACEHOLDER_SOURCES[placeholder]
@@ -986,7 +1144,14 @@ module CompactPrompt
         if source == "CAPSULE_FIELD"
           value = dig_path(capsule, path)
           return [nil, ["TEMPLATE_SOURCE_BINDING_MISMATCH", path, "capsule field not resolvable for #{placeholder}"]] if value.nil?
-          replacement = value.is_a?(Array) ? render_list(value) : render_scalar(value)
+          replacement =
+            if value.is_a?(Array)
+              render_list(value)
+            elsif contexts[placeholder] == :yaml
+              render_yaml_scalar(value)
+            else
+              render_prose_scalar(value)
+            end
           expanded = expanded.gsub(placeholder) { replacement }
         elsif source == "PCE_01_B_PROJECT_MAPPING"
           list_key = path.include?("required") ? "required_command_ids" : "forbidden_command_ids"
@@ -1139,6 +1304,8 @@ module CompactPrompt
                                             "meaning" => "registered placeholder appears more than once" },
       "TEMPLATE_SOURCE_BINDING_MISMATCH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                               "meaning" => "placeholder source not resolvable" },
+      "TEMPLATE_STRUCTURE_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                        "meaning" => "template section shape or delivery_type identity violation" },
       "TEMPLATE_CONDITIONAL_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                           "meaning" => "conditional block missing, duplicate, nested or malformed" },
       # exit 4 — GIT_BASELINE
@@ -1306,14 +1473,15 @@ module CompactPrompt
         end
         ttext = File.read(template_path, encoding: "UTF-8")
       end
-      # Template structure first (conditional blocks), then the single
-      # template-binding validator shared by validate, compile and the
+      # Template structure first (fixed ten sections, single
+      # delivery_type, complete strict WHEN/ENDWHEN marker scan), then the
+      # single template-binding validator shared by validate, compile and the
       # contract validator (finding F05): exact 27-placeholder set,
       # exactly-once occurrences, no unknown/missing/duplicate drift.
-      cerr = CompactPrompt::Template.conditional_error(ttext)
-      if cerr
-        stderr.write(CompactPrompt::Diagnostics.format(*cerr))
-        return Diagnostics.exit_for(cerr[0])
+      serr = CompactPrompt::Template.structure_error(ttext)
+      if serr
+        stderr.write(CompactPrompt::Diagnostics.format(*serr))
+        return Diagnostics.exit_for(serr[0])
       end
       berr = CompactPrompt::Template.binding_error(ttext)
       if berr

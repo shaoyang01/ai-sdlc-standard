@@ -136,19 +136,20 @@ if File.file?(File.join(ROOT, prompt_template_path))
     end
   end
   prompt_placeholders = CompactPrompt::Template.placeholders(prompt_template_text)
+  # Finding F05: single template-structure gate shared with the CLI —
+  # fixed ten sections in exact order, exactly one line-start
+  # delivery_type: CODEX_EXECUTION_PROMPT, and the complete strict
+  # WHEN/ENDWHEN marker scan (malformed / unknown / unpaired / nested /
+  # duplicate / cross-section all fail closed; WHEN-like text that does not
+  # match the legal-token regex is never silently ignored).
+  structure_error = CompactPrompt::Template.structure_error(prompt_template_text)
+  if structure_error
+    errors << "codex prompt template: #{structure_error[2]}"
+  end
   # Finding F05: single template-binding validator shared with the CLI —
   # exact 27-placeholder set, exactly-once occurrences, no unknown,
   # missing, duplicate or source-set drift.
   binding_error = CompactPrompt::Template.binding_error(prompt_template_text)
-  if binding_error
-    errors << "codex prompt template: #{binding_error[2]}"
-  end
-  # Finding PCE-01-B: conditional blocks must be exactly one non-nested block
-  # per legal value.
-  conditional_error = CompactPrompt::Template.conditional_error(prompt_template_text)
-  if conditional_error
-    errors << "codex prompt template: #{conditional_error[2]}"
-  end
   unknown_placeholders = prompt_placeholders - CompactPrompt::PLACEHOLDER_SOURCES.keys
   unless unknown_placeholders.empty?
     errors << "codex prompt template: unknown placeholder(s) not in the source table #{unknown_placeholders.inspect}"
@@ -289,7 +290,9 @@ if standard_text
   unless standard_text.include?("STANDARD_CONSTANT") && standard_text.include?("PCE_01_B_PROJECT_MAPPING")
     errors << "standard: source table must declare STANDARD_CONSTANT and PCE_01_B_PROJECT_MAPPING sources"
   end
-  duplicate_rows = table_placeholders.tally.select { |_p, count| count > 1 }
+  # Ruby 2.6-compatible occurrence count (Array#tally is 2.7+).
+  table_counts = table_placeholders.each_with_object(Hash.new(0)) { |p, h| h[p] += 1 }
+  duplicate_rows = table_counts.select { |_p, count| count > 1 }
   unless duplicate_rows.empty?
     errors << "standard: source table placeholder row(s) duplicated #{duplicate_rows.inspect}"
   end
@@ -524,6 +527,78 @@ def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
   end
 end
 
+# Finding F06: every fenced YAML block of a successful compile output is
+# extracted in order and parsed with `YAML.safe_load(permitted_classes: [],
+# aliases: false)`. The parsed field values and types must match the
+# declared Capsule/Standard expectations exactly — the fixture never merely
+# checks that escaped text is present.
+def assert_yaml_blocks(id, out, yaml_blocks, errors, counts)
+  blocks = []
+  buffer = nil
+  out.each_line do |line|
+    if buffer.nil? && line.match?(/\A```yaml\s*\z/)
+      buffer = +""
+    elsif buffer && line.match?(/\A```\s*\z/)
+      blocks << buffer
+      buffer = nil
+    elsif buffer
+      buffer << line
+    end
+  end
+  counts[:assertions] += 1
+  if blocks.length != yaml_blocks.length
+    errors << "renderer fixture #{id}: expected #{yaml_blocks.length} fenced yaml block(s) " \
+              "but found #{blocks.length}"
+    return
+  end
+  yaml_blocks.each_with_index do |(name, spec), index|
+    raw = blocks[index]
+    if raw.nil?
+      errors << "renderer fixture #{id}: yaml block #{name} not found"
+      next
+    end
+    begin
+      parsed = YAML.safe_load(raw, permitted_classes: [], aliases: false)
+    rescue Psych::Exception => e
+      errors << "renderer fixture #{id}: yaml block #{name} does not parse (#{e.class})"
+      next
+    end
+    counts[:assertions] += 1
+    unless parsed.is_a?(Hash)
+      errors << "renderer fixture #{id}: yaml block #{name} must parse to a mapping"
+      next
+    end
+    fields = spec["fields"]
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: yaml block #{name} key set must be exactly " \
+              "#{fields.keys.sort.inspect} got #{parsed.keys.sort.inspect}" \
+      unless parsed.keys.sort == fields.keys.sort
+    fields.each do |key, expectations|
+      counts[:assertions] += 1
+      if parsed[key] != expectations["value"]
+        errors << "renderer fixture #{id}: yaml block #{name}.#{key} value mismatch expected " \
+                  "#{expectations['value'].inspect} got #{parsed[key].inspect}"
+        next
+      end
+      next unless expectations.key?("type")
+      counts[:assertions] += 1
+      actual_type = case parsed[key]
+                    when String then "string"
+                    when Integer then "integer"
+                    when TrueClass, FalseClass then "boolean"
+                    when NilClass then "null"
+                    when Array then "array"
+                    when Hash then "mapping"
+                    else "unknown"
+                    end
+      if actual_type != expectations["type"]
+        errors << "renderer fixture #{id}: yaml block #{name}.#{key} type mismatch expected " \
+                  "#{expectations['type']} got #{actual_type}"
+      end
+    end
+  end
+end
+
 renderer_fixtures_path = "fixtures/compact-prompt/renderer.yaml"
 if File.file?(File.join(ROOT, renderer_fixtures_path))
   begin
@@ -556,10 +631,37 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           next
         end
         allowed_fixture_keys = %w[
-          id category description command capsule policy git_state expected template template_path
+          id category description command capsule policy git_state expected template template_path yaml_blocks
         ]
         unknown = fixture.keys - allowed_fixture_keys
         errors << "#{label}: unknown key(s) #{unknown.inspect}" unless unknown.empty?
+        if fixture.key?("yaml_blocks")
+          yaml_blocks = fixture["yaml_blocks"]
+          unless yaml_blocks.is_a?(Hash) && !yaml_blocks.empty?
+            errors << "#{label} #{id}: yaml_blocks must be a non-empty mapping"
+            next
+          end
+          yaml_blocks.each do |name, spec|
+            unless name.is_a?(String) && name.match?(/\A[a-z][a-z0-9_-]*\z/)
+              errors << "#{label} #{id}: yaml_blocks key #{name.inspect} must be a lowercase identifier"
+            end
+            unless spec.is_a?(Hash) && spec["fields"].is_a?(Hash) && !spec["fields"].empty?
+              errors << "#{label} #{id}: yaml_blocks.#{name} must declare non-empty fields"
+              next
+            end
+            spec["fields"].each do |key, expectations|
+              unless expectations.is_a?(Hash) && expectations.keys.include?("value")
+                errors << "#{label} #{id}: yaml_blocks.#{name}.#{key} must declare a value"
+                next
+              end
+              if expectations.key?("type") &&
+                 !%w[string integer boolean null].include?(expectations["type"])
+                errors << "#{label} #{id}: yaml_blocks.#{name}.#{key} type must be " \
+                          "string|integer|boolean|null"
+              end
+            end
+          end
+        end
         id = fixture["id"]
         unless id.is_a?(String) && id.match?(/\A[A-Z0-9-]+\z/) && id.length <= 64
           errors << "#{label}: id must match [A-Z0-9-]+ up to 64 chars"
@@ -620,6 +722,16 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           unless out == out2
             errors << "renderer fixture #{id}: repeated compile must be byte-identical"
           end
+        end
+
+        # Finding F06: successful compile outputs with declared yaml_blocks
+        # must yield fenced YAML blocks that safe_load with preserved
+        # values and types.
+        if category == "valid" && command == "compile" && exit_code.zero? &&
+           fixture.key?("yaml_blocks")
+          ycounts = { assertions: 0 }
+          assert_yaml_blocks(id, out, fixture["yaml_blocks"], errors, ycounts)
+          renderer_assertion_count += ycounts[:assertions]
         end
         renderer_fixture_count += 1
       end
