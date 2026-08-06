@@ -144,6 +144,30 @@ PCE-01-B 边界（如实记录）：
 - 不实现 Token 计算、JSON、stdin、inspect、`--output`、clipboard、网络
   请求、LLM、Git 写自动化或远程包发布。
 
+PCE-01-C1R Project Validation Profile Applicability（如实记录）：
+
+- 五种标准 Validation Profile 是标准 vocabulary；project policy 只声明
+  项目真实支持的非空 Profile 子集，Profile key 缺失表示项目不支持该
+  Profile；
+- 选择 policy 未声明的 Profile 稳定返回 `VALIDATION_PROFILE_UNSUPPORTED`
+  （exit 3，CONTRACT_OR_POLICY，registry 第 46 个 code），不回退、不静默
+  渲染缺失 Profile 的 required/forbidden 为 `none`；
+- 诊断 precedence 锁定：policy/已声明 Profile 结构错误先于
+  `VALIDATION_PROFILE_UNSUPPORTED`；`VALIDATION_PROFILE_UNSUPPORTED` 先于
+  command ID resolution；selected present 时所有已声明 Profile 的 unknown
+  command 报 `POLICY_COMMAND_ID_UNKNOWN`；
+- 新增 fixture matrix：PKB-shaped four-profile subset policy（缺 TYPE_ONLY）
+  validate/compile 正向、空 profile map、unknown profile key、malformed
+  declared profile、empty declared required、selected absent
+  validate/compile、selected present unknown command、malformed-before-
+  unsupported、unsupported-before-unknown-command；
+- 91 renderer fixtures / 472 assertions / 46 registered diagnostics；
+- 四项 compatibility proof：actual SDLC all-five policy 的 Profile key set
+  精确为五标准 Profile、通过 revised schema/declared mapping/command
+  resolution、同一 Capsule 在 all-five 与 selected-only subset policy 下
+  validate tuple（exit/stdout bytes/stderr bytes）完全一致、compile tuple
+  完全一致。
+
 边界：
 
 - 该 validator read-only、deterministic、no network、no filesystem writes、

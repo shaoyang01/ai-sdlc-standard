@@ -915,8 +915,18 @@ PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实�
   （`git check-ref-format --branch` + `git show-ref --verify --hash`，不以
   `rev-parse` 为权威）、运行时 template binding 闭合（27 占位符精确集合、
   恰好一次、无漂移）、injection-safe canonical rendering（单行可见转义 +
-  output verifier）与集中 diagnostics registry（44 个 code 登记 exit/类别，
+  output verifier）与集中 diagnostics registry（45 个 code 登记 exit/类别，
   标准双向一致静态证明）。
+- PCE-01-C1P 在 PKB 仓库只读 preflight 中发现真实 portability finding
+  `PCE_01_C1P_F01`（PROJECT_PROFILE_CAPABILITY_SET_NOT_PORTABLE，BLOCKING，
+  OPEN）：五种标准 Profile 语义不要求每个项目实现全部五种。
+- PCE-01-C1R（本工作包）实施 Project Validation Profile Applicability
+  Correction：project policy 可声明真实支持的非空 Profile 子集；选择未声明
+  Profile 稳定返回 `VALIDATION_PROFILE_UNSUPPORTED`（exit 3）；诊断
+  precedence 锁定；91 renderer fixtures / 472 assertions；diagnostics
+  registry 更新为 46 个 code；actual SDLC all-five policy 通过四项
+  compatibility proof（profile key set、schema/mapping/resolution、
+  validate tuple、compile tuple）。C1R 未 merge。
 - 两个项目真实验收属于 PCE-01-C。
 
 ## 近期执行顺序

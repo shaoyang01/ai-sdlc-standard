@@ -447,6 +447,18 @@ module CompactPrompt
     PROFILE_KEYS = %w[required_command_ids forbidden_command_ids].freeze
 
     # Returns an array of [code, path, message] diagnostics; empty = valid.
+    #
+    # PCE-01-C1R staged control flow (single implementation, no copies):
+    #   policy root and commands schema
+    #   → validation_profiles mapping basic schema (present, mapping,
+    #     nonempty subset; missing unselected standard profile is valid)
+    #   → unknown Profile key (wins over every later stage)
+    #   → declared-profile structure, duplicates, conflicts, DOC_ONLY rules
+    #   → selected-profile applicability (resolve_selected_profile, called
+    #     by the CLI before template/Git baseline; also reused by the
+    #     Renderer defensive path)
+    #   → command ID resolution (validate_command_ids) for every declared
+    #     profile
     def validate(data)
       diags = []
       return [["POLICY_SCHEMA_INVALID", "root", "policy root must be a mapping"]] unless data.is_a?(Hash)
@@ -497,24 +509,41 @@ module CompactPrompt
           end
         end
       end
+      return diags unless diags.empty?
 
+      # Stage 2: validation_profiles basic schema. A nonempty subset of the
+      # five standard profiles is valid; missing unselected profiles are
+      # valid (they mean the project does not support them).
+      unless data.key?("validation_profiles")
+        diags << ["POLICY_SCHEMA_INVALID", "root", "missing key(s) validation_profiles"]
+        return diags
+      end
       profiles = data["validation_profiles"]
       unless profiles.is_a?(Hash)
         diags << ["POLICY_SCHEMA_INVALID", "validation_profiles", "must be a mapping"]
         return diags
       end
-      missing_profiles = CompactPrompt::VALIDATION_PROFILES - profiles.keys
-      unless missing_profiles.empty?
+      if profiles.empty?
         diags << ["POLICY_PROFILE_MAPPING_MISSING", "validation_profiles",
-                  "missing profile(s) #{missing_profiles.join(', ')}"]
+                  "must declare at least one supported profile"]
+        return diags
       end
+
+      # Stage 3: unknown Profile key. POLICY_SCHEMA_INVALID wins even when
+      # no supported profile is declared alongside it.
       unknown_profiles = profiles.keys - CompactPrompt::VALIDATION_PROFILES
       unless unknown_profiles.empty?
         diags << ["POLICY_SCHEMA_INVALID", "validation_profiles",
-                  "unknown profile(s) #{unknown_profiles.join(', ')}"]
+                  "unknown profile(s) #{unknown_profiles.join(', ')}; supported profiles are " \
+                  "#{CompactPrompt::VALIDATION_PROFILES.join(', ')}"]
+        return diags
       end
 
+      # Stage 5: declared-profile structure, duplicates, conflicts and
+      # DOC_ONLY rules, iterated in the fixed standard order (not YAML key
+      # input order) and only for actually declared profiles.
       CompactPrompt::VALIDATION_PROFILES.each do |name|
+        next unless profiles.key?(name)
         profile = profiles[name]
         unless profile.is_a?(Hash)
           diags << ["POLICY_PROFILE_MAPPING_MISSING", "validation_profiles.#{name}", "profile mapping missing"]
@@ -553,12 +582,6 @@ module CompactPrompt
           diags << ["POLICY_COMMAND_CONFLICT", "validation_profiles.#{name}",
                     "required/forbidden overlap #{overlap.join(', ')}"]
         end
-        (required + forbidden).each do |id|
-          unless commands.key?(id)
-            diags << ["POLICY_COMMAND_ID_UNKNOWN", "validation_profiles.#{name}",
-                      "command id #{id.inspect} is not registered in commands"]
-          end
-        end
         if name == "DOC_ONLY"
           if required.include?("ROOT_NPM_TEST")
             diags << ["DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN", "validation_profiles.DOC_ONLY.required_command_ids",
@@ -574,6 +597,41 @@ module CompactPrompt
         end
       end
 
+      diags
+    end
+
+    # ── Stage 6: single selected-profile resolver ──
+    # Returns [mapping, nil] on success or [nil, [code, path, message]] when
+    # the Capsule-selected profile is not declared by the policy. Called by
+    # the CLI before template binding and Git baseline, and reused by the
+    # Renderer defensive path. There is no absent → empty-list fallback.
+    def resolve_selected_profile(data, profile)
+      mapping = data.is_a?(Hash) ? data.dig("validation_profiles", profile) : nil
+      if mapping.nil?
+        return [nil, ["VALIDATION_PROFILE_UNSUPPORTED", "validation_profile",
+                      "project policy does not declare selected profile #{profile}"]]
+      end
+      [mapping, nil]
+    end
+
+    # ── Stage 7: command ID resolution for every declared profile ──
+    # Runs only after structural validation and selected-profile resolution
+    # both pass. Checks all declared profiles, not just the selected one.
+    def validate_command_ids(data)
+      diags = []
+      profiles = data.is_a?(Hash) ? data["validation_profiles"] : nil
+      commands = data.is_a?(Hash) ? data["commands"] : nil
+      return diags unless profiles.is_a?(Hash) && commands.is_a?(Hash)
+      CompactPrompt::VALIDATION_PROFILES.each do |name|
+        profile = profiles[name]
+        next unless profile.is_a?(Hash)
+        (profile["required_command_ids"].to_a + profile["forbidden_command_ids"].to_a).each do |id|
+          unless commands.key?(id)
+            diags << ["POLICY_COMMAND_ID_UNKNOWN", "validation_profiles.#{name}",
+                      "command id #{id.inspect} is not registered in commands"]
+          end
+        end
+      end
       diags
     end
   end
@@ -1153,6 +1211,15 @@ module CompactPrompt
 
       expanded = Template.render_conditionals(template_text, capsule)
 
+      # Selected-profile applicability resolves through the single shared
+      # resolver before any placeholder replacement, so no prompt bytes are
+      # produced when the project policy does not declare the selected
+      # profile (PCE-01-C1R). No absent → empty-list fallback exists.
+      resolved_mapping, rerr = CompactPrompt::Policy.resolve_selected_profile(
+        policy, capsule["validation_profile"]
+      )
+      return [nil, rerr] if rerr
+
       contexts = placeholder_contexts(template_text)
       profile = capsule["validation_profile"]
       Template.placeholders(expanded).each do |placeholder|
@@ -1174,7 +1241,7 @@ module CompactPrompt
           expanded = expanded.gsub(placeholder) { replacement }
         elsif source == "PCE_01_B_PROJECT_MAPPING"
           list_key = path.include?("required") ? "required_command_ids" : "forbidden_command_ids"
-          ids = policy.dig("validation_profiles", profile, list_key) || []
+          ids = resolved_mapping[list_key] || []
           argv_list = ids.map { |id| policy.dig("commands", id, "argv") }
           replacement = render_command_list(argv_list)
           expanded = expanded.gsub(placeholder) { replacement }
@@ -1311,6 +1378,8 @@ module CompactPrompt
                                        "meaning" => "command id not registered in commands" },
       "POLICY_COMMAND_CONFLICT" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                      "meaning" => "duplicate or required/forbidden overlap in profile" },
+      "VALIDATION_PROFILE_UNSUPPORTED" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                            "meaning" => "Capsule selected validation profile is not declared by project policy" },
       "DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                               "meaning" => "DOC_ONLY must not require root npm test" },
       "TEMPLATE_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
@@ -1481,6 +1550,21 @@ module CompactPrompt
       unless pdiags.empty?
         stderr.write(CompactPrompt::Diagnostics.render(pdiags))
         return Diagnostics.exit_for(pdiags.first[0])
+      end
+      # Stage 6: selected-profile applicability (before template binding and
+      # Git baseline). Fail closed: no absent → empty-list fallback.
+      resolved_mapping, rerr = CompactPrompt::Policy.resolve_selected_profile(
+        pdata, data["validation_profile"]
+      )
+      if rerr
+        stderr.write(CompactPrompt::Diagnostics.format(*rerr))
+        return Diagnostics.exit_for(rerr[0])
+      end
+      # Stage 7: command ID resolution for every declared profile.
+      cdiags = CompactPrompt::Policy.validate_command_ids(pdata)
+      unless cdiags.empty?
+        stderr.write(CompactPrompt::Diagnostics.render(cdiags))
+        return Diagnostics.exit_for(cdiags.first[0])
       end
 
       ttext = template_text

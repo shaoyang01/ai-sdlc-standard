@@ -750,6 +750,127 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
   end
 end
 
+# ── C1R backward-compatibility proofs ──
+# The actual SDLC all-five project policy must keep working and must be
+# tuple-equivalent to a selected-only subset policy for the same Capsule.
+# Each proof counts as one assertion in the renderer assertion total.
+
+def run_cli_tuple(command, capsule_text, policy_text, git_state, template_text)
+  out = StringIO.new
+  err = StringIO.new
+  exit_code = CompactPrompt::CLI.main(
+    [command, "capsule.yaml"],
+    cwd: "/synthetic/repo",
+    stdout: out,
+    stderr: err,
+    git_state: git_state,
+    capsule_text: capsule_text,
+    policy_text: policy_text,
+    template_text: template_text
+  )
+  [exit_code, out.string.bytesize, err.string.bytesize]
+end
+
+actual_policy_path = ".ai-sdlc/prompt-policy.yaml"
+if File.file?(File.join(ROOT, actual_policy_path)) && prompt_template_text
+  actual_policy_text = read_asset(actual_policy_path)
+  actual_policy, pclass = CompactPrompt::RestrictedYAML.parse(actual_policy_text)
+  if pclass || !actual_policy.is_a?(Hash)
+    errors << "compatibility proof: actual SDLC policy does not parse as restricted YAML (#{pclass || 'not a mapping'})"
+  else
+    # Proof 1: the actual policy declares exactly the five standard profiles.
+    renderer_assertion_count += 1
+    unless actual_policy["validation_profiles"].is_a?(Hash) &&
+           actual_policy["validation_profiles"].keys.sort == CompactPrompt::VALIDATION_PROFILES.sort
+      errors << "compatibility proof: actual SDLC policy profile key set must be exactly " \
+                "#{CompactPrompt::VALIDATION_PROFILES.inspect}"
+    end
+
+    # Proof 2: the actual policy passes revised schema, declared mapping and
+    # command resolution, and a supported selected profile resolves.
+    renderer_assertion_count += 1
+    proof2_diags = CompactPrompt::Policy.validate(actual_policy) +
+                   CompactPrompt::Policy.validate_command_ids(actual_policy)
+    resolved2, rerr2 = CompactPrompt::Policy.resolve_selected_profile(actual_policy, "LOCAL_BEHAVIOR")
+    unless proof2_diags.empty? && rerr2.nil? && resolved2.is_a?(Hash)
+      errors << "compatibility proof: actual SDLC policy must pass revised schema/mapping/resolution " \
+                "(diags #{proof2_diags.inspect}, resolver #{rerr2.inspect})"
+    end
+
+    # Selected-only subset policy: same commands, only LOCAL_BEHAVIOR declared.
+    subset_policy = actual_policy.dup
+    subset_policy["validation_profiles"] = { "LOCAL_BEHAVIOR" => actual_policy["validation_profiles"]["LOCAL_BEHAVIOR"] }
+    subset_text = YAML.dump(subset_policy)
+
+    proof_capsule = <<~CAPSULE
+      task_id: c1r-compat-proof
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: #{actual_policy["repository"]}
+        branch: #{actual_policy["fact_branch"]}
+        head: a76775ed54a7d8361eeb57e304af62f854094ebf
+        pull_request: none
+      objective: "C1R 兼容性证明"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "tuple 等价"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "c1r compat proof"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "C1R-COMPAT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    CAPSULE
+
+    proof_git = RendererFixtureGitState.new(
+      "origin_url" => "https://github.com/#{actual_policy["repository"]}.git",
+      "refs" => {
+        "refs/heads/#{actual_policy["fact_branch"]}" => "a76775ed54a7d8361eeb57e304af62f854094ebf",
+        "refs/remotes/origin/#{actual_policy["fact_branch"]}" => "a76775ed54a7d8361eeb57e304af62f854094ebf"
+      },
+      "tracked" => [".ai-sdlc/prompt-policy.yaml"]
+    )
+
+    # Proof 3: validate tuple equivalence (exit, stdout bytes, stderr bytes).
+    renderer_assertion_count += 1
+    tuple_all_five = run_cli_tuple("validate", proof_capsule, actual_policy_text, proof_git, prompt_template_text)
+    tuple_subset = run_cli_tuple("validate", proof_capsule, subset_text, proof_git, prompt_template_text)
+    unless tuple_all_five == tuple_subset
+      errors << "compatibility proof: validate tuple must be identical for all-five vs subset policy " \
+                "(all-five #{tuple_all_five.inspect}, subset #{tuple_subset.inspect})"
+    end
+
+    # Proof 4: compile tuple equivalence.
+    renderer_assertion_count += 1
+    tuple_all_five = run_cli_tuple("compile", proof_capsule, actual_policy_text, proof_git, prompt_template_text)
+    tuple_subset = run_cli_tuple("compile", proof_capsule, subset_text, proof_git, prompt_template_text)
+    unless tuple_all_five == tuple_subset
+      errors << "compatibility proof: compile tuple must be identical for all-five vs subset policy " \
+                "(all-five #{tuple_all_five.inspect}, subset #{tuple_subset.inspect})"
+    end
+  end
+end
+
 # ── F07 diagnostics registry static proof ──
 # The registry is the single source of truth for B diagnostic codes, exit
 # categories and stable meanings. This block proves:
@@ -898,6 +1019,7 @@ if errors.empty?
        "(#{renderer_assertion_count} assertions); " \
        "#{CompactPrompt::PROMPT_MODES.length} prompt modes with exact budgets; " \
        "#{CompactPrompt::VALIDATION_PROFILES.length} validation profiles; " \
+       "#{CompactPrompt::Diagnostics::REGISTRY.length} registered diagnostics; " \
        "codex prompt template #{CompactPrompt::CODEX_PROMPT_SECTIONS.length}-section order " \
        "with #{CompactPrompt::Template::CONDITIONAL_FIELDS.values.flatten.length} conditional blocks; " \
        "#{prompt_placeholders ? prompt_placeholders.length : 0} prompt placeholders closed " \
@@ -905,6 +1027,7 @@ if errors.empty?
        "standard asset statically verified (fields, git enums, budgets, profiles, " \
        "continuation delta-only, completion report budget, sections, single material, " \
        "stop_after_report, public classifications); " \
+       "diagnostics registry/emit-site/section-14 closed; " \
        "no premature claims)"
 else
   warn "compact prompt contract validation failed:"

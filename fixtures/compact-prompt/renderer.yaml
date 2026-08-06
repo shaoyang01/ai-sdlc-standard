@@ -1014,12 +1014,12 @@ fixtures:
       stderr_contains:
         - "POLICY_SCHEMA_INVALID\troot"
 
-  - id: RENDER-NEG-POLICY-MISSING-PROFILE
-    category: negative
+  - id: RENDER-VALID-POLICY-SUBSET-VALIDATE-SUPPORTED
+    category: valid
     command: validate
-    description: "Policy missing a validation profile is rejected"
+    description: "PKB-shaped four-profile policy subset with supported selected profile passes validate (C1R)"
     capsule: |
-      task_id: fixture-policy-missing-profile
+      task_id: fixture-policy-subset-validate
       prompt_mode: MICRO_FIX
       routing:
         recipient: Codex
@@ -1031,29 +1031,29 @@ fixtures:
         branch: feature/runtime-v1
         head: 7c21cc8bb9649188505dafea1402049c74bd9be7
         pull_request: none
-      objective: "policy 缺失 profile 必须被拒绝"
+      objective: "subset policy 的已支持 profile 必须通过 validate"
       delta:
         open_findings: []
         required_changes:
           - docs/VALIDATION.md
         acceptance_criteria:
-          - "POLICY_PROFILE_MAPPING_MISSING 分类"
+          - "validate 输出 compact execution capsule valid"
         preserved_closed_findings: []
       scope:
         allowed_files:
           - docs/VALIDATION.md
         maximum_changed_files: 1
-      validation_profile: DOC_ONLY
+      validation_profile: LOCAL_BEHAVIOR
       git:
         commit_count: 1
-        commit_message: "test policy missing profile"
+        commit_message: "test subset validate"
         push_mode: NORMAL_PUSH
         pull_request_action: CREATE_DRAFT
       forbidden_actions:
         - "rebase"
       completion_report:
         recipient: "owner-session"
-        name: "POLICY-MISSING-PROFILE Report"
+        name: "SUBSET-VALIDATE Report"
         maximum_lines: 80
         stop_after_report: true
     policy: |
@@ -1062,19 +1062,21 @@ fixtures:
       repository: acme/widgets
       fact_branch: feature/runtime-v1
       commands:
-        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+        PKB_VALIDATE_NOTES: {argv: [python3, 90-system/scripts/validate_notes.py]}
+        PKB_REPO_TESTS: {argv: [python3, -B, 90-system/scripts/run_repo_tests.py]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
       validation_profiles:
         DOC_ONLY:
-          required_command_ids: [SKILL_CONTRACTS]
-          forbidden_command_ids: []
-        TYPE_ONLY:
-          required_command_ids: [SKILL_CONTRACTS]
+          required_command_ids: [PKB_VALIDATE_NOTES, GIT_DIFF_CHECK]
           forbidden_command_ids: []
         LOCAL_BEHAVIOR:
-          required_command_ids: [SKILL_CONTRACTS]
+          required_command_ids: [PKB_REPO_TESTS, GIT_DIFF_CHECK]
           forbidden_command_ids: []
         PERSISTENCE_CONCURRENCY:
-          required_command_ids: [SKILL_CONTRACTS]
+          required_command_ids: [PKB_REPO_TESTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [PKB_VALIDATE_NOTES, PKB_REPO_TESTS, GIT_DIFF_CHECK]
           forbidden_command_ids: []
     git_state:
       origin_url: "https://github.com/acme/widgets.git"
@@ -1084,11 +1086,10 @@ fixtures:
       tracked:
         - .ai-sdlc/prompt-policy.yaml
     expected:
-      exit: 3
-      stdout: empty
-      stderr: contains
-      stderr_contains:
-        - "POLICY_PROFILE_MAPPING_MISSING\tvalidation_profiles"
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
 
   - id: RENDER-NEG-POLICY-UNKNOWN-COMMAND-ID
     category: negative
@@ -5992,3 +5993,777 @@ fixtures:
       stderr: contains
       stderr_contains:
         - "INTERNAL_ERROR\tinternal"
+
+  - id: RENDER-VALID-POLICY-SUBSET-COMPILE-SUPPORTED
+    category: valid
+    command: compile
+    description: "Subset policy with supported selected profile compiles deterministically (C1R)"
+    capsule: |
+      task_id: fixture-subset-compile
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "subset policy 的已支持 profile 必须成功 compile"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "compile 输出单份 Prompt"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test subset compile"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SUBSET-COMPILE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        PKB_VALIDATE_NOTES: {argv: [python3, 90-system/scripts/validate_notes.py]}
+        PKB_REPO_TESTS: {argv: [python3, -B, 90-system/scripts/run_repo_tests.py]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [PKB_VALIDATE_NOTES, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [PKB_REPO_TESTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [PKB_VALIDATE_NOTES, PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-VALID-PKB-FOUR-PROFILE-COMPILE-LOCAL
+    category: valid
+    command: compile
+    description: "PKB-shaped four-profile policy compiles with LOCAL_BEHAVIOR (C1R)"
+    capsule: |
+      task_id: fixture-pkb-four-compile
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "PKB-shaped four-profile policy 必须成功 compile"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "compile 输出单份 Prompt"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "test pkb four profile"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "PKB-FOUR-COMPILE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        PKB_VALIDATE_NOTES: {argv: [python3, 90-system/scripts/validate_notes.py]}
+        PKB_REPO_TESTS: {argv: [python3, -B, 90-system/scripts/run_repo_tests.py]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [PKB_VALIDATE_NOTES, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [PKB_REPO_TESTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [PKB_VALIDATE_NOTES, PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-NEG-POLICY-EMPTY-PROFILE-MAP
+    category: negative
+    command: validate
+    description: "Empty validation_profiles mapping is rejected (C1R)"
+    capsule: |
+      task_id: fixture-empty-profile-map
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 profile map 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_PROFILE_MAPPING_MISSING 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty profile map"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EMPTY-PROFILE-MAP Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles: {}
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_PROFILE_MAPPING_MISSING\tvalidation_profiles"
+
+  - id: RENDER-NEG-POLICY-UNKNOWN-PROFILE-KEY
+    category: negative
+    command: validate
+    description: "Unknown profile key with no supported profile is rejected as POLICY_SCHEMA_INVALID (C1R)"
+    capsule: |
+      task_id: fixture-unknown-profile-key
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "unknown profile key 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_SCHEMA_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unknown profile key"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UNKNOWN-PROFILE-KEY Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        MYSTERY_PROFILE:
+          required_command_ids: [SKILL_CONTRACTS]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_SCHEMA_INVALID\tvalidation_profiles"
+
+  - id: RENDER-NEG-POLICY-MALFORMED-DECLARED-PROFILE
+    category: negative
+    command: validate
+    description: "Declared profile with wrong mapping shape is rejected (C1R)"
+    capsule: |
+      task_id: fixture-malformed-declared
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "形状错误的已声明 profile 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_SCHEMA_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test malformed declared"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "MALFORMED-DECLARED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          extra_field: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_SCHEMA_INVALID\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-POLICY-EMPTY-DECLARED-REQUIRED
+    category: negative
+    command: validate
+    description: "Declared profile with empty required_command_ids is rejected (C1R)"
+    capsule: |
+      task_id: fixture-empty-declared-required
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "空 required_command_ids 必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_PROFILE_MAPPING_MISSING 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test empty declared required"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EMPTY-DECLARED-REQUIRED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: []
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_PROFILE_MAPPING_MISSING\tvalidation_profiles.DOC_ONLY.required_command_ids"
+
+  - id: RENDER-NEG-POLICY-SELECTED-PROFILE-ABSENT-VALIDATE
+    category: negative
+    command: validate
+    description: "Selected profile absent from policy fails validate with VALIDATION_PROFILE_UNSUPPORTED (C1R)"
+    capsule: |
+      task_id: fixture-selected-absent-validate
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "未声明 profile 必须稳定 fail-closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "VALIDATION_PROFILE_UNSUPPORTED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: TYPE_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test selected absent validate"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SELECTED-ABSENT-VALIDATE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        PKB_VALIDATE_NOTES: {argv: [python3, 90-system/scripts/validate_notes.py]}
+        PKB_REPO_TESTS: {argv: [python3, -B, 90-system/scripts/run_repo_tests.py]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [PKB_VALIDATE_NOTES, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [PKB_REPO_TESTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [PKB_VALIDATE_NOTES, PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_PROFILE_UNSUPPORTED\tvalidation_profile\tproject policy does not declare selected profile TYPE_ONLY"
+
+  - id: RENDER-NEG-POLICY-SELECTED-PROFILE-ABSENT-COMPILE
+    category: negative
+    command: compile
+    description: "Selected profile absent from policy fails compile with empty stdout (C1R)"
+    capsule: |
+      task_id: fixture-selected-absent-compile
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "compile 选择未声明 profile 必须无部分 Prompt"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "VALIDATION_PROFILE_UNSUPPORTED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: TYPE_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test selected absent compile"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SELECTED-ABSENT-COMPILE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        PKB_VALIDATE_NOTES: {argv: [python3, 90-system/scripts/validate_notes.py]}
+        PKB_REPO_TESTS: {argv: [python3, -B, 90-system/scripts/run_repo_tests.py]}
+        GIT_DIFF_CHECK: {argv: [git, diff, --check]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [PKB_VALIDATE_NOTES, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        LOCAL_BEHAVIOR:
+          required_command_ids: [PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+        PERSISTENCE_CONCURRENCY:
+          required_command_ids: [PKB_REPO_TESTS]
+          forbidden_command_ids: []
+        GLOBAL_CONTRACT:
+          required_command_ids: [PKB_VALIDATE_NOTES, PKB_REPO_TESTS, GIT_DIFF_CHECK]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_PROFILE_UNSUPPORTED\tvalidation_profile"
+
+  - id: RENDER-NEG-POLICY-SELECTED-PRESENT-UNKNOWN-COMMAND
+    category: negative
+    command: validate
+    description: "Selected present with unknown command in a declared profile yields POLICY_COMMAND_ID_UNKNOWN (C1R)"
+    capsule: |
+      task_id: fixture-selected-present-unknown
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "已声明 profile 引用未知命令必须被拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_COMMAND_ID_UNKNOWN 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test selected present unknown"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "SELECTED-PRESENT-UNKNOWN Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS, NO_SUCH_ID]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_COMMAND_ID_UNKNOWN\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-POLICY-MALFORMED-BEFORE-UNSUPPORTED
+    category: negative
+    command: validate
+    description: "Malformed declared profile wins over selected-absent; no unsupported diagnostic (C1R precedence)"
+    capsule: |
+      task_id: fixture-malformed-before-unsupported
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "结构错误必须先于 unsupported 诊断"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "POLICY_SCHEMA_INVALID 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: TYPE_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test malformed before unsupported"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "MALFORMED-BEFORE-UNSUPPORTED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        DOC_ONLY:
+          required_command_ids: [SKILL_CONTRACTS]
+          extra_field: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "POLICY_SCHEMA_INVALID\tvalidation_profiles.DOC_ONLY"
+
+  - id: RENDER-NEG-POLICY-UNSUPPORTED-BEFORE-UNKNOWN-COMMAND
+    category: negative
+    command: validate
+    description: "Selected absent wins over unknown command in another declared profile (C1R precedence)"
+    capsule: |
+      task_id: fixture-unsupported-before-unknown
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "selected absent 必须先于 unknown command 诊断"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "VALIDATION_PROFILE_UNSUPPORTED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: TYPE_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test unsupported before unknown"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "UNSUPPORTED-BEFORE-UNKNOWN Report"
+        maximum_lines: 80
+        stop_after_report: true
+    policy: |
+      schema: compact-prompt-project-policy-v1
+      project_id: fixture-project
+      repository: acme/widgets
+      fact_branch: feature/runtime-v1
+      commands:
+        SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
+      validation_profiles:
+        LOCAL_BEHAVIOR:
+          required_command_ids: [SKILL_CONTRACTS, NO_SUCH_ID]
+          forbidden_command_ids: []
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_PROFILE_UNSUPPORTED\tvalidation_profile"
