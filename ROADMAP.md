@@ -950,8 +950,11 @@ Codex Execution Prompt（compiled prompt）。
 
 - SDLC 与 PKB 各需真实 verbose-before 与 Renderer-after 的 lines / bytes /
   tokens（或明确 REPRODUCIBLE_PROXY metric）、reduction ratio、semantic
-  preservation 证据，以及 real local Agent consumption（真实 Codex 执行
-  compiled prompt 的实测；无法可靠观察时如实写 unavailable）。
+  preservation 证据，以及 real Agent consumption：真实本地 Agent/Codex 必须
+  实际消费 production Renderer 生成的 compiled prompt 并完成真实任务；
+  real Agent consumption 本身不得以 unavailable 作为 PASS。
+- execution duration 是独立的 secondary metric；只有在缺少可靠 measurement
+  boundary 时可记录 unavailable，且不作为 hard gate。
 - 压缩允许删除重复历史、closed finding 长正文与同义治理说明，但不得丢失
   routing / baseline / objective / scope / validation / Git / forbidden /
   report / stop 等 material constraints。
