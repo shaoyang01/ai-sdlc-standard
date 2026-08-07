@@ -353,14 +353,36 @@ backtrace 或部分 Prompt。exit codes：
 - `repository`：owner/name；
 - `fact_branch`：合法 Git branch 名；
 - `commands`：`COMMAND_ID → {argv: [string, ...]}`；
-- `validation_profiles`：五个 profile → `{required_command_ids: [...],
-  forbidden_command_ids: [...]}`。
+- `validation_profiles`：五种标准 Profile 的非空子集 →
+  `{required_command_ids: [...], forbidden_command_ids: [...]}`。
 
 policy 使用受限 YAML；拒绝 unknown key、missing、duplicate、anchor、alias、
 tag、merge、null、零文档或多文档。`COMMAND_ID` 匹配
 `[A-Z][A-Z0-9_]{0,63}`；`argv` 非空、元素为非空单行字符串且不含 NUL、CR、
-LF。五个 profile 必须全部存在；required 非空；required 与 forbidden 各自无
-重复、二者无交集，且全部 ID 已在 `commands` 登记。
+LF。
+
+五种标准 Profile 是标准 vocabulary（`DOC_ONLY`、`TYPE_ONLY`、
+`LOCAL_BEHAVIOR`、`PERSISTENCE_CONCURRENCY`、`GLOBAL_CONTRACT`）；project
+policy 只声明项目真实支持的非空 Profile 子集：
+
+- Profile key 存在表示项目真实支持该 Profile；
+- Profile key 缺失表示项目不支持该 Profile，缺失未选择的 Profile 合法；
+- `validation_profiles` 为空 mapping 分类为 `POLICY_PROFILE_MAPPING_MISSING`；
+- unknown Profile key 分类为 `POLICY_SCHEMA_INVALID`（即使同时没有声明任何
+  支持的 Profile，`POLICY_SCHEMA_INVALID` 也获胜）；
+- Capsule 选择 policy 未声明的 Profile 时，稳定返回
+  `VALIDATION_PROFILE_UNSUPPORTED`（exit 3，CONTRACT_OR_POLICY），不回退到
+  其他 Profile，也不把缺失 Profile 的 required/forbidden commands 静默渲染
+  为 `none`；
+- 诊断 precedence：policy 结构与已声明 Profile 校验错误先于
+  `VALIDATION_PROFILE_UNSUPPORTED`；`VALIDATION_PROFILE_UNSUPPORTED` 先于
+  command ID resolution（其他已声明 Profile 中的 unknown command）；
+- 禁止伪映射：不得用 unittest、语法检查、no-op 或命令名包装填充
+  `TYPE_ONLY` 等未真实支持的 Profile。
+
+已声明 Profile 的 required 非空；required 与 forbidden 各自无重复、二者无
+交集，且全部 ID 已在 `commands` 登记。所有已声明 Profile 的 command ID 都
+必须解析，而不只是被选择的 Profile。
 
 policy 不得覆盖公共模板、Mode budget、forbidden actions 或 Git write policy；
 Capsule 不接受命令文本，Renderer 只渲染命令、不执行项目验证命令。
@@ -503,6 +525,7 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `POLICY_PROFILE_MAPPING_MISSING` | 3 | CONTRACT_OR_POLICY | profile 映射缺失或 required 为空 |
 | `POLICY_COMMAND_ID_UNKNOWN` | 3 | CONTRACT_OR_POLICY | 命令 ID 未在 commands 登记 |
 | `POLICY_COMMAND_CONFLICT` | 3 | CONTRACT_OR_POLICY | 重复或 required/forbidden 交集 |
+| `VALIDATION_PROFILE_UNSUPPORTED` | 3 | CONTRACT_OR_POLICY | Capsule 选择的 Validation Profile 未被 project policy 声明 |
 | `DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN` | 3 | CONTRACT_OR_POLICY | DOC_ONLY 不得要求根 npm test |
 | `TEMPLATE_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | 找不到 prompt 模板文件 |
 | `TEMPLATE_PLACEHOLDER_UNKNOWN` | 3 | CONTRACT_OR_POLICY | 模板占位符无来源行 |

@@ -168,3 +168,13 @@ skills/sdlc-docflow-writer/
 - portable 边界：不依赖特定 Agent 配置目录、不写死本机路径、不访问网络、
   不执行 Git 写操作、不做 Token 计算；渲染输出仅由 Capsule、policy 与
   标准包模板字节决定（byte-identical）。
+
+PCE-01-C1R Profile Applicability 可移植边界（如实记录）：
+
+- 标准定义五种 Validation Profile 语义，不要求每个项目实现全部五种；
+- project policy 只声明真实支持的 Profile 子集；缺失未选择的 Profile
+  合法；
+- 选择未支持 Profile 稳定失败（`VALIDATION_PROFILE_UNSUPPORTED`，exit 3），
+  不回退到其他 Profile、不静默渲染 `none`；
+- 不得用临时 typechecker、unittest、语法检查、no-op 或命令名包装填补
+  能力缺口（禁止伪映射）。
