@@ -895,7 +895,13 @@ roots = [
 
 ## PCE-01: Compact Prompt Standard and Lightweight Renderer
 
-PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实登记：
+PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。原始用户问题是
+真实 SDLC / PKB 执行 Prompt 过长、且重复历史反复堆积，造成 token 消耗与
+Agent 阅读负担；解决链是 **Capsule → Renderer → compiled prompt**：执行方以
+紧凑 Capsule 声明唯一目标与约束，production Renderer 确定性编译出完整
+Codex Execution Prompt（compiled prompt）。
+
+### 已建立事实
 
 - PCE-01-A 只建立 Compact Prompt Contract：合同
   （`ai-sdlc/compact-prompt-standard.md`）、四份模板（Execution Capsule、
@@ -908,26 +914,66 @@ PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。当前事实�
   validate/compile）、项目 policy（`.ai-sdlc/prompt-policy.yaml`）、renderer
   fixtures（`fixtures/compact-prompt/renderer.yaml`）、确定性渲染、Git
   named-ref 只读核验与 line/byte budget gate；no-network、无 Git 写自动化、
-  无 Token 计算、无远程包发布。当前实现包含 repository identity 三方闭合
-  （origin == capsule == policy，大小写不敏感）、origin 严格锁定三种
-  github.com 形式（拒绝 credential/query/fragment/额外路径/控制字符，
-  diagnostics 不回显 secret）、exact named-ref gate
-  （`git check-ref-format --branch` + `git show-ref --verify --hash`，不以
-  `rev-parse` 为权威）、运行时 template binding 闭合（27 占位符精确集合、
-  恰好一次、无漂移）、injection-safe canonical rendering（单行可见转义 +
-  output verifier）与集中 diagnostics registry（45 个 code 登记 exit/类别，
-  标准双向一致静态证明）。
+  无 Token 计算、无远程包发布。集中 diagnostics registry 登记 46 个 code
+  （exit/类别双向静态一致）。
 - PCE-01-C1P 在 PKB 仓库只读 preflight 中发现真实 portability finding
   `PCE_01_C1P_F01`（PROJECT_PROFILE_CAPABILITY_SET_NOT_PORTABLE，BLOCKING，
   OPEN）：五种标准 Profile 语义不要求每个项目实现全部五种。
-- PCE-01-C1R（本工作包）实施 Project Validation Profile Applicability
-  Correction：project policy 可声明真实支持的非空 Profile 子集；选择未声明
-  Profile 稳定返回 `VALIDATION_PROFILE_UNSUPPORTED`（exit 3）；诊断
-  precedence 锁定；91 renderer fixtures / 472 assertions；diagnostics
-  registry 更新为 46 个 code；actual SDLC all-five policy 通过四项
+- PCE-01-C1R 实施 Project Validation Profile Applicability Correction
+  （Draft PR #66，三 commit / 八文件）：project policy 可声明真实支持的非空
+  Profile 子集；选择未声明 Profile 稳定返回 `VALIDATION_PROFILE_UNSUPPORTED`
+  （exit 3）；诊断 precedence 锁定；91 renderer fixtures / 472 assertions；
+  diagnostics registry 46 个 code；actual SDLC all-five policy 通过四项
   compatibility proof（profile key set、schema/mapping/resolution、
-  validate tuple、compile tuple）。C1R 未 merge。
-- 两个项目真实验收属于 PCE-01-C。
+  validate tuple、compile tuple）。C1R 已 merge 进入 Source（merge commit
+  `86ca9cbd…` / tree `7b10c712…`），状态登记为 **CLOSED_SOURCE_VERIFIED**。
+- PCE-01-C1S Source Refresh 已将 self-hosting preflight 刷新到 post-merge
+  Source `86ca9cbd…` / tree `7b10c712…`，post-merge push CI 四项 job 全绿，
+  状态登记为 **PASS_REFRESHED**。
+- PCE core user value（真实 compact acceptance）仍未完成：本段只登记到
+  C1S preflight；不得声明 PCE overall complete / source_verified。
+
+### MR1 → MR4 当前 critical path
+
+当前 critical path 改为：
+
+- **MR1** SDLC real compact acceptance（本工作包，见下）
+- **MR2** PKB minimal project-policy bootstrap：提供最小真实 portability evidence
+- **MR3** PKB real compact acceptance
+- **MR4** cross-project final acceptance
+
+旧完整 C1P / C1B / C2 / C3 / C4 独立主线不再作为当前 critical path。
+`PCE_01_C1P_F01` 保持 **OPEN**，其 resolution route 登记为 MR2 + MR3 的
+最小真实 portability evidence；不得以 fake typechecker 或 no-op 冒充。
+
+### Real Compact Acceptance DoD（MR1 及后续 MR 通用）
+
+- SDLC 与 PKB 各需真实 verbose-before 与 Renderer-after 的 lines / bytes /
+  tokens（或明确 REPRODUCIBLE_PROXY metric）、reduction ratio、semantic
+  preservation 证据，以及 real local Agent consumption（真实 Codex 执行
+  compiled prompt 的实测；无法可靠观察时如实写 unavailable）。
+- 压缩允许删除重复历史、closed finding 长正文与同义治理说明，但不得丢失
+  routing / baseline / objective / scope / validation / Git / forbidden /
+  report / stop 等 material constraints。
+- anti-overgovernance：只有 compilation correctness、compression
+  measurement、semantic preservation、real Agent execution correctness、
+  irreversible Source integrity 可以成为 PCE critical-path blocker；其余
+  治理要求不得阻塞 critical path。
+
+### MR1 verbose-before 冻结基线（不发送给执行 Agent）
+
+- sha256 = `11cd88cfb6148ef69c3cfc0fbc695c0420ef18879a8bf798148f3b4b9d10befb`
+- lines = `327`，bytes = `11198`，proxy_tokens = `2635`
+- metric = `REPRODUCIBLE_PROXY`，tokenizer = `PCE_UNICODE_WORDPUNCT_V1`
+- PCE_UNICODE_WORDPUNCT_V1：忽略 whitespace；CJK/Hiragana/Katakana/Hangul
+  每个 Unicode scalar 计 1；ASCII alnum/_ 连续段计 1；其他 Unicode
+  letter/number 连续段计 1；其他非空白 scalar 各计 1。
+
+### Operational Rule
+
+PCE 验收后，具备 project policy 且适用 Compact Prompt Contract 的真实
+Codex 工作包默认走 **Capsule → production Renderer → compiled prompt**；
+只有不适用或真实验收失败才回退 verbose route。
 
 ## 近期执行顺序
 
