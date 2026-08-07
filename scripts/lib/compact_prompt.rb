@@ -546,7 +546,7 @@ module CompactPrompt
         next unless profiles.key?(name)
         profile = profiles[name]
         unless profile.is_a?(Hash)
-          diags << ["POLICY_PROFILE_MAPPING_MISSING", "validation_profiles.#{name}", "profile mapping missing"]
+          diags << ["POLICY_SCHEMA_INVALID", "validation_profiles.#{name}", "profile mapping must be a mapping"]
           next
         end
         unless profile.keys.all? { |key| key.is_a?(String) } && profile.keys.sort == PROFILE_KEYS.sort
@@ -1194,7 +1194,11 @@ module CompactPrompt
     end
 
     # Returns [text, nil] or [nil, [code, path, message]].
-    def render(capsule, policy, template_text)
+    # `resolved_profile_mapping` is the single optional mapping input: the CLI
+    # normal path passes the mapping it already resolved (so the renderer
+    # never resolves twice); direct-callers without it trigger exactly one
+    # defensive resolution through the shared resolver (PCE-01-C1R R03).
+    def render(capsule, policy, template_text, resolved_profile_mapping: nil)
       cerr = Template.conditional_error(template_text)
       return [nil, cerr] if cerr
 
@@ -1215,10 +1219,16 @@ module CompactPrompt
       # resolver before any placeholder replacement, so no prompt bytes are
       # produced when the project policy does not declare the selected
       # profile (PCE-01-C1R). No absent → empty-list fallback exists.
-      resolved_mapping, rerr = CompactPrompt::Policy.resolve_selected_profile(
-        policy, capsule["validation_profile"]
-      )
-      return [nil, rerr] if rerr
+      if resolved_profile_mapping.nil?
+        # Defensive direct-call path: resolve exactly once through the same
+        # resolver the CLI uses; no duplicated applicability logic.
+        resolved_mapping, rerr = CompactPrompt::Policy.resolve_selected_profile(
+          policy, capsule["validation_profile"]
+        )
+        return [nil, rerr] if rerr
+      else
+        resolved_mapping = resolved_profile_mapping
+      end
 
       contexts = placeholder_contexts(template_text)
       profile = capsule["validation_profile"]
@@ -1603,7 +1613,9 @@ module CompactPrompt
         return EXIT_OK
       end
 
-      prompt, rerr = CompactPrompt::Renderer.render(data, pdata, ttext)
+      prompt, rerr = CompactPrompt::Renderer.render(
+        data, pdata, ttext, resolved_profile_mapping: resolved_mapping
+      )
       if rerr
         stderr.write(CompactPrompt::Diagnostics.format(*rerr))
         return Diagnostics.exit_for(rerr[0])

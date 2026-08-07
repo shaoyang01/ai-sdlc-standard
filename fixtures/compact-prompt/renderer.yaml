@@ -6280,7 +6280,7 @@ fixtures:
   - id: RENDER-NEG-POLICY-MALFORMED-DECLARED-PROFILE
     category: negative
     command: validate
-    description: "Declared profile with wrong mapping shape is rejected (C1R)"
+    description: "Declared profile with non-mapping value is rejected (C1R)"
     capsule: |
       task_id: fixture-malformed-declared
       prompt_mode: MICRO_FIX
@@ -6327,9 +6327,7 @@ fixtures:
       commands:
         SKILL_CONTRACTS: {argv: [ruby, scripts/validate-skill-contracts.rb]}
       validation_profiles:
-        DOC_ONLY:
-          required_command_ids: [SKILL_CONTRACTS]
-          extra_field: true
+        DOC_ONLY: []
     git_state:
       origin_url: "https://github.com/acme/widgets.git"
       refs:

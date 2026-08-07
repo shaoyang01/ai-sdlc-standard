@@ -768,7 +768,7 @@ def run_cli_tuple(command, capsule_text, policy_text, git_state, template_text)
     policy_text: policy_text,
     template_text: template_text
   )
-  [exit_code, out.string.bytesize, err.string.bytesize]
+  [exit_code, out.string.b, err.string.b]
 end
 
 actual_policy_path = ".ai-sdlc/prompt-policy.yaml"
