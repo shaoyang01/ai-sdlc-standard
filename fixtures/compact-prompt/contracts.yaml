@@ -779,3 +779,177 @@ fixtures:
     description: "Capsule text containing no YAML document at all (only a comment) (F06)"
     capsule: |
       # no document here
+
+  # ── PCE-MR3-M4E4-REVIEW-01: known-extension applicability regressions ──
+  # Known code extensions keep the fast pure classification (no baseline
+  # tree query): py/sh/ts satisfy GLOBAL_CONTRACT, py under DOC_ONLY is
+  # VALIDATION_UNDERSPECIFIED.
+
+  - id: CAPSULE-VALID-GLOBAL-CONTRACT-PY
+    category: valid
+    description: "GLOBAL_CONTRACT with a known .py change satisfies applicability purely (no git evidence needed)"
+    capsule: |
+      task_id: contract-valid-global-py
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "GLOBAL_CONTRACT 携带 .py 变更"
+      delta:
+        open_findings: []
+        required_changes:
+          - core/loop-runtime.py
+        acceptance_criteria:
+          - "GLOBAL_CONTRACT 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.py
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test py global contract"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "GLOBAL-PY Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-VALID-GLOBAL-CONTRACT-SH
+    category: valid
+    description: "GLOBAL_CONTRACT with a known .sh change satisfies applicability purely"
+    capsule: |
+      task_id: contract-valid-global-sh
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "GLOBAL_CONTRACT 携带 .sh 变更"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/audit.sh
+        acceptance_criteria:
+          - "GLOBAL_CONTRACT 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/audit.sh
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test sh global contract"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "GLOBAL-SH Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-VALID-GLOBAL-CONTRACT-TS
+    category: valid
+    description: "GLOBAL_CONTRACT with a known .ts change satisfies applicability purely"
+    capsule: |
+      task_id: contract-valid-global-ts
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "GLOBAL_CONTRACT 携带 .ts 变更"
+      delta:
+        open_findings: []
+        required_changes:
+          - core/loop-runtime.ts
+        acceptance_criteria:
+          - "GLOBAL_CONTRACT 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.ts
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test ts global contract"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "GLOBAL-TS Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-NEG-DOC-ONLY-PY
+    category: negative
+    expected_classification: VALIDATION_UNDERSPECIFIED
+    description: "DOC_ONLY with a known .py change is VALIDATION_UNDERSPECIFIED purely"
+    capsule: |
+      task_id: contract-neg-doc-py
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "DOC_ONLY 携带 .py 变更必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - core/loop-runtime.py
+        acceptance_criteria:
+          - "VALIDATION_UNDERSPECIFIED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - core/loop-runtime.py
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test py under doc only"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "DOC-PY Report"
+        maximum_lines: 80
+        stop_after_report: true

@@ -44,6 +44,15 @@ ruby scripts/validate-gate-runner-scenarios.rb
   （公共分类），在遍历与 `YAML.safe_load` 之前拒绝；
 - 四种 Prompt Mode 名称与 hard limit 预算精确；
 - 五种 Validation Profile 名称与语义键值精确（DOC_ONLY 默认禁止根 `npm test`）；
+- 代码类路径分类：已知代码扩展名（`.ts .tsx .js .jsx .rb .py .go .java .sh`）
+  保持纯 Capsule 阶段快速判定；无扩展名 required_change 不提前判为
+  non-code，当其 code/non-code 结果影响 Profile applicability 时延后到
+  exact Git baseline 证据——仅当该路径已存在于精确 `baseline.head` 的
+  Git 树且树条目为 `100755` blob 时产生 code 信号；brand-new 无扩展名
+  新增、无扩展名 `100644` blob、symlink/gitlink/tree 非 blob 条目均不
+  产生 code 信号；authority 只有 exact baseline commit 树，working-tree
+  权限位与当前 checkout 均不参与；树查询失败 fail closed 到
+  `INTERNAL_ERROR`（PCE-MR3-M4E4-REVIEW-01）；
 - Git 枚举精确：`push_mode` 仅 `NONE | NORMAL_PUSH`，`pull_request_action` 仅
   `NONE | CREATE_DRAFT | UPDATE_DRAFT`，`NO_PUSH` 已完全删除；
 - Codex Prompt 模板固定十节顺序与单份 `CODEX_EXECUTION_PROMPT` 输出；模板不含

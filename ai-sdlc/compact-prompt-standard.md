@@ -190,6 +190,27 @@ documentation: .md .markdown .yaml .yml .json .txt
 code:          .ts .tsx .js .jsx .rb .py .go .java .sh
 ```
 
+补充 code 信号（PCE-MR3-M4E4-REVIEW-01）：对无扩展名的
+`delta.required_changes` 路径，当且仅当该路径已存在于 exact
+`baseline.head` 的 Git 树中且树条目为 `100755` blob 时，分类为代码类：
+
+```text
+code: 已知代码扩展名
+      或（无扩展名 required_change 且 exact baseline.head 树条目 == 100755 blob）
+```
+
+约束：
+
+- 无扩展名路径在纯 Capsule 阶段不提前判为 non-code；其 code/non-code
+  结果影响 Profile applicability 时延后到 exact Git baseline 证据后再判定；
+- brand-new 无扩展名新增（baseline 树中不存在该条目）不产生 code 信号；
+- 无扩展名 `100644` blob 不产生 code 信号；
+- symlink（`120000`）、gitlink（`160000`）、tree 等非 blob 条目不产生
+  code 信号；
+- code 信号 authority 只有 Capsule `baseline.head` 的 exact commit 树；
+  working-tree 权限位、当前 checkout、隐式 HEAD 或文件名猜测均不是
+  authority。
+
 项目级 profile 映射（真实命令解析）属于 PCE-01-B，不在本文件定义。
 
 ## 4. Continuation 与 Findings

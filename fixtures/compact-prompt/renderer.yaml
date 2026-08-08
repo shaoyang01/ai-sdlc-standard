@@ -6765,3 +6765,652 @@ fixtures:
       stderr: contains
       stderr_contains:
         - "VALIDATION_PROFILE_UNSUPPORTED\tvalidation_profile"
+
+  # ── PCE-MR3-M4E4-REVIEW-01: extensionless executable code classification ──
+  # The supplemental code signal is exactly: extensionless required_change
+  # already present at exact capsule baseline.head as a 100755 blob in the
+  # baseline tree (synthetic `tree_entries`, keyed by "<exact head> <path>").
+  # Known extensions never query the tree; absent entries, 100644 blobs,
+  # symlinks (120000), gitlinks (160000) and trees stay non-code; a
+  # tree-query failure fails closed to INTERNAL_ERROR. The synthetic state
+  # carries no worktree mode, so baseline-tree mode is always the sole
+  # authority (worktree/current-HEAD mode can never override it).
+
+  - id: RENDER-VALID-EXTENSIONLESS-EXEC-GLOBAL-CONTRACT
+    category: valid
+    command: validate
+    description: "Extensionless 100755 blob at exact baseline.head satisfies GLOBAL_CONTRACT (covers modify/delete pre-execution classification from required_changes + baseline tree)"
+    capsule: |
+      task_id: fixture-extensionless-exec
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "修改/删除 baseline 中已有的无扩展名可执行脚本"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "GLOBAL_CONTRACT 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test extensionless executable"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-EXEC Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100755"}
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-VALID-EXTENSIONLESS-EXEC-PERSISTENCE-CONCURRENCY
+    category: valid
+    command: validate
+    description: "Extensionless 100755 blob satisfies PERSISTENCE_CONCURRENCY"
+    capsule: |
+      task_id: fixture-extensionless-exec-pc
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "修改无扩展名可执行守护进程"
+      delta:
+        open_findings: []
+        required_changes:
+          - tools/daemon
+        acceptance_criteria:
+          - "PERSISTENCE_CONCURRENCY 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - tools/daemon
+        maximum_changed_files: 1
+      validation_profile: PERSISTENCE_CONCURRENCY
+      git:
+        commit_count: 1
+        commit_message: "test extensionless daemon"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-PC Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 tools/daemon": {type: blob, mode: "100755"}
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-NEG-EXTENSIONLESS-EXEC-DOC-ONLY
+    category: negative
+    command: validate
+    description: "Extensionless 100755 blob under DOC_ONLY is VALIDATION_UNDERSPECIFIED"
+    capsule: |
+      task_id: fixture-extensionless-exec-doc
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "DOC_ONLY 携带无扩展名可执行脚本"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "VALIDATION_UNDERSPECIFIED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test extensionless exec under DOC_ONLY"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-DOC Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100755"}
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_UNDERSPECIFIED\tcapsule"
+
+  - id: RENDER-NEG-EXTENSIONLESS-100644-GLOBAL-CONTRACT
+    category: negative
+    command: validate
+    description: "Extensionless 100644 blob is NOT code: GLOBAL_CONTRACT stays VALIDATION_OVERPROVISIONED"
+    capsule: |
+      task_id: fixture-extensionless-644
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "无扩展名非可执行文件不得满足 GLOBAL_CONTRACT"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "VALIDATION_OVERPROVISIONED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test extensionless 100644"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-644 Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100644"}
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_OVERPROVISIONED\tcapsule"
+
+  - id: RENDER-VALID-EXTENSIONLESS-100644-DOC-ONLY
+    category: valid
+    command: validate
+    description: "Extensionless 100644 blob under DOC_ONLY passes (non-code)"
+    capsule: |
+      task_id: fixture-extensionless-644-doc
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "DOC_ONLY 携带无扩展名非可执行文件"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "DOC_ONLY 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "test extensionless 100644 under DOC_ONLY"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-644-DOC Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100644"}
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-NEG-EXTENSIONLESS-ABSENT-GLOBAL-CONTRACT
+    category: negative
+    command: validate
+    description: "Brand-new extensionless add absent from baseline is deliberately NOT code: GLOBAL_CONTRACT stays VALIDATION_OVERPROVISIONED"
+    capsule: |
+      task_id: fixture-extensionless-absent
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "新增无扩展名文件且 baseline 中不存在不得视为代码"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "VALIDATION_OVERPROVISIONED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test absent extensionless add"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-ABSENT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      # no tree_entries: baseline entry missing → non-code, no failure
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_OVERPROVISIONED\tcapsule"
+
+  - id: RENDER-VALID-EXTENSIONLESS-EXEC-PLUS-DOCS-GLOBAL-CONTRACT
+    category: valid
+    command: validate
+    description: "Mixed extensionless 100755 blob plus docs satisfies GLOBAL_CONTRACT"
+    capsule: |
+      task_id: fixture-extensionless-mixed
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "无扩展名可执行脚本加文档"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "GLOBAL_CONTRACT 适用"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+          - docs/VALIDATION.md
+        maximum_changed_files: 2
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test extensionless mixed"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-MIXED Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100755"}
+    expected:
+      exit: 0
+      stdout: exact
+      stdout_exact: "compact execution capsule valid\n"
+      stderr: empty
+
+  - id: RENDER-NEG-EXTENSIONLESS-NON-BLOB-GLOBAL-CONTRACT
+    category: negative
+    command: validate
+    description: "Symlink (120000), gitlink (160000) and tree entries are never code: GLOBAL_CONTRACT stays VALIDATION_OVERPROVISIONED"
+    capsule: |
+      task_id: fixture-extensionless-nonblob
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "非 blob 树条目不得视为代码"
+      delta:
+        open_findings: []
+        required_changes:
+          - lnk/tool
+          - mod/sub
+          - t/dir
+        acceptance_criteria:
+          - "VALIDATION_OVERPROVISIONED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - lnk/tool
+          - mod/sub
+          - t/dir
+        maximum_changed_files: 3
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test non-blob extensionless"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-NONBLOB Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 lnk/tool": {type: blob, mode: "120000"}
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 mod/sub": {type: commit, mode: "160000"}
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 t/dir": {type: tree, mode: "040000"}
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_OVERPROVISIONED\tcapsule"
+
+  - id: RENDER-NEG-EXTENSIONLESS-TREE-QUERY-FAILURE
+    category: negative
+    command: validate
+    description: "Baseline tree query failure fails closed to INTERNAL_ERROR (no new public diagnostic)"
+    capsule: |
+      task_id: fixture-extensionless-query-fail
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "树查询失败必须 fail closed"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "INTERNAL_ERROR 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test tree query failure"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-QUERY-FAIL Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      raise_on:
+        - tree_entry
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "INTERNAL_ERROR\tinternal"
+
+  - id: RENDER-NEG-EXTENSIONLESS-BASELINE-HEAD-BINDING
+    category: negative
+    command: validate
+    description: "Tree query binds to the exact capsule baseline.head, not any other SHA: entry stored under another commit is absent → non-code"
+    capsule: |
+      task_id: fixture-extensionless-head-binding
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "查询必须绑定 exact baseline.head"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "VALIDATION_OVERPROVISIONED 分类"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test baseline head binding"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-HEAD-BINDING Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "a76775ed54a7d8361eeb57e304af62f854094ebf scripts/runner": {type: blob, mode: "100755"}
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains:
+        - "VALIDATION_OVERPROVISIONED\tcapsule"
+
+  - id: RENDER-VALID-EXTENSIONLESS-EXEC-GLOBAL-CONTRACT-COMPILE
+    category: valid
+    command: compile
+    description: "Extensionless 100755 blob satisfies GLOBAL_CONTRACT through the full compile path (deterministic bytes)"
+    capsule: |
+      task_id: fixture-extensionless-exec-compile
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "编译无扩展名可执行脚本的 Prompt"
+      delta:
+        open_findings: []
+        required_changes:
+          - scripts/runner
+        acceptance_criteria:
+          - "compile 成功且确定性"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - scripts/runner
+        maximum_changed_files: 1
+      validation_profile: GLOBAL_CONTRACT
+      git:
+        commit_count: 1
+        commit_message: "test extensionless compile"
+        push_mode: NORMAL_PUSH
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "owner-session"
+        name: "EXTENSIONLESS-COMPILE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+      tree_entries:
+        "7c21cc8bb9649188505dafea1402049c74bd9be7 scripts/runner": {type: blob, mode: "100755"}
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
