@@ -427,13 +427,67 @@ module CompactPrompt
 
       changed_extensions = delta["required_changes"].map { |path| path_extension(path) }
       has_code = changed_extensions.any? { |ext| CompactPrompt::CODE_EXTENSIONS.include?(ext) }
+      # PCE-MR3-M4E4-REVIEW-01: an extensionless required_change's
+      # code/non-code outcome is decided against exact baseline-tree
+      # evidence. When that outcome can change the selected Profile's
+      # applicability it is deferred to the repository-aware stage (after
+      # GitBaseline.check) instead of being guessed as non-code here; known
+      # extensions keep the fast pure decision exactly as before.
+      extensionless_present = delta["required_changes"].any? { |path| path_extension(path).empty? }
       case profile
       when "DOC_ONLY"
         return "VALIDATION_UNDERSPECIFIED" if has_code
+        return nil if extensionless_present
       when "PERSISTENCE_CONCURRENCY", "GLOBAL_CONTRACT"
-        return "VALIDATION_OVERPROVISIONED" unless has_code
+        return "VALIDATION_OVERPROVISIONED" unless has_code || extensionless_present
       end
 
+      nil
+    end
+
+    # True exactly when Capsule.validate deferred the applicability
+    # decision: the selected Profile performs an applicability check
+    # (DOC_ONLY / PERSISTENCE_CONCURRENCY / GLOBAL_CONTRACT), no known code
+    # extension is present, and at least one extensionless required_change
+    # exists whose baseline-tree entry can flip the outcome.
+    def extensionless_applicability_deferred?(data)
+      return false unless data.is_a?(Hash)
+      profile = data["validation_profile"]
+      return false unless %w[DOC_ONLY PERSISTENCE_CONCURRENCY GLOBAL_CONTRACT].include?(profile)
+      changes = data.dig("delta", "required_changes")
+      return false unless changes.is_a?(Array)
+      return false if changes.any? { |path| CompactPrompt::CODE_EXTENSIONS.include?(path_extension(path)) }
+      changes.any? { |path| path_extension(path).empty? }
+    end
+
+    # Repository-aware applicability completion (PCE-MR3-M4E4-REVIEW-01).
+    # Runs only for deferred extensionless paths and only after the
+    # GitBaseline exact named-ref gate, so baseline.head is already an
+    # exact validated SHA. Each extensionless required_change is queried at
+    # that exact commit tree; the sole supplemental code signal is
+    # present && type == "blob" && mode == "100755". Absent entries,
+    # non-blob entries and every other mode stay non-code. A git/parse
+    # failure fails closed to INTERNAL_ERROR. Returns [code, path, message]
+    # or nil.
+    def repository_aware_applicability(data, git_state, root)
+      baseline_head = data.dig("baseline", "head")
+      profile = data["validation_profile"]
+      code_signal = false
+      data.dig("delta", "required_changes").each do |path|
+        next unless path_extension(path).empty?
+        entry = git_state.tree_entry(root, baseline_head, path)
+        unless entry
+          return ["INTERNAL_ERROR", "internal", "unexpected internal error; no backtrace emitted"]
+        end
+        present, type, mode = entry
+        code_signal = true if present && type == "blob" && mode == "100755"
+      end
+      case profile
+      when "DOC_ONLY"
+        return ["VALIDATION_UNDERSPECIFIED", "capsule", "capsule contract violation"] if code_signal
+      when "PERSISTENCE_CONCURRENCY", "GLOBAL_CONTRACT"
+        return ["VALIDATION_OVERPROVISIONED", "capsule", "capsule contract violation"] unless code_signal
+      end
       nil
     end
   end
@@ -728,6 +782,42 @@ module CompactPrompt
     def exact_ref_head(root, ref)
       out, _err, status = Open3.capture3("git", "-C", root, "show-ref", "--verify", "--hash", ref)
       status.success? && out.strip.match?(CompactPrompt::SHA40_PATTERN) ? out.strip : nil
+    end
+
+    # Exact baseline-tree entry query (PCE-MR3-M4E4-REVIEW-01). Minimal
+    # read-only addition used only for extensionless required_changes whose
+    # code/non-code outcome can change selected-Profile applicability.
+    #
+    # Contract:
+    #   commit argument is the already-validated exact capsule
+    #     baseline.head (40-hex SHA) — never a branch, implicit HEAD or
+    #     arbitrary revision expression;
+    #   path is a repository-relative literal pathspec (`:(literal)`), so
+    #     glob/pathspec magic can never change exact-match semantics; argv
+    #     is fixed and never passes through a shell;
+    #   no worktree metadata, no File.executable?, no fetch, no network.
+    #
+    # Returns:
+    #   [true, type, mode]  entry present and parseable (type is one of
+    #     blob/tree/commit, mode is the raw tree mode such as 100755)
+    #   [false, nil, nil]   entry absent from the baseline tree (not a
+    #     failure; caller treats it as non-code)
+    #   nil                 git failure, unparseable output, multiple
+    #     records or path mismatch — caller fails closed (INTERNAL_ERROR)
+    def tree_entry(root, baseline_commit_sha, repository_relative_path)
+      out, _err, status = Open3.capture3(
+        "git", "-C", root, "ls-tree", "-z", baseline_commit_sha, "--",
+        ":(literal)#{repository_relative_path}"
+      )
+      return nil unless status.success?
+      records = out.split("\0").reject(&:empty?)
+      return [false, nil, nil] if records.empty?
+      return nil if records.length > 1 # one literal path can never match twice
+      meta, name = records.first.split("\t", 2)
+      return nil unless name == repository_relative_path # exact literal identity
+      mode, type, = meta.split(" ", 3)
+      return nil if mode.nil? || type.nil?
+      [true, type, mode]
     end
   end
 
@@ -1606,6 +1696,18 @@ module CompactPrompt
       if gerr
         stderr.write(CompactPrompt::Diagnostics.format(*gerr))
         return Diagnostics.exit_for(gerr[0])
+      end
+
+      # PCE-MR3-M4E4-REVIEW-01: complete deferred extensionless
+      # applicability against exact baseline-tree evidence (baseline.head
+      # already passed Capsule SHA validation and the GitBaseline exact
+      # named-ref gate) before any validate/compile output is produced.
+      if CompactPrompt::Capsule.extensionless_applicability_deferred?(data)
+        aerr = CompactPrompt::Capsule.repository_aware_applicability(data, gs, root)
+        if aerr
+          stderr.write(CompactPrompt::Diagnostics.format(*aerr))
+          return Diagnostics.exit_for(aerr[0])
+        end
       end
 
       if command == "validate"

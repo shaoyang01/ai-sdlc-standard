@@ -414,6 +414,7 @@ class RendererFixtureGitState
     @tracked = spec["tracked"] || []
     @branch_valid = spec["branch_valid"]
     @raise_on = spec["raise_on"] || []
+    @tree_entries = spec["tree_entries"] || {}
   end
 
   def repository_root(_cwd)
@@ -441,6 +442,19 @@ class RendererFixtureGitState
   # never revision expressions.
   def exact_ref_head(_root, ref)
     @refs[ref]
+  end
+
+  # Synthetic exact baseline-tree entry query (PCE-MR3-M4E4-REVIEW-01),
+  # keyed by "<exact baseline.head> <repository-relative path>". An absent
+  # key means the entry is missing from the baseline tree (non-code, not a
+  # failure); `raise_on: [tree_entry]` injects the fail-closed path. The
+  # synthetic state carries no worktree mode at all, so baseline-tree mode
+  # is always the sole authority.
+  def tree_entry(_root, baseline_commit_sha, repository_relative_path)
+    raise "injected internal failure" if @raise_on.include?("tree_entry")
+    entry = @tree_entries["#{baseline_commit_sha} #{repository_relative_path}"]
+    return [false, nil, nil] if entry.nil?
+    [true, entry["type"], entry["mode"]]
   end
 end
 
