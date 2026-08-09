@@ -30,9 +30,10 @@ ruby scripts/validate-gate-runner-scenarios.rb
 
 ## Compact Prompt Contract Validation
 
-`ruby scripts/validate-compact-prompt-contracts.rb` 校验 PCE-01-A Compact Prompt Contract：
+`ruby scripts/validate-compact-prompt-contracts.rb` 校验 PCE-01-A Compact Prompt Contract 与
+PCE-01-B Compact Execution Envelope v2 production 输出合同：
 
-- 十个 whitelist 合同资产均存在；
+- 十六个 whitelist 合同资产均存在；
 - Capsule 根字段与嵌套字段集合精确（unknown key / 缺失必填字段拒绝）；
 - fail-closed 值规则：`delta.required_changes`、`delta.acceptance_criteria`、
   `scope.allowed_files`、`forbidden_actions` 必须非空（空数组分类为
@@ -42,7 +43,9 @@ ruby scripts/validate-gate-runner-scenarios.rb
   `YAML.safe_load(permitted_classes: [], aliases: false)` + AST 级检测；
 - 单 YAML document：零文档与多文档统一分类为 `YAML_DOCUMENT_COUNT_INVALID`
   （公共分类），在遍历与 `YAML.safe_load` 之前拒绝；
-- 四种 Prompt Mode 名称与 hard limit 预算精确；
+- 四种 Prompt Mode 名称与 v2 硬限制预算精确（lines / bytes /
+  PCE_UNICODE_WORDPUNCT_V1 proxy tokens），budget gate 顺序固定：
+  canonical output verification → line → byte → proxy-token → stdout；
 - 五种 Validation Profile 名称与语义键值精确（DOC_ONLY 默认禁止根 `npm test`）；
 - 代码类路径分类：已知代码扩展名（`.ts .tsx .js .jsx .rb .py .go .java .sh`）
   保持纯 Capsule 阶段快速判定；无扩展名 required_change 不提前判为
@@ -55,33 +58,47 @@ ruby scripts/validate-gate-runner-scenarios.rb
   `INTERNAL_ERROR`（PCE-MR3-M4E4-REVIEW-01）；
 - Git 枚举精确：`push_mode` 仅 `NONE | NORMAL_PUSH`，`pull_request_action` 仅
   `NONE | CREATE_DRAFT | UPDATE_DRAFT`，`NO_PUSH` 已完全删除；
-- Codex Prompt 模板固定十节顺序与单份 `CODEX_EXECUTION_PROMPT` 输出；模板不含
-  PCE-01-A 专项内容（专项审查请求行、`contract_assets`、`fixture_summary`、
-  固定 `CI_status: not_waited` 等）；
-- Template Value Source Table 一致性：模板全部 `<...>` 占位符与主标准 source
-  table 双向闭合，每个占位符唯一来源（`CAPSULE_FIELD` / `STANDARD_CONSTANT` /
-  `PCE_01_B_PROJECT_MAPPING`），无未知、遗留或重复占位符；
-- Completion Report 模板紧凑预算（`target_lines: 30-80`、`minimum_lines: 20`、
-  `hard_limit_lines: 120`）与公共字段集合（12 字段，无 `contract_assets` /
-  `fixture_summary`）；
+- Codex Prompt 模板资产（v2）作为 `compact-execution-envelope-v2` contract
+  manifest 校验：必须声明 schema marker、`production_placeholders: 0`、
+  `WHEN_ENDWHEN_blocks: 0`、`fixed_10_section_contract: false`；资产不得含
+  任何 `<...>` production placeholder、`<!-- WHEN` / `<!-- ENDWHEN` 块或
+  `## N. ` 十节 headings；CLI validate、CLI compile 与 contract validator
+  共享同一 fail-closed gate（`TEMPLATE_CONTRACT_INVALID`），模板资产不再是
+  production placeholder interpolation source；
+- Stable Rules：模板资产必须声明全部 12 个 stable rule codes
+  （FETCH_VERIFY_EXACT_BASE 至 STOP_ON_SCOPE_EXPANSION），agent-visible
+  输出只发送 codes；
 - 主标准跨资产一致性：validator 静态验证主标准声明的 Capsule 字段、Git 枚举、
-  四种 Prompt Mode 预算、五种 Validation Profile、continuation delta-only、
-  Completion Report 20-120 约束、十个固定 section、单份交付、
-  `stop_after_report: true` 与 Template Value Source Table，并与 Capsule /
-  Prompt / Completion Report / Validation Profiles 模板、validator 常量和
-  fixtures 对比防漂移；
+  四种 Prompt Mode v2 预算、五种 Validation Profile、continuation delta-only、
+  Completion Report 20-120 约束、v2 envelope schema、全部 stable rule codes、
+  PCE_UNICODE_WORDPUNCT_V1 proxy metric、单份交付、`stop_after_report: true`
+  与 Template Asset Contract Manifest 章节，并与 Capsule / Validation
+  Profiles 模板、validator 常量和 fixtures 对比防漂移；
 - `fixtures/compact-prompt/contracts.yaml` 正例通过、反例被预期分类拒绝
   （每个反例声明 `expected_classification`）；
 - `fixtures/compact-prompt/renderer.yaml`（PCE-01-B）以注入式 synthetic Git
   state 与内存文本运行 CLI service：valid validate/compile 的精确
   stdout/stderr/exit、repeated byte-identical 确定性、UTF-8/LF/单末尾 LF、
-  四种 Mode、line/byte 超限 stdout empty、Git 组合 0/NONE/NONE 与
-  1/NORMAL_PUSH/CREATE_DRAFT、1/NORMAL_PUSH/UPDATE_DRAFT、1/NONE/NONE、
-  CREATE/UPDATE 与 PR 编号不匹配、policy unknown key / missing profile /
+  四种 Mode、line/byte/proxy-token 超限 stdout empty（gate 顺序精确）、
+  Git 组合 0/NONE/NONE（整体省略 git mapping）与 1/NORMAL_PUSH/CREATE_DRAFT、
+  1/NORMAL_PUSH/UPDATE_DRAFT、1/NONE/NONE、CREATE/UPDATE 与 PR 编号不匹配
+  （`GIT_ACTION_CONFLICT`）、policy unknown key / missing profile /
   unknown ID / required-forbidden conflict / DOC_ONLY 根 `npm test`、
   repository / fact branch / 本地 named ref / origin tracking ref mismatch、
-  模板 unknown placeholder / source-table drift / 条件标记缺失、嵌套、
-  不平衡，以及 compile failure 不输出部分 Prompt；
+  模板资产 contract-manifest 违规（缺 schema marker、含 placeholder、
+  含 WHEN block、声明十节合同），以及 compile failure 不输出部分 Prompt；
+- v2 canonical envelope omission/derivation 以 fixtures 锁定：objective 只
+  作为 `purpose` 出现一次；`baseline.pull_request` none 省略 / 正整数渲染；
+  findings 空省略 / 非空渲染 id 列表（状态由 key 派生）；scope derivation
+  （required==allowed → changes only；元素唯一且 allowed_files 为严格
+  superset → changes + scope_extra（保持 allowed_files 顺序）；无法证明 →
+  changes + 完整 allowed_files）；`validation.forbid` 仅非空输出；git
+  positive-action allowlist 精确；forbidden exact duplicate 只保留第一项、
+  与 stable rule code 相同的项不重复；
+- PCE_UNICODE_WORDPUNCT_V1 proxy-token metric fixture-locked：10 个冻结
+  case（含 "A中B"=3 的 Onigmo `\p{L}` 含 Han 语义差异）逐条断言；实现
+  先切分 CJK 码点再扫描 letter-run，无 tokenizer gem / 网络 / model
+  dependency；不声称 model-exact token count；
 - PCE-01-B 专项加固（F02-F07）以 fixtures 锁定：repository identity
   三方闭合（origin == capsule baseline.repository == policy repository，
   大小写不敏感；policy/Capsule mismatch、policy/origin mismatch 失败，
@@ -90,49 +107,30 @@ ruby scripts/validate-gate-runner-scenarios.rb
   exact 锁定不泄漏 secret）；exact named-ref gate（branch validity 经
   `git check-ref-format --branch`，head 经 `git show-ref --verify --hash`
   精确全 ref；`@{1}`、`.lock`、trailing dot、double slash、非法 branch 与
-  缺失 exact ref 均失败）；运行时 template binding 闭合（27 占位符精确集合、
-  恰好一次、无 unknown/missing/duplicate/source-set drift，CLI 与 validator
-  共用同一 validator）；
-- PCE-01-B 专项加固（F05 template structure gate）：共享 structure gate 由
-  CLI validate、CLI compile 与 contract validator 共同调用，fail closed
-  检查固定十节精确顺序（缺节、重复节、额外编号节、乱序均失败）、任意行首
-  `delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`（missing /
-  duplicate / wrong 均失败）、完整严格 WHEN/ENDWHEN marker 扫描（malformed、
-  unknown field/value、unpaired、nested、duplicate、跨节以及不匹配合法 token
-  正则的 WHEN-like 文本全部失败，绝不静默忽略）；marker scanner 按完整
-  HTML comment `<!-- ... -->` 扫描，comment body 内普通 `>` 不得截断
-  fragment（`<!-- malformed > WHEN ... -->` / `<!-- malformed > ENDWHEN -->`
-  在 validate 与 compile 双路径均 fail closed），未闭合 comment 扫至 EOF
-  fail closed，相邻独立 comments 不跨越匹配，无 WHEN/ENDWHEN 的普通注释
-  inert；marker pairing 只基于 marker-bearing comments，合法 WHEN 的 body
-  从该 WHEN comment 末尾延伸至配对 ENDWHEN comment 起点，中间普通注释不得
-  缩短 body 检查范围（F05-C：普通注释后放置的 section heading 依然触发
-  cross-section fail closed，validate 与 compile 双路径均有负向 fixture；
-  同节普通注释与多个普通注释保持 pairing 并继续通过，正向 fixture 锁定
-  byte-identical）；binding gate 的非空返回值在 contract validator 中真实
-  加入 errors（非 call-and-ignore），F05-A guard 在 validator 内以内存模板
-  证明 duplicate 合法 placeholder 返回 `TEMPLATE_PLACEHOLDER_DUPLICATE` 且
-  消费路径被静态锁定；14+11 个 validate/compile 路径 fixtures 锁定 stdout
-  empty + 稳定 diagnostic + exit 3 + 无 backtrace；
-- PCE-01-B 专项加固（F06 YAML context encoding）：渲染器按输出上下文区分
-  `render_yaml_scalar`（fenced YAML block 内确定性 YAML 双引号 scalar，
-  `\\` `\"` `\r` `\n` `\t` `\0` `\xNN` 与 `\u003C`/`\u003E` 转义）、
-  `render_prose_scalar`、`render_list_item`、`render_finding`；成功 compile
-  输出的路由 / Exact Baseline / Git 与 PR / Completion Report footer 四个
-  fenced YAML block 全部以
-  `YAML.safe_load(permitted_classes: [], aliases: false)` 独立解析，断言
-  字段值与类型与 Capsule/Standard 常量精确一致（整数保持 YAML integer、
-  boolean 保持 YAML boolean、字符串 `"none"` 不解析为 null），覆盖 `#`、
-  `: `、双引号、反斜杠、leading/trailing whitespace、Unicode、以 `*`/`!`/`{`/
-  `[` 开头、multiline、CR/LF/tab、第二 delivery_type、heading-like、
-  placeholder-like、WHEN/ENDWHEN-like 文本，重复 compile byte-identical；
-  injection-safe canonical rendering（多行、CR/LF/tab、
-  第二 delivery_type、heading-like、placeholder-like、conditional-marker-like
-  输入均无法破坏输出）；diagnostics registry
-  （45 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
-  双向一致、每个 code 有输出点、CLI 无裸失败 exit 常量；unknown key 含
-  tab/LF/CR 转义、template missing、injected internal failure、malformed
-  origin 不泄漏 secret 均锁定 stdout/stderr/exit）；
+  缺失 exact ref 均失败）；运行时模板资产 contract-manifest gate 闭合
+  （CLI 与 validator 共用同一 gate）；
+- PCE-01-B 专项加固（F05-A v2 contract-manifest gate blocking proof）：
+  binding gate 的非空返回值在 contract validator 中真实加入 errors
+  （非 call-and-ignore），F05-A guard 在 validator 内以内存模板证明含
+  placeholder 的模板资产返回 `TEMPLATE_CONTRACT_INVALID` 且消费路径被
+  静态锁定；9 个 validate/compile 路径 fixtures 锁定 stdout empty + 稳定
+  diagnostic + exit 3/5 + 无 backtrace；
+- PCE-01-B 专项加固（F06 YAML context encoding，v2）：整份 compile stdout
+  作为单一 canonical YAML document 以共享 restricted-YAML 规则解析；
+  命名 block（baseline / validation / git / report）做精确 key-set 断言
+  （git 无 push、validation 无 forbid 等 omission 被精确证明），root 断言
+  顶层标量；`yaml_blocks` 断言字段值与类型与 Capsule/Standard 常量精确一致
+  （整数保持 YAML integer、boolean 保持 YAML boolean、字符串 `"none"` 不
+  解析为 null），`omitted_keys` 断言省略的顶层 key 不存在；覆盖 `#`、
+  `: `、双引号、反斜杠、CJK、control characters、multiline、CR/LF/tab、
+  第二 delivery_type、heading-like、placeholder-like、WHEN/ENDWHEN-like
+  文本，重复 compile byte-identical；canonical output verifier 保证零
+  legacy 十节 headings、零 placeholder-like / marker-like token、单一
+  restricted-YAML document、canonical 顶层 key 顺序；diagnostics registry
+  （43 个 code 集中登记 exit/类别/含义，validator 静态证明 registry 与标准
+  双向一致、每个 code 有输出点、CLI 无裸失败 exit 常量；template missing、
+  injected internal failure、malformed origin 不泄漏 secret 均锁定
+  stdout/stderr/exit）；
 - manifest、ROADMAP、VALIDATION、PORTABILITY 文档已登记且无超前声明（不声明
   PCE-01-C、personal knowledge base 接入、PCE-01 全部完成、source_verified、
   GRP-01 启动、D10-B 恢复）。
@@ -170,7 +168,8 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
   declared profile、empty declared required、selected absent
   validate/compile、selected present unknown command、malformed-before-
   unsupported、unsupported-before-unknown-command；
-- 91 renderer fixtures / 472 assertions / 46 registered diagnostics；
+- 51 renderer fixtures / 630 assertions / 43 registered diagnostics
+  （v2：canonical envelope fixtures + 10 proxy-token metric cases）；
 - 四项 compatibility proof：actual SDLC all-five policy 的 Profile key set
   精确为五标准 Profile、通过 revised schema/declared mapping/command
   resolution、同一 Capsule 在 all-five 与 selected-only subset policy 下

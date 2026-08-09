@@ -71,11 +71,15 @@ module CompactPrompt
   PULL_REQUEST_ACTIONS = %w[NONE CREATE_DRAFT UPDATE_DRAFT].freeze
   MAXIMUM_LINES_RANGE = (20..120).freeze
 
+  # v2 budget contract: logical-line limits stay the secondary safety
+  # signal; byte caps are replaced by the compact-envelope caps and a
+  # deterministic proxy-token cap is added per mode. Gate order is fixed:
+  # canonical output verification → line → byte → proxy token → stdout.
   PROMPT_MODE_BUDGETS = {
-    "MICRO_FIX" => { "hard_limit_lines" => 120, "hard_limit_bytes" => 32_768 },
-    "SESSION_CONTINUATION" => { "hard_limit_lines" => 220, "hard_limit_bytes" => 65_536 },
-    "BOOTSTRAP" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 98_304 },
-    "RECOVERY" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 98_304 }
+    "MICRO_FIX" => { "hard_limit_lines" => 120, "hard_limit_bytes" => 2048, "hard_limit_proxy_tokens" => 512 },
+    "SESSION_CONTINUATION" => { "hard_limit_lines" => 220, "hard_limit_bytes" => 4096, "hard_limit_proxy_tokens" => 1024 },
+    "BOOTSTRAP" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 8192, "hard_limit_proxy_tokens" => 2048 },
+    "RECOVERY" => { "hard_limit_lines" => 400, "hard_limit_bytes" => 8192, "hard_limit_proxy_tokens" => 2048 }
   }.freeze
 
   PROFILE_SEMANTICS = {
@@ -102,6 +106,10 @@ module CompactPrompt
   INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
   ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
 
+  # Legacy v1 production section headings (PCE-01-A contract). Retained as
+  # a negative regression constant only: v2 canonical output must never
+  # contain any of them. The v1 fixed ten-section production contract is
+  # retired; no production renderer emits these headings anymore.
   CODEX_PROMPT_SECTIONS = [
     "1. 路由",
     "2. Exact Baseline",
@@ -113,6 +121,30 @@ module CompactPrompt
     "8. Forbidden Actions",
     "9. Completion Report",
     "10. Stop Condition"
+  ].freeze
+
+  # v2 production output schema (PCE-01 Compact Execution Envelope v2).
+  EXECUTION_ENVELOPE_SCHEMA = "compact-execution-envelope-v2".freeze
+
+  # Canonical top-level key order of the v2 envelope (deterministic).
+  # scope_extra and allowed_files are mutually exclusive (scope derivation);
+  # open_findings / closed_findings / git / forbidden are omitted when
+  # their omission rules apply.
+  ENVELOPE_TOP_LEVEL_ORDER = %w[
+    delivery_type schema recipient paste_location purpose report_back_to
+    next_hop_after_report baseline changes scope_extra allowed_files
+    max_changed_files accept open_findings closed_findings validation git
+    rules forbidden report completion_report_recipient completion_report_name
+    stop_after_report
+  ].freeze
+
+  # Stable concise rule codes (v2 section: Stable Rules + Task Prohibitions).
+  # The agent-visible output sends only these codes; their stable semantics
+  # are documented in the standard.
+  STABLE_RULES = %w[
+    FETCH_VERIFY_EXACT_BASE VERIFY_WORKTREE_SAFE NO_AMEND NO_REBASE NO_SQUASH
+    NO_FORCE_PUSH NO_DIRECT_FACT_BRANCH_WRITE NO_READY NO_MERGE NO_AUTO_MERGE
+    NO_PUBLICATION STOP_ON_SCOPE_EXPANSION
   ].freeze
 
   COMPLETION_REPORT_FIELDS = %w[
@@ -127,43 +159,6 @@ module CompactPrompt
     需要第十一个文件 需要修改现有\ validator 需要修改\ CI\ workflow
     CI_status:\ not_waited
   ].freeze
-
-  LEGACY_PLACEHOLDERS = %w[
-    task-branch objective-scope out-of-scope next-phase out-of-scope-tooling
-    scope-escalation-code specialized-review-request-line
-  ].freeze
-
-  # Template Value Source Table (standard section 6): every public prompt
-  # placeholder binds to exactly one source.
-  PLACEHOLDER_SOURCES = {
-    "<recipient>" => ["CAPSULE_FIELD", "routing.recipient"],
-    "<paste-location>" => ["CAPSULE_FIELD", "routing.paste_location"],
-    "<purpose>" => ["CAPSULE_FIELD", "objective"],
-    "<report-back-to>" => ["CAPSULE_FIELD", "routing.report_back_to"],
-    "<next-hop-after-report>" => ["CAPSULE_FIELD", "routing.next_hop_after_report"],
-    "<repository>" => ["CAPSULE_FIELD", "baseline.repository"],
-    "<fact-branch>" => ["CAPSULE_FIELD", "baseline.branch"],
-    "<fact-head>" => ["CAPSULE_FIELD", "baseline.head"],
-    "<pull-request>" => ["CAPSULE_FIELD", "baseline.pull_request"],
-    "<objective>" => ["CAPSULE_FIELD", "objective"],
-    "<open-findings>" => ["CAPSULE_FIELD", "delta.open_findings"],
-    "<required-changes>" => ["CAPSULE_FIELD", "delta.required_changes"],
-    "<acceptance-criteria>" => ["CAPSULE_FIELD", "delta.acceptance_criteria"],
-    "<preserved-closed-findings>" => ["CAPSULE_FIELD", "delta.preserved_closed_findings"],
-    "<allowed-files>" => ["CAPSULE_FIELD", "scope.allowed_files"],
-    "<maximum-changed-files>" => ["CAPSULE_FIELD", "scope.maximum_changed_files"],
-    "<validation-profile>" => ["CAPSULE_FIELD", "validation_profile"],
-    "<required-commands>" => ["PCE_01_B_PROJECT_MAPPING", "validation_profiles.<profile>.required_command_ids"],
-    "<forbidden-commands>" => ["PCE_01_B_PROJECT_MAPPING", "validation_profiles.<profile>.forbidden_command_ids"],
-    "<commit-count>" => ["CAPSULE_FIELD", "git.commit_count"],
-    "<commit-message>" => ["CAPSULE_FIELD", "git.commit_message"],
-    "<push-mode>" => ["CAPSULE_FIELD", "git.push_mode"],
-    "<pull-request-action>" => ["CAPSULE_FIELD", "git.pull_request_action"],
-    "<forbidden-actions>" => ["CAPSULE_FIELD", "forbidden_actions"],
-    "<completion-report-name>" => ["CAPSULE_FIELD", "completion_report.name"],
-    "<completion-report-maximum-lines>" => ["CAPSULE_FIELD", "completion_report.maximum_lines"],
-    "<completion-report-recipient>" => ["CAPSULE_FIELD", "completion_report.recipient"]
-  }.freeze
 
   # ── Restricted YAML ──
 
@@ -925,29 +920,26 @@ module CompactPrompt
   end
 
   # ── Template binding and conditionals ──
+  # ── Template asset contract manifest (v2) ──
+  #
+  # templates/compact-codex-prompt-template.md is no longer a production
+  # placeholder interpolation source. It is a human-readable canonical
+  # shape reference / contract manifest for compact-execution-envelope-v2:
+  #   schema_marker: compact-execution-envelope-v2
+  #   production_placeholders: 0
+  #   WHEN_ENDWHEN_blocks: 0
+  #   fixed_10_section_contract: false
+  # The CLI reads the asset and verifies those manifest properties
+  # fail-closed before any validate/compile output; the same shared gate is
+  # reused by the contract validator (no duplicated logic).
 
   module Template
     module_function
 
-    ENDWHEN_MARKER = "<!-- ENDWHEN -->"
-    BLOCK_PATTERN = /<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->(.*?)<!-- ENDWHEN -->/m
-    # Placeholder extraction excludes HTML-comment markers (WHEN/ENDWHEN).
+    # Placeholder-like token scan (`<...>` fragments, excluding HTML
+    # comments). The v1 template-binding vocabulary is fully retired: the
+    # v2 asset must contain zero such tokens.
     PLACEHOLDER_PATTERN = /<(?!!--)[^>\n]+>/
-
-    CONDITIONAL_FIELDS = {
-      "git.commit_count" => %w[0 1],
-      "git.push_mode" => %w[NONE NORMAL_PUSH],
-      "git.pull_request_action" => %w[NONE CREATE_DRAFT UPDATE_DRAFT]
-    }.freeze
-
-    def placeholders(text)
-      text.scan(PLACEHOLDER_PATTERN).uniq
-    end
-
-    # Ruby 2.6-compatible occurrence count (Array#tally is 2.7+).
-    def placeholder_counts(text)
-      text.scan(PLACEHOLDER_PATTERN).each_with_object(Hash.new(0)) { |placeholder, counts| counts[placeholder] += 1 }
-    end
 
     # Shape-only check for the capsule template: exact key sets plus the two
     # contract markers report_back_to and stop_after_report: true.
@@ -982,250 +974,53 @@ module CompactPrompt
       nil
     end
 
-    # Returns [code, path, message] or nil when the placeholder set is
-    # exactly the 27 registered PLACEHOLDER_SOURCES, each placeholder
-    # appears exactly once and no unknown, missing, duplicate or
-    # source-set drift exists (finding F05). This is the single
-    # template-binding validator shared by CLI validate, CLI compile and
-    # the contract validator.
-    def binding_error(text)
-      present = placeholders(text)
-      unknown = present - CompactPrompt::PLACEHOLDER_SOURCES.keys
-      unless unknown.empty?
-        return ["TEMPLATE_PLACEHOLDER_UNKNOWN", "template",
-                "unknown placeholder(s) not in the source table #{unknown.sort.join(', ')}"]
+    # Returns [code, path, message] or nil when the template asset honors
+    # the v2 contract manifest. Called by CLI validate, CLI compile and the
+    # contract validator — one shared fail-closed gate.
+    def contract_manifest_error(text)
+      unless text.include?(CompactPrompt::EXECUTION_ENVELOPE_SCHEMA)
+        return ["TEMPLATE_CONTRACT_INVALID", "template",
+                "template asset must declare schema marker compact-execution-envelope-v2"]
       end
-      missing = CompactPrompt::PLACEHOLDER_SOURCES.keys - present
-      unless missing.empty?
-        return ["TEMPLATE_PLACEHOLDER_MISSING", "template",
-                "placeholder(s) missing from the template #{missing.sort.join(', ')}"]
+      placeholders = text.scan(PLACEHOLDER_PATTERN)
+      unless placeholders.empty?
+        return ["TEMPLATE_CONTRACT_INVALID", "template",
+                "template asset must contain zero production placeholders " \
+                "(found #{placeholders.uniq.sort.join(', ')})"]
       end
-      duplicates = placeholder_counts(text).select { |_placeholder, count| count > 1 }
-      unless duplicates.empty?
-        return ["TEMPLATE_PLACEHOLDER_DUPLICATE", "template",
-                "placeholder(s) appear more than once #{duplicates.keys.sort.join(', ')}"]
+      if text.include?("<!-- WHEN") || text.include?("<!-- ENDWHEN")
+        return ["TEMPLATE_CONTRACT_INVALID", "template",
+                "template asset must contain zero WHEN/ENDWHEN blocks"]
       end
-      nil
-    end
-
-    # ── Template structure gate (finding F05) ──
-    #
-    # One shared fail-closed gate for the fixed ten-section shape, the
-    # single line-start `delivery_type: CODEX_EXECUTION_PROMPT` and the
-    # complete strict WHEN/ENDWHEN marker scan. Called by CLI validate,
-    # CLI compile and the contract validator — the logic is never
-    # duplicated across the CLI and the validator.
-
-    # Fixed ten sections, exact order, no missing/duplicate/extra numbered
-    # section.
-    def section_error(text)
-      headings = text.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
-      unknown = headings - CompactPrompt::CODEX_PROMPT_SECTIONS
-      unless unknown.empty?
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "numbered section(s) not in the fixed ten-section list #{unknown.inspect}"]
-      end
-      missing = CompactPrompt::CODEX_PROMPT_SECTIONS - headings
-      unless missing.empty?
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "fixed section(s) missing from the template #{missing.inspect}"]
-      end
-      counts = headings.each_with_object(Hash.new(0)) { |heading, h| h[heading] += 1 }
-      duplicates = counts.select { |_heading, count| count > 1 }
-      unless duplicates.empty?
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "section heading(s) appear more than once #{duplicates.keys.inspect}"]
-      end
-      unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "section order must be exactly #{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}"]
+      if text.lines.grep(/\A## \d+\. /).any?
+        return ["TEMPLATE_CONTRACT_INVALID", "template",
+                "template asset must not declare the fixed ten-section contract"]
       end
       nil
-    end
-
-    # Exactly one line starting with `delivery_type:` and its value must be
-    # precisely `CODEX_EXECUTION_PROMPT`.
-    def delivery_type_error(text)
-      lines = text.lines.grep(/\Adelivery_type:/)
-      unless lines.length == 1
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "template must contain exactly one line starting with delivery_type: (found #{lines.length})"]
-      end
-      unless lines.first.strip == "delivery_type: CODEX_EXECUTION_PROMPT"
-        return ["TEMPLATE_STRUCTURE_INVALID", "template",
-                "the single delivery_type line must be exactly `delivery_type: CODEX_EXECUTION_PROMPT`"]
-      end
-      nil
-    end
-
-    # Complete strict scan of every WHEN/ENDWHEN-bearing HTML comment
-    # (finding F05-B). The scanner consumes full comments `<!-- ... -->`;
-    # a plain `>` inside a comment body never ends the fragment, malformed
-    # closings, WHENX-like tokens, unknown fields and unbalanced markers
-    # can never be silently ignored because they fail the legal-token
-    # regex.
-    def marker_error(text)
-      # Scans every complete HTML comment (finding F05-B): a fragment ends
-      # at the first full `-->`, never at a plain `>` inside the comment
-      # body, so `<!-- malformed > WHEN ... -->` cannot be truncated into
-      # silence. A comment with no closing `-->` scans to EOF and fails
-      # closed. Adjacent independent comments are matched one at a time;
-      # each comment's body is then checked for WHEN/ENDWHEN and must be an
-      # exact legal marker — malformed, unknown field/value, unpaired,
-      # nested, duplicate and cross-section markers all fail closed, and
-      # the seven legal blocks cannot mask an extra malformed marker.
-      tokens = []
-      text.to_enum(:scan, /<!--.*?(?:-->|\z)/m).each do
-        tokens << [Regexp.last_match.begin(0), Regexp.last_match[0]]
-      end
-
-      # Marker pairing uses only marker-bearing comments (finding F05-C):
-      # ordinary comments stay inert and never participate in pairing, but
-      # they remain inside a WHEN block's body text. A WHEN block's body
-      # runs from the matched WHEN comment's end to its paired ENDWHEN
-      # comment's start, so an ordinary comment placed between them cannot
-      # shorten the cross-section scan.
-      markers = tokens.select { |_pos, token| token.include?("WHEN") || token.include?("ENDWHEN") }
-
-      depth = 0
-      when_stack = [] # [body_start, field, value]
-      blocks = []
-      markers.each do |pos, token|
-        if token.include?("ENDWHEN")
-          unless token == ENDWHEN_MARKER
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "malformed ENDWHEN marker #{token.inspect} (expected exactly #{ENDWHEN_MARKER.inspect})"]
-          end
-          if depth.zero? || when_stack.empty?
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template", "ENDWHEN without matching WHEN"]
-          end
-          body_start, field, value = when_stack.pop
-          depth -= 1
-          body = text[body_start...pos]
-          if body.match?(/^## /)
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "conditional #{field}=#{value} must not span sections"]
-          end
-        else
-          return ["TEMPLATE_CONDITIONAL_INVALID", "template", "conditional blocks must not nest"] if depth.positive?
-          match = token.match(/\A<!-- WHEN ([a-z][a-z0-9_.]*)=([A-Z0-9_]+) -->\z/)
-          unless match
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "malformed WHEN marker #{token.inspect} (expected exactly <!-- WHEN <field>=<value> -->)"]
-          end
-          field = match[1]
-          value = match[2]
-          unless CONDITIONAL_FIELDS.key?(field) && CONDITIONAL_FIELDS[field].include?(value)
-            return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                    "conditional #{field}=#{value} is not an allowed field/value"]
-          end
-          when_stack << [pos + token.length, field, value]
-          blocks << [field, value]
-          depth += 1
-        end
-      end
-      return ["TEMPLATE_CONDITIONAL_INVALID", "template", "WHEN without matching ENDWHEN"] unless depth.zero?
-
-      # A template with no conditional blocks at all still fails closed:
-      # every legal field/value must appear exactly once.
-      counts = blocks.each_with_object(Hash.new(0)) { |block, h| h[block] += 1 }
-      CONDITIONAL_FIELDS.each do |field, values|
-        values.each do |value|
-          next if counts[[field, value]] == 1
-          return ["TEMPLATE_CONDITIONAL_INVALID", "template",
-                  "conditional #{field}=#{value} must appear exactly once (found #{counts[[field, value]] || 0})"]
-        end
-      end
-      nil
-    end
-
-    # Single shared template-structure gate: section shape, delivery_type
-    # identity and the strict marker scan, in that order.
-    def structure_error(text)
-      section_error(text) || delivery_type_error(text) || marker_error(text)
-    end
-
-    # Backwards-compatible conditional gate: the strict marker scan is the
-    # single implementation, reused by the structure gate and by
-    # Renderer.render's defensive pre-check.
-    def conditional_error(text)
-      marker_error(text)
-    end
-
-    # Expands conditional blocks: each group keeps only the block whose value
-    # matches the capsule git field; all markers are removed and runs of 3+
-    # newlines left by removed blocks collapse to a single blank line.
-    def render_conditionals(text, capsule)
-      selection = {
-        "git.commit_count" => capsule.dig("git", "commit_count").to_s,
-        "git.push_mode" => capsule.dig("git", "push_mode").to_s,
-        "git.pull_request_action" => capsule.dig("git", "pull_request_action").to_s
-      }
-      text.gsub(BLOCK_PATTERN) do
-        match = Regexp.last_match
-        selection[match[1]] == match[2] ? match[3] : ""
-      end.gsub(/\n{3,}/, "\n\n")
     end
   end
 
   # ── Deterministic renderer ──
+  # ── Deterministic renderer (v2) ──
+  #
+  # v2 production renderer: builds one canonical
+  # compact-execution-envelope-v2 YAML document directly from the
+  # normalized execution IR (validated Capsule + project policy + resolved
+  # profile mapping). There is no template placeholder interpolation, no
+  # WHEN/ENDWHEN expansion and no fixed ten-section Markdown contract. The
+  # v1 production renderer is retired; no dual renderer, feature flag or
+  # legacy production fallback exists.
 
   module Renderer
     module_function
 
-    def dig_path(data, path)
-      path.split(".").reduce(data) { |acc, key| acc.is_a?(Hash) ? acc[key] : nil }
-    end
-
-    # Context-safe renderers (finding F06): the renderer is split by output
-    # context so one scalar encoder is never reused for every context.
-    #
-    #   render_yaml_scalar — values inside fenced YAML blocks (routing /
-    #     baseline / git / footer): deterministic double-quoted YAML scalar
-    #     that round-trips through YAML.safe_load to the exact original
-    #     Capsule value; integers/booleans render bare to keep YAML typing,
-    #     the string "none" stays quoted so it never parses as null.
-    #   render_prose_scalar — single-line strings in the template body
-    #     outside YAML blocks (visible Safety.encode, no second material /
-    #     heading / placeholder / marker can form).
-    #   render_list_item — one string bullet inside a prose list.
-    #   render_finding — one finding bullet (id + status).
-    #
-    # Every Capsule/Policy user string still passes through Safety or the
-    # YAML encoder first, so single-line injection protection is never
-    # weakened.
-
-    YAML_FENCE_OPEN = /\A```yaml\s*\z/
-    YAML_FENCE_CLOSE = /\A```\s*\z/
-
-    # Maps every template placeholder to :yaml (inside a fenced YAML block)
-    # or :prose (template body), based on the raw template text. Placeholder
-    # lines never sit inside conditional blocks, so the map is stable.
-    def placeholder_contexts(template_text)
-      contexts = {}
-      in_yaml = false
-      template_text.each_line do |line|
-        if YAML_FENCE_OPEN.match?(line)
-          in_yaml = true
-          next
-        elsif YAML_FENCE_CLOSE.match?(line)
-          in_yaml = false
-          next
-        end
-        CompactPrompt::PLACEHOLDER_SOURCES.keys.each do |placeholder|
-          contexts[placeholder] = in_yaml ? :yaml : :prose if line.include?(placeholder)
-        end
-      end
-      contexts
-    end
-
     # Deterministic YAML double-quoted scalar. Backslash and double quote
     # use YAML escapes; CR/LF/tab/NUL and other control characters become
     # \r \n \t \0 \xNN; `<`/`>` become \u003C/\u003E so placeholder-like
-    # and conditional-marker-like text stays valid YAML and can never form
-    # a second delivery_type, heading or material. No character is ever
-    # silently dropped: YAML.safe_load of the quoted scalar equals the
-    # original Capsule string.
+    # and marker-like user text stays valid YAML and can never form a
+    # second delivery_type, schema, key, heading or material. No character
+    # is ever silently dropped: YAML.safe_load of the quoted scalar equals
+    # the original Capsule/Policy string.
     def render_yaml_scalar(value)
       case value
       when Integer, TrueClass, FalseClass
@@ -1241,6 +1036,8 @@ module CompactPrompt
           when "\0" then "\\0"
           when "<" then "\\u003C"
           when ">" then "\\u003E"
+          when "\u2028" then "\\u2028"
+          when "\u2029" then "\\u2029"
           else
             # C0 controls, DEL and C1 controls (0x80-0x9F) become \xNN so
             # no control byte can reach the output verbatim.
@@ -1251,145 +1048,280 @@ module CompactPrompt
       end
     end
 
-    # Prose context: single-line visible escape, identical to Safety.encode.
-    def render_prose_scalar(value)
-      CompactPrompt::Safety.encode(value)
-    end
-
-    # One string bullet inside a prose list (single-line visible escape).
-    def render_list_item(item)
-      CompactPrompt::Safety.encode(item)
-    end
-
-    # One finding bullet: `id (status)`, both single-line visible escapes.
-    def render_finding(id, status)
-      "#{CompactPrompt::Safety.encode(id)} (#{CompactPrompt::Safety.encode(status)})"
-    end
-
-    def render_list(values)
-      return "  none" if values.nil? || values.empty?
-      values.map do |item|
-        case item
-        when Hash
-          "  - #{render_finding(item['id'], item['status'])}"
-        else
-          "  - #{render_list_item(item)}"
-        end
-      end.join("\n")
-    end
-
-    def render_command_list(argv_list)
-      return "  none" if argv_list.nil? || argv_list.empty?
-      argv_list.map { |argv| "  - #{render_list_item(Shellwords.join(argv))}" }.join("\n")
-    end
-
     # Returns [text, nil] or [nil, [code, path, message]].
-    # `resolved_profile_mapping` is the single optional mapping input: the CLI
-    # normal path passes the mapping it already resolved (so the renderer
-    # never resolves twice); direct-callers without it trigger exactly one
-    # defensive resolution through the shared resolver (PCE-01-C1R R03).
-    def render(capsule, policy, template_text, resolved_profile_mapping: nil)
-      cerr = Template.conditional_error(template_text)
-      return [nil, cerr] if cerr
-
+    # `resolved_profile_mapping` is the single optional mapping input: the
+    # CLI normal path passes the mapping it already resolved (so the
+    # renderer never resolves twice); direct-callers without it trigger
+    # exactly one defensive resolution through the shared resolver.
+    def render(capsule, policy, resolved_profile_mapping: nil)
       action = capsule.dig("git", "pull_request_action")
       pr = capsule.dig("baseline", "pull_request")
       if action == "CREATE_DRAFT" && pr != "none"
-        return [nil, ["TEMPLATE_CONDITIONAL_INVALID", "baseline.pull_request",
+        return [nil, ["GIT_ACTION_CONFLICT", "baseline.pull_request",
                       "CREATE_DRAFT requires baseline.pull_request=none"]]
       end
       if action == "UPDATE_DRAFT" && !(pr.is_a?(Integer) && pr >= 1)
-        return [nil, ["TEMPLATE_CONDITIONAL_INVALID", "baseline.pull_request",
+        return [nil, ["GIT_ACTION_CONFLICT", "baseline.pull_request",
                       "UPDATE_DRAFT requires baseline.pull_request to be a positive integer"]]
       end
 
-      expanded = Template.render_conditionals(template_text, capsule)
-
-      # Selected-profile applicability resolves through the single shared
-      # resolver before any placeholder replacement, so no prompt bytes are
-      # produced when the project policy does not declare the selected
-      # profile (PCE-01-C1R). No absent → empty-list fallback exists.
-      if resolved_profile_mapping.nil?
+      resolved_mapping = resolved_profile_mapping
+      if resolved_mapping.nil?
         # Defensive direct-call path: resolve exactly once through the same
         # resolver the CLI uses; no duplicated applicability logic.
         resolved_mapping, rerr = CompactPrompt::Policy.resolve_selected_profile(
           policy, capsule["validation_profile"]
         )
         return [nil, rerr] if rerr
-      else
-        resolved_mapping = resolved_profile_mapping
       end
 
-      contexts = placeholder_contexts(template_text)
-      profile = capsule["validation_profile"]
-      Template.placeholders(expanded).each do |placeholder|
-        source, path = CompactPrompt::PLACEHOLDER_SOURCES[placeholder]
-        unless source
-          return [nil, ["TEMPLATE_PLACEHOLDER_UNKNOWN", "template", "unknown placeholder #{placeholder}"]]
-        end
-        if source == "CAPSULE_FIELD"
-          value = dig_path(capsule, path)
-          return [nil, ["TEMPLATE_SOURCE_BINDING_MISMATCH", path, "capsule field not resolvable for #{placeholder}"]] if value.nil?
-          replacement =
-            if value.is_a?(Array)
-              render_list(value)
-            elsif contexts[placeholder] == :yaml
-              render_yaml_scalar(value)
-            else
-              render_prose_scalar(value)
-            end
-          expanded = expanded.gsub(placeholder) { replacement }
-        elsif source == "PCE_01_B_PROJECT_MAPPING"
-          list_key = path.include?("required") ? "required_command_ids" : "forbidden_command_ids"
-          ids = resolved_mapping[list_key] || []
-          argv_list = ids.map { |id| policy.dig("commands", id, "argv") }
-          replacement = render_command_list(argv_list)
-          expanded = expanded.gsub(placeholder) { replacement }
-        else
-          return [nil, ["TEMPLATE_SOURCE_BINDING_MISMATCH", path, "unsupported source #{source}"]]
-        end
-      end
-
-      verr = verify_output(expanded)
+      text = Envelope.build(capsule, policy, resolved_mapping)
+      verr = verify_output(text)
       return [nil, verr] if verr
-      [expanded, nil]
+      [text, nil]
     end
 
-    # Canonical output verifier (finding F06): the rendered text must be
-    # valid UTF-8, free of CR bytes, contain exactly one `^delivery_type:`
-    # with value CODEX_EXECUTION_PROMPT, keep the fixed ten sections, have
-    # zero unresolved placeholders and zero conditional markers, and end
-    # with exactly one trailing LF. The budget gate runs on this canonical
-    # output afterwards.
+    # Canonical output verifier: valid UTF-8, no CR bytes, exactly one
+    # `delivery_type: CODEX_EXECUTION_PROMPT`, exactly one
+    # `schema: compact-execution-envelope-v2`, zero legacy ten-section
+    # headings, zero placeholder-like / marker-like tokens, exactly one
+    # trailing LF, a single restricted-YAML document with the v2 schema and
+    # the canonical top-level key order. The budget gate runs on this
+    # verified output afterwards (line → byte → proxy token).
     def verify_output(text)
       return ["RENDER_INCOMPLETE", "output", "output is not valid UTF-8"] unless text.valid_encoding?
       return ["RENDER_INCOMPLETE", "output", "output must not contain CR bytes"] if text.include?("\r")
-      delivery_lines = text.scan(/^delivery_type:/)
-      unless delivery_lines.length == 1 &&
+      unless text.scan(/^delivery_type:/).length == 1 &&
              text.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
         return ["RENDER_INCOMPLETE", "output",
                 "must contain exactly one delivery_type: CODEX_EXECUTION_PROMPT"]
       end
-      # A leftover placeholder is one of the 27 registered template inputs
-      # still present verbatim; user text is escaped to `\<...\>` so it can
-      # never match. Conditional markers must not appear unescaped either
-      # (`\<!-- ...` from encoded user text is inert).
-      unresolved = CompactPrompt::PLACEHOLDER_SOURCES.keys.select { |p| text.include?(p) }
-      unless unresolved.empty?
-        return ["RENDER_INCOMPLETE", "output", "unresolved placeholder(s) remain"]
-      end
-      if text.match?(/(?<!\\)<!-- WHEN/) || text.match?(/(?<!\\)<!-- ENDWHEN/)
-        return ["RENDER_INCOMPLETE", "output", "conditional markers remain after rendering"]
-      end
-      headings = text.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
-      unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
+      unless text.scan(/^schema: compact-execution-envelope-v2/).length == 1
         return ["RENDER_INCOMPLETE", "output",
-                "section order must be exactly #{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}"]
+                "must contain exactly one schema: compact-execution-envelope-v2"]
+      end
+      legacy = CompactPrompt::CODEX_PROMPT_SECTIONS.select { |section| text.include?(section) }
+      unless legacy.empty?
+        return ["RENDER_INCOMPLETE", "output", "legacy ten-section heading(s) must not appear"]
+      end
+      if text.include?("<!--") || text.match?(/<[A-Za-z][A-Za-z0-9_.-]*>/)
+        return ["RENDER_INCOMPLETE", "output",
+                "placeholder-like or marker-like text must not appear in canonical output"]
       end
       unless text.end_with?("\n") && !text.end_with?("\n\n")
         return ["RENDER_INCOMPLETE", "output", "output must end with exactly one LF"]
       end
+      parsed, classification = CompactPrompt::RestrictedYAML.parse(text)
+      if classification
+        return ["RENDER_INCOMPLETE", "output",
+                "output must be a single restricted-YAML document (#{classification})"]
+      end
+      unless parsed.is_a?(Hash) && parsed["schema"] == CompactPrompt::EXECUTION_ENVELOPE_SCHEMA
+        return ["RENDER_INCOMPLETE", "output",
+                "output must parse to a mapping with schema compact-execution-envelope-v2"]
+      end
+      actual_order = []
+      text.each_line do |line|
+        # 顶层 key 行以字母开头；缩进的嵌套行（`  repository:` 等）自动
+        # 跳过，遍历整份文档收集全部顶层 key，而不是在第一个嵌套行 break。
+        next unless line.match?(/\A[A-Za-z_][A-Za-z0-9_]*:(\s|\z)/)
+        actual_order << line.split(":", 2).first
+      end
+      expected_order = CompactPrompt::ENVELOPE_TOP_LEVEL_ORDER.select { |key| actual_order.include?(key) }
+      unless actual_order == expected_order
+        return ["RENDER_INCOMPLETE", "output",
+                "top-level key order must be canonical (#{actual_order.inspect})"]
+      end
       nil
+    end
+  end
+
+  # ── Canonical Execution Envelope v2 builder ──
+  #
+  # Builds the single canonical compact YAML document text from the
+  # normalized execution IR (validated Capsule + policy + resolved profile
+  # mapping). Explicit canonical serialization: 2-space indent, fixed key
+  # order, LF line endings, exactly one trailing LF. YAML.dump is never the
+  # byte authority. Fixed contract values render as plain scalars; every
+  # Capsule/Policy user string passes through the shared YAML scalar
+  # encoder, so single-line injection protection is never weakened.
+  #
+  # Omission / derivation rules (standard section 5):
+  #   baseline.pull_request omitted when "none", rendered when positive;
+  #   findings omitted when empty, rendered as id lists (status derived
+  #     from the key, OPEN/CLOSED never repeated);
+  #   scope derivation: changes only when required == allowed; changes +
+  #     scope_extra when both lists are unique and allowed_files is a
+  #     strict superset of required_changes (extras keep allowed_files
+  #     order); otherwise changes + full allowed_files — scope is never
+  #     dropped to compress;
+  #   validation.forbid omitted when the forbidden list is empty;
+  #   git is a positive-action allowlist: commit/message only when
+  #     commit_count == 1; branch/push only when NORMAL_PUSH; pr/pr_base
+  #     only for CREATE_DRAFT / UPDATE_DRAFT; the whole git mapping is
+  #     omitted when commit_count == 0, push_mode == NONE and PR action
+  #     == NONE.
+
+  module Envelope
+    module_function
+
+    # 2-space indented `key: <quoted scalar>` line.
+    def kv(indent, key, value)
+      "#{"  " * indent}#{key}: #{CompactPrompt::Renderer.render_yaml_scalar(value)}\n"
+    end
+
+    # 2-space indented `key: <plain value>` line for fixed contract values.
+    def kv_plain(indent, key, value)
+      "#{"  " * indent}#{key}: #{value}\n"
+    end
+
+    # Block-style list of quoted scalars (user data).
+    def kv_list(indent, key, items)
+      out = +"#{"  " * indent}#{key}:\n"
+      items.each { |item| out << "#{"  " * (indent + 1)}- #{CompactPrompt::Renderer.render_yaml_scalar(item)}\n" }
+      out
+    end
+
+    # Block-style list of plain scalars (fixed rule codes).
+    def kv_list_plain(indent, key, items)
+      out = +"#{"  " * indent}#{key}:\n"
+      items.each { |item| out << "#{"  " * (indent + 1)}- #{item}\n" }
+      out
+    end
+
+    # Flow-style list of plain scalars (fixed completion report fields).
+    def kv_flow(indent, key, items)
+      "#{"  " * indent}#{key}: [#{items.join(", ")}]\n"
+    end
+
+    # Scope derivation block (see module comment).
+    def scope_block(capsule)
+      required = capsule.dig("delta", "required_changes")
+      allowed = capsule.dig("scope", "allowed_files")
+      return "" if required == allowed
+      if required.uniq == required && allowed.uniq == allowed &&
+         required.all? { |change| allowed.include?(change) } && allowed.length > required.length
+        extras = allowed.reject { |path| required.include?(path) }
+        return kv_list(0, "scope_extra", extras)
+      end
+      kv_list(0, "allowed_files", allowed)
+    end
+
+    def build(capsule, policy, resolved_mapping)
+      out = +""
+      out << kv_plain(0, "delivery_type", "CODEX_EXECUTION_PROMPT")
+      out << kv_plain(0, "schema", CompactPrompt::EXECUTION_ENVELOPE_SCHEMA)
+      out << kv(0, "recipient", capsule.dig("routing", "recipient"))
+      out << kv(0, "paste_location", capsule.dig("routing", "paste_location"))
+      out << kv(0, "purpose", capsule["objective"])
+      out << kv(0, "report_back_to", capsule.dig("routing", "report_back_to"))
+      out << kv(0, "next_hop_after_report", capsule.dig("routing", "next_hop_after_report"))
+      out << "baseline:\n"
+      out << kv(1, "repository", capsule.dig("baseline", "repository"))
+      out << kv(1, "branch", capsule.dig("baseline", "branch"))
+      out << kv(1, "head", capsule.dig("baseline", "head"))
+      pr = capsule.dig("baseline", "pull_request")
+      out << kv(1, "pull_request", pr) if pr.is_a?(Integer) && pr >= 1
+      out << kv_list(0, "changes", capsule.dig("delta", "required_changes"))
+      out << scope_block(capsule)
+      out << kv(0, "max_changed_files", capsule.dig("scope", "maximum_changed_files"))
+      out << kv_list(0, "accept", capsule.dig("delta", "acceptance_criteria"))
+      open_findings = capsule.dig("delta", "open_findings")
+      closed_findings = capsule.dig("delta", "preserved_closed_findings")
+      unless open_findings.empty?
+        out << kv_list(0, "open_findings", open_findings.map { |finding| finding["id"] })
+      end
+      unless closed_findings.empty?
+        out << kv_list(0, "closed_findings", closed_findings.map { |finding| finding["id"] })
+      end
+      out << "validation:\n"
+      out << kv_plain(1, "profile", capsule["validation_profile"])
+      run_ids = resolved_mapping["required_command_ids"] || []
+      forbid_ids = resolved_mapping["forbidden_command_ids"] || []
+      out << kv_list(1, "run",
+                     run_ids.map { |id| Shellwords.join(policy.dig("commands", id, "argv")) })
+      unless forbid_ids.empty?
+        out << kv_list(1, "forbid",
+                       forbid_ids.map { |id| Shellwords.join(policy.dig("commands", id, "argv")) })
+      end
+      commit_count = capsule.dig("git", "commit_count")
+      push_mode = capsule.dig("git", "push_mode")
+      pr_action = capsule.dig("git", "pull_request_action")
+      if commit_count == 1 || push_mode == "NORMAL_PUSH" || pr_action != "NONE"
+        out << "git:\n"
+        if commit_count == 1
+          out << kv_plain(1, "commit", 1)
+          out << kv(1, "message", capsule.dig("git", "commit_message"))
+        end
+        if push_mode == "NORMAL_PUSH"
+          out << kv_plain(1, "branch", "DERIVE_FROM_FACT_BRANCH")
+          out << kv_plain(1, "push", "NORMAL_PUSH")
+        end
+        case pr_action
+        when "CREATE_DRAFT"
+          out << kv_plain(1, "pr", "CREATE_DRAFT")
+          out << kv_plain(1, "pr_base", "FACT_BRANCH")
+        when "UPDATE_DRAFT"
+          out << kv_plain(1, "pr", "UPDATE_DRAFT")
+        end
+      end
+      out << kv_list_plain(0, "rules", CompactPrompt::STABLE_RULES)
+      # Task-specific prohibitions: exact duplicates keep only the first
+      # occurrence; entries identical to a stable rule code are not
+      # repeated (the stable codes are already in rules). No fuzzy NLP or
+      # guessed semantic deletion ever happens — a task prohibition that
+      # merely looks like a stable rule is never dropped.
+      forbidden = capsule["forbidden_actions"].uniq
+                  .reject { |action| CompactPrompt::STABLE_RULES.include?(action) }
+      out << kv_list(0, "forbidden", forbidden) unless forbidden.empty?
+      out << "report:\n"
+      out << kv(1, "max_lines", capsule.dig("completion_report", "maximum_lines"))
+      out << kv_flow(1, "fields", CompactPrompt::COMPLETION_REPORT_FIELDS)
+      out << kv(0, "completion_report_recipient", capsule.dig("completion_report", "recipient"))
+      out << kv(0, "completion_report_name", capsule.dig("completion_report", "name"))
+      out << kv_plain(0, "stop_after_report", "true")
+      out
+    end
+  end
+
+  # ── PCE_UNICODE_WORDPUNCT_V1 proxy-token metric ──
+  #
+  # Deterministic proxy metric for prompt size; it is NOT a model-exact
+  # token count and no exact-model-token claim is ever made. No Unicode
+  # normalization is applied. On valid UTF-8 canonical output the metric
+  # is equivalent to scanning with:
+  #
+  #   /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]|[\p{L}\p{M}\p{N}_]+|[^\p{Space}]/u
+  #
+  # with the frozen semantics:
+  #   Han/Hiragana/Katakana/Hangul: each code point = 1
+  #   other Unicode letter/mark/number/underscore: contiguous run = 1
+  #   all other non-whitespace code points: each = 1
+  #   whitespace: 0
+  #
+  # Onigmo's \p{L} class contains Han/Hiragana/Katakana/Hangul, so a plain
+  # alternation scan would fold a Han character into a neighbouring
+  # letter run (e.g. "A中B" → 1 instead of 3). The implementation below
+  # splits CJK code points out first and then scans the remaining
+  # fragments with the letter-run alternation, which yields exactly the
+  # frozen semantics (the fixture case table is the authority).
+  #
+  # No tokenizer gem, network access or model dependency is introduced.
+
+  module ProxyToken
+    module_function
+
+    CJK_PATTERN = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/u
+    RUN_PATTERN = /[\p{L}\p{M}\p{N}_]+|[^\p{Space}]/u
+
+    def count(text)
+      text.split(/(#{CJK_PATTERN})/u).sum do |part|
+        if part.match?(/\A#{CJK_PATTERN}\z/u)
+          1
+        else
+          part.scan(RUN_PATTERN).length
+        end
+      end
     end
   end
 
@@ -1398,8 +1330,11 @@ module CompactPrompt
   module Budget
     module_function
 
-    # Returns [code, path, message] or nil. Both logical line count and
-    # UTF-8 byte count are checked against the prompt-mode hard limits.
+    # Returns [code, path, message] or nil. Deterministic gate order on the
+    # verified canonical output: logical line count → UTF-8 byte count →
+    # PCE_UNICODE_WORDPUNCT_V1 proxy-token count. There is no silent pass,
+    # no automatic constraint deletion, no automatic mode upgrade and no
+    # numeric waiver.
     def check(text, mode)
       budget = CompactPrompt::PROMPT_MODE_BUDGETS[mode]
       lines = text.lines.count
@@ -1408,6 +1343,9 @@ module CompactPrompt
               "#{lines} lines exceed #{budget['hard_limit_lines']} for #{mode}"] if lines > budget["hard_limit_lines"]
       return ["PROMPT_BYTE_LIMIT_EXCEEDED", "output",
               "#{bytes} bytes exceed #{budget['hard_limit_bytes']} for #{mode}"] if bytes > budget["hard_limit_bytes"]
+      tokens = CompactPrompt::ProxyToken.count(text)
+      return ["PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED", "output",
+              "#{tokens} proxy tokens exceed #{budget['hard_limit_proxy_tokens']} for #{mode}"] if tokens > budget["hard_limit_proxy_tokens"]
       nil
     end
   end
@@ -1484,18 +1422,10 @@ module CompactPrompt
                                               "meaning" => "DOC_ONLY must not require root npm test" },
       "TEMPLATE_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                    "meaning" => "prompt template file not found" },
-      "TEMPLATE_PLACEHOLDER_UNKNOWN" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                          "meaning" => "template placeholder has no source row" },
-      "TEMPLATE_PLACEHOLDER_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                          "meaning" => "registered placeholder absent from template" },
-      "TEMPLATE_PLACEHOLDER_DUPLICATE" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                            "meaning" => "registered placeholder appears more than once" },
-      "TEMPLATE_SOURCE_BINDING_MISMATCH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                              "meaning" => "placeholder source not resolvable" },
-      "TEMPLATE_STRUCTURE_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                        "meaning" => "template section shape or delivery_type identity violation" },
-      "TEMPLATE_CONDITIONAL_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
-                                          "meaning" => "conditional block missing, duplicate, nested or malformed" },
+      "TEMPLATE_CONTRACT_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                       "meaning" => "prompt template asset violates the v2 contract manifest" },
+      "GIT_ACTION_CONFLICT" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                 "meaning" => "git.pull_request_action conflicts with baseline.pull_request" },
       # exit 4 — GIT_BASELINE
       "GIT_REPOSITORY_NOT_FOUND" => { "exit" => 4, "category" => "GIT_BASELINE",
                                       "meaning" => "cwd is not inside a git repository" },
@@ -1518,6 +1448,8 @@ module CompactPrompt
                                         "meaning" => "logical line count exceeds mode hard limit" },
       "PROMPT_BYTE_LIMIT_EXCEEDED" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
                                         "meaning" => "UTF-8 byte count exceeds mode hard limit" },
+      "PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
+                                               "meaning" => "PCE_UNICODE_WORDPUNCT_V1 proxy-token count exceeds mode hard limit" },
       "INTERNAL_ERROR" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
                             "meaning" => "fail-closed internal/render error; no backtrace emitted" }
     }.freeze
@@ -1676,20 +1608,15 @@ module CompactPrompt
         end
         ttext = File.read(template_path, encoding: "UTF-8")
       end
-      # Template structure first (fixed ten sections, single
-      # delivery_type, complete strict WHEN/ENDWHEN marker scan), then the
-      # single template-binding validator shared by validate, compile and the
-      # contract validator (finding F05): exact 27-placeholder set,
-      # exactly-once occurrences, no unknown/missing/duplicate drift.
-      serr = CompactPrompt::Template.structure_error(ttext)
-      if serr
-        stderr.write(CompactPrompt::Diagnostics.format(*serr))
-        return Diagnostics.exit_for(serr[0])
-      end
-      berr = CompactPrompt::Template.binding_error(ttext)
-      if berr
-        stderr.write(CompactPrompt::Diagnostics.format(*berr))
-        return Diagnostics.exit_for(berr[0])
+      # Template asset contract manifest first (v2): the asset must declare
+      # the compact-execution-envelope-v2 schema marker, contain zero
+      # production placeholders, zero WHEN/ENDWHEN blocks and must not
+      # declare the fixed ten-section contract. One shared fail-closed gate
+      # for validate, compile and the contract validator.
+      terr = CompactPrompt::Template.contract_manifest_error(ttext)
+      if terr
+        stderr.write(CompactPrompt::Diagnostics.format(*terr))
+        return Diagnostics.exit_for(terr[0])
       end
 
       gerr = CompactPrompt::GitBaseline.check(data, pdata, gs, cwd)
@@ -1716,7 +1643,7 @@ module CompactPrompt
       end
 
       prompt, rerr = CompactPrompt::Renderer.render(
-        data, pdata, ttext, resolved_profile_mapping: resolved_mapping
+        data, pdata, resolved_profile_mapping: resolved_mapping
       )
       if rerr
         stderr.write(CompactPrompt::Diagnostics.format(*rerr))
