@@ -69,6 +69,7 @@ Require only the minimum sufficient design for the current phase.
 20. A capability may be valuable to the system and still be out of scope for the current phase.
 21. Require only the minimum design necessary to deliver the current phase correctly, safely, observably, and verifiably.
 22. Do not turn future architecture, platformization, automation, or optimization into current-phase blocking findings.
+23. Apply the Goal-Anchored Global Reasoning contract: scan global-before-local (enumerate applicable material surfaces before detail work), close direct impacts of every material finding, converge on root causes, and continue the remaining reliable bounded surfaces after a fail-worthy finding (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first BLOCKING/REQUIRED finding.
 
 ## Required Standard Files
 
@@ -88,6 +89,7 @@ Load these references as needed:
 - `references/finding-classification.md`
 - `references/output-report.md`
 - `references/follow-up-verification.md`
+- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -141,6 +143,8 @@ If the current phase boundary is not declared, output a finding that the specifi
 
 ### 3. Scan Challenge Dimensions
 
+Scan global-before-local: first enumerate the applicable material surfaces of the current goal (flows, states, data, interfaces, failure/recovery, verification), then scan each dimension within those surfaces. Do not drill into a single local detail before the global surface list is established.
+
 Review the specification against these dimensions, but only for content within the approved scope and current delivery phase:
 
 - Requirement-to-Spec Mapping
@@ -169,6 +173,8 @@ Review the specification against these dimensions, but only for content within t
 - Alternative Solution / Overdesign Check
 
 Skip dimensions that are irrelevant. Do not invent findings to fill the list.
+
+Close direct impacts for every material finding (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) before moving on. After a fail-worthy finding, continue the remaining reliable bounded surfaces; the challenge result reflects the complete scan, not the first finding.
 
 ### 4. Verify Existing Mechanisms
 

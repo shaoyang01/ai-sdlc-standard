@@ -51,3 +51,11 @@ Route findings to the earliest affected node:
 - Task breakdown issue -> `sdlc-speckit-tasks`.
 
 Do not route all findings to implementation. Implementation starts only after Analyze Gate passes.
+
+## Bounded Continuation
+
+Per `ai-sdlc/goal-anchored-global-reasoning.md`:
+
+- Record every material blocker (from Allowed Findings or Blocked Analysis Decisions) and continue the remaining reliable bounded consistency scan; do not fail-fast on the first blocker.
+- A blocker that requires upstream Re-Gate is still recorded and routed to the earliest affected node; it does not end the scan.
+- Hard-stop only for: missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior.

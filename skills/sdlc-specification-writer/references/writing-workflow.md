@@ -70,7 +70,7 @@ Do not use repository context to invent new business requirements.
 
 ## Step 4: Specification Drafting
 
-Draft using `templates/technical-specification-template.md`.
+Before drafting, build the global model: enumerate the material surfaces the current goal touches (modules, data, interfaces, flows, states, verification) using `ai-sdlc/goal-anchored-global-reasoning.md` (anchor -> global-first). Then draft using `templates/technical-specification-template.md`.
 
 Keep sections even when details are missing:
 
@@ -109,6 +109,8 @@ Before output, check:
 - State and data behavior are stated.
 - Tests cover main path, miss path, failure path, idempotency, and old-flow compatibility.
 - Pending confirmations are not hidden.
+
+Whole-model impact self-check: every material surface in the global model is covered or explicitly marked `不涉及`/`待确认`; direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) are closed before the specification is reported ready.
 
 ## Step 6: Handoff
 

@@ -21,6 +21,7 @@ Generate an ESS-compliant technical specification as the DocFlow `01-技术方�
 8. Use `library/{requirement_id}/01-技术方案/` as the default local output node.
 9. Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested.
 10. After generating the specification, recommend `sdlc-solution-reviewer` as the next Gate.
+11. Apply the Goal-Anchored Global Reasoning contract: build the global model of applicable material surfaces before drafting, and run a whole-model impact self-check after drafting (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not expand ESS sections, schemas or Gate architecture.
 
 ## Required Standard Files
 
@@ -42,6 +43,7 @@ Load these references as needed:
 - `references/schema-mapping.md` for ESS section requirements.
 - `references/blocking-rules.md` for when to stop instead of guessing.
 - `references/output-artifact.md` for output paths and manifest recommendations.
+- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -74,9 +76,11 @@ Read:
 
 Read `references/output-artifact.md` before producing or writing the final artifact.
 
+Read `ai-sdlc/goal-anchored-global-reasoning.md` and anchor the current goal, Scope and non-goals before building the global model.
+
 ### 3. Build Specification
 
-Generate a technical specification using `${AI_SDLC_STANDARD_HOME}/templates/technical-specification-template.md`.
+Build the global model first: enumerate the material surfaces the current goal touches (modules, data, interfaces, flows, states, verification) before detailing any single section. Then generate a technical specification using `${AI_SDLC_STANDARD_HOME}/templates/technical-specification-template.md`.
 
 Preserve all ESS sections:
 
@@ -103,6 +107,8 @@ Preserve all ESS sections:
 - 待确认事项
 
 Use "不涉及" only when the section is genuinely not applicable. Use "待确认" when information is missing but relevant.
+
+After drafting, run a whole-model impact self-check: every material surface in the global model must be covered or explicitly marked `不涉及`/`待确认`; close direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) before reporting the specification ready.
 
 ### 4. Preserve Uncertainty
 

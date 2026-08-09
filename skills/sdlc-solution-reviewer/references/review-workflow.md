@@ -106,6 +106,8 @@ Testing gaps that prevent validating the core requirement are Critical or High.
 
 ## Step 6: Gate and Path Decision
 
+Before the Gate / Development Path / Tail decision, complete the current-goal global/material scan and close direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) per `ai-sdlc/goal-anchored-global-reasoning.md`. A FAIL-eligible finding does not end discovery: continue the remaining reliable bounded material surfaces, then decide.
+
 After issue classification:
 
 1. Decide Gate Result.

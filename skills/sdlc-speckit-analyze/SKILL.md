@@ -26,6 +26,7 @@ Audit cross-artifact consistency after `sdlc-speckit-tasks` and before implement
 13. Require `.specify/entry-coverage-profile.yaml`; missing profile blocks Analyze and must point to `scripts/bootstrap-entry-coverage-profile.sh` or full bootstrap.
 14. Parse entry coverage TSV fields for Gate decisions; do not grep markdown reports to infer blockers.
 15. Apply project-type-specific checks from Project Type Profiles before approving implementation readiness.
+16. Apply the Goal-Anchored Global Reasoning contract: record material blockers and continue the remaining reliable bounded consistency scan; hard-stop only for missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first blocker.
 
 ## Standard Package Resolution
 
@@ -94,6 +95,7 @@ Load these references as needed:
 - `references/analyze-gate-check.md` for Analyze Gate coverage and blocking rules.
 - `references/project-type-checks.md` for project_type_profiles-specific readiness checks.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
+- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -207,15 +209,17 @@ Every analysis result must contain:
 
 ## Stop Conditions
 
-Stop instead of approving implementation readiness when:
+Hard-stop instead of continuing the scan when:
 
-- `specs/{feature}/route.md` is missing or conflicts with spec, plan, or tasks.
-- `.specify/entry-coverage-profile.yaml` is missing.
+- A required source is missing or unreadable (`specs/{feature}/route.md`, `spec.md`, `plan.md`, `tasks.md`, `.specify/entry-coverage-profile.yaml`, or parsed TSV entry coverage data).
+- Scope is fundamentally indeterminable from the available artifacts.
+- Continuing would require inventing business or technical behavior.
+
+All other blocking conditions below are recorded as material blockers and reported; they do not end discovery — continue the remaining reliable bounded consistency scan before concluding:
+
 - `.specify/entry-coverage-profile.candidate.yaml` exists without confirmed stable profile.
-- Entry coverage reports are missing or were not parsed from TSV fields.
 - `sdlc-speckit-tasks` has unresolved Blocking items.
 - Spec, plan, tasks, or DocFlow artifacts conflict.
-- A task requires new business or technical behavior.
 - A planned behavior has no task or verification path.
 - Risk acceptance is missing or contradicted.
 - Current artifacts are stale.

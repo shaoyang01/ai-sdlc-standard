@@ -70,6 +70,14 @@ blocking_conditions:
 - 新增业务范围或技术方案。
 - 直接修改共享 checklist、schema 或知识库。
 
+### Goal-Anchored Global Reasoning Contract
+
+绑定 `ai-sdlc/goal-anchored-global-reasoning.md`（GRP-01 shared reference）：
+
+- 对每个 material finding 关闭直接 impact（caller/callee 或 dependency、consumer、state/data、failure/compatibility、verification），再按 root cause 合并（consolidation）；
+- blocking issue 不终止对剩余可靠 bounded surfaces 的审查；不 fail-fast on the first finding；
+- 保持现有 code-review schema；不引入第二套 reasoning 协议。
+
 ## Input Contract
 
 必需输入：

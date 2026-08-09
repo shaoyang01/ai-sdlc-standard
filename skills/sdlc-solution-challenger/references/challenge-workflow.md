@@ -68,8 +68,11 @@ Load and apply:
 - `finding-classification.md` — Finding schema and classification rules
 - `output-report.md` — Report structure
 - `follow-up-verification.md` — If in FOLLOW_UP_VERIFICATION mode
+- `ai-sdlc/goal-anchored-global-reasoning.md` — shared goal-anchored global reasoning contract (global-before-local scan, impact closure, root-cause convergence, bounded continuation)
 
 ## Step 4: Scan Challenge Dimensions
+
+Scan global-before-local: enumerate the applicable material surfaces of the current goal before scanning individual dimensions. Do not drill into a single local detail first.
 
 Review the specification against these dimensions. Only check content within the approved scope and current delivery phase. Skip dimensions that are clearly irrelevant to the current specification.
 
@@ -103,6 +106,8 @@ Review the specification against these dimensions. Only check content within the
 28. Acceptance Coverage
 29. Alternative Solution
 30. Overdesign Check
+
+For every material finding, close its direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) before moving on. After a fail-worthy finding, continue the remaining reliable bounded surfaces; the result reflects the complete scan, not the first finding.
 
 ## Step 5: Classify and Consolidate Findings
 

@@ -89,6 +89,14 @@ blocking_conditions:
 - 修改业务代码。
 - 回写 `.specify/business_domain/**`。
 
+### Goal-Anchored Global Reasoning Contract
+
+绑定 `ai-sdlc/goal-anchored-global-reasoning.md`（GRP-01 shared reference）：
+
+- 记录 material blockers 并继续剩余可靠 bounded consistency scan；不 fail-fast on the first blocker；
+- hard-stop 仅限：required source missing/unreadable、scope fundamentally indeterminable、continuation 需要发明行为；
+- 不引入第二套 reasoning 协议，不改变 Analyze Gate 语义。
+
 ## Input Contract
 
 必需输入：

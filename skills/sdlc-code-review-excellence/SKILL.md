@@ -25,6 +25,7 @@ Perform standards-based code review for an implemented requirement. Treat the ap
 12. Route formal report normalization to `sdlc-code-review-normalizer`.
 13. Route reusable checklist or schema improvements to `sdlc-test-feedback-sync` or standard governance.
 14. Recommend manifest Code Review Gate updates, but do not write them unless explicitly requested through the appropriate writer.
+15. Apply the Goal-Anchored Global Reasoning contract: for every material finding, close its direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) and then consolidate to the root cause (see `ai-sdlc/goal-anchored-global-reasoning.md`). Keep the existing code-review schema; do not fail-fast on the first blocking issue.
 
 ## Required Standard Files
 
@@ -47,6 +48,7 @@ Load these references as needed:
 - `references/finding-standards.md` for finding shape, severity, and evidence rules.
 - `references/blocking-and-regate.md` for blocking conditions and upstream routing.
 - `references/output-and-handoff.md` for output shape, normalizer handoff, and manifest recommendations.
+- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -94,6 +96,8 @@ Inspect in this order:
 - Observability and diagnosability
 - Test coverage and verification quality
 - Maintainability and fit with existing patterns
+
+For every material finding, close its direct impacts — caller/callee or dependency, consumer, state/data, failure/compatibility, verification — before moving on; then consolidate findings to the root cause. A blocking issue does not end the review of the remaining reliable bounded surfaces.
 
 ### 4. Classify Findings
 

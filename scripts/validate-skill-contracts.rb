@@ -4670,8 +4670,108 @@ end
 errors.concat(topic07_closure_baseline_diags)
 errors.concat(topic07_closure_selftest_diags)
 
+# ── GRP-01 Goal-Anchored Global Reasoning Contract Validation ──
+# Read-only, deterministic, no network. Locks the five shared bindings
+# (Specification Writer, Solution Challenger, Solution Reviewer, Speckit
+# Analyze, Code Review Excellence) against the single shared reference and
+# the obvious ordering / impact / consolidation / non-fail-fast / bounded /
+# minimum-sufficient regressions. It does not attempt to prove model
+# intelligence; it only locks document contract terms.
+
+GRP01_SHARED_REFERENCE = "ai-sdlc/goal-anchored-global-reasoning.md"
+
+GRP01_SHARED_TERMS = %w[
+  anchor global-first impact\ closure root-cause bounded fail-worthy fail-fast
+].freeze
+
+# Every binding file must carry its exact goal-anchored terms; missing terms
+# are contract regressions (ordering, impact closure, consolidation,
+# non-fail-fast, bounded continuation, minimum-sufficient preservation).
+GRP01_BINDINGS = {
+  "skills/sdlc-specification-writer/SKILL.md" => %w[global\ model whole-model\ impact\ self-check],
+  "skills/sdlc-specification-writer/references/writing-workflow.md" => %w[global\ model whole-model\ impact],
+  "skill-contracts/known-skills/sdlc-specification-writer.md" => %w[goal-anchored-global-reasoning whole-model\ impact\ self-check],
+  "skills/sdlc-solution-challenger/SKILL.md" => %w[global-before-local direct\ impacts fail-worthy],
+  "skills/sdlc-solution-challenger/references/challenge-workflow.md" => %w[global-before-local fail-worthy],
+  "skill-contracts/known-skills/sdlc-solution-challenger.md" => %w[goal-anchored-global-reasoning minimum-sufficient],
+  "skills/sdlc-solution-reviewer/SKILL.md" => %w[material\ scan does\ not\ end\ discovery],
+  "skills/sdlc-solution-reviewer/references/review-workflow.md" => %w[current-goal\ global/material\ scan does\ not\ end\ discovery],
+  "skill-contracts/known-skills/sdlc-solution-reviewer.md" => %w[goal-anchored-global-reasoning FAIL\ eligibility],
+  "skills/sdlc-speckit-analyze/SKILL.md" => %w[material\ blockers hard-stop],
+  "skills/sdlc-speckit-analyze/references/consistency-scope.md" => %w[bounded\ continuation hard-stop],
+  "skill-contracts/known-skills/sdlc-speckit-analyze.md" => %w[goal-anchored-global-reasoning material\ blockers],
+  "skills/sdlc-code-review-excellence/SKILL.md" => %w[direct\ impacts root\ cause],
+  "skills/sdlc-code-review-excellence/references/review-workflow.md" => %w[impact\ closure root\ cause],
+  "skill-contracts/known-skills/sdlc-code-review-excellence.md" => %w[goal-anchored-global-reasoning root\ cause]
+}.freeze
+
+def grp01_diagnostics(scope)
+  diags = []
+  shared = scope[GRP01_SHARED_REFERENCE]
+  if shared.nil?
+    diags << "GRP-01: shared reference missing #{GRP01_SHARED_REFERENCE}"
+  else
+    GRP01_SHARED_TERMS.each do |term|
+      diags << "GRP-01: shared reference missing term #{term.inspect}" unless shared.downcase.include?(term.downcase)
+    end
+  end
+  GRP01_BINDINGS.each do |rel, terms|
+    text = scope[rel]
+    if text.nil?
+      diags << "GRP-01: binding file missing #{rel}"
+      next
+    end
+    terms.each do |term|
+      diags << "GRP-01: #{rel} missing binding term #{term.inspect}" unless text.downcase.include?(term.downcase)
+    end
+  end
+  diags
+end
+
+grp01_scope = {}
+[GRP01_SHARED_REFERENCE, *GRP01_BINDINGS.keys].each do |rel|
+  path = File.join(ROOT, rel)
+  grp01_scope[rel] = File.read(path) if File.file?(path)
+end
+
+grp01_baseline_diags = grp01_diagnostics(grp01_scope)
+grp01_selftest_diags = []
+
+# Negative self-tests: deleting one exact binding term per skill must be
+# rejected by the real closure (in-memory deep copies only, no file writes).
+GRP01_SELFTEST_MUTATIONS = {
+  "skills/sdlc-specification-writer/SKILL.md" => "whole-model impact self-check",
+  "skills/sdlc-solution-challenger/SKILL.md" => "global-before-local",
+  "skills/sdlc-solution-reviewer/SKILL.md" => "does not end discovery",
+  "skills/sdlc-speckit-analyze/SKILL.md" => "material blockers",
+  "skills/sdlc-code-review-excellence/SKILL.md" => "direct impacts"
+}.freeze
+
+GRP01_SELFTEST_MUTATIONS.each do |rel, term|
+  base = grp01_scope[rel]
+  if base.nil?
+    grp01_selftest_diags << "GRP-01: self-test #{rel} cannot run: missing scope file"
+    next
+  end
+  mutated = base.gsub(term, "REMOVED")
+  if mutated == base
+    grp01_selftest_diags << "GRP-01: self-test #{rel} mutation did not change the text; " \
+                            "baseline text must not be treated as mutation output"
+    next
+  end
+  produced = grp01_diagnostics(grp01_scope.merge(rel => mutated))
+  unless produced.any? { |d| d.include?(rel) && d.include?(term) }
+    grp01_selftest_diags << "GRP-01: self-test #{rel} must be rejected with a diagnostic " \
+                            "containing #{term.inspect}; produced #{produced.inspect}"
+  end
+end
+
+errors.concat(grp01_baseline_diags)
+errors.concat(grp01_selftest_diags)
+
 if errors.empty?
   puts "TOPIC07_FORMAL_CLOSURE_VALIDATED true" if topic07_closure_baseline_diags.empty? && topic07_closure_selftest_diags.empty?
+  puts "GRP01_BINDINGS_VALIDATED true" if grp01_baseline_diags.empty? && grp01_selftest_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
   puts "PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true" if r1_matrix_diags.empty?

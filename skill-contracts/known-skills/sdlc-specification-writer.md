@@ -66,6 +66,14 @@ blocking_conditions:
 - 替代 `sdlc-speckit-pipeline` 执行完整 SDD。
 - 将不确定业务规则写成确定事实。
 
+### Goal-Anchored Global Reasoning Contract
+
+绑定 `ai-sdlc/goal-anchored-global-reasoning.md`（GRP-01 shared reference）：
+
+- 起草前先构建当前 goal 的 applicable material surfaces 全局模型（global-first，先于细节）；
+- 起草后执行 whole-model impact self-check，关闭直接 impact（caller/callee 或 dependency、consumer、state/data、failure/compatibility、verification）；
+- 不扩展 ESS section、schema 或 Gate 架构；不引入第二套 reasoning 协议。
+
 ## Input Contract
 
 必需输入至少满足其一：

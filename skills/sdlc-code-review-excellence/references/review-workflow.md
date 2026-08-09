@@ -74,3 +74,15 @@ Inspect:
 - Naming and comments only when they affect correctness or maintainability.
 
 Avoid blocking on preference-only style comments.
+
+## 8. Impact Closure And Root-Cause Consolidation
+
+Per `ai-sdlc/goal-anchored-global-reasoning.md`, for every material finding close its direct impacts before moving on:
+
+- Caller / callee or dependency.
+- Consumer.
+- State / data.
+- Failure / compatibility.
+- Verification.
+
+Then consolidate findings to the root cause: same-root manifestations merge into one finding; closing the root cause, not each surface symptom. A blocking issue does not end the review of the remaining reliable bounded surfaces.
