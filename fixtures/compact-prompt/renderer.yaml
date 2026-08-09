@@ -3887,3 +3887,380 @@ fixtures:
       stderr: contains
       stderr_contains:
         - "INTERNAL_ERROR\tinternal"
+  - id: RENDER-VALID-COMPILE-ZERO-DELTA-CREATE-DRAFT
+    category: valid
+    command: compile
+    description: "Zero-repository-delta Draft-PR capsule renders changes: [], max_changed_files: 0 and canonical git.pr_head identity"
+    capsule: |
+      task_id: fixture-zero-delta
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "zero-delta Draft-PR 渲染 fixture"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "渲染 zero-delta 形状"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "ZERO-DELTA Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/heads/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+        refs/remotes/origin/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+    yaml_blocks:
+      root:
+        fields:
+          delivery_type: {value: CODEX_EXECUTION_PROMPT}
+          schema: {value: compact-execution-envelope-v2}
+          recipient: {value: "Codex"}
+          paste_location: {value: "acme/widgets 新执行会话"}
+          purpose: {value: "zero-delta Draft-PR 渲染 fixture"}
+          report_back_to: {value: "owner-session"}
+          next_hop_after_report: {value: "owner-session 复核实施报告"}
+          max_changed_files: {value: 0, type: integer}
+          changes: {value: []}
+          accept: {value: ["渲染 zero-delta 形状"]}
+          rules:
+            value: [FETCH_VERIFY_EXACT_BASE, VERIFY_WORKTREE_SAFE, NO_AMEND, NO_REBASE,
+                    NO_SQUASH, NO_FORCE_PUSH, NO_DIRECT_FACT_BRANCH_WRITE, NO_READY,
+                    NO_MERGE, NO_AUTO_MERGE, NO_PUBLICATION, STOP_ON_SCOPE_EXPANSION,
+                    VERIFY_EXACT_PR_HEAD_BEFORE_PR]
+          forbidden: {value: ["merge"]}
+          completion_report_recipient: {value: "owner-session"}
+          completion_report_name: {value: "ZERO-DELTA Report"}
+          stop_after_report: {value: true, type: boolean}
+      baseline:
+        fields:
+          repository: {value: acme/widgets}
+          branch: {value: feature/runtime-v1}
+          head: {value: "7c21cc8bb9649188505dafea1402049c74bd9be7"}
+      validation:
+        fields:
+          profile: {value: DOC_ONLY}
+          run:
+            value: ["ruby scripts/validate-skill-contracts.rb",
+                    "ruby scripts/validate-capability-metadata-chain.rb", "git diff --check"]
+          forbid: {value: ["npm test", "npm run test:loop-patch-mutations"]}
+      git:
+        fields:
+          pr: {value: CREATE_DRAFT}
+          pr_base: {value: FACT_BRANCH}
+          pr_head: {value: {branch: "codex/pce-zero-delta-draft", sha: "1111111111111111111111111111111111111111"}, type: mapping}
+
+  - id: RENDER-NEG-COMPILE-ZERO-DELTA-MISSING-PR-HEAD
+    category: negative
+    command: compile
+    description: "Zero-delta CREATE_DRAFT without pr_head fails closed (MISSING_REQUIRED_FIELD)"
+    capsule: |
+      task_id: fixture-zero-delta-no-pr-head
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺少 pr_head 的 zero-delta 必须失败"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "NO-PR-HEAD Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["MISSING_REQUIRED_FIELD"]
+  - id: RENDER-NEG-COMPILE-ZERO-DELTA-PR-HEAD-LOCAL-MISSING
+    category: negative
+    command: compile
+    description: "Zero-delta PR-head local ref missing fails closed (PR_HEAD_REF_MISSING)"
+    capsule: |
+      task_id: fixture-zero-delta-local-missing
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "本地 PR-head ref 缺失必须失败"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "LOCAL-MISSING Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PR_HEAD_REF_MISSING"]
+
+  - id: RENDER-NEG-COMPILE-ZERO-DELTA-PR-HEAD-ORIGIN-MISSING
+    category: negative
+    command: compile
+    description: "Zero-delta PR-head origin ref missing fails closed (PR_HEAD_REF_MISSING)"
+    capsule: |
+      task_id: fixture-zero-delta-origin-missing
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "origin PR-head ref 缺失必须失败"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "ORIGIN-MISSING Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/heads/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PR_HEAD_REF_MISSING"]
+
+  - id: RENDER-NEG-COMPILE-ZERO-DELTA-PR-HEAD-LOCAL-MISMATCH
+    category: negative
+    command: compile
+    description: "Zero-delta PR-head local ref SHA mismatch fails closed (PR_HEAD_SHA_MISMATCH)"
+    capsule: |
+      task_id: fixture-zero-delta-local-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "本地 PR-head ref SHA 不一致必须失败"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "LOCAL-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/heads/codex/pce-zero-delta-draft: "2222222222222222222222222222222222222222"
+        refs/remotes/origin/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PR_HEAD_SHA_MISMATCH"]
+
+  - id: RENDER-NEG-COMPILE-ZERO-DELTA-PR-HEAD-ORIGIN-MISMATCH
+    category: negative
+    command: compile
+    description: "Zero-delta PR-head origin ref SHA mismatch fails closed (PR_HEAD_SHA_MISMATCH)"
+    capsule: |
+      task_id: fixture-zero-delta-origin-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "origin PR-head ref SHA 不一致必须失败"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: CREATE_DRAFT
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "ORIGIN-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/heads/codex/pce-zero-delta-draft: "1111111111111111111111111111111111111111"
+        refs/remotes/origin/codex/pce-zero-delta-draft: "2222222222222222222222222222222222222222"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 4
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PR_HEAD_SHA_MISMATCH"]

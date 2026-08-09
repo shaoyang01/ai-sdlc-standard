@@ -99,6 +99,31 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
   case（含 "A中B"=3 的 Onigmo `\p{L}` 含 Han 语义差异）逐条断言；实现
   先切分 CJK 码点再扫描 letter-run，无 tokenizer gem / 网络 / model
   dependency；不声称 model-exact token count；
+- Zero-Repository-Delta Draft-PR 执行（PCE_01_PR_ONLY_ZERO_DELTA_F01）：
+  精确三重形状 `required_changes: []` + `allowed_files: []` +
+  `maximum_changed_files: 0` + `commit_count: 0` / `push_mode: NONE` /
+  `CREATE_DRAFT`；可选根字段 `pr_head: {branch, sha}`（canonical exact
+  PR-head identity，仅 zero-delta + CREATE_DRAFT 必填，非零 delta 携带被
+  拒绝）；空 changes 带非空 scope 或正 max 被拒绝；envelope 渲染
+  `changes: []` 与 `git.pr_head`（branch + sha），baseline 保持 exact PR
+  base；7 个 contract 分类 fixtures + 2 个 renderer fixtures 锁定
+  PASS/拒绝路径；既有 nonzero-delta fixtures 全部保持 PASS；
+- Repository-aware PR-head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_
+  BINDING）：zero-delta + CREATE_DRAFT 时 GitBaseline 额外要求
+  `refs/heads/<pr_head.branch>` 与 `refs/remotes/origin/<pr_head.branch>`
+  两个 exact full ref 均等于 `pr_head.sha`；缺失 → `PR_HEAD_REF_MISSING`、
+  不一致 → `PR_HEAD_SHA_MISMATCH`（exit 4）；validate preflight 与
+  compile 渲染前 reverify 均执行（conditional execution-time drift-stop）；
+  4 个 renderer fixtures 锁定 local/origin missing 与 local/origin
+  mismatch 拒绝路径，PASS fixture 注入 local+origin candidate refs；
+- Execution-time drift-stop rule（EXECUTION_TIME_PR_HEAD_DRIFT_STOP）：
+  zero-delta + CREATE_DRAFT 的 envelope `rules` 条件性包含
+  `VERIFY_EXACT_PR_HEAD_BEFORE_PR`（13 项，追加在 12 个 stable codes 后）；
+  非零 delta 输出绝不包含（既有 12 项 rules 精确断言证明 absence）；
+  standard「Conditional Execution-Time Rule」章节明确定义 mutation-time
+  语义（CREATE_DRAFT 前 fetch/reverify exact base 与 local+origin
+  pr_head refs，missing/drift STOP）并与 compile-time GitBaseline gate
+  两层分离；
 - PCE-01-B 专项加固（F02-F07）以 fixtures 锁定：repository identity
   三方闭合（origin == capsule baseline.repository == policy repository，
   大小写不敏感；policy/Capsule mismatch、policy/origin mismatch 失败，
