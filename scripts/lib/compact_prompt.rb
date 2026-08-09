@@ -990,6 +990,28 @@ module CompactPrompt
         end
       end
 
+      # Zero-delta Draft-PR head binding (PCE_01_PR_ONLY_ZERO_DELTA_F01_
+      # HEAD_BINDING): repository-aware validation requires both exact
+      # refs/heads/<pr_head.branch> and refs/remotes/origin/<pr_head.branch>
+      # to equal pr_head.sha; missing or mismatch fails closed. This is the
+      # conditional execution-time drift-stop for the zero-delta CREATE_DRAFT
+      # shape: validate preflights it and compile reverifies it immediately
+      # before envelope rendering (drift/deletion means STOP, never a
+      # silently stale PR-head identity).
+      if CompactPrompt::Capsule.zero_delta?(capsule) &&
+         capsule.dig("git", "pull_request_action") == "CREATE_DRAFT"
+        pr_branch = capsule.dig("pr_head", "branch")
+        pr_sha = capsule.dig("pr_head", "sha")
+        ["refs/heads/#{pr_branch}", "refs/remotes/origin/#{pr_branch}"].each do |ref|
+          actual = git_state.exact_ref_head(root, ref)
+          return ["PR_HEAD_REF_MISSING", ref, "PR-head ref does not exist"] if actual.nil?
+          unless actual == pr_sha
+            return ["PR_HEAD_SHA_MISMATCH", ref,
+                    "PR-head ref head #{actual} does not equal pr_head.sha #{pr_sha}"]
+          end
+        end
+      end
+
       nil
     end
   end
@@ -1535,6 +1557,10 @@ module CompactPrompt
                                   "meaning" => "exact full ref does not exist" },
       "BASELINE_HEAD_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
                                     "meaning" => "exact ref head != capsule baseline.head" },
+      "PR_HEAD_REF_MISSING" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                 "meaning" => "zero-delta PR-head exact ref does not exist" },
+      "PR_HEAD_SHA_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                  "meaning" => "zero-delta PR-head exact ref head != pr_head.sha" },
       # exit 5 — RENDER_OR_BUDGET
       "RENDER_INCOMPLETE" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
                                "meaning" => "canonical output verification failed" },

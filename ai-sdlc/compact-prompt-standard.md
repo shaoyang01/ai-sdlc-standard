@@ -648,6 +648,15 @@ ls-remote。核验顺序：
    无 shell、无网络、无 revision expression），必须精确等于 Capsule
    `baseline.head`；缺失为 `BASELINE_REF_MISSING`，不一致为
    `BASELINE_HEAD_MISMATCH`。
+7. Zero-delta Draft-PR head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_BINDING）：
+   仅当 Capsule 为 zero-repository-delta 且 `pull_request_action ==
+   CREATE_DRAFT` 时，额外要求 `refs/heads/<pr_head.branch>` 与
+   `refs/remotes/origin/<pr_head.branch>` 均经 exact full-ref 查找并精确
+   等于 `pr_head.sha`；任一缺失为 `PR_HEAD_REF_MISSING`，不一致为
+   `PR_HEAD_SHA_MISMATCH`（均为 exit 4，GIT_BASELINE）。这是
+   conditional execution-time drift-stop：validate preflight 与 compile
+   渲染前 reverify 都执行；drift/deletion 意味着 STOP，绝不输出 stale
+   PR-head identity。
 
 不得要求当前 checkout branch 等于事实分支；current checkout 与 current HEAD
 均不是 baseline authority。remote-tracking ref 仅代表上游预先 fetch 后的本地
@@ -747,6 +756,8 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `FACT_BRANCH_INVALID` | 4 | GIT_BASELINE | fact_branch 未通过 git check-ref-format |
 | `BASELINE_REF_MISSING` | 4 | GIT_BASELINE | 精确全 ref 不存在 |
 | `BASELINE_HEAD_MISMATCH` | 4 | GIT_BASELINE | 精确 ref head != capsule baseline.head |
+| `PR_HEAD_REF_MISSING` | 4 | GIT_BASELINE | zero-delta PR-head 精确 ref 不存在 |
+| `PR_HEAD_SHA_MISMATCH` | 4 | GIT_BASELINE | zero-delta PR-head 精确 ref head != pr_head.sha |
 | `RENDER_INCOMPLETE` | 5 | RENDER_OR_BUDGET | canonical 输出验证失败 |
 | `PROMPT_LINE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | 逻辑行数超过 Mode 硬限制 |
 | `PROMPT_BYTE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | UTF-8 字节数超过 Mode 硬限制 |

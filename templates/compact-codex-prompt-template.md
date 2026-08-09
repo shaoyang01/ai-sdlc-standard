@@ -79,6 +79,15 @@ git:
 `pr_head` 是可选根字段 `{branch, sha}`：仅 zero-delta + CREATE_DRAFT 必填；
 非零 delta 携带 `pr_head` 会被拒绝；baseline 保持 exact PR base。
 
+### Repository-Aware PR-Head Binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_BINDING）
+
+zero-delta + CREATE_DRAFT 时，`pr_head.sha` 不是自由声明值：validate
+preflight 与 compile 渲染前都要求 `refs/heads/pr_head.branch` 与
+`refs/remotes/origin/pr_head.branch` 两个 exact full ref 均等于
+`pr_head.sha`。缺失 → `PR_HEAD_REF_MISSING`；不一致 → `PR_HEAD_SHA_MISMATCH`
+（exit 4，GIT_BASELINE）。drift/deletion 意味着 STOP，绝不输出 stale
+PR-head identity。
+
 ## Omission / Derivation 规则（摘要）
 
 - `baseline.pull_request`：`none` 省略；正整数渲染。
