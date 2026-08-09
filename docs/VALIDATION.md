@@ -116,6 +116,14 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
   compile 渲染前 reverify 均执行（conditional execution-time drift-stop）；
   4 个 renderer fixtures 锁定 local/origin missing 与 local/origin
   mismatch 拒绝路径，PASS fixture 注入 local+origin candidate refs；
+- Execution-time drift-stop rule（EXECUTION_TIME_PR_HEAD_DRIFT_STOP）：
+  zero-delta + CREATE_DRAFT 的 envelope `rules` 条件性包含
+  `VERIFY_EXACT_PR_HEAD_BEFORE_PR`（13 项，追加在 12 个 stable codes 后）；
+  非零 delta 输出绝不包含（既有 12 项 rules 精确断言证明 absence）；
+  standard「Conditional Execution-Time Rule」章节明确定义 mutation-time
+  语义（CREATE_DRAFT 前 fetch/reverify exact base 与 local+origin
+  pr_head refs，missing/drift STOP）并与 compile-time GitBaseline gate
+  两层分离；
 - PCE-01-B 专项加固（F02-F07）以 fixtures 锁定：repository identity
   三方闭合（origin == capsule baseline.repository == policy repository，
   大小写不敏感；policy/Capsule mismatch、policy/origin mismatch 失败，

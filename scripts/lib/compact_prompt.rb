@@ -994,10 +994,12 @@ module CompactPrompt
       # HEAD_BINDING): repository-aware validation requires both exact
       # refs/heads/<pr_head.branch> and refs/remotes/origin/<pr_head.branch>
       # to equal pr_head.sha; missing or mismatch fails closed. This is the
-      # conditional execution-time drift-stop for the zero-delta CREATE_DRAFT
-      # shape: validate preflights it and compile reverifies it immediately
-      # before envelope rendering (drift/deletion means STOP, never a
-      # silently stale PR-head identity).
+      # compile-time layer of the zero-delta CREATE_DRAFT drift-stop:
+      # validate preflights it and compile reverifies it immediately before
+      # envelope rendering (so no stale PR-head identity is ever rendered).
+      # Mutation-time enforcement is a separate Agent-visible layer
+      # (VERIFY_EXACT_PR_HEAD_BEFORE_PR, standard Conditional
+      # Execution-Time Rule); the two layers are never conflated.
       if CompactPrompt::Capsule.zero_delta?(capsule) &&
          capsule.dig("git", "pull_request_action") == "CREATE_DRAFT"
         pr_branch = capsule.dig("pr_head", "branch")
@@ -1381,7 +1383,17 @@ module CompactPrompt
           out << kv_plain(1, "pr", "UPDATE_DRAFT")
         end
       end
-      out << kv_list_plain(0, "rules", CompactPrompt::STABLE_RULES)
+      # Stable concise rule codes plus the conditional execution-time rule:
+      # for the zero-repository-delta CREATE_DRAFT shape only, the
+      # Agent-visible rules additionally include
+      # VERIFY_EXACT_PR_HEAD_BEFORE_PR (mutation-time drift-stop, standard
+      # section 5.3). Ordinary nonzero-delta output never carries it.
+      rules = CompactPrompt::STABLE_RULES.dup
+      if CompactPrompt::Capsule.zero_delta?(capsule) &&
+         capsule.dig("git", "pull_request_action") == "CREATE_DRAFT"
+        rules << "VERIFY_EXACT_PR_HEAD_BEFORE_PR"
+      end
+      out << kv_list_plain(0, "rules", rules)
       # Task-specific prohibitions: exact duplicates keep only the first
       # occurrence; entries identical to a stable rule code are not
       # repeated (the stable codes are already in rules). No fuzzy NLP or

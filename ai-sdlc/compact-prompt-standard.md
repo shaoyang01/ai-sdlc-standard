@@ -467,6 +467,36 @@ v2 不再发送长 Git safety prose。固定 concise rule codes（agent-visible 
 | `NO_PUBLICATION` | 禁止 publication |
 | `STOP_ON_SCOPE_EXPANSION` | scope 扩张时停止，不得自行扩 scope |
 
+### Conditional Execution-Time Rule（EXECUTION_TIME_PR_HEAD_DRIFT_STOP）
+
+`VERIFY_EXACT_PR_HEAD_BEFORE_PR` 是 **conditional** Agent-visible rule code：
+仅 zero-repository-delta + `pull_request_action: CREATE_DRAFT` 时出现在
+envelope 的 `rules` 列表中（追加在 12 个 stable codes 之后）；普通非零 delta
+输出绝不包含它。
+
+Authoritative semantics（mutation-time drift-stop）：
+
+```text
+immediately before CREATE_DRAFT:
+  fetch authoritative refs
+  → reverify exact base (baseline.head / fact branch local+origin refs)
+  → reverify refs/heads/<pr_head.branch> and
+    refs/remotes/origin/<pr_head.branch> against git.pr_head.sha
+  → missing or drift: STOP（不执行 CREATE_DRAFT）
+  → CREATE_DRAFT only after all checks PASS
+```
+
+两层分离（不得混为一谈）：
+
+- **compile-time layer**：`GitBaseline.check` 的 repository-aware PR-head
+  exact-ref gate（`PR_HEAD_REF_MISSING` / `PR_HEAD_SHA_MISMATCH`，exit 4）
+  是 renderer 编译/渲染前的校验，属于本标准 §12；它保证
+  canonical envelope 不会携带 stale PR-head identity。
+- **mutation-time layer**：`VERIFY_EXACT_PR_HEAD_BEFORE_PR` 指示执行方
+  Agent 在真正执行 `CREATE_DRAFT` 动作前重新 fetch/reverify 权威 refs；
+  它不是 compile-time 校验的描述，compile-time 校验也不代表 mutation-time
+  已执行。
+
 Capsule `forbidden_actions`：
 
 - 必须保留 material task-specific semantics；

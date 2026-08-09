@@ -234,6 +234,17 @@ if standard_text
     errors << "standard: proxy-token metric PCE_UNICODE_WORDPUNCT_V1 is not declared"
   end
 
+  # Conditional execution-time rule (section 5.3): zero-delta CREATE_DRAFT
+  # output carries VERIFY_EXACT_PR_HEAD_BEFORE_PR; the standard must
+  # declare its mutation-time semantics and the two-layer separation.
+  unless standard_text.include?("VERIFY_EXACT_PR_HEAD_BEFORE_PR")
+    errors << "standard: conditional execution-time rule " \
+              "VERIFY_EXACT_PR_HEAD_BEFORE_PR is not declared"
+  end
+  unless standard_text.include?("mutation-time") && standard_text.include?("compile-time")
+    errors << "standard: execution-time rule must separate mutation-time and compile-time layers"
+  end
+
   # One execution material per delivery (section 8).
   unless standard_text.include?("一次只能交付一份执行材料")
     errors << "standard: single-material delivery rule is missing"

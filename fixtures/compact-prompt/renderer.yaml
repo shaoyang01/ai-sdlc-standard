@@ -3959,7 +3959,8 @@ fixtures:
           rules:
             value: [FETCH_VERIFY_EXACT_BASE, VERIFY_WORKTREE_SAFE, NO_AMEND, NO_REBASE,
                     NO_SQUASH, NO_FORCE_PUSH, NO_DIRECT_FACT_BRANCH_WRITE, NO_READY,
-                    NO_MERGE, NO_AUTO_MERGE, NO_PUBLICATION, STOP_ON_SCOPE_EXPANSION]
+                    NO_MERGE, NO_AUTO_MERGE, NO_PUBLICATION, STOP_ON_SCOPE_EXPANSION,
+                    VERIFY_EXACT_PR_HEAD_BEFORE_PR]
           forbidden: {value: ["merge"]}
           completion_report_recipient: {value: "owner-session"}
           completion_report_name: {value: "ZERO-DELTA Report"}
