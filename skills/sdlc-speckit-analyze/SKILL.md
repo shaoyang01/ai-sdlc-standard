@@ -19,7 +19,7 @@ Audit cross-artifact consistency after `sdlc-speckit-tasks` and before implement
 6. Do not generate implementation tasks; route task fixes to `sdlc-speckit-tasks`.
 7. Do not replace `sdlc-solution-reviewer`, Plan Gate, or Task Gate.
 8. Identify inconsistency, missing traceability, stale artifacts, unaccepted risk, and implementation-readiness blockers.
-9. Stop when analysis reveals undefined behavior, unapproved Scope change, or conflicting artifacts.
+9. Record undefined behavior, unapproved Scope change, and conflicting artifacts as material blockers; continue the remaining reliable bounded consistency scan, then conclude with Analyze Gate Result FAIL / upstream Re-Gate as appropriate. Only missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior may hard-stop discovery (see Core Rule 16 and `ai-sdlc/goal-anchored-global-reasoning.md`).
 10. Require Analyze Gate readiness before `sdlc-speckit-implement`.
 11. Recommend manifest Activity Log and Re-Gate updates.
 12. Return each blocker to the earliest affected upstream node.
