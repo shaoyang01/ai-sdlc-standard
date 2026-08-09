@@ -58,6 +58,12 @@ module CompactPrompt
     task_id prompt_mode routing baseline objective delta scope validation_profile
     git forbidden_actions completion_report
   ].freeze
+
+  # Optional root field (PCE_01_PR_ONLY_ZERO_DELTA_F01): `pr_head` is NOT
+  # part of the exact ROOT_KEYS set, so existing capsules without it stay
+  # valid. It is allowed as a root key and structurally validated only when
+  # present (zero-delta CREATE_DRAFT requires it; nonzero delta forbids it).
+  OPTIONAL_ROOT_KEYS = %w[pr_head].freeze
   ROUTING_KEYS = %w[recipient paste_location report_back_to next_hop_after_report].freeze
   BASELINE_KEYS = %w[repository branch head pull_request].freeze
   DELTA_KEYS = %w[open_findings required_changes acceptance_criteria preserved_closed_findings].freeze
@@ -317,12 +323,29 @@ module CompactPrompt
       File.extname(path.to_s).downcase
     end
 
+  # PCE_01_PR_ONLY_ZERO_DELTA_F01: exact zero-repository-delta shape is
+  # required_changes=[], allowed_files=[], maximum_changed_files=0. Any
+  # other combination with empty changes is rejected; nonzero-delta
+  # capsules are unaffected.
+  def zero_delta?(data)
+    return false unless data.is_a?(Hash)
+    changes = data.dig("delta", "required_changes")
+    allowed = data.dig("scope", "allowed_files")
+    max_changed = data.dig("scope", "maximum_changed_files")
+    changes.is_a?(Array) && changes.empty? &&
+      allowed.is_a?(Array) && allowed.empty? && max_changed == 0
+  end
+
     # Returns a classification code or nil when structurally valid.
     def validate(data)
       return "YAML_UNSUPPORTED" unless data.is_a?(Hash)
 
-      result = check_exact_keys(data, CompactPrompt::ROOT_KEYS)
-      return result if result
+      # pr_head is optional and not part of the exact root key set; the
+      # exact-key check therefore allows it as the sole extra root key.
+      unknown = data.keys - CompactPrompt::ROOT_KEYS - CompactPrompt::OPTIONAL_ROOT_KEYS
+      return "UNKNOWN_KEY" unless unknown.empty?
+      missing = CompactPrompt::ROOT_KEYS - data.keys
+      return "MISSING_REQUIRED_FIELD" unless missing.empty?
 
       return "MISSING_REQUIRED_FIELD" unless nonempty_string?(data["task_id"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PROMPT_MODES.include?(data["prompt_mode"])
@@ -372,7 +395,11 @@ module CompactPrompt
       %w[required_changes acceptance_criteria].each do |key|
         list = delta[key]
         return "FIELD_TYPE_INVALID" unless list.is_a?(Array)
-        return "MISSING_REQUIRED_FIELD" if list.empty?
+        # Zero-repository-delta (PCE_01_PR_ONLY_ZERO_DELTA_F01) allows empty
+        # required_changes only when allowed_files=[] and
+        # maximum_changed_files=0 hold together; acceptance criteria stay
+        # non-empty for every shape.
+        return "MISSING_REQUIRED_FIELD" if list.empty? && key != "required_changes"
         list.each do |item|
           return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
         end
@@ -384,12 +411,29 @@ module CompactPrompt
       return result if result
       allowed_files = scope["allowed_files"]
       return "FIELD_TYPE_INVALID" unless allowed_files.is_a?(Array)
-      return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
+      # Zero delta allows an empty allowed_files list; every other shape
+      # keeps the non-empty requirement.
+      unless zero_delta?(data)
+        return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
+      end
       allowed_files.each do |path|
         return "FIELD_TYPE_INVALID" unless nonempty_string?(path)
         return "UNSAFE_PATH" if unsafe_path?(path)
       end
-      return "FIELD_TYPE_INVALID" unless positive_integer?(scope["maximum_changed_files"])
+      max_changed_files = scope["maximum_changed_files"]
+      # Empty changes with nonempty scope or positive max is rejected before
+      # the max-value checks: zero delta is only the exact
+      # required_changes=[]/allowed_files=[]/maximum_changed_files=0 triple.
+      if delta["required_changes"].empty? && !zero_delta?(data)
+        return "MISSING_REQUIRED_FIELD"
+      end
+      if zero_delta?(data)
+        # Zero delta fixes maximum_changed_files at exactly 0.
+        return "FIELD_TYPE_INVALID" unless max_changed_files.is_a?(Integer) && max_changed_files == 0
+      else
+        # Every other shape keeps the positive-integer requirement.
+        return "FIELD_TYPE_INVALID" unless positive_integer?(max_changed_files)
+      end
 
       profile = data["validation_profile"]
       return "FIELD_TYPE_INVALID" unless CompactPrompt::VALIDATION_PROFILES.include?(profile)
@@ -402,6 +446,37 @@ module CompactPrompt
       return "MISSING_REQUIRED_FIELD" unless nonempty_string?(git["commit_message"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PUSH_MODES.include?(git["push_mode"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PULL_REQUEST_ACTIONS.include?(git["pull_request_action"])
+
+      # Zero-delta git contract: commit_count=0, push_mode=NONE and the
+      # Draft-PR execution shape only (pull_request_action must be
+      # CREATE_DRAFT); zero delta has no other execution meaning.
+      if zero_delta?(data) && (git["commit_count"] != 0 || git["push_mode"] != "NONE" ||
+                               git["pull_request_action"] != "CREATE_DRAFT")
+        return "FIELD_TYPE_INVALID"
+      end
+
+      # Canonical exact PR-head identity (PCE_01_PR_ONLY_ZERO_DELTA_F01):
+      # optional root field `pr_head` {branch, sha}; required for the
+      # zero-delta CREATE_DRAFT shape, forbidden otherwise.
+      pr_head = data["pr_head"]
+      if pr_head.nil?
+        if zero_delta?(data) && git["pull_request_action"] == "CREATE_DRAFT"
+          return "MISSING_REQUIRED_FIELD"
+        end
+      elsif zero_delta?(data)
+        return "FIELD_TYPE_INVALID" unless pr_head.is_a?(Hash)
+        result = check_exact_keys(pr_head, %w[branch sha])
+        return result if result
+        return "FIELD_TYPE_INVALID" unless pr_head["branch"].is_a?(String) && !pr_head["branch"].empty?
+        return "FIELD_TYPE_INVALID" unless CompactPrompt::GitNames.valid_branch?(pr_head["branch"])
+        # A 40+ digit all-numeric SHA would parse as a YAML Integer; the
+        # contract requires a string, so a type check fails closed first.
+        return "FIELD_TYPE_INVALID" unless pr_head["sha"].is_a?(String)
+        return "MISSING_REQUIRED_FIELD" if pr_head["sha"].empty?
+        return "INVALID_SHA" unless pr_head["sha"].match?(CompactPrompt::SHA40_PATTERN)
+      else
+        return "FIELD_TYPE_INVALID"
+      end
 
       forbidden_actions = data["forbidden_actions"]
       return "FIELD_TYPE_INVALID" unless forbidden_actions.is_a?(Array)
@@ -946,8 +1021,15 @@ module CompactPrompt
     # Placeholder values are allowed; value rules apply to instances only.
     def capsule_template_shape_error(data)
       return "template root must be a mapping" unless data.is_a?(Hash)
-      result = CompactPrompt::Capsule.check_exact_keys(data, CompactPrompt::ROOT_KEYS)
-      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} (#{result})" if result
+      # pr_head is optional (PCE_01_PR_ONLY_ZERO_DELTA_F01); the template
+      # may declare it, existing templates without it stay valid.
+      unknown = data.keys - CompactPrompt::ROOT_KEYS - CompactPrompt::OPTIONAL_ROOT_KEYS
+      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} " \
+             "plus optional #{CompactPrompt::OPTIONAL_ROOT_KEYS.inspect} (#{unknown.inspect})" unless unknown.empty?
+      missing = CompactPrompt::ROOT_KEYS - data.keys
+      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} " \
+             "plus optional #{CompactPrompt::OPTIONAL_ROOT_KEYS.inspect} " \
+             "(missing #{missing.inspect})" unless missing.empty?
       {
         "routing" => CompactPrompt::ROUTING_KEYS,
         "baseline" => CompactPrompt::BASELINE_KEYS,
@@ -1175,8 +1257,11 @@ module CompactPrompt
       "#{"  " * indent}#{key}: #{value}\n"
     end
 
-    # Block-style list of quoted scalars (user data).
+    # Block-style list of quoted scalars (user data). An empty list renders
+    # as the flow `[]` so it parses back as an empty array, never as null
+    # (zero-repository-delta shape, PCE_01_PR_ONLY_ZERO_DELTA_F01).
     def kv_list(indent, key, items)
+      return "#{"  " * indent}#{key}: []\n" if items.nil? || items.empty?
       out = +"#{"  " * indent}#{key}:\n"
       items.each { |item| out << "#{"  " * (indent + 1)}- #{CompactPrompt::Renderer.render_yaml_scalar(item)}\n" }
       out
@@ -1261,6 +1346,15 @@ module CompactPrompt
         when "CREATE_DRAFT"
           out << kv_plain(1, "pr", "CREATE_DRAFT")
           out << kv_plain(1, "pr_base", "FACT_BRANCH")
+          # Canonical exact PR-head identity for the zero-repository-delta
+          # Draft-PR shape: the PR head branch and its exact 40-hex SHA are
+          # contract values rendered verbatim; baseline stays the exact PR
+          # base.
+          if CompactPrompt::Capsule.zero_delta?(capsule)
+            out << "  pr_head:\n"
+            out << kv(2, "branch", capsule.dig("pr_head", "branch"))
+            out << kv(2, "sha", capsule.dig("pr_head", "sha"))
+          end
         when "UPDATE_DRAFT"
           out << kv_plain(1, "pr", "UPDATE_DRAFT")
         end

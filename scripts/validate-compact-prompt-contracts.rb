@@ -603,6 +603,7 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           errors << "#{label}: must be a mapping"
           next
         end
+        id = fixture["id"]
         allowed_fixture_keys = %w[
           id category description command capsule policy git_state expected template template_path yaml_blocks omitted_keys
         ]
@@ -628,14 +629,13 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
                 next
               end
               if expectations.key?("type") &&
-                 !%w[string integer boolean null].include?(expectations["type"])
+                 !%w[string integer boolean null mapping].include?(expectations["type"])
                 errors << "#{label} #{id}: yaml_blocks.#{name}.#{key} type must be " \
-                          "string|integer|boolean|null"
+                          "string|integer|boolean|null|mapping"
               end
             end
           end
         end
-        id = fixture["id"]
         unless id.is_a?(String) && id.match?(/\A[A-Z0-9-]+\z/) && id.length <= 64
           errors << "#{label}: id must match [A-Z0-9-]+ up to 64 chars"
           next

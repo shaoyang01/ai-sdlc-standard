@@ -65,6 +65,11 @@ scope:              # 精确两字段
 
 validation_profile: * # 五种 Validation Profile 之一
 
+pr_head:            # 可选（PCE_01_PR_ONLY_ZERO_DELTA_F01）：仅 zero-repository-delta
+                    # + CREATE_DRAFT 必填；非零 delta 禁止携带
+  branch: *         # PR head 分支名（合法 Git branch 名）
+  sha: *            # 40 位小写十六进制 SHA（字符串；纯数字 sha 必须加引号）
+
 git:                # 精确四字段
   commit_count: *   # 只能是 0 或 1
   commit_message: * # 非空字符串
@@ -97,6 +102,31 @@ v1 约束至少包括：
 - `completion_report.stop_after_report` 必须为 `true`；
 - finding 条目只允许 `id` 与 `status` 两个字段；`open_findings` 的条目状态必须为
   `OPEN`，`preserved_closed_findings` 的条目状态必须为 `CLOSED`。
+
+### 1.5 Zero-Repository-Delta Draft-PR 形状（PCE_01_PR_ONLY_ZERO_DELTA_F01）
+
+zero-repository-delta 只允许精确三重形状：`delta.required_changes: []` +
+`scope.allowed_files: []` + `scope.maximum_changed_files: 0`，且
+`git.commit_count: 0`、`git.push_mode: NONE`、
+`git.pull_request_action: CREATE_DRAFT`。
+
+- 空 `required_changes` 但 `allowed_files` 非空或 `maximum_changed_files`
+  为正 → 分类为 `MISSING_REQUIRED_FIELD`（不得只空 changes 却保留 scope）；
+- 非 zero-delta 的 `maximum_changed_files` 保持正整数要求（`0` 仅
+  zero-delta 三重形状允许）；zero-delta 的 `maximum_changed_files` 必须精确
+  为 `0`；
+- zero-delta 的 git 必须为 `commit_count: 0`、`push_mode: NONE` 且
+  `pull_request_action: CREATE_DRAFT`（zero-delta 只表达 Draft-PR 执行；
+  任何其他组合 → `FIELD_TYPE_INVALID`）；
+- zero-delta + CREATE_DRAFT 必须提供根字段 `pr_head: {branch, sha}`，
+  缺失 → `MISSING_REQUIRED_FIELD`；`branch` 必须是非空合法 Git branch 名，
+  `sha` 必须是字符串形式的 40 位小写十六进制（纯数字 sha 未加引号会被
+  YAML 解析为整数 → `FIELD_TYPE_INVALID`；非字符串 → `FIELD_TYPE_INVALID`；
+  非 40 位十六进制 → `INVALID_SHA`）；
+- 非 zero-delta capsule 携带 `pr_head` → 分类为 `FIELD_TYPE_INVALID`（
+  nonzero-delta PR head 由 implementation 分支派生，不接受 contract 声明）；
+- baseline 保持 exact PR base：`baseline.head` 仍是 PR 的 base（fact
+  branch exact HEAD），`pr_head.sha` 是 PR head 的 canonical exact identity。
 
 ### 1.3 受限 YAML
 
@@ -411,6 +441,11 @@ stop_after_report: true
   - 保留 CREATE/UPDATE 与 `baseline.pull_request` 的合法关系：
     `CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
     正整数；冲突时 fail closed（`GIT_ACTION_CONFLICT`）。
+- **Zero-Delta PR-Head**（PCE_01_PR_ONLY_ZERO_DELTA_F01）：zero-delta
+  CREATE_DRAFT 形状在 `git` 块内额外渲染 `pr_head: {branch, sha}`
+  （canonical exact PR-head identity）；`changes: []` 与
+  `max_changed_files: 0` 渲染为零 delta 形状；baseline 保持 exact PR base。
+  非零 delta 不渲染 `pr_head`。
 
 ### 5.3 Stable Rules + Task Prohibitions
 
