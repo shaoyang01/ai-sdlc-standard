@@ -3,7 +3,7 @@
 # frozen_string_literal: true
 
 # Read-only Compact Prompt Contract validator (PCE-01-A contracts + PCE-01-B
-# renderer fixtures).
+# renderer fixtures + PCE-01 Compact Execution Envelope v2).
 #
 # Boundaries:
 #   read_only: true
@@ -13,19 +13,22 @@
 #   shell_execution: false
 #
 # Verifies the compact prompt contract assets, the fixed capsule shape,
-# restricted-YAML rejections, exact prompt-mode budgets, exact
-# validation-profile semantics, the fixed Codex prompt template section
-# order and conditional blocks, the completion report template, the
-# centralized A contract fixtures, the B renderer fixtures (with injected
-# synthetic git state and in-memory text), and that manifest / ROADMAP /
-# VALIDATION / PORTABILITY register facts without premature claims.
+# restricted-YAML rejections, exact prompt-mode budgets (lines / bytes /
+# PCE_UNICODE_WORDPUNCT_V1 proxy tokens), exact validation-profile
+# semantics, the v2 Codex prompt template contract manifest (schema marker,
+# zero production placeholders, zero WHEN/ENDWHEN blocks, no fixed
+# ten-section contract), the completion report template, the centralized A
+# contract fixtures, the B renderer fixtures (with injected synthetic git
+# state and in-memory text), the fixture-locked proxy-token metric cases,
+# and that manifest / ROADMAP / VALIDATION / PORTABILITY register facts
+# without premature claims.
 #
 # This file requires scripts/lib/compact_prompt.rb and must not duplicate
 # schema, budget, enum, placeholder or renderer logic.
 #
 # Not implemented here: prompt renderer execution, git operations, command
-# execution from capsule content, token counting, project profile
-# resolution, network access, file writes.
+# execution from capsule content, model-exact token counting, project
+# profile resolution, network access, file writes.
 
 require_relative "lib/compact_prompt"
 
@@ -98,30 +101,25 @@ end
 prompt_template_path = "templates/compact-codex-prompt-template.md"
 prompt_template_text = nil
 if File.file?(File.join(ROOT, prompt_template_path))
-  headings = File.readlines(File.join(ROOT, prompt_template_path), chomp: true, encoding: "UTF-8")
-              .grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "") }
-  if headings != CompactPrompt::CODEX_PROMPT_SECTIONS
-    errors << "codex prompt template: section headings must be exactly " \
-              "#{CompactPrompt::CODEX_PROMPT_SECTIONS.inspect}, found #{headings.inspect}"
-  end
   prompt_template_text = read_asset(prompt_template_path)
-  delivery_count = prompt_template_text.scan("delivery_type: CODEX_EXECUTION_PROMPT").length
-  errors << "codex prompt template: delivery_type: CODEX_EXECUTION_PROMPT must appear exactly once " \
-            "(found #{delivery_count})" unless delivery_count == 1
-  errors << "codex prompt template: must generate exactly one CODEX_EXECUTION_PROMPT material" \
-    unless prompt_template_text.scan(/^delivery_type:/).length == 1
-  %w[recipient: paste_location: purpose: report_back_to: next_hop_after_report:].each do |needle|
-    unless prompt_template_text.include?(needle)
-      errors << "codex prompt template: routing header is missing #{needle}"
-    end
+  # v2 contract manifest: the asset is a human-readable canonical shape
+  # reference for compact-execution-envelope-v2, not a production
+  # placeholder interpolation source. The shared fail-closed gate checks
+  # schema marker presence, zero production placeholders, zero WHEN/ENDWHEN
+  # blocks and the absence of the fixed ten-section contract.
+  manifest_error = CompactPrompt::Template.contract_manifest_error(prompt_template_text)
+  if manifest_error
+    errors << "codex prompt template: #{manifest_error[2]}"
   end
-  %w[completion_report_recipient: completion_report_name: stop_after_report:\ true].each do |needle|
+  %w[
+    schema_marker:\ compact-execution-envelope-v2
+    production_placeholders:\ 0
+    WHEN_ENDWHEN_blocks:\ 0
+    fixed_10_section_contract:\ false
+  ].each do |needle|
     unless prompt_template_text.include?(needle)
-      errors << "codex prompt template: footer is missing #{needle}"
+      errors << "codex prompt template: contract manifest property #{needle.inspect} is missing"
     end
-  end
-  if prompt_template_text.scan("report_to:").any?
-    errors << "codex prompt template: must not use report_to"
   end
   # Finding F01: no task-specific content in the public template.
   CompactPrompt::TASK_SPECIFIC_TEMPLATE_STRINGS.each do |needle|
@@ -129,35 +127,12 @@ if File.file?(File.join(ROOT, prompt_template_path))
       errors << "codex prompt template: task-specific content must not appear (#{needle.inspect})"
     end
   end
-  # Finding F02: no placeholders without a legitimate source.
-  CompactPrompt::LEGACY_PLACEHOLDERS.each do |placeholder|
-    if prompt_template_text.include?("<#{placeholder}>")
-      errors << "codex prompt template: legacy placeholder without a source must not appear (<#{placeholder}>)"
+  # The asset must declare every stable rule code (agent-visible output
+  # sends only the codes; their stable semantics live in the standard).
+  CompactPrompt::STABLE_RULES.each do |code|
+    unless prompt_template_text.include?(code)
+      errors << "codex prompt template: stable rule code #{code} must be declared"
     end
-  end
-  prompt_placeholders = CompactPrompt::Template.placeholders(prompt_template_text)
-  # Finding F05: single template-structure gate shared with the CLI —
-  # fixed ten sections in exact order, exactly one line-start
-  # delivery_type: CODEX_EXECUTION_PROMPT, and the complete strict
-  # WHEN/ENDWHEN marker scan (malformed / unknown / unpaired / nested /
-  # duplicate / cross-section all fail closed; WHEN-like text that does not
-  # match the legal-token regex is never silently ignored).
-  structure_error = CompactPrompt::Template.structure_error(prompt_template_text)
-  if structure_error
-    errors << "codex prompt template: #{structure_error[2]}"
-  end
-  # Finding F05: single template-binding validator shared with the CLI —
-  # exact 27-placeholder set, exactly-once occurrences, no unknown,
-  # missing, duplicate or source-set drift. The non-nil result must be
-  # appended to errors so the shared gate really blocks the contract
-  # validator (finding F05-A) — never call-and-ignore.
-  binding_error = CompactPrompt::Template.binding_error(prompt_template_text)
-  if binding_error
-    errors << "codex prompt template: #{binding_error[2]}"
-  end
-  unknown_placeholders = prompt_placeholders - CompactPrompt::PLACEHOLDER_SOURCES.keys
-  unless unknown_placeholders.empty?
-    errors << "codex prompt template: unknown placeholder(s) not in the source table #{unknown_placeholders.inspect}"
   end
 end
 
@@ -216,9 +191,10 @@ if standard_text
     errors << "standard: NO_PUSH must be fully removed (finding F04)"
   end
 
-  # Four prompt modes with exact budgets (section 2).
+  # Four prompt modes with exact v2 budgets: lines / bytes / proxy tokens
+  # (section 2).
   CompactPrompt::PROMPT_MODE_BUDGETS.each do |mode, budget|
-    row = "| `#{mode}` | #{budget["hard_limit_lines"]} | #{budget["hard_limit_bytes"]} |"
+    row = "| `#{mode}` | #{budget["hard_limit_lines"]} | #{budget["hard_limit_bytes"]} | #{budget["hard_limit_proxy_tokens"]} |"
     unless standard_text.include?(row)
       errors << "standard: prompt mode budget row #{row.inspect} is missing"
     end
@@ -243,11 +219,19 @@ if standard_text
     end
   end
 
-  # Ten fixed prompt section headings (section 5).
-  CompactPrompt::CODEX_PROMPT_SECTIONS.each do |section|
-    unless standard_text.include?("#{section}\n")
-      errors << "standard: fixed prompt section #{section.inspect} is missing"
+  # v2 canonical envelope schema and stable rules (section 5).
+  unless standard_text.include?("compact-execution-envelope-v2")
+    errors << "standard: v2 execution envelope schema is not declared"
+  end
+  CompactPrompt::STABLE_RULES.each do |code|
+    unless standard_text.include?(code)
+      errors << "standard: stable rule code #{code} is not declared"
     end
+  end
+
+  # Proxy-token metric (section 2).
+  unless standard_text.include?("PCE_UNICODE_WORDPUNCT_V1")
+    errors << "standard: proxy-token metric PCE_UNICODE_WORDPUNCT_V1 is not declared"
   end
 
   # One execution material per delivery (section 8).
@@ -260,9 +244,9 @@ if standard_text
     errors << "standard: stop_after_report: true contract marker is missing"
   end
 
-  # Template Value Source Table (section 6, finding F02).
-  unless standard_text.include?("## 6. Template Value Source Table")
-    errors << "standard: Template Value Source Table section is missing"
+  # Template Asset Contract Manifest (section 6).
+  unless standard_text.include?("## 6. Template Asset Contract Manifest")
+    errors << "standard: Template Asset Contract Manifest section is missing"
   end
 
   # Public classification table (section 1.4) must cover every public code.
@@ -278,40 +262,6 @@ if standard_text
     unless standard_text.include?("#{field}:")
       errors << "standard: completion report field #{field} is not declared"
     end
-  end
-
-  # Template Value Source Table consistency with the prompt template
-  # (finding F02): every placeholder has exactly one source row, the table
-  # and the template placeholder sets are identical, no unknown or leftover
-  # placeholders, no duplicate rows.
-  table_rows = standard_text.scan(
-    /^\| `?<([^>`]+)>`? \| (CAPSULE_FIELD|STANDARD_CONSTANT|PCE_01_B_PROJECT_MAPPING)/
-  )
-  table_placeholders = table_rows.map { |row| "<#{row[0]}>" }
-  table_placeholder_set = table_placeholders.uniq
-  unless standard_text.include?("| `delivery_type` | STANDARD_CONSTANT")
-    errors << "standard: source table must bind delivery_type to STANDARD_CONSTANT"
-  end
-  unless standard_text.include?("STANDARD_CONSTANT") && standard_text.include?("PCE_01_B_PROJECT_MAPPING")
-    errors << "standard: source table must declare STANDARD_CONSTANT and PCE_01_B_PROJECT_MAPPING sources"
-  end
-  # Ruby 2.6-compatible occurrence count (Array#tally is 2.7+).
-  table_counts = table_placeholders.each_with_object(Hash.new(0)) { |p, h| h[p] += 1 }
-  duplicate_rows = table_counts.select { |_p, count| count > 1 }
-  unless duplicate_rows.empty?
-    errors << "standard: source table placeholder row(s) duplicated #{duplicate_rows.inspect}"
-  end
-  if prompt_placeholders
-    unknown = prompt_placeholders - table_placeholder_set
-    unless unknown.empty?
-      errors << "source table: template placeholder(s) without a source row #{unknown.inspect}"
-    end
-    leftover = table_placeholder_set - prompt_placeholders
-    unless leftover.empty?
-      errors << "source table: placeholder row(s) not present in the template #{leftover.inspect}"
-    end
-  else
-    errors << "source table: prompt template placeholders were not extracted (template missing?)"
   end
 end
 
@@ -501,6 +451,11 @@ def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
     counts[:assertions] += 1
     errors << "renderer fixture #{id}: stdout must be empty, got #{out.inspect}" unless out.empty?
   when "prompt"
+    # v2: stdout is one canonical compact-execution-envelope-v2 YAML
+    # document — single trailing LF, valid UTF-8, no CR, exactly one
+    # delivery_type identity, exactly one v2 schema marker, no legacy
+    # ten-section headings, no placeholder-like / marker-like text, and it
+    # parses as a single restricted-YAML mapping with the v2 schema.
     counts[:assertions] += 1
     errors << "renderer fixture #{id}: prompt stdout must end with a single LF" \
       unless out.end_with?("\n") && !out.end_with?("\n\n")
@@ -515,15 +470,21 @@ def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
     errors << "renderer fixture #{id}: prompt stdout must contain exactly one delivery_type" \
       unless out.scan(/^delivery_type: CODEX_EXECUTION_PROMPT/).length == 1
     counts[:assertions] += 1
-    errors << "renderer fixture #{id}: prompt stdout must have zero unresolved placeholders" \
-      if CompactPrompt::PLACEHOLDER_SOURCES.keys.any? { |p| out.include?(p) }
+    errors << "renderer fixture #{id}: prompt stdout must contain exactly one v2 schema marker" \
+      unless out.scan(/^schema: compact-execution-envelope-v2/).length == 1
     counts[:assertions] += 1
-    errors << "renderer fixture #{id}: prompt stdout must have zero conditional markers" \
-      if out.match?(/(?<!\\)<!-- WHEN/) || out.match?(/(?<!\\)<!-- ENDWHEN/)
+    errors << "renderer fixture #{id}: prompt stdout must not contain legacy ten-section headings" \
+      if CompactPrompt::CODEX_PROMPT_SECTIONS.any? { |section| out.include?(section) }
     counts[:assertions] += 1
-    headings = out.lines.grep(/\A## \d+\. /).map { |line| line.sub(/\A## /, "").strip }
-    errors << "renderer fixture #{id}: prompt stdout section order mismatch #{headings.inspect}" \
-      unless headings == CompactPrompt::CODEX_PROMPT_SECTIONS
+    errors << "renderer fixture #{id}: prompt stdout must not contain placeholder-like or marker-like text" \
+      if out.include?("<!--") || out.match?(/<[A-Za-z][A-Za-z0-9_.-]*>/)
+    counts[:assertions] += 1
+    parsed, classification = CompactPrompt::RestrictedYAML.parse(out)
+    errors << "renderer fixture #{id}: prompt stdout must be a single restricted-YAML document " \
+              "(#{classification})" if classification
+    counts[:assertions] += 1
+    errors << "renderer fixture #{id}: prompt stdout must parse to a mapping with the v2 schema" \
+      unless parsed.is_a?(Hash) && parsed["schema"] == CompactPrompt::EXECUTION_ENVELOPE_SCHEMA
   else
     errors << "renderer fixture #{id}: unknown stdout mode #{stdout_mode.inspect}"
   end
@@ -546,62 +507,55 @@ def assert_renderer_fixture(id, exit_code, out, err, expected, errors, counts)
   end
 end
 
-# Finding F06: every fenced YAML block of a successful compile output is
-# extracted in order and parsed with `YAML.safe_load(permitted_classes: [],
-# aliases: false)`. The parsed field values and types must match the
-# declared Capsule/Standard expectations exactly — the fixture never merely
-# checks that escaped text is present.
-def assert_yaml_blocks(id, out, yaml_blocks, errors, counts)
-  blocks = []
-  buffer = nil
-  out.each_line do |line|
-    if buffer.nil? && line.match?(/\A```yaml\s*\z/)
-      buffer = +""
-    elsif buffer && line.match?(/\A```\s*\z/)
-      blocks << buffer
-      buffer = nil
-    elsif buffer
-      buffer << line
-    end
-  end
+# Finding F06 (v2): the whole compile stdout is one canonical YAML document
+# parsed with the shared restricted-YAML rules. `yaml_blocks` entries map a
+# top-level key name (or "root") to declared field expectations; the parsed
+# field values and types must match the declared Capsule/Standard
+# expectations exactly — the fixture never merely checks that escaped text
+# is present. `omitted_keys` lists top-level keys that must NOT be present
+# (omission / derivation rules, e.g. git, open_findings, allowed_files).
+def assert_yaml_blocks(id, out, yaml_blocks, omitted_keys, errors, counts)
+  parsed, classification = CompactPrompt::RestrictedYAML.parse(out)
   counts[:assertions] += 1
-  if blocks.length != yaml_blocks.length
-    errors << "renderer fixture #{id}: expected #{yaml_blocks.length} fenced yaml block(s) " \
-              "but found #{blocks.length}"
+  if classification || !parsed.is_a?(Hash)
+    errors << "renderer fixture #{id}: stdout must parse as a single restricted-YAML mapping " \
+              "(#{classification})"
     return
   end
-  yaml_blocks.each_with_index do |(name, spec), index|
-    raw = blocks[index]
-    if raw.nil?
-      errors << "renderer fixture #{id}: yaml block #{name} not found"
-      next
-    end
-    begin
-      parsed = YAML.safe_load(raw, permitted_classes: [], aliases: false)
-    rescue Psych::Exception => e
-      errors << "renderer fixture #{id}: yaml block #{name} does not parse (#{e.class})"
-      next
-    end
-    counts[:assertions] += 1
-    unless parsed.is_a?(Hash)
+  counts[:assertions] += 1
+  present_omitted = (omitted_keys || []) & parsed.keys
+  unless present_omitted.empty?
+    errors << "renderer fixture #{id}: omitted top-level key(s) must not be present " \
+              "#{present_omitted.inspect}"
+  end
+  yaml_blocks.each do |(name, spec)|
+    mapping = name == "root" ? parsed : parsed[name]
+    unless mapping.is_a?(Hash)
       errors << "renderer fixture #{id}: yaml block #{name} must parse to a mapping"
       next
     end
     fields = spec["fields"]
-    counts[:assertions] += 1
-    errors << "renderer fixture #{id}: yaml block #{name} key set must be exactly " \
-              "#{fields.keys.sort.inspect} got #{parsed.keys.sort.inspect}" \
-      unless parsed.keys.sort == fields.keys.sort
+    unless name == "root"
+      # Exact key-set assertion applies to named blocks (e.g. baseline /
+      # validation / git / report), so omission rules (git without push,
+      # validation without forbid) are proven exactly. The root block only
+      # asserts the declared top-level scalars; nested structures are
+      # asserted by their named blocks.
+      counts[:assertions] += 1
+      errors << "renderer fixture #{id}: yaml block #{name} key set must be exactly " \
+                "#{fields.keys.sort.inspect} got #{mapping.keys.sort.inspect}" \
+        unless mapping.keys.sort == fields.keys.sort
+    end
     fields.each do |key, expectations|
       counts[:assertions] += 1
-      if parsed[key] != expectations["value"]
+      if mapping[key] != expectations["value"]
         errors << "renderer fixture #{id}: yaml block #{name}.#{key} value mismatch expected " \
-                  "#{expectations['value'].inspect} got #{parsed[key].inspect}"
+                  "#{expectations['value'].inspect} got #{mapping[key].inspect}"
         next
       end
       next unless expectations.key?("type")
       counts[:assertions] += 1
-      actual_type = case parsed[key]
+      actual_type = case mapping[key]
                     when String then "string"
                     when Integer then "integer"
                     when TrueClass, FalseClass then "boolean"
@@ -650,7 +604,7 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           next
         end
         allowed_fixture_keys = %w[
-          id category description command capsule policy git_state expected template template_path yaml_blocks
+          id category description command capsule policy git_state expected template template_path yaml_blocks omitted_keys
         ]
         unknown = fixture.keys - allowed_fixture_keys
         errors << "#{label}: unknown key(s) #{unknown.inspect}" unless unknown.empty?
@@ -696,6 +650,14 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
         unless %w[validate compile].include?(command)
           errors << "#{label} #{id}: command must be validate or compile"
           next
+        end
+        if fixture.key?("omitted_keys")
+          omitted_keys = fixture["omitted_keys"]
+          unless omitted_keys.is_a?(Array) && !omitted_keys.empty? &&
+                 omitted_keys.all? { |key| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_]*\z/) }
+            errors << "#{label} #{id}: omitted_keys must be a non-empty array of lowercase keys"
+            next
+          end
         end
         capsule_text = fixture["capsule"]
         unless capsule_text.is_a?(String) && !capsule_text.empty?
@@ -744,12 +706,13 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
         end
 
         # Finding F06: successful compile outputs with declared yaml_blocks
-        # must yield fenced YAML blocks that safe_load with preserved
-        # values and types.
+        # must parse as one canonical restricted-YAML document with the
+        # declared values/types, and declared omitted_keys must be absent.
         if category == "valid" && command == "compile" && exit_code.zero? &&
-           fixture.key?("yaml_blocks")
+           (fixture.key?("yaml_blocks") || fixture.key?("omitted_keys"))
           ycounts = { assertions: 0 }
-          assert_yaml_blocks(id, out, fixture["yaml_blocks"], errors, ycounts)
+          assert_yaml_blocks(id, out, fixture["yaml_blocks"] || {},
+                             fixture["omitted_keys"] || [], errors, ycounts)
           renderer_assertion_count += ycounts[:assertions]
         end
         renderer_fixture_count += 1
@@ -1001,29 +964,58 @@ FORBIDDEN_PREMATURE_CLAIMS = [
   end
 end
 
-# ── F05-A binding-gate blocking proof ──
-# The contract validator must not merely call the shared template-binding
-# gate and ignore its result. Two in-memory proofs (no files, no shell, no
-# template mutation): a duplicated registered placeholder makes the shared
-# gate return TEMPLATE_PLACEHOLDER_DUPLICATE, and the validator source
-# itself appends the non-nil binding_error to errors — a future
-# call-and-ignore regression is statically caught.
-binding_dup_template = prompt_template_text && prompt_template_text.sub("<recipient>", "<recipient><recipient>")
-binding_dup_error = binding_dup_template &&
-                    CompactPrompt::Template.binding_error(binding_dup_template)
-if binding_dup_template.nil?
+# ── F05-A contract-manifest gate blocking proof ──
+# The contract validator must not merely call the shared template
+# contract-manifest gate and ignore its result. Two in-memory proofs (no
+# files, no shell, no template mutation): a placeholder-bearing template
+# asset makes the shared gate return TEMPLATE_CONTRACT_INVALID, and the
+# validator source itself appends the non-nil contract_manifest_error to
+# errors — a future call-and-ignore regression is statically caught.
+manifest_bad_template = prompt_template_text &&
+                        prompt_template_text.sub(
+                          "compact-execution-envelope-v2",
+                          "compact-execution-envelope-v2 <recipient>"
+                        )
+manifest_bad_error = manifest_bad_template &&
+                     CompactPrompt::Template.contract_manifest_error(manifest_bad_template)
+if manifest_bad_template.nil?
   # Prompt template file missing: the main flow already reports it; do not
   # emit a misleading duplicate-placeholder message here.
-elsif !(binding_dup_error && binding_dup_error[0] == "TEMPLATE_PLACEHOLDER_DUPLICATE")
-  errors << "F05-A guard: duplicated registered placeholder must yield " \
-            "TEMPLATE_PLACEHOLDER_DUPLICATE from the shared binding gate"
+elsif !(manifest_bad_error && manifest_bad_error[0] == "TEMPLATE_CONTRACT_INVALID")
+  errors << "F05-A guard: placeholder-bearing template asset must yield " \
+            "TEMPLATE_CONTRACT_INVALID from the shared manifest gate"
 end
 validator_source = read_asset("scripts/validate-compact-prompt-contracts.rb")
 unless validator_source.match?(
-  /binding_error = CompactPrompt::Template\.binding_error\(prompt_template_text\)\n\s+if binding_error\n\s+errors <</
+  /manifest_error = CompactPrompt::Template\.contract_manifest_error\(prompt_template_text\)\n\s+if manifest_error\n\s+errors <</
 )
-  errors << "F05-A guard: contract validator must append binding_error to errors " \
+  errors << "F05-A guard: contract validator must append contract_manifest_error to errors " \
             "(call-and-ignore regression detected)"
+end
+
+# ── PCE_UNICODE_WORDPUNCT_V1 fixture-locked proxy-token cases ──
+# The frozen case table is the semantic authority of the metric (standard
+# section 2). No model-exact token claim is made.
+PROXY_TOKEN_CASES = {
+  "abc def" => 2,
+  "abc_def123" => 1,
+  "中文" => 2,
+  "A中B" => 3,
+  "a-b" => 3,
+  "你好，world!" => 5,
+  "e\u0301" => 1,
+  "🙂" => 1,
+  " \n\t" => 0,
+  "<x>" => 3
+}.freeze
+proxy_fixture_count = 0
+PROXY_TOKEN_CASES.each do |input, expected|
+  actual = CompactPrompt::ProxyToken.count(input)
+  if actual == expected
+    proxy_fixture_count += 1
+  else
+    errors << "proxy token metric: #{input.inspect} expected #{expected} but got #{actual}"
+  end
 end
 
 if errors.empty?
@@ -1031,16 +1023,16 @@ if errors.empty?
        "(#{CompactPrompt::WHITELIST_ASSETS.length} whitelist assets; " \
        "#{fixture_count} contract fixtures; #{renderer_fixture_count} renderer fixtures " \
        "(#{renderer_assertion_count} assertions); " \
+       "#{proxy_fixture_count} proxy-token metric fixtures; " \
        "#{CompactPrompt::PROMPT_MODES.length} prompt modes with exact budgets; " \
        "#{CompactPrompt::VALIDATION_PROFILES.length} validation profiles; " \
        "#{CompactPrompt::Diagnostics::REGISTRY.length} registered diagnostics; " \
-       "codex prompt template #{CompactPrompt::CODEX_PROMPT_SECTIONS.length}-section order " \
-       "with #{CompactPrompt::Template::CONDITIONAL_FIELDS.values.flatten.length} conditional blocks; " \
-       "#{prompt_placeholders ? prompt_placeholders.length : 0} prompt placeholders closed " \
-       "against the Template Value Source Table; " \
+       "codex prompt template v2 contract manifest " \
+       "with #{CompactPrompt::STABLE_RULES.length} stable rule codes; " \
        "standard asset statically verified (fields, git enums, budgets, profiles, " \
-       "continuation delta-only, completion report budget, sections, single material, " \
-       "stop_after_report, public classifications); " \
+       "continuation delta-only, completion report budget, v2 envelope schema, " \
+       "stable rules, proxy metric, single material, stop_after_report, " \
+       "public classifications); " \
        "diagnostics registry/emit-site/section-14 closed; " \
        "no premature claims)"
 else

@@ -1,17 +1,20 @@
-# Compact Prompt Standard (v1)
+# Compact Prompt Standard (v2)
 
 ## Purpose
 
 PCE-01 是 **Compact Prompt Standard and Lightweight Renderer**。本文件定义其中的
-Compact Prompt Contract v1（PCE-01-A 范围）：
+Compact Prompt Contract v1（PCE-01-A 范围）与 Compact Execution Envelope v2
+production 输出合同（PCE-01-B 范围）：
 
 - Compact Execution Capsule v1 合同；
-- 四种 Prompt Mode 及其硬限制；
+- 四种 Prompt Mode 及其硬限制（lines / bytes / proxy tokens）；
+- PCE_UNICODE_WORDPUNCT_V1 proxy-token metric；
 - 五种 Validation Profile；
-- 固定 Codex Prompt section 顺序；
+- Canonical Execution Envelope v2（production 输出 schema）；
+- Template Asset Contract Manifest（v2 模板资产合同）；
 - Compact Completion Report 合同。
 
-本文件只定义合同。Renderer CLI 属于后续 PCE-01-B；两个项目真实验收属于
+本文件只定义合同。Renderer CLI 属于 PCE-01-B；两个项目真实验收属于
 PCE-01-C。本文件不代表 Renderer 已实现、不代表个人知识库已经接入、不代表
 PCE-01 已完成。
 
@@ -144,14 +147,25 @@ fixture 使用以下稳定公共分类；`expected_classification` 只能取其�
 
 ## 2. 四种 Prompt Mode
 
-公共合同精确定义：
+公共合同精确定义（v2：line limits 保持为 secondary safety signal；byte caps
+替换为 compact-envelope caps；新增 PCE_UNICODE_WORDPUNCT_V1 proxy-token cap）：
 
-| Prompt Mode | hard_limit_lines | hard_limit_bytes |
-| --- | --- | --- |
-| `MICRO_FIX` | 120 | 32768 |
-| `SESSION_CONTINUATION` | 220 | 65536 |
-| `BOOTSTRAP` | 400 | 98304 |
-| `RECOVERY` | 400 | 98304 |
+| Prompt Mode | hard_limit_lines | hard_limit_bytes | hard_limit_proxy_tokens |
+| --- | --- | --- | --- |
+| `MICRO_FIX` | 120 | 2048 | 512 |
+| `SESSION_CONTINUATION` | 220 | 4096 | 1024 |
+| `BOOTSTRAP` | 400 | 8192 | 2048 |
+| `RECOVERY` | 400 | 8192 | 2048 |
+
+Budget gate 顺序固定（在 canonical output verification 之后）：
+
+```text
+canonical output verification
+→ line gate
+→ byte gate
+→ proxy-token gate
+→ stdout
+```
 
 超限规则（按顺序执行）：
 
@@ -161,7 +175,58 @@ fixture 使用以下稳定公共分类；`expected_classification` 只能取其�
 → 仍超限则 TASK_SPLIT_REQUIRED
 ```
 
-不得自动升级模式、不得扩大限制、不得声称进行了精确 Token 计算。
+禁止：
+
+- silent pass / 自动删除约束 / 自动升级模式 / numeric waiver；
+- 声称进行了精确 Token 计算（proxy metric 不是 model-exact token count）。
+
+### PCE_UNICODE_WORDPUNCT_V1 proxy-token metric
+
+`PCE_UNICODE_WORDPUNCT_V1` 是 deterministic proxy metric，**不是**
+model-exact token count。无 Unicode normalization。在 valid UTF-8 canonical
+output 上，语义等价于扫描：
+
+```text
+/[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]|[\p{L}\p{M}\p{N}_]+|[^\p{Space}]/u
+```
+
+语义（fixture-locked，case 表是 authority）：
+
+```text
+Han/Hiragana/Katakana/Hangul:
+  each code point = 1
+
+other Unicode letter/mark/number/underscore:
+  contiguous run = 1
+
+all other non-whitespace code points:
+  each = 1
+
+whitespace:
+  0
+```
+
+实现注意：Onigmo 的 `\p{L}` 包含 Han/Hiragana/Katakana/Hangul，直接 alternation
+扫描会把 Han 字符并入相邻字母 run（如 "A中B" 得 1 而非 3）。实现先把 CJK 码点
+切分出来，再对剩余片段扫描 letter-run alternation，从而精确满足冻结语义。
+
+fixture-locked cases（validator 必须逐条断言）：
+
+```yaml
+cases:
+  "abc def": 2
+  "abc_def123": 1
+  "中文": 2
+  "A中B": 3
+  "a-b": 3
+  "你好，world!": 5
+  "e\u0301": 1
+  "🙂": 1
+  " \n\t": 0
+  "<x>": 3
+```
+
+不得引入 tokenizer gem、网络或 model dependency。
 
 ## 3. 五种 Validation Profile
 
@@ -220,79 +285,186 @@ code: 已知代码扩展名
 - closed finding 只保留 `id` 和 `CLOSED` 状态；历史正文不得进入 Capsule。
 - finding 条目只有 `id` 与 `status` 两个字段；详情属于 delta 正文。
 
-## 5. 固定 Prompt Section 顺序
+## 5. Canonical Execution Envelope v2
 
-Codex Prompt 模板（`templates/compact-codex-prompt-template.md`）只能渲染一份
-`CODEX_EXECUTION_PROMPT`，section 顺序固定：
+production 输出 schema 冻结为 `compact-execution-envelope-v2`。输出必须是
+**单一 canonical YAML document text**，不得包含：
 
-1. 路由
-2. Exact Baseline
-3. 唯一目标
-4. Delta
-5. Scope 与 Acceptance
-6. Validation
-7. Git 与 PR
-8. Forbidden Actions
-9. Completion Report
-10. Stop Condition
+```text
+Markdown section headings
+十节固定 prose
+WHEN/ENDWHEN comments
+production placeholder interpolation
+解释每个字段用途的自然语言段落
+```
 
-模板头部生成固定路由字段 `delivery_type: CODEX_EXECUTION_PROMPT`、`recipient`、
-`paste_location`、`purpose`、`report_back_to`、`next_hop_after_report`；模板末尾
-生成 `completion_report_recipient`、`completion_report_name`、
-`stop_after_report: true`。模板不得附带第二份 Handoff、备选 Prompt、下一阶段
-Prompt 或完整历史讨论。
+固定原则：
 
-## 6. Template Value Source Table
+```yaml
+canonical_output:
+  valid_UTF8: true
+  CR: forbidden
+  document_marker: omitted
+  comments: forbidden
+  indent: 2_spaces
+  trailing_LF: exactly_one
+  deterministic_key_order: true
+```
 
-Codex Prompt 模板（`templates/compact-codex-prompt-template.md`）的每个输入
-必须且只能绑定一个来源。来源类别为：
+不得直接依赖 `YAML.dump` 的版本相关 formatting 作为 byte authority；复用
+现有 safe scalar encoding 并由代码显式 canonical serialize。
 
-- `CAPSULE_FIELD`：Capsule 根字段（含嵌套字段路径）；
-- `STANDARD_CONSTANT`：本合同固定的常量文本（如 `delivery_type` 与十个固定
-  section 标题）；
-- `PCE_01_B_PROJECT_MAPPING`：项目对验证命令 ID 的映射（属于后续阶段
-  PCE-01-B，本表只登记绑定关系，不实现映射）。
+### 5.1 Canonical shape
 
-| 模板输入 | 来源 | 说明 |
-| --- | --- | --- |
-| `<recipient>` | CAPSULE_FIELD `routing.recipient` | 执行方 |
-| `<paste-location>` | CAPSULE_FIELD `routing.paste_location` | 粘贴位置 |
-| `<purpose>` | CAPSULE_FIELD `objective` | 本轮唯一目标（purpose 不设独立字段） |
-| `<report-back-to>` | CAPSULE_FIELD `routing.report_back_to` | 报告接收方 |
-| `<next-hop-after-report>` | CAPSULE_FIELD `routing.next_hop_after_report` | 报告后的下一跳 |
-| `<repository>` | CAPSULE_FIELD `baseline.repository` | owner/name |
-| `<fact-branch>` | CAPSULE_FIELD `baseline.branch` | 事实分支 |
-| `<fact-head>` | CAPSULE_FIELD `baseline.head` | 40 位小写十六进制 SHA |
-| `<pull-request>` | CAPSULE_FIELD `baseline.pull_request` | none 或 PR 编号 |
-| `<objective>` | CAPSULE_FIELD `objective` | 唯一目标 |
-| `<open-findings>` | CAPSULE_FIELD `delta.open_findings` | 未关闭 findings |
-| `<required-changes>` | CAPSULE_FIELD `delta.required_changes` | 变更路径列表 |
-| `<acceptance-criteria>` | CAPSULE_FIELD `delta.acceptance_criteria` | 验收标准列表 |
-| `<preserved-closed-findings>` | CAPSULE_FIELD `delta.preserved_closed_findings` | 已关闭 findings |
-| `<allowed-files>` | CAPSULE_FIELD `scope.allowed_files` | 允许修改的文件 |
-| `<maximum-changed-files>` | CAPSULE_FIELD `scope.maximum_changed_files` | 最大变更文件数 |
-| `<validation-profile>` | CAPSULE_FIELD `validation_profile` | 验证等级 |
-| `<required-commands>` | PCE_01_B_PROJECT_MAPPING | 验证命令 ID |
-| `<forbidden-commands>` | PCE_01_B_PROJECT_MAPPING | 禁止命令 ID |
-| `<commit-count>` | CAPSULE_FIELD `git.commit_count` | 0 或 1 |
-| `<commit-message>` | CAPSULE_FIELD `git.commit_message` | 提交信息 |
-| `<push-mode>` | CAPSULE_FIELD `git.push_mode` | NONE 或 NORMAL_PUSH |
-| `<pull-request-action>` | CAPSULE_FIELD `git.pull_request_action` | NONE、CREATE_DRAFT 或 UPDATE_DRAFT |
-| `<forbidden-actions>` | CAPSULE_FIELD `forbidden_actions` | 禁止行为列表 |
-| `<completion-report-name>` | CAPSULE_FIELD `completion_report.name` | 报告名称 |
-| `<completion-report-maximum-lines>` | CAPSULE_FIELD `completion_report.maximum_lines` | 20-120 |
-| `<completion-report-recipient>` | CAPSULE_FIELD `completion_report.recipient` | 报告接收方 |
-| `delivery_type` | STANDARD_CONSTANT | 固定为 `CODEX_EXECUTION_PROMPT` |
-| 十个固定 section 标题 | STANDARD_CONSTANT | 见第 5 节固定顺序 |
+顶层 key 顺序固定：
 
-约束：
+```text
+delivery_type
+schema
+recipient
+paste_location
+purpose            # 唯一目标，只表达一次（来自 Capsule objective）
+report_back_to
+next_hop_after_report
+baseline           # repository / branch / head / [pull_request 仅正整数]
+changes            # required_changes
+[scope_extra | allowed_files]   # scope derivation，二者互斥
+max_changed_files
+accept             # acceptance criteria
+[open_findings]    # 非空才输出，仅 id 列表
+[closed_findings]  # 非空才输出，仅 id 列表
+validation         # profile / run / [forbid 仅非空]
+[git]              # positive-action allowlist，三 NONE 时整体省略
+rules              # 12 个 stable rule codes，固定列表
+[forbidden]        # task-specific prohibitions（去重、剔除与 stable code 相同的项）
+report             # max_lines / fields
+completion_report_recipient
+completion_report_name
+stop_after_report: true
+```
 
-- 模板中出现的每个 `<...>` 占位符都必须在本表中有且仅有一行；
-- 本表中每个占位符行都必须真实出现在模板中；
-- 无合法来源的占位符（如任务分支、下一阶段、scope escalation 代码、
-  专项审查请求行）不得出现在模板中；
-- validator 必须提取模板全部占位符，验证不存在未知占位符、每个占位符都有
-  唯一来源、source table 与模板占位符集合完全一致、不存在遗留或重复占位符。
+示例形状（字段 contract，不是要求所有 optional key 永远输出）：
+
+```yaml
+delivery_type: CODEX_EXECUTION_PROMPT
+schema: compact-execution-envelope-v2
+recipient: "<routing.recipient 的值>"
+baseline:
+  repository: "<baseline.repository>"
+  branch: "<baseline.branch>"
+  head: "<baseline.head>"
+validation:
+  profile: GLOBAL_CONTRACT
+  run:
+    - "<resolved command argv>"
+git:
+  commit: 1
+  message: "<commit message>"
+  branch: DERIVE_FROM_FACT_BRANCH
+  push: NORMAL_PUSH
+rules:
+  - FETCH_VERIFY_EXACT_BASE
+  - VERIFY_WORKTREE_SAFE
+  - NO_AMEND
+  - NO_REBASE
+  - NO_SQUASH
+  - NO_FORCE_PUSH
+  - NO_DIRECT_FACT_BRANCH_WRITE
+  - NO_READY
+  - NO_MERGE
+  - NO_AUTO_MERGE
+  - NO_PUBLICATION
+  - STOP_ON_SCOPE_EXPANSION
+report:
+  max_lines: 80
+  fields: [result, pre_HEAD, post_HEAD, commit, changed_files, change_summary,
+           local_validation, remote_branch_HEAD, pull_request, CI_status,
+           scope_violation, remaining_findings]
+completion_report_recipient: "<completion_report.recipient>"
+completion_report_name: "<completion_report.name>"
+stop_after_report: true
+```
+
+### 5.2 Omission / Derivation 规则
+
+- **Objective**：Capsule `objective` 只进入 `purpose` 一次；不得再有第二个
+  `objective:` / `goal:` / 唯一目标副本。
+- **Pull Request Baseline**：`baseline.pull_request == "none"` 时省略
+  `baseline.pull_request`；正整数时渲染。
+- **Findings**：空数组省略；非空渲染 id 列表，状态由 key 派生
+  （`open_findings` / `closed_findings`），不重复输出 `OPEN/CLOSED`。
+- **required_changes / allowed_files**：
+  - 两个数组精确相同 → 只渲染 `changes`；
+  - 两者元素唯一 且 `allowed_files` 是 `required_changes` 的严格 superset →
+    `changes` + `scope_extra`（extras 保持 `allowed_files` 顺序筛选）；
+  - 无法安全证明上述 derivation → `changes` + 完整 `allowed_files`；
+  - 不得为了压缩丢失 scope。`max_changed_files` 保留。
+- **Validation**：总是输出 `profile` 与 `run`；只有 forbidden command 列表
+  非空时输出 `validation.forbid`，空列表不渲染 `none`。
+- **Git**：git map 是 positive-action allowlist。
+  - `commit_count == 1` → `commit: 1` + `message`；
+  - `commit_count == 0` → 省略 commit + message；
+  - `push_mode == NORMAL_PUSH` → `branch: DERIVE_FROM_FACT_BRANCH` +
+    `push: NORMAL_PUSH`；`NONE` → 省略 push；
+  - `CREATE_DRAFT` → `pr: CREATE_DRAFT` + `pr_base: FACT_BRANCH`；
+  - `UPDATE_DRAFT` → `pr: UPDATE_DRAFT`；`NONE` → 省略 pr；
+  - 保留 CREATE/UPDATE 与 `baseline.pull_request` 的合法关系：
+    `CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
+    正整数；冲突时 fail closed（`GIT_ACTION_CONFLICT`）。
+
+### 5.3 Stable Rules + Task Prohibitions
+
+v2 不再发送长 Git safety prose。固定 concise rule codes（agent-visible 输出
+只发送 codes；stable semantics 如下）：
+
+| code | stable semantics |
+| --- | --- |
+| `FETCH_VERIFY_EXACT_BASE` | 开始前获取远端 refs 并核验 exact base，drift 即停止 |
+| `VERIFY_WORKTREE_SAFE` | 核验工作树无可冲突 tracked/staged 修改，不 reset/stash/clean |
+| `NO_AMEND` | 禁止 amend |
+| `NO_REBASE` | 禁止 rebase（不得 rebase 到新 Source） |
+| `NO_SQUASH` | 禁止 squash |
+| `NO_FORCE_PUSH` | 禁止 force push / force-with-lease |
+| `NO_DIRECT_FACT_BRANCH_WRITE` | 禁止直接写 fact branch |
+| `NO_READY` | 禁止将 PR 标记为 Ready |
+| `NO_MERGE` | 禁止 merge |
+| `NO_AUTO_MERGE` | 禁止 auto-merge |
+| `NO_PUBLICATION` | 禁止 publication |
+| `STOP_ON_SCOPE_EXPANSION` | scope 扩张时停止，不得自行扩 scope |
+
+Capsule `forbidden_actions`：
+
+- 必须保留 material task-specific semantics；
+- exact duplicate 只保留第一项；
+- 与 exact stable rule code 相同时不重复（stable codes 已在 `rules`）；
+- 不做 fuzzy NLP / 猜测式 semantic deletion——不得因为某 task prohibition
+  "看起来像" stable rule 就删除它。
+
+## 6. Template Asset Contract Manifest
+
+`templates/compact-codex-prompt-template.md` 不再是 production placeholder
+interpolation source；它是 `compact-execution-envelope-v2` 的 contract
+manifest 与 human-readable canonical shape reference。资产必须满足：
+
+```yaml
+template_asset:
+  schema_marker: compact-execution-envelope-v2
+  production_placeholders: 0
+  WHEN_ENDWHEN_blocks: 0
+  fixed_10_section_contract: false
+```
+
+CLI validate、CLI compile 与 contract validator 共享同一个 fail-closed gate
+（`Template.contract_manifest_error`）：
+
+- 必须声明 schema marker `compact-execution-envelope-v2`；
+- 必须含零 production placeholder（无 `<...>` token）；
+- 必须含零 WHEN/ENDWHEN block（无 `<!-- WHEN` / `<!-- ENDWHEN`）；
+- 不得声明固定十节合同（无 `## N. ` 编号 headings）。
+
+违规统一为 `TEMPLATE_CONTRACT_INVALID`（exit 3，CONTRACT_OR_POLICY）。
+Renderer 必须直接从 normalized IR 构造 canonical output，不使用资产中的
+任何模板文本。
 
 ## 7. Compact Completion Report
 
@@ -336,7 +508,7 @@ remaining_findings:
 
 - Renderer CLI（属于 PCE-01-B）；
 - 项目 profile resolution 与命令解析（属于 PCE-01-B）；
-- 精确 Token 计算；
+- 精确 Token 计算（PCE_UNICODE_WORDPUNCT_V1 是 deterministic proxy metric）；
 - 个人知识库接入（属于后续阶段）；
 - PCE-01 已完成、PCE-01 source_verified、GRP-01 已启动、D10-B 已恢复或
   PCE-01-B 命令已经存在。
@@ -345,11 +517,13 @@ remaining_findings:
 
 Renderer 以 `ruby scripts/ai-sdlc-prompt.rb` 提供，只接受两个 subcommand：
 
-- `validate <capsule.yaml>`：执行 Capsule、project policy、template binding 与
-  Git baseline preflight，不渲染 Prompt；成功时 stdout 精确输出
-  `compact execution capsule valid`（单行、LF 结尾），stderr 为空，exit 0。
-- `compile <capsule.yaml>`：复用 preflight，再渲染并执行 budget gate；成功时
-  stdout 仅输出最终一份 `CODEX_EXECUTION_PROMPT`，stderr 为空，exit 0。
+- `validate <capsule.yaml>`：执行 Capsule、project policy、template asset
+  contract manifest 与 Git baseline preflight，不渲染 Prompt；成功时 stdout
+  精确输出 `compact execution capsule valid`（单行、LF 结尾），stderr 为空，
+  exit 0。
+- `compile <capsule.yaml>`：复用 preflight，再渲染 canonical
+  compact-execution-envelope-v2 YAML 并执行 budget gate；成功时 stdout 仅输出
+  最终一份 envelope，stderr 为空，exit 0。
 
 Capsule 路径按 cwd 解析；target repository 为 cwd 所属 Git root；policy 固定
 读取 `<git-root>/.ai-sdlc/prompt-policy.yaml`。
@@ -361,9 +535,9 @@ backtrace 或部分 Prompt。exit codes：
 | --- | --- | --- |
 | 0 | success | validate / compile 成功 |
 | 2 | CLI_OR_INPUT | 参数错误、文件缺失、编码无效 |
-| 3 | CONTRACT_OR_POLICY | Capsule 合同违规、policy 违规、模板绑定违规 |
+| 3 | CONTRACT_OR_POLICY | Capsule 合同违规、policy 违规、模板资产违规 |
 | 4 | GIT_BASELINE | Git 仓库、origin 身份、fact branch、named ref 核验失败 |
-| 5 | RENDER_OR_BUDGET | 渲染不完整、行数或字节超限 |
+| 5 | RENDER_OR_BUDGET | 渲染不完整、行数/字节/proxy-token 超限 |
 
 ## 11. Project Policy（PCE-01-B）
 
@@ -446,67 +620,47 @@ ls-remote。核验顺序：
 `live_GitHub_HEAD_guaranteed=false`）。禁止 checkout、branch、update-ref、
 reset、rebase、commit、push 或 PR 操作。
 
-## 13. Renderer（PCE-01-B）
+## 13. Renderer（PCE-01-B，v2）
 
-只使用 Template Value Source Table 登记的 27 个占位符与来源
-`CAPSULE_FIELD | STANDARD_CONSTANT | PCE_01_B_PROJECT_MAPPING`；保持固定十
-节顺序，只生成一份 `CODEX_EXECUTION_PROMPT`。
-
-模板结构在共享库有唯一 template-structure gate（CLI validate、CLI compile
-与 contract validator 共同调用），fail closed 检查：固定十节 heading 精确且
-顺序精确，不得缺节、重复节或出现额外编号节；任意行首 `delivery_type:` 恰好
-一行且值精确为 `CODEX_EXECUTION_PROMPT`（missing、duplicate、wrong 均失败）；
-模板内全部 `WHEN` / `ENDWHEN` 类 HTML marker 被完整扫描——只有精确合法
-marker 才被接受，malformed、unknown field/value、unpaired、nested、
-duplicate、跨节 marker 全部失败，任何不匹配合法 token 正则的 WHEN-like /
-ENDWHEN-like 文本不得被静默忽略。结构失败为 `TEMPLATE_STRUCTURE_INVALID` /
-`TEMPLATE_CONDITIONAL_INVALID`，stdout 为空，exit 3。
-
-模板绑定在共享库有唯一 template-binding validator（CLI validate、CLI
-compile 与 contract validator 共同调用），运行时证明：模板占位符集合精确等于
-27 个 `PLACEHOLDER_SOURCES`；每个占位符恰好出现一次；无 unknown、missing、
-duplicate 或 source-set drift。绑定失败为
-`TEMPLATE_PLACEHOLDER_UNKNOWN` / `TEMPLATE_PLACEHOLDER_MISSING` /
-`TEMPLATE_PLACEHOLDER_DUPLICATE`，stdout 为空，exit 3。
-
-模板只允许非嵌套标记 `<!-- WHEN <field>=<value> -->` 与 `<!-- ENDWHEN -->`。
-条件字段和值只能是：
+v2 production renderer 直接从 normalized execution IR（validated Capsule +
+project policy + resolved profile mapping）构造**单一** canonical
+`compact-execution-envelope-v2` YAML document。以下全部退休、不得长期保留：
 
 ```text
-git.commit_count=0|1
-git.push_mode=NONE|NORMAL_PUSH
-git.pull_request_action=NONE|CREATE_DRAFT|UPDATE_DRAFT
+render_v1 / render_v2 双实现
+feature flag
+legacy production fallback
+固定十节 Markdown production 渲染
+placeholder interpolation production 路径
 ```
 
-每个合法值恰有一个 block；不得缺失、重复、嵌套或跨节。渲染后删除全部条件
-标记，每组只保留命中 block。`commit_count=0` 不得声称创建 commit；
-`push_mode=NONE` 不得声称 push；PR action 为 `NONE` 时不得声称操作 PR；
-`CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
-正整数。
+只存在一个 production renderer。模板资产（第 6 节）只作为 contract
+manifest 被读取与验证，不参与输出构造。
 
-列表按 Capsule 输入顺序渲染为紧凑 bullets；空 findings 渲染为 `none`。渲染器
-按输出上下文区分并集中实现四种 renderer（finding F06）：`render_yaml_scalar`
-处理 fenced YAML block（路由 / Exact Baseline / Git 与 PR / Completion Report
-footer）中的字符串，用确定性 YAML 双引号 scalar——反斜杠、双引号、CR、LF、
-tab、NUL 及其他控制字符编为 YAML 转义（`\\` `\"` `\r` `\n` `\t` `\0` `\xNN`），
-`<` / `>` 编为 `\u003C` / `\u003E` 以保持合法 YAML 且不形成占位符或条件标记；
-整数与 boolean 保持 YAML 原生类型（bare），字符串 `"none"` 保持带引号
-（不得解析为 null）。`render_prose_scalar` 处理模板正文单行字符串，
-`render_list_item` 处理 prose 列表项，`render_finding` 处理 finding id/status，
-三者统一使用集中式可见单行编码（CR、LF、tab、NUL、其他控制字符以及 `<`、
-`>`、`&` 编为 `\r` `\n` `\t` `\0` `\xNN` `\<` `\>` `\&`）。所有编码保留语义、
-不静默删除任何字符，原单行注入防护不得弱化；因此注入的第二 `delivery_type`、
-heading/YAML 控制行、额外材料、占位符、WHEN/ENDWHEN 标记或 CR 字节无法形成。
-成功 compile 输出的每一个 fenced YAML block 都可用
-`YAML.safe_load(permitted_classes: [], aliases: false)` 独立解析，字段值与
-类型与原 Capsule/Standard 常量精确一致。输出固定 UTF-8、LF、恰好一个末尾
-LF；不含 CR、时间、用户、主机或随机值；相同 Capsule、policy 与 Standard
-Package bytes 必须 byte-identical。
+canonical serialization 规则：
 
-输出前验证（canonical output verifier）：有效 UTF-8；不含 CR；任意
-`^delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`；零未解析占位符
-（27 个已登记占位符均不再以原样出现）；零未转义条件标记；十节顺序正确；恰好
-一个末尾 LF。budget gate 在此 canonical 输出上执行。
+- 显式按固定 key 顺序构造（deterministic key order），2 空格缩进、LF 行尾、
+  恰好一个末尾 LF；`YAML.dump` 的版本相关 formatting 不是 byte authority；
+- 固定 contract 值（`delivery_type`、`schema`、枚举、rule codes、report
+  fields）渲染为 plain scalar；
+- 每个 Capsule/Policy 用户字符串（routing、purpose、baseline 值、路径、
+  findings id、acceptance、command argv、forbidden 等）先通过确定性 YAML
+  双引号 scalar 编码：反斜杠、双引号、CR、LF、tab、NUL 及其他控制字符编为
+  YAML 转义（`\\` `\"` `\r` `\n` `\t` `\0` `\xNN`），`<` / `>` 编为
+  `\u003C` / `\u003E`，整数与 boolean 保持 YAML 原生类型（bare），字符串
+  `"none"` 保持带引号（不得解析为 null）。所有编码保留语义、不静默删除任何
+  字符；注入的第二 `delivery_type`、schema、key、heading、占位符样文本、
+  WHEN/ENDWHEN 样文本或 CR 字节无法形成。
+
+输出前验证（canonical output verifier），fail closed：有效 UTF-8；不含 CR；
+任意 `^delivery_type:` 恰好一行且值为 `CODEX_EXECUTION_PROMPT`；恰好一行
+`schema: compact-execution-envelope-v2`；零 legacy 十节 headings；零
+placeholder-like / marker-like token；恰好一个末尾 LF；整份输出必须是单一
+restricted-YAML document 且顶层 key 顺序 canonical。budget gate（第 2 节：
+line → byte → proxy-token）在此 canonical 输出上执行，然后才写 stdout。
+
+相同 Capsule、policy 与 Standard Package bytes 必须 byte-identical
+（deterministic）；输出不含时间、用户、主机或随机值。
 
 ## 14. Diagnostics 与 Budget（PCE-01-B）
 
@@ -549,12 +703,8 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `VALIDATION_PROFILE_UNSUPPORTED` | 3 | CONTRACT_OR_POLICY | Capsule 选择的 Validation Profile 未被 project policy 声明 |
 | `DOC_ONLY_ROOT_NPM_TEST_FORBIDDEN` | 3 | CONTRACT_OR_POLICY | DOC_ONLY 不得要求根 npm test |
 | `TEMPLATE_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | 找不到 prompt 模板文件 |
-| `TEMPLATE_PLACEHOLDER_UNKNOWN` | 3 | CONTRACT_OR_POLICY | 模板占位符无来源行 |
-| `TEMPLATE_PLACEHOLDER_MISSING` | 3 | CONTRACT_OR_POLICY | 已登记占位符在模板中缺失 |
-| `TEMPLATE_PLACEHOLDER_DUPLICATE` | 3 | CONTRACT_OR_POLICY | 已登记占位符出现多次 |
-| `TEMPLATE_SOURCE_BINDING_MISMATCH` | 3 | CONTRACT_OR_POLICY | 占位符来源不可解析 |
-| `TEMPLATE_STRUCTURE_INVALID` | 3 | CONTRACT_OR_POLICY | 模板十节形状或 delivery_type 身份违规 |
-| `TEMPLATE_CONDITIONAL_INVALID` | 3 | CONTRACT_OR_POLICY | 条件块缺失、重复、嵌套或畸形 |
+| `TEMPLATE_CONTRACT_INVALID` | 3 | CONTRACT_OR_POLICY | 模板资产违反 v2 contract manifest |
+| `GIT_ACTION_CONFLICT` | 3 | CONTRACT_OR_POLICY | git.pull_request_action 与 baseline.pull_request 冲突 |
 | `GIT_REPOSITORY_NOT_FOUND` | 4 | GIT_BASELINE | cwd 不在 git repository 内 |
 | `POLICY_NOT_TRACKED` | 4 | GIT_BASELINE | policy 文件未被 git 跟踪 |
 | `REPOSITORY_IDENTITY_MISMATCH` | 4 | GIT_BASELINE | origin/capsule/policy 三方 identity 不闭合 |
@@ -565,6 +715,7 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `RENDER_INCOMPLETE` | 5 | RENDER_OR_BUDGET | canonical 输出验证失败 |
 | `PROMPT_LINE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | 逻辑行数超过 Mode 硬限制 |
 | `PROMPT_BYTE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | UTF-8 字节数超过 Mode 硬限制 |
+| `PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | PCE_UNICODE_WORDPUNCT_V1 proxy-token 数超过 Mode 硬限制 |
 | `INTERNAL_ERROR` | 5 | RENDER_OR_BUDGET | fail-closed 内部/渲染错误；不输出 backtrace |
 
 `TEMPLATE_FILE_MISSING` 固定 exit 3。
@@ -572,17 +723,18 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 失败一律 fail closed 到 `INTERNAL_ERROR`（exit 5）；CLI 不得有绕过 registry 的裸
 exit 常量（`EXIT_OK` 除外）。
 
-budget gate 按 logical line count 与 UTF-8 byte count 同时检查四种 Mode 的
-hard limit（见第 2 节），且始终在 canonical 渲染输出上执行（第 13 节）；
-`completion_report.maximum_lines` 继续验证 20-120 并原值渲染。超限分类为
-`PROMPT_LINE_LIMIT_EXCEEDED` 或 `PROMPT_BYTE_LIMIT_EXCEEDED`。不得自动升级
-Mode、扩大限制、声称 Token 计数或输出部分 Prompt。
+budget gate 按固定顺序在 verified canonical 输出上执行（第 2 节）：
+logical line count → UTF-8 byte count → PCE_UNICODE_WORDPUNCT_V1 proxy-token
+count。超限分类为 `PROMPT_LINE_LIMIT_EXCEEDED`、
+`PROMPT_BYTE_LIMIT_EXCEEDED` 或 `PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED`。不得
+自动升级 Mode、扩大限制、声称精确 Token 计数、silent pass、自动删除约束或
+输出部分 Prompt。
 
 ## 15. 边界（PCE-01-B）
 
 PCE-01-B 只实现 validate、compile、project policy、profile→command ID、
-确定性渲染、Git named-ref 只读核验、line/UTF-8 byte budget、diagnostics 与
-stdout。不实现：Token 计算、JSON、stdin、inspect、`--output`、clipboard、
-网络请求、LLM、Git 写自动化、远程包发布。PCE-01-C（两个项目真实验收）、
-personal knowledge base 接入、PCE-01 整体完成与 source_verified 均不属于
-PCE-01-B。
+确定性 v2 renderer（canonical YAML envelope）、Git named-ref 只读核验、
+line/byte/proxy-token budget、diagnostics 与 stdout。不实现：model-exact
+Token 计算、JSON、stdin、inspect、`--output`、clipboard、网络请求、LLM、
+Git 写自动化、远程包发布。PCE-01-C（两个项目真实验收）、personal
+knowledge base 接入、PCE-01 整体完成与 source_verified 均不属于 PCE-01-B。
