@@ -131,14 +131,19 @@ Read:
 - `references/analyze-gate-check.md`
 - `references/project-type-checks.md`
 
-Continue only when:
+Readiness/Gate blockers do not fail-fast: record each as a material blocker,
+complete the remaining reliable bounded consistency scan, then conclude with
+Analyze Gate Result `FAIL` / upstream Re-Gate as appropriate (per
+`ai-sdlc/goal-anchored-global-reasoning.md`). Typical readiness/Gate
+blockers include:
 
-- Task Gate has no Blocking items.
-- Spec, plan, and tasks are current and not stale.
-- Route artifact is current and Project Type Profiles are known.
-- Entry coverage profile and entry coverage reports are present and current.
-- Solution Review, Plan Gate, and Task Gate results are passable.
-- Development path is `SPECKIT_PIPELINE_REQUIRED` or full SDD was explicitly requested.
+- Task Gate has Blocking items.
+- Spec, plan, and tasks are stale.
+- Route artifact is not current or Project Type Profiles are unknown.
+- Entry coverage profile or entry coverage reports are missing or unstable.
+- Solution Review, Plan Gate, and Task Gate results are not passable.
+- Development path is not `SPECKIT_PIPELINE_REQUIRED` (unless full SDD was
+  explicitly requested).
 
 ### 3. Audit Consistency
 
@@ -215,7 +220,7 @@ Hard-stop instead of continuing the scan when:
 - Scope is fundamentally indeterminable from the available artifacts.
 - Continuing would require inventing business or technical behavior.
 
-All other blocking conditions below are recorded as material blockers and reported; they do not end discovery — continue the remaining reliable bounded consistency scan before concluding:
+All other blocking conditions below are recorded as material blockers and reported; they do not end discovery — continue the remaining reliable bounded consistency scan, then conclude with Analyze Gate Result `FAIL` / upstream Re-Gate as appropriate:
 
 - `.specify/entry-coverage-profile.candidate.yaml` exists without confirmed stable profile.
 - `sdlc-speckit-tasks` has unresolved Blocking items.

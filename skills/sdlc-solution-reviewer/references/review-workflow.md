@@ -44,7 +44,16 @@ Do not treat chat history as a stable source unless the user explicitly confirms
 
 For Requirement Supplement or Specification Missing reviews, read the technical specification's Change Event, Parent Requirement ID, Same Requirement Decision, Current Change Scope / Delta Scope, Aggregate Requirement Scope, Original Implemented / Approved Scope, Out of Delta Scope, Earliest Affected Node, Ignored Aggregate Triggers, Aggregate Complexity: reference only, and Re-Gate Records before judging complexity.
 
-## Step 3: Schema Coverage
+## Step 3: Build Goal/Scope and Global Model
+
+After source reading and before any detailed review, anchor the current goal and build the global model:
+
+- State current goal, Scope (in/out), non-goals, and acceptance from the source material.
+- Enumerate the frozen applicable material surfaces per `ai-sdlc/goal-anchored-global-reasoning.md` (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- Local examples here defer to the shared surface list; they never narrow it.
+- Only then start the detailed review (schema coverage, behavior safety, risk/test).
+
+## Step 4: Schema Coverage
 
 Check the specification against `ess/specification-schema.md`.
 
@@ -76,7 +85,7 @@ Conditional sections become required when relevant:
 
 Missing required behavior-affecting sections are Critical or High.
 
-## Step 4: Behavior Safety Review
+## Step 5: Behavior Safety Review
 
 Check whether the specification answers:
 
@@ -91,7 +100,7 @@ Check whether the specification answers:
 
 If the implementation would require guessing any of these answers, mark Critical and recommend `BLOCKED_NEEDS_REVISION`.
 
-## Step 5: Risk and Test Review
+## Step 6: Risk and Test Review
 
 Check:
 
@@ -104,9 +113,13 @@ Check:
 
 Testing gaps that prevent validating the core requirement are Critical or High.
 
-## Step 6: Gate and Path Decision
+## Step 7: Gate and Path Decision
 
-Before the Gate / Development Path / Tail decision, complete the current-goal global/material scan and close direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) per `ai-sdlc/goal-anchored-global-reasoning.md`. A FAIL-eligible finding does not end discovery: continue the remaining reliable bounded material surfaces, then decide.
+Before the Gate / Development Path / Tail decision, complete the current-goal global/material scan and run the completion check:
+
+- Every applicable frozen surface from the global model (step 3) has been scanned; each is closed or explicitly `NOT_APPLICABLE`.
+- Direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) are closed per the shared reference; root causes are consolidated.
+- A FAIL-eligible finding does not end discovery: continue the remaining reliable bounded material surfaces, then decide.
 
 After issue classification:
 

@@ -55,25 +55,37 @@ Do not approve Analyze readiness by treating a missing profile as "not applicabl
 
 ## Readiness Checks
 
-Continue only when:
+Per `ai-sdlc/goal-anchored-global-reasoning.md`, readiness and Gate blockers
+do **not** fail-fast: record each one as a material blocker, complete the
+remaining reliable bounded consistency scan, then conclude with Analyze Gate
+Result `FAIL` / upstream Re-Gate as appropriate. Hard-stop is limited to
+unreadable/missing required source, fundamentally indeterminable scope, or
+continuation requiring invented behavior.
 
-- `sdlc-speckit-tasks` has no Blocking Items.
-- `specs/{feature}/route.md` exists and is current.
-- `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, and `specs/{feature}/tasks.md` are current and not stale.
-- `.specify/entry-coverage-profile.yaml` exists.
-- Entry coverage reports exist under `.specify/reports/entry_coverage/`.
-- `entry_inventory.tsv` and `service_inventory.tsv` can be parsed by TSV fields.
-- `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
-- Plan Gate result is passable.
-- Task Gate result is passable.
-- Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.
-- No open Required Action affects implementation readiness.
+Recorded readiness/Gate blockers (each is scanned and reported, then drives
+`FAIL` / Re-Gate):
+
+- `sdlc-speckit-tasks` has Blocking Items.
+- `specs/{feature}/route.md` is missing or not current.
+- `specs/{feature}/spec.md`, `specs/{feature}/plan.md`, or
+  `specs/{feature}/tasks.md` is stale.
+- `.specify/entry-coverage-profile.yaml` is missing or unstable.
+- Entry coverage reports are missing or `entry_inventory.tsv` /
+  `service_inventory.tsv` cannot be parsed by TSV fields.
+- `02-方案审核` result is not `PASS` / valid `PASS_WITH_RISK`.
+- Plan Gate result or Task Gate result is not passable.
+- Development Path Decision is not `SPECKIT_PIPELINE_REQUIRED` (unless the
+  user explicitly requested full SDD).
+- An open Required Action affects implementation readiness.
 
 ## Missing Task Gate
 
 If no Task Gate result exists:
 
-- Continue only when `specs/{feature}/tasks.md` contains an explicit no-blocking Task Gate section and the user explicitly confirms it is current.
+- Record it as a readiness blocker per the Readiness Checks section; the
+  scan completes and the Gate concludes `FAIL` unless
+  `specs/{feature}/tasks.md` contains an explicit no-blocking Task Gate
+  section and the user explicitly confirms it is current.
 - Recommend running `sdlc-speckit-tasks`.
 - Do not approve implementation readiness from raw tasks or unreviewed implementation notes.
 

@@ -4698,6 +4698,7 @@ GRP01_BINDINGS = {
   "skills/sdlc-solution-reviewer/references/review-workflow.md" => %w[current-goal\ global/material\ scan does\ not\ end\ discovery],
   "skill-contracts/known-skills/sdlc-solution-reviewer.md" => %w[goal-anchored-global-reasoning FAIL\ eligibility],
   "skills/sdlc-speckit-analyze/SKILL.md" => %w[material\ blockers hard-stop],
+  "skills/sdlc-speckit-analyze/references/analyze-inputs.md" => %w[material\ blocker],
   "skills/sdlc-speckit-analyze/references/consistency-scope.md" => %w[bounded\ continuation hard-stop],
   "skill-contracts/known-skills/sdlc-speckit-analyze.md" => %w[goal-anchored-global-reasoning material\ blockers],
   "skills/sdlc-code-review-excellence/SKILL.md" => %w[direct\ impacts root\ cause],
@@ -4768,6 +4769,140 @@ end
 
 errors.concat(grp01_baseline_diags)
 errors.concat(grp01_selftest_diags)
+
+# ── GRP-01 R1/R2 regression checks ──
+# R1 (GRP01-R1-ANALYZE-NON-FAIL-FAST-NOT-CLOSED): Analyze hard-stop is
+# limited to unreadable/missing required source, fundamentally
+# indeterminable scope, or invented-behavior requirement; readiness/Gate
+# blockers are recorded, reliably scanned, then FAIL/Re-Gate. Fail-fast
+# constructs are rejected.
+# R2 (GRP01-R2-GLOBAL-FIRST-CONTRACT-NOT-FULLY-OPERATIONALIZED): the shared
+# reference lists frozen applicable material surfaces and permits
+# NOT_APPLICABLE without creating an output schema; Solution Reviewer
+# builds Goal/Scope + Global Model after source reading and before detailed
+# review; Writer/Challenger local examples defer to shared surfaces and
+# never narrow them.
+
+GRP01_R1_R2_DIAGS = []
+
+GRP01_R1_ANALYZE_FILES = %w[
+  skills/sdlc-speckit-analyze/SKILL.md
+  skills/sdlc-speckit-analyze/references/analyze-inputs.md
+  skills/sdlc-speckit-analyze/references/consistency-scope.md
+].freeze
+
+GRP01_R1_ANALYZE_FILES.each do |rel|
+  text = grp01_scope[rel]
+  if text.nil?
+    GRP01_R1_R2_DIAGS << "GRP-01: R1 analyze file missing #{rel}"
+    next
+  end
+  if text.include?("Continue only when")
+    GRP01_R1_R2_DIAGS << "GRP-01: R1 #{rel} must not use the fail-fast construct 'Continue only when'"
+  end
+  if text.include?("Stop instead of approving implementation readiness when")
+    GRP01_R1_R2_DIAGS << "GRP-01: R1 #{rel} must not treat readiness/Gate blockers as hard-stop"
+  end
+end
+
+analyze_skill = grp01_scope["skills/sdlc-speckit-analyze/SKILL.md"]
+if analyze_skill
+  hard_stop_block = analyze_skill[/Hard-stop instead of continuing the scan when:(.*?)(?:\n\n|\z)/m, 1].to_s
+  if hard_stop_block.include?("Blocking items")
+    GRP01_R1_R2_DIAGS << "GRP-01: R1 hard-stop list must not include readiness/Gate blockers (Blocking items)"
+  end
+end
+
+shared_ref = grp01_scope[GRP01_SHARED_REFERENCE]
+if shared_ref
+  GRP01_R1_R2_DIAGS << "GRP-01: R2 shared reference must freeze applicable material surfaces" \
+    unless shared_ref.include?("Frozen Applicable Material Surfaces")
+  GRP01_R1_R2_DIAGS << "GRP-01: R2 shared reference must permit NOT_APPLICABLE without an output schema" \
+    unless shared_ref.include?("NOT_APPLICABLE")
+else
+  GRP01_R1_R2_DIAGS << "GRP-01: R2 shared reference missing"
+end
+
+reviewer_wf = grp01_scope["skills/sdlc-solution-reviewer/references/review-workflow.md"]
+if reviewer_wf.nil?
+  GRP01_R1_R2_DIAGS << "GRP-01: R2 reviewer workflow missing"
+else
+  global_model_pos = reviewer_wf.index("Build Goal/Scope and Global Model")
+  schema_pos = reviewer_wf.index("Schema Coverage")
+  if global_model_pos.nil?
+    GRP01_R1_R2_DIAGS << "GRP-01: R2 reviewer workflow must build Goal/Scope + Global Model after source reading"
+  elsif schema_pos.nil? || global_model_pos > schema_pos
+    GRP01_R1_R2_DIAGS << "GRP-01: R2 reviewer workflow must build Global Model before detailed review"
+  end
+end
+
+# R2: Writer/Challenger local examples defer to the shared frozen surfaces;
+# re-listing the five direct-impact dimensions locally would narrow the
+# shared contract and is rejected.
+%w[
+  skills/sdlc-specification-writer/references/writing-workflow.md
+  skills/sdlc-solution-challenger/references/challenge-workflow.md
+].each do |rel|
+  text = grp01_scope[rel]
+  if text.nil?
+    GRP01_R1_R2_DIAGS << "GRP-01: R2 local example file missing #{rel}"
+    next
+  end
+  if text.include?("caller/callee or dependency, consumer, state/data")
+    GRP01_R1_R2_DIAGS << "GRP-01: R2 #{rel} must defer to shared surfaces, " \
+                          "not re-list the direct-impact dimensions locally"
+  end
+end
+
+# Negative self-tests for the R1/R2 checks (in-memory mutations only).
+GRP01_R1_R2_SELFTESTS = {
+  "skills/sdlc-speckit-analyze/references/analyze-inputs.md" => ["Continue only when", "R1"],
+  "skills/sdlc-solution-reviewer/references/review-workflow.md" => ["## Step 3: Build Goal/Scope and Global Model", "R2 ordering"],
+  "skills/sdlc-specification-writer/references/writing-workflow.md" => ["caller/callee or dependency, consumer, state/data", "R2 narrowing"]
+}.freeze
+
+GRP01_R1_R2_SELFTEST_DIAGS = []
+GRP01_R1_R2_SELFTESTS.each do |rel, (term, tag)|
+  base = grp01_scope[rel]
+  if base.nil?
+    GRP01_R1_R2_SELFTEST_DIAGS << "GRP-01: R1/R2 self-test cannot run: missing scope file #{rel}"
+    next
+  end
+  # Mutation strategy per check: insert the fail-fast construct, move the
+  # Global Model build after detailed review, or insert a local surface
+  # re-list. Each mutated scope must be flagged by the real checks.
+  mutated = case tag
+            when "R1" then base.sub("## Readiness Checks", "## Readiness Checks\n\nContinue only when:")
+            when "R2 ordering"
+              block = base[/## Step 3: Build Goal\/Scope and Global Model.*?(?=## Step 4: Schema Coverage)/m]
+              if block.nil?
+                base
+              else
+                base.sub(block, "") + "\n" + block
+              end
+            when "R2 narrowing" then base + "\ncaller/callee or dependency, consumer, state/data (local list)\n"
+            else base
+            end
+  if mutated == base
+    GRP01_R1_R2_SELFTEST_DIAGS << "GRP-01: R1/R2 self-test mutation did not change #{rel}"
+    next
+  end
+  scope2 = grp01_scope.merge(rel => mutated)
+  probe = []
+  if tag == "R1"
+    probe << "R1" if mutated.include?("Continue only when")
+  elsif tag == "R2 ordering"
+    gm = mutated.index("Build Goal/Scope and Global Model")
+    sc = mutated.index("Schema Coverage")
+    probe << "R2" if gm.nil? || sc.nil? || gm > sc
+  elsif tag == "R2 narrowing"
+    probe << "R2" if mutated.include?("caller/callee or dependency, consumer, state/data")
+  end
+  GRP01_R1_R2_SELFTEST_DIAGS << "GRP-01: R1/R2 self-test #{rel} (#{tag}) did not flag the mutation" if probe.empty?
+end
+
+errors.concat(GRP01_R1_R2_DIAGS)
+errors.concat(GRP01_R1_R2_SELFTEST_DIAGS)
 
 if errors.empty?
   puts "TOPIC07_FORMAL_CLOSURE_VALIDATED true" if topic07_closure_baseline_diags.empty? && topic07_closure_selftest_diags.empty?

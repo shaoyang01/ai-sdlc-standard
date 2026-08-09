@@ -107,7 +107,7 @@ Review the specification against these dimensions. Only check content within the
 29. Alternative Solution
 30. Overdesign Check
 
-For every material finding, close its direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) before moving on. After a fail-worthy finding, continue the remaining reliable bounded surfaces; the result reflects the complete scan, not the first finding.
+For every material finding, close its direct impacts per the frozen shared surface list (`ai-sdlc/goal-anchored-global-reasoning.md`, section 7; section 3) before moving on — the local example defers to the shared surfaces and never narrows them. After a fail-worthy finding, continue the remaining reliable bounded surfaces; the result reflects the complete scan, not the first finding.
 
 ## Step 5: Classify and Consolidate Findings
 

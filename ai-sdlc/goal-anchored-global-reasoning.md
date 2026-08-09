@@ -42,6 +42,53 @@ workflow engine、数据库、autonomous reviewer、ledger 或新输出 schema�
 impact 未关闭的 finding 不算完成；把 impact 关闭作为工作的一部分，而不是
 追加的旁路工作。
 
+## 7. Frozen Applicable Material Surfaces
+
+所有 reasoning Skill 共享以下 **frozen applicable material surfaces**
+（适用面清单；GRP01-R2 冻结）：
+
+Direct impact 五维（适用于每个 material finding，见第 3 节）：
+
+```text
+1. caller / callee or dependency
+2. consumer
+3. state / data
+4. failure / compatibility
+5. verification
+```
+
+Skill-specific material surfaces：
+
+```text
+Specification Writer:
+  ESS required sections、behavior constraints、flow/state/data、测试方案、
+  old-flow compatibility
+
+Solution Challenger:
+  scope/phase firewall 面、existing mechanism、minimum-sufficient、
+  30 challenge dimensions
+
+Solution Reviewer:
+  schema coverage 面、behavior safety 面、risk/test 面、
+  Gate / Development Path / Tail decision 面
+
+Speckit Analyze:
+  route/spec/plan/tasks/entry-coverage consistency 面、
+  readiness / Gate blockers 面
+
+Code Review Excellence:
+  caller/callee、consumer、state/data、failure/compat、verification
+  （代码审查面）
+```
+
+- 每个 Skill 的局部示例（SKILL.md、references）必须 defer 到本清单
+  （引用本文件），不得在局部重新定义更窄的清单；narrowing 是 contract
+  violation（GRP01-R2 由 validator 拒绝）。
+- 某 surface 对当前 goal 不适用时，显式标记 `NOT_APPLICABLE`（或中文
+  `不涉及`），不得省略该 surface 的结论，也不得为此创建新输出 schema 或
+  新字段记录它。
+- 本清单只冻结"适用面"，不引入平台 / runtime / schema / Gate 变化。
+
 ## 4. Root-Cause Consolidation
 
 - 把表象归并到根因：同一根因的多个表象合并为一条 finding，不重复计数；
