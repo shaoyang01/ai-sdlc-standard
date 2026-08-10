@@ -51,16 +51,29 @@ git:
   commit_message: "<commit-message>"
   push_mode: "<NONE|NORMAL_PUSH>"
   pull_request_action: "<NONE|CREATE_DRAFT|UPDATE_DRAFT>"
-  # zero-repository-delta 只支持 commit_count: 0、push_mode: NONE 与
-  # pull_request_action: CREATE_DRAFT。
+  # zero-repository-delta 支持 commit_count: 0、push_mode: NONE，且
+  # pull_request_action 为 CREATE_DRAFT（带 pr_head）或 NONE（无 pr_head，
+  # PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）。
 
 # canonical exact PR-head identity（PCE_01_PR_ONLY_ZERO_DELTA_F01）：
-# 仅 zero-repository-delta + CREATE_DRAFT 必填；非零 delta 禁止携带。
+# 仅 zero-repository-delta + CREATE_DRAFT 必填；zero-repository-delta +
+# NONE（PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）与非零 delta 禁止携带。
 # branch 为 PR head 分支名；sha 为 40 位小写十六进制（须以字符串提供，
 # 纯数字 sha 必须加引号，否则会被 YAML 解析为整数）。
 pr_head:
   branch: "<pr-head-branch>"
   sha: "<40-char-lowercase-hex-sha>"
+
+# bounded exact result handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）：
+# 可选单一 result_handoff 契约；省略时输出与现有 capsule byte-identical。
+# identity 为稳定 producer/consumer 标识；maximum_bytes 为有限字节上界；
+# required 标记结果是否必须；payload 为完整 frozen 字节（不得以 hash/
+# 摘要代替，不得要求重建；payload 字节数不得超过 maximum_bytes）。
+# result_handoff:
+#   identity: "<stable-identity>"
+#   maximum_bytes: <positive-integer>
+#   required: <true|false>
+#   payload: "<exact-frozen-payload>"
 
 forbidden_actions:
   - "<forbidden-action>"

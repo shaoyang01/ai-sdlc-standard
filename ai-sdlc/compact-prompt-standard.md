@@ -103,12 +103,17 @@ v1 约束至少包括：
 - finding 条目只允许 `id` 与 `status` 两个字段；`open_findings` 的条目状态必须为
   `OPEN`，`preserved_closed_findings` 的条目状态必须为 `CLOSED`。
 
-### 1.5 Zero-Repository-Delta Draft-PR 形状（PCE_01_PR_ONLY_ZERO_DELTA_F01）
+### 1.5 Zero-Repository-Delta 形状（PCE_01_PR_ONLY_ZERO_DELTA_F01 / PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）
 
 zero-repository-delta 只允许精确三重形状：`delta.required_changes: []` +
 `scope.allowed_files: []` + `scope.maximum_changed_files: 0`，且
-`git.commit_count: 0`、`git.push_mode: NONE`、
-`git.pull_request_action: CREATE_DRAFT`。
+`git.commit_count: 0`、`git.push_mode: NONE`。执行形状二选一：
+
+- `git.pull_request_action: CREATE_DRAFT`（PCE_01_PR_ONLY_ZERO_DELTA_F01，
+  Draft-PR 执行）：必须提供根字段 `pr_head: {branch, sha}`；
+- `git.pull_request_action: NONE`（PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01，
+  通用无 PR 执行）：禁止携带 `pr_head`，编译输出不渲染任何 git mutation，
+  也不渲染 `VERIFY_EXACT_PR_HEAD_BEFORE_PR`。
 
 - 空 `required_changes` 但 `allowed_files` 非空或 `maximum_changed_files`
   为正 → 分类为 `MISSING_REQUIRED_FIELD`（不得只空 changes 却保留 scope）；
@@ -116,17 +121,47 @@ zero-repository-delta 只允许精确三重形状：`delta.required_changes: []`
   zero-delta 三重形状允许）；zero-delta 的 `maximum_changed_files` 必须精确
   为 `0`；
 - zero-delta 的 git 必须为 `commit_count: 0`、`push_mode: NONE` 且
-  `pull_request_action: CREATE_DRAFT`（zero-delta 只表达 Draft-PR 执行；
-  任何其他组合 → `FIELD_TYPE_INVALID`）；
+  `pull_request_action` 为 `CREATE_DRAFT` 或 `NONE`（zero-delta 只表达
+  Draft-PR 或通用无 PR 执行；任何其他组合 → `FIELD_TYPE_INVALID`）；
 - zero-delta + CREATE_DRAFT 必须提供根字段 `pr_head: {branch, sha}`，
   缺失 → `MISSING_REQUIRED_FIELD`；`branch` 必须是非空合法 Git branch 名，
   `sha` 必须是字符串形式的 40 位小写十六进制（纯数字 sha 未加引号会被
   YAML 解析为整数 → `FIELD_TYPE_INVALID`；非字符串 → `FIELD_TYPE_INVALID`；
   非 40 位十六进制 → `INVALID_SHA`）；
-- 非 zero-delta capsule 携带 `pr_head` → 分类为 `FIELD_TYPE_INVALID`（
-  nonzero-delta PR head 由 implementation 分支派生，不接受 contract 声明）；
+- zero-delta + NONE 携带 `pr_head` → 分类为 `FIELD_TYPE_INVALID`（G01 无 PR
+  形状禁止 PR-head 声明）；非 zero-delta capsule 携带 `pr_head` →
+  分类为 `FIELD_TYPE_INVALID`（nonzero-delta PR head 由 implementation
+  分支派生，不接受 contract 声明）；
 - baseline 保持 exact PR base：`baseline.head` 仍是 PR 的 base（fact
   branch exact HEAD），`pr_head.sha` 是 PR head 的 canonical exact identity。
+
+### 1.6 Bounded Exact Result Handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）
+
+可选单一 `result_handoff` 根契约（不引入平行机制；现有 capsule 省略它时
+编译输出 byte-identical）。形状：
+
+```yaml
+result_handoff:
+  identity: "<stable-identity>"      # 稳定 producer/consumer 标识（非空字符串）
+  maximum_bytes: <positive-integer>  # 有限字节上界
+  required: <true|false>             # 结果是否必须产生
+  payload: "<exact-frozen-payload>"  # 完整 frozen 字节（bytesize ≤ maximum_bytes）
+```
+
+- producer 与 consumer 共用同一契约：producer 声明结果必须产生
+  （`required: true` 且 payload 完整）；consumer 携带稳定 identity 与声明
+  上界内的 exact frozen payload；
+- payload 缺失/空、identity 缺失、`maximum_bytes` 非正整数、
+  `required` 非布尔 → 分类为 `MISSING_REQUIRED_FIELD` 或
+  `FIELD_TYPE_INVALID`；
+- payload 字节数超过 `maximum_bytes` → `RESULT_PAYLOAD_OVER_BOUND`
+  （exit 3，`CONTRACT_OR_POLICY`），fail closed；
+- 不得以 hash/摘要、部分文本或任何重建要求替代完整 payload（任何
+  reconstruction requirement fail closed）；不得用 repository-file
+  transport、workflow engine、database、repositoryless framework、
+  新 prompt mode/profile 或无界 payload channel 传递结果；
+- consumer 的 exact payload 以 canonical 形状渲染进编译输出，并始终受
+  既有 Prompt Budget Gate（第 2 节）约束。
 
 ### 1.3 受限 YAML
 
@@ -769,6 +804,7 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `VALIDATION_OVERPROVISIONED` | 3 | CONTRACT_OR_POLICY | 验证等级过重 |
 | `MISSING_STOP_CONDITION` | 3 | CONTRACT_OR_POLICY | completion_report.stop_after_report 不为 true |
 | `FIELD_TYPE_INVALID` | 3 | CONTRACT_OR_POLICY | 字段类型错误或枚举越界 |
+| `RESULT_PAYLOAD_OVER_BOUND` | 3 | CONTRACT_OR_POLICY | result_handoff payload 字节数超过 maximum_bytes |
 | `POLICY_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | git root 下找不到 policy 文件 |
 | `POLICY_SCHEMA_INVALID` | 3 | CONTRACT_OR_POLICY | policy schema、键、类型或枚举违规 |
 | `POLICY_PROFILE_MAPPING_MISSING` | 3 | CONTRACT_OR_POLICY | profile 映射缺失或 required 为空 |

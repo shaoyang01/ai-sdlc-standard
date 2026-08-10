@@ -4264,3 +4264,246 @@ fixtures:
       stdout: empty
       stderr: contains
       stderr_contains: ["PR_HEAD_SHA_MISMATCH"]
+
+  - id: RENDER-ZERO-DELTA-NONE
+    category: valid
+    command: compile
+    description: "Generic zero-delta no-PR capsule renders changes: [], max_changed_files: 0, no git mutation and no VERIFY_EXACT_PR_HEAD_BEFORE_PR (G01)"
+    capsule: |
+      task_id: fixture-zero-delta-none
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "zero-delta 无 PR 渲染 fixture"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "渲染 zero-delta NONE 形状"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "ZERO-DELTA-NONE Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+    yaml_blocks:
+      root:
+        fields:
+          delivery_type: {value: CODEX_EXECUTION_PROMPT}
+          schema: {value: compact-execution-envelope-v2}
+          recipient: {value: "Codex"}
+          paste_location: {value: "acme/widgets 新执行会话"}
+          purpose: {value: "zero-delta 无 PR 渲染 fixture"}
+          report_back_to: {value: "owner-session"}
+          next_hop_after_report: {value: "owner-session 复核实施报告"}
+          max_changed_files: {value: 0, type: integer}
+          changes: {value: []}
+          accept: {value: ["渲染 zero-delta NONE 形状"]}
+          rules:
+            value: [FETCH_VERIFY_EXACT_BASE, VERIFY_WORKTREE_SAFE, NO_AMEND, NO_REBASE,
+                    NO_SQUASH, NO_FORCE_PUSH, NO_DIRECT_FACT_BRANCH_WRITE, NO_READY,
+                    NO_MERGE, NO_AUTO_MERGE, NO_PUBLICATION, STOP_ON_SCOPE_EXPANSION]
+          forbidden: {value: ["merge"]}
+          completion_report_recipient: {value: "owner-session"}
+          completion_report_name: {value: "ZERO-DELTA-NONE Report"}
+          stop_after_report: {value: true, type: boolean}
+      baseline:
+        fields:
+          repository: {value: acme/widgets}
+          branch: {value: feature/runtime-v1}
+          head: {value: "7c21cc8bb9649188505dafea1402049c74bd9be7"}
+      validation:
+        fields:
+          profile: {value: DOC_ONLY}
+          run:
+            value: ["ruby scripts/validate-skill-contracts.rb",
+                    "ruby scripts/validate-capability-metadata-chain.rb", "git diff --check"]
+          forbid: {value: ["npm test", "npm run test:loop-patch-mutations"]}
+
+  - id: RENDER-RESULT-HANDOFF
+    category: valid
+    command: compile
+    description: "Bounded exact result-handoff contract renders canonically and passes the Prompt Budget Gate (G02)"
+    capsule: |
+      task_id: fixture-result-handoff
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "带 result handoff 的渲染 fixture"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "result_handoff 契约渲染成功"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 256
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "RESULT-HANDOFF Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+    yaml_blocks:
+      root:
+        fields:
+          delivery_type: {value: CODEX_EXECUTION_PROMPT}
+          schema: {value: compact-execution-envelope-v2}
+          recipient: {value: "Codex"}
+          paste_location: {value: "acme/widgets 新执行会话"}
+          purpose: {value: "带 result handoff 的渲染 fixture"}
+          report_back_to: {value: "owner-session"}
+          next_hop_after_report: {value: "owner-session 复核实施报告"}
+          max_changed_files: {value: 1, type: integer}
+          changes: {value: ["docs/guide.md"]}
+          accept: {value: ["result_handoff 契约渲染成功"]}
+          rules:
+            value: [FETCH_VERIFY_EXACT_BASE, VERIFY_WORKTREE_SAFE, NO_AMEND, NO_REBASE,
+                    NO_SQUASH, NO_FORCE_PUSH, NO_DIRECT_FACT_BRANCH_WRITE, NO_READY,
+                    NO_MERGE, NO_AUTO_MERGE, NO_PUBLICATION, STOP_ON_SCOPE_EXPANSION]
+          forbidden: {value: ["merge"]}
+          completion_report_recipient: {value: "owner-session"}
+          completion_report_name: {value: "RESULT-HANDOFF Report"}
+          stop_after_report: {value: true, type: boolean}
+      baseline:
+        fields:
+          repository: {value: acme/widgets}
+          branch: {value: feature/runtime-v1}
+          head: {value: "7c21cc8bb9649188505dafea1402049c74bd9be7"}
+      validation:
+        fields:
+          profile: {value: DOC_ONLY}
+          run:
+            value: ["ruby scripts/validate-skill-contracts.rb",
+                    "ruby scripts/validate-capability-metadata-chain.rb", "git diff --check"]
+          forbid: {value: ["npm test", "npm run test:loop-patch-mutations"]}
+      result_handoff:
+        fields:
+          identity: {value: "handoff-v1"}
+          maximum_bytes: {value: 256, type: integer}
+          required: {value: true, type: boolean}
+          payload: {value: "exact-frozen-result-payload"}
+
+  - id: RENDER-NEG-RESULT-HANDOFF-OVER-BOUND
+    category: negative
+    command: compile
+    description: "result_handoff payload exceeding maximum_bytes fails closed (RESULT_PAYLOAD_OVER_BOUND)"
+    capsule: |
+      task_id: fixture-result-handoff-over-bound
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "超界 payload 渲染必须失败"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须失败"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 8
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "RESULT-HANDOFF-OVER-BOUND Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 3
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["RESULT_PAYLOAD_OVER_BOUND"]

@@ -1260,3 +1260,365 @@ fixtures:
         name: "BAD-SHA Report"
         maximum_lines: 80
         stop_after_report: true
+
+  - id: CAPSULE-VALID-ZERO-DELTA-NONE
+    category: valid
+    description: "Generic zero-delta no-PR capsule (PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01) without pr_head"
+    capsule: |
+      task_id: contract-test-zero-delta-none
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "zero-delta 无 PR 执行"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "zero-delta NONE envelope 渲染成功"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "ZERO-DELTA-NONE Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-ZERO-DELTA-NONE-WITH-PR-HEAD
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "Zero-delta NONE carrying pr_head is rejected (G01 forbids pr_head without CREATE_DRAFT)"
+    capsule: |
+      task_id: contract-test-zero-delta-none-pr-head
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "zero-delta NONE 带 pr_head 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 0
+        commit_message: "no commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      pr_head:
+        branch: codex/pce-zero-delta-draft
+        sha: "1111111111111111111111111111111111111111"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "ZERO-DELTA-NONE-PR-HEAD Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-ZERO-DELTA-NONE-COMMIT
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "Zero-delta NONE with nonzero commit is rejected"
+    capsule: |
+      task_id: contract-test-zero-delta-none-commit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "zero-delta NONE 带 commit 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes: []
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files: []
+        maximum_changed_files: 0
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "should not commit"
+        push_mode: NONE
+        pull_request_action: NONE
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "ZERO-DELTA-NONE-COMMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-VALID-RESULT-HANDOFF
+    category: valid
+    description: "Capsule with single bounded exact result-handoff contract (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02)"
+    capsule: |
+      task_id: contract-test-result-handoff
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "带 result handoff 的执行"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "result_handoff 契约通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 256
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "RESULT-HANDOFF Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-MISSING-PAYLOAD
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "result_handoff without payload fails closed"
+    capsule: |
+      task_id: contract-test-result-handoff-no-payload
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺 payload 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 256
+        required: true
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "RESULT-HANDOFF-NO-PAYLOAD Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-OVER-BOUND
+    category: negative
+    expected_classification: RESULT_PAYLOAD_OVER_BOUND
+    description: "result_handoff payload exceeding maximum_bytes fails closed"
+    capsule: |
+      task_id: contract-test-result-handoff-over-bound
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "超界 payload 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 8
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "RESULT-HANDOFF-OVER-BOUND Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-NO-IDENTITY
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "result_handoff without identity fails closed"
+    capsule: |
+      task_id: contract-test-result-handoff-no-identity
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺 identity 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        maximum_bytes: 256
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "RESULT-HANDOFF-NO-IDENTITY Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-BAD-BOUND
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "result_handoff with non-positive maximum_bytes is rejected"
+    capsule: |
+      task_id: contract-test-result-handoff-bad-bound
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "非法 maximum_bytes 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "result handoff"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        identity: handoff-v1
+        maximum_bytes: 0
+        required: true
+        payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "RESULT-HANDOFF-BAD-BOUND Report"
+        maximum_lines: 80
+        stop_after_report: true

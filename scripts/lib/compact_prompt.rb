@@ -59,16 +59,25 @@ module CompactPrompt
     git forbidden_actions completion_report
   ].freeze
 
-  # Optional root field (PCE_01_PR_ONLY_ZERO_DELTA_F01): `pr_head` is NOT
+  # Optional root fields: `pr_head` (PCE_01_PR_ONLY_ZERO_DELTA_F01) is NOT
   # part of the exact ROOT_KEYS set, so existing capsules without it stay
   # valid. It is allowed as a root key and structurally validated only when
-  # present (zero-delta CREATE_DRAFT requires it; nonzero delta forbids it).
-  OPTIONAL_ROOT_KEYS = %w[pr_head].freeze
+  # present (zero-delta CREATE_DRAFT requires it; nonzero delta and
+  # zero-delta NONE forbid it). `result_handoff` (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02)
+  # is the single optional bounded exact result-handoff contract; existing
+  # capsules omit it with byte-identical output.
+  OPTIONAL_ROOT_KEYS = %w[pr_head result_handoff].freeze
   ROUTING_KEYS = %w[recipient paste_location report_back_to next_hop_after_report].freeze
   BASELINE_KEYS = %w[repository branch head pull_request].freeze
   DELTA_KEYS = %w[open_findings required_changes acceptance_criteria preserved_closed_findings].freeze
   SCOPE_KEYS = %w[allowed_files maximum_changed_files].freeze
   GIT_KEYS = %w[commit_count commit_message push_mode pull_request_action].freeze
+  # PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02: one optional result_handoff
+  # contract (not parallel mechanisms). identity is the stable
+  # producer/consumer identity; maximum_bytes is the finite bound;
+  # required marks the result as mandatory; payload is the exact frozen
+  # bytes within the declared bound.
+  RESULT_HANDOFF_KEYS = %w[identity maximum_bytes required payload].freeze
   COMPLETION_REPORT_KEYS = %w[recipient name maximum_lines stop_after_report].freeze
 
   PROMPT_MODES = %w[MICRO_FIX SESSION_CONTINUATION BOOTSTRAP RECOVERY].freeze
@@ -108,6 +117,7 @@ module CompactPrompt
     YAML_TAG YAML_MERGE_KEY YAML_NULL YAML_DOCUMENT_COUNT_INVALID INVALID_SHA
     UNSAFE_PATH MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED
     VALIDATION_OVERPROVISIONED MISSING_STOP_CONDITION FIELD_TYPE_INVALID
+    RESULT_PAYLOAD_OVER_BOUND
   ].freeze
   INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
   ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
@@ -140,8 +150,8 @@ module CompactPrompt
     delivery_type schema recipient paste_location purpose report_back_to
     next_hop_after_report baseline changes scope_extra allowed_files
     max_changed_files accept open_findings closed_findings validation git
-    rules forbidden report completion_report_recipient completion_report_name
-    stop_after_report
+    result_handoff rules forbidden report completion_report_recipient
+    completion_report_name stop_after_report
   ].freeze
 
   # Stable concise rule codes (v2 section: Stable Rules + Task Prohibitions).
@@ -448,22 +458,26 @@ module CompactPrompt
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PULL_REQUEST_ACTIONS.include?(git["pull_request_action"])
 
       # Zero-delta git contract: commit_count=0, push_mode=NONE and the
-      # Draft-PR execution shape only (pull_request_action must be
-      # CREATE_DRAFT); zero delta has no other execution meaning.
+      # execution shape is either the Draft-PR shape (pull_request_action
+      # CREATE_DRAFT with canonical pr_head, PCE_01_PR_ONLY_ZERO_DELTA_F01)
+      # or the generic no-PR shape (pull_request_action NONE,
+      # PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01, which forbids pr_head and
+      # renders no git mutation). Zero delta has no other execution meaning.
       if zero_delta?(data) && (git["commit_count"] != 0 || git["push_mode"] != "NONE" ||
-                               git["pull_request_action"] != "CREATE_DRAFT")
+                               !%w[CREATE_DRAFT NONE].include?(git["pull_request_action"]))
         return "FIELD_TYPE_INVALID"
       end
 
       # Canonical exact PR-head identity (PCE_01_PR_ONLY_ZERO_DELTA_F01):
       # optional root field `pr_head` {branch, sha}; required for the
-      # zero-delta CREATE_DRAFT shape, forbidden otherwise.
+      # zero-delta CREATE_DRAFT shape; forbidden for the zero-delta NONE
+      # shape (PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01) and for nonzero delta.
       pr_head = data["pr_head"]
       if pr_head.nil?
         if zero_delta?(data) && git["pull_request_action"] == "CREATE_DRAFT"
           return "MISSING_REQUIRED_FIELD"
         end
-      elsif zero_delta?(data)
+      elsif zero_delta?(data) && git["pull_request_action"] == "CREATE_DRAFT"
         return "FIELD_TYPE_INVALID" unless pr_head.is_a?(Hash)
         result = check_exact_keys(pr_head, %w[branch sha])
         return result if result
@@ -476,6 +490,29 @@ module CompactPrompt
         return "INVALID_SHA" unless pr_head["sha"].match?(CompactPrompt::SHA40_PATTERN)
       else
         return "FIELD_TYPE_INVALID"
+      end
+
+      # Bounded exact result handoff (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02):
+      # one optional result_handoff contract {identity, maximum_bytes,
+      # required, payload}. identity is the stable producer/consumer
+      # identity; maximum_bytes is the finite bound; required marks the
+      # result as mandatory; payload is the exact frozen bytes within the
+      # declared bound. Missing payload / identity, over-bound payload and
+      # any reconstruction requirement (e.g. a hash or digest instead of
+      # the full payload) fail closed. Existing capsules omit result_handoff
+      # and keep byte-identical output.
+      result_handoff = data["result_handoff"]
+      unless result_handoff.nil?
+        return "FIELD_TYPE_INVALID" unless result_handoff.is_a?(Hash)
+        result = check_exact_keys(result_handoff, CompactPrompt::RESULT_HANDOFF_KEYS)
+        return result if result
+        return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["identity"])
+        return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
+                                             result_handoff["maximum_bytes"] >= 1
+        return "FIELD_TYPE_INVALID" unless [true, false].include?(result_handoff["required"])
+        payload = result_handoff["payload"]
+        return "MISSING_REQUIRED_FIELD" unless payload.is_a?(String) && !payload.empty?
+        return "RESULT_PAYLOAD_OVER_BOUND" if payload.bytesize > result_handoff["maximum_bytes"]
       end
 
       forbidden_actions = data["forbidden_actions"]
@@ -1383,6 +1420,18 @@ module CompactPrompt
           out << kv_plain(1, "pr", "UPDATE_DRAFT")
         end
       end
+      # Bounded exact result handoff (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02):
+      # the single optional contract renders canonically as its own mapping;
+      # the exact frozen payload stays inside the declared bound and the
+      # whole envelope remains subject to the existing Prompt Budget Gate.
+      result_handoff = capsule["result_handoff"]
+      if result_handoff
+        out << "result_handoff:\n"
+        out << kv(1, "identity", result_handoff["identity"])
+        out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
+        out << kv_plain(1, "required", result_handoff["required"])
+        out << kv(1, "payload", result_handoff["payload"])
+      end
       # Stable concise rule codes plus the conditional execution-time rule:
       # for the zero-repository-delta CREATE_DRAFT shape only, the
       # Agent-visible rules additionally include
@@ -1534,6 +1583,8 @@ module CompactPrompt
                                     "meaning" => "completion_report.stop_after_report is not true" },
       "FIELD_TYPE_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                 "meaning" => "field type or enum out of range" },
+      "RESULT_PAYLOAD_OVER_BOUND" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                       "meaning" => "result_handoff payload bytes exceed maximum_bytes" },
       "POLICY_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                  "meaning" => "policy file not found at git root" },
       "POLICY_SCHEMA_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",

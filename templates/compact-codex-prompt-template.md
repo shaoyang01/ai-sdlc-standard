@@ -49,6 +49,7 @@ accept             # acceptance criteria
 [closed_findings]  # 非空才输出，仅 id 列表
 validation         # profile / run / [forbid 仅非空]
 [git]              # positive-action allowlist，三 NONE 时整体省略
+[result_handoff]   # 可选单一 bounded exact result-handoff 契约（G02）
 rules              # 12 个 stable rule codes，固定列表
 [forbidden]        # task-specific prohibitions（去重、剔除与 stable code 相同的项）
 report             # max_lines / fields
@@ -57,12 +58,13 @@ completion_report_name
 stop_after_report: true
 ```
 
-## Zero-Repository-Delta Draft-PR Shape（PCE_01_PR_ONLY_ZERO_DELTA_F01）
+## Zero-Repository-Delta Shape（PCE_01_PR_ONLY_ZERO_DELTA_F01 / PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）
 
 零仓库 delta 执行只允许精确三重形状：`required_changes: []` +
 `allowed_files: []` + `maximum_changed_files: 0`，且 git 为
-`commit_count: 0` / `push_mode: NONE` / `pull_request_action: CREATE_DRAFT`。
-此时 canonical envelope 渲染：
+`commit_count: 0` / `push_mode: NONE`。执行形状二选一：
+
+- `pull_request_action: CREATE_DRAFT`（F01）：canonical envelope 渲染：
 
 ```yaml
 changes: []
@@ -76,8 +78,13 @@ git:
     sha: "40-char-lowercase-hex-sha 的值（字符串，纯数字必须加引号）"
 ```
 
+- `pull_request_action: NONE`（G01，generic zero-delta no-PR）：禁止
+  `pr_head`，整个 git mapping 省略，rules 不包含
+  `VERIFY_EXACT_PR_HEAD_BEFORE_PR`。
+
 `pr_head` 是可选根字段 `{branch, sha}`：仅 zero-delta + CREATE_DRAFT 必填；
-非零 delta 携带 `pr_head` 会被拒绝；baseline 保持 exact PR base。
+zero-delta + NONE 或非零 delta 携带 `pr_head` 会被拒绝；baseline 保持 exact
+PR base。
 
 ### Repository-Aware PR-Head Binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_BINDING）
 
@@ -107,7 +114,12 @@ PR-head identity。
   与 stable rule code 完全相同的项不重复；不做 fuzzy NLP 删除。
 - pr_head（PCE_01_PR_ONLY_ZERO_DELTA_F01）：仅 zero-delta + CREATE_DRAFT
   必填，渲染 `git.pr_head.branch` 与 `git.pr_head.sha`（canonical exact
-  PR-head identity）；非零 delta 携带 pr_head 被拒绝。
+  PR-head identity）；zero-delta + NONE 与非零 delta 携带 pr_head 被拒绝。
+- result_handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）：可选单一契约
+  `{identity, maximum_bytes, required, payload}`；省略时输出 byte-identical。
+  payload 为完整 frozen 字节且 bytesize ≤ maximum_bytes；缺失 payload/
+  identity、超界（`RESULT_PAYLOAD_OVER_BOUND`）、或任何重建要求 fail
+  closed；canonical 渲染并始终受 Budget Gate 约束。
 
 ## Stable Rules（12 codes，固定列表）
 
