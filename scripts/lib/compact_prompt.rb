@@ -1626,12 +1626,14 @@ module CompactPrompt
   module Budget
     module_function
 
-    # Fixed deterministic sentinel that replaces the validated
+    # Canonical empty string that replaces the validated
     # frozen_result.payload value inside the CONSUME control-envelope
-    # budget projection. It is never emitted: the actual canonical stdout
-    # keeps the complete exact payload inline; only the ordinary
-    # line/byte/proxy-token accounting runs on the projected control view.
-    CONTROL_PROJECTION_PAYLOAD_SENTINEL = "PCE_CONTROL_ENVELOPE_PROJECTION".freeze
+    # budget projection: the projected payload accounting content is zero
+    # bytes — no nonempty surrogate, no fixed sentinel penalty. It is
+    # never emitted: the actual canonical stdout keeps the complete exact
+    # payload inline; only the ordinary line/byte/proxy-token accounting
+    # runs on the projected control view.
+    CONTROL_PROJECTION_EMPTY_PAYLOAD = "".freeze
 
     # Returns [code, path, message] or nil. Deterministic gate order on the
     # verified canonical output: logical line count → UTF-8 byte count →
@@ -1660,16 +1662,18 @@ module CompactPrompt
     # unchanged). The projection is rebuilt from the validated capsule
     # structure with exactly one replacement —
     # result_handoff.frozen_result.payload →
-    # CONTROL_PROJECTION_PAYLOAD_SENTINEL — and re-serialized through the
-    # same canonical builder; it is never a rendered-text search/replace
-    # and is never written to stdout. maximum_bytes, identity equality,
-    # UTF-8 and over-bound fail-closed semantics are untouched: they run
-    # in Capsule validation before any rendering, on the full payload.
+    # CONTROL_PROJECTION_EMPTY_PAYLOAD (the canonical empty string, so the
+    # projected payload accounting content is zero bytes) — and
+    # re-serialized through the same canonical builder; it is never a
+    # rendered-text search/replace and is never written to stdout.
+    # maximum_bytes, identity equality, UTF-8 and over-bound fail-closed
+    # semantics are untouched: they run in Capsule validation before any
+    # rendering, on the full payload.
     def control_projection(capsule, policy, resolved_profile_mapping)
       handoff = capsule["result_handoff"]
       return nil unless handoff.is_a?(Hash) && handoff["role"] == "CONSUME"
       projected = deep_dup(capsule)
-      projected["result_handoff"]["frozen_result"]["payload"] = CONTROL_PROJECTION_PAYLOAD_SENTINEL
+      projected["result_handoff"]["frozen_result"]["payload"] = CONTROL_PROJECTION_EMPTY_PAYLOAD
       CompactPrompt::Envelope.build(projected, policy, resolved_profile_mapping)
     end
 

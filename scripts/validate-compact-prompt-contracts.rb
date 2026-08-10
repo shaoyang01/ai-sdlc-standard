@@ -236,9 +236,9 @@ if standard_text
 
   # CONSUME control-envelope budget projection (sections 1.6 / 2): the
   # standard must declare the structural budget-accounting projection and
-  # its deterministic payload-replacement sentinel.
+  # its zero-content canonical-empty-string payload replacement.
   unless standard_text.include?("CONSUME control-envelope budget projection") &&
-         standard_text.include?("PCE_CONTROL_ENVELOPE_PROJECTION")
+         standard_text.include?("canonical empty string")
     errors << "standard: CONSUME control-envelope budget projection is not declared"
   end
 
@@ -1069,6 +1069,11 @@ produce_reject.call({ "identity" => "other", "payload" => "x" }, "handoff-v1", 2
 produce_reject.call({ "identity" => "handoff-v1", "payload" => "123456789" }, "handoff-v1", 8,
                      "RESULT_PAYLOAD_OVER_BOUND", "over bound")
 produce_reject.call("not-a-mapping", "handoff-v1", 256, "FIELD_TYPE_INVALID", "malformed structure")
+# Invalid UTF-8 payload (PCE_PR73 invalid-UTF8 ProducedResult regression):
+# the production validator rejects undisturbed — semantics unchanged.
+produce_reject.call({ "identity" => "handoff-v1",
+                      "payload" => "invalid-\xFF-payload".dup.force_encoding(Encoding::UTF_8) },
+                    "handoff-v1", 256, "FIELD_TYPE_INVALID", "invalid UTF-8 payload")
 
 # ── PCE_EXACT_RESULT_HANDOFF_INLINE_BUDGET_INCOMPATIBILITY adversarial proofs ──
 # Composability acceptance proofs for the CONSUME control-envelope budget
@@ -1143,13 +1148,15 @@ if fixtures.is_a?(Array)
     parsed_projection, projection_class = projection && CompactPrompt::RestrictedYAML.parse(projection)
 
     renderer_assertion_count += 1
+    projected_payload = projection_class.nil? && parsed_projection.is_a?(Hash) &&
+                        parsed_projection.dig("result_handoff", "frozen_result", "payload")
     if projection && projection_class.nil? &&
-       parsed_projection.dig("result_handoff", "frozen_result", "payload") ==
-         CompactPrompt::Budget::CONTROL_PROJECTION_PAYLOAD_SENTINEL
+       projected_payload == CompactPrompt::Budget::CONTROL_PROJECTION_EMPTY_PAYLOAD &&
+       projected_payload.bytesize.zero?
       budget_projection_proofs += 1
     else
       errors << "budget projection proof: projection must structurally replace exactly " \
-                "the payload value with the deterministic sentinel"
+                "the payload value with the canonical empty string (zero accounting bytes)"
     end
 
     renderer_assertion_count += 1
@@ -1181,6 +1188,151 @@ if fixtures.is_a?(Array)
   end
 end
 
+# ── PCE_PR73_PRODUCER_CONSUMER_CHAIN_PROOF_F02 near-boundary chain ──
+# Real production-path regression chain over one same identity, one same
+# maximum_bytes and one same exact payload: PRODUCE compile PASS →
+# ProducedResult.validate PASS → exact freeze (the validated produced
+# result IS the CONSUME frozen_result, verbatim) → corresponding CONSUME
+# compile PASS → parsed stdout preserves the exact identity and payload.
+# Boundary lock: the same CONSUME control envelope carrying the retired
+# nonempty sentinel candidate exceeds the byte gate
+# (PROMPT_BYTE_LIMIT_EXCEEDED) while the zero-content projection passes —
+# a near-boundary case, never a wide-margin one. Non-increase: the CONSUME
+# projection line/byte/proxy-token counts never exceed the corresponding
+# PRODUCE ordinary full-output accounting.
+boundary_chain_proofs = 0
+if fixtures.is_a?(Array)
+  chain_produce = fixtures.find do |fixture|
+    fixture.is_a?(Hash) && fixture["id"] == "RENDER-RESULT-HANDOFF-PRODUCE-BOUNDARY-CHAIN"
+  end
+  chain_consume = fixtures.find do |fixture|
+    fixture.is_a?(Hash) && fixture["id"] == "RENDER-RESULT-HANDOFF-CONSUME-BOUNDARY-CHAIN"
+  end
+  if chain_produce.nil? || chain_consume.nil?
+    errors << "boundary chain proof: PRODUCE/CONSUME boundary chain fixtures are missing"
+  else
+    produce_capsule, produce_class = CompactPrompt::RestrictedYAML.parse(chain_produce["capsule"])
+    consume_capsule, consume_class = CompactPrompt::RestrictedYAML.parse(chain_consume["capsule"])
+
+    renderer_assertion_count += 1
+    if produce_class.nil? && consume_class.nil? &&
+       produce_capsule.reject { |key| key == "result_handoff" } ==
+         consume_capsule.reject { |key| key == "result_handoff" }
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: chain capsules must carry identical control fields"
+    end
+
+    identity = consume_class.nil? && consume_capsule.dig("result_handoff", "expected_identity")
+    bound = consume_class.nil? && consume_capsule.dig("result_handoff", "maximum_bytes")
+    frozen = consume_class.nil? && consume_capsule.dig("result_handoff", "frozen_result")
+    renderer_assertion_count += 1
+    if produce_class.nil? && consume_class.nil? &&
+       identity.is_a?(String) && !identity.empty? && bound.is_a?(Integer) &&
+       produce_capsule.dig("result_handoff", "identity") == identity &&
+       produce_capsule.dig("result_handoff", "maximum_bytes") == bound &&
+       frozen.is_a?(Hash) && frozen["identity"] == identity
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: chain must bind one same identity and one same maximum_bytes"
+    end
+
+    # Step 1: PRODUCE compile PASS (ordinary full-output accounting).
+    pr_exit, pr_out, pr_err = run_renderer_fixture(chain_produce, default_policy, prompt_template_text)
+    renderer_assertion_count += 1
+    if pr_exit.zero? && pr_err.empty?
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: PRODUCE compile must PASS, " \
+                "got exit #{pr_exit} stderr #{pr_err.inspect}"
+    end
+
+    # Step 2: ProducedResult.validate PASS on the exact produced result.
+    produced = frozen.is_a?(Hash) && { "identity" => frozen["identity"], "payload" => frozen["payload"] }
+    renderer_assertion_count += 1
+    if produced && CompactPrompt::ProducedResult.validate(produced, identity, bound).nil?
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: ProducedResult.validate must PASS for the chain produced result"
+    end
+
+    # Step 3: exact freeze — the CONSUME frozen_result IS the validated
+    # produced_result, verbatim (no reconstruction/hash/summary).
+    renderer_assertion_count += 1
+    if produced && frozen == produced
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: frozen_result must equal the validated produced_result verbatim"
+    end
+
+    # Step 4: corresponding CONSUME compile PASS (zero-content projection).
+    co_exit, co_out, co_err = run_renderer_fixture(chain_consume, default_policy, prompt_template_text)
+    renderer_assertion_count += 1
+    if co_exit.zero? && co_err.empty?
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: CONSUME compile must PASS, " \
+                "got exit #{co_exit} stderr #{co_err.inspect}"
+    end
+
+    # Step 5: parsed stdout preserves the exact identity and payload.
+    parsed_chain_out, chain_out_class = CompactPrompt::RestrictedYAML.parse(co_out)
+    renderer_assertion_count += 1
+    if chain_out_class.nil? && parsed_chain_out.is_a?(Hash) && produced &&
+       parsed_chain_out.dig("result_handoff", "frozen_result") == produced
+      boundary_chain_proofs += 1
+    else
+      errors << "boundary chain proof: parsed CONSUME stdout must preserve the exact " \
+                "identity and payload"
+    end
+
+    if consume_class.nil?
+      chain_policy, = CompactPrompt::RestrictedYAML.parse(chain_consume["policy"] || default_policy)
+      chain_mapping, = CompactPrompt::Policy.resolve_selected_profile(
+        chain_policy, consume_capsule["validation_profile"]
+      )
+      chain_mode = consume_capsule["prompt_mode"]
+      # Boundary lock: the retired nonempty sentinel candidate
+      # (PCE_CONTROL_ENVELOPE_PROJECTION, 31 bytes) fails the byte gate on
+      # this same control envelope; only the zero-content projection
+      # passes. Mechanical proof the regression is near-boundary.
+      sentinel_candidate = CompactPrompt::Budget.deep_dup(consume_capsule)
+      sentinel_candidate["result_handoff"]["frozen_result"]["payload"] =
+        "PCE_CONTROL_ENVELOPE_PROJECTION"
+      sentinel_text = CompactPrompt::Envelope.build(sentinel_candidate, chain_policy, chain_mapping)
+      chain_projection = CompactPrompt::Budget.control_projection(
+        consume_capsule, chain_policy, chain_mapping
+      )
+      sentinel_code, = CompactPrompt::Budget.check(sentinel_text, chain_mode)
+      renderer_assertion_count += 1
+      if sentinel_code == "PROMPT_BYTE_LIMIT_EXCEEDED" && chain_projection &&
+         CompactPrompt::Budget.check(chain_projection, chain_mode).nil?
+        boundary_chain_proofs += 1
+      else
+        errors << "boundary chain proof: sentinel candidate must fail PROMPT_BYTE_LIMIT_EXCEEDED " \
+                  "while the zero-content projection passes (sentinel #{sentinel_code.inspect})"
+      end
+
+      # Non-increase: for the same control fields, identity and
+      # maximum_bytes the CONSUME projection line/byte/proxy-token counts
+      # never increase over the PRODUCE ordinary full-output accounting.
+      renderer_assertion_count += 1
+      if chain_projection && !pr_out.empty? &&
+         chain_projection.lines.count <= pr_out.lines.count &&
+         chain_projection.bytesize <= pr_out.bytesize &&
+         CompactPrompt::ProxyToken.count(chain_projection) <= CompactPrompt::ProxyToken.count(pr_out)
+        boundary_chain_proofs += 1
+      else
+        errors << "boundary chain proof: CONSUME projection line/byte/proxy-token counts must not " \
+                  "increase over PRODUCE ordinary accounting " \
+                  "(projection #{chain_projection && chain_projection.lines.count}L/" \
+                  "#{chain_projection && chain_projection.bytesize}B, " \
+                  "produce #{pr_out.lines.count}L/#{pr_out.bytesize}B)"
+      end
+    end
+  end
+end
+
 # Minimal completion-template truth locks (no new template framework): the
 # completion report template must truthfully state the produced_result machine
 # surface, identity binding, payload production and metadata separation.
@@ -1204,6 +1356,7 @@ if errors.empty?
        "#{CompactPrompt::VALIDATION_PROFILES.length} validation profiles; " \
        "#{CompactPrompt::Diagnostics::REGISTRY.length} registered diagnostics; " \
        "#{budget_projection_proofs} budget-projection adversarial proofs; " \
+       "#{boundary_chain_proofs} boundary-chain proofs; " \
        "codex prompt template v2 contract manifest " \
        "with #{CompactPrompt::STABLE_RULES.length} stable rule codes; " \
        "standard asset statically verified (fields, git enums, budgets, profiles, " \

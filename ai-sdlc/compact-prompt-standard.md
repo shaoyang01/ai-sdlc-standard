@@ -189,14 +189,19 @@ result_handoff:
 截断、摘要、hash 替换、改道或重建）；只有普通 line/byte/proxy-token
 预算记账在 deterministic structural control-envelope projection 上
 执行——该 projection 从 validated capsule 结构重建，唯一改动是把
-`frozen_result.payload` 值替换为固定哨兵
-`PCE_CONTROL_ENVELOPE_PROJECTION`，再经同一 canonical builder 序列化；
+`frozen_result.payload` 值替换为 canonical empty string `""`（投影
+payload 记账内容为零字节，无任何非空替身或哨兵罚项），再经同一
+canonical builder 序列化；
 绝不对渲染文本做 search/replace，也从不写入 stdout。完整实际输出仍在
 任何预算判定前通过 canonical output verification；projection 上的
 line/byte/proxy-token 超限依然 fail closed（普通 Prompt Mode 预算不被
 禁用或扩大）；`maximum_bytes`、identity equality、UTF-8 与 over-bound
 fail-closed 语义不变。PRODUCE 与不携带 `result_handoff` 的 capsule
-保持既有 full-output 记账，编译输出 byte-identical。
+保持既有 full-output 记账，编译输出 byte-identical。同一 control
+fields、identity 与 `maximum_bytes` 下，CONSUME projection 的
+line/byte/proxy-token 计数不超过对应 PRODUCE 的 full-output 记账；
+该组合性与零内容投影由 near-boundary PRODUCE→validate→freeze→
+CONSUME 链回归机械锁定。
 
 **跨检查点绑定**：human checkpoint 只 freeze/select 精确的
 `produced_result`；PCE 不实现 persistence / workflow；frozen
@@ -889,7 +894,8 @@ budget gate 按固定顺序在 verified canonical 输出上执行（第 2 节）
 logical line count → UTF-8 byte count → PCE_UNICODE_WORDPUNCT_V1 proxy-token
 count。CONSUME capsule 的记账输入是 deterministic structural
 control-envelope projection（第 1.6 节：仅 `frozen_result.payload` 值被
-固定哨兵替换，从 validated capsule 结构重建，绝不对渲染文本
+canonical empty string `""` 替换，投影记账内容零字节，从 validated
+capsule 结构重建，绝不对渲染文本
 search/replace）；完整 exact payload 仍始终 inline 于 stdout。超限分类为
 `PROMPT_LINE_LIMIT_EXCEEDED`、`PROMPT_BYTE_LIMIT_EXCEEDED` 或
 `PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED`。不得
