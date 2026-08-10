@@ -99,15 +99,34 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
   case（含 "A中B"=3 的 Onigmo `\p{L}` 含 Han 语义差异）逐条断言；实现
   先切分 CJK 码点再扫描 letter-run，无 tokenizer gem / 网络 / model
   dependency；不声称 model-exact token count；
-- Zero-Repository-Delta Draft-PR 执行（PCE_01_PR_ONLY_ZERO_DELTA_F01）：
-  精确三重形状 `required_changes: []` + `allowed_files: []` +
-  `maximum_changed_files: 0` + `commit_count: 0` / `push_mode: NONE` /
-  `CREATE_DRAFT`；可选根字段 `pr_head: {branch, sha}`（canonical exact
-  PR-head identity，仅 zero-delta + CREATE_DRAFT 必填，非零 delta 携带被
-  拒绝）；空 changes 带非空 scope 或正 max 被拒绝；envelope 渲染
-  `changes: []` 与 `git.pr_head`（branch + sha），baseline 保持 exact PR
-  base；7 个 contract 分类 fixtures + 2 个 renderer fixtures 锁定
-  PASS/拒绝路径；既有 nonzero-delta fixtures 全部保持 PASS；
+- Zero-Repository-Delta 执行（PCE_01_PR_ONLY_ZERO_DELTA_F01 /
+  PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）：精确三重形状
+  `required_changes: []` + `allowed_files: []` +
+  `maximum_changed_files: 0` + `commit_count: 0` / `push_mode: NONE`；
+  执行形状二选一：`pull_request_action: CREATE_DRAFT`（F01，必须携带可选根
+  字段 `pr_head: {branch, sha}`，canonical exact PR-head identity）或
+  `pull_request_action: NONE`（G01，禁止 `pr_head`，输出无 git mutation、
+  无 `VERIFY_EXACT_PR_HEAD_BEFORE_PR`）；非零 delta 携带 pr_head 被拒绝；
+  空 changes 带非空 scope 或正 max 被拒绝；envelope 渲染 `changes: []`
+  与（CREATE_DRAFT 时）`git.pr_head`（branch + sha），baseline 保持 exact
+  PR base；contract 分类 fixtures + renderer fixtures 锁定 PASS/拒绝路径；
+  既有 nonzero-delta fixtures 全部保持 PASS；
+- Bounded exact result handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_
+  ROLE_OUTPUT_BINDING）：可选单一 role-discriminated `result_handoff` 根
+  契约，`role` ∈ {PRODUCE, CONSUME}。PRODUCE = {role, identity,
+  maximum_bytes, required}（无预置 payload；携带 payload/frozen_result →
+  UNKNOWN_KEY；required 非 true → FIELD_TYPE_INVALID），编译 envelope 必须
+  渲染专用 machine-result 输出表面 `produced_result: {identity, payload}`
+  （identity 绑定声明、payload 为待产生槽位；与 Completion Report metadata
+  分离；禁止 chat memory / repository file / hash / summary / Agent 重建
+  传递）。CONSUME = {role, expected_identity, maximum_bytes, frozen_result
+  {identity, payload}}；frozen_result.identity != expected_identity →
+  `RESULT_IDENTITY_MISMATCH`（exit 3，CONTRACT_OR_POLICY）、payload 缺失/空
+  → `MISSING_REQUIRED_FIELD`、payload 超界 → `RESULT_PAYLOAD_OVER_BOUND`
+  （exit 3）均 fail closed；禁止重建/hash/summary 替换；human checkpoint
+  只 freeze/select 精确 produced_result，frozen 后可 verbatim 复制进
+  CONSUME，无需 Agent 重建；省略 result_handoff 的 capsule 输出
+  byte-identical；canonical 渲染并始终受既有 Prompt Budget Gate 约束；
 - Repository-aware PR-head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_
   BINDING）：zero-delta + CREATE_DRAFT 时 GitBaseline 额外要求
   `refs/heads/<pr_head.branch>` 与 `refs/remotes/origin/<pr_head.branch>`
@@ -193,8 +212,10 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
   declared profile、empty declared required、selected absent
   validate/compile、selected present unknown command、malformed-before-
   unsupported、unsupported-before-unknown-command；
-- 51 renderer fixtures / 630 assertions / 43 registered diagnostics
-  （v2：canonical envelope fixtures + 10 proxy-token metric cases）；
+- 47 contract fixtures / 62 renderer fixtures / 833 assertions / 47
+  registered diagnostics（v2：canonical envelope fixtures + 10 proxy-token
+  metric cases + G01 zero-delta NONE + G02 role-discriminated
+  PRODUCE/CONSUME cases）；
 - 四项 compatibility proof：actual SDLC all-five policy 的 Profile key set
   精确为五标准 Profile、通过 revised schema/declared mapping/command
   resolution、同一 Capsule 在 all-five 与 selected-only subset policy 下
