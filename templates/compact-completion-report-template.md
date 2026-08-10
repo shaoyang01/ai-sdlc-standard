@@ -32,3 +32,19 @@ remaining_findings: <none|list>
 - `CI_status` 未等待时记录为 `not_waited`；
 - `scope_violation` 明确为 `false`，或报告具体阻塞；
 - 不附带完整 diff、完整日志或下一阶段计划。
+
+PRODUCE 专用 machine-result 表面（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_
+ROLE_OUTPUT_BINDING）：仅当 Capsule 声明 `result_handoff.role: PRODUCE`
+时，报告必须额外输出独立的结构化 `produced_result` 块（不是上述 metadata
+字段的成员）：
+
+```yaml
+produced_result:
+  identity: <与 result_handoff.identity 精确一致>
+  payload: <完整非空 UTF-8 结果，bytesize ≤ maximum_bytes>
+```
+
+- 不得把 `change_summary` / `remaining_findings` / prose 当作 payload；
+- `produced_result` 是执行后由 Agent 产出的 machine result；frozen 后
+  verbatim 复制进后续 CONSUME 契约，无需 Agent 重建；
+- 无 `result_handoff` 或 role 非 PRODUCE 时，报告不输出 `produced_result`。

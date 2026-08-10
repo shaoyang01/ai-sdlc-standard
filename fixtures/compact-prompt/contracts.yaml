@@ -1386,11 +1386,11 @@ fixtures:
         maximum_lines: 80
         stop_after_report: true
 
-  - id: CAPSULE-VALID-RESULT-HANDOFF
+  - id: CAPSULE-VALID-RESULT-HANDOFF-PRODUCE
     category: valid
-    description: "Capsule with single bounded exact result-handoff contract (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02)"
+    description: "Producer result_handoff without pre-existing payload declares identity/bound/required (G02 role-output-binding)"
     capsule: |
-      task_id: contract-test-result-handoff
+      task_id: contract-test-result-produce
       prompt_mode: MICRO_FIX
       routing:
         recipient: Codex
@@ -1402,13 +1402,13 @@ fixtures:
         branch: feature/runtime-v1
         head: 7c21cc8bb9649188505dafea1402049c74bd9be7
         pull_request: none
-      objective: "带 result handoff 的执行"
+      objective: "producer result handoff 执行"
       delta:
         open_findings: []
         required_changes:
           - docs/guide.md
         acceptance_criteria:
-          - "result_handoff 契约通过"
+          - "PRODUCE 契约通过"
         preserved_closed_findings: []
       scope:
         allowed_files:
@@ -1417,28 +1417,27 @@ fixtures:
       validation_profile: DOC_ONLY
       git:
         commit_count: 1
-        commit_message: "result handoff"
+        commit_message: "produce result"
         push_mode: NONE
         pull_request_action: NONE
       result_handoff:
+        role: PRODUCE
         identity: handoff-v1
         maximum_bytes: 256
         required: true
-        payload: "exact-frozen-result-payload"
       forbidden_actions:
         - "rebase"
       completion_report:
         recipient: "<owner-session>"
-        name: "RESULT-HANDOFF Report"
+        name: "PRODUCE Report"
         maximum_lines: 80
         stop_after_report: true
 
-  - id: CAPSULE-INVALID-RESULT-HANDOFF-MISSING-PAYLOAD
-    category: negative
-    expected_classification: MISSING_REQUIRED_FIELD
-    description: "result_handoff without payload fails closed"
+  - id: CAPSULE-VALID-RESULT-HANDOFF-CONSUME
+    category: valid
+    description: "Consumer result_handoff carries expected_identity and exact frozen_result within bound"
     capsule: |
-      task_id: contract-test-result-handoff-no-payload
+      task_id: contract-test-result-consume
       prompt_mode: MICRO_FIX
       routing:
         recipient: Codex
@@ -1450,7 +1449,57 @@ fixtures:
         branch: feature/runtime-v1
         head: 7c21cc8bb9649188505dafea1402049c74bd9be7
         pull_request: none
-      objective: "缺 payload 必须拒绝"
+      objective: "consumer result handoff 执行"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "CONSUME 契约通过"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONSUME Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-PRODUCE-WITH-PAYLOAD
+    category: negative
+    expected_classification: UNKNOWN_KEY
+    description: "PRODUCE carrying a pre-existing payload is rejected"
+    capsule: |
+      task_id: contract-test-result-produce-payload
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "PRODUCE 带 payload 必须拒绝"
       delta:
         open_findings: []
         required_changes:
@@ -1465,122 +1514,29 @@ fixtures:
       validation_profile: DOC_ONLY
       git:
         commit_count: 1
-        commit_message: "result handoff"
+        commit_message: "produce result"
         push_mode: NONE
         pull_request_action: NONE
       result_handoff:
+        role: PRODUCE
         identity: handoff-v1
         maximum_bytes: 256
         required: true
+        payload: "pre-existing-payload"
       forbidden_actions:
         - "rebase"
       completion_report:
         recipient: "<owner-session>"
-        name: "RESULT-HANDOFF-NO-PAYLOAD Report"
+        name: "PRODUCE-PAYLOAD Report"
         maximum_lines: 80
         stop_after_report: true
 
-  - id: CAPSULE-INVALID-RESULT-HANDOFF-OVER-BOUND
-    category: negative
-    expected_classification: RESULT_PAYLOAD_OVER_BOUND
-    description: "result_handoff payload exceeding maximum_bytes fails closed"
-    capsule: |
-      task_id: contract-test-result-handoff-over-bound
-      prompt_mode: MICRO_FIX
-      routing:
-        recipient: Codex
-        paste_location: "<target-repository> 新执行会话"
-        report_back_to: "<owner-session>"
-        next_hop_after_report: "<owner-session> 复核实施报告"
-      baseline:
-        repository: acme/widgets
-        branch: feature/runtime-v1
-        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
-        pull_request: none
-      objective: "超界 payload 必须拒绝"
-      delta:
-        open_findings: []
-        required_changes:
-          - docs/guide.md
-        acceptance_criteria:
-          - "必须拒绝"
-        preserved_closed_findings: []
-      scope:
-        allowed_files:
-          - docs/guide.md
-        maximum_changed_files: 1
-      validation_profile: DOC_ONLY
-      git:
-        commit_count: 1
-        commit_message: "result handoff"
-        push_mode: NONE
-        pull_request_action: NONE
-      result_handoff:
-        identity: handoff-v1
-        maximum_bytes: 8
-        required: true
-        payload: "exact-frozen-result-payload"
-      forbidden_actions:
-        - "rebase"
-      completion_report:
-        recipient: "<owner-session>"
-        name: "RESULT-HANDOFF-OVER-BOUND Report"
-        maximum_lines: 80
-        stop_after_report: true
-
-  - id: CAPSULE-INVALID-RESULT-HANDOFF-NO-IDENTITY
-    category: negative
-    expected_classification: MISSING_REQUIRED_FIELD
-    description: "result_handoff without identity fails closed"
-    capsule: |
-      task_id: contract-test-result-handoff-no-identity
-      prompt_mode: MICRO_FIX
-      routing:
-        recipient: Codex
-        paste_location: "<target-repository> 新执行会话"
-        report_back_to: "<owner-session>"
-        next_hop_after_report: "<owner-session> 复核实施报告"
-      baseline:
-        repository: acme/widgets
-        branch: feature/runtime-v1
-        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
-        pull_request: none
-      objective: "缺 identity 必须拒绝"
-      delta:
-        open_findings: []
-        required_changes:
-          - docs/guide.md
-        acceptance_criteria:
-          - "必须拒绝"
-        preserved_closed_findings: []
-      scope:
-        allowed_files:
-          - docs/guide.md
-        maximum_changed_files: 1
-      validation_profile: DOC_ONLY
-      git:
-        commit_count: 1
-        commit_message: "result handoff"
-        push_mode: NONE
-        pull_request_action: NONE
-      result_handoff:
-        maximum_bytes: 256
-        required: true
-        payload: "exact-frozen-result-payload"
-      forbidden_actions:
-        - "rebase"
-      completion_report:
-        recipient: "<owner-session>"
-        name: "RESULT-HANDOFF-NO-IDENTITY Report"
-        maximum_lines: 80
-        stop_after_report: true
-
-  - id: CAPSULE-INVALID-RESULT-HANDOFF-BAD-BOUND
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-PRODUCE-REQUIRED-FALSE
     category: negative
     expected_classification: FIELD_TYPE_INVALID
-    description: "result_handoff with non-positive maximum_bytes is rejected"
+    description: "PRODUCE with required != true is rejected"
     capsule: |
-      task_id: contract-test-result-handoff-bad-bound
+      task_id: contract-test-result-produce-required-false
       prompt_mode: MICRO_FIX
       routing:
         recipient: Codex
@@ -1592,7 +1548,55 @@ fixtures:
         branch: feature/runtime-v1
         head: 7c21cc8bb9649188505dafea1402049c74bd9be7
         pull_request: none
-      objective: "非法 maximum_bytes 必须拒绝"
+      objective: "PRODUCE required=false 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "produce result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: PRODUCE
+        identity: handoff-v1
+        maximum_bytes: 256
+        required: false
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "PRODUCE-REQUIRED-FALSE Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-NO-ROLE
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "result_handoff without role fails closed"
+    capsule: |
+      task_id: contract-test-result-no-role
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "缺 role 必须拒绝"
       delta:
         open_findings: []
         required_changes:
@@ -1612,13 +1616,211 @@ fixtures:
         pull_request_action: NONE
       result_handoff:
         identity: handoff-v1
-        maximum_bytes: 0
+        maximum_bytes: 256
         required: true
-        payload: "exact-frozen-result-payload"
       forbidden_actions:
         - "rebase"
       completion_report:
         recipient: "<owner-session>"
-        name: "RESULT-HANDOFF-BAD-BOUND Report"
+        name: "NO-ROLE Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-CONSUME-MISSING-PAYLOAD
+    category: negative
+    expected_classification: MISSING_REQUIRED_FIELD
+    description: "CONSUME frozen_result without payload fails closed"
+    capsule: |
+      task_id: contract-test-result-consume-no-payload
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "CONSUME 缺 payload 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: handoff-v1
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONSUME-NO-PAYLOAD Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-CONSUME-IDENTITY-MISMATCH
+    category: negative
+    expected_classification: RESULT_IDENTITY_MISMATCH
+    description: "CONSUME frozen_result.identity != expected_identity fails closed"
+    capsule: |
+      task_id: contract-test-result-consume-identity-mismatch
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "identity 不匹配必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: other-identity
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONSUME-IDENTITY-MISMATCH Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-CONSUME-OVER-BOUND
+    category: negative
+    expected_classification: RESULT_PAYLOAD_OVER_BOUND
+    description: "CONSUME frozen_result payload exceeding maximum_bytes fails closed"
+    capsule: |
+      task_id: contract-test-result-consume-over-bound
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "CONSUME 超界 payload 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 8
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONSUME-OVER-BOUND Report"
+        maximum_lines: 80
+        stop_after_report: true
+
+  - id: CAPSULE-INVALID-RESULT-HANDOFF-CONSUME-BAD-BOUND
+    category: negative
+    expected_classification: FIELD_TYPE_INVALID
+    description: "CONSUME with non-positive maximum_bytes is rejected"
+    capsule: |
+      task_id: contract-test-result-consume-bad-bound
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "<target-repository> 新执行会话"
+        report_back_to: "<owner-session>"
+        next_hop_after_report: "<owner-session> 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "CONSUME 非法 maximum_bytes 必须拒绝"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "必须拒绝"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 0
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "rebase"
+      completion_report:
+        recipient: "<owner-session>"
+        name: "CONSUME-BAD-BOUND Report"
         maximum_lines: 80
         stop_after_report: true

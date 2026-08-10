@@ -72,12 +72,17 @@ module CompactPrompt
   DELTA_KEYS = %w[open_findings required_changes acceptance_criteria preserved_closed_findings].freeze
   SCOPE_KEYS = %w[allowed_files maximum_changed_files].freeze
   GIT_KEYS = %w[commit_count commit_message push_mode pull_request_action].freeze
-  # PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02: one optional result_handoff
-  # contract (not parallel mechanisms). identity is the stable
-  # producer/consumer identity; maximum_bytes is the finite bound;
-  # required marks the result as mandatory; payload is the exact frozen
-  # bytes within the declared bound.
-  RESULT_HANDOFF_KEYS = %w[identity maximum_bytes required payload].freeze
+  # PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02 (role-output-binding): one
+  # optional role-discriminated result_handoff contract (no parallel
+  # mechanisms). PRODUCE declares {role, identity, maximum_bytes, required}
+  # without any pre-existing payload and requires a dedicated
+  # machine-result output surface produced_result {identity, payload}.
+  # CONSUME carries {role, expected_identity, maximum_bytes,
+  # frozen_result {identity, payload}} with the exact frozen payload.
+  RESULT_HANDOFF_ROLES = %w[PRODUCE CONSUME].freeze
+  PRODUCE_RESULT_HANDOFF_KEYS = %w[role identity maximum_bytes required].freeze
+  CONSUME_RESULT_HANDOFF_KEYS = %w[role expected_identity maximum_bytes frozen_result].freeze
+  FROZEN_RESULT_KEYS = %w[identity payload].freeze
   COMPLETION_REPORT_KEYS = %w[recipient name maximum_lines stop_after_report].freeze
 
   PROMPT_MODES = %w[MICRO_FIX SESSION_CONTINUATION BOOTSTRAP RECOVERY].freeze
@@ -117,7 +122,7 @@ module CompactPrompt
     YAML_TAG YAML_MERGE_KEY YAML_NULL YAML_DOCUMENT_COUNT_INVALID INVALID_SHA
     UNSAFE_PATH MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED
     VALIDATION_OVERPROVISIONED MISSING_STOP_CONDITION FIELD_TYPE_INVALID
-    RESULT_PAYLOAD_OVER_BOUND
+    RESULT_PAYLOAD_OVER_BOUND RESULT_IDENTITY_MISMATCH
   ].freeze
   INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
   ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
@@ -150,8 +155,8 @@ module CompactPrompt
     delivery_type schema recipient paste_location purpose report_back_to
     next_hop_after_report baseline changes scope_extra allowed_files
     max_changed_files accept open_findings closed_findings validation git
-    result_handoff rules forbidden report completion_report_recipient
-    completion_report_name stop_after_report
+    result_handoff produced_result rules forbidden report
+    completion_report_recipient completion_report_name stop_after_report
   ].freeze
 
   # Stable concise rule codes (v2 section: Stable Rules + Task Prohibitions).
@@ -492,27 +497,51 @@ module CompactPrompt
         return "FIELD_TYPE_INVALID"
       end
 
-      # Bounded exact result handoff (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02):
-      # one optional result_handoff contract {identity, maximum_bytes,
-      # required, payload}. identity is the stable producer/consumer
-      # identity; maximum_bytes is the finite bound; required marks the
-      # result as mandatory; payload is the exact frozen bytes within the
-      # declared bound. Missing payload / identity, over-bound payload and
-      # any reconstruction requirement (e.g. a hash or digest instead of
-      # the full payload) fail closed. Existing capsules omit result_handoff
-      # and keep byte-identical output.
+      # Role-discriminated bounded exact result handoff
+      # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING): one
+      # optional result_handoff contract with role PRODUCE or CONSUME.
+      # PRODUCE = {role, identity, maximum_bytes, required}: declares the
+      # producer identity, a finite bound and required=true; it MUST NOT
+      # carry a pre-existing payload/frozen_result (unknown keys rejected)
+      # and the Agent-visible envelope requires the dedicated produced_result
+      # machine surface. CONSUME = {role, expected_identity, maximum_bytes,
+      # frozen_result {identity, payload}}: carries the exact frozen payload;
+      # frozen_result.identity must equal expected_identity; missing payload,
+      # identity mismatch or over-bound payload fail closed; reconstruction /
+      # hash / summary substitution is forbidden. Existing capsules omit
+      # result_handoff and keep byte-identical output.
       result_handoff = data["result_handoff"]
       unless result_handoff.nil?
         return "FIELD_TYPE_INVALID" unless result_handoff.is_a?(Hash)
-        result = check_exact_keys(result_handoff, CompactPrompt::RESULT_HANDOFF_KEYS)
-        return result if result
-        return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["identity"])
-        return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
-                                             result_handoff["maximum_bytes"] >= 1
-        return "FIELD_TYPE_INVALID" unless [true, false].include?(result_handoff["required"])
-        payload = result_handoff["payload"]
-        return "MISSING_REQUIRED_FIELD" unless payload.is_a?(String) && !payload.empty?
-        return "RESULT_PAYLOAD_OVER_BOUND" if payload.bytesize > result_handoff["maximum_bytes"]
+        role = result_handoff["role"]
+        return "MISSING_REQUIRED_FIELD" unless role.is_a?(String) && !role.empty?
+        unless CompactPrompt::RESULT_HANDOFF_ROLES.include?(role)
+          return "FIELD_TYPE_INVALID"
+        end
+        if role == "PRODUCE"
+          result = check_exact_keys(result_handoff, CompactPrompt::PRODUCE_RESULT_HANDOFF_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["identity"])
+          return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
+                                               result_handoff["maximum_bytes"] >= 1
+          # PRODUCE requires required=true; a producer cannot declare an
+          # optional result.
+          return "FIELD_TYPE_INVALID" unless result_handoff["required"] == true
+        else # CONSUME
+          result = check_exact_keys(result_handoff, CompactPrompt::CONSUME_RESULT_HANDOFF_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["expected_identity"])
+          return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
+                                               result_handoff["maximum_bytes"] >= 1
+          frozen = result_handoff["frozen_result"]
+          return "MISSING_REQUIRED_FIELD" unless frozen.is_a?(Hash)
+          result = check_exact_keys(frozen, CompactPrompt::FROZEN_RESULT_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(frozen["identity"])
+          return "MISSING_REQUIRED_FIELD" unless frozen["payload"].is_a?(String) && !frozen["payload"].empty?
+          return "RESULT_IDENTITY_MISMATCH" unless frozen["identity"] == result_handoff["expected_identity"]
+          return "RESULT_PAYLOAD_OVER_BOUND" if frozen["payload"].bytesize > result_handoff["maximum_bytes"]
+        end
       end
 
       forbidden_actions = data["forbidden_actions"]
@@ -1420,17 +1449,41 @@ module CompactPrompt
           out << kv_plain(1, "pr", "UPDATE_DRAFT")
         end
       end
-      # Bounded exact result handoff (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02):
-      # the single optional contract renders canonically as its own mapping;
-      # the exact frozen payload stays inside the declared bound and the
+      # Role-discriminated result handoff
+      # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING): the
+      # single optional contract renders canonically as its own mapping; the
       # whole envelope remains subject to the existing Prompt Budget Gate.
+      # PRODUCE additionally renders the dedicated machine-result output
+      # surface produced_result {identity, payload}: identity is prefilled
+      # with the declared producer identity and payload is the empty
+      # production slot the Agent must fill with the complete UTF-8 result
+      # (nonempty, bytesize <= maximum_bytes) — the exact produced_result
+      # stays separate from Completion Report metadata and is copied
+      # verbatim into a later CONSUME contract without reconstruction.
       result_handoff = capsule["result_handoff"]
       if result_handoff
         out << "result_handoff:\n"
+        out << kv_plain(1, "role", result_handoff["role"])
+        if result_handoff["role"] == "PRODUCE"
+          out << kv(1, "identity", result_handoff["identity"])
+          out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
+          out << kv_plain(1, "required", result_handoff["required"])
+        else # CONSUME
+          out << kv(1, "expected_identity", result_handoff["expected_identity"])
+          out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
+          out << "  frozen_result:\n"
+          out << kv(2, "identity", result_handoff.dig("frozen_result", "identity"))
+          out << kv(2, "payload", result_handoff.dig("frozen_result", "payload"))
+        end
+      end
+      # Dedicated machine-result output surface (PRODUCE only): semantically
+      # produced_result {identity, payload}. The identity is bound to the
+      # declared producer identity; the payload is produced by the Agent and
+      # is NOT completion-report metadata.
+      if result_handoff && result_handoff["role"] == "PRODUCE"
+        out << "produced_result:\n"
         out << kv(1, "identity", result_handoff["identity"])
-        out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
-        out << kv_plain(1, "required", result_handoff["required"])
-        out << kv(1, "payload", result_handoff["payload"])
+        out << kv(1, "payload", "")
       end
       # Stable concise rule codes plus the conditional execution-time rule:
       # for the zero-repository-delta CREATE_DRAFT shape only, the
@@ -1585,6 +1638,8 @@ module CompactPrompt
                                 "meaning" => "field type or enum out of range" },
       "RESULT_PAYLOAD_OVER_BOUND" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                        "meaning" => "result_handoff payload bytes exceed maximum_bytes" },
+      "RESULT_IDENTITY_MISMATCH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                      "meaning" => "result_handoff frozen/declared identity does not match expected identity" },
       "POLICY_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                  "meaning" => "policy file not found at git root" },
       "POLICY_SCHEMA_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",

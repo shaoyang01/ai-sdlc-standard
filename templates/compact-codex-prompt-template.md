@@ -49,7 +49,8 @@ accept             # acceptance criteria
 [closed_findings]  # 非空才输出，仅 id 列表
 validation         # profile / run / [forbid 仅非空]
 [git]              # positive-action allowlist，三 NONE 时整体省略
-[result_handoff]   # 可选单一 bounded exact result-handoff 契约（G02）
+[result_handoff]   # 可选 role-discriminated result-handoff 契约（PRODUCE|CONSUME）
+[produced_result]  # PRODUCE 专用 machine-result 输出表面（identity 绑定 + payload 槽位）
 rules              # 12 个 stable rule codes，固定列表
 [forbidden]        # task-specific prohibitions（去重、剔除与 stable code 相同的项）
 report             # max_lines / fields
@@ -115,11 +116,19 @@ PR-head identity。
 - pr_head（PCE_01_PR_ONLY_ZERO_DELTA_F01）：仅 zero-delta + CREATE_DRAFT
   必填，渲染 `git.pr_head.branch` 与 `git.pr_head.sha`（canonical exact
   PR-head identity）；zero-delta + NONE 与非零 delta 携带 pr_head 被拒绝。
-- result_handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）：可选单一契约
-  `{identity, maximum_bytes, required, payload}`；省略时输出 byte-identical。
-  payload 为完整 frozen 字节且 bytesize ≤ maximum_bytes；缺失 payload/
-  identity、超界（`RESULT_PAYLOAD_OVER_BOUND`）、或任何重建要求 fail
-  closed；canonical 渲染并始终受 Budget Gate 约束。
+- result_handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_
+  BINDING）：可选 role-discriminated 单一契约；省略时输出 byte-identical。
+  PRODUCE = {role, identity, maximum_bytes, required}（无预置 payload；
+  输出要求 produced_result machine surface）；CONSUME = {role,
+  expected_identity, maximum_bytes, frozen_result {identity, payload}}。
+  frozen_result.identity != expected_identity → `RESULT_IDENTITY_MISMATCH`；
+  payload 缺失/空 → `MISSING_REQUIRED_FIELD`；超界 →
+  `RESULT_PAYLOAD_OVER_BOUND`；禁止重建/hash/summary 替换；canonical
+  渲染并始终受 Budget Gate 约束。
+- produced_result（PRODUCE 专用）：`{identity, payload}` machine-result
+  输出表面；identity 预填声明的 producer identity，payload 为空槽位（Agent
+  以完整非空 UTF-8 结果填充，bytesize ≤ maximum_bytes）；与 Completion
+  Report metadata 分离；frozen 后 verbatim 复制进 CONSUME。
 
 ## Stable Rules（12 codes，固定列表）
 

@@ -111,18 +111,22 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
   与（CREATE_DRAFT 时）`git.pr_head`（branch + sha），baseline 保持 exact
   PR base；contract 分类 fixtures + renderer fixtures 锁定 PASS/拒绝路径；
   既有 nonzero-delta fixtures 全部保持 PASS；
-- Bounded exact result handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）：
-  可选单一 `result_handoff` 根契约 `{identity, maximum_bytes, required,
-  payload}`；identity 为稳定 producer/consumer 标识，maximum_bytes 为有限
-  正整数字节上界，required 标记结果是否必须，payload 为完整 frozen 字节且
-  bytesize ≤ maximum_bytes；缺失 payload/identity → `MISSING_REQUIRED_FIELD`
-  、超界 → `RESULT_PAYLOAD_OVER_BOUND`（exit 3，CONTRACT_OR_POLICY）、
-  非正整数 bound / 非布尔 required / 未知键 → `FIELD_TYPE_INVALID` 或
-  `UNKNOWN_KEY`；任何重建要求（hash/摘要代替完整 payload）fail closed；
-  不得用 repository-file transport、workflow engine、database、
-  repositoryless framework、新 prompt mode/profile 或无界 channel 传递
-  结果；省略 result_handoff 的 capsule 输出 byte-identical；consumer 的
-  exact payload 以 canonical 形状渲染并始终受既有 Prompt Budget Gate 约束；
+- Bounded exact result handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_
+  ROLE_OUTPUT_BINDING）：可选单一 role-discriminated `result_handoff` 根
+  契约，`role` ∈ {PRODUCE, CONSUME}。PRODUCE = {role, identity,
+  maximum_bytes, required}（无预置 payload；携带 payload/frozen_result →
+  UNKNOWN_KEY；required 非 true → FIELD_TYPE_INVALID），编译 envelope 必须
+  渲染专用 machine-result 输出表面 `produced_result: {identity, payload}`
+  （identity 绑定声明、payload 为待产生槽位；与 Completion Report metadata
+  分离；禁止 chat memory / repository file / hash / summary / Agent 重建
+  传递）。CONSUME = {role, expected_identity, maximum_bytes, frozen_result
+  {identity, payload}}；frozen_result.identity != expected_identity →
+  `RESULT_IDENTITY_MISMATCH`（exit 3，CONTRACT_OR_POLICY）、payload 缺失/空
+  → `MISSING_REQUIRED_FIELD`、payload 超界 → `RESULT_PAYLOAD_OVER_BOUND`
+  （exit 3）均 fail closed；禁止重建/hash/summary 替换；human checkpoint
+  只 freeze/select 精确 produced_result，frozen 后可 verbatim 复制进
+  CONSUME，无需 Agent 重建；省略 result_handoff 的 capsule 输出
+  byte-identical；canonical 渲染并始终受既有 Prompt Budget Gate 约束；
 - Repository-aware PR-head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_
   BINDING）：zero-delta + CREATE_DRAFT 时 GitBaseline 额外要求
   `refs/heads/<pr_head.branch>` 与 `refs/remotes/origin/<pr_head.branch>`
@@ -208,9 +212,10 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
   declared profile、empty declared required、selected absent
   validate/compile、selected present unknown command、malformed-before-
   unsupported、unsupported-before-unknown-command；
-- 43 contract fixtures / 60 renderer fixtures / 780 assertions / 46
+- 47 contract fixtures / 62 renderer fixtures / 833 assertions / 47
   registered diagnostics（v2：canonical envelope fixtures + 10 proxy-token
-  metric cases + G01 zero-delta NONE + G02 result-handoff cases）；
+  metric cases + G01 zero-delta NONE + G02 role-discriminated
+  PRODUCE/CONSUME cases）；
 - 四项 compatibility proof：actual SDLC all-five policy 的 Profile key set
   精确为五标准 Profile、通过 revised schema/declared mapping/command
   resolution、同一 Capsule 在 all-five 与 selected-only subset policy 下

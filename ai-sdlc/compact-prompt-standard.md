@@ -135,33 +135,59 @@ zero-repository-delta 只允许精确三重形状：`delta.required_changes: []`
 - baseline 保持 exact PR base：`baseline.head` 仍是 PR 的 base（fact
   branch exact HEAD），`pr_head.sha` 是 PR head 的 canonical exact identity。
 
-### 1.6 Bounded Exact Result Handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02）
+### 1.6 Bounded Exact Result Handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING）
 
-可选单一 `result_handoff` 根契约（不引入平行机制；现有 capsule 省略它时
-编译输出 byte-identical）。形状：
+可选单一 `result_handoff` 根契约（role-discriminated，不引入平行机制；现有
+capsule 省略它时编译输出 byte-identical）。`role` 必须为 `PRODUCE` 或
+`CONSUME`。
+
+**PRODUCE**（producer 输入，无预置结果）：
 
 ```yaml
 result_handoff:
-  identity: "<stable-identity>"      # 稳定 producer/consumer 标识（非空字符串）
-  maximum_bytes: <positive-integer>  # 有限字节上界
-  required: <true|false>             # 结果是否必须产生
-  payload: "<exact-frozen-payload>"  # 完整 frozen 字节（bytesize ≤ maximum_bytes）
+  role: PRODUCE
+  identity: "<stable-producer-identity>"   # 非空字符串
+  maximum_bytes: <positive-integer>        # 有限字节上界
+  required: true                           # 必须为 true
 ```
 
-- producer 与 consumer 共用同一契约：producer 声明结果必须产生
-  （`required: true` 且 payload 完整）；consumer 携带稳定 identity 与声明
-  上界内的 exact frozen payload；
-- payload 缺失/空、identity 缺失、`maximum_bytes` 非正整数、
-  `required` 非布尔 → 分类为 `MISSING_REQUIRED_FIELD` 或
-  `FIELD_TYPE_INVALID`；
-- payload 字节数超过 `maximum_bytes` → `RESULT_PAYLOAD_OVER_BOUND`
-  （exit 3，`CONTRACT_OR_POLICY`），fail closed；
-- 不得以 hash/摘要、部分文本或任何重建要求替代完整 payload（任何
-  reconstruction requirement fail closed）；不得用 repository-file
-  transport、workflow engine、database、repositoryless framework、
-  新 prompt mode/profile 或无界 payload channel 传递结果；
-- consumer 的 exact payload 以 canonical 形状渲染进编译输出，并始终受
-  既有 Prompt Budget Gate（第 2 节）约束。
+- PRODUCE 输入**不得**携带预置 payload / frozen_result（exact key 集之外的
+  键 → `UNKNOWN_KEY`）；`required` 非 true → `FIELD_TYPE_INVALID`；
+- 编译后 Agent-visible Envelope 必须显式要求一个专用 machine-result 输出
+  表面 `produced_result: {identity, payload}`：`identity` 预填为声明的
+  producer identity，`payload` 为待产生槽位（Agent 必须以完整非空 UTF-8
+  结果填充，bytesize ≤ `maximum_bytes`）；
+- `produced_result` 与 Completion Report metadata 分离：不得把
+  `change_summary` / `remaining_findings` / prose 当作 payload；不得用
+  聊天记忆、repository 文件、hash/摘要或 Agent 重建作为结果传递；
+- PRODUCE 输出契约：`produced_result.identity` 必须等于声明的 producer
+  identity；required 输出缺失、identity 不匹配或超界输出均为
+  non-conformant，MUST STOP handoff（由执行侧校验，不落入既有 Prompt
+  Budget Gate 之外）。
+
+**CONSUME**（consumer 输入，携带 frozen 结果）：
+
+```yaml
+result_handoff:
+  role: CONSUME
+  expected_identity: "<stable-identity>"
+  maximum_bytes: <positive-integer>
+  frozen_result:
+    identity: "<stable-identity>"          # 必须等于 expected_identity
+    payload: "<exact-frozen-payload>"      # 完整 frozen 字节
+```
+
+- `frozen_result.identity` 必须等于 `expected_identity`，否则 →
+  `RESULT_IDENTITY_MISMATCH`（exit 3，`CONTRACT_OR_POLICY`）fail closed；
+- payload 缺失/空 → `MISSING_REQUIRED_FIELD`；payload 字节数超过
+  `maximum_bytes` → `RESULT_PAYLOAD_OVER_BOUND` fail closed；
+- 禁止任何 reconstruction / hash / summary 替换：CONSUME 必须携带完整
+  frozen payload，不得要求 Agent 重建。
+
+**跨检查点绑定**：human checkpoint 只 freeze/select 精确的
+`produced_result`；PCE 不实现 persistence / workflow；frozen
+`produced_result` 必须可 verbatim 复制进后续 CONSUME 契约，无需 Agent
+重建。两形状都保持 canonical 渲染并受既有 Prompt Budget Gate 约束。
 
 ### 1.3 受限 YAML
 
@@ -805,6 +831,7 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `MISSING_STOP_CONDITION` | 3 | CONTRACT_OR_POLICY | completion_report.stop_after_report 不为 true |
 | `FIELD_TYPE_INVALID` | 3 | CONTRACT_OR_POLICY | 字段类型错误或枚举越界 |
 | `RESULT_PAYLOAD_OVER_BOUND` | 3 | CONTRACT_OR_POLICY | result_handoff payload 字节数超过 maximum_bytes |
+| `RESULT_IDENTITY_MISMATCH` | 3 | CONTRACT_OR_POLICY | result_handoff frozen/declared identity 与 expected identity 不一致 |
 | `POLICY_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | git root 下找不到 policy 文件 |
 | `POLICY_SCHEMA_INVALID` | 3 | CONTRACT_OR_POLICY | policy schema、键、类型或枚举违规 |
 | `POLICY_PROFILE_MAPPING_MISSING` | 3 | CONTRACT_OR_POLICY | profile 映射缺失或 required 为空 |
