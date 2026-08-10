@@ -1066,7 +1066,7 @@ produce_reject.call("not-a-mapping", "handoff-v1", 256, "FIELD_TYPE_INVALID", "m
 # completion report template must truthfully state the produced_result machine
 # surface, identity binding, payload production and metadata separation.
 completion_template = read_asset("templates/compact-completion-report-template.md")
-%w[produced_result identity payload change_summary].each do |probe|
+%w[produced_result identity payload change_summary PRODUCE].each do |probe|
   unless completion_template.include?(probe)
     errors << "completion template: missing produced_result truth marker #{probe.inspect}"
   end
