@@ -46,6 +46,11 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
 - 四种 Prompt Mode 名称与 v2 硬限制预算精确（lines / bytes /
   PCE_UNICODE_WORDPUNCT_V1 proxy tokens），budget gate 顺序固定：
   canonical output verification → line → byte → proxy-token → stdout；
+  CONSUME capsule 的普通预算记账在 deterministic structural
+  control-envelope budget projection 上执行（仅 `frozen_result.payload`
+  值被固定哨兵 `PCE_CONTROL_ENVELOPE_PROJECTION` 结构性替换，绝不对
+  渲染文本 search/replace，projection 从不写入 stdout），完整 exact
+  payload 始终 inline 于 stdout；
 - 五种 Validation Profile 名称与语义键值精确（DOC_ONLY 默认禁止根 `npm test`）；
 - 代码类路径分类：已知代码扩展名（`.ts .tsx .js .jsx .rb .py .go .java .sh`）
   保持纯 Capsule 阶段快速判定；无扩展名 required_change 不提前判为
@@ -127,6 +132,15 @@ PCE-01-B Compact Execution Envelope v2 production 输出合同：
   只 freeze/select 精确 produced_result，frozen 后可 verbatim 复制进
   CONSUME，无需 Agent 重建；省略 result_handoff 的 capsule 输出
   byte-identical；canonical 渲染并始终受既有 Prompt Budget Gate 约束；
+  CONSUME 普通预算记账走 control-envelope budget projection（完整 exact
+  payload 始终 inline 于 stdout，仅其值被哨兵
+  `PCE_CONTROL_ENVELOPE_PROJECTION` 结构性替换后参与计量）；
+  adversarial positive fixture 锁定 bound 内 payload 的完整 inline 输出
+  超过 byte 与 proxy-token 预算仍编译成功且解析后 identity/payload 精确
+  保持，validator 直接断言完整输出的普通记账确实 fail closed；
+  fail-closed fixtures 锁定 CONSUME control-envelope line/byte/
+  proxy-token 超限与 PRODUCE full-output byte 超限依旧拒绝（豁免不
+  禁用、不扩大普通预算，projection 仅 CONSUME 专用）；
 - Repository-aware PR-head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_
   BINDING）：zero-delta + CREATE_DRAFT 时 GitBaseline 额外要求
   `refs/heads/<pr_head.branch>` 与 `refs/remotes/origin/<pr_head.branch>`
@@ -212,10 +226,11 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
   declared profile、empty declared required、selected absent
   validate/compile、selected present unknown command、malformed-before-
   unsupported、unsupported-before-unknown-command；
-- 47 contract fixtures / 62 renderer fixtures / 833 assertions / 47
-  registered diagnostics（v2：canonical envelope fixtures + 10 proxy-token
-  metric cases + G01 zero-delta NONE + G02 role-discriminated
-  PRODUCE/CONSUME cases）；
+- 47 contract fixtures / 67 renderer fixtures / 868 assertions / 47
+  registered diagnostics / 10 budget-projection adversarial proofs（v2：
+  canonical envelope fixtures + 10 proxy-token metric cases + G01
+  zero-delta NONE + G02 role-discriminated PRODUCE/CONSUME cases +
+  CONSUME control-envelope budget projection composability proofs）；
 - 四项 compatibility proof：actual SDLC all-five policy 的 Profile key set
   精确为五标准 Profile、通过 revised schema/declared mapping/command
   resolution、同一 Capsule 在 all-five 与 selected-only subset policy 下

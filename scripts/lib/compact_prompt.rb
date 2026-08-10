@@ -65,7 +65,11 @@ module CompactPrompt
   # present (zero-delta CREATE_DRAFT requires it; nonzero delta and
   # zero-delta NONE forbid it). `result_handoff` (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02)
   # is the single optional bounded exact result-handoff contract; existing
-  # capsules omit it with byte-identical output.
+  # capsules omit it with byte-identical output. CONSUME keeps the complete
+  # exact frozen_result.payload inline in the canonical output; ordinary
+  # budget accounting for it runs on the structural control-envelope
+  # projection (Budget.control_projection) so the validated payload value
+  # is excluded from line/byte/proxy-token accounting.
   OPTIONAL_ROOT_KEYS = %w[pr_head result_handoff].freeze
   ROUTING_KEYS = %w[recipient paste_location report_back_to next_hop_after_report].freeze
   BASELINE_KEYS = %w[repository branch head pull_request].freeze
@@ -95,6 +99,9 @@ module CompactPrompt
   # signal; byte caps are replaced by the compact-envelope caps and a
   # deterministic proxy-token cap is added per mode. Gate order is fixed:
   # canonical output verification → line → byte → proxy token → stdout.
+  # CONSUME capsules are accounted on the structural control-envelope
+  # projection (validated frozen_result.payload value excluded); every
+  # other shape is accounted on the full verified output.
   PROMPT_MODE_BUDGETS = {
     "MICRO_FIX" => { "hard_limit_lines" => 120, "hard_limit_bytes" => 2048, "hard_limit_proxy_tokens" => 512 },
     "SESSION_CONTINUATION" => { "hard_limit_lines" => 220, "hard_limit_bytes" => 4096, "hard_limit_proxy_tokens" => 1024 },
@@ -1315,8 +1322,10 @@ module CompactPrompt
     # `schema: compact-execution-envelope-v2`, zero legacy ten-section
     # headings, zero placeholder-like / marker-like tokens, exactly one
     # trailing LF, a single restricted-YAML document with the v2 schema and
-    # the canonical top-level key order. The budget gate runs on this
-    # verified output afterwards (line → byte → proxy token).
+    # the canonical top-level key order. The budget gate runs after this
+    # verification (line → byte → proxy token); for CONSUME capsules the
+    # accounting input is the structural control-envelope projection
+    # (Budget.control_projection), never this full output's payload bytes.
     def verify_output(text)
       return ["RENDER_INCOMPLETE", "output", "output is not valid UTF-8"] unless text.valid_encoding?
       return ["RENDER_INCOMPLETE", "output", "output must not contain CR bytes"] if text.include?("\r")
@@ -1617,6 +1626,13 @@ module CompactPrompt
   module Budget
     module_function
 
+    # Fixed deterministic sentinel that replaces the validated
+    # frozen_result.payload value inside the CONSUME control-envelope
+    # budget projection. It is never emitted: the actual canonical stdout
+    # keeps the complete exact payload inline; only the ordinary
+    # line/byte/proxy-token accounting runs on the projected control view.
+    CONTROL_PROJECTION_PAYLOAD_SENTINEL = "PCE_CONTROL_ENVELOPE_PROJECTION".freeze
+
     # Returns [code, path, message] or nil. Deterministic gate order on the
     # verified canonical output: logical line count → UTF-8 byte count →
     # PCE_UNICODE_WORDPUNCT_V1 proxy-token count. There is no silent pass,
@@ -1634,6 +1650,41 @@ module CompactPrompt
       return ["PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED", "output",
               "#{tokens} proxy tokens exceed #{budget['hard_limit_proxy_tokens']} for #{mode}"] if tokens > budget["hard_limit_proxy_tokens"]
       nil
+    end
+
+    # PCE_EXACT_RESULT_HANDOFF_INLINE_BUDGET_INCOMPATIBILITY narrow
+    # correction: returns the deterministic structural control-envelope
+    # projection used for ordinary budget accounting of CONSUME capsules,
+    # or nil when the capsule carries no CONSUME result_handoff (PRODUCE
+    # and no-result_handoff capsules keep full-output accounting,
+    # unchanged). The projection is rebuilt from the validated capsule
+    # structure with exactly one replacement —
+    # result_handoff.frozen_result.payload →
+    # CONTROL_PROJECTION_PAYLOAD_SENTINEL — and re-serialized through the
+    # same canonical builder; it is never a rendered-text search/replace
+    # and is never written to stdout. maximum_bytes, identity equality,
+    # UTF-8 and over-bound fail-closed semantics are untouched: they run
+    # in Capsule validation before any rendering, on the full payload.
+    def control_projection(capsule, policy, resolved_profile_mapping)
+      handoff = capsule["result_handoff"]
+      return nil unless handoff.is_a?(Hash) && handoff["role"] == "CONSUME"
+      projected = deep_dup(capsule)
+      projected["result_handoff"]["frozen_result"]["payload"] = CONTROL_PROJECTION_PAYLOAD_SENTINEL
+      CompactPrompt::Envelope.build(projected, policy, resolved_profile_mapping)
+    end
+
+    # Recursive structural copy of a restricted-YAML value tree (plain
+    # Hash/Array/scalar only). Scalars are never mutated in place, so
+    # they are shared by reference.
+    def deep_dup(value)
+      case value
+      when Hash
+        value.each_with_object({}) { |(k, v), copy| copy[k] = deep_dup(v) }
+      when Array
+        value.map { |item| deep_dup(item) }
+      else
+        value
+      end
     end
   end
 
@@ -1944,7 +1995,14 @@ module CompactPrompt
         stderr.write(CompactPrompt::Diagnostics.format(*rerr))
         return Diagnostics.exit_for(rerr[0])
       end
-      berr = CompactPrompt::Budget.check(prompt, data["prompt_mode"])
+      # CONSUME budget accounting runs on the deterministic structural
+      # control-envelope projection (validated frozen_result.payload value
+      # excluded); the full verified output — complete exact payload
+      # inline — is what reaches stdout. Every other shape accounts on
+      # the full output, unchanged.
+      accounting_text =
+        CompactPrompt::Budget.control_projection(data, pdata, resolved_mapping) || prompt
+      berr = CompactPrompt::Budget.check(accounting_text, data["prompt_mode"])
       if berr
         stderr.write(CompactPrompt::Diagnostics.format(*berr))
         return Diagnostics.exit_for(berr[0])

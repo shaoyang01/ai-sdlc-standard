@@ -234,6 +234,14 @@ if standard_text
     errors << "standard: proxy-token metric PCE_UNICODE_WORDPUNCT_V1 is not declared"
   end
 
+  # CONSUME control-envelope budget projection (sections 1.6 / 2): the
+  # standard must declare the structural budget-accounting projection and
+  # its deterministic payload-replacement sentinel.
+  unless standard_text.include?("CONSUME control-envelope budget projection") &&
+         standard_text.include?("PCE_CONTROL_ENVELOPE_PROJECTION")
+    errors << "standard: CONSUME control-envelope budget projection is not declared"
+  end
+
   # Conditional execution-time rule (section 5.3): zero-delta CREATE_DRAFT
   # output carries VERIFY_EXACT_PR_HEAD_BEFORE_PR; the standard must
   # declare its mutation-time semantics and the two-layer separation.
@@ -1062,6 +1070,117 @@ produce_reject.call({ "identity" => "handoff-v1", "payload" => "123456789" }, "h
                      "RESULT_PAYLOAD_OVER_BOUND", "over bound")
 produce_reject.call("not-a-mapping", "handoff-v1", 256, "FIELD_TYPE_INVALID", "malformed structure")
 
+# ── PCE_EXACT_RESULT_HANDOFF_INLINE_BUDGET_INCOMPATIBILITY adversarial proofs ──
+# Composability acceptance proofs for the CONSUME control-envelope budget
+# projection. Positive: a frozen_result.payload within its accepted
+# maximum_bytes bound whose FULL inline canonical output exceeds the
+# ordinary byte and proxy-token budgets still compiles; the parsed output
+# preserves the exact identity/payload; ordinary accounting on the full
+# output really fails (the exemption is projection-only, never an output
+# or budget weakening); the structural projection replaces exactly the
+# payload value, passes ordinary accounting and is never emitted.
+# Negative presence locks: CONSUME control-envelope line/byte/proxy-token
+# overruns and PRODUCE full-output byte overruns keep failing closed in
+# the generic renderer fixture loop; this block locks those fixtures by
+# id so a rename/removal cannot silently drop the regression coverage.
+budget_projection_proofs = 0
+if fixtures.is_a?(Array)
+  positive_fixture = fixtures.find do |fixture|
+    fixture.is_a?(Hash) && fixture["id"] == "RENDER-RESULT-HANDOFF-CONSUME-BUDGET-PROJECTION-POSITIVE"
+  end
+  if positive_fixture.nil?
+    errors << "budget projection proof: positive adversarial fixture is missing"
+  else
+    pexit, pout, perr = run_renderer_fixture(positive_fixture, default_policy, prompt_template_text)
+    mode = "MICRO_FIX"
+    budget = CompactPrompt::PROMPT_MODE_BUDGETS[mode]
+    capsule_data, capsule_class = CompactPrompt::RestrictedYAML.parse(positive_fixture["capsule"])
+    parsed_out, out_class = CompactPrompt::RestrictedYAML.parse(pout)
+
+    renderer_assertion_count += 1
+    if pexit.zero? && perr.empty?
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: adversarial CONSUME compile must succeed, " \
+                "got exit #{pexit} stderr #{perr.inspect}"
+    end
+
+    renderer_assertion_count += 1
+    if capsule_class.nil? && out_class.nil? && parsed_out.is_a?(Hash) &&
+       parsed_out.dig("result_handoff", "frozen_result") ==
+         capsule_data.dig("result_handoff", "frozen_result")
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: parsed output must preserve the exact " \
+                "frozen_result identity/payload (#{out_class || capsule_class || 'parsed'})"
+    end
+
+    renderer_assertion_count += 1
+    if pout.bytesize > budget["hard_limit_bytes"] &&
+       CompactPrompt::ProxyToken.count(pout) > budget["hard_limit_proxy_tokens"] &&
+       pout.lines.count <= budget["hard_limit_lines"]
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: full inline output must exceed the ordinary " \
+                "byte and proxy-token budgets while staying within the line budget " \
+                "(bytes #{pout.bytesize}, tokens #{CompactPrompt::ProxyToken.count(pout)}, " \
+                "lines #{pout.lines.count})"
+    end
+
+    renderer_assertion_count += 1
+    if CompactPrompt::Budget.check(pout, mode).nil?
+      errors << "budget projection proof: ordinary accounting on the full output must fail closed"
+    else
+      budget_projection_proofs += 1
+    end
+
+    projection = nil
+    if capsule_class.nil?
+      policy_data, = CompactPrompt::RestrictedYAML.parse(positive_fixture["policy"] || default_policy)
+      mapping, = CompactPrompt::Policy.resolve_selected_profile(policy_data, capsule_data["validation_profile"])
+      projection = CompactPrompt::Budget.control_projection(capsule_data, policy_data, mapping)
+    end
+    parsed_projection, projection_class = projection && CompactPrompt::RestrictedYAML.parse(projection)
+
+    renderer_assertion_count += 1
+    if projection && projection_class.nil? &&
+       parsed_projection.dig("result_handoff", "frozen_result", "payload") ==
+         CompactPrompt::Budget::CONTROL_PROJECTION_PAYLOAD_SENTINEL
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: projection must structurally replace exactly " \
+                "the payload value with the deterministic sentinel"
+    end
+
+    renderer_assertion_count += 1
+    exact_payload = capsule_class.nil? && capsule_data.dig("result_handoff", "frozen_result", "payload")
+    if projection && exact_payload && CompactPrompt::Budget.check(projection, mode).nil? &&
+       projection != pout && !projection.include?(exact_payload) && pout.include?(exact_payload)
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: projection must pass ordinary accounting, stay " \
+                "un-emitted and never carry the payload; stdout keeps the exact payload inline"
+    end
+  end
+
+  # Fail-closed regression presence locks: the exact-payload exemption
+  # must never disable or enlarge ordinary Prompt Mode budgets, and the
+  # projection must stay CONSUME-only.
+  %w[
+    RENDER-NEG-RESULT-HANDOFF-CONSUME-LINE-LIMIT
+    RENDER-NEG-RESULT-HANDOFF-CONSUME-BYTE-LIMIT
+    RENDER-NEG-RESULT-HANDOFF-CONSUME-PROXY-LIMIT
+    RENDER-NEG-RESULT-HANDOFF-PRODUCE-BYTE-LIMIT
+  ].each do |id|
+    renderer_assertion_count += 1
+    if fixtures.any? { |fixture| fixture.is_a?(Hash) && fixture["id"] == id && fixture["category"] == "negative" }
+      budget_projection_proofs += 1
+    else
+      errors << "budget projection proof: fail-closed regression fixture #{id} is missing"
+    end
+  end
+end
+
 # Minimal completion-template truth locks (no new template framework): the
 # completion report template must truthfully state the produced_result machine
 # surface, identity binding, payload production and metadata separation.
@@ -1084,6 +1203,7 @@ if errors.empty?
        "#{CompactPrompt::PROMPT_MODES.length} prompt modes with exact budgets; " \
        "#{CompactPrompt::VALIDATION_PROFILES.length} validation profiles; " \
        "#{CompactPrompt::Diagnostics::REGISTRY.length} registered diagnostics; " \
+       "#{budget_projection_proofs} budget-projection adversarial proofs; " \
        "codex prompt template v2 contract manifest " \
        "with #{CompactPrompt::STABLE_RULES.length} stable rule codes; " \
        "standard asset statically verified (fields, git enums, budgets, profiles, " \

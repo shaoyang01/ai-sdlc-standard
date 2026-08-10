@@ -184,10 +184,25 @@ result_handoff:
 - 禁止任何 reconstruction / hash / summary 替换：CONSUME 必须携带完整
   frozen payload，不得要求 Agent 重建。
 
+**CONSUME control-envelope budget projection**（预算记账口径）：canonical
+输出始终在 stdout 完整 inline 携带 exact `frozen_result.payload`（不得
+截断、摘要、hash 替换、改道或重建）；只有普通 line/byte/proxy-token
+预算记账在 deterministic structural control-envelope projection 上
+执行——该 projection 从 validated capsule 结构重建，唯一改动是把
+`frozen_result.payload` 值替换为固定哨兵
+`PCE_CONTROL_ENVELOPE_PROJECTION`，再经同一 canonical builder 序列化；
+绝不对渲染文本做 search/replace，也从不写入 stdout。完整实际输出仍在
+任何预算判定前通过 canonical output verification；projection 上的
+line/byte/proxy-token 超限依然 fail closed（普通 Prompt Mode 预算不被
+禁用或扩大）；`maximum_bytes`、identity equality、UTF-8 与 over-bound
+fail-closed 语义不变。PRODUCE 与不携带 `result_handoff` 的 capsule
+保持既有 full-output 记账，编译输出 byte-identical。
+
 **跨检查点绑定**：human checkpoint 只 freeze/select 精确的
 `produced_result`；PCE 不实现 persistence / workflow；frozen
 `produced_result` 必须可 verbatim 复制进后续 CONSUME 契约，无需 Agent
-重建。两形状都保持 canonical 渲染并受既有 Prompt Budget Gate 约束。
+重建。两形状都保持 canonical 渲染；预算记账按上述口径（CONSUME 走
+control-envelope projection，其余形状走完整 verified 输出）。
 
 ### 1.3 受限 YAML
 
@@ -257,6 +272,12 @@ canonical output verification
 → proxy-token gate
 → stdout
 ```
+
+CONSUME capsule 的普通预算记账在 deterministic structural
+control-envelope projection（第 1.6 节）上执行：完整 exact payload
+始终 inline 于 stdout，仅其值不参与 line/byte/proxy-token 计量；
+control envelope 自身的超限仍按上述固定顺序 fail closed。其余形状
+（PRODUCE、无 result_handoff）在完整 verified 输出上记账，不变。
 
 超限规则（按顺序执行）：
 
@@ -792,7 +813,9 @@ canonical serialization 规则：
 `schema: compact-execution-envelope-v2`；零 legacy 十节 headings；零
 placeholder-like / marker-like token；恰好一个末尾 LF；整份输出必须是单一
 restricted-YAML document 且顶层 key 顺序 canonical。budget gate（第 2 节：
-line → byte → proxy-token）在此 canonical 输出上执行，然后才写 stdout。
+line → byte → proxy-token）在此验证之后执行（CONSUME 的记账输入为第 1.6
+节定义的 control-envelope projection；完整输出在任何预算判定前已验证），
+然后才写 stdout。
 
 相同 Capsule、policy 与 Standard Package bytes 必须 byte-identical
 （deterministic）；输出不含时间、用户、主机或随机值。
@@ -864,8 +887,12 @@ exit 常量（`EXIT_OK` 除外）。
 
 budget gate 按固定顺序在 verified canonical 输出上执行（第 2 节）：
 logical line count → UTF-8 byte count → PCE_UNICODE_WORDPUNCT_V1 proxy-token
-count。超限分类为 `PROMPT_LINE_LIMIT_EXCEEDED`、
-`PROMPT_BYTE_LIMIT_EXCEEDED` 或 `PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED`。不得
+count。CONSUME capsule 的记账输入是 deterministic structural
+control-envelope projection（第 1.6 节：仅 `frozen_result.payload` 值被
+固定哨兵替换，从 validated capsule 结构重建，绝不对渲染文本
+search/replace）；完整 exact payload 仍始终 inline 于 stdout。超限分类为
+`PROMPT_LINE_LIMIT_EXCEEDED`、`PROMPT_BYTE_LIMIT_EXCEEDED` 或
+`PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED`。不得
 自动升级 Mode、扩大限制、声称精确 Token 计数、silent pass、自动删除约束或
 输出部分 Prompt。
 

@@ -124,7 +124,14 @@ PR-head identity。
   frozen_result.identity != expected_identity → `RESULT_IDENTITY_MISMATCH`；
   payload 缺失/空 → `MISSING_REQUIRED_FIELD`；超界 →
   `RESULT_PAYLOAD_OVER_BOUND`；禁止重建/hash/summary 替换；canonical
-  渲染并始终受 Budget Gate 约束。
+  渲染并始终受 Budget Gate 约束。CONSUME 预算记账走
+  control-envelope budget projection：完整 exact payload 始终 inline
+  于 stdout，普通 line/byte/proxy-token 记账仅在 structural
+  projection 上执行（frozen_result.payload 值被固定哨兵
+  PCE_CONTROL_ENVELOPE_PROJECTION 结构性替换，绝不对渲染文本
+  search/replace，projection 从不输出）；control envelope 自身超限
+  仍 fail closed。PRODUCE 与无 result_handoff capsule 保持
+  full-output 记账，byte-identical。
 - produced_result（PRODUCE 专用）：`{identity, payload}` machine-result
   输出表面；identity 预填声明的 producer identity，payload 为空槽位（Agent
   以完整非空 UTF-8 结果填充，bytesize ≤ maximum_bytes）；与 Completion
@@ -158,4 +165,8 @@ canonical output verification
 ```
 
 四种 Prompt Mode 的 hard limits 见标准第 2 节（lines / bytes /
-proxy_tokens）。
+proxy_tokens）。CONSUME capsule 的普通预算记账在 structural
+control-envelope budget projection 上执行（仅 frozen_result.payload
+值被固定哨兵 PCE_CONTROL_ENVELOPE_PROJECTION 替换，从 validated
+capsule 结构重建）；完整 exact payload 始终 inline 于 stdout，完整
+实际输出在任何预算判定前先通过 canonical output verification。

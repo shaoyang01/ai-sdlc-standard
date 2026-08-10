@@ -4677,3 +4677,568 @@ fixtures:
       stdout: empty
       stderr: contains
       stderr_contains: ["RESULT_PAYLOAD_OVER_BOUND"]
+
+  - id: RENDER-RESULT-HANDOFF-CONSUME-BUDGET-PROJECTION-POSITIVE
+    category: valid
+    command: compile
+    description: "Adversarial positive: CONSUME payload within maximum_bytes whose full inline output exceeds the MICRO_FIX byte and proxy-token budgets still compiles; exact payload stays inline"
+    capsule: |
+      task_id: fixture-result-consume-projection
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "adversarial control-envelope budget projection 渲染 fixture"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/guide.md
+        acceptance_criteria:
+          - "CONSUME 契约渲染成功"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/guide.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "consume result"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 4096
+        frozen_result:
+          identity: handoff-v1
+          payload: "ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "CONSUME-PROJECTION Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 0
+      stdout: prompt
+      stderr: empty
+
+  - id: RENDER-NEG-RESULT-HANDOFF-CONSUME-LINE-LIMIT
+    category: negative
+    command: compile
+    description: "CONSUME control envelope still fails the line gate (130 changes > 120 MICRO_FIX lines); the exact-payload exemption never disables ordinary line budgets"
+    capsule: |
+      task_id: fixture-consume-line-limit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "行数超限的 fixture"
+      delta:
+        open_findings: []
+        required_changes:
+            - docs/doc-01.md
+            - docs/doc-02.md
+            - docs/doc-03.md
+            - docs/doc-04.md
+            - docs/doc-05.md
+            - docs/doc-06.md
+            - docs/doc-07.md
+            - docs/doc-08.md
+            - docs/doc-09.md
+            - docs/doc-10.md
+            - docs/doc-11.md
+            - docs/doc-12.md
+            - docs/doc-13.md
+            - docs/doc-14.md
+            - docs/doc-15.md
+            - docs/doc-16.md
+            - docs/doc-17.md
+            - docs/doc-18.md
+            - docs/doc-19.md
+            - docs/doc-20.md
+            - docs/doc-21.md
+            - docs/doc-22.md
+            - docs/doc-23.md
+            - docs/doc-24.md
+            - docs/doc-25.md
+            - docs/doc-26.md
+            - docs/doc-27.md
+            - docs/doc-28.md
+            - docs/doc-29.md
+            - docs/doc-30.md
+            - docs/doc-31.md
+            - docs/doc-32.md
+            - docs/doc-33.md
+            - docs/doc-34.md
+            - docs/doc-35.md
+            - docs/doc-36.md
+            - docs/doc-37.md
+            - docs/doc-38.md
+            - docs/doc-39.md
+            - docs/doc-40.md
+            - docs/doc-41.md
+            - docs/doc-42.md
+            - docs/doc-43.md
+            - docs/doc-44.md
+            - docs/doc-45.md
+            - docs/doc-46.md
+            - docs/doc-47.md
+            - docs/doc-48.md
+            - docs/doc-49.md
+            - docs/doc-50.md
+            - docs/doc-51.md
+            - docs/doc-52.md
+            - docs/doc-53.md
+            - docs/doc-54.md
+            - docs/doc-55.md
+            - docs/doc-56.md
+            - docs/doc-57.md
+            - docs/doc-58.md
+            - docs/doc-59.md
+            - docs/doc-60.md
+            - docs/doc-61.md
+            - docs/doc-62.md
+            - docs/doc-63.md
+            - docs/doc-64.md
+            - docs/doc-65.md
+            - docs/doc-66.md
+            - docs/doc-67.md
+            - docs/doc-68.md
+            - docs/doc-69.md
+            - docs/doc-70.md
+            - docs/doc-71.md
+            - docs/doc-72.md
+            - docs/doc-73.md
+            - docs/doc-74.md
+            - docs/doc-75.md
+            - docs/doc-76.md
+            - docs/doc-77.md
+            - docs/doc-78.md
+            - docs/doc-79.md
+            - docs/doc-80.md
+            - docs/doc-81.md
+            - docs/doc-82.md
+            - docs/doc-83.md
+            - docs/doc-84.md
+            - docs/doc-85.md
+            - docs/doc-86.md
+            - docs/doc-87.md
+            - docs/doc-88.md
+            - docs/doc-89.md
+            - docs/doc-90.md
+            - docs/doc-91.md
+            - docs/doc-92.md
+            - docs/doc-93.md
+            - docs/doc-94.md
+            - docs/doc-95.md
+            - docs/doc-96.md
+            - docs/doc-97.md
+            - docs/doc-98.md
+            - docs/doc-99.md
+            - docs/doc-100.md
+            - docs/doc-101.md
+            - docs/doc-102.md
+            - docs/doc-103.md
+            - docs/doc-104.md
+            - docs/doc-105.md
+            - docs/doc-106.md
+            - docs/doc-107.md
+            - docs/doc-108.md
+            - docs/doc-109.md
+            - docs/doc-110.md
+            - docs/doc-111.md
+            - docs/doc-112.md
+            - docs/doc-113.md
+            - docs/doc-114.md
+            - docs/doc-115.md
+            - docs/doc-116.md
+            - docs/doc-117.md
+            - docs/doc-118.md
+            - docs/doc-119.md
+            - docs/doc-120.md
+            - docs/doc-121.md
+            - docs/doc-122.md
+            - docs/doc-123.md
+            - docs/doc-124.md
+            - docs/doc-125.md
+            - docs/doc-126.md
+            - docs/doc-127.md
+            - docs/doc-128.md
+            - docs/doc-129.md
+            - docs/doc-130.md
+        acceptance_criteria:
+          - "必须触发行数超限"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+            - docs/doc-01.md
+            - docs/doc-02.md
+            - docs/doc-03.md
+            - docs/doc-04.md
+            - docs/doc-05.md
+            - docs/doc-06.md
+            - docs/doc-07.md
+            - docs/doc-08.md
+            - docs/doc-09.md
+            - docs/doc-10.md
+            - docs/doc-11.md
+            - docs/doc-12.md
+            - docs/doc-13.md
+            - docs/doc-14.md
+            - docs/doc-15.md
+            - docs/doc-16.md
+            - docs/doc-17.md
+            - docs/doc-18.md
+            - docs/doc-19.md
+            - docs/doc-20.md
+            - docs/doc-21.md
+            - docs/doc-22.md
+            - docs/doc-23.md
+            - docs/doc-24.md
+            - docs/doc-25.md
+            - docs/doc-26.md
+            - docs/doc-27.md
+            - docs/doc-28.md
+            - docs/doc-29.md
+            - docs/doc-30.md
+            - docs/doc-31.md
+            - docs/doc-32.md
+            - docs/doc-33.md
+            - docs/doc-34.md
+            - docs/doc-35.md
+            - docs/doc-36.md
+            - docs/doc-37.md
+            - docs/doc-38.md
+            - docs/doc-39.md
+            - docs/doc-40.md
+            - docs/doc-41.md
+            - docs/doc-42.md
+            - docs/doc-43.md
+            - docs/doc-44.md
+            - docs/doc-45.md
+            - docs/doc-46.md
+            - docs/doc-47.md
+            - docs/doc-48.md
+            - docs/doc-49.md
+            - docs/doc-50.md
+            - docs/doc-51.md
+            - docs/doc-52.md
+            - docs/doc-53.md
+            - docs/doc-54.md
+            - docs/doc-55.md
+            - docs/doc-56.md
+            - docs/doc-57.md
+            - docs/doc-58.md
+            - docs/doc-59.md
+            - docs/doc-60.md
+            - docs/doc-61.md
+            - docs/doc-62.md
+            - docs/doc-63.md
+            - docs/doc-64.md
+            - docs/doc-65.md
+            - docs/doc-66.md
+            - docs/doc-67.md
+            - docs/doc-68.md
+            - docs/doc-69.md
+            - docs/doc-70.md
+            - docs/doc-71.md
+            - docs/doc-72.md
+            - docs/doc-73.md
+            - docs/doc-74.md
+            - docs/doc-75.md
+            - docs/doc-76.md
+            - docs/doc-77.md
+            - docs/doc-78.md
+            - docs/doc-79.md
+            - docs/doc-80.md
+            - docs/doc-81.md
+            - docs/doc-82.md
+            - docs/doc-83.md
+            - docs/doc-84.md
+            - docs/doc-85.md
+            - docs/doc-86.md
+            - docs/doc-87.md
+            - docs/doc-88.md
+            - docs/doc-89.md
+            - docs/doc-90.md
+            - docs/doc-91.md
+            - docs/doc-92.md
+            - docs/doc-93.md
+            - docs/doc-94.md
+            - docs/doc-95.md
+            - docs/doc-96.md
+            - docs/doc-97.md
+            - docs/doc-98.md
+            - docs/doc-99.md
+            - docs/doc-100.md
+            - docs/doc-101.md
+            - docs/doc-102.md
+            - docs/doc-103.md
+            - docs/doc-104.md
+            - docs/doc-105.md
+            - docs/doc-106.md
+            - docs/doc-107.md
+            - docs/doc-108.md
+            - docs/doc-109.md
+            - docs/doc-110.md
+            - docs/doc-111.md
+            - docs/doc-112.md
+            - docs/doc-113.md
+            - docs/doc-114.md
+            - docs/doc-115.md
+            - docs/doc-116.md
+            - docs/doc-117.md
+            - docs/doc-118.md
+            - docs/doc-119.md
+            - docs/doc-120.md
+            - docs/doc-121.md
+            - docs/doc-122.md
+            - docs/doc-123.md
+            - docs/doc-124.md
+            - docs/doc-125.md
+            - docs/doc-126.md
+            - docs/doc-127.md
+            - docs/doc-128.md
+            - docs/doc-129.md
+            - docs/doc-130.md
+        maximum_changed_files: 130
+      validation_profile: LOCAL_BEHAVIOR
+      git:
+        commit_count: 1
+        commit_message: "docs: line limit"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "LINE-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PROMPT_LINE_LIMIT_EXCEEDED"]
+
+  - id: RENDER-NEG-RESULT-HANDOFF-CONSUME-BYTE-LIMIT
+    category: negative
+    command: compile
+    description: "CONSUME control envelope still fails the byte gate (long ASCII message > 2048 bytes); only the validated frozen_result.payload value is excluded from accounting"
+    capsule: |
+      task_id: fixture-consume-byte-limit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "字节数超限的 fixture"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "必须触发字节超限"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: byte limit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "BYTE-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PROMPT_BYTE_LIMIT_EXCEEDED"]
+
+  - id: RENDER-NEG-RESULT-HANDOFF-CONSUME-PROXY-LIMIT
+    category: negative
+    command: compile
+    description: "CONSUME control envelope still fails the proxy-token gate (840 Han push proxy past the 1024 SESSION_CONTINUATION cap while bytes stay under 4096); the exemption never enlarges ordinary proxy budgets"
+    capsule: |
+      task_id: fixture-consume-proxy-limit
+      prompt_mode: SESSION_CONTINUATION
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "必须触发 proxy-token 超限"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: proxy limit"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: CONSUME
+        expected_identity: handoff-v1
+        maximum_bytes: 256
+        frozen_result:
+          identity: handoff-v1
+          payload: "exact-frozen-result-payload"
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "PROXY-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PROMPT_PROXY_TOKEN_LIMIT_EXCEEDED"]
+
+  - id: RENDER-NEG-RESULT-HANDOFF-PRODUCE-BYTE-LIMIT
+    category: negative
+    command: compile
+    description: "PRODUCE keeps full-output budget accounting (long ASCII message > 2048 bytes); the control-envelope projection is CONSUME-only"
+    capsule: |
+      task_id: fixture-produce-byte-limit
+      prompt_mode: MICRO_FIX
+      routing:
+        recipient: Codex
+        paste_location: "acme/widgets 新执行会话"
+        report_back_to: "owner-session"
+        next_hop_after_report: "owner-session 复核实施报告"
+      baseline:
+        repository: acme/widgets
+        branch: feature/runtime-v1
+        head: 7c21cc8bb9649188505dafea1402049c74bd9be7
+        pull_request: none
+      objective: "字节数超限的 fixture"
+      delta:
+        open_findings: []
+        required_changes:
+          - docs/VALIDATION.md
+        acceptance_criteria:
+          - "必须触发字节超限"
+        preserved_closed_findings: []
+      scope:
+        allowed_files:
+          - docs/VALIDATION.md
+        maximum_changed_files: 1
+      validation_profile: DOC_ONLY
+      git:
+        commit_count: 1
+        commit_message: "docs: byte limit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        push_mode: NONE
+        pull_request_action: NONE
+      result_handoff:
+        role: PRODUCE
+        identity: handoff-v1
+        maximum_bytes: 256
+        required: true
+      forbidden_actions:
+        - "merge"
+      completion_report:
+        recipient: "owner-session"
+        name: "BYTE-LIMIT Report"
+        maximum_lines: 80
+        stop_after_report: true
+    git_state:
+      origin_url: "https://github.com/acme/widgets.git"
+      refs:
+        refs/heads/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+        refs/remotes/origin/feature/runtime-v1: "7c21cc8bb9649188505dafea1402049c74bd9be7"
+      tracked:
+        - .ai-sdlc/prompt-policy.yaml
+    expected:
+      exit: 5
+      stdout: empty
+      stderr: contains
+      stderr_contains: ["PROMPT_BYTE_LIMIT_EXCEEDED"]
