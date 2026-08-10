@@ -1098,6 +1098,63 @@ module CompactPrompt
   # fail-closed before any validate/compile output; the same shared gate is
   # reused by the contract validator (no duplicated logic).
 
+  # ── Produced-result conformance validator ──
+  #
+  # Canonical post-execution / pre-freeze gate for the PRODUCE machine
+  # surface produced_result {identity, payload}
+  # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_PRODUCED_RESULT_VALIDATION).
+  # Pure, deterministic, no IO, no CLI: focused validation calls this
+  # production primitive directly and never duplicates the equality /
+  # bytesize logic.
+  module ProducedResult
+    module_function
+
+    PRODUCED_RESULT_KEYS = %w[identity payload].freeze
+
+    # produced: candidate produced_result mapping (Agent output, pre-freeze);
+    # producer_identity: the declared producer result_handoff.identity;
+    # maximum_bytes: the declared finite bound. Returns nil when conformant
+    # or [code, path, message] otherwise (fail closed):
+    #   missing result / identity / payload or empty payload →
+    #     MISSING_REQUIRED_FIELD
+    #   identity mismatch → RESULT_IDENTITY_MISMATCH
+    #   over-bound payload → RESULT_PAYLOAD_OVER_BOUND
+    #   malformed structure / invalid UTF-8 → FIELD_TYPE_INVALID / UNKNOWN_KEY
+    def validate(produced, producer_identity, maximum_bytes)
+      return ["MISSING_REQUIRED_FIELD", "produced_result",
+              "produced_result missing"] if produced.nil?
+      unless produced.is_a?(Hash)
+        return ["FIELD_TYPE_INVALID", "produced_result",
+                "produced_result must be a mapping {identity, payload}"]
+      end
+      result = CompactPrompt::Capsule.check_exact_keys(produced, PRODUCED_RESULT_KEYS)
+      return [result, "produced_result", "produced_result structure invalid"] if result
+      identity = produced["identity"]
+      unless CompactPrompt::Capsule.nonempty_string?(identity)
+        return ["MISSING_REQUIRED_FIELD", "produced_result.identity",
+                "produced_result.identity missing or empty"]
+      end
+      unless identity == producer_identity
+        return ["RESULT_IDENTITY_MISMATCH", "produced_result.identity",
+                "produced_result.identity #{identity.inspect} does not match producer identity #{producer_identity.inspect}"]
+      end
+      payload = produced["payload"]
+      unless payload.is_a?(String) && !payload.empty?
+        return ["MISSING_REQUIRED_FIELD", "produced_result.payload",
+                "produced_result.payload missing or empty"]
+      end
+      unless payload.valid_encoding? && payload.encoding == Encoding::UTF_8
+        return ["FIELD_TYPE_INVALID", "produced_result.payload",
+                "produced_result.payload must be valid UTF-8"]
+      end
+      if payload.bytesize > maximum_bytes
+        return ["RESULT_PAYLOAD_OVER_BOUND", "produced_result.payload",
+                "produced_result.payload bytes #{payload.bytesize} exceed maximum_bytes #{maximum_bytes}"]
+      end
+      nil
+    end
+  end
+
   module Template
     module_function
 

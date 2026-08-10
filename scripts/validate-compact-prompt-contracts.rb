@@ -1029,6 +1029,52 @@ PROXY_TOKEN_CASES.each do |input, expected|
   end
 end
 
+# ── PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_PRODUCED_RESULT_VALIDATION ──
+# Shared produced-result conformance validator: focused direct cases call the
+# production primitive (CompactPrompt::ProducedResult.validate) directly and
+# never duplicate the equality / bytesize logic. This is the canonical
+# post-execution / pre-freeze gate for the PRODUCE machine surface.
+produced_result_direct_cases = 0
+produced_valid = CompactPrompt::ProducedResult.validate(
+  { "identity" => "handoff-v1", "payload" => "complete-utf8-result" },
+  "handoff-v1", 256
+)
+if produced_valid.nil?
+  produced_result_direct_cases += 1
+else
+  errors << "produced_result direct: valid PASS expected but got #{produced_valid.inspect}"
+end
+produce_reject = lambda do |produced, identity, bound, expected_code, label|
+  code, = CompactPrompt::ProducedResult.validate(produced, identity, bound)
+  if code == expected_code
+    produced_result_direct_cases += 1
+  else
+    errors << "produced_result direct: #{label} expected #{expected_code} but got #{code.inspect}"
+  end
+end
+produce_reject.call(nil, "handoff-v1", 256, "MISSING_REQUIRED_FIELD", "missing result")
+produce_reject.call({ "payload" => "x" }, "handoff-v1", 256, "MISSING_REQUIRED_FIELD", "missing identity")
+produce_reject.call({ "identity" => "handoff-v1", "payload" => "" }, "handoff-v1", 256,
+                     "MISSING_REQUIRED_FIELD", "empty payload")
+produce_reject.call({ "identity" => "other", "payload" => "x" }, "handoff-v1", 256,
+                     "RESULT_IDENTITY_MISMATCH", "identity mismatch")
+produce_reject.call({ "identity" => "handoff-v1", "payload" => "123456789" }, "handoff-v1", 8,
+                     "RESULT_PAYLOAD_OVER_BOUND", "over bound")
+produce_reject.call("not-a-mapping", "handoff-v1", 256, "FIELD_TYPE_INVALID", "malformed structure")
+
+# Minimal completion-template truth locks (no new template framework): the
+# completion report template must truthfully state the produced_result machine
+# surface, identity binding, payload production and metadata separation.
+completion_template = read_asset("templates/compact-completion-report-template.md")
+%w[produced_result identity payload change_summary].each do |probe|
+  unless completion_template.include?(probe)
+    errors << "completion template: missing produced_result truth marker #{probe.inspect}"
+  end
+end
+unless completion_template.include?("metadata") && completion_template.include?("字段的成员")
+  errors << "completion template: missing produced_result metadata separation truth"
+end
+
 if errors.empty?
   puts "compact prompt contract validation ok " \
        "(#{CompactPrompt::WHITELIST_ASSETS.length} whitelist assets; " \
