@@ -65,6 +65,11 @@ scope:              # 精确两字段
 
 validation_profile: * # 五种 Validation Profile 之一
 
+pr_head:            # 可选（PCE_01_PR_ONLY_ZERO_DELTA_F01）：仅 zero-repository-delta
+                    # + CREATE_DRAFT 必填；非零 delta 禁止携带
+  branch: *         # PR head 分支名（合法 Git branch 名）
+  sha: *            # 40 位小写十六进制 SHA（字符串；纯数字 sha 必须加引号）
+
 git:                # 精确四字段
   commit_count: *   # 只能是 0 或 1
   commit_message: * # 非空字符串
@@ -97,6 +102,92 @@ v1 约束至少包括：
 - `completion_report.stop_after_report` 必须为 `true`；
 - finding 条目只允许 `id` 与 `status` 两个字段；`open_findings` 的条目状态必须为
   `OPEN`，`preserved_closed_findings` 的条目状态必须为 `CLOSED`。
+
+### 1.5 Zero-Repository-Delta 形状（PCE_01_PR_ONLY_ZERO_DELTA_F01 / PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）
+
+zero-repository-delta 只允许精确三重形状：`delta.required_changes: []` +
+`scope.allowed_files: []` + `scope.maximum_changed_files: 0`，且
+`git.commit_count: 0`、`git.push_mode: NONE`。执行形状二选一：
+
+- `git.pull_request_action: CREATE_DRAFT`（PCE_01_PR_ONLY_ZERO_DELTA_F01，
+  Draft-PR 执行）：必须提供根字段 `pr_head: {branch, sha}`；
+- `git.pull_request_action: NONE`（PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01，
+  通用无 PR 执行）：禁止携带 `pr_head`，编译输出不渲染任何 git mutation，
+  也不渲染 `VERIFY_EXACT_PR_HEAD_BEFORE_PR`。
+
+- 空 `required_changes` 但 `allowed_files` 非空或 `maximum_changed_files`
+  为正 → 分类为 `MISSING_REQUIRED_FIELD`（不得只空 changes 却保留 scope）；
+- 非 zero-delta 的 `maximum_changed_files` 保持正整数要求（`0` 仅
+  zero-delta 三重形状允许）；zero-delta 的 `maximum_changed_files` 必须精确
+  为 `0`；
+- zero-delta 的 git 必须为 `commit_count: 0`、`push_mode: NONE` 且
+  `pull_request_action` 为 `CREATE_DRAFT` 或 `NONE`（zero-delta 只表达
+  Draft-PR 或通用无 PR 执行；任何其他组合 → `FIELD_TYPE_INVALID`）；
+- zero-delta + CREATE_DRAFT 必须提供根字段 `pr_head: {branch, sha}`，
+  缺失 → `MISSING_REQUIRED_FIELD`；`branch` 必须是非空合法 Git branch 名，
+  `sha` 必须是字符串形式的 40 位小写十六进制（纯数字 sha 未加引号会被
+  YAML 解析为整数 → `FIELD_TYPE_INVALID`；非字符串 → `FIELD_TYPE_INVALID`；
+  非 40 位十六进制 → `INVALID_SHA`）；
+- zero-delta + NONE 携带 `pr_head` → 分类为 `FIELD_TYPE_INVALID`（G01 无 PR
+  形状禁止 PR-head 声明）；非 zero-delta capsule 携带 `pr_head` →
+  分类为 `FIELD_TYPE_INVALID`（nonzero-delta PR head 由 implementation
+  分支派生，不接受 contract 声明）；
+- baseline 保持 exact PR base：`baseline.head` 仍是 PR 的 base（fact
+  branch exact HEAD），`pr_head.sha` 是 PR head 的 canonical exact identity。
+
+### 1.6 Bounded Exact Result Handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING）
+
+可选单一 `result_handoff` 根契约（role-discriminated，不引入平行机制；现有
+capsule 省略它时编译输出 byte-identical）。`role` 必须为 `PRODUCE` 或
+`CONSUME`。
+
+**PRODUCE**（producer 输入，无预置结果）：
+
+```yaml
+result_handoff:
+  role: PRODUCE
+  identity: "<stable-producer-identity>"   # 非空字符串
+  maximum_bytes: <positive-integer>        # 有限字节上界
+  required: true                           # 必须为 true
+```
+
+- PRODUCE 输入**不得**携带预置 payload / frozen_result（exact key 集之外的
+  键 → `UNKNOWN_KEY`）；`required` 非 true → `FIELD_TYPE_INVALID`；
+- 编译后 Agent-visible Envelope 必须显式要求一个专用 machine-result 输出
+  表面 `produced_result: {identity, payload}`：`identity` 预填为声明的
+  producer identity，`payload` 为待产生槽位（Agent 必须以完整非空 UTF-8
+  结果填充，bytesize ≤ `maximum_bytes`）；
+- `produced_result` 与 Completion Report metadata 分离：不得把
+  `change_summary` / `remaining_findings` / prose 当作 payload；不得用
+  聊天记忆、repository 文件、hash/摘要或 Agent 重建作为结果传递；
+- PRODUCE 输出契约：`produced_result.identity` 必须等于声明的 producer
+  identity；required 输出缺失、identity 不匹配或超界输出均为
+  non-conformant，MUST STOP handoff（由执行侧校验，不落入既有 Prompt
+  Budget Gate 之外）。
+
+**CONSUME**（consumer 输入，携带 frozen 结果）：
+
+```yaml
+result_handoff:
+  role: CONSUME
+  expected_identity: "<stable-identity>"
+  maximum_bytes: <positive-integer>
+  frozen_result:
+    identity: "<stable-identity>"          # 必须等于 expected_identity
+    payload: "<exact-frozen-payload>"      # 完整 frozen 字节
+```
+
+- `frozen_result.identity` 必须等于 `expected_identity`，否则 →
+  `RESULT_IDENTITY_MISMATCH`（exit 3，`CONTRACT_OR_POLICY`）fail closed；
+- payload 缺失/空 → `MISSING_REQUIRED_FIELD`；payload 字节数超过
+  `maximum_bytes` → `RESULT_PAYLOAD_OVER_BOUND` fail closed；
+- 禁止任何 reconstruction / hash / summary 替换：CONSUME 必须携带完整
+  frozen payload，不得要求 Agent 重建。
+
+**跨检查点绑定**：human checkpoint 只 freeze/select 精确的
+`produced_result`；PCE 不实现 persistence / workflow；frozen
+`produced_result` 必须可 verbatim 复制进后续 CONSUME 契约，无需 Agent
+重建。两形状都保持 canonical 渲染并受既有 Prompt Budget Gate 约束。
 
 ### 1.3 受限 YAML
 
@@ -411,6 +502,11 @@ stop_after_report: true
   - 保留 CREATE/UPDATE 与 `baseline.pull_request` 的合法关系：
     `CREATE_DRAFT` 要求 `baseline.pull_request=none`；`UPDATE_DRAFT` 要求其为
     正整数；冲突时 fail closed（`GIT_ACTION_CONFLICT`）。
+- **Zero-Delta PR-Head**（PCE_01_PR_ONLY_ZERO_DELTA_F01）：zero-delta
+  CREATE_DRAFT 形状在 `git` 块内额外渲染 `pr_head: {branch, sha}`
+  （canonical exact PR-head identity）；`changes: []` 与
+  `max_changed_files: 0` 渲染为零 delta 形状；baseline 保持 exact PR base。
+  非零 delta 不渲染 `pr_head`。
 
 ### 5.3 Stable Rules + Task Prohibitions
 
@@ -431,6 +527,36 @@ v2 不再发送长 Git safety prose。固定 concise rule codes（agent-visible 
 | `NO_AUTO_MERGE` | 禁止 auto-merge |
 | `NO_PUBLICATION` | 禁止 publication |
 | `STOP_ON_SCOPE_EXPANSION` | scope 扩张时停止，不得自行扩 scope |
+
+### Conditional Execution-Time Rule（EXECUTION_TIME_PR_HEAD_DRIFT_STOP）
+
+`VERIFY_EXACT_PR_HEAD_BEFORE_PR` 是 **conditional** Agent-visible rule code：
+仅 zero-repository-delta + `pull_request_action: CREATE_DRAFT` 时出现在
+envelope 的 `rules` 列表中（追加在 12 个 stable codes 之后）；普通非零 delta
+输出绝不包含它。
+
+Authoritative semantics（mutation-time drift-stop）：
+
+```text
+immediately before CREATE_DRAFT:
+  fetch authoritative refs
+  → reverify exact base (baseline.head / fact branch local+origin refs)
+  → reverify refs/heads/<pr_head.branch> and
+    refs/remotes/origin/<pr_head.branch> against git.pr_head.sha
+  → missing or drift: STOP（不执行 CREATE_DRAFT）
+  → CREATE_DRAFT only after all checks PASS
+```
+
+两层分离（不得混为一谈）：
+
+- **compile-time layer**：`GitBaseline.check` 的 repository-aware PR-head
+  exact-ref gate（`PR_HEAD_REF_MISSING` / `PR_HEAD_SHA_MISMATCH`，exit 4）
+  是 renderer 编译/渲染前的校验，属于本标准 §12；它保证
+  canonical envelope 不会携带 stale PR-head identity。
+- **mutation-time layer**：`VERIFY_EXACT_PR_HEAD_BEFORE_PR` 指示执行方
+  Agent 在真正执行 `CREATE_DRAFT` 动作前重新 fetch/reverify 权威 refs；
+  它不是 compile-time 校验的描述，compile-time 校验也不代表 mutation-time
+  已执行。
 
 Capsule `forbidden_actions`：
 
@@ -613,6 +739,15 @@ ls-remote。核验顺序：
    无 shell、无网络、无 revision expression），必须精确等于 Capsule
    `baseline.head`；缺失为 `BASELINE_REF_MISSING`，不一致为
    `BASELINE_HEAD_MISMATCH`。
+7. Zero-delta Draft-PR head binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_BINDING）：
+   仅当 Capsule 为 zero-repository-delta 且 `pull_request_action ==
+   CREATE_DRAFT` 时，额外要求 `refs/heads/<pr_head.branch>` 与
+   `refs/remotes/origin/<pr_head.branch>` 均经 exact full-ref 查找并精确
+   等于 `pr_head.sha`；任一缺失为 `PR_HEAD_REF_MISSING`，不一致为
+   `PR_HEAD_SHA_MISMATCH`（均为 exit 4，GIT_BASELINE）。这是
+   conditional execution-time drift-stop：validate preflight 与 compile
+   渲染前 reverify 都执行；drift/deletion 意味着 STOP，绝不输出 stale
+   PR-head identity。
 
 不得要求当前 checkout branch 等于事实分支；current checkout 与 current HEAD
 均不是 baseline authority。remote-tracking ref 仅代表上游预先 fetch 后的本地
@@ -695,6 +830,8 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `VALIDATION_OVERPROVISIONED` | 3 | CONTRACT_OR_POLICY | 验证等级过重 |
 | `MISSING_STOP_CONDITION` | 3 | CONTRACT_OR_POLICY | completion_report.stop_after_report 不为 true |
 | `FIELD_TYPE_INVALID` | 3 | CONTRACT_OR_POLICY | 字段类型错误或枚举越界 |
+| `RESULT_PAYLOAD_OVER_BOUND` | 3 | CONTRACT_OR_POLICY | result_handoff payload 字节数超过 maximum_bytes |
+| `RESULT_IDENTITY_MISMATCH` | 3 | CONTRACT_OR_POLICY | result_handoff frozen/declared identity 与 expected identity 不一致 |
 | `POLICY_FILE_MISSING` | 3 | CONTRACT_OR_POLICY | git root 下找不到 policy 文件 |
 | `POLICY_SCHEMA_INVALID` | 3 | CONTRACT_OR_POLICY | policy schema、键、类型或枚举违规 |
 | `POLICY_PROFILE_MAPPING_MISSING` | 3 | CONTRACT_OR_POLICY | profile 映射缺失或 required 为空 |
@@ -712,6 +849,8 @@ code 在共享库有输出点、CLI 失败出口只经 registry 解析）：
 | `FACT_BRANCH_INVALID` | 4 | GIT_BASELINE | fact_branch 未通过 git check-ref-format |
 | `BASELINE_REF_MISSING` | 4 | GIT_BASELINE | 精确全 ref 不存在 |
 | `BASELINE_HEAD_MISMATCH` | 4 | GIT_BASELINE | 精确 ref head != capsule baseline.head |
+| `PR_HEAD_REF_MISSING` | 4 | GIT_BASELINE | zero-delta PR-head 精确 ref 不存在 |
+| `PR_HEAD_SHA_MISMATCH` | 4 | GIT_BASELINE | zero-delta PR-head 精确 ref head != pr_head.sha |
 | `RENDER_INCOMPLETE` | 5 | RENDER_OR_BUDGET | canonical 输出验证失败 |
 | `PROMPT_LINE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | 逻辑行数超过 Mode 硬限制 |
 | `PROMPT_BYTE_LIMIT_EXCEEDED` | 5 | RENDER_OR_BUDGET | UTF-8 字节数超过 Mode 硬限制 |

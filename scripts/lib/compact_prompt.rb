@@ -58,11 +58,31 @@ module CompactPrompt
     task_id prompt_mode routing baseline objective delta scope validation_profile
     git forbidden_actions completion_report
   ].freeze
+
+  # Optional root fields: `pr_head` (PCE_01_PR_ONLY_ZERO_DELTA_F01) is NOT
+  # part of the exact ROOT_KEYS set, so existing capsules without it stay
+  # valid. It is allowed as a root key and structurally validated only when
+  # present (zero-delta CREATE_DRAFT requires it; nonzero delta and
+  # zero-delta NONE forbid it). `result_handoff` (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02)
+  # is the single optional bounded exact result-handoff contract; existing
+  # capsules omit it with byte-identical output.
+  OPTIONAL_ROOT_KEYS = %w[pr_head result_handoff].freeze
   ROUTING_KEYS = %w[recipient paste_location report_back_to next_hop_after_report].freeze
   BASELINE_KEYS = %w[repository branch head pull_request].freeze
   DELTA_KEYS = %w[open_findings required_changes acceptance_criteria preserved_closed_findings].freeze
   SCOPE_KEYS = %w[allowed_files maximum_changed_files].freeze
   GIT_KEYS = %w[commit_count commit_message push_mode pull_request_action].freeze
+  # PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02 (role-output-binding): one
+  # optional role-discriminated result_handoff contract (no parallel
+  # mechanisms). PRODUCE declares {role, identity, maximum_bytes, required}
+  # without any pre-existing payload and requires a dedicated
+  # machine-result output surface produced_result {identity, payload}.
+  # CONSUME carries {role, expected_identity, maximum_bytes,
+  # frozen_result {identity, payload}} with the exact frozen payload.
+  RESULT_HANDOFF_ROLES = %w[PRODUCE CONSUME].freeze
+  PRODUCE_RESULT_HANDOFF_KEYS = %w[role identity maximum_bytes required].freeze
+  CONSUME_RESULT_HANDOFF_KEYS = %w[role expected_identity maximum_bytes frozen_result].freeze
+  FROZEN_RESULT_KEYS = %w[identity payload].freeze
   COMPLETION_REPORT_KEYS = %w[recipient name maximum_lines stop_after_report].freeze
 
   PROMPT_MODES = %w[MICRO_FIX SESSION_CONTINUATION BOOTSTRAP RECOVERY].freeze
@@ -102,6 +122,7 @@ module CompactPrompt
     YAML_TAG YAML_MERGE_KEY YAML_NULL YAML_DOCUMENT_COUNT_INVALID INVALID_SHA
     UNSAFE_PATH MULTIPLE_OBJECTIVES VALIDATION_UNDERSPECIFIED
     VALIDATION_OVERPROVISIONED MISSING_STOP_CONDITION FIELD_TYPE_INVALID
+    RESULT_PAYLOAD_OVER_BOUND RESULT_IDENTITY_MISMATCH
   ].freeze
   INTERNAL_CLASSIFICATIONS = %w[YAML_SYNTAX YAML_UNSUPPORTED].freeze
   ALL_CLASSIFICATIONS = (PUBLIC_CLASSIFICATIONS + INTERNAL_CLASSIFICATIONS).freeze
@@ -134,8 +155,8 @@ module CompactPrompt
     delivery_type schema recipient paste_location purpose report_back_to
     next_hop_after_report baseline changes scope_extra allowed_files
     max_changed_files accept open_findings closed_findings validation git
-    rules forbidden report completion_report_recipient completion_report_name
-    stop_after_report
+    result_handoff produced_result rules forbidden report
+    completion_report_recipient completion_report_name stop_after_report
   ].freeze
 
   # Stable concise rule codes (v2 section: Stable Rules + Task Prohibitions).
@@ -317,12 +338,29 @@ module CompactPrompt
       File.extname(path.to_s).downcase
     end
 
+  # PCE_01_PR_ONLY_ZERO_DELTA_F01: exact zero-repository-delta shape is
+  # required_changes=[], allowed_files=[], maximum_changed_files=0. Any
+  # other combination with empty changes is rejected; nonzero-delta
+  # capsules are unaffected.
+  def zero_delta?(data)
+    return false unless data.is_a?(Hash)
+    changes = data.dig("delta", "required_changes")
+    allowed = data.dig("scope", "allowed_files")
+    max_changed = data.dig("scope", "maximum_changed_files")
+    changes.is_a?(Array) && changes.empty? &&
+      allowed.is_a?(Array) && allowed.empty? && max_changed == 0
+  end
+
     # Returns a classification code or nil when structurally valid.
     def validate(data)
       return "YAML_UNSUPPORTED" unless data.is_a?(Hash)
 
-      result = check_exact_keys(data, CompactPrompt::ROOT_KEYS)
-      return result if result
+      # pr_head is optional and not part of the exact root key set; the
+      # exact-key check therefore allows it as the sole extra root key.
+      unknown = data.keys - CompactPrompt::ROOT_KEYS - CompactPrompt::OPTIONAL_ROOT_KEYS
+      return "UNKNOWN_KEY" unless unknown.empty?
+      missing = CompactPrompt::ROOT_KEYS - data.keys
+      return "MISSING_REQUIRED_FIELD" unless missing.empty?
 
       return "MISSING_REQUIRED_FIELD" unless nonempty_string?(data["task_id"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PROMPT_MODES.include?(data["prompt_mode"])
@@ -372,7 +410,11 @@ module CompactPrompt
       %w[required_changes acceptance_criteria].each do |key|
         list = delta[key]
         return "FIELD_TYPE_INVALID" unless list.is_a?(Array)
-        return "MISSING_REQUIRED_FIELD" if list.empty?
+        # Zero-repository-delta (PCE_01_PR_ONLY_ZERO_DELTA_F01) allows empty
+        # required_changes only when allowed_files=[] and
+        # maximum_changed_files=0 hold together; acceptance criteria stay
+        # non-empty for every shape.
+        return "MISSING_REQUIRED_FIELD" if list.empty? && key != "required_changes"
         list.each do |item|
           return "FIELD_TYPE_INVALID" unless nonempty_string?(item)
         end
@@ -384,12 +426,29 @@ module CompactPrompt
       return result if result
       allowed_files = scope["allowed_files"]
       return "FIELD_TYPE_INVALID" unless allowed_files.is_a?(Array)
-      return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
+      # Zero delta allows an empty allowed_files list; every other shape
+      # keeps the non-empty requirement.
+      unless zero_delta?(data)
+        return "MISSING_REQUIRED_FIELD" if allowed_files.empty?
+      end
       allowed_files.each do |path|
         return "FIELD_TYPE_INVALID" unless nonempty_string?(path)
         return "UNSAFE_PATH" if unsafe_path?(path)
       end
-      return "FIELD_TYPE_INVALID" unless positive_integer?(scope["maximum_changed_files"])
+      max_changed_files = scope["maximum_changed_files"]
+      # Empty changes with nonempty scope or positive max is rejected before
+      # the max-value checks: zero delta is only the exact
+      # required_changes=[]/allowed_files=[]/maximum_changed_files=0 triple.
+      if delta["required_changes"].empty? && !zero_delta?(data)
+        return "MISSING_REQUIRED_FIELD"
+      end
+      if zero_delta?(data)
+        # Zero delta fixes maximum_changed_files at exactly 0.
+        return "FIELD_TYPE_INVALID" unless max_changed_files.is_a?(Integer) && max_changed_files == 0
+      else
+        # Every other shape keeps the positive-integer requirement.
+        return "FIELD_TYPE_INVALID" unless positive_integer?(max_changed_files)
+      end
 
       profile = data["validation_profile"]
       return "FIELD_TYPE_INVALID" unless CompactPrompt::VALIDATION_PROFILES.include?(profile)
@@ -402,6 +461,88 @@ module CompactPrompt
       return "MISSING_REQUIRED_FIELD" unless nonempty_string?(git["commit_message"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PUSH_MODES.include?(git["push_mode"])
       return "FIELD_TYPE_INVALID" unless CompactPrompt::PULL_REQUEST_ACTIONS.include?(git["pull_request_action"])
+
+      # Zero-delta git contract: commit_count=0, push_mode=NONE and the
+      # execution shape is either the Draft-PR shape (pull_request_action
+      # CREATE_DRAFT with canonical pr_head, PCE_01_PR_ONLY_ZERO_DELTA_F01)
+      # or the generic no-PR shape (pull_request_action NONE,
+      # PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01, which forbids pr_head and
+      # renders no git mutation). Zero delta has no other execution meaning.
+      if zero_delta?(data) && (git["commit_count"] != 0 || git["push_mode"] != "NONE" ||
+                               !%w[CREATE_DRAFT NONE].include?(git["pull_request_action"]))
+        return "FIELD_TYPE_INVALID"
+      end
+
+      # Canonical exact PR-head identity (PCE_01_PR_ONLY_ZERO_DELTA_F01):
+      # optional root field `pr_head` {branch, sha}; required for the
+      # zero-delta CREATE_DRAFT shape; forbidden for the zero-delta NONE
+      # shape (PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01) and for nonzero delta.
+      pr_head = data["pr_head"]
+      if pr_head.nil?
+        if zero_delta?(data) && git["pull_request_action"] == "CREATE_DRAFT"
+          return "MISSING_REQUIRED_FIELD"
+        end
+      elsif zero_delta?(data) && git["pull_request_action"] == "CREATE_DRAFT"
+        return "FIELD_TYPE_INVALID" unless pr_head.is_a?(Hash)
+        result = check_exact_keys(pr_head, %w[branch sha])
+        return result if result
+        return "FIELD_TYPE_INVALID" unless pr_head["branch"].is_a?(String) && !pr_head["branch"].empty?
+        return "FIELD_TYPE_INVALID" unless CompactPrompt::GitNames.valid_branch?(pr_head["branch"])
+        # A 40+ digit all-numeric SHA would parse as a YAML Integer; the
+        # contract requires a string, so a type check fails closed first.
+        return "FIELD_TYPE_INVALID" unless pr_head["sha"].is_a?(String)
+        return "MISSING_REQUIRED_FIELD" if pr_head["sha"].empty?
+        return "INVALID_SHA" unless pr_head["sha"].match?(CompactPrompt::SHA40_PATTERN)
+      else
+        return "FIELD_TYPE_INVALID"
+      end
+
+      # Role-discriminated bounded exact result handoff
+      # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING): one
+      # optional result_handoff contract with role PRODUCE or CONSUME.
+      # PRODUCE = {role, identity, maximum_bytes, required}: declares the
+      # producer identity, a finite bound and required=true; it MUST NOT
+      # carry a pre-existing payload/frozen_result (unknown keys rejected)
+      # and the Agent-visible envelope requires the dedicated produced_result
+      # machine surface. CONSUME = {role, expected_identity, maximum_bytes,
+      # frozen_result {identity, payload}}: carries the exact frozen payload;
+      # frozen_result.identity must equal expected_identity; missing payload,
+      # identity mismatch or over-bound payload fail closed; reconstruction /
+      # hash / summary substitution is forbidden. Existing capsules omit
+      # result_handoff and keep byte-identical output.
+      result_handoff = data["result_handoff"]
+      unless result_handoff.nil?
+        return "FIELD_TYPE_INVALID" unless result_handoff.is_a?(Hash)
+        role = result_handoff["role"]
+        return "MISSING_REQUIRED_FIELD" unless role.is_a?(String) && !role.empty?
+        unless CompactPrompt::RESULT_HANDOFF_ROLES.include?(role)
+          return "FIELD_TYPE_INVALID"
+        end
+        if role == "PRODUCE"
+          result = check_exact_keys(result_handoff, CompactPrompt::PRODUCE_RESULT_HANDOFF_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["identity"])
+          return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
+                                               result_handoff["maximum_bytes"] >= 1
+          # PRODUCE requires required=true; a producer cannot declare an
+          # optional result.
+          return "FIELD_TYPE_INVALID" unless result_handoff["required"] == true
+        else # CONSUME
+          result = check_exact_keys(result_handoff, CompactPrompt::CONSUME_RESULT_HANDOFF_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(result_handoff["expected_identity"])
+          return "FIELD_TYPE_INVALID" unless result_handoff["maximum_bytes"].is_a?(Integer) &&
+                                               result_handoff["maximum_bytes"] >= 1
+          frozen = result_handoff["frozen_result"]
+          return "MISSING_REQUIRED_FIELD" unless frozen.is_a?(Hash)
+          result = check_exact_keys(frozen, CompactPrompt::FROZEN_RESULT_KEYS)
+          return result if result
+          return "MISSING_REQUIRED_FIELD" unless nonempty_string?(frozen["identity"])
+          return "MISSING_REQUIRED_FIELD" unless frozen["payload"].is_a?(String) && !frozen["payload"].empty?
+          return "RESULT_IDENTITY_MISMATCH" unless frozen["identity"] == result_handoff["expected_identity"]
+          return "RESULT_PAYLOAD_OVER_BOUND" if frozen["payload"].bytesize > result_handoff["maximum_bytes"]
+        end
+      end
 
       forbidden_actions = data["forbidden_actions"]
       return "FIELD_TYPE_INVALID" unless forbidden_actions.is_a?(Array)
@@ -915,6 +1056,30 @@ module CompactPrompt
         end
       end
 
+      # Zero-delta Draft-PR head binding (PCE_01_PR_ONLY_ZERO_DELTA_F01_
+      # HEAD_BINDING): repository-aware validation requires both exact
+      # refs/heads/<pr_head.branch> and refs/remotes/origin/<pr_head.branch>
+      # to equal pr_head.sha; missing or mismatch fails closed. This is the
+      # compile-time layer of the zero-delta CREATE_DRAFT drift-stop:
+      # validate preflights it and compile reverifies it immediately before
+      # envelope rendering (so no stale PR-head identity is ever rendered).
+      # Mutation-time enforcement is a separate Agent-visible layer
+      # (VERIFY_EXACT_PR_HEAD_BEFORE_PR, standard Conditional
+      # Execution-Time Rule); the two layers are never conflated.
+      if CompactPrompt::Capsule.zero_delta?(capsule) &&
+         capsule.dig("git", "pull_request_action") == "CREATE_DRAFT"
+        pr_branch = capsule.dig("pr_head", "branch")
+        pr_sha = capsule.dig("pr_head", "sha")
+        ["refs/heads/#{pr_branch}", "refs/remotes/origin/#{pr_branch}"].each do |ref|
+          actual = git_state.exact_ref_head(root, ref)
+          return ["PR_HEAD_REF_MISSING", ref, "PR-head ref does not exist"] if actual.nil?
+          unless actual == pr_sha
+            return ["PR_HEAD_SHA_MISMATCH", ref,
+                    "PR-head ref head #{actual} does not equal pr_head.sha #{pr_sha}"]
+          end
+        end
+      end
+
       nil
     end
   end
@@ -933,6 +1098,63 @@ module CompactPrompt
   # fail-closed before any validate/compile output; the same shared gate is
   # reused by the contract validator (no duplicated logic).
 
+  # ── Produced-result conformance validator ──
+  #
+  # Canonical post-execution / pre-freeze gate for the PRODUCE machine
+  # surface produced_result {identity, payload}
+  # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_PRODUCED_RESULT_VALIDATION).
+  # Pure, deterministic, no IO, no CLI: focused validation calls this
+  # production primitive directly and never duplicates the equality /
+  # bytesize logic.
+  module ProducedResult
+    module_function
+
+    PRODUCED_RESULT_KEYS = %w[identity payload].freeze
+
+    # produced: candidate produced_result mapping (Agent output, pre-freeze);
+    # producer_identity: the declared producer result_handoff.identity;
+    # maximum_bytes: the declared finite bound. Returns nil when conformant
+    # or [code, path, message] otherwise (fail closed):
+    #   missing result / identity / payload or empty payload →
+    #     MISSING_REQUIRED_FIELD
+    #   identity mismatch → RESULT_IDENTITY_MISMATCH
+    #   over-bound payload → RESULT_PAYLOAD_OVER_BOUND
+    #   malformed structure / invalid UTF-8 → FIELD_TYPE_INVALID / UNKNOWN_KEY
+    def validate(produced, producer_identity, maximum_bytes)
+      return ["MISSING_REQUIRED_FIELD", "produced_result",
+              "produced_result missing"] if produced.nil?
+      unless produced.is_a?(Hash)
+        return ["FIELD_TYPE_INVALID", "produced_result",
+                "produced_result must be a mapping {identity, payload}"]
+      end
+      result = CompactPrompt::Capsule.check_exact_keys(produced, PRODUCED_RESULT_KEYS)
+      return [result, "produced_result", "produced_result structure invalid"] if result
+      identity = produced["identity"]
+      unless CompactPrompt::Capsule.nonempty_string?(identity)
+        return ["MISSING_REQUIRED_FIELD", "produced_result.identity",
+                "produced_result.identity missing or empty"]
+      end
+      unless identity == producer_identity
+        return ["RESULT_IDENTITY_MISMATCH", "produced_result.identity",
+                "produced_result.identity #{identity.inspect} does not match producer identity #{producer_identity.inspect}"]
+      end
+      payload = produced["payload"]
+      unless payload.is_a?(String) && !payload.empty?
+        return ["MISSING_REQUIRED_FIELD", "produced_result.payload",
+                "produced_result.payload missing or empty"]
+      end
+      unless payload.valid_encoding? && payload.encoding == Encoding::UTF_8
+        return ["FIELD_TYPE_INVALID", "produced_result.payload",
+                "produced_result.payload must be valid UTF-8"]
+      end
+      if payload.bytesize > maximum_bytes
+        return ["RESULT_PAYLOAD_OVER_BOUND", "produced_result.payload",
+                "produced_result.payload bytes #{payload.bytesize} exceed maximum_bytes #{maximum_bytes}"]
+      end
+      nil
+    end
+  end
+
   module Template
     module_function
 
@@ -946,8 +1168,15 @@ module CompactPrompt
     # Placeholder values are allowed; value rules apply to instances only.
     def capsule_template_shape_error(data)
       return "template root must be a mapping" unless data.is_a?(Hash)
-      result = CompactPrompt::Capsule.check_exact_keys(data, CompactPrompt::ROOT_KEYS)
-      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} (#{result})" if result
+      # pr_head is optional (PCE_01_PR_ONLY_ZERO_DELTA_F01); the template
+      # may declare it, existing templates without it stay valid.
+      unknown = data.keys - CompactPrompt::ROOT_KEYS - CompactPrompt::OPTIONAL_ROOT_KEYS
+      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} " \
+             "plus optional #{CompactPrompt::OPTIONAL_ROOT_KEYS.inspect} (#{unknown.inspect})" unless unknown.empty?
+      missing = CompactPrompt::ROOT_KEYS - data.keys
+      return "template root keys must be exactly #{CompactPrompt::ROOT_KEYS.inspect} " \
+             "plus optional #{CompactPrompt::OPTIONAL_ROOT_KEYS.inspect} " \
+             "(missing #{missing.inspect})" unless missing.empty?
       {
         "routing" => CompactPrompt::ROUTING_KEYS,
         "baseline" => CompactPrompt::BASELINE_KEYS,
@@ -1175,8 +1404,11 @@ module CompactPrompt
       "#{"  " * indent}#{key}: #{value}\n"
     end
 
-    # Block-style list of quoted scalars (user data).
+    # Block-style list of quoted scalars (user data). An empty list renders
+    # as the flow `[]` so it parses back as an empty array, never as null
+    # (zero-repository-delta shape, PCE_01_PR_ONLY_ZERO_DELTA_F01).
     def kv_list(indent, key, items)
+      return "#{"  " * indent}#{key}: []\n" if items.nil? || items.empty?
       out = +"#{"  " * indent}#{key}:\n"
       items.each { |item| out << "#{"  " * (indent + 1)}- #{CompactPrompt::Renderer.render_yaml_scalar(item)}\n" }
       out
@@ -1261,11 +1493,66 @@ module CompactPrompt
         when "CREATE_DRAFT"
           out << kv_plain(1, "pr", "CREATE_DRAFT")
           out << kv_plain(1, "pr_base", "FACT_BRANCH")
+          # Canonical exact PR-head identity for the zero-repository-delta
+          # Draft-PR shape: the PR head branch and its exact 40-hex SHA are
+          # contract values rendered verbatim; baseline stays the exact PR
+          # base.
+          if CompactPrompt::Capsule.zero_delta?(capsule)
+            out << "  pr_head:\n"
+            out << kv(2, "branch", capsule.dig("pr_head", "branch"))
+            out << kv(2, "sha", capsule.dig("pr_head", "sha"))
+          end
         when "UPDATE_DRAFT"
           out << kv_plain(1, "pr", "UPDATE_DRAFT")
         end
       end
-      out << kv_list_plain(0, "rules", CompactPrompt::STABLE_RULES)
+      # Role-discriminated result handoff
+      # (PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_BINDING): the
+      # single optional contract renders canonically as its own mapping; the
+      # whole envelope remains subject to the existing Prompt Budget Gate.
+      # PRODUCE additionally renders the dedicated machine-result output
+      # surface produced_result {identity, payload}: identity is prefilled
+      # with the declared producer identity and payload is the empty
+      # production slot the Agent must fill with the complete UTF-8 result
+      # (nonempty, bytesize <= maximum_bytes) — the exact produced_result
+      # stays separate from Completion Report metadata and is copied
+      # verbatim into a later CONSUME contract without reconstruction.
+      result_handoff = capsule["result_handoff"]
+      if result_handoff
+        out << "result_handoff:\n"
+        out << kv_plain(1, "role", result_handoff["role"])
+        if result_handoff["role"] == "PRODUCE"
+          out << kv(1, "identity", result_handoff["identity"])
+          out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
+          out << kv_plain(1, "required", result_handoff["required"])
+        else # CONSUME
+          out << kv(1, "expected_identity", result_handoff["expected_identity"])
+          out << kv_plain(1, "maximum_bytes", result_handoff["maximum_bytes"])
+          out << "  frozen_result:\n"
+          out << kv(2, "identity", result_handoff.dig("frozen_result", "identity"))
+          out << kv(2, "payload", result_handoff.dig("frozen_result", "payload"))
+        end
+      end
+      # Dedicated machine-result output surface (PRODUCE only): semantically
+      # produced_result {identity, payload}. The identity is bound to the
+      # declared producer identity; the payload is produced by the Agent and
+      # is NOT completion-report metadata.
+      if result_handoff && result_handoff["role"] == "PRODUCE"
+        out << "produced_result:\n"
+        out << kv(1, "identity", result_handoff["identity"])
+        out << kv(1, "payload", "")
+      end
+      # Stable concise rule codes plus the conditional execution-time rule:
+      # for the zero-repository-delta CREATE_DRAFT shape only, the
+      # Agent-visible rules additionally include
+      # VERIFY_EXACT_PR_HEAD_BEFORE_PR (mutation-time drift-stop, standard
+      # section 5.3). Ordinary nonzero-delta output never carries it.
+      rules = CompactPrompt::STABLE_RULES.dup
+      if CompactPrompt::Capsule.zero_delta?(capsule) &&
+         capsule.dig("git", "pull_request_action") == "CREATE_DRAFT"
+        rules << "VERIFY_EXACT_PR_HEAD_BEFORE_PR"
+      end
+      out << kv_list_plain(0, "rules", rules)
       # Task-specific prohibitions: exact duplicates keep only the first
       # occurrence; entries identical to a stable rule code are not
       # repeated (the stable codes are already in rules). No fuzzy NLP or
@@ -1406,6 +1693,10 @@ module CompactPrompt
                                     "meaning" => "completion_report.stop_after_report is not true" },
       "FIELD_TYPE_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                 "meaning" => "field type or enum out of range" },
+      "RESULT_PAYLOAD_OVER_BOUND" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                       "meaning" => "result_handoff payload bytes exceed maximum_bytes" },
+      "RESULT_IDENTITY_MISMATCH" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
+                                      "meaning" => "result_handoff frozen/declared identity does not match expected identity" },
       "POLICY_FILE_MISSING" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
                                  "meaning" => "policy file not found at git root" },
       "POLICY_SCHEMA_INVALID" => { "exit" => 3, "category" => "CONTRACT_OR_POLICY",
@@ -1441,6 +1732,10 @@ module CompactPrompt
                                   "meaning" => "exact full ref does not exist" },
       "BASELINE_HEAD_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
                                     "meaning" => "exact ref head != capsule baseline.head" },
+      "PR_HEAD_REF_MISSING" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                 "meaning" => "zero-delta PR-head exact ref does not exist" },
+      "PR_HEAD_SHA_MISMATCH" => { "exit" => 4, "category" => "GIT_BASELINE",
+                                  "meaning" => "zero-delta PR-head exact ref head != pr_head.sha" },
       # exit 5 — RENDER_OR_BUDGET
       "RENDER_INCOMPLETE" => { "exit" => 5, "category" => "RENDER_OR_BUDGET",
                                "meaning" => "canonical output verification failed" },

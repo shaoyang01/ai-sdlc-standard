@@ -234,6 +234,17 @@ if standard_text
     errors << "standard: proxy-token metric PCE_UNICODE_WORDPUNCT_V1 is not declared"
   end
 
+  # Conditional execution-time rule (section 5.3): zero-delta CREATE_DRAFT
+  # output carries VERIFY_EXACT_PR_HEAD_BEFORE_PR; the standard must
+  # declare its mutation-time semantics and the two-layer separation.
+  unless standard_text.include?("VERIFY_EXACT_PR_HEAD_BEFORE_PR")
+    errors << "standard: conditional execution-time rule " \
+              "VERIFY_EXACT_PR_HEAD_BEFORE_PR is not declared"
+  end
+  unless standard_text.include?("mutation-time") && standard_text.include?("compile-time")
+    errors << "standard: execution-time rule must separate mutation-time and compile-time layers"
+  end
+
   # One execution material per delivery (section 8).
   unless standard_text.include?("一次只能交付一份执行材料")
     errors << "standard: single-material delivery rule is missing"
@@ -603,6 +614,7 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
           errors << "#{label}: must be a mapping"
           next
         end
+        id = fixture["id"]
         allowed_fixture_keys = %w[
           id category description command capsule policy git_state expected template template_path yaml_blocks omitted_keys
         ]
@@ -628,14 +640,13 @@ if File.file?(File.join(ROOT, renderer_fixtures_path))
                 next
               end
               if expectations.key?("type") &&
-                 !%w[string integer boolean null].include?(expectations["type"])
+                 !%w[string integer boolean null mapping].include?(expectations["type"])
                 errors << "#{label} #{id}: yaml_blocks.#{name}.#{key} type must be " \
-                          "string|integer|boolean|null"
+                          "string|integer|boolean|null|mapping"
               end
             end
           end
         end
-        id = fixture["id"]
         unless id.is_a?(String) && id.match?(/\A[A-Z0-9-]+\z/) && id.length <= 64
           errors << "#{label}: id must match [A-Z0-9-]+ up to 64 chars"
           next
@@ -1016,6 +1027,52 @@ PROXY_TOKEN_CASES.each do |input, expected|
   else
     errors << "proxy token metric: #{input.inspect} expected #{expected} but got #{actual}"
   end
+end
+
+# ── PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_PRODUCED_RESULT_VALIDATION ──
+# Shared produced-result conformance validator: focused direct cases call the
+# production primitive (CompactPrompt::ProducedResult.validate) directly and
+# never duplicate the equality / bytesize logic. This is the canonical
+# post-execution / pre-freeze gate for the PRODUCE machine surface.
+produced_result_direct_cases = 0
+produced_valid = CompactPrompt::ProducedResult.validate(
+  { "identity" => "handoff-v1", "payload" => "complete-utf8-result" },
+  "handoff-v1", 256
+)
+if produced_valid.nil?
+  produced_result_direct_cases += 1
+else
+  errors << "produced_result direct: valid PASS expected but got #{produced_valid.inspect}"
+end
+produce_reject = lambda do |produced, identity, bound, expected_code, label|
+  code, = CompactPrompt::ProducedResult.validate(produced, identity, bound)
+  if code == expected_code
+    produced_result_direct_cases += 1
+  else
+    errors << "produced_result direct: #{label} expected #{expected_code} but got #{code.inspect}"
+  end
+end
+produce_reject.call(nil, "handoff-v1", 256, "MISSING_REQUIRED_FIELD", "missing result")
+produce_reject.call({ "payload" => "x" }, "handoff-v1", 256, "MISSING_REQUIRED_FIELD", "missing identity")
+produce_reject.call({ "identity" => "handoff-v1", "payload" => "" }, "handoff-v1", 256,
+                     "MISSING_REQUIRED_FIELD", "empty payload")
+produce_reject.call({ "identity" => "other", "payload" => "x" }, "handoff-v1", 256,
+                     "RESULT_IDENTITY_MISMATCH", "identity mismatch")
+produce_reject.call({ "identity" => "handoff-v1", "payload" => "123456789" }, "handoff-v1", 8,
+                     "RESULT_PAYLOAD_OVER_BOUND", "over bound")
+produce_reject.call("not-a-mapping", "handoff-v1", 256, "FIELD_TYPE_INVALID", "malformed structure")
+
+# Minimal completion-template truth locks (no new template framework): the
+# completion report template must truthfully state the produced_result machine
+# surface, identity binding, payload production and metadata separation.
+completion_template = read_asset("templates/compact-completion-report-template.md")
+%w[produced_result identity payload change_summary PRODUCE].each do |probe|
+  unless completion_template.include?(probe)
+    errors << "completion template: missing produced_result truth marker #{probe.inspect}"
+  end
+end
+unless completion_template.include?("metadata") && completion_template.include?("字段的成员")
+  errors << "completion template: missing produced_result metadata separation truth"
 end
 
 if errors.empty?

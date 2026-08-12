@@ -41,7 +41,7 @@ purpose            # 唯一目标，只表达一次（来自 Capsule objective�
 report_back_to
 next_hop_after_report
 baseline           # repository / branch / head / [pull_request 仅正整数]
-changes            # required_changes
+changes            # required_changes；zero-delta 形状渲染为 []
 [scope_extra | allowed_files]   # scope derivation，二者互斥
 max_changed_files
 accept             # acceptance criteria
@@ -49,6 +49,8 @@ accept             # acceptance criteria
 [closed_findings]  # 非空才输出，仅 id 列表
 validation         # profile / run / [forbid 仅非空]
 [git]              # positive-action allowlist，三 NONE 时整体省略
+[result_handoff]   # 可选 role-discriminated result-handoff 契约（PRODUCE|CONSUME）
+[produced_result]  # PRODUCE 专用 machine-result 输出表面（identity 绑定 + payload 槽位）
 rules              # 12 个 stable rule codes，固定列表
 [forbidden]        # task-specific prohibitions（去重、剔除与 stable code 相同的项）
 report             # max_lines / fields
@@ -56,6 +58,43 @@ completion_report_recipient
 completion_report_name
 stop_after_report: true
 ```
+
+## Zero-Repository-Delta Shape（PCE_01_PR_ONLY_ZERO_DELTA_F01 / PCE_01_GENERIC_ZERO_DELTA_NO_PR_G01）
+
+零仓库 delta 执行只允许精确三重形状：`required_changes: []` +
+`allowed_files: []` + `maximum_changed_files: 0`，且 git 为
+`commit_count: 0` / `push_mode: NONE`。执行形状二选一：
+
+- `pull_request_action: CREATE_DRAFT`（F01）：canonical envelope 渲染：
+
+```yaml
+changes: []
+max_changed_files: 0
+...
+git:
+  pr: CREATE_DRAFT
+  pr_base: FACT_BRANCH
+  pr_head:            # canonical exact PR-head identity
+    branch: "pr-head-branch 的值（示例：codex/pce-zero-delta-draft）"
+    sha: "40-char-lowercase-hex-sha 的值（字符串，纯数字必须加引号）"
+```
+
+- `pull_request_action: NONE`（G01，generic zero-delta no-PR）：禁止
+  `pr_head`，整个 git mapping 省略，rules 不包含
+  `VERIFY_EXACT_PR_HEAD_BEFORE_PR`。
+
+`pr_head` 是可选根字段 `{branch, sha}`：仅 zero-delta + CREATE_DRAFT 必填；
+zero-delta + NONE 或非零 delta 携带 `pr_head` 会被拒绝；baseline 保持 exact
+PR base。
+
+### Repository-Aware PR-Head Binding（PCE_01_PR_ONLY_ZERO_DELTA_F01_HEAD_BINDING）
+
+zero-delta + CREATE_DRAFT 时，`pr_head.sha` 不是自由声明值：validate
+preflight 与 compile 渲染前都要求 `refs/heads/pr_head.branch` 与
+`refs/remotes/origin/pr_head.branch` 两个 exact full ref 均等于
+`pr_head.sha`。缺失 → `PR_HEAD_REF_MISSING`；不一致 → `PR_HEAD_SHA_MISMATCH`
+（exit 4，GIT_BASELINE）。drift/deletion 意味着 STOP，绝不输出 stale
+PR-head identity。
 
 ## Omission / Derivation 规则（摘要）
 
@@ -74,6 +113,22 @@ stop_after_report: true
   且 PR action == NONE 时整个 git mapping 省略。
 - forbidden：Capsule forbidden_actions 的 exact duplicate 只保留第一项；
   与 stable rule code 完全相同的项不重复；不做 fuzzy NLP 删除。
+- pr_head（PCE_01_PR_ONLY_ZERO_DELTA_F01）：仅 zero-delta + CREATE_DRAFT
+  必填，渲染 `git.pr_head.branch` 与 `git.pr_head.sha`（canonical exact
+  PR-head identity）；zero-delta + NONE 与非零 delta 携带 pr_head 被拒绝。
+- result_handoff（PCE_01_BOUNDED_EXACT_RESULT_HANDOFF_G02_ROLE_OUTPUT_
+  BINDING）：可选 role-discriminated 单一契约；省略时输出 byte-identical。
+  PRODUCE = {role, identity, maximum_bytes, required}（无预置 payload；
+  输出要求 produced_result machine surface）；CONSUME = {role,
+  expected_identity, maximum_bytes, frozen_result {identity, payload}}。
+  frozen_result.identity != expected_identity → `RESULT_IDENTITY_MISMATCH`；
+  payload 缺失/空 → `MISSING_REQUIRED_FIELD`；超界 →
+  `RESULT_PAYLOAD_OVER_BOUND`；禁止重建/hash/summary 替换；canonical
+  渲染并始终受 Budget Gate 约束。
+- produced_result（PRODUCE 专用）：`{identity, payload}` machine-result
+  输出表面；identity 预填声明的 producer identity，payload 为空槽位（Agent
+  以完整非空 UTF-8 结果填充，bytesize ≤ maximum_bytes）；与 Completion
+  Report metadata 分离；frozen 后 verbatim 复制进 CONSUME。
 
 ## Stable Rules（12 codes，固定列表）
 
