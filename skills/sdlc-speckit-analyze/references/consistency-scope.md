@@ -1,5 +1,14 @@
 # Consistency Scope
 
+## Global-First Anchor
+
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`
+(sections 1, 2 and 7), before the detailed consistency audit:
+
+- Anchor the current goal, Scope (in/out), non-goals, and acceptance from the current route, spec, plan, tasks, and approved DocFlow artifacts.
+- Enumerate the frozen applicable material surfaces (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- The consistency dimensions below are interpretations of the shared surface list; they never narrow it.
+
 ## Consistency Dimensions
 
 Audit these dimensions across DocFlow, spec, plan, and tasks:
@@ -51,3 +60,11 @@ Route findings to the earliest affected node:
 - Task breakdown issue -> `sdlc-speckit-tasks`.
 
 Do not route all findings to implementation. Implementation starts only after Analyze Gate passes.
+
+## Bounded Continuation
+
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`:
+
+- Record every material blocker (from Allowed Findings or Blocked Analysis Decisions) and continue the remaining reliable bounded consistency scan; do not fail-fast on the first blocker.
+- A blocker that requires upstream Re-Gate is still recorded and routed to the earliest affected node; it does not end the scan.
+- Hard-stop only for: missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior.

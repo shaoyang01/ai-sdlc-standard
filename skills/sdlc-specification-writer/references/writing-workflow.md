@@ -70,7 +70,11 @@ Do not use repository context to invent new business requirements.
 
 ## Step 4: Specification Drafting
 
-Draft using `templates/technical-specification-template.md`.
+Before drafting, build the global model: enumerate the frozen applicable
+material surfaces per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`
+(section 7) and mark each applicable or `NOT_APPLICABLE`; the local example
+here defers to the shared surface list and never narrows it. Then draft
+using `templates/technical-specification-template.md`.
 
 Keep sections even when details are missing:
 
@@ -109,6 +113,8 @@ Before output, check:
 - State and data behavior are stated.
 - Tests cover main path, miss path, failure path, idempotency, and old-flow compatibility.
 - Pending confirmations are not hidden.
+
+Whole-model impact self-check: every applicable frozen surface from the shared reference (`${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`, section 7) is covered or explicitly marked `不涉及`/`待确认`; direct impacts are closed per the shared reference (section 3) before the specification is reported ready.
 
 ## Step 6: Handoff
 

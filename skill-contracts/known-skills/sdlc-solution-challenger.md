@@ -67,6 +67,16 @@ blocking_conditions:
 - 将不确定业务规则写成确定事实。
 - 为未来不确定需求提前建设架构。
 
+### Goal-Anchored Global Reasoning Contract
+
+绑定 `ai-sdlc/goal-anchored-global-reasoning.md`（GRP-01 shared reference），保留既有 scope/phase firewall、existing-mechanism 与 minimum-sufficient 规则：
+
+- 扫描 global-before-local：先枚举当前 goal 的 applicable material surfaces，再逐项扫描；
+- 每个 material finding 关闭直接 impact（caller/callee 或 dependency、consumer、state/data、failure/compatibility、verification）；
+- findings 按 root cause 收敛（consolidation），同一根因不重复计数；
+- fail-worthy finding 后继续剩余可靠 bounded surfaces；不 fail-fast on the first finding；
+- 不引入第二套 reasoning 协议，不改变 Gate 决策语义。
+
 ## Input Contract
 
 必需输入：

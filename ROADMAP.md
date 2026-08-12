@@ -978,6 +978,42 @@ PCE 验收后，具备 project policy 且适用 Compact Prompt Contract 的真�
 Codex 工作包默认走 **Capsule → production Renderer → compiled prompt**；
 只有不适用或真实验收失败才回退 verbose route。
 
+## GRP-01: Goal-Anchored Global Reasoning Convergence
+
+### Stable Product Problem
+
+跨 reasoning Skill（Specification Writer、Solution Challenger、Solution
+Reviewer、Speckit Analyze、Code Review Excellence）的局部-first 工作方式
+导致：细节先于全局模型、finding 未关闭直接 impact、表象替代根因、首个
+fail-worthy finding 即终止发现。产品问题稳定存在，不随具体需求变化。
+
+### Direction
+
+```text
+Goal-Anchored → Global-first → Systemic → Bounded → Convergent
+```
+
+- **Goal-Anchored**：先锚定 current goal / scope / non-goals / acceptance。
+- **Global-first**：细节工作前先构建 applicable material surfaces 全局模型。
+- **Systemic**：material finding 关闭直接 impact（caller/callee 或 dependency、
+  consumer、state/data、failure/compatibility、verification）。
+- **Bounded**：保持 scope/phase firewall、minimum-sufficient、既有 hard-stop
+  边界；fail-worthy finding 后继续剩余可靠 bounded surfaces。
+- **Convergent**：按 root cause 合并 findings，关闭根因而非逐个表象。
+
+共享 reference：`ai-sdlc/goal-anchored-global-reasoning.md`。
+
+### Boundary
+
+- 不构建 reasoning/review 平台、runtime、workflow engine、数据库、
+  autonomous reviewer、新输出 schema、Gate redesign 或 acceptance-condition
+  ledger。
+- 不重写全部 Skills；只收敛五个 reasoning Skill 的既有语义。
+- 不修改 ESS / code-review schema、Solution Reviewer Gate / Development
+  Path / Tail 语义、PCE、D10/D10-B、Advanced 11-14。
+- 不度量或证明模型"推理质量"；validator 只锁定文档契约与 obvious
+  regression。
+
 ## 近期执行顺序
 
 1. [x] 完成本路线图，并吸收外部 v1.0 文档暴露的路线图缺口。

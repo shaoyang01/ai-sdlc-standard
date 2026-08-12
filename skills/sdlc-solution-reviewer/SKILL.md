@@ -24,6 +24,7 @@ Review a technical specification as the global DocFlow Specification Gate. Decid
    - `SPECKIT_PIPELINE_REQUIRED`
    - `BLOCKED_NEEDS_REVISION`
 10. Require explicit risk acceptance for `PASS_WITH_RISK`.
+11. Apply the Goal-Anchored Global Reasoning contract: complete the current-goal global/material scan and direct impact closure before the unchanged Gate, Development Path and Tail decisions; FAIL eligibility does not end discovery (see `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`).
 
 ## Required Standard Files
 
@@ -48,6 +49,7 @@ Load these references as needed:
 - `references/development-path-decision.md` for direct implementation vs Speckit routing.
 - `references/checklist.md` for severity and coverage checks.
 - `references/output-report.md` for the report structure and manifest update suggestions.
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -96,6 +98,8 @@ Check the technical specification against:
 - Requirement change and Re-Gate implications
 
 Classify every issue as Critical, High, Medium, or Low.
+
+Complete the current-goal global/material scan first and close direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) before any Gate / Development Path / Tail decision. A FAIL-eligible finding does not end discovery: continue the remaining reliable bounded material surfaces, then decide.
 
 ### 4. Decide Gate Result
 
