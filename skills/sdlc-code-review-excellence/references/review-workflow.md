@@ -10,6 +10,15 @@ Before line-level review:
 - Identify explicit non-goals and compatibility requirements.
 - Identify relevant risks, rollback, and verification requirements.
 
+Then anchor the current goal and build the global model before any detailed
+review (per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`,
+sections 1, 2 and 7):
+
+- State current goal, Scope (in/out), non-goals, and acceptance from the requirement and approved artifacts.
+- Enumerate the frozen applicable material surfaces per the shared reference (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- Local examples here defer to the shared surface list; they never narrow it.
+- Only then start the detailed review (scope and traceability, behavioral, data and integration, operational, test, maintainability).
+
 ## 2. Scope And Traceability
 
 Check whether changed code:
@@ -77,7 +86,7 @@ Avoid blocking on preference-only style comments.
 
 ## 8. Impact Closure And Root-Cause Consolidation
 
-Per `ai-sdlc/goal-anchored-global-reasoning.md`, for every material finding close its direct impacts before moving on:
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`, for every material finding close its direct impacts before moving on:
 
 - Caller / callee or dependency.
 - Consumer.

@@ -19,14 +19,15 @@ Audit cross-artifact consistency after `sdlc-speckit-tasks` and before implement
 6. Do not generate implementation tasks; route task fixes to `sdlc-speckit-tasks`.
 7. Do not replace `sdlc-solution-reviewer`, Plan Gate, or Task Gate.
 8. Identify inconsistency, missing traceability, stale artifacts, unaccepted risk, and implementation-readiness blockers.
-9. Record undefined behavior, unapproved Scope change, and conflicting artifacts as material blockers; continue the remaining reliable bounded consistency scan, then conclude with Analyze Gate Result FAIL / upstream Re-Gate as appropriate. Only missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior may hard-stop discovery (see Core Rule 16 and `ai-sdlc/goal-anchored-global-reasoning.md`).
+9. Record undefined behavior, unapproved Scope change, and conflicting artifacts as material blockers; continue the remaining reliable bounded consistency scan, then conclude with Analyze Gate Result FAIL / upstream Re-Gate as appropriate. Only missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior may hard-stop discovery (see Core Rule 16 and `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`).
 10. Require Analyze Gate readiness before `sdlc-speckit-implement`.
 11. Recommend manifest Activity Log and Re-Gate updates.
 12. Return each blocker to the earliest affected upstream node.
 13. Require `.specify/entry-coverage-profile.yaml`; missing profile blocks Analyze and must point to `scripts/bootstrap-entry-coverage-profile.sh` or full bootstrap.
 14. Parse entry coverage TSV fields for Gate decisions; do not grep markdown reports to infer blockers.
 15. Apply project-type-specific checks from Project Type Profiles before approving implementation readiness.
-16. Apply the Goal-Anchored Global Reasoning contract: record material blockers and continue the remaining reliable bounded consistency scan; hard-stop only for missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first blocker.
+16. Apply the Goal-Anchored Global Reasoning contract: record material blockers and continue the remaining reliable bounded consistency scan; hard-stop only for missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior (see `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first blocker.
+17. Apply global-first: after input resolution and before the detailed consistency audit, anchor the current goal, Scope (in/out), non-goals, and acceptance, and enumerate the frozen applicable material surfaces with applicable / `NOT_APPLICABLE` disposition (see `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`, sections 1, 2 and 7). Local consistency dimensions defer to the shared surface list and never narrow it.
 
 ## Standard Package Resolution
 
@@ -95,7 +96,7 @@ Load these references as needed:
 - `references/analyze-gate-check.md` for Analyze Gate coverage and blocking rules.
 - `references/project-type-checks.md` for project_type_profiles-specific readiness checks.
 - `references/output-and-manifest.md` for output format and manifest recommendations.
-- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -134,7 +135,7 @@ Read:
 Readiness/Gate blockers do not fail-fast: record each as a material blocker,
 complete the remaining reliable bounded consistency scan, then conclude with
 Analyze Gate Result `FAIL` / upstream Re-Gate as appropriate (per
-`ai-sdlc/goal-anchored-global-reasoning.md`). Typical readiness/Gate
+`${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`). Typical readiness/Gate
 blockers include:
 
 - Task Gate has Blocking items.
@@ -145,7 +146,19 @@ blockers include:
 - Development path is not `SPECKIT_PIPELINE_REQUIRED` (unless full SDD was
   explicitly requested).
 
-### 3. Audit Consistency
+### 3. Build Goal/Scope And Global Model
+
+After input resolution and before the detailed consistency audit, anchor the
+current goal and build the global model per
+`${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`
+(sections 1, 2 and 7):
+
+- State current goal, Scope (in/out), non-goals, and acceptance from the current route, spec, plan, tasks, and approved DocFlow artifacts.
+- Enumerate the frozen applicable material surfaces per the shared reference (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- Local consistency dimensions defer to the shared surface list; they never narrow it.
+- Only then start the detailed consistency audit and Analyze Gate.
+
+### 4. Audit Consistency
 
 Read `references/consistency-scope.md`.
 
@@ -159,7 +172,7 @@ Check consistency across:
 - Acceptance criteria and verification tasks.
 - Data, state, API, DB, cache, MQ, schedule, listener, failure, rollback, and compatibility rules.
 
-### 4. Run Analyze Gate
+### 5. Run Analyze Gate
 
 Read `references/analyze-gate-check.md`.
 
@@ -175,7 +188,7 @@ Block when:
 - A risk is unaccepted, stale, contradicted, or hidden in tasks.
 - A current artifact has been stale.
 
-### 5. Output Recommendation
+### 6. Output Recommendation
 
 Read `references/output-and-manifest.md`.
 

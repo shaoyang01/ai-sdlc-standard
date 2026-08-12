@@ -23,6 +23,7 @@ entrypoints:
   complexity_routing: ai-sdlc/complexity-routing.md
   development_path_governance: ai-sdlc/development-path-governance.md
   standard_package_resolution: ai-sdlc/standard-package-resolution.md
+  goal_anchored_global_reasoning: ai-sdlc/goal-anchored-global-reasoning.md
   speckit_generation_source_model: ai-sdlc/speckit-generation-source-model.md
   speckit_dual_rail_isolation: ai-sdlc/speckit-dual-rail-isolation.md
   speckit_document_generation_spec: ai-sdlc/speckit-document-generation-spec.md

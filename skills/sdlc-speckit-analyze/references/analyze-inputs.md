@@ -55,7 +55,7 @@ Do not approve Analyze readiness by treating a missing profile as "not applicabl
 
 ## Readiness Checks
 
-Per `ai-sdlc/goal-anchored-global-reasoning.md`, readiness and Gate blockers
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`, readiness and Gate blockers
 do **not** fail-fast: record each one as a material blocker, complete the
 remaining reliable bounded consistency scan, then conclude with Analyze Gate
 Result `FAIL` / upstream Re-Gate as appropriate. Hard-stop is limited to

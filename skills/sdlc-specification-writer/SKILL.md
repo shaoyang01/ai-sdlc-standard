@@ -21,7 +21,7 @@ Generate an ESS-compliant technical specification as the DocFlow `01-技术方�
 8. Use `library/{requirement_id}/01-技术方案/` as the default local output node.
 9. Use `sdlc-docflow-writer` for HTML, Lark/Feishu, manifest writes, and output routing when requested.
 10. After generating the specification, recommend `sdlc-solution-reviewer` as the next Gate.
-11. Apply the Goal-Anchored Global Reasoning contract: build the global model of applicable material surfaces before drafting, and run a whole-model impact self-check after drafting (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not expand ESS sections, schemas or Gate architecture.
+11. Apply the Goal-Anchored Global Reasoning contract: build the global model of applicable material surfaces before drafting, and run a whole-model impact self-check after drafting (see `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`). Do not expand ESS sections, schemas or Gate architecture.
 
 ## Required Standard Files
 
@@ -43,7 +43,7 @@ Load these references as needed:
 - `references/schema-mapping.md` for ESS section requirements.
 - `references/blocking-rules.md` for when to stop instead of guessing.
 - `references/output-artifact.md` for output paths and manifest recommendations.
-- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
@@ -76,7 +76,7 @@ Read:
 
 Read `references/output-artifact.md` before producing or writing the final artifact.
 
-Read `ai-sdlc/goal-anchored-global-reasoning.md` and anchor the current goal, Scope and non-goals before building the global model.
+Read `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` and anchor the current goal, Scope and non-goals before building the global model.
 
 ### 3. Build Specification
 

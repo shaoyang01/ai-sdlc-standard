@@ -49,7 +49,7 @@ For Requirement Supplement or Specification Missing reviews, read the technical 
 After source reading and before any detailed review, anchor the current goal and build the global model:
 
 - State current goal, Scope (in/out), non-goals, and acceptance from the source material.
-- Enumerate the frozen applicable material surfaces per `ai-sdlc/goal-anchored-global-reasoning.md` (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- Enumerate the frozen applicable material surfaces per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
 - Local examples here defer to the shared surface list; they never narrow it.
 - Only then start the detailed review (schema coverage, behavior safety, risk/test).
 

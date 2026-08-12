@@ -69,7 +69,7 @@ Require only the minimum sufficient design for the current phase.
 20. A capability may be valuable to the system and still be out of scope for the current phase.
 21. Require only the minimum design necessary to deliver the current phase correctly, safely, observably, and verifiably.
 22. Do not turn future architecture, platformization, automation, or optimization into current-phase blocking findings.
-23. Apply the Goal-Anchored Global Reasoning contract: scan global-before-local (enumerate applicable material surfaces before detail work), close direct impacts of every material finding, converge on root causes, and continue the remaining reliable bounded surfaces after a fail-worthy finding (see `ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first BLOCKING/REQUIRED finding.
+23. Apply the Goal-Anchored Global Reasoning contract: scan global-before-local (enumerate applicable material surfaces before detail work), close direct impacts of every material finding, converge on root causes, and continue the remaining reliable bounded surfaces after a fail-worthy finding (see `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`). Do not fail-fast on the first BLOCKING/REQUIRED finding.
 
 ## Required Standard Files
 
@@ -89,7 +89,7 @@ Load these references as needed:
 - `references/finding-classification.md`
 - `references/output-report.md`
 - `references/follow-up-verification.md`
-- `ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` for the shared goal-anchored global reasoning contract (anchor, global-first, impact closure, root-cause consolidation, bounded continuation).
 
 ## Workflow
 
