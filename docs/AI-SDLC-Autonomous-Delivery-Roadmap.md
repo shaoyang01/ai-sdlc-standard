@@ -58,6 +58,7 @@
 - **recovered**：由早期项目路线材料明确恢复，当前 Source 未必实现；
 - **partially_recovered**：高层目标已恢复，精确合同仍待恢复；
 - **proposed**：新候选方案，尚未成为 accepted 路线定义。
+- **accepted_reconstruction**：历史 exact definition 无法唯一恢复后，基于 surviving authoritative constraints 形成、由当前用户显式接受并 materialize 的受控重建定义；它不声称恢复历史定义，也不因 semantic acceptance/materialization 自动成为 `source_verified`。
 
 ### Status vocabulary（状态词汇）
 
@@ -325,6 +326,53 @@ D10-A Source-closure record：
 - D10_overall_completed：false
 - real_single_repository_acceptance_completed：false
 - D10_B_to_D10_F_completed：false
+
+### D10-B — Governed Cross-Process Publish Recovery Hardening
+
+- **Definition status**：accepted_reconstruction
+- **Objective**：在一个真实单仓 governed delivery 中，把 D09 已明确留下的跨进程 publish-intent recovery 缺口与 D10-A durable checkpoint foundation 接通；process loss 后，由 fresh process 仅依赖持久化 canonical references / checkpoint facts 恢复并核对既有 governed publish 状态，在不重放已完成 D06、不重复 commit / push / Draft PR side effects、且不绕过 governance evidence binding 的前提下安全续跑或 fail closed。
+- **Problem closed**：D09-B 已能完成 governed delivery，但 request 明确不接受 `recoveryPublishIntentArtifactRef`，因此跨进程 coordinator recovery 没有 accepted contract；D10-A 只建立 durable checkpoint / locator / integrity foundation，并未定义如何从该 foundation 恢复 D09→D07 publish continuity。D10-B 关闭这一 coordinator-level recovery gap。
+- **Required inputs**：
+  - existing D09 governed production coordinator and canonical root/evidence bindings；
+  - existing D07 publish-intent / publish-result recovery contracts；
+  - D10-A immutable checkpoint, current-head locator, CAS and integrity semantics；
+  - a real single-repository governed delivery path whose eventual publish effect is Draft PR only；
+  - an additive recovery-mode reference to persisted D07 publish intent represented as `recoveryPublishIntentArtifactRef`。
+- **Required outputs**：
+  - additive coordinator recovery contract accepting `recoveryPublishIntentArtifactRef` only for explicit recovery mode while preserving the existing normal D09 path；
+  - deterministic recovery decisions limited to resume/reconcile, recognizing already-completed effects, or fail-closed blocking；
+  - real-single-repository evidence proving no D06 replay and no duplicate commit / push / Draft PR effect；
+  - negative integrity evidence for stale, mismatched, corrupted or otherwise non-authoritative recovery references；
+  - no new persistent artifact type is required by this definition。
+- **Depends on**：`D10-A`、`D09`；D07 recovery capability is consumed through the D09 governed publish boundary and this does not create a new Roadmap stage/dependency chain。
+- **In scope**：
+  - recovery after a D07 publish intent has become durable；
+  - fresh-process canonical parsing and identity/cross-binding validation；
+  - reconciliation against existing publish result / repository facts / D10-A checkpoint facts；
+  - safe resume or fail-closed handling across publish ambiguity windows；
+  - preservation of the D09 rule that completed D06 work is not replayed；
+  - real-single-repository failure-injection acceptance。
+- **Out of scope**：
+  - arbitrary recovery of pre-publish D05/D06 in-flight execution；
+  - redesign of D10-A checkpoint storage, locator, CAS or corruption semantics；
+  - new loop type or mandatory new evidence type；
+  - timeout auto-cancellation / abort policy outside this minimum D10-B slice；
+  - multi-repository delivery or enterprise scheduler/platform semantics；
+  - Ready, merge, publication or unattended high-risk authority；
+  - any substantive definition or allocation of D10-C through D10-F。
+- **Completion contract**：under separately authorized real-single-repository execution, a governed delivery reaches durable publish intent, the original process is terminated, and a fresh process resumes from durable canonical references. Acceptance requires deterministic behavior for at least: interruption after intent persistence but before first remote publish effect; interruption after a publish side effect but before durable publish-result completion; and stale/tampered/mismatched recovery input. Valid cases converge to one governed Draft PR outcome without replaying D06 or duplicating commit/push/PR effects; invalid or ambiguous cases fail closed with decision-relevant evidence。
+- **Expected evidence**：
+  - deterministic unit/contract evidence for recovery-reference parsing and cross-binding；
+  - fresh-process integration evidence rather than same-process object reuse；
+  - failure-injection evidence for the defined recovery windows；
+  - proof completed D06 execution was not replayed；
+  - proof commit / push / Draft PR effects were not duplicated；
+  - negative fail-closed evidence for corrupted/stale/mismatched recovery state；
+  - real-repository commit/push/Draft-PR facts only when separately execution-authorized；
+  - applicable repository build/test/security checks at the future implementation anchor。
+- **Boundary with D10-A**：D10-A exclusively owns durable checkpoint persistence, current-head selection, CAS/integrity and restart durability. D10-B consumes those facts but does not reopen, rename or re-accept D10-A and is not satisfied merely by checkpoint restart survival。
+- **Boundary with remaining D10**：D10-B consumes only the explicitly deferred cross-process publish recovery slice; D10-C through D10-F remain unspecified/unallocated, no new Roadmap stage is created, and LOOP-DELIVERY-10 is not reordered。
+- **Definition provenance**：historical exact D10-B definition was not uniquely recoverable. This definition is a controlled reconstruction from surviving authoritative D10 scope, the explicit D09 cross-process recovery deferral and the source-closed D10-A foundation, explicitly accepted by the current user. It is not historical `recovered` fact and does not become `source_verified` merely through acceptance/materialization。
 
 ## LOOP-ADVANCED-11
 
