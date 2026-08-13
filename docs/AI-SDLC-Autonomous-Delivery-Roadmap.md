@@ -344,7 +344,7 @@ D10-A Source-closure record：
   - real-single-repository evidence proving no D06 replay and no duplicate commit / push / Draft PR effect；
   - negative integrity evidence for stale, mismatched, corrupted or otherwise non-authoritative recovery references；
   - no new persistent artifact type is required by this definition。
-- **Depends on**：`D10-A`、`D09`；D07 recovery capability is consumed through the D09 governed publish boundary and this does not create a new Roadmap stage/dependency chain。
+- **Depends on**：`D10-A`、`D09`、`D07`；D07 is included because D10-B directly consumes the stable D07 publish-intent / publish-result recovery contracts and the persisted publish-intent reference through the D09 governed publish boundary; this dependency does not execute D07, create a new Roadmap stage, or create execution/authorization semantics。
 - **In scope**：
   - recovery after a D07 publish intent has become durable；
   - fresh-process canonical parsing and identity/cross-binding validation；
