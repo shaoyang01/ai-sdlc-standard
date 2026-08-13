@@ -124,6 +124,47 @@
 
 每个阶段使用统一字段：Definition status、Objective、Problem closed、Required inputs、Required outputs、Depends on、In scope、Out of scope、Completion contract、Expected evidence、Relationship to previous stage、Relationship to next stage、Definition provenance。各阶段不携带 live authorization 或 merge 状态字段。
 
+## Stage Hierarchy and Continuity Contract
+
+本节是 Outcome Ladder 与 Stage Index 之间权威的层级分解 / continuity 合同；它不改变任何既有 Stage ID、编号或实质定义。
+
+### Hierarchy（层级）
+
+- 层级固定为：`Project Purpose / Outcome Ladder -> Stage -> optional material Substage`。
+- `Stage` 是 durable parent capability outcome，携带其 Objective / Scope / Completion Contract。
+- `Substage`（既有例：LOOP-DELIVERY-10 下的 D10-A / D10-B 小节）仅在以下条件全部成立时才可存在：
+  - 它代表一个 material capability outcome；
+  - 它具有独立意义的 completion boundary；
+  - durable recovery / continuity 需要保留该 boundary；
+  - 它显式锚定并被其 parent Stage goal 所包含。
+
+### Anti-Fragmentation（反碎片化）
+
+- prompt、commit、PR、finding、review round、fix、rework loop、execution attempt、conversation / session 或单条 evidence 本身都不构成 Substage 的创建依据；
+- 不创建递归的 Sub-substage 层级。
+
+### Parent-Goal Anchoring（父目标锚定）
+
+- child 不得扩大或重解释 parent Stage 的 Objective、Scope、dependencies 或 Completion Contract；
+- 当 required material child outcome 或未解决的 material continuity gap 仍然 open 时，不得声称 parent completion。
+
+### Definition Gap（定义缺口）
+
+- 目的 / 顺序 / 依赖 / Completion Contract 尚未被权威定义的实质工作，保持显式 undefined / unallocated；
+- 编号、历史对话、Handoff、实现猜测或表面顺序不得用于发明缺失定义；
+- D10-C 至 D10-F 保持 `unspecified/unallocated`，不得推定其目的、顺序、依赖或 Completion Contract。
+
+### Continuity-Before-Close（关闭前的连续性检查）
+
+- 关闭一个 Stage 之前，评估其 parent Objective / Completion Contract 是否仍包含未解决的 material capability 或 continuity gap；
+- 若该 gap 存在但尚未被权威定义，将其保留为显式 Definition Gap，而不是静默关闭 Stage 或制造 child 定义。
+
+### Roadmap / STATE Authority Separation（权威分离）
+
+- Roadmap 存放稳定 planning definitions、层级、durable capability boundaries、dependencies、Completion Contracts 与显式 Definition Gaps；
+- 动态 cursor、Gate、authorization、current work、live findings、临时顺序、PR / CI / HEAD 与执行状态属于 Roadmap 之外的既有权威（包括适用的 current STATE）；
+- 不在 STATE 中创建第二 planning authority，也不在 Roadmap 中创建动态 project-state 区。
+
 ## LOOP-FOUNDATION-00
 
 - **Definition status**：source_verified
