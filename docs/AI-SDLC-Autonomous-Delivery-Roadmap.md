@@ -444,7 +444,7 @@
   - real-single-repository evidence proving no D06 replay and no duplicate commit / push / Draft PR effect；
   - negative integrity evidence for stale, mismatched, corrupted or otherwise non-authoritative recovery references；
   - no new persistent artifact type is required by this definition。
-- **depends_on**：`D10-A`、`D09`；D07 recovery capability is consumed through the D09 governed publish boundary and this does not create a new Roadmap stage/dependency chain。（当前权威依赖语义按此保留；PR #75 的 D07 dependency correction 候选未并入本文件，`B01_DEPENDENCY_CONTRACT_INCONSISTENCY` 未解决，详见 definition_provenance。）
+- **depends_on**：`D10-A`、`D09`；D07 recovery capability is consumed through the D09 governed publish boundary and this does not create a new Roadmap stage/dependency chain。`B01_DEPENDENCY_CONTRACT_INCONSISTENCY` 是当前静态 dependency-readiness gap；在经授权的 Roadmap replanning 解决前，D10-B 保持 `PLANNING_REQUIRED`。
 - **scope**：
   - recovery after a D07 publish intent has become durable；
   - fresh-process canonical parsing and identity/cross-binding validation；
@@ -471,7 +471,7 @@
   - negative fail-closed evidence for corrupted/stale/mismatched recovery state；
   - real-repository commit/push/Draft-PR facts only when separately execution-authorized；
   - applicable repository build/test/security checks at the future implementation anchor。
-- **definition_provenance**：accepted_reconstruction——historical exact D10-B definition was not uniquely recoverable. This definition is a controlled reconstruction from surviving authoritative D10 scope, the explicit D09 cross-process recovery deferral and the source-closed D10-A foundation, explicitly accepted by the current user. It is not historical `recovered` fact and does not become `source_verified` merely through acceptance/materialization。Shared readiness 为 `PLANNING_REQUIRED`：dependency-contract inconsistency `B01_DEPENDENCY_CONTRACT_INCONSISTENCY` 尚未解决；PR #75 携带的 D07 dependency correction 是独立修正路线，未并入本文件，本文件保留当前权威依赖事实并显式标记该未解决的 dependency-readiness gap。
+- **definition_provenance**：accepted_reconstruction——historical exact D10-B definition was not uniquely recoverable. This definition is a controlled reconstruction from surviving authoritative D10 scope, the explicit D09 cross-process recovery deferral and the source-closed D10-A foundation, explicitly accepted by the current user. It is not historical `recovered` fact and does not become `source_verified` merely through acceptance/materialization。Shared readiness 为 `PLANNING_REQUIRED`，因为静态 dependency-readiness gap `B01_DEPENDENCY_CONTRACT_INCONSISTENCY` 尚未解决；本 Roadmap 只保留该 planning fact，关联修正路线的实时 PR/CI/HEAD 状态属于当前项目 STATE，不在本文件维护。
 
 ### D10-C
 
