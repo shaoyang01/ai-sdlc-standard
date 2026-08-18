@@ -8,6 +8,7 @@
 
 import { ExecutionRequest, ExecutionResult, ExecutionArtifact } from "./types";
 import { createArtifact } from "../core/artifact";
+import { isSupportedCodexRequestType } from "./codex-real-dispatch-runner";
 import {
   buildCodexPrompt,
   CodexPromptBuilderInput,
@@ -114,7 +115,7 @@ export function createCodexRealDispatchRunner(
 
   return {
     async run(request: ExecutionRequest): Promise<ExecutionResult> {
-      if (request.type !== "code_generation") {
+      if (!isSupportedCodexRequestType(request.type)) {
         return buildShadowFallbackResult(
           request,
           "unsupported_request_type",

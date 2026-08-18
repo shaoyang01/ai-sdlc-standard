@@ -6,6 +6,7 @@
 
 import { ExecutionRequest, ExecutionResult, ExecutionArtifact } from "./types";
 import { createArtifact } from "../core/artifact";
+import { NODE_CAPABILITY_IDS } from "../loop/types";
 import {
   buildCodexPrompt,
   CodexPromptBuilderInput,
@@ -17,6 +18,15 @@ import {
   OutputParserLimits,
   DEFAULT_OUTPUT_PARSER_LIMITS,
 } from "./codex-real-dispatch-output-parser";
+
+// C01 WP-3 (Decision-020): capability-driven request types. The codex
+// execution layers accept legacy code_generation plus every node capability
+// request type.
+const CAPABILITY_REQUEST_TYPES: ReadonlySet<string> = new Set<string>(NODE_CAPABILITY_IDS);
+
+export function isSupportedCodexRequestType(type: string): boolean {
+  return type === "code_generation" || CAPABILITY_REQUEST_TYPES.has(type);
+}
 
 export type CodexFakeRunnerScenario =
   | "success_code_patch"
@@ -141,7 +151,7 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
 
   return {
     async run(request: ExecutionRequest): Promise<ExecutionResult> {
-      if (request.type !== "code_generation") {
+      if (!isSupportedCodexRequestType(request.type)) {
         return buildShadowFallbackResult(
           request,
           "unsupported_request_type",

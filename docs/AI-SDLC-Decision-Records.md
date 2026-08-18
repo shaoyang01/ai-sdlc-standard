@@ -823,3 +823,37 @@ WP-2 收口：登记 `completed_requirements.WP2_NODE_CAPABILITY_CONTRACT`（clo
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-025：WP-3（Agent Capability Binding 层）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-2 收口后，按逐 WP 授权粒度，WP-3（Agent Capability Binding 层）为第三个工作包。
+
+## 问题
+
+WP-3 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-3，scope：① binding schema（版本化、enable/disable、输入输出合同、结果校验器、副作用/超时/失败边界）；② 全能力矩阵注册（7 能力 × 3 Agent = 21 bindings；codex enabled、kimi/hermes disabled，符合 Decision-020 全能力模型）；③ codex 请求类型从 `code_generation` 扩展至全部 7 个节点能力；④ binding 替换守卫测试（替换不改变 Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界）；⑤ 标准文档 `ai-sdlc/agent-capability-binding.md`。明确排除：真实 Agent 调用（real dispatch 保持 feature-flagged）、任何 Git 发布动作、节点合同修改（WP-2 已验收）、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-3 是"可替换 binding"的最小可验收包；节点合同面（WP-2）已就绪，binding 只做选择与校验。
+
+## 影响
+
+WP-3 完成后，任意节点 × 任意 Agent 的组合可由配置表达；替换 binding 不改变节点合同（LOOP Core Contract §6 验收）。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-3；`docs/LOOP_CORE_CONTRACT.md` §6.2

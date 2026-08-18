@@ -7,16 +7,21 @@
 import { Artifact } from "../core/artifact";
 import type { HermesGatewayRealDispatchResult } from "./hermes-gateway-real-dispatch";
 import type { HermesPhase2ShadowEnablementSidecar } from "./hermes-gateway-real-dispatch-phase-2-shadow-enablement";
+import type { NodeCapabilityId } from "../loop/types";
 
 export type AgentName = "kimi" | "codex" | "hermes";
 
+// C01 WP-3 (Decision-020): capability-driven request types — every supported
+// agent can execute every node capability; the binding layer chooses the
+// executor. Legacy request types are retained for existing callers.
 export type ExecutionRequestType =
   | "llm_task"
   | "code_generation"
   | "review"
   | "validation"
   | "code_review"
-  | "bugfix";
+  | "bugfix"
+  | NodeCapabilityId;
 
 export type HermesPhase2CodeReviewCanaryApproval = Readonly<{
   approvalId: string;
