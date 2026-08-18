@@ -66,12 +66,17 @@ export function checkCapabilityInput(input: unknown): CapabilitySafetyResult {
 }
 
 /**
- * Fail-closed output safety for capability text: oversized output must NOT be
- * silently truncated into a "successful" node product (Gate/finding/test
- * evidence would be lost), and sensitive output must never be persisted as a
- * successful artifact.
+ * Fail-closed output safety for capability text: empty/blank output must
+ * never be reported as a successful node product (a solution review with no
+ * Gate verdict or a validation with no acceptance evidence would mislead
+ * downstream nodes), oversized output must NOT be silently truncated
+ * (Gate/finding/test evidence would be lost), and sensitive output must
+ * never be persisted as a successful artifact.
  */
 export function checkCapabilityOutput(outputText: string): CapabilitySafetyResult {
+  if (outputText.trim().length === 0) {
+    return { ok: false, reason: "empty_output" };
+  }
   if (outputText.length > CAPABILITY_OUTPUT_MAX) {
     return { ok: false, reason: "output_too_large" };
   }
@@ -79,6 +84,18 @@ export function checkCapabilityOutput(outputText: string): CapabilitySafetyResul
     return { ok: false, reason: "prohibited_output_content" };
   }
   return { ok: true, text: outputText };
+}
+
+/** Safe human-readable message for capability output fallback reasons. */
+export function capabilityOutputFallbackMessage(reason: string): string {
+  switch (reason) {
+    case "empty_output":
+      return "Capability produced empty output";
+    case "output_too_large":
+      return "Capability output exceeded maximum allowed size";
+    default:
+      return "Output contains prohibited content";
+  }
 }
 
 /**
@@ -345,9 +362,7 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
             request,
             outputCheck.reason,
             "reject_and_shadow_fallback",
-            outputCheck.reason === "output_too_large"
-              ? "Capability output exceeded maximum allowed size"
-              : "Output contains prohibited content"
+            capabilityOutputFallbackMessage(outputCheck.reason)
           );
         }
       }

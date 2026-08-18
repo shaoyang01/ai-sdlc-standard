@@ -528,6 +528,39 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
   }
 }
 
+
+console.log("binding: empty/blank capability output fails closed (real branch, six non-implementation capabilities)");
+{
+  const nonImplementation = NODE_CAPABILITY_IDS.filter((cap) => cap !== "implementation");
+  for (const outputText of ["", "   \n\t  "]) {
+    const processRunner = {
+      async run(_prompt: string) {
+        return { exitCode: 0, stdout: outputText, durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-empty-test" },
+    });
+    for (const capability of nonImplementation) {
+      const result = await gateway.execute(makeRequest(capability, capability));
+      assert(
+        result.artifacts[0].type === "shadow_output",
+        `${capability}: ${outputText.length === 0 ? "empty" : "blank"} output fails closed to shadow_output`,
+      );
+      assert(
+        result.output["codex_fallback_reason"] === "empty_output",
+        `${capability}: ${outputText.length === 0 ? "empty" : "blank"} output reason is empty_output`,
+      );
+      assert(
+        result.artifacts[0].content["node_output"] === undefined,
+        `${capability}: ${outputText.length === 0 ? "empty" : "blank"} output produces no node_output artifact`,
+      );
+    }
+  }
+}
+
 console.log(`Results: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exitCode = 1;

@@ -19,6 +19,7 @@ import {
   buildCapabilityTextArtifact,
   checkCapabilityInput,
   checkCapabilityOutput,
+  capabilityOutputFallbackMessage,
 } from "./codex-real-dispatch-runner";
 import { CAPABILITY_ARTIFACT_TYPES, validateNodeOutputArtifact } from "../core/agent-capability-bindings";
 import type { NodeCapabilityId } from "../loop/types";
@@ -243,9 +244,7 @@ export function createCodexRealDispatchRunner(
             request,
             outputCheck.reason,
             "reject_and_shadow_fallback",
-            outputCheck.reason === "output_too_large"
-              ? "Capability output exceeded maximum allowed size"
-              : "Output contains prohibited content"
+            capabilityOutputFallbackMessage(outputCheck.reason)
           );
         }
       }
