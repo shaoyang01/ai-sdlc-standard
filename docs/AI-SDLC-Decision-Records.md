@@ -619,3 +619,37 @@ EXCHANGE_POLICY v1 本来就是 central Publisher direct-main 设计（禁止 fo
 ## 代码依据
 
 `temp/plans/loop-core-c01-planning-draft-20260818.md` §9.3；exchange 仓库 `EXCHANGE_POLICY.md`、`AGENTS.md`
+
+# Decision-019：进度管理机制固化到控制平面 GOVERNANCE.md
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+阶段 0 机制恢复执行中，用户提醒：治理机制必须固化到持久文档，避免更换 Agent 或会话上下文丢失后无法恢复治理。
+
+## 问题
+
+这套进度管理机制（决定记录、Handoff 通道、STATE 登记、收口流程、恢复路径）的权威落点在哪里？
+
+## 决策
+
+机制固化到控制平面 `projects/ai-sdlc/GOVERNANCE.md` 新增 §15（Progress Management Mechanism），包含：三面分工（STATE 控制 / Exchange 传输 / 10-projects 归档）、Decision-NNN 记录规则、Exchange 发布与归档硬规则、STATE 登记结构、收口流程、Fresh Controller 恢复路径与边界；产品仓库决策记录同步补记本决定。
+
+## 原因
+
+GOVERNANCE.md 是 Fresh Controller 恢复治理时必读的权威源之一（§14 成功条件）；机制必须与聊天记忆解耦。
+
+## 影响
+
+后续任何 Agent/会话均可按 §15.6 恢复路径独立恢复 ai-sdlc 治理；机制变更本身需经用户授权并更新 §15 与决策记录。
+
+## 实现状态
+
+GOVERNANCE.md §15 已写入（控制平面提交待登记）。
+
+## 代码依据
+
+`ai-project-control-plane/projects/ai-sdlc/GOVERNANCE.md` §15
