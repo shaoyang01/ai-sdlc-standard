@@ -47,6 +47,18 @@
 | 图/编排 | `loop/`（engine、node_router、agent_router、types）、`core/state-machine-vm.ts`、`loop-autonomous-delivery-loop.ts`、`loop-requirement-design-orchestrator.ts` | 节点流转参考 | **部分复用**；注意 `loop/types/index.ts` 的 `AgentMapEntry` 是 node→agent 静态绑定，与 C01"能力与 Agent 解耦"冲突，正式规划须决定废弃或改造 |
 | 失败/回退策略 | `execution/*-fallback-policy.ts` 等 | 不可用/超时/不合格处理语义 | 复用语义，需抽象为 binding 级统一策略，避免各 adapter 各自实现 |
 
+### 3.2 复核结论（2026-08-19，只读 Source 复核，218 个相关测试全部通过）
+
+| 资产 | 复核结果 |
+| --- | --- |
+| 入口 Skill | `sdlc-requirement-normalizer`：SKILL.md 177 行 + 4 份 references（intake-workflow / source-handling / conflict-and-blocking / output-artifact），合同完整，`prompt_skill_ready`；确认缺口：未与运行记录创建/恢复挂钩 |
+| run journal | `loop-run-state` + `loop-run-store`：113 个测试通过（含并发、fail-closed、错误消息边界）；**确认缺口：无按 requirementId 查询 run 的 API**——跨入口恢复（C01 完成合同第 1 条）需新增查询接口 |
+| checkpoint | `loop-delivery-checkpoint(-store)`：测试通过；fresh/recovery + 不可变 generation 链可用；发布 phase 复用裁剪确认（不进 C01） |
+| Codex 适配 | `codex-real-dispatch-*` 全链（prompt builder / output parser / fallback policy / guardrails / observability / readiness / real runner）测试通过；**仅支持 `code_generation` 请求类型**；feature-flagged（`SDLC_EXECUTION_MODE=codex` + `SDLC_CODEX_REAL_DISPATCH=enabled`，默认 shadow）；smoke 通道存在（`scripts/codex-real-dispatch-smoke.ts`） |
+| Kimi / Hermes | CLI adapter contract 测试通过；为 binding 注册候选（启用状态需真实环境复核） |
+| 产物合同 | `artifact-flow` / `artifact-storage` / `artifact-versioning` / manifest 模板完整，C01 只读不改 |
+| `loop/` 引擎 | `AgentMapEntry` 静态 node→agent 绑定确认存在，与能力解耦冲突（WP-2 处理） |
+
 ### 3.1 关键缺口（C01 必须新建，仓库当前不存在）
 
 1. **Node Capability Contract** 表示层：当前节点模型直接绑定 `LoopAgent`（kimi/codex/hermes），没有"能力类型"抽象（需求归一化、技术方案、方案挑战、方案审核、实现、代码审核、测试验收是能力，不是 Agent 专属名）。
@@ -131,18 +143,18 @@ WP-5 验证与守卫（完成合同验收）
 
 | # | 风险/问题 | 处理方向 |
 | --- | --- | --- |
-| R1 | 历史 D01~D06 资产与新 Roadmap 合同对齐度未知 | 正式规划期逐资产复核测试状态与合同匹配（Roadmap §6） |
+| R1 | 历史 D01~D06 资产与新 Roadmap 合同对齐度未知 | **已复核（2026-08-19）**：C01 相关 218 个测试全部通过；run journal/checkpoint/adapter 资产健康；确认缺口：run journal 无 requirementId 查询 API（WP-4 新增）、codex 仅支持 code_generation（WP-3 范围） |
 | R2 | run journal 事件 schema 扩展可能破坏现有消费者 | 版本化事件 schema，新增字段 fail-closed，向后兼容测试 |
 | R3 | checkpoint 含发布语义，复用裁剪边界 | 只取 fresh/recovery + 不可变链，发布 phase 留在历史 |
 | R4 | PCE 与 binding 职责重叠 | 规划期明确：binding = 选择+校验+版本；PCE = 执行信封，不重复定义 |
-| R5 | 真实入口 Agent 可用性（Kimi/Codex/Hermes CLI 现状） | 以 Source 事实复核，初始 binding 只注册已验证的适配能力 |
+| R5 | 真实入口 Agent 可用性（Kimi/Codex/Hermes CLI 现状） | **部分复核**：codex real-dispatch smoke 通道存在（feature-flagged）；Kimi/Hermes 真实 CLI 需规划期在真实环境验证后决定启用状态 |
 | R6 | `loop/types` 静态 Agent 映射与能力解耦冲突 | WP-2 明确废弃/兼容决策，避免半迁移状态 |
 
 ## 8. 需要用户授权的决策点（本草稿不预设答案）
 
-1. **初始 binding 集合**：先注册哪个/哪些执行者（Codex 先行？Kimi/Hermes 一并？）；
-2. **首个验收入口**：以哪个入口 Agent 作为 C01 创建/恢复验收入口；
-3. **授权粒度**：WP-1~WP-5 一次性授权，还是逐 WP 授权推进；
+1. **初始 binding 集合**（复核后建议：Codex 先行）：`codex-real-dispatch-*` 全链最完整且测试全通过，可注册为 enabled；Kimi/Hermes 有 CLI adapter contract，可注册为 disabled（真实环境复核后再启用）；
+2. **首个验收入口**（复核后建议：Codex CLI）：已有 feature-flagged real-dispatch smoke 通道（`scripts/codex-real-dispatch-smoke.ts`）与 readiness review，作为 C01 创建/恢复验收入口成本最低；
+3. **授权粒度**（建议：逐 WP 授权）：与 PKB 工作包模式一致，每个 WP 独立 scope + 明确排除 + 收口登记，避免一次性大授权；
 4. **正式规划落点**（已对照 PKB 惯例澄清，建议采用）：正式 C01 规划是**持久规划合同**（与 `docs/LOOP_CORE_CONTRACT.md` 同类），建议落在产品仓库 `docs/LOOP-CORE-C01-PLAN.md`，控制平面 STATE 只记录指针。对照说明：
    - PKB 的 `90-system/handoffs/*.md` 是**任务完成后的证据/交接记录**（产品仓库内书写 + STATE 登记），不是规划合同的权威载体；Shared `SESSION_LIFECYCLE.md` §12 同样定义 Handoff 为"供下一会话的 transport package，应引用持久权威源而非复制历史"。
    - 因此正式规划不直接写进 handoff；审阅与授权以规划文档本身为载体，STATE 记录授权结果。
