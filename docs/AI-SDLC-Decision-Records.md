@@ -721,3 +721,37 @@ WP-1 完成后按收口流程：实施 handoff（exchange + 10-projects）→ re
 ## 代码依据
 
 `core/loop-run-store.ts`；`tests/loop-run-requirement-query.test.ts`；`ai-sdlc/loop-entry-contract.md`
+
+# Decision-022：WP-1 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-1 实施后经 review round 1（CHANGES_REQUESTED，3 项 P1）与 consolidated correction（产品 2dbd87a），用户复审 Approved。
+
+## 问题
+
+WP-1 是否满足完成合同并可收口？
+
+## 决策
+
+WP-1 收口：登记 `completed_requirements.WP1_ENTRY_NORMALIZATION`（closure_basis + 证据 + fact HEAD），消费 `WP1_ENTRY_NORMALIZATION` 授权（consumed/COMPLETED）。WP-2 仍需单独用户授权，WP-1 通过不构成对 WP-2 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+入口合同（v0.1.1）与 requirementId 查询接口成为 C01 已验收能力；WP-2（Node Capability Contract）等待单独授权。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记 8c88e06 后更新；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
