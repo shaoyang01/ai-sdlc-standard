@@ -755,3 +755,37 @@ WP-1 收口：登记 `completed_requirements.WP1_ENTRY_NORMALIZATION`（closure_
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-023：WP-2（Node Capability Contract）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-1 收口后，按逐 WP 授权粒度，WP-2（Node Capability Contract）为第二个工作包。
+
+## 问题
+
+WP-2 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-2，scope：① 定义能力类型清单（需求归一化、技术方案生成、方案挑战、方案审核、实现、代码审核、测试验收——能力类型，非 Agent 专属名）；② 每个节点合同声明输入、输出、Gate、副作用边界（不出现 Agent 名）；③ 处理 `loop/types` 静态 `AgentMapEntry` 的废弃/兼容决策；④ 标准文档 `ai-sdlc/node-capability-contract.md` 与类型定义、合同完整性测试。明确排除：binding 实现与注册（WP-3）、任何 Agent 真实调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-2 是"能力与 Agent 解耦"的最小可验收包；节点模型脱离 Agent 是 Decision-020（全能力模型）的前提。
+
+## 影响
+
+WP-2 完成后，节点模型以能力为唯一合同面；binding（WP-3）只做选择，不定义节点。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-2；`docs/LOOP_CORE_CONTRACT.md` §6.1
