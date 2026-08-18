@@ -191,6 +191,39 @@ console.log("requirement query: closed store behavior");
   rmSync(dir, { recursive: true, force: true });
 }
 
+console.log("requirement query: identity and query share one validator (C1 boundary)");
+withStore((store) => {
+  // C1 control characters (\x80-\x9f) must be rejected consistently by both
+  // createRun (identity validation) and the requirement query, otherwise a
+  // run could be created that can never be recovered by its own ID.
+  const c1Id = "req\u0080-001";
+  expectThrow("INVALID_INPUT", () => store.createRun(makeIdentity({ requirementId: c1Id })), "createRun rejects C1 ID");
+  expectThrow("INVALID_INPUT", () => store.listRunsByRequirement(c1Id), "query rejects C1 ID (consistent)");
+  expectThrow("INVALID_INPUT", () => store.findLatestRunByRequirement(c1Id), "latest lookup rejects C1 ID (consistent)");
+
+  const c0Id = "req\u001b-001";
+  expectThrow("INVALID_INPUT", () => store.createRun(makeIdentity({ requirementId: c0Id })), "createRun rejects C0 ID");
+  expectThrow("INVALID_INPUT", () => store.listRunsByRequirement(c0Id), "query rejects C0 ID (consistent)");
+
+  // Same validator must accept the same legal boundary for both paths.
+  const legalId = "req-!@#-001";
+  store.createRun(makeIdentity({ requirementId: legalId }));
+  assert(store.listRunsByRequirement(legalId).length === 1, "legal ID accepted by both create and query");
+});
+
+console.log("requirement query: created run recoverable by same ID");
+withStore((store) => {
+  const legalId = "req-recover-边界-001";
+  store.createRun(makeIdentity({ requirementId: legalId }));
+  const latest = store.findLatestRunByRequirement(legalId);
+  assert(
+    latest !== undefined && latest.state.identity.requirementId === legalId,
+    "created run is recoverable by the same ID",
+  );
+  const runs = store.listRunsByRequirement(legalId);
+  assert(runs.length === 1 && runs[0].state.identity.runId === "run-001", "recovered snapshot matches created run");
+});
+
 console.log(`Results: ${passed} passed, ${failed} failed`);
 if (failed > 0) {
   process.exitCode = 1;

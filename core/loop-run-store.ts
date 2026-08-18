@@ -32,6 +32,7 @@ import {
   createLoopRunCreatedEvent,
   validateLoopRunEvent,
   validateLoopRunIdentity,
+  validateRequirementId,
 } from "./loop-run-state";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
@@ -670,7 +671,7 @@ export class LoopRunStore {
    * requirementId is external input: validated fail-closed and never echoed.
    */
   listRunsByRequirement(requirementId: string): readonly LoopRunSnapshot[] {
-    this.validateRequirementId(requirementId);
+    validateRequirementId(requirementId);
     const db = this.connection();
     try {
       return db.transaction((): readonly LoopRunSnapshot[] => {
@@ -703,19 +704,6 @@ export class LoopRunStore {
   findLatestRunByRequirement(requirementId: string): LoopRunSnapshot | undefined {
     const runs = this.listRunsByRequirement(requirementId);
     return runs.length === 0 ? undefined : runs[runs.length - 1];
-  }
-
-  private validateRequirementId(requirementId: string): void {
-    if (typeof requirementId !== "string") {
-      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must be a string");
-    }
-    const trimmed = requirementId.trim();
-    if (trimmed.length === 0 || trimmed !== requirementId) {
-      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must be a non-empty trimmed string");
-    }
-    if (/[\x00-\x1f\x7f-\x9f]/.test(requirementId)) {
-      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must not contain control characters");
-    }
   }
 
   // ── storage error translation ──

@@ -173,11 +173,32 @@ const STAGE_LEVEL_KINDS: readonly LoopRunEventKind[] = [
 
 // ── identity validation ──
 
+/**
+ * Shared requirementId validator used by BOTH identity validation (createRun)
+ * and the requirement query API (recovery lookup). A single implementation
+ * guarantees that any run creatable with an ID can be looked up by the same
+ * ID. External input is never echoed into errors.
+ * Rejects: non-string, blank or untrimmed values, and C0/C1/DEL control
+ * characters (\x00-\x1f, \x7f-\x9f).
+ */
+export function validateRequirementId(requirementId: unknown, label = "requirementId"): void {
+  if (typeof requirementId !== "string") {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a string`);
+  }
+  const trimmed = requirementId.trim();
+  if (trimmed.length === 0 || trimmed !== requirementId) {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a non-empty trimmed string`);
+  }
+  if (/[\x00-\x1f\x7f-\x9f]/.test(requirementId)) {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must not contain control characters`);
+  }
+}
+
 export function validateLoopRunIdentity(identity: unknown): void {
   const record = readPlainDataRecord(identity, "identity");
   requireFields(record, IDENTITY_FIELDS, "identity");
   asNonEmptyString(record.runId, "identity.runId", true);
-  asNonEmptyString(record.requirementId, "identity.requirementId", true);
+  validateRequirementId(record.requirementId, "identity.requirementId");
   asNonEmptyString(record.repository, "identity.repository", true);
   asNonEmptyString(record.baseBranch, "identity.baseBranch", true);
   const sha = asNonEmptyString(record.expectedBaseSha, "identity.expectedBaseSha", true);

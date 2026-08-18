@@ -63,9 +63,9 @@
 运行记录是跨入口恢复的持久面（`core/loop-run-store.ts`，SQLite 追加式 run journal）。
 
 - **创建**：新需求或既有 Requirement 无运行记录时，以 Requirement ID 为核心的 identity 创建 run（`createRun`）。
-- **恢复**：入口以 Requirement ID 定位最新运行记录（`findLatestRunByRequirement` / `listRunsByRequirement`），恢复当前节点、有效产物版本、Gate 结果、未解决 finding、阻塞项和下一步资格。
+- **恢复（本 WP 范围）**：入口以 Requirement ID 定位最新已验证 run 快照（`findLatestRunByRequirement` / `listRunsByRequirement`）。本 WP 仅提供 **Requirement ID → 已验证 run 快照** 定位能力；完整恢复协议（有效产物版本、Gate 结果、未解决 finding、下一步资格的恢复与失效传播）属 WP-4（执行溯源与跨入口恢复），schema 与恢复语义见 C01 规划 §4 WP-4。
 - **不重解释**：恢复后继续的是已确认事实，入口不得凭新会话重新解释。
-- **查询校验**：Requirement ID 是外部输入，查询接口 fail-closed 校验（非空、trim、无控制字符）；错误消息不回显输入；持久化数据经 corruption-first 完整验证。
+- **查询校验**：Requirement ID 是外部输入，创建与查询走**同一共享校验器**（非空、trim、无 C0/C1/DEL 控制字符，fail-closed）；错误消息不回显输入；持久化数据经 corruption-first 完整验证。
 
 ## 8. 阻塞条件（STOP）
 
@@ -91,4 +91,5 @@
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 0.1.1 | 2026-08-19 | Accepted | Correction（review round 1）：§7 恢复语义收敛为本 WP 的 "Requirement ID → 已验证 run 快照" 定位，完整恢复协议显式指向 WP-4；查询校验改为与创建共享同一校验器。 |
 | 0.1.0 | 2026-08-19 | Accepted | WP-1 交付：统一入口义务、Requirement ID 规则、分类语义、运行记录创建/恢复、阻塞条件；对齐 LOOP Core Contract §3 与 Change Control。 |
