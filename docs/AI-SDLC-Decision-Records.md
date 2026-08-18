@@ -377,3 +377,245 @@ Accepted / Partially Implemented
 ## 代码依据
 
 `core/artifact.ts`、`core/node-artifacts.ts`、`ai-sdlc/artifact-versioning.md`
+
+---
+
+> 2026-08-19 起恢复本文件的持续记录惯例（对齐 personal-knowledge-base 的 DECISIONS.md 行为：每次决定即记录）。以下 Decision-012 起为 LOOP 时代记录。
+
+# Decision-012：LOOP Core Contract v0.3.0 接受
+
+## 状态
+
+Accepted（2026-08-16，历史补记）
+
+## 背景
+
+项目进入 LOOP（Artifact-Driven Delivery Core）产品化阶段前，需要一份明确的产品边界合同，避免需求细节只存在于 Agent 聊天上下文。
+
+## 问题
+
+LOOP 产品的目标、边界、产物链、Agent 协作与 Git 交接边界如何固定？
+
+## 决策
+
+接受 `docs/LOOP_CORE_CONTRACT.md` v0.3.0：任意已支持入口 Agent 以同一套产物和 Gate 启动或恢复单仓需求；节点按可替换 Agent binding 选择执行者；交付终点为 `READY_FOR_MANUAL_GIT_HANDOFF`，commit/push/PR/Ready/merge/发布均不属于 LOOP Core。
+
+## 原因
+
+产物优先于聊天记忆；能力与 Agent 解耦；人工保留 Git 决策权。
+
+## 影响
+
+本合同成为后续调整 Autonomous Delivery Roadmap 的判断基线；不再把自动 Git 发布作为 Core 或单仓验收前置条件。
+
+## 实现状态
+
+合同已接受；C01~C05 执行未开始，等待授权。
+
+## 代码依据
+
+`docs/LOOP_CORE_CONTRACT.md`（Revision Record v0.3.0）
+
+# Decision-013：Autonomous Delivery Roadmap v2.1.0 Rebaseline
+
+## 状态
+
+Accepted（2026-08-16，历史补记）
+
+## 背景
+
+LOOP Core Contract 接受后，旧 Foundation/D01~D10/Advanced 11~14 阶段定义与新产品边界不一致。
+
+## 问题
+
+如何按 Shared PROJECT_CONTROL §14 合同重排 Roadmap？
+
+## 决策
+
+`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` 重排为 v2.1.0：父需求 LOOP-CORE-00 + 子需求 C01~C05；Advanced 01~03 标记 `PLANNING_REQUIRED` 并写出显式 Definition Gap，不得作为执行入口；动态控制语义（指针、Gate、授权）移出 Roadmap，由控制平面 STATE 承担。
+
+## 原因
+
+满足 Fresh Controller 仅凭权威文档和仓库事实即可恢复项目的要求。
+
+## 影响
+
+旧编号（D01~D10、Advanced 11~14）保留于 Git 历史；历史能力作为 C01~C05 的候选支撑，复用前需以当时 Source 事实确认。
+
+## 实现状态
+
+Roadmap v2.1.0 已生效；STATE 指针指向 LOOP-CORE-00 / LOOP-CORE-01。
+
+## 代码依据
+
+`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md`（Revision Record v2.1.0）
+
+# Decision-014：C01 正式规划落点 = 产品仓库 docs/ 持久合同
+
+## 状态
+
+Accepted（2026-08-18）
+
+## 背景
+
+C01 有界实现规划草稿完成后，需要确定正式规划文档的落点；候选包括 `docs/`、`temp/plans/` 或 Handoff。
+
+## 问题
+
+正式规划文档应该放在哪里？
+
+## 决策
+
+正式 C01 规划是持久规划合同（与 `docs/LOOP_CORE_CONTRACT.md` 同类），落在产品仓库 `docs/LOOP-CORE-C01-PLAN.md`；控制平面 STATE 只记录指针；不写入 Handoff（Handoff 是会话间 transport package，应引用持久权威源而非复制历史）。
+
+## 原因
+
+规划合同与执行记录性质不同；Roadmap/STATE/执行三分权要求规划合同留在产品仓库权威面。
+
+## 影响
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` 审阅通过后迁移为正式文档；`project-governance-exchange` 只承载执行类 Handoff 材料。
+
+## 实现状态
+
+草稿已就绪，等待用户审阅与授权迁移。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md`、`docs/LOOP_CORE_CONTRACT.md`
+
+# Decision-015：决定编号沿用 Decision-NNN
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+ai-sdlc 与 personal-knowledge-base 均注册于同一 ai-project-control-plane；PKB 使用 DEC-NNN 编号（DECISIONS.md），ai-sdlc 既有 `docs/AI-SDLC-Decision-Records.md` 使用 Decision-NNN。
+
+## 问题
+
+决定编号形式是否统一为 PKB 同款 DEC-NNN？
+
+## 决策
+
+沿用 ai-sdlc 现有 `Decision-NNN` 编号（从 Decision-012 续号），不改为 DEC-NNN。
+
+## 原因
+
+既有文件与格式已稳定，避免为编号形式做无价值迁移；记录行为（每次决定即记录）与 PKB 对齐即可。
+
+## 影响
+
+决定记录留在 ai-sdlc-standard 产品仓库 `docs/AI-SDLC-Decision-Records.md`，不经过 exchange。
+
+## 实现状态
+
+本文件自 Decision-012 起恢复持续记录。
+
+## 代码依据
+
+`docs/AI-SDLC-Decision-Records.md`
+
+# Decision-016：进度管理机制阶段 0 先单独授权落地
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+ai-sdlc 的进度管理机制（任务级 Handoff、current 入口、决定记录、STATE 登记、收口流程）长期未运转，与 PKB 模式存在差距。
+
+## 问题
+
+机制恢复与 C01 实施是否一并授权？
+
+## 决策
+
+阶段 0（机制恢复：决定记录 + Handoff 通道 + STATE 扩展 + 收口流程）先单独授权落地，独立于 C01 实施规划。
+
+## 原因
+
+机制先行，后续 C01 工作包才能在完整运转的进度管理框架内执行。
+
+## 影响
+
+阶段 0 落地后再进行 C01 规划授权；C01 各 WP 的授权、实施、审阅、收口均按 PKB 流程运转。
+
+## 实现状态
+
+阶段 0 执行中。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9
+
+# Decision-017：Handoff 落点恢复既有 exchange → 10-projects 机制
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+2026-07-13~19（最后活动 07-26）期间，ai-sdlc-standard 的 Handoff 通过 `shaoyang01/project-governance-exchange`（authority=transport_only）传输并发布到 personal-knowledge-base 的 `10-projects/ai-sdlc-standard/`；8 月起项目转入控制平面模式后该通道停用。
+
+## 问题
+
+ai-sdlc 的任务级 Handoff 落点选哪个机制？
+
+## 决策
+
+选项 A：恢复既有 exchange → 10-projects 机制，与现行 ai-project-control-plane 模式并行；不在 ai-sdlc-standard 新建 `90-system/`。分工：控制平面 STATE 管控制状态，exchange 管材料传输，10-projects 管归档导航。
+
+## 原因
+
+既有机制有完整规则（EXCHANGE_POLICY、external-project-publishing.md、exchange-consumption.md）、schema、Publisher 工具与历史；避免重复建设。
+
+## 影响
+
+exchange 保持 transport_only，不得从 Handoff 推导授权/执行/收口；10-projects 写入属 PKB 仓库跨仓写入，需在阶段 0 授权范围内覆盖。
+
+## 实现状态
+
+阶段 0 执行中：exchange 远程 main（45b611a）已验证可访问，Publisher workflow 存在。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9.1/§9.4
+
+# Decision-018：exchange 仓库发布操作直接 main
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+exchange 仓库本地存在多个历史工作分支（codex/topic06、feature/exchange-publisher-v1-1、fix/exchange-publisher-deploy-key-auth、chore/remove-accidental-root-file），与 EXCHANGE_POLICY 的单写者 direct-main 设计不一致。
+
+## 问题
+
+exchange 仓库的分支策略如何简化？
+
+## 决策
+
+exchange 仓库的发布与操作直接使用 main 分支：单写者 fast-forward 写入，不创建、不切换 feature 分支做发布；本地已同步至 origin/main（45b611a）；已合并的历史本地分支删除，未合并的历史分支保留（不强制删除，内容在 main 历史中可追溯）。
+
+## 原因
+
+EXCHANGE_POLICY v1 本来就是 central Publisher direct-main 设计（禁止 force push/reset/rebase/amend）；分支只增加混淆。
+
+## 影响
+
+后续 ai-sdlc 的 exchange 发布（Issue 通道 → Actions Publisher）与本地维护均直接基于 main；远程遗留分支 `origin/codex/topic06-governance-drift-clarification` 保留为历史，不参与发布。
+
+## 实现状态
+
+本地已 checkout main 并对齐 origin/main；codex/topic06 本地分支已删除（远程保留）。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9.3；exchange 仓库 `EXCHANGE_POLICY.md`、`AGENTS.md`
