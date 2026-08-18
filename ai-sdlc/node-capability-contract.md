@@ -44,6 +44,10 @@ prohibited:           本节点禁止的副作用
 - Gate 与 [Phase Gates](phase-gates.md) / `sdlc-gate-runner` 对齐；
 - 节点合同由 binding（WP-3）选择执行者，执行者替换不修改本合同。
 
+### 3.5 规范源声明（Single Source of Truth）
+
+`core/node-capability-contracts.ts` 是 WP-3 消费的**规范机器投影**，与本章 §4 逐字段一致；本文档是人工阅读视图。一致性由 `tests/node-capability-contract.test.ts` 的 `EXPECTED_CONTRACTS` 守卫：修改 §4 任一字段时，必须同步更新机器投影与该测试守卫，否则一致性断言失败。
+
 ## 4. 七个能力的节点合同
 
 ### 4.1 `requirement-intake` — 需求归一化
@@ -138,4 +142,5 @@ prohibited:          以未验证测试或历史 CI 替代本次验收；伪造�
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 0.1.1 | 2026-08-19 | Accepted | Correction（review round 1）：明确 `core/node-capability-contracts.ts` 为规范机器投影（补全 §4 全部约束，不再弱化）；新增 §3.5 规范源声明与文档—投影一致性守卫。 |
 | 0.1.0 | 2026-08-19 | Accepted | WP-2 交付：7 个能力类型清单、节点合同模板与完整合同、AgentMapEntry 废弃决策、与执行面/binding 的关系。 |

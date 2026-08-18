@@ -1,10 +1,11 @@
 // Node Capability Contracts — machine-verifiable instance data (C01 WP-2)
 // =======================================================================
-// Agent-neutral node capability contracts, mirroring
-// ai-sdlc/node-capability-contract.md §4. The document is the human
-// authority; this file is the machine-verifiable projection used by tests
-// and later by the binding layer (WP-3). No agent name may appear in any
-// contract field.
+// SINGLE SOURCE OF TRUTH for WP-3 consumption: this file carries the full
+// per-node contracts, field-for-field identical to
+// ai-sdlc/node-capability-contract.md §4. The document is the human view;
+// this file is the normative machine projection. A consistency guard test
+// (EXPECTED_CONTRACTS in tests/node-capability-contract.test.ts) fails when
+// either side drifts. No agent name may appear in any contract field.
 
 import type { NodeCapabilityContract } from "../loop/types";
 
@@ -41,15 +42,15 @@ export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = [
     title: "方案审核",
     inputArtifacts: ["01-技术方案（当前版本）", "方案挑战 findings"],
     outputArtifact: "library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html|md",
-    gate: "Specification Completeness Audit；无未解决 Blocking finding",
-    sideEffectBoundary: "输出 Gate Result 与开发路径建议",
+    gate: "Specification Completeness Audit（sdlc-solution-reviewer）；无未解决 Blocking finding",
+    sideEffectBoundary: "输出 Gate Result（PASS / FAIL / PASS_WITH_RISK）与开发路径建议",
     prohibited: ["代写技术方案", "无开发路径建议时放行进入实现"],
   },
   {
     capability: "implementation",
     title: "实现",
     inputArtifacts: ["01-技术方案（已审核通过）", "02-方案审核/开发路径决定", "任务边界"],
-    outputArtifact: "工作区改动 + 03-实现记录",
+    outputArtifact: "工作区改动 + 实现记录（library/{requirement_id}/03-实现记录/）",
     gate: "方案审核通过；路径决定为 DIRECT_IMPLEMENTATION 或 Speckit 任务准入",
     sideEffectBoundary: "受已批准方案约束的代码改动；本地验证",
     prohibited: ["超出已批准行为", "commit/push/PR/merge/发布", "补未定义业务规则"],
@@ -59,9 +60,9 @@ export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = [
     title: "代码审核",
     inputArtifacts: ["实现产物/diff", "01-技术方案", "任务边界"],
     outputArtifact: "library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.md",
-    gate: "实现记录存在；审核范围确定",
-    sideEffectBoundary: "输出可定位、可修复的 findings",
-    prohibited: ["泛泛不可执行建议", "把方案缺口只当作代码问题"],
+    gate: "实现记录存在；审核范围（changed files → canonical files）确定",
+    sideEffectBoundary: "输出可定位、可修复的 findings（severity + 位置/证据）",
+    prohibited: ["输出泛泛不可执行建议", "把方案缺口只当作代码问题（应回流技术方案）"],
   },
   {
     capability: "test-validation",

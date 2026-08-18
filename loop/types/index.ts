@@ -42,8 +42,8 @@ export interface FlowTableEntry {
  * conflicts with capability decoupling. Node selection must use
  * NodeCapabilityContract; choosing the executing agent is the binding
  * layer's job (WP-3). Kept only for legacy engine compatibility.
+ * Agent mapping entry.
  */
-// Agent mapping entry
 export interface AgentMapEntry {
   node: DocFlowNode;
   agent: LoopAgent;
