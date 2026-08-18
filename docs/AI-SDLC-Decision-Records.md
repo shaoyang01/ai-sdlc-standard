@@ -789,3 +789,37 @@ WP-2 完成后，节点模型以能力为唯一合同面；binding（WP-3）只�
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §4 WP-2；`docs/LOOP_CORE_CONTRACT.md` §6.1
+
+# Decision-024：WP-2 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-2 实施后经三轮 review（round 1：2 P1 + 1 P2；round 2：1 P1 假守卫；round 3：1 P1 fail-open 解析器 + 1 P2 陈旧声明）与三轮 consolidated correction，用户复审 Approved。
+
+## 问题
+
+WP-2 是否满足完成合同并可收口？
+
+## 决策
+
+WP-2 收口：登记 `completed_requirements.WP2_NODE_CAPABILITY_CONTRACT`（closure_basis + 证据 + fact HEAD），消费 `WP2_NODE_CAPABILITY_CONTRACT` 授权（consumed/COMPLETED）。WP-3 仍需单独用户授权，WP-2 通过不构成对 WP-3 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+七个 Agent 中立节点能力合同（文档 §4 单一规范源 + fail-closed 解析守卫）成为 C01 已验收基线；binding 层（WP-3）可直接消费机器投影选择执行者。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
