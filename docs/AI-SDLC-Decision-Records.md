@@ -891,3 +891,37 @@ WP-3 收口：登记 `completed_requirements.WP3_AGENT_CAPABILITY_BINDING`（clo
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-027：WP-4（执行溯源与跨入口恢复）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-3 收口后，按逐 WP 授权粒度，WP-4（执行溯源与跨入口恢复）为第四个工作包。
+
+## 问题
+
+WP-4 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-4，scope：① run journal 事件 schema 扩展（每次节点执行记录 bindingId、bindingVersion、inputArtifactRef，nullable 向后兼容 + 旧库列迁移 + fail-closed 校验）；② 执行溯源辅助（recordNodeExecution）；③ 跨入口恢复协议（recoverRunContext：以 Requirement ID 定位最新已验证 run，恢复当前阶段/attempt/fixRound/阻塞与失败原因/最近执行溯源，基于 WP-1 查询接口）；④ 标准文档 ai-sdlc/loop-recovery-protocol.md；⑤ 相关测试。明确排除：checkpoint 发布 phase（D10-A 发布语义不进 C01）、真实 Agent 调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-4 是"每节点可记录实际 binding 和输入/输出来源"与"跨入口恢复"的最小可验收包（C01 完成合同第 1、2 条）。
+
+## 影响
+
+WP-4 完成后，每次节点执行可追溯 binding 与输入/输出来源；入口可跨会话恢复同一 Requirement。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4；`docs/LOOP_CORE_CONTRACT.md` §6.2
