@@ -857,3 +857,37 @@ WP-3 完成后，任意节点 × 任意 Agent 的组合可由配置表达；替�
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §4 WP-3；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-026：WP-3 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-3 实施后经四轮 review（round 1：registry 快照/端到端/AST 字段锁；round 2：能力 prompt/解析/真实分支；round 3：敏感输入输出/超限；round 4：空输出）与四轮 consolidated correction，用户复审 Approved。
+
+## 问题
+
+WP-3 是否满足完成合同并可收口？
+
+## 决策
+
+WP-3 收口：登记 `completed_requirements.WP3_AGENT_CAPABILITY_BINDING`（closure_basis + 证据 + fact HEAD），消费 `WP3_AGENT_CAPABILITY_BINDING` 授权（consumed/COMPLETED）。WP-4 仍需单独用户授权，WP-3 通过不构成对 WP-4 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+不可变 binding registry（每能力恰一 enabled 执行者）、全能力矩阵（codex enabled、kimi/hermes disabled）、能力感知 prompt/解析/校验（含敏感/超限/空输出 fail-closed）成为 C01 已验收基线；WP-4 可在其上实现执行溯源与跨入口恢复。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记 ef41d58；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
