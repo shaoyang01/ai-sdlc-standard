@@ -35,7 +35,7 @@ export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = [
     outputArtifact: "方案挑战产物（findings：已解决/未解决，引用方案版本）",
     gate: "技术方案存在且为有效版本",
     sideEffectBoundary: "记录 findings；发现有效问题时回流最早受影响节点",
-    prohibited: ["仅凭再次执行推断问题关闭", "跳过审核直接放行"],
+    prohibited: ["仅凭“再次执行了 Agent”推定问题关闭", "跳过审核直接放行"],
   },
   {
     capability: "solution-review",

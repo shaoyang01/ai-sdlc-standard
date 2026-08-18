@@ -1,12 +1,11 @@
 // Node Capability Contract — Tests (C01 WP-2)
 // ============================================
-// Guards for ai-sdlc/node-capability-contract.md §4 and its machine
-// projection core/node-capability-contracts.ts:
-// 1. consistency: projection is field-for-field identical to the document
-//    (EXPECTED_CONTRACTS below mirrors §4; update both together);
-// 2. deprecation: AgentMapEntry carries @deprecated directly attached;
-// 3. agent neutrality: no agent name in ANY contract field, including
-//    the capability id.
+// The document ai-sdlc/node-capability-contract.md §4 is the single source
+// of truth. This test PARSES the document directly and deep-compares it with
+// the machine projection core/node-capability-contracts.ts — no third copy.
+// Any unilateral drift on either side fails. Additional guards: canonical
+// list shape, field completeness, agent neutrality (all fields including the
+// capability id), and AgentMapEntry @deprecated attachment.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -30,6 +29,62 @@ function assert(condition: boolean, message: string): void {
 
 const AGENT_NAMES = ["kimi", "codex", "hermes", "claude", "gpt"];
 
+function stripBackticks(value: string): string {
+  return value.replace(/`/g, "");
+}
+
+// ── document §4 parser ──
+// Parses each ```text block under "### 4.x" headings. Scalar fields are
+// "key: value" single lines; array fields (inputArtifacts / prohibited) are
+// "key:" followed by "  - item" lines. Markdown backticks are display marks
+// and are stripped before comparison.
+function parseDocumentContracts(mdPath: string): NodeCapabilityContract[] {
+  const text = readFileSync(mdPath, "utf8");
+  const blocks = [...text.matchAll(/### 4\.\d+[^\n]*\n\n```text\n([\s\S]*?)```/g)];
+  if (blocks.length !== 7) {
+    throw new Error(`expected 7 capability blocks in ${mdPath}, got ${blocks.length}`);
+  }
+  return blocks.map((match) => parseBlock(match[1]));
+}
+
+function parseBlock(block: string): NodeCapabilityContract {
+  const contract: Record<string, unknown> = {
+    capability: "",
+    title: "",
+    inputArtifacts: [],
+    outputArtifact: "",
+    gate: "",
+    sideEffectBoundary: "",
+    prohibited: [],
+  };
+  let currentArrayKey: "inputArtifacts" | "prohibited" | null = null;
+  for (const rawLine of block.split("\n")) {
+    const line = rawLine.trimEnd();
+    if (line.trim().length === 0) continue;
+    if (/^  - /.test(line)) {
+      if (currentArrayKey === null) {
+        throw new Error(`array item outside array field: ${line}`);
+      }
+      (contract[currentArrayKey] as string[]).push(stripBackticks(line.replace(/^  - /, "").trim()));
+      continue;
+    }
+    const field = line.match(/^([a-zA-Z]+):\s*(.*)$/);
+    if (field === null) {
+      throw new Error(`unparseable contract line: ${line}`);
+    }
+    const key = field[1] as keyof NodeCapabilityContract;
+    const value = field[2].trim();
+    if (key === "inputArtifacts" || key === "prohibited") {
+      currentArrayKey = key;
+      contract[key] = [];
+    } else {
+      currentArrayKey = null;
+      contract[key] = stripBackticks(value);
+    }
+  }
+  return contract as unknown as NodeCapabilityContract;
+}
+
 console.log("node capability: canonical list");
 assert(NODE_CAPABILITY_IDS.length === 7, "exactly seven capability ids");
 assert(new Set(NODE_CAPABILITY_IDS).size === 7, "capability ids are unique");
@@ -37,91 +92,31 @@ for (const id of NODE_CAPABILITY_IDS) {
   assert(/^[a-z]+(-[a-z]+)*$/.test(id), `id ${id} matches lowercase-dash format`);
 }
 
-// ── document §4 consistency guard ──
-// EXPECTED_CONTRACTS mirrors ai-sdlc/node-capability-contract.md §4
-// field-for-field (single source of truth for WP-3 is the projection; the
-// document is the human view). When the document changes, update this table
-// AND the projection together — the deep-equal assertion below fails on any
-// unilateral drift.
-const EXPECTED_CONTRACTS: readonly NodeCapabilityContract[] = [
-  {
-    capability: "requirement-intake",
-    title: "需求归一化",
-    inputArtifacts: ["需求来源（对话/飞书/HTML/Markdown/PDF/截图）"],
-    outputArtifact: "library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md",
-    gate: "入口义务完成（Entry Contract §3）；业务目标可识别",
-    sideEffectBoundary: "创建/恢复运行记录（run journal）；写入 00-需求资料",
-    prohibited: ["生成技术方案", "决定开发路径", "修改生产代码、specs/**、.specify/**"],
-  },
-  {
-    capability: "tech-design",
-    title: "技术方案生成",
-    inputArtifacts: ["00-需求资料/{requirement_id}_需求摘要.md"],
-    outputArtifact: "library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md",
-    gate: "需求摘要有效；Specification Audit 前置要求满足",
-    sideEffectBoundary: "写入 01-技术方案",
-    prohibited: ["绕过需求摘要", "补造未定义业务规则", "修改生产代码"],
-  },
-  {
-    capability: "solution-challenge",
-    title: "方案挑战",
-    inputArtifacts: ["01-技术方案/{requirement_id}_技术方案.md（当前版本）"],
-    outputArtifact: "方案挑战产物（findings：已解决/未解决，引用方案版本）",
-    gate: "技术方案存在且为有效版本",
-    sideEffectBoundary: "记录 findings；发现有效问题时回流最早受影响节点",
-    prohibited: ["仅凭再次执行推断问题关闭", "跳过审核直接放行"],
-  },
-  {
-    capability: "solution-review",
-    title: "方案审核",
-    inputArtifacts: ["01-技术方案（当前版本）", "方案挑战 findings"],
-    outputArtifact: "library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html|md",
-    gate: "Specification Completeness Audit（sdlc-solution-reviewer）；无未解决 Blocking finding",
-    sideEffectBoundary: "输出 Gate Result（PASS / FAIL / PASS_WITH_RISK）与开发路径建议",
-    prohibited: ["代写技术方案", "无开发路径建议时放行进入实现"],
-  },
-  {
-    capability: "implementation",
-    title: "实现",
-    inputArtifacts: ["01-技术方案（已审核通过）", "02-方案审核/开发路径决定", "任务边界"],
-    outputArtifact: "工作区改动 + 实现记录（library/{requirement_id}/03-实现记录/）",
-    gate: "方案审核通过；路径决定为 DIRECT_IMPLEMENTATION 或 Speckit 任务准入",
-    sideEffectBoundary: "受已批准方案约束的代码改动；本地验证",
-    prohibited: ["超出已批准行为", "commit/push/PR/merge/发布", "补未定义业务规则"],
-  },
-  {
-    capability: "code-review",
-    title: "代码审核",
-    inputArtifacts: ["实现产物/diff", "01-技术方案", "任务边界"],
-    outputArtifact: "library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.md",
-    gate: "实现记录存在；审核范围（changed files → canonical files）确定",
-    sideEffectBoundary: "输出可定位、可修复的 findings（severity + 位置/证据）",
-    prohibited: ["输出泛泛不可执行建议", "把方案缺口只当作代码问题（应回流技术方案）"],
-  },
-  {
-    capability: "test-validation",
-    title: "测试验收",
-    inputArtifacts: ["实现产物", "测试结果", "01-技术方案", "04-代码审核"],
-    outputArtifact: "library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.html|md",
-    gate: "代码审核通过；测试证据可复现",
-    sideEffectBoundary: "执行验证；记录未执行项、残余风险、恢复说明",
-    prohibited: ["以未验证测试或历史 CI 替代本次验收", "伪造通过"],
-  },
-];
+console.log("node capability: document §4 ↔ projection deep comparison");
+{
+  const docPath = resolve(process.cwd(), "ai-sdlc/node-capability-contract.md");
+  const parsed = parseDocumentContracts(docPath);
+  assert(parsed.length === NODE_CAPABILITY_CONTRACTS.length, "document §4 block count matches projection");
 
-console.log("node capability: document §4 ↔ projection consistency");
-assert(NODE_CAPABILITY_CONTRACTS.length === EXPECTED_CONTRACTS.length, "projection count matches document §4");
-assert(
-  JSON.stringify(NODE_CAPABILITY_CONTRACTS) === JSON.stringify(EXPECTED_CONTRACTS),
-  "projection is field-for-field identical to document §4 (no weakened constraints)",
-);
-
-const contractIds = new Set(NODE_CAPABILITY_CONTRACTS.map((c) => c.capability));
-assert(
-  NODE_CAPABILITY_IDS.every((id) => contractIds.has(id)) &&
-    contractIds.size === NODE_CAPABILITY_IDS.length,
-  "contract instances cover the canonical list exactly",
-);
+  for (let i = 0; i < parsed.length; i++) {
+    const doc = parsed[i];
+    const proj = NODE_CAPABILITY_CONTRACTS[i];
+    const label = `contract ${proj.capability}`;
+    assert(proj.capability === doc.capability, `${label}: capability matches document`);
+    assert(proj.title === doc.title, `${label}: title matches document`);
+    assert(
+      JSON.stringify(proj.inputArtifacts) === JSON.stringify(doc.inputArtifacts),
+      `${label}: inputArtifacts matches document`,
+    );
+    assert(proj.outputArtifact === doc.outputArtifact, `${label}: outputArtifact matches document`);
+    assert(proj.gate === doc.gate, `${label}: gate matches document`);
+    assert(proj.sideEffectBoundary === doc.sideEffectBoundary, `${label}: sideEffectBoundary matches document`);
+    assert(
+      JSON.stringify(proj.prohibited) === JSON.stringify(doc.prohibited),
+      `${label}: prohibited matches document`,
+    );
+  }
+}
 
 console.log("node capability: projection completeness (non-empty fields)");
 for (const contract of NODE_CAPABILITY_CONTRACTS) {

@@ -44,80 +44,132 @@ prohibited:           本节点禁止的副作用
 - Gate 与 [Phase Gates](phase-gates.md) / `sdlc-gate-runner` 对齐；
 - 节点合同由 binding（WP-3）选择执行者，执行者替换不修改本合同。
 
-### 3.5 规范源声明（Single Source of Truth）
+### 3.5 规范源与一致性守卫
 
-`core/node-capability-contracts.ts` 是 WP-3 消费的**规范机器投影**，与本章 §4 逐字段一致；本文档是人工阅读视图。一致性由 `tests/node-capability-contract.test.ts` 的 `EXPECTED_CONTRACTS` 守卫：修改 §4 任一字段时，必须同步更新机器投影与该测试守卫，否则一致性断言失败。
+本文档 §4 是合同的**单一规范源**（人工权威）；`core/node-capability-contracts.ts` 是其机器投影（WP-3 消费）。测试解析器（`tests/node-capability-contract.test.ts`）**直接读取本文档 §4 的 ```text 块**，按以下规则解析后与机器投影深度比较，任一侧漂移即失败：
+
+- 标量字段（`capability` / `title` / `outputArtifact` / `gate` / `sideEffectBoundary`）：`字段: 值` 单行；
+- 数组字段（`inputArtifacts` / `prohibited`）：`字段:` 后跟随 `  - 子项` 行，直到下一个字段或块尾；
+- Markdown 反引号是展示标记，解析时剥离后比较（如 `` `sdlc-solution-reviewer` `` → `sdlc-solution-reviewer`）。
+
+修改 §4 任一字段时，必须同步更新机器投影；反之亦然。测试不依赖任何第三份手工副本。
 
 ## 4. 七个能力的节点合同
 
 ### 4.1 `requirement-intake` — 需求归一化
 
 ```text
-inputArtifacts:      [需求来源（对话/飞书/HTML/Markdown/PDF/截图）]
+capability:          requirement-intake
+title:               需求归一化
+inputArtifacts:
+  - 需求来源（对话/飞书/HTML/Markdown/PDF/截图）
 outputArtifact:      library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md
 gate:                入口义务完成（Entry Contract §3）；业务目标可识别
 sideEffectBoundary:  创建/恢复运行记录（run journal）；写入 00-需求资料
-prohibited:          生成技术方案；决定开发路径；修改生产代码、specs/**、.specify/**
+prohibited:
+  - 生成技术方案
+  - 决定开发路径
+  - 修改生产代码、specs/**、.specify/**
 ```
 
 ### 4.2 `tech-design` — 技术方案生成
 
 ```text
-inputArtifacts:      [00-需求资料/{requirement_id}_需求摘要.md]
+capability:          tech-design
+title:               技术方案生成
+inputArtifacts:
+  - 00-需求资料/{requirement_id}_需求摘要.md
 outputArtifact:      library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
 gate:                需求摘要有效；Specification Audit 前置要求满足
 sideEffectBoundary:  写入 01-技术方案
-prohibited:          绕过需求摘要；补造未定义业务规则；修改生产代码
+prohibited:
+  - 绕过需求摘要
+  - 补造未定义业务规则
+  - 修改生产代码
 ```
 
 ### 4.3 `solution-challenge` — 方案挑战
 
 ```text
-inputArtifacts:      [01-技术方案/{requirement_id}_技术方案.md（当前版本）]
+capability:          solution-challenge
+title:               方案挑战
+inputArtifacts:
+  - 01-技术方案/{requirement_id}_技术方案.md（当前版本）
 outputArtifact:      方案挑战产物（findings：已解决/未解决，引用方案版本）
 gate:                技术方案存在且为有效版本
 sideEffectBoundary:  记录 findings；发现有效问题时回流最早受影响节点
-prohibited:          仅凭"再次执行了 Agent"推定问题关闭；跳过审核直接放行
+prohibited:
+  - 仅凭“再次执行了 Agent”推定问题关闭
+  - 跳过审核直接放行
 ```
 
 ### 4.4 `solution-review` — 方案审核
 
 ```text
-inputArtifacts:      [01-技术方案（当前版本）；方案挑战 findings]
+capability:          solution-review
+title:               方案审核
+inputArtifacts:
+  - 01-技术方案（当前版本）
+  - 方案挑战 findings
 outputArtifact:      library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html|md
 gate:                Specification Completeness Audit（`sdlc-solution-reviewer`）；无未解决 Blocking finding
 sideEffectBoundary:  输出 Gate Result（PASS / FAIL / PASS_WITH_RISK）与开发路径建议
-prohibited:          代写技术方案；无开发路径建议时放行进入实现
+prohibited:
+  - 代写技术方案
+  - 无开发路径建议时放行进入实现
 ```
 
 ### 4.5 `implementation` — 实现
 
 ```text
-inputArtifacts:      [01-技术方案（已审核通过）；02-方案审核/开发路径决定；任务边界]
+capability:          implementation
+title:               实现
+inputArtifacts:
+  - 01-技术方案（已审核通过）
+  - 02-方案审核/开发路径决定
+  - 任务边界
 outputArtifact:      工作区改动 + 实现记录（library/{requirement_id}/03-实现记录/）
 gate:                方案审核通过；路径决定为 DIRECT_IMPLEMENTATION 或 Speckit 任务准入
 sideEffectBoundary:  受已批准方案约束的代码改动；本地验证
-prohibited:          超出已批准行为；commit/push/PR/merge/发布；补未定义业务规则
+prohibited:
+  - 超出已批准行为
+  - commit/push/PR/merge/发布
+  - 补未定义业务规则
 ```
 
 ### 4.6 `code-review` — 代码审核
 
 ```text
-inputArtifacts:      [实现产物/diff；01-技术方案；任务边界]
+capability:          code-review
+title:               代码审核
+inputArtifacts:
+  - 实现产物/diff
+  - 01-技术方案
+  - 任务边界
 outputArtifact:      library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.md
 gate:                实现记录存在；审核范围（changed files → canonical files）确定
 sideEffectBoundary:  输出可定位、可修复的 findings（severity + 位置/证据）
-prohibited:          输出泛泛不可执行建议；把方案缺口只当作代码问题（应回流技术方案）
+prohibited:
+  - 输出泛泛不可执行建议
+  - 把方案缺口只当作代码问题（应回流技术方案）
 ```
 
 ### 4.7 `test-validation` — 测试验收
 
 ```text
-inputArtifacts:      [实现产物；测试结果；01-技术方案；04-代码审核]
+capability:          test-validation
+title:               测试验收
+inputArtifacts:
+  - 实现产物
+  - 测试结果
+  - 01-技术方案
+  - 04-代码审核
 outputArtifact:      library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.html|md
 gate:                代码审核通过；测试证据可复现
 sideEffectBoundary:  执行验证；记录未执行项、残余风险、恢复说明
-prohibited:          以未验证测试或历史 CI 替代本次验收；伪造通过
+prohibited:
+  - 以未验证测试或历史 CI 替代本次验收
+  - 伪造通过
 ```
 
 ## 5. 与现有 DocFlow 节点/执行面的关系
@@ -142,5 +194,6 @@ prohibited:          以未验证测试或历史 CI 替代本次验收；伪造�
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 0.1.2 | 2026-08-19 | Accepted | Correction（review round 2）：§4 规范化（显式 capability/title、数组多行列表），成为可机械解析的单一规范源；测试改为直接解析文档 §4 与投影深度比较，删除第三份 EXPECTED 副本；§3.5 更新守卫描述。 |
 | 0.1.1 | 2026-08-19 | Accepted | Correction（review round 1）：明确 `core/node-capability-contracts.ts` 为规范机器投影（补全 §4 全部约束，不再弱化）；新增 §3.5 规范源声明与文档—投影一致性守卫。 |
 | 0.1.0 | 2026-08-19 | Accepted | WP-2 交付：7 个能力类型清单、节点合同模板与完整合同、AgentMapEntry 废弃决策、与执行面/binding 的关系。 |
