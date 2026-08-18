@@ -1,11 +1,10 @@
-// Node Capability Contracts — machine-verifiable instance data (C01 WP-2)
-// =======================================================================
-// SINGLE SOURCE OF TRUTH for WP-3 consumption: this file carries the full
-// per-node contracts, field-for-field identical to
-// ai-sdlc/node-capability-contract.md §4. The document is the human view;
-// this file is the normative machine projection. A consistency guard test
-// (EXPECTED_CONTRACTS in tests/node-capability-contract.test.ts) fails when
-// either side drifts. No agent name may appear in any contract field.
+// Node Capability Contracts — machine projection (C01 WP-2)
+// ==========================================================
+// Machine projection of the single source of truth
+// ai-sdlc/node-capability-contract.md §4 (the document is authoritative).
+// The guard test PARSES the document directly and deep-compares this
+// projection field-by-field; any unilateral drift on either side fails.
+// No agent name may appear in any contract field.
 
 import type { NodeCapabilityContract } from "../loop/types";
 

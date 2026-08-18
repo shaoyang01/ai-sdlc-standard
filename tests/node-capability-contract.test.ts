@@ -29,6 +29,17 @@ function assert(condition: boolean, message: string): void {
 
 const AGENT_NAMES = ["kimi", "codex", "hermes", "claude", "gpt"];
 
+const CONTRACT_FIELDS = [
+  "capability",
+  "title",
+  "inputArtifacts",
+  "outputArtifact",
+  "gate",
+  "sideEffectBoundary",
+  "prohibited",
+] as const;
+const ARRAY_FIELDS = new Set(["inputArtifacts", "prohibited"]);
+
 function stripBackticks(value: string): string {
   return value.replace(/`/g, "");
 }
@@ -48,15 +59,8 @@ function parseDocumentContracts(mdPath: string): NodeCapabilityContract[] {
 }
 
 function parseBlock(block: string): NodeCapabilityContract {
-  const contract: Record<string, unknown> = {
-    capability: "",
-    title: "",
-    inputArtifacts: [],
-    outputArtifact: "",
-    gate: "",
-    sideEffectBoundary: "",
-    prohibited: [],
-  };
+  const contract: Record<string, unknown> = {};
+  const seen = new Set<string>();
   let currentArrayKey: "inputArtifacts" | "prohibited" | null = null;
   for (const rawLine of block.split("\n")) {
     const line = rawLine.trimEnd();
@@ -72,14 +76,28 @@ function parseBlock(block: string): NodeCapabilityContract {
     if (field === null) {
       throw new Error(`unparseable contract line: ${line}`);
     }
-    const key = field[1] as keyof NodeCapabilityContract;
+    const key = field[1];
+    // Fail-closed: only the seven canonical fields, each exactly once.
+    if (!CONTRACT_FIELDS.includes(key as (typeof CONTRACT_FIELDS)[number])) {
+      throw new Error(`unknown contract field: ${key}`);
+    }
+    if (seen.has(key)) {
+      throw new Error(`duplicate contract field: ${key}`);
+    }
+    seen.add(key);
     const value = field[2].trim();
-    if (key === "inputArtifacts" || key === "prohibited") {
-      currentArrayKey = key;
+    if (ARRAY_FIELDS.has(key)) {
+      currentArrayKey = key as "inputArtifacts" | "prohibited";
       contract[key] = [];
     } else {
       currentArrayKey = null;
       contract[key] = stripBackticks(value);
+    }
+  }
+  // Fail-closed: every canonical field must be present exactly once.
+  for (const field of CONTRACT_FIELDS) {
+    if (!seen.has(field)) {
+      throw new Error(`missing contract field: ${field}`);
     }
   }
   return contract as unknown as NodeCapabilityContract;
@@ -116,6 +134,54 @@ console.log("node capability: document §4 ↔ projection deep comparison");
       `${label}: prohibited matches document`,
     );
   }
+}
+
+console.log("node capability: parser is fail-closed");
+{
+  const fullBlock = [
+    "capability:          requirement-intake",
+    "title:               需求归一化",
+    "inputArtifacts:",
+    "  - 需求来源（对话/飞书/HTML/Markdown/PDF/截图）",
+    "outputArtifact:      library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md",
+    "gate:                入口义务完成（Entry Contract §3）；业务目标可识别",
+    "sideEffectBoundary:  创建/恢复运行记录（run journal）；写入 00-需求资料",
+    "prohibited:",
+    "  - 生成技术方案",
+    "  - 决定开发路径",
+    "  - 修改生产代码、specs/**、.specify/**",
+  ].join("\n");
+
+  function expectParseFail(block: string, label: string): void {
+    try {
+      parseBlock(block);
+      assert(false, `${label} (no error thrown)`);
+    } catch {
+      assert(true, label);
+    }
+  }
+
+  // Unknown field (e.g. an agent binding sneaking into the contract) must
+  // fail instead of being silently ignored.
+  expectParseFail(
+    fullBlock.replace("sideEffectBoundary:  创建/恢复运行记录（run journal）；写入 00-需求资料", "sideEffectBoundary:  创建/恢复运行记录（run journal）；写入 00-需求资料\nagent:               codex"),
+    "unknown field rejected",
+  );
+  // Duplicate field must fail.
+  expectParseFail(
+    fullBlock.replace("gate:                入口义务完成（Entry Contract §3）；业务目标可识别", "gate:                入口义务完成（Entry Contract §3）；业务目标可识别\ngate:                重复"),
+    "duplicate field rejected",
+  );
+  // Missing canonical field must fail at end-of-block field-set check.
+  expectParseFail(
+    fullBlock.replace("outputArtifact:      library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md\n", ""),
+    "missing field rejected",
+  );
+  // Array item outside an array field must fail.
+  expectParseFail(
+    fullBlock.replace("gate:                入口义务完成（Entry Contract §3）；业务目标可识别", "gate:                入口义务完成（Entry Contract §3）；业务目标可识别\n  - 游离数组项"),
+    "array item outside array field rejected",
+  );
 }
 
 console.log("node capability: projection completeness (non-empty fields)");
