@@ -181,6 +181,9 @@ type EventRow = {
   error_code: string | null;
   retryable: number | null;
   reason_code: string | null;
+  binding_id: string | null;
+  binding_version: string | null;
+  input_artifact_ref: string | null;
   canonical_sha256: string;
 };
 
@@ -199,6 +202,10 @@ function rowToEvent(row: EventRow): LoopRunEvent {
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
+    // C01 WP-4: legacy rows without the columns map to null.
+    bindingId: row.binding_id ?? null,
+    bindingVersion: row.binding_version ?? null,
+    inputArtifactRef: row.input_artifact_ref ?? null,
   });
 }
 
@@ -217,6 +224,9 @@ function eventToRow(event: LoopRunEvent): EventRow {
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
     reason_code: event.reasonCode,
+    binding_id: event.bindingId,
+    binding_version: event.bindingVersion,
+    input_artifact_ref: event.inputArtifactRef,
     canonical_sha256: sha256Hex(canonicalizeLoopRunEvent(event)),
   };
 }
@@ -372,12 +382,31 @@ export class LoopRunStore {
             error_code TEXT,
             retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
             reason_code TEXT,
+            binding_id TEXT,
+            binding_version TEXT,
+            input_artifact_ref TEXT,
             canonical_sha256 TEXT NOT NULL,
             UNIQUE (run_id, sequence),
             FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
+
+        // C01 WP-4 migration: pre-extension journals lack the provenance
+        // columns; add them in place (existing rows read as NULL and stay
+        // canonical-compatible).
+        const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
+        const existing = new Set(eventColumns.map((column) => column.name));
+        const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
+          { name: "binding_id", ddl: "ALTER TABLE loop_events ADD COLUMN binding_id TEXT" },
+          { name: "binding_version", ddl: "ALTER TABLE loop_events ADD COLUMN binding_version TEXT" },
+          { name: "input_artifact_ref", ddl: "ALTER TABLE loop_events ADD COLUMN input_artifact_ref TEXT" },
+        ];
+        for (const column of provenanceColumns) {
+          if (!existing.has(column.name)) {
+            db.exec(column.ddl);
+          }
+        }
       } catch (error) {
         if (error instanceof LoopRunJournalError) throw error;
         if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -768,8 +797,9 @@ export class LoopRunStore {
       `INSERT INTO loop_events (
         event_id, run_id, sequence, kind, stage, attempt, created_at,
         input_digest, output_artifact_ref, output_digest, error_code,
-        retryable, reason_code, canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        retryable, reason_code, binding_id, binding_version,
+        input_artifact_ref, canonical_sha256
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.event_id,
       row.run_id,
@@ -784,6 +814,9 @@ export class LoopRunStore {
       row.error_code,
       row.retryable,
       row.reason_code,
+      row.binding_id,
+      row.binding_version,
+      row.input_artifact_ref,
       row.canonical_sha256,
     );
   }

@@ -152,6 +152,9 @@ const EVENT_FIELDS = [
   "errorCode",
   "retryable",
   "reasonCode",
+  "bindingId",
+  "bindingVersion",
+  "inputArtifactRef",
 ] as const;
 
 const RUN_LEVEL_KINDS: readonly LoopRunEventKind[] = [
@@ -240,6 +243,10 @@ export function validateLoopRunEvent(event: unknown): void {
     throw new LoopRunJournalError("INVALID_INPUT", "event.retryable must be a boolean or null");
   }
   if (record.reasonCode !== null) asNonEmptyString(record.reasonCode, "event.reasonCode", false);
+  // C01 WP-4 provenance fields: nullable strings, never echoed.
+  if (record.bindingId !== null) asNonEmptyString(record.bindingId, "event.bindingId", true);
+  if (record.bindingVersion !== null) asNonEmptyString(record.bindingVersion, "event.bindingVersion", true);
+  if (record.inputArtifactRef !== null) asNonEmptyString(record.inputArtifactRef, "event.inputArtifactRef", true);
 
   const canonicalKind = kind as LoopRunEventKind;
   if (RUN_LEVEL_KINDS.includes(canonicalKind)) {
@@ -294,6 +301,9 @@ export function canonicalizeLoopRunEvent(event: LoopRunEvent): string {
     errorCode: event.errorCode,
     retryable: event.retryable,
     reasonCode: event.reasonCode,
+    bindingId: event.bindingId,
+    bindingVersion: event.bindingVersion,
+    inputArtifactRef: event.inputArtifactRef,
   };
   return JSON.stringify(ordered);
 }
@@ -316,6 +326,9 @@ export function createLoopRunCreatedEvent(identity: LoopRunIdentity): LoopRunEve
     errorCode: null,
     retryable: null,
     reasonCode: null,
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
   });
 }
 
