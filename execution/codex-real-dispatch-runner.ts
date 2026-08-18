@@ -18,6 +18,7 @@ import {
   CodexPromptBuilderInput,
   PromptBuilderLimits,
   DEFAULT_PROMPT_BUILDER_LIMITS,
+  containsProhibitedContent,
 } from "./codex-real-dispatch-prompt-builder";
 import {
   parseCodexOutput,
@@ -37,30 +38,73 @@ export function isSupportedCodexRequestType(type: string): boolean {
 const CAPABILITY_PROMPT_INPUT_MAX = 4000;
 const CAPABILITY_OUTPUT_MAX = 8000;
 
+export type CapabilitySafetyResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: string };
+
+/**
+ * Fail-closed input safety for capability prompts: serializes the request
+ * input and rejects circular/unserializable payloads and sensitive content
+ * BEFORE any prompt is built or the process runner is invoked. Mirrors the
+ * implementation path's sensitive-content detection.
+ */
+export function checkCapabilityInput(input: unknown): CapabilitySafetyResult {
+  let json: string;
+  try {
+    const serialized = JSON.stringify(input);
+    if (serialized === undefined) {
+      return { ok: false, reason: "unsafe_input" };
+    }
+    json = serialized;
+  } catch {
+    return { ok: false, reason: "unsafe_input" };
+  }
+  if (containsProhibitedContent(json)) {
+    return { ok: false, reason: "prohibited_input_content" };
+  }
+  return { ok: true, text: json.slice(0, CAPABILITY_PROMPT_INPUT_MAX) };
+}
+
+/**
+ * Fail-closed output safety for capability text: oversized output must NOT be
+ * silently truncated into a "successful" node product (Gate/finding/test
+ * evidence would be lost), and sensitive output must never be persisted as a
+ * successful artifact.
+ */
+export function checkCapabilityOutput(outputText: string): CapabilitySafetyResult {
+  if (outputText.length > CAPABILITY_OUTPUT_MAX) {
+    return { ok: false, reason: "output_too_large" };
+  }
+  if (containsProhibitedContent(outputText)) {
+    return { ok: false, reason: "prohibited_output_content" };
+  }
+  return { ok: true, text: outputText };
+}
+
 /**
  * Deterministic, non-empty prompt for a node capability, including the
- * request input. Used by both fake and real runners for non-implementation
- * capabilities (implementation-like requests use the dedicated prompt
- * builder with ImplementationExecutorInput).
+ * (already safety-checked) request input. Used by both fake and real runners
+ * for non-implementation capabilities (implementation-like requests use the
+ * dedicated prompt builder with ImplementationExecutorInput).
  */
 export function buildCapabilityPrompt(
   request: ExecutionRequest,
   capability: NodeCapabilityId,
+  inputText: string,
 ): string {
-  const inputSummary = JSON.stringify(request.input).slice(0, CAPABILITY_PROMPT_INPUT_MAX);
   return [
     `You are executing the ${capability} node of an SDLC loop.`,
     `Requirement ID: ${request.requirementId}`,
     `Node: ${request.node}`,
-    `Input: ${inputSummary}`,
+    `Input: ${inputText}`,
   ].join("\n");
 }
 
 /**
  * Builds the canonical output artifact for a non-implementation capability:
- * the executor text output becomes the node product content (bounded),
- * typed by CAPABILITY_ARTIFACT_TYPES. No code-patch parsing is applied to
- * non-implementation capabilities.
+ * the (already safety-checked, non-truncated) executor text output becomes
+ * the node product content, typed by CAPABILITY_ARTIFACT_TYPES. No code-patch
+ * parsing is applied to non-implementation capabilities.
  */
 export function buildCapabilityTextArtifact(
   request: ExecutionRequest,
@@ -75,7 +119,7 @@ export function buildCapabilityTextArtifact(
     node: request.node,
     type: artifactType,
     content: {
-      node_output: outputText.slice(0, CAPABILITY_OUTPUT_MAX),
+      node_output: outputText,
       parser_summary: "capability_text_output",
     },
     agent: agent as ExecutionRequest["agent"],
@@ -249,7 +293,20 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
         }
         prompt = promptResult.prompt;
       } else {
-        prompt = buildCapabilityPrompt(request, effectiveCapability);
+        // Fail-closed: sensitive or unserializable input must never reach a
+        // prompt or the process runner.
+        const inputCheck = checkCapabilityInput(request.input);
+        if (inputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            inputCheck.reason,
+            "reject_and_shadow_fallback",
+            inputCheck.reason === "prohibited_input_content"
+              ? "Input contains prohibited content"
+              : "Input is not safely serializable"
+          );
+        }
+        prompt = buildCapabilityPrompt(request, effectiveCapability, inputCheck.text);
       }
 
       switch (options.scenario) {
@@ -278,6 +335,22 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
 
       const stdout = buildSyntheticStdout(options.scenario);
       const artifactType: ExecutionArtifactType = CAPABILITY_ARTIFACT_TYPES[effectiveCapability];
+
+      if (!isImplementationLike) {
+        // Fail-closed: oversized or sensitive output must never become a
+        // successful node product (no silent truncation, no secret leak).
+        const outputCheck = checkCapabilityOutput(stdout);
+        if (outputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            outputCheck.reason,
+            "reject_and_shadow_fallback",
+            outputCheck.reason === "output_too_large"
+              ? "Capability output exceeded maximum allowed size"
+              : "Output contains prohibited content"
+          );
+        }
+      }
 
       // C01 WP-3: per-capability parsing and artifact construction.
       // Implementation-like requests parse a code patch; other capabilities

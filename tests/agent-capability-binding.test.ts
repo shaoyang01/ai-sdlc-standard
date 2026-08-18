@@ -420,6 +420,114 @@ console.log("binding: real-dispatch branch fails closed on CLI errors for all ca
   }
 }
 
+
+console.log("binding: capability safety fails closed (real branch, codexRealDispatchConfig + codexProcessRunner)");
+{
+  // Sensitive input: process runner must never be invoked.
+  {
+    const tracking = { calls: 0 };
+    const processRunner = {
+      async run(_prompt: string) {
+        tracking.calls += 1;
+        return { exitCode: 0, stdout: "output", durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
+    });
+    const request = { ...makeRequest("tech-design", "tech-design"), input: { api_key: "secret-value" } };
+    const result = await gateway.execute(request);
+    assert(tracking.calls === 0, "sensitive input: process runner not invoked");
+    assert(result.artifacts[0].type === "shadow_output", "sensitive input: fails closed to shadow_output");
+    assert(result.success === true, "sensitive input: shadow fallback keeps gateway success contract");
+  }
+
+  // Sensitive output: no successful artifact may be produced.
+  {
+    const processRunner = {
+      async run(_prompt: string) {
+        return { exitCode: 0, stdout: "analysis result with sk-ABCDEF1234567890 token", durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
+    });
+    const result = await gateway.execute(makeRequest("test-validation", "test-validation"));
+    assert(result.artifacts[0].type === "shadow_output", "sensitive output: fails closed to shadow_output");
+    assert(
+      result.output["codex_fallback_reason"] === "prohibited_output_content",
+      "sensitive output: fallback reason is prohibited_output_content",
+    );
+  }
+
+  // Oversized output: no partial artifact, output_too_large.
+  {
+    const processRunner = {
+      async run(_prompt: string) {
+        return { exitCode: 0, stdout: "x".repeat(8001), durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
+    });
+    const result = await gateway.execute(makeRequest("test-validation", "test-validation"));
+    assert(result.artifacts[0].type === "shadow_output", "oversized output: fails closed to shadow_output");
+    assert(
+      result.output["codex_fallback_reason"] === "output_too_large",
+      "oversized output: fallback reason is output_too_large",
+    );
+    assert(result.artifacts[0].content["node_output"] === undefined, "oversized output: no partial node product artifact");
+  }
+
+  // Circular input: fail closed before the process runner.
+  {
+    const tracking = { calls: 0 };
+    const processRunner = {
+      async run(_prompt: string) {
+        tracking.calls += 1;
+        return { exitCode: 0, stdout: "output", durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
+    });
+    const circular: Record<string, unknown> = { name: "loop" };
+    circular.self = circular;
+    const request = { ...makeRequest("tech-design", "tech-design"), input: circular };
+    const result = await gateway.execute(request);
+    assert(tracking.calls === 0, "circular input: process runner not invoked");
+    assert(result.artifacts[0].type === "shadow_output", "circular input: fails closed to shadow_output");
+  }
+
+  // Unserializable input (BigInt): fail closed before the process runner.
+  {
+    const tracking = { calls: 0 };
+    const processRunner = {
+      async run(_prompt: string) {
+        tracking.calls += 1;
+        return { exitCode: 0, stdout: "output", durationMs: 5 };
+      },
+    };
+    const gateway = new ExecutionGateway({
+      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      codexProcessRunner: processRunner,
+      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
+    });
+    const request = { ...makeRequest("tech-design", "tech-design"), input: { big: BigInt(9007199254740991) } };
+    const result = await gateway.execute(request);
+    assert(tracking.calls === 0, "unserializable input: process runner not invoked");
+    assert(result.artifacts[0].type === "shadow_output", "unserializable input: fails closed to shadow_output");
+  }
+}
+
 console.log(`Results: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exitCode = 1;

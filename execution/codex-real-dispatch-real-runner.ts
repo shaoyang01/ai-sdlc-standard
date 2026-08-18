@@ -17,6 +17,8 @@ import {
   isSupportedCodexRequestType,
   buildCapabilityPrompt,
   buildCapabilityTextArtifact,
+  checkCapabilityInput,
+  checkCapabilityOutput,
 } from "./codex-real-dispatch-runner";
 import { CAPABILITY_ARTIFACT_TYPES, validateNodeOutputArtifact } from "../core/agent-capability-bindings";
 import type { NodeCapabilityId } from "../loop/types";
@@ -168,7 +170,20 @@ export function createCodexRealDispatchRunner(
         }
         prompt = promptResult.prompt;
       } else {
-        prompt = buildCapabilityPrompt(request, effectiveCapability);
+        // Fail-closed: sensitive or unserializable input must never reach a
+        // prompt or the process runner.
+        const inputCheck = checkCapabilityInput(request.input);
+        if (inputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            inputCheck.reason,
+            "reject_and_shadow_fallback",
+            inputCheck.reason === "prohibited_input_content"
+              ? "Input contains prohibited content"
+              : "Input is not safely serializable"
+          );
+        }
+        prompt = buildCapabilityPrompt(request, effectiveCapability, inputCheck.text);
       }
 
       let processResult;
@@ -218,6 +233,22 @@ export function createCodexRealDispatchRunner(
       }
 
       const artifactType: ExecutionArtifactType = CAPABILITY_ARTIFACT_TYPES[effectiveCapability];
+
+      if (!isImplementationLike) {
+        // Fail-closed: oversized or sensitive output must never become a
+        // successful node product (no silent truncation, no secret leak).
+        const outputCheck = checkCapabilityOutput(processResult.stdout);
+        if (outputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            outputCheck.reason,
+            "reject_and_shadow_fallback",
+            outputCheck.reason === "output_too_large"
+              ? "Capability output exceeded maximum allowed size"
+              : "Output contains prohibited content"
+          );
+        }
+      }
 
       // C01 WP-3: per-capability parsing and artifact construction.
       // Implementation-like requests parse a code patch; other capabilities
