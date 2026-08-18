@@ -653,3 +653,37 @@ GOVERNANCE.md §15 已写入（控制平面提交待登记）。
 ## 代码依据
 
 `ai-project-control-plane/projects/ai-sdlc/GOVERNANCE.md` §15
+
+# Decision-020：Agent Binding 全能力模型（所有 Agent 可独立完成所有节点）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+C01 规划决策点 1（初始 binding 集合）确认中，用户明确：Codex 可以先行，但不能只支持 `code_generation`；需求是**所有已支持 Agent 都能独立完成所有节点（需求归一化、技术方案、方案挑战、方案审核、实现、代码审核、测试验收），binding 支持随意组合**（任意节点 × 任意 Agent）。
+
+## 问题
+
+binding 模型是"能力→固定 Agent 映射"（如 codex 只做实现），还是全能力矩阵？
+
+## 决策
+
+采用全能力模型：binding 不预设任何 Agent 的能力限制，每个已支持 Agent 均可执行任一节点；binding 配置支持任意组合与替换，替换不改变节点合同（Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界）。初始状态：Codex enabled（请求类型从 `code_generation` 扩展至全部节点能力），Kimi/Hermes 注册为 disabled（全能力模型，真实环境复核后启用）。
+
+## 原因
+
+对齐 LOOP Core Contract §6（节点声明能力、binding 选执行者、不写死角色）；用户明确要求所有 Agent 独立完成所有节点。
+
+## 影响
+
+WP-3 范围扩大：binding schema 支持全矩阵；codex adapter 需按节点扩展请求类型与输出合同校验器；WP-2 能力类型清单成为唯一节点合同面，binding 只做选择。
+
+## 实现状态
+
+已并入 C01 正式规划（docs/LOOP-CORE-C01-PLAN.md）。
+
+## 代码依据
+
+`docs/LOOP_CORE_CONTRACT.md` §6；`temp/plans/loop-core-c01-planning-draft-20260818.md` §8
