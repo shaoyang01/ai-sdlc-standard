@@ -340,7 +340,87 @@ console.log("binding: Gateway routes all seven capabilities to real dispatch");
   assert(shadowResult.artifacts[0].type === "shadow_output", "default env still returns shadow_output for capability requests");
 }
 
-  console.log(`Results: ${passed} passed, ${failed} failed`);
+
+console.log("binding: fake runner prompt is non-empty and includes input (all capabilities)");
+{
+  const runner = createCodexFakeRunner({ scenario: "success_code_patch" });
+  for (const capability of NODE_CAPABILITY_IDS) {
+    const request = makeRequest(capability, capability);
+    const result = await runner.run(request);
+    const promptCharCount = result.output["prompt_char_count"] as number;
+    assert(promptCharCount > 0, `fake runner: ${capability} prompt non-empty (${promptCharCount} chars)`);
+  }
+}
+
+console.log("binding: real-dispatch branch (codexRealDispatchConfig + codexProcessRunner) covers all seven capabilities");
+{
+  const tracking = { calls: 0, lastPrompt: "" };
+  let expectedStdout = "capability output text";
+  const processRunner = {
+    async run(prompt: string) {
+      tracking.calls += 1;
+      tracking.lastPrompt = prompt;
+      return { exitCode: 0, stdout: expectedStdout, durationMs: 10 };
+    },
+  };
+  const gateway = new ExecutionGateway({
+    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+    codexProcessRunner: processRunner,
+    codexRealDispatchConfig: { workingDirectory: "/tmp/binding-real-branch-test" },
+  });
+
+  for (const capability of NODE_CAPABILITY_IDS) {
+    expectedStdout =
+      capability === "implementation"
+        ? "FILE: src/a.ts\nPATCH:\n+export const a = 1;\n"
+        : "capability output text";
+    const request = makeRequest(capability, capability);
+    const result = await gateway.execute(request);
+    assert(result.success === true, `real branch: ${capability} succeeds`);
+    assert(
+      result.artifacts[0].type === CAPABILITY_ARTIFACT_TYPES[capability],
+      `real branch: ${capability} artifact '${result.artifacts[0].type}' matches contract`,
+    );
+    assert(tracking.lastPrompt.length > 0, `real branch: ${capability} prompt non-empty (${tracking.lastPrompt.length} chars)`);
+    assert(
+      tracking.lastPrompt.includes("REQ-BINDING-TEST"),
+      `real branch: ${capability} prompt includes requirementId`,
+    );
+    const content = result.artifacts[0].content as Record<string, unknown>;
+    if (capability === "implementation") {
+      assert(result.output["result"] === "code_patch_generated", "real branch: implementation result is code_patch_generated");
+      assert(content["patch"] !== undefined, "real branch: implementation content is a parsed patch");
+    } else {
+      assert(result.output["result"] === "capability_completed", `real branch: ${capability} result is capability_completed`);
+      assert(content["node_output"] === "capability output text", `real branch: ${capability} content is capability text output`);
+      assert(content["parser_summary"] === "capability_text_output", `real branch: ${capability} parser summary is capability_text_output`);
+    }
+  }
+  assert(tracking.calls === 7, "real process runner invoked for all seven capabilities");
+}
+
+console.log("binding: real-dispatch branch fails closed on CLI errors for all capabilities");
+{
+  const failingRunner = {
+    async run(_prompt: string) {
+      return { exitCode: 1, stdout: "", durationMs: 5 };
+    },
+  };
+  const gateway = new ExecutionGateway({
+    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+    codexProcessRunner: failingRunner,
+    codexRealDispatchConfig: { workingDirectory: "/tmp/binding-real-branch-test" },
+  });
+  for (const capability of NODE_CAPABILITY_IDS) {
+    const result = await gateway.execute(makeRequest(capability, capability));
+    assert(
+      result.artifacts[0].type === "shadow_output",
+      `real branch: ${capability} CLI failure fails closed to shadow_output`,
+    );
+  }
+}
+
+console.log(`Results: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exitCode = 1;
   }

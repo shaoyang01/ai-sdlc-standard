@@ -12,7 +12,7 @@ import {
 } from "./types";
 import { createArtifact } from "../core/artifact";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
-import { CAPABILITY_ARTIFACT_TYPES } from "../core/agent-capability-bindings";
+import { CAPABILITY_ARTIFACT_TYPES, validateNodeOutputArtifact } from "../core/agent-capability-bindings";
 import {
   buildCodexPrompt,
   CodexPromptBuilderInput,
@@ -32,6 +32,56 @@ const CAPABILITY_REQUEST_TYPES: ReadonlySet<string> = new Set<string>(NODE_CAPAB
 
 export function isSupportedCodexRequestType(type: string): boolean {
   return type === "code_generation" || CAPABILITY_REQUEST_TYPES.has(type);
+}
+
+const CAPABILITY_PROMPT_INPUT_MAX = 4000;
+const CAPABILITY_OUTPUT_MAX = 8000;
+
+/**
+ * Deterministic, non-empty prompt for a node capability, including the
+ * request input. Used by both fake and real runners for non-implementation
+ * capabilities (implementation-like requests use the dedicated prompt
+ * builder with ImplementationExecutorInput).
+ */
+export function buildCapabilityPrompt(
+  request: ExecutionRequest,
+  capability: NodeCapabilityId,
+): string {
+  const inputSummary = JSON.stringify(request.input).slice(0, CAPABILITY_PROMPT_INPUT_MAX);
+  return [
+    `You are executing the ${capability} node of an SDLC loop.`,
+    `Requirement ID: ${request.requirementId}`,
+    `Node: ${request.node}`,
+    `Input: ${inputSummary}`,
+  ].join("\n");
+}
+
+/**
+ * Builds the canonical output artifact for a non-implementation capability:
+ * the executor text output becomes the node product content (bounded),
+ * typed by CAPABILITY_ARTIFACT_TYPES. No code-patch parsing is applied to
+ * non-implementation capabilities.
+ */
+export function buildCapabilityTextArtifact(
+  request: ExecutionRequest,
+  capability: NodeCapabilityId,
+  outputText: string,
+  artifactType: ExecutionArtifactType,
+  agent: string,
+): ExecutionArtifact {
+  return createArtifact({
+    id: `${request.requirementId}:${request.node}:${artifactType}:capability-text`,
+    requirementId: request.requirementId,
+    node: request.node,
+    type: artifactType,
+    content: {
+      node_output: outputText.slice(0, CAPABILITY_OUTPUT_MAX),
+      parser_summary: "capability_text_output",
+    },
+    agent: agent as ExecutionRequest["agent"],
+    source: "execution_gateway",
+    createdAt: new Date().toISOString(),
+  });
 }
 
 export type CodexFakeRunnerScenario =
@@ -167,8 +217,8 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
       }
 
       // C01 WP-3: implementation-like requests need ImplementationExecutorInput;
-      // other node capabilities accept generic input and produce their own
-      // canonical output artifact (CAPABILITY_ARTIFACT_TYPES).
+      // other node capabilities build a deterministic capability prompt from
+      // the input and produce their own canonical output artifact.
       const isImplementationLike =
         request.type === "code_generation" || request.type === "implementation";
       const implInput = request.input
@@ -183,6 +233,9 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
         );
       }
 
+      // Legacy code_generation maps to the implementation capability.
+      const effectiveCapability: NodeCapabilityId =
+        request.type === "code_generation" ? "implementation" : (request.type as NodeCapabilityId);
       let prompt = "";
       if (isImplementationLike) {
         const promptResult = buildCodexPrompt(implInput as CodexPromptBuilderInput, promptLimits);
@@ -195,6 +248,8 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
           );
         }
         prompt = promptResult.prompt;
+      } else {
+        prompt = buildCapabilityPrompt(request, effectiveCapability);
       }
 
       switch (options.scenario) {
@@ -222,38 +277,60 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
       }
 
       const stdout = buildSyntheticStdout(options.scenario);
-      const parseResult = parseCodexOutput(
-        stdout,
-        request.requirementId,
-        request.node,
-        parserLimits
-      );
+      const artifactType: ExecutionArtifactType = CAPABILITY_ARTIFACT_TYPES[effectiveCapability];
 
-      if (!parseResult.ok) {
-        return buildShadowFallbackResult(
+      // C01 WP-3: per-capability parsing and artifact construction.
+      // Implementation-like requests parse a code patch; other capabilities
+      // take the executor text output as the node product (no code-patch
+      // parsing is applied).
+      let artifact: ExecutionArtifact;
+      if (isImplementationLike) {
+        const parseResult = parseCodexOutput(
+          stdout,
+          request.requirementId,
+          request.node,
+          parserLimits
+        );
+        if (!parseResult.ok) {
+          return buildShadowFallbackResult(
+            request,
+            parseResult.reason ?? "unknown_error",
+            parseResult.fallbackAction ?? "shadow_fallback",
+            `Output parser refused: ${parseResult.reason ?? "unknown_error"}`
+          );
+        }
+        artifact = createArtifact({
+          id: `${request.requirementId}:${request.node}:${artifactType}:codex-fake`,
+          requirementId: request.requirementId,
+          node: request.node,
+          type: artifactType,
+          content: parseResult.artifact.content,
+          agent: request.agent,
+          source: "execution_gateway",
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        artifact = buildCapabilityTextArtifact(
           request,
-          parseResult.reason ?? "unknown_error",
-          parseResult.fallbackAction ?? "shadow_fallback",
-          `Output parser refused: ${parseResult.reason ?? "unknown_error"}`
+          effectiveCapability,
+          stdout,
+          artifactType,
+          request.agent,
         );
       }
 
-      // C01 WP-3: the produced artifact must carry the canonical output type
-      // for the requested capability (WP-2 output contracts).
-      const artifactType: ExecutionArtifactType =
-        request.type === "code_generation"
-          ? "code_patch"
-          : CAPABILITY_ARTIFACT_TYPES[request.type as NodeCapabilityId];
-      const artifact = createArtifact({
-        id: `${request.requirementId}:${request.node}:${artifactType}:codex-fake`,
-        requirementId: request.requirementId,
-        node: request.node,
-        type: artifactType,
-        content: parseResult.artifact.content,
-        agent: request.agent,
-        source: "execution_gateway",
-        createdAt: new Date().toISOString(),
-      });
+      // Production boundary: the output artifact must satisfy the WP-2 node
+      // output contract for the requested capability (fail-closed).
+      try {
+        validateNodeOutputArtifact(artifact.type, effectiveCapability);
+      } catch {
+        return buildShadowFallbackResult(
+          request,
+          "output_contract_violation",
+          "reject_and_shadow_fallback",
+          "Output artifact violates node contract"
+        );
+      }
 
       return {
         success: true,
@@ -262,7 +339,7 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
         output: {
           node: request.node,
           agent: request.agent,
-          result: "code_patch_generated",
+          result: isImplementationLike ? "code_patch_generated" : "capability_completed",
           prompt_char_count: prompt.length,
           output_char_count: stdout.length,
         },

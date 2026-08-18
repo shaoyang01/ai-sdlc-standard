@@ -177,7 +177,7 @@ export const CAPABILITY_ARTIFACT_TYPES: Readonly<Record<NodeCapabilityId, Execut
  * artifact type.
  */
 export function validateNodeOutputArtifact(
-  artifactType: ExecutionArtifactType,
+  artifactType: string,
   capability: NodeCapabilityId,
 ): void {
   const expected = CAPABILITY_ARTIFACT_TYPES[capability];
