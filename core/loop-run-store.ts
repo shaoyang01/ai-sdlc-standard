@@ -663,6 +663,61 @@ export class LoopRunStore {
     return snapshot === undefined ? Object.freeze([]) : snapshot.events;
   }
 
+  /**
+   * Lists all verified run snapshots for one requirement, oldest first.
+   * This is the cross-entry lookup that lets an entry resume the same
+   * Requirement by requirementId without reinterpreting confirmed facts.
+   * requirementId is external input: validated fail-closed and never echoed.
+   */
+  listRunsByRequirement(requirementId: string): readonly LoopRunSnapshot[] {
+    this.validateRequirementId(requirementId);
+    const db = this.connection();
+    try {
+      return db.transaction((): readonly LoopRunSnapshot[] => {
+        const rows = db
+          .prepare(
+            "SELECT run_id FROM loop_runs WHERE requirement_id = ? ORDER BY created_at ASC, run_id ASC",
+          )
+          .all(requirementId) as ReadonlyArray<{ run_id: string }>;
+        return rows.map((row) => {
+          const snapshot = this.readRunSnapshotInTransaction(db, row.run_id);
+          if (snapshot === undefined) {
+            // A listed row must always resolve to a verified snapshot.
+            throw new LoopRunJournalError("STORE_CORRUPT", "requirement run row missing verified snapshot");
+          }
+          return snapshot;
+        });
+      })() as readonly LoopRunSnapshot[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * Finds the latest verified run snapshot for a requirement, or undefined
+   * when the requirement has no run yet. Primary recovery lookup for the
+   * LOOP entry contract.
+   */
+  findLatestRunByRequirement(requirementId: string): LoopRunSnapshot | undefined {
+    const runs = this.listRunsByRequirement(requirementId);
+    return runs.length === 0 ? undefined : runs[runs.length - 1];
+  }
+
+  private validateRequirementId(requirementId: string): void {
+    if (typeof requirementId !== "string") {
+      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must be a string");
+    }
+    const trimmed = requirementId.trim();
+    if (trimmed.length === 0 || trimmed !== requirementId) {
+      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must be a non-empty trimmed string");
+    }
+    if (/[\x00-\x1f\x7f-\x9f]/.test(requirementId)) {
+      throw new LoopRunJournalError("INVALID_INPUT", "requirementId must not contain control characters");
+    }
+  }
+
   // ── storage error translation ──
 
   /**

@@ -687,3 +687,37 @@ WP-3 范围扩大：binding schema 支持全矩阵；codex adapter 需按节点�
 ## 代码依据
 
 `docs/LOOP_CORE_CONTRACT.md` §6；`temp/plans/loop-core-c01-planning-draft-20260818.md` §8
+
+# Decision-021：WP-1（入口归一化合同）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+C01 规划定案后，按逐 WP 授权粒度，WP-1（LOOP-CORE-C01 工作包 1：入口归一化合同）为第一个工作包。
+
+## 问题
+
+WP-1 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-1，scope：① run journal 新增 requirementId 查询接口（`listRunsByRequirement` / `findLatestRunByRequirement`，fail-closed 校验，corruption-first 验证）——支撑跨入口恢复；② 入口合同标准文档 `ai-sdlc/loop-entry-contract.md`（Requirement ID 规则、来源记录、新/补充/变更/返工/反馈分类、运行记录创建与恢复、阻塞条件）；③ 相关测试。明确排除：binding 实现（WP-3）、任何 Agent 真实调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision 3）下，WP-1 是入口能力的最小可验收包；查询接口是已确认缺口（R1 复核）。
+
+## 影响
+
+WP-1 完成后按收口流程：实施 handoff（exchange + 10-projects）→ review → 用户裁决 → closure 登记。
+
+## 实现状态
+
+实施完成（run journal 查询接口 + 测试 30/30 通过；入口合同文档待提交）。
+
+## 代码依据
+
+`core/loop-run-store.ts`；`tests/loop-run-requirement-query.test.ts`；`ai-sdlc/loop-entry-contract.md`
