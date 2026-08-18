@@ -12,6 +12,7 @@ import { executeCodeReview } from "./code-review-adapter";
 import { executeBugfix } from "./bugfix-adapter";
 import { getExecutionMode, isCodexRealDispatchEnabled } from "./config";
 import type { CodexRunner } from "./codex-real-dispatch-runner";
+import { isSupportedCodexRequestType } from "./codex-real-dispatch-runner";
 import { createCodexRealDispatchRunner } from "./codex-real-dispatch-real-runner";
 import type { CodexCliProcessRunner } from "./codex-real-dispatch-real-runner";
 import { createCodexCliProcessRunner } from "./codex-cli-process-runner";
@@ -147,7 +148,7 @@ export class ExecutionGateway {
     //   - SDLC_EXECUTION_MODE=codex
     //   - SDLC_CODEX_REAL_DISPATCH=enabled
     //   - agent === "codex"
-    //   - request.type === "code_generation"
+    //   - request.type is code_generation or a node capability type (WP-3)
     //   - codexRealDispatchConfig.workingDirectory is a non-empty string after trim
     // If any condition is missing, the Gateway returns shadow.
     // The legacy executeCodexAgent path is no longer reachable through ExecutionGateway.
@@ -162,7 +163,7 @@ export class ExecutionGateway {
 
     if (
       isCodexRealDispatchEnabled(env) &&
-      enriched.type === "code_generation" &&
+      isSupportedCodexRequestType(enriched.type) &&
       typeof this.options.codexRealDispatchConfig?.workingDirectory === "string" &&
       this.options.codexRealDispatchConfig.workingDirectory.trim().length > 0
     ) {

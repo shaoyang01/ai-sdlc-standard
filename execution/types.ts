@@ -60,6 +60,7 @@ export type ExecutionRequest = Readonly<{
 export type ExecutionArtifactType =
   | "requirement_summary"
   | "tech_design"
+  | "solution_challenge"
   | "solution_review"
   | "code_patch"
   | "code_review"
