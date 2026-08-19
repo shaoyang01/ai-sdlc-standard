@@ -1004,3 +1004,40 @@ run journal 事件溯源三字段（含旧库原子迁移与篡改 fail-closed�
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §4 WP-4/§5；`ai-sdlc/loop-recovery-protocol.md`；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-030：三仓库常驻分支策略
+
+## 状态
+
+Accepted（2026-08-19，Current User 指令）
+
+## 背景
+
+C01 实施期间产品仓库使用 `feature/loop-core-contract-roadmap`、控制平面使用 `feature/ai-sdlc-loop-core-rebaseline` 作为临时工作分支，产生合并与多分支管理负担。用户明确指令收敛分支模型，不再随意新增开发分支。
+
+## 问题
+
+三个仓库各自的常驻工作分支是什么，临时功能分支如何处置？
+
+## 决策
+
+- 产品仓库（ai-sdlc-standard）：常驻 `feature/loop-runtime-v1`；C01 全部工作（WP-1~WP-4，至 `0e18a2a`）经 merge commit 合并入该分支，此后以其为唯一工作分支；`feature/loop-core-contract-roadmap` 在合并验证后删除（本地与远端）。
+- 控制平面（ai-project-control-plane）：常驻 `main`，直接提交并推送；`feature/ai-sdlc-loop-core-rebaseline` 在 main 推送后删除（本地与远端）。
+- PKB（personal-knowledge-base）：常驻 `feature/knowledge-base-v1`（已是当前唯一开发分支，无需变更）。
+- 后续工作不得新增长期并行的开发分支；确需临时分支时须在使用完毕后即合并回常驻分支并删除。
+
+## 原因
+
+减少合并面与分支漂移；STATE、Exchange、PKB 中登记的 source_commit 均为主干可达提交，分支收敛不影响已发布材料的 provenance 可追溯性。
+
+## 影响
+
+`projects/ai-sdlc/STATE.yaml` 的 `repository_observation.last_observed.current_rebaseline_worktrees` 更新为 product=`feature/loop-runtime-v1`、control=`main`；两个临时功能分支删除后，任何续作（含 WP-4B）直接在上述常驻分支上进行。
+
+## 实现状态
+
+已执行：产品合并提交后推送 `feature/loop-runtime-v1`；控制平面 STATE 更新随 `main` 推送；临时分支删除。
+
+## 代码依据
+
+`projects/ai-sdlc/STATE.yaml` repository_observation；产品 merge commit（loop-core-contract-roadmap → loop-runtime-v1）
