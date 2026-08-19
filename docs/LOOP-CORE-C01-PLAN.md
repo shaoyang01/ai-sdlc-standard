@@ -3,7 +3,7 @@
 > 状态：**ACCEPTED**（2026-08-19 用户确认全部决策点；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
 > 前身：`temp/plans/loop-core-c01-planning-draft-20260818.md`（2026-08-18 草稿，已迁移）
 > 日期：2026-08-18（草稿）/ 2026-08-19（定案）
-> 相关决定：Decision-014（落点）、015（编号）、016（阶段 0 顺序）、017（handoff 落点）、018（直接 main）、020（binding 全能力模型）
+> 相关决定：Decision-014（落点）、015（编号）、016（阶段 0 顺序）、017（handoff 落点）、018（直接 main）、020（binding 全能力模型）、028（WP-4B 拆分）、031（WP-4B 实现方案）
 > 依据：
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0（Accepted）
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-01`
@@ -81,6 +81,8 @@ WP-3 Agent Capability Binding ──┴─（设计可并行，落地有依赖�
   ↓
 WP-4 执行溯源与跨入口恢复
   ↓
+WP-4B 执行溯源完整性与生产接线
+  ↓
 WP-5 验证与守卫（完成合同验收）
 ```
 
@@ -120,6 +122,15 @@ WP-5 验证与守卫（完成合同验收）
 - 验收：每次节点执行可追溯 binding 与输入/输出来源；中断后可由另一入口/binding 继续。
 - 拆分说明（Decision-028）：WP-4 实际交付范围为 Decision-027 授权的三字段 schema 扩展、迁移、recordNodeExecution/recoverRunContext helper 与最小恢复上下文；adapter/Agent 执行者标识与版本、有效产物版本/Gate/finding/下一步资格的完整恢复模型、写入侧溯源强制与 ExecutionGateway/入口接线拆分为 **WP-4B**。WP-4B 收口前，C01 完成合同第 1、2 条不得登记为完成，本节验收标准整体由 WP-4 + WP-4B 共同满足。
 
+### WP-4B：执行溯源完整性与生产接线
+
+- 同一 run journal 新增正交的 capability attempt 事件流，避免把七个能力错误映射为八个 legacy delivery stages；journal 格式 v2，v1→v2 单事务迁移；
+- 完整快照：binding/registry、Agent/adapter/executor 版本、输入/输出产物 ref+version+digest、Gate、未解决 finding、下一步资格与失败可重试性；
+- 七能力 canonical chain + started 互斥 claim + corruption-first；产物 lineage、Gate/finding 与资格关系 fail-closed；
+- ExecutionGateway 携带 journal/artifact store/binding registry，真实 capability dispatch 前后强制写 started/terminal；shadow、异常与不合格结果只形成 failed attempt；
+- `LoopCapabilityEntry` 作为首个受支持入口，按 Requirement ID 创建或恢复同一 run，并严格消费前一能力的有效输出；
+- 状态（2026-08-19）：**实施完成、等待用户复审**（Decision-031）；未消费授权，未登记 C01 完成合同第 1、2 条完成。
+
 ### WP-5：验证与守卫
 
 - 单元测试：binding schema 校验、run journal 扩展、恢复协议、替换守卫；
@@ -148,8 +159,8 @@ WP-5 验证与守卫（完成合同验收）
 
 | # | 风险/问题 | 处理方向 |
 | --- | --- | --- |
-| R1 | 历史 D01~D06 资产与新 Roadmap 合同对齐度未知 | **已复核（2026-08-19）**：C01 相关 218 个测试全部通过；run journal/checkpoint/adapter 资产健康；确认缺口：run journal 无 requirementId 查询 API（WP-4 新增）、codex 仅支持 code_generation（WP-3 范围） |
-| R2 | run journal 事件 schema 扩展可能破坏现有消费者 | 版本化事件 schema，新增字段 fail-closed，向后兼容测试 |
+| R1 | 历史 D01~D06 资产与新 Roadmap 合同对齐度未知 | **已闭合**：WP-1 补 requirementId 查询，WP-3 扩展 codex 全能力请求，WP-4/WP-4B 完成版本化溯源与恢复；以各 WP review/回归证据为准 |
+| R2 | run journal 事件 schema 扩展可能破坏现有消费者 | **已控制**：v0→v1 hash 原子迁移 + v1→v2 capability 表迁移；未知版本/缺表/约束漂移/历史行损坏 fail-closed，回归覆盖 |
 | R3 | checkpoint 含发布语义，复用裁剪边界 | 只取 fresh/recovery + 不可变链，发布 phase 留在历史 |
 | R4 | PCE 与 binding 职责重叠 | 规划期明确：binding = 选择+校验+版本；PCE = 执行信封，不重复定义 |
 | R5 | 真实入口 Agent 可用性（Kimi/Codex/Hermes CLI 现状） | **部分复核**：codex real-dispatch smoke 通道存在（feature-flagged）；Kimi/Hermes 真实 CLI 需规划期在真实环境验证后决定启用状态 |
@@ -211,5 +222,6 @@ WP-5 验证与守卫（完成合同验收）
 1. ✅ 阶段 0 机制恢复（决定记录、handoff 通道、STATE 扩展、收口流程固化）——已完成并发布；
 2. ✅ §8 决策点全部定案（Decision-020：binding 全能力模型；Codex 验收入口；逐 WP 授权）；
 3. ✅ R1 逐资产 Source 复核（218 测试通过）与正式规划迁移（本文件）；
-4. **待用户授权 WP-1**（入口归一化合同）：授权后按 §9.3 收口流程执行——STATE 登记授权（scope + 明确排除）→ 实施 → 实施 handoff（exchange + 10-projects）→ review → 用户裁决 → closure 登记；
-5. 每完成一个 WP 按 §5 验收映射更新证据与 STATE，再进入下一 WP。
+4. ✅ WP-1～WP-4 已实施、复审并按各自 Decision 收口；WP-4B 已获授权并完成产品实现，当前等待 review，授权尚未 consumed；
+5. WP-4B review/correction/用户裁决通过后，登记 C01 完成合同第 1、2 条证据并消费 WP-4B 授权；
+6. 之后单独授权 WP-5，完成 binding 替换守卫与不可用/超时/不合格结果的综合验收，覆盖 C01 完成合同第 3、4 条。

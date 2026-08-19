@@ -51,7 +51,8 @@ replaceBinding(fromBindingId, toBindingId)
 ```
 
 - 替换必须发生在同一 capability 内（不同能力替换被拒绝）；
-- 替换只生成新的配置快照，节点合同对象不变；
+- 替换只生成新的深冻结配置快照，registry 正整数版本递增；节点合同对象不变；
+- 执行事件同时记录 registry version 与 binding version，因此后续再次替换不会改写历史实际执行者快照；
 - 替换后执行者改变，但 Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界均不变（守卫测试断言）。
 
 ## 5. 失败与超时
@@ -78,3 +79,4 @@ replaceBinding(fromBindingId, toBindingId)
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-19 | Accepted | WP-3 交付：全能力矩阵（7×3）、binding schema、替换语义、失败/超时策略、与 WP-2 关系。 |
+| 0.1.1 | 2026-08-19 | 等待 WP-4B 复审 | WP-4B 接线补充：每次 replacement 递增不可变 registry snapshot version，供 capability execution 事件持久化历史选择快照。 |

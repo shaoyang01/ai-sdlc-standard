@@ -124,7 +124,11 @@ function test(): void {
       const store = openStore(schemaDir);
       const db = new Database(join(schemaDir, "journal.db"), { readonly: true });
       const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>).map((row) => row.name);
-      assert(tables.includes("loop_runs") && tables.includes("loop_stage_states") && tables.includes("loop_events"), "three schema tables exist");
+      assert(
+        tables.includes("loop_runs") && tables.includes("loop_stage_states") &&
+        tables.includes("loop_events") && tables.includes("loop_capability_executions"),
+        "four schema tables exist",
+      );
       const journalMode = (db.pragma("journal_mode", { simple: true }) as string).toLowerCase();
       assert(journalMode === "wal", "WAL mode enabled");
       const foreignKeys = db.pragma("foreign_keys", { simple: true }) as number;

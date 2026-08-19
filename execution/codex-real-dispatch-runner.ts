@@ -109,12 +109,55 @@ export function buildCapabilityPrompt(
   capability: NodeCapabilityId,
   inputText: string,
 ): string {
+  const outcomeInstructions: string[] = [];
+  if (capability === "solution-review" || capability === "test-validation") {
+    outcomeInstructions.push("End with exactly one line: GATE_RESULT: PASS, FAIL, or PASS_WITH_RISK.");
+  }
+  if (capability === "solution-challenge" || capability === "code-review") {
+    outcomeInstructions.push("End with exactly one line: UNRESOLVED_FINDINGS_JSON: <JSON array>.");
+  }
   return [
     `You are executing the ${capability} node of an SDLC loop.`,
     `Requirement ID: ${request.requirementId}`,
     `Node: ${request.node}`,
     `Input: ${inputText}`,
+    ...outcomeInstructions,
   ].join("\n");
+}
+
+/** Parse only explicit, line-delimited machine outcome markers. */
+export function parseCapabilityOutcomeMarkers(
+  capability: NodeCapabilityId,
+  outputText: string,
+): Readonly<Record<string, unknown>> {
+  const outcome: Record<string, unknown> = Object.create(null);
+  if (capability === "solution-review" || capability === "test-validation") {
+    const matches = [...outputText.matchAll(/^GATE_RESULT: (PASS|FAIL|PASS_WITH_RISK)$/gm)];
+    if (matches.length === 1) outcome.gateResult = matches[0]![1];
+  }
+  if (capability === "solution-challenge" || capability === "code-review") {
+    const matches = [...outputText.matchAll(/^UNRESOLVED_FINDINGS_JSON: (.+)$/gm)];
+    if (matches.length === 1) {
+      try {
+        const parsed = JSON.parse(matches[0]![1]!);
+        if (Array.isArray(parsed)) outcome.unresolvedFindings = parsed;
+      } catch {
+        // Missing field is intentional: the tracing Gateway will reject the
+        // outcome contract instead of guessing that there are no findings.
+      }
+    }
+  }
+  return Object.freeze(outcome);
+}
+
+function fakeCapabilityOutcome(capability: NodeCapabilityId): Readonly<Record<string, unknown>> {
+  if (capability === "solution-review" || capability === "test-validation") {
+    return Object.freeze({ gateResult: "PASS" });
+  }
+  if (capability === "solution-challenge" || capability === "code-review") {
+    return Object.freeze({ unresolvedFindings: Object.freeze([]) });
+  }
+  return Object.freeze({});
 }
 
 /**
@@ -430,6 +473,7 @@ export function createCodexFakeRunner(options: CodexRunnerOptions): CodexRunner 
           result: isImplementationLike ? "code_patch_generated" : "capability_completed",
           prompt_char_count: prompt.length,
           output_char_count: stdout.length,
+          ...fakeCapabilityOutcome(effectiveCapability),
         },
         artifacts: [artifact],
       };

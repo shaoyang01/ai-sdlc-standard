@@ -937,14 +937,17 @@ function sectionD01D08Regression(store: LoopArtifactStore): void {
     "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
   ] as const;
   check(
-    LOOP_ARTIFACT_KINDS.length === 12,
-    "kind list has exactly 12 entries (11 existing + delivery_checkpoint)",
+    LOOP_ARTIFACT_KINDS.length === 14,
+    "kind list has 12 historical entries plus 2 WP-4B entries",
   );
   check(
     originalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
     "original ten kinds keep their positions",
   );
   check(LOOP_ARTIFACT_KINDS[10] === "governance_tail_result", "governance_tail_result is the eleventh kind");
+  check(LOOP_ARTIFACT_KINDS[11] === "delivery_checkpoint", "delivery_checkpoint retains its historical position");
+  check(LOOP_ARTIFACT_KINDS[12] === "capability_output", "WP-4B capability output kind is appended");
+  check(LOOP_ARTIFACT_KINDS[13] === "capability_findings", "WP-4B capability findings kind is appended");
   for (const kind of originalKinds) {
     const content = `{"kind":"${kind}"}`;
     const expectedDigest = createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex");

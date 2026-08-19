@@ -55,6 +55,15 @@ export type ExecutionRequest = Readonly<{
     hermesPhase2ShadowEnablement?: true;
     hermesPhase2CodeReviewCanary?: HermesPhase2CodeReviewCanaryApproval;
   }>;
+  /** C01 WP-4B durable capability-attempt context. */
+  loopExecution?: Readonly<{
+    runId: string;
+    attempt: number;
+    inputArtifactRef: string;
+    inputArtifactVersion: string;
+    inputDigest: string;
+    outputArtifactVersion: string;
+  }>;
 }>;
 
 export type ExecutionArtifactType =
