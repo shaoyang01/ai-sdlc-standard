@@ -1,13 +1,13 @@
 # Loop Recovery Protocol（跨入口恢复协议）
 
-> 状态：WP-4 Accepted；WP-4B 实施完成、等待复审（2026-08-19，Decision-029/031）。C01 完成合同第 1、2 条在 WP-4B 用户裁决收口前不得登记完成。
+> 状态：WP-4 + WP-4B Accepted（2026-08-19，Decision-029/031/032）。两者的联合证据已满足 C01 完成合同第 1、2 条；第 3、4 条仍归 WP-5，须单独授权。
 > 关联：[Entry Contract](loop-entry-contract.md) · [Agent Capability Binding](agent-capability-binding.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §6.2
 
 ## 1. Purpose
 
 定义跨入口恢复协议与执行溯源合同：**每次节点执行记录实际使用的 binding、binding 版本与输入产物引用；入口以 Requirement ID 定位最新已验证运行记录并恢复当前节点、阶段、attempt、fixRound、阻塞/失败原因与最近执行溯源，不重解释已确认事实**（C01 完成合同第 1、2 条）。
 
-WP-4（Decision-027）提供最小 helper 与恢复面；WP-4B（Decision-028/031）增加完整 capability attempt 模型、ExecutionGateway 强制写入与受支持入口。两者共同构成 C01 完成合同第 1、2 条的候选证据，仍须通过 review 与用户裁决。
+WP-4（Decision-027）提供最小 helper 与恢复面；WP-4B（Decision-028/031）增加完整 capability attempt 模型、ExecutionGateway 强制写入与受支持入口。WP-4B 经两轮独立复审后由用户裁决通过（Decision-032），两者共同构成 C01 完成合同第 1、2 条的已验收证据。
 
 ## 2. 执行溯源（Event Provenance）
 
@@ -115,7 +115,7 @@ recoverRunContext(store, requirementId)
 - 不修改 WP-2 节点能力合同；binding schema 保持 12 字段不变，仅使 registry replacement 递增不可变快照版本；
 - legacy `appendEvent` 保持 WP-1 通用语义；生产 capability 写入由 ExecutionGateway + `appendCapabilityExecution` 强制；
 - 不把本轮产品仓库 commit/push 解释为 LOOP 节点可执行的 Git 副作用；人工 Git 边界不变；
-- WP-4B 在 review 与用户裁决前保持“等待复审”，不得消费授权或登记 C01 完成合同第 1、2 条完成。
+- WP-4B 已经 review 与用户裁决收口；C01 完成合同第 1、2 条已完成。第 3、4 条及 WP-5 不因本次收口获得授权。
 
 ## Revision Record
 
@@ -130,3 +130,4 @@ recoverRunContext(store, requirementId)
 | 0.2.0 | 2026-08-19 | Accepted | WP-4 收口（Decision-029，用户复审通过）：范围限 Decision-027（三字段溯源 + 原子迁移 + helper + 最小恢复上下文）；模型完整性与生产接线归 WP-4B（Decision-028），C01 完成合同第 1、2 条待 WP-4B 收口后方可登记。 |
 | 0.3.0 | 2026-08-19 | 等待复审 | WP-4B（Decision-031）：新增正交 capability attempt 事件流、journal v2 迁移、完整执行者/产物/Gate/finding/资格恢复投影、BindingRegistry/Gateway 强制写入与按 Requirement ID 创建/恢复的受支持入口。 |
 | 0.3.1 | 2026-08-19 | 等待复审 | WP-4B review round 1 correction：`RUNNING` 不再暴露不可执行的 nextCapability；受支持入口按历史 binding failurePolicy 原子关闭中断 attempt 并重试，关闭事件复制原 started 执行者与输入快照；配置 tracing 的 canonical capability 缺 `loopExecution` 时 dispatch 前 fail-closed。 |
+| 0.4.0 | 2026-08-19 | Accepted | WP-4B review round 2 通过并收口（Decision-032）：独立复核确认中断恢复、历史执行者快照、binding 替换后的重试、无 tracing context 绕过均闭合；WP-4 + WP-4B 联合满足 C01 完成合同第 1、2 条，第 3、4 条继续归 WP-5 且须单独授权。 |

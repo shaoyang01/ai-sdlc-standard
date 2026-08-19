@@ -129,7 +129,7 @@ WP-5 验证与守卫（完成合同验收）
 - 七能力 canonical chain + started 互斥 claim + corruption-first；产物 lineage、Gate/finding 与资格关系 fail-closed；
 - ExecutionGateway 携带 journal/artifact store/binding registry，真实 capability dispatch 前后强制写 started/terminal；shadow、异常与不合格结果只形成 failed attempt；
 - `LoopCapabilityEntry` 作为首个受支持入口，按 Requirement ID 创建或恢复同一 run，并严格消费前一能力的有效输出；
-- 状态（2026-08-19）：**实施完成、等待用户复审**（Decision-031）；未消费授权，未登记 C01 完成合同第 1、2 条完成。
+- 状态（2026-08-19）：**Accepted / 已收口**（Decision-032）；两轮独立复审完成，WP-4B 授权随控制平面收口登记消费，C01 完成合同第 1、2 条由 WP-4 + WP-4B 联合证据登记完成。
 
 ### WP-5：验证与守卫
 
@@ -142,8 +142,8 @@ WP-5 验证与守卫（完成合同验收）
 
 | 完成合同条款 | 覆盖 WP | 验收证据 |
 | --- | --- | --- |
-| 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4、WP-4B | 入口运行记录创建+恢复测试与真实执行记录 |
-| 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4、WP-4B | run journal 事件含 binding/版本/产物版本字段 |
+| ✅ 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4、WP-4B | `LoopCapabilityEntry` 创建/恢复、中断关闭与重试测试；WP-4B round 2 独立复审通过（Decision-032） |
+| ✅ 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4、WP-4B | capability event 保存 binding/registry/executor 与输入/输出 lineage；替换后历史快照对抗验证通过（Decision-032） |
 | binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 替换守卫测试（替换前后契约断言） |
 | 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-5 | 失败注入测试 + 禁止 shadow 通过的断言 |
 
@@ -222,6 +222,6 @@ WP-5 验证与守卫（完成合同验收）
 1. ✅ 阶段 0 机制恢复（决定记录、handoff 通道、STATE 扩展、收口流程固化）——已完成并发布；
 2. ✅ §8 决策点全部定案（Decision-020：binding 全能力模型；Codex 验收入口；逐 WP 授权）；
 3. ✅ R1 逐资产 Source 复核（218 测试通过）与正式规划迁移（本文件）；
-4. ✅ WP-1～WP-4 已实施、复审并按各自 Decision 收口；WP-4B 已获授权并完成产品实现，round 1 `CHANGES_REQUESTED` 的中断恢复与 tracing 绕过修正已落地，当前等待重新复审，授权尚未 consumed；
-5. WP-4B review/correction/用户裁决通过后，登记 C01 完成合同第 1、2 条证据并消费 WP-4B 授权；
-6. 之后单独授权 WP-5，完成 binding 替换守卫与不可用/超时/不合格结果的综合验收，覆盖 C01 完成合同第 3、4 条。
+4. ✅ WP-1～WP-4B 已实施、复审并按各自 Decision 收口；WP-4B round 1 的中断恢复与 tracing 绕过修正经 round 2 独立复核通过（Decision-032）；
+5. ✅ C01 完成合同第 1、2 条由 WP-4 + WP-4B 联合证据登记完成，WP-4B 授权随控制平面收口登记消费；
+6. 下一有效边界：等待用户单独授权 WP-5，完成 binding 替换守卫与不可用/超时/不合格结果的综合验收，覆盖 C01 完成合同第 3、4 条；未授权前不得实施。
