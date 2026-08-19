@@ -1086,3 +1086,42 @@ Round 1 `CHANGES_REQUESTED` 的两项发现已完成产品修正，等待用户�
 ## 代码依据
 
 `core/loop-capability-execution.ts`；`core/loop-capability-entry.ts`；`core/loop-run-store.ts`；`core/loop-recovery.ts`；`execution/gateway.ts`；`tests/loop-capability-execution.test.ts`
+
+# Decision-032：WP-4B 复审通过与 C01 完成合同第 1、2 条收口
+
+## 状态
+
+Accepted（2026-08-19，Current User 裁决并授权执行收口）
+
+## 背景
+
+WP-4B 首次实现（`b27e551`，经 PR #80 合入 `5cd5b66`）完成 capability execution 事件流、完整执行者/产物/Gate/finding/资格模型、ExecutionGateway 强制溯源和 `LoopCapabilityEntry`。独立复审 round 1 提出两项未闭合问题：进程在 started claim 后中断会使 run 永久 wedge；配置 tracing 的 Gateway 仍允许 canonical capability 在缺少 `loopExecution` 时无溯源 dispatch。修正提交 `6c548e9` 经 PR #81 合入 `d886eaa`。
+
+Round 2 独立复审重新执行 WP-4B 专项 86/86、全量 `npm test`、`tsc --noEmit` 与提交区间 `git diff --check`，并对 claim 后恢复、过期 started id、错误 lineage、错误 capability、binding 替换、interrupt 幂等和无 tracing context 绕过进行对抗验证，均符合合同；用户据此裁决通过并指令执行收口。
+
+## 问题
+
+WP-4B 是否已闭合 Decision-028/031 的完整性与生产接线范围，并可消费授权、登记 C01 完成合同第 1、2 条完成？
+
+## 决策
+
+1. WP-4B 通过并收口；控制平面消费 `WP4B_PROVENANCE_MODEL_COMPLETENESS_AND_WIRING` 授权并登记完成需求。
+2. C01 完成合同第 1 条“至少一个已支持入口创建或恢复同一 Requirement”和第 2 条“每节点可记录实际 binding 和输入/输出来源”由 WP-4 + WP-4B 联合证据登记完成。
+3. `ai-sdlc/loop-recovery-protocol.md` 升为 0.4.0 Accepted；本计划的 WP-4B 与验收映射同步为已完成。
+4. C01 完成合同第 3、4 条仍属于 WP-5。本决定不授权 WP-5，也不扩大 checkpoint 发布、真实 Agent、自动 Git/Ready/merge/publication 等边界。
+
+## 原因
+
+Round 1 的两个问题均在真实生产边界闭合：受支持入口可按已持久化 started claim 的历史 binding policy 原子记录中断失败并重试，且不会伪造或改写历史执行者；配置 tracing 的 Gateway 对缺少 `loopExecution` 的 canonical capability 在 dispatch 和 journal 写入前 fail-closed。Round 2 对抗复核未发现新的完整性或恢复缺口。
+
+## 影响
+
+跨入口恢复与完整执行溯源成为 C01 已验收基线。后续工作只能在获得单独授权后进入 WP-5，验证 binding 替换不改变契约与失败尝试不伪造通过；C01 在第 3、4 条完成前仍不整体收口。
+
+## 实现状态
+
+已裁决通过；产品仓库收口文档、控制平面 STATE、Exchange closure handoff 与 PKB current 指针按既定治理流程发布。
+
+## 代码依据
+
+`core/loop-capability-execution.ts`；`core/loop-capability-entry.ts`；`core/loop-run-store.ts`；`core/loop-recovery.ts`；`execution/gateway.ts`；`tests/loop-capability-execution.test.ts`；`ai-sdlc/loop-recovery-protocol.md` 0.4.0；`docs/LOOP-CORE-C01-PLAN.md` §4/§5/§10
