@@ -1,9 +1,10 @@
 # LOOP-CORE-01 有界实现规划（C01 Bounded Implementation Plan）
 
 > 状态：**ACCEPTED**（2026-08-19 用户确认全部决策点；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
+> 实施状态：**C01 COMPLETED**（2026-08-19，WP-1～WP-5 全部收口，Decision-034）
 > 前身：`temp/plans/loop-core-c01-planning-draft-20260818.md`（2026-08-18 草稿，已迁移）
 > 日期：2026-08-18（草稿）/ 2026-08-19（定案）
-> 相关决定：Decision-014（落点）、015（编号）、016（阶段 0 顺序）、017（handoff 落点）、018（直接 main）、020（binding 全能力模型）、028（WP-4B 拆分）、031（WP-4B 实现方案）
+> 相关决定：Decision-014（落点）、015（编号）、016（阶段 0 顺序）、017（handoff 落点）、018（直接 main）、020（binding 全能力模型）、028（WP-4B 拆分）、031（WP-4B 实现方案）、032（WP-4B 收口）、033（WP-5 实施）、034（WP-5 与 C01 收口）
 > 依据：
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0（Accepted）
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-01`
@@ -138,7 +139,7 @@ WP-5 验证与守卫（完成合同验收）
 - 失败注入：执行者不可用/shadow、binding timeout、执行异常、错误产物与 Gate/finding 合同不合格均形成稳定 failed attempt，不产生有效输出；
 - 恢复守卫：迟到结果丢弃；恢复必须 attempt + 1 fresh dispatch，保留历史 binding/registry/executor 与输入 lineage；finding 阻塞不能自动进入审核/Re-Gate；
 - 测试入口：`tests/loop-validation-guards.test.ts` 已接入默认 `npm test`。
-- 状态（2026-08-19）：**已实施，等待独立复审**（Decision-033）；复审裁决前不消费授权、不登记 C01 第 3、4 条或 C01 整体完成。
+- 状态（2026-08-19）：**Accepted / 已收口**（Decision-034）；独立复审确认第 3、4 条 PASS 且无 P1/P2，Current User 裁决消费 WP-5 授权并完成 C01。
 
 ## 5. 验收映射（完成合同 ↔ 工作包）
 
@@ -146,8 +147,8 @@ WP-5 验证与守卫（完成合同验收）
 | --- | --- | --- |
 | ✅ 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4、WP-4B | `LoopCapabilityEntry` 创建/恢复、中断关闭与重试测试；WP-4B round 2 独立复审通过（Decision-032） |
 | ✅ 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4、WP-4B | capability event 保存 binding/registry/executor 与输入/输出 lineage；替换后历史快照对抗验证通过（Decision-032） |
-| ⏳ binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 产品实现与 WP-5 专项断言已完成；等待独立复审与用户收口裁决（Decision-033） |
-| ⏳ 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-5 | unavailable/timeout/late/unqualified + fresh retry 综合测试已完成；等待独立复审与用户收口裁决 |
+| ✅ binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 独立复审逐字段比对 replacement 前后合同，并以 53 项 registry 对抗检查验证运行时 fail-closed；PASS（Decision-034） |
+| ✅ 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-4B、WP-5 | 独立复审验证 unavailable/timeout/late/unqualified、fresh retry、terminal 写入失败恢复与无伪造通过；PASS（Decision-034） |
 
 ## 6. 明确不做（Out of Scope）
 
@@ -226,5 +227,6 @@ WP-5 验证与守卫（完成合同验收）
 3. ✅ R1 逐资产 Source 复核（218 测试通过）与正式规划迁移（本文件）；
 4. ✅ WP-1～WP-4B 已实施、复审并按各自 Decision 收口；WP-4B round 1 的中断恢复与 tracing 绕过修正经 round 2 独立复核通过（Decision-032）；
 5. ✅ C01 完成合同第 1、2 条由 WP-4 + WP-4B 联合证据登记完成，WP-4B 授权随控制平面收口登记消费；
-6. ✅ 用户已单独授权 WP-5；控制平面授权登记已发布，产品实现、专项测试与标准文档已完成；
-7. 下一有效边界：完成独立代码复审。仅复审通过并经用户裁决后，消费 WP-5 授权、登记 C01 完成合同第 3、4 条与 C01 整体收口。
+6. ✅ 用户已单独授权 WP-5；控制平面授权登记、产品实现、专项测试、默认测试、CI 与 implementation handoff 已完成；
+7. ✅ 独立复审覆盖完整 WP-5 范围，第 3、4 条均 PASS、无 P1/P2；Current User 已裁决执行 WP-5 与 C01 收口（Decision-034）；
+8. 下一有效边界：C02 是 Roadmap 的下一依赖项，但须单独规划与授权；C01 收口不构成 C02 实施入口。
