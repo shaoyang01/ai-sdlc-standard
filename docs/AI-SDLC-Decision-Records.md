@@ -1206,3 +1206,42 @@ WP-5 是否已经在真实入口、Gateway、journal 与 artifact store 路径�
 ## 代码与验证依据
 
 `core/agent-capability-bindings.ts`；`core/node-capability-contracts.ts`；`core/loop-capability-entry.ts`；`execution/gateway.ts`；`tests/loop-validation-guards.test.ts`；`ai-sdlc/loop-validation-guards.md`；实现 merge `432c705c35d24183a524382554814c9c319ace7f`；独立复审 49/86/537/144、默认 `npm test`、typecheck、diff-check、53 项 registry 探针与 6 组时序/恢复场景。
+
+# Decision-035：授权 LOOP-CORE-02 有界规划，实施保持未授权
+
+## 状态
+
+Accepted（2026-08-20，Current User 明确“授权开始 C02 有界规划”）
+
+## 背景
+
+Decision-034 已收口 WP-5 与 LOOP-CORE-01；控制平面已将 active sub-requirement 指向 `LOOP-CORE-02`，四项 completion contract 保持 `INCOMPLETE / NOT_AUTHORIZED`，下一有效边界是 C02 bounded implementation planning authorization。C02 Roadmap 合同已经 `DEFINED`，但尚无基于 C01 最终 Source 事实的工作包分解、复用审计和验收映射。
+
+## 问题
+
+是否可以开始 C02 的有界规划；本次授权是否同时包含任一 C02 实现、Agent 调用、目标项目修改或外部发布？
+
+## 决策
+
+1. 授权读取当前产品/控制平面权威源，执行 C02 decomposition assessment 和能力复用审计。
+2. 在产品仓库生成 `docs/LOOP-CORE-C02-PLAN.md` 规划草案，覆盖工作包、依赖、设计不变量、验收映射、风险、排除项和待用户裁决点。
+3. 规划草案状态为 `DRAFT FOR USER REVIEW`；通过受保护分支的 Draft PR 提交供审阅，不因文件落库自动成为 Accepted implementation contract。
+4. 控制平面只登记本次规划授权、草案位置和下一审阅边界，不复制规划全文，不把 C02 任一完成项改为 completed。
+5. 本授权不包含 C02 工作包实现、真实 Agent 调用、Kimi/Hermes 启用、C03/C04/C05、目标项目 workspace 修改、LOOP runtime Git 副作用或 Exchange/PKB 外部发布。
+6. 规划被 Current User 接受后，再逐 WP 单独授权；在此之前不得启动 C02-WP1。
+
+## 原因
+
+Shared `PROJECT_CONTROL.md` §14 要求在首次 material execution 前基于父目标、完成合同和当前 Source 做最小充分分解；Roadmap 与 STATE/Execution 必须分权。C01 已提供入口、binding、attempt、Gate/finding 和恢复基底，但 C02 仍缺 current artifact revision、finding lifecycle、下游失效和 Re-Gate generation，因此必须先形成可审阅的持久规划合同，不能从聊天直接进入实现。
+
+## 影响
+
+项目从“C02 等待规划授权”进入“C02 规划草案编制与审阅”状态。C02 Roadmap 定义不改变；四项完成合同和全部实现权限保持未授权。产品规划草案成为审阅对象，控制平面下一边界切换为用户审阅/裁决 C02 规划。
+
+## 实现状态
+
+规划授权已生效；Source 审计与规划草案编制中。规划草案须经 commit、push、Draft PR 和文档/基线验证后交付用户审阅；未开始任何 C02 实现。
+
+## 代码与验证依据
+
+`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` §4 `LOOP-CORE-02`；`docs/LOOP_CORE_CONTRACT.md` §2/§4/§5；`docs/LOOP-CORE-C02-PLAN.md`；C01 closure merge `93e9c45f1b8ae8512451090284ce90d715429458`；控制平面 baseline `515fa2193e55a79f15c01e20225d87ca14a8331d`。
