@@ -66,14 +66,19 @@ const PROHIBITED_PATTERNS = [
   "sk-",
 ];
 
+/**
+ * Shared sensitive-content detection used by the implementation prompt
+ * builder and the capability paths (C01 WP-3). Case-insensitive substring
+ * match against known credential/secret patterns.
+ */
+export function containsProhibitedContent(value: string): boolean {
+  const lower = value.toLowerCase();
+  return PROHIBITED_PATTERNS.some((pattern) => lower.includes(pattern.toLowerCase()));
+}
+
 function truncate(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return value.slice(0, maxChars);
-}
-
-function containsProhibitedContent(value: string): boolean {
-  const lower = value.toLowerCase();
-  return PROHIBITED_PATTERNS.some((pattern) => lower.includes(pattern.toLowerCase()));
 }
 
 function safeJsonPreview(value: unknown, maxChars: number): string {

@@ -377,3 +377,667 @@ Accepted / Partially Implemented
 ## 代码依据
 
 `core/artifact.ts`、`core/node-artifacts.ts`、`ai-sdlc/artifact-versioning.md`
+
+---
+
+> 2026-08-19 起恢复本文件的持续记录惯例（对齐 personal-knowledge-base 的 DECISIONS.md 行为：每次决定即记录）。以下 Decision-012 起为 LOOP 时代记录。
+
+# Decision-012：LOOP Core Contract v0.3.0 接受
+
+## 状态
+
+Accepted（2026-08-16，历史补记）
+
+## 背景
+
+项目进入 LOOP（Artifact-Driven Delivery Core）产品化阶段前，需要一份明确的产品边界合同，避免需求细节只存在于 Agent 聊天上下文。
+
+## 问题
+
+LOOP 产品的目标、边界、产物链、Agent 协作与 Git 交接边界如何固定？
+
+## 决策
+
+接受 `docs/LOOP_CORE_CONTRACT.md` v0.3.0：任意已支持入口 Agent 以同一套产物和 Gate 启动或恢复单仓需求；节点按可替换 Agent binding 选择执行者；交付终点为 `READY_FOR_MANUAL_GIT_HANDOFF`，commit/push/PR/Ready/merge/发布均不属于 LOOP Core。
+
+## 原因
+
+产物优先于聊天记忆；能力与 Agent 解耦；人工保留 Git 决策权。
+
+## 影响
+
+本合同成为后续调整 Autonomous Delivery Roadmap 的判断基线；不再把自动 Git 发布作为 Core 或单仓验收前置条件。
+
+## 实现状态
+
+合同已接受；C01~C05 执行未开始，等待授权。
+
+## 代码依据
+
+`docs/LOOP_CORE_CONTRACT.md`（Revision Record v0.3.0）
+
+# Decision-013：Autonomous Delivery Roadmap v2.1.0 Rebaseline
+
+## 状态
+
+Accepted（2026-08-16，历史补记）
+
+## 背景
+
+LOOP Core Contract 接受后，旧 Foundation/D01~D10/Advanced 11~14 阶段定义与新产品边界不一致。
+
+## 问题
+
+如何按 Shared PROJECT_CONTROL §14 合同重排 Roadmap？
+
+## 决策
+
+`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` 重排为 v2.1.0：父需求 LOOP-CORE-00 + 子需求 C01~C05；Advanced 01~03 标记 `PLANNING_REQUIRED` 并写出显式 Definition Gap，不得作为执行入口；动态控制语义（指针、Gate、授权）移出 Roadmap，由控制平面 STATE 承担。
+
+## 原因
+
+满足 Fresh Controller 仅凭权威文档和仓库事实即可恢复项目的要求。
+
+## 影响
+
+旧编号（D01~D10、Advanced 11~14）保留于 Git 历史；历史能力作为 C01~C05 的候选支撑，复用前需以当时 Source 事实确认。
+
+## 实现状态
+
+Roadmap v2.1.0 已生效；STATE 指针指向 LOOP-CORE-00 / LOOP-CORE-01。
+
+## 代码依据
+
+`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md`（Revision Record v2.1.0）
+
+# Decision-014：C01 正式规划落点 = 产品仓库 docs/ 持久合同
+
+## 状态
+
+Accepted（2026-08-18）
+
+## 背景
+
+C01 有界实现规划草稿完成后，需要确定正式规划文档的落点；候选包括 `docs/`、`temp/plans/` 或 Handoff。
+
+## 问题
+
+正式规划文档应该放在哪里？
+
+## 决策
+
+正式 C01 规划是持久规划合同（与 `docs/LOOP_CORE_CONTRACT.md` 同类），落在产品仓库 `docs/LOOP-CORE-C01-PLAN.md`；控制平面 STATE 只记录指针；不写入 Handoff（Handoff 是会话间 transport package，应引用持久权威源而非复制历史）。
+
+## 原因
+
+规划合同与执行记录性质不同；Roadmap/STATE/执行三分权要求规划合同留在产品仓库权威面。
+
+## 影响
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` 审阅通过后迁移为正式文档；`project-governance-exchange` 只承载执行类 Handoff 材料。
+
+## 实现状态
+
+草稿已就绪，等待用户审阅与授权迁移。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md`、`docs/LOOP_CORE_CONTRACT.md`
+
+# Decision-015：决定编号沿用 Decision-NNN
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+ai-sdlc 与 personal-knowledge-base 均注册于同一 ai-project-control-plane；PKB 使用 DEC-NNN 编号（DECISIONS.md），ai-sdlc 既有 `docs/AI-SDLC-Decision-Records.md` 使用 Decision-NNN。
+
+## 问题
+
+决定编号形式是否统一为 PKB 同款 DEC-NNN？
+
+## 决策
+
+沿用 ai-sdlc 现有 `Decision-NNN` 编号（从 Decision-012 续号），不改为 DEC-NNN。
+
+## 原因
+
+既有文件与格式已稳定，避免为编号形式做无价值迁移；记录行为（每次决定即记录）与 PKB 对齐即可。
+
+## 影响
+
+决定记录留在 ai-sdlc-standard 产品仓库 `docs/AI-SDLC-Decision-Records.md`，不经过 exchange。
+
+## 实现状态
+
+本文件自 Decision-012 起恢复持续记录。
+
+## 代码依据
+
+`docs/AI-SDLC-Decision-Records.md`
+
+# Decision-016：进度管理机制阶段 0 先单独授权落地
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+ai-sdlc 的进度管理机制（任务级 Handoff、current 入口、决定记录、STATE 登记、收口流程）长期未运转，与 PKB 模式存在差距。
+
+## 问题
+
+机制恢复与 C01 实施是否一并授权？
+
+## 决策
+
+阶段 0（机制恢复：决定记录 + Handoff 通道 + STATE 扩展 + 收口流程）先单独授权落地，独立于 C01 实施规划。
+
+## 原因
+
+机制先行，后续 C01 工作包才能在完整运转的进度管理框架内执行。
+
+## 影响
+
+阶段 0 落地后再进行 C01 规划授权；C01 各 WP 的授权、实施、审阅、收口均按 PKB 流程运转。
+
+## 实现状态
+
+阶段 0 执行中。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9
+
+# Decision-017：Handoff 落点恢复既有 exchange → 10-projects 机制
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+2026-07-13~19（最后活动 07-26）期间，ai-sdlc-standard 的 Handoff 通过 `shaoyang01/project-governance-exchange`（authority=transport_only）传输并发布到 personal-knowledge-base 的 `10-projects/ai-sdlc-standard/`；8 月起项目转入控制平面模式后该通道停用。
+
+## 问题
+
+ai-sdlc 的任务级 Handoff 落点选哪个机制？
+
+## 决策
+
+选项 A：恢复既有 exchange → 10-projects 机制，与现行 ai-project-control-plane 模式并行；不在 ai-sdlc-standard 新建 `90-system/`。分工：控制平面 STATE 管控制状态，exchange 管材料传输，10-projects 管归档导航。
+
+## 原因
+
+既有机制有完整规则（EXCHANGE_POLICY、external-project-publishing.md、exchange-consumption.md）、schema、Publisher 工具与历史；避免重复建设。
+
+## 影响
+
+exchange 保持 transport_only，不得从 Handoff 推导授权/执行/收口；10-projects 写入属 PKB 仓库跨仓写入，需在阶段 0 授权范围内覆盖。
+
+## 实现状态
+
+阶段 0 执行中：exchange 远程 main（45b611a）已验证可访问，Publisher workflow 存在。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9.1/§9.4
+
+# Decision-018：exchange 仓库发布操作直接 main
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+exchange 仓库本地存在多个历史工作分支（codex/topic06、feature/exchange-publisher-v1-1、fix/exchange-publisher-deploy-key-auth、chore/remove-accidental-root-file），与 EXCHANGE_POLICY 的单写者 direct-main 设计不一致。
+
+## 问题
+
+exchange 仓库的分支策略如何简化？
+
+## 决策
+
+exchange 仓库的发布与操作直接使用 main 分支：单写者 fast-forward 写入，不创建、不切换 feature 分支做发布；本地已同步至 origin/main（45b611a）；已合并的历史本地分支删除，未合并的历史分支保留（不强制删除，内容在 main 历史中可追溯）。
+
+## 原因
+
+EXCHANGE_POLICY v1 本来就是 central Publisher direct-main 设计（禁止 force push/reset/rebase/amend）；分支只增加混淆。
+
+## 影响
+
+后续 ai-sdlc 的 exchange 发布（Issue 通道 → Actions Publisher）与本地维护均直接基于 main；远程遗留分支 `origin/codex/topic06-governance-drift-clarification` 保留为历史，不参与发布。
+
+## 实现状态
+
+本地已 checkout main 并对齐 origin/main；codex/topic06 本地分支已删除（远程保留）。
+
+## 代码依据
+
+`temp/plans/loop-core-c01-planning-draft-20260818.md` §9.3；exchange 仓库 `EXCHANGE_POLICY.md`、`AGENTS.md`
+
+# Decision-019：进度管理机制固化到控制平面 GOVERNANCE.md
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+阶段 0 机制恢复执行中，用户提醒：治理机制必须固化到持久文档，避免更换 Agent 或会话上下文丢失后无法恢复治理。
+
+## 问题
+
+这套进度管理机制（决定记录、Handoff 通道、STATE 登记、收口流程、恢复路径）的权威落点在哪里？
+
+## 决策
+
+机制固化到控制平面 `projects/ai-sdlc/GOVERNANCE.md` 新增 §15（Progress Management Mechanism），包含：三面分工（STATE 控制 / Exchange 传输 / 10-projects 归档）、Decision-NNN 记录规则、Exchange 发布与归档硬规则、STATE 登记结构、收口流程、Fresh Controller 恢复路径与边界；产品仓库决策记录同步补记本决定。
+
+## 原因
+
+GOVERNANCE.md 是 Fresh Controller 恢复治理时必读的权威源之一（§14 成功条件）；机制必须与聊天记忆解耦。
+
+## 影响
+
+后续任何 Agent/会话均可按 §15.6 恢复路径独立恢复 ai-sdlc 治理；机制变更本身需经用户授权并更新 §15 与决策记录。
+
+## 实现状态
+
+GOVERNANCE.md §15 已写入（控制平面提交待登记）。
+
+## 代码依据
+
+`ai-project-control-plane/projects/ai-sdlc/GOVERNANCE.md` §15
+
+# Decision-020：Agent Binding 全能力模型（所有 Agent 可独立完成所有节点）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+C01 规划决策点 1（初始 binding 集合）确认中，用户明确：Codex 可以先行，但不能只支持 `code_generation`；需求是**所有已支持 Agent 都能独立完成所有节点（需求归一化、技术方案、方案挑战、方案审核、实现、代码审核、测试验收），binding 支持随意组合**（任意节点 × 任意 Agent）。
+
+## 问题
+
+binding 模型是"能力→固定 Agent 映射"（如 codex 只做实现），还是全能力矩阵？
+
+## 决策
+
+采用全能力模型：binding 不预设任何 Agent 的能力限制，每个已支持 Agent 均可执行任一节点；binding 配置支持任意组合与替换，替换不改变节点合同（Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界）。初始状态：Codex enabled（请求类型从 `code_generation` 扩展至全部节点能力），Kimi/Hermes 注册为 disabled（全能力模型，真实环境复核后启用）。
+
+## 原因
+
+对齐 LOOP Core Contract §6（节点声明能力、binding 选执行者、不写死角色）；用户明确要求所有 Agent 独立完成所有节点。
+
+## 影响
+
+WP-3 范围扩大：binding schema 支持全矩阵；codex adapter 需按节点扩展请求类型与输出合同校验器；WP-2 能力类型清单成为唯一节点合同面，binding 只做选择。
+
+## 实现状态
+
+已并入 C01 正式规划（docs/LOOP-CORE-C01-PLAN.md）。
+
+## 代码依据
+
+`docs/LOOP_CORE_CONTRACT.md` §6；`temp/plans/loop-core-c01-planning-draft-20260818.md` §8
+
+# Decision-021：WP-1（入口归一化合同）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+C01 规划定案后，按逐 WP 授权粒度，WP-1（LOOP-CORE-C01 工作包 1：入口归一化合同）为第一个工作包。
+
+## 问题
+
+WP-1 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-1，scope：① run journal 新增 requirementId 查询接口（`listRunsByRequirement` / `findLatestRunByRequirement`，fail-closed 校验，corruption-first 验证）——支撑跨入口恢复；② 入口合同标准文档 `ai-sdlc/loop-entry-contract.md`（Requirement ID 规则、来源记录、新/补充/变更/返工/反馈分类、运行记录创建与恢复、阻塞条件）；③ 相关测试。明确排除：binding 实现（WP-3）、任何 Agent 真实调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision 3）下，WP-1 是入口能力的最小可验收包；查询接口是已确认缺口（R1 复核）。
+
+## 影响
+
+WP-1 完成后按收口流程：实施 handoff（exchange + 10-projects）→ review → 用户裁决 → closure 登记。
+
+## 实现状态
+
+实施完成（run journal 查询接口 + 测试 30/30 通过；入口合同文档待提交）。
+
+## 代码依据
+
+`core/loop-run-store.ts`；`tests/loop-run-requirement-query.test.ts`；`ai-sdlc/loop-entry-contract.md`
+
+# Decision-022：WP-1 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-1 实施后经 review round 1（CHANGES_REQUESTED，3 项 P1）与 consolidated correction（产品 2dbd87a），用户复审 Approved。
+
+## 问题
+
+WP-1 是否满足完成合同并可收口？
+
+## 决策
+
+WP-1 收口：登记 `completed_requirements.WP1_ENTRY_NORMALIZATION`（closure_basis + 证据 + fact HEAD），消费 `WP1_ENTRY_NORMALIZATION` 授权（consumed/COMPLETED）。WP-2 仍需单独用户授权，WP-1 通过不构成对 WP-2 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+入口合同（v0.1.1）与 requirementId 查询接口成为 C01 已验收能力；WP-2（Node Capability Contract）等待单独授权。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记 8c88e06 后更新；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-023：WP-2（Node Capability Contract）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-1 收口后，按逐 WP 授权粒度，WP-2（Node Capability Contract）为第二个工作包。
+
+## 问题
+
+WP-2 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-2，scope：① 定义能力类型清单（需求归一化、技术方案生成、方案挑战、方案审核、实现、代码审核、测试验收——能力类型，非 Agent 专属名）；② 每个节点合同声明输入、输出、Gate、副作用边界（不出现 Agent 名）；③ 处理 `loop/types` 静态 `AgentMapEntry` 的废弃/兼容决策；④ 标准文档 `ai-sdlc/node-capability-contract.md` 与类型定义、合同完整性测试。明确排除：binding 实现与注册（WP-3）、任何 Agent 真实调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-2 是"能力与 Agent 解耦"的最小可验收包；节点模型脱离 Agent 是 Decision-020（全能力模型）的前提。
+
+## 影响
+
+WP-2 完成后，节点模型以能力为唯一合同面；binding（WP-3）只做选择，不定义节点。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-2；`docs/LOOP_CORE_CONTRACT.md` §6.1
+
+# Decision-024：WP-2 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-2 实施后经三轮 review（round 1：2 P1 + 1 P2；round 2：1 P1 假守卫；round 3：1 P1 fail-open 解析器 + 1 P2 陈旧声明）与三轮 consolidated correction，用户复审 Approved。
+
+## 问题
+
+WP-2 是否满足完成合同并可收口？
+
+## 决策
+
+WP-2 收口：登记 `completed_requirements.WP2_NODE_CAPABILITY_CONTRACT`（closure_basis + 证据 + fact HEAD），消费 `WP2_NODE_CAPABILITY_CONTRACT` 授权（consumed/COMPLETED）。WP-3 仍需单独用户授权，WP-2 通过不构成对 WP-3 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+七个 Agent 中立节点能力合同（文档 §4 单一规范源 + fail-closed 解析守卫）成为 C01 已验收基线；binding 层（WP-3）可直接消费机器投影选择执行者。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-025：WP-3（Agent Capability Binding 层）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-2 收口后，按逐 WP 授权粒度，WP-3（Agent Capability Binding 层）为第三个工作包。
+
+## 问题
+
+WP-3 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-3，scope：① binding schema（版本化、enable/disable、输入输出合同、结果校验器、副作用/超时/失败边界）；② 全能力矩阵注册（7 能力 × 3 Agent = 21 bindings；codex enabled、kimi/hermes disabled，符合 Decision-020 全能力模型）；③ codex 请求类型从 `code_generation` 扩展至全部 7 个节点能力；④ binding 替换守卫测试（替换不改变 Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界）；⑤ 标准文档 `ai-sdlc/agent-capability-binding.md`。明确排除：真实 Agent 调用（real dispatch 保持 feature-flagged）、任何 Git 发布动作、节点合同修改（WP-2 已验收）、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-3 是"可替换 binding"的最小可验收包；节点合同面（WP-2）已就绪，binding 只做选择与校验。
+
+## 影响
+
+WP-3 完成后，任意节点 × 任意 Agent 的组合可由配置表达；替换 binding 不改变节点合同（LOOP Core Contract §6 验收）。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-3；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-026：WP-3 收口（用户复审 Approved）
+
+## 状态
+
+Accepted（2026-08-19）
+
+## 背景
+
+WP-3 实施后经四轮 review（round 1：registry 快照/端到端/AST 字段锁；round 2：能力 prompt/解析/真实分支；round 3：敏感输入输出/超限；round 4：空输出）与四轮 consolidated correction，用户复审 Approved。
+
+## 问题
+
+WP-3 是否满足完成合同并可收口？
+
+## 决策
+
+WP-3 收口：登记 `completed_requirements.WP3_AGENT_CAPABILITY_BINDING`（closure_basis + 证据 + fact HEAD），消费 `WP3_AGENT_CAPABILITY_BINDING` 授权（consumed/COMPLETED）。WP-4 仍需单独用户授权，WP-3 通过不构成对 WP-4 的授权。
+
+## 原因
+
+收口流程要求：review 通过 → 用户裁决 → closure 登记。
+
+## 影响
+
+不可变 binding registry（每能力恰一 enabled 执行者）、全能力矩阵（codex enabled、kimi/hermes disabled）、能力感知 prompt/解析/校验（含敏感/超限/空输出 fail-closed）成为 C01 已验收基线；WP-4 可在其上实现执行溯源与跨入口恢复。
+
+## 实现状态
+
+已收口（控制平面 STATE 登记 ef41d58；closure handoff 发布中）。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §5/§9.3；控制平面 `projects/ai-sdlc/STATE.yaml`
+
+# Decision-027：WP-4（执行溯源与跨入口恢复）授权
+
+## 状态
+
+Accepted（2026-08-19，Current User 授权）
+
+## 背景
+
+WP-3 收口后，按逐 WP 授权粒度，WP-4（执行溯源与跨入口恢复）为第四个工作包。
+
+## 问题
+
+WP-4 的执行范围与排除边界如何界定？
+
+## 决策
+
+授权 WP-4，scope：① run journal 事件 schema 扩展（每次节点执行记录 bindingId、bindingVersion、inputArtifactRef，nullable 向后兼容 + 旧库列迁移 + fail-closed 校验）；② 执行溯源辅助（recordNodeExecution）；③ 跨入口恢复协议（recoverRunContext：以 Requirement ID 定位最新已验证 run，恢复当前阶段/attempt/fixRound/阻塞与失败原因/最近执行溯源，基于 WP-1 查询接口）；④ 标准文档 ai-sdlc/loop-recovery-protocol.md；⑤ 相关测试。明确排除：checkpoint 发布 phase（D10-A 发布语义不进 C01）、真实 Agent 调用、Git 发布动作、Ready/merge/publication。
+
+## 原因
+
+逐 WP 授权粒度（Decision-3）下，WP-4 是"每节点可记录实际 binding 和输入/输出来源"与"跨入口恢复"的最小可验收包（C01 完成合同第 1、2 条）。
+
+## 影响
+
+WP-4 完成后，每次节点执行可追溯 binding 与输入/输出来源；入口可跨会话恢复同一 Requirement。
+
+## 实现状态
+
+实施中。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-028：WP-4 复审缺口处置与 WP-4B（执行溯源完整性与生产接线）授权拆分
+
+## 状态
+
+Accepted（2026-08-19，Current User 裁决）
+
+## 背景
+
+WP-4 实施后经四轮复审：round 1（真实旧库 STORE_CORRUPT → 迁移事务验证旧 hash 并原子重算）、round 2（读取侧双形态 hash 引入降级绕过 → 单一形式严格校验）、round 3（recordNodeExecution 裸 TypeError、迁移原子性未含补列 → 输入边界 fail-closed + 单事务回滚）、round 4（输入形状校验顺序、user_version 严格校验、返回值冻结已修；其余三项 P1 超出 Decision-027 授权）：P1-2 公开 appendEvent 可写入无溯源节点事件；P1-3 溯源/恢复模型缺 adapter/Agent 实际执行者标识与版本、有效产物版本、Gate、未解决 finding、下一步资格；P1-4 recordNodeExecution/recoverRunContext 无生产调用方，ExecutionGateway 未接线。
+
+## 问题
+
+超出 Decision-027 授权的 P1-2/3/4 如何处理？WP-4 与 C01 能否标记完成？
+
+## 决策
+
+1. WP-4 范围维持 Decision-027 不变；round 4 授权内修正（输入形状校验、user_version fail-closed、返回值冻结）完成后进入复审收口流程，不自行登记完成。
+2. P1-2/3/4 拆分为 **WP-4B（执行溯源完整性与生产接线）**（命名避开计划文档既有"WP-5：验证与守卫"），授权 scope：
+   - 溯源模型扩展：adapter/Agent 实际执行者标识与版本的历史快照（binding 更换后可反查历史实际执行者）、有效产物版本、Gate 结果、未解决 finding、下一步资格（具体字段在 WP-4B 方案阶段定稿，保持事件 schema 版本化与 fail-closed）；
+   - 写入层强制：ExecutionGateway 接线后，stage_started/stage_succeeded/stage_failed 必须携带溯源（含 stage_succeeded 的输出产物引用约束，在 WP-4B 定稿）；journal 层 appendEvent 保持 WP-1 已验收的通用语义不变，不在存储层强制；
+   - 接线：ExecutionGateway 携带 run journal 与 binding registry，真实节点执行必经 recordNodeExecution（或其后继 API）；至少一个真实入口接入 recoverRunContext 并恢复同一 Requirement；
+   - 对应测试与 ai-sdlc/loop-recovery-protocol.md 更新。
+   - 排除不变：checkpoint 发布 phase、真实 Agent 调用、Git 发布动作、Ready/merge/publication。
+3. 在 WP-4B 收口前，C01 完成合同第 1、2 条不得登记为完整需求完成；计划文档"WP-5：验证与守卫"的验收以 WP-4B 收口为前置。
+
+## 原因
+
+Decision-027 只授权三个可空字段、helper 与最小恢复上下文；模型扩展与生产接线属于新的授权边界，不应与"已完成"混淆（复审裁决要求）。写入侧强制依赖接线落地，提前在 journal 层强制会回溯破坏 WP-1 已验收语义与存量测试。
+
+## 影响
+
+WP-4 收口路径清晰（Decision-027 范围内复审）；WP-4B 成为 C01 完成合同第 1、2 条的收口前提；ai-sdlc/loop-recovery-protocol.md §6 已如实标注边界与拆分去向。
+
+## 实现状态
+
+已登记；WP-4B 待排期实施。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4/WP-5；`ai-sdlc/loop-recovery-protocol.md` §6；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-029：WP-4 收口（用户复审通过，仅限 Decision-027 窄范围）
+
+## 状态
+
+Accepted（2026-08-19，Current User 裁决通过）
+
+## 背景
+
+WP-4 经五轮复审：round 1 真实旧库 hash 兼容（迁移事务验证旧 hash 并原子重算为扩展格式）；round 2 读取侧双形态 hash 降级绕过（恢复单一形式严格校验）；round 3 输入边界裸 TypeError 与迁移原子性（fail-closed + 单事务回滚含补列）；round 4 输入形状校验顺序、`user_version` 严格校验、返回值冻结，及 P1-2/3/4 授权拆分（Decision-028）；round 5 透明/revoked/带 trap Proxy 经 `util.types.isProxy` 在反射前拒绝、验收映射同步 WP-4B。用户裁决：WP-4（Decision-027 窄范围）通过。
+
+## 问题
+
+WP-4 是否满足 Decision-027 授权范围内的完成合同并可收口？
+
+## 决策
+
+WP-4 收口：登记 `completed_requirements.WP4_EXECUTION_PROVENANCE_RECOVERY`（closure_basis + 证据 + fact HEAD），消费 `Decision-027` 授权（consumed/COMPLETED）。同时约束：
+
+- C01 完成合同第 1、2 条不得完成登记，直至 WP-4B（Decision-028）实施、验证、复审完成；
+- WP-4B 授权不在本轮消费；
+- 控制平面 STATE 登记与 closure handoff 在提交后按既定治理流程进行。
+
+## 原因
+
+五轮复审的全部 P1/P2 已闭合：旧 hash 迁移原子重算、读取单一 hash 形式、输入边界 fail-closed（含 Proxy）、格式版本 fail-closed、返回值不可变、文档与验收映射一致。超出 Decision-027 的完整性缺口已正确拆分为 WP-4B，不与"已完成"混淆。
+
+## 影响
+
+run journal 事件溯源三字段（含旧库原子迁移与篡改 fail-closed）、recordNodeExecution（fail-closed 输入边界、冻结返回）、recoverRunContext（最小恢复上下文）成为 C01 已验收基线；WP-4B 可在其上扩展完整模型与生产接线。
+
+## 实现状态
+
+已裁决通过；库内文档已更新（ai-sdlc/loop-recovery-protocol.md 0.2.0）。closure 登记（fact HEAD）与控制平面 STATE 登记待提交后执行。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4/§5；`ai-sdlc/loop-recovery-protocol.md`；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-030：三仓库常驻分支策略
+
+## 状态
+
+Accepted（2026-08-19，Current User 指令）
+
+## 背景
+
+C01 实施期间产品仓库使用 `feature/loop-core-contract-roadmap`、控制平面使用 `feature/ai-sdlc-loop-core-rebaseline` 作为临时工作分支，产生合并与多分支管理负担。用户明确指令收敛分支模型，不再随意新增开发分支。
+
+## 问题
+
+三个仓库各自的常驻工作分支是什么，临时功能分支如何处置？
+
+## 决策
+
+- 产品仓库（ai-sdlc-standard）：常驻 `feature/loop-runtime-v1`；C01 全部工作（WP-1~WP-4，至 `0e18a2a`）经 merge commit 合并入该分支，此后以其为唯一工作分支；`feature/loop-core-contract-roadmap` 在合并验证后删除（本地与远端）。
+- 控制平面（ai-project-control-plane）：常驻 `main`，直接提交并推送；`feature/ai-sdlc-loop-core-rebaseline` 在 main 推送后删除（本地与远端）。
+- PKB（personal-knowledge-base）：常驻 `feature/knowledge-base-v1`（已是当前唯一开发分支，无需变更）。
+- 后续工作不得新增长期并行的开发分支；确需临时分支时须在使用完毕后即合并回常驻分支并删除。
+
+## 原因
+
+减少合并面与分支漂移；STATE、Exchange、PKB 中登记的 source_commit 均为主干可达提交，分支收敛不影响已发布材料的 provenance 可追溯性。
+
+## 影响
+
+`projects/ai-sdlc/STATE.yaml` 的 `repository_observation.last_observed.current_rebaseline_worktrees` 更新为 product=`feature/loop-runtime-v1`、control=`main`；两个临时功能分支删除后，任何续作（含 WP-4B）直接在上述常驻分支上进行。
+
+## 实现状态
+
+已执行：产品合并提交后推送 `feature/loop-runtime-v1`；控制平面 STATE 更新随 `main` 推送；临时分支删除。
+
+## 代码依据
+
+`projects/ai-sdlc/STATE.yaml` repository_observation；产品 merge commit（loop-core-contract-roadmap → loop-runtime-v1）

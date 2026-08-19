@@ -27,11 +27,13 @@ import {
 import {
   applyLoopRunEvent,
   canonicalizeLoopRunEvent,
+  canonicalizeLoopRunEventLegacy,
   canonicalizeLoopRunIdentity,
   createInitialLoopRunState,
   createLoopRunCreatedEvent,
   validateLoopRunEvent,
   validateLoopRunIdentity,
+  validateRequirementId,
 } from "./loop-run-state";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
@@ -87,6 +89,15 @@ function validatePersistedEvent(event: unknown): void {
 function canonicalizePersistedEvent(event: LoopRunEvent): string {
   try {
     return canonicalizeLoopRunEvent(event);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
+    throw error;
+  }
+}
+
+function canonicalizePersistedEventLegacy(event: LoopRunEvent): string {
+  try {
+    return canonicalizeLoopRunEventLegacy(event);
   } catch (error) {
     if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
     throw error;
@@ -180,6 +191,9 @@ type EventRow = {
   error_code: string | null;
   retryable: number | null;
   reason_code: string | null;
+  binding_id: string | null;
+  binding_version: string | null;
+  input_artifact_ref: string | null;
   canonical_sha256: string;
 };
 
@@ -198,6 +212,12 @@ function rowToEvent(row: EventRow): LoopRunEvent {
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
+    // C01 WP-4: legacy rows without the columns map to null; their stored
+    // hash is verified against the legacy form and rewritten to the extended
+    // form by the init() migration.
+    bindingId: row.binding_id ?? null,
+    bindingVersion: row.binding_version ?? null,
+    inputArtifactRef: row.input_artifact_ref ?? null,
   });
 }
 
@@ -216,6 +236,9 @@ function eventToRow(event: LoopRunEvent): EventRow {
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
     reason_code: event.reasonCode,
+    binding_id: event.bindingId,
+    binding_version: event.bindingVersion,
+    input_artifact_ref: event.inputArtifactRef,
     canonical_sha256: sha256Hex(canonicalizeLoopRunEvent(event)),
   };
 }
@@ -371,12 +394,47 @@ export class LoopRunStore {
             error_code TEXT,
             retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
             reason_code TEXT,
+            binding_id TEXT,
+            binding_version TEXT,
+            input_artifact_ref TEXT,
             canonical_sha256 TEXT NOT NULL,
             UNIQUE (run_id, sequence),
             FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
+
+        // C01 WP-4 migration (single atomic unit): add the provenance
+        // columns, verify each historical row against the legacy 13-field
+        // hash form, rewrite verified rows to the extended hash, and flip
+        // user_version — all inside one immediate transaction. Any failure
+        // (including a corrupt historical row) rolls everything back: no
+        // columns added, no hash rewritten, user_version stays 0, and the
+        // next init simply retries this idempotent migration.
+        db.transaction(() => {
+          const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
+          const existing = new Set(eventColumns.map((column) => column.name));
+          const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
+            { name: "binding_id", ddl: "ALTER TABLE loop_events ADD COLUMN binding_id TEXT" },
+            { name: "binding_version", ddl: "ALTER TABLE loop_events ADD COLUMN binding_version TEXT" },
+            { name: "input_artifact_ref", ddl: "ALTER TABLE loop_events ADD COLUMN input_artifact_ref TEXT" },
+          ];
+          for (const column of provenanceColumns) {
+            if (!existing.has(column.name)) {
+              db.exec(column.ddl);
+            }
+          }
+          // Format version is fail-closed: only 0 (may hold legacy hashes,
+          // normalize now) and 1 (normalized) are known. Anything else means
+          // the journal was written by an unknown format — STORE_CORRUPT.
+          const formatVersion = db.pragma("user_version", { simple: true });
+          if (formatVersion !== 0 && formatVersion !== 1) {
+            corrupt("unknown journal format version");
+          }
+          if (formatVersion === 0) {
+            this.normalizeEventHashesToExtendedForm(db);
+          }
+        }).immediate();
       } catch (error) {
         if (error instanceof LoopRunJournalError) throw error;
         if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -663,6 +721,48 @@ export class LoopRunStore {
     return snapshot === undefined ? Object.freeze([]) : snapshot.events;
   }
 
+  /**
+   * Lists all verified run snapshots for one requirement, oldest first.
+   * This is the cross-entry lookup that lets an entry resume the same
+   * Requirement by requirementId without reinterpreting confirmed facts.
+   * requirementId is external input: validated fail-closed and never echoed.
+   */
+  listRunsByRequirement(requirementId: string): readonly LoopRunSnapshot[] {
+    validateRequirementId(requirementId);
+    const db = this.connection();
+    try {
+      return db.transaction((): readonly LoopRunSnapshot[] => {
+        const rows = db
+          .prepare(
+            "SELECT run_id FROM loop_runs WHERE requirement_id = ? ORDER BY created_at ASC, run_id ASC",
+          )
+          .all(requirementId) as ReadonlyArray<{ run_id: string }>;
+        return rows.map((row) => {
+          const snapshot = this.readRunSnapshotInTransaction(db, row.run_id);
+          if (snapshot === undefined) {
+            // A listed row must always resolve to a verified snapshot.
+            throw new LoopRunJournalError("STORE_CORRUPT", "requirement run row missing verified snapshot");
+          }
+          return snapshot;
+        });
+      })() as readonly LoopRunSnapshot[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * Finds the latest verified run snapshot for a requirement, or undefined
+   * when the requirement has no run yet. Primary recovery lookup for the
+   * LOOP entry contract.
+   */
+  findLatestRunByRequirement(requirementId: string): LoopRunSnapshot | undefined {
+    const runs = this.listRunsByRequirement(requirementId);
+    return runs.length === 0 ? undefined : runs[runs.length - 1];
+  }
+
   // ── storage error translation ──
 
   /**
@@ -725,8 +825,9 @@ export class LoopRunStore {
       `INSERT INTO loop_events (
         event_id, run_id, sequence, kind, stage, attempt, created_at,
         input_digest, output_artifact_ref, output_digest, error_code,
-        retryable, reason_code, canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        retryable, reason_code, binding_id, binding_version,
+        input_artifact_ref, canonical_sha256
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.event_id,
       row.run_id,
@@ -741,8 +842,40 @@ export class LoopRunStore {
       row.error_code,
       row.retryable,
       row.reason_code,
+      row.binding_id,
+      row.binding_version,
+      row.input_artifact_ref,
       row.canonical_sha256,
     );
+  }
+
+  /**
+   * Verifies and rewrites persisted event hashes to the extended canonical
+   * form. Runs inside the caller's migration transaction (init), so any
+   * failure rolls back the column additions and hash rewrites together.
+   * Every row whose stored hash does not match the extended form must match
+   * the legacy 13-field form (and have all provenance fields null) — it is
+   * then rewritten to the extended hash. Any other mismatch (including
+   * tampered historical rows) aborts the migration with STORE_CORRUPT.
+   * user_version flips to 1 as the last step, marking the journal as fully
+   * normalized.
+   */
+  private normalizeEventHashesToExtendedForm(db: Database.Database): void {
+    const rows = db.prepare("SELECT * FROM loop_events").all() as EventRow[];
+    const update = db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE event_id = ?");
+    for (const row of rows) {
+      const event = rowToEvent(row);
+      validatePersistedEvent(event);
+      const extendedSha = sha256Hex(canonicalizePersistedEvent(event));
+      if (extendedSha === row.canonical_sha256) continue;
+      const legacyCompatible =
+        event.bindingId === null && event.bindingVersion === null && event.inputArtifactRef === null;
+      if (!legacyCompatible || sha256Hex(canonicalizePersistedEventLegacy(event)) !== row.canonical_sha256) {
+        corrupt("persisted event canonical hash mismatch");
+      }
+      update.run(extendedSha, row.event_id);
+    }
+    db.exec("PRAGMA user_version = 1");
   }
 
   private verifySnapshotInTransaction(db: Database.Database, row: RunRow): LoopRunSnapshot {
@@ -783,6 +916,8 @@ export class LoopRunStore {
     const events = eventRows.map((eventRow) => {
       const event = rowToEvent(eventRow);
       validatePersistedEvent(event);
+      // init() has already normalized any legacy hashes to the extended
+      // form, so exactly one hash format is valid here.
       if (sha256Hex(canonicalizePersistedEvent(event)) !== eventRow.canonical_sha256) {
         corrupt("persisted event canonical hash mismatch");
       }

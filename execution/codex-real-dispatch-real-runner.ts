@@ -6,8 +6,23 @@
 // by the caller through CodexCliProcessRunner. Wired into ExecutionGateway only when
 // explicitly injected.
 
-import { ExecutionRequest, ExecutionResult, ExecutionArtifact } from "./types";
+import {
+  ExecutionRequest,
+  ExecutionResult,
+  ExecutionArtifact,
+  ExecutionArtifactType,
+} from "./types";
 import { createArtifact } from "../core/artifact";
+import {
+  isSupportedCodexRequestType,
+  buildCapabilityPrompt,
+  buildCapabilityTextArtifact,
+  checkCapabilityInput,
+  checkCapabilityOutput,
+  capabilityOutputFallbackMessage,
+} from "./codex-real-dispatch-runner";
+import { CAPABILITY_ARTIFACT_TYPES, validateNodeOutputArtifact } from "../core/agent-capability-bindings";
+import type { NodeCapabilityId } from "../loop/types";
 import {
   buildCodexPrompt,
   CodexPromptBuilderInput,
@@ -114,7 +129,7 @@ export function createCodexRealDispatchRunner(
 
   return {
     async run(request: ExecutionRequest): Promise<ExecutionResult> {
-      if (request.type !== "code_generation") {
+      if (!isSupportedCodexRequestType(request.type)) {
         return buildShadowFallbackResult(
           request,
           "unsupported_request_type",
@@ -123,10 +138,15 @@ export function createCodexRealDispatchRunner(
         );
       }
 
+      // C01 WP-3: implementation-like requests need ImplementationExecutorInput;
+      // other node capabilities build a deterministic capability prompt from
+      // the input and produce their own canonical output artifact.
+      const isImplementationLike =
+        request.type === "code_generation" || request.type === "implementation";
       const implInput = request.input
         .implementationExecutorInput as CodexPromptBuilderInput | undefined;
 
-      if (!implInput) {
+      if (isImplementationLike && !implInput) {
         return buildShadowFallbackResult(
           request,
           "unsupported_request_type",
@@ -135,19 +155,41 @@ export function createCodexRealDispatchRunner(
         );
       }
 
-      const promptResult = buildCodexPrompt(implInput, promptLimits);
-      if (!promptResult.ok) {
-        return buildShadowFallbackResult(
-          request,
-          promptResult.reason ?? "unknown_error",
-          promptResult.fallbackAction ?? "shadow_fallback",
-          `Prompt builder refused: ${promptResult.reason ?? "unknown_error"}`
-        );
+      // Legacy code_generation maps to the implementation capability.
+      const effectiveCapability: NodeCapabilityId =
+        request.type === "code_generation" ? "implementation" : (request.type as NodeCapabilityId);
+      let prompt = "";
+      if (isImplementationLike) {
+        const promptResult = buildCodexPrompt(implInput as CodexPromptBuilderInput, promptLimits);
+        if (!promptResult.ok) {
+          return buildShadowFallbackResult(
+            request,
+            promptResult.reason ?? "unknown_error",
+            promptResult.fallbackAction ?? "shadow_fallback",
+            `Prompt builder refused: ${promptResult.reason ?? "unknown_error"}`
+          );
+        }
+        prompt = promptResult.prompt;
+      } else {
+        // Fail-closed: sensitive or unserializable input must never reach a
+        // prompt or the process runner.
+        const inputCheck = checkCapabilityInput(request.input);
+        if (inputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            inputCheck.reason,
+            "reject_and_shadow_fallback",
+            inputCheck.reason === "prohibited_input_content"
+              ? "Input contains prohibited content"
+              : "Input is not safely serializable"
+          );
+        }
+        prompt = buildCapabilityPrompt(request, effectiveCapability, inputCheck.text);
       }
 
       let processResult;
       try {
-        processResult = await options.processRunner.run(promptResult.prompt);
+        processResult = await options.processRunner.run(prompt);
       } catch (error) {
         if (isTimeoutError(error)) {
           return buildShadowFallbackResult(
@@ -191,19 +233,73 @@ export function createCodexRealDispatchRunner(
         );
       }
 
-      const parseResult = parseCodexOutput(
-        processResult.stdout,
-        request.requirementId,
-        request.node,
-        parserLimits
-      );
+      const artifactType: ExecutionArtifactType = CAPABILITY_ARTIFACT_TYPES[effectiveCapability];
 
-      if (!parseResult.ok) {
+      if (!isImplementationLike) {
+        // Fail-closed: oversized or sensitive output must never become a
+        // successful node product (no silent truncation, no secret leak).
+        const outputCheck = checkCapabilityOutput(processResult.stdout);
+        if (outputCheck.ok === false) {
+          return buildShadowFallbackResult(
+            request,
+            outputCheck.reason,
+            "reject_and_shadow_fallback",
+            capabilityOutputFallbackMessage(outputCheck.reason)
+          );
+        }
+      }
+
+      // C01 WP-3: per-capability parsing and artifact construction.
+      // Implementation-like requests parse a code patch; other capabilities
+      // take the real CLI text output as the node product (no code-patch
+      // parsing is applied to them).
+      let artifact: ExecutionArtifact;
+      if (isImplementationLike) {
+        const parseResult = parseCodexOutput(
+          processResult.stdout,
+          request.requirementId,
+          request.node,
+          parserLimits
+        );
+
+        if (!parseResult.ok) {
+          return buildShadowFallbackResult(
+            request,
+            parseResult.reason ?? "unknown_error",
+            parseResult.fallbackAction ?? "shadow_fallback",
+            `Output parser refused: ${parseResult.reason ?? "unknown_error"}`
+          );
+        }
+        artifact = createArtifact({
+          id: `${request.requirementId}:${request.node}:${artifactType}:codex-real`,
+          requirementId: request.requirementId,
+          node: request.node,
+          type: artifactType,
+          content: parseResult.artifact.content,
+          agent: request.agent,
+          source: "execution_gateway",
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        artifact = buildCapabilityTextArtifact(
+          request,
+          effectiveCapability,
+          processResult.stdout,
+          artifactType,
+          request.agent,
+        );
+      }
+
+      // Production boundary: the output artifact must satisfy the WP-2 node
+      // output contract for the requested capability (fail-closed).
+      try {
+        validateNodeOutputArtifact(artifact.type, effectiveCapability);
+      } catch {
         return buildShadowFallbackResult(
           request,
-          parseResult.reason ?? "unknown_error",
-          parseResult.fallbackAction ?? "shadow_fallback",
-          `Output parser refused: ${parseResult.reason ?? "unknown_error"}`
+          "output_contract_violation",
+          "reject_and_shadow_fallback",
+          "Output artifact violates node contract"
         );
       }
 
@@ -214,12 +310,12 @@ export function createCodexRealDispatchRunner(
         output: {
           node: request.node,
           agent: request.agent,
-          result: "code_patch_generated",
-          prompt_char_count: promptResult.prompt.length,
+          result: isImplementationLike ? "code_patch_generated" : "capability_completed",
+          prompt_char_count: prompt.length,
           output_char_count: processResult.stdout.length,
           duration_ms: processResult.durationMs,
         },
-        artifacts: [parseResult.artifact],
+        artifacts: [artifact],
       };
     },
   };

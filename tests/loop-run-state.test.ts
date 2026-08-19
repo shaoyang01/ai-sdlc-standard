@@ -69,6 +69,9 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
     errorCode: o.errorCode ?? null,
     retryable: o.retryable ?? null,
     reasonCode: o.reasonCode ?? null,
+    bindingId: o.bindingId ?? null,
+    bindingVersion: o.bindingVersion ?? null,
+    inputArtifactRef: o.inputArtifactRef ?? null,
   });
 }
 
@@ -206,6 +209,9 @@ function test(): void {
     const event = makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1 });
     const eventShuffled = Object.freeze({
       reasonCode: event.reasonCode,
+      inputArtifactRef: event.inputArtifactRef,
+      bindingVersion: event.bindingVersion,
+      bindingId: event.bindingId,
       retryable: event.retryable,
       errorCode: event.errorCode,
       outputDigest: event.outputDigest,

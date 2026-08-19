@@ -116,6 +116,11 @@ export type LoopRunEvent = Readonly<{
   errorCode: string | null;
   retryable: boolean | null;
   reasonCode: string | null;
+  // C01 WP-4: execution provenance. Nullable for backward compatibility with
+  // events persisted before this schema extension.
+  bindingId: string | null;
+  bindingVersion: string | null;
+  inputArtifactRef: string | null;
 }>;
 
 export type LoopRunJournalErrorCode =

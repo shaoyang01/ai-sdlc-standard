@@ -21,7 +21,7 @@ import {
 // keys, and any object whose reflection throws (e.g. Proxy traps). Never
 // invokes getters; never leaks the original exception text.
 
-function readPlainDataRecord(value: unknown, label: string): Record<string, unknown> {
+export function readPlainDataRecord(value: unknown, label: string): Record<string, unknown> {
   const fail = (): never => {
     throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a plain data record`);
   };
@@ -152,6 +152,9 @@ const EVENT_FIELDS = [
   "errorCode",
   "retryable",
   "reasonCode",
+  "bindingId",
+  "bindingVersion",
+  "inputArtifactRef",
 ] as const;
 
 const RUN_LEVEL_KINDS: readonly LoopRunEventKind[] = [
@@ -173,11 +176,32 @@ const STAGE_LEVEL_KINDS: readonly LoopRunEventKind[] = [
 
 // ── identity validation ──
 
+/**
+ * Shared requirementId validator used by BOTH identity validation (createRun)
+ * and the requirement query API (recovery lookup). A single implementation
+ * guarantees that any run creatable with an ID can be looked up by the same
+ * ID. External input is never echoed into errors.
+ * Rejects: non-string, blank or untrimmed values, and C0/C1/DEL control
+ * characters (\x00-\x1f, \x7f-\x9f).
+ */
+export function validateRequirementId(requirementId: unknown, label = "requirementId"): void {
+  if (typeof requirementId !== "string") {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a string`);
+  }
+  const trimmed = requirementId.trim();
+  if (trimmed.length === 0 || trimmed !== requirementId) {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a non-empty trimmed string`);
+  }
+  if (/[\x00-\x1f\x7f-\x9f]/.test(requirementId)) {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must not contain control characters`);
+  }
+}
+
 export function validateLoopRunIdentity(identity: unknown): void {
   const record = readPlainDataRecord(identity, "identity");
   requireFields(record, IDENTITY_FIELDS, "identity");
   asNonEmptyString(record.runId, "identity.runId", true);
-  asNonEmptyString(record.requirementId, "identity.requirementId", true);
+  validateRequirementId(record.requirementId, "identity.requirementId");
   asNonEmptyString(record.repository, "identity.repository", true);
   asNonEmptyString(record.baseBranch, "identity.baseBranch", true);
   const sha = asNonEmptyString(record.expectedBaseSha, "identity.expectedBaseSha", true);
@@ -219,6 +243,10 @@ export function validateLoopRunEvent(event: unknown): void {
     throw new LoopRunJournalError("INVALID_INPUT", "event.retryable must be a boolean or null");
   }
   if (record.reasonCode !== null) asNonEmptyString(record.reasonCode, "event.reasonCode", false);
+  // C01 WP-4 provenance fields: nullable strings, never echoed.
+  if (record.bindingId !== null) asNonEmptyString(record.bindingId, "event.bindingId", true);
+  if (record.bindingVersion !== null) asNonEmptyString(record.bindingVersion, "event.bindingVersion", true);
+  if (record.inputArtifactRef !== null) asNonEmptyString(record.inputArtifactRef, "event.inputArtifactRef", true);
 
   const canonicalKind = kind as LoopRunEventKind;
   if (RUN_LEVEL_KINDS.includes(canonicalKind)) {
@@ -273,6 +301,37 @@ export function canonicalizeLoopRunEvent(event: LoopRunEvent): string {
     errorCode: event.errorCode,
     retryable: event.retryable,
     reasonCode: event.reasonCode,
+    bindingId: event.bindingId,
+    bindingVersion: event.bindingVersion,
+    inputArtifactRef: event.inputArtifactRef,
+  };
+  return JSON.stringify(ordered);
+}
+
+/**
+ * C01 WP-4 legacy canonical form: journals persisted before the provenance
+ * schema extension hashed events over the 13 pre-extension fields only. This
+ * form exists solely so the init() migration can verify those historical
+ * rows (valid only when every provenance field is null) before atomically
+ * rewriting their stored hash to the extended form; new writes always use
+ * canonicalizeLoopRunEvent.
+ */
+export function canonicalizeLoopRunEventLegacy(event: LoopRunEvent): string {
+  validateLoopRunEvent(event);
+  const ordered = {
+    eventId: event.eventId,
+    runId: event.runId,
+    sequence: event.sequence,
+    kind: event.kind,
+    stage: event.stage,
+    attempt: event.attempt,
+    createdAt: event.createdAt,
+    inputDigest: event.inputDigest,
+    outputArtifactRef: event.outputArtifactRef,
+    outputDigest: event.outputDigest,
+    errorCode: event.errorCode,
+    retryable: event.retryable,
+    reasonCode: event.reasonCode,
   };
   return JSON.stringify(ordered);
 }
@@ -295,6 +354,9 @@ export function createLoopRunCreatedEvent(identity: LoopRunIdentity): LoopRunEve
     errorCode: null,
     retryable: null,
     reasonCode: null,
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
   });
 }
 

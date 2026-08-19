@@ -88,6 +88,9 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
     errorCode: o.errorCode ?? null,
     retryable: o.retryable ?? null,
     reasonCode: o.reasonCode ?? null,
+    bindingId: o.bindingId ?? null,
+    bindingVersion: o.bindingVersion ?? null,
+    inputArtifactRef: o.inputArtifactRef ?? null,
   });
 }
 

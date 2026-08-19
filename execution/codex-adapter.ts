@@ -7,6 +7,7 @@
 
 import { ExecutionRequest, ExecutionResult, ExecutionArtifact } from "./types";
 import { createArtifact } from "../core/artifact";
+import { isSupportedCodexRequestType } from "./codex-real-dispatch-runner";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -15,13 +16,13 @@ const execFileAsync = promisify(execFile);
 export async function executeCodexAgent(
   request: ExecutionRequest
 ): Promise<ExecutionResult> {
-  // Only code_generation supported in this PR
-  if (request.type !== "code_generation") {
+  // Only code_generation and node capability request types are supported.
+  if (!isSupportedCodexRequestType(request.type)) {
     return {
       success: false,
       node: request.node,
       agent: request.agent,
-      output: { error: "Codex adapter only supports code_generation in PR-4.4" },
+      output: { error: "Codex adapter only supports code_generation and node capability request types" },
       artifacts: [],
       error: "Unsupported request type",
     };
