@@ -1041,3 +1041,42 @@ C01 实施期间产品仓库使用 `feature/loop-core-contract-roadmap`、控制
 ## 代码依据
 
 `projects/ai-sdlc/STATE.yaml` repository_observation；产品 merge commit（loop-core-contract-roadmap → loop-runtime-v1）
+
+# Decision-031：WP-4B 能力执行事件流与生产接线方案
+
+## 状态
+
+Accepted（2026-08-19，Current User 明确授权执行 WP-4B，并授权产品仓库 commit/push）
+
+## 背景
+
+Decision-028 将 WP-4 复审中超出原授权的三项缺口拆为 WP-4B：完整执行者快照与产物/Gate/finding/资格模型、ExecutionGateway 写入侧强制、至少一个按 Requirement ID 创建或恢复的受支持入口。现有 `LoopStageName` 是八个交付阶段，而 C01 `NodeCapabilityId` 是七个产品能力，两者不是同一命名空间。
+
+## 问题
+
+WP-4B 如何在不破坏 WP-1 已验收的八阶段状态机和通用 `appendEvent` 语义的前提下，形成可验证、可恢复、不可伪造通过的生产执行链？
+
+## 决策
+
+1. 在同一 SQLite run journal 中新增正交的版本化 `loop_capability_executions` 事件流；其 per-run sequence、canonical hash、固定字段集和状态转移独立于八阶段 delivery cursor，但普通 run snapshot 读取同时验证两条事件流，任一损坏均 `STORE_CORRUPT`。
+2. 能力尝试固定记录实际 binding/registry 快照、Agent/adapter/executor 版本、输入/输出产物引用与版本、Gate、未解决 findings 引用、下一步资格及失败可重试性；不持久化 prompt/stdout/stderr/任意 JSON。
+3. 七能力严格按 canonical chain 执行。started 是互斥 claim；只有取得 claim 的 Gateway 才能 dispatch。Gateway 从 binding registry 选择实际执行者，shadow、Agent 不匹配、错误产物类型、缺失结构化 Gate/finding 或安全落盘失败均写为 failed attempt，不产生有效输出。
+4. 新增受支持入口 `LoopCapabilityEntry`：按 Requirement ID 创建或恢复同一 run，验证内容寻址输入，并强制下一能力消费前一能力的有效输出；入口调用已配置 journal/artifact store/binding registry 的 ExecutionGateway。
+5. journal 格式升为 v2；v1→v2 在单事务内建表、校验完整 schema/约束并落版本标记。v2 缺表、字段/约束漂移或事件 hash/chain 损坏均 fail-closed。
+6. 仍排除 checkpoint 发布 phase、真实 Agent 调用、Ready/merge/publication。用户本轮授权的 commit/push 仅用于发布本次产品仓库实现，不改变 LOOP Core 的人工 Git 边界。
+
+## 原因
+
+把七能力强行映射为八交付阶段会制造错误业务语义；正交事件流可保持已验收状态机兼容，同时让 Capability Execution 成为强制溯源写入边界。结构化 Gate/finding 与严格产物 lineage 防止“有文本输出即通过”和跨节点替换输入。
+
+## 影响
+
+WP-4B 实现完成后，C01 完成合同第 1、2 条具备产品代码和测试证据，但在用户复审裁决前不登记完成、不消费授权。WP-5 仍负责完成合同第 3、4 条的综合守卫与最终验收。
+
+## 实现状态
+
+实施完成，等待用户 review；产品仓库提交与推送按本轮明确授权执行，PR 是否需要依据常驻分支策略与远端保护结果决定。
+
+## 代码依据
+
+`core/loop-capability-execution.ts`；`core/loop-capability-entry.ts`；`core/loop-run-store.ts`；`core/loop-recovery.ts`；`execution/gateway.ts`；`tests/loop-capability-execution.test.ts`

@@ -550,7 +550,7 @@ console.log("provenance: historical legacy rows read back after migration");
   db.close();
   assert(row?.canonical_sha256 === extendedHash, "legacy hash atomically rewritten to extended form");
   assert(row?.canonical_sha256 !== legacyHash, "stored hash no longer the legacy form");
-  assert(formatVersion === 1, "journal marked normalized (user_version = 1)");
+  assert(formatVersion === 2, "journal migrated through capability-attempt schema (user_version = 2)");
   rmSync(dir, { recursive: true, force: true });
 }
 
@@ -682,6 +682,12 @@ console.log("provenance: failed migration rolls back columns, hashes and user_ve
     !columns.some((c) => c.name === "binding_id" || c.name === "binding_version" || c.name === "input_artifact_ref"),
     "provenance columns not persisted after rollback",
   );
+  const dbCapability = new Database(path, { readonly: true });
+  const capabilityTable = dbCapability
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'")
+    .get();
+  dbCapability.close();
+  assert(capabilityTable === undefined, "capability execution table not persisted after rollback");
   // The failed migration is retryable: fixing the corruption lets init succeed.
   const dbFix = new Database(path);
   dbFix
@@ -702,7 +708,7 @@ console.log("provenance: failed migration rolls back columns, hashes and user_ve
 
 console.log("provenance: unknown journal format version is STORE_CORRUPT");
 {
-  for (const badVersion of [2, -1]) {
+  for (const badVersion of [3, -1]) {
     const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
     const path = join(dir, "journal.db");
     const store = new LoopRunStore(path);

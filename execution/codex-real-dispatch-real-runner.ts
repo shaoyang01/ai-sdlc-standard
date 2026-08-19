@@ -20,6 +20,7 @@ import {
   checkCapabilityInput,
   checkCapabilityOutput,
   capabilityOutputFallbackMessage,
+  parseCapabilityOutcomeMarkers,
 } from "./codex-real-dispatch-runner";
 import { CAPABILITY_ARTIFACT_TYPES, validateNodeOutputArtifact } from "../core/agent-capability-bindings";
 import type { NodeCapabilityId } from "../loop/types";
@@ -314,6 +315,7 @@ export function createCodexRealDispatchRunner(
           prompt_char_count: prompt.length,
           output_char_count: processResult.stdout.length,
           duration_ms: processResult.durationMs,
+          ...parseCapabilityOutcomeMarkers(effectiveCapability, processResult.stdout),
         },
         artifacts: [artifact],
       };

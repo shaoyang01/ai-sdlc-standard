@@ -15,6 +15,13 @@ import { types as utilTypes } from "node:util";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunSnapshot } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
+import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import type {
+  LoopCapabilityExecutionEvent,
+  LoopCapabilityExecutionStatus,
+  LoopCapabilityGateResult,
+  LoopNextStepEligibility,
+} from "./loop-capability-execution";
 
 export interface NodeExecutionProvenance {
   bindingId: string;
@@ -55,6 +62,32 @@ export interface RunRecoveryContext {
     outputArtifactRef: string | null;
     reasonCode: string | null;
   }> | null;
+  capabilityStates: readonly CapabilityRecoveryState[];
+  capabilityChainStatus: "READY" | "RUNNING" | "BLOCKED" | "COMPLETED";
+  nextCapability: NodeCapabilityId | null;
+  lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
+}
+
+export interface CapabilityRecoveryState {
+  capability: NodeCapabilityId;
+  status: LoopCapabilityExecutionStatus | "not_started";
+  lastAttempt: number;
+  bindingId: string | null;
+  bindingVersion: string | null;
+  bindingRegistryVersion: string | null;
+  executorAgent: string | null;
+  executorAdapter: string | null;
+  executorVersion: string | null;
+  effectiveOutputArtifactRef: string | null;
+  effectiveOutputArtifactVersion: string | null;
+  effectiveOutputDigest: string | null;
+  gateResult: LoopCapabilityGateResult | null;
+  unresolvedFindingsRef: string | null;
+  unresolvedFindingsDigest: string | null;
+  nextStepEligibility: LoopNextStepEligibility | null;
+  errorCode: string | null;
+  retryable: boolean | null;
+  reasonCode: string | null;
 }
 
 const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
@@ -175,6 +208,59 @@ export function recoverRunContext(
     return undefined;
   }
   const state = snapshot.state;
+  const capabilityExecutions = store.listCapabilityExecutions(snapshot.state.identity.runId);
+  const capabilityStates = NODE_CAPABILITY_IDS.map((capability): CapabilityRecoveryState => {
+    const events = capabilityExecutions.filter((event) => event.capability === capability);
+    const last = events.length === 0 ? undefined : events[events.length - 1];
+    const lastSucceeded = [...events].reverse().find((event) => event.status === "succeeded");
+    return Object.freeze({
+      capability,
+      status: last?.status ?? "not_started",
+      lastAttempt: last?.attempt ?? 0,
+      bindingId: last?.bindingId ?? null,
+      bindingVersion: last?.bindingVersion ?? null,
+      bindingRegistryVersion: last?.bindingRegistryVersion ?? null,
+      executorAgent: last?.executorAgent ?? null,
+      executorAdapter: last?.executorAdapter ?? null,
+      executorVersion: last?.executorVersion ?? null,
+      effectiveOutputArtifactRef: lastSucceeded?.outputArtifactRef ?? null,
+      effectiveOutputArtifactVersion: lastSucceeded?.outputArtifactVersion ?? null,
+      effectiveOutputDigest: lastSucceeded?.outputDigest ?? null,
+      gateResult: lastSucceeded?.gateResult ?? null,
+      unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
+      unresolvedFindingsDigest: lastSucceeded?.unresolvedFindingsDigest ?? null,
+      nextStepEligibility: last?.nextStepEligibility ?? null,
+      errorCode: last?.errorCode ?? null,
+      retryable: last?.retryable ?? null,
+      reasonCode: last?.reasonCode ?? null,
+    });
+  });
+  let nextCapability: NodeCapabilityId | null = null;
+  for (const capabilityState of capabilityStates) {
+    if (capabilityState.status === "failed") {
+      nextCapability = capabilityState.retryable === true ? capabilityState.capability : null;
+      break;
+    }
+    if (capabilityState.status === "started" || capabilityState.status === "not_started") {
+      nextCapability = capabilityState.capability;
+      break;
+    }
+    if (capabilityState.nextStepEligibility !== "ELIGIBLE") {
+      nextCapability = null;
+      break;
+    }
+  }
+  const lastCapabilityExecution = capabilityExecutions.length === 0
+    ? null
+    : capabilityExecutions[capabilityExecutions.length - 1]!;
+  const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
+    capabilityStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
+      ? "COMPLETED"
+      : lastCapabilityExecution?.status === "started"
+        ? "RUNNING"
+        : lastCapabilityExecution !== null && nextCapability === null
+          ? "BLOCKED"
+          : "READY";
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
@@ -186,6 +272,10 @@ export function recoverRunContext(
     status: state.status,
     blockingReasonCode: state.blockingReasonCode,
     failureReasonCode: state.failureReasonCode,
+    capabilityStates: Object.freeze(capabilityStates),
+    capabilityChainStatus,
+    nextCapability,
+    lastCapabilityExecution,
     lastExecution:
       lastExecutionEvent === undefined
         ? null

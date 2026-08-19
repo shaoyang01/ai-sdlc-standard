@@ -141,8 +141,18 @@ export function replaceBinding(
     }
     return binding;
   });
+  if (!/^[1-9][0-9]*$/.test(registry.version)) {
+    throw new Error("binding registry version must be a positive integer string");
+  }
+  const currentVersion = Number(registry.version);
+  if (!Number.isSafeInteger(currentVersion) || currentVersion >= Number.MAX_SAFE_INTEGER) {
+    throw new Error("binding registry version cannot be incremented safely");
+  }
   const next: BindingRegistry = deepFreeze({
-    version: registry.version,
+    // A replacement is a new immutable configuration snapshot. Incrementing
+    // the registry version lets persisted executions identify the exact
+    // selection snapshot even after later replacements.
+    version: String(currentVersion + 1),
     bindings,
   }) as BindingRegistry;
   // Fail-closed invariant: every capability still has exactly one enabled

@@ -35,9 +35,21 @@ import {
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
+import {
+  canonicalizeLoopCapabilityExecutionEvent,
+  validateLoopCapabilityExecutionChain,
+  validateLoopCapabilityExecutionEvent,
+  type LoopCapabilityExecutionEvent,
+} from "./loop-capability-execution";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
+const LOOP_RUN_STORE_FORMAT_VERSION = 2;
+
+export type CapabilityExecutionAppendResult = Readonly<{
+  event: LoopCapabilityExecutionEvent;
+  appended: boolean;
+}>;
 
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
@@ -197,6 +209,38 @@ type EventRow = {
   canonical_sha256: string;
 };
 
+type CapabilityExecutionRow = {
+  execution_event_id: string;
+  run_id: string;
+  sequence: number;
+  schema_version: number;
+  capability: string;
+  node_id: string;
+  attempt: number;
+  status: string;
+  created_at: string;
+  binding_id: string;
+  binding_version: string;
+  binding_registry_version: string;
+  executor_agent: string;
+  executor_adapter: string;
+  executor_version: string;
+  input_artifact_ref: string;
+  input_artifact_version: string;
+  input_digest: string;
+  output_artifact_ref: string | null;
+  output_artifact_version: string | null;
+  output_digest: string | null;
+  gate_result: string | null;
+  unresolved_findings_ref: string | null;
+  unresolved_findings_digest: string | null;
+  next_step_eligibility: string | null;
+  error_code: string | null;
+  retryable: number | null;
+  reason_code: string | null;
+  canonical_sha256: string;
+};
+
 function rowToEvent(row: EventRow): LoopRunEvent {
   return Object.freeze({
     eventId: row.event_id,
@@ -240,6 +284,73 @@ function eventToRow(event: LoopRunEvent): EventRow {
     binding_version: event.bindingVersion,
     input_artifact_ref: event.inputArtifactRef,
     canonical_sha256: sha256Hex(canonicalizeLoopRunEvent(event)),
+  };
+}
+
+function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
+  return Object.freeze({
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 1,
+    executionEventId: row.execution_event_id,
+    runId: row.run_id,
+    sequence: asPersistedSafeInteger(row.sequence),
+    capability: row.capability as LoopCapabilityExecutionEvent["capability"],
+    nodeId: row.node_id,
+    attempt: asPersistedSafeInteger(row.attempt),
+    status: row.status as LoopCapabilityExecutionEvent["status"],
+    createdAt: row.created_at,
+    bindingId: row.binding_id,
+    bindingVersion: row.binding_version,
+    bindingRegistryVersion: row.binding_registry_version,
+    executorAgent: row.executor_agent as LoopCapabilityExecutionEvent["executorAgent"],
+    executorAdapter: row.executor_adapter,
+    executorVersion: row.executor_version,
+    inputArtifactRef: row.input_artifact_ref,
+    inputArtifactVersion: row.input_artifact_version,
+    inputDigest: row.input_digest,
+    outputArtifactRef: row.output_artifact_ref,
+    outputArtifactVersion: row.output_artifact_version,
+    outputDigest: row.output_digest,
+    gateResult: row.gate_result as LoopCapabilityExecutionEvent["gateResult"],
+    unresolvedFindingsRef: row.unresolved_findings_ref,
+    unresolvedFindingsDigest: row.unresolved_findings_digest,
+    nextStepEligibility: row.next_step_eligibility as LoopCapabilityExecutionEvent["nextStepEligibility"],
+    errorCode: row.error_code,
+    retryable: asPersistedRetryable(row.retryable),
+    reasonCode: row.reason_code,
+  });
+}
+
+function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): CapabilityExecutionRow {
+  return {
+    execution_event_id: event.executionEventId,
+    run_id: event.runId,
+    sequence: event.sequence,
+    schema_version: event.schemaVersion,
+    capability: event.capability,
+    node_id: event.nodeId,
+    attempt: event.attempt,
+    status: event.status,
+    created_at: event.createdAt,
+    binding_id: event.bindingId,
+    binding_version: event.bindingVersion,
+    binding_registry_version: event.bindingRegistryVersion,
+    executor_agent: event.executorAgent,
+    executor_adapter: event.executorAdapter,
+    executor_version: event.executorVersion,
+    input_artifact_ref: event.inputArtifactRef,
+    input_artifact_version: event.inputArtifactVersion,
+    input_digest: event.inputDigest,
+    output_artifact_ref: event.outputArtifactRef,
+    output_artifact_version: event.outputArtifactVersion,
+    output_digest: event.outputDigest,
+    gate_result: event.gateResult,
+    unresolved_findings_ref: event.unresolvedFindingsRef,
+    unresolved_findings_digest: event.unresolvedFindingsDigest,
+    next_step_eligibility: event.nextStepEligibility,
+    error_code: event.errorCode,
+    retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
+    reason_code: event.reasonCode,
+    canonical_sha256: sha256Hex(canonicalizeLoopCapabilityExecutionEvent(event)),
   };
 }
 
@@ -404,14 +515,20 @@ export class LoopRunStore {
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
 
-        // C01 WP-4 migration (single atomic unit): add the provenance
-        // columns, verify each historical row against the legacy 13-field
-        // hash form, rewrite verified rows to the extended hash, and flip
-        // user_version — all inside one immediate transaction. Any failure
-        // (including a corrupt historical row) rolls everything back: no
-        // columns added, no hash rewritten, user_version stays 0, and the
-        // next init simply retries this idempotent migration.
+        // C01 WP-4/WP-4B migrations are one atomic unit. v0 adds the three
+        // legacy provenance columns and normalizes historical event hashes;
+        // v1 adds the orthogonal capability-attempt journal; v2 is current.
+        // Any failure rolls back all migration DDL/data and user_version.
         db.transaction(() => {
+          const formatVersion = db.pragma("user_version", { simple: true });
+          if (
+            typeof formatVersion !== "number" ||
+            !Number.isSafeInteger(formatVersion) ||
+            formatVersion < 0 ||
+            formatVersion > LOOP_RUN_STORE_FORMAT_VERSION
+          ) {
+            corrupt("unknown journal format version");
+          }
           const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
           const existing = new Set(eventColumns.map((column) => column.name));
           const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
@@ -421,18 +538,61 @@ export class LoopRunStore {
           ];
           for (const column of provenanceColumns) {
             if (!existing.has(column.name)) {
+              if (formatVersion !== 0) corrupt("normalized journal is missing provenance columns");
               db.exec(column.ddl);
             }
           }
-          // Format version is fail-closed: only 0 (may hold legacy hashes,
-          // normalize now) and 1 (normalized) are known. Anything else means
-          // the journal was written by an unknown format — STORE_CORRUPT.
-          const formatVersion = db.pragma("user_version", { simple: true });
-          if (formatVersion !== 0 && formatVersion !== 1) {
-            corrupt("unknown journal format version");
-          }
           if (formatVersion === 0) {
             this.normalizeEventHashesToExtendedForm(db);
+          }
+          const capabilityTableExists = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'",
+          ).get() !== undefined;
+          if (formatVersion === LOOP_RUN_STORE_FORMAT_VERSION && !capabilityTableExists) {
+            corrupt("current journal is missing capability execution table");
+          }
+          if (!capabilityTableExists) {
+            db.exec(`
+              CREATE TABLE loop_capability_executions (
+                execution_event_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                schema_version INTEGER NOT NULL,
+                capability TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                attempt INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                binding_id TEXT NOT NULL,
+                binding_version TEXT NOT NULL,
+                binding_registry_version TEXT NOT NULL,
+                executor_agent TEXT NOT NULL,
+                executor_adapter TEXT NOT NULL,
+                executor_version TEXT NOT NULL,
+                input_artifact_ref TEXT NOT NULL,
+                input_artifact_version TEXT NOT NULL,
+                input_digest TEXT NOT NULL,
+                output_artifact_ref TEXT,
+                output_artifact_version TEXT,
+                output_digest TEXT,
+                gate_result TEXT,
+                unresolved_findings_ref TEXT,
+                unresolved_findings_digest TEXT,
+                next_step_eligibility TEXT,
+                error_code TEXT,
+                retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
+                reason_code TEXT,
+                canonical_sha256 TEXT NOT NULL,
+                UNIQUE (run_id, sequence),
+                FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+              );
+              CREATE INDEX idx_loop_capability_executions_run_id
+                ON loop_capability_executions(run_id);
+            `);
+          }
+          this.verifyCapabilityExecutionTableSchema(db);
+          if (formatVersion < LOOP_RUN_STORE_FORMAT_VERSION) {
+            db.exec(`PRAGMA user_version = ${LOOP_RUN_STORE_FORMAT_VERSION}`);
           }
         }).immediate();
       } catch (error) {
@@ -632,6 +792,11 @@ export class LoopRunStore {
           throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
         }
 
+        const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, event.runId);
+        if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "run events cannot advance while a capability execution is active");
+        }
+
         // ── check sequence conflict ──
         const sequenceOwner = current.events.find((e) => e.sequence === event.sequence);
         if (sequenceOwner !== undefined) {
@@ -719,6 +884,96 @@ export class LoopRunStore {
   listEvents(runId: string): readonly LoopRunEvent[] {
     const snapshot = this.readSnapshot(runId);
     return snapshot === undefined ? Object.freeze([]) : snapshot.events;
+  }
+
+  /**
+   * Append one immutable C01 capability-execution event. Capability attempts
+   * use their own per-run sequence and never mutate the legacy delivery-stage
+   * cursor. The owning run must exist and be running. The complete persisted
+   * run and attempt chain are verified before any write.
+   */
+  appendCapabilityExecution(event: LoopCapabilityExecutionEvent): CapabilityExecutionAppendResult {
+    const db = this.connection();
+    validateLoopCapabilityExecutionEvent(event);
+    const row = capabilityExecutionToRow(event);
+    try {
+      return db.transaction((): CapabilityExecutionAppendResult => {
+        const snapshot = this.readRunSnapshotInTransaction(db, event.runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        if (snapshot.state.status !== "running") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires a running run");
+        }
+        if (snapshot.state.currentStage !== null) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires no active delivery stage");
+        }
+        const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
+        const existing = current.find((item) => item.executionEventId === event.executionEventId);
+        if (existing !== undefined) {
+          if (
+            canonicalizeLoopCapabilityExecutionEvent(existing) ===
+            canonicalizeLoopCapabilityExecutionEvent(event)
+          ) {
+            return Object.freeze({ event: existing, appended: false });
+          }
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
+        }
+        if (current.some((item) => item.sequence === event.sequence)) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+        }
+        try {
+          validateLoopCapabilityExecutionChain([...current, event], event.runId);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
+          }
+          throw error;
+        }
+        this.insertCapabilityExecutionRow(db, row);
+        return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
+      }).immediate() as CapabilityExecutionAppendResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      if (isConstraintCode(code)) {
+        try {
+          const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
+          const existing = current.find((item) => item.executionEventId === event.executionEventId);
+          if (
+            existing !== undefined &&
+            canonicalizeLoopCapabilityExecutionEvent(existing) === canonicalizeLoopCapabilityExecutionEvent(event)
+          ) {
+            return Object.freeze({ event: existing, appended: false });
+          }
+          if (existing !== undefined) {
+            throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
+          }
+          if (current.some((item) => item.sequence === event.sequence)) {
+            throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+          }
+        } catch (reclassifyError) {
+          if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
+          storageFailure();
+        }
+      }
+      storageFailure();
+    }
+  }
+
+  /** Read and verify the complete capability attempt chain for one run. */
+  listCapabilityExecutions(runId: string): readonly LoopCapabilityExecutionEvent[] {
+    const snapshot = this.readSnapshot(runId);
+    if (snapshot === undefined) return Object.freeze([]);
+    const db = this.connection();
+    try {
+      return db.transaction(() => this.readCapabilityExecutionsInTransaction(db, runId))() as readonly LoopCapabilityExecutionEvent[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
   }
 
   /**
@@ -849,6 +1104,61 @@ export class LoopRunStore {
     );
   }
 
+  private insertCapabilityExecutionRow(db: Database.Database, row: CapabilityExecutionRow): void {
+    db.prepare(
+      `INSERT INTO loop_capability_executions (
+        execution_event_id, run_id, sequence, schema_version, capability,
+        node_id, attempt, status, created_at, binding_id, binding_version,
+        binding_registry_version, executor_agent, executor_adapter,
+        executor_version, input_artifact_ref, input_artifact_version,
+        input_digest, output_artifact_ref, output_artifact_version,
+        output_digest, gate_result, unresolved_findings_ref,
+        unresolved_findings_digest, next_step_eligibility, error_code,
+        retryable, reason_code, canonical_sha256
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.execution_event_id, row.run_id, row.sequence, row.schema_version,
+      row.capability, row.node_id, row.attempt, row.status, row.created_at,
+      row.binding_id, row.binding_version, row.binding_registry_version,
+      row.executor_agent, row.executor_adapter, row.executor_version,
+      row.input_artifact_ref, row.input_artifact_version, row.input_digest,
+      row.output_artifact_ref, row.output_artifact_version, row.output_digest,
+      row.gate_result, row.unresolved_findings_ref, row.unresolved_findings_digest,
+      row.next_step_eligibility, row.error_code, row.retryable, row.reason_code,
+      row.canonical_sha256,
+    );
+  }
+
+  private readCapabilityExecutionsInTransaction(
+    db: Database.Database,
+    runId: string,
+  ): readonly LoopCapabilityExecutionEvent[] {
+    const rows = db.prepare(
+      "SELECT * FROM loop_capability_executions WHERE run_id = ? ORDER BY sequence ASC",
+    ).all(runId) as CapabilityExecutionRow[];
+    const events = rows.map((row) => {
+      const event = rowToCapabilityExecution(row);
+      try {
+        validateLoopCapabilityExecutionEvent(event);
+        if (sha256Hex(canonicalizeLoopCapabilityExecutionEvent(event)) !== row.canonical_sha256) {
+          corrupt("capability execution canonical hash mismatch");
+        }
+      } catch (error) {
+        if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
+        if (error instanceof LoopRunJournalError) corrupt("persisted capability execution is invalid");
+        throw error;
+      }
+      return event;
+    });
+    try {
+      validateLoopCapabilityExecutionChain(events, runId);
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) corrupt("persisted capability execution chain is invalid");
+      throw error;
+    }
+    return Object.freeze(events);
+  }
+
   /**
    * Verifies and rewrites persisted event hashes to the extended canonical
    * form. Runs inside the caller's migration transaction (init), so any
@@ -857,8 +1167,9 @@ export class LoopRunStore {
    * the legacy 13-field form (and have all provenance fields null) — it is
    * then rewritten to the extended hash. Any other mismatch (including
    * tampered historical rows) aborts the migration with STORE_CORRUPT.
-   * user_version flips to 1 as the last step, marking the journal as fully
-   * normalized.
+   * user_version flips to 1 as the last step of the legacy-event phase; the
+   * caller then creates/verifies the capability table and publishes v2 in
+   * the same outer transaction.
    */
   private normalizeEventHashesToExtendedForm(db: Database.Database): void {
     const rows = db.prepare("SELECT * FROM loop_events").all() as EventRow[];
@@ -876,6 +1187,69 @@ export class LoopRunStore {
       update.run(extendedSha, row.event_id);
     }
     db.exec("PRAGMA user_version = 1");
+  }
+
+  private verifyCapabilityExecutionTableSchema(db: Database.Database): void {
+    const expected: ReadonlyArray<readonly [string, string, number, number]> = [
+      ["execution_event_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
+      ["sequence", "INTEGER", 1, 0], ["schema_version", "INTEGER", 1, 0],
+      ["capability", "TEXT", 1, 0], ["node_id", "TEXT", 1, 0],
+      ["attempt", "INTEGER", 1, 0], ["status", "TEXT", 1, 0],
+      ["created_at", "TEXT", 1, 0], ["binding_id", "TEXT", 1, 0],
+      ["binding_version", "TEXT", 1, 0], ["binding_registry_version", "TEXT", 1, 0],
+      ["executor_agent", "TEXT", 1, 0], ["executor_adapter", "TEXT", 1, 0],
+      ["executor_version", "TEXT", 1, 0], ["input_artifact_ref", "TEXT", 1, 0],
+      ["input_artifact_version", "TEXT", 1, 0], ["input_digest", "TEXT", 1, 0],
+      ["output_artifact_ref", "TEXT", 0, 0], ["output_artifact_version", "TEXT", 0, 0],
+      ["output_digest", "TEXT", 0, 0], ["gate_result", "TEXT", 0, 0],
+      ["unresolved_findings_ref", "TEXT", 0, 0], ["unresolved_findings_digest", "TEXT", 0, 0],
+      ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
+      ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
+      ["canonical_sha256", "TEXT", 1, 0],
+    ];
+    const actual = db.prepare("PRAGMA table_info(loop_capability_executions)").all() as Array<{
+      name: string; type: string; notnull: number; pk: number;
+    }>;
+    if (actual.length !== expected.length) corrupt("capability execution table schema mismatch");
+    for (let index = 0; index < expected.length; index += 1) {
+      const row = actual[index]!;
+      const [name, type, notnull, pk] = expected[index]!;
+      if (row.name !== name || row.type.toUpperCase() !== type || row.notnull !== notnull || row.pk !== pk) {
+        corrupt("capability execution table schema mismatch");
+      }
+    }
+    const uniqueIndexes = db.prepare("PRAGMA index_list(loop_capability_executions)").all() as Array<{
+      name: string; unique: number;
+    }>;
+    const hasRunSequenceUnique = uniqueIndexes.some((index) => {
+      if (index.unique !== 1) return false;
+      const columns = db.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all() as Array<{ name: string }>;
+      return columns.length === 2 && columns[0]?.name === "run_id" && columns[1]?.name === "sequence";
+    });
+    if (!hasRunSequenceUnique) corrupt("capability execution table is missing run sequence uniqueness");
+    const foreignKeys = db.prepare("PRAGMA foreign_key_list(loop_capability_executions)").all() as Array<{
+      table: string; from: string; to: string; on_delete: string;
+    }>;
+    if (
+      foreignKeys.length !== 1 || foreignKeys[0]?.table !== "loop_runs" ||
+      foreignKeys[0]?.from !== "run_id" || foreignKeys[0]?.to !== "run_id" ||
+      foreignKeys[0]?.on_delete.toUpperCase() !== "CASCADE"
+    ) {
+      corrupt("capability execution table foreign key mismatch");
+    }
+    const runIndex = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_loop_capability_executions_run_id'",
+    ).get();
+    if (runIndex === undefined) corrupt("capability execution run index is missing");
+    const tableSql = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'",
+    ).get() as { sql?: unknown } | undefined;
+    if (
+      typeof tableSql?.sql !== "string" ||
+      !tableSql.sql.includes("CHECK (retryable IS NULL OR retryable IN (0, 1))")
+    ) {
+      corrupt("capability execution retryable constraint is missing");
+    }
   }
 
   private verifySnapshotInTransaction(db: Database.Database, row: RunRow): LoopRunSnapshot {
@@ -1002,6 +1376,10 @@ export class LoopRunStore {
     if (frozenEvents.length === 0 || frozenEvents[frozenEvents.length - 1]!.eventId !== state.lastEventId) {
       corrupt("snapshot last-event invariant violated");
     }
+    // The capability-attempt stream is orthogonal to delivery stages but is
+    // part of the same durable run. Snapshot reads verify both streams before
+    // returning any business state.
+    this.readCapabilityExecutionsInTransaction(db, row.run_id);
     return Object.freeze({ state, events: frozenEvents });
   }
 }

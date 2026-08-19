@@ -51,6 +51,22 @@ import {
   evaluateHermesGatewayRealDispatchGuardrails,
   type HermesGatewayRealDispatchGuardrailLimits,
 } from "./hermes-gateway-real-dispatch-guardrails";
+import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import {
+  getEnabledBinding,
+  validateNodeOutputArtifact,
+  type BindingRegistry,
+} from "../core/agent-capability-bindings";
+import type { LoopRunStore } from "../core/loop-run-store";
+import type { LoopArtifactStore } from "../core/loop-artifact-store";
+import {
+  LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+  type LoopCapabilityExecutionEvent,
+  type LoopCapabilityGateResult,
+} from "../core/loop-capability-execution";
+import { LoopRunJournalError } from "../core/loop-executor-types";
+import { readPlainDataRecord } from "../core/loop-run-state";
+import { types as utilTypes } from "node:util";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
 
@@ -75,6 +91,13 @@ export interface ExecutionGatewayOptions {
   hermesGatewayRealDispatcher?: HermesGatewayRealDispatcher;
   hermesPhase2ShadowDispatcher?: HermesPhase2ShadowDispatcher;
   hermesGuardrailLimits?: Partial<HermesGatewayRealDispatchGuardrailLimits>;
+  capabilityTracing?: Readonly<{
+    runStore: LoopRunStore;
+    artifactStore: Pick<LoopArtifactStore, "put" | "read">;
+    bindingRegistry: BindingRegistry;
+    executorVersions: Readonly<Record<"kimi" | "codex" | "hermes", string>>;
+    now?: () => string;
+  }>;
 }
 
 export class ExecutionGateway {
@@ -85,8 +108,312 @@ export class ExecutionGateway {
     const skillValidation = validateExecutionRequestSkill(request);
     const enriched = { ...request, skillValidation };
 
+    if (request.loopExecution !== undefined) {
+      return this.executeCapabilityWithTracing(enriched);
+    }
     const primaryResult = await this.executePrimary(enriched);
     return this.attachHermesGatewayRealDispatch(enriched, primaryResult);
+  }
+
+  private async executeCapabilityWithTracing(request: ExecutionRequest): Promise<ExecutionResult> {
+    const tracing = this.options.capabilityTracing;
+    if (tracing === undefined) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loop execution context requires capability tracing configuration");
+    }
+    if (typeof request.type !== "string" || !NODE_CAPABILITY_IDS.includes(request.type as NodeCapabilityId)) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loop execution context requires a canonical capability request");
+    }
+    const capability = request.type as NodeCapabilityId;
+    if (utilTypes.isProxy(request.loopExecution)) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loopExecution must not be a Proxy");
+    }
+    const context = readPlainDataRecord(request.loopExecution, "loopExecution");
+    const contextKeys = [
+      "runId", "attempt", "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactVersion",
+    ];
+    if (
+      Object.keys(context).length !== contextKeys.length ||
+      contextKeys.some((key) => !(key in context)) ||
+      Object.keys(context).some((key) => !contextKeys.includes(key))
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loopExecution must contain exactly the canonical fields");
+    }
+    const runId = this.requireTracingString(context.runId, "loopExecution.runId");
+    const attempt = context.attempt;
+    if (typeof attempt !== "number" || !Number.isSafeInteger(attempt) || attempt < 1) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loopExecution.attempt must be a positive safe integer");
+    }
+    const inputArtifactRef = this.requireTracingString(context.inputArtifactRef, "loopExecution.inputArtifactRef");
+    const inputArtifactVersion = this.requireSemanticVersion(context.inputArtifactVersion, "loopExecution.inputArtifactVersion");
+    const inputDigest = this.requireDigest(context.inputDigest, "loopExecution.inputDigest");
+    const outputArtifactVersion = this.requireSemanticVersion(context.outputArtifactVersion, "loopExecution.outputArtifactVersion");
+    const snapshot = tracing.runStore.getSnapshot(runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "loop execution run does not exist");
+    }
+    if (snapshot.state.identity.requirementId !== request.requirementId) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loop execution Requirement ID does not match the run");
+    }
+    tracing.artifactStore.read(inputArtifactRef, inputDigest);
+    const binding = getEnabledBinding(tracing.bindingRegistry, capability);
+    const executorVersion = this.requireSemanticVersion(
+      tracing.executorVersions[binding.agent],
+      "capability tracing executor version",
+    );
+    const boundRequest: ExecutionRequest = Object.freeze({ ...request, agent: binding.agent });
+    const existing = tracing.runStore.listCapabilityExecutions(runId);
+    const startedSequence = existing.length + 1;
+    const now = (): string => {
+      const value = tracing.now?.() ?? new Date().toISOString();
+      if (typeof value !== "string") {
+        throw new LoopRunJournalError("INVALID_INPUT", "capability tracing clock must return an ISO timestamp");
+      }
+      return value;
+    };
+    const base = {
+      schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+      runId,
+      capability,
+      nodeId: request.node,
+      attempt,
+      bindingId: binding.bindingId,
+      bindingVersion: binding.bindingVersion,
+      bindingRegistryVersion: tracing.bindingRegistry.version,
+      executorAgent: binding.agent,
+      executorAdapter: binding.adapter,
+      executorVersion,
+      inputArtifactRef,
+      inputArtifactVersion,
+      inputDigest,
+    } as const;
+    const started: LoopCapabilityExecutionEvent = Object.freeze({
+      ...base,
+      executionEventId: `${runId}:capability:${startedSequence}:started`,
+      sequence: startedSequence,
+      status: "started",
+      createdAt: now(),
+      outputArtifactRef: null,
+      outputArtifactVersion: null,
+      outputDigest: null,
+      gateResult: null,
+      unresolvedFindingsRef: null,
+      unresolvedFindingsDigest: null,
+      nextStepEligibility: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+    });
+    const claim = tracing.runStore.appendCapabilityExecution(started);
+    if (!claim.appended) {
+      return Object.freeze({
+        success: false,
+        node: request.node,
+        agent: binding.agent,
+        output: Object.freeze({ result: "FAIL", reason: "execution_already_claimed" }),
+        artifacts: Object.freeze([]),
+        error: "capability execution is already active",
+      });
+    }
+
+    let result: ExecutionResult;
+    try {
+      const primary = await this.executePrimary(boundRequest);
+      result = await this.attachHermesGatewayRealDispatch(boundRequest, primary);
+    } catch {
+      this.appendCapabilityFailure(tracing, base, startedSequence + 1, now(), "EXECUTOR_EXCEPTION", binding.failurePolicy === "retry_other_binding");
+      return Object.freeze({
+        success: false,
+        node: request.node,
+        agent: binding.agent,
+        output: Object.freeze({ result: "FAIL", reason: "executor_exception" }),
+        artifacts: Object.freeze([]),
+        error: "capability execution failed",
+      });
+    }
+
+    const expectedArtifacts = result.artifacts.filter((artifact) => {
+      try {
+        validateNodeOutputArtifact(artifact.type, capability);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (
+      !result.success || result.node !== request.node || result.agent !== binding.agent || result.artifacts.length !== 1 ||
+      expectedArtifacts.length !== 1 || result.artifacts.some((artifact) => artifact.type === "shadow_output") ||
+      expectedArtifacts[0]?.requirementId !== request.requirementId || expectedArtifacts[0]?.node !== request.node ||
+      expectedArtifacts[0]?.metadata.agent !== binding.agent || expectedArtifacts[0]?.metadata.source !== "execution_gateway"
+    ) {
+      this.appendCapabilityFailure(tracing, base, startedSequence + 1, now(), "OUTPUT_CONTRACT_VIOLATION", binding.failurePolicy === "retry_other_binding");
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "capability output contract violation",
+      });
+    }
+    const expectedArtifact = expectedArtifacts[0]!;
+
+    let outputDescriptor: ReturnType<NonNullable<ExecutionGatewayOptions["capabilityTracing"]>["artifactStore"]["put"]>;
+    let findingsDescriptor: ReturnType<NonNullable<ExecutionGatewayOptions["capabilityTracing"]>["artifactStore"]["put"]> | null;
+    let gateResult: LoopCapabilityGateResult;
+    let findings: unknown[];
+    try {
+      ({ gateResult, findings } = this.readCapabilityOutcome(result, capability));
+    } catch {
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "OUTPUT_CONTRACT_VIOLATION",
+        binding.failurePolicy === "retry_other_binding",
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "capability outcome contract violation",
+      });
+    }
+    try {
+      const outputEnvelope = JSON.stringify({
+        schema: "loop-capability-output:v1",
+        requirementId: request.requirementId,
+        capability,
+        nodeId: request.node,
+        artifact: expectedArtifact,
+      });
+      if (outputEnvelope === undefined) throw new Error("capability output is not serializable");
+      outputDescriptor = tracing.artifactStore.put("capability_output", outputEnvelope);
+      if (findings.length === 0) {
+        findingsDescriptor = null;
+      } else {
+        const findingEnvelope = JSON.stringify({
+          schema: "loop-capability-findings:v1",
+          requirementId: request.requirementId,
+          capability,
+          findings,
+        });
+        if (findingEnvelope === undefined) throw new Error("capability findings are not serializable");
+        findingsDescriptor = tracing.artifactStore.put("capability_findings", findingEnvelope);
+      }
+    } catch {
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "OUTPUT_RECORDING_FAILED",
+        binding.failurePolicy === "retry_other_binding",
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "capability output could not be recorded safely",
+      });
+    }
+    const succeeded: LoopCapabilityExecutionEvent = Object.freeze({
+      ...base,
+      executionEventId: `${runId}:capability:${startedSequence + 1}:succeeded`,
+      sequence: startedSequence + 1,
+      status: "succeeded",
+      createdAt: now(),
+      outputArtifactRef: outputDescriptor.artifactRef,
+      outputArtifactVersion,
+      outputDigest: outputDescriptor.digest,
+      gateResult,
+      unresolvedFindingsRef: findingsDescriptor?.artifactRef ?? null,
+      unresolvedFindingsDigest: findingsDescriptor?.digest ?? null,
+      nextStepEligibility: gateResult === "FAIL" || findings.length > 0 ? "BLOCKED" : "ELIGIBLE",
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+    });
+    tracing.runStore.appendCapabilityExecution(succeeded);
+    return result;
+  }
+
+  private appendCapabilityFailure(
+    tracing: NonNullable<ExecutionGatewayOptions["capabilityTracing"]>,
+    base: Omit<LoopCapabilityExecutionEvent,
+      "executionEventId" | "sequence" | "status" | "createdAt" | "outputArtifactRef" |
+      "outputArtifactVersion" | "outputDigest" | "gateResult" | "unresolvedFindingsRef" |
+      "unresolvedFindingsDigest" | "nextStepEligibility" | "errorCode" | "retryable" | "reasonCode">,
+    sequence: number,
+    createdAt: string,
+    errorCode: string,
+    retryable: boolean,
+  ): void {
+    tracing.runStore.appendCapabilityExecution(Object.freeze({
+      ...base,
+      executionEventId: `${base.runId}:capability:${sequence}:failed`,
+      sequence,
+      status: "failed",
+      createdAt,
+      outputArtifactRef: null,
+      outputArtifactVersion: null,
+      outputDigest: null,
+      gateResult: null,
+      unresolvedFindingsRef: null,
+      unresolvedFindingsDigest: null,
+      nextStepEligibility: "BLOCKED",
+      errorCode,
+      retryable,
+      reasonCode: null,
+    }));
+  }
+
+  private readCapabilityOutcome(
+    result: ExecutionResult,
+    capability: NodeCapabilityId,
+  ): { gateResult: LoopCapabilityGateResult; findings: unknown[] } {
+    const requiresGate = capability === "solution-review" || capability === "test-validation";
+    const gateValue = result.output["gateResult"] ?? result.output["gate_result"];
+    let gateResult: LoopCapabilityGateResult = "NOT_APPLICABLE";
+    if (requiresGate) {
+      if (gateValue !== "PASS" && gateValue !== "FAIL" && gateValue !== "PASS_WITH_RISK") {
+        throw new Error("Gate-producing capability omitted a canonical Gate result");
+      }
+      gateResult = gateValue;
+    } else if (gateValue !== undefined && gateValue !== "NOT_APPLICABLE") {
+      throw new Error("non-Gate capability returned a non-canonical Gate result");
+    }
+
+    const requiresFindings = capability === "solution-challenge" || capability === "code-review";
+    const rawFindings = result.output["unresolvedFindings"] ?? result.output["unresolved_findings"];
+    if (requiresFindings && !Array.isArray(rawFindings)) {
+      throw new Error("finding-producing capability omitted unresolved findings");
+    }
+    if (rawFindings !== undefined && !Array.isArray(rawFindings)) {
+      throw new Error("unresolved findings must be an array");
+    }
+    return { gateResult, findings: Array.isArray(rawFindings) ? [...rawFindings] : [] };
+  }
+
+  private requireTracingString(value: unknown, label: string): string {
+    if (typeof value !== "string" || value.length === 0 || value.trim() !== value || /[\x00-\x1f\x7f-\x9f]/.test(value)) {
+      throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a safe trimmed non-empty string`);
+    }
+    return value;
+  }
+
+  private requireSemanticVersion(value: unknown, label: string): string {
+    const text = this.requireTracingString(value, label);
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(text)) {
+      throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a semantic version`);
+    }
+    return text;
+  }
+
+  private requireDigest(value: unknown, label: string): string {
+    const text = this.requireTracingString(value, label);
+    if (!/^[0-9a-f]{64}$/.test(text)) {
+      throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a lowercase SHA-256 hex`);
+    }
+    return text;
   }
 
   private async executePrimary(enriched: ExecutionRequest): Promise<ExecutionResult> {
