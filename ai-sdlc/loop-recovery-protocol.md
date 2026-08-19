@@ -97,7 +97,8 @@ recoverRunContext(store, requirementId)
 - ExecutionGateway 在 dispatch 前从不可变 BindingRegistry 选择唯一 enabled binding 并写 started claim；只有取得 claim 的调用方才执行 Agent adapter；
 - 当恢复到 active started（包括 claim 落库后、dispatch 进行中或 terminal 写入前进程中断），入口只接受与该 claim 的 capability 和 input ref/version/digest 完全一致的请求；随后调用 journal 的原子中断 API，以固定 `ATTEMPT_INTERRUPTED / ENTRY_RECOVERY` failed 事件关闭它。关闭事件逐字段复制已持久化的 binding/registry/Agent/adapter/executor 与输入快照，不由新入口重构或替换；
 - 中断事件的 `retryable` 取自 active claim 对应历史 binding 的 `failurePolicy`：`retry_other_binding` 才允许生成下一 attempt，`block` 则保持阻塞。关闭与新 attempt 是两个独立持久事实，迟到的旧执行者不能覆盖已占用的 terminal sequence；
-- shadow、执行异常、Agent 不匹配、产物类型不符、Gate/finding 缺失或输出无法安全持久化均写 failed attempt，不产生有效输出；
+- shadow/执行者不可用、执行超时、执行异常、Agent 不匹配、产物类型不符、Gate/finding 缺失或输出无法安全持久化均以稳定 errorCode 写 failed attempt，不产生有效输出；
+- Gateway 按 binding `timeoutMs` 关闭超时 attempt。adapter 不支持取消时的迟到结果会被观察并丢弃，不能追加 succeeded 或产生有效产物；恢复必须以 attempt + 1 重新 dispatch；
 - binding 替换会递增 registry snapshot version；历史事件保存原 binding/registry/executor 快照，新 attempt 使用新快照。
 - 配置 `capabilityTracing` 后，七个 canonical capability 请求必须携带完整 `loopExecution`；缺失时 Gateway 在 binding 选择、journal 写入和 Agent dispatch 前以 `INVALID_INPUT` 拒绝。legacy 非 capability 请求保持原兼容路径。
 
@@ -115,7 +116,8 @@ recoverRunContext(store, requirementId)
 - 不修改 WP-2 节点能力合同；binding schema 保持 12 字段不变，仅使 registry replacement 递增不可变快照版本；
 - legacy `appendEvent` 保持 WP-1 通用语义；生产 capability 写入由 ExecutionGateway + `appendCapabilityExecution` 强制；
 - 不把本轮产品仓库 commit/push 解释为 LOOP 节点可执行的 Git 副作用；人工 Git 边界不变；
-- WP-4B 已经 review 与用户裁决收口；C01 完成合同第 1、2 条已完成。第 3、4 条及 WP-5 不因本次收口获得授权。
+- WP-4B 已经 review 与用户裁决收口；C01 完成合同第 1、2 条已完成。Decision-032 本身未授权第 3、4 条或 WP-5；其后续授权与状态单独记录。
+- WP-5 已获单独授权并完成产品实现，但仍等待独立复审；在复审裁决前不消费授权、不登记 C01 第 3、4 条完成。
 
 ## Revision Record
 
@@ -131,3 +133,4 @@ recoverRunContext(store, requirementId)
 | 0.3.0 | 2026-08-19 | 等待复审 | WP-4B（Decision-031）：新增正交 capability attempt 事件流、journal v2 迁移、完整执行者/产物/Gate/finding/资格恢复投影、BindingRegistry/Gateway 强制写入与按 Requirement ID 创建/恢复的受支持入口。 |
 | 0.3.1 | 2026-08-19 | 等待复审 | WP-4B review round 1 correction：`RUNNING` 不再暴露不可执行的 nextCapability；受支持入口按历史 binding failurePolicy 原子关闭中断 attempt 并重试，关闭事件复制原 started 执行者与输入快照；配置 tracing 的 canonical capability 缺 `loopExecution` 时 dispatch 前 fail-closed。 |
 | 0.4.0 | 2026-08-19 | Accepted | WP-4B review round 2 通过并收口（Decision-032）：独立复核确认中断恢复、历史执行者快照、binding 替换后的重试、无 tracing context 绕过均闭合；WP-4 + WP-4B 联合满足 C01 完成合同第 1、2 条，第 3、4 条继续归 WP-5 且须单独授权。 |
+| 0.5.0 | 2026-08-19 | 等待 WP-5 独立复审 | WP-5 实施：不可用/超时/异常/不合格输出形成稳定失败 attempt；迟到结果丢弃；恢复必须 fresh retry。C01 第 3、4 条尚未登记完成。 |

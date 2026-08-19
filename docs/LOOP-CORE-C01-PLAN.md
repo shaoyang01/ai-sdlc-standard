@@ -133,10 +133,12 @@ WP-5 验证与守卫（完成合同验收）
 
 ### WP-5：验证与守卫
 
-- 单元测试：binding schema 校验、run journal 扩展、恢复协议、替换守卫；
-- 真实/样例验证：至少一个真实入口创建+恢复；一次 binding 替换；一次不可用/超时/不合格 → 可恢复失败尝试；
-- 伪造通过禁令：无 shadow/历史结果冒充本次通过的测试断言。
-- 验收：覆盖 C01 completion_contract 全部 4 条。
+- 运行时守卫：完整 BindingRegistry 固定字段集、深冻结、7×3 矩阵、canonical 输入/输出/validator/副作用、每能力唯一 enabled；replacement 只能 enabled source → disabled target；
+- 契约不变：替换仅切换选择标志并递增 registry version；Node Capability Contract 深冻结，Requirement identity、artifact type、finding/Gate 解释、下一步资格与人工 Git 边界不改变；
+- 失败注入：执行者不可用/shadow、binding timeout、执行异常、错误产物与 Gate/finding 合同不合格均形成稳定 failed attempt，不产生有效输出；
+- 恢复守卫：迟到结果丢弃；恢复必须 attempt + 1 fresh dispatch，保留历史 binding/registry/executor 与输入 lineage；finding 阻塞不能自动进入审核/Re-Gate；
+- 测试入口：`tests/loop-validation-guards.test.ts` 已接入默认 `npm test`。
+- 状态（2026-08-19）：**已实施，等待独立复审**（Decision-033）；复审裁决前不消费授权、不登记 C01 第 3、4 条或 C01 整体完成。
 
 ## 5. 验收映射（完成合同 ↔ 工作包）
 
@@ -144,8 +146,8 @@ WP-5 验证与守卫（完成合同验收）
 | --- | --- | --- |
 | ✅ 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4、WP-4B | `LoopCapabilityEntry` 创建/恢复、中断关闭与重试测试；WP-4B round 2 独立复审通过（Decision-032） |
 | ✅ 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4、WP-4B | capability event 保存 binding/registry/executor 与输入/输出 lineage；替换后历史快照对抗验证通过（Decision-032） |
-| binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 替换守卫测试（替换前后契约断言） |
-| 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-5 | 失败注入测试 + 禁止 shadow 通过的断言 |
+| ⏳ binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 产品实现与 WP-5 专项断言已完成；等待独立复审与用户收口裁决（Decision-033） |
+| ⏳ 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-5 | unavailable/timeout/late/unqualified + fresh retry 综合测试已完成；等待独立复审与用户收口裁决 |
 
 ## 6. 明确不做（Out of Scope）
 
@@ -224,4 +226,5 @@ WP-5 验证与守卫（完成合同验收）
 3. ✅ R1 逐资产 Source 复核（218 测试通过）与正式规划迁移（本文件）；
 4. ✅ WP-1～WP-4B 已实施、复审并按各自 Decision 收口；WP-4B round 1 的中断恢复与 tracing 绕过修正经 round 2 独立复核通过（Decision-032）；
 5. ✅ C01 完成合同第 1、2 条由 WP-4 + WP-4B 联合证据登记完成，WP-4B 授权随控制平面收口登记消费；
-6. 下一有效边界：等待用户单独授权 WP-5，完成 binding 替换守卫与不可用/超时/不合格结果的综合验收，覆盖 C01 完成合同第 3、4 条；未授权前不得实施。
+6. ✅ 用户已单独授权 WP-5；控制平面授权登记已发布，产品实现、专项测试与标准文档已完成；
+7. 下一有效边界：完成独立代码复审。仅复审通过并经用户裁决后，消费 WP-5 授权、登记 C01 完成合同第 3、4 条与 C01 整体收口。
