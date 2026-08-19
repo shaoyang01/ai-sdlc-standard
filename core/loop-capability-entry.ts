@@ -8,7 +8,7 @@ import type { ExecutionGateway } from "../execution/gateway";
 import { types as utilTypes } from "node:util";
 import type { ExecutionResult } from "../execution/types";
 import type { NodeCapabilityId } from "../loop/types";
-import { getEnabledBinding, type BindingRegistry } from "./agent-capability-bindings";
+import { getBinding, getEnabledBinding, type BindingRegistry } from "./agent-capability-bindings";
 import type { LoopArtifactStore } from "./loop-artifact-store";
 import type { LoopRunEvent, LoopRunIdentity } from "./loop-executor-types";
 import { LoopRunJournalError } from "./loop-executor-types";
@@ -129,8 +129,14 @@ export class LoopCapabilityEntry {
     if (recovery.status !== "running") {
       throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability entry requires a running run");
     }
-    if (recovery.nextCapability !== request.capability) {
-      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requested capability is not the next recoverable capability");
+    const interruptedAttempt = recovery.capabilityChainStatus === "RUNNING"
+      ? recovery.lastCapabilityExecution
+      : null;
+    if (
+      recovery.capabilityChainStatus === "RUNNING" &&
+      (interruptedAttempt?.status !== "started" || interruptedAttempt.capability !== request.capability)
+    ) {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "request does not match the active capability execution");
     }
     // The content-addressed store independently checks ref syntax, kind,
     // containment and digest before any execution side effect.
@@ -155,6 +161,40 @@ export class LoopCapabilityEntry {
       ) {
         throw new LoopRunJournalError("INVALID_INPUT", "capability input does not match the predecessor's effective output");
       }
+    }
+    if (
+      interruptedAttempt !== null &&
+      (
+        interruptedAttempt.inputArtifactRef !== request.inputArtifactRef ||
+        interruptedAttempt.inputArtifactVersion !== request.inputArtifactVersion ||
+        interruptedAttempt.inputDigest !== request.inputDigest
+      )
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "recovery input does not match the active capability claim");
+    }
+    if (interruptedAttempt !== null) {
+      const historicalBinding = getBinding(this.options.bindingRegistry, interruptedAttempt.bindingId);
+      if (
+        historicalBinding === undefined || historicalBinding.capability !== interruptedAttempt.capability ||
+        historicalBinding.bindingVersion !== interruptedAttempt.bindingVersion ||
+        historicalBinding.agent !== interruptedAttempt.executorAgent ||
+        historicalBinding.adapter !== interruptedAttempt.executorAdapter
+      ) {
+        throw new LoopRunJournalError("STORE_FAILURE", "binding registry cannot recover the active capability execution");
+      }
+      this.options.runStore.interruptCapabilityExecution(
+        recovery.snapshot.state.identity.runId,
+        interruptedAttempt.executionEventId,
+        now,
+        historicalBinding.failurePolicy === "retry_other_binding",
+      );
+      recovery = recoverRunContext(this.options.runStore, request.requirementId);
+      if (recovery === undefined) {
+        throw new LoopRunJournalError("STORE_FAILURE", "run recovery failed after interrupted capability closure");
+      }
+    }
+    if (recovery.nextCapability !== request.capability) {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requested capability is not the next recoverable capability");
     }
     const capabilityState = recovery.capabilityStates.find((state) => state.capability === request.capability)!;
     const attempt = capabilityState.lastAttempt + 1;

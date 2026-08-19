@@ -86,6 +86,7 @@ recoverRunContext(store, requirementId)
 
 - 基于 WP-1 已验收的 `findLatestRunByRequirement`（最新已验证 run 快照，corruption-first）；
 - 恢复内容：当前阶段、attempt、fixRound、运行状态、阻塞/失败原因码、最近一次 legacy 节点执行；并为七能力恢复最近 attempt、实际 binding/registry/Agent/adapter/executor 版本、有效输出版本与摘要、Gate、未解决 finding、下一步资格、`READY / RUNNING / BLOCKED / COMPLETED` 能力链状态及 canonical `nextCapability`；
+- `RUNNING` 表示存在尚未闭合的 started claim，此时 `nextCapability = null`：它不是可直接 dispatch 的下一步，必须先由受支持入口执行 §4.1 的中断关闭；
 - requirement 尚无 run 时返回 undefined（入口据此进入"创建"路径）；
 - 恢复后继续的是已确认事实：入口不得凭新会话重新解释（Entry Contract §7）。
 
@@ -94,8 +95,11 @@ recoverRunContext(store, requirementId)
 - `LoopCapabilityEntry` 是 WP-4B 的受支持入口：按 Requirement ID 创建或定位最新已验证 run；对半完成的 `created` run 补 `run_started`；只允许执行 `nextCapability`；
 - 第一能力消费已持久化的 `requirement_summary`，后续能力必须逐字段匹配前一能力的有效 output ref/version/digest，合法但无关的 artifact 也会被拒绝；
 - ExecutionGateway 在 dispatch 前从不可变 BindingRegistry 选择唯一 enabled binding 并写 started claim；只有取得 claim 的调用方才执行 Agent adapter；
+- 当恢复到 active started（包括 claim 落库后、dispatch 进行中或 terminal 写入前进程中断），入口只接受与该 claim 的 capability 和 input ref/version/digest 完全一致的请求；随后调用 journal 的原子中断 API，以固定 `ATTEMPT_INTERRUPTED / ENTRY_RECOVERY` failed 事件关闭它。关闭事件逐字段复制已持久化的 binding/registry/Agent/adapter/executor 与输入快照，不由新入口重构或替换；
+- 中断事件的 `retryable` 取自 active claim 对应历史 binding 的 `failurePolicy`：`retry_other_binding` 才允许生成下一 attempt，`block` 则保持阻塞。关闭与新 attempt 是两个独立持久事实，迟到的旧执行者不能覆盖已占用的 terminal sequence；
 - shadow、执行异常、Agent 不匹配、产物类型不符、Gate/finding 缺失或输出无法安全持久化均写 failed attempt，不产生有效输出；
 - binding 替换会递增 registry snapshot version；历史事件保存原 binding/registry/executor 快照，新 attempt 使用新快照。
+- 配置 `capabilityTracing` 后，七个 canonical capability 请求必须携带完整 `loopExecution`；缺失时 Gateway 在 binding 选择、journal 写入和 Agent dispatch 前以 `INVALID_INPUT` 拒绝。legacy 非 capability 请求保持原兼容路径。
 
 ## 5. 与 checkpoint 的关系（复用裁剪）
 
@@ -125,3 +129,4 @@ recoverRunContext(store, requirementId)
 | 0.1.5 | 2026-08-19 | 复审中 | 复审修正：Proxy 输入（透明/revoked/带 trap）在复制前经 `util.types.isProxy` 一律拒绝为 INVALID_INPUT，删除"透明 Proxy 无法检测"的错误表述与正例；C01 计划验收映射第 1、2 条补 WP-4B；Purpose 明确 WP-4 不单独构成完成证据。 |
 | 0.2.0 | 2026-08-19 | Accepted | WP-4 收口（Decision-029，用户复审通过）：范围限 Decision-027（三字段溯源 + 原子迁移 + helper + 最小恢复上下文）；模型完整性与生产接线归 WP-4B（Decision-028），C01 完成合同第 1、2 条待 WP-4B 收口后方可登记。 |
 | 0.3.0 | 2026-08-19 | 等待复审 | WP-4B（Decision-031）：新增正交 capability attempt 事件流、journal v2 迁移、完整执行者/产物/Gate/finding/资格恢复投影、BindingRegistry/Gateway 强制写入与按 Requirement ID 创建/恢复的受支持入口。 |
+| 0.3.1 | 2026-08-19 | 等待复审 | WP-4B review round 1 correction：`RUNNING` 不再暴露不可执行的 nextCapability；受支持入口按历史 binding failurePolicy 原子关闭中断 attempt 并重试，关闭事件复制原 started 执行者与输入快照；配置 tracing 的 canonical capability 缺 `loopExecution` 时 dispatch 前 fail-closed。 |

@@ -24,6 +24,7 @@ import {
   buildCapabilityPrompt,
   createCodexFakeRunner,
   parseCapabilityOutcomeMarkers,
+  type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
 import { RUNTIME_CAPABILITY_BY_EXECUTION_POINT } from "../core/runtime-capability-map";
@@ -124,6 +125,102 @@ function runEvent(runId: string, sequence: number, kind: "run_started" | "run_pa
     bindingVersion: null,
     inputArtifactRef: null,
   });
+}
+
+function tracedGateway(
+  runStore: LoopRunStore,
+  artifactStore: LoopArtifactStore,
+  codexRunner: CodexRunner = createCodexFakeRunner({ scenario: "success_code_patch" }),
+): ExecutionGateway {
+  return new ExecutionGateway({
+    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+    codexRunner,
+    capabilityTracing: {
+      runStore,
+      artifactStore,
+      bindingRegistry: INITIAL_BINDING_REGISTRY,
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+      now: () => TS,
+    },
+  });
+}
+
+async function completedIntakeFixture(prefix: string): Promise<Readonly<{
+  root: string;
+  id: LoopRunIdentity;
+  runStore: LoopRunStore;
+  artifactStore: LoopArtifactStore;
+  techInput: Readonly<{ artifactRef: string; version: string; digest: string }>;
+}>> {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  const id = identity(root);
+  const runStore = new LoopRunStore(join(root, "journal.db"));
+  const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
+  runStore.init();
+  artifactStore.init();
+  const source = artifactStore.put("requirement_summary", "interruption recovery Requirement source");
+  const entry = new LoopCapabilityEntry({
+    runStore,
+    artifactStore,
+    bindingRegistry: INITIAL_BINDING_REGISTRY,
+    gateway: tracedGateway(runStore, artifactStore),
+    now: () => TS,
+  });
+  const first = await entry.execute({
+    requirementId: id.requirementId,
+    identity: id,
+    capability: "requirement-intake",
+    inputArtifactRef: source.artifactRef,
+    inputArtifactVersion: "1.0.0",
+    inputDigest: source.digest,
+    outputArtifactVersion: "1.0.0",
+    input: { requirement: "recover an interrupted execution" },
+  });
+  const output = first.recoveryContext.capabilityStates[0]!;
+  return Object.freeze({
+    root,
+    id,
+    runStore,
+    artifactStore,
+    techInput: Object.freeze({
+      artifactRef: output.effectiveOutputArtifactRef!,
+      version: output.effectiveOutputArtifactVersion!,
+      digest: output.effectiveOutputDigest!,
+    }),
+  });
+}
+
+function techRequest(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>) {
+  return Object.freeze({
+    requirementId: fixture.id.requirementId,
+    capability: "tech-design" as const,
+    inputArtifactRef: fixture.techInput.artifactRef,
+    inputArtifactVersion: fixture.techInput.version,
+    inputDigest: fixture.techInput.digest,
+    outputArtifactVersion: "1.0.0",
+    input: { requirementSummaryRef: fixture.techInput.artifactRef },
+  });
+}
+
+function recoveryEntry(
+  fixture: Awaited<ReturnType<typeof completedIntakeFixture>>,
+  gateway = tracedGateway(fixture.runStore, fixture.artifactStore),
+): LoopCapabilityEntry {
+  return new LoopCapabilityEntry({
+    runStore: fixture.runStore,
+    artifactStore: fixture.artifactStore,
+    bindingRegistry: INITIAL_BINDING_REGISTRY,
+    gateway,
+    now: () => TS,
+  });
+}
+
+function closeFixture(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>): void {
+  fixture.artifactStore.close();
+  fixture.runStore.close();
+  rmSync(fixture.root, { recursive: true, force: true });
 }
 
 async function main(): Promise<void> {
@@ -403,6 +500,154 @@ async function main(): Promise<void> {
     chainStore.close();
   } finally {
     rmSync(chainRoot, { recursive: true, force: true });
+  }
+
+  console.log("WP-4B round 1: traced Gateway rejects canonical capability bypass");
+  const bypassFixture = await completedIntakeFixture("loop-wp4b-bypass-");
+  try {
+    let dispatchCalls = 0;
+    const spyRunner: CodexRunner = {
+      run: async (request) => {
+        dispatchCalls += 1;
+        return createCodexFakeRunner({ scenario: "success_code_patch" }).run(request);
+      },
+    };
+    const gateway = tracedGateway(bypassFixture.runStore, bypassFixture.artifactStore, spyRunner);
+    const before = bypassFixture.runStore.listCapabilityExecutions(bypassFixture.id.runId).length;
+    await rejectsCode("INVALID_INPUT", () => gateway.execute({
+      type: "solution-review",
+      node: "review",
+      agent: "codex",
+      requirementId: bypassFixture.id.requirementId,
+      input: { design: "untraced" },
+    }), "configured tracing rejects a canonical capability without loopExecution");
+    ok(dispatchCalls === 0, "untraced canonical capability is rejected before Agent dispatch");
+    ok(
+      bypassFixture.runStore.listCapabilityExecutions(bypassFixture.id.runId).length === before,
+      "untraced canonical capability rejection has no journal side effect",
+    );
+  } finally {
+    closeFixture(bypassFixture);
+  }
+
+  console.log("WP-4B round 1: claim-persisted interruption is closed and retried");
+  const claimedFixture = await completedIntakeFixture("loop-wp4b-claimed-");
+  try {
+    const started = event({
+      executionEventId: `${claimedFixture.id.runId}:capability:3:started`,
+      runId: claimedFixture.id.runId,
+      sequence: 3,
+      capability: "tech-design",
+      nodeId: "tech-design",
+      inputArtifactRef: claimedFixture.techInput.artifactRef,
+      inputArtifactVersion: claimedFixture.techInput.version,
+      inputDigest: claimedFixture.techInput.digest,
+      bindingId: "binding-codex-tech-design",
+    });
+    claimedFixture.runStore.appendCapabilityExecution(started);
+    const running = recoverRunContext(claimedFixture.runStore, claimedFixture.id.requirementId)!;
+    ok(running.capabilityChainStatus === "RUNNING", "persisted claim recovers as RUNNING");
+    ok(running.nextCapability === null, "RUNNING recovery does not advertise an impossible dispatch");
+    const unrelated = claimedFixture.artifactStore.put("capability_output", "unrelated interruption input");
+    await rejectsCode("INVALID_INPUT", () => recoveryEntry(claimedFixture).execute({
+      ...techRequest(claimedFixture),
+      inputArtifactRef: unrelated.artifactRef,
+      inputDigest: unrelated.digest,
+    }), "mismatched recovery input cannot close the active claim");
+    ok(
+      claimedFixture.runStore.listCapabilityExecutions(claimedFixture.id.runId).length === 3,
+      "mismatched recovery input leaves the active claim unchanged",
+    );
+    const resumed = await recoveryEntry(claimedFixture).execute(techRequest(claimedFixture));
+    ok(resumed.attempt === 2 && resumed.execution.success === true, "claim-persisted interruption resumes as attempt two");
+    const events = claimedFixture.runStore.listCapabilityExecutions(claimedFixture.id.runId);
+    const interrupted = events[3]!;
+    ok(
+      interrupted.status === "failed" && interrupted.errorCode === "ATTEMPT_INTERRUPTED" &&
+      interrupted.retryable === true && interrupted.reasonCode === "ENTRY_RECOVERY",
+      "supported entry closes the abandoned claim with a retryable interruption event",
+    );
+    ok(
+      interrupted.bindingId === started.bindingId && interrupted.bindingVersion === started.bindingVersion &&
+      interrupted.bindingRegistryVersion === started.bindingRegistryVersion &&
+      interrupted.executorAgent === started.executorAgent && interrupted.executorAdapter === started.executorAdapter &&
+      interrupted.executorVersion === started.executorVersion,
+      "interruption terminal copies the persisted executor snapshot without fabrication",
+    );
+    ok(
+      interrupted.inputArtifactRef === started.inputArtifactRef &&
+      interrupted.inputArtifactVersion === started.inputArtifactVersion && interrupted.inputDigest === started.inputDigest,
+      "interruption terminal copies the persisted input lineage",
+    );
+    ok(events[4]?.attempt === 2 && events[5]?.status === "succeeded", "retry closes as a distinct successful attempt");
+  } finally {
+    closeFixture(claimedFixture);
+  }
+
+  console.log("WP-4B round 1: in-dispatch process loss can be recovered by another entry");
+  const dispatchFixture = await completedIntakeFixture("loop-wp4b-dispatch-");
+  try {
+    let enteredDispatch!: () => void;
+    let releaseDispatch!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredDispatch = resolve; });
+    const released = new Promise<void>((resolve) => { releaseDispatch = resolve; });
+    const baseRunner = createCodexFakeRunner({ scenario: "success_code_patch" });
+    const hangingRunner: CodexRunner = {
+      run: async (request) => {
+        enteredDispatch();
+        await released;
+        return baseRunner.run(request);
+      },
+    };
+    const abandoned = recoveryEntry(
+      dispatchFixture,
+      tracedGateway(dispatchFixture.runStore, dispatchFixture.artifactStore, hangingRunner),
+    ).execute(techRequest(dispatchFixture));
+    await entered;
+    ok(
+      recoverRunContext(dispatchFixture.runStore, dispatchFixture.id.requirementId)?.capabilityChainStatus === "RUNNING",
+      "dispatch-in-progress claim is durable before the runner returns",
+    );
+    const resumed = await recoveryEntry(dispatchFixture).execute(techRequest(dispatchFixture));
+    ok(resumed.attempt === 2 && resumed.execution.success === true, "another entry closes and retries an in-dispatch interruption");
+    releaseDispatch();
+    await rejectsCode(
+      "EVENT_SEQUENCE_CONFLICT",
+      () => abandoned,
+      "late abandoned executor cannot overwrite the interruption terminal",
+    );
+    const events = dispatchFixture.runStore.listCapabilityExecutions(dispatchFixture.id.runId);
+    ok(events.length === 6 && events[3]?.errorCode === "ATTEMPT_INTERRUPTED", "in-dispatch recovery persists one closed interruption and one retry");
+  } finally {
+    closeFixture(dispatchFixture);
+  }
+
+  console.log("WP-4B round 1: terminal-write interruption can be recovered");
+  const terminalFixture = await completedIntakeFixture("loop-wp4b-terminal-");
+  try {
+    const originalAppend = terminalFixture.runStore.appendCapabilityExecution.bind(terminalFixture.runStore);
+    let rejectTerminalOnce = true;
+    terminalFixture.runStore.appendCapabilityExecution = ((candidate: LoopCapabilityExecutionEvent) => {
+      if (rejectTerminalOnce && candidate.status !== "started") {
+        rejectTerminalOnce = false;
+        throw new LoopRunJournalError("STORE_FAILURE", "injected terminal write failure");
+      }
+      return originalAppend(candidate);
+    }) as typeof terminalFixture.runStore.appendCapabilityExecution;
+    await rejectsCode(
+      "STORE_FAILURE",
+      () => recoveryEntry(terminalFixture).execute(techRequest(terminalFixture)),
+      "terminal write failure leaves a durable active claim",
+    );
+    terminalFixture.runStore.appendCapabilityExecution = originalAppend;
+    const stranded = recoverRunContext(terminalFixture.runStore, terminalFixture.id.requirementId)!;
+    ok(stranded.capabilityChainStatus === "RUNNING" && stranded.nextCapability === null, "terminal-write interruption is recovered honestly as active");
+    const resumed = await recoveryEntry(terminalFixture).execute(techRequest(terminalFixture));
+    ok(resumed.attempt === 2 && resumed.execution.success === true, "new entry recovers after terminal write loss");
+    const events = terminalFixture.runStore.listCapabilityExecutions(terminalFixture.id.runId);
+    ok(events.length === 6 && events[3]?.errorCode === "ATTEMPT_INTERRUPTED", "terminal-write recovery closes the abandoned attempt before retry");
+  } finally {
+    closeFixture(terminalFixture);
   }
 
   const root = mkdtempSync(join(tmpdir(), "loop-wp4b-"));

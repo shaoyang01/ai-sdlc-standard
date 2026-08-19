@@ -1075,7 +1075,13 @@ WP-4B 实现完成后，C01 完成合同第 1、2 条具备产品代码和测试
 
 ## 实现状态
 
-实施完成，等待用户 review；产品仓库提交与推送按本轮明确授权执行，PR 是否需要依据常驻分支策略与远端保护结果决定。
+Round 1 `CHANGES_REQUESTED` 的两项发现已完成产品修正，等待用户重新复审，授权仍未消费：
+
+- 中断恢复：journal 新增原子 interruption terminal API；受支持入口在 active claim 的 capability/lineage 完全匹配后，复制其历史执行者快照并按 binding failurePolicy 关闭、重试；`RUNNING` 不再暴露不可执行的 `nextCapability`；
+- tracing 强制：配置 capabilityTracing 的 Gateway 对缺少 loopExecution 的 canonical capability 请求在 dispatch 前 `INVALID_INPUT`；legacy 非 capability 类型不受影响；
+- 回归覆盖 claim 后、dispatch 中、terminal 写入前三个中断窗口，以及无 tracing context 绕过的零写入/零 dispatch 负例。
+
+产品仓库 correction 的 commit/push 继续沿用本轮明确授权；目标常驻分支受保护时使用最小合规 PR 路径。
 
 ## 代码依据
 

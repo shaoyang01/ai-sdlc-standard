@@ -222,6 +222,6 @@ WP-5 验证与守卫（完成合同验收）
 1. ✅ 阶段 0 机制恢复（决定记录、handoff 通道、STATE 扩展、收口流程固化）——已完成并发布；
 2. ✅ §8 决策点全部定案（Decision-020：binding 全能力模型；Codex 验收入口；逐 WP 授权）；
 3. ✅ R1 逐资产 Source 复核（218 测试通过）与正式规划迁移（本文件）；
-4. ✅ WP-1～WP-4 已实施、复审并按各自 Decision 收口；WP-4B 已获授权并完成产品实现，当前等待 review，授权尚未 consumed；
+4. ✅ WP-1～WP-4 已实施、复审并按各自 Decision 收口；WP-4B 已获授权并完成产品实现，round 1 `CHANGES_REQUESTED` 的中断恢复与 tracing 绕过修正已落地，当前等待重新复审，授权尚未 consumed；
 5. WP-4B review/correction/用户裁决通过后，登记 C01 完成合同第 1、2 条证据并消费 WP-4B 授权；
 6. 之后单独授权 WP-5，完成 binding 替换守卫与不可用/超时/不合格结果的综合验收，覆盖 C01 完成合同第 3、4 条。
