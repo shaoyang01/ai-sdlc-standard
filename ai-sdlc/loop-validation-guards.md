@@ -1,6 +1,6 @@
 # LOOP Validation and Replacement Guards（验证与替换守卫）
 
-> 状态：WP-5 已实施，等待独立复审（2026-08-19，Decision-033）
+> 状态：Accepted（2026-08-19，WP-5 与 C01 收口，Decision-034）
 > 关联：[Agent Capability Binding](agent-capability-binding.md) · [Loop Recovery Protocol](loop-recovery-protocol.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §6
 
 ## 1. Purpose
@@ -48,10 +48,11 @@ ExecutionGateway 在 binding 边界执行 timeout。底层 adapter 若不支持�
 
 `tests/loop-validation-guards.test.ts` 通过默认 `npm test` 执行，覆盖：运行时 schema 漂移拒绝、replacement 不变量、不可用 binding、timeout、迟到输出、错误产物、fresh retry、历史执行者快照、finding 阻塞与无自动 Re-Gate。
 
-本文件记录“实现完成、等待独立复审”，不自行构成 C01 第 3、4 条的完成登记。只有独立复审通过并由用户裁决收口后，才能消费 WP-5 授权、将本合同升为 Accepted，并登记 C01 完成。
+独立复审覆盖完整 WP-5 提交范围、专项与默认测试，并以 53 项 registry 边界检查和 6 组时序/恢复探针对生产路径进行对抗验证；C01 第 3、4 条均为 PASS，无未解决 P1/P2。Current User 接受复审结论并指令收口后，本合同成为 C01 第 3、4 条的已验收合同；三项 P3 观察不改变运行时语义，也不阻止收口。
 
 ## Revision Record
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-19 | 等待独立复审 | WP-5 实施：binding 运行时守卫、替换不变量、不可用/超时/不合格失败 attempt、迟到结果丢弃与 fresh retry 综合验证。 |
+| 0.2.0 | 2026-08-19 | Accepted | Decision-034：独立复审确认 C01 第 3、4 条 PASS，无 P1/P2；用户裁决 WP-5 与 C01 收口。 |

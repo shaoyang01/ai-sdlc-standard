@@ -1,6 +1,6 @@
 # Loop Recovery Protocol（跨入口恢复协议）
 
-> 状态：WP-4 + WP-4B Accepted（2026-08-19，Decision-029/031/032）。两者的联合证据已满足 C01 完成合同第 1、2 条；第 3、4 条仍归 WP-5，须单独授权。
+> 状态：Accepted（2026-08-19，WP-4/WP-4B/WP-5 联合满足 C01 完成合同第 1～4 条，Decision-029/031/032/034）。
 > 关联：[Entry Contract](loop-entry-contract.md) · [Agent Capability Binding](agent-capability-binding.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §6.2
 
 ## 1. Purpose
@@ -117,7 +117,7 @@ recoverRunContext(store, requirementId)
 - legacy `appendEvent` 保持 WP-1 通用语义；生产 capability 写入由 ExecutionGateway + `appendCapabilityExecution` 强制；
 - 不把本轮产品仓库 commit/push 解释为 LOOP 节点可执行的 Git 副作用；人工 Git 边界不变；
 - WP-4B 已经 review 与用户裁决收口；C01 完成合同第 1、2 条已完成。Decision-032 本身未授权第 3、4 条或 WP-5；其后续授权与状态单独记录。
-- WP-5 已获单独授权并完成产品实现，但仍等待独立复审；在复审裁决前不消费授权、不登记 C01 第 3、4 条完成。
+- WP-5 经独立复审确认不可用/超时/异常/不合格结果均形成 durable failed attempt，迟到结果不能伪造通过，恢复必须 fresh retry；Current User 已裁决收口，C01 完成合同第 3、4 条与 C01 整体完成（Decision-034）。
 
 ## Revision Record
 
@@ -134,3 +134,4 @@ recoverRunContext(store, requirementId)
 | 0.3.1 | 2026-08-19 | 等待复审 | WP-4B review round 1 correction：`RUNNING` 不再暴露不可执行的 nextCapability；受支持入口按历史 binding failurePolicy 原子关闭中断 attempt 并重试，关闭事件复制原 started 执行者与输入快照；配置 tracing 的 canonical capability 缺 `loopExecution` 时 dispatch 前 fail-closed。 |
 | 0.4.0 | 2026-08-19 | Accepted | WP-4B review round 2 通过并收口（Decision-032）：独立复核确认中断恢复、历史执行者快照、binding 替换后的重试、无 tracing context 绕过均闭合；WP-4 + WP-4B 联合满足 C01 完成合同第 1、2 条，第 3、4 条继续归 WP-5 且须单独授权。 |
 | 0.5.0 | 2026-08-19 | 等待 WP-5 独立复审 | WP-5 实施：不可用/超时/异常/不合格输出形成稳定失败 attempt；迟到结果丢弃；恢复必须 fresh retry。C01 第 3、4 条尚未登记完成。 |
+| 0.6.0 | 2026-08-19 | Accepted | Decision-034：独立复审确认失败 attempt、迟到结果丢弃、fresh retry 与 terminal 写入失败恢复符合合同；C01 第 3、4 条及整体收口。 |

@@ -1164,3 +1164,45 @@ WP-4 + WP-4B 已完成 C01 完成合同第 1、2 条。剩余第 3 条要求 bin
 ## 代码依据
 
 `core/agent-capability-bindings.ts`；`core/node-capability-contracts.ts`；`execution/gateway.ts`；`tests/loop-validation-guards.test.ts`；`ai-sdlc/loop-validation-guards.md`
+
+# Decision-034：WP-5 复审通过与 C01 整体收口
+
+## 状态
+
+Accepted（2026-08-19，Current User 接受独立复审结论并指令执行 WP-5 与 C01 收口）
+
+## 背景
+
+WP-5 实现提交 `24bee8d` 经 PR #83 合入常驻分支 `feature/loop-runtime-v1`，merge commit 为 `432c705c35d24183a524382554814c9c319ace7f`。实现增加 BindingRegistry 运行时 fail-closed 校验、契约保持 replacement、节点能力合同深冻结，以及 traced ExecutionGateway 对不可用、超时、异常、不合格输出、迟到结果和 fresh retry 的持久语义。实施 handoff 已经 Exchange run `20260819T150020Z-ai-sdlc-wp5-validation-guards` 与 PKB 镜像发布，但明确保持“等待独立复审”，未消费授权或登记 C01 第 3、4 条完成。
+
+独立复审覆盖 `57cd272..432c705` 的全部 11 个变更文件，复跑 WP-5 49/49、WP-4B 86/86、binding 537/537、node contract 144/144、默认 `npm test`、typecheck 与 diff-check；另执行 53 项 registry 边界探针和 6 组时序/恢复场景。复审确认 C01 第 3、4 条均 PASS，无未解决 P1/P2，并提出三项非阻塞 P3：registry 错误类型可统一、等值 timeout 竞态可补充确定性说明、当前 21-binding 全量校验的性能仅作观察。
+
+## 问题
+
+WP-5 是否已经在真实入口、Gateway、journal 与 artifact store 路径闭合 C01 完成合同第 3、4 条，并可消费授权、登记 C01 整体完成？
+
+## 决策
+
+1. 接受独立复审 `APPROVED` 结论；WP-5 通过并收口。
+2. C01 完成合同第 3 条“binding 替换不改变 Requirement ID、产物 schema、finding 语义、Re-Gate 路由或人工 Git 边界”由 WP-2、WP-3、WP-5 联合证据登记完成。
+3. C01 完成合同第 4 条“不可用、超时或不合格结果产生可恢复失败尝试而非伪造通过”由 WP-3、WP-4B、WP-5 联合证据登记完成。
+4. C01 第 1～4 条至此全部完成，`LOOP-CORE-01` 整体收口；控制平面消费 `WP5_VALIDATION_AND_GUARDS` 授权并登记 WP-5 与 C01 完成。
+5. `ai-sdlc/loop-validation-guards.md` 升为 0.2.0 Accepted；binding、recovery 协议与 C01 计划同步最终验收状态。
+6. 三项 P3 作为非阻塞观察保留，不建立 material open finding，也不阻止收口。
+7. 收口不授权真实 Agent 启用、新 Provider、C02 Re-Gate 编排、checkpoint 发布或自动 Git/PR/Ready/merge/publication。C02 仅成为 Roadmap 上的下一规划候选，不因 C01 完成自动获得执行授权。
+
+## 原因
+
+独立复审不仅验证已有测试，还对运行时输入反射边界、深冻结、Symbol/非枚举字段、Proxy/accessor、矩阵和 timeout 上下界进行对抗检查；并验证 timeout 迟到 resolve/reject、等值竞态、terminal 写入失败恢复、binding 替换后重试与 finding 阻塞。结果证明 replacement 只改变 registry version 和同能力 enabled 选择，历史执行者与 lineage 不被改写；失败 attempt 不产生有效输出，shadow、迟到或历史结果不能冒充本次成功，恢复通过 fresh attempt 继续。
+
+## 影响
+
+`LOOP-CORE-01` 成为已完成、可恢复的入口与可替换 binding 基线。Roadmap 的下一依赖项是 `LOOP-CORE-02`，但其规划、授权和实施必须另行登记；本决定不扩展 C01 已验收边界。
+
+## 实现状态
+
+用户已最终裁决通过；产品收口文档通过受保护分支 PR 发布后，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针。
+
+## 代码与验证依据
+
+`core/agent-capability-bindings.ts`；`core/node-capability-contracts.ts`；`core/loop-capability-entry.ts`；`execution/gateway.ts`；`tests/loop-validation-guards.test.ts`；`ai-sdlc/loop-validation-guards.md`；实现 merge `432c705c35d24183a524382554814c9c319ace7f`；独立复审 49/86/537/144、默认 `npm test`、typecheck、diff-check、53 项 registry 探针与 6 组时序/恢复场景。

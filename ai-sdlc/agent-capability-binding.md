@@ -83,3 +83,4 @@ replaceBinding(fromBindingId, toBindingId)
 | 0.1.0 | 2026-08-19 | Accepted | WP-3 交付：全能力矩阵（7×3）、binding schema、替换语义、失败/超时策略、与 WP-2 关系。 |
 | 0.1.1 | 2026-08-19 | 等待 WP-4B 复审 | WP-4B 接线补充：每次 replacement 递增不可变 registry snapshot version，供 capability execution 事件持久化历史选择快照。 |
 | 0.2.0 | 2026-08-19 | 等待 WP-5 独立复审 | WP-5 运行时守卫：完整 registry fail-closed 校验、enabled→disabled replacement 前置条件、节点合同深冻结；失败/超时综合证据见 loop-validation-guards.md。 |
+| 0.3.0 | 2026-08-19 | Accepted | Decision-034：独立复审验证 replacement 仅改变 registry version 与同能力 enabled 选择，Requirement、产物合同、finding/Gate、Re-Gate 与人工 Git 边界保持不变。 |
