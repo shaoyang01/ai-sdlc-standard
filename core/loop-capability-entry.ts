@@ -8,7 +8,12 @@ import type { ExecutionGateway } from "../execution/gateway";
 import { types as utilTypes } from "node:util";
 import type { ExecutionResult } from "../execution/types";
 import type { NodeCapabilityId } from "../loop/types";
-import { getBinding, getEnabledBinding, type BindingRegistry } from "./agent-capability-bindings";
+import {
+  getBinding,
+  getEnabledBinding,
+  validateBindingRegistry,
+  type BindingRegistry,
+} from "./agent-capability-bindings";
 import type { LoopArtifactStore } from "./loop-artifact-store";
 import type { LoopRunEvent, LoopRunIdentity } from "./loop-executor-types";
 import { LoopRunJournalError } from "./loop-executor-types";
@@ -68,6 +73,7 @@ export class LoopCapabilityEntry {
     if (options === null || typeof options !== "object" || Array.isArray(options)) {
       throw new LoopRunJournalError("INVALID_INPUT", "entry options must be an object");
     }
+    validateBindingRegistry(options.bindingRegistry);
     this.options = options;
   }
 

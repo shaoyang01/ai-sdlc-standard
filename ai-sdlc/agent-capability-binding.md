@@ -51,7 +51,9 @@ replaceBinding(fromBindingId, toBindingId)
 ```
 
 - 替换必须发生在同一 capability 内（不同能力替换被拒绝）；
+- 替换必须从当前 enabled source 指向当前 disabled target；已消费的旧替换不得重放；
 - 替换只生成新的深冻结配置快照，registry 正整数版本递增；节点合同对象不变；
+- `validateBindingRegistry` 在查询、替换与 traced Gateway dispatch 前验证完整 21-binding 矩阵、固定字段集、canonical 输入/输出/validator/副作用和每能力唯一 enabled 不变量；任何合同漂移 fail-closed；
 - 执行事件同时记录 registry version 与 binding version，因此后续再次替换不会改写历史实际执行者快照；
 - 替换后执行者改变，但 Requirement ID、产物 schema、finding 语义、Re-Gate 路由、人工 Git 边界均不变（守卫测试断言）。
 
@@ -80,3 +82,4 @@ replaceBinding(fromBindingId, toBindingId)
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-19 | Accepted | WP-3 交付：全能力矩阵（7×3）、binding schema、替换语义、失败/超时策略、与 WP-2 关系。 |
 | 0.1.1 | 2026-08-19 | 等待 WP-4B 复审 | WP-4B 接线补充：每次 replacement 递增不可变 registry snapshot version，供 capability execution 事件持久化历史选择快照。 |
+| 0.2.0 | 2026-08-19 | 等待 WP-5 独立复审 | WP-5 运行时守卫：完整 registry fail-closed 校验、enabled→disabled replacement 前置条件、节点合同深冻结；失败/超时综合证据见 loop-validation-guards.md。 |

@@ -1125,3 +1125,42 @@ Round 1 的两个问题均在真实生产边界闭合：受支持入口可按已
 ## 代码依据
 
 `core/loop-capability-execution.ts`；`core/loop-capability-entry.ts`；`core/loop-run-store.ts`；`core/loop-recovery.ts`；`execution/gateway.ts`；`tests/loop-capability-execution.test.ts`；`ai-sdlc/loop-recovery-protocol.md` 0.4.0；`docs/LOOP-CORE-C01-PLAN.md` §4/§5/§10
+
+# Decision-033：WP-5 验证与守卫实施方案
+
+## 状态
+
+Accepted（2026-08-19，Current User 明确授权执行 WP-5，并沿用产品仓库 commit/push 授权）
+
+## 背景
+
+WP-4 + WP-4B 已完成 C01 完成合同第 1、2 条。剩余第 3 条要求 binding 替换不能改变 Requirement ID、产物 schema、finding 语义、Re-Gate 路由或人工 Git 边界；第 4 条要求不可用、超时或不合格结果形成可恢复失败尝试而非伪造通过。WP-3 已有静态 binding schema 与不可变 replacement，WP-4B 已有 durable capability attempt，但尚缺 production runtime registry 校验、统一 timeout、不可用分类、迟到结果丢弃和跨替换综合守卫。
+
+## 问题
+
+如何在不引入真实 Agent、自动 Git/发布或 C02 Re-Gate 编排的前提下，为第 3、4 条建立可执行、可恢复、可独立复审的生产边界？
+
+## 决策
+
+1. 增加 `validateBindingRegistry` 作为 replacement 与 traced Gateway 共用的 fail-closed 边界：深冻结固定字段集、完整 7×3 矩阵、canonical contract 与副作用、每能力唯一 enabled；replacement 只允许同能力 enabled source → disabled target。
+2. Node Capability Contract 在运行时深冻结；replacement 只能生成新 registry 快照并切换 enabled，不能修改节点合同、产物类型、finding/Gate 解释或人工 Git 边界。
+3. ExecutionGateway 按 binding `timeoutMs` 约束 durable dispatch，并将不可用/shadow、timeout、exception、output contract violation 分别记录为稳定 failed attempt；失败不产生 output ref/digest。
+4. adapter 不支持取消时，迟到完成值/异常只能被观察并丢弃；恢复必须以 attempt + 1 fresh dispatch，不得复用 shadow、迟到或历史结果。
+5. `tests/loop-validation-guards.test.ts` 通过默认 `npm test` 执行，综合覆盖 replacement、unavailable、timeout、late result、unqualified output、fresh retry、历史执行者快照与 finding 阻塞。
+6. 排除：真实 Agent 启用、新 Provider、C02 Re-Gate 编排、checkpoint 发布、自动 commit/push/PR/Ready/merge/publication。产品仓库的人工 commit/push 是治理发布动作，不构成 LOOP capability 副作用。
+
+## 原因
+
+静态 TS 类型和孤立 helper 测试不能约束运行时注入的 registry，也不能证明超时或 shadow 不会成为有效结果。把校验、timeout 与失败 terminal 放在 traced Gateway 的 durable 边界，才能使恢复上下文只接受已验证事实，同时保持 WP-2/WP-3 合同不变。
+
+## 影响
+
+产品实现具备 C01 第 3、4 条的候选证据，但在独立复审与用户裁决前保持未完成：不消费 WP-5 授权，不登记 C01 第 3、4 条或 C01 整体完成。复审若发现问题，继续在本授权范围内修正。
+
+## 实现状态
+
+产品实现与专项测试已完成，等待独立复审；治理收口未执行。
+
+## 代码依据
+
+`core/agent-capability-bindings.ts`；`core/node-capability-contracts.ts`；`execution/gateway.ts`；`tests/loop-validation-guards.test.ts`；`ai-sdlc/loop-validation-guards.md`

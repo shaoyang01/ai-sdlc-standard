@@ -8,7 +8,17 @@
 
 import type { NodeCapabilityContract } from "../loop/types";
 
-export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = [
+function deepFreeze<T>(value: T): Readonly<T> {
+  if (value !== null && typeof value === "object") {
+    Object.freeze(value);
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return value as Readonly<T>;
+}
+
+export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = deepFreeze([
   {
     capability: "requirement-intake",
     title: "需求归一化",
@@ -72,4 +82,4 @@ export const NODE_CAPABILITY_CONTRACTS: readonly NodeCapabilityContract[] = [
     sideEffectBoundary: "执行验证；记录未执行项、残余风险、恢复说明",
     prohibited: ["以未验证测试或历史 CI 替代本次验收", "伪造通过"],
   },
-] as const;
+] as const) as readonly NodeCapabilityContract[];

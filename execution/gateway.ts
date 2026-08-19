@@ -54,6 +54,7 @@ import {
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 import {
   getEnabledBinding,
+  validateBindingRegistry,
   validateNodeOutputArtifact,
   type BindingRegistry,
 } from "../core/agent-capability-bindings";
@@ -69,6 +70,13 @@ import { readPlainDataRecord } from "../core/loop-run-state";
 import { types as utilTypes } from "node:util";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
+
+class CapabilityExecutionTimeoutError extends Error {
+  constructor() {
+    super("capability execution exceeded the binding timeout");
+    this.name = "CapabilityExecutionTimeoutError";
+  }
+}
 
 export interface CodexGatewayRealDispatchConfig {
   workingDirectory: string;
@@ -158,6 +166,7 @@ export class ExecutionGateway {
     const inputArtifactVersion = this.requireSemanticVersion(context.inputArtifactVersion, "loopExecution.inputArtifactVersion");
     const inputDigest = this.requireDigest(context.inputDigest, "loopExecution.inputDigest");
     const outputArtifactVersion = this.requireSemanticVersion(context.outputArtifactVersion, "loopExecution.outputArtifactVersion");
+    validateBindingRegistry(tracing.bindingRegistry);
     const snapshot = tracing.runStore.getSnapshot(runId);
     if (snapshot === undefined) {
       throw new LoopRunJournalError("RUN_NOT_FOUND", "loop execution run does not exist");
@@ -228,17 +237,46 @@ export class ExecutionGateway {
 
     let result: ExecutionResult;
     try {
-      const primary = await this.executePrimary(boundRequest);
-      result = await this.attachHermesGatewayRealDispatch(boundRequest, primary);
-    } catch {
-      this.appendCapabilityFailure(tracing, base, startedSequence + 1, now(), "EXECUTOR_EXCEPTION", binding.failurePolicy === "retry_other_binding");
+      result = await this.executeWithinBindingTimeout(async () => {
+        const primary = await this.executePrimary(boundRequest);
+        return this.attachHermesGatewayRealDispatch(boundRequest, primary);
+      }, binding.timeoutMs);
+    } catch (error) {
+      const timedOut = error instanceof CapabilityExecutionTimeoutError;
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        timedOut ? "EXECUTOR_TIMEOUT" : "EXECUTOR_EXCEPTION",
+        binding.failurePolicy === "retry_other_binding",
+      );
       return Object.freeze({
         success: false,
         node: request.node,
         agent: binding.agent,
-        output: Object.freeze({ result: "FAIL", reason: "executor_exception" }),
+        output: Object.freeze({ result: "FAIL", reason: timedOut ? "executor_timeout" : "executor_exception" }),
         artifacts: Object.freeze([]),
         error: "capability execution failed",
+      });
+    }
+
+    if (result.artifacts.some((artifact) => artifact.type === "shadow_output")) {
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "EXECUTOR_UNAVAILABLE",
+        binding.failurePolicy === "retry_other_binding",
+      );
+      return Object.freeze({
+        success: false,
+        node: request.node,
+        agent: binding.agent,
+        output: Object.freeze({ result: "FAIL", reason: "executor_unavailable" }),
+        artifacts: Object.freeze([]),
+        error: "capability executor is unavailable",
       });
     }
 
@@ -252,7 +290,7 @@ export class ExecutionGateway {
     });
     if (
       !result.success || result.node !== request.node || result.agent !== binding.agent || result.artifacts.length !== 1 ||
-      expectedArtifacts.length !== 1 || result.artifacts.some((artifact) => artifact.type === "shadow_output") ||
+      expectedArtifacts.length !== 1 ||
       expectedArtifacts[0]?.requirementId !== request.requirementId || expectedArtifacts[0]?.node !== request.node ||
       expectedArtifacts[0]?.metadata.agent !== binding.agent || expectedArtifacts[0]?.metadata.source !== "execution_gateway"
     ) {
@@ -375,6 +413,41 @@ export class ExecutionGateway {
       retryable,
       reasonCode: null,
     }));
+  }
+
+  /**
+   * Enforces the immutable binding snapshot's timeout at the durable Gateway
+   * boundary. The underlying adapter may not support cancellation; any late
+   * completion is deliberately observed and discarded after the failed event
+   * has been committed, so it can never become a successful journal result.
+   */
+  private executeWithinBindingTimeout(
+    operation: () => Promise<ExecutionResult>,
+    timeoutMs: number,
+  ): Promise<ExecutionResult> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new CapabilityExecutionTimeoutError());
+      }, timeoutMs);
+
+      void operation().then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
   }
 
   private readCapabilityOutcome(
