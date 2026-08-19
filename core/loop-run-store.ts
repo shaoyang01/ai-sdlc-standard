@@ -27,6 +27,7 @@ import {
 import {
   applyLoopRunEvent,
   canonicalizeLoopRunEvent,
+  canonicalizeLoopRunEventLegacy,
   canonicalizeLoopRunIdentity,
   createInitialLoopRunState,
   createLoopRunCreatedEvent,
@@ -88,6 +89,15 @@ function validatePersistedEvent(event: unknown): void {
 function canonicalizePersistedEvent(event: LoopRunEvent): string {
   try {
     return canonicalizeLoopRunEvent(event);
+  } catch (error) {
+    if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
+    throw error;
+  }
+}
+
+function canonicalizePersistedEventLegacy(event: LoopRunEvent): string {
+  try {
+    return canonicalizeLoopRunEventLegacy(event);
   } catch (error) {
     if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
     throw error;
@@ -202,7 +212,9 @@ function rowToEvent(row: EventRow): LoopRunEvent {
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
-    // C01 WP-4: legacy rows without the columns map to null.
+    // C01 WP-4: legacy rows without the columns map to null; their stored
+    // hash is verified against the legacy form and rewritten to the extended
+    // form by the init() migration.
     bindingId: row.binding_id ?? null,
     bindingVersion: row.binding_version ?? null,
     inputArtifactRef: row.input_artifact_ref ?? null,
@@ -392,21 +404,37 @@ export class LoopRunStore {
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
 
-        // C01 WP-4 migration: pre-extension journals lack the provenance
-        // columns; add them in place (existing rows read as NULL and stay
-        // canonical-compatible).
-        const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
-        const existing = new Set(eventColumns.map((column) => column.name));
-        const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
-          { name: "binding_id", ddl: "ALTER TABLE loop_events ADD COLUMN binding_id TEXT" },
-          { name: "binding_version", ddl: "ALTER TABLE loop_events ADD COLUMN binding_version TEXT" },
-          { name: "input_artifact_ref", ddl: "ALTER TABLE loop_events ADD COLUMN input_artifact_ref TEXT" },
-        ];
-        for (const column of provenanceColumns) {
-          if (!existing.has(column.name)) {
-            db.exec(column.ddl);
+        // C01 WP-4 migration (single atomic unit): add the provenance
+        // columns, verify each historical row against the legacy 13-field
+        // hash form, rewrite verified rows to the extended hash, and flip
+        // user_version — all inside one immediate transaction. Any failure
+        // (including a corrupt historical row) rolls everything back: no
+        // columns added, no hash rewritten, user_version stays 0, and the
+        // next init simply retries this idempotent migration.
+        db.transaction(() => {
+          const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
+          const existing = new Set(eventColumns.map((column) => column.name));
+          const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
+            { name: "binding_id", ddl: "ALTER TABLE loop_events ADD COLUMN binding_id TEXT" },
+            { name: "binding_version", ddl: "ALTER TABLE loop_events ADD COLUMN binding_version TEXT" },
+            { name: "input_artifact_ref", ddl: "ALTER TABLE loop_events ADD COLUMN input_artifact_ref TEXT" },
+          ];
+          for (const column of provenanceColumns) {
+            if (!existing.has(column.name)) {
+              db.exec(column.ddl);
+            }
           }
-        }
+          // Format version is fail-closed: only 0 (may hold legacy hashes,
+          // normalize now) and 1 (normalized) are known. Anything else means
+          // the journal was written by an unknown format — STORE_CORRUPT.
+          const formatVersion = db.pragma("user_version", { simple: true });
+          if (formatVersion !== 0 && formatVersion !== 1) {
+            corrupt("unknown journal format version");
+          }
+          if (formatVersion === 0) {
+            this.normalizeEventHashesToExtendedForm(db);
+          }
+        }).immediate();
       } catch (error) {
         if (error instanceof LoopRunJournalError) throw error;
         if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -821,6 +849,35 @@ export class LoopRunStore {
     );
   }
 
+  /**
+   * Verifies and rewrites persisted event hashes to the extended canonical
+   * form. Runs inside the caller's migration transaction (init), so any
+   * failure rolls back the column additions and hash rewrites together.
+   * Every row whose stored hash does not match the extended form must match
+   * the legacy 13-field form (and have all provenance fields null) — it is
+   * then rewritten to the extended hash. Any other mismatch (including
+   * tampered historical rows) aborts the migration with STORE_CORRUPT.
+   * user_version flips to 1 as the last step, marking the journal as fully
+   * normalized.
+   */
+  private normalizeEventHashesToExtendedForm(db: Database.Database): void {
+    const rows = db.prepare("SELECT * FROM loop_events").all() as EventRow[];
+    const update = db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE event_id = ?");
+    for (const row of rows) {
+      const event = rowToEvent(row);
+      validatePersistedEvent(event);
+      const extendedSha = sha256Hex(canonicalizePersistedEvent(event));
+      if (extendedSha === row.canonical_sha256) continue;
+      const legacyCompatible =
+        event.bindingId === null && event.bindingVersion === null && event.inputArtifactRef === null;
+      if (!legacyCompatible || sha256Hex(canonicalizePersistedEventLegacy(event)) !== row.canonical_sha256) {
+        corrupt("persisted event canonical hash mismatch");
+      }
+      update.run(extendedSha, row.event_id);
+    }
+    db.exec("PRAGMA user_version = 1");
+  }
+
   private verifySnapshotInTransaction(db: Database.Database, row: RunRow): LoopRunSnapshot {
     const identity: LoopRunIdentity = Object.freeze({
       runId: row.run_id,
@@ -859,6 +916,8 @@ export class LoopRunStore {
     const events = eventRows.map((eventRow) => {
       const event = rowToEvent(eventRow);
       validatePersistedEvent(event);
+      // init() has already normalized any legacy hashes to the extended
+      // form, so exactly one hash format is valid here.
       if (sha256Hex(canonicalizePersistedEvent(event)) !== eventRow.canonical_sha256) {
         corrupt("persisted event canonical hash mismatch");
       }

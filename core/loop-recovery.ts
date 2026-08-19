@@ -10,7 +10,10 @@
 // The checkpoint machinery (D10-A) keeps its fresh/recovery semantics but its
 // publish phases stay out of C01 (LOOP Core Contract §8).
 
+import { types as utilTypes } from "node:util";
+
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunSnapshot } from "./loop-executor-types";
+import { readPlainDataRecord } from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
 
 export interface NodeExecutionProvenance {
@@ -54,39 +57,105 @@ export interface RunRecoveryContext {
   }> | null;
 }
 
+const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
+
+function requireRecordString(value: unknown, label: string): void {
+  if (typeof value !== "string") {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a string`);
+  }
+}
+
+function requireRecordNullableString(value: unknown, label: string): void {
+  if (value !== null && value !== undefined && typeof value !== "string") {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a string or null`);
+  }
+}
+
+/**
+ * Validates every field recordNodeExecution consumes, before the journal is
+ * touched. Content-level rules (non-empty, control characters, digest
+ * formats, transition legality) stay with the journal's own fail-closed
+ * validation in appendEvent.
+ */
+function validateNodeExecutionRecordShape(
+  rec: NodeExecutionRecord,
+  provenance: NodeExecutionProvenance,
+): void {
+  requireRecordString(rec.runId, "record.runId");
+  requireRecordString(rec.stage, "record.stage");
+  if (!NODE_EXECUTION_KINDS.includes(rec.kind)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "record.kind must be a stage execution kind");
+  }
+  if (typeof rec.attempt !== "number" || !Number.isSafeInteger(rec.attempt)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "record.attempt must be a safe integer");
+  }
+  requireRecordString(rec.createdAt, "record.createdAt");
+  requireRecordString(provenance.bindingId, "record.provenance.bindingId");
+  requireRecordString(provenance.bindingVersion, "record.provenance.bindingVersion");
+  if (provenance.inputArtifactRef !== null && typeof provenance.inputArtifactRef !== "string") {
+    throw new LoopRunJournalError("INVALID_INPUT", "record.provenance.inputArtifactRef must be a string or null");
+  }
+  requireRecordNullableString(rec.inputDigest, "record.inputDigest");
+  requireRecordNullableString(rec.outputArtifactRef, "record.outputArtifactRef");
+  requireRecordNullableString(rec.outputDigest, "record.outputDigest");
+  requireRecordNullableString(rec.errorCode, "record.errorCode");
+  requireRecordNullableString(rec.reasonCode, "record.reasonCode");
+  if (rec.retryable !== null && rec.retryable !== undefined && typeof rec.retryable !== "boolean") {
+    throw new LoopRunJournalError("INVALID_INPUT", "record.retryable must be a boolean or null");
+  }
+}
+
 /**
  * Appends a stage execution event with binding provenance. The sequence is
  * derived from the journal state machine (lastSequence + 1) so the event
  * passes the journal's transition validation. Provenance fields are
  * nullable-validated by the journal (fail-closed, never echoed).
+ *
+ * Fail-closed input boundary: record and provenance must be plain data
+ * records, and every field is shape-validated before the journal is read or
+ * written — null, missing fields, accessor properties, or any Proxy
+ * (transparent, revoked, or trapping; detected via util.types.isProxy
+ * before any reflection) surface as INVALID_INPUT (no event, no state
+ * change, never a raw TypeError).
+ * The returned event is frozen, matching the immutability contract of
+ * persisted events.
  */
 export function recordNodeExecution(
   store: LoopRunStore,
   record: NodeExecutionRecord,
 ): LoopRunEvent {
-  const snapshot = store.getSnapshot(record.runId);
+  if (utilTypes.isProxy(record)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "record must not be a Proxy");
+  }
+  const rec = readPlainDataRecord(record, "record") as unknown as NodeExecutionRecord;
+  if (utilTypes.isProxy(rec.provenance)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "record.provenance must not be a Proxy");
+  }
+  const provenance = readPlainDataRecord(rec.provenance, "record.provenance") as unknown as NodeExecutionProvenance;
+  validateNodeExecutionRecordShape(rec, provenance);
+  const snapshot = store.getSnapshot(rec.runId);
   if (snapshot === undefined) {
     throw new LoopRunJournalError("RUN_NOT_FOUND", "run not found");
   }
   const sequence = snapshot.state.lastSequence + 1;
-  const event: LoopRunEvent = {
-    eventId: `${record.runId}:${sequence}:${record.kind}`,
-    runId: record.runId,
+  const event: LoopRunEvent = Object.freeze({
+    eventId: `${rec.runId}:${sequence}:${rec.kind}`,
+    runId: rec.runId,
     sequence,
-    kind: record.kind,
-    stage: record.stage as LoopRunEvent["stage"],
-    attempt: record.attempt,
-    createdAt: record.createdAt,
-    inputDigest: record.inputDigest ?? null,
-    outputArtifactRef: record.outputArtifactRef ?? null,
-    outputDigest: record.outputDigest ?? null,
-    errorCode: record.errorCode ?? null,
-    retryable: record.retryable ?? null,
-    reasonCode: record.reasonCode ?? null,
-    bindingId: record.provenance.bindingId,
-    bindingVersion: record.provenance.bindingVersion,
-    inputArtifactRef: record.provenance.inputArtifactRef,
-  };
+    kind: rec.kind,
+    stage: rec.stage as LoopRunEvent["stage"],
+    attempt: rec.attempt,
+    createdAt: rec.createdAt,
+    inputDigest: rec.inputDigest ?? null,
+    outputArtifactRef: rec.outputArtifactRef ?? null,
+    outputDigest: rec.outputDigest ?? null,
+    errorCode: rec.errorCode ?? null,
+    retryable: rec.retryable ?? null,
+    reasonCode: rec.reasonCode ?? null,
+    bindingId: provenance.bindingId,
+    bindingVersion: provenance.bindingVersion,
+    inputArtifactRef: provenance.inputArtifactRef,
+  });
   store.appendEvent(event);
   return event;
 }

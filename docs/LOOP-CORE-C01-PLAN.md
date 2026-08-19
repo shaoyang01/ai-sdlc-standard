@@ -118,6 +118,7 @@ WP-5 验证与守卫（完成合同验收）
 - 跨入口恢复协议：入口以 Requirement ID 定位运行记录 → 恢复当前节点/有效产物版本/Gate/阻塞项/下一步资格；
 - checkpoint 复用裁剪：只取 fresh/recovery 与不可变链语义。
 - 验收：每次节点执行可追溯 binding 与输入/输出来源；中断后可由另一入口/binding 继续。
+- 拆分说明（Decision-028）：WP-4 实际交付范围为 Decision-027 授权的三字段 schema 扩展、迁移、recordNodeExecution/recoverRunContext helper 与最小恢复上下文；adapter/Agent 执行者标识与版本、有效产物版本/Gate/finding/下一步资格的完整恢复模型、写入侧溯源强制与 ExecutionGateway/入口接线拆分为 **WP-4B**。WP-4B 收口前，C01 完成合同第 1、2 条不得登记为完成，本节验收标准整体由 WP-4 + WP-4B 共同满足。
 
 ### WP-5：验证与守卫
 
@@ -130,8 +131,8 @@ WP-5 验证与守卫（完成合同验收）
 
 | 完成合同条款 | 覆盖 WP | 验收证据 |
 | --- | --- | --- |
-| 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4 | 入口运行记录创建+恢复测试与真实执行记录 |
-| 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4 | run journal 事件含 binding/版本/产物版本字段 |
+| 至少一个已支持入口创建或恢复同一 Requirement | WP-1、WP-4、WP-4B | 入口运行记录创建+恢复测试与真实执行记录 |
+| 每节点可记录实际 binding 和输入/输出来源 | WP-3、WP-4、WP-4B | run journal 事件含 binding/版本/产物版本字段 |
 | binding 替换不改变 ID/schema/finding/Re-Gate/人工 Git 边界 | WP-2、WP-3、WP-5 | 替换守卫测试（替换前后契约断言） |
 | 不可用/超时/不合格 → 可恢复失败尝试而非伪造通过 | WP-3、WP-5 | 失败注入测试 + 禁止 shadow 通过的断言 |
 

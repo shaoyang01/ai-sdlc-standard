@@ -21,7 +21,7 @@ import {
 // keys, and any object whose reflection throws (e.g. Proxy traps). Never
 // invokes getters; never leaks the original exception text.
 
-function readPlainDataRecord(value: unknown, label: string): Record<string, unknown> {
+export function readPlainDataRecord(value: unknown, label: string): Record<string, unknown> {
   const fail = (): never => {
     throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a plain data record`);
   };
@@ -304,6 +304,34 @@ export function canonicalizeLoopRunEvent(event: LoopRunEvent): string {
     bindingId: event.bindingId,
     bindingVersion: event.bindingVersion,
     inputArtifactRef: event.inputArtifactRef,
+  };
+  return JSON.stringify(ordered);
+}
+
+/**
+ * C01 WP-4 legacy canonical form: journals persisted before the provenance
+ * schema extension hashed events over the 13 pre-extension fields only. This
+ * form exists solely so the init() migration can verify those historical
+ * rows (valid only when every provenance field is null) before atomically
+ * rewriting their stored hash to the extended form; new writes always use
+ * canonicalizeLoopRunEvent.
+ */
+export function canonicalizeLoopRunEventLegacy(event: LoopRunEvent): string {
+  validateLoopRunEvent(event);
+  const ordered = {
+    eventId: event.eventId,
+    runId: event.runId,
+    sequence: event.sequence,
+    kind: event.kind,
+    stage: event.stage,
+    attempt: event.attempt,
+    createdAt: event.createdAt,
+    inputDigest: event.inputDigest,
+    outputArtifactRef: event.outputArtifactRef,
+    outputDigest: event.outputDigest,
+    errorCode: event.errorCode,
+    retryable: event.retryable,
+    reasonCode: event.reasonCode,
   };
   return JSON.stringify(ordered);
 }

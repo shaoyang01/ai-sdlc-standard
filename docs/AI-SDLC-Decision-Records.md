@@ -925,3 +925,82 @@ WP-4 完成后，每次节点执行可追溯 binding 与输入/输出来源；�
 ## 代码依据
 
 `docs/LOOP-CORE-C01-PLAN.md` §4 WP-4；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-028：WP-4 复审缺口处置与 WP-4B（执行溯源完整性与生产接线）授权拆分
+
+## 状态
+
+Accepted（2026-08-19，Current User 裁决）
+
+## 背景
+
+WP-4 实施后经四轮复审：round 1（真实旧库 STORE_CORRUPT → 迁移事务验证旧 hash 并原子重算）、round 2（读取侧双形态 hash 引入降级绕过 → 单一形式严格校验）、round 3（recordNodeExecution 裸 TypeError、迁移原子性未含补列 → 输入边界 fail-closed + 单事务回滚）、round 4（输入形状校验顺序、user_version 严格校验、返回值冻结已修；其余三项 P1 超出 Decision-027 授权）：P1-2 公开 appendEvent 可写入无溯源节点事件；P1-3 溯源/恢复模型缺 adapter/Agent 实际执行者标识与版本、有效产物版本、Gate、未解决 finding、下一步资格；P1-4 recordNodeExecution/recoverRunContext 无生产调用方，ExecutionGateway 未接线。
+
+## 问题
+
+超出 Decision-027 授权的 P1-2/3/4 如何处理？WP-4 与 C01 能否标记完成？
+
+## 决策
+
+1. WP-4 范围维持 Decision-027 不变；round 4 授权内修正（输入形状校验、user_version fail-closed、返回值冻结）完成后进入复审收口流程，不自行登记完成。
+2. P1-2/3/4 拆分为 **WP-4B（执行溯源完整性与生产接线）**（命名避开计划文档既有"WP-5：验证与守卫"），授权 scope：
+   - 溯源模型扩展：adapter/Agent 实际执行者标识与版本的历史快照（binding 更换后可反查历史实际执行者）、有效产物版本、Gate 结果、未解决 finding、下一步资格（具体字段在 WP-4B 方案阶段定稿，保持事件 schema 版本化与 fail-closed）；
+   - 写入层强制：ExecutionGateway 接线后，stage_started/stage_succeeded/stage_failed 必须携带溯源（含 stage_succeeded 的输出产物引用约束，在 WP-4B 定稿）；journal 层 appendEvent 保持 WP-1 已验收的通用语义不变，不在存储层强制；
+   - 接线：ExecutionGateway 携带 run journal 与 binding registry，真实节点执行必经 recordNodeExecution（或其后继 API）；至少一个真实入口接入 recoverRunContext 并恢复同一 Requirement；
+   - 对应测试与 ai-sdlc/loop-recovery-protocol.md 更新。
+   - 排除不变：checkpoint 发布 phase、真实 Agent 调用、Git 发布动作、Ready/merge/publication。
+3. 在 WP-4B 收口前，C01 完成合同第 1、2 条不得登记为完整需求完成；计划文档"WP-5：验证与守卫"的验收以 WP-4B 收口为前置。
+
+## 原因
+
+Decision-027 只授权三个可空字段、helper 与最小恢复上下文；模型扩展与生产接线属于新的授权边界，不应与"已完成"混淆（复审裁决要求）。写入侧强制依赖接线落地，提前在 journal 层强制会回溯破坏 WP-1 已验收语义与存量测试。
+
+## 影响
+
+WP-4 收口路径清晰（Decision-027 范围内复审）；WP-4B 成为 C01 完成合同第 1、2 条的收口前提；ai-sdlc/loop-recovery-protocol.md §6 已如实标注边界与拆分去向。
+
+## 实现状态
+
+已登记；WP-4B 待排期实施。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4/WP-5；`ai-sdlc/loop-recovery-protocol.md` §6；`docs/LOOP_CORE_CONTRACT.md` §6.2
+
+# Decision-029：WP-4 收口（用户复审通过，仅限 Decision-027 窄范围）
+
+## 状态
+
+Accepted（2026-08-19，Current User 裁决通过）
+
+## 背景
+
+WP-4 经五轮复审：round 1 真实旧库 hash 兼容（迁移事务验证旧 hash 并原子重算为扩展格式）；round 2 读取侧双形态 hash 降级绕过（恢复单一形式严格校验）；round 3 输入边界裸 TypeError 与迁移原子性（fail-closed + 单事务回滚含补列）；round 4 输入形状校验顺序、`user_version` 严格校验、返回值冻结，及 P1-2/3/4 授权拆分（Decision-028）；round 5 透明/revoked/带 trap Proxy 经 `util.types.isProxy` 在反射前拒绝、验收映射同步 WP-4B。用户裁决：WP-4（Decision-027 窄范围）通过。
+
+## 问题
+
+WP-4 是否满足 Decision-027 授权范围内的完成合同并可收口？
+
+## 决策
+
+WP-4 收口：登记 `completed_requirements.WP4_EXECUTION_PROVENANCE_RECOVERY`（closure_basis + 证据 + fact HEAD），消费 `Decision-027` 授权（consumed/COMPLETED）。同时约束：
+
+- C01 完成合同第 1、2 条不得完成登记，直至 WP-4B（Decision-028）实施、验证、复审完成；
+- WP-4B 授权不在本轮消费；
+- 控制平面 STATE 登记与 closure handoff 在提交后按既定治理流程进行。
+
+## 原因
+
+五轮复审的全部 P1/P2 已闭合：旧 hash 迁移原子重算、读取单一 hash 形式、输入边界 fail-closed（含 Proxy）、格式版本 fail-closed、返回值不可变、文档与验收映射一致。超出 Decision-027 的完整性缺口已正确拆分为 WP-4B，不与"已完成"混淆。
+
+## 影响
+
+run journal 事件溯源三字段（含旧库原子迁移与篡改 fail-closed）、recordNodeExecution（fail-closed 输入边界、冻结返回）、recoverRunContext（最小恢复上下文）成为 C01 已验收基线；WP-4B 可在其上扩展完整模型与生产接线。
+
+## 实现状态
+
+已裁决通过；库内文档已更新（ai-sdlc/loop-recovery-protocol.md 0.2.0）。closure 登记（fact HEAD）与控制平面 STATE 登记待提交后执行。
+
+## 代码依据
+
+`docs/LOOP-CORE-C01-PLAN.md` §4 WP-4/§5；`ai-sdlc/loop-recovery-protocol.md`；`docs/LOOP_CORE_CONTRACT.md` §6.2
