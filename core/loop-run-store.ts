@@ -51,6 +51,11 @@ export type CapabilityExecutionAppendResult = Readonly<{
   appended: boolean;
 }>;
 
+export type CapabilityExecutionInterruptResult = Readonly<{
+  event: LoopCapabilityExecutionEvent;
+  interrupted: boolean;
+}>;
+
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
@@ -957,6 +962,107 @@ export class LoopRunStore {
           if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
           storageFailure();
         }
+      }
+      storageFailure();
+    }
+  }
+
+  /**
+   * Atomically close the exact active capability claim after a previous
+   * process disappeared before recording its terminal event. The terminal
+   * event copies the persisted started snapshot; callers cannot substitute a
+   * binding, executor, capability, attempt or input lineage while recovering.
+   */
+  interruptCapabilityExecution(
+    runId: string,
+    expectedStartedEventId: string,
+    createdAt: string,
+    retryable: boolean,
+  ): CapabilityExecutionInterruptResult {
+    if (
+      typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
+      /[\x00-\x1f\x7f-\x9f]/.test(runId)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "runId must be a safe trimmed non-empty string");
+    }
+    if (
+      typeof expectedStartedEventId !== "string" || expectedStartedEventId.length === 0 ||
+      expectedStartedEventId.trim() !== expectedStartedEventId ||
+      /[\x00-\x1f\x7f-\x9f]/.test(expectedStartedEventId)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "expected started event id must be a safe string");
+    }
+    if (
+      typeof createdAt !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(createdAt) ||
+      Number.isNaN(Date.parse(createdAt))
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "interruption timestamp must be ISO-8601");
+    }
+    if (typeof retryable !== "boolean") {
+      throw new LoopRunJournalError("INVALID_INPUT", "interruption retryable must be boolean");
+    }
+
+    const db = this.connection();
+    try {
+      return db.transaction((): CapabilityExecutionInterruptResult => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        if (snapshot.state.status !== "running" || snapshot.state.currentStage !== null) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability interruption requires an idle running run");
+        }
+        const current = this.readCapabilityExecutionsInTransaction(db, runId);
+        const active = current[current.length - 1];
+        if (active?.status !== "started") {
+          const priorStarted = current[current.length - 2];
+          if (
+            active?.status === "failed" && active.errorCode === "ATTEMPT_INTERRUPTED" &&
+            priorStarted?.status === "started" &&
+            priorStarted.executionEventId === expectedStartedEventId
+          ) {
+            return Object.freeze({ event: active, interrupted: false });
+          }
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "no matching active capability execution exists");
+        }
+        if (active.executionEventId !== expectedStartedEventId) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "active capability execution does not match recovery claim");
+        }
+        const failed: LoopCapabilityExecutionEvent = Object.freeze({
+          ...active,
+          executionEventId: `${runId}:capability:${active.sequence + 1}:failed`,
+          sequence: active.sequence + 1,
+          status: "failed",
+          createdAt,
+          outputArtifactRef: null,
+          outputArtifactVersion: null,
+          outputDigest: null,
+          gateResult: null,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: "BLOCKED",
+          errorCode: "ATTEMPT_INTERRUPTED",
+          retryable,
+          reasonCode: "ENTRY_RECOVERY",
+        });
+        try {
+          validateLoopCapabilityExecutionChain([...current, failed], runId);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability interruption transition is invalid");
+          }
+          throw error;
+        }
+        this.insertCapabilityExecutionRow(db, capabilityExecutionToRow(failed));
+        return Object.freeze({ event: failed, interrupted: true });
+      }).immediate() as CapabilityExecutionInterruptResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      if (isConstraintCode(code)) {
+        throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability interruption sequence is occupied");
       }
       storageFailure();
     }

@@ -241,7 +241,15 @@ export function recoverRunContext(
       nextCapability = capabilityState.retryable === true ? capabilityState.capability : null;
       break;
     }
-    if (capabilityState.status === "started" || capabilityState.status === "not_started") {
+    // An active claim is not dispatchable work: it must first be closed by the
+    // supported entry's interruption recovery path. Reporting it as the next
+    // capability would promise a transition that the journal correctly
+    // rejects while the started attempt remains open.
+    if (capabilityState.status === "started") {
+      nextCapability = null;
+      break;
+    }
+    if (capabilityState.status === "not_started") {
       nextCapability = capabilityState.capability;
       break;
     }

@@ -104,6 +104,17 @@ export class ExecutionGateway {
   constructor(private readonly options: ExecutionGatewayOptions = {}) {}
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+    const isCanonicalCapability =
+      typeof request?.type === "string" && NODE_CAPABILITY_IDS.includes(request.type as NodeCapabilityId);
+    if (
+      this.options.capabilityTracing !== undefined && isCanonicalCapability &&
+      request.loopExecution === undefined
+    ) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "canonical capability request requires durable loop execution context",
+      );
+    }
     // ── Skill Validation — metadata only, does not affect dispatch ──
     const skillValidation = validateExecutionRequestSkill(request);
     const enriched = { ...request, skillValidation };
