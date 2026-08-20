@@ -550,7 +550,7 @@ console.log("provenance: historical legacy rows read back after migration");
   db.close();
   assert(row?.canonical_sha256 === extendedHash, "legacy hash atomically rewritten to extended form");
   assert(row?.canonical_sha256 !== legacyHash, "stored hash no longer the legacy form");
-  assert(formatVersion === 2, "journal migrated through capability-attempt schema (user_version = 2)");
+  assert(formatVersion === 3, "journal migrated through requirement-change schema (user_version = 3)");
   rmSync(dir, { recursive: true, force: true });
 }
 
@@ -708,7 +708,7 @@ console.log("provenance: failed migration rolls back columns, hashes and user_ve
 
 console.log("provenance: unknown journal format version is STORE_CORRUPT");
 {
-  for (const badVersion of [3, -1]) {
+  for (const badVersion of [4, -1]) {
     const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
     const path = join(dir, "journal.db");
     const store = new LoopRunStore(path);

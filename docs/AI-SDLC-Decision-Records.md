@@ -1206,3 +1206,42 @@ WP-5 是否已经在真实入口、Gateway、journal 与 artifact store 路径�
 ## 代码与验证依据
 
 `core/agent-capability-bindings.ts`；`core/node-capability-contracts.ts`；`core/loop-capability-entry.ts`；`execution/gateway.ts`；`tests/loop-validation-guards.test.ts`；`ai-sdlc/loop-validation-guards.md`；实现 merge `432c705c35d24183a524382554814c9c319ace7f`；独立复审 49/86/537/144、默认 `npm test`、typecheck、diff-check、53 项 registry 探针与 6 组时序/恢复场景。
+
+# Decision-037：授权并实施 C02-WP1 需求变更分类合同
+
+## 状态
+
+Accepted（2026-08-20，Current User 单独授权实施 C02-WP1；实现完成后待独立复审）
+
+## 背景
+
+Decision-036 裁决接受 C02 有界规划（`docs/LOOP-CORE-C02-PLAN.md` v1.0.0）全部六个裁决点，但 C02 四项完成合同保持 `INCOMPLETE / NOT_AUTHORIZED`，各工作包需逐 WP 单独授权。Current User 本轮通过控制平面授权条目 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 单独授权 C02-WP1：为同一 Requirement 建立机器可判定、可恢复、可审计的 change record，关闭规划 §4 缺口 G1 的分类持久面。C01 已收口的 run journal（SQLite v2、corruption-first、事务迁移）与入口合同 §6 的五类分类语义是直接基线。
+
+## 问题
+
+如何在不触碰 C01 历史、不实现 artifact 失效计算与 Re-Gate dispatch、不接线生产入口的前提下，把"新需求 / 补充 / 变更 / 返工 / 反馈驱动变更"的分类结果以固定 schema 持久化，并满足幂等重放、并发冲突、blocked 持久化与跨入口一致读取的验收要求？
+
+## 决策
+
+1. 新增 `core/loop-change-classification.ts` 纯函数模型：五个 canonical change kind（`NEW_REQUIREMENT`/`SUPPLEMENT`/`CHANGE`/`REWORK`/`FEEDBACK_DRIVEN_CHANGE`）、`FULL_REQUIREMENT`/`DELTA_CHANGE` 载荷形态、来源引用、当前 change scope、confirmed-fact 边界、触发证据、分类原因与 previousGeneration 引用绑定的固定字段 schema；`NEW_REQUIREMENT` 与 `FULL_REQUIREMENT`、其余四类与 `DELTA_CHANGE` 的一致性规则 fail-closed。
+2. 分类不确定或来源冲突持久化 BLOCKED 记录：blockedReasonCode 五个 canonical 值对齐入口合同 §8 STOP 条件；BLOCKED 记录不得携带任何分类字段，不猜测业务事实；BLOCKED 非终态，后续记录可携带解决后的分类，历史保持可审计。
+3. `core/loop-run-store.ts` 前进到格式 v3：新增 `loop_requirement_changes` 主表与 source refs / confirmed facts / trigger evidence 三个子表（固定标量列，不存 JSON 载荷）；v2→v3 与既有迁移同事务原子完成，失败全回滚、可幂等重试，未知版本/缺表/schema 漂移 fail-closed；C01 历史一行不改。
+4. 写入唯一入口为 `appendRequirementChange`：精确重放幂等（`appended: false`），同 id 不同内容 `EVENT_ID_CONFLICT`，同 `(runId, sequence)` 被占用 `EVENT_SEQUENCE_CONFLICT`；terminal run、活动 stage、活动 capability execution 期间拒绝追加；每次快照读取同时验证 change 链（corruption-first）。
+5. 跨入口读取经 `listRequirementChanges(runId)` 与 `findLatestRequirementChangeByRequirement(requirementId)`，读到相同分类与 confirmed-fact 边界；requirementId 与创建共用同一校验器。
+6. 明确排除：artifact 失效计算、Re-Gate dispatch、generation 推进权威、恢复上下文扩展与生产入口接线、业务实现、真实 Agent 调用、任何 Git/PR/发布副作用；这些属于 WP2～WP6 或完全不做。
+
+## 原因
+
+C01 的 capability attempt journal 只能表达线性能力执行，无法区分"一次新执行"与"对既有 Requirement 的变更"（规划 §4 G1）。把分类合同落为 run journal 内的 append-only change 链，沿用同一迁移与 corruption-first 模式，可以在不引入第二份权威、不改写历史的前提下满足验收：五类正反例由 schema 一致性规则保证，幂等与并发由唯一约束 + canonical hash 重分类保证，blocked 与跨入口一致由持久化记录本身保证。
+
+## 影响
+
+C02-WP1 具备候选实现证据，但在独立复审与 Current User 裁决前保持未完成：不消费 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 的收口语义，不登记 C02 任一完成合同项。本决定不授权 C02-WP2～WP6，不扩展真实 Agent、Git/PR/发布或 C03～C05 边界。
+
+## 实现状态
+
+产品实现与专项测试已完成，等待独立复审；治理收口未执行。
+
+## 代码与验证依据
+
+`core/loop-change-classification.ts`；`core/loop-run-store.ts`（v3 迁移与 change 链读写）；`ai-sdlc/loop-change-classification.md` 0.1.0 Draft；`tests/loop-change-classification.test.ts`（100/100，含五类正反例、幂等重放、并发冲突、blocked 持久化、跨入口读取、plain-data/Proxy/accessor/Symbol/注入边界、v2→v3 迁移回滚与幂等重试）；既有断言随格式版本前进更新：`tests/loop-run-provenance.test.ts`（79/79）、`tests/loop-capability-execution.test.ts`（86/86）；完整默认 `npm test`、`tsc --noEmit` 与 `git diff --check` 结果记录在实施 handoff。

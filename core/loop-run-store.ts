@@ -41,13 +41,25 @@ import {
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
 } from "./loop-capability-execution";
+import {
+  canonicalizeLoopRequirementChangeRecord,
+  validateLoopRequirementChangeChain,
+  validateLoopRequirementChangeRecord,
+  type LoopChangeSourceRef,
+  type LoopRequirementChangeRecord,
+} from "./loop-change-classification";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-const LOOP_RUN_STORE_FORMAT_VERSION = 2;
+const LOOP_RUN_STORE_FORMAT_VERSION = 3;
 
 export type CapabilityExecutionAppendResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
+  appended: boolean;
+}>;
+
+export type RequirementChangeAppendResult = Readonly<{
+  record: LoopRequirementChangeRecord;
   appended: boolean;
 }>;
 
@@ -246,6 +258,45 @@ type CapabilityExecutionRow = {
   canonical_sha256: string;
 };
 
+type RequirementChangeRow = {
+  change_record_id: string;
+  run_id: string;
+  requirement_id: string;
+  sequence: number;
+  schema_version: number;
+  status: string;
+  change_kind: string | null;
+  payload_form: string | null;
+  previous_generation: number | null;
+  current_change_scope: string | null;
+  classification_reason: string;
+  blocked_reason_code: string | null;
+  created_at: string;
+  canonical_sha256: string;
+};
+
+type ChangeSourceRefRow = {
+  change_record_id: string;
+  source_index: number;
+  source_type: string;
+  locator: string;
+  priority: number;
+  source_version: string | null;
+  observed_at: string;
+};
+
+type ChangeFactRow = {
+  change_record_id: string;
+  fact_index: number;
+  fact: string;
+};
+
+type ChangeEvidenceRow = {
+  change_record_id: string;
+  evidence_index: number;
+  evidence_ref: string;
+};
+
 function rowToEvent(row: EventRow): LoopRunEvent {
   return Object.freeze({
     eventId: row.event_id,
@@ -357,6 +408,107 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     reason_code: event.reasonCode,
     canonical_sha256: sha256Hex(canonicalizeLoopCapabilityExecutionEvent(event)),
   };
+}
+
+function rowToRequirementChange(
+  db: Database.Database,
+  row: RequirementChangeRow,
+): LoopRequirementChangeRecord {
+  const sourceRows = db.prepare(
+    "SELECT * FROM loop_change_source_refs WHERE change_record_id = ? ORDER BY source_index ASC",
+  ).all(row.change_record_id) as ChangeSourceRefRow[];
+  const sourceRefs = sourceRows.map((sourceRow, index) => {
+    if (asPersistedSafeInteger(sourceRow.source_index) !== index) {
+      corrupt("persisted change source refs are not contiguous");
+    }
+    asPersistedSafeInteger(sourceRow.priority);
+    return Object.freeze({
+      sourceType: sourceRow.source_type,
+      locator: sourceRow.locator,
+      priority: sourceRow.priority,
+      sourceVersion: sourceRow.source_version,
+      observedAt: sourceRow.observed_at,
+    } as LoopChangeSourceRef);
+  });
+  const factRows = db.prepare(
+    "SELECT * FROM loop_change_confirmed_facts WHERE change_record_id = ? ORDER BY fact_index ASC",
+  ).all(row.change_record_id) as ChangeFactRow[];
+  const confirmedFacts = factRows.map((factRow, index) => {
+    if (asPersistedSafeInteger(factRow.fact_index) !== index) {
+      corrupt("persisted change confirmed facts are not contiguous");
+    }
+    return factRow.fact;
+  });
+  const evidenceRows = db.prepare(
+    "SELECT * FROM loop_change_trigger_evidence WHERE change_record_id = ? ORDER BY evidence_index ASC",
+  ).all(row.change_record_id) as ChangeEvidenceRow[];
+  const triggerEvidence = evidenceRows.map((evidenceRow, index) => {
+    if (asPersistedSafeInteger(evidenceRow.evidence_index) !== index) {
+      corrupt("persisted change trigger evidence is not contiguous");
+    }
+    return evidenceRow.evidence_ref;
+  });
+  return Object.freeze({
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 1,
+    changeRecordId: row.change_record_id,
+    runId: row.run_id,
+    requirementId: row.requirement_id,
+    sequence: asPersistedSafeInteger(row.sequence),
+    status: row.status as LoopRequirementChangeRecord["status"],
+    changeKind: row.change_kind as LoopRequirementChangeRecord["changeKind"],
+    payloadForm: row.payload_form as LoopRequirementChangeRecord["payloadForm"],
+    previousGeneration: row.previous_generation === null
+      ? null
+      : asPersistedSafeInteger(row.previous_generation),
+    currentChangeScope: row.current_change_scope,
+    confirmedFactsPreserved: Object.freeze(confirmedFacts),
+    sourceRefs: Object.freeze(sourceRefs),
+    triggerEvidence: Object.freeze(triggerEvidence),
+    classificationReason: row.classification_reason,
+    blockedReasonCode: row.blocked_reason_code as LoopRequirementChangeRecord["blockedReasonCode"],
+    createdAt: row.created_at,
+  });
+}
+
+function insertRequirementChangeRows(db: Database.Database, record: LoopRequirementChangeRecord): void {
+  db.prepare(
+    `INSERT INTO loop_requirement_changes (
+      change_record_id, run_id, requirement_id, sequence, schema_version,
+      status, change_kind, payload_form, previous_generation,
+      current_change_scope, classification_reason, blocked_reason_code,
+      created_at, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.changeRecordId, record.runId, record.requirementId, record.sequence,
+    record.schemaVersion, record.status, record.changeKind, record.payloadForm,
+    record.previousGeneration, record.currentChangeScope, record.classificationReason,
+    record.blockedReasonCode, record.createdAt,
+    sha256Hex(canonicalizeLoopRequirementChangeRecord(record)),
+  );
+  const sourceInsert = db.prepare(
+    `INSERT INTO loop_change_source_refs (
+      change_record_id, source_index, source_type, locator, priority,
+      source_version, observed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  record.sourceRefs.forEach((ref, index) => {
+    sourceInsert.run(
+      record.changeRecordId, index, ref.sourceType, ref.locator, ref.priority,
+      ref.sourceVersion, ref.observedAt,
+    );
+  });
+  const factInsert = db.prepare(
+    "INSERT INTO loop_change_confirmed_facts (change_record_id, fact_index, fact) VALUES (?, ?, ?)",
+  );
+  record.confirmedFactsPreserved.forEach((fact, index) => {
+    factInsert.run(record.changeRecordId, index, fact);
+  });
+  const evidenceInsert = db.prepare(
+    "INSERT INTO loop_change_trigger_evidence (change_record_id, evidence_index, evidence_ref) VALUES (?, ?, ?)",
+  );
+  record.triggerEvidence.forEach((ref, index) => {
+    evidenceInsert.run(record.changeRecordId, index, ref);
+  });
 }
 
 export class LoopRunStore {
@@ -520,10 +672,11 @@ export class LoopRunStore {
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
 
-        // C01 WP-4/WP-4B migrations are one atomic unit. v0 adds the three
-        // legacy provenance columns and normalizes historical event hashes;
-        // v1 adds the orthogonal capability-attempt journal; v2 is current.
-        // Any failure rolls back all migration DDL/data and user_version.
+        // C01 WP-4/WP-4B and C02 WP-1 migrations are one atomic unit. v0 adds
+        // the three legacy provenance columns and normalizes historical event
+        // hashes; v1 adds the orthogonal capability-attempt journal; v2 adds
+        // the requirement change classification tables; v3 is current. Any
+        // failure rolls back all migration DDL/data and user_version.
         db.transaction(() => {
           const formatVersion = db.pragma("user_version", { simple: true });
           if (
@@ -553,8 +706,11 @@ export class LoopRunStore {
           const capabilityTableExists = db.prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'",
           ).get() !== undefined;
-          if (formatVersion === LOOP_RUN_STORE_FORMAT_VERSION && !capabilityTableExists) {
-            corrupt("current journal is missing capability execution table");
+          // v2 introduced the capability-attempt journal: any journal already
+          // marked v2 or later must carry the table; only v0/v1 journals may
+          // legitimately lack it (created below in the same transaction).
+          if (formatVersion >= 2 && !capabilityTableExists) {
+            corrupt("normalized journal is missing capability execution table");
           }
           if (!capabilityTableExists) {
             db.exec(`
@@ -596,6 +752,70 @@ export class LoopRunStore {
             `);
           }
           this.verifyCapabilityExecutionTableSchema(db);
+          const changeTableExists = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_requirement_changes'",
+          ).get() !== undefined;
+          if (formatVersion === LOOP_RUN_STORE_FORMAT_VERSION && !changeTableExists) {
+            corrupt("current journal is missing requirement change table");
+          }
+          if (!changeTableExists) {
+            db.exec(`
+              CREATE TABLE loop_requirement_changes (
+                change_record_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                requirement_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                schema_version INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                change_kind TEXT,
+                payload_form TEXT,
+                previous_generation INTEGER,
+                current_change_scope TEXT,
+                classification_reason TEXT NOT NULL,
+                blocked_reason_code TEXT,
+                created_at TEXT NOT NULL,
+                canonical_sha256 TEXT NOT NULL,
+                UNIQUE (run_id, sequence),
+                FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+              );
+              CREATE INDEX idx_loop_requirement_changes_run_id
+                ON loop_requirement_changes(run_id);
+              CREATE INDEX idx_loop_requirement_changes_requirement_id
+                ON loop_requirement_changes(requirement_id);
+
+              CREATE TABLE loop_change_source_refs (
+                change_record_id TEXT NOT NULL,
+                source_index INTEGER NOT NULL,
+                source_type TEXT NOT NULL,
+                locator TEXT NOT NULL,
+                priority INTEGER NOT NULL,
+                source_version TEXT,
+                observed_at TEXT NOT NULL,
+                PRIMARY KEY (change_record_id, source_index),
+                FOREIGN KEY (change_record_id)
+                  REFERENCES loop_requirement_changes(change_record_id) ON DELETE CASCADE
+              );
+
+              CREATE TABLE loop_change_confirmed_facts (
+                change_record_id TEXT NOT NULL,
+                fact_index INTEGER NOT NULL,
+                fact TEXT NOT NULL,
+                PRIMARY KEY (change_record_id, fact_index),
+                FOREIGN KEY (change_record_id)
+                  REFERENCES loop_requirement_changes(change_record_id) ON DELETE CASCADE
+              );
+
+              CREATE TABLE loop_change_trigger_evidence (
+                change_record_id TEXT NOT NULL,
+                evidence_index INTEGER NOT NULL,
+                evidence_ref TEXT NOT NULL,
+                PRIMARY KEY (change_record_id, evidence_index),
+                FOREIGN KEY (change_record_id)
+                  REFERENCES loop_requirement_changes(change_record_id) ON DELETE CASCADE
+              );
+            `);
+          }
+          this.verifyRequirementChangeTablesSchema(db);
           if (formatVersion < LOOP_RUN_STORE_FORMAT_VERSION) {
             db.exec(`PRAGMA user_version = ${LOOP_RUN_STORE_FORMAT_VERSION}`);
           }
@@ -1124,6 +1344,124 @@ export class LoopRunStore {
     return runs.length === 0 ? undefined : runs[runs.length - 1];
   }
 
+  /**
+   * Append one immutable C02 WP-1 requirement change record. Records use
+   * their own per-run sequence and never mutate the delivery-stage cursor or
+   * the capability-attempt stream. The owning run must exist, be non-terminal
+   * and have no active stage or capability execution; the record's
+   * requirementId must match the verified run identity. The complete
+   * persisted run and change chain are verified before any write. Exact
+   * replays are idempotent; conflicting ids or sequences are rejected.
+   */
+  appendRequirementChange(record: LoopRequirementChangeRecord): RequirementChangeAppendResult {
+    const db = this.connection();
+    validateLoopRequirementChangeRecord(record);
+    try {
+      return db.transaction((): RequirementChangeAppendResult => {
+        const snapshot = this.readRunSnapshotInTransaction(db, record.runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        const status = snapshot.state.status;
+        if (status === "completed" || status === "failed" || status === "cancelled") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "terminal run must not accept change records");
+        }
+        if (snapshot.state.currentStage !== null) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "change records require no active delivery stage");
+        }
+        if (record.requirementId !== snapshot.state.identity.requirementId) {
+          throw new LoopRunJournalError("INVALID_INPUT", "change record requirement does not match the run identity");
+        }
+        const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, record.runId);
+        if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "change records cannot advance while a capability execution is active");
+        }
+        const current = this.readRequirementChangesInTransaction(db, record.runId);
+        const existing = current.find((item) => item.changeRecordId === record.changeRecordId);
+        if (existing !== undefined) {
+          if (
+            canonicalizeLoopRequirementChangeRecord(existing) ===
+            canonicalizeLoopRequirementChangeRecord(record)
+          ) {
+            return Object.freeze({ record: existing, appended: false });
+          }
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "requirement change record id already exists");
+        }
+        if (current.some((item) => item.sequence === record.sequence)) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "requirement change sequence is occupied");
+        }
+        try {
+          validateLoopRequirementChangeChain([...current, record], record.runId);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requirement change transition is invalid");
+          }
+          throw error;
+        }
+        insertRequirementChangeRows(db, record);
+        return Object.freeze({ record, appended: true });
+      }).immediate() as RequirementChangeAppendResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      if (isConstraintCode(code)) {
+        try {
+          const current = this.readRequirementChangesInTransaction(db, record.runId);
+          const existing = current.find((item) => item.changeRecordId === record.changeRecordId);
+          if (
+            existing !== undefined &&
+            canonicalizeLoopRequirementChangeRecord(existing) === canonicalizeLoopRequirementChangeRecord(record)
+          ) {
+            return Object.freeze({ record: existing, appended: false });
+          }
+          if (existing !== undefined) {
+            throw new LoopRunJournalError("EVENT_ID_CONFLICT", "requirement change record id already exists");
+          }
+          if (current.some((item) => item.sequence === record.sequence)) {
+            throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "requirement change sequence is occupied");
+          }
+        } catch (reclassifyError) {
+          if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
+          storageFailure();
+        }
+      }
+      storageFailure();
+    }
+  }
+
+  /** Read and verify the complete requirement change chain for one run. */
+  listRequirementChanges(runId: string): readonly LoopRequirementChangeRecord[] {
+    const snapshot = this.readSnapshot(runId);
+    if (snapshot === undefined) return Object.freeze([]);
+    const db = this.connection();
+    try {
+      return db.transaction(() => this.readRequirementChangesInTransaction(db, runId))() as readonly LoopRequirementChangeRecord[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * Finds the latest verified requirement change record for a requirement,
+   * scanning its runs newest first, or undefined when no change has been
+   * classified yet. This is the cross-entry read that lets another entry
+   * recover the same classification and confirmed-fact boundary without
+   * reinterpreting confirmed facts.
+   */
+  findLatestRequirementChangeByRequirement(requirementId: string): LoopRequirementChangeRecord | undefined {
+    validateRequirementId(requirementId);
+    const runs = this.listRunsByRequirement(requirementId);
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      const records = this.listRequirementChanges(runs[index]!.state.identity.runId);
+      if (records.length > 0) return records[records.length - 1]!;
+    }
+    return undefined;
+  }
+
+
   // ── storage error translation ──
 
   /**
@@ -1293,6 +1631,111 @@ export class LoopRunStore {
       update.run(extendedSha, row.event_id);
     }
     db.exec("PRAGMA user_version = 1");
+  }
+
+  private readRequirementChangesInTransaction(
+    db: Database.Database,
+    runId: string,
+  ): readonly LoopRequirementChangeRecord[] {
+    const rows = db.prepare(
+      "SELECT * FROM loop_requirement_changes WHERE run_id = ? ORDER BY sequence ASC",
+    ).all(runId) as RequirementChangeRow[];
+    const records = rows.map((row) => {
+      const record = rowToRequirementChange(db, row);
+      try {
+        validateLoopRequirementChangeRecord(record);
+        if (sha256Hex(canonicalizeLoopRequirementChangeRecord(record)) !== row.canonical_sha256) {
+          corrupt("requirement change canonical hash mismatch");
+        }
+      } catch (error) {
+        if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
+        if (error instanceof LoopRunJournalError) corrupt("persisted requirement change is invalid");
+        throw error;
+      }
+      return record;
+    });
+    try {
+      validateLoopRequirementChangeChain(records, runId);
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) corrupt("persisted requirement change chain is invalid");
+      throw error;
+    }
+    return Object.freeze(records);
+  }
+
+  private verifyRequirementChangeTablesSchema(db: Database.Database): void {
+    const verifyColumns = (
+      table: string,
+      expected: ReadonlyArray<readonly [string, string, number, number]>,
+    ): void => {
+      const actual = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+        name: string; type: string; notnull: number; pk: number;
+      }>;
+      if (actual.length !== expected.length) corrupt("requirement change table schema mismatch");
+      for (let index = 0; index < expected.length; index += 1) {
+        const row = actual[index]!;
+        const [name, type, notnull, pk] = expected[index]!;
+        if (row.name !== name || row.type.toUpperCase() !== type || row.notnull !== notnull || row.pk !== pk) {
+          corrupt("requirement change table schema mismatch");
+        }
+      }
+    };
+    const verifyForeignKey = (table: string, referenced: string): void => {
+      const foreignKeys = db.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{
+        table: string; from: string; to: string; on_delete: string;
+      }>;
+      if (
+        foreignKeys.length !== 1 || foreignKeys[0]?.table !== referenced ||
+        foreignKeys[0]?.on_delete.toUpperCase() !== "CASCADE"
+      ) {
+        corrupt("requirement change table foreign key mismatch");
+      }
+    };
+    verifyColumns("loop_requirement_changes", [
+      ["change_record_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
+      ["requirement_id", "TEXT", 1, 0], ["sequence", "INTEGER", 1, 0],
+      ["schema_version", "INTEGER", 1, 0], ["status", "TEXT", 1, 0],
+      ["change_kind", "TEXT", 0, 0], ["payload_form", "TEXT", 0, 0],
+      ["previous_generation", "INTEGER", 0, 0], ["current_change_scope", "TEXT", 0, 0],
+      ["classification_reason", "TEXT", 1, 0], ["blocked_reason_code", "TEXT", 0, 0],
+      ["created_at", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
+    ]);
+    const uniqueIndexes = db.prepare("PRAGMA index_list(loop_requirement_changes)").all() as Array<{
+      name: string; unique: number;
+    }>;
+    const hasRunSequenceUnique = uniqueIndexes.some((index) => {
+      if (index.unique !== 1) return false;
+      const columns = db.prepare(`PRAGMA index_info(${JSON.stringify(index.name)})`).all() as Array<{ name: string }>;
+      return columns.length === 2 && columns[0]?.name === "run_id" && columns[1]?.name === "sequence";
+    });
+    if (!hasRunSequenceUnique) corrupt("requirement change table is missing run sequence uniqueness");
+    verifyForeignKey("loop_requirement_changes", "loop_runs");
+    for (const indexName of [
+      "idx_loop_requirement_changes_run_id",
+      "idx_loop_requirement_changes_requirement_id",
+    ]) {
+      const index = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+      ).get(indexName);
+      if (index === undefined) corrupt("requirement change index is missing");
+    }
+    verifyColumns("loop_change_source_refs", [
+      ["change_record_id", "TEXT", 1, 1], ["source_index", "INTEGER", 1, 2],
+      ["source_type", "TEXT", 1, 0], ["locator", "TEXT", 1, 0],
+      ["priority", "INTEGER", 1, 0], ["source_version", "TEXT", 0, 0],
+      ["observed_at", "TEXT", 1, 0],
+    ]);
+    verifyForeignKey("loop_change_source_refs", "loop_requirement_changes");
+    verifyColumns("loop_change_confirmed_facts", [
+      ["change_record_id", "TEXT", 1, 1], ["fact_index", "INTEGER", 1, 2],
+      ["fact", "TEXT", 1, 0],
+    ]);
+    verifyForeignKey("loop_change_confirmed_facts", "loop_requirement_changes");
+    verifyColumns("loop_change_trigger_evidence", [
+      ["change_record_id", "TEXT", 1, 1], ["evidence_index", "INTEGER", 1, 2],
+      ["evidence_ref", "TEXT", 1, 0],
+    ]);
+    verifyForeignKey("loop_change_trigger_evidence", "loop_requirement_changes");
   }
 
   private verifyCapabilityExecutionTableSchema(db: Database.Database): void {
@@ -1486,6 +1929,9 @@ export class LoopRunStore {
     // part of the same durable run. Snapshot reads verify both streams before
     // returning any business state.
     this.readCapabilityExecutionsInTransaction(db, row.run_id);
+    // C02 WP-1: requirement change records are part of the same durable run;
+    // every snapshot read verifies the change chain before returning state.
+    this.readRequirementChangesInTransaction(db, row.run_id);
     return Object.freeze({ state, events: frozenEvents });
   }
 }
