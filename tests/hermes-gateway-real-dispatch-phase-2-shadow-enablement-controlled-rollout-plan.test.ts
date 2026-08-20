@@ -562,18 +562,31 @@ async function test() {
   );
   console.log("");
 
-  // ── Test 20: package.json registration ──
-  console.log("Test 20: package.json registration");
+  // ── Test 20: npm test registration ──
+  // Registration model: scripts/run-tests-parallel.mjs discovers top-level
+  // tests/*.test.ts files (sorted); package.json `scripts.test` invokes the
+  // runner. Membership in the default `npm test` run = being a discovered
+  // top-level test file not pinned to the runner's SERIAL_TAIL.
+  console.log("Test 20: npm test registration");
   const packageJson = fs.readFileSync("package.json", "utf-8");
-  const planTestEntry = `tsx ${TEST_PATH}`;
-  const gateTestEntry = "tsx tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.test.ts";
+  const runnerSource = fs.readFileSync("scripts/run-tests-parallel.mjs", "utf-8");
+  const gateTestPath = "tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.test.ts";
   assert(
-    packageJson.split(planTestEntry).length - 1 === 1,
-    "npm test contains the plan test exactly once"
+    packageJson.includes('"test": "node scripts/run-tests-parallel.mjs"'),
+    "npm test invokes the parallel test runner"
   );
   assert(
-    packageJson.indexOf(gateTestEntry) !== -1 && packageJson.indexOf(gateTestEntry) < packageJson.indexOf(planTestEntry),
-    "plan test is registered after the controlled rollout gate test"
+    runnerSource.includes('readdirSync(TESTS_DIR)') && runnerSource.includes('.endsWith(\'.test.ts\')'),
+    "runner discovers top-level tests/*.test.ts files"
+  );
+  assert(
+    fs.existsSync(TEST_PATH) && fs.existsSync(gateTestPath),
+    "plan and gate tests are top-level test files (auto-discovered by the runner)"
+  );
+  const serialTailBlock = runnerSource.match(/SERIAL_TAIL = new Set\(\[([\s\S]*?)\]\)/);
+  assert(
+    serialTailBlock !== null && !serialTailBlock[1].includes("hermes-gateway-real-dispatch-phase-2"),
+    "plan and gate tests are not pinned to the runner serial tail"
   );
   console.log("");
 
