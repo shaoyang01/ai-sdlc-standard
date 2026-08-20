@@ -453,6 +453,38 @@ export function createLoopArtifactRevision(draft: unknown): LoopArtifactRevision
 }
 
 /**
+ * Compute the post-transition SUPERSEDED form of a node's previous current
+ * revision during an append. The validity machine admits exactly one
+ * supersede edge — ACTIVE → SUPERSEDED — and the successor must be the
+ * canonical next revision of the same node; anything else fails closed. The
+ * run-store write path validates the chain in this post-transition state:
+ * validating the pre-transition rows (old current still ACTIVE alongside the
+ * new ACTIVE revision) would reject every legitimate version advance, because
+ * only the latest revision of a node may remain ACTIVE.
+ */
+export function supersedeArtifactRevision(
+  previous: LoopArtifactRevision,
+  successorRevisionId: string,
+): LoopArtifactRevision {
+  if (utilTypes.isProxy(previous)) invalid("previous artifact revision must not be a Proxy");
+  validateLoopArtifactRevision(previous);
+  if (previous.validity !== "ACTIVE") {
+    invalid("only an active artifact revision can be superseded");
+  }
+  const expectedSuccessor = loopArtifactRevisionId(previous.runId, previous.nodeId, previous.sequence + 1);
+  if (successorRevisionId !== expectedSuccessor) {
+    invalid("supersede successor must be the next revision of the node");
+  }
+  const superseded: LoopArtifactRevision = {
+    ...previous,
+    validity: "SUPERSEDED",
+    supersededBy: successorRevisionId,
+  };
+  validateLoopArtifactRevision(superseded);
+  return deepFreezeRevision(superseded);
+}
+
+/**
  * Verify a complete per-run revision set. Records are grouped by node (each
  * node's revisions contiguous, sequences from one, timestamps monotonic,
  * SemVer strictly increasing); every record shares the run identity and one

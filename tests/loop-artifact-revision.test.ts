@@ -34,6 +34,7 @@ import {
   compareLoopArtifactSemver,
   createLoopArtifactRevision,
   crossBindArtifactIndexRow,
+  supersedeArtifactRevision,
   validateLoopArtifactRevision,
   validateLoopArtifactRevisionChain,
   type LoopArtifactRevision,
@@ -598,6 +599,39 @@ console.log("artifact revision: per-node progression and supersede linkage fail 
     rev(2, "1.1.0", at(2)),
   ], "run-001");
   assert(true, "a stale non-terminal revision keeps its validity when the tip advances");
+}
+
+console.log("artifact revision: supersede transition is validated as the post-transition state");
+{
+  const at = (offset: number) => new Date(Date.parse(TS) + offset * 1000).toISOString();
+  const first = createLoopArtifactRevision(revisionDraft({
+    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    producerExecutionId: "run-001:capability:4:succeeded", createdAt: at(1),
+  }));
+  const second = createLoopArtifactRevision(revisionDraft({
+    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("e"),
+    producerExecutionId: "run-001:capability:9:succeeded", createdAt: at(2),
+  }));
+  const superseded = supersedeArtifactRevision(first, second.revisionId);
+  assert(superseded.validity === "SUPERSEDED" && superseded.supersededBy === second.revisionId,
+    "supersede backfills validity and the successor pointer");
+  assert(Object.isFrozen(superseded) && Object.isFrozen(superseded.upstreamRevisionIds),
+    "superseded record is deep-frozen");
+  // The store write path validates exactly this post-transition chain: the
+  // previous current already superseded, the new revision the active tip.
+  validateLoopArtifactRevisionChain([superseded, second], "run-001");
+  assert(true, "post-transition chain passes validation");
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([first, second], "run-001"),
+    "pre-transition chain (old and new both ACTIVE) is rejected");
+  const staleFirst = Object.freeze({ ...first, validity: "STALE" }) as LoopArtifactRevision;
+  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(staleFirst, second.revisionId),
+    "stale revision cannot be superseded (no STALE → SUPERSEDED edge)");
+  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(superseded, second.revisionId),
+    "superseded revision cannot be superseded again");
+  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(first, "run-001:revision:tech-design:9"),
+    "supersede successor must be the next revision of the node");
+  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(new Proxy(first, {}), second.revisionId),
+    "Proxy previous revision rejected");
 }
 
 console.log("artifact revision: store append binds run, requirement and producer execution");

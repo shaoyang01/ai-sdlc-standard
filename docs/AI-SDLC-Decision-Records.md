@@ -1458,3 +1458,12 @@ C02-WP2 具备候选实现证据，但在独立复审与 Current User 裁决前�
 修正的连带影响（已在合同与测试头注释中如实记录）：producer 读回重验使原 WP4-era 预置行不再自洽——可读 journal 在同 run 同 capability 只有一次成功执行的链规则下不可能容纳同节点两个 revision。supersede 成功路径、stale pointer 前进、superseded upstream 三个场景的 store 级覆盖因此推迟到 C02-WP4 的链扩展，链规则层面由纯函数回归覆盖（非末尾 ACTIVE 拒绝、SUPERSEDED/STALE 非末尾合法态正例）。新增六组 rehash 篡改回归（producer 不存在/失败/节点漂移/三元组漂移/版本漂移/Gate 漂移 × list/getCurrent/getSnapshot 三路径）。修正后专项 182/182 通过，`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`tsc --noEmit` 通过。
 
 修正提交推送至 PR #90 同一分支后需重新复审；WP-2 在复审通过前保持未收口，`C02_WP2_ARTIFACT_REVISION_AUTHORITY` 授权不消费。
+
+## Round 2 复审与修正（2026-08-20）
+
+独立复审裁决 FAIL（H3 一项 High；H1/H2/L1 确认关闭）：
+
+1. **H3 写入路径以转换前状态校验候选链**：`appendArtifactRevision` 原先以"旧 revision 仍 ACTIVE + 新 revision 也 ACTIVE"的候选集调用链校验，Round 1 引入的"仅末尾可 ACTIVE"规则会在 supersede 执行前拒绝每一次合法版本前进——即使 WP4 将来提供第二次成功执行证据，写入路径仍会失败。修正：新增纯函数 `supersedeArtifactRevision`（唯一 supersede 边 `ACTIVE → SUPERSEDED`，successor 必须为同节点下一 sequence 的 canonical id，其余 fail-closed）；写入路径的候选链校验改为**转换后状态**（旧 current 已置 SUPERSEDED 的形态），落库的 supersede 写入复用同一纯函数产物，校验与写入不再有第二份语义。纯函数回归覆盖：转换后链通过校验、转换前链（双 ACTIVE）被拒绝、STALE/SUPERSEDED 不可被 supersede、successor 错位拒绝、Proxy 拒绝。
+2. **store 级 supersede 成功路径覆盖的正式重基线**：Round 1 已证明该场景在 C01 链下不可构造（同节点第二个 revision 需要同 capability 第二次成功执行证据，链校验器在 WP4 重执行扩展前禁止）。Round 2 复审者要求要么恢复可验证的 store 级前进语义、要么由 Current User 显式重基线。Current User 于 2026-08-20 **显式接受重基线**：store 级端到端 supersede 成功路径（含 stale pointer 前进、superseded upstream、markStale-on-superseded 变体）的验证随 C02-WP4 的链扩展一并验收；WP-2 以转换后状态校验 + 纯函数回归 + store 级边界测试作为当前证据。该重基线不扩大任何授权边界，WP4 范围不变。
+
+修正后专项 190/190 通过，`loop-run-store` 185/185、`tsc --noEmit` 通过。修正提交推送至 PR #90 后进入 Round 3 复审；WP-2 保持未收口，授权不消费。

@@ -1,6 +1,6 @@
 # LOOP Artifact Revision and Current Authority Contract（产物版本与当前权威合同）
 
-> 状态：0.1.0 Draft（2026-08-20，C02-WP2 实施，Decision-040；待独立复审与收口）
+> 状态：0.1.2 Draft（2026-08-20，C02-WP2 实施，Decision-040；Round 2 复审修正后待重新复审）
 > 关联：[Decision-040](../docs/AI-SDLC-Decision-Records.md#decision-040授权并实施-c02-wp2-artifact-revision-and-current-authority) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G2 / §7 · [Artifact Versioning](artifact-versioning.md) · [Artifact Flow](artifact-flow.md)
 
 ## 1. Purpose
@@ -57,7 +57,7 @@
 - **写入唯一入口**：`appendArtifactRevision` 与 `markArtifactRevisionStale` 是仅有的两个写原语；任何绕过 API 写入的行在读取时因 schema/canonical hash 校验失败而为 `STORE_CORRUPT`。
 - **幂等重放**：同一输入精确重放（且持久 revision 仍处原始 ACTIVE 形态）返回已持久 revision 且不重复写入（`appended: false`）。
 - **CAS/冲突**：同一 `revisionId` 内容不同 → `EVENT_ID_CONFLICT`；同一 `(runId, nodeId, sequence)` 或 `(runId, nodeId, semver)` 被占用 → `EVENT_SEQUENCE_CONFLICT`；跨连接并发依赖事务 + 唯一约束保证，相同候选并发幂等收敛。
-- **版本前进与 supersede 原子化**：新 revision 的 semver 必须按 SemVer 大于该节点前一 current；同事务内 ACTIVE 旧 current 置 `SUPERSEDED` 并回填 `supersededBy`、current pointer 以"期望当前 revision"为谓词 CAS 前进。STALE 旧 current 不发生状态迁移（状态机无 `STALE → SUPERSEDED` 边），pointer 直接前进越过它。
+- **版本前进与 supersede 原子化**：新 revision 的 semver 必须按 SemVer 大于该节点前一 current；同事务内 ACTIVE 旧 current 置 `SUPERSEDED` 并回填 `supersededBy`、current pointer 以"期望当前 revision"为谓词 CAS 前进。STALE 旧 current 不发生状态迁移（状态机无 `STALE → SUPERSEDED` 边），pointer 直接前进越过它。候选链校验作用于**转换后状态**——旧 current 以 `supersedeArtifactRevision` 计算出的 SUPERSEDED 形态进入候选集，校验与落库复用同一纯函数产物，不存在第二份 supersede 语义。
 - **上游消费 fail-closed**：upstream refs 必须引用同 run 现存 revision，且在追加时刻是各自节点的 current 指针目标且 validity 为 ACTIVE；stale/superseded/不存在/跨 run 的上游一律拒绝。
 - **链规则**：节点分组内 sequence 从 1 连续、时间戳单调、SemVer 严格前进、仅节点最新 revision 可为 ACTIVE（更早 revision 只能是 SUPERSEDED 或 STALE）、`supersededBy` 精确指向下一 sequence、upstream 必须解析到同 run 已存 revision 且不晚于消费方创建；违反即 `ILLEGAL_TRANSITION`（追加时）或 `STORE_CORRUPT`（读取时）。
 - **run 状态守卫**：terminal run（completed/failed/cancelled）、活动 delivery stage、活动 capability execution 期间均拒绝追加与 STALE 标记（`ILLEGAL_TRANSITION`）。
@@ -97,3 +97,4 @@
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-20 | Draft | C02-WP2 交付（Decision-040）：artifact revision schema、validity 状态机、四项绑定与 producer execution 锚定、supersede + current pointer CAS、上游消费 fail-closed、manifest cross-bind、v3→v4 迁移与读回交叉绑定合同。 |
 | 0.1.1 | 2026-08-20 | Draft | Round 1 复审修正：四项绑定在每条读回路径逐条重验（rehash 篡改的 producer 不存在/失败/节点/三元组/Gate 漂移均 `STORE_CORRUPT`）；链规则新增"仅节点最新 revision 可为 ACTIVE"；测试预置说明修正——producer 重验后 WP4-era 预置行不再自洽，同节点多 revision 的 store 级 supersede 成功路径覆盖推迟到 C02-WP4 链扩展；测试源码控制字节改为转义字面量。 |
+| 0.1.2 | 2026-08-20 | Draft | Round 2 复审修正（H3）：写入路径的候选链校验改为转换后状态，新增 `supersedeArtifactRevision` 纯函数统一校验与落库的 supersede 语义；store 级端到端 supersede 成功路径覆盖经 Current User 显式重基线，随 C02-WP4 链扩展一并验收。 |

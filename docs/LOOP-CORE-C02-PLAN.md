@@ -170,7 +170,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：finding 分类和自动路由。
 
-- 状态（2026-08-20）：**已实施，等待重新复审**（Decision-040）；Round 1 独立复审 CHANGES_REQUESTED（读回 producer 绑定重验、链非末尾 ACTIVE 规则、测试控制字节），修正已推送至 PR #90（初始实现 CI run 32363565455 四项全过）；授权 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 未消费。同节点多 revision 的 store 级 supersede 成功路径依赖 WP4 重执行链扩展，验收时需注意该覆盖边界。
+- 状态（2026-08-20）：**已实施，等待 Round 3 复审**（Decision-040）；Round 1 复审 CHANGES_REQUESTED（读回 producer 绑定重验、链非末尾 ACTIVE 规则、测试控制字节）已修正；Round 2 复审 FAIL（H3：写入路径以转换前状态校验候选链）已修正为转换后状态校验 + `supersedeArtifactRevision` 纯函数统一语义；store 级端到端 supersede 成功路径覆盖经 Current User 显式重基线，随 C02-WP4 链扩展一并验收。授权 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 未消费。
 
 ### C02-WP3：Finding Lifecycle and Dependency Invalidation
 

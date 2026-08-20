@@ -51,6 +51,7 @@ import {
 import {
   canonicalizeLoopArtifactRevision,
   compareLoopArtifactSemver,
+  supersedeArtifactRevision,
   validateLoopArtifactRevision,
   validateLoopArtifactRevisionChain,
   type LoopArtifactRevision,
@@ -1808,7 +1809,26 @@ export class LoopRunStore {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "upstream artifact revision must be active");
           }
         }
-        const candidate = [...current, record].sort((a, b) =>
+        // The chain is validated in its post-transition state: when this
+        // append advances an ACTIVE previous current, that revision becomes
+        // SUPERSEDED with supersededBy backfilled by the same transaction
+        // (below). Validating the pre-transition rows instead would reject
+        // every legitimate version advance, because only the latest revision
+        // of a node may remain ACTIVE. A non-contiguous successor sequence
+        // keeps the pre-transition rows here so the chain validator rejects
+        // the gap itself.
+        const supersededPrevious = previousCurrent !== undefined &&
+          previousCurrent.validity === "ACTIVE" &&
+          record.sequence === previousCurrent.sequence + 1
+          ? supersedeArtifactRevision(previousCurrent, record.revisionId)
+          : undefined;
+        const candidate = [
+          ...current.map((item) =>
+            supersededPrevious !== undefined && item.revisionId === supersededPrevious.revisionId
+              ? supersededPrevious
+              : item),
+          record,
+        ].sort((a, b) =>
           a.nodeId === b.nodeId ? a.sequence - b.sequence : a.nodeId < b.nodeId ? -1 : 1);
         try {
           validateLoopArtifactRevisionChain(candidate, record.runId);
@@ -1824,18 +1844,13 @@ export class LoopRunStore {
         // recomputed in the same transaction. A STALE previous current keeps
         // its validity — the state machine has no STALE → SUPERSEDED edge —
         // and the pointer simply advances past it.
-        if (previousCurrent !== undefined && previousCurrent.validity === "ACTIVE") {
-          const superseded: LoopArtifactRevision = Object.freeze({
-            ...previousCurrent,
-            validity: "SUPERSEDED",
-            supersededBy: record.revisionId,
-          });
+        if (supersededPrevious !== undefined) {
           const supersedeResult = db.prepare(
             "UPDATE loop_artifact_revisions SET validity = ?, superseded_by = ?, canonical_sha256 = ? WHERE revision_id = ? AND validity = ?",
           ).run(
             "SUPERSEDED", record.revisionId,
-            sha256Hex(canonicalizeLoopArtifactRevision(superseded)),
-            previousCurrent.revisionId, "ACTIVE",
+            sha256Hex(canonicalizeLoopArtifactRevision(supersededPrevious)),
+            previousCurrent!.revisionId, "ACTIVE",
           );
           if (supersedeResult.changes !== 1) {
             corrupt("previous current artifact revision drifted during supersede");
