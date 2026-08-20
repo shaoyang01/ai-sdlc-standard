@@ -1323,3 +1323,41 @@ C02-WP1 具备候选实现证据，但在独立复审与 Current User 裁决前�
 ## 代码与验证依据
 
 `core/loop-change-classification.ts`；`core/loop-run-store.ts`（v3 迁移与 change 链读写）；`ai-sdlc/loop-change-classification.md` 0.1.0 Draft；`tests/loop-change-classification.test.ts`（100/100，含五类正反例、幂等重放、并发冲突、blocked 持久化、跨入口读取、plain-data/Proxy/accessor/Symbol/注入边界、v2→v3 迁移回滚与幂等重试）；既有断言随格式版本前进更新：`tests/loop-run-provenance.test.ts`（79/79）、`tests/loop-capability-execution.test.ts`（86/86）；完整默认 `npm test`、`tsc --noEmit` 与 `git diff --check` 结果记录在实施 handoff。
+
+# Decision-038：C02-WP1 复审通过与收口
+
+## 状态
+
+Accepted（2026-08-20，Current User 接受 Round 2 独立复审 PASS 结论并裁决 C02-WP1 收口）
+
+## 背景
+
+C02-WP1 由 Decision-037 单独授权并实施：实现提交 `b1d29dc`（WP-1 requirement change classification contract）与 Round 1 修正 `8fecdb3`，经 PR #86 合入常驻分支 `feature/loop-runtime-v1`，merge commit 为 `aaf5e32a4e9719ff8c521c9d29990e8c5d35f6d0`，四项 CI 检查全部 SUCCESS。Round 1 独立复审提出四项 finding：读回记录未与 run identity 交叉绑定（错绑记录可通过校验）、`source:<locator>` 未强制命中本记录 sourceRefs、主表与子表外键 from/to 映射校验不完整、规划基线 PR #85 未合入导致评审依据死链。Round 2 独立复审覆盖 `b1d29dc..85e9602`，确认四项 finding 全部关闭，Result: PASS、无 Critical/High/Medium/Low finding、无阻塞缺口。
+
+## 问题
+
+C02-WP1 是否满足规划 §6 验收（五类正反例、分类与 Requirement ID/source refs/前一 generation 绑定、跨入口恢复一致读取、幂等与并发冲突语义、blocked 持久化），并可消费 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 授权完成治理收口？
+
+## 决策
+
+1. 接受 Round 2 独立复审 PASS 结论；C02-WP1 通过并收口。
+2. 控制平面消费 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 授权并登记 WP1 完成；C02 四项完成合同保持 `INCOMPLETE`（合同 1 需 WP1+WP5+WP6 联合证据，合同 2～4 由 WP2～WP6 覆盖）。
+3. `ai-sdlc/loop-change-classification.md` 升为 1.0.0 Accepted；C02 规划同步 WP1 收口状态。
+4. 本决定不授权 C02-WP2～WP6，不登记 C02 任一完成合同项，不授权真实 Agent 启用、新 Provider、Git/PR 自动化或 C03～C05。
+5. WP1 收口后提出的并发回归改造不属于本次收口范围：若为 WP1 已交付语义的缺陷，按 finding 流程回到 WP1 复审；若为新增 material outcome，回到 C02 规划受控重排（规划 §12）。
+
+## 原因
+
+复审在同一 HEAD 独立复验：loop-change-classification 107/107、loop-run-provenance 79/79、loop-capability-execution 86/86、`tsc --noEmit`、`git diff --check` 与完整 `npm test` 全部通过，工作区干净，远端与本地同为 `85e9602`。四项 Round 1 finding 的修正均被验证为 fail-closed：读回记录与 run identity 交叉绑定，错绑记录重算 hash 后在链、快照、跨入口读取均 STORE_CORRUPT；`source:<locator>` 在构造期与持久化读回均强制命中本记录 sourceRefs；主表与三个子表外键精确校验 from/to 映射；PR #85 合入后规划基线与引用链接可复现。
+
+## 影响
+
+C02 缺口 G1 的分类持久面关闭：同一 Requirement 的每次入口变化具备固定 schema、可恢复、可审计的 change record，run journal 格式前进到 v3 且 C01 历史一行未改。WP2（Artifact Revision Authority）成为下一个可申请授权的工作包；WP1 收口不构成 WP2～WP6 的实施入口。
+
+## 实现状态
+
+用户已最终裁决通过；产品收口文档通过受保护分支 PR 发布后，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针。
+
+## 代码与验证依据
+
+`core/loop-change-classification.ts`；`core/loop-run-store.ts`（v3 迁移、change 链读写、外键校验）；`ai-sdlc/loop-change-classification.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（107/107）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；实现 merge `aaf5e32a4e9719ff8c521c9d29990e8c5d35f6d0`（PR #86，CI 全绿）；Round 2 独立复审 PASS 与收口前本地复验（107/79/86、`tsc --noEmit`）。
