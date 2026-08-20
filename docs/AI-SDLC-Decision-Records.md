@@ -1361,3 +1361,41 @@ C02 缺口 G1 的分类持久面关闭：同一 Requirement 的每次入口变�
 ## 代码与验证依据
 
 `core/loop-change-classification.ts`；`core/loop-run-store.ts`（v3 迁移、change 链读写、外键校验）；`ai-sdlc/loop-change-classification.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（107/107）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；实现 merge `aaf5e32a4e9719ff8c521c9d29990e8c5d35f6d0`（PR #86，CI 全绿）；Round 2 独立复审 PASS 与收口前本地复验（107/79/86、`tsc --noEmit`）。
+
+# Decision-039：npm test 并发 runner 改造
+
+## 状态
+
+Accepted（2026-08-20，Current User 指令先行补登记，再按既有工具变更流程评审合入实现）
+
+## 背景
+
+`npm test` 是 `package.json` 中 125 个 `tsx tests/*.test.ts` 以 `&&` 串行的长链，本地基线 4m46s（real；user 2m10s），I/O 等待占比高。PKB（personal-knowledge-base）的 `90-system/scripts/run_repo_tests.py` 已验证同构改造：每测试模块一个子进程、worker 池并发（默认 min(8, cpu_count)）、共享状态模块进串行尾段、输出按模块名排序回放、保留串行兜底、fail-closed 聚合退出码，全局回归从几十分钟压缩到 4~5 分钟。对本仓库 tests/ 的只读隔离审计确认：无端口/server、无网络访问、无真实外部 CLI 依赖（codex/kimi/hermes runner 全部注入 fake spawn）；唯一跨进程共享状态是 `tests/policy-memory.test.ts` 与 `tests/policy-memory-read.test.ts` 共用并 `rm -rf` 同一 cwd 相对目录 `.sdlc-runtime-test/`（已在 .gitignore）。审计另发现 `tests/kimi-output-normalizer.test.ts` 与 `tests/sdlc-solution-challenger-behavior.test.ts` 存在于磁盘但未注册进 `npm test` 链（漏网；单独运行分别 17/17、185/185 通过）。
+
+## 问题
+
+是否将默认 `npm test` 从 `&&` 串行链改造为目录发现 + 进程池并发的 runner，顺带修复测试注册漏网，且不改变任何测试语义、运行时代码与 CI job 结构？
+
+## 决策
+
+1. 新增 `scripts/run-tests-parallel.mjs`（纯 Node 标准库）：扫描 `tests/*.test.ts` 顶层文件作为唯一测试清单源（新增测试文件自动纳入默认回归）；每个文件一个 tsx 子进程，worker 池默认 min(8, cpu_count)；`tests/policy-memory.test.ts` 与 `tests/policy-memory-read.test.ts` 固定进串行尾段（SERIAL_TAIL），在并发段完全排空后逐一执行；输出按文件名排序回放并聚合失败，任一文件失败或未运行即非零退出；`--serial` 保留历史逐一串行语义。
+2. `package.json` 的 `test` 切换为 `node scripts/run-tests-parallel.mjs`；其余 scripts、CI 四个 job 的结构与触发配置不变；`test:solution-challenge` 独立 script 保留（该文件同时被目录发现纳入 npm test，CI 中的单独补跑步骤暂保留，后续可单独清理）。
+3. `tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts` 的 Test 20 注册断言随注册机制调整：从断言 `&&` 链注册改为断言 runner 调用、目录发现与不在 SERIAL_TAIL；不再断言执行顺序（并发段无顺序语义）。
+4. 两个漏网测试文件随目录发现纳入默认 `npm test`（修复注册缺口，非扩大 scope）。
+5. 不修改任何 runtime、gateway、`loop/` 实现代码与测试语义；本改造是测试工具链变更，不属于 LOOP-CORE-02 工作包范围，不占用或消费任何 C02 授权，不登记任何 roadmap 完成项。
+
+## 原因
+
+PKB 同构 runner 已长期验证该模式的安全性（每文件一进程天然隔离 process.env 等进程内状态）；本仓库隔离审计确认除 policy-memory 一对的 cwd 相对目录外无跨进程共享状态，重测试（git/子进程/SQLite 密集型）全部使用 mkdtemp 唯一沙箱，并发收益确定。目录发现使"新增测试文件即纳入回归"成为默认行为，消除注册漏网这一类问题。串行尾段与 `--serial` 兜底保证共享状态用例与排查场景可复现历史语义。
+
+## 影响
+
+本地全量回归 real 4m46s → 2m27s（8 核，128/128 文件通过，含两个新纳入的漏网文件）；CI ci-tests job 预期同幅压缩。后续新增测试文件无需再编辑 `package.json`；policy-memory 两个测试如改用各自 mkdtemp 可移出 SERIAL_TAIL（非本次范围）。
+
+## 实现状态
+
+实现已在本地分支完成并全量验证（128/128，2m27s；`tsc --noEmit` 通过）；本 Decision 经 PR 评审合入后，实现按 commit → push → PR → CI → Current User 评审 → merge 的既有工具变更流程落地。
+
+## 代码与验证依据
+
+`scripts/run-tests-parallel.mjs`（新增）；`package.json`（test script 一行）；`tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts`（Test 20 断言段）；PKB `90-system/scripts/run_repo_tests.py`；本地基线串行 4m46s 与并发 2m27s 两次全量运行；tests/ 全量共享状态隔离审计（只读）。
