@@ -280,13 +280,13 @@ async function main(): Promise<void> {
     ok(upgraded.getSnapshot("run-wp4b-001") !== undefined, "v1 run remains readable after v2 migration");
     upgraded.close();
     const migrated = new Database(migrationPath);
-    ok(migrated.pragma("user_version", { simple: true }) === 2, "v1 migration atomically records format v2");
+    ok(migrated.pragma("user_version", { simple: true }) === 3, "v1 migration atomically records format v3");
     ok(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='loop_capability_executions'").get() !== undefined,
       "v1 migration creates the capability execution table");
     migrated.exec("DROP TABLE loop_capability_executions");
     migrated.close();
     const corruptV2 = new LoopRunStore(migrationPath);
-    throwsCode("STORE_CORRUPT", () => corruptV2.init(), "v2 marker with missing capability table is rejected");
+    throwsCode("STORE_CORRUPT", () => corruptV2.init(), "current marker with missing capability table is rejected");
   } finally {
     rmSync(migrationRoot, { recursive: true, force: true });
   }
