@@ -18,9 +18,11 @@
 
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { LoopArtifactStore } from "../core/loop-artifact-store";
 
 import {
   LOOP_ARTIFACT_GATE_CAPABILITIES,
@@ -1407,6 +1409,158 @@ console.log("artifact revision: v3 to v4 migration is atomic and retryable");
   expectThrow("STORE_CORRUPT", () => store2.init(), "pointer table foreign key column drift is rejected");
   store2.close();
   rmSync(dir, { recursive: true, force: true });
+}
+
+console.log("artifact revision: identity rewrite between verification and detail read fails closed");
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const producer = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake",
+    sequence: 1,
+    semver: INTAKE_OUT.version,
+    digest: INTAKE_OUT.digest,
+    producerExecutionId: producer.executionEventId,
+  }));
+  store.appendArtifactRevision(revision);
+  // Second connection: rewrite the run's requirement_id AND rehash the
+  // revision to match — the tampered detail row is self-consistent under the
+  // tampered identity. Snapshot verification and record return happen in ONE
+  // transaction, so both reads must fail closed instead of returning the
+  // tampered revision.
+  const raw = new Database(join(dir, "journal.db"));
+  raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+  raw.close();
+  tamperRevisionWithRehash(dir, revision.revisionId, Object.freeze({ ...revision, requirementId: "req-tampered" }));
+  expectThrow("STORE_CORRUPT", () => store.listArtifactRevisions("run-001"),
+    "listArtifactRevisions verifies identity and revisions in one transaction");
+  expectThrow("STORE_CORRUPT", () => store.getCurrentArtifactRevision("run-001", "requirement-intake"),
+    "getCurrentArtifactRevision verifies identity and revisions in one transaction");
+});
+
+console.log("artifact revision: blob binding verifies the physical blob (bound artifact store)");
+{
+  // The store rejects a non-LoopArtifactStore binding fail-closed.
+  const dir = mkdtempSync(join(tmpdir(), "loop-artifact-rev-blob-"));
+  expectThrow("INVALID_INPUT", () => new LoopRunStore(join(dir, "journal.db"), {
+    artifactStore: {} as unknown as LoopArtifactStore,
+  }), "bogus artifactStore binding rejected");
+  rmSync(dir, { recursive: true, force: true });
+}
+
+/** Bound-store fixture: run journal + real artifact store in one temp dir. */
+function withBoundStore(
+  fn: (store: LoopRunStore, artifactStore: LoopArtifactStore, dir: string) => void,
+): void {
+  // realpath: the artifact store resolves its control root, so blob paths
+  // derived by the test must be computed from the resolved directory.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "loop-artifact-rev-blob-")));
+  const repositoryPath = join(dir, "repo");
+  mkdirSync(repositoryPath, { recursive: true });
+  const controlRoot = join(dir, "control");
+  const artifactStore = new LoopArtifactStore({ controlRoot, repositoryPath });
+  artifactStore.init();
+  const store = new LoopRunStore(join(dir, "journal.db"), { artifactStore });
+  store.init();
+  try {
+    fn(store, artifactStore, dir);
+  } finally {
+    store.close();
+    artifactStore.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function blobPath(dir: string, kind: string, digest: string): string {
+  return join(dir, "control", "artifacts", "v1", kind, digest.slice(0, 2), `${digest}.blob`);
+}
+
+{
+  // 从未存在：a revision whose blob was never written must not become the
+  // node's ACTIVE current, even when the producer journal binding matches.
+  withBoundStore((store, _artifactStore, _dir) => {
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const producer = driver.succeed("requirement-intake", INTAKE_OUT);
+    const revision = createLoopArtifactRevision(revisionDraft({
+      nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version,
+      digest: INTAKE_OUT.digest, producerExecutionId: producer.executionEventId,
+    }));
+    expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(revision),
+      "revision with a never-written blob is rejected");
+    assert(store.getCurrentArtifactRevision("run-001", "requirement-intake") === undefined,
+      "rejected revision leaves no current pointer");
+    assert(store.listArtifactRevisions("run-001").length === 0, "rejected revision is not persisted");
+  });
+}
+{
+  // 写后丢失：the append succeeds with the blob present; deleting the blob
+  // afterwards fails every read path closed.
+  withBoundStore((store, artifactStore, dir) => {
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const stored = artifactStore.put("capability_output", "requirement-intake output v1");
+    const producer = driver.succeed("requirement-intake", { version: "1.0.0", digest: stored.digest });
+    const revision = createLoopArtifactRevision(revisionDraft({
+      nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
+      digest: stored.digest, producerExecutionId: producer.executionEventId,
+    }));
+    assert(store.appendArtifactRevision(revision).appended === true,
+      "revision with an existing blob appended");
+    assert(store.getCurrentArtifactRevision("run-001", "requirement-intake")?.revisionId === revision.revisionId,
+      "current read resolves while the blob exists");
+    unlinkSync(blobPath(dir, "capability_output", stored.digest));
+    expectCorruptOnAllReadPaths(store, "requirement-intake", "blob deleted after append fails closed");
+    expectThrow("STORE_CORRUPT", () => store.markArtifactRevisionStale("run-001", revision.revisionId),
+      "stale marking after blob loss fails closed");
+  });
+}
+{
+  // 内容漂移：overwriting the blob with different bytes fails every read
+  // path closed, and a fresh append referencing a corrupted blob is rejected.
+  withBoundStore((store, artifactStore, dir) => {
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const stored = artifactStore.put("capability_output", "tech-design output v1");
+    writeFileSync(blobPath(dir, "capability_output", stored.digest), "tampered bytes");
+    const producer = driver.succeed("requirement-intake", { version: "1.0.0", digest: stored.digest });
+    const revision = createLoopArtifactRevision(revisionDraft({
+      nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
+      digest: stored.digest, producerExecutionId: producer.executionEventId,
+    }));
+    expectThrow("STORE_CORRUPT", () => store.appendArtifactRevision(revision),
+      "append referencing a corrupted blob fails closed");
+  });
+}
+{
+  // Bound store, intact blobs: the full write + read flow stays healthy.
+  withBoundStore((store, artifactStore, _dir) => {
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const storedIntake = artifactStore.put("capability_output", "requirement-intake output v1");
+    const intakeProducer = driver.succeed("requirement-intake", { version: "1.0.0", digest: storedIntake.digest });
+    const intakeRevision = createLoopArtifactRevision(revisionDraft({
+      nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
+      digest: storedIntake.digest, producerExecutionId: intakeProducer.executionEventId,
+    }));
+    store.appendArtifactRevision(intakeRevision);
+    const storedDesign = artifactStore.put("capability_output", "tech-design output v1");
+    const designProducer = driver.succeed("tech-design", { version: "1.0.0", digest: storedDesign.digest });
+    const designRevision = createLoopArtifactRevision(revisionDraft({
+      nodeId: "tech-design", sequence: 1, semver: "1.0.0",
+      digest: storedDesign.digest, producerExecutionId: designProducer.executionEventId,
+      upstreamRevisionIds: [intakeRevision.revisionId],
+    }));
+    assert(store.appendArtifactRevision(designRevision).appended === true,
+      "downstream revision with existing blobs appended");
+    assert(store.listArtifactRevisions("run-001").length === 2, "bound read path lists both revisions");
+    assert(store.getCurrentArtifactRevision("run-001", "tech-design")?.revisionId === designRevision.revisionId,
+      "bound current read resolves the downstream revision");
+  });
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`);

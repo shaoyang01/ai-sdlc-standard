@@ -179,6 +179,151 @@ async function main(): Promise<void> {
     bindingRegistry: drifted,
     gateway: null as unknown as ExecutionGateway,
   }), "supported entry rejects a drifted registry before any journal can be touched");
+
+  console.log("WP-5: supported entry requires the run store bound to the same artifact store");
+  {
+    const bindRoot = mkdtempSync(join(tmpdir(), "loop-wp5-binding-"));
+    try {
+      mkdirSync(join(bindRoot, "repo"));
+      const id = identity(bindRoot, "BINDING");
+      const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+      artifactStore.init();
+      const unboundStore = new LoopRunStore(join(bindRoot, "unbound.db"));
+      unboundStore.init();
+      const boundStore = new LoopRunStore(join(bindRoot, "bound.db"), { artifactStore });
+      boundStore.init();
+      const otherArtifacts = new LoopArtifactStore({
+        controlRoot: join(bindRoot, "other-control"),
+        repositoryPath: id.repositoryPath,
+      });
+      otherArtifacts.init();
+      const mismatchedStore = new LoopRunStore(join(bindRoot, "mismatched.db"), { artifactStore: otherArtifacts });
+      mismatchedStore.init();
+      throws(() => entry(unboundStore, artifactStore, INITIAL_BINDING_REGISTRY),
+        "entry rejects an unbound run store");
+      throws(() => entry(mismatchedStore, artifactStore, INITIAL_BINDING_REGISTRY),
+        "entry rejects a run store bound to a different artifact store instance");
+      // The gateway must trace into the same store pair: a gateway writing
+      // outputs to a different artifact store would split journal refs from
+      // the blobs revisions are verified against.
+      throws(() => new LoopCapabilityEntry({
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        gateway: gateway(boundStore, otherArtifacts, INITIAL_BINDING_REGISTRY),
+        now: () => TS,
+      }), "entry rejects a gateway tracing a different artifact store");
+      const foreignRunStore = new LoopRunStore(join(bindRoot, "foreign.db"), { artifactStore });
+      foreignRunStore.init();
+      throws(() => new LoopCapabilityEntry({
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        gateway: gateway(foreignRunStore, artifactStore, INITIAL_BINDING_REGISTRY),
+        now: () => TS,
+      }), "entry rejects a gateway tracing a different run store");
+      throws(() => new LoopCapabilityEntry({
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        gateway: { execute: async () => Promise.reject(new Error("unused")) } as unknown as ExecutionGateway,
+        now: () => TS,
+      }), "entry rejects an execute-only object that is not a traced ExecutionGateway");
+      ok(entry(boundStore, artifactStore, INITIAL_BINDING_REGISTRY) instanceof LoopCapabilityEntry,
+        "entry accepts the same-instance binding");
+      // Binding checks are non-virtual (construction-time WeakMap state):
+      // neither subclass overrides nor monkey-patched instance members can
+      // forge them.
+      class OverrideRunStore extends LoopRunStore {
+        isBoundToArtifactStore(): boolean { return true; }
+      }
+      const forgedStore = new OverrideRunStore(join(bindRoot, "forged.db"));
+      forgedStore.init();
+      throws(() => entry(forgedStore, artifactStore, INITIAL_BINDING_REGISTRY),
+        "subclass override cannot forge the artifact store binding");
+      Object.assign(unboundStore, { isBoundToArtifactStore: () => true });
+      throws(() => entry(unboundStore, artifactStore, INITIAL_BINDING_REGISTRY),
+        "monkey-patched instance member cannot forge the artifact store binding");
+      class OverrideGateway extends ExecutionGateway {
+        isCapabilityTracingBoundTo(): boolean { return true; }
+      }
+      const forgedGateway = new OverrideGateway({
+        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+        capabilityTracing: {
+          runStore: boundStore,
+          artifactStore: otherArtifacts,
+          bindingRegistry: INITIAL_BINDING_REGISTRY,
+          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+          now: () => TS,
+        },
+      });
+      throws(() => new LoopCapabilityEntry({
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        gateway: forgedGateway,
+        now: () => TS,
+      }), "subclass override cannot forge the gateway tracing binding");
+      forgedStore.close();
+      // Post-construction mutation of the caller's configuration objects
+      // cannot swap the entry's or the gateway's store wiring: both snapshot
+      // and freeze their dependency configuration at construction.
+      const originalTracing = {
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+        now: () => TS,
+      };
+      const stableGatewayOptions = {
+        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+        codexRunner: runner((request) => qualifiedResult(request)),
+        capabilityTracing: originalTracing,
+      };
+      const stableGateway = new ExecutionGateway(stableGatewayOptions);
+      const stableEntryOptions = {
+        runStore: boundStore,
+        artifactStore,
+        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        gateway: stableGateway,
+        now: () => TS,
+      };
+      const stableEntry = new LoopCapabilityEntry(stableEntryOptions);
+      originalTracing.artifactStore = otherArtifacts;
+      stableGatewayOptions.capabilityTracing = { ...originalTracing };
+      stableEntryOptions.gateway = gateway(boundStore, otherArtifacts, INITIAL_BINDING_REGISTRY);
+      stableEntryOptions.artifactStore = otherArtifacts;
+      const stableSource = artifactStore.put("requirement_summary", "WP-5 binding stability source");
+      const executed = await stableEntry.execute({
+        requirementId: id.requirementId,
+        identity: id,
+        capability: "requirement-intake",
+        inputArtifactRef: stableSource.artifactRef,
+        inputArtifactVersion: "1.0.0",
+        inputDigest: stableSource.digest,
+        outputArtifactVersion: "1.0.0",
+        input: { requirement: "binding stability" },
+      });
+      ok(executed.execution.success === true,
+        "entry executes against its construction-time dependency snapshot");
+      const stableEvents = boundStore.listCapabilityExecutions(id.runId);
+      ok(stableEvents.length === 2 && stableEvents[1]?.status === "succeeded",
+        "execution journals into the original run store");
+      const stableRef = stableEvents[1]?.outputArtifactRef ?? null;
+      const stableDigest = stableEvents[1]?.outputDigest ?? null;
+      ok(stableRef !== null && stableDigest !== null &&
+        artifactStore.read(stableRef, stableDigest).length > 0,
+        "output blob stays in the original artifact store");
+      foreignRunStore.close();
+      unboundStore.close();
+      boundStore.close();
+      mismatchedStore.close();
+      otherArtifacts.close();
+      artifactStore.close();
+    } finally {
+      rmSync(bindRoot, { recursive: true, force: true });
+    }
+  }
   const gitExpanded = registrySnapshot("2", (binding) => binding.capability === "tech-design" && binding.agent === "codex"
     ? { ...binding, allowedSideEffects: Object.freeze(["workspace-local-write", "git-push"] as unknown as string[]) }
     : binding);
@@ -201,8 +346,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(replacementRoot, "repo"));
     const id = identity(replacementRoot, "REPLACEMENT");
-    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 replacement source");
@@ -294,8 +439,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(failureRoot, "repo"));
     const id = identity(failureRoot, "TIMEOUT");
-    const runStore = new LoopRunStore(join(failureRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(failureRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 timeout source");
@@ -350,8 +495,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(outputRoot, "repo"));
     const id = identity(outputRoot, "OUTPUT");
-    const runStore = new LoopRunStore(join(outputRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(outputRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 output source");

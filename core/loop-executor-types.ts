@@ -4,6 +4,8 @@
 // persistence only: no Runtime, Graph, ExecutionGateway, Skill Flow,
 // Agent routing, Git workspace, patch execution, or target-repo commands.
 
+import type { LoopArtifactStore } from "./loop-artifact-store";
+
 export type LoopRunStatus =
   | "created"
   | "running"
@@ -136,9 +138,19 @@ export type LoopRunJournalErrorCode =
   | "STORE_FAILURE"
   | "STORE_CORRUPT";
 
-/** Options for LoopRunStore. busyTimeoutMs defaults to 2000 (integer 1..5000). */
+/**
+ * Options for LoopRunStore. busyTimeoutMs defaults to 2000 (integer 1..5000).
+ *
+ * artifactStore binds the durable content-addressed artifact store so that
+ * artifact revisions (C02-WP2) are cross-checked against physical blobs:
+ * appends are rejected when the referenced blob is missing or digest-drifted,
+ * and every revision read path fails closed when a persisted revision's blob
+ * no longer exists or no longer matches. When omitted the store keeps
+ * journal-only semantics (used by pure-journal tests and tooling).
+ */
 export type LoopRunStoreOptions = Readonly<{
   busyTimeoutMs?: number;
+  artifactStore?: LoopArtifactStore;
 }>;
 
 /** A fully verified, immutable read snapshot of one run. */

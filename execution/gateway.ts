@@ -108,8 +108,55 @@ export interface ExecutionGatewayOptions {
   }>;
 }
 
+/**
+ * Construction-time capability-tracing bindings, keyed by gateway instance.
+ * Module-level so the binding check is non-virtual: no subclass override or
+ * monkey patch can forge which stores a gateway traces into.
+ */
+const GATEWAY_TRACING_BINDINGS = new WeakMap<ExecutionGateway, Readonly<{
+  runStore: LoopRunStore;
+  artifactStore: Pick<LoopArtifactStore, "put" | "read">;
+}>>();
+
+/**
+ * Non-virtual identity check for the durable capability tracing wiring
+ * (C02-WP2 blob binding): true only when `gateway` was constructed with
+ * capability tracing into exactly the given run store and artifact store
+ * instances. Supported entries use this instead of any instance method.
+ */
+export function isExecutionGatewayTracingBoundTo(
+  gateway: ExecutionGateway,
+  runStore: LoopRunStore,
+  artifactStore: Pick<LoopArtifactStore, "read">,
+): boolean {
+  const binding = GATEWAY_TRACING_BINDINGS.get(gateway);
+  return binding !== undefined &&
+    binding.runStore === runStore &&
+    binding.artifactStore === artifactStore;
+}
+
 export class ExecutionGateway {
-  constructor(private readonly options: ExecutionGatewayOptions = {}) {}
+  private readonly options: ExecutionGatewayOptions;
+
+  constructor(options: ExecutionGatewayOptions = {}) {
+    // Snapshot and freeze the dependency configuration: post-construction
+    // mutation of the caller's options objects (including the nested
+    // capabilityTracing record) must not redirect where executions are
+    // journaled or where output blobs are written.
+    const tracing = options.capabilityTracing === undefined
+      ? undefined
+      : Object.freeze({ ...options.capabilityTracing });
+    this.options = Object.freeze({
+      ...options,
+      ...(tracing === undefined ? {} : { capabilityTracing: tracing }),
+    });
+    if (tracing !== undefined) {
+      GATEWAY_TRACING_BINDINGS.set(this, Object.freeze({
+        runStore: tracing.runStore,
+        artifactStore: tracing.artifactStore,
+      }));
+    }
+  }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
     const isCanonicalCapability =

@@ -29,6 +29,7 @@ import {
   type LoopRunIdentity,
 } from "../core/loop-executor-types";
 import type { LoopCapabilityExecutionEvent } from "../core/loop-capability-execution";
+import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { runtimeExecutionPointForCapability } from "../core/runtime-capability-map";
 
@@ -461,6 +462,209 @@ withStore((store) => {
   const chain = store.listRequirementChanges("run-001");
   assert(chain[0].status === "BLOCKED" && chain[1].changeKind === "NEW_REQUIREMENT",
     "blocked state remains auditable after resolution");
+});
+
+console.log("change classification: NEW_REQUIREMENT is unique across runs of one requirement");
+withStore((store) => {
+  store.createRun(makeIdentity());
+  const original = createLoopRequirementChangeRecord(newRequirementDraft());
+  assert(store.appendRequirementChange(original).appended === true, "first run classifies NEW_REQUIREMENT");
+  store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+  // The requirement already has a classified change record in run-001, so a
+  // second run must not declare NEW_REQUIREMENT again (contract §2/§5).
+  expectThrow("ILLEGAL_TRANSITION", () => store.appendRequirementChange(
+    createLoopRequirementChangeRecord(newRequirementDraft({
+      runId: "run-002", classificationReason: "重复声明新需求",
+    })),
+  ), "cross-run duplicate NEW_REQUIREMENT is rejected");
+  // A delta classification in the follow-up run remains legal.
+  const supplement = store.appendRequirementChange(createLoopRequirementChangeRecord(
+    deltaDraft("SUPPLEMENT", { runId: "run-002", sequence: 1 }),
+  ));
+  assert(supplement.appended === true, "follow-up run may classify a delta change");
+  // The cross-run rule does not break exact-replay idempotency.
+  const replay = store.appendRequirementChange(original);
+  assert(replay.appended === false, "replaying the original NEW_REQUIREMENT stays idempotent");
+});
+withStore((store) => {
+  // A prior run whose chain holds only BLOCKED records never classified the
+  // requirement, so a later run may still declare NEW_REQUIREMENT.
+  store.createRun(makeIdentity());
+  store.appendRequirementChange(createLoopRequirementChangeRecord(blockedDraft()));
+  store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+  const resolved = store.appendRequirementChange(createLoopRequirementChangeRecord(
+    newRequirementDraft({ runId: "run-002", classificationReason: "前序 run 仅阻塞未分类，按新需求处理" }),
+  ));
+  assert(resolved.appended === true, "NEW_REQUIREMENT allowed when prior runs hold only blocked records");
+});
+withStore((store) => {
+  store.createRun(makeIdentity());
+  store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+  const first = store.appendRequirementChange(createLoopRequirementChangeRecord(
+    newRequirementDraft({ runId: "run-002" }),
+  ));
+  assert(first.appended === true, "NEW_REQUIREMENT allowed while no run of the requirement has classified");
+});
+{
+  // Cross-connection: the uniqueness rule holds for concurrent writers.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const storeA = new LoopRunStore(path);
+  const storeB = new LoopRunStore(path);
+  storeA.init();
+  storeB.init();
+  try {
+    storeA.createRun(makeIdentity());
+    storeB.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+    assert(storeA.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft())).appended === true,
+      "first connection classifies NEW_REQUIREMENT");
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.appendRequirementChange(
+      createLoopRequirementChangeRecord(newRequirementDraft({ runId: "run-002" })),
+    ), "second connection cannot re-declare NEW_REQUIREMENT");
+  } finally {
+    storeA.close();
+    storeB.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+{
+  // The cross-run guard adjudicates on verified chains only: a historical
+  // CLASSIFIED row tampered to BLOCKED (stale canonical hash) must surface
+  // as corruption inside the guard, not silently pass a second NEW through.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    store.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft()));
+    store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+    const raw = new Database(path);
+    raw.prepare(
+      "UPDATE loop_requirement_changes SET status = 'BLOCKED', change_kind = NULL WHERE run_id = 'run-001'",
+    ).run();
+    raw.close();
+    expectThrow("STORE_CORRUPT", () => store.appendRequirementChange(
+      createLoopRequirementChangeRecord(newRequirementDraft({ runId: "run-002" })),
+    ), "tampered historical chain surfaces as corruption inside the cross-run guard");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+{
+  // corruption-first, no short-circuit: even though run-001 already holds a
+  // valid CLASSIFIED record (enough to reject the second NEW), the guard must
+  // still verify every related chain — a corrupt later chain surfaces as
+  // STORE_CORRUPT, not ILLEGAL_TRANSITION.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    store.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft()));
+    store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+    store.appendRequirementChange(createLoopRequirementChangeRecord(blockedDraft({ runId: "run-002" })));
+    store.createRun(makeIdentity({ runId: "run-003", createdAt: nextTs() }));
+    const raw = new Database(path);
+    raw.prepare(
+      "UPDATE loop_requirement_changes SET classification_reason = 'tampered reason' WHERE run_id = 'run-002'",
+    ).run();
+    raw.close();
+    expectThrow("STORE_CORRUPT", () => store.appendRequirementChange(
+      createLoopRequirementChangeRecord(newRequirementDraft({ runId: "run-003" })),
+    ), "corrupt related chain surfaces before the uniqueness decision (no short-circuit)");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+{
+  // The guard, the recovery lookups and entry recovery must not trust the
+  // persisted requirement_id column: tampering it breaks the run identity
+  // hash, and every run enumeration now verifies each run's identity through
+  // the verified snapshot path before filtering by the verified identity.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    store.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft()));
+    store.createRun(makeIdentity({ runId: "run-002", createdAt: nextTs() }));
+    const raw = new Database(path);
+    raw.prepare("UPDATE loop_runs SET requirement_id = 'req-hidden' WHERE run_id = 'run-001'").run();
+    raw.close();
+    expectThrow("STORE_CORRUPT", () => store.appendRequirementChange(
+      createLoopRequirementChangeRecord(newRequirementDraft({ runId: "run-002" })),
+    ), "guard verifies run identities, not the persisted requirement column (append)");
+    expectThrow("STORE_CORRUPT", () => store.listRunsByRequirement("req-001"),
+      "run enumeration verifies identities (listRunsByRequirement)");
+    expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-001"),
+      "latest-classification query verifies identities");
+    expectThrow("STORE_CORRUPT", () => recoverRunContext(store, "req-001"),
+      "entry recovery verifies identities");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+{
+  // Transaction-gap regression: a second connection rewrites the run's
+  // requirement_id AND rehashes the change record to match, so the tampered
+  // detail row is self-consistent under the tampered identity. Snapshot
+  // verification and record return happen in ONE transaction, so the read
+  // must fail closed instead of returning the tampered record.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    const record = createLoopRequirementChangeRecord(newRequirementDraft());
+    store.appendRequirementChange(record);
+    const tampered: LoopRequirementChangeRecord = Object.freeze({ ...record, requirementId: "req-tampered" });
+    const raw = new Database(path);
+    raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+    raw.prepare(
+      "UPDATE loop_requirement_changes SET requirement_id = 'req-tampered', canonical_sha256 = ? WHERE change_record_id = ?",
+    ).run(
+      createHash("sha256").update(canonicalizeLoopRequirementChangeRecord(tampered)).digest("hex"),
+      record.changeRecordId,
+    );
+    raw.close();
+    expectThrow("STORE_CORRUPT", () => store.listRequirementChanges("run-001"),
+      "listRequirementChanges verifies identity and records in one transaction");
+    expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-001"),
+      "findLatest verifies identity and records in one transaction");
+    expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-tampered"),
+      "findLatest under the tampered requirement id fails closed");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+console.log("change classification: latest classification query skips blocked-only tails");
+withStore((store) => {
+  store.createRun(makeIdentity());
+  store.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft()));
+  const classified = store.appendRequirementChange(createLoopRequirementChangeRecord(deltaDraft("CHANGE"))).record;
+  store.appendRequirementChange(createLoopRequirementChangeRecord(blockedDraft({ sequence: 3 })));
+  const latest = store.findLatestRequirementChangeByRequirement("req-001");
+  assert(latest !== undefined && latest.changeRecordId === classified.changeRecordId,
+    "query returns the latest classified record, not a trailing blocked record");
+});
+withStore((store) => {
+  store.createRun(makeIdentity());
+  store.appendRequirementChange(createLoopRequirementChangeRecord(blockedDraft()));
+  assert(store.findLatestRequirementChangeByRequirement("req-001") === undefined,
+    "blocked-only requirement reads as unclassified");
 });
 
 console.log("change classification: run state guards");

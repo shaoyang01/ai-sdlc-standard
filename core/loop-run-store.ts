@@ -56,6 +56,7 @@ import {
   validateLoopArtifactRevisionChain,
   type LoopArtifactRevision,
 } from "./loop-artifact-revision";
+import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
 import { NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
@@ -109,6 +110,27 @@ function storageFailure(): never {
  */
 function corrupt(message: string): never {
   throw new LoopRunJournalError("STORE_CORRUPT", `persisted run journal is corrupt: ${message}`);
+}
+
+/**
+ * Construction-time artifact-store bindings, keyed by store instance. Kept in
+ * a module-level WeakMap (not on the instance) so the binding check below is
+ * non-virtual: no subclass override or monkey patch of an instance member can
+ * forge it, and no store capability leaks through the check.
+ */
+const LOOP_RUN_STORE_ARTIFACT_BINDINGS = new WeakMap<LoopRunStore, LoopArtifactStore>();
+
+/**
+ * Non-virtual identity check for the C02-WP2 blob binding: true only when
+ * `runStore` was constructed with `LoopRunStoreOptions.artifactStore` set to
+ * exactly `artifactStore`. Supported entries use this instead of any instance
+ * method so the check cannot be forged by subclassing or monkey patching.
+ */
+export function isLoopRunStoreBoundToArtifactStore(
+  runStore: LoopRunStore,
+  artifactStore: LoopArtifactStore,
+): boolean {
+  return LOOP_RUN_STORE_ARTIFACT_BINDINGS.get(runStore) === artifactStore;
 }
 
 // ── persisted-data validation boundary ──
@@ -698,6 +720,7 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 export class LoopRunStore {
   private readonly dbPath: string;
   private readonly busyTimeoutMs: number;
+  private readonly artifactStore: LoopArtifactStore | null = null;
   private db: Database.Database | null = null;
   private wasOpened = false;
 
@@ -735,6 +758,13 @@ export class LoopRunStore {
     }
     this.dbPath = dbPath;
     this.busyTimeoutMs = busyTimeoutMs;
+    if (options?.artifactStore !== undefined) {
+      if (!(options.artifactStore instanceof LoopArtifactStore)) {
+        throw new LoopRunJournalError("INVALID_INPUT", "artifactStore must be a LoopArtifactStore instance");
+      }
+      this.artifactStore = options.artifactStore;
+      LOOP_RUN_STORE_ARTIFACT_BINDINGS.set(this, options.artifactStore);
+    }
   }
 
   private connection(): Database.Database {
@@ -1556,31 +1586,51 @@ export class LoopRunStore {
    * This is the cross-entry lookup that lets an entry resume the same
    * Requirement by requirementId without reinterpreting confirmed facts.
    * requirementId is external input: validated fail-closed and never echoed.
+   *
+   * The persisted requirement_id column is never trusted for selection:
+   * tampering it would otherwise hide a run from this lookup (and from the
+   * cross-run NEW_REQUIREMENT guard) without touching its identity hash.
+   * Every run row is read through the verified snapshot path (identity hash,
+   * event replay, change chain and revision chain) and filtered by the
+   * verified identity instead — a tampered row fails closed as STORE_CORRUPT.
    */
   listRunsByRequirement(requirementId: string): readonly LoopRunSnapshot[] {
     validateRequirementId(requirementId);
     const db = this.connection();
     try {
-      return db.transaction((): readonly LoopRunSnapshot[] => {
-        const rows = db
-          .prepare(
-            "SELECT run_id FROM loop_runs WHERE requirement_id = ? ORDER BY created_at ASC, run_id ASC",
-          )
-          .all(requirementId) as ReadonlyArray<{ run_id: string }>;
-        return rows.map((row) => {
-          const snapshot = this.readRunSnapshotInTransaction(db, row.run_id);
-          if (snapshot === undefined) {
-            // A listed row must always resolve to a verified snapshot.
-            throw new LoopRunJournalError("STORE_CORRUPT", "requirement run row missing verified snapshot");
-          }
-          return snapshot;
-        });
-      })() as readonly LoopRunSnapshot[];
+      return db.transaction((): readonly LoopRunSnapshot[] =>
+        this.listRunsByRequirementInTransaction(db, requirementId))() as readonly LoopRunSnapshot[];
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
       if (isBusyCode(sqliteErrorCode(error))) busy();
       storageFailure();
     }
+  }
+
+  /**
+   * In-transaction implementation of listRunsByRequirement: every run row is
+   * read through the verified snapshot path (identity hash, event replay,
+   * change chain and revision chain) and filtered by the verified identity.
+   */
+  private listRunsByRequirementInTransaction(
+    db: Database.Database,
+    requirementId: string,
+  ): readonly LoopRunSnapshot[] {
+    const rows = db
+      .prepare("SELECT run_id FROM loop_runs ORDER BY created_at ASC, run_id ASC")
+      .all() as ReadonlyArray<{ run_id: string }>;
+    const snapshots: LoopRunSnapshot[] = [];
+    for (const row of rows) {
+      const snapshot = this.readRunSnapshotInTransaction(db, row.run_id);
+      if (snapshot === undefined) {
+        // A listed row must always resolve to a verified snapshot.
+        throw new LoopRunJournalError("STORE_CORRUPT", "requirement run row missing verified snapshot");
+      }
+      if (snapshot.state.identity.requirementId === requirementId) {
+        snapshots.push(snapshot);
+      }
+    }
+    return snapshots;
   }
 
   /**
@@ -1625,7 +1675,7 @@ export class LoopRunStore {
         if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "change records cannot advance while a capability execution is active");
         }
-        const current = this.readRequirementChangesInTransaction(db, record.runId);
+        const current = this.readRequirementChangesInTransaction(db, record.runId, snapshot.state.identity.requirementId);
         const existing = current.find((item) => item.changeRecordId === record.changeRecordId);
         if (existing !== undefined) {
           if (
@@ -1638,6 +1688,42 @@ export class LoopRunStore {
         }
         if (current.some((item) => item.sequence === record.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "requirement change sequence is occupied");
+        }
+        // Cross-run NEW_REQUIREMENT uniqueness: NEW_REQUIREMENT is only legal
+        // while the requirement has no classified change record in ANY run.
+        // The chain validator covers the current run; this check binds the
+        // rule across runs of the same requirement (verified run identity is
+        // authoritative, so the requirement is resolved through loop_runs).
+        // The guard adjudicates only on fully verified chains: every related
+        // run's change chain is read through the verified reader inside this
+        // same immediate transaction, so a tampered historical row (e.g. a
+        // CLASSIFIED record rewritten to BLOCKED with a stale canonical hash)
+        // surfaces here as STORE_CORRUPT instead of silently passing.
+        if (record.changeKind === "NEW_REQUIREMENT") {
+          // corruption-first: every run row is read through the verified
+          // snapshot path (never the persisted requirement_id column) and
+          // every related chain is fully read and verified before the
+          // uniqueness decision — no short-circuit. A tampered identity
+          // column or a corrupt related chain surfaces here as STORE_CORRUPT
+          // even when an earlier run already holds a valid CLASSIFIED record.
+          const allRuns = db.prepare(
+            "SELECT run_id FROM loop_runs ORDER BY created_at ASC, run_id ASC",
+          ).all() as ReadonlyArray<{ run_id: string }>;
+          const relatedChains: Array<readonly LoopRequirementChangeRecord[]> = [];
+          for (const row of allRuns) {
+            if (row.run_id === record.runId) continue;
+            const related = this.readRunSnapshotInTransaction(db, row.run_id);
+            if (related === undefined) {
+              throw new LoopRunJournalError("STORE_CORRUPT", "run row missing verified snapshot inside change guard");
+            }
+            if (related.state.identity.requirementId !== snapshot.state.identity.requirementId) continue;
+            relatedChains.push(this.readRequirementChangesInTransaction(db, row.run_id, related.state.identity.requirementId));
+          }
+          const hasPriorClassification = relatedChains.some((chain) =>
+            chain.some((item) => item.status === "CLASSIFIED"));
+          if (hasPriorClassification) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requirement already has a classified change record in another run");
+          }
         }
         try {
           validateLoopRequirementChangeChain([...current, record], record.runId);
@@ -1656,7 +1742,13 @@ export class LoopRunStore {
       if (isBusyCode(code)) busy();
       if (isConstraintCode(code)) {
         try {
-          const current = this.readRequirementChangesInTransaction(db, record.runId);
+          const current = db.transaction(() => {
+            const snapshot = this.readRunSnapshotInTransaction(db, record.runId);
+            if (snapshot === undefined) {
+              throw new LoopRunJournalError("STORE_CORRUPT", "run row missing verified snapshot inside conflict reclassification");
+            }
+            return this.readRequirementChangesInTransaction(db, record.runId, snapshot.state.identity.requirementId);
+          })() as readonly LoopRequirementChangeRecord[];
           const existing = current.find((item) => item.changeRecordId === record.changeRecordId);
           if (
             existing !== undefined &&
@@ -1679,13 +1771,19 @@ export class LoopRunStore {
     }
   }
 
-  /** Read and verify the complete requirement change chain for one run. */
+  /**
+   * Read and verify the complete requirement change chain for one run. The
+   * snapshot verification and the record read happen in ONE transaction, so
+   * no second connection can rewrite identity or records between them.
+   */
   listRequirementChanges(runId: string): readonly LoopRequirementChangeRecord[] {
-    const snapshot = this.readSnapshot(runId);
-    if (snapshot === undefined) return Object.freeze([]);
     const db = this.connection();
     try {
-      return db.transaction(() => this.readRequirementChangesInTransaction(db, runId))() as readonly LoopRequirementChangeRecord[];
+      return db.transaction((): readonly LoopRequirementChangeRecord[] => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return Object.freeze([]);
+        return this.readRequirementChangesInTransaction(db, runId, snapshot.state.identity.requirementId);
+      })() as readonly LoopRequirementChangeRecord[];
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
       if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -1694,20 +1792,71 @@ export class LoopRunStore {
   }
 
   /**
-   * Finds the latest verified requirement change record for a requirement,
-   * scanning its runs newest first, or undefined when no change has been
-   * classified yet. This is the cross-entry read that lets another entry
-   * recover the same classification and confirmed-fact boundary without
-   * reinterpreting confirmed facts.
+   * Finds the latest verified CLASSIFIED requirement change record for a
+   * requirement, scanning its runs newest first and each chain latest-first,
+   * or undefined when the requirement has no classification yet. BLOCKED
+   * records carry no classification (kind/scope/facts are all null), so they
+   * are skipped: a trailing BLOCKED never shadows the latest classification,
+   * and a blocked-only requirement reads as unclassified. This is the
+   * cross-entry read that lets another entry recover the same classification
+   * and confirmed-fact boundary without reinterpreting confirmed facts.
    */
   findLatestRequirementChangeByRequirement(requirementId: string): LoopRequirementChangeRecord | undefined {
     validateRequirementId(requirementId);
-    const runs = this.listRunsByRequirement(requirementId);
-    for (let index = runs.length - 1; index >= 0; index -= 1) {
-      const records = this.listRequirementChanges(runs[index]!.state.identity.runId);
-      if (records.length > 0) return records[records.length - 1]!;
+    const db = this.connection();
+    try {
+      // One transaction for the whole scan: run identity verification and
+      // change-chain reads cannot be split by a second connection.
+      return db.transaction((): LoopRequirementChangeRecord | undefined => {
+        const runs = this.listRunsByRequirementInTransaction(db, requirementId);
+        for (let index = runs.length - 1; index >= 0; index -= 1) {
+          const identity = runs[index]!.state.identity;
+          const records = this.readRequirementChangesInTransaction(db, identity.runId, identity.requirementId);
+          for (let recordIndex = records.length - 1; recordIndex >= 0; recordIndex -= 1) {
+            if (records[recordIndex]!.status === "CLASSIFIED") return records[recordIndex]!;
+          }
+        }
+        return undefined;
+      })() as LoopRequirementChangeRecord | undefined;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
     }
-    return undefined;
+  }
+
+  /**
+   * Cross-check a revision's immutable ref/digest against the physical blob
+   * in the bound artifact store (C02-WP2 blob binding; Decision-040 review
+   * round 3). No-op when no artifact store is bound. On the append path a
+   * missing or digest-drifted blob rejects the transition
+   * (ILLEGAL_TRANSITION); on read paths it is journal corruption
+   * (STORE_CORRUPT). Corrupt blob content fails closed as STORE_CORRUPT on
+   * both paths; artifact-store I/O failures translate to STORE_FAILURE.
+   * External input is never echoed.
+   */
+  private verifyRevisionBlob(record: LoopArtifactRevision, mode: "append" | "read"): void {
+    if (this.artifactStore === null) return;
+    try {
+      this.artifactStore.read(record.artifactRef, record.digest);
+    } catch (error) {
+      if (error instanceof LoopArtifactStoreError) {
+        if (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH") {
+          if (mode === "append") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "artifact revision blob is missing in the bound artifact store",
+            );
+          }
+          corrupt("artifact revision blob is missing in the bound artifact store");
+        }
+        if (error.code === "ARTIFACT_CORRUPT") {
+          corrupt("artifact revision blob is corrupt in the bound artifact store");
+        }
+        storageFailure();
+      }
+      storageFailure();
+    }
   }
 
   /**
@@ -1751,7 +1900,7 @@ export class LoopRunStore {
         if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revisions cannot advance while a capability execution is active");
         }
-        const current = this.readArtifactRevisionsInTransaction(db, record.runId);
+        const current = this.readArtifactRevisionsInTransaction(db, record.runId, snapshot.state.identity.requirementId);
         const existing = current.find((item) => item.revisionId === record.revisionId);
         if (existing !== undefined) {
           if (
@@ -1786,6 +1935,11 @@ export class LoopRunStore {
         if (producer.gateResult !== record.gateResult) {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revision Gate result does not match the producer execution");
         }
+        // Blob binding (fifth binding): the producer journal match only proves
+        // the claimed output triple; the physical blob must also exist in the
+        // bound artifact store with a matching digest before the revision may
+        // become the node's ACTIVE current.
+        this.verifyRevisionBlob(record, "append");
         const nodeChain = current.filter((item) => item.nodeId === record.nodeId);
         const previousCurrent = nodeChain[nodeChain.length - 1];
         if (
@@ -1878,7 +2032,13 @@ export class LoopRunStore {
       if (isBusyCode(code)) busy();
       if (isConstraintCode(code)) {
         try {
-          const current = this.readArtifactRevisionsInTransaction(db, record.runId);
+          const current = db.transaction(() => {
+            const snapshot = this.readRunSnapshotInTransaction(db, record.runId);
+            if (snapshot === undefined) {
+              throw new LoopRunJournalError("STORE_CORRUPT", "run row missing verified snapshot inside conflict reclassification");
+            }
+            return this.readArtifactRevisionsInTransaction(db, record.runId, snapshot.state.identity.requirementId);
+          })() as readonly LoopArtifactRevision[];
           const existing = current.find((item) => item.revisionId === record.revisionId);
           if (
             existing !== undefined &&
@@ -1941,7 +2101,7 @@ export class LoopRunStore {
         if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "stale markings cannot advance while a capability execution is active");
         }
-        const current = this.readArtifactRevisionsInTransaction(db, runId);
+        const current = this.readArtifactRevisionsInTransaction(db, runId, snapshot.state.identity.requirementId);
         const target = current.find((item) => item.revisionId === revisionId);
         if (target === undefined) {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "no matching artifact revision exists");
@@ -1969,13 +2129,19 @@ export class LoopRunStore {
     }
   }
 
-  /** Read and verify the complete artifact revision set for one run. */
+  /**
+   * Read and verify the complete artifact revision set for one run. The
+   * snapshot verification and the record read happen in ONE transaction, so
+   * no second connection can rewrite identity or records between them.
+   */
   listArtifactRevisions(runId: string): readonly LoopArtifactRevision[] {
-    const snapshot = this.readSnapshot(runId);
-    if (snapshot === undefined) return Object.freeze([]);
     const db = this.connection();
     try {
-      return db.transaction(() => this.readArtifactRevisionsInTransaction(db, runId))() as readonly LoopArtifactRevision[];
+      return db.transaction((): readonly LoopArtifactRevision[] => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return Object.freeze([]);
+        return this.readArtifactRevisionsInTransaction(db, runId, snapshot.state.identity.requirementId);
+      })() as readonly LoopArtifactRevision[];
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
       if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -2000,12 +2166,15 @@ export class LoopRunStore {
     if (!(NODE_CAPABILITY_IDS as readonly string[]).includes(nodeId)) {
       throw new LoopRunJournalError("INVALID_INPUT", "nodeId must be a canonical capability id");
     }
-    const snapshot = this.readSnapshot(runId);
-    if (snapshot === undefined) return undefined;
     const db = this.connection();
     try {
+      // Snapshot verification, revision read and pointer resolution happen in
+      // ONE transaction: no second connection can rewrite identity or records
+      // between verifying the run and returning its current revision.
       return db.transaction((): LoopArtifactRevision | undefined => {
-        const records = this.readArtifactRevisionsInTransaction(db, runId);
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return undefined;
+        const records = this.readArtifactRevisionsInTransaction(db, runId, snapshot.state.identity.requirementId);
         const row = db.prepare(
           "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
         ).get(runId, nodeId) as { revision_id?: unknown } | undefined;
@@ -2201,6 +2370,7 @@ export class LoopRunStore {
   private readRequirementChangesInTransaction(
     db: Database.Database,
     runId: string,
+    verifiedRequirementId: string,
   ): readonly LoopRequirementChangeRecord[] {
     const rows = db.prepare(
       "SELECT * FROM loop_requirement_changes WHERE run_id = ? ORDER BY sequence ASC",
@@ -2222,16 +2392,12 @@ export class LoopRunStore {
     // Cross-bind every record to the owning run identity: the canonical hash
     // only proves a record is internally consistent, so a tampered row with a
     // recomputed hash must still fail closed when its requirementId drifts
-    // from the verified run identity.
-    const runRequirement = db.prepare(
-      "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
-    ).get(runId) as { requirement_id?: unknown } | undefined;
-    if (runRequirement === undefined || typeof runRequirement.requirement_id !== "string") {
-      corrupt("requirement change run identity is missing");
-    }
-    const runRequirementId: string = runRequirement.requirement_id;
+    // from the verified run identity. The identity is ALWAYS supplied by the
+    // caller from a snapshot verified inside the same transaction — the
+    // persisted loop_runs.requirement_id column is never re-queried here, so
+    // a verified snapshot and the returned records cannot drift apart.
     for (const record of records) {
-      if (record.requirementId !== runRequirementId) {
+      if (record.requirementId !== verifiedRequirementId) {
         corrupt("requirement change does not match the run identity");
       }
     }
@@ -2344,6 +2510,7 @@ export class LoopRunStore {
   private readArtifactRevisionsInTransaction(
     db: Database.Database,
     runId: string,
+    verifiedRequirementId: string,
   ): readonly LoopArtifactRevision[] {
     const rows = db.prepare(
       "SELECT * FROM loop_artifact_revisions WHERE run_id = ? ORDER BY node_id ASC, sequence ASC",
@@ -2365,16 +2532,11 @@ export class LoopRunStore {
     // Cross-bind every revision to the owning run identity: the canonical
     // hash only proves a revision is internally consistent, so a tampered row
     // with a recomputed hash must still fail closed when its requirementId
-    // drifts from the verified run identity.
-    const runRequirement = db.prepare(
-      "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
-    ).get(runId) as { requirement_id?: unknown } | undefined;
-    if (runRequirement === undefined || typeof runRequirement.requirement_id !== "string") {
-      corrupt("artifact revision run identity is missing");
-    }
-    const runRequirementId: string = runRequirement.requirement_id;
+    // drifts from the verified run identity. The identity is ALWAYS supplied
+    // by the caller from a snapshot verified inside the same transaction —
+    // the persisted loop_runs.requirement_id column is never re-queried here.
     for (const record of records) {
-      if (record.requirementId !== runRequirementId) {
+      if (record.requirementId !== verifiedRequirementId) {
         corrupt("artifact revision does not match the run identity");
       }
     }
@@ -2404,6 +2566,12 @@ export class LoopRunStore {
       if (producer.gateResult !== record.gateResult) {
         corrupt("artifact revision Gate result does not match the producer execution");
       }
+    }
+    // Re-verify the blob binding on every read: a persisted revision whose
+    // physical blob never existed, was deleted after the append, or no longer
+    // matches the persisted digest must fail closed on every read path.
+    for (const record of records) {
+      this.verifyRevisionBlob(record, "read");
     }
     try {
       validateLoopArtifactRevisionChain(records, runId);
@@ -2636,11 +2804,11 @@ export class LoopRunStore {
     this.readCapabilityExecutionsInTransaction(db, row.run_id);
     // C02 WP-1: requirement change records are part of the same durable run;
     // every snapshot read verifies the change chain before returning state.
-    this.readRequirementChangesInTransaction(db, row.run_id);
+    this.readRequirementChangesInTransaction(db, row.run_id, identity.requirementId);
     // C02 WP-2: artifact revisions and the per-node current pointer are part
     // of the same durable run; every snapshot read verifies the revision
     // chain and pointer consistency (corruption-first) before returning state.
-    this.readArtifactRevisionsInTransaction(db, row.run_id);
+    this.readArtifactRevisionsInTransaction(db, row.run_id, identity.requirementId);
     return Object.freeze({ state, events: frozenEvents });
   }
 }
