@@ -2363,6 +2363,33 @@ export class LoopRunStore {
         corrupt("artifact revision does not match the run identity");
       }
     }
+    // Re-verify the producer execution binding on every read (Decision-040
+    // item 4). The canonical hash only proves a row is internally consistent;
+    // a rehashed tampered row must still fail closed when its producer
+    // execution is missing, not succeeded, or its node, output triple or Gate
+    // result drifted from the verified capability execution stream.
+    const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, runId);
+    for (const record of records) {
+      const producer = capabilityExecutions.find(
+        (item) => item.executionEventId === record.producerExecutionId,
+      );
+      if (producer === undefined || producer.status !== "succeeded") {
+        corrupt("artifact revision producer execution is missing or not succeeded");
+      }
+      if (producer.capability !== record.nodeId) {
+        corrupt("artifact revision node does not match the producer execution");
+      }
+      if (
+        producer.outputArtifactRef !== record.artifactRef ||
+        producer.outputArtifactVersion !== record.semver ||
+        producer.outputDigest !== record.digest
+      ) {
+        corrupt("artifact revision does not match the producer execution output");
+      }
+      if (producer.gateResult !== record.gateResult) {
+        corrupt("artifact revision Gate result does not match the producer execution");
+      }
+    }
     try {
       validateLoopArtifactRevisionChain(records, runId);
     } catch (error) {

@@ -6,11 +6,15 @@
 // detection and v3→v4 migration. All databases live in disposable temp
 // directories outside the repository. No Git, no network, no Agent.
 //
-// Note on supersede fixtures: the C01 capability chain admits exactly one
-// succeeded execution per capability per run (re-execution authority arrives
-// with C02-WP4). Tests that need an earlier revision of the same node seed a
-// fully consistent revision row directly, simulating a WP4-era journal
-// state, and then exercise the public append path for the new revision.
+// Note on same-node revision chains: the C01 capability chain admits exactly
+// one succeeded execution per capability per run (re-execution authority
+// arrives with C02-WP4), and every persisted revision is re-verified against
+// its producer execution on every read (Decision-040 item 4, review round 1).
+// A readable journal therefore cannot contain two revisions of one node: the
+// second revision would require a second succeeded execution of the same
+// capability. Supersede/pointer-advance success paths are WP4-era semantics;
+// they are covered here at the chain-validator level, and their store-level
+// coverage arrives with the WP4 re-execution chain extension.
 
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
@@ -108,6 +112,13 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 /** Drives the canonical single-pass capability chain inside one run. */
 function makeCapabilityDriver(store: LoopRunStore, runId: string) {
   let sequence = 0;
+  const attempts = new Map<NodeCapabilityId, number>();
+  /** Begin the next attempt of a capability (retry after a retryable failure). */
+  function nextAttempt(capability: NodeCapabilityId): number {
+    const attempt = (attempts.get(capability) ?? 0) + 1;
+    attempts.set(capability, attempt);
+    return attempt;
+  }
   let predecessor = {
     ref: `loop-artifact:v1:requirement_summary:sha256:${dg("b")}`,
     version: "1.0.0",
@@ -154,15 +165,17 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
   return {
     /** Append only the started event, leaving an active execution claim. */
     start(capability: NodeCapabilityId): LoopCapabilityExecutionEvent {
-      const started = event(capability, "started", {});
+      const started = event(capability, "started", { attempt: nextAttempt(capability) });
       store.appendCapabilityExecution(started);
       return started;
     },
     /** Append started + failed(retryable) and return the failed event. */
     fail(capability: NodeCapabilityId): LoopCapabilityExecutionEvent {
-      const started = event(capability, "started", {});
+      const attempt = nextAttempt(capability);
+      const started = event(capability, "started", { attempt });
       store.appendCapabilityExecution(started);
       const failed = event(capability, "failed", {
+        attempt,
         nextStepEligibility: "BLOCKED",
         errorCode: "PROBE_FAILURE",
         retryable: true,
@@ -179,10 +192,12 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     ): LoopCapabilityExecutionEvent {
       const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(capability);
       const gateResult = isGate ? gate ?? "PASS" : "NOT_APPLICABLE";
-      const started = event(capability, "started", {});
+      const attempt = nextAttempt(capability);
+      const started = event(capability, "started", { attempt });
       store.appendCapabilityExecution(started);
       const outputRef = `loop-artifact:v1:capability_output:sha256:${output.digest}`;
       const succeeded = event(capability, "succeeded", {
+        attempt,
         outputArtifactRef: outputRef,
         outputArtifactVersion: output.version,
         outputDigest: output.digest,
@@ -230,35 +245,46 @@ function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
 }
 
 /**
- * Seed a fully consistent earlier revision + current pointer directly,
- * simulating a WP4-era journal state (the C01 chain allows only one
- * succeeded execution per capability per run). The row carries a correctly
- * recomputed canonical hash, so all verified reads accept it.
+ * Overwrite a persisted revision row with tampered content and its recomputed
+ * canonical hash, bypassing the write API. The row is internally consistent
+ * afterwards, so only the read-path cross-checks can still reject it.
  */
-function seedRevisionWithPointer(dir: string, record: LoopArtifactRevision): void {
+function tamperRevisionWithRehash(dir: string, originalRevisionId: string, tampered: LoopArtifactRevision): void {
   const db = new Database(join(dir, "journal.db"));
   try {
+    // Tampering bypasses the write API and may rekey the row (revision_id is
+    // referenced by the pointer table), so foreign key enforcement is
+    // disabled on this raw connection — the drift it creates is exactly what
+    // the read-path cross-checks must then reject.
+    db.pragma("foreign_keys = OFF");
     db.prepare(
-      `INSERT INTO loop_artifact_revisions (
-        revision_id, run_id, requirement_id, node_id, sequence, schema_version,
-        generation, stable_path, artifact_kind, semver, artifact_ref, digest,
-        producer_execution_id, gate_result, validity, superseded_by, created_at,
-        canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `UPDATE loop_artifact_revisions SET
+        revision_id = ?, run_id = ?, requirement_id = ?, node_id = ?, sequence = ?,
+        schema_version = ?, generation = ?, stable_path = ?, artifact_kind = ?,
+        semver = ?, artifact_ref = ?, digest = ?, producer_execution_id = ?,
+        gate_result = ?, validity = ?, superseded_by = ?, created_at = ?,
+        canonical_sha256 = ?
+      WHERE revision_id = ?`,
     ).run(
-      record.revisionId, record.runId, record.requirementId, record.nodeId,
-      record.sequence, record.schemaVersion, record.generation, record.stablePath,
-      record.artifactKind, record.semver, record.artifactRef, record.digest,
-      record.producerExecutionId, record.gateResult, record.validity,
-      record.supersededBy, record.createdAt,
-      createHash("sha256").update(canonicalizeLoopArtifactRevision(record)).digest("hex"),
+      tampered.revisionId, tampered.runId, tampered.requirementId, tampered.nodeId,
+      tampered.sequence, tampered.schemaVersion, tampered.generation, tampered.stablePath,
+      tampered.artifactKind, tampered.semver, tampered.artifactRef, tampered.digest,
+      tampered.producerExecutionId, tampered.gateResult, tampered.validity,
+      tampered.supersededBy, tampered.createdAt,
+      createHash("sha256").update(canonicalizeLoopArtifactRevision(tampered)).digest("hex"),
+      originalRevisionId,
     );
-    db.prepare(
-      "INSERT INTO loop_artifact_current (run_id, node_id, revision_id, updated_at) VALUES (?, ?, ?, ?)",
-    ).run(record.runId, record.nodeId, record.revisionId, record.createdAt);
   } finally {
     db.close();
   }
+}
+
+/** Assert a tampered revision state fails closed on all three read paths. */
+function expectCorruptOnAllReadPaths(store: LoopRunStore, nodeId: NodeCapabilityId, message: string): void {
+  expectThrow("STORE_CORRUPT", () => store.listArtifactRevisions("run-001"), `${message} (chain read)`);
+  expectThrow("STORE_CORRUPT", () => store.getCurrentArtifactRevision("run-001", nodeId),
+    `${message} (current read)`);
+  expectThrow("STORE_CORRUPT", () => store.getSnapshot("run-001"), `${message} (snapshot read)`);
 }
 
 function expectThrow(code: string, fn: () => unknown, message: string): void {
@@ -488,7 +514,7 @@ console.log("artifact revision: adversarial input boundaries fail closed");
     "sparse upstream array rejected");
   const sentinel = "SENTINEL-INPUT-8f2c11";
   try {
-    createLoopArtifactRevision({ ...draft, stablePath: `${sentinel} ` });
+    createLoopArtifactRevision({ ...draft, stablePath: `${sentinel}\x00` });
     assert(false, "sentinel input not echoed (no error thrown)");
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -559,6 +585,19 @@ console.log("artifact revision: per-node progression and supersede linkage fail 
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
     Object.freeze({ ...dangling, upstreamRevisionIds: Object.freeze(["run-001:revision:tech-design:9"]) }) as LoopArtifactRevision,
   ], "run-001"), "dangling upstream reference rejected");
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
+    rev(1, "1.0.0", at(1)), rev(2, "1.1.0", at(2)),
+  ], "run-001"), "a non-terminal revision still ACTIVE rejected");
+  validateLoopArtifactRevisionChain([
+    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:tech-design:2" }),
+    rev(2, "1.1.0", at(2)),
+  ], "run-001");
+  assert(true, "superseded history with an active tip passes validation");
+  validateLoopArtifactRevisionChain([
+    rev(1, "1.0.0", at(1), { validity: "STALE" }),
+    rev(2, "1.1.0", at(2)),
+  ], "run-001");
+  assert(true, "a stale non-terminal revision keeps its validity when the tip advances");
 }
 
 console.log("artifact revision: store append binds run, requirement and producer execution");
@@ -713,56 +752,54 @@ console.log("artifact revision: concurrent writers use CAS/conflict semantics");
   }
 }
 
-console.log("artifact revision: supersede and pointer advance are atomic");
+console.log("artifact revision: same-node advance requires WP4-era execution evidence");
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  // The real execution produced version 1.1.0; the seeded row is the WP4-era
-  // earlier 1.0.0 revision of the same node.
-  const design = driver.succeed("tech-design", { version: "1.1.0", digest: dg("d") });
-  const earlier = createLoopArtifactRevision(revisionDraft({
+  const design = driver.succeed("tech-design", { version: "1.0.0", digest: dg("9") });
+  const first = createLoopArtifactRevision(revisionDraft({
     nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
   }));
-  seedRevisionWithPointer(dir, earlier);
-  const newer = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  const appended = store.appendArtifactRevision(newer);
-  assert(appended.appended === true, "advancing revision appended");
-  const chain = store.listArtifactRevisions("run-001");
-  const oldRecord = chain.find((item) => item.revisionId === earlier.revisionId)!;
-  assert(oldRecord.validity === "SUPERSEDED" && oldRecord.supersededBy === newer.revisionId,
-    "previous current is superseded with supersededBy backfilled in the same transaction");
-  const current = store.getCurrentArtifactRevision("run-001", "tech-design");
-  assert(current !== undefined && current.revisionId === newer.revisionId && current.validity === "ACTIVE",
-    "current pointer advanced to the new revision");
+  assert(store.appendArtifactRevision(first).appended === true, "first revision appended");
   const probe = new Database(join(dir, "journal.db"), { readonly: true });
   const pointerRow = probe.prepare(
     "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
   ).get("run-001", "tech-design") as { revision_id: string };
   probe.close();
-  assert(pointerRow.revision_id === newer.revisionId, "persisted pointer row targets the new revision");
-  const replay = store.appendArtifactRevision(newer);
+  assert(pointerRow.revision_id === first.revisionId, "persisted pointer row targets the revision");
+  const replay = store.appendArtifactRevision(first);
   assert(replay.appended === false, "replay of the still-active revision stays idempotent");
-});
-withRunningStore((store, dir) => {
-  const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", { version: "0.9.0", digest: dg("d") });
-  const earlier = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  seedRevisionWithPointer(dir, earlier);
+  // A second revision of the same node must bind a new succeeded execution of
+  // that capability. The C01 chain admits exactly one, so a candidate bound
+  // to the existing producer either claims an output the producer never
+  // produced or carries the producer's exact output triple — which pins its
+  // semver to the current revision and cannot advance. The real path is the
+  // WP4 re-execution chain extension.
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "0.9.0", digest: dg("d"),
+    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }))), "semver that does not advance past the current revision rejected");
+  }))), "revision claiming an output the producer never produced rejected");
+  expectThrow("EVENT_SEQUENCE_CONFLICT", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "tech-design", sequence: 2, semver: "1.0.0", digest: dg("9"),
+    producerExecutionId: design.executionEventId, createdAt: nextTs(),
+  }))), "producer-pinned candidate semver is already occupied by the current revision");
   const chain = store.listArtifactRevisions("run-001");
-  assert(chain.length === 1 && chain[0]!.validity === "ACTIVE", "rejected append leaves the chain untouched");
+  assert(chain.length === 1 && chain[0]!.validity === "ACTIVE", "rejected advances leave the chain untouched");
+  const current = store.getCurrentArtifactRevision("run-001", "tech-design");
+  assert(current !== undefined && current.revisionId === first.revisionId && current.validity === "ACTIVE",
+    "current pointer still targets the first revision");
 });
+
+// Supersede-success, stale-pointer advance and superseded-upstream scenarios
+// require a readable journal with two revisions of one node. Post round-1
+// review every revision is re-verified against its producer execution on
+// every read, and the C01 capability chain admits one succeeded execution
+// per capability per run — so such states cannot exist until C02-WP4 extends
+// the chain with re-execution authority. The validity-machine rules involved
+// (supersede backfill, non-terminal ACTIVE rejection, STALE preservation) are
+// covered at the chain-validator level above; non-current/non-active upstream
+// rejection remains covered below by the nonexistent and STALE variants.
 
 console.log("artifact revision: upstream consumption is fail-closed");
 withRunningStore((store) => {
@@ -784,35 +821,6 @@ withRunningStore((store) => {
     producerExecutionId: design.executionEventId,
     upstreamRevisionIds: ["run-001:revision:requirement-intake:9"],
   }))), "nonexistent upstream revision rejected");
-});
-withRunningStore((store, dir) => {
-  // Superseded upstream: after tech-design advances to sequence 2, a consumer
-  // referencing the superseded sequence-1 revision must be rejected.
-  const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", { version: "1.1.0", digest: dg("d") });
-  const earlier = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  seedRevisionWithPointer(dir, earlier);
-  store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  })));
-  const challenge = driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
-  expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-challenge", sequence: 1, semver: "1.0.0", digest: dg("e"),
-    producerExecutionId: challenge.executionEventId,
-    upstreamRevisionIds: [earlier.revisionId],
-  }))), "superseded upstream revision rejected");
-  const current = store.getCurrentArtifactRevision("run-001", "tech-design")!;
-  const accepted = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-challenge", sequence: 1, semver: "1.0.0", digest: dg("e"),
-    producerExecutionId: challenge.executionEventId,
-    upstreamRevisionIds: [current.revisionId],
-  })));
-  assert(accepted.appended === true, "current upstream revision accepted");
 });
 withRunningStore((store) => {
   // Stale upstream: the pointer still targets the STALE revision, but a STALE
@@ -852,52 +860,8 @@ withRunningStore((store) => {
     "current read fails closed while the pointer targets a non-active revision");
   expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:tech-design:1"),
     "marking a nonexistent revision rejected");
-  expectThrow("INVALID_INPUT", () => store.markArtifactRevisionStale("run-001", revision.revisionId),
+  expectThrow("INVALID_INPUT", () => store.markArtifactRevisionStale("run-001\x05", revision.revisionId),
     "mark input validated fail-closed");
-});
-withRunningStore((store, dir) => {
-  // A STALE current does not block recovery: the pointer CAS advances past it
-  // and the stale revision keeps its validity (no STALE → SUPERSEDED edge).
-  const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", { version: "1.1.0", digest: dg("d") });
-  const earlier = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  seedRevisionWithPointer(dir, earlier);
-  store.markArtifactRevisionStale("run-001", earlier.revisionId);
-  const newer = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  assert(store.appendArtifactRevision(newer).appended === true, "append advances past a stale current");
-  const chain = store.listArtifactRevisions("run-001");
-  const stale = chain.find((item) => item.revisionId === earlier.revisionId)!;
-  assert(stale.validity === "STALE" && stale.supersededBy === null,
-    "stale revision keeps its validity when the pointer advances past it");
-  const current = store.getCurrentArtifactRevision("run-001", "tech-design");
-  assert(current !== undefined && current.revisionId === newer.revisionId,
-    "current read recovers after the pointer advances");
-  const markedNew = store.markArtifactRevisionStale("run-001", newer.revisionId);
-  assert(markedNew.marked === true && markedNew.record.validity === "STALE",
-    "the state machine applies to any active revision, old or new");
-});
-withRunningStore((store, dir) => {
-  const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", { version: "1.1.0", digest: dg("d") });
-  const earlier = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  }));
-  seedRevisionWithPointer(dir, earlier);
-  store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
-    producerExecutionId: design.executionEventId, createdAt: nextTs(),
-  })));
-  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", earlier.revisionId),
-    "marking a superseded revision regresses the state machine and is rejected");
 });
 
 console.log("artifact revision: run state guards");
@@ -1071,6 +1035,101 @@ withRunningStore((store, dir) => {
     "directly forged persisted revision raises STORE_CORRUPT");
   expectThrow("STORE_CORRUPT", () => store.getSnapshot("run-001"),
     "forged revision detected through snapshot reads");
+});
+
+console.log("artifact revision: producer binding drift with a recomputed hash is corrupt on every read path");
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const intake = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
+    producerExecutionId: intake.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({
+    ...revision, producerExecutionId: "run-001:capability:99:succeeded",
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "requirement-intake",
+    "rehashed revision bound to a nonexistent producer execution rejected");
+});
+withRunningStore((store, dir) => {
+  // A retryable failure followed by a retry gives the run a failed execution
+  // and a succeeded execution of the same capability; rebinding the revision
+  // to the failed one must fail closed even with a recomputed hash.
+  const driver = makeCapabilityDriver(store, "run-001");
+  const failed = driver.fail("requirement-intake");
+  const intake = driver.succeed("requirement-intake", INTAKE_OUT);
+  assert(intake.attempt === 2, "retry succeeds as attempt two");
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
+    producerExecutionId: intake.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({
+    ...revision, producerExecutionId: failed.executionEventId,
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "requirement-intake",
+    "rehashed revision rebound to a failed producer execution rejected");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const intake = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
+    producerExecutionId: intake.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({
+    ...revision,
+    artifactRef: `loop-artifact:v1:capability_output:sha256:${dg("7")}`,
+    digest: dg("7"),
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "requirement-intake",
+    "rehashed revision with a drifted output ref/digest rejected");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const intake = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
+    producerExecutionId: intake.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({ ...revision, semver: "1.0.1" }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "requirement-intake",
+    "rehashed revision with a drifted output version rejected");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  driver.succeed("requirement-intake", INTAKE_OUT);
+  driver.succeed("tech-design", DESIGN_OUT);
+  driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
+  const review = driver.succeed("solution-review", { version: "1.0.0", digest: dg("f") }, "PASS");
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("f"),
+    producerExecutionId: review.executionEventId, gateResult: "PASS",
+  }))).record;
+  const tampered = Object.freeze({ ...revision, gateResult: "PASS_WITH_RISK" }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "solution-review",
+    "rehashed revision with a drifted Gate result rejected");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  driver.succeed("requirement-intake", INTAKE_OUT);
+  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    producerExecutionId: design.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({
+    ...revision,
+    revisionId: "run-001:revision:solution-challenge:1",
+    nodeId: "solution-challenge",
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "tech-design",
+    "rehashed revision rebound to another node rejected");
 });
 
 console.log("artifact revision: another entry reads the same revision authority");

@@ -48,9 +48,9 @@
 
 ## 4. 四项绑定与执行证据
 
-`appendArtifactRevision` 强制 revision 的 `nodeId`/`artifactRef`/`semver`/`digest` 与 `producerExecutionId` 指向的同 run、已成功 capability execution 事件的 capability 与 output 三元组（`outputArtifactRef`/`outputArtifactVersion`/`outputDigest`）精确匹配；Gate 节点的 `gateResult` 必须等于该事件的 Gate 结果。绑定失败（producer 不存在、未成功、节点不符、三元组漂移、Gate 漂移）一律 `ILLEGAL_TRANSITION` 拒绝。
+`appendArtifactRevision` 强制 revision 的 `nodeId`/`artifactRef`/`semver`/`digest` 与 `producerExecutionId` 指向的同 run、已成功 capability execution 事件的 capability 与 output 三元组（`outputArtifactRef`/`outputArtifactVersion`/`outputDigest`）精确匹配；Gate 节点的 `gateResult` 必须等于该事件的 Gate 结果。绑定失败（producer 不存在、未成功、节点不符、三元组漂移、Gate 漂移）一律 `ILLEGAL_TRANSITION` 拒绝。同一四项绑定在**每条读回路径上逐条重验**（§7）：canonical hash 只证明行内自洽，rehash 篡改过的行在 producer 不存在、未成功、节点/三元组/Gate 漂移时必须 `STORE_CORRUPT`。
 
-由于 C01 capability 链每 run 每 capability 只承认一次成功执行，当前每个节点每 run 至多一个可由公开 API 追加的 revision；同节点多 revision（supersede 路径）为 C02-WP4 重执行语义预留，存储语义在本合同中完整定义并验证。
+由于 C01 capability 链每 run 每 capability 只承认一次成功执行，且读回路径重验 producer 绑定，可读的 journal 当前不可能容纳同一节点的两个 revision（第二个 revision 需要同 capability 的第二次成功执行证据）。同节点多 revision（supersede/pointer 前进成功路径）为 C02-WP4 重执行语义预留：存储语义在本合同中完整定义，链规则在链校验器层面验证，store 级 supersede 成功路径覆盖随 WP4 的链扩展一并验收。
 
 ## 5. 持久化与并发语义
 
@@ -59,7 +59,7 @@
 - **CAS/冲突**：同一 `revisionId` 内容不同 → `EVENT_ID_CONFLICT`；同一 `(runId, nodeId, sequence)` 或 `(runId, nodeId, semver)` 被占用 → `EVENT_SEQUENCE_CONFLICT`；跨连接并发依赖事务 + 唯一约束保证，相同候选并发幂等收敛。
 - **版本前进与 supersede 原子化**：新 revision 的 semver 必须按 SemVer 大于该节点前一 current；同事务内 ACTIVE 旧 current 置 `SUPERSEDED` 并回填 `supersededBy`、current pointer 以"期望当前 revision"为谓词 CAS 前进。STALE 旧 current 不发生状态迁移（状态机无 `STALE → SUPERSEDED` 边），pointer 直接前进越过它。
 - **上游消费 fail-closed**：upstream refs 必须引用同 run 现存 revision，且在追加时刻是各自节点的 current 指针目标且 validity 为 ACTIVE；stale/superseded/不存在/跨 run 的上游一律拒绝。
-- **链规则**：节点分组内 sequence 从 1 连续、时间戳单调、SemVer 严格前进、`supersededBy` 精确指向下一 sequence、upstream 必须解析到同 run 已存 revision 且不晚于消费方创建；违反即 `ILLEGAL_TRANSITION`（追加时）或 `STORE_CORRUPT`（读取时）。
+- **链规则**：节点分组内 sequence 从 1 连续、时间戳单调、SemVer 严格前进、仅节点最新 revision 可为 ACTIVE（更早 revision 只能是 SUPERSEDED 或 STALE）、`supersededBy` 精确指向下一 sequence、upstream 必须解析到同 run 已存 revision 且不晚于消费方创建；违反即 `ILLEGAL_TRANSITION`（追加时）或 `STORE_CORRUPT`（读取时）。
 - **run 状态守卫**：terminal run（completed/failed/cancelled）、活动 delivery stage、活动 capability execution 期间均拒绝追加与 STALE 标记（`ILLEGAL_TRANSITION`）。
 - **append-only**：revision 不可变（仅 validity/supersededBy 两个状态字段可经上述原语迁移并重算 canonical hash）、不删除；历史保持可审计。
 
@@ -74,7 +74,7 @@
 
 ## 7. 读回交叉绑定
 
-- `listArtifactRevisions(runId)`：读取并完整验证某 run 的 revision 集合（每条记录 schema + canonical hash 重算 + requirementId 与已验证 run identity 逐条比对 + 链规则 + current pointer 双向一致性：每个 pointer 必须指向其节点最大 sequence 的 revision，每个节点链必须恰好有一个 pointer；任一失败 `STORE_CORRUPT`）。
+- `listArtifactRevisions(runId)`：读取并完整验证某 run 的 revision 集合（每条记录 schema + canonical hash 重算 + requirementId 与已验证 run identity 逐条比对 + **producer execution 四项绑定逐条重验**（§4：存在且已成功、capability 匹配、output 三元组精确一致、Gate 结果一致）+ 链规则 + current pointer 双向一致性：每个 pointer 必须指向其节点最大 sequence 的 revision，每个节点链必须恰好有一个 pointer；任一失败 `STORE_CORRUPT`）。
 - `getCurrentArtifactRevision(runId, nodeId)`：在上述验证之上，pointer 目标必须为 ACTIVE，否则 `STORE_CORRUPT`；run 或节点链不存在返回 `undefined`。
 - 每次 run 快照读取同时验证 revision 链与 pointer（corruption-first），挂入 `verifySnapshotInTransaction`。
 
@@ -96,3 +96,4 @@
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-20 | Draft | C02-WP2 交付（Decision-040）：artifact revision schema、validity 状态机、四项绑定与 producer execution 锚定、supersede + current pointer CAS、上游消费 fail-closed、manifest cross-bind、v3→v4 迁移与读回交叉绑定合同。 |
+| 0.1.1 | 2026-08-20 | Draft | Round 1 复审修正：四项绑定在每条读回路径逐条重验（rehash 篡改的 producer 不存在/失败/节点/三元组/Gate 漂移均 `STORE_CORRUPT`）；链规则新增"仅节点最新 revision 可为 ACTIVE"；测试预置说明修正——producer 重验后 WP4-era 预置行不再自洽，同节点多 revision 的 store 级 supersede 成功路径覆盖推迟到 C02-WP4 链扩展；测试源码控制字节改为转义字面量。 |

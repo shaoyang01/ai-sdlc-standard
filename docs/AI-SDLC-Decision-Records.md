@@ -1437,12 +1437,24 @@ C02-WP2 具备候选实现证据，但在独立复审与 Current User 裁决前�
 
 ## 实现状态
 
-产品实现与专项测试已完成并提交（`be2db49`，分支 `feature/c02-wp2-artifact-revision`），等待独立复审；治理收口（复审、裁决、控制平面收口登记、Exchange/PKB 发布）未执行。
+产品实现与专项测试已完成并提交（`be2db49`，分支 `feature/c02-wp2-artifact-revision`），Round 1 独立复审裁决 CHANGES_REQUESTED（H1 读回未重验 producer 绑定、H2 链校验允许非末尾 ACTIVE、L1 测试源码控制字节），修正已同分支提交并推送至 PR #90，等待重新复审；治理收口（复审通过、裁决、控制平面收口登记、Exchange/PKB 发布）未执行。
 
 ## 代码与验证依据
 
 - 实现提交：`be2db49 feat(c02): WP-2 artifact revision and current authority`（7 文件，+2710/-46）：新增 `core/loop-artifact-revision.ts`、`tests/loop-artifact-revision.test.ts`、`ai-sdlc/loop-artifact-revision.md`（0.1.0 Draft）；`core/loop-run-store.ts` 前进 v4（三表迁移、`appendArtifactRevision`、`markArtifactRevisionStale`、`listArtifactRevisions`/`getCurrentArtifactRevision` 读回交叉绑定、快照校验挂载）；三个既有测试文件仅机械更新格式断言 3→4。
 - 专项测试：`tests/loop-artifact-revision.test.ts` 167/167 通过。
 - 既有断言回归：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 107/107。
-- 全量验证：完整 `npm test` 129 文件 1767/0 通过；`tsc --noEmit`、`git diff --check` 通过。CI run 待 PR 创建后回填。
-- 测试预置说明：supersede 与版本前进用例以 `seedRevisionWithPointer` 裸 SQL 预置 revision-1 前置态，因为 C01 capability 链每 run 每 capability 只允许一次 succeeded，公开路径无法产出同节点 revision-2（该真实路径属于 WP4 generation 时代）；测试文件头有对应注释。
+- 全量验证：完整 `npm test` 129 文件 1767/0 通过；`tsc --noEmit`、`git diff --check` 通过。CI 已回填：PR #90（`feature/c02-wp2-artifact-revision` → `feature/loop-runtime-v1`），run 32363565455 四项检查（ci-tests / ci-typecheck / ci-standards / ci-loop-patch-mutations）全部通过（head `d03c431`）。
+- 测试预置说明（初始版本）：supersede 与版本前进用例以 `seedRevisionWithPointer` 裸 SQL 预置 revision-1 前置态，因为 C01 capability 链每 run 每 capability 只允许一次 succeeded，公开路径无法产出同节点 revision-2（该真实路径属于 WP4 generation 时代）；测试文件头有对应注释。**Round 1 复审后该预置方式被取代**，见下。
+
+## Round 1 复审与修正（2026-08-20）
+
+独立复审裁决 CHANGES_REQUESTED，两项 High 一项 Low，均已修正：
+
+1. **H1 读回未重验 producer 绑定**：`readArtifactRevisionsInTransaction` 原先只校验 revision 自身 hash、Requirement ID、链与 pointer。现复用已验证的 capability execution 集合，对每条 revision 逐条重验 producer 存在且已成功、capability 匹配、output 三元组精确一致、Gate 结果一致（与写入路径四项绑定同构）；任一漂移 `STORE_CORRUPT`。`listArtifactRevisions`、`getCurrentArtifactRevision`、`verifySnapshotInTransaction` 三条读路径共用该校验。
+2. **H2 链校验允许非末尾 ACTIVE**：`validateLoopArtifactRevisionChain` 新增规则——同一节点仅最新 revision 可为 `ACTIVE`，更早 revision 只能是 `SUPERSEDED`（且 `supersededBy` 指向下一 sequence）或 `STALE`；读回路径经链校验自动获得该规则。
+3. **L1 测试源码含原始控制字节**：两处字面 NUL/`\x05` 改为 `\x00`/`\x05` 转义，文件恢复为纯 UTF-8 文本。
+
+修正的连带影响（已在合同与测试头注释中如实记录）：producer 读回重验使原 WP4-era 预置行不再自洽——可读 journal 在同 run 同 capability 只有一次成功执行的链规则下不可能容纳同节点两个 revision。supersede 成功路径、stale pointer 前进、superseded upstream 三个场景的 store 级覆盖因此推迟到 C02-WP4 的链扩展，链规则层面由纯函数回归覆盖（非末尾 ACTIVE 拒绝、SUPERSEDED/STALE 非末尾合法态正例）。新增六组 rehash 篡改回归（producer 不存在/失败/节点漂移/三元组漂移/版本漂移/Gate 漂移 × list/getCurrent/getSnapshot 三路径）。修正后专项 182/182 通过，`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`tsc --noEmit` 通过。
+
+修正提交推送至 PR #90 同一分支后需重新复审；WP-2 在复审通过前保持未收口，`C02_WP2_ARTIFACT_REVISION_AUTHORITY` 授权不消费。

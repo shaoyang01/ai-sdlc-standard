@@ -170,6 +170,8 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：finding 分类和自动路由。
 
+- 状态（2026-08-20）：**已实施，等待重新复审**（Decision-040）；Round 1 独立复审 CHANGES_REQUESTED（读回 producer 绑定重验、链非末尾 ACTIVE 规则、测试控制字节），修正已推送至 PR #90（初始实现 CI run 32363565455 四项全过）；授权 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 未消费。同节点多 revision 的 store 级 supersede 成功路径依赖 WP4 重执行链扩展，验收时需注意该覆盖边界。
+
 ### C02-WP3：Finding Lifecycle and Dependency Invalidation
 
 **Material outcome**：finding 成为绑定具体 artifact revision 的持久事实，并能原子使受影响下游 current revisions/Gates 失效。

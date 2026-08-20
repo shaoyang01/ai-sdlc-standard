@@ -458,7 +458,10 @@ export function createLoopArtifactRevision(draft: unknown): LoopArtifactRevision
  * SemVer strictly increasing); every record shares the run identity and one
  * Requirement identity; upstream references must resolve to existing
  * revisions of the same run that were created no later than the consumer; a
- * SUPERSEDED revision's supersededBy must point at its node's next sequence.
+ * SUPERSEDED revision's supersededBy must point at its node's next sequence;
+ * only the latest revision of a node may remain ACTIVE (earlier revisions are
+ * SUPERSEDED with a backfilled successor, or STALE when the pointer advanced
+ * past them).
  */
 export function validateLoopArtifactRevisionChain(
   records: readonly LoopArtifactRevision[],
@@ -504,9 +507,12 @@ export function validateLoopArtifactRevisionChain(
     previousInGroup = record;
   }
   for (const record of records) {
+    const successorId = loopArtifactRevisionId(record.runId, record.nodeId, record.sequence + 1);
+    if (record.validity === "ACTIVE" && byId.has(successorId)) {
+      invalid("only the latest revision of a node may remain active");
+    }
     if (record.validity === "SUPERSEDED") {
-      const expectedSuccessor = loopArtifactRevisionId(record.runId, record.nodeId, record.sequence + 1);
-      if (record.supersededBy !== expectedSuccessor || !byId.has(expectedSuccessor)) {
+      if (record.supersededBy !== successorId || !byId.has(successorId)) {
         invalid("superseded revisions must reference the next revision of their node");
       }
     }
