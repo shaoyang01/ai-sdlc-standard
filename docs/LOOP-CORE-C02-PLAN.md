@@ -1,9 +1,9 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**NOT AUTHORIZED**（规划 Accepted 不构成实施授权；C02-WP1～WP6 仍需逐 WP 单独授权）
+> 实施状态：**IN PROGRESS**（2026-08-20，C02-WP1 已实施、复审通过并收口，Decision-037/038；WP2～WP6 仍需逐 WP 单独授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）
 > 权威依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
@@ -151,6 +151,8 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 验收：五类均有正反例；分类与 Requirement ID、source refs 和前一 generation 绑定；另一入口恢复后读到相同分类和 confirmed-fact 边界。
 
 明确排除：artifact 失效计算、Re-Gate dispatch、业务实现。
+
+- 状态（2026-08-20）：**Accepted / 已收口**（Decision-038）；Round 2 独立复审 PASS（107/79/86、`tsc --noEmit`、完整 `npm test`），实现经 PR #86 合入常驻分支（merge `aaf5e32`），授权 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 已消费。
 
 ### C02-WP2：Artifact Revision and Current Authority
 
@@ -311,3 +313,4 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-20 | Draft for user review | 基于 C01 收口事实、Roadmap C02 完成合同和当前 Source 复用审计，提出六个有界工作包、设计不变量、验收映射与实施排除。 |
 | 1.0.0 | 2026-08-20 | Accepted | Current User 裁决接受全部六个裁决点（Decision-036），规划成为正式合同；实施仍逐 WP 单独授权。 |
+| 1.0.1 | 2026-08-20 | Accepted | 登记 C02-WP1 Round 2 复审通过与收口（Decision-038）；C02 四项完成合同保持 INCOMPLETE，WP2～WP6 保持未授权。 |

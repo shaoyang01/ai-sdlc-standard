@@ -1,6 +1,6 @@
 # LOOP Requirement Change Classification Contract（需求变更分类合同）
 
-> 状态：0.1.0 Draft（2026-08-20，C02-WP1 交付，Decision-037；待独立复审）
+> 状态：1.0.0 Accepted（2026-08-20，C02-WP1 复审通过与收口，Decision-038；前身为 0.1.0 Draft，Decision-037）
 > 关联：[LOOP Entry Contract](loop-entry-contract.md) §4/§6/§7/§8 · [Change Control](change-control.md) · [Development Path Governance](development-path-governance.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §5/§6
 
 ## 1. Purpose
@@ -116,3 +116,4 @@
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-20 | Draft | C02-WP1 交付：五个 canonical change kind、change record schema、blocked 持久化、幂等/CAS 语义、v2→v3 迁移与跨入口读取合同。 |
+| 1.0.0 | 2026-08-20 | Accepted | Round 2 独立复审 PASS，C02-WP1 收口（Decision-038）；合同成为 WP2～WP6 的分类持久基线。 |
