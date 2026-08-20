@@ -1,9 +1,9 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
-> 规划状态：**DRAFT FOR USER REVIEW**（2026-08-20，Current User 已授权开始有界规划；尚未接受本规划）
-> 实施状态：**NOT AUTHORIZED**（本文件不授权任何 C02 代码、Agent 调用或运行时接线）
+> 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
+> 实施状态：**NOT AUTHORIZED**（规划 Accepted 不构成实施授权；C02-WP1～WP6 仍需逐 WP 单独授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）
 > 权威依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
@@ -294,7 +294,7 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 5. 是否继续沿用 C01 的逐 WP 单独授权、实施、独立复审、收口流程；
 6. 规划被接受后是否授权单独发布 Exchange/PKB planning handoff。
 
-未确认前：C02 所有 completion item 保持 `INCOMPLETE / NOT_AUTHORIZED`，不得启动 C02-WP1。
+裁决记录（2026-08-20，Decision-036）：Current User 裁决第 1～6 点**全部接受**。第 6 点澄清为仅针对本规划的 planning handoff 的一次性发布授权，并已在本次裁决中一并授予；后续各 WP 的实施/closure handoff 沿用既有机制、随逐 WP 授权流程发布，不需逐次单独授权。规划状态升为 Accepted；C02 四个完成合同项保持 `INCOMPLETE / NOT_AUTHORIZED`，C02-WP1 启动仍需 Current User 单独授权。
 
 ## 12. 进度管理与收口
 
@@ -310,3 +310,4 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-20 | Draft for user review | 基于 C01 收口事实、Roadmap C02 完成合同和当前 Source 复用审计，提出六个有界工作包、设计不变量、验收映射与实施排除。 |
+| 1.0.0 | 2026-08-20 | Accepted | Current User 裁决接受全部六个裁决点（Decision-036），规划成为正式合同；实施仍逐 WP 单独授权。 |

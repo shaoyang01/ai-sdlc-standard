@@ -1245,3 +1245,43 @@ Shared `PROJECT_CONTROL.md` §14 要求在首次 material execution 前基于父
 ## 代码与验证依据
 
 `docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` §4 `LOOP-CORE-02`；`docs/LOOP_CORE_CONTRACT.md` §2/§4/§5；`docs/LOOP-CORE-C02-PLAN.md`；C01 closure merge `93e9c45f1b8ae8512451090284ce90d715429458`；控制平面 baseline `515fa2193e55a79f15c01e20225d87ca14a8331d`。
+
+# Decision-036：接受 LOOP-CORE-02 有界规划并授予 planning handoff 发布授权
+
+## 状态
+
+Accepted（2026-08-20，Current User 裁决接受 C02 规划全部六个裁决点，并澄清第 6 点后一并授予 planning handoff 发布授权）
+
+## 背景
+
+Decision-035 授权的 C02 有界规划草案 `docs/LOOP-CORE-C02-PLAN.md` 已通过产品提交 `791f8de` 以 Draft PR #85 发布供审阅；控制平面已登记 `C02_PLAN_DRAFT_AWAITING_USER_REVIEW` 与 `LOOP_CORE_C02_PLAN_REVIEW_GATE`。规划 §11 列出六个待用户裁决点，未裁决前 C02 四项完成合同保持 `INCOMPLETE / NOT_AUTHORIZED`，不得启动 C02-WP1。
+
+## 问题
+
+Current User 是否接受六个裁决点（工作包分解与顺序、change kind 五 token、双权威边界、append-only generation、逐 WP 流程、planning handoff 发布安排）；其中第 6 点"单独授权发布"是指本次裁决一并授予，还是覆盖后续所有流程的逐次授权要求？
+
+## 决策
+
+1. 接受六个工作包（C02-WP1～WP6）及依赖顺序（WP1/WP2 可并行设计，WP3 依赖 WP2，WP4 依赖 WP1～3，WP5 依赖 WP4，WP6 最终综合验收）。
+2. 接受 change kind 五个 canonical token：`NEW_REQUIREMENT`、`SUPPLEMENT`、`CHANGE`、`REWORK`、`FEEDBACK_DRIVEN_CHANGE`。
+3. 接受双权威边界：run journal 为 runtime orchestration authority，`manifest.md` 为目标项目 DocFlow/Tail authority，二者交叉绑定，漂移即 STOP。
+4. 接受 append-only generation 方案；C01 capability event 历史一律不改写。
+5. 沿用 C01 流程：逐 WP 单独授权、实施、独立复审、Current User 裁决、收口登记。
+6. 第 6 点澄清：单独授权仅针对本规划的 planning handoff 这一次性发布（因 Decision-035 授权 scope 明确排除了 Exchange/PKB 发布）；Current User 在本次裁决中一并授予该发布授权。后续各 WP 的实施/closure handoff 沿用既有机制、随逐 WP 授权流程发布，不需逐次单独授权。
+7. 规划升为 Accepted（v1.0.0），成为正式规划合同；本决定不授权任何 C02 实现、真实 Agent 调用、C03～C05、Ready/merge/publication，C02-WP1 启动仍需单独授权。
+
+## 原因
+
+规划草案已完成 Source 复用审计、缺口确认、设计不变量与验收映射，并经用户逐项审阅；第 6 点的歧义经澄清后按一次性授权处理，避免给既有 handoff 机制增加无必要的逐次审批负担，同时保持 Decision-035 排除项的授权边界显式闭合。
+
+## 影响
+
+项目从"C02 规划草案待审"进入"C02 规划 Accepted、等待 WP-1 单独授权"状态。控制平面登记规划 Accepted、发布授权与发布证据；Exchange/PKB 发布 planning handoff；`next_valid_transition` 指向 C02-WP1 授权边界。规划 Accepted 本身不产生任何执行授权。
+
+## 实现状态
+
+Current User 裁决已记录；规划文档升为 1.0.0 Accepted。随后按既定机制执行：Exchange planning handoff 发布、PKB 归档与 current.md 同 commit 更新、控制平面 STATE 登记。
+
+## 代码与验证依据
+
+`docs/LOOP-CORE-C02-PLAN.md`（v0.1.0 草案，产品提交 `791f8de`，Draft PR #85）；控制平面 `projects/ai-sdlc/STATE.yaml` C02 规划授权与评审登记；Decision-034/035。发布与登记证据（Exchange run、PKB 提交、控制平面提交）以控制平面 STATE 登记为准。
