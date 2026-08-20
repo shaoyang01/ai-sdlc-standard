@@ -6,6 +6,7 @@
 // directories outside the repository. No Git, no network, no Agent.
 
 import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -616,6 +617,142 @@ withStore((store, dir) => {
   expectThrow("STORE_CORRUPT", () => store.listRequirementChanges("run-001"),
     "directly forged persisted record raises STORE_CORRUPT");
 });
+
+console.log("change classification: review round 1 corrections");
+// High-1: a tampered record whose requirementId was rebound to another
+// requirement — with a freshly recomputed canonical hash — must still fail
+// closed on every read path, because reads cross-bind each record to the
+// owning run identity.
+function recomputeCanonicalHash(record: LoopRequirementChangeRecord): string {
+  return createHash("sha256").update(JSON.stringify({
+    schemaVersion: record.schemaVersion,
+    changeRecordId: record.changeRecordId,
+    runId: record.runId,
+    requirementId: record.requirementId,
+    sequence: record.sequence,
+    status: record.status,
+    changeKind: record.changeKind,
+    payloadForm: record.payloadForm,
+    previousGeneration: record.previousGeneration,
+    currentChangeScope: record.currentChangeScope,
+    confirmedFactsPreserved: record.confirmedFactsPreserved,
+    sourceRefs: record.sourceRefs,
+    triggerEvidence: record.triggerEvidence,
+    classificationReason: record.classificationReason,
+    blockedReasonCode: record.blockedReasonCode,
+    createdAt: record.createdAt,
+  })).digest("hex");
+}
+withStore((store, dir) => {
+  store.createRun(makeIdentity());
+  store.appendRequirementChange(createLoopRequirementChangeRecord(newRequirementDraft()));
+  const tampered = createLoopRequirementChangeRecord(newRequirementDraft({ requirementId: "req-002" }));
+  const db = new Database(join(dir, "journal.db"));
+  try {
+    db.prepare("UPDATE loop_requirement_changes SET requirement_id = ?, canonical_sha256 = ? WHERE change_record_id = ?")
+      .run("req-002", recomputeCanonicalHash(tampered), "run-001:change:1:classified");
+  } finally {
+    db.close();
+  }
+  expectThrow("STORE_CORRUPT", () => store.listRequirementChanges("run-001"),
+    "rehashed mis-bound record raises STORE_CORRUPT on chain read");
+  expectThrow("STORE_CORRUPT", () => store.getSnapshot("run-001"),
+    "rehashed mis-bound record detected through snapshot reads");
+  expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-001"),
+    "rehashed mis-bound record detected through cross-entry reads");
+});
+
+// Medium-1: source-scoped trigger evidence must reference a locator that is
+// actually recorded in the record's sourceRefs — at construction and on
+// persisted read-back.
+expectThrow("INVALID_INPUT", () => createLoopRequirementChangeRecord(
+  newRequirementDraft({ triggerEvidence: ["source:conversation:not-recorded"] }),
+), "unrecorded source evidence locator fails closed at construction");
+withStore((store, dir) => {
+  store.createRun(makeIdentity());
+  const record = createLoopRequirementChangeRecord(newRequirementDraft());
+  store.appendRequirementChange(record);
+  const renamedRef = Object.freeze({ ...record.sourceRefs[0]!, locator: "conversation:renamed" });
+  const tampered = { ...record, sourceRefs: Object.freeze([renamedRef]) } as LoopRequirementChangeRecord;
+  const db = new Database(join(dir, "journal.db"));
+  try {
+    db.prepare("UPDATE loop_change_source_refs SET locator = ? WHERE change_record_id = ? AND source_index = 0")
+      .run("conversation:renamed", record.changeRecordId);
+    db.prepare("UPDATE loop_requirement_changes SET canonical_sha256 = ? WHERE change_record_id = ?")
+      .run(recomputeCanonicalHash(tampered), record.changeRecordId);
+  } finally {
+    db.close();
+  }
+  expectThrow("STORE_CORRUPT", () => store.listRequirementChanges("run-001"),
+    "persisted evidence locator unbound from sourceRefs raises STORE_CORRUPT");
+});
+
+// Medium-2: foreign key column drift on the change tables must fail closed,
+// not just the referenced table and delete action.
+console.log("change classification: foreign key column drift fails closed");
+{
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store1 = new LoopRunStore(path);
+  store1.init();
+  store1.close();
+  const raw = new Database(path);
+  raw.exec(`
+    PRAGMA foreign_keys = OFF;
+    DROP TABLE loop_change_source_refs;
+    CREATE TABLE loop_change_source_refs (
+      change_record_id TEXT NOT NULL,
+      source_index INTEGER NOT NULL,
+      source_type TEXT NOT NULL,
+      locator TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      source_version TEXT,
+      observed_at TEXT NOT NULL,
+      PRIMARY KEY (change_record_id, source_index),
+      FOREIGN KEY (locator) REFERENCES loop_requirement_changes(change_record_id) ON DELETE CASCADE
+    );
+  `);
+  raw.close();
+  const store2 = new LoopRunStore(path);
+  expectThrow("STORE_CORRUPT", () => store2.init(), "child table foreign key column drift is rejected");
+  store2.close();
+  rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store1 = new LoopRunStore(path);
+  store1.init();
+  store1.close();
+  const raw = new Database(path);
+  raw.exec(`
+    PRAGMA foreign_keys = OFF;
+    DROP TABLE loop_requirement_changes;
+    CREATE TABLE loop_requirement_changes (
+      change_record_id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      requirement_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      schema_version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      change_kind TEXT,
+      payload_form TEXT,
+      previous_generation INTEGER,
+      current_change_scope TEXT,
+      classification_reason TEXT NOT NULL,
+      blocked_reason_code TEXT,
+      created_at TEXT NOT NULL,
+      canonical_sha256 TEXT NOT NULL,
+      UNIQUE (run_id, sequence),
+      FOREIGN KEY (requirement_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+    );
+  `);
+  raw.close();
+  const store2 = new LoopRunStore(path);
+  expectThrow("STORE_CORRUPT", () => store2.init(), "main table foreign key column drift is rejected");
+  store2.close();
+  rmSync(dir, { recursive: true, force: true });
+}
 
 console.log("change classification: closed store behavior");
 {

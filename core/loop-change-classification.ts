@@ -215,13 +215,20 @@ function textList(value: unknown, label: string): readonly string[] {
 
 /**
  * Trigger evidence entries are either canonical content-addressed artifact
- * references or source-scoped references (`source:<locator>`) pointing back
- * at a recorded source ref. Nothing else is evidence.
+ * references or source-scoped references (`source:<locator>`) that must point
+ * back at a locator actually recorded in this record's sourceRefs. Nothing
+ * else is evidence.
  */
-function evidenceRef(value: unknown, label: string): string {
+function evidenceRef(value: unknown, label: string, sourceLocators: ReadonlySet<string>): string {
   const result = text(value, label);
   if (ARTIFACT_REF_RE.test(result)) return result;
-  if (result.startsWith("source:") && result.length > "source:".length) return result;
+  if (result.startsWith("source:") && result.length > "source:".length) {
+    const locator = result.slice("source:".length);
+    if (!sourceLocators.has(locator)) {
+      invalid(`${label} must reference a locator recorded in sourceRefs`);
+    }
+    return result;
+  }
   invalid(`${label} must be a canonical artifact reference or a source-scoped reference`);
 }
 
@@ -299,9 +306,10 @@ export function validateLoopRequirementChangeRecord(value: unknown): void {
   if (record.previousGeneration !== null) positiveInteger(record.previousGeneration, "previousGeneration");
   if (record.currentChangeScope !== null) text(record.currentChangeScope, "currentChangeScope");
   const confirmedFacts = textList(record.confirmedFactsPreserved, "confirmedFactsPreserved");
-  sourceRefList(record.sourceRefs);
+  const refs = sourceRefList(record.sourceRefs);
+  const sourceLocators = new Set(refs.map((ref) => ref.locator));
   const evidence = textList(record.triggerEvidence, "triggerEvidence");
-  for (const item of evidence) evidenceRef(item, "triggerEvidence element");
+  for (const item of evidence) evidenceRef(item, "triggerEvidence element", sourceLocators);
   text(record.classificationReason, "classificationReason");
   if (
     record.blockedReasonCode !== null &&

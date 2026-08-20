@@ -1654,6 +1654,22 @@ export class LoopRunStore {
       }
       return record;
     });
+    // Cross-bind every record to the owning run identity: the canonical hash
+    // only proves a record is internally consistent, so a tampered row with a
+    // recomputed hash must still fail closed when its requirementId drifts
+    // from the verified run identity.
+    const runRequirement = db.prepare(
+      "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
+    ).get(runId) as { requirement_id?: unknown } | undefined;
+    if (runRequirement === undefined || typeof runRequirement.requirement_id !== "string") {
+      corrupt("requirement change run identity is missing");
+    }
+    const runRequirementId: string = runRequirement.requirement_id;
+    for (const record of records) {
+      if (record.requirementId !== runRequirementId) {
+        corrupt("requirement change does not match the run identity");
+      }
+    }
     try {
       validateLoopRequirementChangeChain(records, runId);
     } catch (error) {
@@ -1680,12 +1696,13 @@ export class LoopRunStore {
         }
       }
     };
-    const verifyForeignKey = (table: string, referenced: string): void => {
+    const verifyForeignKey = (table: string, from: string, referenced: string, to: string): void => {
       const foreignKeys = db.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{
         table: string; from: string; to: string; on_delete: string;
       }>;
       if (
         foreignKeys.length !== 1 || foreignKeys[0]?.table !== referenced ||
+        foreignKeys[0]?.from !== from || foreignKeys[0]?.to !== to ||
         foreignKeys[0]?.on_delete.toUpperCase() !== "CASCADE"
       ) {
         corrupt("requirement change table foreign key mismatch");
@@ -1709,7 +1726,7 @@ export class LoopRunStore {
       return columns.length === 2 && columns[0]?.name === "run_id" && columns[1]?.name === "sequence";
     });
     if (!hasRunSequenceUnique) corrupt("requirement change table is missing run sequence uniqueness");
-    verifyForeignKey("loop_requirement_changes", "loop_runs");
+    verifyForeignKey("loop_requirement_changes", "run_id", "loop_runs", "run_id");
     for (const indexName of [
       "idx_loop_requirement_changes_run_id",
       "idx_loop_requirement_changes_requirement_id",
@@ -1725,17 +1742,17 @@ export class LoopRunStore {
       ["priority", "INTEGER", 1, 0], ["source_version", "TEXT", 0, 0],
       ["observed_at", "TEXT", 1, 0],
     ]);
-    verifyForeignKey("loop_change_source_refs", "loop_requirement_changes");
+    verifyForeignKey("loop_change_source_refs", "change_record_id", "loop_requirement_changes", "change_record_id");
     verifyColumns("loop_change_confirmed_facts", [
       ["change_record_id", "TEXT", 1, 1], ["fact_index", "INTEGER", 1, 2],
       ["fact", "TEXT", 1, 0],
     ]);
-    verifyForeignKey("loop_change_confirmed_facts", "loop_requirement_changes");
+    verifyForeignKey("loop_change_confirmed_facts", "change_record_id", "loop_requirement_changes", "change_record_id");
     verifyColumns("loop_change_trigger_evidence", [
       ["change_record_id", "TEXT", 1, 1], ["evidence_index", "INTEGER", 1, 2],
       ["evidence_ref", "TEXT", 1, 0],
     ]);
-    verifyForeignKey("loop_change_trigger_evidence", "loop_requirement_changes");
+    verifyForeignKey("loop_change_trigger_evidence", "change_record_id", "loop_requirement_changes", "change_record_id");
   }
 
   private verifyCapabilityExecutionTableSchema(db: Database.Database): void {

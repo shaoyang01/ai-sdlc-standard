@@ -44,7 +44,7 @@
 | `currentChangeScope` | string / `null` | CLASSIFIED 必填（本次真正要处理的当前变更范围）；BLOCKED 必须为 `null` |
 | `confirmedFactsPreserved` | string 列表 | 保留的已确认事实边界；元素非空、去重；规则见 §2 |
 | `sourceRefs` | 列表，≥1 | 来源引用，字段见 §4；priority 唯一 |
-| `triggerEvidence` | string 列表 | 触发证据：canonical artifact ref（`loop-artifact:v1:<kind>:sha256:<64hex>`）或 `source:<locator>`；CLASSIFIED 非空 |
+| `triggerEvidence` | string 列表 | 触发证据：canonical artifact ref（`loop-artifact:v1:<kind>:sha256:<64hex>`）或 `source:<locator>`；`source:` 形式的 locator 必须精确等于本记录 `sourceRefs` 中已记录的某个 locator；CLASSIFIED 非空 |
 | `classificationReason` | string | 分类原因；必填 |
 | `blockedReasonCode` | Blocked Reason / `null` | BLOCKED 必填；CLASSIFIED 必须为 `null` |
 | `createdAt` | ISO-8601 | 链内单调不减 |
