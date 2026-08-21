@@ -1,9 +1,9 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口，Decision-037/038/040/041；WP3～WP6 仍需逐 WP 单独授权）
+> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；WP4～WP6 仍需逐 WP 单独授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）
 > 权威依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
@@ -188,7 +188,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：实际执行 Re-Gate 节点。
 
-- 状态（2026-08-21）：**已实施，Round 2 复审 PASS，回归加固完成，待 Current User 收口裁决**（Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes`、appendFinding 同事务失效传播与 scope 落库、resolve/accept/supersede guarded 迁移与证明写删、读回 proof/scope 全量重验、finding 链挂入快照校验）；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.1 Draft；专项 tests/loop-finding-lifecycle.test.ts 340/340，全量 npm test 0 失败。Round 1 复审 CHANGES_REQUESTED（2 High：关闭证据未绑定当前事实、失效边完整性未持久化比对）已修正；Round 2 复审（8d1d697..fdc6610 全量重审）PASS 无阻塞，两项 High 关闭均独立复核成立，其两条非阻塞回归加固建议（删中间边重编号命中 scope digest 分支、proof/scope 插入点故障回滚与迁移并发竞争矩阵）已落实。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 未消费。
+- 状态（2026-08-21）：**Accepted / 已收口**（Decision-043；实施授权 Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes`、appendFinding 同事务失效传播与 scope 落库、resolve/accept/supersede guarded 迁移与证明写删、读回 proof/scope 全量重验、finding 链挂入快照校验）。Round 1 复审 CHANGES_REQUESTED（2 High：关闭证据未绑定当前事实、失效边完整性未持久化比对）已修正（合同 0.1.1）；Round 2 独立复审（codex）全量重审 `8d1d697..fdc6610` PASS 无阻塞，两项 High 关闭均独立复核成立，两条非阻塞回归加固建议（删中间边重编号命中 scope digest 分支、proof/scope 插入点故障回滚与关闭迁移并发竞争矩阵）已落实（专项 303→340/340、回归 185/79/86/132/212、全量 npm test 130 文件 0 失败、`tsc --noEmit` 与 `git diff --check` 通过；GitHub Actions run 32464819692 与 32469000224 四 job 全绿，后者 ci-tests 首跑命中 C01 期 loop-git-workspace 并发 worktree flake、rerun 后通过），Current User 裁决收口；合同前进 1.0.0 Accepted。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 已消费。
 
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
 
@@ -319,3 +319,4 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 | 1.0.0 | 2026-08-20 | Accepted | Current User 裁决接受全部六个裁决点（Decision-036），规划成为正式合同；实施仍逐 WP 单独授权。 |
 | 1.0.1 | 2026-08-20 | Accepted | 登记 C02-WP1 Round 2 复审通过与收口（Decision-038）；C02 四项完成合同保持 INCOMPLETE，WP2～WP6 保持未授权。 |
 | 1.0.2 | 2026-08-21 | Accepted | 登记 C02-WP1 重开后经 Round 9 复审 PASS 重新收口与 C02-WP2 Round 9 复审通过与收口（Decision-041）；C02 四项完成合同保持 INCOMPLETE，WP3～WP6 保持未授权。 |
+| 1.0.3 | 2026-08-21 | Accepted | 登记 C02-WP3 Round 2 复审 PASS 与收口（Decision-043）；C02 四项完成合同保持 INCOMPLETE，WP4～WP6 保持未授权。 |

@@ -1,6 +1,6 @@
 # LOOP Finding Lifecycle and Dependency Invalidation Contract（Finding 生命周期与依赖失效合同）
 
-> 状态：0.1.1 Draft（2026-08-21，C02-WP3 Round 1 复审修正，Decision-042；待独立复审）
+> 状态：1.0.0 Accepted（2026-08-21，Round 2 独立复审 PASS，C02-WP3 收口，Decision-043；前身为 0.1.1 Draft，Decision-042）
 > 关联：[C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G3 / §6 C02-WP3 · [LOOP Artifact Revision and Current Authority Contract](loop-artifact-revision.md) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md)
 
 ## 1. Purpose
@@ -121,3 +121,4 @@ C01 只在 capability execution 事件上携带 opaque 的 `unresolvedFindingsRe
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-21 | Draft | C02-WP3 交付：finding record schema、固定状态机、五类路由矩阵、依赖图失效传播（同事务原子化）、PASS_WITH_RISK 消费规则、v4→v5 迁移与读回交叉绑定合同。 |
 | 0.1.1 | 2026-08-21 | Draft | Round 1 复审修正（H1/H2）：durable 关闭证明表 `loop_finding_proofs`（RESOLUTION 捕获 revision 不可变内容绑定、RISK_ACCEPTANCE 捕获接受者与证据、supersede 同事务删除、读回全量重验）、绑定 artifact store 时关闭证据 blob 物理存在性校验、append-time 完整失效范围表 `loop_finding_scopes`（含空集语义）与读回全集合比对。 |
+| 1.0.0 | 2026-08-21 | Accepted | Round 2 独立复审 PASS（无阻塞项，Round 1 两项 High 关闭均独立复核成立，两条非阻塞回归加固建议已落实），Current User 裁决 C02-WP3 收口（Decision-043）；内容等同 0.1.1 Draft，仅状态前进。 |

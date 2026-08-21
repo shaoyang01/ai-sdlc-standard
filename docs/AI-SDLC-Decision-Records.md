@@ -1568,3 +1568,43 @@ C02-WP3 具备候选实现证据，但在独立复审与 Current User 裁决前�
 - 专项测试：340/340 通过（schema/边界、五类路由矩阵正反例、失效传播与原子回滚、状态机、资格推导、篡改读回、证明/范围完整性、证据 blob 绑定、迁移原子性、删中间边重编号 scope digest 回归、proof/scope 插入点故障回滚、关闭迁移并发竞争矩阵）。
 - 既有断言回归：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 132/132、`loop-artifact-revision` 212/212。
 - 全量验证：完整 `npm test`、`tsc --noEmit`、`git diff --check` 通过；CI 结果以 PR #91 最新 head 的远端 run 为准。
+
+---
+
+# Decision-043：C02-WP3 复审通过与收口
+
+## 状态
+
+Accepted（2026-08-21，Current User 接受 Round 2 独立复审 PASS 结论，裁决 C02-WP3 收口）
+
+## 背景
+
+C02-WP3 经 Decision-042 授权实施（实现提交 `60a9f41`）。Round 1 独立复审 CHANGES_REQUESTED（2 High：关闭/风险接受证据仅格式校验、未绑定当前事实；失效边读回只校验残存边合法、append-time 完整集合未持久化比对），修正提交 `fdc6610`（durable 关闭证明表 `loop_finding_proofs`、append-time 完整失效范围表 `loop_finding_scopes`、v5 四表族定稿、合同 0.1.1 Draft）。Round 2 独立复审（codex）全量只读重审 `8d1d697..fdc6610`，裁决 PASS、无合同内阻塞项，两项 High 关闭均独立复核成立；其两条非阻塞回归加固建议已落实（提交 `4a814d3`，专项 303→340 断言，生产代码零改动）。
+
+## 问题
+
+C02-WP3 是否满足规划 §6 验收与合同 0.1.1，可否消费授权完成治理收口？
+
+## 决策
+
+1. 接受 Round 2 独立复审 PASS 结论；C02-WP3 收口。
+2. 控制平面消费 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 授权并登记 WP3 完成；C02 四项完成合同保持 `INCOMPLETE`（需 WP4～WP6 联合证据）。
+3. `ai-sdlc/loop-finding-lifecycle.md` 升为 1.0.0 Accepted（内容等同 0.1.1 Draft）；C02 规划同步状态（v1.0.3）。
+4. 复审边界声明保持：跨多表一致性整体改写超出单结构篡改模型；`riskAcceptedBy` 身份本体不由 store 验证。
+5. 本决定不授权 C02-WP4～WP6，不授权 Ready/merge（PR #91 保持 Draft，Ready 与 merge 为独立 Gate，需单独明确授权），不登记 C02 任一完成合同项，不授权真实 Agent 启用、Git/PR 自动化或 C03～C05。
+
+## 原因
+
+Round 2 复审在同一范围独立复核 WP3 不变量：finding 固定 schema 与五类路由矩阵绑定、固定状态机（OPEN/RESOLVED/ACCEPTED_RISK/SUPERSEDED）、下游失效由 store 沿 canonical 依赖图计算并原子持久化、关闭/风险接受绑定当前事实（proof 双向交叉绑定 + 绑定 artifact store 时证据 blob 物理存在性）、失效边完整可审计（append-time scope 全集合 digest 比对）、eligibility fail-closed、v4→v5 原子迁移可回滚重试；H1/H2 修正经伪造证据、替换 revision、删首/中/末/全部边等对抗性读回复核成立。独立验证：专项 340/340、回归 185/79/86/132/212、全量 `npm test` 130 文件 0 失败、`tsc --noEmit` 与 `git diff --check` 干净；CI run 32464819692（`fdc6610`）四 job 一次全绿，run 32469000224（`4a814d3`）ci-tests 首跑命中 C01 期 `loop-git-workspace` 并发 worktree flake（本地单独复跑 354/354、全量重跑 130 文件 0 失败），失败 job rerun 后四 job 全绿。
+
+## 影响
+
+C02 缺口 G3（finding 持久与失效传播）关闭：每一次审核/测试/入口发现的问题均具备固定 schema、绑定具体 artifact revision、可恢复、可审计的 run journal 持久面，失效影响由 canonical 依赖图同事务计算落库，journal 格式定稿 v5 四表族，C01/WP1/WP2 历史一行未改。WP4（最早节点 Re-Gate 编排）成为下一个可申请授权的工作包；本收口不构成 WP4～WP6 的实施入口，也不构成 PR #91 的 Ready/merge 授权。
+
+## 实现状态
+
+用户已最终裁决通过；收口治理文档随 PR #91 同分支提交推送，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针；Ready/merge 待单独授权后执行。
+
+## 代码与验证依据
+
+`core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes` 原子迁移、`appendFinding` 同事务失效传播与 scope 落库、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移与证明写删、读回 proof/scope 全量重验、单事务公开读路径、finding 链挂入快照校验）；`ai-sdlc/loop-finding-lifecycle.md` 1.0.0 Accepted；`tests/loop-finding-lifecycle.test.ts`（340/340）；回归 `tests/loop-run-store.test.ts`（185/185）、`loop-run-provenance`（79/79）、`loop-capability-execution`（86/86）、`loop-change-classification`（132/132）、`loop-artifact-revision`（212/212）；实现/修正/加固提交 `60a9f41`、`fdc6610`、`4a814d3`（PR #91，Draft）；Round 2 独立复审 PASS 与 CI run 32464819692、32469000224（四 job 全绿）。
