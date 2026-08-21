@@ -4,7 +4,7 @@
 // input artifact, enforces the canonical next capability, and dispatches
 // through an ExecutionGateway configured for durable capability tracing.
 
-import { ExecutionGateway, isExecutionGatewayTracingBoundTo } from "../execution/gateway";
+import type { ExecutionGateway } from "../execution/gateway";
 import { types as utilTypes } from "node:util";
 import type { ExecutionResult } from "../execution/types";
 import type { NodeCapabilityId } from "../loop/types";
@@ -24,28 +24,16 @@ import {
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
-import { LoopRunStore, isLoopRunStoreBoundToArtifactStore } from "./loop-run-store";
+import type { LoopRunStore } from "./loop-run-store";
 import {
   runtimeExecutionPointForCapability,
   type RuntimeCapabilityExecutionPoint,
 } from "./runtime-capability-map";
 
 export interface LoopCapabilityEntryOptions {
-  /**
-   * The durable run journal. Must be constructed with
-   * `LoopRunStoreOptions.artifactStore` bound to the exact same
-   * `LoopArtifactStore` instance passed below — the C02-WP2 blob binding must
-   * not be bypassable by wiring the two stores separately.
-   */
   runStore: LoopRunStore;
   artifactStore: Pick<LoopArtifactStore, "read">;
   bindingRegistry: BindingRegistry;
-  /**
-   * The dispatch gateway. Must be a real ExecutionGateway whose capability
-   * tracing writes into the exact same run store and artifact store
-   * instances; otherwise journal outputs and revision blobs would be split
-   * across disjoint stores.
-   */
   gateway: Pick<ExecutionGateway, "execute">;
   now?: () => string;
 }
@@ -86,32 +74,7 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("INVALID_INPUT", "entry options must be an object");
     }
     validateBindingRegistry(options.bindingRegistry);
-    if (!(options.runStore instanceof LoopRunStore)) {
-      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires a LoopRunStore");
-    }
-    // All binding checks are non-virtual: they read construction-time private
-    // binding state (module-level WeakMaps), never overridable instance
-    // members — subclassing or monkey patching cannot forge them. The run
-    // store must be bound to the exact artifact store instance this entry
-    // reads through; otherwise C02-WP2 blob verification is silently skipped
-    // on every revision write and read path.
-    if (!isLoopRunStoreBoundToArtifactStore(options.runStore, options.artifactStore as LoopArtifactStore)) {
-      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires the run store bound to the same artifact store instance");
-    }
-    // The gateway must trace capability executions into the same store pair:
-    // a gateway writing outputs to a different artifact store would split the
-    // journal's output refs from the blobs later revisions are verified
-    // against.
-    if (
-      !(options.gateway instanceof ExecutionGateway) ||
-      !isExecutionGatewayTracingBoundTo(options.gateway, options.runStore, options.artifactStore)
-    ) {
-      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires the gateway tracing the same run store and artifact store instances");
-    }
-    // Snapshot and freeze the dependency configuration so post-construction
-    // mutation of the caller's options object cannot swap the gateway or the
-    // artifact store this entry uses.
-    this.options = Object.freeze({ ...options });
+    this.options = options;
   }
 
   async execute(value: LoopCapabilityEntryRequest): Promise<LoopCapabilityEntryResult> {

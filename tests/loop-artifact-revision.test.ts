@@ -1411,7 +1411,7 @@ console.log("artifact revision: v3 to v4 migration is atomic and retryable");
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("artifact revision: identity rewrite between verification and detail read fails closed");
+console.log("artifact revision: identity rewrite committed before the read starts fails closed");
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const producer = driver.succeed("requirement-intake", INTAKE_OUT);
@@ -1423,19 +1423,123 @@ withRunningStore((store, dir) => {
     producerExecutionId: producer.executionEventId,
   }));
   store.appendArtifactRevision(revision);
-  // Second connection: rewrite the run's requirement_id AND rehash the
-  // revision to match — the tampered detail row is self-consistent under the
-  // tampered identity. Snapshot verification and record return happen in ONE
-  // transaction, so both reads must fail closed instead of returning the
-  // tampered revision.
+  // Pre-transaction tamper barrier: the second connection rewrites the run's
+  // requirement_id AND rehashes the revision to match, and COMMITS before the
+  // read starts. Snapshot verification then observes the tampered identity
+  // and fails closed. (The mid-transaction window is covered by the
+  // deterministic barrier tests below; this case alone cannot distinguish a
+  // single-transaction read from the former two-transaction read.)
   const raw = new Database(join(dir, "journal.db"));
   raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
   raw.close();
   tamperRevisionWithRehash(dir, revision.revisionId, Object.freeze({ ...revision, requirementId: "req-tampered" }));
   expectThrow("STORE_CORRUPT", () => store.listArtifactRevisions("run-001"),
-    "listArtifactRevisions verifies identity and revisions in one transaction");
+    "listArtifactRevisions fails closed on a pre-transaction identity rewrite");
   expectThrow("STORE_CORRUPT", () => store.getCurrentArtifactRevision("run-001", "requirement-intake"),
-    "getCurrentArtifactRevision verifies identity and revisions in one transaction");
+    "getCurrentArtifactRevision fails closed on a pre-transaction identity rewrite");
+});
+
+/**
+ * Deterministic mid-transaction barrier for read-path TOCTOU regression
+ * tests (Round 8, comment precision per Round 9 L1). Fires `onBarrier` when
+ * the store's own connection first prepares a statement matching
+ * `detailSqlMarker`. Precise position: snapshot verification itself validates
+ * the revision chain through the internal reader, so the first match fires
+ * INSIDE verification's chain-validation read — but always after the
+ * transaction's first read (the `loop_runs` identity row), which is what pins
+ * the WAL snapshot. The barrier callback commits a tamper through a SECOND
+ * connection while the read transaction is still open; the tamper is
+ * therefore invisible to the rest of the transaction, including the detail
+ * read that produces the returned rows. A two-transaction implementation
+ * would instead observe and return the spliced tampered rows, failing these
+ * tests.
+ */
+function withDetailReadBarrier<T>(
+  store: LoopRunStore,
+  detailSqlMarker: string,
+  onBarrier: () => void,
+  read: () => T,
+): { result: T; fired: boolean } {
+  const db = (store as unknown as { db: Database.Database }).db;
+  const originalPrepare = db.prepare;
+  let fired = false;
+  db.prepare = function (this: Database.Database, sql: string) {
+    if (!fired && sql.includes(detailSqlMarker)) {
+      fired = true;
+      onBarrier();
+    }
+    return originalPrepare.call(this, sql);
+  } as typeof db.prepare;
+  try {
+    return { result: read(), fired };
+  } finally {
+    db.prepare = originalPrepare;
+  }
+}
+
+console.log("artifact revision: mid-transaction identity rewrite keeps the read's own consistent snapshot");
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const producer = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake",
+    sequence: 1,
+    semver: INTAKE_OUT.version,
+    digest: INTAKE_OUT.digest,
+    producerExecutionId: producer.executionEventId,
+  }));
+  store.appendArtifactRevision(revision);
+  // Barrier fires at the first revision-table statement of this read (inside
+  // snapshot verification's chain-validation read, after the transaction's
+  // snapshot is pinned). The second connection then commits an identity
+  // rewrite + rehashed revision while the read transaction is still open; the
+  // returned rows are read afterwards from the same pinned snapshot.
+  const tamper = () => {
+    const raw = new Database(join(dir, "journal.db"));
+    raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+    raw.close();
+    tamperRevisionWithRehash(dir, revision.revisionId, Object.freeze({ ...revision, requirementId: "req-tampered" }));
+  };
+  const listed = withDetailReadBarrier(store, "FROM loop_artifact_revisions", tamper,
+    () => store.listArtifactRevisions("run-001"));
+  assert(listed.fired, "barrier fired inside the read transaction");
+  assert(
+    listed.result.length === 1 &&
+      listed.result[0]!.revisionId === revision.revisionId &&
+      listed.result[0]!.requirementId === "req-001",
+    "listArtifactRevisions returns its own consistent pre-tamper snapshot, not the mid-transaction tamper",
+  );
+  expectThrow("STORE_CORRUPT", () => store.listArtifactRevisions("run-001"),
+    "the committed tamper fails closed on the next read");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const producer = driver.succeed("requirement-intake", INTAKE_OUT);
+  const revision = createLoopArtifactRevision(revisionDraft({
+    nodeId: "requirement-intake",
+    sequence: 1,
+    semver: INTAKE_OUT.version,
+    digest: INTAKE_OUT.digest,
+    producerExecutionId: producer.executionEventId,
+  }));
+  store.appendArtifactRevision(revision);
+  const tamper = () => {
+    const raw = new Database(join(dir, "journal.db"));
+    raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+    raw.close();
+    tamperRevisionWithRehash(dir, revision.revisionId, Object.freeze({ ...revision, requirementId: "req-tampered" }));
+  };
+  const current = withDetailReadBarrier(store, "FROM loop_artifact_revisions", tamper,
+    () => store.getCurrentArtifactRevision("run-001", "requirement-intake"));
+  assert(current.fired, "barrier fired inside the read transaction");
+  assert(
+    current.result !== undefined &&
+      current.result.revisionId === revision.revisionId &&
+      current.result.requirementId === "req-001",
+    "getCurrentArtifactRevision returns the pre-tamper current revision from its own transaction snapshot",
+  );
+  expectThrow("STORE_CORRUPT", () => store.getCurrentArtifactRevision("run-001", "requirement-intake"),
+    "the committed tamper fails closed on the next current read");
 });
 
 console.log("artifact revision: blob binding verifies the physical blob (bound artifact store)");

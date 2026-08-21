@@ -615,11 +615,13 @@ withStore((store) => {
 }
 
 {
-  // Transaction-gap regression: a second connection rewrites the run's
-  // requirement_id AND rehashes the change record to match, so the tampered
-  // detail row is self-consistent under the tampered identity. Snapshot
-  // verification and record return happen in ONE transaction, so the read
-  // must fail closed instead of returning the tampered record.
+  // Pre-transaction tamper barrier: the second connection rewrites the run's
+  // requirement_id AND rehashes the change record to match, and COMMITS before
+  // the read starts. The read's snapshot verification then observes the
+  // tampered identity and fails closed. (The mid-transaction window is covered
+  // by the deterministic barrier tests below; this case alone cannot
+  // distinguish a single-transaction read from the former two-transaction
+  // read, because both fail here at snapshot verification.)
   const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
   const path = join(dir, "journal.db");
   const store = new LoopRunStore(path);
@@ -644,6 +646,137 @@ withStore((store) => {
       "findLatest verifies identity and records in one transaction");
     expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-tampered"),
       "findLatest under the tampered requirement id fails closed");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Deterministic mid-transaction barrier for read-path TOCTOU regression
+ * tests (Round 8, comment precision per Round 9 L1). Fires `onBarrier` when
+ * the store's own connection first prepares a statement matching
+ * `detailSqlMarker`. Precise position: snapshot verification itself validates
+ * the change/revision chains through the internal readers, so the first match
+ * fires INSIDE verification's chain-validation read — but always after the
+ * transaction's first read (the `loop_runs` identity row), which is what pins
+ * the WAL snapshot. The barrier callback commits a tamper through a SECOND
+ * connection while the read transaction is still open; the tamper is
+ * therefore invisible to the rest of the transaction, including the detail
+ * read that produces the returned rows. A two-transaction implementation
+ * (verification committed, then a fresh detail-read transaction) would
+ * instead observe and return the spliced tampered rows, failing these tests.
+ */
+function withDetailReadBarrier<T>(
+  store: LoopRunStore,
+  detailSqlMarker: string,
+  onBarrier: () => void,
+  read: () => T,
+): { result: T; fired: boolean } {
+  const db = (store as unknown as { db: Database.Database }).db;
+  const originalPrepare = db.prepare;
+  let fired = false;
+  db.prepare = function (this: Database.Database, sql: string) {
+    if (!fired && sql.includes(detailSqlMarker)) {
+      fired = true;
+      onBarrier();
+    }
+    return originalPrepare.call(this, sql);
+  } as typeof db.prepare;
+  try {
+    return { result: read(), fired };
+  } finally {
+    db.prepare = originalPrepare;
+  }
+}
+
+{
+  // Mid-transaction barrier, listRequirementChanges: the second connection
+  // rewrites the run's requirement_id AND rehashes the change record at the
+  // first detail-table statement of this read (inside snapshot verification's
+  // chain-validation read, after the transaction's snapshot is pinned). The
+  // returned rows are read afterwards from the same pinned snapshot: the read
+  // must return its own consistent pre-tamper snapshot (not an error, not
+  // spliced data); the committed tamper is then detected by the NEXT read.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    const record = createLoopRequirementChangeRecord(newRequirementDraft());
+    store.appendRequirementChange(record);
+    const tampered: LoopRequirementChangeRecord = Object.freeze({ ...record, requirementId: "req-tampered" });
+    const tamper = () => {
+      const raw = new Database(path);
+      try {
+        raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+        raw.prepare(
+          "UPDATE loop_requirement_changes SET requirement_id = 'req-tampered', canonical_sha256 = ? WHERE change_record_id = ?",
+        ).run(
+          createHash("sha256").update(canonicalizeLoopRequirementChangeRecord(tampered)).digest("hex"),
+          record.changeRecordId,
+        );
+      } finally {
+        raw.close();
+      }
+    };
+    const listed = withDetailReadBarrier(store, "FROM loop_requirement_changes", tamper,
+      () => store.listRequirementChanges("run-001"));
+    assert(listed.fired, "barrier fired inside the read transaction");
+    assert(
+      listed.result.length === 1 &&
+        listed.result[0]!.changeRecordId === record.changeRecordId &&
+        listed.result[0]!.requirementId === "req-001",
+      "listRequirementChanges returns its own consistent pre-tamper snapshot, not the mid-transaction tamper",
+    );
+    expectThrow("STORE_CORRUPT", () => store.listRequirementChanges("run-001"),
+      "the committed tamper fails closed on the next read");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+{
+  // Mid-transaction barrier, findLatestRequirementChangeByRequirement: same
+  // barrier position (first detail-table statement of the transaction, after
+  // the snapshot is pinned); the scan must return the pre-tamper record bound
+  // to the verified identity.
+  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
+  const path = join(dir, "journal.db");
+  const store = new LoopRunStore(path);
+  store.init();
+  try {
+    store.createRun(makeIdentity());
+    const record = createLoopRequirementChangeRecord(newRequirementDraft());
+    store.appendRequirementChange(record);
+    const tampered: LoopRequirementChangeRecord = Object.freeze({ ...record, requirementId: "req-tampered" });
+    const tamper = () => {
+      const raw = new Database(path);
+      try {
+        raw.prepare("UPDATE loop_runs SET requirement_id = 'req-tampered' WHERE run_id = 'run-001'").run();
+        raw.prepare(
+          "UPDATE loop_requirement_changes SET requirement_id = 'req-tampered', canonical_sha256 = ? WHERE change_record_id = ?",
+        ).run(
+          createHash("sha256").update(canonicalizeLoopRequirementChangeRecord(tampered)).digest("hex"),
+          record.changeRecordId,
+        );
+      } finally {
+        raw.close();
+      }
+    };
+    const latest = withDetailReadBarrier(store, "FROM loop_requirement_changes", tamper,
+      () => store.findLatestRequirementChangeByRequirement("req-001"));
+    assert(latest.fired, "barrier fired inside the read transaction");
+    assert(
+      latest.result !== undefined &&
+        latest.result.changeRecordId === record.changeRecordId &&
+        latest.result.requirementId === "req-001",
+      "findLatest returns the pre-tamper record from its own transaction snapshot",
+    );
+    expectThrow("STORE_CORRUPT", () => store.findLatestRequirementChangeByRequirement("req-001"),
+      "the committed tamper fails closed on the next findLatest");
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });

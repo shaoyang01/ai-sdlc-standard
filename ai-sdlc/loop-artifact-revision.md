@@ -1,6 +1,6 @@
 # LOOP Artifact Revision and Current Authority Contract（产物版本与当前权威合同）
 
-> 状态：0.1.7 Draft（2026-08-21，C02-WP2 实施，Decision-040；Round 7 复审修正后待重新复审）
+> 状态：0.1.8 Draft（2026-08-21，C02-WP2 实施，Decision-040；Round 8 复审修正：入口/gateway 接线校验拆出为 WP5 候选、TOCTOU 回归改为确定性屏障证据；待重新复审）
 > 关联：[Decision-040](../docs/AI-SDLC-Decision-Records.md#decision-040授权并实施-c02-wp2-artifact-revision-and-current-authority) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G2 / §7 · [Artifact Versioning](artifact-versioning.md) · [Artifact Flow](artifact-flow.md)
 
 ## 1. Purpose
@@ -52,7 +52,7 @@
 
 由于 C01 capability 链每 run 每 capability 只承认一次成功执行，且读回路径重验 producer 绑定，可读的 journal 当前不可能容纳同一节点的两个 revision（第二个 revision 需要同 capability 的第二次成功执行证据）。同节点多 revision（supersede/pointer 前进成功路径）为 C02-WP4 重执行语义预留：存储语义在本合同中完整定义，链规则在链校验器层面验证，store 级 supersede 成功路径覆盖随 WP4 的链扩展一并验收。
 
-**blob 绑定（第五项绑定）**：当 run store 绑定 `LoopArtifactStore`（`LoopRunStoreOptions.artifactStore`）时，`appendArtifactRevision` 在四项绑定之外验证 `artifactRef`/`digest` 指向的物理 blob 真实存在且 digest 一致；blob 从未写入或 digest 漂移一律 `ILLEGAL_TRANSITION` 拒绝，缺失 blob 不得成为 ACTIVE current。该绑定在**每条读回路径逐条重验**（§7）：blob 写后丢失或内容被覆写时读取 fail-closed（`STORE_CORRUPT`）。未绑定 artifact store 的 run store 保持 journal-only 语义（仅限纯 journal 测试与工具）；**受支持入口强制绑定、校验不可伪造、配置不可换**：`LoopCapabilityEntry` 构造时要求 `runStore` 已绑定且与入口读取所用 artifact store 为同一实例，并要求 `gateway` 为真实 `ExecutionGateway` 且其 capability tracing 写入**同一对** run store / artifact store 实例；同一性一律经**非虚拟**校验判定——`isLoopRunStoreBoundToArtifactStore` / `isExecutionGatewayTracingBoundTo` 模块函数读取构造期私有绑定状态（模块级 WeakMap），子类覆写或猴子补丁实例成员均无法伪造，亦不泄露任何 store 能力；入口与 gateway 在构造时**快照并冻结**各自依赖配置（含嵌套 `capabilityTracing`），构造后对调用方配置对象的任何替换/修改都不能改变已验 wiring；任一不满足 fail-closed（`INVALID_INPUT`）。
+**blob 绑定（第五项绑定）**：当 run store 绑定 `LoopArtifactStore`（`LoopRunStoreOptions.artifactStore`）时，`appendArtifactRevision` 在四项绑定之外验证 `artifactRef`/`digest` 指向的物理 blob 真实存在且 digest 一致；blob 从未写入或 digest 漂移一律 `ILLEGAL_TRANSITION` 拒绝，缺失 blob 不得成为 ACTIVE current。该绑定在**每条读回路径逐条重验**（§7）：blob 写后丢失或内容被覆写时读取 fail-closed（`STORE_CORRUPT`）。未绑定 artifact store 的 run store 保持 journal-only 语义（仅限纯 journal 测试与工具）。本合同只定义 store 级绑定语义；**受支持入口是否强制绑定、如何校验 wiring 属生产入口接线范畴，明确排除（§9，C02-WP5）**。
 
 ## 5. 持久化与并发语义
 
@@ -106,3 +106,4 @@
 | 0.1.5 | 2026-08-21 | Draft | Round 5 复审修正：入口同时约束 gateway——`ExecutionGateway` 新增 `isCapabilityTracingBoundTo` 谓词，入口要求 gateway 的 capability tracing 写入同一对 run store / artifact store 实例（防止输出 blob 与 journal 分裂到不同 store）；同一性判定改为不暴露实例能力的谓词（`LoopRunStore.isBoundToArtifactStore` 取代泄露 put/close 的 `artifactStoreBinding` 访问器）；补 gateway tracing 错配与非真实 gateway 负例；待重新复审。 |
 | 0.1.6 | 2026-08-21 | Draft | Round 6 复审修正（同实例校验可伪造、构造后配置可换）：绑定同一性改为**非虚拟**校验——模块级 WeakMap 记录构造期绑定状态，入口经模块函数 `isLoopRunStoreBoundToArtifactStore` / `isExecutionGatewayTracingBoundTo` 判定，子类覆写与猴子补丁实例成员均无法伪造（实例谓词方法移除）；`LoopCapabilityEntry` 与 `ExecutionGateway` 构造时快照并冻结依赖配置（含嵌套 `capabilityTracing`），构造后替换调用方 options 的 gateway/artifactStore/capabilityTracing 均不影响已验 wiring；补子类伪造、猴子补丁、构造后变异与端到端执行回归；待重新复审。 |
 | 0.1.7 | 2026-08-21 | Draft | Round 7 复审修正（读路径 TOCTOU）：`listArtifactRevisions` / `getCurrentArtifactRevision`（及 WP1 的对应读路径）的快照验证与 revision 明细读取合入**同一事务**，消除两事务间被并发连接篡改 `requirement_id` 绑定的窗口；内部 revision 读取器改为接收已验证 `requirementId`，不再自行查询表列；新增第二连接确定性事务间隙回归（list/current 在间隙篡改下均 `STORE_CORRUPT`），保留既有 blob 绑定、producer 重验与正常读回回归；待重新复审。 |
+| 0.1.8 | 2026-08-21 | Draft | Round 8 复审修正：①范围收口——`LoopCapabilityEntry`/`ExecutionGateway` 的接线校验（同实例绑定、非虚拟 WeakMap 判定、配置快照冻结）及其测试越出 WP2 授权的生产入口接线边界（§9 WP5），全部拆出为未提交的 WP5 候选；`LoopRunStoreOptions.artifactStore` 与 store 级 blob 读写校验保留在 WP2。②TOCTOU 证据修正——Round 7 的两处"事务间隙"回归实际在公开读调用前完成并提交篡改，无法区分单事务与旧双事务实现；已重写为确定性屏障回归：屏障在"快照已验证、明细读取前"经第二连接提交篡改，断言四条公开读路径（WP1 的 list/findLatest、WP2 的 list/getCurrent）返回本事务一致快照（旧数据、不报错），且篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出；原两处回归改标为"事务开始前篡改 fail-closed"语义。生产读路径未改；待重新复审。 |

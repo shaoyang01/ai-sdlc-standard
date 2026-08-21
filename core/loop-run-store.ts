@@ -112,27 +112,6 @@ function corrupt(message: string): never {
   throw new LoopRunJournalError("STORE_CORRUPT", `persisted run journal is corrupt: ${message}`);
 }
 
-/**
- * Construction-time artifact-store bindings, keyed by store instance. Kept in
- * a module-level WeakMap (not on the instance) so the binding check below is
- * non-virtual: no subclass override or monkey patch of an instance member can
- * forge it, and no store capability leaks through the check.
- */
-const LOOP_RUN_STORE_ARTIFACT_BINDINGS = new WeakMap<LoopRunStore, LoopArtifactStore>();
-
-/**
- * Non-virtual identity check for the C02-WP2 blob binding: true only when
- * `runStore` was constructed with `LoopRunStoreOptions.artifactStore` set to
- * exactly `artifactStore`. Supported entries use this instead of any instance
- * method so the check cannot be forged by subclassing or monkey patching.
- */
-export function isLoopRunStoreBoundToArtifactStore(
-  runStore: LoopRunStore,
-  artifactStore: LoopArtifactStore,
-): boolean {
-  return LOOP_RUN_STORE_ARTIFACT_BINDINGS.get(runStore) === artifactStore;
-}
-
 // ── persisted-data validation boundary ──
 // Data read back from SQLite is untrusted: any validation or canonicalization
 // failure while reading persisted rows is STORE_CORRUPT, never INVALID_INPUT.
@@ -763,7 +742,6 @@ export class LoopRunStore {
         throw new LoopRunJournalError("INVALID_INPUT", "artifactStore must be a LoopArtifactStore instance");
       }
       this.artifactStore = options.artifactStore;
-      LOOP_RUN_STORE_ARTIFACT_BINDINGS.set(this, options.artifactStore);
     }
   }
 

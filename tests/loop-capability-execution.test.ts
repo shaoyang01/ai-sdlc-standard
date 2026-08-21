@@ -156,8 +156,8 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
   const repo = join(root, "repo");
   mkdirSync(repo);
   const id = identity(root);
+  const runStore = new LoopRunStore(join(root, "journal.db"));
   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
-  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
   runStore.init();
   artifactStore.init();
   const source = artifactStore.put("requirement_summary", "interruption recovery Requirement source");
@@ -419,11 +419,11 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(chainRoot, "repo"));
     const chainIdentity = identity(chainRoot);
+    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"));
     const chainArtifacts = new LoopArtifactStore({
       controlRoot: chainIdentity.controlRoot,
       repositoryPath: chainIdentity.repositoryPath,
     });
-    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"), { artifactStore: chainArtifacts });
     chainStore.init();
     chainArtifacts.init();
     const chainGateway = new ExecutionGateway({
@@ -654,8 +654,8 @@ async function main(): Promise<void> {
   const repo = join(root, "repo");
   mkdirSync(repo);
   const id = identity(root);
+  const runStore = new LoopRunStore(join(root, "journal.db"));
   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
-  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
   runStore.init();
   artifactStore.init();
   try {
