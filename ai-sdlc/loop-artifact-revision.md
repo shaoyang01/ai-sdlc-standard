@@ -1,6 +1,6 @@
 # LOOP Artifact Revision and Current Authority Contract（产物版本与当前权威合同）
 
-> 状态：0.1.8 Draft（2026-08-21，C02-WP2 实施，Decision-040；Round 8 复审修正：入口/gateway 接线校验拆出为 WP5 候选、TOCTOU 回归改为确定性屏障证据；待重新复审）
+> 状态：1.0.0 Accepted（2026-08-21，Round 9 独立复审 PASS，C02-WP2 收口，Decision-041；前身为 0.1.8 Draft，Decision-040）
 > 关联：[Decision-040](../docs/AI-SDLC-Decision-Records.md#decision-040授权并实施-c02-wp2-artifact-revision-and-current-authority) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G2 / §7 · [Artifact Versioning](artifact-versioning.md) · [Artifact Flow](artifact-flow.md)
 
 ## 1. Purpose
@@ -107,3 +107,4 @@
 | 0.1.6 | 2026-08-21 | Draft | Round 6 复审修正（同实例校验可伪造、构造后配置可换）：绑定同一性改为**非虚拟**校验——模块级 WeakMap 记录构造期绑定状态，入口经模块函数 `isLoopRunStoreBoundToArtifactStore` / `isExecutionGatewayTracingBoundTo` 判定，子类覆写与猴子补丁实例成员均无法伪造（实例谓词方法移除）；`LoopCapabilityEntry` 与 `ExecutionGateway` 构造时快照并冻结依赖配置（含嵌套 `capabilityTracing`），构造后替换调用方 options 的 gateway/artifactStore/capabilityTracing 均不影响已验 wiring；补子类伪造、猴子补丁、构造后变异与端到端执行回归；待重新复审。 |
 | 0.1.7 | 2026-08-21 | Draft | Round 7 复审修正（读路径 TOCTOU）：`listArtifactRevisions` / `getCurrentArtifactRevision`（及 WP1 的对应读路径）的快照验证与 revision 明细读取合入**同一事务**，消除两事务间被并发连接篡改 `requirement_id` 绑定的窗口；内部 revision 读取器改为接收已验证 `requirementId`，不再自行查询表列；新增第二连接确定性事务间隙回归（list/current 在间隙篡改下均 `STORE_CORRUPT`），保留既有 blob 绑定、producer 重验与正常读回回归；待重新复审。 |
 | 0.1.8 | 2026-08-21 | Draft | Round 8 复审修正：①范围收口——`LoopCapabilityEntry`/`ExecutionGateway` 的接线校验（同实例绑定、非虚拟 WeakMap 判定、配置快照冻结）及其测试越出 WP2 授权的生产入口接线边界（§9 WP5），全部拆出为未提交的 WP5 候选；`LoopRunStoreOptions.artifactStore` 与 store 级 blob 读写校验保留在 WP2。②TOCTOU 证据修正——Round 7 的两处"事务间隙"回归实际在公开读调用前完成并提交篡改，无法区分单事务与旧双事务实现；已重写为确定性屏障回归：屏障在"快照已验证、明细读取前"经第二连接提交篡改，断言四条公开读路径（WP1 的 list/findLatest、WP2 的 list/getCurrent）返回本事务一致快照（旧数据、不报错），且篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出；原两处回归改标为"事务开始前篡改 fail-closed"语义。生产读路径未改；待重新复审。 |
+| 1.0.0 | 2026-08-21 | Accepted | Round 9 独立复审 PASS，C02-WP2 收口（Decision-041）；合同内容等同 0.1.8 Draft，仅状态前进；合同成为 WP3～WP6 的产物版本与 current 权威持久基线。 |

@@ -1467,3 +1467,49 @@ C02-WP2 具备候选实现证据，但在独立复审与 Current User 裁决前�
 2. **store 级 supersede 成功路径覆盖的正式重基线**：Round 1 已证明该场景在 C01 链下不可构造（同节点第二个 revision 需要同 capability 第二次成功执行证据，链校验器在 WP4 重执行扩展前禁止）。Round 2 复审者要求要么恢复可验证的 store 级前进语义、要么由 Current User 显式重基线。Current User 于 2026-08-20 **显式接受重基线**：store 级端到端 supersede 成功路径（含 stale pointer 前进、superseded upstream、markStale-on-superseded 变体）的验证随 C02-WP4 的链扩展一并验收；WP-2 以转换后状态校验 + 纯函数回归 + store 级边界测试作为当前证据。该重基线不扩大任何授权边界，WP4 范围不变。
 
 修正后专项 190/190 通过，`loop-run-store` 185/185、`tsc --noEmit` 通过。修正提交推送至 PR #90 后进入 Round 3 复审；WP-2 保持未收口，授权不消费。
+
+## Round 3～9 复审与修正（2026-08-21）
+
+Round 3 CHANGES_REQUESTED（缺失 blob 可判定）→ 第五项 blob 绑定：`LoopRunStoreOptions.artifactStore` 绑定 `LoopArtifactStore` 后，写入拒绝 blob 未写入/digest 漂移的 revision，读回逐条重验物理 blob（合同 0.1.3）。Round 4～6 CHANGES_REQUESTED（入口/gateway 接线：同实例绑定、gateway tracing 同实例、非虚拟 WeakMap 判定与配置冻结，合同 0.1.4～0.1.6）→ Round 8 复审裁定这些接线修正越出 WP2 授权的生产入口接线边界（WP5 范畴），已整体拆出为未提交的 WP5 候选补丁（`temp/wp5-candidate-entry-wiring.patch`），WP2 仅保留 store 级 `artifactStore` 绑定与 blob 读写校验（合同 0.1.8 范围项①）。Round 7 CHANGES_REQUESTED（公开读路径快照验证与明细返回拆在两个事务）→ 单事务化 + 内部读取器只接收已验证 requirementId（合同 0.1.7；WP1 同步，合同 1.0.5）。Round 8 CHANGES_REQUESTED（Round 7 的 TOCTOU 回归在公开读调用前即提交篡改，无法区分单/双事务实现）→ 确定性屏障回归：屏障在事务首个明细表语句处经第二连接提交篡改，四条公开读路径返回本事务一致快照、篡改在事务结束后被下一次读取以 STORE_CORRUPT 检出（合同 0.1.8；WP1 合同 1.0.6）。
+
+Round 9 独立复审（范围 0485376..b576e13 加当时未提交的 Round 8 修正，现提交为 `1cc650a`）裁决 **PASS**：无 Critical/High 阻塞；WP2 producer 绑定、非末尾 ACTIVE、WP1/WP2 读路径一致性独立复核通过；非阻塞 L1（屏障测试注释精确化）已在 `1cc650a` 修正；本 Decision 早先轮次的断言计数由本节最终值取代。
+
+最终验证（head `1cc650a`）：专项 loop-artifact-revision 212/212、loop-change-classification 132/132、loop-run-store 185/185、loop-run-provenance 79/79、loop-capability-execution 86/86、loop-validation-guards 49/49；`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0（145.4s）；mutation gate 14/14 杀死 + 3/3 探针；GitHub Actions run 32440818155 四项检查全绿（PR #90 Draft）。WP-2 收口与授权消费由 Decision-041 记录。
+
+# Decision-041：C02-WP1 重新收口与 C02-WP2 复审通过与收口
+
+## 状态
+
+Accepted（2026-08-21，Current User 接受 Round 9 独立复审 PASS 结论，裁决 C02-WP1 重新收口与 C02-WP2 收口）
+
+## 背景
+
+C02-WP1 原经 Decision-038 收口，但 WP1/WP2 合并多轮独立复审在 Round 3～8 发现 WP1 四处缺口（跨 run `NEW_REQUIREMENT` 唯一性、同事务验证相关链与 findLatest 语义、守卫短路、未验证 identity 列过滤）与读路径 TOCTOU 证据问题，WP1 重开，Decision-038 收口结论保留为历史事实、不沿用。C02-WP2 经 Decision-040 授权实施，历经 Round 1～8 复审修正（producer 绑定重验、非末尾 ACTIVE、转换后状态校验 + `supersedeArtifactRevision` 纯函数、第五项 blob 绑定、入口/gateway 接线越界拆出为 WP5 候选、读路径单事务化、TOCTOU 确定性屏障证据）。Round 9 独立复审覆盖 `0485376..b576e13` 加 Round 8 修正（提交 `1cc650a`），裁决 PASS，无 Critical/High/Medium/Low 阻塞项。
+
+## 问题
+
+C02-WP1（重开后）与 C02-WP2 是否满足规划 §6/§7 验收与各自合同，可否消费授权完成治理收口？
+
+## 决策
+
+1. 接受 Round 9 独立复审 PASS 结论；C02-WP1 重新收口、C02-WP2 收口。
+2. 控制平面消费 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 授权并登记 WP1 重新收口与 WP2 完成；`C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 维持已消费；C02 四项完成合同保持 `INCOMPLETE`（需 WP3～WP6 联合证据）。
+3. `ai-sdlc/loop-change-classification.md` 升为 1.1.0 Accepted（内容等同 1.0.6 Draft）；`ai-sdlc/loop-artifact-revision.md` 升为 1.0.0 Accepted（内容等同 0.1.8 Draft）；C02 规划同步状态（v1.0.2）。
+4. WP5 候选入口/gateway 接线补丁保持未提交，归 C02-WP5 授权范围；store 级端到端 supersede 成功路径覆盖维持 Decision-040 Round 2 的 WP4 重基线。
+5. 本决定不授权 C02-WP3～WP6，不授权 Ready/merge（PR #90 保持 Draft，Ready 与 merge 为独立 Gate，需单独明确授权），不登记 C02 任一完成合同项，不授权真实 Agent 启用、Git/PR 自动化或 C03～C05。
+
+## 原因
+
+Round 9 复审在同一范围独立复核：WP1 不变量（跨 run `NEW_REQUIREMENT` 唯一、corruption-first 全链验证、BLOCKED 语义、已验证 identity 过滤、公开读路径一致快照）与 WP2 不变量（v3→v4 原子迁移、producer/output/Gate/blob 五项绑定、revision 链状态机、pointer 双向校验、CAS 写入与 fail-closed 读回）均成立；四条公开读路径同事务完成快照验证与明细读取，TOCTOU 由确定性屏障回归证据覆盖。独立验证：专项 132/212/185/79/86/49 全绿、`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0、mutation gate 14/14 杀死 + 3/3 探针；代码 head `1cc650a` 的 GitHub Actions run 32440818155 四项检查全绿。
+
+## 影响
+
+C02 缺口 G1（分类持久）与 G2（产物版本与 current 权威持久）关闭：同一 Requirement 的入口变化与每个 canonical 节点的当前交付物均具备固定 schema、可恢复、可审计的 run journal 持久面，journal 格式前进到 v4，C01 历史一行未改。WP3（失效传播）成为下一个可申请授权的工作包；本收口不构成 WP3～WP6 的实施入口，也不构成 PR #90 的 Ready/merge 授权。
+
+## 实现状态
+
+用户已最终裁决通过；收口治理文档随 PR #90 同分支提交推送，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针；Ready/merge 待单独授权后执行。
+
+## 代码与验证依据
+
+`core/loop-change-classification.ts`；`core/loop-artifact-revision.ts`；`core/loop-run-store.ts`（v3/v4 迁移、change/revision 链读写、单事务读路径、blob 绑定重验）；`ai-sdlc/loop-change-classification.md` 1.1.0 Accepted；`ai-sdlc/loop-artifact-revision.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（132/132）；`tests/loop-artifact-revision.test.ts`（212/212）；`tests/loop-run-store.test.ts`（185/185）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；`tests/loop-validation-guards.test.ts`（49/49）；实现与修正提交 `be2db49`、`23a9895`、`8cf25f9`、`b576e13`、`1cc650a`（PR #90，Draft）；Round 9 独立复审 PASS 与 CI run 32440818155（四项检查全绿）。

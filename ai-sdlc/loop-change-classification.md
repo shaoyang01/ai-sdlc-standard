@@ -1,6 +1,6 @@
 # LOOP Requirement Change Classification Contract（需求变更分类合同）
 
-> 状态：1.0.6 Draft（2026-08-21，Round 8 复审修正：读路径 TOCTOU 的回归证据改为确定性屏障测试（快照验证后、明细读取前经第二连接提交篡改），原"事务间隙"回归改标为事务开始前篡改 fail-closed 语义；合同语义不变，待重新复审。前身为 1.0.0 Accepted，Decision-038；0.1.0 Draft，Decision-037）
+> 状态：1.1.0 Accepted（2026-08-21，Round 9 独立复审 PASS，C02-WP1 重开后重新收口，Decision-041；内容等同 1.0.6 Draft，仅状态前进。前身为 1.0.0 Accepted，Decision-038；0.1.0 Draft，Decision-037）
 > 关联：[LOOP Entry Contract](loop-entry-contract.md) §4/§6/§7/§8 · [Change Control](change-control.md) · [Development Path Governance](development-path-governance.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §5/§6
 
 ## 1. Purpose
@@ -125,3 +125,4 @@
 | 1.0.4 | 2026-08-21 | Draft | Round 6 复审 CHANGES_REQUESTED 修正：守卫与所有按 Requirement 的恢复查询不得以未验证的 `loop_runs.requirement_id` 列选择相关 run——改为枚举全部 run、经已验证快照路径逐 run 验证 identity（identity hash 覆盖 requirement_id，篡改即 `STORE_CORRUPT`），再按已验证 identity 过滤；覆盖 append、`findLatestRequirementChangeByRequirement` 与入口恢复（`recoverRunContext`）负例；待重新复审。 |
 | 1.0.5 | 2026-08-21 | Draft | Round 7 复审 CHANGES_REQUESTED 修正（读路径 TOCTOU）：`listRequirementChanges` / `findLatestRequirementChangeByRequirement`（及 WP2 的 `listArtifactRevisions` / `getCurrentArtifactRevision`）的快照验证与明细读取合入**同一事务**，消除"先验证、后读取"两事务间被并发连接篡改 identity 绑定的窗口；内部 change/revision 读取器改为接收快照验证产出的已验证 `requirementId`，不再自行查询 `loop_runs.requirement_id` 列；新增第二连接确定性事务间隙回归（WP1 list/findLatest 与 WP2 list/current 在间隙篡改下均 `STORE_CORRUPT`），保留既有静态篡改、跨连接写入与正常恢复回归；待重新复审。 |
 | 1.0.6 | 2026-08-21 | Draft | Round 8 复审修正（TOCTOU 证据有效性）：Round 7 新增的"事务间隙"回归实际在公开读调用前即完成并提交篡改，旧双事务实现同样会在快照验证处失败，无法区分实现、未证明间隙窗口被消除；已重写为确定性屏障回归——屏障在该读事务首个明细表语句处（快照验证自身会经内部读取器校验明细链，屏障即在此处触发；事务快照已由首次读取固定）经第二连接提交篡改，断言四条公开读路径返回本事务一致快照（篡改前数据、不强行报错），且篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出；原两处回归改标为"事务开始前篡改 fail-closed"语义。合同语义不变，仅证据与表述修正；待重新复审。 |
+| 1.1.0 | 2026-08-21 | Accepted | Round 9 独立复审 PASS，C02-WP1 重开后重新收口（Decision-041）；合同内容等同 1.0.6 Draft，仅状态前进，重新成为 WP2～WP6 的分类持久基线。 |

@@ -1,9 +1,9 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**IN PROGRESS**（2026-08-20，C02-WP1 已实施、复审通过并收口，Decision-037/038；WP2～WP6 仍需逐 WP 单独授权）
+> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口，Decision-037/038/040/041；WP3～WP6 仍需逐 WP 单独授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）
 > 权威依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
@@ -152,7 +152,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：artifact 失效计算、Re-Gate dispatch、业务实现。
 
-- 状态（2026-08-21）：**Round 8 复审 CHANGES_REQUESTED 已修正，待重新复审**；原 Accepted/收口结论（Decision-038）不沿用。Round 3 缺口：WP1 可跨 run 重复声明 `NEW_REQUIREMENT`——已修正为跨 run 写入守卫（合同 1.0.1）。Round 4 缺口：守卫以未验证的原始行裁决、`findLatestRequirementChangeByRequirement` 返回尾部 BLOCKED 与合同语义不符——已修正为同事务内验证相关链再裁决、findLatest 只返回最新 CLASSIFIED（合同 1.0.2）。Round 5 缺口：守卫用 `some()` 短路——已修正为逐一完整读验所有相关链（合同 1.0.3）。Round 6 缺口：守卫与恢复查询以未验证的 `loop_runs.requirement_id` 列选择相关 run（篡改该列可把旧 run 从守卫/恢复中隐藏）——已修正为枚举全部 run、经已验证快照路径验证 identity 后按已验证 identity 过滤，覆盖 append、findLatest 与入口恢复负例（合同 1.0.4）。Round 7 缺口：公开读路径把快照验证与明细返回拆在两个事务（事务间隙可被并发连接篡改 identity 绑定，返回脱离已验证快照的数据）——已修正为单事务"验证快照 + 读明细"，内部读取器只接收已验证 requirementId、不再自查表列（合同 1.0.5）。Round 8 缺口：Round 7 的"事务间隙"回归未真正复现 TOCTOU（篡改在公开读调用前已提交，无法区分单/双事务实现）——已重写为确定性屏障回归：屏障在快照验证后、明细读取前经第二连接提交篡改，断言 list/findLatest 返回本事务一致快照、篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出；原回归改标为事务开始前篡改 fail-closed（合同 1.0.6，仅证据与表述修正，语义不变）。
+- 状态（2026-08-21）：**Accepted / 已重新收口**（Decision-041）；原 Accepted/收口结论（Decision-038）经 Round 3～8 复审发现缺口后重开、不沿用。Round 3 缺口：WP1 可跨 run 重复声明 `NEW_REQUIREMENT`——已修正为跨 run 写入守卫（合同 1.0.1）。Round 4 缺口：守卫以未验证的原始行裁决、`findLatestRequirementChangeByRequirement` 返回尾部 BLOCKED 与合同语义不符——已修正为同事务内验证相关链再裁决、findLatest 只返回最新 CLASSIFIED（合同 1.0.2）。Round 5 缺口：守卫用 `some()` 短路——已修正为逐一完整读验所有相关链（合同 1.0.3）。Round 6 缺口：守卫与恢复查询以未验证的 `loop_runs.requirement_id` 列选择相关 run（篡改该列可把旧 run 从守卫/恢复中隐藏）——已修正为枚举全部 run、经已验证快照路径验证 identity 后按已验证 identity 过滤，覆盖 append、findLatest 与入口恢复负例（合同 1.0.4）。Round 7 缺口：公开读路径把快照验证与明细返回拆在两个事务（事务间隙可被并发连接篡改 identity 绑定，返回脱离已验证快照的数据）——已修正为单事务"验证快照 + 读明细"，内部读取器只接收已验证 requirementId、不再自查表列（合同 1.0.5）。Round 8 缺口：Round 7 的"事务间隙"回归未真正复现 TOCTOU（篡改在公开读调用前已提交，无法区分单/双事务实现）——已重写为确定性屏障回归：屏障在快照验证后、明细读取前经第二连接提交篡改，断言 list/findLatest 返回本事务一致快照、篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出；原回归改标为事务开始前篡改 fail-closed（合同 1.0.6，仅证据与表述修正，语义不变）。Round 9 独立复审 PASS（专项 loop-change-classification 132/132、loop-run-store 185/185、loop-run-provenance 79/79、loop-capability-execution 86/86、loop-validation-guards 49/49，`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0、mutation gate 14/14 杀死 + 3/3 探针；GitHub Actions run 32440818155 四项检查全绿），Current User 裁决重新收口；合同前进 1.1.0 Accepted。授权 `C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 维持已消费。
 
 ### C02-WP2：Artifact Revision and Current Authority
 
@@ -170,7 +170,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：finding 分类和自动路由。
 
-- 状态（2026-08-21）：**已实施，Round 8 复审修正后待重新复审**（Decision-040）；Round 1 复审 CHANGES_REQUESTED（读回 producer 绑定重验、链非末尾 ACTIVE 规则、测试控制字节）已修正；Round 2 复审 FAIL（H3：写入路径以转换前状态校验候选链）已修正为转换后状态校验 + `supersedeArtifactRevision` 纯函数统一语义；Round 3 复审 CHANGES_REQUESTED（缺失 blob 可判定）已修正为第五项 blob 绑定（合同 0.1.3）；Round 4～6 复审的入口/gateway 接线修正（入口强制同实例绑定、gateway tracing 同实例校验、非虚拟判定与配置冻结，合同 0.1.4～0.1.6）经 Round 8 复审裁定越出 WP2 授权的生产入口接线边界（WP5 范畴），已整体拆出为未提交的 WP5 候选，WP2 仅保留 `LoopRunStoreOptions.artifactStore` 与 store 级 blob 读写校验；Round 7 复审 CHANGES_REQUESTED（公开读路径的快照验证与明细返回拆在两个事务）已修正为单事务化 + 内部读取器只接收已验证 requirementId（合同 0.1.7）；Round 8 复审 CHANGES_REQUESTED（Round 7 的 TOCTOU 回归未复现真正的事务间隙）已修正为确定性屏障回归：屏障在快照验证后、明细读取前经第二连接提交篡改，断言 list/getCurrent 返回本事务一致快照、篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出（合同 0.1.8）。store 级端到端 supersede 成功路径覆盖经 Current User 显式重基线，随 C02-WP4 链扩展一并验收。授权 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 未消费。
+- 状态（2026-08-21）：**Accepted / 已收口**（Decision-041；实施授权 Decision-040）；Round 1 复审 CHANGES_REQUESTED（读回 producer 绑定重验、链非末尾 ACTIVE 规则、测试控制字节）已修正；Round 2 复审 FAIL（H3：写入路径以转换前状态校验候选链）已修正为转换后状态校验 + `supersedeArtifactRevision` 纯函数统一语义；Round 3 复审 CHANGES_REQUESTED（缺失 blob 可判定）已修正为第五项 blob 绑定（合同 0.1.3）；Round 4～6 复审的入口/gateway 接线修正（入口强制同实例绑定、gateway tracing 同实例校验、非虚拟判定与配置冻结，合同 0.1.4～0.1.6）经 Round 8 复审裁定越出 WP2 授权的生产入口接线边界（WP5 范畴），已整体拆出为未提交的 WP5 候选，WP2 仅保留 `LoopRunStoreOptions.artifactStore` 与 store 级 blob 读写校验；Round 7 复审 CHANGES_REQUESTED（公开读路径的快照验证与明细返回拆在两个事务）已修正为单事务化 + 内部读取器只接收已验证 requirementId（合同 0.1.7）；Round 8 复审 CHANGES_REQUESTED（Round 7 的 TOCTOU 回归未复现真正的事务间隙）已修正为确定性屏障回归：屏障在快照验证后、明细读取前经第二连接提交篡改，断言 list/getCurrent 返回本事务一致快照、篡改在事务结束后被下一次读取以 `STORE_CORRUPT` 检出（合同 0.1.8）。store 级端到端 supersede 成功路径覆盖经 Current User 显式重基线，随 C02-WP4 链扩展一并验收。Round 9 独立复审 PASS（专项 loop-artifact-revision 212/212、loop-change-classification 132/132、loop-run-store 185/185、loop-run-provenance 79/79、loop-capability-execution 86/86、loop-validation-guards 49/49，`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0、mutation gate 14/14 杀死 + 3/3 探针；GitHub Actions run 32440818155 四项检查全绿），Current User 裁决收口；合同前进 1.0.0 Accepted。授权 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 已消费。
 
 ### C02-WP3：Finding Lifecycle and Dependency Invalidation
 
@@ -316,3 +316,4 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 | 0.1.0 | 2026-08-20 | Draft for user review | 基于 C01 收口事实、Roadmap C02 完成合同和当前 Source 复用审计，提出六个有界工作包、设计不变量、验收映射与实施排除。 |
 | 1.0.0 | 2026-08-20 | Accepted | Current User 裁决接受全部六个裁决点（Decision-036），规划成为正式合同；实施仍逐 WP 单独授权。 |
 | 1.0.1 | 2026-08-20 | Accepted | 登记 C02-WP1 Round 2 复审通过与收口（Decision-038）；C02 四项完成合同保持 INCOMPLETE，WP2～WP6 保持未授权。 |
+| 1.0.2 | 2026-08-21 | Accepted | 登记 C02-WP1 重开后经 Round 9 复审 PASS 重新收口与 C02-WP2 Round 9 复审通过与收口（Decision-041）；C02 四项完成合同保持 INCOMPLETE，WP3～WP6 保持未授权。 |
