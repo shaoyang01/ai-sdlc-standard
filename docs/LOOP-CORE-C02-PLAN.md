@@ -1,9 +1,9 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；WP4～WP6 仍需逐 WP 单独授权）
+> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；2026-08-21 Current User 裁决单轨重基线并授权 C02-WP3.5 治理登记，Decision-044；WP3.5 实施与 WP4～WP6 仍需逐 WP 单独授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）、Decision-044（C02-WP3.5 单轨生命周期重基线授权与两项治理裁决）
 > 权威依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
@@ -33,7 +33,7 @@ Current User 本轮只授权：
 
 ### 2.1 Objective
 
-把需求摘要、技术方案、方案挑战、方案审核、Development Path Decision、实现、代码审核和测试验收的当前有效版本组织为可恢复的协调链，使后续节点只消费当前有效事实；发现问题时回到最早受影响节点并使依赖它的下游事实失效。
+把需求摘要、技术方案、方案门禁（挑战/澄清/裁决）、任务规划、实现、代码审核和知识同步的当前有效版本组织为可恢复的协调链，使后续节点只消费当前有效事实；发现问题时回到最早受影响节点并使依赖它的下游事实失效。设计深度由 solution-gate 按 LIGHT/STANDARD/DEEP 档位裁决（Decision-044 Q2）；不再存在 Development Path 分流。
 
 ### 2.2 Roadmap completion contract
 
@@ -44,13 +44,16 @@ Current User 本轮只授权：
 
 ### 2.3 Durable continuity rules
 
+> 2026-08-21 按 Decision-044 单轨裁决重基线为 v2 节点链（requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync）；旧节点名映射：tech-design→solution-design，solution-challenge/solution-review→solution-gate，test-validation 退出 LOOP。
+
 | 变化或发现 | 最早受影响节点 | 必需后续动作 |
 | --- | --- | --- |
 | 业务目标、范围、验收或来源冲突 | `requirement-intake` | 修订需求摘要，重新生成方案并重新 Gate |
-| 架构、接口、数据、异常、兼容性或风险缺口 | `tech-design` | 修订技术方案，重新挑战、审核并刷新下游边界 |
-| 实现错误且不改变已批准行为 | `implementation` | 修复后重新代码审核和测试验收 |
-| 代码审核或测试揭示方案缺口 | `tech-design` | 不得只修代码；重新挑战、审核、实现和复核 |
-| Development Path Decision 失效 | `solution-review` 或更早受影响节点 | 重新审核并生成当前路径决定 |
+| 架构、接口、数据、异常、兼容性或风险缺口 | `solution-design` | 修订技术方案，重新过 solution-gate 并刷新下游边界 |
+| 实现错误且不改变已批准行为 | `implementation` | 修复后重新代码审核和知识同步 |
+| 代码审核揭示方案缺口 | `solution-design` | 不得只修代码；重新过 solution-gate、任务规划、实现和复核 |
+| 线下测试/线上反馈（非 LOOP 节点） | `requirement-intake` | 经 WP1 分类（FEEDBACK_DRIVEN_CHANGE 等）开启新 generation，按分类结果路由最早受影响节点 |
+| 设计深度决策失效 | `solution-gate` 或更早受影响节点 | 重新深度裁决并生成当前深度决定 |
 
 ## 3. 当前 Source 复用审计
 
@@ -66,7 +69,7 @@ Current User 本轮只授权：
 | Node Capability Contract + BindingRegistry | 七能力合同、21 binding、每能力唯一 enabled、替换不改变节点合同 | 保持 Agent 中立的节点调用边界 |
 | capability execution event | 已记录 input/output ref+version+digest、Gate、unresolved findings、eligibility 和执行者快照 | 作为一次执行事实；C02 不复制执行者模型 |
 | Artifact/Version/Gate 标准 | 稳定路径 + 内部 SemVer；Gate 绑定 Reviewed Artifact Version；Manifest Artifact Index / Change History / Re-Gate Records | C02 版本、stale 和 Re-Gate 语义来源 |
-| Development Path Governance | 三个固定路径、FULL_REQUIREMENT/DELTA_CHANGE、最早节点返工和 stale 规则 | C02 路径决定与变更范围语义来源 |
+| Development Path Governance | 三个固定路径、FULL_REQUIREMENT/DELTA_CHANGE、最早节点返工和 stale 规则 | ~~C02 路径决定与变更范围语义来源~~（2026-08-21 失效：Decision-044 取消路径分流，Decision Scope/Delta 隔离与用户 override 语义平移入深度档位模型；该文档群的重写属 WP3.5 后续工作包范围） |
 
 ### 3.2 部分复用
 
@@ -107,11 +110,13 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 ### G4. 当前 capability chain 只能线性前进
 
-`recoverRunContext` 从七能力历史中寻找第一个未完成/可重试节点；已经成功的上游能力没有 supersede/invalidate/generation 语义，`LoopCapabilityEntry` 也拒绝调用非 `nextCapability`。它不能表达“测试发现方案缺口 → tech-design generation 2 → challenge/review/implementation/code-review/test 全部重新有效化”。
+`recoverRunContext` 从七能力历史中寻找第一个未完成/可重试节点；已经成功的上游能力没有 supersede/invalidate/generation 语义，`LoopCapabilityEntry` 也拒绝调用非 `nextCapability`。它不能表达"测试发现方案缺口 → 方案节点 generation 2 → 下游全部重新有效化"（2026-08-21 起按 Decision-044：该例中的节点名按 v2 链解读——线下测试反馈经 requirement-intake 新 generation 进入，方案节点为 solution-design，下游为 solution-gate/task-planning/implementation/code-review/knowledge-sync）。
 
-### G5. Development Path Decision 未接入 C01 持久链
+### G5. 设计深度决策未接入 C01 持久链
 
-标准与 D08 已有 Direct/Speckit/Blocked 语义，但 C01 的 solution-review succeeded event 只保存 Gate 与 generic capability output，没有当前 Development Path Decision、Decision Scope 和失效关系的机器投影。
+> 2026-08-21 重基线（Decision-044 Q2）：原"Development Path Decision 未接入持久链"缺口随双轨取消改写——Direct/Speckit/Blocked 三值路径分流不再存在，待接入持久链的是 solution-gate 的设计深度决策（depth = LIGHT/STANDARD/DEEP，decision_status = DECIDED/BLOCKED_UNKNOWN，含 Decision Scope 与 Delta 隔离语义平移）。
+
+原缺口事实保持有效：C01 的 solution-review（现 solution-gate）succeeded event 只保存 Gate 与 generic capability output，没有当前决策、Decision Scope 和失效关系的机器投影。
 
 ### G6. 恢复上下文不包含 C02 全量事实
 
@@ -129,10 +134,11 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 6. **先失效后调度**：变更或有效 finding 的分类、最早节点和下游失效必须原子持久化成功，随后入口才能 dispatch Re-Gate。
 7. **版本资格 fail-closed**：后续节点必须精确消费 current revision 的 path/version/ref/digest 和 current Gate；任一漂移、缺失或 stale 均拒绝。
 8. **finding 关闭有证据**：不得因再次调用 Agent 自动关闭 finding；resolved/accepted-risk 必须引用当前修订和 Gate/用户风险接受证据。
-9. **路径决定只有三个值**：`DIRECT_IMPLEMENTATION`、`SPECKIT_PIPELINE_REQUIRED`、`BLOCKED_NEEDS_REVISION`；C02 不创建第四种路径。
-10. **C01 binding 合同保持**：Re-Gate 可以替换 binding，但不得改变节点输入输出合同或历史执行者快照。
+9. **深度决策只有三个档位**：solution-gate 输出的设计深度决策只取 `LIGHT`、`STANDARD`、`DEEP`，`decision_status` 只取 `DECIDED`、`BLOCKED_UNKNOWN`；C02 不创建第四种深度，也不恢复任何 Direct/Speckit 路径分流（2026-08-21 由 Decision-044 Q2 取代原"路径决定三值"不变量；`BLOCKED_UNKNOWN` 不进入实现）。
+10. **C01 binding 合同保持**：Re-Gate 可以替换 binding，但不得改变节点输入输出合同或历史执行者快照；节点输入输出合同本身随 WP3.5 链重定义时，须经合同升版而非静默修改（Decision-044）。
 11. **不偷渡 Git**：C02 结束于可恢复的 orchestration state；不执行 commit/push/PR/Ready/merge/publication。
 12. **迁移原子性**：run store v2→后续格式迁移必须在单事务内完成 schema 校验、数据迁移和 version 落标；失败全部回滚并可幂等重试。
+13. **历史格式 fail-closed 且可区分**：canonical 链/格式变更采用声明式 cutover，不做历史语义重写、不建链版本化或永久兼容机器；旧格式 journal 打开必须返回明确的 `UNSUPPORTED_HISTORICAL_FORMAT`，不得伪装为 `STORE_CORRUPT`；cutover 前必须完成受支持范围的持久化 journal preflight，发现真实历史数据即停止并重新裁决（Decision-044 Q1）。
 
 ## 6. 有界工作包
 
@@ -190,30 +196,63 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 - 状态（2026-08-21）：**Accepted / 已收口**（Decision-043；实施授权 Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes`、appendFinding 同事务失效传播与 scope 落库、resolve/accept/supersede guarded 迁移与证明写删、读回 proof/scope 全量重验、finding 链挂入快照校验）。Round 1 复审 CHANGES_REQUESTED（2 High：关闭证据未绑定当前事实、失效边完整性未持久化比对）已修正（合同 0.1.1）；Round 2 独立复审（codex）全量重审 `8d1d697..fdc6610` PASS 无阻塞，两项 High 关闭均独立复核成立，两条非阻塞回归加固建议（删中间边重编号命中 scope digest 分支、proof/scope 插入点故障回滚与关闭迁移并发竞争矩阵）已落实（专项 303→340/340、回归 185/79/86/132/212、全量 npm test 130 文件 0 失败、`tsc --noEmit` 与 `git diff --check` 通过；GitHub Actions run 32464819692 与 32469000224 四 job 全绿，后者 ci-tests 首跑命中 C01 期 loop-git-workspace 并发 worktree flake、rerun 后通过），Current User 裁决收口；合同前进 1.0.0 Accepted。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 已消费。
 
+### C02-WP3.5：Single-Rail Lifecycle Re-baseline
+
+**Material outcome**：canonical 节点链从 v1（含 tech-design/solution-challenge/solution-review/test-validation）受控切换到 v2 单轨七节点链（requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync），WP1～WP3 合同条款级升版重基线，双轨路径语义与旧 5 节点执行面退役，WP4～WP6 获得在新链上实施的合同依据。
+
+阶段划分（逐阶段单独授权）：
+
+- **阶段 1：治理登记**（本轮，Decision-044）：Roadmap v2.2.0、本规划 v1.1.0、控制平面 STATE 登记；不含任何代码/Skill/合同实现。
+- **阶段 2：只读影响分析与实施规划**（沿用 2026-08-21 WP3.5 原始授权）：输出 A（v1→v2 节点/finding 分类/最早回退节点/artifact 兼容映射）、B（WP4～WP6 重基线/保留/废弃清单）、C（C03 拆分 Single-Rail Skill Delivery）、D（C04 历史兼容内容处置）、E（受影响标准文档/Skill 合同/校验器/registry/安装副本精确改动清单）、F（后续独立授权工作包：先合同、后实现、后真实复杂需求验证）、G（收敛协议与 knowledge-sync 单轨迁移验收场景）；输出后停止等授权。
+- **阶段 3 起**：按阶段 2 的 F 清单逐包授权实施。
+
+范围（阶段 3 起的实施边界，由阶段 2 细化）：
+
+- canonical 链 v2 定义与全部硬编码镜像（Gate 二元划分、类别绑定、首节点、相邻推进、binding 矩阵）的同步切换；
+- WP2/WP3 Accepted 合同条款级升版（路由矩阵、canonical 依赖图、Gate 绑定、Manifest Index 映射）；WP1 合同原位保留，仅确认交叉引用；
+- 声明式 cutover：旧格式 journal 打开返回 `UNSUPPORTED_HISTORICAL_FORMAT`（不得伪装为 `STORE_CORRUPT`）；cutover 前执行受支持范围持久化 journal preflight，发现真实 v5 journal 即停止并重新申请裁决，不得自动降级（不变量 13）；
+- 设计深度决策模型落地（depth LIGHT/STANDARD/DEEP + decision_status DECIDED/BLOCKED_UNKNOWN，solution-gate 唯一裁决点）取代 Development Path Decision；
+- solution-gate/code-review 收敛协议合同化（Finding Ledger、closure review、新 finding 举证责任、轮次耗尽升级裁决）；solution-gate 对抗扫描与裁决的绑定级分离；
+- 旧 5 节点执行面（`loop/registry/node_map.ts`、`sdlc_graph`、runtime-capability-map 桥接）退役；
+- Skill 收敛映射登记（含 sdlc-requirement-normalizer → requirement-intake 载体、sdlc-specification-writer → solution-design 的显式归属）；pipeline 删除后编排职责由 LOOP runtime 接管；implementation 合并 recorder 后的证据生成约束；
+- knowledge-sync 单轨化：library 工件 + LOOP artifact revision 为 Reconcile 单一对账基准；sync source mode 文档重写为单模式。
+
+验收：链切换后默认 npm test/typecheck/standards 全绿；旧格式打开报 `UNSUPPORTED_HISTORICAL_FORMAT` 负例；preflight 记录归档；WP1～WP3 既有测试在新链定义下等价通过（允许按新链重基线断言，不允许削弱）；收敛协议与 knowledge-sync 迁移验收场景（阶段 2 输出 G）全部可执行。
+
+明确排除：治理登记与影响分析阶段不含任何 runtime 代码、Skill、合同实现、registry、安装副本、Git 发布；实施阶段不恢复 Direct/Speckit 分流，不重写历史 journal。
+
+- 状态（2026-08-21）：**阶段 1 治理登记已完成（Decision-044，工作区待提交授权）**；阶段 2 只读影响分析待执行（授权已存在，登记完成后恢复）。
+
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
+
+> 2026-08-21 按 Decision-044 重基线到 v2 单轨链；实施前须先完成 C02-WP3.5 相应阶段。
 
 **Material outcome**：协调器依据 change/finding 和 current dependency graph 选择唯一最早节点，创建新 generation 的 Re-Gate 计划并逐节点恢复资格。
 
 范围：
 
-- 固化最早节点路由矩阵及冲突优先级；多个 finding 取 canonical chain 中最早节点；
+- 固化最早节点路由矩阵及冲突优先级；多个 finding 取 canonical chain（v2）中最早节点；
 - 新 generation 从最早节点开始，上游未受影响 confirmed revisions 只读复用，下游必须重建/重新 Gate；
-- 重新接入 `solution-challenge`、`solution-review` 和 Development Path Decision；
+- 接入 `solution-gate` 与设计深度决策（depth LIGHT/STANDARD/DEEP + decision_status DECIDED/BLOCKED_UNKNOWN，Decision Scope/Delta 隔离语义平移）；
 - 后续 dispatch 的输入由 orchestration context 生成，调用方不得绕过 current pointers 自选历史 artifact；
-- Direct/Speckit/Blocked 三路径决定必须绑定当前 solution-review revision 和 Gate；Blocked 不进入实现；
+- 深度决策必须绑定当前 solution-gate revision 和 Gate；`BLOCKED_UNKNOWN` 不进入实现；
+- 收敛协议落地：solution-gate/code-review 首轮 Finding Ledger + 后续 closure review，新 finding 须证明由本次修复直接引入，轮次耗尽升级业务裁决/风险接受/范围重置；
+- 线下测试/线上反馈经 requirement-intake 分类（WP1 change 路径）开启新 generation，不再经 test-validation 节点回流；
 - bounded retry、pause、blocked、failed 保持 C01 durable attempt 语义。
 
-验收：至少覆盖 requirement→全链、tech-design→挑战/审核/下游、implementation→review/test 三种回流；代码审核/测试揭示方案缺口必须回 tech-design；stale Gate/Decision 不能放行。
+验收：至少覆盖 requirement→全链、solution-design→门禁/任务规划/下游、implementation→code-review/knowledge-sync 三种回流；代码审核或线下测试反馈揭示方案缺口必须回 solution-design（线下测试经 requirement-intake 新 generation）；stale Gate/深度决策不能放行；收敛协议举证与轮次耗尽升级路径有正反例。
 
-明确排除：真实 Direct/Speckit 实现引擎和目标仓库 Git 操作。
+明确排除：真实实现引擎和目标仓库 Git 操作。
 
 ### C02-WP5：Cross-Entry Recovery and Production Wiring
+
+> 2026-08-21 按 Decision-044 重基线到 v2 单轨链；WP2 Round 8 拆出的入口/gateway 接线候选补丁（`temp/wp5-candidate-entry-wiring.patch`）仍归本 WP 授权范围，并须在 v2 链定义下重新核对。
 
 **Material outcome**：首个受支持入口和 Gateway 真正消费 C02 orchestration authority，在进程中断、binding 替换或另一入口接管后继续同一 generation/next boundary。
 
 范围：
 
-- 扩展恢复上下文：change record、generation、current artifact map、current Gates、open findings、invalidated revisions、Development Path Decision、next capability/eligibility；
+- 扩展恢复上下文：change record、generation、current artifact map、current Gates、open findings、invalidated revisions、设计深度决策、next capability/eligibility（节点集合为 v2 链，含 task-planning/knowledge-sync 的恢复语义）；
 - 入口从恢复结果取得 dispatch command，不接受调用方自选非当前节点；
 - claim 前再次验证 current pointers，terminal 写入时 CAS 防止并发变更将旧输出提升为 current；
 - 复用 C01 interrupted-attempt 关闭语义，保留历史 binding/executor/lineage；
@@ -221,9 +260,11 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 验收：中断前后不重解释 confirmed facts；旧进程晚到结果不能覆盖新 generation；不同入口恢复出相同 current facts 和唯一 next action。
 
-明确排除：C03 实际单仓交付、C04 Speckit 投影、C05 真实业务验收。
+明确排除：C03 实际单仓交付、C05 真实业务验收。
 
 ### C02-WP6：Validation Guards and Completion Acceptance
+
+> 2026-08-21 按 Decision-044 重基线到 v2 单轨链与深度档位模型。
 
 **Material outcome**：用生产路径对抗测试证明 C02 四项完成合同，而不是只验证 helper 或文档矩阵。
 
@@ -231,8 +272,10 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 - schema 固定字段、plain-data/Proxy/accessor/Symbol/额外字段边界；
 - run store 格式迁移、corruption、回滚、并发/CAS；
-- change classification、artifact revision、finding lifecycle、失效传播、Re-Gate、跨入口恢复端到端矩阵；
-- stale artifact/Gate/Decision、旧 generation late result、伪造 finding close、手工选择历史输入全部 fail-closed；
+- change classification、artifact revision、finding lifecycle、失效传播、Re-Gate、跨入口恢复端到端矩阵（场景按 v2 链枚举，含 task-planning/knowledge-sync）；
+- stale artifact/Gate/深度决策、旧 generation late result、伪造 finding close、手工选择历史输入全部 fail-closed；
+- 历史格式兼容负例：v1 及更早格式 journal 打开返回 `UNSUPPORTED_HISTORICAL_FORMAT` 而非 `STORE_CORRUPT`（不变量 13）；cutover preflight 程序有执行记录；
+- 收敛协议对抗矩阵：首轮 Finding Ledger 完整性、closure review 只审关闭、新 finding 举证失败拒绝、轮次耗尽升级；
 - 默认 `npm test`、typecheck、standards、mutation/相关 CI 接入；
 - 独立完整范围复审，不以实施方报告代替。
 
@@ -242,18 +285,19 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 ```text
 C02-WP1 Change Classification ───────────────┐
-                                              ├─> C02-WP4 Re-Gate Orchestration
-C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
-                                                               v
-                                             C02-WP5 Recovery + Production Wiring
-                                                               │
-                                                               v
-                                             C02-WP6 Guards + Completion Acceptance
+                                              ├─> C02-WP3.5 Single-Rail Re-baseline ─> C02-WP4 Re-Gate Orchestration
+C02-WP2 Artifact Revision Authority ─> WP3 ──┘                                                  │
+                                                                                                v
+                                                                              C02-WP5 Recovery + Production Wiring
+                                                                                                │
+                                                                                                v
+                                                                              C02-WP6 Guards + Completion Acceptance
 ```
 
 - WP1 与 WP2 可在各自 schema 定案后并行设计，但实施授权仍逐 WP 发放；
 - WP3 依赖 WP2 的 canonical revision/dependency model；
-- WP4 依赖 WP1～WP3；
+- WP3.5 依赖 WP1～WP3 已收口的合同基线（其条款级升版属 WP3.5 实施范围），按阶段单独授权（Decision-044）；
+- WP4 依赖 WP1～WP3 与 WP3.5 的 v2 链重基线；
 - WP5 依赖 WP4 的唯一 next-action 语义；
 - WP6 是最终综合验收，不替代各 WP 自身测试和复审。
 
@@ -268,14 +312,15 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 
 ## 9. 明确不做
 
-- C03 的真实 Direct single-repository delivery、workspace 修改和 Manual Git Handoff；
-- C04 的 Speckit SDD 投影与完整 pipeline 接线；
+- C03 的真实单仓交付、workspace 修改和 Manual Git Handoff；
+- C04 已取消（Decision-044）：Speckit SDD 投影与 pipeline 接线永久退出 Core 范围，独立 Speckit 产物轨道不恢复；
 - C05 的真实单仓需求 Core MVP 验收；
 - 自动 commit、push、Draft PR、Ready、merge、发布；
 - 新 Agent Provider 或 Kimi/Hermes 默认启用；
 - 多仓事务、队列、daemon、UI、服务化、HA/SLO；
 - Roadmap/任务数据库、第二份 Manifest schema 或以聊天摘要作为 current authority；
-- 重写/清理 C01 历史 attempt、artifact 或 binding snapshot。
+- 重写/清理 C01 历史 attempt、artifact 或 binding snapshot；
+- 历史 journal 的语义重写、链版本化或永久兼容机器（Decision-044 Q1）。
 
 ## 10. 风险与控制
 
@@ -308,7 +353,7 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 - 控制平面 STATE 只记录动态指针、规划授权、WP 授权、review finding 和 completion 状态，不复制规划全文；
 - 每个 WP 必须记录 scope、明确排除、产品提交、默认测试/CI、独立复审和用户裁决；
 - finding 修正仍在原 WP 授权范围内，新增 material outcome 才回到本规划受控重排；
-- 只有 WP1～WP6 全部收口且四项完成合同均有联合证据，才能登记 `LOOP-CORE-02 = COMPLETED`；
+- 只有 WP1～WP3.5、WP4～WP6 全部收口且四项完成合同均有联合证据，才能登记 `LOOP-CORE-02 = COMPLETED`；
 - C02 收口不自动授权 C03。
 
 ## Revision Record
@@ -320,3 +365,4 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                 │
 | 1.0.1 | 2026-08-20 | Accepted | 登记 C02-WP1 Round 2 复审通过与收口（Decision-038）；C02 四项完成合同保持 INCOMPLETE，WP2～WP6 保持未授权。 |
 | 1.0.2 | 2026-08-21 | Accepted | 登记 C02-WP1 重开后经 Round 9 复审 PASS 重新收口与 C02-WP2 Round 9 复审通过与收口（Decision-041）；C02 四项完成合同保持 INCOMPLETE，WP3～WP6 保持未授权。 |
 | 1.0.3 | 2026-08-21 | Accepted | 登记 C02-WP3 Round 2 复审 PASS 与收口（Decision-043）；C02 四项完成合同保持 INCOMPLETE，WP4～WP6 保持未授权。 |
+| 1.1.0 | 2026-08-21 | Accepted | 按 Decision-044 单轨裁决重基线：§2.1/§2.3 节点链与连续性规则切换到 v2 单轨链；§4 G5 改写为设计深度决策缺口；§5 不变量 9 由路径三值改为深度档位、不变量 10 补合同升版约束、新增不变量 13（历史格式 fail-closed 可区分 + cutover preflight）；§6 插入 C02-WP3.5（Single-Rail Lifecycle Re-baseline，三阶段划分）并重基线 WP4～WP6；§7 依赖图插入 WP3.5；§9 登记 C04 取消与历史兼容机器不做。WP1～WP3 收口结论保持有效；WP3.5 实施与 WP4～WP6 保持未授权。 |
