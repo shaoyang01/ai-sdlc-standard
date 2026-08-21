@@ -188,7 +188,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：实际执行 Re-Gate 节点。
 
-- 状态（2026-08-21）：**已实施，Round 1 复审修正完成，待重新复审**（Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes`、appendFinding 同事务失效传播与 scope 落库、resolve/accept/supersede guarded 迁移与证明写删、读回 proof/scope 全量重验、finding 链挂入快照校验）；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.1 Draft；专项 tests/loop-finding-lifecycle.test.ts 303/303，全量 npm test 0 失败。Round 1 复审 CHANGES_REQUESTED（2 High：关闭证据未绑定当前事实、失效边完整性未持久化比对）已修正。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 未消费。
+- 状态（2026-08-21）：**已实施，Round 2 复审 PASS，回归加固完成，待 Current User 收口裁决**（Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes`、appendFinding 同事务失效传播与 scope 落库、resolve/accept/supersede guarded 迁移与证明写删、读回 proof/scope 全量重验、finding 链挂入快照校验）；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.1 Draft；专项 tests/loop-finding-lifecycle.test.ts 340/340，全量 npm test 0 失败。Round 1 复审 CHANGES_REQUESTED（2 High：关闭证据未绑定当前事实、失效边完整性未持久化比对）已修正；Round 2 复审（8d1d697..fdc6610 全量重审）PASS 无阻塞，两项 High 关闭均独立复核成立，其两条非阻塞回归加固建议（删中间边重编号命中 scope digest 分支、proof/scope 插入点故障回滚与迁移并发竞争矩阵）已落实。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 未消费。
 
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
 

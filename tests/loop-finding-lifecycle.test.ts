@@ -1705,6 +1705,252 @@ function appendFullScopeFinding(store: LoopRunStore, driver: CapabilityDriver): 
   });
 }
 
+console.log("finding lifecycle: a renumbered middle-edge deletion is caught by the scope digest");
+withRunningStore((store, dir) => {
+  // Round-2 hardening: delete a MIDDLE edge, renumber the survivors back to a
+  // contiguous chain, and repair both the persisted edge count and the scope
+  // row's own canonical hash — index contiguity, edge count and the canonical
+  // hash all pass afterwards, so only the recomputed scope digest can still
+  // reject this state.
+  const driver = makeCapabilityDriver(store, "run-001");
+  const finding = appendFullScopeFinding(store, driver);
+  const db = new Database(join(dir, "journal.db"));
+  try {
+    const scope = db.prepare("SELECT scope_digest FROM loop_finding_scopes WHERE finding_id = ?")
+      .get(finding.findingId) as { scope_digest: string };
+    db.prepare("DELETE FROM loop_finding_invalidations WHERE finding_id = ? AND invalidation_index = 3")
+      .run(finding.findingId);
+    db.prepare(
+      "UPDATE loop_finding_invalidations SET invalidation_index = invalidation_index - 1 " +
+      "WHERE finding_id = ? AND invalidation_index > 3",
+    ).run(finding.findingId);
+    db.prepare("UPDATE loop_finding_scopes SET edge_count = 6, canonical_sha256 = ? WHERE finding_id = ?")
+      .run(createHash("sha256").update(JSON.stringify({
+        findingId: finding.findingId, edgeCount: 6, scopeDigest: scope.scope_digest,
+      })).digest("hex"), finding.findingId);
+  } finally {
+    db.close();
+  }
+  expectFindingCorruptOnAllReadPaths(store,
+    "renumbered middle-edge deletion with repaired count raises STORE_CORRUPT via the scope digest");
+});
+
+/** Count the persisted closure proofs of one finding, bypassing the store. */
+function countFindingProofs(dir: string, findingId: string): number {
+  const db = new Database(join(dir, "journal.db"), { readonly: true });
+  try {
+    const row = db.prepare("SELECT COUNT(*) AS n FROM loop_finding_proofs WHERE finding_id = ?")
+      .get(findingId) as { n: number };
+    return row.n;
+  } finally {
+    db.close();
+  }
+}
+
+/** Append a TEST finding, then produce the downstream current it resolves against. */
+function setupResolvableFinding(
+  store: LoopRunStore,
+): { finding: LoopFinding; validationRevision: LoopArtifactRevision } {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+  const finding = store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "test-validation", category: "TEST",
+    earliestAffectedNodeId: "test-validation",
+  }))).record;
+  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+  }))).record;
+  return { finding, validationRevision };
+}
+
+/** Two OPEN findings plus a revision either of them could resolve against. */
+function setupTwoResolvableFindings(
+  store: LoopRunStore,
+): { first: LoopFinding; second: LoopFinding; validationRevision: LoopArtifactRevision } {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+  const first = store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "test-validation", category: "TEST",
+    earliestAffectedNodeId: "test-validation",
+  }))).record;
+  const second = store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 2, sourceCapability: "test-validation", category: "TEST",
+    earliestAffectedNodeId: "test-validation", severity: "MEDIUM",
+  }))).record;
+  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+  }))).record;
+  return { first, second, validationRevision };
+}
+
+console.log("finding lifecycle: proof/scope insert-point failures roll back the whole write");
+withRunningStore((store, dir) => {
+  // A forced failure at the scope insert rolls back the finding, the edges
+  // and the STALE marks together (same trigger technique as the
+  // mid-propagation atomicity test above).
+  const driver = makeCapabilityDriver(store, "run-001");
+  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  const raw = new Database(join(dir, "journal.db"));
+  raw.exec(
+    "CREATE TRIGGER abort_finding_scope BEFORE INSERT ON loop_finding_scopes " +
+    "BEGIN SELECT RAISE(ABORT, 'forced'); END",
+  );
+  raw.close();
+  expectThrow("STORE_FAILURE", () => store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "requirement-intake", category: "REQUIREMENT",
+    earliestAffectedNodeId: "requirement-intake",
+  }))), "forced scope-insert failure rejects the append");
+  assert(store.listFindings("run-001").length === 0, "finding insert rolled back with the scope failure");
+  assert(store.listFindingInvalidations("run-001").length === 0,
+    "no invalidation edges persisted after the scope failure");
+  assert(store.listArtifactRevisions("run-001").every((item) => item.validity === "ACTIVE"),
+    "stale marks rolled back with the scope failure");
+});
+withRunningStore((store, dir) => {
+  // A forced failure at the proof insert rolls back the resolution
+  // transition; once the failure clears the resolution retries cleanly.
+  const { finding, validationRevision } = setupResolvableFinding(store);
+  const raw = new Database(join(dir, "journal.db"));
+  raw.exec(
+    "CREATE TRIGGER abort_finding_proof BEFORE INSERT ON loop_finding_proofs " +
+    "BEGIN SELECT RAISE(ABORT, 'forced'); END",
+  );
+  raw.close();
+  expectThrow("STORE_FAILURE", () => store.resolveFinding("run-001", finding.findingId, {
+    resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+  }), "forced proof-insert failure rejects the resolution");
+  const listed = store.listFindings("run-001");
+  assert(listed.length === 1 && listed[0]!.status === "OPEN", "resolution status update rolled back");
+  assert(countFindingProofs(dir, finding.findingId) === 0, "no closure proof persisted");
+  const fix = new Database(join(dir, "journal.db"));
+  fix.exec("DROP TRIGGER abort_finding_proof");
+  fix.close();
+  const retried = store.resolveFinding("run-001", finding.findingId, {
+    resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+  });
+  assert(retried.record.status === "RESOLVED", "resolution retries cleanly after the failure clears");
+  assert(countFindingProofs(dir, finding.findingId) === 1, "retry persists exactly one proof");
+});
+withRunningStore((store, dir) => {
+  // Same insert-point failure for risk acceptance.
+  const finding = store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+    earliestAffectedNodeId: "code-review",
+  }))).record;
+  const raw = new Database(join(dir, "journal.db"));
+  raw.exec(
+    "CREATE TRIGGER abort_finding_proof BEFORE INSERT ON loop_finding_proofs " +
+    "BEGIN SELECT RAISE(ABORT, 'forced'); END",
+  );
+  raw.close();
+  expectThrow("STORE_FAILURE", () => store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
+    "forced proof-insert failure rejects the risk acceptance");
+  assert(store.listFindings("run-001")[0]!.status === "OPEN", "risk-acceptance status update rolled back");
+  assert(countFindingProofs(dir, finding.findingId) === 0, "no risk proof persisted");
+});
+
+console.log("finding lifecycle: closure transition races settle exactly one winner");
+/** Two stores on one journal: the loser of a race observes the committed winner state. */
+function withTwoRunningStores(
+  fn: (storeA: LoopRunStore, storeB: LoopRunStore, dir: string) => void,
+): void {
+  const dir = mkdtempSync(join(tmpdir(), "loop-finding-"));
+  const path = join(dir, "journal.db");
+  const storeA = new LoopRunStore(path);
+  const storeB = new LoopRunStore(path);
+  storeA.init();
+  storeB.init();
+  try {
+    storeA.createRun(makeIdentity());
+    storeA.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    fn(storeA, storeB, dir);
+  } finally {
+    storeA.close();
+    storeB.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+{
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { finding, validationRevision } = setupResolvableFinding(storeA);
+    storeA.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    });
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    }), "concurrent resolve loses to a committed resolve");
+    const listed = storeB.listFindings("run-001");
+    assert(listed.length === 1 && listed[0]!.status === "RESOLVED",
+      "the loser observes the winner's resolved state");
+    assert(countFindingProofs(dir, finding.findingId) === 1, "exactly one resolution proof persisted");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { finding } = setupResolvableFinding(storeA);
+    storeA.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
+      "concurrent risk acceptance loses to a committed risk acceptance");
+    const listed = storeB.listFindings("run-001");
+    assert(listed.length === 1 && listed[0]!.status === "ACCEPTED_RISK",
+      "the loser observes the winner's accepted-risk state");
+    assert(countFindingProofs(dir, finding.findingId) === 1, "exactly one risk proof persisted");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { finding, validationRevision } = setupResolvableFinding(storeA);
+    storeA.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    });
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
+      "concurrent risk acceptance loses to a committed resolve");
+    assert(storeB.listFindings("run-001")[0]!.status === "RESOLVED",
+      "the loser observes the winner's resolved state");
+    assert(countFindingProofs(dir, finding.findingId) === 1, "exactly one closure proof persisted");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { finding, validationRevision } = setupResolvableFinding(storeA);
+    storeA.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    }), "concurrent resolve loses to a committed risk acceptance");
+    assert(storeB.listFindings("run-001")[0]!.status === "ACCEPTED_RISK",
+      "the loser observes the winner's accepted-risk state");
+    assert(countFindingProofs(dir, finding.findingId) === 1, "exactly one closure proof persisted");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { first, second, validationRevision } = setupTwoResolvableFindings(storeA);
+    storeA.supersedeFinding("run-001", first.findingId, second.findingId);
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.resolveFinding("run-001", first.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    }), "concurrent resolve loses to a committed supersede");
+    const listed = storeB.listFindings("run-001");
+    assert(listed[0]!.status === "SUPERSEDED" && listed[1]!.status === "OPEN",
+      "the loser observes the superseded finding and the open replacement");
+    assert(countFindingProofs(dir, first.findingId) === 0, "supersede persists no closure proof");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { first, second } = setupTwoResolvableFindings(storeA);
+    storeA.supersedeFinding("run-001", first.findingId, second.findingId);
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.acceptFindingRisk("run-001", first.findingId, RISK_EVIDENCE),
+      "concurrent risk acceptance loses to a committed supersede");
+    assert(storeB.listFindings("run-001")[0]!.status === "SUPERSEDED",
+      "the loser observes the winner's superseded state");
+    assert(countFindingProofs(dir, first.findingId) === 0, "supersede persists no closure proof");
+  });
+  withTwoRunningStores((storeA, storeB, dir) => {
+    const { first, second } = setupTwoResolvableFindings(storeA);
+    storeA.supersedeFinding("run-001", first.findingId, second.findingId);
+    expectThrow("ILLEGAL_TRANSITION", () => storeB.supersedeFinding("run-001", first.findingId, second.findingId),
+      "concurrent supersede loses to a committed supersede (absorbing)");
+    const listed = storeB.listFindings("run-001");
+    assert(listed[0]!.status === "SUPERSEDED" && listed[1]!.status === "OPEN",
+      "the loser observes the winner's superseded state");
+    assert(countFindingProofs(dir, first.findingId) === 0, "supersede persists no closure proof");
+  });
+}
+
 console.log("finding lifecycle: identity rewrite committed before the read starts fails closed");
 withRunningStore((store, dir) => {
   const finding = store.appendFinding(createLoopFinding(findingDraft({

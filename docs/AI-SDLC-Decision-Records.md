@@ -1548,7 +1548,7 @@ C02-WP3 具备候选实现证据，但在独立复审与 Current User 裁决前�
 
 ## 实现状态
 
-产品实现与专项测试已完成：新增 `core/loop-finding-lifecycle.ts` 与 `tests/loop-finding-lifecycle.test.ts`，`core/loop-run-store.ts` 前进 v5；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.0 Draft。已提交 Draft PR #91 并进入独立复审；治理收口（复审通过、裁决、控制平面收口登记）未执行，授权不消费。
+产品实现与专项测试已完成：新增 `core/loop-finding-lifecycle.ts` 与 `tests/loop-finding-lifecycle.test.ts`，`core/loop-run-store.ts` 前进 v5；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.1 Draft。已提交 Draft PR #91 并进入独立复审；治理收口（复审通过、裁决、控制平面收口登记）未执行，授权不消费。
 
 ## 复审记录
 
@@ -1559,10 +1559,12 @@ C02-WP3 具备候选实现证据，但在独立复审与 Current User 裁决前�
   - v5 表族定义扩展为四表（findings + invalidations + proofs + scopes）；0.1.0 的 v5 从未进入任何 Accepted 基线（PR #91 仍 Draft），不存在需要回填的 v5 journal，格式版本保持 5。
   - 合同前进 0.1.1 Draft；专项测试 232→**303 断言**（新增：伪造关闭/伪造风险接受/替换 resolvedByRevisionId/删除或篡改证明/supersede 证明清理/删除首末全部失效边/删除或篡改 scope/证据 blob 从未写入拒绝与写后删除 fail-closed/真实证据 blob 下 resolve 与 risk-accept 的 Gate 消费）。
 - **复审边界声明**：残余威胁模型与 WP1/WP2 一致——跨多表的一致性整体改写（攻击者同时重写失效边、scope 记录并全部重算 hash）超出本 store 的单结构篡改模型；`riskAcceptedBy` 身份本体不由 store 验证，其锚点是证据 blob 与证明记录交叉绑定。
+- **Round 2（2026-08-21，PASS，codex 独立复审）**：全量只读重审 `8d1d697..fdc6610`（WP3 初始实现 + Round 1 修正），以合同 0.1.1 Draft、规划 §4 G3/§6 C02-WP3 与本决定为边界；未发现合同内阻塞项。两项 Round 1 High 关闭均独立复核成立：H1（证明双向交叉绑定、伪造证据写入拒绝、写后删 blob 读回 fail-closed、重算 hash 替换 resolvedByRevisionId 仍 fail-closed、后置合法 STALE 不误判 corruption）；H2（append-time 完整 scope 持久化，删首/中/末/全部边与 scope 篡改均 fail-closed，仅存已声明的跨多表整体改写残余）。复审方实测：专项 303/303、回归 185/79/86/132/212、全量 npm test 130 文件 0 失败、tsc/diff-check 干净、CI run 32464819692 四 job 绿。复审 PASS 不构成 Ready/合并/发布或授权消费。
+- **Round 2 加固落实（同日完成，非阻塞建议项）**：复审方两条回归加固建议均已落实，专项测试 303→**340 断言**——（1）删除中间失效边后重编号后续索引并修复 edge_count 与 scope canonical hash 的显式回归（直接命中 scope digest 分支，四条读路径均 STORE_CORRUPT）；（2）proof/scope 插入点故障注入回滚（trigger RAISE(ABORT) 强制失败：scope 插入失败时 finding/失效边/STALE 标记整体回滚；proof 插入失败时 resolve/accept 状态更新回滚、故障清除后可干净重试）；resolve/accept/supersede 并发竞争矩阵七例（双连接先后提交模拟竞态：resolve/accept/supersede 两两组合，负方一律 ILLEGAL_TRANSITION、观察到胜方已提交状态、关闭证明恰好一条或零条）。生产代码零改动。
 
 ## 代码与验证依据
 
 - 交付物：`core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、`downstreamNodeIds` 依赖图下游计算、`validateLoopFindingChain`、关闭证明与失效范围类型的校验/canonical 化、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes` 原子迁移、`appendFinding` 同事务失效传播与 scope 落库、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移与证明写删、读回 proof/scope 全量重验、`listFindings`/`listFindingInvalidations`/`computeFindingGate` 单事务读回、finding 链挂入 `verifySnapshotInTransaction`）；`tests/loop-finding-lifecycle.test.ts` 接入默认 npm test。
-- 专项测试：303/303 通过（schema/边界、五类路由矩阵正反例、失效传播与原子回滚、状态机、资格推导、篡改读回、证明/范围完整性、证据 blob 绑定、迁移原子性）。
+- 专项测试：340/340 通过（schema/边界、五类路由矩阵正反例、失效传播与原子回滚、状态机、资格推导、篡改读回、证明/范围完整性、证据 blob 绑定、迁移原子性、删中间边重编号 scope digest 回归、proof/scope 插入点故障回滚、关闭迁移并发竞争矩阵）。
 - 既有断言回归：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 132/132、`loop-artifact-revision` 212/212。
 - 全量验证：完整 `npm test`、`tsc --noEmit`、`git diff --check` 通过；CI 结果以 PR #91 最新 head 的远端 run 为准。
