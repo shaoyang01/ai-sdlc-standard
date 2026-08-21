@@ -99,6 +99,48 @@ export type LoopFindingInvalidation = Readonly<{
   nodeId: NodeCapabilityId;
 }>;
 
+/**
+ * The durable closure proof of a RESOLVED / ACCEPTED_RISK finding (contract
+ * §5): a separate persisted fact, written in the same transition transaction,
+ * that re-binds the closure to facts the finding row alone cannot prove.
+ * RESOLUTION proofs carry the resolving revision's immutable content binding
+ * (node id + artifact ref + digest) captured at transition time, so a
+ * rehashed finding row pointing at a different revision fails closed on
+ * read-back; RISK_ACCEPTANCE proofs carry the acceptor and the evidence. The
+ * resolving revision's VALIDITY is deliberately not captured: a resolution
+ * revision may legitimately go STALE later, which is a Gate matter
+ * (FINDING_DOWNSTREAM_STALE), not corruption.
+ */
+export const LOOP_FINDING_PROOF_KINDS = ["RESOLUTION", "RISK_ACCEPTANCE"] as const;
+export type LoopFindingProofKind = (typeof LOOP_FINDING_PROOF_KINDS)[number];
+
+export type LoopFindingProof = Readonly<{
+  findingId: string;
+  proofKind: LoopFindingProofKind;
+  revisionId: string | null;
+  revisionNodeId: NodeCapabilityId | null;
+  revisionArtifactRef: string | null;
+  revisionArtifactDigest: string | null;
+  evidenceRef: string;
+  evidenceDigest: string;
+  riskAcceptedBy: string | null;
+}>;
+
+/**
+ * The persisted append-time invalidation scope of a finding (contract §4):
+ * the exact edge set the store computed inside the append transaction,
+ * reduced to the edge count and a digest over the ordered edges. Read-back
+ * recomputes the digest from the SURVIVING edges and compares — deleting the
+ * first, middle, last or every edge fails closed, as does a scope row whose
+ * digest was rewritten without its canonical hash. An empty scope (edge
+ * count zero) is a first-class verified value.
+ */
+export type LoopFindingInvalidationScope = Readonly<{
+  findingId: string;
+  edgeCount: number;
+  scopeDigest: string;
+}>;
+
 /** resolveFinding closure payload: the current revision and the Gate evidence. */
 export type LoopFindingResolution = Readonly<{
   resolvedByRevisionId: string;
@@ -135,6 +177,14 @@ const DRAFT_FIELDS = [
 ] as const;
 
 const INVALIDATION_FIELDS = ["findingId", "invalidationIndex", "revisionId", "nodeId"] as const;
+
+const PROOF_FIELDS = [
+  "findingId", "proofKind", "revisionId", "revisionNodeId",
+  "revisionArtifactRef", "revisionArtifactDigest",
+  "evidenceRef", "evidenceDigest", "riskAcceptedBy",
+] as const;
+
+const SCOPE_FIELDS = ["findingId", "edgeCount", "scopeDigest"] as const;
 
 const RESOLUTION_FIELDS = ["resolvedByRevisionId", "resolutionEvidenceRef", "resolutionEvidenceDigest"] as const;
 
@@ -436,6 +486,236 @@ export function validateLoopFindingInvalidation(value: unknown): void {
   nonNegativeInteger(record.invalidationIndex, "finding invalidation invalidationIndex");
   text(record.revisionId, "finding invalidation revisionId");
   nodeCapabilityId(record.nodeId, "finding invalidation nodeId");
+}
+
+/** Validate one persisted closure proof row against the run identity. */
+export function validateLoopFindingProof(value: unknown, expectedRunId: string): void {
+  if (utilTypes.isProxy(value)) invalid("finding proof must not be a Proxy");
+  const record = readPlainDataRecord(value, "finding proof");
+  exactFields(record, PROOF_FIELDS, "finding proof");
+  const findingId = text(record.findingId, "finding proof findingId");
+  if (parseFindingId(findingId, expectedRunId) === null) {
+    invalid("finding proof must reference a finding of the same run");
+  }
+  if (
+    typeof record.proofKind !== "string" ||
+    !(LOOP_FINDING_PROOF_KINDS as readonly string[]).includes(record.proofKind)
+  ) {
+    invalid("finding proof kind must be canonical");
+  }
+  const proofKind = record.proofKind as LoopFindingProofKind;
+  evidenceReference(record.evidenceRef, record.evidenceDigest, "finding proof evidence");
+  if (proofKind === "RESOLUTION") {
+    const revisionId = text(record.revisionId, "finding proof revisionId");
+    const parsed = parseRevisionReference(revisionId, expectedRunId);
+    if (parsed === null) {
+      invalid("finding proof revision must reference a revision of the same run");
+    }
+    if (record.revisionNodeId !== parsed.nodeId) {
+      invalid("finding proof revision node must match the revision reference");
+    }
+    // The resolving revision's content binding reuses the canonical
+    // content-addressed artifact form: ref kind and digest must match.
+    evidenceReference(
+      record.revisionArtifactRef,
+      record.revisionArtifactDigest,
+      "finding proof revision artifact",
+    );
+    if (record.riskAcceptedBy !== null) {
+      invalid("resolution proofs must not carry a risk acceptor");
+    }
+    return;
+  }
+  if (
+    record.revisionId !== null ||
+    record.revisionNodeId !== null ||
+    record.revisionArtifactRef !== null ||
+    record.revisionArtifactDigest !== null
+  ) {
+    invalid("risk acceptance proofs must not carry revision binding fields");
+  }
+  text(record.riskAcceptedBy, "finding proof riskAcceptedBy");
+}
+
+/** Fixed-order canonical representation used by the run-journal hash. */
+export function canonicalizeLoopFindingProof(proof: LoopFindingProof, expectedRunId: string): string {
+  validateLoopFindingProof(proof, expectedRunId);
+  return JSON.stringify({
+    findingId: proof.findingId,
+    proofKind: proof.proofKind,
+    revisionId: proof.revisionId,
+    revisionNodeId: proof.revisionNodeId,
+    revisionArtifactRef: proof.revisionArtifactRef,
+    revisionArtifactDigest: proof.revisionArtifactDigest,
+    evidenceRef: proof.evidenceRef,
+    evidenceDigest: proof.evidenceDigest,
+    riskAcceptedBy: proof.riskAcceptedBy,
+  });
+}
+
+/**
+ * Derive the RESOLUTION proof for a finding transition from the validated
+ * resolution payload and the resolving revision's immutable content binding
+ * (revision id, node id, artifact ref, digest), captured by the store inside
+ * the transition transaction.
+ */
+export function createLoopFindingResolutionProof(
+  finding: LoopFinding,
+  resolution: LoopFindingResolution,
+  revision: Readonly<{ revisionId: string; nodeId: NodeCapabilityId; artifactRef: string; digest: string }>,
+): LoopFindingProof {
+  validateLoopFinding(finding);
+  const valid = validateLoopFindingResolution(resolution);
+  if (valid.resolvedByRevisionId !== revision.revisionId) {
+    invalid("resolution revision binding must match the resolution payload");
+  }
+  const proof: LoopFindingProof = Object.freeze({
+    findingId: finding.findingId,
+    proofKind: "RESOLUTION",
+    revisionId: revision.revisionId,
+    revisionNodeId: revision.nodeId,
+    revisionArtifactRef: revision.artifactRef,
+    revisionArtifactDigest: revision.digest,
+    evidenceRef: valid.resolutionEvidenceRef,
+    evidenceDigest: valid.resolutionEvidenceDigest,
+    riskAcceptedBy: null,
+  });
+  validateLoopFindingProof(proof, finding.runId);
+  return proof;
+}
+
+/** Derive the RISK_ACCEPTANCE proof for a finding transition. */
+export function createLoopFindingRiskAcceptanceProof(
+  finding: LoopFinding,
+  acceptance: LoopFindingRiskAcceptance,
+): LoopFindingProof {
+  validateLoopFinding(finding);
+  const valid = validateLoopFindingRiskAcceptance(acceptance);
+  const proof: LoopFindingProof = Object.freeze({
+    findingId: finding.findingId,
+    proofKind: "RISK_ACCEPTANCE",
+    revisionId: null,
+    revisionNodeId: null,
+    revisionArtifactRef: null,
+    revisionArtifactDigest: null,
+    evidenceRef: valid.riskAcceptanceEvidenceRef,
+    evidenceDigest: valid.riskAcceptanceEvidenceDigest,
+    riskAcceptedBy: valid.riskAcceptedBy,
+  });
+  validateLoopFindingProof(proof, finding.runId);
+  return proof;
+}
+
+/**
+ * Cross-verify the proof set against the verified finding chain (pure part):
+ * exactly one proof per RESOLVED / ACCEPTED_RISK finding, none for OPEN /
+ * SUPERSEDED findings; the proof kind matches the status; every closure field
+ * of the finding row equals its proof counterpart; a RESOLUTION proof's
+ * revision node must be at or downstream of the earliest affected node. The
+ * store additionally re-binds the proof's revision content fields to the
+ * verified revision chain and the evidence to the bound artifact store.
+ */
+export function validateLoopFindingProofs(
+  findings: readonly LoopFinding[],
+  proofs: readonly LoopFindingProof[],
+  expectedRunId: string,
+): void {
+  const byId = new Map<string, LoopFinding>();
+  for (const finding of findings) byId.set(finding.findingId, finding);
+  const proofByFinding = new Map<string, LoopFindingProof>();
+  for (const proof of proofs) {
+    validateLoopFindingProof(proof, expectedRunId);
+    const finding = byId.get(proof.findingId);
+    if (finding === undefined) {
+      invalid("finding proof must reference an existing finding");
+    }
+    if (proofByFinding.has(proof.findingId)) {
+      invalid("finding must carry at most one closure proof");
+    }
+    proofByFinding.set(proof.findingId, proof);
+    if (finding.status === "RESOLVED") {
+      if (proof.proofKind !== "RESOLUTION") {
+        invalid("resolved findings must carry a resolution proof");
+      }
+      if (
+        finding.resolvedByRevisionId !== proof.revisionId ||
+        finding.resolutionEvidenceRef !== proof.evidenceRef ||
+        finding.resolutionEvidenceDigest !== proof.evidenceDigest
+      ) {
+        invalid("resolution proof must match the finding closure fields");
+      }
+      const parsed = parseRevisionReference(proof.revisionId!, expectedRunId)!;
+      if (nodeIndex(parsed.nodeId) < nodeIndex(finding.earliestAffectedNodeId)) {
+        invalid("resolution proof revision is upstream of the earliest affected node");
+      }
+    } else if (finding.status === "ACCEPTED_RISK") {
+      if (proof.proofKind !== "RISK_ACCEPTANCE") {
+        invalid("risk-accepted findings must carry a risk acceptance proof");
+      }
+      if (
+        finding.riskAcceptedBy !== proof.riskAcceptedBy ||
+        finding.riskAcceptanceEvidenceRef !== proof.evidenceRef ||
+        finding.riskAcceptanceEvidenceDigest !== proof.evidenceDigest
+      ) {
+        invalid("risk acceptance proof must match the finding closure fields");
+      }
+    } else {
+      invalid("open or superseded findings must not carry a closure proof");
+    }
+  }
+  for (const finding of findings) {
+    if (
+      (finding.status === "RESOLVED" || finding.status === "ACCEPTED_RISK") &&
+      !proofByFinding.has(finding.findingId)
+    ) {
+      invalid("closed findings must carry a closure proof");
+    }
+  }
+}
+
+/** Validate one persisted invalidation scope row against the run identity. */
+export function validateLoopFindingInvalidationScope(value: unknown, expectedRunId: string): void {
+  if (utilTypes.isProxy(value)) invalid("finding invalidation scope must not be a Proxy");
+  const record = readPlainDataRecord(value, "finding invalidation scope");
+  exactFields(record, SCOPE_FIELDS, "finding invalidation scope");
+  const findingId = text(record.findingId, "finding invalidation scope findingId");
+  if (parseFindingId(findingId, expectedRunId) === null) {
+    invalid("finding invalidation scope must reference a finding of the same run");
+  }
+  nonNegativeInteger(record.edgeCount, "finding invalidation scope edgeCount");
+  digest(record.scopeDigest, "finding invalidation scope scopeDigest");
+}
+
+/** Fixed-order canonical representation used by the run-journal hash. */
+export function canonicalizeLoopFindingInvalidationScope(
+  scope: LoopFindingInvalidationScope,
+  expectedRunId: string,
+): string {
+  validateLoopFindingInvalidationScope(scope, expectedRunId);
+  return JSON.stringify({
+    findingId: scope.findingId,
+    edgeCount: scope.edgeCount,
+    scopeDigest: scope.scopeDigest,
+  });
+}
+
+/**
+ * Fixed-order canonical representation of one finding's ordered invalidation
+ * edge list. The store hashes this string into the scope's scopeDigest at
+ * append time and recomputes it from the surviving edges on every read-back;
+ * the edges MUST be ordered by invalidationIndex (chain validation enforces
+ * contiguity, so the order is canonical).
+ */
+export function canonicalizeLoopFindingInvalidationEdges(
+  edges: readonly LoopFindingInvalidation[],
+): string {
+  return JSON.stringify(
+    edges.map((edge) => ({
+      invalidationIndex: edge.invalidationIndex,
+      revisionId: edge.revisionId,
+      nodeId: edge.nodeId,
+    })),
+  );
 }
 
 /** Validate a resolveFinding closure payload. */

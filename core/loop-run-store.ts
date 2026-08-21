@@ -59,18 +59,28 @@ import {
 import {
   acceptLoopFindingRisk,
   canonicalizeLoopFinding,
+  canonicalizeLoopFindingInvalidationEdges,
+  canonicalizeLoopFindingInvalidationScope,
+  canonicalizeLoopFindingProof,
   computeFindingGate as computeFindingGateFromFacts,
+  createLoopFindingResolutionProof,
+  createLoopFindingRiskAcceptanceProof,
   downstreamNodeIds,
   resolveLoopFinding,
   supersedeLoopFinding,
   validateLoopFinding,
   validateLoopFindingChain,
   validateLoopFindingInvalidation,
+  validateLoopFindingInvalidationScope,
+  validateLoopFindingProof,
+  validateLoopFindingProofs,
   validateLoopFindingResolution,
   validateLoopFindingRiskAcceptance,
   type LoopFinding,
   type LoopFindingGateResult,
   type LoopFindingInvalidation,
+  type LoopFindingInvalidationScope,
+  type LoopFindingProof,
 } from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
 import { NODE_CAPABILITY_IDS } from "../loop/types";
@@ -416,6 +426,26 @@ type FindingInvalidationRow = {
   invalidation_index: number;
   revision_id: string;
   node_id: string;
+};
+
+type FindingProofRow = {
+  finding_id: string;
+  proof_kind: string;
+  revision_id: string | null;
+  revision_node_id: string | null;
+  revision_artifact_ref: string | null;
+  revision_artifact_digest: string | null;
+  evidence_ref: string;
+  evidence_digest: string;
+  risk_accepted_by: string | null;
+  canonical_sha256: string;
+};
+
+type FindingScopeRow = {
+  finding_id: string;
+  edge_count: number;
+  scope_digest: string;
+  canonical_sha256: string;
 };
 
 function rowToEvent(row: EventRow): LoopRunEvent {
@@ -809,6 +839,58 @@ function insertFindingRow(db: Database.Database, record: LoopFinding): void {
     record.riskAcceptedBy, record.riskAcceptanceEvidenceRef,
     record.riskAcceptanceEvidenceDigest, record.supersededBy, record.createdAt,
     sha256Hex(canonicalizeLoopFinding(record)),
+  );
+}
+
+function rowToFindingProof(row: FindingProofRow): LoopFindingProof {
+  return Object.freeze({
+    findingId: row.finding_id,
+    proofKind: row.proof_kind as LoopFindingProof["proofKind"],
+    revisionId: row.revision_id,
+    revisionNodeId: row.revision_node_id as LoopFindingProof["revisionNodeId"],
+    revisionArtifactRef: row.revision_artifact_ref,
+    revisionArtifactDigest: row.revision_artifact_digest,
+    evidenceRef: row.evidence_ref,
+    evidenceDigest: row.evidence_digest,
+    riskAcceptedBy: row.risk_accepted_by,
+  });
+}
+
+function insertFindingProofRow(db: Database.Database, proof: LoopFindingProof, runId: string): void {
+  db.prepare(
+    `INSERT INTO loop_finding_proofs (
+      finding_id, proof_kind, revision_id, revision_node_id,
+      revision_artifact_ref, revision_artifact_digest,
+      evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    proof.findingId, proof.proofKind, proof.revisionId, proof.revisionNodeId,
+    proof.revisionArtifactRef, proof.revisionArtifactDigest,
+    proof.evidenceRef, proof.evidenceDigest, proof.riskAcceptedBy,
+    sha256Hex(canonicalizeLoopFindingProof(proof, runId)),
+  );
+}
+
+function rowToFindingScope(row: FindingScopeRow): LoopFindingInvalidationScope {
+  return Object.freeze({
+    findingId: row.finding_id,
+    edgeCount: asPersistedSafeInteger(row.edge_count),
+    scopeDigest: row.scope_digest,
+  });
+}
+
+function insertFindingScopeRow(
+  db: Database.Database,
+  scope: LoopFindingInvalidationScope,
+  runId: string,
+): void {
+  db.prepare(
+    `INSERT INTO loop_finding_scopes (
+      finding_id, edge_count, scope_digest, canonical_sha256
+    ) VALUES (?, ?, ?, ?)`,
+  ).run(
+    scope.findingId, scope.edgeCount, scope.scopeDigest,
+    sha256Hex(canonicalizeLoopFindingInvalidationScope(scope, runId)),
   );
 }
 
@@ -1214,10 +1296,13 @@ export class LoopRunStore {
           const findingTableExists = db.prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_findings'",
           ).get() !== undefined;
-          // v5 introduced the finding lifecycle and invalidation tables: any
-          // journal already marked v5 must carry them; older journals get them
-          // below in the same transaction. C01/WP1/WP2 history is never
-          // rewritten.
+          // v5 introduced the finding lifecycle tables: the findings main
+          // table, the invalidation edge table, the closure proof table and
+          // the invalidation scope table. Any journal already marked v5 must
+          // carry them; older journals get them below in the same
+          // transaction. C01/WP1/WP2 history is never rewritten. (The proof
+          // and scope tables joined the v5 definition by contract 0.1.1
+          // before any v5 journal reached an accepted baseline.)
           if (formatVersion >= 5 && !findingTableExists) {
             corrupt("current journal is missing finding table");
           }
@@ -1263,6 +1348,33 @@ export class LoopRunStore {
                   REFERENCES loop_findings(finding_id) ON DELETE CASCADE,
                 FOREIGN KEY (revision_id)
                   REFERENCES loop_artifact_revisions(revision_id) ON DELETE CASCADE
+              );
+
+              CREATE TABLE loop_finding_proofs (
+                finding_id TEXT PRIMARY KEY,
+                proof_kind TEXT NOT NULL,
+                revision_id TEXT,
+                revision_node_id TEXT,
+                revision_artifact_ref TEXT,
+                revision_artifact_digest TEXT,
+                evidence_ref TEXT NOT NULL,
+                evidence_digest TEXT NOT NULL,
+                risk_accepted_by TEXT,
+                canonical_sha256 TEXT NOT NULL,
+                CHECK (proof_kind IN ('RESOLUTION', 'RISK_ACCEPTANCE')),
+                FOREIGN KEY (finding_id)
+                  REFERENCES loop_findings(finding_id) ON DELETE CASCADE,
+                FOREIGN KEY (revision_id)
+                  REFERENCES loop_artifact_revisions(revision_id) ON DELETE CASCADE
+              );
+
+              CREATE TABLE loop_finding_scopes (
+                finding_id TEXT PRIMARY KEY,
+                edge_count INTEGER NOT NULL,
+                scope_digest TEXT NOT NULL,
+                canonical_sha256 TEXT NOT NULL,
+                FOREIGN KEY (finding_id)
+                  REFERENCES loop_findings(finding_id) ON DELETE CASCADE
               );
             `);
           }
@@ -2032,6 +2144,36 @@ export class LoopRunStore {
   }
 
   /**
+   * Closure-evidence blob binding (contract 0.1.1 §5): when an artifact store
+   * is bound, resolution and risk-acceptance evidence must reference a blob
+   * that physically exists with the declared digest. A forged but well-formed
+   * digest fails closed — ILLEGAL_TRANSITION on write, STORE_CORRUPT on read.
+   */
+  private verifyFindingEvidenceBlob(ref: string, digest: string, mode: "append" | "read"): void {
+    if (this.artifactStore === null) return;
+    try {
+      this.artifactStore.read(ref, digest);
+    } catch (error) {
+      if (error instanceof LoopArtifactStoreError) {
+        if (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH") {
+          if (mode === "append") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "finding closure evidence blob is missing in the bound artifact store",
+            );
+          }
+          corrupt("finding closure evidence blob is missing in the bound artifact store");
+        }
+        if (error.code === "ARTIFACT_CORRUPT") {
+          corrupt("finding closure evidence blob is corrupt in the bound artifact store");
+        }
+        storageFailure();
+      }
+      storageFailure();
+    }
+  }
+
+  /**
    * Append one immutable C02 WP-2 artifact revision. Revisions use their own
    * per-run+node sequence and never mutate the delivery-stage cursor, the
    * capability-attempt stream or the change chain. The owning run must exist,
@@ -2436,13 +2578,17 @@ export class LoopRunStore {
         // Dependency invalidation along the canonical linear node order: every
         // node at or downstream of earliestAffectedNodeId whose current
         // revision is ACTIVE is marked STALE and recorded as an edge, in node
-        // order. Already-STALE currents are skipped without an edge.
+        // order. Already-STALE currents are skipped without an edge. The
+        // complete computed set is then persisted as the finding's
+        // append-time invalidation scope (contract 0.1.1 §4): read-back
+        // recomputes the scope digest from the surviving edges and fails
+        // closed on any deleted edge — first, middle, last or all.
         const invalidationInsert = db.prepare(
           `INSERT INTO loop_finding_invalidations (
             finding_id, invalidation_index, revision_id, node_id
           ) VALUES (?, ?, ?, ?)`,
         );
-        let invalidationIndex = 0;
+        const edges: LoopFindingInvalidation[] = [];
         for (const nodeId of downstreamNodeIds(record.earliestAffectedNodeId)) {
           const pointer = db.prepare(
             "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
@@ -2454,9 +2600,22 @@ export class LoopRunStore {
           }
           if (revision.validity !== "ACTIVE") continue;
           markRevisionStaleRowInTransaction(db, revision);
-          invalidationInsert.run(record.findingId, invalidationIndex, revision.revisionId, nodeId);
-          invalidationIndex += 1;
+          edges.push(Object.freeze({
+            findingId: record.findingId,
+            invalidationIndex: edges.length,
+            revisionId: revision.revisionId,
+            nodeId,
+          }));
         }
+        for (const edge of edges) {
+          invalidationInsert.run(edge.findingId, edge.invalidationIndex, edge.revisionId, edge.nodeId);
+        }
+        const scope: LoopFindingInvalidationScope = Object.freeze({
+          findingId: record.findingId,
+          edgeCount: edges.length,
+          scopeDigest: sha256Hex(canonicalizeLoopFindingInvalidationEdges(edges)),
+        });
+        insertFindingScopeRow(db, scope, record.runId);
         return Object.freeze({ record, appended: true });
       }).immediate() as FindingAppendResult;
     } catch (error) {
@@ -2620,6 +2779,7 @@ export class LoopRunStore {
         if (pointer === undefined || pointer.revision_id !== resolvedBy.revisionId || resolvedBy.validity !== "ACTIVE") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "resolution revision must be the current active revision of its node");
         }
+        this.verifyFindingEvidenceBlob(valid.resolutionEvidenceRef, valid.resolutionEvidenceDigest, "append");
         const resolved = resolveLoopFinding(target, valid);
         const updateResult = db.prepare(
           `UPDATE loop_findings SET
@@ -2634,6 +2794,15 @@ export class LoopRunStore {
         if (updateResult.changes !== 1) {
           corrupt("finding drifted during resolution");
         }
+        // Persist the durable closure proof in the same transaction: the
+        // resolving revision's immutable content binding (node + artifact
+        // ref + digest) is captured so read-back can re-verify the binding
+        // even after the revision legitimately leaves ACTIVE.
+        insertFindingProofRow(
+          db,
+          createLoopFindingResolutionProof(resolved, valid, resolvedBy),
+          runId,
+        );
         return Object.freeze({ record: resolved });
       }).immediate() as FindingTransitionResult;
     } catch (error) {
@@ -2671,6 +2840,11 @@ export class LoopRunStore {
         if (target.severity === "CRITICAL") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "critical findings are not risk-acceptable");
         }
+        this.verifyFindingEvidenceBlob(
+          valid.riskAcceptanceEvidenceRef,
+          valid.riskAcceptanceEvidenceDigest,
+          "append",
+        );
         const accepted = acceptLoopFindingRisk(target, valid);
         const updateResult = db.prepare(
           `UPDATE loop_findings SET
@@ -2685,6 +2859,13 @@ export class LoopRunStore {
         if (updateResult.changes !== 1) {
           corrupt("finding drifted during risk acceptance");
         }
+        // Persist the durable risk-acceptance proof in the same transaction
+        // so read-back can re-verify the acceptor and the evidence binding.
+        insertFindingProofRow(
+          db,
+          createLoopFindingRiskAcceptanceProof(accepted, valid),
+          runId,
+        );
         return Object.freeze({ record: accepted });
       }).immediate() as FindingTransitionResult;
     } catch (error) {
@@ -2742,6 +2923,9 @@ export class LoopRunStore {
         if (updateResult.changes !== 1) {
           corrupt("finding drifted during supersede");
         }
+        // Superseding clears the closure fields, so the closure proof must
+        // not survive: a SUPERSEDED finding carries no proof.
+        db.prepare("DELETE FROM loop_finding_proofs WHERE finding_id = ?").run(findingId);
         return Object.freeze({ record: superseded });
       }).immediate() as FindingTransitionResult;
     } catch (error) {
@@ -3116,6 +3300,35 @@ export class LoopRunStore {
       { from: "finding_id", references: "loop_findings", to: "finding_id" },
       { from: "revision_id", references: "loop_artifact_revisions", to: "revision_id" },
     ]);
+    verifyTableColumns(db, "loop_finding_proofs", "finding proof table", [
+      ["finding_id", "TEXT", 0, 1], ["proof_kind", "TEXT", 1, 0],
+      ["revision_id", "TEXT", 0, 0], ["revision_node_id", "TEXT", 0, 0],
+      ["revision_artifact_ref", "TEXT", 0, 0],
+      ["revision_artifact_digest", "TEXT", 0, 0],
+      ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
+      ["risk_accepted_by", "TEXT", 0, 0],
+      ["canonical_sha256", "TEXT", 1, 0],
+    ]);
+    verifyTableForeignKeys(db, "loop_finding_proofs", "finding proof table", [
+      { from: "finding_id", references: "loop_findings", to: "finding_id" },
+      { from: "revision_id", references: "loop_artifact_revisions", to: "revision_id" },
+    ]);
+    const proofTableSql = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_proofs'",
+    ).get() as { sql?: unknown } | undefined;
+    if (
+      typeof proofTableSql?.sql !== "string" ||
+      !proofTableSql.sql.includes("CHECK (proof_kind IN ('RESOLUTION', 'RISK_ACCEPTANCE'))")
+    ) {
+      corrupt("finding proof table kind constraint is missing");
+    }
+    verifyTableColumns(db, "loop_finding_scopes", "finding scope table", [
+      ["finding_id", "TEXT", 0, 1], ["edge_count", "INTEGER", 1, 0],
+      ["scope_digest", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
+    ]);
+    verifyTableForeignKeys(db, "loop_finding_scopes", "finding scope table", [
+      { from: "finding_id", references: "loop_findings", to: "finding_id" },
+    ]);
   }
 
   /**
@@ -3237,11 +3450,15 @@ export class LoopRunStore {
    * and every invalidation edge is re-verified against the verified revision
    * chain: the referenced revision must exist, belong to the named node and
    * still be STALE (the validity machine has no STALE exit edge, so a drifted
-   * edge always fails closed). The chain rules (sequence contiguity, single
-   * Requirement identity, supersede linkage, edge consistency) are enforced
-   * last. The verified requirementId is ALWAYS supplied by the caller from a
-   * snapshot verified inside the same transaction — the persisted
-   * loop_runs.requirement_id column is never re-queried here.
+   * edge always fails closed). Every finding's persisted append-time
+   * invalidation scope is recomputed from the surviving edges (contract 0.1.1
+   * §4), and every closed finding's durable closure proof is re-verified
+   * against the finding row, the verified revision chain and the bound
+   * artifact store (contract 0.1.1 §5). The chain rules (sequence contiguity,
+   * single Requirement identity, supersede linkage, edge consistency) are
+   * enforced last. The verified requirementId is ALWAYS supplied by the
+   * caller from a snapshot verified inside the same transaction — the
+   * persisted loop_runs.requirement_id column is never re-queried here.
    */
   private readFindingChainInTransaction(
     db: Database.Database,
@@ -3313,6 +3530,100 @@ export class LoopRunStore {
       if (revision.validity !== "STALE") {
         corrupt("finding invalidation revision is not stale");
       }
+    }
+    // Re-verify the persisted append-time invalidation scope of every finding
+    // (contract 0.1.1 §4): the scope row must exist, hash-verify and match the
+    // complete SURVIVING edge set — deleting the first, middle, last or every
+    // edge leaves the remaining edges contiguous, so only the scope digest and
+    // edge count comparison fails closed. An empty scope is verified the same
+    // way.
+    const scopeQuery = db.prepare(
+      "SELECT * FROM loop_finding_scopes WHERE finding_id = ?",
+    );
+    for (const finding of findings) {
+      const scopeRow = scopeQuery.get(finding.findingId) as FindingScopeRow | undefined;
+      if (scopeRow === undefined) {
+        corrupt("finding invalidation scope is missing");
+      }
+      const scope = rowToFindingScope(scopeRow);
+      try {
+        if (
+          sha256Hex(canonicalizeLoopFindingInvalidationScope(scope, runId)) !==
+          scopeRow.canonical_sha256
+        ) {
+          corrupt("finding invalidation scope canonical hash mismatch");
+        }
+      } catch (error) {
+        if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
+        if (error instanceof LoopRunJournalError) corrupt("persisted finding invalidation scope is invalid");
+        throw error;
+      }
+      const findingEdges = invalidations.filter((edge) => edge.findingId === finding.findingId);
+      if (scope.edgeCount !== findingEdges.length) {
+        corrupt("finding invalidation scope edge count does not match the persisted edges");
+      }
+      if (scope.scopeDigest !== sha256Hex(canonicalizeLoopFindingInvalidationEdges(findingEdges))) {
+        corrupt("finding invalidation scope digest does not match the persisted edges");
+      }
+    }
+    // Re-verify the durable closure proofs (contract 0.1.1 §5): every RESOLVED
+    // / ACCEPTED_RISK finding must carry exactly one hash-verified proof whose
+    // fields equal the finding row's closure fields; OPEN / SUPERSEDED
+    // findings must carry none. A RESOLUTION proof is re-bound to the verified
+    // revision chain: the referenced revision must exist and still carry the
+    // immutable content binding (node + artifact ref + digest) captured at
+    // transition time, so a rehashed finding row pointing at a different
+    // revision fails closed. Revision VALIDITY is deliberately not re-checked
+    // here — a legitimately stale-later resolution is a Gate matter, not
+    // corruption.
+    const proofQuery = db.prepare(
+      "SELECT * FROM loop_finding_proofs WHERE finding_id = ?",
+    );
+    const proofs: LoopFindingProof[] = [];
+    for (const finding of findings) {
+      const proofRow = proofQuery.get(finding.findingId) as FindingProofRow | undefined;
+      if (finding.status !== "RESOLVED" && finding.status !== "ACCEPTED_RISK") {
+        if (proofRow !== undefined) {
+          corrupt("open or superseded finding carries a closure proof");
+        }
+        continue;
+      }
+      if (proofRow === undefined) {
+        corrupt("finding closure proof is missing");
+      }
+      const proof = rowToFindingProof(proofRow);
+      try {
+        if (sha256Hex(canonicalizeLoopFindingProof(proof, runId)) !== proofRow.canonical_sha256) {
+          corrupt("finding proof canonical hash mismatch");
+        }
+      } catch (error) {
+        if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
+        if (error instanceof LoopRunJournalError) corrupt("persisted finding proof is invalid");
+        throw error;
+      }
+      if (proof.proofKind === "RESOLUTION") {
+        const revision = revisionById.get(proof.revisionId!);
+        if (revision === undefined) {
+          corrupt("finding resolution proof revision is missing");
+        }
+        if (revision.nodeId !== proof.revisionNodeId) {
+          corrupt("finding resolution proof node does not match the revision");
+        }
+        if (
+          revision.artifactRef !== proof.revisionArtifactRef ||
+          revision.digest !== proof.revisionArtifactDigest
+        ) {
+          corrupt("finding resolution proof does not match the revision content binding");
+        }
+      }
+      this.verifyFindingEvidenceBlob(proof.evidenceRef, proof.evidenceDigest, "read");
+      proofs.push(proof);
+    }
+    try {
+      validateLoopFindingProofs(findings, proofs, runId);
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) corrupt("persisted finding proof set is invalid");
+      throw error;
     }
     try {
       validateLoopFindingChain(findings, invalidations, runId);

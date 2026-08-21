@@ -16,7 +16,7 @@
 
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,7 @@ import {
   type LoopArtifactRevision,
   type LoopArtifactRevisionDraft,
 } from "../core/loop-artifact-revision";
+import { LoopArtifactStore } from "../core/loop-artifact-store";
 import {
   LOOP_FINDING_CATEGORIES,
   LOOP_FINDING_CATEGORY_CAPABILITIES,
@@ -36,8 +37,10 @@ import {
   LOOP_FINDING_STATUSES,
   acceptLoopFindingRisk,
   canonicalizeLoopFinding,
+  canonicalizeLoopFindingProof,
   computeFindingGate,
   createLoopFinding,
+  createLoopFindingRiskAcceptanceProof,
   downstreamNodeIds,
   isLegalLoopFindingTransition,
   loopFindingId,
@@ -48,6 +51,7 @@ import {
   type LoopFinding,
   type LoopFindingDraft,
   type LoopFindingInvalidation,
+  type LoopFindingProof,
 } from "../core/loop-finding-lifecycle";
 import {
   LoopRunJournalError,
@@ -1371,6 +1375,336 @@ withRunningStore((store, dir) => {
   expectFindingCorruptOnAllReadPaths(store, "invalidation edge on a non-stale revision raises STORE_CORRUPT");
 });
 
+console.log("finding lifecycle: closure proofs are durable and cross-bound on read-back");
+/** Fixed-order canonical form without validation, mirroring the proof schema. */
+function canonicalizeProofUnchecked(proof: LoopFindingProof): string {
+  return JSON.stringify({
+    findingId: proof.findingId,
+    proofKind: proof.proofKind,
+    revisionId: proof.revisionId,
+    revisionNodeId: proof.revisionNodeId,
+    revisionArtifactRef: proof.revisionArtifactRef,
+    revisionArtifactDigest: proof.revisionArtifactDigest,
+    evidenceRef: proof.evidenceRef,
+    evidenceDigest: proof.evidenceDigest,
+    riskAcceptedBy: proof.riskAcceptedBy,
+  });
+}
+
+/**
+ * Append a finding before test-validation ran, then drive test-validation and
+ * resolve the finding against its later-arriving current ACTIVE revision.
+ */
+function appendAndResolveFinding(
+  store: LoopRunStore,
+  driver: CapabilityDriver,
+): { finding: LoopFinding; validationRevision: LoopArtifactRevision } {
+  const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+  const finding = store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "test-validation", category: "TEST",
+    earliestAffectedNodeId: "test-validation",
+  }))).record;
+  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+  }))).record;
+  store.resolveFinding("run-001", finding.findingId, {
+    resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+  });
+  return { finding, validationRevision };
+}
+{
+  withRunningStore((store, dir) => {
+    const driver = makeCapabilityDriver(store, "run-001");
+    const { finding, validationRevision } = appendAndResolveFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"), { readonly: true });
+    try {
+      const proof = db.prepare("SELECT * FROM loop_finding_proofs WHERE finding_id = ?")
+        .get(finding.findingId) as Record<string, unknown> | undefined;
+      assert(
+        proof !== undefined &&
+        proof.proof_kind === "RESOLUTION" &&
+        proof.revision_id === validationRevision.revisionId &&
+        proof.revision_node_id === "test-validation" &&
+        proof.revision_artifact_ref === validationRevision.artifactRef &&
+        proof.revision_artifact_digest === validationRevision.digest,
+        "resolution proof persisted with the revision content binding",
+      );
+      const scope = db.prepare("SELECT * FROM loop_finding_scopes WHERE finding_id = ?")
+        .get(finding.findingId) as Record<string, unknown> | undefined;
+      // The finding was appended before test-validation ran: the append-time
+      // affected set was empty, and the empty scope is a first-class value.
+      assert(
+        scope !== undefined && scope.edge_count === 0,
+        "append-time invalidation scope persisted, empty set included",
+      );
+    } finally {
+      db.close();
+    }
+    assert(store.computeFindingGate("run-001").status === "ELIGIBLE",
+      "resolved finding with a durable proof is gate-eligible");
+  });
+  withRunningStore((store, dir) => {
+    // A programmatically forged closure: the attacker flips an OPEN finding to
+    // RESOLVED with a format-valid evidence pair and recomputes the canonical
+    // hash. Only the missing durable closure proof still rejects it.
+    const driver = makeCapabilityDriver(store, "run-001");
+    driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+      earliestAffectedNodeId: "code-review",
+    }))).record;
+    tamperFindingWithRehash(dir, finding.findingId, Object.freeze({
+      ...finding,
+      status: "RESOLVED",
+      resolvedByRevisionId: "run-001:revision:code-review:1",
+      resolutionEvidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("9")}`,
+      resolutionEvidenceDigest: dg("9"),
+    }));
+    expectFindingCorruptOnAllReadPaths(store, "forged resolution without a durable proof raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // The review's attack: a never-accepted HIGH finding is programmatically
+    // risk-accepted with an arbitrary acceptor and a forged but well-formed
+    // digest, canonical hash recomputed. No proof exists → fail closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+      earliestAffectedNodeId: "code-review",
+    }))).record;
+    tamperFindingWithRehash(dir, finding.findingId, Object.freeze({
+      ...finding,
+      status: "ACCEPTED_RISK",
+      riskAcceptedBy: "user:mallory",
+      riskAcceptanceEvidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("8")}`,
+      riskAcceptanceEvidenceDigest: dg("8"),
+    }));
+    expectFindingCorruptOnAllReadPaths(store, "forged risk acceptance without a durable proof raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // Rehashed replacement of resolvedByRevisionId: the proof's captured
+    // revision binding no longer matches the finding row's closure fields.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const { finding } = appendAndResolveFinding(store, driver);
+    const resolved = store.listFindings("run-001")[0]!;
+    tamperFindingWithRehash(dir, finding.findingId, Object.freeze({
+      ...resolved,
+      resolvedByRevisionId: "run-001:revision:code-review:1",
+    }));
+    expectFindingCorruptOnAllReadPaths(store, "rehashed resolvedByRevisionId replacement raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // Deleting the durable proof of a legitimately resolved finding fails
+    // every read path closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const { finding } = appendAndResolveFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_proofs WHERE finding_id = ?").run(finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "deleted resolution proof raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // Tampering the proof's evidence and recomputing the proof's own hash
+    // still fails closed: the proof must equal the finding row's closure
+    // fields.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const { finding } = appendAndResolveFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      const row = db.prepare("SELECT * FROM loop_finding_proofs WHERE finding_id = ?")
+        .get(finding.findingId) as Record<string, unknown>;
+      const tampered: LoopFindingProof = Object.freeze({
+        findingId: finding.findingId,
+        proofKind: "RESOLUTION",
+        revisionId: row.revision_id as string,
+        revisionNodeId: row.revision_node_id as LoopFindingProof["revisionNodeId"],
+        revisionArtifactRef: row.revision_artifact_ref as string,
+        revisionArtifactDigest: row.revision_artifact_digest as string,
+        evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("7")}`,
+        evidenceDigest: dg("7"),
+        riskAcceptedBy: null,
+      });
+      db.prepare("UPDATE loop_finding_proofs SET evidence_ref = ?, evidence_digest = ?, canonical_sha256 = ? WHERE finding_id = ?")
+        .run(tampered.evidenceRef, tampered.evidenceDigest,
+          createHash("sha256").update(canonicalizeProofUnchecked(tampered)).digest("hex"),
+          finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "rehashed proof evidence drift raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // A forged proof attached to an OPEN finding — hash correctly computed —
+    // fails closed: only closed findings may carry proofs.
+    const driver = makeCapabilityDriver(store, "run-001");
+    driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+      earliestAffectedNodeId: "code-review",
+    }))).record;
+    const forged = createLoopFindingRiskAcceptanceProof(finding, RISK_EVIDENCE);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare(
+        `INSERT INTO loop_finding_proofs (
+          finding_id, proof_kind, revision_id, revision_node_id,
+          revision_artifact_ref, revision_artifact_digest,
+          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        forged.findingId, forged.proofKind, null, null, null, null,
+        forged.evidenceRef, forged.evidenceDigest, forged.riskAcceptedBy,
+        createHash("sha256").update(canonicalizeLoopFindingProof(forged, "run-001")).digest("hex"),
+      );
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "forged proof on an open finding raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // Superseding clears the closure fields, so the proof must not survive;
+    // re-adding one to the SUPERSEDED finding fails closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const { finding, validationRevision } = appendAndResolveFinding(store, driver);
+    const replacement = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 2, sourceCapability: "test-validation", category: "TEST",
+      earliestAffectedNodeId: "test-validation",
+    }))).record;
+    store.supersedeFinding("run-001", finding.findingId, replacement.findingId);
+    assert(store.listFindings("run-001")[0]!.status === "SUPERSEDED",
+      "superseded finding reads back cleanly");
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      const leftover = db.prepare("SELECT * FROM loop_finding_proofs WHERE finding_id = ?")
+        .get(finding.findingId);
+      assert(leftover === undefined, "supersede removes the closure proof in the same transaction");
+      // Re-add the removed proof: a SUPERSEDED finding must not carry one.
+      db.prepare(
+        `INSERT INTO loop_finding_proofs (
+          finding_id, proof_kind, revision_id, revision_node_id,
+          revision_artifact_ref, revision_artifact_digest,
+          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        finding.findingId, "RESOLUTION", validationRevision.revisionId, "test-validation",
+        validationRevision.artifactRef, validationRevision.digest,
+        RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null,
+        createHash("sha256").update(canonicalizeProofUnchecked(Object.freeze({
+          findingId: finding.findingId,
+          proofKind: "RESOLUTION",
+          revisionId: validationRevision.revisionId,
+          revisionNodeId: "test-validation" as NodeCapabilityId,
+          revisionArtifactRef: validationRevision.artifactRef,
+          revisionArtifactDigest: validationRevision.digest,
+          evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
+          evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
+          riskAcceptedBy: null,
+        }))).digest("hex"),
+      );
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "proof re-added to a superseded finding raises STORE_CORRUPT");
+  });
+}
+
+console.log("finding lifecycle: invalidation scope completeness is verified on read-back");
+/** Drive all seven nodes ACTIVE, then append a finding that stales every one. */
+function appendFullScopeFinding(store: LoopRunStore, driver: CapabilityDriver): LoopFinding {
+  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  return store.appendFinding(createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "test-validation", category: "TEST",
+    earliestAffectedNodeId: "requirement-intake",
+  }))).record;
+}
+{
+  withRunningStore((store, dir) => {
+    // The demonstrated Round-1 gap: deleting the LAST edge leaves the rest
+    // contiguous; only the persisted append-time scope fails closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_invalidations WHERE finding_id = ? AND invalidation_index = 6")
+        .run(finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "deleted last invalidation edge raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_invalidations WHERE finding_id = ? AND invalidation_index = 0")
+        .run(finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "deleted first invalidation edge raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_invalidations WHERE finding_id = ?")
+        .run(finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "deleted complete invalidation edge set raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // 重算关联事实：the attacker deletes the last edge AND recomputes the
+    // finding row's canonical hash — the scope digest still fails closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_invalidations WHERE finding_id = ? AND invalidation_index = 6")
+        .run(finding.findingId);
+      db.prepare("UPDATE loop_findings SET canonical_sha256 = ? WHERE finding_id = ?")
+        .run(createHash("sha256").update(canonicalizeFindingUnchecked(finding)).digest("hex"),
+          finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store,
+      "deleted last edge with recomputed finding hash raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("DELETE FROM loop_finding_scopes WHERE finding_id = ?").run(finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "deleted invalidation scope raises STORE_CORRUPT");
+  });
+  withRunningStore((store, dir) => {
+    // A scope digest rewritten without its canonical hash fails closed.
+    const driver = makeCapabilityDriver(store, "run-001");
+    const finding = appendFullScopeFinding(store, driver);
+    const db = new Database(join(dir, "journal.db"));
+    try {
+      db.prepare("UPDATE loop_finding_scopes SET scope_digest = ? WHERE finding_id = ?")
+        .run(dg("6"), finding.findingId);
+    } finally {
+      db.close();
+    }
+    expectFindingCorruptOnAllReadPaths(store, "tampered invalidation scope digest raises STORE_CORRUPT");
+  });
+}
+
 console.log("finding lifecycle: identity rewrite committed before the read starts fails closed");
 withRunningStore((store, dir) => {
   const finding = store.appendFinding(createLoopFinding(findingDraft({
@@ -1515,6 +1849,8 @@ console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
   store1.close();
   // Simulate a pre-WP3 journal: no finding tables, format marker v4.
   const v4 = new Database(path);
+  v4.exec("DROP TABLE loop_finding_proofs");
+  v4.exec("DROP TABLE loop_finding_scopes");
   v4.exec("DROP TABLE loop_finding_invalidations");
   v4.exec("DROP TABLE loop_findings");
   v4.pragma("user_version = 4");
@@ -1535,6 +1871,14 @@ console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
     migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_invalidations'").get() !== undefined,
     "migration creates the invalidation table",
   );
+  assert(
+    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_proofs'").get() !== undefined,
+    "migration creates the closure proof table",
+  );
+  assert(
+    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_scopes'").get() !== undefined,
+    "migration creates the invalidation scope table",
+  );
   migrated.close();
   rmSync(dir, { recursive: true, force: true });
 }
@@ -1546,6 +1890,8 @@ console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
   store1.createRun(makeIdentity());
   store1.close();
   const v4 = new Database(path);
+  v4.exec("DROP TABLE loop_finding_proofs");
+  v4.exec("DROP TABLE loop_finding_scopes");
   v4.exec("DROP TABLE loop_finding_invalidations");
   v4.exec("DROP TABLE loop_findings");
   v4.pragma("user_version = 4");
@@ -1583,6 +1929,8 @@ console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
   store1.createRun(makeIdentity());
   store1.close();
   const raw = new Database(path);
+  raw.exec("DROP TABLE loop_finding_proofs");
+  raw.exec("DROP TABLE loop_finding_scopes");
   raw.exec("DROP TABLE loop_finding_invalidations");
   raw.exec("DROP TABLE loop_findings");
   raw.close();
@@ -1617,6 +1965,198 @@ console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
   expectThrow("STORE_CORRUPT", () => store2.init(), "invalidation table foreign key drift is rejected");
   store2.close();
   rmSync(dir, { recursive: true, force: true });
+}
+
+console.log("finding lifecycle: closure evidence binds to the physical blob (bound artifact store)");
+/** Bound-store fixture: run journal + real artifact store in one temp dir. */
+function withBoundFindingStore(
+  fn: (store: LoopRunStore, artifactStore: LoopArtifactStore, dir: string) => void,
+): void {
+  // realpath: the artifact store resolves its control root, so blob paths
+  // derived by the test must be computed from the resolved directory.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "loop-finding-blob-")));
+  const repositoryPath = join(dir, "repo");
+  mkdirSync(repositoryPath, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: join(dir, "control"), repositoryPath });
+  artifactStore.init();
+  const store = new LoopRunStore(join(dir, "journal.db"), { artifactStore });
+  store.init();
+  try {
+    fn(store, artifactStore, dir);
+  } finally {
+    store.close();
+    artifactStore.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function findingBlobPath(dir: string, kind: string, digest: string): string {
+  return join(dir, "control", "artifacts", "v1", kind, digest.slice(0, 2), `${digest}.blob`);
+}
+
+/** Drive the given nodes with real output blobs and matching revisions. */
+function driveBoundNodes(
+  store: LoopRunStore,
+  artifactStore: LoopArtifactStore,
+  driver: CapabilityDriver,
+  nodes: readonly NodeCapabilityId[],
+): Map<NodeCapabilityId, LoopArtifactRevision> {
+  const revisions = new Map<NodeCapabilityId, LoopArtifactRevision>();
+  let upstream: string[] = [];
+  for (const nodeId of nodes) {
+    const stored = artifactStore.put("capability_output", `${nodeId} output v1`);
+    const execution = driver.succeed(nodeId, { version: "1.0.0", digest: stored.digest });
+    const revision = store.appendArtifactRevision(createLoopArtifactRevision({
+      runId: "run-001",
+      requirementId: "req-001",
+      nodeId,
+      sequence: 1,
+      generation: null,
+      stablePath: `artifacts/req-001_${nodeId}.md`,
+      artifactKind: "capability_output",
+      semver: "1.0.0",
+      artifactRef: stored.artifactRef,
+      digest: stored.digest,
+      producerExecutionId: execution.executionEventId,
+      gateResult: (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(nodeId)
+        ? "PASS"
+        : "NOT_APPLICABLE",
+      upstreamRevisionIds: upstream,
+      createdAt: nextTs(),
+    })).record;
+    revisions.set(nodeId, revision);
+    upstream = [revision.revisionId];
+  }
+  return revisions;
+}
+
+{
+  withBoundFindingStore((store, artifactStore, _dir) => {
+    // 伪造证据：a resolution evidence digest whose blob was never written is
+    // rejected at write time when the artifact store is bound.
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "test-validation", category: "TEST",
+      earliestAffectedNodeId: "test-validation",
+    }))).record;
+    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
+    const validation = driver.succeed("test-validation", {
+      version: "1.0.0", digest: storedValidation.digest,
+    });
+    const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision({
+      runId: "run-001",
+      requirementId: "req-001",
+      nodeId: "test-validation",
+      sequence: 1,
+      generation: null,
+      stablePath: "artifacts/req-001_test-validation.md",
+      artifactKind: "capability_output",
+      semver: "1.0.0",
+      artifactRef: storedValidation.artifactRef,
+      digest: storedValidation.digest,
+      producerExecutionId: validation.executionEventId,
+      gateResult: "PASS",
+      upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+      createdAt: nextTs(),
+    })).record;
+    expectThrow("ILLEGAL_TRANSITION", () => store.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
+    }), "resolution with a never-written evidence blob is rejected");
+    assert(store.listFindings("run-001")[0]!.status === "OPEN",
+      "rejected resolution leaves the finding open");
+    expectThrow("ILLEGAL_TRANSITION", () => store.acceptFindingRisk("run-001", finding.findingId,
+      RISK_EVIDENCE), "risk acceptance with a never-written evidence blob is rejected");
+    assert(store.computeFindingGate("run-001").status === "BLOCKED",
+      "rejected closures leave the gate blocked");
+  });
+  withBoundFindingStore((store, artifactStore, dir) => {
+    // 真实证据：a resolution whose evidence blob physically exists succeeds;
+    // deleting the blob afterwards fails every read path closed.
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "test-validation", category: "TEST",
+      earliestAffectedNodeId: "test-validation",
+    }))).record;
+    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
+    const validation = driver.succeed("test-validation", {
+      version: "1.0.0", digest: storedValidation.digest,
+    });
+    const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision({
+      runId: "run-001",
+      requirementId: "req-001",
+      nodeId: "test-validation",
+      sequence: 1,
+      generation: null,
+      stablePath: "artifacts/req-001_test-validation.md",
+      artifactKind: "capability_output",
+      semver: "1.0.0",
+      artifactRef: storedValidation.artifactRef,
+      digest: storedValidation.digest,
+      producerExecutionId: validation.executionEventId,
+      gateResult: "PASS",
+      upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+      createdAt: nextTs(),
+    })).record;
+    const evidence = artifactStore.put("capability_findings", "resolution gate evidence v1");
+    const resolved = store.resolveFinding("run-001", finding.findingId, {
+      resolvedByRevisionId: validationRevision.revisionId,
+      resolutionEvidenceRef: evidence.artifactRef,
+      resolutionEvidenceDigest: evidence.digest,
+    });
+    assert(resolved.record.status === "RESOLVED", "resolution with an existing evidence blob succeeds");
+    assert(store.computeFindingGate("run-001").status === "ELIGIBLE",
+      "resolved finding with verified durable evidence is gate-eligible");
+    unlinkSync(findingBlobPath(dir, "capability_findings", evidence.digest));
+    expectFindingCorruptOnAllReadPaths(store, "evidence blob deleted after resolution fails closed");
+  });
+  withBoundFindingStore((store, artifactStore, _dir) => {
+    // 用户风险接受证据：a risk acceptance whose evidence blob physically
+    // exists is consumed by the gate once the downstream current is ACTIVE.
+    store.createRun(makeIdentity());
+    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(store, "run-001");
+    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+    const finding = store.appendFinding(createLoopFinding(findingDraft({
+      sequence: 1, sourceCapability: "test-validation", category: "TEST",
+      earliestAffectedNodeId: "test-validation",
+    }))).record;
+    const evidence = artifactStore.put("capability_findings", "user risk acceptance v1");
+    const accepted = store.acceptFindingRisk("run-001", finding.findingId, {
+      riskAcceptedBy: "user:shaoyang01",
+      riskAcceptanceEvidenceRef: evidence.artifactRef,
+      riskAcceptanceEvidenceDigest: evidence.digest,
+    });
+    assert(accepted.record.status === "ACCEPTED_RISK",
+      "risk acceptance with an existing evidence blob succeeds");
+    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
+    const validation = driver.succeed("test-validation", {
+      version: "1.0.0", digest: storedValidation.digest,
+    });
+    store.appendArtifactRevision(createLoopArtifactRevision({
+      runId: "run-001",
+      requirementId: "req-001",
+      nodeId: "test-validation",
+      sequence: 1,
+      generation: null,
+      stablePath: "artifacts/req-001_test-validation.md",
+      artifactKind: "capability_output",
+      semver: "1.0.0",
+      artifactRef: storedValidation.artifactRef,
+      digest: storedValidation.digest,
+      producerExecutionId: validation.executionEventId,
+      gateResult: "PASS",
+      upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
+      createdAt: nextTs(),
+    }));
+    assert(store.computeFindingGate("run-001").status === "ELIGIBLE",
+      "accepted risk with verified durable evidence is gate-consumable");
+  });
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`);
