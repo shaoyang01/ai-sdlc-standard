@@ -1399,3 +1399,117 @@ PKB 同构 runner 已长期验证该模式的安全性（每文件一进程天�
 ## 代码与验证依据
 
 `scripts/run-tests-parallel.mjs`（新增）；`package.json`（test script 一行）；`tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts`（Test 20 断言段）；PKB `90-system/scripts/run_repo_tests.py`；本地基线串行 4m46s 与并发 2m27s 两次全量运行；tests/ 全量共享状态隔离审计（只读）。
+
+# Decision-040：授权并实施 C02-WP2 Artifact Revision and Current Authority
+
+## 状态
+
+Accepted（2026-08-20，Current User 单独授权实施 C02-WP2；实现完成后待独立复审）
+
+## 背景
+
+Decision-038 收口 C02-WP1 后，规划 §7 依赖图的下一工作包是 C02-WP2（Artifact Revision and Current Authority），目标是为每个 canonical 节点建立机器可验证的 current artifact revision，消除规划 §4 缺口 G2（`LoopArtifactStore` 只保存不可变 blob，capability event 的版本字段没有存储层绑定）。Current User 本轮通过控制平面授权条目 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 单独授权 C02-WP2。既有可复用基线：WP1 的 v3 表族迁移与 append/CAS/读回交叉绑定模式、`loop-delivery-checkpoint-store.ts` 的 current-head 全定位符 CAS 范式、`loop-governance-tail-result.ts` 的 path+version+digest 交叉绑定先例。
+
+## 问题
+
+如何在不触碰 C01/WP1 历史、不实现 finding 失效计算与 Re-Gate dispatch、不新建第二份 Manifest schema、不接线生产入口的前提下，把"stable path + 内部 SemVer + immutable ref + digest"四项绑定落为 run journal 内 append-only 的 artifact revision 链与每节点 current pointer，并满足创建、版本前进、精确重放、并发冲突、篡改/缺失 blob、Manifest 漂移全部可判定的验收要求？
+
+## 决策
+
+1. 新增 `core/loop-artifact-revision.ts` 纯函数模型：固定 revision schema（schemaVersion 1）——`revisionId`（派生自 `{runId}:revision:{nodeId}:{sequence}`）、`runId`、`requirementId`、`nodeId`（复用 journal 既有七个 canonical capability id）、`sequence`（每 run+node 独立序列，从 1 连续）、`generation`（可空正整数，仅引用绑定，推进权威属于 WP4）、`stablePath`、`artifactKind`（`LoopArtifactKind` 枚举）、`semver`、`artifactRef`、`digest`、`producerExecutionId`、`gateResult`（可空）、`validity`（`ACTIVE`/`STALE`/`SUPERSEDED`）、`supersededBy`（可空）、`createdAt`；上游 revision 引用以子表持久化（多值字段不存 JSON 载荷）。
+2. `core/loop-run-store.ts` 前进到格式 **v4**：新增 `loop_artifact_revisions` 主表（`UNIQUE(run_id, node_id, sequence)`、`UNIQUE(run_id, node_id, semver)`、外键 CASCADE）、`loop_artifact_revision_upstreams` 子表、`loop_artifact_current` 每节点 current pointer 表；v3→v4 与既有迁移同事务原子完成，失败全回滚、可幂等重试，未知版本/缺表/schema 漂移 fail-closed；C01 与 WP1 历史一行不改。
+3. 写入唯一入口为 `appendArtifactRevision`：精确重放幂等；同 id 不同内容、同 `(runId, nodeId, sequence)` 或 `(runId, nodeId, semver)` 被占用均冲突报错；terminal run、活动 stage、活动 capability execution 期间拒绝追加；`requirementId` 与 run identity 精确一致。
+4. 四项绑定与执行证据强制一致：revision 的 `nodeId`/`artifactRef`/`semver`/`digest` 必须与 `producerExecutionId` 指向的同 run、已成功 capability execution 事件的节点与 output 三元组精确匹配；Gate 节点（solution-review、test-validation）的 `gateResult` 必须等于该执行事件的 Gate 结果且不得为 FAIL/NOT_APPLICABLE，非 Gate 节点必须为 NOT_APPLICABLE。
+5. 版本前进与 supersede 原子化：新 revision 的 semver 必须按 SemVer 大于该节点前一 current；同事务内旧 revision 置 `SUPERSEDED` 并回填 `supersededBy`、current pointer 以"期望当前 revision"为谓词 CAS 前进；并发败者冲突报错，相同候选并发幂等收敛。
+6. 上游消费 fail-closed（不变量 7）：revision 的 upstream refs 必须引用同 run 现存 revision，且在追加时刻必须是各自节点的 current 指针目标；stale/superseded/不存在/跨 run 的上游一律拒绝。
+7. validity 状态机固定：`ACTIVE → SUPERSEDED`（仅经 supersede 路径并回填 supersededBy）、`ACTIVE → STALE`（显式标记原语，供 WP3 失效传播调用；WP2 不实现依赖图传播）；状态不可回退；current pointer 指向非 ACTIVE revision 时读取 fail-closed。
+8. journal ↔ `manifest.md` Artifact Index 交叉绑定以纯函数 `crossBindArtifactIndexRow` 表达：调用方提供解析后的 Index 行（node/stablePath/version/status/result），函数校验 stablePath 与 version 与 journal current revision 精确一致、manifest status 与 runtime validity 映射一致（current ↔ draft/active；stale ↔ stale；superseded ↔ replaced）、Gate 行 result 与 `gateResult` 一致；任一漂移返回 STOP 诊断，不静默选边。journal 侧拥有 ref/digest，manifest 侧拥有 DocFlow 状态，不互相复制 schema（不变量 2）。
+9. 读回交叉绑定：`listArtifactRevisions(runId)` 与 `getCurrentArtifactRevision(runId, nodeId)` 在 canonical hash 重算之外，逐条将 `requirementId` 与已验证 run identity 比对，并做 current pointer ↔ revision 双向一致性校验；快照读取同时验证 revision 链（corruption-first），挂入既有 `verifySnapshotInTransaction`。
+10. 明确排除：finding 分类、依赖图失效传播与自动路由（WP3）、Re-Gate dispatch 与 generation 推进权威（WP4）、恢复上下文扩展与生产入口接线（WP5）、业务实现、真实 Agent 调用、任何 Git/PR/发布副作用。
+
+## 原因
+
+G2 的本质是版本字符串与 blob、stable path、前驱、current 指针脱节。把 revision 落为 run journal 内 append-only 表族并沿用 WP1 的迁移、幂等、CAS 与读回交叉绑定模式，可以在不引入第二份权威、不改写历史的前提下满足验收：四项绑定由"revision ↔ producer execution output 三元组精确匹配"锚定到真实执行证据；current 语义由单指针表 + 同事务 supersede 保证唯一；Manifest 漂移由显式 cross-bind 函数判定 STOP 而非各自猜测。
+
+## 影响
+
+C02-WP2 具备候选实现证据，但在独立复审与 Current User 裁决前保持未完成：不消费 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 的收口语义，不登记 C02 任一完成合同项。本决定不授权 C02-WP3～WP6，不扩展真实 Agent、Git/PR/发布或 C03～C05 边界。
+
+## 实现状态
+
+产品实现与专项测试已完成并提交（`be2db49`，分支 `feature/c02-wp2-artifact-revision`），Round 1 独立复审裁决 CHANGES_REQUESTED（H1 读回未重验 producer 绑定、H2 链校验允许非末尾 ACTIVE、L1 测试源码控制字节），修正已同分支提交并推送至 PR #90，等待重新复审；治理收口（复审通过、裁决、控制平面收口登记、Exchange/PKB 发布）未执行。
+
+## 代码与验证依据
+
+- 实现提交：`be2db49 feat(c02): WP-2 artifact revision and current authority`（7 文件，+2710/-46）：新增 `core/loop-artifact-revision.ts`、`tests/loop-artifact-revision.test.ts`、`ai-sdlc/loop-artifact-revision.md`（0.1.0 Draft）；`core/loop-run-store.ts` 前进 v4（三表迁移、`appendArtifactRevision`、`markArtifactRevisionStale`、`listArtifactRevisions`/`getCurrentArtifactRevision` 读回交叉绑定、快照校验挂载）；三个既有测试文件仅机械更新格式断言 3→4。
+- 专项测试：`tests/loop-artifact-revision.test.ts` 167/167 通过。
+- 既有断言回归：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 107/107。
+- 全量验证：完整 `npm test` 129 文件 1767/0 通过；`tsc --noEmit`、`git diff --check` 通过。CI 已回填：PR #90（`feature/c02-wp2-artifact-revision` → `feature/loop-runtime-v1`），run 32363565455 四项检查（ci-tests / ci-typecheck / ci-standards / ci-loop-patch-mutations）全部通过（head `d03c431`）。
+- 测试预置说明（初始版本）：supersede 与版本前进用例以 `seedRevisionWithPointer` 裸 SQL 预置 revision-1 前置态，因为 C01 capability 链每 run 每 capability 只允许一次 succeeded，公开路径无法产出同节点 revision-2（该真实路径属于 WP4 generation 时代）；测试文件头有对应注释。**Round 1 复审后该预置方式被取代**，见下。
+
+## Round 1 复审与修正（2026-08-20）
+
+独立复审裁决 CHANGES_REQUESTED，两项 High 一项 Low，均已修正：
+
+1. **H1 读回未重验 producer 绑定**：`readArtifactRevisionsInTransaction` 原先只校验 revision 自身 hash、Requirement ID、链与 pointer。现复用已验证的 capability execution 集合，对每条 revision 逐条重验 producer 存在且已成功、capability 匹配、output 三元组精确一致、Gate 结果一致（与写入路径四项绑定同构）；任一漂移 `STORE_CORRUPT`。`listArtifactRevisions`、`getCurrentArtifactRevision`、`verifySnapshotInTransaction` 三条读路径共用该校验。
+2. **H2 链校验允许非末尾 ACTIVE**：`validateLoopArtifactRevisionChain` 新增规则——同一节点仅最新 revision 可为 `ACTIVE`，更早 revision 只能是 `SUPERSEDED`（且 `supersededBy` 指向下一 sequence）或 `STALE`；读回路径经链校验自动获得该规则。
+3. **L1 测试源码含原始控制字节**：两处字面 NUL/`\x05` 改为 `\x00`/`\x05` 转义，文件恢复为纯 UTF-8 文本。
+
+修正的连带影响（已在合同与测试头注释中如实记录）：producer 读回重验使原 WP4-era 预置行不再自洽——可读 journal 在同 run 同 capability 只有一次成功执行的链规则下不可能容纳同节点两个 revision。supersede 成功路径、stale pointer 前进、superseded upstream 三个场景的 store 级覆盖因此推迟到 C02-WP4 的链扩展，链规则层面由纯函数回归覆盖（非末尾 ACTIVE 拒绝、SUPERSEDED/STALE 非末尾合法态正例）。新增六组 rehash 篡改回归（producer 不存在/失败/节点漂移/三元组漂移/版本漂移/Gate 漂移 × list/getCurrent/getSnapshot 三路径）。修正后专项 182/182 通过，`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`tsc --noEmit` 通过。
+
+修正提交推送至 PR #90 同一分支后需重新复审；WP-2 在复审通过前保持未收口，`C02_WP2_ARTIFACT_REVISION_AUTHORITY` 授权不消费。
+
+## Round 2 复审与修正（2026-08-20）
+
+独立复审裁决 FAIL（H3 一项 High；H1/H2/L1 确认关闭）：
+
+1. **H3 写入路径以转换前状态校验候选链**：`appendArtifactRevision` 原先以"旧 revision 仍 ACTIVE + 新 revision 也 ACTIVE"的候选集调用链校验，Round 1 引入的"仅末尾可 ACTIVE"规则会在 supersede 执行前拒绝每一次合法版本前进——即使 WP4 将来提供第二次成功执行证据，写入路径仍会失败。修正：新增纯函数 `supersedeArtifactRevision`（唯一 supersede 边 `ACTIVE → SUPERSEDED`，successor 必须为同节点下一 sequence 的 canonical id，其余 fail-closed）；写入路径的候选链校验改为**转换后状态**（旧 current 已置 SUPERSEDED 的形态），落库的 supersede 写入复用同一纯函数产物，校验与写入不再有第二份语义。纯函数回归覆盖：转换后链通过校验、转换前链（双 ACTIVE）被拒绝、STALE/SUPERSEDED 不可被 supersede、successor 错位拒绝、Proxy 拒绝。
+2. **store 级 supersede 成功路径覆盖的正式重基线**：Round 1 已证明该场景在 C01 链下不可构造（同节点第二个 revision 需要同 capability 第二次成功执行证据，链校验器在 WP4 重执行扩展前禁止）。Round 2 复审者要求要么恢复可验证的 store 级前进语义、要么由 Current User 显式重基线。Current User 于 2026-08-20 **显式接受重基线**：store 级端到端 supersede 成功路径（含 stale pointer 前进、superseded upstream、markStale-on-superseded 变体）的验证随 C02-WP4 的链扩展一并验收；WP-2 以转换后状态校验 + 纯函数回归 + store 级边界测试作为当前证据。该重基线不扩大任何授权边界，WP4 范围不变。
+
+修正后专项 190/190 通过，`loop-run-store` 185/185、`tsc --noEmit` 通过。修正提交推送至 PR #90 后进入 Round 3 复审；WP-2 保持未收口，授权不消费。
+
+## Round 3～9 复审与修正（2026-08-21）
+
+Round 3 CHANGES_REQUESTED（缺失 blob 可判定）→ 第五项 blob 绑定：`LoopRunStoreOptions.artifactStore` 绑定 `LoopArtifactStore` 后，写入拒绝 blob 未写入/digest 漂移的 revision，读回逐条重验物理 blob（合同 0.1.3）。Round 4～6 CHANGES_REQUESTED（入口/gateway 接线：同实例绑定、gateway tracing 同实例、非虚拟 WeakMap 判定与配置冻结，合同 0.1.4～0.1.6）→ Round 8 复审裁定这些接线修正越出 WP2 授权的生产入口接线边界（WP5 范畴），已整体拆出为未提交的 WP5 候选补丁（`temp/wp5-candidate-entry-wiring.patch`），WP2 仅保留 store 级 `artifactStore` 绑定与 blob 读写校验（合同 0.1.8 范围项①）。Round 7 CHANGES_REQUESTED（公开读路径快照验证与明细返回拆在两个事务）→ 单事务化 + 内部读取器只接收已验证 requirementId（合同 0.1.7；WP1 同步，合同 1.0.5）。Round 8 CHANGES_REQUESTED（Round 7 的 TOCTOU 回归在公开读调用前即提交篡改，无法区分单/双事务实现）→ 确定性屏障回归：屏障在事务首个明细表语句处经第二连接提交篡改，四条公开读路径返回本事务一致快照、篡改在事务结束后被下一次读取以 STORE_CORRUPT 检出（合同 0.1.8；WP1 合同 1.0.6）。
+
+Round 9 独立复审（范围 0485376..b576e13 加当时未提交的 Round 8 修正，现提交为 `1cc650a`）裁决 **PASS**：无 Critical/High 阻塞；WP2 producer 绑定、非末尾 ACTIVE、WP1/WP2 读路径一致性独立复核通过；非阻塞 L1（屏障测试注释精确化）已在 `1cc650a` 修正；本 Decision 早先轮次的断言计数由本节最终值取代。
+
+最终验证（head `1cc650a`）：专项 loop-artifact-revision 212/212、loop-change-classification 132/132、loop-run-store 185/185、loop-run-provenance 79/79、loop-capability-execution 86/86、loop-validation-guards 49/49；`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0（145.4s）；mutation gate 14/14 杀死 + 3/3 探针；GitHub Actions run 32440818155 四项检查全绿（PR #90 Draft）。WP-2 收口与授权消费由 Decision-041 记录。
+
+# Decision-041：C02-WP1 重新收口与 C02-WP2 复审通过与收口
+
+## 状态
+
+Accepted（2026-08-21，Current User 接受 Round 9 独立复审 PASS 结论，裁决 C02-WP1 重新收口与 C02-WP2 收口）
+
+## 背景
+
+C02-WP1 原经 Decision-038 收口，但 WP1/WP2 合并多轮独立复审在 Round 3～8 发现 WP1 四处缺口（跨 run `NEW_REQUIREMENT` 唯一性、同事务验证相关链与 findLatest 语义、守卫短路、未验证 identity 列过滤）与读路径 TOCTOU 证据问题，WP1 重开，Decision-038 收口结论保留为历史事实、不沿用。C02-WP2 经 Decision-040 授权实施，历经 Round 1～8 复审修正（producer 绑定重验、非末尾 ACTIVE、转换后状态校验 + `supersedeArtifactRevision` 纯函数、第五项 blob 绑定、入口/gateway 接线越界拆出为 WP5 候选、读路径单事务化、TOCTOU 确定性屏障证据）。Round 9 独立复审覆盖 `0485376..b576e13` 加 Round 8 修正（提交 `1cc650a`），裁决 PASS，无 Critical/High/Medium/Low 阻塞项。
+
+## 问题
+
+C02-WP1（重开后）与 C02-WP2 是否满足规划 §6/§7 验收与各自合同，可否消费授权完成治理收口？
+
+## 决策
+
+1. 接受 Round 9 独立复审 PASS 结论；C02-WP1 重新收口、C02-WP2 收口。
+2. 控制平面消费 `C02_WP2_ARTIFACT_REVISION_AUTHORITY` 授权并登记 WP1 重新收口与 WP2 完成；`C02_WP1_REQUIREMENT_CHANGE_CLASSIFICATION` 维持已消费；C02 四项完成合同保持 `INCOMPLETE`（需 WP3～WP6 联合证据）。
+3. `ai-sdlc/loop-change-classification.md` 升为 1.1.0 Accepted（内容等同 1.0.6 Draft）；`ai-sdlc/loop-artifact-revision.md` 升为 1.0.0 Accepted（内容等同 0.1.8 Draft）；C02 规划同步状态（v1.0.2）。
+4. WP5 候选入口/gateway 接线补丁保持未提交，归 C02-WP5 授权范围；store 级端到端 supersede 成功路径覆盖维持 Decision-040 Round 2 的 WP4 重基线。
+5. 本决定不授权 C02-WP3～WP6，不授权 Ready/merge（PR #90 保持 Draft，Ready 与 merge 为独立 Gate，需单独明确授权），不登记 C02 任一完成合同项，不授权真实 Agent 启用、Git/PR 自动化或 C03～C05。
+
+## 原因
+
+Round 9 复审在同一范围独立复核：WP1 不变量（跨 run `NEW_REQUIREMENT` 唯一、corruption-first 全链验证、BLOCKED 语义、已验证 identity 过滤、公开读路径一致快照）与 WP2 不变量（v3→v4 原子迁移、producer/output/Gate/blob 五项绑定、revision 链状态机、pointer 双向校验、CAS 写入与 fail-closed 读回）均成立；四条公开读路径同事务完成快照验证与明细读取，TOCTOU 由确定性屏障回归证据覆盖。独立验证：专项 132/212/185/79/86/49 全绿、`tsc --noEmit`、`git diff --check`、完整 `npm test` 129 文件 1767/0、mutation gate 14/14 杀死 + 3/3 探针；代码 head `1cc650a` 的 GitHub Actions run 32440818155 四项检查全绿。
+
+## 影响
+
+C02 缺口 G1（分类持久）与 G2（产物版本与 current 权威持久）关闭：同一 Requirement 的入口变化与每个 canonical 节点的当前交付物均具备固定 schema、可恢复、可审计的 run journal 持久面，journal 格式前进到 v4，C01 历史一行未改。WP3（失效传播）成为下一个可申请授权的工作包；本收口不构成 WP3～WP6 的实施入口，也不构成 PR #90 的 Ready/merge 授权。
+
+## 实现状态
+
+用户已最终裁决通过；收口治理文档随 PR #90 同分支提交推送，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针；Ready/merge 待单独授权后执行。
+
+## 代码与验证依据
+
+`core/loop-change-classification.ts`；`core/loop-artifact-revision.ts`；`core/loop-run-store.ts`（v3/v4 迁移、change/revision 链读写、单事务读路径、blob 绑定重验）；`ai-sdlc/loop-change-classification.md` 1.1.0 Accepted；`ai-sdlc/loop-artifact-revision.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（132/132）；`tests/loop-artifact-revision.test.ts`（212/212）；`tests/loop-run-store.test.ts`（185/185）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；`tests/loop-validation-guards.test.ts`（49/49）；实现与修正提交 `be2db49`、`23a9895`、`8cf25f9`、`b576e13`、`1cc650a`（PR #90，Draft）；Round 9 独立复审 PASS 与 CI run 32440818155（四项检查全绿）。
