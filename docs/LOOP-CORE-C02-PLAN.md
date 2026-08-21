@@ -1,11 +1,11 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；2026-08-21 Current User 裁决单轨重基线并授权 C02-WP3.5 治理登记，Decision-044；WP3.5 实施与 WP4～WP6 仍需逐 WP 单独授权）
+> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；2026-08-21 Current User 裁决单轨重基线并授权 C02-WP3.5 治理登记，Decision-044；2026-08-22 Current User 补充裁决 Skill 收敛映射与两个非节点 Skill 的去留，Decision-045；WP3.5 阶段 2 输出 A～G 已物化为待审稿，尚未获得 Current User 验收，任何后续实施与 WP4～WP6 仍未授权）
 > 日期：2026-08-20
-> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）、Decision-044（C02-WP3.5 单轨生命周期重基线授权与两项治理裁决）
+> 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）、Decision-044（C02-WP3.5 单轨生命周期重基线授权与两项治理裁决）、Decision-045（Skill 收敛映射与非节点通用 Skill 边界）
 > 权威依据：
-> - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.1.0 §4 `LOOP-CORE-02`
+> - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.2.2 §4 `LOOP-CORE-02`
 > - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) v0.3.0 §2、§4、§5
 > - `ai-project-control-plane/projects/ai-sdlc/STATE.yaml`：C02 四项 `INCOMPLETE / NOT_AUTHORIZED`
 
@@ -206,6 +206,48 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 - **阶段 2：只读影响分析与实施规划**（沿用 2026-08-21 WP3.5 原始授权）：输出 A（v1→v2 节点/finding 分类/最早回退节点/artifact 兼容映射）、B（WP4～WP6 重基线/保留/废弃清单）、C（C03 拆分 Single-Rail Skill Delivery）、D（C04 历史兼容内容处置）、E（受影响标准文档/Skill 合同/校验器/registry/安装副本精确改动清单）、F（后续独立授权工作包：先合同、后实现、后真实复杂需求验证）、G（收敛协议与 knowledge-sync 单轨迁移验收场景）；输出后停止等授权。
 - **阶段 3 起**：按阶段 2 的 F 清单逐包授权实施。
 
+#### 阶段 2 完整输出（待 Current User 验收）
+
+[C02-WP3.5 单轨生命周期重基线：阶段 2 影响分析与实施规划](LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md) 已物化 A～G，包含：
+
+- v1→v2 节点/执行角色、六类 finding、外部反馈入口、最早回退节点和 v2 Artifact Index；
+- WP4～WP6 重基线与 C03 Skill/registry/install/Delivery Tail 拆分；
+- C04 active standards 和 v5 journal 声明式 cutover；
+- 受影响文档、runtime、旧执行面、Skill、安装副本和测试的精确清单；
+- 十个逐包授权边界，以及 solution-gate/code-review 收敛协议和 knowledge-sync 验收场景。
+
+该文档当前状态为 `DRAFT FOR CURRENT USER REVIEW`。内容已补全不等于阶段 2 已被接受，更不构成阶段 3、WP4～WP6、C03、C05、CP/PKB 同步或 Git 发布授权。
+
+#### 阶段 2 输出 C：Skill 收敛映射（Decision-045）
+
+最终 Skill 拓扑为七个 canonical 节点 Skill，加一个不拥有 LOOP 生命周期状态的 `non-node utility skill`：`sdlc-docflow-writer`。表中“合并”表示能力迁入目标 Skill，并在替代合同、调用方、registry、校验器和安装副本完成切换后退役旧 Skill 包；不允许先删除旧包再补能力。
+
+| 现有 Skill | 最终归属 | 处置与保留语义 |
+| --- | --- | --- |
+| `sdlc-requirement-normalizer` | `sdlc-requirement-intake` | 合并为需求归一化与来源冲突处理主能力。 |
+| `sdlc-test-feedback-classifier` | `sdlc-requirement-intake` | 合并为测试/线上反馈的新输入分类；反馈开启新 generation，`05-测试验收` 不再是 LOOP 节点。 |
+| `sdlc-specification-writer` | `sdlc-solution-design` | 合并为方案内容生成主能力。 |
+| `sdlc-speckit-specify` | `sdlc-solution-design` | 只保留结构化映射与可追溯性能力；删除独立 `specs/{feature}/spec.md` 投影轨道。 |
+| `sdlc-speckit-plan` | `sdlc-solution-design` | 合并为按 LIGHT/STANDARD/DEEP 深度生成技术深化内容；删除独立 Speckit `plan.md` 轨道。 |
+| `sdlc-solution-challenger` | `sdlc-solution-gate` | 合并为对抗扫描与首轮 Finding Ledger 能力；不得作正式 Gate 裁决。 |
+| `sdlc-solution-reviewer` | `sdlc-solution-gate` | 合并为正式 Gate 与深度档位裁决；删除 Direct/Speckit 路径决定。 |
+| `sdlc-speckit-clarify` | `sdlc-solution-gate` | 合并为正式裁决前的残余澄清与一致性检查。 |
+| `sdlc-speckit-tasks` | `sdlc-task-planning` | 合并为任务拆解主能力。 |
+| `sdlc-speckit-analyze` | `sdlc-task-planning` | 合并为实现前跨产物一致性审计。 |
+| `sdlc-speckit-checklist` | `sdlc-task-planning` / `sdlc-implementation` 内部校验 | 不再独立拥有节点；按阶段作为可追溯 checklist 校验能力被节点调用。 |
+| `sdlc-speckit-implement` | `sdlc-implementation` | 合并为受约束实现主能力。 |
+| `sdlc-implementation-recorder` | `sdlc-implementation` | 合并为证据记录能力；完成声明必须引用 diff、测试输出或 journal 事件。 |
+| `sdlc-code-review-excellence` | `sdlc-code-review` | 合并为实际代码审查与 finding 发现能力。 |
+| `sdlc-code-review-normalizer` | `sdlc-code-review` | 合并为 Finding Ledger 归一化、正式报告与 closure review 能力。 |
+| `sdlc-speckit-sync` | `sdlc-knowledge-sync` | 合并为稳定事实筛选与知识写入能力；删除 dual-rail、sync source mode 与 specs-run 语义。 |
+| `sdlc-speckit-code-doc-reconcile` | `sdlc-knowledge-sync` | 合并为代码、library 工件与长期知识的 Reconcile 能力。 |
+| `sdlc-test-feedback-sync` | `sdlc-knowledge-sync` | 只承接已验证、可复用的 checklist/schema/知识改进；原始反馈及需求变化仍从 requirement-intake 重入。 |
+| `sdlc-docflow-writer` | 保留为 `non-node utility skill` | 保留独立 Skill 身份，可在非 DocFlow/非 LOOP 场景生成 Markdown、HTML、飞书等文档；在 LOOP 内只负责渲染、落盘和发布节点已确认内容，不注册 node capability，不裁决 Gate、不关闭 finding、不推进 generation。 |
+| `sdlc-gate-runner` | 删除；能力拆分迁移 | 确定性节点准入迁入 LOOP runtime；专业内容判断归各节点 Skill；`development_path_entry` 删除；治理尾部完成检查迁入 C03 Delivery Tail/checkpoint；不保留手动调用 Skill。 |
+| `sdlc-speckit-pipeline` | 删除；编排迁移 | activation、阶段停靠、暂停/恢复与 Re-Gate 编排由 LOOP runtime 承接，不保留 Speckit pipeline 或路径分流。 |
+
+`sdlc-solution-gate` 虽为一个 canonical 节点 Skill，其对抗扫描与正式裁决仍必须由不同 Agent binding 执行。`sdlc-docflow-writer` 的保留不改变“每个 LOOP 节点只有一个 canonical Skill”：该约束不禁止无节点状态、无流程权威的通用辅助 Skill。
+
 范围（阶段 3 起的实施边界，由阶段 2 细化）：
 
 - canonical 链 v2 定义与全部硬编码镜像（Gate 二元划分、类别绑定、首节点、相邻推进、binding 矩阵）的同步切换；
@@ -221,7 +263,7 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：治理登记与影响分析阶段不含任何 runtime 代码、Skill、合同实现、registry、安装副本、Git 发布；实施阶段不恢复 Direct/Speckit 分流，不重写历史 journal。
 
-- 状态（2026-08-21）：**阶段 1 治理登记已完成（Decision-044，工作区待提交授权）**；阶段 2 只读影响分析待执行（授权已存在，登记完成后恢复）。
+- 状态（2026-08-22）：**阶段 1 治理登记已完成（Decision-044）**；阶段 2 输出 C 的 Skill 收敛映射已由 Current User 补充裁决并登记（Decision-045）；A～G 完整稿已物化但仍为 `DRAFT FOR CURRENT USER REVIEW`，等待验收。任何 runtime、Skill、合同、registry、安装副本、CP/PKB 同步或阶段 3 实施仍未授权。
 
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
 
@@ -366,3 +408,5 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                          
 | 1.0.2 | 2026-08-21 | Accepted | 登记 C02-WP1 重开后经 Round 9 复审 PASS 重新收口与 C02-WP2 Round 9 复审通过与收口（Decision-041）；C02 四项完成合同保持 INCOMPLETE，WP3～WP6 保持未授权。 |
 | 1.0.3 | 2026-08-21 | Accepted | 登记 C02-WP3 Round 2 复审 PASS 与收口（Decision-043）；C02 四项完成合同保持 INCOMPLETE，WP4～WP6 保持未授权。 |
 | 1.1.0 | 2026-08-21 | Accepted | 按 Decision-044 单轨裁决重基线：§2.1/§2.3 节点链与连续性规则切换到 v2 单轨链；§4 G5 改写为设计深度决策缺口；§5 不变量 9 由路径三值改为深度档位、不变量 10 补合同升版约束、新增不变量 13（历史格式 fail-closed 可区分 + cutover preflight）；§6 插入 C02-WP3.5（Single-Rail Lifecycle Re-baseline，三阶段划分）并重基线 WP4～WP6；§7 依赖图插入 WP3.5；§9 登记 C04 取消与历史兼容机器不做。WP1～WP3 收口结论保持有效；WP3.5 实施与 WP4～WP6 保持未授权。 |
+| 1.1.1 | 2026-08-22 | Accepted | 按 Decision-045 登记 WP3.5 阶段 2 输出 C 的完整 21 Skill 收敛映射：七个 canonical 节点 Skill + 一个非节点通用 Skill `sdlc-docflow-writer`；`sdlc-gate-runner` 与 `sdlc-speckit-pipeline` 退役删除并迁移必要能力。阶段 2 其余 A、B、D～G 与任何实现仍未因此获得授权。 |
+| 1.2.0 | 2026-08-22 | Accepted baseline / Stage 2 draft pending review | 物化 WP3.5 阶段 2 输出 A～G 的独立实施规划，补齐节点/角色/finding/artifact、WP4～WP6、C03/C04、精确改动面、逐包授权与收敛/knowledge-sync 场景；只登记待审规划，不接受其内容，不授权实施。 |

@@ -1,5 +1,7 @@
 # AI-SDLC Decision Records
 
+> **Historical volume**：本文件固定保存 Decision-001～Decision-045。Decision-046 起采用一事一文件，统一从 [Decision Index](decisions/README.md) 定位；存储规则见 [Decision-046](decisions/Decision-046-decision-record-modularization.md)。既有编号与正文不拆迁、不重编号。
+
 > 导航：[架构基线](AI-SDLC-Architecture-Baseline.md) · [工作流设计](AI-SDLC-Workflow-Design.md) · [Agent 规范](AI-SDLC-Agent-Specification.md) · [实施路线图](AI-SDLC-Implementation-Roadmap.md) · [当前状态](CURRENT_STATUS.md)
 
 本文件只记录已确定决策。未确定事项见 [CURRENT_STATUS](CURRENT_STATUS.md#need-decision)。共同背景是：Agent 能力执行与流程控制必须分离，执行过程必须可审计、可回放且默认无真实副作用。
@@ -1682,3 +1684,89 @@ C02-WP1～WP3 已按 v1 七节点链（`requirement-intake → tech-design → s
 
 - 六项固定决策（2026-08-21 WP3.5 授权原文）与 Q1/Q2 裁决原文（2026-08-21）。
 - 只读核对证据：`loop/types/index.ts:57-74`（NODE_CAPABILITY_IDS v1 定义）；`core/loop-run-store.ts:981-1407`（迁移事务与 user_version 门控）、`:3119-3135`（v0→v1 仅 hash 格式扩展）、`:90`（FORMAT_VERSION=5）；`core/loop-run-state.ts:521-533`（cancelled 封存语义现成）；`core/loop-finding-lifecycle.ts:264-340`、`core/loop-artifact-revision.ts:309-350`（旧 id fail-closed 读回）；`core/loop-delivery-checkpoint-store.ts`（Delivery Tail generation/CAS 底座）；`ai-sdlc/complexity-routing.md`、`ai-sdlc/development-path-governance.md`（Topic 07 已关闭）；skills/sdlc-speckit-{specify,clarify,plan,tasks,analyze,checklist} 合同边界（以 01/02 为 source of truth、禁止从零设计）；零生产 journal 事实（生产代码 `new LoopRunStore(` 零实例化）。
+
+# Decision-045：单轨 Skill 收敛映射与非节点通用 Skill 边界
+
+## 状态
+
+Accepted（2026-08-22，Current User 补充裁决 Decision-044 未落盘的 Skill 逐项映射，并裁决 `sdlc-docflow-writer` / `sdlc-gate-runner` 去留）
+
+## 背景
+
+Decision-044 已裁决 21 个现有 SDLC Skill 按固定映射收敛到 v2 单轨七节点链，但治理登记只显式记录了 `sdlc-requirement-normalizer → requirement-intake`、`sdlc-specification-writer → solution-design` 以及 Speckit 能力的分组承接关系，没有保存 21 项逐项表。Git 历史、PR #92 和已发布 PKB Handoff 也没有另一份完整映射；C02-WP3.5 阶段 2 输出 C 因而保持缺口。
+
+重新核对当前 21 个 Skill 合同后，可恢复七个 canonical 节点 Skill 的能力分组；仍需 Current User 裁决两个非节点能力的形态：文档生成是否继续保留独立 Skill，以及节点准入审计是否继续保留手动调用 Skill。
+
+## 问题
+
+1. 当前 21 个 SDLC Skill 如何逐项收敛到单轨七节点能力面？
+2. `sdlc-docflow-writer` 是否属于 LOOP 节点，是否继续保留独立 Skill？
+3. `sdlc-gate-runner` 是否继续作为手动调用 Skill，还是由 LOOP runtime 与节点 Skill 承接后退役？
+
+## 决策
+
+### 最终 Skill 拓扑
+
+1. LOOP 对外提供七个 canonical 节点 Skill：`sdlc-requirement-intake`、`sdlc-solution-design`、`sdlc-solution-gate`、`sdlc-task-planning`、`sdlc-implementation`、`sdlc-code-review`、`sdlc-knowledge-sync`。
+2. 额外保留一个 `non-node utility skill`：`sdlc-docflow-writer`。因此交付拓扑是“七个节点 Skill + 一个非节点通用 Skill”，而不是把所有可复用 Skill 强制缩减为七个。
+3. `sdlc-gate-runner` 与 `sdlc-speckit-pipeline` 退役删除；被保留的必要能力迁入各自权威承载方。
+
+### 21 项收敛映射
+
+| 最终归属 | 合并或处置的现有 Skill | 固定边界 |
+| --- | --- | --- |
+| `sdlc-requirement-intake` | `sdlc-requirement-normalizer`、`sdlc-test-feedback-classifier` | 需求归一化与反馈新输入分类；测试/线上反馈开启新 generation。 |
+| `sdlc-solution-design` | `sdlc-specification-writer`、`sdlc-speckit-specify`、`sdlc-speckit-plan` | 方案生成、结构映射和按深度档位深化；不保留独立 Speckit 产物轨道。 |
+| `sdlc-solution-gate` | `sdlc-solution-challenger`、`sdlc-solution-reviewer`、`sdlc-speckit-clarify` | 对抗扫描、残余澄清和正式裁决；扫描与裁决保持不同 Agent binding。 |
+| `sdlc-task-planning` | `sdlc-speckit-tasks`、`sdlc-speckit-analyze`、`sdlc-speckit-checklist` | 任务拆解与实现前一致性审计；checklist 也可作为 implementation 内部校验能力。 |
+| `sdlc-implementation` | `sdlc-speckit-implement`、`sdlc-implementation-recorder` | 实现与证据记录；声明必须引用 diff、测试输出或 journal 事件。 |
+| `sdlc-code-review` | `sdlc-code-review-excellence`、`sdlc-code-review-normalizer` | 实际审查、Finding Ledger 归一化和 closure review。 |
+| `sdlc-knowledge-sync` | `sdlc-speckit-sync`、`sdlc-speckit-code-doc-reconcile`、`sdlc-test-feedback-sync` | 稳定事实同步、代码文档对账及已验证的可复用反馈沉淀；原始反馈仍从 intake 重入。 |
+| 保留非节点通用 Skill | `sdlc-docflow-writer` | 不参与 LOOP 状态和 Gate；保留独立文档生成、渲染、落盘和发布能力。 |
+| 删除并迁移能力 | `sdlc-gate-runner` | 确定性准入归 LOOP runtime，专业判断归节点 Skill，治理尾部检查归 C03 Delivery Tail；`development_path_entry` 删除。 |
+| 删除并迁移编排 | `sdlc-speckit-pipeline` | activation、停靠、暂停/恢复和 Re-Gate 编排归 LOOP runtime；不恢复路径分流。 |
+
+### `sdlc-docflow-writer` 边界
+
+1. 它不是 LOOP 节点，不得注册 node capability，不拥有 generation、finding、Gate 或节点推进权威。
+2. 它可在非 DocFlow/非 LOOP 场景根据用户需要独立生成 Markdown、HTML、飞书等文档。
+3. 它在 LOOP 内只能渲染、落盘或发布节点 Skill 已确认的内容；不得替代 requirement、solution、review、feedback 或 knowledge-sync 的专业判断。
+4. “每个 LOOP 节点只有一个 canonical Skill”只约束节点能力归属，不禁止这种无生命周期状态的通用辅助 Skill。
+
+### `sdlc-gate-runner` 退役边界
+
+1. 正常节点推进不依赖人工调用 Gate Skill；current revision、blocking finding、风险接受证据和下一节点 eligibility 等确定性检查迁入 LOOP runtime。
+2. 方案或代码是否专业通过仍由 `sdlc-solution-gate`、`sdlc-code-review` 等节点 Skill 判断，runtime 不代替专业内容审查。
+3. `development_path_entry` 随 Direct/Speckit 分流取消而删除。
+4. `documentation_governance_tail_completion` 的有效证据和完成检查迁入 C03 Delivery Tail/checkpoint。
+5. 不保留 `sdlc-gate-runner` 的手动调用 Skill 或第二套 Gate authority。
+
+## 原因
+
+- 文档生成是可脱离 LOOP 独立成立的用户能力；删除其 Skill 入口会损失非 DocFlow 管理需求下的直接文档生成场景。只要明确无节点状态和流程权威，保留它不破坏七节点单轨约束。
+- Gate runner 的主要职责是节点之间的确定性进入门槛，正常流程不应依赖人工记得调用某个 Skill。把资格检查交给 runtime 能形成 fail-closed、可测试和可恢复的唯一权威。
+- pipeline 是已取消双轨路径的编排器；继续保留会形成第二条流程权威，与 Decision-044 冲突。
+
+## 影响
+
+- Roadmap 前进 v2.2.1：C03 明确交付七个 canonical 节点 Skill 和一个非节点通用文档 Skill，并登记两个退役 Skill 的职责迁移。
+- C02 规划前进 v1.1.1：登记 WP3.5 阶段 2 输出 C 的完整映射；A、B、D～G 及 C 的实施拆包仍待完成。
+- 后续实现必须先交付替代合同与调用面、验证等价能力，再移除旧 Skill 包、known-skill contract、registry、manifest 和安装副本；不得先删后补。
+- 本裁决不授权 runtime、Skill、合同、registry、校验器、安装副本或全局 Skill 的实际修改，也不授权任何 Git 或外部发布副作用。
+
+## 实现状态
+
+Decision-045 的 Skill 映射登记已完成；同日后续已将阶段 2 输出 A～G 物化为独立待审稿。Skill 与 runtime 实施未开始，阶段 2 尚未获得 Current User 验收，阶段 3 后续工作包仍未授权。
+
+## 依据
+
+- Decision-044 的单轨七节点、21 Skill 收敛、反馈重入、pipeline 删除和 knowledge-sync 单轨化裁决。
+- Roadmap v2.2.0 对 Speckit 能力的承接关系：specify/plan → solution-design，clarify → solution-gate，tasks → task-planning，analyze/checklist → task-planning/implementation 内部校验，sync/code-doc-reconcile → knowledge-sync。
+- 当前 21 个 `skills/sdlc-*/SKILL.md`、对应 `skill-contracts/known-skills/*.md`、`manifest.yaml` 与 `registry/skill-registry.md`。
+
+## Decision-044/045 后续恢复入口
+
+> 本段是 2026-08-22 后续链接，不改写 Decision-044/045 的原裁决或授权边界。
+
+- [C02-WP3.5 单轨生命周期重基线：阶段 2 影响分析与实施规划](LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md) 已物化输出 A～G，当前为 `DRAFT FOR CURRENT USER REVIEW`，不构成实施授权。
+- Decision-046 及后续记录见 [Decision Index](decisions/README.md)。

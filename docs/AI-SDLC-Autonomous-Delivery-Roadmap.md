@@ -1,6 +1,6 @@
 # AI-SDLC LOOP Core Roadmap
 
-> Version: 2.2.0
+> Version: 2.2.2
 > Planning baseline: [LOOP Core Contract](LOOP_CORE_CONTRACT.md)
 > Authority: 这是 `ai-sdlc` 的稳定 Roadmap planning surface。当前执行指针、Gate、授权、live finding、PR/CI/HEAD 和执行尝试只记录在 `ai-project-control-plane` 的 STATE 及执行证据中。
 
@@ -95,7 +95,7 @@ Project: ai-sdlc
 - **inputs_or_prerequisites**：C01 的入口与 binding 记录；目标项目适用的 Standard Package、Gate 和文档治理合同。
 - **expected_output**：可以判定当前节点、有效产物引用、Gate 结果、未解决 finding、受影响下游失效关系和下一步资格的运行记录。
 - **depends_on**：`LOOP-CORE-01`。
-- **scope**：来源冲突/缺失处理；产物版本与引用；方案门禁收敛协议；设计深度裁决；最早受影响节点 Re-Gate；有界失败、暂停和恢复；C02-WP3.5 单轨生命周期重基线（Decision-044，逐阶段单独授权）。
+- **scope**：来源冲突/缺失处理；产物版本与引用；方案门禁收敛协议；设计深度裁决；最早受影响节点 Re-Gate；有界失败、暂停和恢复；C02-WP3.5 单轨生命周期重基线（Decision-044，逐阶段单独授权；[阶段 2 A～G 待审稿](LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md)）。
 - **out_of_scope**：以聊天记忆替代产物；将普通执行尝试提升为 Roadmap 阶段；直接修改远程 Git；恢复 Direct/Speckit 路径分流或独立 Speckit 产物轨道。
 - **completion_contract**：对同一 Requirement 可明确分类新需求、补充、变更、返工和反馈；有效 finding 会失效受影响下游产物并回流正确最早节点；后续节点只消费有效上游版本和 Gate 结论；中断后可由另一入口/binding 继续而不重解释已确认事实。
 - **continuity**：业务目标、范围、验收或来源冲突回流 requirement-intake；架构、接口、数据、异常、兼容性和风险问题回流 solution-design；实现错误仅在不改变已批准行为时可停留在 implementation；代码审核揭示方案缺口必须回流 solution-design 并重新过 solution-gate；线下测试/线上反馈不是 LOOP 节点，经 requirement-intake 分类为新输入开启新 generation。
@@ -108,13 +108,13 @@ Project: ai-sdlc
 - **title**：Single-Rail Skill Delivery and Manual Handoff
 - **definition_status**：`DEFINED`
 - **definition_provenance**：`user_accepted`
-- **objective**：在 C02 单轨链的有效方案与深度裁决之上，交付与七节点一一对应的收敛 Skill 集（Skill 收敛映射见 Decision-044），并在一个真实目标仓库中完成受约束的实现、文档治理、代码审核和知识同步，交付人工 Git 交接包。
-- **rationale**：近期需要首先证明完整的单仓产品闭环可用；工作区改动成功不能被误读为远程交付成功。Skill 收敛后每节点有唯一执行能力归属，Delivery Tail 语义不随双轨取消而改变。
+- **objective**：在 C02 单轨链的有效方案与深度裁决之上，交付与七节点一一对应的 canonical Skill 集，以及一个不拥有 LOOP 生命周期状态的通用文档 Skill `sdlc-docflow-writer`（完整收敛映射见 Decision-045），并在一个真实目标仓库中完成受约束的实现、文档治理、代码审核和知识同步，交付人工 Git 交接包。
+- **rationale**：近期需要首先证明完整的单仓产品闭环可用；工作区改动成功不能被误读为远程交付成功。Skill 收敛后每节点有唯一执行能力归属；非节点通用文档生成仍有独立使用价值，但不得取得节点、Gate 或流程推进权威；Delivery Tail 语义不随双轨取消而改变。
 - **inputs_or_prerequisites**：C02 的审核通过方案、深度裁决、有效 finding/Gate；目标仓库事实；适用测试、代码审核和文档治理约束。
-- **expected_output**：收敛 Skill 集与其合同/注册/校验器；工作区改动、实现记录、代码审核、知识同步结论、未执行项、残余风险、恢复说明和 `READY_FOR_MANUAL_GIT_HANDOFF` 或明确失败结果。
+- **expected_output**：七个 canonical 节点 Skill、一个 `non-node utility skill`（`sdlc-docflow-writer`）及其合同/注册/校验器；工作区改动、实现记录、代码审核、知识同步结论、未执行项、残余风险、恢复说明和 `READY_FOR_MANUAL_GIT_HANDOFF` 或明确失败结果。
 - **depends_on**：`LOOP-CORE-02`。
-- **scope**：单轨 Skill 交付与收敛（含 pipeline 删除后由 LOOP runtime 接管的编排职责）；Direct 路径原义的受约束实现；文档治理；实现错误和方案缺口的 Re-Gate；代码审核与人工 Git 交接清单；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
-- **out_of_scope**：commit、push、Draft PR、Ready、merge、发布；以未验证测试或历史 CI 替代本次验收；恢复 Speckit pipeline 或独立 Speckit 产物轨道。
+- **scope**：单轨 Skill 交付与收敛；`sdlc-speckit-pipeline` 删除后由 LOOP runtime 接管编排职责；`sdlc-gate-runner` 删除后由 LOOP runtime 承接确定性节点准入、由专业节点 Skill 承接内容判断、由 C03 Delivery Tail 承接治理尾部检查；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill；Direct 路径原义的受约束实现；文档治理；实现错误和方案缺口的 Re-Gate；代码审核与人工 Git 交接清单；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
+- **out_of_scope**：commit、push、Draft PR、Ready、merge、发布；以未验证测试或历史 CI 替代本次验收；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill 或独立 Speckit 产物轨道；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
 - **completion_contract**：无 blocking finding 时，工作区与当前产物一致，且已记录改动文件、验证命令及结果、未执行检查、残余风险和恢复说明；只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生远程 Git 副作用。否则输出可继续的 `blocked`/`failed` 结论。
 - **continuity**：C03 定义 Core 的共同交付尾部。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把局部修复当作完整闭环通过。
 
@@ -239,6 +239,8 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.2.2 | 2026-08-22 | Accepted baseline / draft pointer | 为 C02-WP3.5 增加阶段 2 A～G 独立待审稿入口；仅改善规划可恢复性，不表示 Current User 已接受该稿，不产生任何实施或外部同步授权。 |
+| 2.2.1 | 2026-08-22 | Accepted | 按 Decision-045 固化 Skill 收敛拓扑：七个 canonical 节点 Skill + 一个非节点通用文档 Skill `sdlc-docflow-writer`；`sdlc-gate-runner` 与 `sdlc-speckit-pipeline` 退役删除，前者的确定性准入、专业判断与 Delivery Tail 检查分别迁移到 LOOP runtime、节点 Skill 与 C03。 |
 | 2.2.0 | 2026-08-21 | Accepted | 按 Decision-044 单轨裁决重排：LOOP-CORE-00/02 去除双轨路径表述并引入深度档位语义；C02 插入 WP3.5（Single-Rail Lifecycle Re-baseline）；C03 重写为 Single-Rail Skill Delivery 并保留 Delivery Tail；C04 取消（内容保留为历史记录）；C05 depends_on 重规划为仅 LOOP-CORE-03。 |
 | 2.1.0 | 2026-08-16 | Accepted conformance rebaseline | 按 Shared PROJECT_CONTROL §14 建立 Core 父 Requirement 与 C01～C05 子项合同，补齐 Advanced 全字段和显式 Definition Gap，并将动态控制语义移出 Roadmap。 |
 | 2.0.0 | 2026-08-16 | Superseded in working tree | 首次按 LOOP Core Contract 重排主线；其产品方向保留，但层级、字段完整性与 STATE 边界由 2.1.0 纠正。 |
