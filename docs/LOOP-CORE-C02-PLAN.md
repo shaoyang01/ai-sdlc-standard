@@ -188,6 +188,8 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：实际执行 Re-Gate 节点。
 
+- 状态（2026-08-21）：**已实施，待独立复审**（Decision-042）；交付 `core/loop-finding-lifecycle.ts`（finding schema、固定状态机、五类路由矩阵绑定、依赖图下游计算、computeFindingGate 资格推导）与 `core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations`、appendFinding 同事务失效传播、resolve/accept/supersede guarded 迁移、finding 链挂入快照校验）；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.0 Draft；专项 tests/loop-finding-lifecycle.test.ts 232/232，既有断言机械前进到 v5 后全量 npm test 130 文件 0 失败。授权 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 未消费。
+
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
 
 **Material outcome**：协调器依据 change/finding 和 current dependency graph 选择唯一最早节点，创建新 generation 的 Re-Gate 计划并逐节点恢复资格。

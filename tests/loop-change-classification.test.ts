@@ -1125,7 +1125,7 @@ console.log("change classification: v2 to v3 migration is atomic and retryable")
   assert(store2.listRequirementChanges("run-001").length === 0, "migrated journal has an empty change chain");
   store2.close();
   const migrated = new Database(path, { readonly: true });
-  assert(migrated.pragma("user_version", { simple: true }) === 4, "migration atomically records format v4");
+  assert(migrated.pragma("user_version", { simple: true }) === 5, "migration atomically records format v5");
   assert(
     migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_requirement_changes'").get() !== undefined,
     "migration creates the requirement change table",
@@ -1170,7 +1170,7 @@ console.log("change classification: v2 to v3 migration is atomic and retryable")
   assert(store3.getSnapshot("run-001") !== undefined, "repaired journal migrates and reads back");
   store3.close();
   const retry = new Database(path, { readonly: true });
-  assert(retry.pragma("user_version", { simple: true }) === 4, "retry completes the v4 migration");
+  assert(retry.pragma("user_version", { simple: true }) === 5, "retry completes the v5 migration");
   retry.close();
   rmSync(dir, { recursive: true, force: true });
 }

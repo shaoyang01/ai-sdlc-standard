@@ -1513,3 +1513,46 @@ C02 缺口 G1（分类持久）与 G2（产物版本与 current 权威持久）�
 ## 代码与验证依据
 
 `core/loop-change-classification.ts`；`core/loop-artifact-revision.ts`；`core/loop-run-store.ts`（v3/v4 迁移、change/revision 链读写、单事务读路径、blob 绑定重验）；`ai-sdlc/loop-change-classification.md` 1.1.0 Accepted；`ai-sdlc/loop-artifact-revision.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（132/132）；`tests/loop-artifact-revision.test.ts`（212/212）；`tests/loop-run-store.test.ts`（185/185）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；`tests/loop-validation-guards.test.ts`（49/49）；实现与修正提交 `be2db49`、`23a9895`、`8cf25f9`、`b576e13`、`1cc650a`（PR #90，Draft）；Round 9 独立复审 PASS 与 CI run 32440818155（四项检查全绿）。
+
+# Decision-042：授权并实施 C02-WP3 Finding Lifecycle and Dependency Invalidation
+
+## 状态
+
+Accepted（2026-08-21，Current User 单独授权实施 C02-WP3；实现完成后待独立复审）
+
+## 背景
+
+C02-WP1（重开后重新收口）与 C02-WP2 已经 Decision-041 收口并经 PR #90 合入常驻分支（merge `8d1d697`）。规划 §7 依赖图的下一工作包是 C02-WP3（Finding Lifecycle and Dependency Invalidation），目标是把 finding 从 C01 的 opaque `unresolvedFindingsRef` 提升为绑定具体 artifact revision 的一等持久事实，并能原子地使受影响下游 current revisions/Gates 失效（规划 §4 缺口 G3）。Current User 本轮明确授权实施 C02-WP3（"继续搞 WP3"，紧接 WP3 授权边界陈述）。既有可复用基线：WP1 的 change 链/读回交叉绑定模式、WP2 的 revision 链/current pointer/STALE 标记原语与 blob 绑定重验、v4 表族迁移范式。
+
+## 问题
+
+如何在不触碰 C01/WP1/WP2 历史、不实现 Re-Gate 节点编排与 generation 推进（WP4）、不接线生产入口（WP5）的前提下，把 finding 生命周期（OPEN/RESOLVED/ACCEPTED_RISK/SUPERSEDED）与依赖图失效传播落为 run journal 内 append-only 的 finding 链，并满足五类路由矩阵、下游精确失效、关闭但未重新 Gate 仍不能继续、历史可审计的验收要求？
+
+## 决策
+
+1. 新增 `core/loop-finding-lifecycle.ts` 纯函数模型：固定 finding schema（schemaVersion 1）——`findingId`（派生自 `{runId}:finding:{sequence}`）、`runId`、`requirementId`、`sequence`、`sourceCapability`、`sourceRevisionId`（可空，引用同 run 现存 revision）、`severity`（CRITICAL/HIGH/MEDIUM/LOW）、`category`（REQUIREMENT/SOLUTION/IMPLEMENTATION/REVIEW/TEST，与 sourceCapability 固定绑定）、`evidenceRef`/`evidenceDigest`、`earliestAffectedNodeId`（序 ≤ sourceCapability）、`status` 与关闭/风险接受证据字段、`supersededBy`、`createdAt`。
+2. `core/loop-run-store.ts` 前进到格式 **v5**：新增 `loop_findings` 主表与 `loop_finding_invalidations` 子表；v4→v5 与既有迁移同事务原子完成，失败全回滚、可幂等重试；C01/WP1/WP2 历史一行不改。
+3. 写入唯一入口 `appendFinding`：同事务内由 store 沿 canonical 节点序（`NODE_CAPABILITY_IDS` 线性序）计算最早受影响节点及其全部下游的当前 ACTIVE revision，逐一 STALE 标记并持久化失效边；调用方不得提交任意失效列表；失效集合可为空。
+4. 状态机固定：`OPEN → RESOLVED`（`resolveFinding`，必须引用当前 ACTIVE revision + 证据）、`OPEN → ACCEPTED_RISK`（`acceptFindingRisk`，CRITICAL 不可风险接受，必须携带 riskAcceptedBy + 用户证据）、`→ SUPERSEDED`（`supersedeFinding` 回填 supersededBy）；全部迁移为 guarded UPDATE + canonical hash 重算，漂移即 `STORE_CORRUPT`；不得因再次调用 Agent 自动关闭 finding（不变量 8）。
+5. next eligibility 不单独持久化：由 durable 事实按固定规则 `computeFindingGate(runId)` 只读推导——存在 OPEN finding 或其下游 current 仍 STALE/缺失即 BLOCKED；PASS_WITH_RISK 只能消费证据绑定当前事实的 ACCEPTED_RISK；CRITICAL 与未接受 HIGH 永远阻塞。
+6. 读回交叉绑定与 WP1/WP2 同构：`listFindings` / `listFindingInvalidations` 同事务快照验证 + 明细读取、已验证 identity 过滤、链校验、finding 链挂入 `verifySnapshotInTransaction`（corruption-first）。
+7. 明确排除：Re-Gate 节点执行与 generation 推进（WP4）、恢复上下文扩展与生产入口接线（WP5）、完成合同验收守卫（WP6）、业务实现、真实 Agent 调用、任何 Git/PR/发布副作用。
+
+## 原因
+
+G3 的本质是 finding 没有持久身份、没有绑定 revision、失效靠调用方自觉。把 finding 落为 run journal 内 append-only 表族并沿用 WP1/WP2 的迁移、幂等、guarded UPDATE 与读回交叉绑定模式，可以在不引入第二份权威、不改写历史的前提下满足验收：失效集合由 canonical 依赖图在 store 内计算，调用方无法伪造失效范围；关闭证据绑定当前 revision/Gate，使"关闭了但没重新 Gate"在资格推导中天然 BLOCKED。
+
+## 影响
+
+C02-WP3 具备候选实现证据，但在独立复审与 Current User 裁决前保持未完成：不消费 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 的收口语义，不登记 C02 任一完成合同项。本决定不授权 C02-WP4～WP6，不扩展真实 Agent、Git/PR/发布或 C03～C05 边界。
+
+## 实现状态
+
+产品实现与专项测试已完成：新增 `core/loop-finding-lifecycle.ts`（689 行）与 `tests/loop-finding-lifecycle.test.ts`（232 断言），`core/loop-run-store.ts` 前进 v5；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.0 Draft。待提交 Draft PR 与独立复审；治理收口（复审通过、裁决、控制平面收口登记、Exchange/PKB 发布）未执行，授权不消费。
+
+## 代码与验证依据
+
+- 交付物：`core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、`downstreamNodeIds` 依赖图下游计算、`validateLoopFindingChain`、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` 原子迁移、`appendFinding` 同事务失效传播、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移、`listFindings`/`listFindingInvalidations`/`computeFindingGate` 单事务读回、finding 链挂入 `verifySnapshotInTransaction`）；`tests/loop-finding-lifecycle.test.ts` 接入默认 npm test。
+- 专项测试：232/232 通过（schema/边界、五类路由矩阵正反例、失效传播与原子回滚、状态机、资格推导、篡改读回、迁移原子性）。
+- 既有断言回归（机械前进格式断言 4→5）：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 132/132、`loop-artifact-revision` 212/212。
+- 全量验证：完整 `npm test` 130 文件 1767/0 通过；`tsc --noEmit`、`git diff --check` 通过。CI 结果待 PR 推送后回填。

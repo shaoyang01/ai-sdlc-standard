@@ -56,12 +56,28 @@ import {
   validateLoopArtifactRevisionChain,
   type LoopArtifactRevision,
 } from "./loop-artifact-revision";
+import {
+  acceptLoopFindingRisk,
+  canonicalizeLoopFinding,
+  computeFindingGate as computeFindingGateFromFacts,
+  downstreamNodeIds,
+  resolveLoopFinding,
+  supersedeLoopFinding,
+  validateLoopFinding,
+  validateLoopFindingChain,
+  validateLoopFindingInvalidation,
+  validateLoopFindingResolution,
+  validateLoopFindingRiskAcceptance,
+  type LoopFinding,
+  type LoopFindingGateResult,
+  type LoopFindingInvalidation,
+} from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
 import { NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-const LOOP_RUN_STORE_FORMAT_VERSION = 4;
+const LOOP_RUN_STORE_FORMAT_VERSION = 5;
 
 export type CapabilityExecutionAppendResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
@@ -83,6 +99,15 @@ export type ArtifactRevisionStaleResult = Readonly<{
   marked: boolean;
 }>;
 
+export type FindingAppendResult = Readonly<{
+  record: LoopFinding;
+  appended: boolean;
+}>;
+
+export type FindingTransitionResult = Readonly<{
+  record: LoopFinding;
+}>;
+
 export type CapabilityExecutionInterruptResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
   interrupted: boolean;
@@ -102,6 +127,17 @@ function busy(): never {
 
 function storageFailure(): never {
   throw new LoopRunJournalError("STORE_FAILURE", "run journal storage operation failed");
+}
+
+/** Fail-closed validation for external identifier inputs (never echoed). */
+function safeIdInput(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" || value.length === 0 || value.trim() !== value ||
+    /[\x00-\x1f\x7f-\x9f]/.test(value)
+  ) {
+    throw new LoopRunJournalError("INVALID_INPUT", `${label} must be a safe trimmed non-empty string`);
+  }
+  return value;
 }
 
 /**
@@ -349,6 +385,37 @@ type ArtifactCurrentRow = {
   node_id: string;
   revision_id: string;
   updated_at: string;
+};
+
+type FindingRow = {
+  finding_id: string;
+  run_id: string;
+  requirement_id: string;
+  sequence: number;
+  source_capability: string;
+  source_revision_id: string | null;
+  severity: string;
+  category: string;
+  evidence_ref: string;
+  evidence_digest: string;
+  earliest_affected_node_id: string;
+  status: string;
+  resolved_by_revision_id: string | null;
+  resolution_evidence_ref: string | null;
+  resolution_evidence_digest: string | null;
+  risk_accepted_by: string | null;
+  risk_acceptance_evidence_ref: string | null;
+  risk_acceptance_evidence_digest: string | null;
+  superseded_by: string | null;
+  created_at: string;
+  canonical_sha256: string;
+};
+
+type FindingInvalidationRow = {
+  finding_id: string;
+  invalidation_index: number;
+  revision_id: string;
+  node_id: string;
 };
 
 function rowToEvent(row: EventRow): LoopRunEvent {
@@ -696,6 +763,75 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
   });
 }
 
+function rowToFinding(row: FindingRow): LoopFinding {
+  return Object.freeze({
+    // The schema version is a fixed model constant, not a persisted column.
+    schemaVersion: 1,
+    findingId: row.finding_id,
+    runId: row.run_id,
+    requirementId: row.requirement_id,
+    sequence: asPersistedSafeInteger(row.sequence),
+    sourceCapability: row.source_capability as LoopFinding["sourceCapability"],
+    sourceRevisionId: row.source_revision_id,
+    severity: row.severity as LoopFinding["severity"],
+    category: row.category as LoopFinding["category"],
+    evidenceRef: row.evidence_ref,
+    evidenceDigest: row.evidence_digest,
+    earliestAffectedNodeId: row.earliest_affected_node_id as LoopFinding["earliestAffectedNodeId"],
+    status: row.status as LoopFinding["status"],
+    resolvedByRevisionId: row.resolved_by_revision_id,
+    resolutionEvidenceRef: row.resolution_evidence_ref,
+    resolutionEvidenceDigest: row.resolution_evidence_digest,
+    riskAcceptedBy: row.risk_accepted_by,
+    riskAcceptanceEvidenceRef: row.risk_acceptance_evidence_ref,
+    riskAcceptanceEvidenceDigest: row.risk_acceptance_evidence_digest,
+    supersededBy: row.superseded_by,
+    createdAt: row.created_at,
+  });
+}
+
+function insertFindingRow(db: Database.Database, record: LoopFinding): void {
+  db.prepare(
+    `INSERT INTO loop_findings (
+      finding_id, run_id, requirement_id, sequence, source_capability,
+      source_revision_id, severity, category, evidence_ref, evidence_digest,
+      earliest_affected_node_id, status, resolved_by_revision_id,
+      resolution_evidence_ref, resolution_evidence_digest, risk_accepted_by,
+      risk_acceptance_evidence_ref, risk_acceptance_evidence_digest,
+      superseded_by, created_at, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.findingId, record.runId, record.requirementId, record.sequence,
+    record.sourceCapability, record.sourceRevisionId, record.severity,
+    record.category, record.evidenceRef, record.evidenceDigest,
+    record.earliestAffectedNodeId, record.status, record.resolvedByRevisionId,
+    record.resolutionEvidenceRef, record.resolutionEvidenceDigest,
+    record.riskAcceptedBy, record.riskAcceptanceEvidenceRef,
+    record.riskAcceptanceEvidenceDigest, record.supersededBy, record.createdAt,
+    sha256Hex(canonicalizeLoopFinding(record)),
+  );
+}
+
+/**
+ * Shared single-revision STALE primitive used by markArtifactRevisionStale and
+ * by finding invalidation propagation: guarded UPDATE (the revision must still
+ * be ACTIVE) with the canonical hash recomputed for the post-transition form.
+ * A concurrent drift surfaces as STORE_CORRUPT inside the caller's transaction.
+ */
+function markRevisionStaleRowInTransaction(
+  db: Database.Database,
+  record: LoopArtifactRevision,
+): LoopArtifactRevision {
+  const marked: LoopArtifactRevision = Object.freeze({ ...record, validity: "STALE" });
+  const updateResult = db.prepare(
+    "UPDATE loop_artifact_revisions SET validity = ?, canonical_sha256 = ? WHERE revision_id = ? AND validity = ?",
+  ).run("STALE", sha256Hex(canonicalizeLoopArtifactRevision(marked)), record.revisionId, "ACTIVE");
+  if (updateResult.changes !== 1) {
+    corrupt("artifact revision drifted during stale marking");
+  }
+  return marked;
+}
+
 export class LoopRunStore {
   private readonly dbPath: string;
   private readonly busyTimeoutMs: number;
@@ -864,11 +1000,12 @@ export class LoopRunStore {
           CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
         `);
 
-        // C01 WP-4/WP-4B and C02 WP-1/WP-2 migrations are one atomic unit. v0
-        // adds the three legacy provenance columns and normalizes historical
+        // C01 WP-4/WP-4B and C02 WP-1/WP-2/WP-3 migrations are one atomic unit.
+        // v0 adds the three legacy provenance columns and normalizes historical
         // event hashes (marker v1); v2 adds the orthogonal capability-attempt
-        // journal; v3 adds the requirement change classification tables; v4 is
-        // current and adds the artifact revision and current authority tables.
+        // journal; v3 adds the requirement change classification tables; v4
+        // adds the artifact revision and current authority tables; v5 is
+        // current and adds the finding lifecycle and invalidation tables.
         // Any failure rolls back all migration DDL/data and user_version.
         db.transaction(() => {
           const formatVersion = db.pragma("user_version", { simple: true });
@@ -1016,9 +1153,10 @@ export class LoopRunStore {
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_artifact_revisions'",
           ).get() !== undefined;
           // v4 introduced the artifact revision authority: any journal already
-          // marked v4 must carry the tables; older journals get them below in
-          // the same transaction. C01 and WP1 history is never rewritten.
-          if (formatVersion === LOOP_RUN_STORE_FORMAT_VERSION && !revisionTableExists) {
+          // marked v4 or later must carry the tables; older journals get them
+          // below in the same transaction. C01 and WP1 history is never
+          // rewritten.
+          if (formatVersion >= 4 && !revisionTableExists) {
             corrupt("current journal is missing artifact revision table");
           }
           if (!revisionTableExists) {
@@ -1073,6 +1211,62 @@ export class LoopRunStore {
             `);
           }
           this.verifyArtifactRevisionTablesSchema(db);
+          const findingTableExists = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_findings'",
+          ).get() !== undefined;
+          // v5 introduced the finding lifecycle and invalidation tables: any
+          // journal already marked v5 must carry them; older journals get them
+          // below in the same transaction. C01/WP1/WP2 history is never
+          // rewritten.
+          if (formatVersion >= 5 && !findingTableExists) {
+            corrupt("current journal is missing finding table");
+          }
+          if (!findingTableExists) {
+            db.exec(`
+              CREATE TABLE loop_findings (
+                finding_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                requirement_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                source_capability TEXT NOT NULL,
+                source_revision_id TEXT,
+                severity TEXT NOT NULL,
+                category TEXT NOT NULL,
+                evidence_ref TEXT NOT NULL,
+                evidence_digest TEXT NOT NULL,
+                earliest_affected_node_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                resolved_by_revision_id TEXT,
+                resolution_evidence_ref TEXT,
+                resolution_evidence_digest TEXT,
+                risk_accepted_by TEXT,
+                risk_acceptance_evidence_ref TEXT,
+                risk_acceptance_evidence_digest TEXT,
+                superseded_by TEXT,
+                created_at TEXT NOT NULL,
+                canonical_sha256 TEXT NOT NULL,
+                UNIQUE (run_id, sequence),
+                FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE,
+                FOREIGN KEY (source_revision_id)
+                  REFERENCES loop_artifact_revisions(revision_id) ON DELETE CASCADE
+              );
+              CREATE INDEX idx_loop_findings_run_id
+                ON loop_findings(run_id);
+
+              CREATE TABLE loop_finding_invalidations (
+                finding_id TEXT NOT NULL,
+                invalidation_index INTEGER NOT NULL,
+                revision_id TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                PRIMARY KEY (finding_id, invalidation_index),
+                FOREIGN KEY (finding_id)
+                  REFERENCES loop_findings(finding_id) ON DELETE CASCADE,
+                FOREIGN KEY (revision_id)
+                  REFERENCES loop_artifact_revisions(revision_id) ON DELETE CASCADE
+              );
+            `);
+          }
+          this.verifyFindingTablesSchema(db);
           if (formatVersion < LOOP_RUN_STORE_FORMAT_VERSION) {
             db.exec(`PRAGMA user_version = ${LOOP_RUN_STORE_FORMAT_VERSION}`);
           }
@@ -2090,13 +2284,7 @@ export class LoopRunStore {
         if (target.validity !== "ACTIVE") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only an active artifact revision can be marked stale");
         }
-        const marked: LoopArtifactRevision = Object.freeze({ ...target, validity: "STALE" });
-        const updateResult = db.prepare(
-          "UPDATE loop_artifact_revisions SET validity = ?, canonical_sha256 = ? WHERE revision_id = ? AND validity = ?",
-        ).run("STALE", sha256Hex(canonicalizeLoopArtifactRevision(marked)), revisionId, "ACTIVE");
-        if (updateResult.changes !== 1) {
-          corrupt("artifact revision drifted during stale marking");
-        }
+        const marked = markRevisionStaleRowInTransaction(db, target);
         return Object.freeze({ record: marked, marked: true });
       }).immediate() as ArtifactRevisionStaleResult;
     } catch (error) {
@@ -2171,6 +2359,423 @@ export class LoopRunStore {
       if (isBusyCode(sqliteErrorCode(error))) busy();
       storageFailure();
     }
+  }
+
+  /**
+   * Append one immutable C02 WP-3 finding and atomically propagate its
+   * dependency invalidation. Findings use their own per-run sequence and
+   * never mutate the delivery-stage cursor, the capability-attempt stream,
+   * the change chain or the revision chain beyond the computed STALE marks.
+   * The owning run must exist, be non-terminal and have no active stage or
+   * capability execution; the finding's requirementId must match the verified
+   * run identity; sourceRevisionId (when set) must reference an existing
+   * revision of the same run. In the SAME transaction the store computes the
+   * downstream node set from earliestAffectedNodeId over the canonical linear
+   * node order — callers never submit invalidation lists — marks every
+   * affected node's current ACTIVE revision STALE (shared guarded-UPDATE
+   * primitive; an already-STALE revision stays STALE and is not recorded) and
+   * persists one invalidation edge per marked revision. An empty affected set
+   * is legal. Exact replays are idempotent; conflicting ids or sequences are
+   * rejected.
+   */
+  appendFinding(record: LoopFinding): FindingAppendResult {
+    const db = this.connection();
+    validateLoopFinding(record);
+    if (record.status !== "OPEN") {
+      throw new LoopRunJournalError("INVALID_INPUT", "new findings must be born open");
+    }
+    try {
+      return db.transaction((): FindingAppendResult => {
+        const snapshot = this.readRunSnapshotInTransaction(db, record.runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        const status = snapshot.state.status;
+        if (status === "completed" || status === "failed" || status === "cancelled") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "terminal run must not accept findings");
+        }
+        if (snapshot.state.currentStage !== null) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "findings require no active delivery stage");
+        }
+        if (record.requirementId !== snapshot.state.identity.requirementId) {
+          throw new LoopRunJournalError("INVALID_INPUT", "finding requirement does not match the run identity");
+        }
+        const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, record.runId);
+        if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "findings cannot advance while a capability execution is active");
+        }
+        const verifiedRequirementId = snapshot.state.identity.requirementId;
+        const revisions = this.readArtifactRevisionsInTransaction(db, record.runId, verifiedRequirementId);
+        const findingChain = this.readFindingChainInTransaction(db, record.runId, verifiedRequirementId);
+        const current = findingChain.findings;
+        const existing = current.find((item) => item.findingId === record.findingId);
+        if (existing !== undefined) {
+          if (canonicalizeLoopFinding(existing) === canonicalizeLoopFinding(record)) {
+            return Object.freeze({ record: existing, appended: false });
+          }
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "finding id already exists");
+        }
+        if (current.some((item) => item.sequence === record.sequence)) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "finding sequence is occupied");
+        }
+        if (
+          record.sourceRevisionId !== null &&
+          !revisions.some((item) => item.revisionId === record.sourceRevisionId)
+        ) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision does not exist in the run");
+        }
+        try {
+          validateLoopFindingChain([...current, record], findingChain.invalidations, record.runId);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "finding transition is invalid");
+          }
+          throw error;
+        }
+        insertFindingRow(db, record);
+        // Dependency invalidation along the canonical linear node order: every
+        // node at or downstream of earliestAffectedNodeId whose current
+        // revision is ACTIVE is marked STALE and recorded as an edge, in node
+        // order. Already-STALE currents are skipped without an edge.
+        const invalidationInsert = db.prepare(
+          `INSERT INTO loop_finding_invalidations (
+            finding_id, invalidation_index, revision_id, node_id
+          ) VALUES (?, ?, ?, ?)`,
+        );
+        let invalidationIndex = 0;
+        for (const nodeId of downstreamNodeIds(record.earliestAffectedNodeId)) {
+          const pointer = db.prepare(
+            "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
+          ).get(record.runId, nodeId) as { revision_id?: unknown } | undefined;
+          if (pointer === undefined) continue;
+          const revision = revisions.find((item) => item.revisionId === pointer.revision_id);
+          if (revision === undefined) {
+            corrupt("current artifact pointer target is missing");
+          }
+          if (revision.validity !== "ACTIVE") continue;
+          markRevisionStaleRowInTransaction(db, revision);
+          invalidationInsert.run(record.findingId, invalidationIndex, revision.revisionId, nodeId);
+          invalidationIndex += 1;
+        }
+        return Object.freeze({ record, appended: true });
+      }).immediate() as FindingAppendResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      if (isConstraintCode(code)) {
+        try {
+          const current = db.transaction(() => {
+            const snapshot = this.readRunSnapshotInTransaction(db, record.runId);
+            if (snapshot === undefined) {
+              throw new LoopRunJournalError("STORE_CORRUPT", "run row missing verified snapshot inside conflict reclassification");
+            }
+            return this.readFindingsInTransaction(db, record.runId, snapshot.state.identity.requirementId);
+          })() as readonly LoopFinding[];
+          const existing = current.find((item) => item.findingId === record.findingId);
+          if (
+            existing !== undefined &&
+            canonicalizeLoopFinding(existing) === canonicalizeLoopFinding(record)
+          ) {
+            return Object.freeze({ record: existing, appended: false });
+          }
+          if (existing !== undefined) {
+            throw new LoopRunJournalError("EVENT_ID_CONFLICT", "finding id already exists");
+          }
+          if (current.some((item) => item.sequence === record.sequence)) {
+            throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "finding sequence is occupied");
+          }
+        } catch (reclassifyError) {
+          if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
+          storageFailure();
+        }
+      }
+      storageFailure();
+    }
+  }
+
+  /**
+   * Read and verify the complete finding chain for one run. The snapshot
+   * verification and the record read happen in ONE transaction, so no second
+   * connection can rewrite identity or records between them.
+   */
+  listFindings(runId: string): readonly LoopFinding[] {
+    const db = this.connection();
+    try {
+      return db.transaction((): readonly LoopFinding[] => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return Object.freeze([]);
+        return this.readFindingsInTransaction(db, runId, snapshot.state.identity.requirementId);
+      })() as readonly LoopFinding[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * Read and verify the complete finding invalidation edge set for one run,
+   * ordered by finding sequence and invalidation index. Same single
+   * transaction discipline as listFindings.
+   */
+  listFindingInvalidations(runId: string): readonly LoopFindingInvalidation[] {
+    const db = this.connection();
+    try {
+      return db.transaction((): readonly LoopFindingInvalidation[] => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return Object.freeze([]);
+        return this.readFindingChainInTransaction(db, runId, snapshot.state.identity.requirementId).invalidations;
+      })() as readonly LoopFindingInvalidation[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * The fixed read-only next-eligibility derivation (contract §6): any OPEN
+   * finding blocks; any closed (RESOLVED / ACCEPTED_RISK) finding whose
+   * earliest-affected-or-downstream current revision is STALE or missing
+   * blocks; SUPERSEDED findings are absorbed by their replacement. The
+   * derivation is recomputed from durable facts inside one verified
+   * transaction and is never persisted. An unknown run derives ELIGIBLE with
+   * no findings, mirroring the empty-chain read pattern.
+   */
+  computeFindingGate(runId: string): LoopFindingGateResult {
+    safeIdInput(runId, "runId");
+    const db = this.connection();
+    try {
+      return db.transaction((): LoopFindingGateResult => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) {
+          return computeFindingGateFromFacts([], new Map());
+        }
+        const verifiedRequirementId = snapshot.state.identity.requirementId;
+        const findings = this.readFindingsInTransaction(db, runId, verifiedRequirementId);
+        const revisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
+        const revisionById = new Map(revisions.map((revision) => [revision.revisionId, revision]));
+        const currentValidityByNode = new Map<string, string>();
+        const pointerRows = db.prepare(
+          "SELECT * FROM loop_artifact_current WHERE run_id = ?",
+        ).all(runId) as ArtifactCurrentRow[];
+        for (const pointerRow of pointerRows) {
+          const revision = revisionById.get(pointerRow.revision_id);
+          if (revision === undefined) {
+            corrupt("current artifact pointer target is missing");
+          }
+          currentValidityByNode.set(pointerRow.node_id, revision.validity);
+        }
+        return computeFindingGateFromFacts(findings, currentValidityByNode);
+      })() as LoopFindingGateResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * OPEN → RESOLVED: the target must be OPEN; resolvedByRevisionId must exist
+   * in-run, belong to earliestAffectedNodeId or a downstream node, and be that
+   * node's CURRENT ACTIVE revision; resolution evidence ref/digest are
+   * required. The transition is a guarded UPDATE with the canonical hash
+   * recomputed; concurrent drift surfaces as STORE_CORRUPT.
+   */
+  resolveFinding(
+    runId: string,
+    findingId: string,
+    resolution: unknown,
+  ): FindingTransitionResult {
+    safeIdInput(runId, "runId");
+    safeIdInput(findingId, "findingId");
+    const valid = validateLoopFindingResolution(resolution);
+    const db = this.connection();
+    try {
+      return db.transaction((): FindingTransitionResult => {
+        const findings = this.readFindingsForTransitionInTransaction(db, runId);
+        const target = findings.find((item) => item.findingId === findingId);
+        if (target === undefined) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "no matching finding exists");
+        }
+        if (target.status !== "OPEN") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only an open finding can be resolved");
+        }
+        const verifiedRequirementId = target.requirementId;
+        const revisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
+        const resolvedBy = revisions.find((item) => item.revisionId === valid.resolvedByRevisionId);
+        if (resolvedBy === undefined) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "resolution revision does not exist in the run");
+        }
+        if (
+          NODE_CAPABILITY_IDS.indexOf(resolvedBy.nodeId) <
+          NODE_CAPABILITY_IDS.indexOf(target.earliestAffectedNodeId)
+        ) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "resolution revision is upstream of the earliest affected node");
+        }
+        const pointer = db.prepare(
+          "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
+        ).get(runId, resolvedBy.nodeId) as { revision_id?: unknown } | undefined;
+        if (pointer === undefined || pointer.revision_id !== resolvedBy.revisionId || resolvedBy.validity !== "ACTIVE") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "resolution revision must be the current active revision of its node");
+        }
+        const resolved = resolveLoopFinding(target, valid);
+        const updateResult = db.prepare(
+          `UPDATE loop_findings SET
+            status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
+            resolution_evidence_digest = ?, canonical_sha256 = ?
+          WHERE finding_id = ? AND status = ?`,
+        ).run(
+          "RESOLVED", resolved.resolvedByRevisionId, resolved.resolutionEvidenceRef,
+          resolved.resolutionEvidenceDigest, sha256Hex(canonicalizeLoopFinding(resolved)),
+          findingId, "OPEN",
+        );
+        if (updateResult.changes !== 1) {
+          corrupt("finding drifted during resolution");
+        }
+        return Object.freeze({ record: resolved });
+      }).immediate() as FindingTransitionResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * OPEN → ACCEPTED_RISK: the target must be OPEN and must not be CRITICAL
+   * (critical findings are never risk-acceptable); riskAcceptedBy and the
+   * risk acceptance evidence ref/digest are required. Same guarded-UPDATE
+   * discipline as resolveFinding.
+   */
+  acceptFindingRisk(
+    runId: string,
+    findingId: string,
+    acceptance: unknown,
+  ): FindingTransitionResult {
+    safeIdInput(runId, "runId");
+    safeIdInput(findingId, "findingId");
+    const valid = validateLoopFindingRiskAcceptance(acceptance);
+    const db = this.connection();
+    try {
+      return db.transaction((): FindingTransitionResult => {
+        const findings = this.readFindingsForTransitionInTransaction(db, runId);
+        const target = findings.find((item) => item.findingId === findingId);
+        if (target === undefined) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "no matching finding exists");
+        }
+        if (target.status !== "OPEN") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only an open finding can be risk-accepted");
+        }
+        if (target.severity === "CRITICAL") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "critical findings are not risk-acceptable");
+        }
+        const accepted = acceptLoopFindingRisk(target, valid);
+        const updateResult = db.prepare(
+          `UPDATE loop_findings SET
+            status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
+            risk_acceptance_evidence_digest = ?, canonical_sha256 = ?
+          WHERE finding_id = ? AND status = ?`,
+        ).run(
+          "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
+          accepted.riskAcceptanceEvidenceDigest, sha256Hex(canonicalizeLoopFinding(accepted)),
+          findingId, "OPEN",
+        );
+        if (updateResult.changes !== 1) {
+          corrupt("finding drifted during risk acceptance");
+        }
+        return Object.freeze({ record: accepted });
+      }).immediate() as FindingTransitionResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * OPEN / RESOLVED / ACCEPTED_RISK → SUPERSEDED: the target must exist and
+   * not already be SUPERSEDED; the superseding finding must exist in the same
+   * run and follow the target in the chain. The transition backfills
+   * supersededBy and clears any prior closure fields so every status keeps
+   * exactly one canonical field shape. Same guarded-UPDATE discipline.
+   */
+  supersedeFinding(
+    runId: string,
+    findingId: string,
+    supersedingFindingId: string,
+  ): FindingTransitionResult {
+    safeIdInput(runId, "runId");
+    safeIdInput(findingId, "findingId");
+    safeIdInput(supersedingFindingId, "supersedingFindingId");
+    const db = this.connection();
+    try {
+      return db.transaction((): FindingTransitionResult => {
+        const findings = this.readFindingsForTransitionInTransaction(db, runId);
+        const target = findings.find((item) => item.findingId === findingId);
+        if (target === undefined) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "no matching finding exists");
+        }
+        if (target.status === "SUPERSEDED") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "a superseded finding cannot be superseded again");
+        }
+        const superseding = findings.find((item) => item.findingId === supersedingFindingId);
+        if (superseding === undefined) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "superseding finding does not exist in the run");
+        }
+        if (superseding.sequence <= target.sequence) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "superseding finding must follow the superseded finding");
+        }
+        const superseded = supersedeLoopFinding(target, supersedingFindingId);
+        const updateResult = db.prepare(
+          `UPDATE loop_findings SET
+            status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
+            resolution_evidence_digest = ?, risk_accepted_by = ?,
+            risk_acceptance_evidence_ref = ?, risk_acceptance_evidence_digest = ?,
+            superseded_by = ?, canonical_sha256 = ?
+          WHERE finding_id = ? AND status != ?`,
+        ).run(
+          "SUPERSEDED", null, null, null, null, null, null, superseded.supersededBy,
+          sha256Hex(canonicalizeLoopFinding(superseded)), findingId, "SUPERSEDED",
+        );
+        if (updateResult.changes !== 1) {
+          corrupt("finding drifted during supersede");
+        }
+        return Object.freeze({ record: superseded });
+      }).immediate() as FindingTransitionResult;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * Shared prologue for the finding status transitions: verified snapshot,
+   * non-terminal run, no active stage or capability execution, then the
+   * verified finding chain — all inside the caller's immediate transaction.
+   */
+  private readFindingsForTransitionInTransaction(
+    db: Database.Database,
+    runId: string,
+  ): readonly LoopFinding[] {
+    const snapshot = this.readRunSnapshotInTransaction(db, runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+    }
+    const status = snapshot.state.status;
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "terminal run must not transition findings");
+    }
+    if (snapshot.state.currentStage !== null) {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "finding transitions require no active delivery stage");
+    }
+    const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, runId);
+    if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "finding transitions cannot advance while a capability execution is active");
+    }
+    return this.readFindingsInTransaction(db, runId, snapshot.state.identity.requirementId);
   }
 
 
@@ -2477,6 +3082,42 @@ export class LoopRunStore {
     ]);
   }
 
+  private verifyFindingTablesSchema(db: Database.Database): void {
+    verifyTableColumns(db, "loop_findings", "finding table", [
+      ["finding_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
+      ["requirement_id", "TEXT", 1, 0], ["sequence", "INTEGER", 1, 0],
+      ["source_capability", "TEXT", 1, 0], ["source_revision_id", "TEXT", 0, 0],
+      ["severity", "TEXT", 1, 0], ["category", "TEXT", 1, 0],
+      ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
+      ["earliest_affected_node_id", "TEXT", 1, 0], ["status", "TEXT", 1, 0],
+      ["resolved_by_revision_id", "TEXT", 0, 0],
+      ["resolution_evidence_ref", "TEXT", 0, 0],
+      ["resolution_evidence_digest", "TEXT", 0, 0],
+      ["risk_accepted_by", "TEXT", 0, 0],
+      ["risk_acceptance_evidence_ref", "TEXT", 0, 0],
+      ["risk_acceptance_evidence_digest", "TEXT", 0, 0],
+      ["superseded_by", "TEXT", 0, 0],
+      ["created_at", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
+    ]);
+    verifyUniqueIndex(db, "loop_findings", "finding table", ["run_id", "sequence"]);
+    verifyTableForeignKeys(db, "loop_findings", "finding table", [
+      { from: "run_id", references: "loop_runs", to: "run_id" },
+      { from: "source_revision_id", references: "loop_artifact_revisions", to: "revision_id" },
+    ]);
+    const runIndex = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_loop_findings_run_id'",
+    ).get();
+    if (runIndex === undefined) corrupt("finding run index is missing");
+    verifyTableColumns(db, "loop_finding_invalidations", "finding table", [
+      ["finding_id", "TEXT", 1, 1], ["invalidation_index", "INTEGER", 1, 2],
+      ["revision_id", "TEXT", 1, 0], ["node_id", "TEXT", 1, 0],
+    ]);
+    verifyTableForeignKeys(db, "loop_finding_invalidations", "finding table", [
+      { from: "finding_id", references: "loop_findings", to: "finding_id" },
+      { from: "revision_id", references: "loop_artifact_revisions", to: "revision_id" },
+    ]);
+  }
+
   /**
    * Read and verify the complete artifact revision set for one run. Beyond
    * per-record validation and canonical hash recomputation, every record is
@@ -2587,6 +3228,110 @@ export class LoopRunStore {
       if (!pointerNodes.has(nodeId)) corrupt("artifact revision chain is missing its current pointer");
     }
     return Object.freeze(records);
+  }
+
+  /**
+   * Read and verify the complete finding chain with its invalidation edges
+   * for one run (C02-WP3). Beyond per-record validation and canonical hash
+   * recomputation, every record is cross-bound to the verified run identity,
+   * and every invalidation edge is re-verified against the verified revision
+   * chain: the referenced revision must exist, belong to the named node and
+   * still be STALE (the validity machine has no STALE exit edge, so a drifted
+   * edge always fails closed). The chain rules (sequence contiguity, single
+   * Requirement identity, supersede linkage, edge consistency) are enforced
+   * last. The verified requirementId is ALWAYS supplied by the caller from a
+   * snapshot verified inside the same transaction — the persisted
+   * loop_runs.requirement_id column is never re-queried here.
+   */
+  private readFindingChainInTransaction(
+    db: Database.Database,
+    runId: string,
+    verifiedRequirementId: string,
+  ): Readonly<{
+    findings: readonly LoopFinding[];
+    invalidations: readonly LoopFindingInvalidation[];
+  }> {
+    const rows = db.prepare(
+      "SELECT * FROM loop_findings WHERE run_id = ? ORDER BY sequence ASC",
+    ).all(runId) as FindingRow[];
+    const findings = rows.map((row) => {
+      const record = rowToFinding(row);
+      try {
+        validateLoopFinding(record);
+        if (sha256Hex(canonicalizeLoopFinding(record)) !== row.canonical_sha256) {
+          corrupt("finding canonical hash mismatch");
+        }
+      } catch (error) {
+        if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
+        if (error instanceof LoopRunJournalError) corrupt("persisted finding is invalid");
+        throw error;
+      }
+      return record;
+    });
+    for (const record of findings) {
+      if (record.requirementId !== verifiedRequirementId) {
+        corrupt("finding does not match the run identity");
+      }
+    }
+    const invalidations: LoopFindingInvalidation[] = [];
+    const invalidationQuery = db.prepare(
+      "SELECT * FROM loop_finding_invalidations WHERE finding_id = ? ORDER BY invalidation_index ASC",
+    );
+    for (const finding of findings) {
+      const invalidationRows = invalidationQuery.all(finding.findingId) as FindingInvalidationRow[];
+      invalidationRows.forEach((invalidationRow, index) => {
+        if (asPersistedSafeInteger(invalidationRow.invalidation_index) !== index) {
+          corrupt("persisted finding invalidations are not contiguous");
+        }
+        const invalidation: LoopFindingInvalidation = Object.freeze({
+          findingId: invalidationRow.finding_id,
+          invalidationIndex: index,
+          revisionId: invalidationRow.revision_id,
+          nodeId: invalidationRow.node_id as LoopFindingInvalidation["nodeId"],
+        });
+        try {
+          validateLoopFindingInvalidation(invalidation);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) corrupt("persisted finding invalidation is invalid");
+          throw error;
+        }
+        invalidations.push(invalidation);
+      });
+    }
+    // Re-verify every invalidation edge against the verified revision chain:
+    // a tampered edge row must fail closed even though it carries no hash.
+    const revisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
+    const revisionById = new Map(revisions.map((revision) => [revision.revisionId, revision]));
+    for (const invalidation of invalidations) {
+      const revision = revisionById.get(invalidation.revisionId);
+      if (revision === undefined) {
+        corrupt("finding invalidation revision is missing");
+      }
+      if (revision.nodeId !== invalidation.nodeId) {
+        corrupt("finding invalidation node does not match the revision");
+      }
+      if (revision.validity !== "STALE") {
+        corrupt("finding invalidation revision is not stale");
+      }
+    }
+    try {
+      validateLoopFindingChain(findings, invalidations, runId);
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) corrupt("persisted finding chain is invalid");
+      throw error;
+    }
+    return Object.freeze({
+      findings: Object.freeze(findings),
+      invalidations: Object.freeze(invalidations),
+    });
+  }
+
+  private readFindingsInTransaction(
+    db: Database.Database,
+    runId: string,
+    verifiedRequirementId: string,
+  ): readonly LoopFinding[] {
+    return this.readFindingChainInTransaction(db, runId, verifiedRequirementId).findings;
   }
 
   private verifyCapabilityExecutionTableSchema(db: Database.Database): void {
@@ -2787,6 +3532,10 @@ export class LoopRunStore {
     // of the same durable run; every snapshot read verifies the revision
     // chain and pointer consistency (corruption-first) before returning state.
     this.readArtifactRevisionsInTransaction(db, row.run_id, identity.requirementId);
+    // C02 WP-3: findings and their invalidation edges are part of the same
+    // durable run; every snapshot read verifies the finding chain (including
+    // edge/revision consistency) before returning state.
+    this.readFindingsInTransaction(db, row.run_id, identity.requirementId);
     return Object.freeze({ state, events: frozenEvents });
   }
 }

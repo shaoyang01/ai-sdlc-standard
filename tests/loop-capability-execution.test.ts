@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     ok(upgraded.getSnapshot("run-wp4b-001") !== undefined, "v1 run remains readable after v2 migration");
     upgraded.close();
     const migrated = new Database(migrationPath);
-    ok(migrated.pragma("user_version", { simple: true }) === 4, "v1 migration atomically records format v4");
+    ok(migrated.pragma("user_version", { simple: true }) === 5, "v1 migration atomically records format v5");
     ok(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='loop_capability_executions'").get() !== undefined,
       "v1 migration creates the capability execution table");
     migrated.exec("DROP TABLE loop_capability_executions");
