@@ -1513,3 +1513,98 @@ C02 缺口 G1（分类持久）与 G2（产物版本与 current 权威持久）�
 ## 代码与验证依据
 
 `core/loop-change-classification.ts`；`core/loop-artifact-revision.ts`；`core/loop-run-store.ts`（v3/v4 迁移、change/revision 链读写、单事务读路径、blob 绑定重验）；`ai-sdlc/loop-change-classification.md` 1.1.0 Accepted；`ai-sdlc/loop-artifact-revision.md` 1.0.0 Accepted；`tests/loop-change-classification.test.ts`（132/132）；`tests/loop-artifact-revision.test.ts`（212/212）；`tests/loop-run-store.test.ts`（185/185）；`tests/loop-run-provenance.test.ts`（79/79）；`tests/loop-capability-execution.test.ts`（86/86）；`tests/loop-validation-guards.test.ts`（49/49）；实现与修正提交 `be2db49`、`23a9895`、`8cf25f9`、`b576e13`、`1cc650a`（PR #90，Draft）；Round 9 独立复审 PASS 与 CI run 32440818155（四项检查全绿）。
+
+# Decision-042：授权并实施 C02-WP3 Finding Lifecycle and Dependency Invalidation
+
+## 状态
+
+Accepted（2026-08-21，Current User 单独授权实施 C02-WP3；实现完成后待独立复审）
+
+## 背景
+
+C02-WP1（重开后重新收口）与 C02-WP2 已经 Decision-041 收口并经 PR #90 合入常驻分支（merge `8d1d697`）。规划 §7 依赖图的下一工作包是 C02-WP3（Finding Lifecycle and Dependency Invalidation），目标是把 finding 从 C01 的 opaque `unresolvedFindingsRef` 提升为绑定具体 artifact revision 的一等持久事实，并能原子地使受影响下游 current revisions/Gates 失效（规划 §4 缺口 G3）。Current User 本轮明确授权实施 C02-WP3（"继续搞 WP3"，紧接 WP3 授权边界陈述）。既有可复用基线：WP1 的 change 链/读回交叉绑定模式、WP2 的 revision 链/current pointer/STALE 标记原语与 blob 绑定重验、v4 表族迁移范式。
+
+## 问题
+
+如何在不触碰 C01/WP1/WP2 历史、不实现 Re-Gate 节点编排与 generation 推进（WP4）、不接线生产入口（WP5）的前提下，把 finding 生命周期（OPEN/RESOLVED/ACCEPTED_RISK/SUPERSEDED）与依赖图失效传播落为 run journal 内 append-only 的 finding 链，并满足五类路由矩阵、下游精确失效、关闭但未重新 Gate 仍不能继续、历史可审计的验收要求？
+
+## 决策
+
+1. 新增 `core/loop-finding-lifecycle.ts` 纯函数模型：固定 finding schema（schemaVersion 1）——`findingId`（派生自 `{runId}:finding:{sequence}`）、`runId`、`requirementId`、`sequence`、`sourceCapability`、`sourceRevisionId`（可空，引用同 run 现存 revision）、`severity`（CRITICAL/HIGH/MEDIUM/LOW）、`category`（REQUIREMENT/SOLUTION/IMPLEMENTATION/REVIEW/TEST，与 sourceCapability 固定绑定）、`evidenceRef`/`evidenceDigest`、`earliestAffectedNodeId`（序 ≤ sourceCapability）、`status` 与关闭/风险接受证据字段、`supersededBy`、`createdAt`。
+2. `core/loop-run-store.ts` 前进到格式 **v5**：新增 `loop_findings` 主表与 `loop_finding_invalidations` 子表；v4→v5 与既有迁移同事务原子完成，失败全回滚、可幂等重试；C01/WP1/WP2 历史一行不改。
+3. 写入唯一入口 `appendFinding`：同事务内由 store 沿 canonical 节点序（`NODE_CAPABILITY_IDS` 线性序）计算最早受影响节点及其全部下游的当前 ACTIVE revision，逐一 STALE 标记并持久化失效边；调用方不得提交任意失效列表；失效集合可为空。
+4. 状态机固定：`OPEN → RESOLVED`（`resolveFinding`，必须引用当前 ACTIVE revision + 证据）、`OPEN → ACCEPTED_RISK`（`acceptFindingRisk`，CRITICAL 不可风险接受，必须携带 riskAcceptedBy + 用户证据）、`→ SUPERSEDED`（`supersedeFinding` 回填 supersededBy）；全部迁移为 guarded UPDATE + canonical hash 重算，漂移即 `STORE_CORRUPT`；不得因再次调用 Agent 自动关闭 finding（不变量 8）。
+5. next eligibility 不单独持久化：由 durable 事实按固定规则 `computeFindingGate(runId)` 只读推导——存在 OPEN finding 或其下游 current 仍 STALE/缺失即 BLOCKED；PASS_WITH_RISK 只能消费证据绑定当前事实的 ACCEPTED_RISK；CRITICAL 与未接受 HIGH 永远阻塞。
+6. 读回交叉绑定与 WP1/WP2 同构：`listFindings` / `listFindingInvalidations` 同事务快照验证 + 明细读取、已验证 identity 过滤、链校验、finding 链挂入 `verifySnapshotInTransaction`（corruption-first）。
+7. 明确排除：Re-Gate 节点执行与 generation 推进（WP4）、恢复上下文扩展与生产入口接线（WP5）、完成合同验收守卫（WP6）、业务实现、真实 Agent 调用、任何 Git/PR/发布副作用。
+
+## 原因
+
+G3 的本质是 finding 没有持久身份、没有绑定 revision、失效靠调用方自觉。把 finding 落为 run journal 内 append-only 表族并沿用 WP1/WP2 的迁移、幂等、guarded UPDATE 与读回交叉绑定模式，可以在不引入第二份权威、不改写历史的前提下满足验收：失效集合由 canonical 依赖图在 store 内计算，调用方无法伪造失效范围；关闭证据绑定当前 revision/Gate，使"关闭了但没重新 Gate"在资格推导中天然 BLOCKED。
+
+## 影响
+
+C02-WP3 具备候选实现证据，但在独立复审与 Current User 裁决前保持未完成：不消费 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 的收口语义，不登记 C02 任一完成合同项。本决定不授权 C02-WP4～WP6，不扩展真实 Agent、Git/PR/发布或 C03～C05 边界。
+
+## 实现状态
+
+产品实现与专项测试已完成：新增 `core/loop-finding-lifecycle.ts` 与 `tests/loop-finding-lifecycle.test.ts`，`core/loop-run-store.ts` 前进 v5；合同 `ai-sdlc/loop-finding-lifecycle.md` 0.1.1 Draft。已提交 Draft PR #91 并进入独立复审；治理收口（复审通过、裁决、控制平面收口登记）未执行，授权不消费。
+
+## 复审记录
+
+- **Round 1（2026-08-21，CHANGES_REQUESTED）**：2 个 High。H1：关闭与风险接受证据仅格式校验，读回不重验——伪造但格式正确的 digest 与任意 `riskAcceptedBy` 可程序化关闭/接受 finding，重算 hash 后替换 `resolvedByRevisionId` 也可获得资格。H2：失效边读回只校验"残存边合法"，删除末尾或全部边后索引仍连续，append-time 完整失效集合未持久化比对，审计链可静默缺边。
+- **Round 1 修正（同日完成）**：
+  - H1：新增 durable 关闭证明表 `loop_finding_proofs`（每 finding 至多一条，`proof_kind` CHECK 约束，canonical hash 覆盖全字段）。`resolveFinding`/`acceptFindingRisk` 在同一迁移事务内写入证明：RESOLUTION 证明捕获解决 revision 的不可变内容绑定（revision id + node + artifact ref + digest，不捕获 validity——解决后合法 STALE 属 Gate 语义）；RISK_ACCEPTANCE 证明捕获接受者与证据。`supersedeFinding` 同事务删除被替代 finding 的证明。全部读回路径重验：关闭 finding 必须恰好一条证明、字段与 finding 行逐一相等、RESOLUTION 证明重新绑定到已验证 revision 链（存在、节点一致、内容绑定一致）；OPEN/SUPERSEDED 携带证明即 `STORE_CORRUPT`。绑定 artifact store 时，关闭证据 ref/digest 必须指向物理存在且 digest 匹配的 blob（写入缺失即 `ILLEGAL_TRANSITION`，读回缺失/损坏即 `STORE_CORRUPT`）。
+  - H2：新增 append-time 完整失效范围表 `loop_finding_scopes`（`edge_count + scope_digest`，scope_digest 为按序完整边列表 canonical 形式的 sha256，空集为一等值）。读回逐 finding 用存活边重算 digest/计数比对：删除首/中/末/全部边、删除或篡改 scope 记录均 `STORE_CORRUPT`。
+  - v5 表族定义扩展为四表（findings + invalidations + proofs + scopes）；0.1.0 的 v5 从未进入任何 Accepted 基线（PR #91 仍 Draft），不存在需要回填的 v5 journal，格式版本保持 5。
+  - 合同前进 0.1.1 Draft；专项测试 232→**303 断言**（新增：伪造关闭/伪造风险接受/替换 resolvedByRevisionId/删除或篡改证明/supersede 证明清理/删除首末全部失效边/删除或篡改 scope/证据 blob 从未写入拒绝与写后删除 fail-closed/真实证据 blob 下 resolve 与 risk-accept 的 Gate 消费）。
+- **复审边界声明**：残余威胁模型与 WP1/WP2 一致——跨多表的一致性整体改写（攻击者同时重写失效边、scope 记录并全部重算 hash）超出本 store 的单结构篡改模型；`riskAcceptedBy` 身份本体不由 store 验证，其锚点是证据 blob 与证明记录交叉绑定。
+- **Round 2（2026-08-21，PASS，codex 独立复审）**：全量只读重审 `8d1d697..fdc6610`（WP3 初始实现 + Round 1 修正），以合同 0.1.1 Draft、规划 §4 G3/§6 C02-WP3 与本决定为边界；未发现合同内阻塞项。两项 Round 1 High 关闭均独立复核成立：H1（证明双向交叉绑定、伪造证据写入拒绝、写后删 blob 读回 fail-closed、重算 hash 替换 resolvedByRevisionId 仍 fail-closed、后置合法 STALE 不误判 corruption）；H2（append-time 完整 scope 持久化，删首/中/末/全部边与 scope 篡改均 fail-closed，仅存已声明的跨多表整体改写残余）。复审方实测：专项 303/303、回归 185/79/86/132/212、全量 npm test 130 文件 0 失败、tsc/diff-check 干净、CI run 32464819692 四 job 绿。复审 PASS 不构成 Ready/合并/发布或授权消费。
+- **Round 2 加固落实（同日完成，非阻塞建议项）**：复审方两条回归加固建议均已落实，专项测试 303→**340 断言**——（1）删除中间失效边后重编号后续索引并修复 edge_count 与 scope canonical hash 的显式回归（直接命中 scope digest 分支，四条读路径均 STORE_CORRUPT）；（2）proof/scope 插入点故障注入回滚（trigger RAISE(ABORT) 强制失败：scope 插入失败时 finding/失效边/STALE 标记整体回滚；proof 插入失败时 resolve/accept 状态更新回滚、故障清除后可干净重试）；resolve/accept/supersede 并发竞争矩阵七例（双连接先后提交模拟竞态：resolve/accept/supersede 两两组合，负方一律 ILLEGAL_TRANSITION、观察到胜方已提交状态、关闭证明恰好一条或零条）。生产代码零改动。
+
+## 代码与验证依据
+
+- 交付物：`core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、`downstreamNodeIds` 依赖图下游计算、`validateLoopFindingChain`、关闭证明与失效范围类型的校验/canonical 化、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes` 原子迁移、`appendFinding` 同事务失效传播与 scope 落库、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移与证明写删、读回 proof/scope 全量重验、`listFindings`/`listFindingInvalidations`/`computeFindingGate` 单事务读回、finding 链挂入 `verifySnapshotInTransaction`）；`tests/loop-finding-lifecycle.test.ts` 接入默认 npm test。
+- 专项测试：340/340 通过（schema/边界、五类路由矩阵正反例、失效传播与原子回滚、状态机、资格推导、篡改读回、证明/范围完整性、证据 blob 绑定、迁移原子性、删中间边重编号 scope digest 回归、proof/scope 插入点故障回滚、关闭迁移并发竞争矩阵）。
+- 既有断言回归：`loop-run-store` 185/185、`loop-run-provenance` 79/79、`loop-capability-execution` 86/86、`loop-change-classification` 132/132、`loop-artifact-revision` 212/212。
+- 全量验证：完整 `npm test`、`tsc --noEmit`、`git diff --check` 通过；CI 结果以 PR #91 最新 head 的远端 run 为准。
+
+---
+
+# Decision-043：C02-WP3 复审通过与收口
+
+## 状态
+
+Accepted（2026-08-21，Current User 接受 Round 2 独立复审 PASS 结论，裁决 C02-WP3 收口）
+
+## 背景
+
+C02-WP3 经 Decision-042 授权实施（实现提交 `60a9f41`）。Round 1 独立复审 CHANGES_REQUESTED（2 High：关闭/风险接受证据仅格式校验、未绑定当前事实；失效边读回只校验残存边合法、append-time 完整集合未持久化比对），修正提交 `fdc6610`（durable 关闭证明表 `loop_finding_proofs`、append-time 完整失效范围表 `loop_finding_scopes`、v5 四表族定稿、合同 0.1.1 Draft）。Round 2 独立复审（codex）全量只读重审 `8d1d697..fdc6610`，裁决 PASS、无合同内阻塞项，两项 High 关闭均独立复核成立；其两条非阻塞回归加固建议已落实（提交 `4a814d3`，专项 303→340 断言，生产代码零改动）。
+
+## 问题
+
+C02-WP3 是否满足规划 §6 验收与合同 0.1.1，可否消费授权完成治理收口？
+
+## 决策
+
+1. 接受 Round 2 独立复审 PASS 结论；C02-WP3 收口。
+2. 控制平面消费 `C02_WP3_FINDING_LIFECYCLE_AND_INVALIDATION` 授权并登记 WP3 完成；C02 四项完成合同保持 `INCOMPLETE`（需 WP4～WP6 联合证据）。
+3. `ai-sdlc/loop-finding-lifecycle.md` 升为 1.0.0 Accepted（内容等同 0.1.1 Draft）；C02 规划同步状态（v1.0.3）。
+4. 复审边界声明保持：跨多表一致性整体改写超出单结构篡改模型；`riskAcceptedBy` 身份本体不由 store 验证。
+5. 本决定不授权 C02-WP4～WP6，不授权 Ready/merge（PR #91 保持 Draft，Ready 与 merge 为独立 Gate，需单独明确授权），不登记 C02 任一完成合同项，不授权真实 Agent 启用、Git/PR 自动化或 C03～C05。
+
+## 原因
+
+Round 2 复审在同一范围独立复核 WP3 不变量：finding 固定 schema 与五类路由矩阵绑定、固定状态机（OPEN/RESOLVED/ACCEPTED_RISK/SUPERSEDED）、下游失效由 store 沿 canonical 依赖图计算并原子持久化、关闭/风险接受绑定当前事实（proof 双向交叉绑定 + 绑定 artifact store 时证据 blob 物理存在性）、失效边完整可审计（append-time scope 全集合 digest 比对）、eligibility fail-closed、v4→v5 原子迁移可回滚重试；H1/H2 修正经伪造证据、替换 revision、删首/中/末/全部边等对抗性读回复核成立。独立验证：专项 340/340、回归 185/79/86/132/212、全量 `npm test` 130 文件 0 失败、`tsc --noEmit` 与 `git diff --check` 干净；CI run 32464819692（`fdc6610`）四 job 一次全绿，run 32469000224（`4a814d3`）ci-tests 首跑命中 C01 期 `loop-git-workspace` 并发 worktree flake（本地单独复跑 354/354、全量重跑 130 文件 0 失败），失败 job rerun 后四 job 全绿。
+
+## 影响
+
+C02 缺口 G3（finding 持久与失效传播）关闭：每一次审核/测试/入口发现的问题均具备固定 schema、绑定具体 artifact revision、可恢复、可审计的 run journal 持久面，失效影响由 canonical 依赖图同事务计算落库，journal 格式定稿 v5 四表族，C01/WP1/WP2 历史一行未改。WP4（最早节点 Re-Gate 编排）成为下一个可申请授权的工作包；本收口不构成 WP4～WP6 的实施入口，也不构成 PR #91 的 Ready/merge 授权。
+
+## 实现状态
+
+用户已最终裁决通过；收口治理文档随 PR #91 同分支提交推送，按既定机制登记控制平面、Exchange closure handoff 与 PKB current 指针；Ready/merge 待单独授权后执行。
+
+## 代码与验证依据
+
+`core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes` 原子迁移、`appendFinding` 同事务失效传播与 scope 落库、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移与证明写删、读回 proof/scope 全量重验、单事务公开读路径、finding 链挂入快照校验）；`ai-sdlc/loop-finding-lifecycle.md` 1.0.0 Accepted；`tests/loop-finding-lifecycle.test.ts`（340/340）；回归 `tests/loop-run-store.test.ts`（185/185）、`loop-run-provenance`（79/79）、`loop-capability-execution`（86/86）、`loop-change-classification`（132/132）、`loop-artifact-revision`（212/212）；实现/修正/加固提交 `60a9f41`、`fdc6610`、`4a814d3`（PR #91，Draft）；Round 2 独立复审 PASS 与 CI run 32464819692、32469000224（四 job 全绿）。
