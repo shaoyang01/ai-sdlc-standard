@@ -1608,3 +1608,77 @@ C02 缺口 G3（finding 持久与失效传播）关闭：每一次审核/测试/
 ## 代码与验证依据
 
 `core/loop-finding-lifecycle.ts`（finding schema v1、固定状态机、五类路由矩阵绑定、依赖图下游计算、关闭证明与失效范围模型、`computeFindingGate`）；`core/loop-run-store.ts` v5（`loop_findings` + `loop_finding_invalidations` + `loop_finding_proofs` + `loop_finding_scopes` 原子迁移、`appendFinding` 同事务失效传播与 scope 落库、`resolveFinding`/`acceptFindingRisk`/`supersedeFinding` guarded 迁移与证明写删、读回 proof/scope 全量重验、单事务公开读路径、finding 链挂入快照校验）；`ai-sdlc/loop-finding-lifecycle.md` 1.0.0 Accepted；`tests/loop-finding-lifecycle.test.ts`（340/340）；回归 `tests/loop-run-store.test.ts`（185/185）、`loop-run-provenance`（79/79）、`loop-capability-execution`（86/86）、`loop-change-classification`（132/132）、`loop-artifact-revision`（212/212）；实现/修正/加固提交 `60a9f41`、`fdc6610`、`4a814d3`（PR #91，Draft）；Round 2 独立复审 PASS 与 CI run 32464819692、32469000224（四 job 全绿）。
+
+---
+
+# Decision-044：C02-WP3.5 单轨生命周期重基线授权与两项治理裁决
+
+## 状态
+
+Accepted（2026-08-21，Current User 裁决 Q1/Q2 并授权 C02-WP3.5 治理登记）
+
+## 背景
+
+C02-WP1～WP3 已按 v1 七节点链（`requirement-intake → tech-design → solution-challenge → solution-review → implementation → code-review → test-validation`）收口并合入（PR #86/#90/#91）。WP4 授权前，Current User 与独立复审方确认了六项固定决策：LOOP 收敛为单轨七节点链（`requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync`）；取消 `DIRECT_IMPLEMENTATION`/`SPECKIT_PIPELINE_REQUIRED` 路径分流与独立 Speckit 产物轨道；21 个 Skill 按固定映射收敛；线下测试验收退出 LOOP 节点、测试/线上反馈经 requirement-intake 分类为新输入开启新 generation；solution-gate 与 code-review 采用收敛协议（首轮 Finding Ledger + 后续 closure review + 新 finding 举证 + 轮次耗尽升级裁决）；knowledge-sync 单轨化（废弃 dual-rail、sync source mode、pipeline 状态、specs-run）。
+
+针对这些决策的只读核对发现两项必须治理级裁决的缺口：（Q1）canonical 链变更与历史 journal 兼容的路线；（Q2）双轨取消后复杂度分级深度调节能力的承接方式。五方案与职责归属的完整对比分析（含旧 Speckit 技能能力提取、store 迁移/恢复机制核实、三种需求形态模拟）作为本决定的输入，要点记录如下。
+
+## 问题
+
+1. canonical 链从 v1 切到 v2 时，既有 v5 格式 journal 的读取、审计与未完成 run 处置采用哪条路线（v6 原地重写 / 链版本化 / contract-version authority / 封存续接 / 声明式 cutover）？
+2. 复杂度分级、用户主动加强、later Gate 深度升级、方案深化、代表数据与边界场景、任务粒度、实现前一致性审计、升级后 Re-Gate 这八项职责在单轨下由谁承接？
+3. 是否授权 C02-WP3.5 的治理登记（Decision Record、Roadmap、C02 规划重基线、控制平面状态），作为后续只读影响分析与实施规划的前置？
+
+## 决策
+
+### Q1：历史 journal 兼容 = 声明式 cutover（方案 5）
+
+1. 依据事实：当前受支持范围内不存在任何真实持久化 v5 LoopRunStore journal（`new LoopRunStore(` 的 168 处实例化全部位于 tests/ 临时目录，生产代码零实例化），且 WP5 生产接线尚未实施。因此**不建设**历史语义重写（方案 1）、链版本化（方案 2）、contract-version authority（方案 3）或任何永久兼容机器。
+2. WP3.5 cutover 直接切换 canonical 链定义；旧格式 journal 打开时必须返回明确的 `UNSUPPORTED_HISTORICAL_FORMAT`，**不得伪装为 STORE_CORRUPT**（篡改与格式退役是可区分的两类事实）。
+3. cutover 前必须执行一次受支持范围内的持久化 journal preflight：确认不存在真实 v5 journal 方可继续；**若发现任何真实持久化 v5 journal，立即停止并向 Current User 重新申请裁决；不得自动降级执行方案 4**。
+4. 「封存-续接程序」（未完成 run 以 `cancelled` 终态封存、当前有效 artifact 经 requirement-intake 重入新 generation、open finding 处置规则、v1→v2 节点映射表）合同化为未来任何链/格式变更的常备程序；本次不执行该程序。
+5. **先例澄清**：v0→v1 的 `normalizeEventHashesToExtendedForm` 经核实仅重写 `canonical_sha256` 一列（legacy 13-field → extended-form 的 hash 格式扩展），不改任何业务字段值，**不构成语义重写的先例**；方案 1 因违反不变量 1（历史不可变）与 WP3 §9 被否决。
+
+### Q2：复杂度深化承接 = 单轨深度档位模型
+
+1. 所有需求使用相同七节点顺序，不恢复任何 Direct/Speckit 路径分流；深度调节载体从"路径分叉"改为"深度档位 + finding/Re-Gate 机器"。
+2. `depth = LIGHT | STANDARD | DEEP`；`decision_status = DECIDED | BLOCKED_UNKNOWN`；solution-gate 是唯一深度裁决点；原 Complexity Assessment 的 Decision Scope / Delta 隔离（Ignored Aggregate Triggers）与用户 override（`user_requested`）语义平移保留。
+3. solution-design 承担对应深度的方案内容（DEEP 档强制完整状态机/DB/MQ/事务/回滚/代表数据/边界场景章节）；task-planning 承担任务拆解与实现前内部一致性审计（analyze/checklist 的降级形态）；later Gate（code-review 等）发现方案缺口时经 finding → 最早受影响节点 Re-Gate 提升深度，由 WP3/WP4 机器强制下游失效。
+4. `complexity-routing.md` 与 `development-path-governance.md` 据此重写；development-path-governance 的 Topic 07 formal closure 降级标注（取消双轨推翻该已关闭 Topic，属受控重排而非静默删除）。
+
+### 其余分析结论 = WP3.5 固定规划输入（不再逐项裁决）
+
+- 节点映射：`tech-design→solution-design`；`solution-challenge+solution-review→solution-gate`；新增 `task-planning`、`knowledge-sync`；`test-validation` 退出 LOOP。Skill 收敛映射按六项固定决策执行，并显式补记：`sdlc-requirement-normalizer` 为 requirement-intake 载体，`sdlc-specification-writer` 并入 solution-design。
+- WP1 合同（loop-change-classification 1.1.0）零节点耦合、原位保留；WP2/WP3 Accepted 合同须在后续工作包中条款级升版重基线（路由矩阵、canonical 依赖图、Gate 绑定、Manifest Index 映射），历史 journal 一行不改。
+- solution-gate 的挑战/裁决制衡采用**绑定级分离**：对抗扫描（Finding Ledger 产出）与正式裁决必须由不同 Agent binding 执行，叠加收敛协议举证规则；implementation 合并 recorder 后须遵守证据生成约束（记录每项声明必须引用 diff/测试输出/journal 事件证据，禁止自述，code-review 负验证一致性）。
+- pipeline 删除后的 activation、阶段停靠、暂停/恢复职责由 LOOP runtime 接管（WP4 Re-Gate 编排与 WP5 恢复语义承载）；用户确认边界成为显式人工 Gate。
+- 旧 5 节点执行面（`loop/registry/node_map.ts`、`sdlc_graph` 及 runtime-capability-map 桥接）随 cutover 一并退役；specs 机器事实层取消后，knowledge-sync Reconcile 的单一对账基准为 library 工件 + LOOP artifact revision（task-planning 产物纳入 WP2 revision 机器）。
+
+### C02-WP3.5 治理登记授权（本轮范围）
+
+5. 在 Roadmap 插入 C02-WP3.5 并重基线 C02-WP4～WP6；重写 C03 定位为 Single-Rail Skill Delivery 并**保留 Delivery Tail**（`READY_FOR_MANUAL_GIT_HANDOFF` 人工 Git 交接语义不变，delivery checkpoint 机器底座保留）；取消 C04（Speckit Projection and SDD Integration）；C05 `depends_on` 重规划为仅 `LOOP-CORE-03`。
+6. 登记旧 5 节点执行面退役、单轨知识治理与 Skill 收敛方向；更新控制平面 STATE。
+7. **本授权不包含**任何 runtime 代码、Skill、合同实现、registry、安装副本、全局 Skill、Git 发布（commit/push/PR/Ready/merge）或后续工作包实施。WP3.5 的只读影响分析与实施规划（输出 A～G）沿用 2026-08-21 WP3.5 原始授权，在治理登记完成后执行，输出后停止等待下一步授权。
+
+## 原因
+
+- Q1：方案 1 违反已接受不变量且无证实的语义重写先例；方案 2/3 为不存在的历史数据永久预建双链/版本注册机器，与单轨目标自相矛盾；方案 5 在当前数据现实下以最小机器（一处格式识别分支 + 合同条款）满足历史不可变与单一活跃流程，preflight 与"发现真实数据即停止重裁"条款封住了唯一残余风险。
+- Q2：旧 Speckit 段（specify/clarify/plan/tasks）经合同核实从不承担从零设计，深化内容的原始产出方本就在 DocFlow 侧；深度档位模型把调节能力回归原位，且深度升级经 WP3 finding + WP4 Re-Gate 机器强制下游失效，比旧的 `later_gate_required` 文档记录制更严密。三形态模拟（简单字段修改 / 中等单模块改造 / 复杂跨模块状态变更）证明同节点序可承载不同深度。
+- 逐 WP 授权、独立复审、Current User 收口的既有治理节奏不变；本登记只是把已裁决的方向写进权威文档，使后续 WP3.5 影响分析和 WP4～WP6 授权有合同依据。
+
+## 影响
+
+- Roadmap 前进 v2.2.0：C02 插入 WP3.5、C03 重写、C04 取消、C05 依赖重规划；LOOP-CORE-00 的 objective/scope 去除双轨表述。
+- C02 规划前进 v1.1.0：§2.3 连续性规则、§4 G5、§5 不变量 9（路径三值不变量由深度档位不变量取代，新增不变量 13 历史格式 fail-closed 语义）、§6 WP3.5 节与 WP4～WP6 重基线、§7 依赖图、§9 明确不做同步更新。
+- WP1～WP3 的 Accepted 结论保持有效，不因此次重基线重开；其合同的条款级升版属后续工作包范围。
+- 控制平面 STATE 登记 WP3.5 授权与两项裁决；C02 四项完成合同保持 `INCOMPLETE`，WP3.5 实施与 WP4～WP6 保持未授权。
+- Exchange/PKB 治理登记 handoff 发布不在本轮范围，随后续 Git 发布授权一并处理。
+
+## 实现状态
+
+治理登记文档（本决定、Roadmap v2.2.0、C02 规划 v1.1.0、控制平面 STATE）已按授权在工作区完成，未提交、未推送；commit/push/PR 与 Exchange/PKB 发布待 Current User 单独授权。
+
+## 依据
+
+- 六项固定决策（2026-08-21 WP3.5 授权原文）与 Q1/Q2 裁决原文（2026-08-21）。
+- 只读核对证据：`loop/types/index.ts:57-74`（NODE_CAPABILITY_IDS v1 定义）；`core/loop-run-store.ts:981-1407`（迁移事务与 user_version 门控）、`:3119-3135`（v0→v1 仅 hash 格式扩展）、`:90`（FORMAT_VERSION=5）；`core/loop-run-state.ts:521-533`（cancelled 封存语义现成）；`core/loop-finding-lifecycle.ts:264-340`、`core/loop-artifact-revision.ts:309-350`（旧 id fail-closed 读回）；`core/loop-delivery-checkpoint-store.ts`（Delivery Tail generation/CAS 底座）；`ai-sdlc/complexity-routing.md`、`ai-sdlc/development-path-governance.md`（Topic 07 已关闭）；skills/sdlc-speckit-{specify,clarify,plan,tasks,analyze,checklist} 合同边界（以 01/02 为 source of truth、禁止从零设计）；零生产 journal 事实（生产代码 `new LoopRunStore(` 零实例化）。
