@@ -350,15 +350,15 @@ export function replaceBinding(
 
 // ── capability -> output artifact contract (validator support) ──
 
-/** Canonical output artifact type per node capability (WP-2 contracts). */
+/** Canonical output artifact type per node capability (v2 contracts, A4). */
 export const CAPABILITY_ARTIFACT_TYPES: Readonly<Record<NodeCapabilityId, ExecutionArtifactType>> = Object.freeze({
   "requirement-intake": "requirement_summary",
-  "tech-design": "tech_design",
-  "solution-challenge": "solution_challenge",
-  "solution-review": "solution_review",
-  "implementation": "code_patch",
-  "code-review": "code_review",
-  "test-validation": "validation_report",
+  "solution-design": "technical_design",
+  "solution-gate": "solution_review",
+  "task-planning": "task_plan",
+  "implementation": "implementation_record",
+  "code-review": "review_summary",
+  "knowledge-sync": "knowledge_sync_result",
 });
 
 /**

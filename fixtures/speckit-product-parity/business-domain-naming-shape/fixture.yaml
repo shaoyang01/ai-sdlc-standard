@@ -4,7 +4,6 @@ project_type_profiles: []
 required_standard_files:
   - ai-sdlc/business-domain-naming-and-shape.md
   - ai-sdlc/shared-business-domain-governance.md
-  - ai-sdlc/business-domain-sync-source-modes.md
   - templates/business-domain-governance-profile-template.yaml
   - templates/business-domain-sync-proposal-template.md
   - skills/sdlc-speckit-sync/references/sync-targets.md

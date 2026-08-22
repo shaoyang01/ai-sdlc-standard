@@ -41,6 +41,7 @@ import {
   validateLoopArtifactRevisionChain,
   type LoopArtifactRevision,
   type LoopArtifactRevisionDraft,
+  LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
 } from "../core/loop-artifact-revision";
 import {
   LoopRunJournalError,
@@ -49,8 +50,7 @@ import {
 } from "../core/loop-executor-types";
 import type { LoopCapabilityExecutionEvent } from "../core/loop-capability-execution";
 import { LoopRunStore } from "../core/loop-run-store";
-import { runtimeExecutionPointForCapability } from "../core/runtime-capability-map";
-import type { NodeCapabilityId } from "../loop/types";
+import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 
 let passed = 0;
 let failed = 0;
@@ -139,7 +139,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       runId,
       sequence,
       capability,
-      nodeId: runtimeExecutionPointForCapability(capability),
+      nodeId: capability,
       attempt: 1,
       status,
       createdAt: nextTs(),
@@ -198,7 +198,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       const attempt = nextAttempt(capability);
       const started = event(capability, "started", { attempt });
       store.appendCapabilityExecution(started);
-      const outputRef = `loop-artifact:v1:capability_output:sha256:${output.digest}`;
+      const outputRef = `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind}:sha256:${output.digest}`;
       const succeeded = event(capability, "succeeded", {
         attempt,
         outputArtifactRef: outputRef,
@@ -235,10 +235,11 @@ function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
     nodeId: o.nodeId,
     sequence: o.sequence,
     generation: null,
-    stablePath: o.stablePath ?? "01-技术方案/req-001_技术方案.md",
-    artifactKind: "capability_output",
+    stablePath: o.stablePath ??
+      `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].stablePathSegment}/req-001_${o.nodeId}.md`,
+    artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind,
     semver: o.semver,
-    artifactRef: `loop-artifact:v1:capability_output:sha256:${o.digest}`,
+    artifactRef: `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind}:sha256:${o.digest}`,
     digest: o.digest,
     producerExecutionId: o.producerExecutionId,
     gateResult: o.gateResult !== undefined ? o.gateResult : isGate ? "PASS" : "NOT_APPLICABLE",
@@ -248,9 +249,30 @@ function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
 }
 
 /**
+ * Canonical field order of the run-journal hash, replicated locally so
+ * tampering can persist rows whose hash matches their content while the
+ * content itself violates schema rules (e.g. a traversal-shaped stable
+ * path); canonicalizeLoopArtifactRevision would refuse to serialize such
+ * records.
+ */
+const CANONICAL_REVISION_FIELD_ORDER = [
+  "schemaVersion", "revisionId", "runId", "requirementId", "nodeId",
+  "sequence", "generation", "stablePath", "artifactKind", "semver",
+  "artifactRef", "digest", "producerExecutionId", "gateResult", "validity",
+  "supersededBy", "upstreamRevisionIds", "createdAt",
+] as const;
+
+function hashRevisionWithoutValidation(record: LoopArtifactRevision): string {
+  const flat: Record<string, unknown> = {};
+  for (const field of CANONICAL_REVISION_FIELD_ORDER) flat[field] = record[field];
+  return createHash("sha256").update(JSON.stringify(flat)).digest("hex");
+}
+
+/**
  * Overwrite a persisted revision row with tampered content and its recomputed
- * canonical hash, bypassing the write API. The row is internally consistent
- * afterwards, so only the read-path cross-checks can still reject it.
+ * canonical hash, bypassing the write API. The row's stored hash matches its
+ * content afterwards, but the content may violate schema rules; only the
+ * read-path cross-checks can still reject it.
  */
 function tamperRevisionWithRehash(dir: string, originalRevisionId: string, tampered: LoopArtifactRevision): void {
   const db = new Database(join(dir, "journal.db"));
@@ -274,7 +296,7 @@ function tamperRevisionWithRehash(dir: string, originalRevisionId: string, tampe
       tampered.artifactKind, tampered.semver, tampered.artifactRef, tampered.digest,
       tampered.producerExecutionId, tampered.gateResult, tampered.validity,
       tampered.supersededBy, tampered.createdAt,
-      createHash("sha256").update(canonicalizeLoopArtifactRevision(tampered)).digest("hex"),
+      hashRevisionWithoutValidation(tampered),
       originalRevisionId,
     );
   } finally {
@@ -332,10 +354,10 @@ console.log("artifact revision: schema constants and canonical tokens");
     "three canonical validity tokens",
   );
   assert(
-    LOOP_ARTIFACT_GATE_CAPABILITIES.join(",") === "solution-review,test-validation",
-    "exactly two Gate capabilities",
+    LOOP_ARTIFACT_GATE_CAPABILITIES.join(",") === "solution-gate",
+    "exactly one Gate capability",
   );
-  assert(LOOP_ARTIFACT_REVISION_KINDS.length === 14, "fourteen canonical artifact kinds");
+  assert(LOOP_ARTIFACT_REVISION_KINDS.length === 17, "seventeen canonical artifact kinds");
   assert(
     LOOP_ARTIFACT_INDEX_STATUSES.join(",") === "draft,active,stale,replaced",
     "four canonical manifest artifact statuses",
@@ -345,41 +367,44 @@ console.log("artifact revision: schema constants and canonical tokens");
     "seven cross-bind STOP reason codes",
   );
   const mapped = Object.keys(LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES);
-  assert(mapped.length === 6, "six manifest Index rows map to capabilities");
+  assert(mapped.length === 7, "seven manifest Index rows map to capabilities");
   assert(!("04 交付总结" in LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES), "delivery summary row is not cross-bound");
-  assert(!("solution-challenge" in Object.values(LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES)),
-    "solution-challenge has no Index row, which is normal");
+  assert(!("07 交付总结" in LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES), "delivery tail row is not cross-bound");
+  const indexValues = Object.values(LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES);
+  assert(indexValues.length === new Set(indexValues).size, "every capability maps to exactly one Index row");
+  assert(NODE_CAPABILITY_IDS.every((id) => indexValues.includes(id)),
+    "every canonical capability has an Index row");
 }
 
 console.log("artifact revision: positive construction across nodes");
 {
   const draft = revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   });
   const created = createLoopArtifactRevision(draft);
-  assert(created.revisionId === "run-001:revision:tech-design:1", "canonical revision id derived");
+  assert(created.revisionId === "run-001:revision:solution-design:1", "canonical revision id derived");
   assert(created.validity === "ACTIVE" && created.supersededBy === null, "revisions are born active");
   assert(Object.isFrozen(created) && Object.isFrozen(created.upstreamRevisionIds), "revision is deep-frozen");
   validateLoopArtifactRevision(created);
   assert(true, "non-Gate revision passes validation");
   const gateRevision = createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("e"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("e"),
     producerExecutionId: "run-001:capability:8:succeeded", gateResult: "PASS_WITH_RISK",
   }));
   validateLoopArtifactRevision(gateRevision);
   assert(gateRevision.gateResult === "PASS_WITH_RISK", "Gate revision carries a conclusive passing result");
   const withGeneration = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   }));
   assert(withGeneration.generation === null, "generation reference is nullable");
   const withUpstream = createLoopArtifactRevision({
     ...revisionDraft({
-      nodeId: "solution-challenge", sequence: 1, semver: "1.0.0", digest: dg("f"),
+      nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
       producerExecutionId: "run-001:capability:6:succeeded",
     }),
-    upstreamRevisionIds: ["run-001:revision:tech-design:1"],
+    upstreamRevisionIds: ["run-001:revision:solution-design:1"],
   });
   validateLoopArtifactRevision(withUpstream);
   assert(true, "revision with an upstream reference passes validation");
@@ -389,12 +414,12 @@ console.log("artifact revision: positive construction across nodes");
   expectThrow("INVALID_INPUT", () => compareLoopArtifactSemver("1.0", "1.0.0"), "malformed semver comparison fails closed");
   // A valid two-node chain: the challenge revision consumes the design revision.
   const designRevision = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded", createdAt: nextTs(),
   }));
   const challengeRevision = createLoopArtifactRevision({
     ...revisionDraft({
-      nodeId: "solution-challenge", sequence: 1, semver: "1.0.0", digest: dg("f"),
+      nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
       producerExecutionId: "run-001:capability:6:succeeded", createdAt: nextTs(),
     }),
     upstreamRevisionIds: [designRevision.revisionId],
@@ -409,7 +434,7 @@ console.log("artifact revision: positive construction across nodes");
 console.log("artifact revision: malformed and incoherent drafts fail closed (negative)");
 {
   const base = revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   });
   for (const bad of ["1.0", "v1.0.0", "1.0.0.0", "1.0.x"]) {
@@ -418,8 +443,8 @@ console.log("artifact revision: malformed and incoherent drafts fail closed (neg
   }
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({ ...base, digest: dg("e") }),
     "artifact ref/digest mismatch rejected");
-  expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({ ...base, artifactKind: "technical_design" }),
-    "artifact kind drift from the ref kind rejected");
+  expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({ ...base, artifactKind: "task_plan" }),
+    "artifact kind drift from the node product kind rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
     ...base, artifactRef: `loop-artifact:v2:capability_output:sha256:${dg("d")}`,
   }), "non-canonical artifact ref rejected");
@@ -436,34 +461,34 @@ console.log("artifact revision: malformed and incoherent drafts fail closed (neg
     ...base, producerExecutionId: "run-001:capability:4:done",
   }), "non-canonical producer execution id rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
-    ...base, upstreamRevisionIds: ["run-001:revision:tech-design:1"],
+    ...base, upstreamRevisionIds: ["run-001:revision:solution-design:1"],
   }), "self-referencing upstream rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
-    ...base, upstreamRevisionIds: ["run-002:revision:tech-design:1"],
+    ...base, upstreamRevisionIds: ["run-002:revision:solution-design:1"],
   }), "cross-run upstream reference rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
-    ...base, upstreamRevisionIds: ["run-001:revision:solution-challenge:1", "run-001:revision:solution-challenge:1"],
+    ...base, upstreamRevisionIds: ["run-001:revision:solution-gate:1", "run-001:revision:solution-gate:1"],
   }), "duplicate upstream references rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
     ...base, upstreamRevisionIds: ["run-001:revision:deploy:1"],
   }), "upstream with unknown node rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
     ...revisionDraft({
-      nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("e"),
+      nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("e"),
       producerExecutionId: "run-001:capability:8:succeeded",
     }),
     gateResult: "FAIL",
   }), "Gate node revision with FAIL result rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
     ...revisionDraft({
-      nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("e"),
+      nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("e"),
       producerExecutionId: "run-001:capability:8:succeeded",
     }),
     gateResult: null,
   }), "Gate node revision without a Gate result rejected");
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({
     ...revisionDraft({
-      nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("e"),
+      nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("e"),
       producerExecutionId: "run-001:capability:8:succeeded",
     }),
     gateResult: "NOT_APPLICABLE",
@@ -471,24 +496,62 @@ console.log("artifact revision: malformed and incoherent drafts fail closed (neg
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({ ...base, gateResult: "PASS" }),
     "non-Gate node revision with a conclusive Gate result rejected");
   const created = createLoopArtifactRevision(base);
-  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "STALE", supersededBy: "run-001:revision:tech-design:2" }),
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "STALE", supersededBy: "run-001:revision:solution-design:2" }),
     "STALE revision must not carry supersededBy");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "SUPERSEDED", supersededBy: null }),
     "SUPERSEDED revision requires supersededBy");
-  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-challenge:2" }),
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-gate:2" }),
     "supersededBy pointing at another node rejected");
-  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "SUPERSEDED", supersededBy: "run-001:revision:tech-design:1" }),
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-design:1" }),
     "supersededBy pointing backwards rejected");
-  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, revisionId: "run-001:revision:tech-design:9" }),
+  expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, revisionId: "run-001:revision:solution-design:9" }),
     "forged revision id rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...created, validity: "OBSOLETE" }),
     "unknown validity token rejected");
 }
 
+console.log("artifact revision: stable paths must carry the canonical logical shape");
+{
+  const base = revisionDraft({
+    nodeId: "task-planning", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    producerExecutionId: "run-001:capability:4:succeeded",
+  });
+  // The round-2 escape repro and its structural siblings: each shape names
+  // (or prefixes) the canonical segment but is not the canonical logical
+  // path, so containment-style guards would admit them.
+  const escapePaths = [
+    "03-任务规划/../01-技术方案/escape.md",
+    "library/req-001/03-任务规划/../01-技术方案/escape.md",
+    "/library/req-001/03-任务规划/x.md",
+    "library//03-任务规划/x.md",
+    "library/req-001/03-任务规划/",
+    "library/./req-001/03-任务规划/x.md",
+    "library\\req-001\\03-任务规划\\x.md",
+    "library/req-002/03-任务规划/x.md",
+    "library/req-001/01-技术方案/x.md",
+    "specs/req-001/03-任务规划/x.md",
+    "library/req-001/03-任务规划",
+  ];
+  for (const escape of escapePaths) {
+    expectThrow("INVALID_INPUT", () => createLoopArtifactRevision({ ...base, stablePath: escape }),
+      `creation rejects a non-canonical stable path (${escape})`);
+    const valid = createLoopArtifactRevision(base);
+    expectThrow("INVALID_INPUT", () => validateLoopArtifactRevision({ ...valid, stablePath: escape }),
+      `read-back rejects a non-canonical stable path (${escape})`);
+  }
+  const created = createLoopArtifactRevision({
+    ...base,
+    stablePath: "library/req-001/03-任务规划/req-001_task-planning.md",
+  });
+  validateLoopArtifactRevision(created);
+  assert(created.stablePath === "library/req-001/03-任务规划/req-001_task-planning.md",
+    "the canonical library/{requirementId}/{segment}/{file} shape passes validation");
+}
+
 console.log("artifact revision: adversarial input boundaries fail closed");
 {
   const draft = revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   });
   expectThrow("INVALID_INPUT", () => createLoopArtifactRevision(new Proxy({ ...draft }, {})),
@@ -535,13 +598,13 @@ console.log("artifact revision: chain rules are fail-closed");
     producerExecutionId: "run-001:capability:4:succeeded", createdAt,
   }));
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain(
-    [rev("tech-design", 2, "1.0.0", at(1))], "run-001",
+    [rev("solution-design", 2, "1.0.0", at(1))], "run-001",
   ), "node chain must start at sequence one");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev("tech-design", 1, "1.0.0", at(1)), rev("tech-design", 1, "1.1.0", at(2)),
+    rev("solution-design", 1, "1.0.0", at(1)), rev("solution-design", 1, "1.1.0", at(2)),
   ], "run-001"), "duplicate sequence inside a node chain rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev("tech-design", 1, "1.0.0", at(1)), rev("tech-design", 2, "1.0.0", at(2)),
+    rev("solution-design", 1, "1.0.0", at(1)), rev("solution-design", 2, "1.0.0", at(2)),
   ], "run-001"), "semver must strictly increase inside a node chain");
 }
 
@@ -552,7 +615,7 @@ console.log("artifact revision: per-node progression and supersede linkage fail 
     sequence: number, semver: string, createdAt: string, o?: Record<string, unknown>,
   ): LoopArtifactRevision => {
     const draft = revisionDraft({
-      nodeId: "tech-design", sequence, semver, digest: dg("d"),
+      nodeId: "solution-design", sequence, semver, digest: dg("d"),
       producerExecutionId: "run-001:capability:4:succeeded", createdAt,
     });
     const created = createLoopArtifactRevision(draft);
@@ -568,31 +631,31 @@ console.log("artifact revision: per-node progression and supersede linkage fail 
     rev(1, "1.0.0", at(1)), rev(3, "1.1.0", at(2)),
   ], "run-001"), "sequence gap inside a node chain rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:tech-design:3" }),
+    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-design:3" }),
     rev(2, "1.1.0", at(2)),
   ], "run-001"), "supersededBy must point at the next revision of the node");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:tech-design:2" }),
+    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-design:2" }),
   ], "run-001"), "superseded chain tip without a successor rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
     rev(1, "1.0.0", at(1)), rev(2, "1.1.0", at(2), { requirementId: "req-002" }),
   ], "run-001"), "mixed Requirement identities rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev(1, "1.0.0", at(1), { runId: "run-002", revisionId: "run-002:revision:tech-design:1" }),
+    rev(1, "1.0.0", at(1), { runId: "run-002", revisionId: "run-002:revision:solution-design:1" }),
   ], "run-001"), "run identity mismatch rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    rev(1, "1.0.0", at(1)), rev(1, "1.1.0", at(2), { nodeId: "solution-challenge" }),
+    rev(1, "1.0.0", at(1)), rev(1, "1.1.0", at(2), { nodeId: "solution-gate" }),
     rev(1, "1.2.0", at(3)),
   ], "run-001"), "interleaved node groups rejected");
-  const dangling = rev(1, "1.0.0", at(1), { nodeId: "solution-challenge" });
+  const dangling = rev(1, "1.0.0", at(1), { nodeId: "solution-gate" });
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
-    Object.freeze({ ...dangling, upstreamRevisionIds: Object.freeze(["run-001:revision:tech-design:9"]) }) as LoopArtifactRevision,
+    Object.freeze({ ...dangling, upstreamRevisionIds: Object.freeze(["run-001:revision:solution-design:9"]) }) as LoopArtifactRevision,
   ], "run-001"), "dangling upstream reference rejected");
   expectThrow("INVALID_INPUT", () => validateLoopArtifactRevisionChain([
     rev(1, "1.0.0", at(1)), rev(2, "1.1.0", at(2)),
   ], "run-001"), "a non-terminal revision still ACTIVE rejected");
   validateLoopArtifactRevisionChain([
-    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:tech-design:2" }),
+    rev(1, "1.0.0", at(1), { validity: "SUPERSEDED", supersededBy: "run-001:revision:solution-design:2" }),
     rev(2, "1.1.0", at(2)),
   ], "run-001");
   assert(true, "superseded history with an active tip passes validation");
@@ -607,11 +670,11 @@ console.log("artifact revision: supersede transition is validated as the post-tr
 {
   const at = (offset: number) => new Date(Date.parse(TS) + offset * 1000).toISOString();
   const first = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded", createdAt: at(1),
   }));
   const second = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("e"),
+    nodeId: "solution-design", sequence: 2, semver: "1.1.0", digest: dg("e"),
     producerExecutionId: "run-001:capability:9:succeeded", createdAt: at(2),
   }));
   const superseded = supersedeArtifactRevision(first, second.revisionId);
@@ -630,7 +693,7 @@ console.log("artifact revision: supersede transition is validated as the post-tr
     "stale revision cannot be superseded (no STALE → SUPERSEDED edge)");
   expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(superseded, second.revisionId),
     "superseded revision cannot be superseded again");
-  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(first, "run-001:revision:tech-design:9"),
+  expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(first, "run-001:revision:solution-design:9"),
     "supersede successor must be the next revision of the node");
   expectThrow("INVALID_INPUT", () => supersedeArtifactRevision(new Proxy(first, {}), second.revisionId),
     "Proxy previous revision rejected");
@@ -643,7 +706,7 @@ withRunningStore((store) => {
   const appended = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
     producerExecutionId: intake.executionEventId,
-    stablePath: "00-需求资料/req-001_需求摘要.md",
+    stablePath: "library/req-001/00-需求资料/req-001_需求摘要.md",
   })));
   assert(appended.appended === true, "first revision appended");
   const listed = store.listArtifactRevisions("run-001");
@@ -651,7 +714,7 @@ withRunningStore((store) => {
   const current = store.getCurrentArtifactRevision("run-001", "requirement-intake");
   assert(current !== undefined && current.revisionId === "run-001:revision:requirement-intake:1",
     "current pointer targets the appended revision");
-  assert(store.getCurrentArtifactRevision("run-001", "tech-design") === undefined,
+  assert(store.getCurrentArtifactRevision("run-001", "solution-design") === undefined,
     "a node without revisions has no current revision");
   expectThrow("INVALID_INPUT", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 2, semver: "9.9.9", digest: dg("9"),
@@ -662,11 +725,11 @@ withRunningStore((store) => {
 });
 withStore((store) => {
   expectThrow("RUN_NOT_FOUND", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   }))), "revision for a missing run rejected");
   assert(store.listArtifactRevisions("run-404").length === 0, "unknown run lists no revisions");
-  assert(store.getCurrentArtifactRevision("run-404", "tech-design") === undefined,
+  assert(store.getCurrentArtifactRevision("run-404", "solution-design") === undefined,
     "unknown run has no current revision");
 });
 
@@ -674,14 +737,14 @@ console.log("artifact revision: producer execution binding rejects any drift");
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const bind = (o: Partial<RevisionDraftOptions>) => () => store.appendArtifactRevision(
     createLoopArtifactRevision(revisionDraft({
-      nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+      nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
       producerExecutionId: design.executionEventId, ...o,
     })),
   );
-  expectThrow("ILLEGAL_TRANSITION", bind({ nodeId: "solution-challenge" }),
+  expectThrow("ILLEGAL_TRANSITION", bind({ nodeId: "solution-gate" }),
     "revision node mismatching the producer capability rejected");
   expectThrow("ILLEGAL_TRANSITION", bind({ digest: dg("e") }),
     "revision ref/digest drift from the producer output rejected");
@@ -708,24 +771,22 @@ withRunningStore((store) => {
   // claiming a passing Gate for it must be rejected.
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("tech-design", DESIGN_OUT);
-  driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
-  const review = driver.succeed("solution-review", { version: "1.0.0", digest: dg("f") }, "FAIL");
+  driver.succeed("solution-design", DESIGN_OUT);
+  const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "FAIL");
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("f"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: review.executionEventId, gateResult: "PASS",
   }))), "revision claiming PASS for a FAIL Gate execution rejected");
 });
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("tech-design", DESIGN_OUT);
-  driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
-  const review = driver.succeed("solution-review", { version: "1.0.0", digest: dg("f") }, "PASS_WITH_RISK");
+  driver.succeed("solution-design", DESIGN_OUT);
+  const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "PASS_WITH_RISK");
   const appended = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("f"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: review.executionEventId, gateResult: "PASS_WITH_RISK",
-    stablePath: "02-方案审核/req-001_方案审核.md",
+    stablePath: "library/req-001/02-方案审核/req-001_方案审核.md",
   })));
   assert(appended.appended === true && appended.record.gateResult === "PASS_WITH_RISK",
     "Gate revision bound to a PASS_WITH_RISK execution appended");
@@ -745,7 +806,7 @@ withRunningStore((store) => {
   assert(store.listArtifactRevisions("run-001").length === 1, "replay leaves a single persisted revision");
   const sameIdDifferent = createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
-    producerExecutionId: intake.executionEventId, stablePath: "00-需求资料/other.md",
+    producerExecutionId: intake.executionEventId, stablePath: "library/req-001/00-需求资料/other.md",
   }));
   expectThrow("EVENT_ID_CONFLICT", () => store.appendArtifactRevision(sameIdDifferent),
     "same revision id with different content rejected");
@@ -773,7 +834,7 @@ console.log("artifact revision: concurrent writers use CAS/conflict semantics");
       "concurrent identical candidate replays idempotently");
     const loser = createLoopArtifactRevision(revisionDraft({
       nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
-      producerExecutionId: intake.executionEventId, stablePath: "00-需求资料/loser.md",
+      producerExecutionId: intake.executionEventId, stablePath: "library/req-001/00-需求资料/loser.md",
     }));
     expectThrow("EVENT_ID_CONFLICT", () => storeB.appendArtifactRevision(loser),
       "concurrent different content on the same revision id conflicts");
@@ -792,16 +853,16 @@ console.log("artifact revision: same-node advance requires WP4-era execution evi
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", { version: "1.0.0", digest: dg("9") });
+  const design = driver.succeed("solution-design", { version: "1.0.0", digest: dg("9") });
   const first = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
   }));
   assert(store.appendArtifactRevision(first).appended === true, "first revision appended");
   const probe = new Database(join(dir, "journal.db"), { readonly: true });
   const pointerRow = probe.prepare(
     "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
-  ).get("run-001", "tech-design") as { revision_id: string };
+  ).get("run-001", "solution-design") as { revision_id: string };
   probe.close();
   assert(pointerRow.revision_id === first.revisionId, "persisted pointer row targets the revision");
   const replay = store.appendArtifactRevision(first);
@@ -813,16 +874,16 @@ withRunningStore((store, dir) => {
   // semver to the current revision and cannot advance. The real path is the
   // WP4 re-execution chain extension.
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 2, semver: "1.1.0", digest: dg("d"),
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
   }))), "revision claiming an output the producer never produced rejected");
   expectThrow("EVENT_SEQUENCE_CONFLICT", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 2, semver: "1.0.0", digest: dg("9"),
+    nodeId: "solution-design", sequence: 2, semver: "1.0.0", digest: dg("9"),
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
   }))), "producer-pinned candidate semver is already occupied by the current revision");
   const chain = store.listArtifactRevisions("run-001");
   assert(chain.length === 1 && chain[0]!.validity === "ACTIVE", "rejected advances leave the chain untouched");
-  const current = store.getCurrentArtifactRevision("run-001", "tech-design");
+  const current = store.getCurrentArtifactRevision("run-001", "solution-design");
   assert(current !== undefined && current.revisionId === first.revisionId && current.validity === "ACTIVE",
     "current pointer still targets the first revision");
 });
@@ -843,17 +904,17 @@ withRunningStore((store) => {
   const intake = driver.succeed("requirement-intake", INTAKE_OUT);
   const intakeRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
-    producerExecutionId: intake.executionEventId, stablePath: "00-需求资料/req-001_需求摘要.md",
+    producerExecutionId: intake.executionEventId, stablePath: "library/req-001/00-需求资料/req-001_需求摘要.md",
   }))).record;
-  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const withUpstream = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
     producerExecutionId: design.executionEventId,
     upstreamRevisionIds: [intakeRevision.revisionId],
   })));
   assert(withUpstream.appended === true, "revision consuming the current upstream appended");
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 9, semver: "9.9.9", digest: dg("8"),
+    nodeId: "solution-design", sequence: 9, semver: "9.9.9", digest: dg("8"),
     producerExecutionId: design.executionEventId,
     upstreamRevisionIds: ["run-001:revision:requirement-intake:9"],
   }))), "nonexistent upstream revision rejected");
@@ -863,15 +924,15 @@ withRunningStore((store) => {
   // revision can never be consumed as an upstream.
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const designRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
     producerExecutionId: design.executionEventId,
   }))).record;
   store.markArtifactRevisionStale("run-001", designRevision.revisionId);
-  const challenge = driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
+  const challenge = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("e") });
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-challenge", sequence: 1, semver: "1.0.0", digest: dg("e"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("e"),
     producerExecutionId: challenge.executionEventId,
     upstreamRevisionIds: [designRevision.revisionId],
   }))), "stale upstream revision rejected even while still the pointer target");
@@ -894,7 +955,7 @@ withRunningStore((store) => {
   assert(chain.length === 1 && chain[0]!.validity === "STALE", "stale revision remains auditable in the chain");
   expectThrow("STORE_CORRUPT", () => store.getCurrentArtifactRevision("run-001", "requirement-intake"),
     "current read fails closed while the pointer targets a non-active revision");
-  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:tech-design:1"),
+  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:solution-design:1"),
     "marking a nonexistent revision rejected");
   expectThrow("INVALID_INPUT", () => store.markArtifactRevisionStale("run-001\x05", revision.revisionId),
     "mark input validated fail-closed");
@@ -906,10 +967,10 @@ withStore((store) => {
   store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
   store.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1 }));
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   }))), "revision rejected while a delivery stage is active");
-  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:tech-design:1"),
+  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:solution-design:1"),
     "stale marking rejected while a delivery stage is active");
 });
 withStore((store) => {
@@ -926,10 +987,10 @@ withStore((store) => {
   store.createRun(makeIdentity());
   store.appendEvent(makeEvent({ sequence: 2, kind: "run_failed", errorCode: "X" }));
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   }))), "terminal run must not accept revisions");
-  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:tech-design:1"),
+  expectThrow("ILLEGAL_TRANSITION", () => store.markArtifactRevisionStale("run-001", "run-001:revision:solution-design:1"),
     "terminal run must not accept stale markings");
 });
 
@@ -967,7 +1028,7 @@ withRunningStore((store, dir) => {
   const db = new Database(join(dir, "journal.db"));
   try {
     db.prepare("UPDATE loop_artifact_revisions SET requirement_id = ?, canonical_sha256 = ? WHERE revision_id = ?")
-      .run("req-002", createHash("sha256").update(canonicalizeLoopArtifactRevision(tampered)).digest("hex"), revision.revisionId);
+      .run("req-002", hashRevisionWithoutValidation(tampered), revision.revisionId);
   } finally {
     db.close();
   }
@@ -1003,13 +1064,13 @@ withRunningStore((store, dir) => {
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const intake = driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const intakeRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
-    producerExecutionId: intake.executionEventId, stablePath: "00-需求资料/req-001_需求摘要.md",
+    producerExecutionId: intake.executionEventId, stablePath: "library/req-001/00-需求资料/req-001_需求摘要.md",
   }))).record;
   const designRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
     producerExecutionId: design.executionEventId,
     upstreamRevisionIds: [intakeRevision.revisionId],
   }))).record;
@@ -1058,7 +1119,7 @@ withRunningStore((store, dir) => {
         canonical_sha256
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      "run-001:revision:tech-design:1", "run-001", "req-001", "tech-design", 1, 1,
+      "run-001:revision:solution-design:1", "run-001", "req-001", "solution-design", 1, 1,
       null, "01-技术方案/forged.md", "capability_output", "1.0.0",
       `loop-artifact:v1:capability_output:sha256:${dg("7")}`, dg("7"),
       "run-001:capability:99:succeeded", "NOT_APPLICABLE", "ACTIVE", null,
@@ -1116,7 +1177,7 @@ withRunningStore((store, dir) => {
   }))).record;
   const tampered = Object.freeze({
     ...revision,
-    artifactRef: `loop-artifact:v1:capability_output:sha256:${dg("7")}`,
+    artifactRef: `loop-artifact:v1:requirement_summary:sha256:${dg("7")}`,
     digest: dg("7"),
   }) as LoopArtifactRevision;
   tamperRevisionWithRehash(dir, revision.revisionId, tampered);
@@ -1138,33 +1199,70 @@ withRunningStore((store, dir) => {
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("tech-design", DESIGN_OUT);
-  driver.succeed("solution-challenge", { version: "1.0.0", digest: dg("e") });
-  const review = driver.succeed("solution-review", { version: "1.0.0", digest: dg("f") }, "PASS");
+  driver.succeed("solution-design", DESIGN_OUT);
+  const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "PASS");
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("f"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: review.executionEventId, gateResult: "PASS",
   }))).record;
   const tampered = Object.freeze({ ...revision, gateResult: "PASS_WITH_RISK" }) as LoopArtifactRevision;
   tamperRevisionWithRehash(dir, revision.revisionId, tampered);
-  expectCorruptOnAllReadPaths(store, "solution-review",
+  expectCorruptOnAllReadPaths(store, "solution-gate",
     "rehashed revision with a drifted Gate result rejected");
 });
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("tech-design", DESIGN_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
     producerExecutionId: design.executionEventId,
   }))).record;
   const tampered = Object.freeze({
     ...revision,
-    revisionId: "run-001:revision:solution-challenge:1",
-    nodeId: "solution-challenge",
+    stablePath: "library/req-001/01-技术方案/../02-方案审核/escape.md",
   }) as LoopArtifactRevision;
   tamperRevisionWithRehash(dir, revision.revisionId, tampered);
-  expectCorruptOnAllReadPaths(store, "tech-design",
+  expectCorruptOnAllReadPaths(store, "solution-design",
+    "rehashed traversal-shaped stable path rejected on every read path");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  driver.succeed("requirement-intake", INTAKE_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    producerExecutionId: design.executionEventId,
+  }))).record;
+  const tampered = Object.freeze({
+    ...revision,
+    stablePath: "library/req-002/01-技术方案/req-002_solution-design.md",
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "solution-design",
+    "rehashed foreign-requirement stable path rejected on every read path");
+});
+withRunningStore((store, dir) => {
+  const driver = makeCapabilityDriver(store, "run-001");
+  driver.succeed("requirement-intake", INTAKE_OUT);
+  const design = driver.succeed("solution-design", DESIGN_OUT);
+  const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
+    nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
+    producerExecutionId: design.executionEventId,
+  }))).record;
+  // Rebinding must also carry the target node's product kind/path so the
+  // tampered row is internally consistent; only the producer-binding and
+  // node cross-checks on the read path can reject it.
+  const tampered = Object.freeze({
+    ...revision,
+    revisionId: "run-001:revision:task-planning:1",
+    nodeId: "task-planning",
+    artifactKind: "task_plan",
+    stablePath: "library/req-001/03-任务规划/req-001_task-planning.md",
+    artifactRef: `loop-artifact:v1:task_plan:sha256:${revision.digest}`,
+  }) as LoopArtifactRevision;
+  tamperRevisionWithRehash(dir, revision.revisionId, tampered);
+  expectCorruptOnAllReadPaths(store, "solution-design",
     "rehashed revision rebound to another node rejected");
 });
 
@@ -1206,13 +1304,13 @@ console.log("artifact revision: another entry reads the same revision authority"
 console.log("artifact revision: manifest Artifact Index cross-binding");
 {
   const designRevision = createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
-    stablePath: "01-技术方案/req-001_技术方案.md",
+    stablePath: "library/req-001/01-技术方案/req-001_技术方案.md",
   }));
   const row = (o?: Record<string, unknown>) => Object.freeze({
     node: "01 技术方案",
-    stablePath: "01-技术方案/req-001_技术方案.md",
+    stablePath: "library/req-001/01-技术方案/req-001_技术方案.md",
     version: "1.0.0",
     status: "active",
     result: "",
@@ -1234,8 +1332,19 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
   }));
   assert(stop(crossBindArtifactIndexRow(row(), intakeRevision)) === "NODE_MISMATCH",
     "revision of another node is a STOP diagnosis");
-  assert(stop(crossBindArtifactIndexRow(row({ stablePath: "01-技术方案/other.md" }), designRevision)) === "STABLE_PATH_DRIFT",
+  assert(stop(crossBindArtifactIndexRow(row({ stablePath: "library/req-001/01-技术方案/other.md" }), designRevision)) === "STABLE_PATH_DRIFT",
     "stable path drift is a STOP diagnosis");
+  assert(stop(crossBindArtifactIndexRow(
+    row({ stablePath: "library/req-001/03-任务规划/../01-技术方案/escape.md" }),
+    designRevision,
+  )) === "STABLE_PATH_DRIFT", "a traversal-shaped manifest stable path cannot bind");
+  expectThrow("INVALID_INPUT", () => crossBindArtifactIndexRow(
+    row(),
+    Object.freeze({
+      ...designRevision,
+      stablePath: "library/req-001/01-技术方案/../02-方案审核/escape.md",
+    }) as LoopArtifactRevision,
+  ), "cross-binding fails closed when the journal current carries an escape path");
   assert(stop(crossBindArtifactIndexRow(row({ version: "1.0.1" }), designRevision)) === "VERSION_DRIFT",
     "version drift is a STOP diagnosis");
   assert(stop(crossBindArtifactIndexRow(row({ status: "stale" }), designRevision)) === "STATUS_DRIFT",
@@ -1246,13 +1355,13 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
   assert(stop(crossBindArtifactIndexRow(row({ status: "active" }), staleRevision)) === "STATUS_DRIFT",
     "stale revision against an active manifest status is a STOP diagnosis");
   const reviewRevision = createLoopArtifactRevision(revisionDraft({
-    nodeId: "solution-review", sequence: 1, semver: "1.0.0", digest: dg("f"),
+    nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: "run-001:capability:8:succeeded", gateResult: "PASS",
-    stablePath: "02-方案审核/req-001_方案审核.md",
+    stablePath: "library/req-001/02-方案审核/req-001_方案审核.md",
   }));
   const gateRow = (o?: Record<string, unknown>) => Object.freeze({
     node: "02 方案审核",
-    stablePath: "02-方案审核/req-001_方案审核.md",
+    stablePath: "library/req-001/02-方案审核/req-001_方案审核.md",
     version: "1.0.0",
     status: "active",
     result: "PASS",
@@ -1279,12 +1388,12 @@ console.log("artifact revision: closed store behavior");
   store.init();
   store.close();
   expectThrow("STORE_CLOSED", () => store.listArtifactRevisions("run-001"), "closed store raises STORE_CLOSED");
-  expectThrow("STORE_CLOSED", () => store.getCurrentArtifactRevision("run-001", "tech-design"),
+  expectThrow("STORE_CLOSED", () => store.getCurrentArtifactRevision("run-001", "solution-design"),
     "closed store current read raises STORE_CLOSED");
-  expectThrow("STORE_CLOSED", () => store.markArtifactRevisionStale("run-001", "run-001:revision:tech-design:1"),
+  expectThrow("STORE_CLOSED", () => store.markArtifactRevisionStale("run-001", "run-001:revision:solution-design:1"),
     "closed store stale marking raises STORE_CLOSED");
   expectThrow("STORE_CLOSED", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "tech-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
+    nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
     producerExecutionId: "run-001:capability:4:succeeded",
   }))), "closed store append raises STORE_CLOSED");
   rmSync(dir, { recursive: true, force: true });
@@ -1605,7 +1714,7 @@ function blobPath(dir: string, kind: string, digest: string): string {
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
     const driver = makeCapabilityDriver(store, "run-001");
-    const stored = artifactStore.put("capability_output", "requirement-intake output v1");
+    const stored = artifactStore.put("requirement_summary", "requirement-intake output v1");
     const producer = driver.succeed("requirement-intake", { version: "1.0.0", digest: stored.digest });
     const revision = createLoopArtifactRevision(revisionDraft({
       nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
@@ -1615,7 +1724,7 @@ function blobPath(dir: string, kind: string, digest: string): string {
       "revision with an existing blob appended");
     assert(store.getCurrentArtifactRevision("run-001", "requirement-intake")?.revisionId === revision.revisionId,
       "current read resolves while the blob exists");
-    unlinkSync(blobPath(dir, "capability_output", stored.digest));
+    unlinkSync(blobPath(dir, "requirement_summary", stored.digest));
     expectCorruptOnAllReadPaths(store, "requirement-intake", "blob deleted after append fails closed");
     expectThrow("STORE_CORRUPT", () => store.markArtifactRevisionStale("run-001", revision.revisionId),
       "stale marking after blob loss fails closed");
@@ -1628,8 +1737,12 @@ function blobPath(dir: string, kind: string, digest: string): string {
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
     const driver = makeCapabilityDriver(store, "run-001");
-    const stored = artifactStore.put("capability_output", "tech-design output v1");
-    writeFileSync(blobPath(dir, "capability_output", stored.digest), "tampered bytes");
+    const stored = artifactStore.put("technical_design", "solution-design output v1");
+    // The revision will reference the requirement_summary kind directory;
+    // seed a tampered blob there (the directory may not exist yet).
+    mkdirSync(join(dir, "control", "artifacts", "v1", "requirement_summary", stored.digest.slice(0, 2)),
+      { recursive: true });
+    writeFileSync(blobPath(dir, "requirement_summary", stored.digest), "tampered bytes");
     const producer = driver.succeed("requirement-intake", { version: "1.0.0", digest: stored.digest });
     const revision = createLoopArtifactRevision(revisionDraft({
       nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
@@ -1645,24 +1758,24 @@ function blobPath(dir: string, kind: string, digest: string): string {
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
     const driver = makeCapabilityDriver(store, "run-001");
-    const storedIntake = artifactStore.put("capability_output", "requirement-intake output v1");
+    const storedIntake = artifactStore.put("requirement_summary", "requirement-intake output v1");
     const intakeProducer = driver.succeed("requirement-intake", { version: "1.0.0", digest: storedIntake.digest });
     const intakeRevision = createLoopArtifactRevision(revisionDraft({
       nodeId: "requirement-intake", sequence: 1, semver: "1.0.0",
       digest: storedIntake.digest, producerExecutionId: intakeProducer.executionEventId,
     }));
     store.appendArtifactRevision(intakeRevision);
-    const storedDesign = artifactStore.put("capability_output", "tech-design output v1");
-    const designProducer = driver.succeed("tech-design", { version: "1.0.0", digest: storedDesign.digest });
+    const storedDesign = artifactStore.put("technical_design", "solution-design output v1");
+    const designProducer = driver.succeed("solution-design", { version: "1.0.0", digest: storedDesign.digest });
     const designRevision = createLoopArtifactRevision(revisionDraft({
-      nodeId: "tech-design", sequence: 1, semver: "1.0.0",
+      nodeId: "solution-design", sequence: 1, semver: "1.0.0",
       digest: storedDesign.digest, producerExecutionId: designProducer.executionEventId,
       upstreamRevisionIds: [intakeRevision.revisionId],
     }));
     assert(store.appendArtifactRevision(designRevision).appended === true,
       "downstream revision with existing blobs appended");
     assert(store.listArtifactRevisions("run-001").length === 2, "bound read path lists both revisions");
-    assert(store.getCurrentArtifactRevision("run-001", "tech-design")?.revisionId === designRevision.revisionId,
+    assert(store.getCurrentArtifactRevision("run-001", "solution-design")?.revisionId === designRevision.revisionId,
       "bound current read resolves the downstream revision");
   });
 }

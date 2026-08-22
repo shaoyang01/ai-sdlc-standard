@@ -25,21 +25,52 @@ export const LOOP_FINDING_SCHEMA_VERSION = 1 as const;
 export const LOOP_FINDING_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type LoopFindingSeverity = (typeof LOOP_FINDING_SEVERITIES)[number];
 
-export const LOOP_FINDING_CATEGORIES = ["REQUIREMENT", "SOLUTION", "IMPLEMENTATION", "REVIEW", "TEST"] as const;
+export const LOOP_FINDING_CATEGORIES = [
+  "REQUIREMENT",
+  "SOLUTION",
+  "PLANNING",
+  "IMPLEMENTATION",
+  "REVIEW",
+  "KNOWLEDGE",
+] as const;
 export type LoopFindingCategory = (typeof LOOP_FINDING_CATEGORIES)[number];
 
 export const LOOP_FINDING_STATUSES = ["OPEN", "RESOLVED", "ACCEPTED_RISK", "SUPERSEDED"] as const;
 export type LoopFindingStatus = (typeof LOOP_FINDING_STATUSES)[number];
 
-// The five-category routing matrix (contract §2): a finding's category must
-// bind to the capability that produced it; any other pairing fails closed.
+// The six-category routing matrix (v2 contract §2, A3): a finding's category
+// expresses the problem layer (root cause), not where it was found. Allowed
+// source capabilities for a category are the canonical chain suffix starting
+// at the category's canonical earliest affected node — a problem layer cannot
+// be discovered before the node that produces it (e.g. a SOLUTION finding can
+// surface at implementation/code-review, but never at requirement-intake).
+// Any other pairing fails closed. TEST no longer exists as a category:
+// offline test and online feedback are external change input that re-enters
+// via requirement-intake (changeKind=FEEDBACK_DRIVEN_CHANGE), not findings of
+// a test-validation node.
 export const LOOP_FINDING_CATEGORY_CAPABILITIES: Readonly<Record<LoopFindingCategory, readonly NodeCapabilityId[]>> =
   Object.freeze({
-    REQUIREMENT: Object.freeze(["requirement-intake"] as const),
-    SOLUTION: Object.freeze(["tech-design", "solution-challenge", "solution-review"] as const),
-    IMPLEMENTATION: Object.freeze(["implementation"] as const),
-    REVIEW: Object.freeze(["code-review"] as const),
-    TEST: Object.freeze(["test-validation"] as const),
+    REQUIREMENT: Object.freeze(NODE_CAPABILITY_IDS.slice(0) as readonly NodeCapabilityId[]),
+    SOLUTION: Object.freeze(NODE_CAPABILITY_IDS.slice(1) as readonly NodeCapabilityId[]),
+    PLANNING: Object.freeze(NODE_CAPABILITY_IDS.slice(3) as readonly NodeCapabilityId[]),
+    IMPLEMENTATION: Object.freeze(NODE_CAPABILITY_IDS.slice(4) as readonly NodeCapabilityId[]),
+    REVIEW: Object.freeze(NODE_CAPABILITY_IDS.slice(5) as readonly NodeCapabilityId[]),
+    KNOWLEDGE: Object.freeze(NODE_CAPABILITY_IDS.slice(6) as readonly NodeCapabilityId[]),
+  });
+
+// The unique canonical earliest affected node per category (v2 contract §2,
+// A3): the invalidation origin is fixed by the problem layer, never chosen by
+// the caller. `earliestAffectedNodeId` must equal this value on creation;
+// failing closed prevents a caller from shrinking the invalidation start to a
+// downstream node.
+export const LOOP_FINDING_CATEGORY_EARLIEST_NODE: Readonly<Record<LoopFindingCategory, NodeCapabilityId>> =
+  Object.freeze({
+    REQUIREMENT: "requirement-intake",
+    SOLUTION: "solution-design",
+    PLANNING: "task-planning",
+    IMPLEMENTATION: "implementation",
+    REVIEW: "code-review",
+    KNOWLEDGE: "knowledge-sync",
   });
 
 export const LOOP_FINDING_GATE_STATUSES = ["ELIGIBLE", "BLOCKED"] as const;
@@ -377,6 +408,11 @@ export function validateLoopFinding(value: unknown): void {
   }
   evidenceReference(record.evidenceRef, record.evidenceDigest, "evidence");
   const earliestAffectedNodeId = nodeCapabilityId(record.earliestAffectedNodeId, "earliestAffectedNodeId");
+  // The earliest affected node is the category's unique canonical node (A3):
+  // the caller must not shrink the invalidation origin to a downstream node.
+  if (earliestAffectedNodeId !== LOOP_FINDING_CATEGORY_EARLIEST_NODE[category]) {
+    invalid("earliestAffectedNodeId must equal the canonical earliest node of the category");
+  }
   if (nodeIndex(earliestAffectedNodeId) > nodeIndex(sourceCapability)) {
     invalid("earliestAffectedNodeId must not follow the source capability");
   }

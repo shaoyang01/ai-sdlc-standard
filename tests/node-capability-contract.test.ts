@@ -32,13 +32,14 @@ const AGENT_NAMES = ["kimi", "codex", "hermes", "claude", "gpt"];
 const CONTRACT_FIELDS = [
   "capability",
   "title",
+  "executionRoles",
   "inputArtifacts",
   "outputArtifact",
   "gate",
   "sideEffectBoundary",
   "prohibited",
 ] as const;
-const ARRAY_FIELDS = new Set(["inputArtifacts", "prohibited"]);
+const ARRAY_FIELDS = new Set(["executionRoles", "inputArtifacts", "prohibited"]);
 
 function stripBackticks(value: string): string {
   return value.replace(/`/g, "");
@@ -61,7 +62,7 @@ function parseDocumentContracts(mdPath: string): NodeCapabilityContract[] {
 function parseBlock(block: string): NodeCapabilityContract {
   const contract: Record<string, unknown> = {};
   const seen = new Set<string>();
-  let currentArrayKey: "inputArtifacts" | "prohibited" | null = null;
+  let currentArrayKey: "executionRoles" | "inputArtifacts" | "prohibited" | null = null;
   for (const rawLine of block.split("\n")) {
     const line = rawLine.trimEnd();
     if (line.trim().length === 0) continue;
@@ -77,7 +78,7 @@ function parseBlock(block: string): NodeCapabilityContract {
       throw new Error(`unparseable contract line: ${line}`);
     }
     const key = field[1];
-    // Fail-closed: only the seven canonical fields, each exactly once.
+    // Fail-closed: only the canonical fields, each exactly once.
     if (!CONTRACT_FIELDS.includes(key as (typeof CONTRACT_FIELDS)[number])) {
       throw new Error(`unknown contract field: ${key}`);
     }
@@ -87,7 +88,7 @@ function parseBlock(block: string): NodeCapabilityContract {
     seen.add(key);
     const value = field[2].trim();
     if (ARRAY_FIELDS.has(key)) {
-      currentArrayKey = key as "inputArtifacts" | "prohibited";
+      currentArrayKey = key as "executionRoles" | "inputArtifacts" | "prohibited";
       contract[key] = [];
     } else {
       currentArrayKey = null;
@@ -110,6 +111,22 @@ for (const id of NODE_CAPABILITY_IDS) {
   assert(/^[a-z]+(-[a-z]+)*$/.test(id), `id ${id} matches lowercase-dash format`);
 }
 
+console.log("node capability: execution role shape");
+{
+  const byCapability = new Map(NODE_CAPABILITY_CONTRACTS.map((c) => [c.capability, c.executionRoles]));
+  assert(
+    JSON.stringify(byCapability.get("solution-gate")) === JSON.stringify(["adversarial_scan", "formal_verdict"]),
+    "solution-gate carries exactly [adversarial_scan, formal_verdict]",
+  );
+  for (const id of NODE_CAPABILITY_IDS) {
+    if (id === "solution-gate") continue;
+    assert(
+      JSON.stringify(byCapability.get(id)) === JSON.stringify(["primary"]),
+      `${id} carries exactly [primary]`,
+    );
+  }
+}
+
 console.log("node capability: document §4 ↔ projection deep comparison");
 {
   const docPath = resolve(process.cwd(), "ai-sdlc/node-capability-contract.md");
@@ -122,6 +139,10 @@ console.log("node capability: document §4 ↔ projection deep comparison");
     const label = `contract ${proj.capability}`;
     assert(proj.capability === doc.capability, `${label}: capability matches document`);
     assert(proj.title === doc.title, `${label}: title matches document`);
+    assert(
+      JSON.stringify(proj.executionRoles) === JSON.stringify(doc.executionRoles),
+      `${label}: executionRoles matches document`,
+    );
     assert(
       JSON.stringify(proj.inputArtifacts) === JSON.stringify(doc.inputArtifacts),
       `${label}: inputArtifacts matches document`,
@@ -140,15 +161,17 @@ console.log("node capability: parser is fail-closed");
 {
   const fullBlock = [
     "capability:          requirement-intake",
-    "title:               需求归一化",
+    "title:               需求归一化与反馈分类",
+    "executionRoles:",
+    "  - primary",
     "inputArtifacts:",
-    "  - 需求来源（对话/飞书/HTML/Markdown/PDF/截图）",
+    "  - 需求来源（对话/飞书/HTML/Markdown/PDF/截图/测试反馈）",
     "outputArtifact:      library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md",
-    "gate:                入口义务完成（Entry Contract §3）；业务目标可识别",
+    "gate:                入口义务完成（Entry Contract §3）；业务目标可识别；change record 已建立（新需求/补充/变更/返工/反馈）",
     "sideEffectBoundary:  创建/恢复运行记录（run journal）；写入 00-需求资料",
     "prohibited:",
     "  - 生成技术方案",
-    "  - 决定开发路径",
+    "  - 裁决设计深度",
     "  - 修改生产代码、specs/**、.specify/**",
   ].join("\n");
 
@@ -188,6 +211,7 @@ console.log("node capability: projection completeness (non-empty fields)");
 for (const contract of NODE_CAPABILITY_CONTRACTS) {
   const label = `contract ${contract.capability}`;
   assert(contract.title.trim().length > 0, `${label}: title non-empty`);
+  assert(contract.executionRoles.length > 0, `${label}: executionRoles non-empty`);
   assert(contract.inputArtifacts.length > 0, `${label}: inputArtifacts non-empty`);
   assert(contract.outputArtifact.trim().length > 0, `${label}: outputArtifact non-empty`);
   assert(contract.gate.trim().length > 0, `${label}: gate non-empty`);
@@ -203,6 +227,7 @@ for (const contract of NODE_CAPABILITY_CONTRACTS) {
     contract.outputArtifact,
     contract.gate,
     contract.sideEffectBoundary,
+    ...contract.executionRoles,
     ...contract.inputArtifacts,
     ...contract.prohibited,
   ];

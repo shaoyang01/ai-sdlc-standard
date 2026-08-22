@@ -55,7 +55,7 @@ export interface LoopCapabilityEntryResult {
   requirementId: string;
   recovered: boolean;
   capability: NodeCapabilityId;
-  nodeId: RuntimeCapabilityExecutionPoint;
+  nodeId: NodeCapabilityId;
   attempt: number;
   execution: ExecutionResult;
   recoveryContext: RunRecoveryContext;
@@ -90,7 +90,7 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("INVALID_INPUT", "capability entry request fields are invalid");
     }
     validateRequirementId(request.requirementId);
-    const nodeId = runtimeExecutionPointForCapability(request.capability);
+    const nodeId = request.capability;
     if (request.identity !== undefined) {
       if (utilTypes.isProxy(request.identity)) {
         throw new LoopRunJournalError("INVALID_INPUT", "run identity must not be a Proxy");

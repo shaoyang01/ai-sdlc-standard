@@ -77,10 +77,10 @@ function identity(root: string, suffix: string): LoopRunIdentity {
 function qualifiedResult(request: ExecutionRequest, findings: readonly unknown[] = []): ExecutionResult {
   const capability = request.type as NodeCapabilityId;
   const output: Record<string, unknown> = { result: "capability_completed" };
-  if (capability === "solution-challenge" || capability === "code-review") {
+  if (capability === "solution-gate" || capability === "code-review") {
     output.unresolvedFindings = [...findings];
   }
-  if (capability === "solution-review" || capability === "test-validation") {
+  if (capability === "solution-gate") {
     output.gateResult = "PASS";
   }
   return Object.freeze({
@@ -148,8 +148,8 @@ async function main(): Promise<void> {
   const bindingContractsBefore = INITIAL_BINDING_REGISTRY.bindings.map(({ enabled: _enabled, ...contract }) => contract);
   const replacement = replaceBinding(
     INITIAL_BINDING_REGISTRY,
-    "binding-codex-tech-design",
-    "binding-kimi-tech-design",
+    "binding-codex-solution-design",
+    "binding-kimi-solution-design",
   );
   validateBindingRegistry(replacement.registry);
   ok(true, "replacement snapshot passes the production validator");
@@ -166,10 +166,10 @@ async function main(): Promise<void> {
   ok(NODE_CAPABILITY_CONTRACTS.every((contract) => Object.isFrozen(contract.inputArtifacts) && Object.isFrozen(contract.prohibited)),
     "nested contract arrays are frozen at runtime");
   throws(
-    () => replaceBinding(replacement.registry, "binding-codex-tech-design", "binding-kimi-tech-design"),
+    () => replaceBinding(replacement.registry, "binding-codex-solution-design", "binding-kimi-solution-design"),
     "a disabled source cannot be replayed as a replacement",
   );
-  const drifted = registrySnapshot("2", (binding) => binding.capability === "tech-design" && binding.agent === "codex"
+  const drifted = registrySnapshot("2", (binding) => binding.capability === "solution-design" && binding.agent === "codex"
     ? { ...binding, outputContract: "drifted-contract:v1" }
     : binding);
   throws(() => validateBindingRegistry(drifted), "runtime validation rejects output contract drift");
@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     bindingRegistry: drifted,
     gateway: null as unknown as ExecutionGateway,
   }), "supported entry rejects a drifted registry before any journal can be touched");
-  const gitExpanded = registrySnapshot("2", (binding) => binding.capability === "tech-design" && binding.agent === "codex"
+  const gitExpanded = registrySnapshot("2", (binding) => binding.capability === "solution-design" && binding.agent === "codex"
     ? { ...binding, allowedSideEffects: Object.freeze(["workspace-local-write", "git-push"] as unknown as string[]) }
     : binding);
   throws(() => validateBindingRegistry(gitExpanded), "runtime validation rejects automatic Git side-effect expansion");
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   Object.freeze(accessorBindings);
   throws(() => validateBindingRegistry(Object.freeze({ version: "2", bindings: accessorBindings })),
     "runtime validation rejects accessor elements before invoking them");
-  const overflowingTimeout = registrySnapshot("2", (binding) => binding.bindingId === "binding-codex-tech-design"
+  const overflowingTimeout = registrySnapshot("2", (binding) => binding.bindingId === "binding-codex-solution-design"
     ? { ...binding, timeoutMs: 2_147_483_648 }
     : binding);
   throws(() => validateBindingRegistry(overflowingTimeout), "runtime validation rejects timeout values that Node would clamp");
@@ -226,7 +226,7 @@ async function main(): Promise<void> {
     const kimiRegistry = replacement.registry;
     const unavailable = await entry(runStore, artifactStore, kimiRegistry).execute({
       requirementId: id.requirementId,
-      capability: "tech-design",
+      capability: "solution-design",
       ...techInput,
       outputArtifactVersion: "1.0.0",
       input: { requirementSummaryRef: techInput.inputArtifactRef },
@@ -238,12 +238,12 @@ async function main(): Promise<void> {
     equal(failedTech.errorCode, "EXECUTOR_UNAVAILABLE", "unavailable attempt has a stable journal code");
     ok(failedTech.retryable === true, "retry_other_binding makes the unavailable attempt recoverable");
     ok(failedTech.effectiveOutputArtifactRef === null, "shadow output never becomes an effective artifact");
-    equal(unavailable.recoveryContext.nextCapability, "tech-design", "recovery points to the same capability for retry");
+    equal(unavailable.recoveryContext.nextCapability, "solution-design", "recovery points to the same capability for retry");
 
     const codexRegistry = replaceBinding(
       kimiRegistry,
-      "binding-kimi-tech-design",
-      "binding-codex-tech-design",
+      "binding-kimi-solution-design",
+      "binding-codex-solution-design",
     ).registry;
     let freshDispatches = 0;
     const retry = await entry(runStore, artifactStore, codexRegistry, runner((request) => {
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
       return qualifiedResult(request);
     })).execute({
       requirementId: id.requirementId,
-      capability: "tech-design",
+      capability: "solution-design",
       ...techInput,
       outputArtifactVersion: "1.0.0",
       input: { requirementSummaryRef: techInput.inputArtifactRef },
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
     equal(retry.attempt, 2, "retry is recorded as a new attempt");
     equal(freshDispatches, 1, "retry invokes the selected executor again instead of reusing history");
     ok(retry.execution.success === true, "fresh qualified retry can succeed");
-    const techEvents = runStore.listCapabilityExecutions(id.runId).filter((event) => event.capability === "tech-design");
+    const techEvents = runStore.listCapabilityExecutions(id.runId).filter((event) => event.capability === "solution-design");
     equal(techEvents.map((event) => event.status), ["started", "failed", "started", "succeeded"],
       "history preserves the failed attempt before the successful retry");
     equal(techEvents[0]?.executorAgent, "kimi", "failed attempt preserves the replacement executor snapshot");
@@ -271,7 +271,7 @@ async function main(): Promise<void> {
       { severity: "P1", evidence: "missing failure recovery proof" },
     ]))).execute({
       requirementId: id.requirementId,
-      capability: "solution-challenge",
+      capability: "solution-gate",
       inputArtifactRef: techState.effectiveOutputArtifactRef!,
       inputArtifactVersion: techState.effectiveOutputArtifactVersion!,
       inputDigest: techState.effectiveOutputDigest!,

@@ -102,7 +102,7 @@ async function test() {
   const successResult = await successRunner.run(baseRequest);
   assert(successResult.success === true, "success result returns success");
   assert(successResult.artifacts.length === 1, "success result returns one artifact");
-  assert(successResult.artifacts[0].type === "code_patch", "success artifact is code_patch");
+  assert(successResult.artifacts[0].type === "implementation_record", "success artifact is implementation_record");
   assert(successResult.artifacts[0].content["file"] === "src/generated-real-codex-patch.ts", "success artifact has expected file path");
   assert(successResult.output["result"] === "code_patch_generated", "success output result is code_patch_generated");
   assert(successResult.output["duration_ms"] === 1234, "success output includes duration_ms");

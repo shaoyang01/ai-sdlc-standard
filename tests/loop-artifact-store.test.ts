@@ -1124,7 +1124,7 @@ async function main(): Promise<void> {
         "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
         "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
       ] as const;
-      assert(LOOP_ARTIFACT_KINDS.length === 14, "kind list includes 12 historical and 2 WP-4B kinds");
+      assert(LOOP_ARTIFACT_KINDS.length === 17, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds");
       assert(
         d09a1OriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
         "original ten D01-D08 kinds keep their exact positions",
@@ -1173,7 +1173,7 @@ async function main(): Promise<void> {
         "governance_tail_result",
       ] as const;
       const kindFailuresBefore = failed;
-      assert(LOOP_ARTIFACT_KINDS.length === 14, "kind list includes 12 historical and 2 WP-4B kinds");
+      assert(LOOP_ARTIFACT_KINDS.length === 17, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds");
       assert(
         d10aOriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
         "original eleven D01-D09 kinds keep their exact names and order",

@@ -13,7 +13,7 @@ schema_version: 0.1.0
 project_type_profiles:
   selected:
     - "<backend-business-service|admin-mixed-workflow|frontend-application|data-pipeline-etl|library-shared-component|mixed>"
-  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md"
   selection_basis:
     - "<code-evidence-or-user-confirmed-reason>"
 

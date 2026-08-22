@@ -110,10 +110,10 @@ export function buildCapabilityPrompt(
   inputText: string,
 ): string {
   const outcomeInstructions: string[] = [];
-  if (capability === "solution-review" || capability === "test-validation") {
+  if (capability === "solution-gate") {
     outcomeInstructions.push("End with exactly one line: GATE_RESULT: PASS, FAIL, or PASS_WITH_RISK.");
   }
-  if (capability === "solution-challenge" || capability === "code-review") {
+  if (capability === "solution-gate" || capability === "code-review") {
     outcomeInstructions.push("End with exactly one line: UNRESOLVED_FINDINGS_JSON: <JSON array>.");
   }
   return [
@@ -131,11 +131,11 @@ export function parseCapabilityOutcomeMarkers(
   outputText: string,
 ): Readonly<Record<string, unknown>> {
   const outcome: Record<string, unknown> = Object.create(null);
-  if (capability === "solution-review" || capability === "test-validation") {
+  if (capability === "solution-gate") {
     const matches = [...outputText.matchAll(/^GATE_RESULT: (PASS|FAIL|PASS_WITH_RISK)$/gm)];
     if (matches.length === 1) outcome.gateResult = matches[0]![1];
   }
-  if (capability === "solution-challenge" || capability === "code-review") {
+  if (capability === "solution-gate" || capability === "code-review") {
     const matches = [...outputText.matchAll(/^UNRESOLVED_FINDINGS_JSON: (.+)$/gm)];
     if (matches.length === 1) {
       try {
@@ -151,10 +151,10 @@ export function parseCapabilityOutcomeMarkers(
 }
 
 function fakeCapabilityOutcome(capability: NodeCapabilityId): Readonly<Record<string, unknown>> {
-  if (capability === "solution-review" || capability === "test-validation") {
-    return Object.freeze({ gateResult: "PASS" });
+  if (capability === "solution-gate") {
+    return Object.freeze({ gateResult: "PASS", unresolvedFindings: Object.freeze([]) });
   }
-  if (capability === "solution-challenge" || capability === "code-review") {
+  if (capability === "code-review") {
     return Object.freeze({ unresolvedFindings: Object.freeze([]) });
   }
   return Object.freeze({});

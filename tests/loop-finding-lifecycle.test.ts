@@ -1,6 +1,6 @@
 // LOOP Finding Lifecycle and Dependency Invalidation Tests (C02 WP-3)
 // ==================================================================
-// Canonical finding schema, five-category routing matrix, earliest-affected
+// Canonical finding schema, six-category routing matrix, earliest-affected
 // node ordering, append guards and idempotent replay, same-transaction
 // invalidation propagation, the fixed status state machine, the read-only
 // finding Gate derivation, adversarial input boundaries, tampering detection
@@ -26,6 +26,7 @@ import {
   createLoopArtifactRevision,
   type LoopArtifactRevision,
   type LoopArtifactRevisionDraft,
+  LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
 } from "../core/loop-artifact-revision";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import {
@@ -60,7 +61,6 @@ import {
 } from "../core/loop-executor-types";
 import type { LoopCapabilityExecutionEvent } from "../core/loop-capability-execution";
 import { LoopRunStore } from "../core/loop-run-store";
-import { runtimeExecutionPointForCapability } from "../core/runtime-capability-map";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 
 let passed = 0;
@@ -159,7 +159,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       runId,
       sequence,
       capability,
-      nodeId: runtimeExecutionPointForCapability(capability),
+      nodeId: capability,
       attempt: 1,
       status,
       createdAt: nextTs(),
@@ -203,7 +203,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       const attempt = nextAttempt(capability);
       const started = event(capability, "started", { attempt });
       store.appendCapabilityExecution(started);
-      const outputRef = `loop-artifact:v1:capability_output:sha256:${output.digest}`;
+      const outputRef = `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind}:sha256:${output.digest}`;
       const succeeded = event(capability, "succeeded", {
         attempt,
         outputArtifactRef: outputRef,
@@ -223,12 +223,12 @@ type CapabilityDriver = ReturnType<typeof makeCapabilityDriver>;
 
 const NODE_OUT: Readonly<Record<NodeCapabilityId, { version: string; digest: string }>> = {
   "requirement-intake": { version: "1.0.0", digest: dg("c") },
-  "tech-design": { version: "1.0.0", digest: dg("d") },
-  "solution-challenge": { version: "1.0.0", digest: dg("e") },
-  "solution-review": { version: "1.0.0", digest: dg("f") },
+  "solution-design": { version: "1.0.0", digest: dg("d") },
+  "solution-gate": { version: "1.0.0", digest: dg("e") },
+  "task-planning": { version: "1.0.0", digest: dg("f") },
   "implementation": { version: "1.0.0", digest: dg("0") },
   "code-review": { version: "1.0.0", digest: dg("1") },
-  "test-validation": { version: "1.0.0", digest: dg("2") },
+  "knowledge-sync": { version: "1.0.0", digest: dg("2") },
 };
 
 function revisionDraft(o: {
@@ -244,10 +244,10 @@ function revisionDraft(o: {
     nodeId: o.nodeId,
     sequence: 1,
     generation: null,
-    stablePath: `artifacts/req-001_${o.nodeId}.md`,
-    artifactKind: "capability_output",
+    stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].stablePathSegment}/req-001_${o.nodeId}.md`,
+    artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind,
     semver: output.version,
-    artifactRef: `loop-artifact:v1:capability_output:sha256:${output.digest}`,
+    artifactRef: `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind}:sha256:${output.digest}`,
     digest: output.digest,
     producerExecutionId: o.producerExecutionId,
     gateResult: isGate ? "PASS" : "NOT_APPLICABLE",
@@ -414,8 +414,8 @@ console.log("finding lifecycle: schema constants and canonical tokens");
 {
   assert(LOOP_FINDING_SCHEMA_VERSION === 1, "finding schema version is 1");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
-  assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,IMPLEMENTATION,REVIEW,TEST",
-    "five canonical categories");
+  assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
+    "six canonical categories");
   assert(LOOP_FINDING_STATUSES.join(",") === "OPEN,RESOLVED,ACCEPTED_RISK,SUPERSEDED",
     "four canonical statuses");
   assert(
@@ -423,15 +423,14 @@ console.log("finding lifecycle: schema constants and canonical tokens");
     "three canonical gate reason codes",
   );
   const routed = Object.values(LOOP_FINDING_CATEGORY_CAPABILITIES).flat();
-  assert(routed.length === NODE_CAPABILITY_IDS.length &&
-    NODE_CAPABILITY_IDS.every((id) => routed.includes(id)),
-    "routing matrix covers every canonical capability exactly once");
+  assert(NODE_CAPABILITY_IDS.every((id) => routed.includes(id)),
+    "routing matrix covers every canonical capability at least once");
   assert(loopFindingId("run-001", 3) === "run-001:finding:3", "canonical finding id derived");
   assert(downstreamNodeIds("requirement-intake").length === 7, "intake downstream set spans all nodes");
-  assert(downstreamNodeIds("implementation").join(",") === "implementation,code-review,test-validation",
-    "implementation downstream set is the tail");
-  assert(downstreamNodeIds("test-validation").join(",") === "test-validation",
-    "test-validation downstream set is itself only");
+  assert(downstreamNodeIds("implementation").join(",") === "implementation,code-review,knowledge-sync",
+    "implementation downstream set is the v2 tail");
+  assert(downstreamNodeIds("knowledge-sync").join(",") === "knowledge-sync",
+    "knowledge-sync downstream set is itself only");
   expectThrow("INVALID_INPUT", () => downstreamNodeIds("deploy" as NodeCapabilityId),
     "unknown earliest node rejected");
   assert(isLegalLoopFindingTransition("OPEN", "RESOLVED"), "OPEN -> RESOLVED is legal");
@@ -449,7 +448,7 @@ console.log("finding lifecycle: schema constants and canonical tokens");
 console.log("finding lifecycle: positive construction");
 {
   const finding = createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+    sequence: 1, sourceCapability: "code-review", category: "IMPLEMENTATION",
     earliestAffectedNodeId: "implementation",
   }));
   assert(finding.findingId === "run-001:finding:1", "finding id derived from run and sequence");
@@ -463,31 +462,46 @@ console.log("finding lifecycle: positive construction");
     "canonical form is stable");
 }
 
-console.log("finding lifecycle: five-category routing matrix");
+console.log("finding lifecycle: six-category routing matrix");
 {
   const allowed: ReadonlyArray<readonly [LoopFindingDraft["category"], NodeCapabilityId]> = [
     ["REQUIREMENT", "requirement-intake"],
-    ["SOLUTION", "tech-design"],
-    ["SOLUTION", "solution-challenge"],
-    ["SOLUTION", "solution-review"],
+    ["REQUIREMENT", "solution-design"],
+    ["REQUIREMENT", "code-review"],
+    ["SOLUTION", "solution-design"],
+    ["SOLUTION", "solution-gate"],
+    ["SOLUTION", "implementation"],
+    ["PLANNING", "task-planning"],
+    ["PLANNING", "implementation"],
     ["IMPLEMENTATION", "implementation"],
+    ["IMPLEMENTATION", "code-review"],
     ["REVIEW", "code-review"],
-    ["TEST", "test-validation"],
+    ["KNOWLEDGE", "knowledge-sync"],
   ];
+  const canonicalEarliest: Readonly<Record<LoopFindingDraft["category"], NodeCapabilityId>> = {
+    REQUIREMENT: "requirement-intake",
+    SOLUTION: "solution-design",
+    PLANNING: "task-planning",
+    IMPLEMENTATION: "implementation",
+    REVIEW: "code-review",
+    KNOWLEDGE: "knowledge-sync",
+  };
   for (const [category, capability] of allowed) {
     const finding = createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: capability, category,
-      earliestAffectedNodeId: capability === "test-validation" ? "test-validation" : "requirement-intake",
+      earliestAffectedNodeId: canonicalEarliest[category],
     }));
     assert(finding.category === category, `${category} finding from ${capability} accepted`);
+    assert(finding.earliestAffectedNodeId === canonicalEarliest[category],
+      `${category} finding carries its canonical earliest node`);
   }
   const mismatches: ReadonlyArray<readonly [LoopFindingDraft["category"], NodeCapabilityId]> = [
-    ["REQUIREMENT", "tech-design"],
     ["SOLUTION", "requirement-intake"],
-    ["SOLUTION", "implementation"],
-    ["IMPLEMENTATION", "tech-design"],
-    ["REVIEW", "solution-review"],
-    ["TEST", "code-review"],
+    ["PLANNING", "solution-gate"],
+    ["IMPLEMENTATION", "solution-design"],
+    ["IMPLEMENTATION", "task-planning"],
+    ["REVIEW", "solution-gate"],
+    ["KNOWLEDGE", "code-review"],
   ];
   for (const [category, capability] of mismatches) {
     expectThrow("INVALID_INPUT", () => createLoopFinding(findingDraft({
@@ -496,20 +510,30 @@ console.log("finding lifecycle: five-category routing matrix");
   }
 }
 
-console.log("finding lifecycle: earliest affected node ordering rule");
+console.log("finding lifecycle: earliest affected node is the category's canonical node");
 {
   const ok = createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "solution-review", category: "SOLUTION",
-    earliestAffectedNodeId: "solution-review",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
   }));
-  assert(ok.earliestAffectedNodeId === "solution-review", "earliest node equal to the source capability accepted");
-  const upstream = createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "solution-review", category: "SOLUTION",
-    earliestAffectedNodeId: "requirement-intake",
+  assert(ok.earliestAffectedNodeId === "solution-design",
+    "canonical earliest node at or before the source capability accepted");
+  const discoveredLater = createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "code-review", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
   }));
-  assert(upstream.earliestAffectedNodeId === "requirement-intake", "earliest node upstream of the source accepted");
+  assert(discoveredLater.earliestAffectedNodeId === "solution-design",
+    "SOLUTION finding discovered at code-review still invalidates from solution-design");
   expectThrow("INVALID_INPUT", () => createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "tech-design", category: "SOLUTION",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-gate",
+  })), "caller cannot shrink the invalidation origin to a downstream node (H1)");
+  expectThrow("INVALID_INPUT", () => createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "requirement-intake",
+  })), "earliest node must equal the canonical node of the category");
+  expectThrow("INVALID_INPUT", () => createLoopFinding(findingDraft({
+    sequence: 1, sourceCapability: "solution-design", category: "SOLUTION",
     earliestAffectedNodeId: "implementation",
   })), "earliest node downstream of the source capability rejected");
   expectThrow("INVALID_INPUT", () => createLoopFinding(findingDraft({
@@ -521,7 +545,7 @@ console.log("finding lifecycle: earliest affected node ordering rule");
 console.log("finding lifecycle: malformed and incoherent drafts fail closed (negative)");
 {
   const base = findingDraft({
-    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+    sequence: 1, sourceCapability: "code-review", category: "IMPLEMENTATION",
     earliestAffectedNodeId: "implementation",
   });
   expectThrow("INVALID_INPUT", () => createLoopFinding({ ...base, severity: "BLOCKER" }),
@@ -544,7 +568,7 @@ console.log("finding lifecycle: malformed and incoherent drafts fail closed (neg
     "untrimmed requirement identity rejected");
   expectThrow("INVALID_INPUT", () => createLoopFinding({ ...base, createdAt: "yesterday" }),
     "non-ISO timestamp rejected");
-  expectThrow("INVALID_INPUT", () => createLoopFinding({ ...base, sourceRevisionId: "run-002:revision:tech-design:1" }),
+  expectThrow("INVALID_INPUT", () => createLoopFinding({ ...base, sourceRevisionId: "run-002:revision:solution-design:1" }),
     "cross-run source revision rejected");
   expectThrow("INVALID_INPUT", () => createLoopFinding({ ...base, sourceRevisionId: "not-a-revision" }),
     "malformed source revision rejected");
@@ -581,13 +605,13 @@ console.log("finding lifecycle: malformed and incoherent drafts fail closed (neg
   assert(resolved.status === "RESOLVED" && resolved.resolvedByRevisionId === "run-001:revision:implementation:1",
     "resolution transition carries the current revision");
   expectThrow("INVALID_INPUT", () => validateLoopFinding({
-    ...resolved, resolvedByRevisionId: "run-001:revision:tech-design:1",
+    ...resolved, resolvedByRevisionId: "run-001:revision:solution-design:1",
   }), "resolution revision upstream of the earliest affected node rejected");
   expectThrow("INVALID_INPUT", () => validateLoopFinding({ ...resolved, resolutionEvidenceDigest: dg("9") }),
     "resolution evidence ref/digest mismatch rejected");
   const critical = createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "CRITICAL",
+    sequence: 2, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "CRITICAL",
   }));
   expectThrow("INVALID_INPUT", () => acceptLoopFindingRisk(critical, RISK_EVIDENCE),
     "critical findings are not risk-acceptable");
@@ -600,7 +624,7 @@ console.log("finding lifecycle: malformed and incoherent drafts fail closed (neg
   expectThrow("INVALID_INPUT", () => acceptLoopFindingRisk(accepted, RISK_EVIDENCE),
     "risk-accepting a non-open finding rejected");
   const replacement = createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "code-review", category: "REVIEW",
+    sequence: 2, sourceCapability: "code-review", category: "IMPLEMENTATION",
     earliestAffectedNodeId: "implementation",
   }));
   const superseded = supersedeLoopFinding(accepted, replacement.findingId);
@@ -622,7 +646,7 @@ console.log("finding lifecycle: malformed and incoherent drafts fail closed (neg
 console.log("finding lifecycle: adversarial input boundaries fail closed");
 {
   const draft = findingDraft({
-    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
+    sequence: 1, sourceCapability: "code-review", category: "IMPLEMENTATION",
     earliestAffectedNodeId: "implementation",
   });
   expectThrow("INVALID_INPUT", () => createLoopFinding(new Proxy({ ...draft }, {})),
@@ -656,8 +680,8 @@ console.log("finding lifecycle: adversarial input boundaries fail closed");
 console.log("finding lifecycle: chain rules are fail-closed");
 {
   const f1 = createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "solution-challenge", category: "SOLUTION",
-    earliestAffectedNodeId: "tech-design",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
   }));
   const f2 = createLoopFinding(findingDraft({
     sequence: 2, sourceCapability: "code-review", category: "REVIEW",
@@ -686,23 +710,23 @@ console.log("finding lifecycle: chain rules are fail-closed");
     revisionId: `run-001:revision:${nodeId}:1`,
     nodeId,
   });
-  validateLoopFindingChain([f1], [inv(0, "tech-design"), inv(1, "implementation")], "run-001");
+  validateLoopFindingChain([f1], [inv(0, "solution-design"), inv(1, "implementation")], "run-001");
   assert(true, "ordered downstream invalidation edges pass validation");
-  expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [inv(1, "tech-design")], "run-001"),
+  expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [inv(1, "solution-design")], "run-001"),
     "invalidation indexes must be contiguous from zero");
   expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1],
-    [inv(0, "tech-design"), inv(1, "tech-design")], "run-001"),
+    [inv(0, "solution-design"), inv(1, "solution-design")], "run-001"),
     "duplicate invalidation nodes rejected");
   expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [inv(0, "requirement-intake")], "run-001"),
     "invalidation upstream of the earliest affected node rejected");
   expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [
-    Object.freeze({ ...inv(0, "tech-design"), revisionId: "run-001:revision:implementation:1" }),
+    Object.freeze({ ...inv(0, "solution-design"), revisionId: "run-001:revision:implementation:1" }),
   ], "run-001"), "invalidation revision must belong to the named node");
   expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [
-    Object.freeze({ ...inv(0, "tech-design"), revisionId: "run-002:revision:tech-design:1" }),
+    Object.freeze({ ...inv(0, "solution-design"), revisionId: "run-002:revision:solution-design:1" }),
   ], "run-001"), "cross-run invalidation revision rejected");
   expectThrow("INVALID_INPUT", () => validateLoopFindingChain([f1], [
-    Object.freeze({ ...inv(0, "tech-design"), findingId: "run-001:finding:9" }),
+    Object.freeze({ ...inv(0, "solution-design"), findingId: "run-001:finding:9" }),
   ], "run-001"), "invalidation for an unknown finding rejected");
   const older = createLoopFinding(findingDraft({
     sequence: 1, sourceCapability: "code-review", category: "REVIEW",
@@ -733,11 +757,11 @@ console.log("finding lifecycle: pure gate derivation");
   assert(computeFindingGate([resolved], allActive).status === "ELIGIBLE",
     "resolved finding with all downstream currents active is eligible");
   const staleGate = computeFindingGate([resolved],
-    new Map([...allActive].map(([k, v]) => [k, k === "test-validation" ? "STALE" : v])));
+    new Map([...allActive].map(([k, v]) => [k, k === "knowledge-sync" ? "STALE" : v])));
   assert(staleGate.status === "BLOCKED" && staleGate.reasonCodes.join(",") === "FINDING_DOWNSTREAM_STALE",
     "resolved finding with a stale downstream current blocks");
   const missingGate = computeFindingGate([resolved],
-    new Map([...allActive].filter(([k]) => k !== "test-validation")));
+    new Map([...allActive].filter(([k]) => k !== "knowledge-sync")));
   assert(missingGate.status === "BLOCKED" && missingGate.reasonCodes.join(",") === "FINDING_DOWNSTREAM_MISSING",
     "resolved finding with a missing downstream current blocks");
   const accepted = acceptLoopFindingRisk(openFinding, RISK_EVIDENCE);
@@ -890,11 +914,11 @@ withStore((store) => {
 console.log("finding lifecycle: source revision binding");
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  const revisions = driveNodes(store, driver, ["requirement-intake", "tech-design"]);
-  const design = revisions.get("tech-design")!;
+  const revisions = driveNodes(store, driver, ["requirement-intake", "solution-design"]);
+  const design = revisions.get("solution-design")!;
   const bound = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "tech-design", category: "SOLUTION",
-    earliestAffectedNodeId: "tech-design", sourceRevisionId: design.revisionId,
+    sequence: 1, sourceCapability: "solution-design", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design", sourceRevisionId: design.revisionId,
   })));
   assert(bound.appended === true && bound.record.sourceRevisionId === design.revisionId,
     "finding bound to an existing revision appended");
@@ -939,29 +963,29 @@ withRunningStore((store) => {
     revisions.find((item) => item.nodeId === nodeId)!.validity;
   assert(
     validityOf("requirement-intake") === "ACTIVE" &&
-    validityOf("tech-design") === "ACTIVE" &&
-    validityOf("solution-challenge") === "ACTIVE" &&
-    validityOf("solution-review") === "ACTIVE",
+    validityOf("solution-design") === "ACTIVE" &&
+    validityOf("solution-gate") === "ACTIVE" &&
+    validityOf("task-planning") === "ACTIVE",
     "nodes upstream of the earliest affected node stay active",
   );
   assert(
     validityOf("implementation") === "STALE" &&
     validityOf("code-review") === "STALE" &&
-    validityOf("test-validation") === "STALE",
+    validityOf("knowledge-sync") === "STALE",
     "finding at implementation marks only the implementation tail stale",
   );
   const invalidations = store.listFindingInvalidations("run-001");
   assert(invalidations.length === 3 &&
-    invalidations.map((item) => item.nodeId).join(",") === "implementation,code-review,test-validation",
+    invalidations.map((item) => item.nodeId).join(",") === "implementation,code-review,knowledge-sync",
     "exactly the implementation tail edges persisted");
 });
 withRunningStore((store) => {
   // Empty affected set is legal: the finding still persists without edges.
   const driver = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, driver, ["requirement-intake", "tech-design"]);
+  driveNodes(store, driver, ["requirement-intake", "solution-design"]);
   const appended = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   })));
   assert(appended.appended === true, "finding with an empty affected set persisted");
   assert(store.listFindingInvalidations("run-001").length === 0, "no invalidation edges recorded");
@@ -972,17 +996,17 @@ withRunningStore((store) => {
   // An already-STALE current stays STALE and is NOT recorded as a new edge.
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS);
-  store.markArtifactRevisionStale("run-001", revisions.get("tech-design")!.revisionId);
+  store.markArtifactRevisionStale("run-001", revisions.get("solution-design")!.revisionId);
   store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "solution-challenge", category: "SOLUTION",
-    earliestAffectedNodeId: "tech-design",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
   })));
   const invalidations = store.listFindingInvalidations("run-001");
   assert(invalidations.length === 5 &&
-    !invalidations.some((item) => item.nodeId === "tech-design"),
+    !invalidations.some((item) => item.nodeId === "solution-design"),
     "already-stale revision is not double-recorded as an invalidation edge");
   assert(
-    store.listArtifactRevisions("run-001").find((item) => item.nodeId === "tech-design")!.validity === "STALE",
+    store.listArtifactRevisions("run-001").find((item) => item.nodeId === "solution-design")!.validity === "STALE",
     "already-stale revision stays stale",
   );
 });
@@ -1010,17 +1034,17 @@ withRunningStore((store, dir) => {
 console.log("finding lifecycle: status transitions");
 withRunningStore((store) => {
   // Resolve against a later-arriving downstream current: the finding is
-  // appended before test-validation ran (empty affected set), then the node
+  // appended before knowledge-sync ran (empty affected set), then the node
   // produces its current ACTIVE revision, which resolves the finding.
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "CRITICAL",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "CRITICAL",
   }))).record;
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   const resolved = store.resolveFinding("run-001", finding.findingId, {
@@ -1078,7 +1102,7 @@ withRunningStore((store) => {
     resolvedByRevisionId: revisions.get("implementation")!.revisionId, ...RESOLUTION_EVIDENCE,
   }), "resolution against a stale current rejected");
   expectThrow("ILLEGAL_TRANSITION", () => store.resolveFinding("run-001", finding.findingId, {
-    resolvedByRevisionId: revisions.get("tech-design")!.revisionId, ...RESOLUTION_EVIDENCE,
+    resolvedByRevisionId: revisions.get("solution-design")!.revisionId, ...RESOLUTION_EVIDENCE,
   }), "resolution against a revision upstream of the earliest affected node rejected");
 });
 withRunningStore((store) => {
@@ -1114,20 +1138,20 @@ withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const first = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }))).record;
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   store.resolveFinding("run-001", first.findingId, {
     resolvedByRevisionId: validationRevision.revisionId, ...RESOLUTION_EVIDENCE,
   });
   const second = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "LOW",
+    sequence: 2, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "LOW",
   }))).record;
   const superseded = store.supersedeFinding("run-001", first.findingId, second.findingId);
   assert(superseded.record.status === "SUPERSEDED" &&
@@ -1162,9 +1186,9 @@ withRunningStore((store) => {
     earliestAffectedNodeId: "code-review",
   }))).record;
   // The append marked code-review stale; test-validation has not run yet.
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("implementation")!.revisionId],
   }))).record;
   store.resolveFinding("run-001", finding.findingId, {
@@ -1199,15 +1223,15 @@ withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "CRITICAL",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "CRITICAL",
   }))).record;
   const before = store.computeFindingGate("run-001");
   assert(before.status === "BLOCKED" && before.reasonCodes.join(",") === "FINDING_OPEN",
     "critical finding blocks while open");
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   store.resolveFinding("run-001", finding.findingId, {
@@ -1223,21 +1247,21 @@ withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const first = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }))).record;
   const second = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "MEDIUM",
+    sequence: 2, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "MEDIUM",
   }))).record;
   store.supersedeFinding("run-001", first.findingId, second.findingId);
   store.acceptFindingRisk("run-001", second.findingId, RISK_EVIDENCE);
   const missing = store.computeFindingGate("run-001");
   assert(missing.status === "BLOCKED" && missing.reasonCodes.join(",") === "FINDING_DOWNSTREAM_MISSING",
     "risk-accepted finding still blocks while the downstream current is missing");
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   })));
   const eligible = store.computeFindingGate("run-001");
@@ -1304,7 +1328,7 @@ withRunningStore((store, dir) => {
     sequence: 1, sourceCapability: "code-review", category: "REVIEW",
     earliestAffectedNodeId: "code-review",
   }))).record;
-  tamperFindingWithRehash(dir, finding.findingId, Object.freeze({ ...finding, category: "TEST" }));
+  tamperFindingWithRehash(dir, finding.findingId, Object.freeze({ ...finding, category: "KNOWLEDGE" }));
   expectFindingCorruptOnAllReadPaths(store, "rehashed category/capability mismatch raises STORE_CORRUPT");
 });
 withRunningStore((store, dir) => {
@@ -1313,7 +1337,7 @@ withRunningStore((store, dir) => {
     earliestAffectedNodeId: "code-review",
   }))).record;
   tamperFindingWithRehash(dir, finding.findingId, Object.freeze({
-    ...finding, earliestAffectedNodeId: "test-validation",
+    ...finding, earliestAffectedNodeId: "knowledge-sync",
   }));
   expectFindingCorruptOnAllReadPaths(store, "rehashed earliest-node ordering violation raises STORE_CORRUPT");
 });
@@ -1330,7 +1354,7 @@ withRunningStore((store, dir) => {
   try {
     db.pragma("foreign_keys = OFF");
     db.prepare("UPDATE loop_finding_invalidations SET node_id = ? WHERE finding_id = ? AND invalidation_index = 0")
-      .run("tech-design", "run-001:finding:1");
+      .run("solution-design", "run-001:finding:1");
   } finally {
     db.close();
   }
@@ -1401,12 +1425,12 @@ function appendAndResolveFinding(
 ): { finding: LoopFinding; validationRevision: LoopArtifactRevision } {
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }))).record;
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   store.resolveFinding("run-001", finding.findingId, {
@@ -1426,7 +1450,7 @@ function appendAndResolveFinding(
         proof !== undefined &&
         proof.proof_kind === "RESOLUTION" &&
         proof.revision_id === validationRevision.revisionId &&
-        proof.revision_node_id === "test-validation" &&
+        proof.revision_node_id === "knowledge-sync" &&
         proof.revision_artifact_ref === validationRevision.artifactRef &&
         proof.revision_artifact_digest === validationRevision.digest,
         "resolution proof persisted with the revision content binding",
@@ -1572,8 +1596,8 @@ function appendAndResolveFinding(
     const driver = makeCapabilityDriver(store, "run-001");
     const { finding, validationRevision } = appendAndResolveFinding(store, driver);
     const replacement = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 2, sourceCapability: "test-validation", category: "TEST",
-      earliestAffectedNodeId: "test-validation",
+      sequence: 2, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+      earliestAffectedNodeId: "knowledge-sync",
     }))).record;
     store.supersedeFinding("run-001", finding.findingId, replacement.findingId);
     assert(store.listFindings("run-001")[0]!.status === "SUPERSEDED",
@@ -1591,14 +1615,14 @@ function appendAndResolveFinding(
           evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
-        finding.findingId, "RESOLUTION", validationRevision.revisionId, "test-validation",
+        finding.findingId, "RESOLUTION", validationRevision.revisionId, "knowledge-sync",
         validationRevision.artifactRef, validationRevision.digest,
         RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null,
         createHash("sha256").update(canonicalizeProofUnchecked(Object.freeze({
           findingId: finding.findingId,
           proofKind: "RESOLUTION",
           revisionId: validationRevision.revisionId,
-          revisionNodeId: "test-validation" as NodeCapabilityId,
+          revisionNodeId: "knowledge-sync" as NodeCapabilityId,
           revisionArtifactRef: validationRevision.artifactRef,
           revisionArtifactDigest: validationRevision.digest,
           evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
@@ -1617,8 +1641,10 @@ console.log("finding lifecycle: invalidation scope completeness is verified on r
 /** Drive all seven nodes ACTIVE, then append a finding that stales every one. */
 function appendFullScopeFinding(store: LoopRunStore, driver: CapabilityDriver): LoopFinding {
   driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  // Full-chain invalidation requires the REQUIREMENT layer (canonical earliest
+  // = requirement-intake); KNOWLEDGE would only stale the knowledge-sync node.
   return store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "REQUIREMENT",
     earliestAffectedNodeId: "requirement-intake",
   }))).record;
 }
@@ -1754,12 +1780,12 @@ function setupResolvableFinding(
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }))).record;
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   return { finding, validationRevision };
@@ -1772,16 +1798,16 @@ function setupTwoResolvableFindings(
   const driver = makeCapabilityDriver(store, "run-001");
   const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const first = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }))).record;
   const second = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation", severity: "MEDIUM",
+    sequence: 2, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync", severity: "MEDIUM",
   }))).record;
-  const validation = driver.succeed("test-validation", NODE_OUT["test-validation"]);
+  const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
-    nodeId: "test-validation", producerExecutionId: validation.executionEventId,
+    nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
     upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
   }))).record;
   return { first, second, validationRevision };
@@ -2035,8 +2061,8 @@ console.log("finding lifecycle: another entry reads the same finding chain");
   const driver = makeCapabilityDriver(storeA, "run-001");
   driveNodes(storeA, driver, NODE_CAPABILITY_IDS.slice(0, 6));
   const finding = createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "test-validation", category: "TEST",
-    earliestAffectedNodeId: "test-validation",
+    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+    earliestAffectedNodeId: "knowledge-sync",
   }));
   storeA.appendFinding(finding);
   storeA.close();
@@ -2250,7 +2276,7 @@ function driveBoundNodes(
   const revisions = new Map<NodeCapabilityId, LoopArtifactRevision>();
   let upstream: string[] = [];
   for (const nodeId of nodes) {
-    const stored = artifactStore.put("capability_output", `${nodeId} output v1`);
+    const stored = artifactStore.put(LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].artifactKind, `${nodeId} output v1`);
     const execution = driver.succeed(nodeId, { version: "1.0.0", digest: stored.digest });
     const revision = store.appendArtifactRevision(createLoopArtifactRevision({
       runId: "run-001",
@@ -2258,8 +2284,8 @@ function driveBoundNodes(
       nodeId,
       sequence: 1,
       generation: null,
-      stablePath: `artifacts/req-001_${nodeId}.md`,
-      artifactKind: "capability_output",
+      stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].stablePathSegment}/req-001_${nodeId}.md`,
+      artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].artifactKind,
       semver: "1.0.0",
       artifactRef: stored.artifactRef,
       digest: stored.digest,
@@ -2285,26 +2311,26 @@ function driveBoundNodes(
     const driver = makeCapabilityDriver(store, "run-001");
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
     const finding = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 1, sourceCapability: "test-validation", category: "TEST",
-      earliestAffectedNodeId: "test-validation",
+      sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+      earliestAffectedNodeId: "knowledge-sync",
     }))).record;
-    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
-    const validation = driver.succeed("test-validation", {
+    const storedValidation = artifactStore.put("knowledge_sync_result", "knowledge-sync output v1");
+    const validation = driver.succeed("knowledge-sync", {
       version: "1.0.0", digest: storedValidation.digest,
     });
     const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision({
       runId: "run-001",
       requirementId: "req-001",
-      nodeId: "test-validation",
+      nodeId: "knowledge-sync",
       sequence: 1,
       generation: null,
-      stablePath: "artifacts/req-001_test-validation.md",
-      artifactKind: "capability_output",
+      stablePath: "library/req-001/06-知识同步/req-001_knowledge-sync.md",
+      artifactKind: "knowledge_sync_result",
       semver: "1.0.0",
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
-      gateResult: "PASS",
+      gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),
     })).record;
@@ -2326,26 +2352,26 @@ function driveBoundNodes(
     const driver = makeCapabilityDriver(store, "run-001");
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
     const finding = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 1, sourceCapability: "test-validation", category: "TEST",
-      earliestAffectedNodeId: "test-validation",
+      sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+      earliestAffectedNodeId: "knowledge-sync",
     }))).record;
-    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
-    const validation = driver.succeed("test-validation", {
+    const storedValidation = artifactStore.put("knowledge_sync_result", "knowledge-sync output v1");
+    const validation = driver.succeed("knowledge-sync", {
       version: "1.0.0", digest: storedValidation.digest,
     });
     const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision({
       runId: "run-001",
       requirementId: "req-001",
-      nodeId: "test-validation",
+      nodeId: "knowledge-sync",
       sequence: 1,
       generation: null,
-      stablePath: "artifacts/req-001_test-validation.md",
-      artifactKind: "capability_output",
+      stablePath: "library/req-001/06-知识同步/req-001_knowledge-sync.md",
+      artifactKind: "knowledge_sync_result",
       semver: "1.0.0",
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
-      gateResult: "PASS",
+      gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),
     })).record;
@@ -2369,8 +2395,8 @@ function driveBoundNodes(
     const driver = makeCapabilityDriver(store, "run-001");
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS.slice(0, 6));
     const finding = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 1, sourceCapability: "test-validation", category: "TEST",
-      earliestAffectedNodeId: "test-validation",
+      sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
+      earliestAffectedNodeId: "knowledge-sync",
     }))).record;
     const evidence = artifactStore.put("capability_findings", "user risk acceptance v1");
     const accepted = store.acceptFindingRisk("run-001", finding.findingId, {
@@ -2380,23 +2406,23 @@ function driveBoundNodes(
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");
-    const storedValidation = artifactStore.put("capability_output", "test-validation output v1");
-    const validation = driver.succeed("test-validation", {
+    const storedValidation = artifactStore.put("knowledge_sync_result", "knowledge-sync output v1");
+    const validation = driver.succeed("knowledge-sync", {
       version: "1.0.0", digest: storedValidation.digest,
     });
     store.appendArtifactRevision(createLoopArtifactRevision({
       runId: "run-001",
       requirementId: "req-001",
-      nodeId: "test-validation",
+      nodeId: "knowledge-sync",
       sequence: 1,
       generation: null,
-      stablePath: "artifacts/req-001_test-validation.md",
-      artifactKind: "capability_output",
+      stablePath: "library/req-001/06-知识同步/req-001_knowledge-sync.md",
+      artifactKind: "knowledge_sync_result",
       semver: "1.0.0",
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
-      gateResult: "PASS",
+      gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),
     }));

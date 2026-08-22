@@ -48,7 +48,7 @@ Requirement-level workspace under `library/{requirement_id}/`:
 
 | Document | Purpose |
 | --- | --- |
-| [New-Rail Enhanced Speckit Pipeline Summary](docs/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md) | Comprehensive overview of PR J–P capabilities |
+| [New-Rail Enhanced Speckit Pipeline Summary（Historical，已归档）](docs/reports/archive/c02-wp3-5-single-rail-retired/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md) | PR J–P 能力总览（历史；2026-08-22 随单轨重基线归档，Decision-044/045） |
 | [Final Audit Report](docs/reports/final-audit-report.md) | PR J–P consistency audit findings and resolution |
 | [Full Repository Review Report](docs/reports/full-repository-review-report.md) | 12-area repository audit |
 | [Validation Guide](docs/VALIDATION.md) | Validator descriptions and expected checks |
@@ -84,7 +84,7 @@ git diff --check                                    # whitespace validation
 - Existing legacy Speckit projects continue using `legacy_speckit`.
 - Explicit `sdlc-*` / `sdlc-speckit-*` activation enters `new_rail_sdlc`.
 - Direct Implementation / library-only DocFlow can use `library_driven` sync.
-- Read the [summary document](docs/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md) before starting a pilot.
+- Read the [summary document（Historical）](docs/reports/archive/c02-wp3-5-single-rail-retired/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md) before starting a pilot（已随单轨重基线归档，Decision-044/045）。
 - Execute `scripts/bootstrap-speckit-project.sh <target> --dry-run` to generate project profiles and private context files.
 
 ## Core Directory

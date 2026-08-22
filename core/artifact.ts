@@ -15,7 +15,13 @@ export type ArtifactType =
   | "bugfix_patch"
   | "validation_report"
   | "fanout_result"
-  | "shadow_output";
+  | "shadow_output"
+  // v2 canonical capability artifact types (C02-WP3.5, A4)
+  | "technical_design"
+  | "task_plan"
+  | "implementation_record"
+  | "review_summary"
+  | "knowledge_sync_result";
 
 export type Artifact = Readonly<{
   id: string;

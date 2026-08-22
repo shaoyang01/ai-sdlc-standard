@@ -33,9 +33,8 @@ Each fixture directory contains:
 | `bootstrap-scan-control/` | Bootstrap performance: --scan-root, --scan-timeout, structured inventory, timeout/partial semantics |
 | `delta-change-supplement/` | Delta change routing: Requirement Supplement, Specification Missing, Decision Scope, aggregate vs delta |
 | `project-type-contract-matrix/` | Plan contract matrix: companion artifact status table, project-type contract granularity, skip records, Plan Gate BLOCKED |
-| `rail-routing-business-domain-sync/` | Rail routing: legacy vs new-rail AGENTS.md split, specs run lifecycle, shared business-domain governance, sync source modes, duplicate sync guard |
 | `business-domain-naming-shape/` | Business-domain naming and shape: canonical naming gate, project shape gate, create-if-missing with project naming/shape, whole-document rewrite guard |
 | `business-domain-compatible-update/` | Compatible update: preserve existing shape/facts, safe insertion point, update proposal, reconcile proposal, conflict types, revision traceability |
-| `specs-run-lifecycle/` | Specs run lifecycle: specs_run_id metadata, manifest lifecycle authority, archive/cleanup gate, library_driven no-specs handling |
-| `library-driven-sync-runtime/` | Library-driven sync runtime: runtime inputs, evidence classification, sync need classification, duplicate sync guard, supplemental sync, manifest recording |
-| `legacy-new-rail-product-parity-expanded/` | Comprehensive parity: covers PR J–O rail routing, specs lifecycle, business-domain governance, library-driven runtime, project-type contract matrix semantics |
+| `business-domain-compatible-update/` | Compatible update: preserve existing shape/facts, safe insertion point, update proposal, reconcile proposal, conflict types, revision traceability |
+
+> 2026-08-22（C02-WP3.5，Decision-044/045）：`rail-routing-business-domain-sync/`、`specs-run-lifecycle/`、`library-driven-sync-runtime/`、`legacy-new-rail-product-parity-expanded/` 四个类别验证的是已退役的双轨/specs/sync-mode 语义，已随单轨重基线归档到 `docs/reports/archive/c02-wp3-5-single-rail-retired/product-parity-fixtures/`（residue audit allowlist 点名目录）。

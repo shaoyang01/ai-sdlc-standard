@@ -1,6 +1,6 @@
 # LOOP Finding Lifecycle and Dependency Invalidation Contract（Finding 生命周期与依赖失效合同）
 
-> 状态：1.0.0 Accepted（2026-08-21，Round 2 独立复审 PASS，C02-WP3 收口，Decision-043；前身为 0.1.1 Draft，Decision-042）
+> 状态：2.0.0 Draft（2026-08-22，C02-WP3.5 条款级升版，Decision-044/045，影响分析 A3；前身为 1.0.0 Accepted，Decision-043）
 > 关联：[C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G3 / §6 C02-WP3 · [LOOP Artifact Revision and Current Authority Contract](loop-artifact-revision.md) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md)
 
 ## 1. Purpose
@@ -12,24 +12,25 @@ C01 只在 capability execution 事件上携带 opaque 的 `unresolvedFindingsRe
 ## 2. Canonical 定义
 
 - **Severity**（固定四值）：`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`。
-- **Category**（固定五值，与来源 capability 绑定校验）：
+- **Category**（固定六值，与来源 capability 按 v2 矩阵校验（C02-WP3.5 影响分析 A3））：
 
-  | Category | 语义 | 允许的 sourceCapability |
-  | --- | --- | --- |
-  | `REQUIREMENT` | 需求资料缺陷 | `requirement-intake` |
-  | `SOLUTION` | 技术方案缺陷 | `tech-design`、`solution-challenge`、`solution-review` |
-  | `IMPLEMENTATION` | 实现缺陷 | `implementation` |
-  | `REVIEW` | 代码审核发现 | `code-review` |
-  | `TEST` | 测试验收发现 | `test-validation` |
+  | Category | 语义 | 允许的发现来源（canonical 链后缀） | canonical earliest affected node |
+  | --- | --- | --- | --- |
+  | `REQUIREMENT` | 目标、范围、验收或来源冲突 | `requirement-intake` 及任一下游节点 | `requirement-intake` |
+  | `SOLUTION` | 行为、架构、接口或约束缺口 | `solution-design`、`solution-gate`、`task-planning`、`implementation`、`code-review`、`knowledge-sync` | `solution-design` |
+  | `PLANNING` | 任务遗漏、顺序、依赖或验证计划错误 | `task-planning`、`implementation`、`code-review`、`knowledge-sync` | `task-planning` |
+  | `IMPLEMENTATION` | 已批准方案内的实现错误、测试失败或证据缺失 | `implementation`、`code-review`、`knowledge-sync` | `implementation` |
+  | `REVIEW` | 审查产物、范围或 closure protocol 本身不完整 | `code-review`、`knowledge-sync` | `code-review` |
+  | `KNOWLEDGE` | 稳定事实筛选、知识目标或对账证据错误 | `knowledge-sync` | `knowledge-sync` |
 
-  这就是规划验收要求的五类 finding 路由矩阵：category 必须与 sourceCapability 落在上表同一行，否则 fail-closed（`INVALID_INPUT`）。
+  这就是规划验收要求的六类 finding 路由矩阵：category 表达**问题所属层次**（根因），sourceCapability 表达**在哪里发现**；配对必须落在上表同一行，否则 fail-closed（`INVALID_INPUT`）。`TEST` 类别与 `test-validation` 节点随单轨退役：原始测试/线上反馈不是当前 run 的 finding——它先经 WP1 合同形成 `changeKind=FEEDBACK_DRIVEN_CHANGE` 的 change record 进入 `requirement-intake`，intake 确认事实后在新 generation 中按上表建立 finding。
 - **状态机**（固定，不可回退）：
   - `OPEN → RESOLVED`：仅经 `resolveFinding`，必须携带**当前**修订与 Gate 证据（不变量 8）；
   - `OPEN → ACCEPTED_RISK`：仅经 `acceptFindingRisk`，必须携带用户风险接受证据；
   - `OPEN / RESOLVED / ACCEPTED_RISK → SUPERSEDED`：仅经 `supersedeFinding`（同 run 追加替代 finding 时回填）；
   - `RESOLVED` / `ACCEPTED_RISK` / `SUPERSEDED` 对关闭语义均为吸收态；`SUPERSEDED` 完全吸收。
-- **Canonical 依赖图**：节点级依赖图固定为 `NODE_CAPABILITY_IDS` 的线性序（`requirement-intake → tech-design → solution-challenge → solution-review → implementation → code-review → test-validation`）；revision 级依赖为各 revision 的 `upstreamRevisionIds`（WP2 合同）。失效传播只沿"节点序下游"计算，调用方不得提交任意失效列表。
-- **最早受影响节点**：finding 的 `earliestAffectedNodeId` 必须满足 `index(earliestAffectedNodeId) ≤ index(sourceCapability)`——不可能在缺陷存在之前发现它。
+- **Canonical 依赖图**：节点级依赖图固定为 v2 单轨链的线性序（`requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync`）；revision 级依赖为各 revision 的 `upstreamRevisionIds`（WP2 合同）。失效传播只沿"节点序下游"计算，调用方不得提交任意失效列表。
+- **最早受影响节点**：每个 category 有**唯一 canonical 最早受影响节点**（REQUIREMENT→requirement-intake、SOLUTION→solution-design、PLANNING→task-planning、IMPLEMENTATION→implementation、REVIEW→code-review、KNOWLEDGE→knowledge-sync；机器投影 `LOOP_FINDING_CATEGORY_EARLIEST_NODE`）。`earliestAffectedNodeId` 必须**等于**该 canonical 节点（调用方不得把失效起点缩小到下游节点）；同时必须满足 `index(earliestAffectedNodeId) ≤ index(sourceCapability)`——不可能在缺陷存在之前发现它。
 
 ## 3. Finding Record Schema
 
@@ -45,7 +46,7 @@ C01 只在 capability execution 事件上携带 opaque 的 `unresolvedFindingsRe
 | `sourceCapability` | NodeCapabilityId | 七个 canonical id 之一；与 category 同表行绑定 |
 | `sourceRevisionId` | string / `null` | 绑定具体 artifact revision；必须引用同 run 现存 revision；Gate FAIL 等无产物场景可为 `null` |
 | `severity` | Severity | canonical 四值 |
-| `category` | Category | canonical 五值 |
+| `category` | Category | canonical 六值 |
 | `evidenceRef` | string | `loop-artifact:v1:<kind>:sha256:<digest>` 形式，与 evidenceDigest 一致 |
 | `evidenceDigest` | string | sha256 hex |
 | `earliestAffectedNodeId` | NodeCapabilityId | 满足 §2 序约束 |
@@ -119,6 +120,7 @@ C01 只在 capability execution 事件上携带 opaque 的 `unresolvedFindingsRe
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 条款级升版（Decision-044/045，A3）：类别五值升六值（新增 PLANNING/KNOWLEDGE、删除 TEST）；路由矩阵改为"category = 问题层次（根因）、sourceCapability = 发现位置"并绑定 v2 七节点链后缀；canonical 依赖图切 v2 线性序；原始测试/线上反馈明确经 WP1 change record（FEEDBACK_DRIVEN_CHANGE）经 requirement-intake 重入，不产生 TEST finding。状态机、失效传播、关闭证明、scope 完整性、PASS_WITH_RISK 消费、v5 存储与读回重验语义不变。 |
 | 0.1.0 | 2026-08-21 | Draft | C02-WP3 交付：finding record schema、固定状态机、五类路由矩阵、依赖图失效传播（同事务原子化）、PASS_WITH_RISK 消费规则、v4→v5 迁移与读回交叉绑定合同。 |
 | 0.1.1 | 2026-08-21 | Draft | Round 1 复审修正（H1/H2）：durable 关闭证明表 `loop_finding_proofs`（RESOLUTION 捕获 revision 不可变内容绑定、RISK_ACCEPTANCE 捕获接受者与证据、supersede 同事务删除、读回全量重验）、绑定 artifact store 时关闭证据 blob 物理存在性校验、append-time 完整失效范围表 `loop_finding_scopes`（含空集语义）与读回全集合比对。 |
 | 1.0.0 | 2026-08-21 | Accepted | Round 2 独立复审 PASS（无阻塞项，Round 1 两项 High 关闭均独立复核成立，两条非阻塞回归加固建议已落实），Current User 裁决 C02-WP3 收口（Decision-043）；内容等同 0.1.1 Draft，仅状态前进。 |

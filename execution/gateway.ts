@@ -53,13 +53,14 @@ import {
 } from "./hermes-gateway-real-dispatch-guardrails";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 import {
+  CAPABILITY_ARTIFACT_TYPES,
   getEnabledBinding,
   validateBindingRegistry,
   validateNodeOutputArtifact,
   type BindingRegistry,
 } from "../core/agent-capability-bindings";
 import type { LoopRunStore } from "../core/loop-run-store";
-import type { LoopArtifactStore } from "../core/loop-artifact-store";
+import type { LoopArtifactKind, LoopArtifactStore } from "../core/loop-artifact-store";
 import {
   LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
   type LoopCapabilityExecutionEvent,
@@ -335,7 +336,7 @@ export class ExecutionGateway {
         artifact: expectedArtifact,
       });
       if (outputEnvelope === undefined) throw new Error("capability output is not serializable");
-      outputDescriptor = tracing.artifactStore.put("capability_output", outputEnvelope);
+      outputDescriptor = tracing.artifactStore.put(CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind, outputEnvelope);
       if (findings.length === 0) {
         findingsDescriptor = null;
       } else {
@@ -454,7 +455,7 @@ export class ExecutionGateway {
     result: ExecutionResult,
     capability: NodeCapabilityId,
   ): { gateResult: LoopCapabilityGateResult; findings: unknown[] } {
-    const requiresGate = capability === "solution-review" || capability === "test-validation";
+    const requiresGate = capability === "solution-gate";
     const gateValue = result.output["gateResult"] ?? result.output["gate_result"];
     let gateResult: LoopCapabilityGateResult = "NOT_APPLICABLE";
     if (requiresGate) {
@@ -466,7 +467,7 @@ export class ExecutionGateway {
       throw new Error("non-Gate capability returned a non-canonical Gate result");
     }
 
-    const requiresFindings = capability === "solution-challenge" || capability === "code-review";
+    const requiresFindings = capability === "solution-gate" || capability === "code-review";
     const rawFindings = result.output["unresolvedFindings"] ?? result.output["unresolved_findings"];
     if (requiresFindings && !Array.isArray(rawFindings)) {
       throw new Error("finding-producing capability omitted unresolved findings");

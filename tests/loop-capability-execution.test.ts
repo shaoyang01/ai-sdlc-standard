@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 
-import { LoopArtifactStore } from "../core/loop-artifact-store";
+import { LoopArtifactStore, type LoopArtifactKind } from "../core/loop-artifact-store";
 import {
   canonicalizeLoopCapabilityExecutionEvent,
   LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
@@ -17,6 +17,7 @@ import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunIdentity } from "../core/loop-executor-types";
 import {
+  CAPABILITY_ARTIFACT_TYPES,
   INITIAL_BINDING_REGISTRY,
   replaceBinding,
 } from "../core/agent-capability-bindings";
@@ -28,7 +29,7 @@ import {
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
 import { RUNTIME_CAPABILITY_BY_EXECUTION_POINT } from "../core/runtime-capability-map";
-import { NODE_CAPABILITY_IDS } from "../loop/types";
+import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 import { createArtifact } from "../core/artifact";
 
 let passed = 0;
@@ -79,7 +80,7 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     runId: "run-wp4b-001",
     sequence: 1,
     capability: "requirement-intake",
-    nodeId: "requirement-summary",
+    nodeId: "requirement-intake",
     attempt: 1,
     status: "started",
     createdAt: TS,
@@ -195,7 +196,7 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
 function techRequest(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>) {
   return Object.freeze({
     requirementId: fixture.id.requirementId,
-    capability: "tech-design" as const,
+    capability: "solution-design" as const,
     inputArtifactRef: fixture.techInput.artifactRef,
     inputArtifactVersion: fixture.techInput.version,
     inputDigest: fixture.techInput.digest,
@@ -230,7 +231,7 @@ async function main(): Promise<void> {
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent({ ...event(), extra: "x" }), "unknown field rejected");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({ executorVersion: "unknown" })), "invalid executor version rejected");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({ bindingRegistryVersion: "v1" })), "invalid registry version rejected");
-  throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({ nodeId: "tech-design" })), "capability/node mismatch rejected");
+  throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({ nodeId: "solution-design" })), "capability/node mismatch rejected");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({ inputDigest: "b".repeat(64) })), "artifact ref/digest mismatch rejected");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({
     executionEventId: "run-wp4b-001:capability:1:succeeded", status: "succeeded",
@@ -240,26 +241,30 @@ async function main(): Promise<void> {
     status: "failed", nextStepEligibility: "ELIGIBLE", errorCode: "X", retryable: true,
   })), "failed execution cannot make next step eligible");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionChain([
-    event({ capability: "tech-design", nodeId: "tech-design", bindingId: "binding-codex-tech-design" }),
+    event({ capability: "solution-design", nodeId: "solution-design", bindingId: "binding-codex-solution-design" }),
   ], "run-wp4b-001"), "capability chain cannot skip requirement intake");
   ok(canonicalizeLoopCapabilityExecutionEvent(event()).includes('"executorAgent":"codex"'), "canonical form contains executor snapshot");
 
-  console.log("WP-4B: seven Runtime points map exactly to seven capabilities");
+  console.log("WP-4B: v2 Runtime bridge covers the six legacy-graph execution points");
   const mapped = Object.values(RUNTIME_CAPABILITY_BY_EXECUTION_POINT);
-  ok(mapped.length === 7, "exactly seven Runtime execution points");
-  ok(new Set(mapped).size === 7, "capability projection is one-to-one");
-  ok(NODE_CAPABILITY_IDS.every((capability) => mapped.includes(capability)), "all canonical capabilities are covered");
+  ok(mapped.length === 6, "exactly six legacy-graph execution points (validation retired)");
+  ok(new Set(mapped).size === 5, "legacy-graph projection covers five distinct v2 capabilities (solution-gate for both challenge and review points)");
+  ok(
+    (["requirement-intake", "solution-design", "solution-gate", "implementation", "code-review"] as NodeCapabilityId[])
+      .every((capability) => mapped.includes(capability)),
+    "every v2 capability with a legacy-graph home is covered (task-planning/knowledge-sync have no old-graph point)",
+  );
   const reviewPrompt = buildCapabilityPrompt({
-    type: "solution-review", node: "review", agent: "codex", requirementId: "REQ-WP4B", input: {},
-  }, "solution-review", "{}");
+    type: "solution-gate", node: "solution-gate", agent: "codex", requirementId: "REQ-WP4B", input: {},
+  }, "solution-gate", "{}");
   ok(reviewPrompt.includes("GATE_RESULT"), "Gate capability prompt requires a machine-readable Gate marker");
-  ok(parseCapabilityOutcomeMarkers("solution-review", "review\nGATE_RESULT: PASS")["gateResult"] === "PASS",
+  ok(parseCapabilityOutcomeMarkers("solution-gate", "review\nGATE_RESULT: PASS")["gateResult"] === "PASS",
     "real-runner Gate marker parser extracts one canonical result");
   ok(Array.isArray(parseCapabilityOutcomeMarkers(
     "code-review", 'review\nUNRESOLVED_FINDINGS_JSON: [{"severity":"P1"}]',
   )["unresolvedFindings"]), "real-runner finding marker parser extracts a JSON array");
   ok(parseCapabilityOutcomeMarkers(
-    "solution-review", "GATE_RESULT: PASS\nGATE_RESULT: FAIL",
+    "solution-gate", "GATE_RESULT: PASS\nGATE_RESULT: FAIL",
   )["gateResult"] === undefined, "duplicate Gate markers fail closed");
 
   console.log("WP-4B: v1 journal migration and v2 schema marker are fail-closed");
@@ -330,8 +335,8 @@ async function main(): Promise<void> {
     let inputRef = gateSource.artifactRef;
     let inputDigest = gateSource.digest;
     let sequence = 1;
-    for (const capability of NODE_CAPABILITY_IDS.slice(0, 3)) {
-      const nodeId = Object.entries(RUNTIME_CAPABILITY_BY_EXECUTION_POINT).find(([, value]) => value === capability)![0];
+    for (const capability of NODE_CAPABILITY_IDS.slice(0, 2)) {
+      const nodeId = capability;
       const start = event({
         executionEventId: `${gateIdentity.runId}:capability:${sequence}:started`,
         sequence,
@@ -342,7 +347,7 @@ async function main(): Promise<void> {
         inputDigest,
       });
       gateStore.appendCapabilityExecution(start);
-      const seededOutput = gateArtifacts.put("capability_output", `seed output for ${capability}`);
+      const seededOutput = gateArtifacts.put(CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind, `seed output for ${capability}`);
       const outputDigest = seededOutput.digest;
       const outputRef = seededOutput.artifactRef;
       gateStore.appendCapabilityExecution(event({
@@ -353,7 +358,7 @@ async function main(): Promise<void> {
         outputArtifactRef: outputRef,
         outputArtifactVersion: "1.0.0",
         outputDigest,
-        gateResult: "NOT_APPLICABLE",
+        gateResult: capability === "solution-gate" ? "PASS" : "NOT_APPLICABLE",
         nextStepEligibility: "ELIGIBLE",
       }));
       inputRef = outputRef;
@@ -369,7 +374,7 @@ async function main(): Promise<void> {
           agent: request.agent,
           output: { result: "capability_completed" },
           artifacts: [createArtifact({
-            id: "solution-review-without-gate",
+            id: "solution-gate-without-gate",
             requirementId: request.requirementId,
             node: request.node,
             type: "solution_review",
@@ -389,8 +394,8 @@ async function main(): Promise<void> {
       },
     });
     const gateResult = await gateGateway.execute({
-      type: "solution-review",
-      node: "review",
+      type: "solution-gate",
+      node: "solution-gate",
       agent: "codex",
       requirementId: gateIdentity.requirementId,
       input: { designRef: inputRef },
@@ -515,8 +520,8 @@ async function main(): Promise<void> {
     const gateway = tracedGateway(bypassFixture.runStore, bypassFixture.artifactStore, spyRunner);
     const before = bypassFixture.runStore.listCapabilityExecutions(bypassFixture.id.runId).length;
     await rejectsCode("INVALID_INPUT", () => gateway.execute({
-      type: "solution-review",
-      node: "review",
+      type: "solution-gate",
+      node: "solution-gate",
       agent: "codex",
       requirementId: bypassFixture.id.requirementId,
       input: { design: "untraced" },
@@ -537,12 +542,12 @@ async function main(): Promise<void> {
       executionEventId: `${claimedFixture.id.runId}:capability:3:started`,
       runId: claimedFixture.id.runId,
       sequence: 3,
-      capability: "tech-design",
-      nodeId: "tech-design",
+      capability: "solution-design",
+      nodeId: "solution-design",
       inputArtifactRef: claimedFixture.techInput.artifactRef,
       inputArtifactVersion: claimedFixture.techInput.version,
       inputDigest: claimedFixture.techInput.digest,
-      bindingId: "binding-codex-tech-design",
+      bindingId: "binding-codex-solution-design",
     });
     claimedFixture.runStore.appendCapabilityExecution(started);
     const running = recoverRunContext(claimedFixture.runStore, claimedFixture.id.requirementId)!;
@@ -691,7 +696,7 @@ async function main(): Promise<void> {
     ok(first.recovered === false, "first entry creates the Requirement run");
     ok(first.runId === id.runId, "created entry uses the supplied run identity");
     ok(first.execution.success === true, "qualified capability output succeeds");
-    ok(first.recoveryContext.nextCapability === "tech-design", "recovery advances to the next capability");
+    ok(first.recoveryContext.nextCapability === "solution-design", "recovery advances to the next capability");
     const firstEvents = runStore.listCapabilityExecutions(id.runId);
     ok(firstEvents.length === 2, "started and succeeded events persisted");
     ok(firstEvents[0]?.executorAgent === "codex", "actual Agent snapshot persisted");
@@ -708,7 +713,7 @@ async function main(): Promise<void> {
     const unrelated = artifactStore.put("capability_output", "unrelated but valid artifact");
     await rejectsCode("INVALID_INPUT", () => entry.execute({
       requirementId: id.requirementId,
-      capability: "tech-design",
+      capability: "solution-design",
       inputArtifactRef: unrelated.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: unrelated.digest,
@@ -722,8 +727,8 @@ async function main(): Promise<void> {
     // failed attempt rather than a fabricated success.
     const replacement = replaceBinding(
       INITIAL_BINDING_REGISTRY,
-      "binding-codex-tech-design",
-      "binding-kimi-tech-design",
+      "binding-codex-solution-design",
+      "binding-kimi-solution-design",
     );
     ok(replacement.registry.version === "2", "binding replacement increments registry snapshot version");
     const replacedGateway = new ExecutionGateway({
@@ -746,7 +751,7 @@ async function main(): Promise<void> {
     });
     const second = await replacedEntry.execute({
       requirementId: id.requirementId,
-      capability: "tech-design",
+      capability: "solution-design",
       inputArtifactRef: currentOutput.effectiveOutputArtifactRef!,
       inputArtifactVersion: currentOutput.effectiveOutputArtifactVersion!,
       inputDigest: currentOutput.effectiveOutputDigest!,
@@ -756,11 +761,11 @@ async function main(): Promise<void> {
     ok(second.recovered === true, "second entry recovers the existing Requirement");
     ok(second.runId === first.runId, "second entry resumes the same run");
     ok(second.execution.success === false, "unqualified shadow result is not reported as success");
-    ok(second.recoveryContext.nextCapability === "tech-design", "retryable failure remains recoverable at the same capability");
+    ok(second.recoveryContext.nextCapability === "solution-design", "retryable failure remains recoverable at the same capability");
     const allEvents = runStore.listCapabilityExecutions(id.runId);
     ok(allEvents.length === 4, "replacement attempt adds started and failed events");
     ok(allEvents[0]?.bindingId === "binding-codex-requirement-intake", "historical binding snapshot remains unchanged");
-    ok(allEvents[2]?.bindingId === "binding-kimi-tech-design", "new attempt records replacement binding");
+    ok(allEvents[2]?.bindingId === "binding-kimi-solution-design", "new attempt records replacement binding");
     ok(allEvents[2]?.bindingRegistryVersion === "2", "new attempt records replacement registry version");
     ok(allEvents[2]?.executorVersion === "2.0.0", "new attempt records replacement executor version");
     ok(allEvents[3]?.status === "failed" && allEvents[3]?.retryable === true, "failure is persisted as a retryable attempt");

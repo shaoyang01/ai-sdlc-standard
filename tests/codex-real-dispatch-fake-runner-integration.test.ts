@@ -134,7 +134,7 @@ async function test() {
   const parseSuccess = parseCodexOutput(validStdout, "REQ-FAKE-RUNNER", "implementation");
   assert(parseSuccess.ok === true, "parser succeeds for valid stdout");
   if (parseSuccess.ok) {
-    assert(parseSuccess.artifact.type === "code_patch", "artifact type is code_patch");
+    assert(parseSuccess.artifact.type === "code_patch", "artifact type is code_patch (parser-level patch kind, A4)");
     assert(parseSuccess.artifact.content["file"] === "src/generated-codex-patch.ts", "artifact has file path");
     assert(typeof parseSuccess.artifact.content["patch"] === "string", "artifact has patch content");
     assert((parseSuccess.artifact.content["patch"] as string).length > 0, "patch is non-empty");
@@ -334,7 +334,7 @@ async function test() {
   const successResult = await successRunner.run(requestWithImplInput);
   assert(successResult.success === true, "success scenario returns success");
   assert(successResult.artifacts.length === 1, "success scenario returns one artifact");
-  assert(successResult.artifacts[0].type === "code_patch", "success artifact is code_patch");
+  assert(successResult.artifacts[0].type === "implementation_record", "success artifact is implementation_record");
   assert(successResult.artifacts[0].content["file"] === "src/generated-codex-patch.ts", "success artifact has expected file path");
   assert(successResult.output["result"] === "code_patch_generated", "success output result is code_patch_generated");
   assert(successResult.output["raw_stdout"] === undefined, "success output does not expose raw stdout");
@@ -425,7 +425,7 @@ async function test() {
   });
   const injectedResult = await injectedGateway.execute(requestWithImplInput);
   assert(injectedResult.success === true, "injected gateway returns success");
-  assert(injectedResult.artifacts[0].type === "code_patch", "injected gateway returns code_patch");
+  assert(injectedResult.artifacts[0].type === "implementation_record", "injected gateway returns implementation_record");
   assert(injectedResult.artifacts[0].content["file"] === "src/generated-codex-patch.ts", "injected gateway artifact has expected file path");
   console.log("");
 
@@ -442,7 +442,7 @@ async function test() {
   const kimiResult = await kimiRunnerGateway.execute(kimiRequest);
   assert(kimiResult.success === true, "kimi request in codex mode returns success");
   assert(kimiResult.artifacts[0].type === "shadow_output", "kimi request uses shadow_output, not injected codex runner");
-  assert(!kimiResult.artifacts.some((a) => a.type === "code_patch"), "kimi request did not produce code_patch");
+  assert(!kimiResult.artifacts.some((a) => a.type === "implementation_record"), "kimi request did not produce implementation_record");
   console.log("");
 
   // ── Test 14c: Injected runner is not used when mode is not codex ──
@@ -454,7 +454,7 @@ async function test() {
   const shadowModeResult = await shadowModeGateway.execute(requestWithImplInput);
   assert(shadowModeResult.success === true, "shadow mode with injected runner returns success");
   assert(shadowModeResult.artifacts[0].type === "shadow_output", "shadow mode uses shadow_output, not injected codex runner");
-  assert(!shadowModeResult.artifacts.some((a) => a.type === "code_patch"), "shadow mode did not produce code_patch");
+  assert(!shadowModeResult.artifacts.some((a) => a.type === "implementation_record"), "shadow mode did not produce implementation_record");
   console.log("");
 
   // ── Test 15: Runtime with fake runner via custom implementation executor ──
@@ -479,7 +479,7 @@ async function test() {
     const gateway = new ExecutionGateway({ codexRunner: fakeRunner });
     const result = await gateway.execute(request);
 
-    const codePatchArtifact = result.artifacts.find((a) => a.type === "code_patch");
+    const codePatchArtifact = result.artifacts.find((a) => a.type === "implementation_record");
     if (!codePatchArtifact) {
       return {
         node: "implementation",
@@ -511,7 +511,7 @@ async function test() {
   assert(runtimeResult.feedback.review_summary.validationPassed === true, "validation passes");
 
   const codexArtifact = runtimeResult.artifacts.find(
-    (a) => a.node === "implementation" && a.type === "code_patch" && a.id.includes("codex-fake")
+    (a) => a.node === "implementation" && a.type === "implementation_record" && a.id.includes("codex-fake")
   );
   assert(codexArtifact !== undefined, "runtime produced codex-fake code_patch artifact");
   assert(

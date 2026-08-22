@@ -240,7 +240,6 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
 - `templates/gate-result-template.md`
 - `templates/artifact-manifest-template.md`
 - `templates/business-domain-sync-status-template.yaml`
-- `templates/library-driven-sync-decision-template.md`
 
 职责划分：
 

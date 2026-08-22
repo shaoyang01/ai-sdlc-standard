@@ -1,9 +1,12 @@
 # Gate Result: <Phase Name>
 
+> 状态：Draft（2026-08-22，C02-WP3.5 合同重基线，Decision-044/045；收口后升 Accepted）
+> 关联：[Phase Gates](../ai-sdlc/phase-gates.md) · [Artifact Versioning](../ai-sdlc/artifact-versioning.md) · [Artifact Flow](../ai-sdlc/artifact-flow.md)
+
 ## Metadata
 
 - Requirement ID:
-- Artifact Type: 方案审核 / 代码审核 / 测试验收 / Gate Result
+- Artifact Type: 方案审核（solution-gate 正式裁决）/ 其他
 - Version: 1.0.0
 - Status: draft / active / passed / failed / stale / replaced
 - Reviewer / Skill:
@@ -13,75 +16,44 @@
 - Reviewed Artifact Version:
 - Gate Artifact Version:
 - Gate Name:
-- Gate Type: generic / development_path_entry / documentation_governance_tail_completion / other
+- Gate Type: solution_gate / other
 - Manifest Path:
 - Gate Basis:
-- Development Path Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION / not_applicable
-- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE / not_applicable
-- Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN / not_applicable
-- Development Path Decision Source:
-- Development Path Decision Artifact:
-- Tail Required: yes / no / not_applicable
-- Tail Scope:
-- Tail Status: planned / in_progress / blocked / completed / not_required / stale / not_applicable
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
 
-非 Development Path 或 Tail Gate 可以将 Development Path、Tail 相关字段标记为 `not_applicable`，但字段本身不得删除。
+本模板只用于产出结论性 Gate；只有 solution-gate 的 `formal_verdict` 输出结论性 Gate（PASS / FAIL / PASS_WITH_RISK），`adversarial_scan` 角色产出的 Finding Ledger 不给正式 Gate。其他节点的确定性准入由 LOOP runtime 执行（generation、current revision、Gate、设计深度裁决、finding 状态），不产出本模板；`sdlc-gate-runner` 已退役。
 
 ## Conclusion
 
-## Development Path Check
+- Result: PASS / FAIL / PASS_WITH_RISK
+- Can Continue: yes/no
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Gate Artifact Version:
 
-当 Gate Type 为 `development_path_entry` 时必填；其他 Gate Type 可整体标记 `not_applicable`。
+## Design Depth Decision（solution-gate 正式裁决必填）
 
-- Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION
+- Depth: LIGHT / STANDARD / DEEP
+- Decision Status: DECIDED / BLOCKED_UNKNOWN
 - Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
-- Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
-- Decision Source:
 - Decision Artifact:
 - Current / Stale:
-- Implementation Entry Eligible: yes/no
-- Blocking Reason:
-- Evidence:
+- Stale Condition:
 
-## Documentation Governance Tail Evidence Check
+`BLOCKED_UNKNOWN` 不进入实现；必须回到需求/方案补齐事实后重新正式裁决。深度档位或 decision_status 变化必须重新过 solution-gate，不得沿用旧裁决。
 
-当 Gate Type 为 `documentation_governance_tail_completion` 时必填；其他 Gate Type 可整体标记 `not_applicable`。`sdlc-gate-runner` 只检查和判定证据，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile，不修改生产代码或知识材料。
+## Finding Ledger Reference（solution-gate 正式裁决必填）
 
-- required_artifacts:
+- Finding Ledger Artifact:
+- Finding Ledger Version:
+- Scan Executor Binding:（adversarial_scan 角色）
+- Verdict Executor Binding:（formal_verdict 角色，必须与 Scan Executor Binding 不同）
+- Ledger Current / Stale:
+- Baseline Findings（总数 / 已关闭）:
+- 未解决 Blocking Findings：Critical: / High:
 
-| Item | Required | Artifact Path | Expected Version / Basis | Status | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| 03-实现记录 | actual_implementation_required |  |  |  |  |
-| 04-代码审核 | actual_implementation_required |  |  |  |  |
-| 05-测试验收 | actual_implementation_required |  |  |  |  |
-| business_domain_sync decision | required |  |  |  |  |
-| Reconcile decision | required |  |  |  |  |
-
-- completed_artifacts:
-
-| Item | Artifact Path | Version | Status | Result | Evidence |
-| --- | --- | --- | --- | --- | --- |
-
-- skipped_items:
-
-| Item | Decision | Reason | Evidence | Decision Source | Decision Owner | Stale Condition |
-| --- | --- | --- | --- | --- | --- | --- |
-
-- blocking_items:
-
-| Item | Reason | Owner | Earliest Affected Node | Required Action | Status |
-| --- | --- | --- | --- | --- | --- |
-
-- business_domain_sync_decision: SYNC_REQUIRED / NOT_REQUIRED / PROPOSAL_REQUIRED / BLOCKED / DUPLICATE_SYNC_BLOCKED
-- reconcile_decision: required / not_required / blocked
-- entry_coverage_result:
-- regate_result:
-- completion_evidence:
-- completion_decision_source:
-
-对 Tail Completion Gate，`completion_decision_source` 必须指向当前 Gate artifact 和当前 Gate Artifact Version。Manifest 是状态权威；Pipeline result、Delivery Summary、Stage Summary、workflow-status snapshot 和聊天结论不能替代 Tail Completion Gate。
+对抗扫描与正式裁决必须由不同 Agent binding 执行（Decision-044）；同一 Agent 执行两角色、输入 revision 不同或 ledger 非 current 均 fail-closed。closure review 新增 blocking finding 只有两种合法来源：本轮修复直接引入的回归，或足以证明 baseline/输入完整性失效的新证据。
 
 ## Critical
 
@@ -119,6 +91,8 @@
 - Follow-up Required: yes/no
 - Follow-up Owner:
 
+`PASS_WITH_RISK` 只消费 current `ACCEPTED_RISK` proof；Critical 与未接受 High 始终阻塞。
+
 ## Re-Gate Check
 
 - Required: yes/no
@@ -134,18 +108,7 @@
 - Reviewed Version Matches Manifest: yes/no
 - Stale Because:
 - Required Re-Gate:
-
-## Tail Completion Decision
-
-仅当 Gate Type 为 `documentation_governance_tail_completion` 时填写；其他 Gate Type 可整体标记 `not_applicable`。
-
-- Tail Completion Eligible: yes/no
-- Gate Result: PASS / FAIL / PASS_WITH_RISK
-- Completion Evidence:
-- Completion Decision Source:
-- Manifest Version:
-- Blocking Items:
-- Next Step:
+- Depth Re-Verdict: 重新裁决 / 沿用
 
 ## Next Step
 
@@ -153,4 +116,5 @@
 
 | Version | Date | Reviewer / Skill | Change Type | Summary | Re-Gate |
 | --- | --- | --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | C02-WP3.5 | rebaseline | v2 合同重基线（Decision-044/045）：删除 Development Path / Tail / pipeline 相关字段与检查区段（Development Path Check、Documentation Governance Tail Evidence Check、Tail Completion Decision）；新增 Design Depth Decision 与 Finding Ledger Reference 区段（solution-gate 正式裁决必填）；Gate Type 收敛为 solution_gate / other，明确唯一结论性 Gate。 | no |
 | 1.0.0 |  |  | initial | Initial gate result. | no |

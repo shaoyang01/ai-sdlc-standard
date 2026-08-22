@@ -31,7 +31,6 @@ import {
 import type { LoopCapabilityExecutionEvent } from "../core/loop-capability-execution";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
-import { runtimeExecutionPointForCapability } from "../core/runtime-capability-map";
 
 let passed = 0;
 let failed = 0;
@@ -96,7 +95,7 @@ function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
     runId: "run-001",
     sequence: 1,
     capability: "requirement-intake",
-    nodeId: runtimeExecutionPointForCapability("requirement-intake"),
+    nodeId: "requirement-intake",
     attempt: 1,
     status: "started",
     createdAt: nextTs(),
