@@ -39,7 +39,6 @@ canonical_sources:
   - templates/gate-result-template.md
   - templates/artifact-manifest-template.md
   - templates/business-domain-sync-status-template.yaml
-  - templates/library-driven-sync-decision-template.md
 
 required_coverage_tags:
   - development_path_direct

@@ -1,193 +1,113 @@
-# AI SDLC Lifecycle
+# AI SDLC Lifecycle（v2 单轨）
+
+> 状态：Draft（2026-08-22，C02-WP3.5 合同重基线，Decision-044/045；收口后升 Accepted）
+> 关联：[LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) · [Node Capability Contract](node-capability-contract.md) · [Development Path Governance（单轨重写）](development-path-governance.md) · [Phase Gates](phase-gates.md)
 
 ## 适用场景
 
 本生命周期适用于人工唤醒 Skill 的 AI 辅助研发流程，尤其适用于不同 Agent 之间只能通过文档交接的场景。
 
-## 标准阶段
+## Canonical 七节点链（v2，Decision-044）
+
+所有需求走同一条链；复杂度只决定深度档位，不改变链结构：
 
 ```text
-0. Requirement Intake
-1. Requirement Understanding
-2. Requirement Confirmation
-3. Specification Writing
-4. Specification Gate
-5. Planning
-6. Plan Gate
-7. Task Generation
-8. Task Gate
-9. Implementation
-10. Implementation Gate
-11. Code Review
-12. Fix
-13. Test
-14. Knowledge Sync
-15. Reconcile
+requirement-intake
+  -> solution-design
+  -> solution-gate（adversarial_scan 对抗扫描 + formal_verdict 正式裁决 + 设计深度裁决）
+  -> task-planning
+  -> implementation
+  -> code-review
+  -> knowledge-sync
+  -> Manual Git Handoff（C03 Delivery Tail）
 ```
+
+节点能力合同见 [Node Capability Contract](node-capability-contract.md)；门禁语义见 [Phase Gates](phase-gates.md)；返回最早受影响节点规则见 [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §5.3。
 
 ## 阶段职责
 
-### 0. Requirement Intake
+### requirement-intake — 需求归一化与反馈分类
 
-接收原始需求，不做实现判断。
-
-输出：
-- Source
-- Format
-- Missing Context
-- Conflicting Sources
-
-### 1. Requirement Understanding
-
-复述业务目标、用户意图、当前问题、初步范围和不确定点。
+接收原始需求（含测试/线上反馈），不做实现判断。
 
 输出：
-- Business Goal
-- User Intent
-- Current Problem
-- Initial Scope
-- Uncertainties
+- Requirement ID 与 change record（新需求/补充/变更/返工/反馈驱动变更）
+- Source / Format / Missing Context / Conflicting Sources
+- Business Goal / User Intent / Current Problem / Initial Scope / Uncertainties
+- In Scope / Out of Scope / Success Criteria / Pending Questions
 
-### 2. Requirement Confirmation
+原始测试/线上反馈不是 LOOP 节点产物：先经 change record 分类为 `FEEDBACK_DRIVEN_CHANGE`，intake 确认事实后在新 generation 中进入本链。
 
-确认边界，避免后续方案扩散。
+### solution-design — 技术方案设计与深化
 
-输出：
-- In Scope
-- Out of Scope
-- Success Criteria
-- Pending Questions
-
-### 3. Specification Writing
-
-生成符合 ESS 的技术方案。
+生成符合 ESS 的技术方案，并按已裁决深度档位深化。
 
 输出：
-- Technical Specification
-- Open Questions
-- Assumptions
+- Technical Specification（LIGHT/STANDARD/DEEP 档位对应的章节深度）
+- Open Questions / Assumptions
 
-### 4. Specification Gate
+### solution-gate — 方案门禁（对抗扫描与正式裁决）
 
-开发前审计规格是否完整，阻止未定义行为进入实现阶段。
+开发前审计规格是否完整，阻止未定义行为进入实现阶段。两个执行角色必须由不同 Agent binding 执行：
 
-输出：
-- Gate Result
-- Critical / High / Medium / Low
-- Missing Constraints
-- Required Actions
-
-### 5. Planning
-
-将通过规格审计的方案转化为实现计划。
+- `adversarial_scan`：对抗扫描，产出首轮 Finding Ledger；不给正式 Gate。
+- `formal_verdict`：消费当前方案与扫描 ledger，输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = DECIDED/BLOCKED_UNKNOWN）。
 
 输出：
-- plan.md
-- research.md
-- data-model.md
-- contracts/
-- rollback and monitoring notes
+- Gate Result（PASS / FAIL / PASS_WITH_RISK）
+- Design Depth Decision
+- Critical / High / Medium / Low findings
+- Missing Constraints / Required Actions
 
-### 6. Plan Gate
+### task-planning — 任务规划与实现前一致性审计
 
-审计计划是否改变需求边界，是否引入未定义业务行为。
+将通过方案门禁的方案转化为实现计划，并做实现前内部一致性审计（原 analyze/checklist 的降级形态）。
 
-### 7. Task Generation
+输出：
+- Task Plan（可执行、可追溯、可测试的任务清单）
+- 实现前一致性审计结论（覆盖规格、计划、测试、回滚和风险项）
 
-生成可执行、可追溯、可测试的任务清单。
+### implementation — 实现与证据记录
 
-### 8. Task Gate
+按任务实现，同时形成可核验证据。遇到未定义行为时停止并反馈，不自行补业务规则。
 
-审计任务是否覆盖规格、计划、测试、回滚和风险项。
+输出：
+- 工作区改动（代码 patch）
+- Implementation Record（每项声明引用 diff、测试输出或 journal 事件证据，禁止自述）
 
-### 9. Implementation
+### code-review — 代码审核与收敛复审
 
-按任务实现。遇到未定义行为时停止并反馈，不自行补业务规则。
+审查代码是否符合规格与任务边界，而不只是审查代码风格。首轮建立 Finding Ledger baseline，后续轮次为 closure review（只逐项验证修复证据；新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效）。
 
-### 10. Implementation Gate
+输出：
+- Review Summary（含 Finding Ledger / closure review）
+- 可定位、可修复的 findings（severity + 位置/证据）
 
-确认实现是否符合任务和规格，是否有未声明副作用。
+### knowledge-sync — 知识同步与对账
 
-### 11. Code Review
+将稳定业务事实、规格遗漏和反复出现的问题沉淀到知识库、Checklist 或 Schema；校对代码、规格、业务文档之间的一致性。唯一输入权威是当前 generation 的七节点 current revisions、已关闭/已接受 finding proof、代码/测试 evidence 与目标知识现状。
 
-审查代码是否符合规格，而不只是审查代码风格。
+输出：
+- decision（NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT）
+- 候选稳定事实 / source revision IDs / 目标路径 / diff 或 proposal / reconcile result
+- 未执行项、残余风险和 evidence digest
 
-### 12. Fix
+默认只读，明确写授权后才写入目标知识。
 
-按结构化 Review 报告修复，修复不得引入新业务行为。
+## 返回最早受影响节点（Re-Gate）
 
-### 13. Test
-
-验证实现结果，失败必须分类。
-
-### 14. Knowledge Sync
-
-将稳定业务事实、规格遗漏和反复出现的问题沉淀到知识库、Checklist 或 Schema。
-
-### 15. Reconcile
-
-校对代码、规格、业务文档之间的一致性。默认只读，明确授权后才写入。
-
-## Development Path 分流与 Shared Tail 汇合
-
-Specification Gate 之后必须形成 Development Path Decision，遵循 canonical 标准 `ai-sdlc/development-path-governance.md`：
-
-```text
-Specification Gate
-  -> Development Path Decision
-       |
-       +-- DIRECT_IMPLEMENTATION
-       |     -> Implementation
-       |          |
-       |          +-----------------------------+
-       |
-       +-- SPECKIT_PIPELINE_REQUIRED
-       |     -> Speckit SDD Core through Implement
-       |          |
-       |          +-----------------------------+
-       |
-       +-- BLOCKED_NEEDS_REVISION
-                 -> Earliest Affected Upstream Node
-                 -> Re-Gate
-
-实现路径汇合：
-    DIRECT_IMPLEMENTATION / Implementation
-    SPECKIT_PIPELINE_REQUIRED / Core through Implement
-                |
-                v
-    Shared Documentation Governance Tail
-                |
-                v
-    Tail Completion Gate
-```
-
-- `DIRECT_IMPLEMENTATION`：不执行完整 SDD Core，直接从技术方案拆任务实现。
-- `SPECKIT_PIPELINE_REQUIRED`：执行 Speckit SDD Core through Implement；canonical Core 止于 Implement，Shared Tail 从 Implement 完成后开始。
-- `BLOCKED_NEEDS_REVISION`：返回最早受影响节点重新 Gate，不得进入实现或 Tail。
-
-Direct 和 Speckit 两条实现路径在 Implementation 后汇入同一个 Shared Documentation Governance Tail；Blocked 路径不汇入 Tail。Tail 位于 canonical Speckit SDD Core 边界之外，包含：
-
-- 实现记录（`03-实现记录`）。
-- 代码审核（`04-代码审核`）与 Fix 或 Re-Gate loop。
-- 测试验收（`05-测试验收`）。
-- business_domain_sync decision 和 conditional execution。
-- Reconcile decision 和 conditional execution。
-- Manifest update。
-- Tail Completion Gate（owner 为 `sdlc-gate-runner`）。
-
-Development Path 与 Tail 的正式语义以 `ai-sdlc/development-path-governance.md` 为准。本任务不声称 Pipeline Skill 已完成后续接入。
-
-Current implementation note：当前 `sdlc-speckit-pipeline` 实现仍按现状串行调度 Implement 之后的 Sync 和 Reconcile，这是待 Task 07-E 收敛的实现差异，不是 canonical Core 边界；当前 Pipeline completion 不能替代 Tail Completion Gate。
+任何节点发现有效 finding 时，按 [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §5.3 的 v2 路由表返回最早受影响节点；`solution-gate` 与 `code-review` 的收敛协议见 [Finding Lifecycle Contract](loop-finding-lifecycle.md) 与 C02-WP3.5 影响分析 §9 G1。
 
 ## 裁剪规则
 
-简单需求可以裁剪阶段，但必须说明裁剪原因。
+简单需求可以裁剪阶段内容，但必须说明裁剪原因，且不改变链结构。
 
-裁剪原因必须遵循 `ai-sdlc/complexity-routing.md`：
+裁剪原因必须遵循 [Complexity Routing](complexity-routing.md) 的深度档位模型：
 
-- `SIMPLE` 和 `MEDIUM` 默认可以走直接实现路径。
-- `COMPLEX` 默认进入完整 SDD / Speckit pipeline。
-- `BLOCKED_UNKNOWN` 必须回到技术方案补齐事实，不能靠猜测裁剪。
+- `LIGHT`：方案与任务内容可精简；节点顺序不变。
+- `STANDARD`：常规单模块改造的完整内容。
+- `DEEP`：完整状态机/DB/MQ/事务/回滚/代表数据/边界场景章节 + 实现前一致性审计。
+- `BLOCKED_UNKNOWN`：必须回到需求/方案补齐事实，不能靠猜测裁剪。
 
 不可裁剪的内容：
 - Scope / Out of Scope
@@ -195,5 +115,10 @@ Current implementation note：当前 `sdlc-speckit-pipeline` 实现仍按现状�
 - 失败策略
 - 测试方式
 - 副作用边界
+- 七节点顺序与 Gate 结论（节点产物可能精简，节点不得跳过）
 
-阶段裁剪不能裁剪实际实现所需的 `03-实现记录`、`04-代码审核`、`05-测试验收` 以及 business_domain_sync decision、Reconcile decision 和 Tail Completion Gate 等 Tail 决策。
+## Revision Record
+
+| Version | Date | Status | Summary |
+| --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 重基线：阶段集切换为 v2 七节点链；Specification Gate 改为 solution-gate 双角色 + 设计深度裁决；删除 Development Path 分流、Shared Tail 与 pipeline 语义；Test 阶段退役（反馈经 intake 重入）；新增 task-planning/knowledge-sync 职责；裁剪规则按深度档位重写。 |

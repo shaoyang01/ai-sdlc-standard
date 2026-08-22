@@ -128,6 +128,10 @@ Decision-045 的 21 项映射是固定输入。C03 实施按以下顺序进行�
 
 Skill 完整映射以 Decision-045 为权威，本文不复制第二份可独立修改的映射表。
 
+> **2026-08-22 补充裁决（WP3.5-A Round 2 复审）**：上述顺序方向确认不变；但当前 WP3.5-A 已删除仍被公开注册旧 Skill（`sdlc-speckit-pipeline`、`sdlc-speckit-sync` 等，见 `manifest.yaml`）消费的合同文件（library-driven-sync-runtime.md、speckit-project-bootstrap.md 等），形成中间态断链，登记为 open finding H3。“活动路径残留扫描清零”仅对部分目录成立；归档链接不能替代运行所需合同。该裁决同时明确：(1) 不得把 Skill 修复塞入 WP3.5-A；(2) C03-B 原子 cutover 必须在同一变更内完成「新包可用 → registry 切换 → 旧包及其依赖删除」；(3) 若要在 C03 前保持旧 Skill 可调用，必须先重新裁决当前删除顺序。H3 关闭前 WP3.5-A 不得收口。
+>
+> **Round 2 跟进（同日）**：H2（stablePath 结构校验）修复经独立复审通过并标记关闭，未发现新的 Critical/High。根因归并：节点产物与失效起点过去由调用方自由表达、缺少单一 canonical authority，已由固定映射与写入/读回/交叉绑定校验消除（H1/H2）；文档代码退役与公开 Skill 注册切换原先不在同一原子边界，属切换治理缺口——因此 H3 只能由 C03-B 的原子 cutover 消除，不能扩大为 WP3.5-A 内的临时补丁。下一有效边界：执行并独立复审 C03-B，届时做活动路径残留扫描与真实入口可调用性验证。
+
 ## 6. 输出 D：C04 与历史兼容处置
 
 ### D1. C04 状态

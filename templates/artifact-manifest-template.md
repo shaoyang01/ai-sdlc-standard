@@ -1,5 +1,8 @@
 # Artifact Manifest: <Requirement ID>
 
+> 状态：Draft（2026-08-22，C02-WP3.5 合同重基线，Decision-044/045；收口后升 Accepted）
+> 关联：[Lifecycle](../ai-sdlc/lifecycle.md) · [Artifact Storage](../ai-sdlc/artifact-storage.md) · [Artifact Versioning](../ai-sdlc/artifact-versioning.md) · [Phase Gates](../ai-sdlc/phase-gates.md)
+
 ## Metadata
 
 - Requirement ID:
@@ -8,196 +11,97 @@
 - Status: active / blocked / completed / abandoned / stale / replaced
 - Repository:
 - Created At:
-- Current Stage:
+- Current Generation: 1
+- Current Node: requirement-intake / solution-design / solution-gate / task-planning / implementation / code-review / knowledge-sync / delivery_tail（07）
 - Current Status: active / blocked / completed / abandoned
 - Versioning Model: stable-path-internal-version
-- Related Specs Directory:
 - Related Branch:
 - Current Owner:
 - Last Updated At:
 
-## Development Path Decision
+## Design Depth Decision
 
-- Decision: DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION / undecided
-- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
-- Parent Requirement ID:
-- Current Change Scope:
-- Original Requirement Context:
-- Aggregate Requirement Scope:
-- Original Implemented / Approved Scope:
-- Out of Delta Scope:
-- Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
-- Delta Complexity: SIMPLE / MEDIUM / COMPLEX / BLOCKED_UNKNOWN
-- Aggregate Complexity: reference only
-- Complexity Triggers:
-- Delta Complexity Triggers:
-- Ignored Aggregate Triggers:
-- Full SDD Override: none / user_requested / later_gate_required
-- Decided By:
-- Decision Source: sdlc-solution-reviewer / user / sdlc-gate-runner / other
-- Development Path Decision Source:
-- Decision Artifact:
+本字段是 solution-gate（formal_verdict）设计深度裁决在 Manifest 中的唯一模板权威，语义遵循 `ai-sdlc/phase-gates.md` 与 `templates/gate-result-template.md`。
+
+- Depth: LIGHT / STANDARD / DEEP
+- Decision Status: DECIDED / BLOCKED_UNKNOWN
+- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE（变更时）
+- Decided At:
+- Decision Source: sdlc-solution-gate / formal_verdict
+- Decision Artifact: `library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md`
+- Gate Artifact Version:
+- Finding Ledger Reference:
+- Verdict Executor Binding（formal_verdict）:
+- Scan Executor Binding（adversarial_scan）:（必须与 Verdict Executor Binding 不同，Decision-044）
 - Reason:
 - Follow-up:
+- Current / Stale:
+- Stale Condition: 01-技术方案 版本变化或 finding 使裁决失效时
 
-Manifest rule: when a Change Event exists, do not reuse an old Development Path
-Decision as the new delta route. Record a new Re-Gate Decision or Delta
-Development Path Decision based on Current Change Scope / Delta Scope.
+规则：
 
-## Delta Development Path Decision
+- `BLOCKED_UNKNOWN` 不进入实现；必须回到需求/方案补齐事实后重新正式裁决。
+- 深度档位或 decision_status 变化必须重新过 solution-gate（formal_verdict），不得自行沿用旧裁决。
+- 对抗扫描与正式裁决必须由不同 Agent binding 执行（Decision-044）；同一 Agent 执行两角色即 fail-closed。
 
-- Change Event:
-- Parent Requirement ID:
-- Same Requirement Decision:
-- Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
-- Current Change Scope / Delta Scope:
-- Aggregate Requirement Scope:
-- Aggregate Complexity: reference only
-- Delta Complexity:
-- Delta Complexity Triggers:
-- Ignored Aggregate Triggers:
-- Re-Gate Source:
-- Earliest Affected Node:
-- Decision:
-- Decision Source:
-- Decision Artifact:
-- Required Re-Gate:
-- Status: open / passed / blocked / superseded
+## Generation 与变更记录
+
+- Current Generation: 1
+- 变更（含测试/线上反馈）经 requirement-intake 分类为 change record（NEW_REQUIREMENT / SUPPLEMENT / CHANGE / REWORK / FEEDBACK_DRIVEN_CHANGE）后开启新 generation；旧 generation 产物只读，不自动提升为 current。
+
+## 变更范围（Delta Scope）
+
+v2 change-control 保留字段（完整语义见 `ai-sdlc/change-control.md`）：
+
+- Delta Scope:（本次补充 / 返工 / 测试反馈 / Review 暴露缺口真正处理的当前变更范围）
+- Aggregate Requirement Scope:（同一 `requirement_id` 已归档、已审核或已实现的完整原需求范围，只作为上下文）
+- Same Requirement Decision: yes / no（是否沿用原 `requirement_id` 的显式决策）
+- Earliest Affected Node: 00-需求资料 / 01-技术方案 / 02-方案审核 / 03-任务规划 / 04-实现记录 / 05-代码审核 / 06-知识同步
 
 ## Artifact Index
 
-| Node | Required | Directory | Stable Path | Version | Status | Result | Updated At |
+| Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 00 需求资料 | no | `00-需求资料/` |  |  | draft / active / stale / replaced |  |  |
+| 00 需求资料 | yes | `00-需求资料/` |  |  | draft / active / stale / replaced |  |  |
 | 01 技术方案 | yes | `01-技术方案/` |  |  | draft / active / stale / replaced |  |  |
 | 02 方案审核 | yes | `02-方案审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
-| 03 实现记录 | actual_implementation_required | `03-实现记录/` |  |  | draft / active / stale |  |  |
-| 04 交付总结 | recommended | `04-交付总结/` |  |  | draft / active / stale |  |  |
-| 04 代码审核 | actual_implementation_required | `04-代码审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
-| 05 测试验收 | actual_implementation_required | `05-测试验收/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
+| 03 任务规划 | yes | `03-任务规划/` |  |  | draft / active / stale |  |  |
+| 04 实现记录 | actual_implementation_required | `04-实现记录/` |  |  | draft / active / stale |  |  |
+| 05 代码审核 | actual_implementation_required | `05-代码审核/` |  |  | draft / active / stale | closed / blocked / risk_accepted |  |
+| 06 知识同步 | yes | `06-知识同步/` |  |  | draft / active / stale | NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT |  |
+
+`07 交付总结` 属于 C03 Delivery Tail，不映射节点能力，不进入 node Artifact Index；单独登记，见下文 Delivery Tail 区段。
 
 Required 语义说明：
 
-- `actual_implementation_required`：产生实际代码、配置或行为实现时为 required。
-- 纯文档、纯分析或纯治理且不产生实际实现时，对应项可以判定为 `not_applicable`，但必须记录范围、原因、证据、decision source 和 decision owner。
-- 不得继续使用无条件 `recommended` 或无证据 `conditional` 代替上述语义。
-- `04 交付总结` 继续为 `recommended`；它不是 Gate，不能替代 `03 实现记录`、`04 代码审核`、`05 测试验收` 或 Tail Completion Gate。
+- `yes`：节点不可跳过（节点产物可精简，节点顺序不变）。
+- `actual_implementation_required`：产生实际代码、配置或行为实现时为 required；纯文档、纯分析或纯治理且不产生实际实现时，对应项可以判定为 `not_applicable`，但必须记录范围、原因、证据、decision source 和 decision owner。
+- 只有 solution-gate（02）输出结论性 Gate；`05` 的 Result 是 closure review 结论，`06` 的 Result 是 knowledge-sync decision，均不是 Gate。
+- v1 旧产物不进入本表：`00/01/02` 可作历史输入引用，旧 `03/04/05` 保持只读历史；若确需复用，必须在新 generation 中显式导入为 evidence 并生成 v2 revision。
 
-## Documentation Governance Tail
+## Delivery Tail（07-交付总结，C03）
 
-Canonical Field: `documentation_governance_tail`
+本区段记录 C03 Delivery Tail 状态与证据指针；Delivery Tail 不映射节点能力，不输出 Gate，不替代七节点产物，不进入 node Artifact Index。
 
-本区段是 Shared Documentation Governance Tail 当前状态、证据路径和版本指针的唯一模板权威，语义遵循 `ai-sdlc/development-path-governance.md`。本区段不创建第二份状态字段；Tail 状态只有 `documentation_governance_tail.status`。
-
-- required: yes/no
-- scope:
-- status: planned / in_progress / blocked / completed / not_required / stale
-- required_artifacts:
-
-| Item | Requirement Basis | Expected Artifact | Expected Version / Current Basis | Status |
-| --- | --- | --- | --- | --- |
-
-- completed_artifacts:
-
-| Item | Artifact Path | Version | Status | Result | Evidence | Current / Stale |
-| --- | --- | --- | --- | --- | --- | --- |
-
-- skipped_items:
-
-| Item | Decision: not_required / not_applicable | Reason | Evidence | Decision Source | Decision Owner | Artifact / Version Basis | Stale Condition |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-
-- blocking_items:
-
-| Item | Reason | Owner | Earliest Affected Node | Required Action | Status |
-| --- | --- | --- | --- | --- | --- |
-
-### business_domain_sync
-
-Manifest Field: `documentation_governance_tail.business_domain_sync`
-
-- business_domain_sync_decision: SYNC_REQUIRED / NOT_REQUIRED / PROPOSAL_REQUIRED / BLOCKED / DUPLICATE_SYNC_BLOCKED
-- mode: none / speckit_driven / library_driven / hybrid
-- decision_source:
-- decision_artifact:
-- current_sync_owner: sdlc-speckit-sync / none
-- execution_required: yes/no
-- execution_status: not_started / in_progress / done / blocked
-- execution_result: not_run / synced / proposal / partial / not_required / blocked
-- source_of_truth:
-- target_documents:
-- execution_artifact:
-- duplicate_sync_guard: active
-- stable_fact_candidates:
-- synced_facts:
-- proposed_updates:
-- skipped_facts:
-- blocked_reasons:
-- residual_risks:
-- current / stale:
-- stale_condition:
-
-decision 与 execution result 必须分离：`business_domain_sync_decision` 记录五种固定判定之一，`execution_result` 记录六种执行结果之一。duplicate guard 阻止执行时，decision 保持 `DUPLICATE_SYNC_BLOCKED`，execution_result 按是否实际尝试记录 `blocked` 或 `not_run`，blocking reason 与 duplicate evidence 必须记录。现有 Sync output 到 execution_result 的映射：`SYNCED -> synced`、`PROPOSED -> proposal`、`PARTIAL -> partial`、`BLOCKED -> blocked`、未执行 -> `not_run`、`NOT_REQUIRED` decision 且无需执行 -> `not_required`。
-
-Legacy compatibility：历史 Manifest 中的 `## Speckit Sync` 区段允许兼容读取，读取时映射到 `documentation_governance_tail.business_domain_sync`；新 Manifest 不得同时创建旧区段和本区段；不要求自动迁移历史 Manifest；不删除历史事实；compatibility read 不允许继续新写旧字段。
-
-### Reconcile
-
-- reconcile_decision: required / not_required / blocked
-- decision_source:
-- decision_artifact:
-- audit_scope:
-- execution_required: yes/no
-- execution_status:
-- reconciliation_artifact:
-- result_classification:
-- evidence:
-- blocking_drift:
-- earliest_affected_node:
-- stale_condition:
-
-本子区段只记录 decision 与结果指针；模板不得执行或替代 Reconcile。
-
-### entry_coverage_result
-
-Manifest Field: `documentation_governance_tail.entry_coverage_result`
-
-本字段只记录状态、证据和指针，不执行 Entry Coverage，也不创建第二份 Tail 状态。
-
-- status:
-- artifact:
-- scope:
-- evidence:
-- blocking_items:
-- current / stale:
-
-`PENDING`、`FAILED` 或 `BLOCKED` 的 Entry Coverage 不能支持 Tail completion。
-
-### regate_result
-
-- required: yes/no
-- trigger:
-- starting_point:
-- gate_artifact:
-- gate_artifact_version:
-- result:
-- current / stale:
-- evidence:
+- required: yes/no（进入 C03 Delivery Tail / Manual Git Handoff，即 READY_FOR_MANUAL_GIT_HANDOFF 前为 required）
+- status: planned / in_progress / blocked / ready_for_manual_git_handoff / completed / not_required
+- delivery_checkpoint:
+- 07-交付总结 path / version:
+- delivery_summary:
+- external_evidence_references:
+- manual_git_handoff: pending / done / not_applicable
 - next_step:
 
-### Completion 记录
+## External Evidence References
 
-- completion_evidence:
-- completion_decision_source:
-- Tail Completion Gate artifact:
-- Gate artifact version:
-- Gate result: PASS / FAIL / PASS_WITH_RISK
-- Decided By: sdlc-gate-runner
-- Decided At:
-- Manifest Version:
-- Blocking Items:
+非节点产物（不进入 Artifact Index），以 content-addressed 引用登记（如 `loop-artifact:v1:<kind>:sha256:<digest>`）：
 
-不新增独立的第二份完成状态字段；只有 `documentation_governance_tail.status` 是 Tail 状态。只有当前、non-stale 的 Tail Completion Gate artifact 可以成为 `completion_decision_source`。
+| Ref | Kind（test / log / receipt / feedback / other） | Digest | Source Node / Delivery Tail | Status |
+| --- | --- | --- | --- | --- |
+|  |  |  |  |  |
+
+- 可复现测试输出、运行日志与外部系统回执由相应节点 revision 或 Delivery Tail 引用。
+- 原始测试/线上反馈先经 requirement-intake 分类为 `FEEDBACK_DRIVEN_CHANGE`；必要时渲染到 `00-需求资料/反馈/`，其来源作为 intake source ref。
 
 ## Activity Log
 
@@ -209,7 +113,9 @@ Manifest Field: `documentation_governance_tail.entry_coverage_result`
 
 | Change ID | Date | Source | Classification | Parent Requirement ID | Decision Scope | Current Change Scope | Affected Node | Artifact | Previous Version | New Version | Summary | Re-Gate Required | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change / Review Missing / Implementation Bug / Test Case Issue / Environment / Documentation Correction |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  | yes/no | open/resolved |
+|  |  |  | Requirement Supplement / Requirement Change / Rework / Specification Missing / Feedback-Driven Change / Review Missing / Implementation Bug / Environment / Documentation Correction |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  | yes/no | open/resolved |
+
+注：测试/线上反馈统一按 Feedback-Driven Change 分类（经 intake 建立 change record），不再单列 Test Case Issue。
 
 ## Replaced Artifact Paths
 
@@ -222,16 +128,16 @@ Normal updates to the same stable file use `Version` and `Change History`.
 
 ## Re-Gate Records
 
-| Date | Trigger | Parent Requirement ID | Decision Scope | Current Change Scope | From Node | Upstream Artifact | Upstream Version | Required Gate | Gate Artifact | Gate Artifact Version | Result | Development Path Decision Source | Next Step |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK |  |  |
+| Date | Trigger | Parent Requirement ID | Decision Scope | Current Change Scope | From Node | Upstream Artifact | Upstream Version | Required Gate | Gate Artifact | Gate Artifact Version | Result | Depth Re-Verdict | Next Step |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  | FULL_REQUIREMENT / DELTA_CHANGE |  |  |  |  |  |  |  | PASS / FAIL / PASS_WITH_RISK | 重新裁决 / 沿用 |  |
 
-## Gate Decisions
+## Gate 与结论记录
 
-### 方案审核
+### 方案审核（solution-gate 正式裁决，唯一结论性 Gate）
 
-- Result:
-- Can Continue:
+- Result: PASS / FAIL / PASS_WITH_RISK
+- Can Continue: yes/no
 - Risk Accepted: yes/no
 - Accepted Risk:
 - Accepted By:
@@ -240,33 +146,30 @@ Normal updates to the same stable file use `Version` and `Change History`.
 - Accepted Scope:
 - Follow-up Required: yes/no
 - Follow-up Owner:
-- Development Path Recommendation:
+- Reviewed Artifact:
+- Reviewed Artifact Version:
+- Design Depth Decision: LIGHT / STANDARD / DEEP
+- Depth Decision Status: DECIDED / BLOCKED_UNKNOWN
+- Finding Ledger Reference:
+- Scan Executor Binding:
+- Verdict Executor Binding:（必须与 Scan Executor Binding 不同）
 
-### 代码审核
+### 代码审核（closure review 结论，非 Gate）
 
-- Result:
-- Blocking Issues:
+- Closure Status: completed / blocked / risk_accepted
+- Blocking Findings:
 - Required Fixes:
+- Finding Ledger Reference:
 
-### 测试验收
+### 知识同步（knowledge-sync decision，非 Gate）
 
-- Result:
-- Feedback Classification:
-- Required Action:
-
-### Shared Documentation Governance Tail Completion Gate
-
-- Gate Artifact:
-- Gate Artifact Version:
-- Result: PASS / FAIL / PASS_WITH_RISK
-- Can Continue: yes/no
-- Completion Eligible: yes/no
-- Risk Accepted: yes/no
-- Blocking Items:
-- Decided By: sdlc-gate-runner
-- Decided At:
-
-Stage Summary 不是该 Gate；Pipeline result、Delivery Summary、workflow-status snapshot 和聊天结论不能替代该 Gate。
+- Decision: NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT
+- Candidate Stable Facts:
+- Source Revision IDs:
+- Target Paths:
+- Reconcile Result:
+- Residual Risks:
+- Evidence Digest:
 
 ## Stage Summaries
 
@@ -278,25 +181,6 @@ Stage Summary 不是该 Gate；Pipeline result、Delivery Summary、workflow-sta
 - Follow-up:
 - Notes: This is not a Gate, does not set `Can Continue`, does not block later workflow steps, and does not mark the requirement completed.
 
-## Speckit Process Products
-
-`manifest.md` is the status authority. `workflow-status.md` is only a
-machine-side snapshot.
-
-| Artifact | Stable Path | Version | Status | Updated At | Notes |
-| --- | --- | --- | --- | --- | --- |
-| Implementation | `specs/{feature}/implementation.md` |  | draft / active / stale |  |  |
-| Workflow Status Snapshot | `specs/{feature}/workflow-status.md` |  | draft / active / stale |  | manifest is status authority |
-| Debug Guide | `specs/{feature}/debug-guide.md` |  | draft / active / stale |  |  |
-| Observability | `specs/{feature}/observability.md` |  | draft / active / stale |  |  |
-
-## DocFlow Handoff Products
-
-| Artifact | Stable Path | Version | Status | Updated At | Notes |
-| --- | --- | --- | --- | --- | --- |
-| Implementation Record | `library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md` |  | draft / active / stale |  |  |
-| Delivery Summary | `library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md` |  | draft / active / stale |  |  |
-
 ## Missing Artifacts
 
 ## Blocking Issues
@@ -307,4 +191,5 @@ machine-side snapshot.
 
 | Version | Date | Author / Skill | Change Type | Summary | Re-Gate |
 | --- | --- | --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | C02-WP3.5 | rebaseline | v2 合同重基线（Decision-044/045）：删除 Development Path Decision / Delta Development Path Decision / Documentation Governance Tail / Speckit Process Products / DocFlow Handoff Products 区段；新增 Design Depth Decision、current generation、七节点 Artifact Index（00-06）、Delivery Tail（07）与 External Evidence References；补回 v2 change-control 保留字段（Delta Scope / Aggregate Requirement Scope / Same Requirement Decision / Earliest Affected Node）；Gate 记录收敛为 solution-gate 唯一结论性 Gate，代码审核/知识同步为非 Gate 结论。 | no |
 | 1.0.0 |  |  | initial | Initial manifest. | no |

@@ -6,6 +6,12 @@ export type DocFlowNode = "requirement-summary" | "tech-design" | "review" | "im
 
 export type LoopAgent = "kimi" | "codex" | "hermes";
 
+/**
+ * @deprecated C02-WP3.5 (Decision-044): Direct/Speckit path split is
+ * cancelled; solution-gate depth-tier decisions replace path selection.
+ * Kept only until runtime consumers are rebaselined (WP3.5-B/C); the residue
+ * audit (WP3.5-F/WP6) requires its removal from active code.
+ */
 export type ExecutionMode = "direct" | "speckit";
 
 export interface LoopContext {
@@ -49,33 +55,44 @@ export interface AgentMapEntry {
   agent: LoopAgent;
 }
 
-// ── Node Capability Contract (C01 WP-2) ──
+// ── Node Capability Contract (v2 single-rail, C02-WP3.5) ──
 // Agent-neutral capability surface. A node declares the capability it needs;
 // the binding layer (WP-3) chooses which agent executes it. No agent name may
 // appear in any capability contract field.
+//
+// v2 canonical chain (Decision-044):
+//   requirement-intake → solution-design → solution-gate → task-planning
+//   → implementation → code-review → knowledge-sync
+// solution-gate is ONE node with two execution roles (adversarial_scan /
+// formal_verdict) that must be bound to different agents (Decision-044
+// binding-level separation).
 
 export type NodeCapabilityId =
   | "requirement-intake"
-  | "tech-design"
-  | "solution-challenge"
-  | "solution-review"
+  | "solution-design"
+  | "solution-gate"
+  | "task-planning"
   | "implementation"
   | "code-review"
-  | "test-validation";
+  | "knowledge-sync";
 
 export const NODE_CAPABILITY_IDS: readonly NodeCapabilityId[] = [
   "requirement-intake",
-  "tech-design",
-  "solution-challenge",
-  "solution-review",
+  "solution-design",
+  "solution-gate",
+  "task-planning",
   "implementation",
   "code-review",
-  "test-validation",
+  "knowledge-sync",
 ] as const;
+
+export type CapabilityExecutionRole = "primary" | "adversarial_scan" | "formal_verdict";
 
 export interface NodeCapabilityContract {
   capability: NodeCapabilityId;
   title: string;
+  /** solution-gate 固定为 [adversarial_scan, formal_verdict]；其余节点固定为 [primary]。 */
+  executionRoles: readonly CapabilityExecutionRole[];
   inputArtifacts: readonly string[];
   outputArtifact: string;
   gate: string;

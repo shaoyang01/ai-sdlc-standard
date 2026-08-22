@@ -937,8 +937,8 @@ function sectionD01D08Regression(store: LoopArtifactStore): void {
     "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
   ] as const;
   check(
-    LOOP_ARTIFACT_KINDS.length === 14,
-    "kind list has 12 historical entries plus 2 WP-4B entries",
+    LOOP_ARTIFACT_KINDS.length === 17,
+    "kind list has 12 historical + 2 WP-4B + 3 v2 node kinds",
   );
   check(
     originalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),

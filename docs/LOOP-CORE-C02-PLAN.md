@@ -1,7 +1,7 @@
 # LOOP-CORE-02 有界实现规划（C02 Bounded Implementation Plan）
 
 > 规划状态：**ACCEPTED**（2026-08-20，Current User 裁决接受全部六个裁决点，Decision-036；正式规划合同，与 `docs/LOOP_CORE_CONTRACT.md` 同层级）
-> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；2026-08-21 Current User 裁决单轨重基线并授权 C02-WP3.5 治理登记，Decision-044；2026-08-22 Current User 补充裁决 Skill 收敛映射与两个非节点 Skill 的去留，Decision-045；WP3.5 阶段 2 输出 A～G 已物化为待审稿，尚未获得 Current User 验收，任何后续实施与 WP4～WP6 仍未授权）
+> 实施状态：**IN PROGRESS**（2026-08-21，C02-WP1 重开后经 Round 9 复审 PASS 重新收口、C02-WP2 复审通过并收口、C02-WP3 Round 2 复审 PASS 收口，Decision-037/038/040/041/042/043；2026-08-21 Current User 裁决单轨重基线并授权 C02-WP3.5 治理登记，Decision-044；2026-08-22 Current User 补充裁决 Skill 收敛映射与两个非节点 Skill 的去留，Decision-045；2026-08-22 Current User 验收 WP3.5 阶段 2 输出 A～G（PR #93 合入 491c0e2），控制平面登记 `C02_WP3_5_STAGE_3_IMPLEMENTATION` 授权（AUTHORIZED_NOT_STARTED_RESERVED_FOR_NEXT_AGENT）；阶段 3 自 WP3.5-A（合同重基线）起逐包实施中，WP4～WP6 仍未授权）
 > 日期：2026-08-20
 > 相关决定：Decision-034（C01 收口）、Decision-035（C02 有界规划授权）、Decision-036（C02 规划裁决与 planning handoff 发布授权）、Decision-037（C02-WP1 授权与实施）、Decision-038（C02-WP1 复审通过与收口）、Decision-039（npm test 并发 runner 改造）、Decision-040（C02-WP2 授权与实施）、Decision-041（C02-WP1 重新收口与 C02-WP2 复审通过与收口）、Decision-042（C02-WP3 授权与实施）、Decision-043（C02-WP3 复审通过与收口）、Decision-044（C02-WP3.5 单轨生命周期重基线授权与两项治理裁决）、Decision-045（Skill 收敛映射与非节点通用 Skill 边界）
 > 权威依据：
@@ -263,7 +263,9 @@ C01 可持久化 unresolved findings ref 并阻塞下一节点，但没有 findi
 
 明确排除：治理登记与影响分析阶段不含任何 runtime 代码、Skill、合同实现、registry、安装副本、Git 发布；实施阶段不恢复 Direct/Speckit 分流，不重写历史 journal。
 
-- 状态（2026-08-22）：**阶段 1 治理登记已完成（Decision-044）**；阶段 2 输出 C 的 Skill 收敛映射已由 Current User 补充裁决并登记（Decision-045）；A～G 完整稿已物化但仍为 `DRAFT FOR CURRENT USER REVIEW`，等待验收。任何 runtime、Skill、合同、registry、安装副本、CP/PKB 同步或阶段 3 实施仍未授权。
+- 状态（2026-08-22）：**阶段 1 治理登记已完成（Decision-044）**；**阶段 2 输出 A～G 已获 Current User 验收**（2026-08-22，PR #93 合入 `491c0e2`，控制平面登记 `C02_WP3_5_STAGE_2_ACCEPTED`）；Decision-045 登记 21 Skill 收敛映射；控制平面已登记 `C02_WP3_5_STAGE_3_IMPLEMENTATION` 授权（`AUTHORIZED_NOT_STARTED_RESERVED_FOR_NEXT_AGENT`）。阶段 3 自 WP3.5-A（合同重基线：E1 文档、machine projection、测试断言）起逐包实施；WP4～WP6、C03、C05 仍未授权。
+- WP3.5-A Round 2 复审（2026-08-22）：结论 **FAIL，5 项 High 不全部关闭**。H1（canonical earliest node 强制校验）、H4（两合同头部 2.0.0 Draft）、H5（首轮 intake → solution-design → solution-gate 循环准入解除）经独立复审确认关闭；H2（stablePath 仅做字符串包含校验）本轮已修复：`validateLoopArtifactRevision` 改为纯逻辑路径结构校验（固定 `library/{requirementId}/{canonical目录段}/…` 形态，拒绝绝对路径、空段、`.`/`..`、反斜杠与错误 requirementId），并覆盖创建、读回（rehash 篡改 STORE_CORRUPT）与 Manifest 交叉绑定负例；默认门禁全绿（npm test 130 文件 1767/1767、`tsc --noEmit`、5 个 Ruby 校验器）。**H3 保持 open**：`manifest.yaml` 仍公开注册 `sdlc-speckit-pipeline`/`sdlc-speckit-sync`，其包内引用已删除的合同文件（library-driven-sync-runtime.md、speckit-project-bootstrap.md 等）形成中间态断链；按裁决不在 WP3.5-A 内偷偷修复 Skill，待 C03-B 原子 registry cutover（新包可用 → registry 切换 → 旧包及其依赖删除）统一处置——H3 关闭前 **WP3.5-A 不得收口**。
+- WP3.5-A Round 2 复审跟进（2026-08-22）：**H2 修复经独立复审通过，标记关闭**——实现（`core/loop-artifact-revision.ts`）与合同（`ai-sdlc/loop-artifact-revision.md`）一致；独立复现 `03-任务规划/../01-技术方案/escape.md` 返回 INVALID_INPUT，规范路径通过；创建、读回、Manifest 交叉绑定与 journal current 全部拒绝穿越、外来 requirementId、空段、点段、绝对路径与反斜杠。复审未发现新的 Critical/High。根因归并：节点产物与失效起点过去由调用方自由表达、缺少单一 canonical authority（H1/H2 已由固定映射 + 写入/读回/交叉绑定校验消除）；文档代码退役与公开 Skill 注册切换不在同一原子边界（H3 属 C03-B 切换治理问题，不得扩大为 WP3.5-A 内临时补丁）。**裁决维持：WP3.5-A 不收口，唯一阻塞项为保持 open 的 H3**；专项复跑 artifact revision 245/245、finding 359/359、node capability 165/165、capability execution 86/86。下一有效边界是执行并独立复审 C03-B 原子切换，届时再做活动路径残留扫描与真实入口可调用性验证；C03 当前仍未授权。
 
 ### C02-WP4：Earliest-Affected-Node Re-Gate Orchestration
 
@@ -410,3 +412,5 @@ C02-WP2 Artifact Revision Authority ─> WP3 ──┘                          
 | 1.1.0 | 2026-08-21 | Accepted | 按 Decision-044 单轨裁决重基线：§2.1/§2.3 节点链与连续性规则切换到 v2 单轨链；§4 G5 改写为设计深度决策缺口；§5 不变量 9 由路径三值改为深度档位、不变量 10 补合同升版约束、新增不变量 13（历史格式 fail-closed 可区分 + cutover preflight）；§6 插入 C02-WP3.5（Single-Rail Lifecycle Re-baseline，三阶段划分）并重基线 WP4～WP6；§7 依赖图插入 WP3.5；§9 登记 C04 取消与历史兼容机器不做。WP1～WP3 收口结论保持有效；WP3.5 实施与 WP4～WP6 保持未授权。 |
 | 1.1.1 | 2026-08-22 | Accepted | 按 Decision-045 登记 WP3.5 阶段 2 输出 C 的完整 21 Skill 收敛映射：七个 canonical 节点 Skill + 一个非节点通用 Skill `sdlc-docflow-writer`；`sdlc-gate-runner` 与 `sdlc-speckit-pipeline` 退役删除并迁移必要能力。阶段 2 其余 A、B、D～G 与任何实现仍未因此获得授权。 |
 | 1.2.0 | 2026-08-22 | Accepted baseline / Stage 2 draft pending review | 物化 WP3.5 阶段 2 输出 A～G 的独立实施规划，补齐节点/角色/finding/artifact、WP4～WP6、C03/C04、精确改动面、逐包授权与收敛/knowledge-sync 场景；只登记待审规划，不接受其内容，不授权实施。 |
+| 1.2.1 | 2026-08-22 | Accepted | 登记 WP3.5 阶段 2 验收（2026-08-22 Current User，PR #93 合入 491c0e2）与阶段 3 实施授权（`C02_WP3_5_STAGE_3_IMPLEMENTATION`，AUTHORIZED_NOT_STARTED）；阶段 3 按影响分析 §8 F 自 WP3.5-A 起逐包实施，WP4～WP6 保持未授权。 |
+| 1.2.2 | 2026-08-22 | Round 2 registered / H3 open | 登记 WP3.5-A Round 2 复审（FAIL）及其跟进：H1/H4/H5 确认关闭；**H2 stablePath 结构校验修复经复审关闭**；H3 保持 open——公开注册旧 Skill 引用已删除合同文件构成中间态断链，属 C03-B 原子 registry cutover 的切换治理问题，不得在 WP3.5-A 内打临时补丁；H3 关闭前 WP3.5-A 不得收口，下一有效边界为执行并独立复审 C03-B。 |

@@ -455,7 +455,7 @@ def profile_hash(profiles, files, source_roots, pending_confirmation, profile_so
       "source" => profile_source,
       "precedence" => PROFILE_PRECEDENCE,
       "pending_confirmation" => pending_confirmation,
-      "standard_reference" => "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+      "standard_reference" => "${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md"
     },
     "scope" => {
       "source_roots" => source_roots,

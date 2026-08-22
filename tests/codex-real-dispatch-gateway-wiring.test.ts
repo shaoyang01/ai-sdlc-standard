@@ -202,7 +202,7 @@ async function test() {
   const result5 = await gateway5.execute(baseRequest);
   assert(result5.success === true, "real dispatch returns success");
   assert(result5.artifacts.length === 1, "real dispatch returns one artifact");
-  assert(result5.artifacts[0].type === "code_patch", "real dispatch returns code_patch");
+  assert(result5.artifacts[0].type === "implementation_record", "real dispatch returns implementation_record");
   assert(
     result5.artifacts[0].content["file"] === "src/gateway-wired-patch.ts",
     "code_patch has expected file path"
@@ -273,7 +273,7 @@ async function test() {
             id: "injected:artifact",
             requirementId: request.requirementId,
             node: request.node,
-            type: "code_patch",
+            type: "implementation_record",
             content: {
               file: "src/injected.ts",
               patch: "// injected",
@@ -300,7 +300,7 @@ async function test() {
   assert(result8.success === true, "injected runner returns success");
   assert(result8.output["result"] === "injected_runner_result", "injected codexRunner produced its result");
   assert(!processRunnerCalled, "process runner was not called when codexRunner injected");
-  assert(result8.artifacts[0].type === "code_patch", "injected runner returns code_patch");
+  assert(result8.artifacts[0].type === "implementation_record", "injected runner returns implementation_record");
   assert(
     result8.artifacts[0].content["file"] === "src/injected.ts",
     "injected runner artifact file matches"

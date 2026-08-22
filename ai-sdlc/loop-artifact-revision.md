@@ -1,6 +1,6 @@
 # LOOP Artifact Revision and Current Authority Contract（产物版本与当前权威合同）
 
-> 状态：1.0.0 Accepted（2026-08-21，Round 9 独立复审 PASS，C02-WP2 收口，Decision-041；前身为 0.1.8 Draft，Decision-040）
+> 状态：2.0.0 Draft（2026-08-22，C02-WP3.5 条款级升版，Decision-044/045，影响分析 A4；前身为 1.0.0 Accepted，Decision-041）
 > 关联：[Decision-040](../docs/AI-SDLC-Decision-Records.md#decision-040授权并实施-c02-wp2-artifact-revision-and-current-authority) · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §4 G2 / §7 · [Artifact Versioning](artifact-versioning.md) · [Artifact Flow](artifact-flow.md)
 
 ## 1. Purpose
@@ -11,12 +11,13 @@
 
 ## 2. Canonical 定义
 
-- **节点域**：revision 的 `nodeId` 复用 journal 既有七个 canonical capability id（`NODE_CAPABILITY_IDS`）。Manifest Artifact Index 行到 capability 的映射固定为：`00 需求资料`→requirement-intake、`01 技术方案`→tech-design、`02 方案审核`→solution-review、`03 实现记录`→implementation、`04 代码审核`→code-review、`05 测试验收`→test-validation；`04 交付总结` 行无对应 capability，不在交叉绑定范围；solution-challenge 无 Index 行，属正常。
+- **节点域**：revision 的 `nodeId` 复用 journal 既有七个 canonical capability id（`NODE_CAPABILITY_IDS`，v2 单轨，Decision-044）。Manifest Artifact Index 行到 capability 的映射固定为 v2（C02-WP3.5 影响分析 A4）：`00 需求资料`→requirement-intake、`01 技术方案`→solution-design、`02 方案审核`→solution-gate、`03 任务规划`→task-planning、`04 实现记录`→implementation、`05 代码审核`→code-review、`06 知识同步`→knowledge-sync；`07 交付总结` 行属于 C03 Delivery Tail，无对应 capability，不在交叉绑定范围。v1 旧行（`03 实现记录`/`04 代码审核`/`05 测试验收`）是历史事实：不自动重命名、不自动提升为 current，已有文件保持只读历史，确需复用必须在新 generation 中显式导入为 evidence 并重新生成 v2 revision。
+- **artifact kind**：canonical `LoopArtifactKind` 在 v1 基础上新增 v2 节点产物：`task_plan`（task-planning）、`implementation_record`（implementation，代码 patch 仍用 `code_patch`）、`knowledge_sync_result`（knowledge-sync）。
 - **validity 状态机**（固定，不可回退）：
   - `ACTIVE → SUPERSEDED`：仅经 supersede 路径（同节点追加更高 SemVer 的 revision），同事务回填 `supersededBy`；
   - `ACTIVE → STALE`：仅经显式标记原语 `markArtifactRevisionStale`（供 C02-WP3 失效传播调用；本合同不实现依赖图传播）；
   - `STALE` 与 `SUPERSEDED` 均为吸收态；current pointer 指向非 ACTIVE revision 时，current 读取 fail-closed（`STORE_CORRUPT`），链读取保持可审计。
-- **Gate 绑定**：Gate 节点（solution-review、test-validation）的 `gateResult` 必须为 `PASS`/`PASS_WITH_RISK` 且与 producer execution 的 Gate 结果精确一致；非 Gate 节点必须为 `NOT_APPLICABLE`。
+- **Gate 绑定**：Gate 节点（v2 仅 `solution-gate`，其 `formal_verdict` 角色写结论性 Gate；角色级强制属 WP3.5-B）的 `gateResult` 必须为 `PASS`/`PASS_WITH_RISK` 且与 producer execution 的 Gate 结果精确一致；非 Gate 节点必须为 `NOT_APPLICABLE`。
 - **generation**：可空正整数，仅记录引用绑定；generation 推进权威属于 C02-WP4，本合同不实现。
 
 ## 3. Revision Record Schema
@@ -32,8 +33,8 @@
 | `nodeId` | capability id | 七个 canonical capability id 之一 |
 | `sequence` | positive integer | 每 run+node 独立序列，从 1 连续 |
 | `generation` | positive integer / `null` | 仅引用绑定（§2） |
-| `stablePath` | string | 稳定路径（安全标量） |
-| `artifactKind` | `LoopArtifactKind` | 必须与 `artifactRef` 的 kind 段一致 |
+| `stablePath` | string | 稳定路径（安全标量）；必须是纯逻辑相对路径，固定形态 **`library/{requirementId}/{canonical目录段}/{产物文件}`**：首段必须为 `library`，第二段必须与本 revision 的 `requirementId` 精确一致，第三段必须是该节点 canonical 目录段（v2 A4 投影：00-需求资料/01-技术方案/02-方案审核/03-任务规划/04-实现记录/05-代码审核/06-知识同步），其后至少一个文件段；按段结构拒绝绝对路径、反斜杠、空段、`.`/`..` 点段与外来 requirement 目录——`03-任务规划/../01-技术方案/…` 等穿越形态 fail-closed，不做文件系统语义判断。旧 v1 路径（03-实现记录/04-代码审核/05-测试验收）与 specs/** 路径不得作为 v2 current |
+| `artifactKind` | `LoopArtifactKind` | **必须等于该节点的 canonical 产物 kind**（v2 A4 投影：requirement_summary/technical_design/solution_review/task_plan/implementation_record/review_summary/knowledge_sync_result；机器投影 `LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION`）；同时必须与 `artifactRef` 的 kind 段一致 |
 | `semver` | `x.y.z` | 数值段 SemVer；节点链内严格前进 |
 | `artifactRef` | string | canonical 内容寻址引用 `loop-artifact:v1:<kind>:sha256:<64hex>`；digest 段必须与 `digest` 一致 |
 | `digest` | sha256 hex | 64 位小写 hex |
@@ -71,7 +72,7 @@
 
 - stablePath 与 version 必须与 current revision 精确一致；
 - manifest status 与 runtime validity 映射一致：current ACTIVE ↔ `draft`/`active`；STALE ↔ `stale`；SUPERSEDED ↔ `replaced`；
-- Gate 行（`02 方案审核`、`05 测试验收`）的 result 必须等于 revision 的 `gateResult`；非 Gate 行的 result 不参与交叉绑定（DocFlow 评审结果归 manifest 侧所有）；
+- Gate 行（v2 仅 `02 方案审核`）的 result 必须等于 revision 的 `gateResult`；非 Gate 行的 result 不参与交叉绑定（DocFlow 评审结果归 manifest 侧所有）；
 - 任一漂移返回 `STOP` 诊断（`NODE_NOT_MAPPED`/`CURRENT_REVISION_MISSING`/`NODE_MISMATCH`/`STABLE_PATH_DRIFT`/`VERSION_DRIFT`/`STATUS_DRIFT`/`RESULT_DRIFT`），不静默选边；调用方输入形状非法时 fail-closed（`INVALID_INPUT`）。
 
 ## 7. 读回交叉绑定
@@ -98,6 +99,7 @@
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 条款级升版（Decision-044/045，A4）：节点域切 v2 七节点单轨链；Manifest Index 映射更新为 00～06 七行（03 任务规划/06 知识同步 新增，05 测试验收 退役，07 交付总结 属 Delivery Tail 不交叉绑定）；artifact kind 新增 task_plan / implementation_record / knowledge_sync_result；Gate 绑定收窄为 solution-gate 单一节点。存储语义（validity 状态机、四项+blob 绑定、supersede/current pointer CAS、cross-bind、读回重验、v4 迁移）不变。 |
 | 0.1.0 | 2026-08-20 | Draft | C02-WP2 交付（Decision-040）：artifact revision schema、validity 状态机、四项绑定与 producer execution 锚定、supersede + current pointer CAS、上游消费 fail-closed、manifest cross-bind、v3→v4 迁移与读回交叉绑定合同。 |
 | 0.1.1 | 2026-08-20 | Draft | Round 1 复审修正：四项绑定在每条读回路径逐条重验（rehash 篡改的 producer 不存在/失败/节点/三元组/Gate 漂移均 `STORE_CORRUPT`）；链规则新增"仅节点最新 revision 可为 ACTIVE"；测试预置说明修正——producer 重验后 WP4-era 预置行不再自洽，同节点多 revision 的 store 级 supersede 成功路径覆盖推迟到 C02-WP4 链扩展；测试源码控制字节改为转义字面量。 |
 | 0.1.2 | 2026-08-20 | Draft | Round 2 复审修正（H3）：写入路径的候选链校验改为转换后状态，新增 `supersedeArtifactRevision` 纯函数统一校验与落库的 supersede 语义；store 级端到端 supersede 成功路径覆盖经 Current User 显式重基线，随 C02-WP4 链扩展一并验收。 |

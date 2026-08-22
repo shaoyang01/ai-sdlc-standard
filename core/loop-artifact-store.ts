@@ -25,13 +25,18 @@ export type LoopArtifactKind =
   | "governance_tail_result"
   | "delivery_checkpoint"
   | "capability_output"
-  | "capability_findings";
+  | "capability_findings"
+  // v2 node artifact kinds (C02-WP3.5, A4)
+  | "task_plan"
+  | "implementation_record"
+  | "knowledge_sync_result";
 
 const LOOP_ARTIFACT_KINDS: readonly LoopArtifactKind[] = [
   "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
   "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
   "governance_tail_result", "delivery_checkpoint",
   "capability_output", "capability_findings",
+  "task_plan", "implementation_record", "knowledge_sync_result",
 ];
 
 export type LoopStoredArtifact = Readonly<{ artifactRef: string; kind: LoopArtifactKind; digest: string; sizeBytes: number }>;

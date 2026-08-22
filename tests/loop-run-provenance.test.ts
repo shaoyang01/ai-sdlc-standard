@@ -153,7 +153,7 @@ console.log("provenance: provenance survives reopen (durable round-trip)");
     attempt: 1,
     kind: "stage_started",
     createdAt: TS,
-    provenance: { bindingId: "binding-codex-solution-review", bindingVersion: "1.0.0", inputArtifactRef: null },
+    provenance: { bindingId: "binding-codex-solution-gate", bindingVersion: "1.0.0", inputArtifactRef: null },
   });
   store1.close();
 
@@ -162,7 +162,7 @@ console.log("provenance: provenance survives reopen (durable round-trip)");
   try {
     const snapshot = store2.getSnapshot("run-001");
     const started = snapshot?.events.find((e) => e.kind === "stage_started");
-    assert(started?.bindingId === "binding-codex-solution-review", "provenance read back after reopen");
+    assert(started?.bindingId === "binding-codex-solution-gate", "provenance read back after reopen");
     assert(started?.bindingVersion === "1.0.0", "binding version read back after reopen");
   } finally {
     store2.close();

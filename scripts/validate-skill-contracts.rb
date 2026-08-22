@@ -291,6 +291,31 @@ FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS = [
   "manifest is status authority"
 ].freeze
 
+# v2 (Decision-044/045) DocFlow artifact requirements for the canonical
+# artifact-manifest template and the artifact-storage standard: the seven-node
+# chain (00-06) plus C03 Delivery Tail (07), with the manifest as the DocFlow
+# status authority. The retired frontend process products under specs/**, the
+# legacy 03-实现记录/04-交付总结 library paths, and the workflow-status
+# snapshot authority are no longer required.
+V2_MANIFEST_TEMPLATE_TERMS = [
+  "03 任务规划",
+  "04 实现记录",
+  "05 代码审核",
+  "06 知识同步",
+  "07 交付总结",
+  "不映射节点能力",
+  "NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT"
+].freeze
+
+V2_ARTIFACT_STORAGE_TERMS = [
+  "03-任务规划",
+  "04-实现记录",
+  "05-代码审核",
+  "06-知识同步",
+  "07-交付总结",
+  "不映射节点能力",
+  "是需求目录的索引和状态视图"
+].freeze
 FRONTEND_PROCESS_PRODUCT_LEGACY_MAPPING_TERMS = [
   "Legacy Semantic Mapping Source Only",
   "implementation-details.md",
@@ -1162,8 +1187,7 @@ end
 
 bootstrap_context_paths = {
   "templates/project-governance-profile-template.yaml" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(4),
-  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2),
-  "ai-sdlc/speckit-project-bootstrap.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2)
+  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2)
 }.freeze
 
 bootstrap_context_paths.each do |relative_path, required_terms|
@@ -1182,8 +1206,7 @@ bootstrap_performance_paths = {
   "scripts/bootstrap-speckit-project.sh" => BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS,
   "scripts/bootstrap-entry-coverage-profile.sh" => BOOTSTRAP_PERFORMANCE_SCRIPT_TERMS,
   "docs/VALIDATION.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS,
-  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control"],
-  "ai-sdlc/speckit-project-bootstrap.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control", "pfms"]
+  "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PERFORMANCE_DOC_TERMS - ["Bootstrap Performance / Large Repo Scan Control"]
 }.freeze
 
 bootstrap_performance_paths.each do |relative_path, required_terms|
@@ -1199,14 +1222,6 @@ bootstrap_performance_paths.each do |relative_path, required_terms|
 end
 
 new_rail_pipeline_paths = {
-  "ai-sdlc/speckit-skill-product-compatibility.md" => [
-    "New-Rail Enhanced",
-    "ProjectWorkflowGuide.md",
-    "ProjectDocumentationGuide.md",
-    "sdlc-speckit-*",
-    "development-time fixture",
-    "post-Clarify continuous execution"
-  ],
   "skills/sdlc-speckit-pipeline/SKILL.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
   "skills/sdlc-speckit-pipeline/references/new-rail-enhanced-pipeline.md" => NEW_RAIL_PIPELINE_REQUIRED_TERMS,
   "skills/sdlc-speckit-pipeline/references/domain-route-artifact.md" => ROUTE_ARTIFACT_REQUIRED_TERMS,
@@ -1372,12 +1387,9 @@ frontend_process_product_paths = {
       "manifest is status authority"
     ],
   "templates/artifact-manifest-template.md" =>
-    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS,
+    V2_MANIFEST_TEMPLATE_TERMS,
   "ai-sdlc/artifact-storage.md" =>
-    FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS.first(4) + [
-      "04-交付总结",
-      "manifest 是状态权威源"
-    ],
+    V2_ARTIFACT_STORAGE_TERMS,
   "docs/VALIDATION.md" =>
     FRONTEND_PROCESS_PRODUCT_REQUIRED_TERMS +
     FRONTEND_PROCESS_PRODUCT_LEGACY_MAPPING_TERMS
@@ -1474,17 +1486,6 @@ entry_coverage_precision_paths = {
     "reverse_coverage_status",
     "create-if-missing",
     "table/code anchor/path/method/route/topic/job/function/SQL/connector/sink"
-  ],
-  "ai-sdlc/speckit-project-type-profiles.md" => [
-    "EntryCoverage table parsing",
-    "Service -> Manager -> Mapper/Repository/Client reverse coverage",
-    "native shell",
-    "generated/vendor",
-    "spark_job",
-    "flink_process_function",
-    "api_client/request/service",
-    "current_requirement",
-    "historical_repository_residue"
   ]
 }.freeze
 
@@ -1600,8 +1601,7 @@ business_domain_bootstrap_paths = [
   "scripts/bootstrap-business-domain.sh",
   "templates/business-domain-bootstrap-template.yaml",
   "docs/SPECKIT_BOOTSTRAP.md",
-  "docs/VALIDATION.md",
-  "ai-sdlc/speckit-project-bootstrap.md"
+  "docs/VALIDATION.md"
 ].freeze
 
 business_domain_bootstrap_paths.each do |relative_path|
@@ -1744,8 +1744,7 @@ PRODUCT_PARITY_FIXTURE_DIRS = [
   "entry-coverage-analyze",
   "bootstrap-scan-control",
   "delta-change-supplement",
-  "project-type-contract-matrix",
-  "rail-routing-business-domain-sync"
+  "project-type-contract-matrix"
 ].freeze
 
 PRODUCT_PARITY_VALIDATION_DOC_TERMS = [
@@ -1770,6 +1769,10 @@ end
 
 fixture_root = File.join(ROOT, "fixtures", "speckit-product-parity")
 if File.directory?(fixture_root)
+  fixture_dir_count = Dir.children(fixture_root).count { |name| File.directory?(File.join(fixture_root, name)) }
+  if fixture_dir_count < 12
+    errors << "fixtures/speckit-product-parity/ must contain at least 12 fixture directories (got #{fixture_dir_count})"
+  end
   PRODUCT_PARITY_FIXTURE_DIRS.each do |dir|
     full_dir = File.join(fixture_root, dir)
     unless File.directory?(full_dir)
@@ -1873,12 +1876,12 @@ plan_refs.each do |rel_path, terms|
   end
 end
 
-# PR J: Rail Routing and Business-Domain Sync Source Modes
+# PR J: Rail Routing and Business-Domain Sync Source Modes (v2 rebaseline,
+# Decision-044/045: agents-rail-routing / specs-run-lifecycle /
+# business-domain-sync-source-modes are archived; only the surviving
+# governance files are required)
 RAIL_ROUTING_REQUIRED_FILES = [
-  "ai-sdlc/agents-rail-routing.md",
-  "ai-sdlc/specs-run-lifecycle.md",
   "ai-sdlc/shared-business-domain-governance.md",
-  "ai-sdlc/business-domain-sync-source-modes.md",
   "templates/agents-rail-routing-addendum.md",
   "templates/business-domain-sync-status-template.yaml"
 ].freeze
@@ -1901,10 +1904,7 @@ RAIL_ROUTING_REQUIRED_TERMS = [
 ].freeze
 
 RAIL_ROUTING_FILE_TERMS = {
-  "ai-sdlc/agents-rail-routing.md" => ["legacy_speckit", "new_rail_sdlc", "addendum", "/speckit.*", "sdlc-speckit-*", "Ambiguous Rail", "Activation Rule"],
-  "ai-sdlc/specs-run-lifecycle.md" => ["run-level artifact", "requirement_id", "Rail consistency", "archive", "Specs Metadata"],
   "ai-sdlc/shared-business-domain-governance.md" => ["shared long-term knowledge base", "existing document", "rail", "source", "Conflict Handling"],
-  "ai-sdlc/business-domain-sync-source-modes.md" => ["speckit_driven", "library_driven", "hybrid", "duplicate sync guard", "pipeline_sync_executed", "library_sync_executed"],
   "templates/agents-rail-routing-addendum.md" => ["/speckit.*", "sdlc-*", "new rail", "shared long-term knowledge base", "run-level"],
   "templates/business-domain-sync-status-template.yaml" => ["business_domain_sync", "speckit_driven", "library_driven", "hybrid", "duplicate_sync_guard"],
   "skills/sdlc-speckit-pipeline/SKILL.md" => ["speckit_driven", "agents-rail-routing", "shared-business-domain-governance", "business-domain-sync-source-modes"],
@@ -2014,11 +2014,13 @@ PR_K_FORBIDDEN_PATTERNS = {
   ]
 }.freeze
 
-# Global Cleanup 1: sync_source_mode consistency
+# Global Cleanup 1: sync_source_mode consistency (v2 rebaseline,
+# Decision-044/045: sync source modes are retired; the shared governance doc
+# must carry knowledge-sync decision semantics and the retirement declaration)
 GLOBAL_SYNC_MODE_TERMS = {
   "skills/sdlc-speckit-sync/SKILL.md" => ["sync_source_mode", "speckit_driven", "library_driven", "hybrid", "library_driven mode", "missing specs", "must not block", "proposal/not_required/blocked", "Direct Implementation", "library-only DocFlow", "Implementation evidence may come from", "code diff with accepted implementation record"],
   "skill-contracts/known-skills/sdlc-speckit-sync.md" => ["Required Inputs (speckit_driven)", "Required Inputs (library_driven)", "Required Inputs (hybrid)", "is not required", "Missing specs is expected and must not block", "Without implementation and verification evidence, output proposal/not_required/blocked only", "In speckit_driven mode, read specs", "In library_driven mode, read library", "implementation evidence and verification evidence exist for the selected sync_source_mode", "In library_driven mode, missing implementation evidence outputs proposal/not_required/blocked"],
-  "ai-sdlc/shared-business-domain-governance.md" => ["library artifacts / manifest", "01DomainCatalog.md", "L2 main document index", "In library_driven mode"]
+  "ai-sdlc/shared-business-domain-governance.md" => ["APPLY_LOCAL", "PROPOSAL_ONLY", "BLOCKED_CONFLICT", "NO_CHANGE", "已随双轨退役"]
 }.freeze
 
 GLOBAL_SYNC_MODE_TERMS.each do |rel_path, terms|
@@ -2136,22 +2138,19 @@ PR_L_FORBIDDEN_CHECK_FILES.each do |rel_path|
   end
 end
 
-# PR M: Specs Run Lifecycle — required files and terms
-PR_M_REQUIRED_FILES = [
-  "ai-sdlc/specs-run-metadata-and-archive.md",
-  "templates/specs-run-metadata-template.yaml",
-  "templates/specs-archive-cleanup-proposal-template.md",
-  "fixtures/speckit-product-parity/specs-run-lifecycle/fixture.yaml",
-  "fixtures/speckit-product-parity/specs-run-lifecycle/expected.md"
-].freeze
-
+# PR M: Specs Run Lifecycle — required terms (v2 rebaseline: specs-run is
+# retired with Decision-044/045; specs-run-metadata-and-archive.md, the
+# specs-run metadata/cleanup templates, and the specs-run-lifecycle fixture
+# are archived, so no existence requirement remains. The specs-run metadata
+# era terms below (machine-side snapshot / archive_allowed / cleanup_allowed /
+# synced_business_domain_targets) are retired and must not be required.)
 PR_M_REQUIRED_TERMS = [
   "specs_run_id", "requirement_id", "feature_id", "run-level artifact",
   "rail consistency within run", "lifecycle authority",
-  "machine-side snapshot", "business_domain_sync",
+  "business_domain_sync",
   "specs_runs", "business_domain_synced", "archived", "superseded",
-  "cleaned", "archive_allowed", "cleanup_allowed",
-  "synced_business_domain_targets", "source_artifacts",
+  "cleaned",
+  "source_artifacts",
   "may have no specs", "must not delete library",
   "no filename-versioned artifacts"
 ].freeze
@@ -2166,15 +2165,12 @@ PR_M_FORBIDDEN_PATTERNS = [
 ].freeze
 
 PR_M_CHECK_FILES = [
-  "ai-sdlc/specs-run-metadata-and-archive.md",
   "skills/sdlc-speckit-sync/SKILL.md",
   "skills/sdlc-speckit-code-doc-reconcile/SKILL.md",
   "skill-contracts/known-skills/sdlc-speckit-sync.md",
   "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
   "docs/VALIDATION.md"
 ].freeze
-
-PR_M_REQUIRED_FILES.each { |f| errors << "missing #{f}" unless File.exist?(File.join(ROOT, f)) }
 
 # PR M terms: each term must appear in at least one check file
 PR_M_CHECK_FILES.each do |rel_path|
@@ -2193,44 +2189,12 @@ PR_M_REQUIRED_TERMS.each do |term|
   errors << "missing PR M term #{term} across checked files" unless combined_pr_m.include?(term)
 end
 
-# lifecycle/result consistency check
-metadata_path = File.join(ROOT, "ai-sdlc/specs-run-metadata-and-archive.md")
-if File.exist?(metadata_path)
-  meta_text = File.read(metadata_path)
-  ["synced` or `not_required", "pending", "proposal", "blocked", "cleanup is not allowed", "invalid"].each do |term|
-    errors << "specs-run-metadata-and-archive.md missing lifecycle/result term #{term}" unless meta_text.include?(term)
-  end
-end
-
-# Also add fixture dir check
-fixture_dirs_14th = File.join(fixture_root, "specs-run-lifecycle")
-errors << "missing fixture specs-run-lifecycle" unless File.directory?(fixture_dirs_14th)
-
-# PR N: Library-Driven Sync Runtime — required files and terms
-["ai-sdlc/library-driven-sync-runtime.md", "templates/library-driven-sync-decision-template.md",
- "fixtures/speckit-product-parity/library-driven-sync-runtime/fixture.yaml",
- "fixtures/speckit-product-parity/library-driven-sync-runtime/expected.md"].each do |f|
-  errors << "missing #{f}" unless File.exist?(File.join(ROOT, f))
-end
-
-prn_files = ["ai-sdlc/library-driven-sync-runtime.md", "skills/sdlc-speckit-sync/SKILL.md",
-  "skills/sdlc-speckit-sync/references/sync-inputs.md", "skills/sdlc-speckit-sync/references/output-and-manifest.md",
-  "skills/sdlc-speckit-sync/references/conflict-and-blocking.md",
-  "skill-contracts/known-skills/sdlc-speckit-sync.md", "docs/VALIDATION.md"]
-prn_combined = prn_files.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(File.join(ROOT, f)) : "" }.join
-["DUPLICATE_SYNC_BLOCKED", "supplemental sync", "Sync Need Classification",
- "library_driven sync runtime", "library-driven-sync-runtime"].each do |t|
-  errors << "missing PR N term #{t}" unless prn_combined.include?(t)
-end
-prn_forbidden = ["require specs in library_driven mode", "missing specs blocks library_driven",
-  "direct write without verification evidence", "duplicate sync allowed by default",
-  "library is long-term knowledge base", "use chat as source of truth"]
-prn_files.reject { |f| f.include?("fixtures/") }.each do |f|
-  path = File.join(ROOT, f)
-  next unless File.exist?(path)
-  text = File.read(path)
-  prn_forbidden.each { |p| errors << "#{f} contains forbidden PR N wording: #{p}" if text.include?(p) }
-end
+# PR N: retired with Decision-044/045 — library-driven-sync-runtime.md,
+# templates/library-driven-sync-decision-template.md, and the
+# library-driven-sync-runtime fixture are archived. The knowledge-sync
+# decision semantics they carried are now covered by
+# ai-sdlc/shared-business-domain-governance.md and the development-path /
+# manifest v2 checks above.
 
 # PR O: Project-Type Contract Artifact Matrix
 ["ai-sdlc/project-type-contract-artifact-matrix.md", "templates/project-type-contract-artifact-matrix-template.yaml"].each do |f|
@@ -2250,9 +2214,11 @@ if File.exist?(old_matrix_path)
   end
 end
 
-# PR P: expanded parity validator static checks
-prp_files = ["ai-sdlc/agents-rail-routing.md", "ai-sdlc/specs-run-lifecycle.md",
-  "ai-sdlc/shared-business-domain-governance.md",
+# PR P: expanded parity validator static checks (v2 rebaseline:
+# agents-rail-routing.md and specs-run-lifecycle.md are archived; the
+# specs-run metadata era "spec/plan/task/sync/reconcile traceability" term is
+# retired with specs-run and must not be required)
+prp_files = ["ai-sdlc/shared-business-domain-governance.md",
   "skill-contracts/known-skills/sdlc-speckit-sync.md",
   "skill-contracts/known-skills/sdlc-speckit-code-doc-reconcile.md",
   "skill-contracts/known-skills/sdlc-speckit-plan.md", "docs/VALIDATION.md"]
@@ -2260,8 +2226,7 @@ prp_combined = prp_files.map { |f| File.exist?(File.join(ROOT, f)) ? File.read(F
 ["legacy_speckit", "new_rail_sdlc", "sync_source_mode", "project canonical naming",
   "compatible update", "specs_run_id", "library_driven sync runtime",
   "Project-Type Contract Artifact Matrix", "lifecycle authority",
-  "no filename-versioned artifacts", "baseline traceability",
-  "spec/plan/task/sync/reconcile traceability"].each do |t|
+  "no filename-versioned artifacts", "baseline traceability"].each do |t|
   errors << "missing PR P term #{t}" unless prp_combined.include?(t)
 end
 
@@ -2288,11 +2253,12 @@ prp_files.reject { |f| f.include?("fixtures/") }.each do |f|
 end
 
 # Final Audit Guard: manifest entrypoints + plan Deferred hardening
+# (v2 rebaseline: agents-rail-routing.md, specs-run-metadata-and-archive.md,
+# library-driven-sync-runtime.md, and library-driven-sync-decision-template.md
+# are archived and must no longer be required as manifest entrypoints)
 manifest_text = File.read(File.join(ROOT, "manifest.yaml"))
-["ai-sdlc/agents-rail-routing.md", "ai-sdlc/business-domain-naming-and-shape.md",
-  "ai-sdlc/business-domain-compatible-update.md", "ai-sdlc/specs-run-metadata-and-archive.md",
-  "ai-sdlc/library-driven-sync-runtime.md", "ai-sdlc/project-type-contract-artifact-matrix.md",
-  "templates/library-driven-sync-decision-template.md",
+["ai-sdlc/business-domain-naming-and-shape.md", "ai-sdlc/business-domain-compatible-update.md",
+  "ai-sdlc/project-type-contract-artifact-matrix.md",
   "templates/project-type-contract-artifact-matrix-template.yaml"].each do |e|
   errors << "manifest.yaml missing entry #{e}" unless manifest_text.include?(e)
 end
@@ -2323,31 +2289,30 @@ def tail_require(errors, text, needle, label)
 end
 
 # A. Gate Result Template
+# v2 (Decision-044/045): the template is the canonical authority for the
+# solution-gate formal verdict only — Design Depth Decision + Finding Ledger
+# Reference. Dual-rail fields (Development Path Check, Documentation
+# Governance Tail Evidence Check, Tail Completion Decision) are retired and
+# must not be required; their reappearance is a regression.
 gate_template = tail_template_text("templates/gate-result-template.md")
 if gate_template.nil?
   errors << "tail-template: templates/gate-result-template.md must exist"
 else
   [
-    "Gate Name:", "Gate Type:", "development_path_entry", "documentation_governance_tail_completion",
-    "Manifest Path:", "Gate Basis:", "Development Path Decision:", "Decision Scope:", "Complexity:",
-    "Development Path Decision Source:", "Development Path Decision Artifact:",
-    "Tail Required:", "Tail Scope:", "Tail Status:",
-    "## Development Path Check", "## Documentation Governance Tail Evidence Check",
-    "required_artifacts", "completed_artifacts", "skipped_items", "blocking_items",
-    "business_domain_sync_decision", "reconcile_decision", "entry_coverage_result", "regate_result",
-    "completion_evidence", "completion_decision_source",
-    "## Tail Completion Decision", "Tail Completion Eligible:", "`sdlc-gate-runner` 只检查和判定证据",
-    "不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`",
-    "不执行 Sync 或 Reconcile",
-    "不修改生产代码或知识材料",
-    "PASS / FAIL / PASS_WITH_RISK"
+    "Gate Name:", "Gate Type:", "Manifest Path:", "Gate Basis:",
+    "Result: PASS / FAIL / PASS_WITH_RISK", "Can Continue: yes/no",
+    "## Design Depth Decision", "## Finding Ledger Reference",
+    "Depth: LIGHT / STANDARD / DEEP", "Decision Status: DECIDED / BLOCKED_UNKNOWN",
+    "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
+    "adversarial_scan", "formal_verdict", "Earliest Affected Node",
+    "Current / Stale:", "Finding Ledger Artifact:", "Scan Executor Binding",
+    "Verdict Executor Binding", "## Re-Gate Check", "## Risk Acceptance",
+    "PASS_WITH_RISK", "Reviewed Artifact:", "Reviewed Artifact Version:",
+    "Gate Artifact Version:"
   ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
-  if gate_template.include?("Gate Runner 只检查和判定证据")
-    errors << "tail-template: gate-result-template must not use the generic Gate Runner owner phrase"
-  end
   {
-    /^## Development Path Check\s*$/ => 1,
-    /^## Documentation Governance Tail Evidence Check\s*$/ => 1
+    /^## Design Depth Decision/ => 1,
+    /^## Finding Ledger Reference/ => 1
   }.each do |pattern, expected_count|
     actual_count = gate_template.scan(pattern).size
     unless actual_count == expected_count
@@ -2355,111 +2320,54 @@ else
     end
   end
   [
-    "| 03-实现记录 | actual_implementation_required |",
-    "| 04-代码审核 | actual_implementation_required |",
-    "| 05-测试验收 | actual_implementation_required |"
-  ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
+    "## Development Path Check", "## Documentation Governance Tail Evidence Check",
+    "## Tail Completion Decision", "Tail Completion Eligible",
+    "development_path_entry", "documentation_governance_tail_completion"
+  ].each do |forbidden|
+    if gate_template.include?(forbidden)
+      errors << "tail-template: gate-result-template restores retired dual-rail field: #{forbidden}"
+    end
+  end
 end
 
 # B. Artifact Manifest Template
+# v2 (Decision-044/045): the manifest is the DocFlow status authority for the
+# canonical seven-node chain (00-06) plus the C03 Delivery Tail (07), with
+# Design Depth Decision, v2 change-control fields, knowledge-sync decision
+# values, and external evidence references. The retired Documentation
+# Governance Tail section and its fields must not be required; their
+# reappearance is a regression.
 manifest_template = tail_template_text("templates/artifact-manifest-template.md")
 if manifest_template.nil?
   errors << "tail-template: templates/artifact-manifest-template.md must exist"
 else
-  if manifest_template.scan(/^## Documentation Governance Tail\s*$/).size != 1
-    errors << "tail-template: manifest must have exactly one ## Documentation Governance Tail heading"
-  end
-  if manifest_template.scan(/^Canonical Field: `documentation_governance_tail`\s*$/).size != 1
-    errors << "tail-template: manifest must declare Canonical Field: `documentation_governance_tail` exactly once"
-  end
-  tail_heading_index = manifest_template.lines.index { |line| line.match?(/^## Documentation Governance Tail\s*$/) }
-  if tail_heading_index.nil?
-    errors << "tail-template: manifest tail root section not found"
-  else
-    tail_section_lines = []
-    manifest_template.lines[(tail_heading_index + 1)..].each do |line|
-      break if line.start_with?("## ")
-      tail_section_lines << line
-    end
-    tail_section_text = tail_section_lines.join
-    status_count = tail_section_text.scan(/^- status: planned \/ in_progress \/ blocked \/ completed \/ not_required \/ stale\s*$/).size
-    unless status_count == 1
-      errors << "tail-template: manifest tail root section status enum line must appear exactly once (got #{status_count})"
+  {
+    /^## Design Depth Decision\s*$/ => 1,
+    /^## Artifact Index\s*$/ => 1,
+    /^## Delivery Tail/ => 1,
+    /^## External Evidence References\s*$/ => 1
+  }.each do |pattern, expected_count|
+    actual_count = manifest_template.scan(pattern).size
+    unless actual_count == expected_count
+      errors << "tail-template: artifact-manifest-template #{pattern.inspect} count must be #{expected_count} (got #{actual_count})"
     end
   end
   [
-    "- required: yes/no", "- scope:", "required_artifacts", "completed_artifacts",
-    "skipped_items", "blocking_items", "documentation_governance_tail.business_domain_sync",
-    "business_domain_sync_decision: SYNC_REQUIRED / NOT_REQUIRED / PROPOSAL_REQUIRED / BLOCKED / DUPLICATE_SYNC_BLOCKED",
-    "current_sync_owner: sdlc-speckit-sync / none",
-    "execution_status: not_started / in_progress / done / blocked",
-    "execution_result: not_run / synced / proposal / partial / not_required / blocked",
-    "reconcile_decision", "documentation_governance_tail.entry_coverage_result",
-    "current / stale", "PENDING", "FAILED", "BLOCKED", "regate_result",
-    "completion_evidence", "completion_decision_source", "Tail Completion Gate"
+    "| 00 需求资料 |", "| 01 技术方案 |", "| 02 方案审核 |",
+    "| 03 任务规划 |", "| 04 实现记录 |", "| 05 代码审核 |", "| 06 知识同步 |"
   ].each { |needle| tail_require(errors, manifest_template, needle, "artifact-manifest-template") }
   [
-    "| 03 实现记录 | actual_implementation_required |",
-    "| 04 代码审核 | actual_implementation_required |",
-    "| 05 测试验收 | actual_implementation_required |",
-    "| 04 交付总结 | recommended |"
+    "07 交付总结", "不映射节点能力", "NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT",
+    "external_evidence_references", "Decision Scope", "Delta Scope",
+    "Aggregate Requirement Scope", "Same Requirement Decision", "Earliest Affected Node",
+    "Finding Ledger Reference", "## Re-Gate Records", "## Change History",
+    "## 修订记录"
   ].each { |needle| tail_require(errors, manifest_template, needle, "artifact-manifest-template") }
-  tail_require(errors, manifest_template, "它不是 Gate", "artifact-manifest-template")
-  tail_require(errors, manifest_template, "compatibility read", "artifact-manifest-template")
-  if manifest_template.include?("completion_status")
-    errors << "tail-template: manifest must not define a second completion state (completion_status)"
+  if manifest_template.match?(/^## Documentation Governance Tail\s*$/)
+    errors << "tail-template: manifest must not restore the retired ## Documentation Governance Tail section"
   end
-  if manifest_template.include?("library-driven-sync")
-    errors << "tail-template: manifest must not reference forbidden owner library-driven-sync"
-  end
-  if manifest_template.match?(/^## Speckit Sync\s*$/)
-    errors << "tail-template: manifest must not contain a new-write ## Speckit Sync heading"
-  end
-  if manifest_template.include?("| 03 实现记录 | recommended |")
-    errors << "tail-template: 03 实现记录 must not regress to recommended"
-  end
-  if manifest_template.include?("| 04 代码审核 | conditional |")
-    errors << "tail-template: 04 代码审核 must not regress to conditional"
-  end
-  if manifest_template.include?("| 05 测试验收 | conditional |")
-    errors << "tail-template: 05 测试验收 must not regress to conditional"
-  end
-
-  # entry_coverage_result subsection: fields and semantics must live inside
-  # the dedicated subsection, not anywhere else in the document.
-  entry_heading_pattern = /^### entry_coverage_result\s*$/
-  entry_heading_count = manifest_template.scan(entry_heading_pattern).size
-  unless entry_heading_count == 1
-    errors << "tail-template: manifest ### entry_coverage_result heading count must be 1 (got #{entry_heading_count})"
-  end
-  if entry_heading_count == 1
-    manifest_lines = manifest_template.lines
-    entry_heading_index = manifest_lines.index { |line| line.match?(entry_heading_pattern) }
-    entry_subsection_lines = []
-    manifest_lines[(entry_heading_index + 1)..].each do |line|
-      break if line.start_with?("## ") || line.start_with?("### ")
-      entry_subsection_lines << line
-    end
-    entry_subsection_text = entry_subsection_lines.join
-    {
-      "Manifest Field: `documentation_governance_tail.entry_coverage_result`" => 1,
-      "- status:" => 1,
-      "- artifact:" => 1,
-      "- scope:" => 1,
-      "- evidence:" => 1,
-      "- blocking_items:" => 1,
-      "- current / stale:" => 1
-    }.each do |field, expected_count|
-      actual_count = entry_subsection_lines.count { |line| line.strip == field }
-      unless actual_count == expected_count
-        errors << "tail-template: entry_coverage_result subsection #{field.inspect} count must be #{expected_count} (got #{actual_count})"
-      end
-    end
-    ["PENDING", "FAILED", "BLOCKED", "不能支持 Tail completion"].each do |needle|
-      unless entry_subsection_text.include?(needle)
-        errors << "tail-template: entry_coverage_result subsection missing #{needle.inspect}"
-      end
-    end
+  if manifest_template.include?("documentation_governance_tail")
+    errors << "tail-template: manifest must not restore documentation_governance_tail fields"
   end
 end
 
@@ -2502,40 +2410,6 @@ if File.file?(sync_yaml_path)
   end
   if sync_yaml_text.include?("library-driven-sync")
     errors << "tail-template: sync status template must not reference forbidden owner library-driven-sync"
-  end
-end
-
-# D. Library-Driven Sync Decision Template
-library_template = tail_template_text("templates/library-driven-sync-decision-template.md")
-if library_template.nil?
-  errors << "tail-template: templates/library-driven-sync-decision-template.md must exist"
-else
-  {
-    /^## Metadata\s*$/ => 1,
-    /^## Decision Metadata\s*$/ => 0,
-    /^- Requirement ID:/ => 1,
-    /^- Generated By:/ => 1,
-    /^- Date:/ => 1
-  }.each do |pattern, expected_count|
-    actual_count = library_template.scan(pattern).size
-    unless actual_count == expected_count
-      errors << "tail-template: library-driven template #{pattern.inspect} count must be #{expected_count} (got #{actual_count})"
-    end
-  end
-  [
-    "Sync Source Mode: library_driven", "Decision Owner: sdlc-speckit-sync",
-    "Decision Source:", "Decision Artifact:", "Reviewed Artifact:",
-    "Reviewed Artifact Version:", "Gate Artifact Version:",
-    "Sync Need Classification", "SYNC_REQUIRED", "NOT_REQUIRED", "PROPOSAL_REQUIRED",
-    "BLOCKED", "DUPLICATE_SYNC_BLOCKED", "Duplicate Sync Guard",
-    "Execution Status", "not_started / in_progress / done / blocked",
-    "Execution Result", "not_run / synced / proposal / partial / not_required / blocked",
-    "Manifest Mapping", "documentation_governance_tail.business_domain_sync",
-    "Shared Tail Item Status", "Completion Eligibility"
-  ].each { |needle| tail_require(errors, library_template, needle, "library-driven-sync-decision-template") }
-  tail_require(errors, library_template, "不要求 `specs/**` 或 `specs_run_id`", "library-driven-sync-decision-template")
-  if library_template.include?("library-driven-sync")
-    errors << "tail-template: library-driven template must not reference forbidden owner library-driven-sync"
   end
 end
 
@@ -2613,37 +2487,29 @@ end
 # The validator's own source must not be scanned for content needles.
 gate_runner_combined = gate_runner_scope_text.reject { |rel, _| rel == "scripts/validate-skill-contracts.rb" }.values.join("\n")
 
-# A. Canonical development-path-governance.md current integration matrix.
-#    Topic 07 formal closure must be implemented; pending is a closure
-#    regression. D09 must remain not implemented.
+# A. Canonical development-path-governance.md single-rail (v2, Decision-044/045).
+#    The old two-rail integration status matrix (当前集成状态边界 / 状态矩阵)
+#    is retired; the document must carry the v2 single-rail markers instead:
+#    gate-runner retirement, BLOCKED_UNKNOWN gate status, solution-gate as the
+#    sole conclusive gate, and LOOP runtime as the deterministic admission
+#    owner. D09-style path-split tokens are handled by the single-rail
+#    rebaseline block below.
 devpath_text = gate_runner_scope_text["ai-sdlc/development-path-governance.md"]
 if devpath_text
   [
-    "## 当前集成状态边界",
-    "状态矩阵",
-    "状态矩阵只是描述",
-    "当前 Git/PR/CI 高于该矩阵",
-    "| canonical standard baseline | implemented |",
-    "| Gate Result Template convergence | implemented |",
-    "| Artifact Manifest Template convergence | implemented |",
-    "| Solution Reviewer Development Path alignment | implemented |",
-    "| Solution Reviewer initial Tail recommendation | implemented |",
-    "| Sync public-tail metadata 与 library_driven support | implemented |",
-    "| Reconcile public-tail metadata 与 library_driven support | implemented |",
-    "| Gate Runner Development Path Entry enforcement | implemented |",
-    "| Gate Runner Tail Completion enforcement | implemented |",
-    "| Speckit Pipeline boundary alignment | implemented |",
-    "| Direct / Speckit / Tail 完整场景验证 | implemented |",
-    "| Topic 07 formal closure | implemented |",
-    "不实施 D09",
-    "D09 尚未实施"
+    "sdlc-gate-runner 退役登记",
+    "decision_status = BLOCKED_UNKNOWN",
+    "solution-gate",
+    "LOOP runtime",
+    "C03 Delivery Tail"
   ].each { |needle| gate_runner_require(errors, devpath_text, needle, "development-path-governance") }
   [
-    "| Speckit Pipeline boundary alignment | pending |",
-    "| Topic 07 formal closure | pending |",
+    "## 当前集成状态边界",
+    "| Speckit Pipeline boundary alignment | implemented |",
+    "| Topic 07 formal closure | implemented |",
     "| D09 | implemented |"
   ].each do |forbidden|
-    errors << "gate-runner: development-path-governance contains forbidden matrix status: #{forbidden}" if devpath_text.include?(forbidden)
+    errors << "gate-runner: development-path-governance restores retired matrix status: #{forbidden}" if devpath_text.include?(forbidden)
   end
 end
 
@@ -3047,7 +2913,6 @@ else
     "templates/gate-result-template.md",
     "templates/artifact-manifest-template.md",
     "templates/business-domain-sync-status-template.yaml",
-    "templates/library-driven-sync-decision-template.md",
     "development_path_entry",
     "documentation_governance_tail_completion"
   ].each { |needle| gate_scenario_require(errors, gate_scenario_fixture_text, needle, "scenarios.yaml") }
@@ -3128,15 +2993,14 @@ gate_scenario_devpath = tail_template_text("ai-sdlc/development-path-governance.
 if gate_scenario_devpath.nil?
   errors << "gate-scenario: ai-sdlc/development-path-governance.md must exist"
 else
-  gate_scenario_require(errors, gate_scenario_devpath, "| Direct / Speckit / Tail 完整场景验证 | implemented |", "development-path-governance")
-  gate_scenario_require(errors, gate_scenario_devpath, "| Topic 07 formal closure | implemented |", "development-path-governance")
-  gate_scenario_require(errors, gate_scenario_devpath, "validation-only harness", "development-path-governance")
-  gate_scenario_require(errors, gate_scenario_devpath, "不运行真实 Gate", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "sdlc-gate-runner 退役登记", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "LOOP runtime", "development-path-governance")
+  gate_scenario_require(errors, gate_scenario_devpath, "solution-gate", "development-path-governance")
   [
     "| Topic 07 formal closure | pending |",
     "| D09 | implemented |"
   ].each do |forbidden|
-    errors << "gate-scenario: development-path-governance closure regression or D09 implemented: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
+    errors << "gate-scenario: development-path-governance restores retired matrix status: #{forbidden}" if gate_scenario_devpath.include?(forbidden)
   end
 end
 
@@ -3384,17 +3248,15 @@ if pipeline_registry_text
   pipeline_boundary_require(errors, pipeline_registry_text, "Pipeline result cannot replace the Tail Completion Gate", "registry")
 end
 
-# I. Development Path matrix: boundary alignment implemented, Topic 07 formal
-#    closure implemented as aggregate state, D09 still not implemented.
+# I. Development Path matrix: v2 single-rail (Decision-044/045) — the
+#    document must declare that the Speckit pipeline rail is retired and that
+#    deterministic admission is taken over by the LOOP runtime. The existing
+#    checks against skills/sdlc-speckit-pipeline/** are preserved (those files
+#    are unchanged this round).
 if pipeline_devpath_text
-  pipeline_boundary_require(errors, pipeline_devpath_text, "| Speckit Pipeline boundary alignment | implemented |", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "| Topic 07 formal closure | implemented |", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "D09 尚未实施", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "Pipeline fixed Core ends at Implement", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "Implement 后输出 Shared Tail Handoff", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "Sync/Reconcile/Tail Gate 位于 Pipeline 外部", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "不代表 Topic 07 formal closure", "development-path-governance")
-  pipeline_boundary_require(errors, pipeline_devpath_text, "不代表 D09 implemented", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "不存在独立 Speckit 产物轨道", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "LOOP runtime", "development-path-governance")
+  pipeline_boundary_require(errors, pipeline_devpath_text, "已退役", "development-path-governance")
 end
 
 # J. docs/VALIDATION.md: Pipeline Core Boundary Static Validation documented.
@@ -4416,259 +4278,130 @@ errors.concat(r3_selftest_diags)
 # files; unknown exceptions or unrelated errors never count as successful
 # rejection.
 
-TOPIC07_CLOSURE_DEVPATH = "ai-sdlc/development-path-governance.md".freeze
-TOPIC07_CLOSURE_VALIDATION_DOC = "docs/VALIDATION.md".freeze
-TOPIC07_CLOSURE_SECTION_HEADING = "### Topic 07 Formal Closure".freeze
-TOPIC07_CLOSURE_VALIDATION_HEADING = "## Topic 07 Formal Closure Validation".freeze
+# ── Topic 07 single-rail rebaseline check (C02-WP3.5, Decision-044) ──
+# The old Topic 07 Formal Closure section was built on the two-rail path
+# model (Gate Runner Development Path Entry / Tail Completion enforcement,
+# Speckit Pipeline boundary alignment). Decision-044 cancelled the two-rail
+# split: this is a controlled replanning (受控重排), not a silent deletion.
+# The standard must therefore (1) keep the Topic 07 demotion note and (2) no
+# longer carry path-split tokens as active authority.
 
-TOPIC07_CLOSURE_PREREQUISITE_ROWS = [
-  "| Gate Runner Development Path Entry enforcement | implemented |",
-  "| Gate Runner Tail Completion enforcement | implemented |",
-  "| Speckit Pipeline boundary alignment | implemented |",
-  "| Direct / Speckit / Tail 完整场景验证 | implemented |"
+SINGLE_RAIL_DEVPATH = "ai-sdlc/development-path-governance.md".freeze
+
+SINGLE_RAIL_REQUIRED_MARKERS = [
+  "Decision-044",
+  "单轨",
+  "solution-gate"
 ].freeze
 
-TOPIC07_CLOSURE_PREREQUISITE_PENDING_ROWS = [
-  "| Gate Runner Development Path Entry enforcement | pending |",
-  "| Gate Runner Tail Completion enforcement | pending |",
-  "| Speckit Pipeline boundary alignment | pending |",
-  "| Direct / Speckit / Tail 完整场景验证 | pending |"
+SINGLE_RAIL_FORBIDDEN_TOKENS = [
+  "DIRECT_IMPLEMENTATION",
+  "SPECKIT_PIPELINE_REQUIRED",
+  "BLOCKED_NEEDS_REVISION"
 ].freeze
 
-TOPIC07_CLOSURE_ROW_IMPLEMENTED = "| Topic 07 formal closure | implemented |".freeze
-TOPIC07_CLOSURE_ROW_PENDING = "| Topic 07 formal closure | pending |".freeze
-TOPIC07_CLOSURE_ROW_PATTERN = /^\|\s*Topic 07 formal closure\s*\|/.freeze
-TOPIC07_CLOSURE_ROW_PARSE = /
-  ^\|\s*Topic\s+07\s+formal\s+closure\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|
-/x.freeze
-TOPIC07_CLOSURE_D09_IMPLEMENTED_PATTERN = /^\|\s*D09[^|]*\|\s*implemented\s*\|/.freeze
+SINGLE_RAIL_TOPIC07_DEMOTION_MARKER = "Topic 07"
 
-# Section-scoped boundary needles: the bare presence of a keyword elsewhere in
-# the file never satisfies a section boundary requirement.
-TOPIC07_CLOSURE_SECTION_REQUIRED = {
-  "closure status implemented" => "implemented",
-  "Gate Runner Entry basis" => "Gate Runner Development Path Entry enforcement",
-  "Gate Runner Tail Completion basis" => "Gate Runner Tail Completion enforcement",
-  "scenario validation basis" => "scenario conformance",
-  "Pipeline boundary basis" => "Speckit Pipeline boundary alignment",
-  "scenario authority validation-only" => "validation-only",
-  "Manifest authority" => "Manifest 仍是",
-  "Pipeline result boundary" => "Pipeline result 仍不能替代 Tail Completion Gate",
-  "D09 not implemented" => "D09 尚未实施",
-  "no runtime execution fact" => "不代表真实 target-project runtime 执行",
-  "no requirement completion fact" => "不代表真实 requirement Tail completed"
-}.freeze
-
-TOPIC07_CLOSURE_SECTION_FORBIDDEN_ESCALATION = [
-  "runtime_authority=true",
-  "gate_decision_authority=true",
-  "implementation_authority=true",
-  "merge_authority=true",
-  "publication_authority=true",
-  "scenario harness 获得 runtime authority"
-].freeze
-
-TOPIC07_CLOSURE_VALIDATION_DOC_FORBIDDEN_PENDING = "Topic 07 formal closure 仍 pending".freeze
-
-def topic07_closure_diagnostics(scope)
+def single_rail_rebaseline_diagnostics(scope)
   diags = []
-  devpath = scope[TOPIC07_CLOSURE_DEVPATH]
-  validation_doc = scope[TOPIC07_CLOSURE_VALIDATION_DOC]
-
+  devpath = scope[SINGLE_RAIL_DEVPATH]
   if devpath.nil?
-    diags << "topic07-formal-closure: development-path-governance.md missing"
+    diags << "single-rail-rebaseline: development-path-governance.md missing"
+    return diags
   end
-  if validation_doc.nil?
-    diags << "topic07-formal-closure: docs/VALIDATION.md missing"
+  SINGLE_RAIL_REQUIRED_MARKERS.each do |marker|
+    diags << "single-rail-rebaseline: missing marker #{marker.inspect}" unless devpath.include?(marker)
   end
-  return diags if devpath.nil?
-
-  unless devpath.include?("状态矩阵") && devpath.include?("| 接入项 | 状态 | 说明 |")
-    diags << "topic07-formal-closure: status matrix missing"
+  SINGLE_RAIL_FORBIDDEN_TOKENS.each do |token|
+    diags << "single-rail-rebaseline: path-split token restored: #{token}" if devpath.include?(token)
   end
-
-  TOPIC07_CLOSURE_PREREQUISITE_ROWS.each do |row|
-    count = devpath.scan(Regexp.new(Regexp.escape(row))).size
-    if count.zero?
-      diags << "topic07-formal-closure: prerequisite row missing: #{row}"
-    elsif count > 1
-      diags << "topic07-formal-closure: prerequisite row duplicate: #{row}"
-    end
+  unless devpath.include?(SINGLE_RAIL_TOPIC07_DEMOTION_MARKER)
+    diags << "single-rail-rebaseline: Topic 07 demotion note missing"
   end
-  TOPIC07_CLOSURE_PREREQUISITE_PENDING_ROWS.each do |row|
-    if devpath.include?(row)
-      diags << "topic07-formal-closure: prerequisite row not implemented: #{row}"
-    end
-  end
-
-  closure_count = devpath.scan(Regexp.new(Regexp.escape(TOPIC07_CLOSURE_ROW_IMPLEMENTED))).size
-  if closure_count.zero?
-    diags << "topic07-formal-closure: closure row missing"
-  elsif closure_count > 1
-    diags << "topic07-formal-closure: closure row duplicate"
-  end
-  if devpath.include?(TOPIC07_CLOSURE_ROW_PENDING)
-    diags << "topic07-formal-closure: closure row not implemented"
-  end
-  devpath.lines.select { |line| line.match?(TOPIC07_CLOSURE_ROW_PATTERN) }.each do |line|
-    match = line.match(TOPIC07_CLOSURE_ROW_PARSE)
-    next unless match
-
-    status = match[1].to_s.strip
-    explanation = match[2].to_s.strip
-    unless status == "implemented"
-      diags << "topic07-formal-closure: closure row not implemented (status=#{status})"
-    end
-    if status == "implemented" && explanation.empty?
-      diags << "topic07-formal-closure: closure row explanation empty"
-    end
-  end
-
-  if devpath.match?(TOPIC07_CLOSURE_D09_IMPLEMENTED_PATTERN)
-    diags << "topic07-formal-closure: D09 marked implemented"
-  end
-
-  heading_count = devpath.scan(TOPIC07_CLOSURE_SECTION_HEADING).size
-  if heading_count.zero?
-    diags << "topic07-formal-closure: closure dedicated section missing"
-  elsif heading_count > 1
-    diags << "topic07-formal-closure: closure dedicated section duplicate"
-  else
-    section = extract_section(devpath, TOPIC07_CLOSURE_SECTION_HEADING)
-    TOPIC07_CLOSURE_SECTION_REQUIRED.each do |label, needle|
-      unless section.include?(needle)
-        diags << "topic07-formal-closure: closure section required boundary missing: #{label}"
-      end
-    end
-    TOPIC07_CLOSURE_SECTION_FORBIDDEN_ESCALATION.each do |phrase|
-      if section.include?(phrase)
-        diags << "topic07-formal-closure: closure section scenario authority escalated: #{phrase}"
-      end
-    end
-  end
-
-  unless validation_doc.to_s.include?(TOPIC07_CLOSURE_VALIDATION_HEADING)
-    diags << "topic07-formal-closure: Validation doc closure section missing"
-  end
-  if validation_doc.to_s.include?(TOPIC07_CLOSURE_VALIDATION_DOC_FORBIDDEN_PENDING)
-    diags << "topic07-formal-closure: Validation doc keeps stale pending closure wording"
-  end
-
   diags
 end
 
-# Negative self-tests: every mutation must be rejected by the real closure
+# Negative self-tests: every mutation must be rejected by the real rebaseline
 # diagnostics with the expected diagnostic. Mutations operate on in-memory
 # deep copies; the mutation must actually change the text; unknown exceptions
 # or unrelated errors never count as rejection.
-TOPIC07_CLOSURE_SELFTESTS = [
+SINGLE_RAIL_SELFTESTS = [
   {
-    id: "closure_row_reverted_to_pending",
-    desc: "closure row reverted to pending",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub(TOPIC07_CLOSURE_ROW_IMPLEMENTED, TOPIC07_CLOSURE_ROW_PENDING) },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "closure row not implemented"
+    id: "marker_decision_removed",
+    desc: "Decision-044 marker removed",
+    mutate: ->(text) { text.gsub("Decision-044", "") },
+    expect: "missing marker"
   },
   {
-    id: "entry_enforcement_reverted_to_pending",
-    desc: "Gate Runner Entry enforcement reverted to pending",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub("| Gate Runner Development Path Entry enforcement | implemented |", "| Gate Runner Development Path Entry enforcement | pending |") },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "prerequisite row not implemented"
+    id: "marker_single_rail_removed",
+    desc: "单轨 marker removed",
+    mutate: ->(text) { text.gsub("单轨", "") },
+    expect: "missing marker"
   },
   {
-    id: "tail_enforcement_reverted_to_pending",
-    desc: "Gate Runner Tail Completion enforcement reverted to pending",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub("| Gate Runner Tail Completion enforcement | implemented |", "| Gate Runner Tail Completion enforcement | pending |") },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "prerequisite row not implemented"
+    id: "marker_gate_removed",
+    desc: "solution-gate marker removed",
+    mutate: ->(text) { text.gsub("solution-gate", "") },
+    expect: "missing marker"
   },
   {
-    id: "scenario_validation_reverted_to_pending",
-    desc: "Direct / Speckit / Tail scenario validation reverted to pending",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub("| Direct / Speckit / Tail 完整场景验证 | implemented |", "| Direct / Speckit / Tail 完整场景验证 | pending |") },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "prerequisite row not implemented"
+    id: "path_split_restored",
+    desc: "DIRECT_IMPLEMENTATION restored",
+    mutate: ->(text) { text + "\nDIRECT_IMPLEMENTATION\n" },
+    expect: "path-split token restored"
   },
   {
-    id: "pipeline_boundary_reverted_to_pending",
-    desc: "Speckit Pipeline boundary alignment reverted to pending",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub("| Speckit Pipeline boundary alignment | implemented |", "| Speckit Pipeline boundary alignment | pending |") },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "prerequisite row not implemented"
+    id: "topic07_demotion_removed",
+    desc: "Topic 07 demotion note removed",
+    mutate: ->(text) { text.gsub("Topic 07", "") },
+    expect: "Topic 07 demotion note missing"
   },
   {
-    id: "d09_marked_implemented",
-    desc: "D09 marked implemented",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text + "\n| D09 | implemented | D09 已实施 |\n" },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "D09 marked implemented"
-  },
-  {
-    id: "closure_section_removed",
-    desc: "dedicated Topic 07 Formal Closure section removed",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text.sub(TOPIC07_CLOSURE_SECTION_HEADING, "") },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "closure dedicated section missing"
-  },
-  {
-    id: "closure_row_duplicated",
-    desc: "second closure row added",
-    scope_file: TOPIC07_CLOSURE_DEVPATH,
-    mutate: ->(text) { text + "\n| Topic 07 formal closure | implemented | duplicate closure row |\n" },
-    run: ->(scope) { topic07_closure_diagnostics(scope) },
-    expect: "closure row duplicate"
+    id: "file_removed",
+    desc: "development-path-governance.md removed from scope",
+    scope_file_removed: true,
+    expect: "development-path-governance.md missing"
   }
 ].freeze
 
-def topic07_closure_self_test_diagnostics(scope)
+def single_rail_self_test_diagnostics(scope)
   diags = []
-  TOPIC07_CLOSURE_SELFTESTS.each do |test|
-    text = scope[test[:scope_file]]
-    if text.nil?
-      diags << "topic07-formal-closure: self-test #{test[:id]} cannot run: missing scope file #{test[:scope_file]}"
+  SINGLE_RAIL_SELFTESTS.each do |test|
+    text = scope[SINGLE_RAIL_DEVPATH]
+    if text.nil? && !test[:scope_file_removed]
+      diags << "single-rail-rebaseline: self-test #{test[:id]} cannot run: missing scope file #{SINGLE_RAIL_DEVPATH}"
       next
     end
-    begin
-      mutated_text = test[:mutate].call(text.dup)
-      if mutated_text == text
-        diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) mutation did not change the text; baseline text must not be treated as mutation output"
-        next
-      end
-      mutated_scope = scope.dup
-      mutated_scope[test[:scope_file]] = mutated_text
-      produced = test[:run].call(mutated_scope)
-      unless produced.any? { |d| d.include?(test[:expect]) }
-        diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
-      end
-    rescue StandardError => e
-      diags << "topic07-formal-closure: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
+    mutated = test[:scope_file_removed] ? nil : test[:mutate].call(text.dup)
+    if !test[:scope_file_removed] && mutated == text
+      diags << "single-rail-rebaseline: self-test #{test[:id]} (#{test[:desc]}) mutation did not change the text; baseline text must not be treated as mutation output"
+      next
     end
+    mutated_scope = test[:scope_file_removed] ? {} : scope.merge(SINGLE_RAIL_DEVPATH => mutated)
+    produced = single_rail_rebaseline_diagnostics(mutated_scope)
+    unless produced.any? { |d| d.include?(test[:expect]) }
+      diags << "single-rail-rebaseline: self-test #{test[:id]} (#{test[:desc]}) must be rejected with a diagnostic containing #{test[:expect].inspect}; produced #{produced.inspect}"
+    end
+  rescue StandardError => e
+    diags << "single-rail-rebaseline: self-test #{test[:id]} (#{test[:desc]}) raised unexpected error #{e.class}: #{e.message}; unexpected exceptions do not count as successful rejection"
   end
   diags
 end
 
-topic07_closure_scope = {}
-[TOPIC07_CLOSURE_DEVPATH, TOPIC07_CLOSURE_VALIDATION_DOC].each do |rel|
+single_rail_scope = {}
+[SINGLE_RAIL_DEVPATH].each do |rel|
   path = File.join(ROOT, rel)
-  topic07_closure_scope[rel] = File.read(path) if File.file?(path)
+  single_rail_scope[rel] = File.read(path) if File.file?(path)
 end
 
-topic07_closure_baseline_diags = topic07_closure_diagnostics(topic07_closure_scope)
-topic07_closure_selftest_diags = []
-if topic07_closure_scope.key?(TOPIC07_CLOSURE_DEVPATH)
-  topic07_closure_selftest_diags = topic07_closure_self_test_diagnostics(topic07_closure_scope)
+single_rail_baseline_diags = single_rail_rebaseline_diagnostics(single_rail_scope)
+single_rail_selftest_diags = []
+if single_rail_scope.key?(SINGLE_RAIL_DEVPATH)
+  single_rail_selftest_diags = single_rail_self_test_diagnostics(single_rail_scope)
 end
 
-errors.concat(topic07_closure_baseline_diags)
-errors.concat(topic07_closure_selftest_diags)
+errors.concat(single_rail_baseline_diags)
+errors.concat(single_rail_selftest_diags)
 
 # ── GRP-01 Goal-Anchored Global Reasoning Contract Validation ──
 # Read-only, deterministic, no network. Locks the five shared bindings
@@ -5114,7 +4847,7 @@ end
 errors.concat(GRP01_R3_R4_SELFTEST_DIAGS)
 
 if errors.empty?
-  puts "TOPIC07_FORMAL_CLOSURE_VALIDATED true" if topic07_closure_baseline_diags.empty? && topic07_closure_selftest_diags.empty?
+  puts "SINGLE_RAIL_REBASELINE_VALIDATED true" if single_rail_baseline_diags.empty? && single_rail_selftest_diags.empty?
   puts "GRP01_BINDINGS_VALIDATED true" if grp01_baseline_diags.empty? && grp01_selftest_diags.empty?
   puts "GRP01_RESOLUTION_AND_FIVE_SKILL_GLOBAL_FIRST_VALIDATED true" if grp01_r3_r4_baseline_diags.empty? && GRP01_R3_R4_SELFTEST_DIAGS.empty?
   puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?

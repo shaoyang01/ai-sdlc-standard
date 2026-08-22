@@ -1,7 +1,7 @@
 # Speckit 投放指南
 
 > **Status**: Historical / Superseded
-> This document describes pre-New-Rail bootstrap guidance. For current New-Rail Enhanced Speckit Pipeline governance, see [`docs/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md`](NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md). The bootstrap scripts described here remain functional but the governance protocols have been superseded by PR J–P (`ai-sdlc/` governance files).
+> This document describes pre-New-Rail bootstrap guidance. For current New-Rail Enhanced Speckit Pipeline governance, see [`docs/reports/archive/c02-wp3-5-single-rail-retired/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md`](reports/archive/c02-wp3-5-single-rail-retired/NEW_RAIL_ENHANCED_SPECKIT_PIPELINE_SUMMARY.md)（Historical）。 The bootstrap scripts described here remain functional but the governance protocols have been superseded by PR J–P (`ai-sdlc/` governance files).
 
 > 本指南说明当前 `scripts/bootstrap-speckit-project.sh` 的真实行为，以及 Speckit 双轨隔离、代码驱动生成和 report 输出边界。
 
@@ -233,7 +233,7 @@ tests
 | `data-pipeline-etl` | Spark Job、online ETL、Flink Main、Process Function、connector、SQL task。 |
 | `library-shared-component` | public API、client method、adapter、extension point。 |
 
-项目类型语义见 `ai-sdlc/speckit-project-type-profiles.md`。如果一个仓库同时包含多种执行形态，`.specify/entry-coverage-profile.yaml` 可以保留多个 profile，并按模块列出各自入口。
+项目类型语义见 `ai-sdlc/project-type-contract-artifact-matrix.md`（v2；旧 speckit-project-type-profiles 已归档）。如果一个仓库同时包含多种执行形态，`.specify/entry-coverage-profile.yaml` 可以保留多个 profile，并按模块列出各自入口。
 
 profile 选择遵循执行形态强信号，而不是只看语言或单个配置文件：
 

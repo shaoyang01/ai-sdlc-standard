@@ -7,13 +7,13 @@
 
 import type { AgentName } from "../execution/types";
 import { types as utilTypes } from "node:util";
+import { CAPABILITY_ARTIFACT_TYPES } from "./agent-capability-bindings";
 import {
   NODE_CAPABILITY_IDS,
   type NodeCapabilityId,
 } from "../loop/types";
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
-import { runtimeExecutionPointForCapability } from "./runtime-capability-map";
 
 export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 1 as const;
 
@@ -156,7 +156,7 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     invalid("capability must be a canonical NodeCapabilityId");
   }
   const nodeId = text(event.nodeId, "nodeId");
-  if (nodeId !== runtimeExecutionPointForCapability(event.capability as NodeCapabilityId)) {
+  if (nodeId !== event.capability) {
     invalid("nodeId must match the canonical capability execution point");
   }
   positiveInteger(event.attempt, "attempt");
@@ -188,7 +188,11 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   const outputRef = nullableArtifactRef(event.outputArtifactRef, "outputArtifactRef");
   const outputVersion = nullableVersion(event.outputArtifactVersion, "outputArtifactVersion");
   const outputDigest = nullableDigest(event.outputDigest, "outputDigest");
-  if (outputRef !== null && (outputRef.kind !== "capability_output" || outputRef.digest !== outputDigest)) {
+  // v2 (A4): the execution output reference kind is the node's canonical
+  // product kind, matching the artifact revision binding. The C01-era
+  // capability_output envelope kind is no longer a valid node product.
+  if (outputRef !== null &&
+      (outputRef.kind !== CAPABILITY_ARTIFACT_TYPES[event.capability] || outputRef.digest !== outputDigest)) {
     invalid("output artifact reference must be a matching capability output");
   }
   const findingRef = nullableArtifactRef(event.unresolvedFindingsRef, "unresolvedFindingsRef");
@@ -231,7 +235,7 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (errorCode !== null || event.retryable !== null || reasonCode !== null) {
       invalid("succeeded capability execution must not contain failure fields");
     }
-    const gateCapability = event.capability === "solution-review" || event.capability === "test-validation";
+    const gateCapability = event.capability === "solution-gate";
     if (gateCapability && event.gateResult === "NOT_APPLICABLE") {
       invalid("Gate-producing capability requires a conclusive Gate result");
     }

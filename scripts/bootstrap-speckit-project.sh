@@ -1018,12 +1018,6 @@ standard_package:
     - ai-sdlc/complexity-routing.md
     - ai-sdlc/standard-package-resolution.md
     - ai-sdlc/speckit-generation-source-model.md
-    - ai-sdlc/speckit-dual-rail-isolation.md
-    - ai-sdlc/speckit-document-generation-spec.md
-    - ai-sdlc/speckit-document-governance.md
-    - ai-sdlc/speckit-project-type-profiles.md
-    - ai-sdlc/speckit-skill-product-compatibility.md
-    - ai-sdlc/speckit-project-bootstrap.md
 
 project:
   name: "$(yaml_escape "${PROJECT_NAME}")"
@@ -1120,8 +1114,8 @@ speckit_dual_rail:
     runtime_legacy_comparison: false
 
 speckit_semantic_profile:
-  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
-  product_compatibility_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-skill-product-compatibility.md"
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md"
+  product_compatibility_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md"
   selected_profiles:
 EOF
     emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
@@ -1607,7 +1601,7 @@ project_type_profiles:
 EOF
     emit_yaml_list "    " "${PROJECT_TYPE_PROFILES[@]}"
     cat <<'EOF'
-  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/speckit-project-type-profiles.md"
+  standard_reference: "${AI_SDLC_STANDARD_HOME}/ai-sdlc/project-type-contract-artifact-matrix.md"
   selection_basis:
     - "Generated from target repository code shape; confirm and edit if project execution model differs."
 

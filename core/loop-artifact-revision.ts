@@ -29,10 +29,12 @@ export const LOOP_ARTIFACT_REVISION_SCHEMA_VERSION = 1 as const;
 export const LOOP_ARTIFACT_REVISION_VALIDITIES = ["ACTIVE", "STALE", "SUPERSEDED"] as const;
 export type LoopArtifactRevisionValidity = (typeof LOOP_ARTIFACT_REVISION_VALIDITIES)[number];
 
-// Gate-producing capabilities mirror the capability execution contract:
-// exactly solution-review and test-validation produce conclusive Gate
-// results; every other capability records NOT_APPLICABLE.
-export const LOOP_ARTIFACT_GATE_CAPABILITIES = ["solution-review", "test-validation"] as const;
+// Gate-producing capabilities mirror the capability execution contract
+// (v2, A2): exactly solution-gate produces conclusive Gate results; every
+// other capability records NOT_APPLICABLE. Role-level enforcement (only the
+// formal_verdict role may write PASS/FAIL/PASS_WITH_RISK) lands with the
+// executionRole model in WP3.5-B.
+export const LOOP_ARTIFACT_GATE_CAPABILITIES = ["solution-gate"] as const;
 
 // The revision artifact kinds are exactly the canonical LoopArtifactKind
 // values. The list is restated here so this model stays import-pure (the
@@ -53,10 +55,31 @@ export const LOOP_ARTIFACT_REVISION_KINDS = [
   "delivery_checkpoint",
   "capability_output",
   "capability_findings",
+  "task_plan",
+  "implementation_record",
+  "knowledge_sync_result",
 ] as const;
 type ArtifactKindDrift = Exclude<LoopArtifactKind, (typeof LOOP_ARTIFACT_REVISION_KINDS)[number]>;
 const _artifactKindListComplete: [ArtifactKindDrift] extends [never] ? true : never = true;
 void _artifactKindListComplete;
+
+// The unique canonical node product projection (v2 contract §2, A4): each
+// canonical node has exactly one product artifact kind and one stable-path
+// directory segment. Revision creation, read-back and Manifest cross-binding
+// must all agree on this projection; a legacy specs/** path or a non-node
+// kind (e.g. code_patch as a node current) fails closed instead of becoming
+// an internally consistent v2 current.
+export const LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION: Readonly<
+  Record<NodeCapabilityId, { artifactKind: LoopArtifactKind; stablePathSegment: string }>
+> = Object.freeze({
+  "requirement-intake": { artifactKind: "requirement_summary", stablePathSegment: "00-需求资料" },
+  "solution-design": { artifactKind: "technical_design", stablePathSegment: "01-技术方案" },
+  "solution-gate": { artifactKind: "solution_review", stablePathSegment: "02-方案审核" },
+  "task-planning": { artifactKind: "task_plan", stablePathSegment: "03-任务规划" },
+  implementation: { artifactKind: "implementation_record", stablePathSegment: "04-实现记录" },
+  "code-review": { artifactKind: "review_summary", stablePathSegment: "05-代码审核" },
+  "knowledge-sync": { artifactKind: "knowledge_sync_result", stablePathSegment: "06-知识同步" },
+});
 
 export type LoopArtifactRevision = Readonly<{
   schemaVersion: typeof LOOP_ARTIFACT_REVISION_SCHEMA_VERSION;
@@ -110,17 +133,20 @@ const DRAFT_FIELDS = [
   "gateResult", "upstreamRevisionIds", "createdAt",
 ] as const;
 
-// Manifest Artifact Index rows that map to a canonical capability. The
-// `04 交付总结` row has no corresponding capability and is outside the
-// cross-binding scope; solution-challenge has no Index row, which is normal.
+// Manifest Artifact Index rows that map to a canonical capability (v2, A4).
+// The `07 交付总结` row belongs to the C03 Delivery Tail and has no
+// capability; it is outside the cross-binding scope. Old v1 rows
+// (`03 实现记录`→implementation 等) are history: v2 rows are the only
+// current cross-bind surface, old files stay read-only.
 export const LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES: Readonly<Record<string, NodeCapabilityId>> =
   Object.freeze({
     "00 需求资料": "requirement-intake",
-    "01 技术方案": "tech-design",
-    "02 方案审核": "solution-review",
-    "03 实现记录": "implementation",
-    "04 代码审核": "code-review",
-    "05 测试验收": "test-validation",
+    "01 技术方案": "solution-design",
+    "02 方案审核": "solution-gate",
+    "03 任务规划": "task-planning",
+    "04 实现记录": "implementation",
+    "05 代码审核": "code-review",
+    "06 知识同步": "knowledge-sync",
   });
 
 export const LOOP_ARTIFACT_INDEX_STATUSES = ["draft", "active", "stale", "replaced"] as const;
@@ -295,6 +321,50 @@ function parseRevisionId(
   return { nodeId, sequence };
 }
 
+/**
+ * Pure logical-path syntax check for canonical stable paths (v2, A4): the
+ * only accepted shape is
+ *   library/{requirementId}/{canonicalNodeSegment}/{artifact file}
+ * validated on segment structure alone — never against the filesystem.
+ * Absolute paths, backslashes, empty segments, `.` / `..` dot segments,
+ * foreign requirement directories and traversal shapes such as
+ * `03-任务规划/../01-技术方案/escape.md` fail closed instead of passing a
+ * substring containment test.
+ */
+function validateCanonicalStablePath(
+  stablePath: string,
+  requirementId: string,
+  stablePathSegment: string,
+): void {
+  if (stablePath.includes("\\")) {
+    invalid("stablePath must be a POSIX-style logical path without backslashes");
+  }
+  if (stablePath.startsWith("/")) {
+    invalid("stablePath must be a relative logical path");
+  }
+  const segments = stablePath.split("/");
+  if (segments.length < 4) {
+    invalid("stablePath must be library/{requirementId}/{canonical segment}/{artifact file}");
+  }
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      invalid("stablePath must not contain empty path segments");
+    }
+    if (segment === "." || segment === "..") {
+      invalid("stablePath must not contain dot segments");
+    }
+  }
+  if (segments[0] !== "library") {
+    invalid("stablePath must live under the run's library root");
+  }
+  if (segments[1] !== requirementId) {
+    invalid("stablePath requirement directory must match the revision requirement identity");
+  }
+  if (segments[2] !== stablePathSegment) {
+    invalid("stablePath must live under the canonical node directory");
+  }
+}
+
 /** Validate the exact fixed-scalar record contract and the validity rules. */
 export function validateLoopArtifactRevision(value: unknown): void {
   if (utilTypes.isProxy(value)) invalid("artifact revision must not be a Proxy");
@@ -312,7 +382,7 @@ export function validateLoopArtifactRevision(value: unknown): void {
   const nodeId = record.nodeId as NodeCapabilityId;
   const sequence = positiveInteger(record.sequence, "sequence");
   if (record.generation !== null) positiveInteger(record.generation, "generation");
-  text(record.stablePath, "stablePath");
+  const stablePath = text(record.stablePath, "stablePath");
   if (
     typeof record.artifactKind !== "string" ||
     !(LOOP_ARTIFACT_REVISION_KINDS as readonly string[]).includes(record.artifactKind)
@@ -320,6 +390,22 @@ export function validateLoopArtifactRevision(value: unknown): void {
     invalid("artifactKind must be a canonical artifact kind");
   }
   const artifactKind = record.artifactKind as string;
+  // Canonical node product projection (v2, A4): the node's product kind and
+  // stable-path directory are fixed, and the path must carry the exact
+  // logical shape library/{requirementId}/{segment}/…. A legacy specs/**
+  // path or a non-node kind cannot masquerade as a v2 current revision, and
+  // a traversal shape cannot escape the node directory while naming it.
+  const nodeProjection = LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId];
+  if (nodeProjection !== undefined) {
+    if (artifactKind !== nodeProjection.artifactKind) {
+      invalid("artifactKind must be the canonical product kind of the node");
+    }
+    validateCanonicalStablePath(
+      stablePath,
+      record.requirementId as string,
+      nodeProjection.stablePathSegment,
+    );
+  }
   semver(record.semver, "semver");
   const ref = text(record.artifactRef, "artifactRef");
   const refMatch = ARTIFACT_REF_RE.exec(ref);

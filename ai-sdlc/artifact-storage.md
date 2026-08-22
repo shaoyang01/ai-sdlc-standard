@@ -1,5 +1,8 @@
 # Artifact Storage Standard
 
+> 状态：Draft（2026-08-22，C02-WP3.5 合同重基线，Decision-044/045；收口后升 Accepted）
+> 关联：[Lifecycle](lifecycle.md) · [Artifact Flow](artifact-flow.md) · [Artifact Versioning](artifact-versioning.md) · [Phase Gates](phase-gates.md)
+
 ## 目标
 
 在无法自动串联 Agent 和 Skill 的阶段，用固定文档目录、文件名和 Gate 产物实现人工工作流。
@@ -8,8 +11,8 @@
 
 - 每个需求在 `library/` 下拥有独立目录。
 - 同一个需求的跨 Agent 交接产物都放在该需求目录下。
-- 需求目录内部只保留少量高价值节点目录，避免把 SpecKit 机器产物重复文档化。
-- 下一个节点是否可进入，不只看文件是否存在，还要看 Gate 结论。
+- 需求目录内部只保留少量高价值节点目录（v2 七节点 + C03 Delivery Tail）。
+- 下一个节点是否可进入，不只看文件是否存在，还要看 Gate 结论与设计深度裁决；确定性检查由 LOOP runtime 执行。
 
 ## 推荐根目录
 
@@ -48,17 +51,18 @@ YYYYMMDD-short-name
 
 ## 需求目录结构
 
-标准结构：
+标准结构（v2 七节点 + C03 Delivery Tail）：
 
 ```text
 library/{requirement_id}/
 ├── 00-需求资料/
 ├── 01-技术方案/
 ├── 02-方案审核/
-├── 03-实现记录/
-├── 04-交付总结/
-├── 04-代码审核/
-├── 05-测试验收/
+├── 03-任务规划/
+├── 04-实现记录/
+├── 05-代码审核/
+├── 06-知识同步/
+├── 07-交付总结/          # C03 Delivery Tail，不映射节点能力
 └── manifest.md
 ```
 
@@ -66,23 +70,24 @@ library/{requirement_id}/
 
 | 目录 | 是否必需 | 职责 |
 | --- | --- | --- |
-| `00-需求资料/` | 可选 | 保存原始需求、截图、飞书导出、测试或业务补充说明。 |
-| `01-技术方案/` | 必需 | 保存面向人工阅读的技术方案，通常由 DeepSeek 或 html-doc-style 生成。 |
-| `02-方案审核/` | 必需 | 保存 Codex 对技术方案的审阅结论，作为开发前 Gate。 |
-| `03-实现记录/` | 实际实现时必需 | 保存 Codex 实现摘要、涉及模块、验证情况、未完成项和残余风险。 |
-| `04-交付总结/` | 建议 | 保存最终交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人；交付总结独立存在，不是 Gate。 |
-| `04-代码审核/` | 实际实现时必需 | 保存 DeepSeek 或其他 Reviewer 的代码审查报告。 |
-| `05-测试验收/` | 实际实现时必需 | 保存测试同事反馈、截图、Bug 描述的结构化整理，不要求自动化测试。 |
-| `manifest.md` | 进入实现或 Shared Tail 时必需 | 保存该需求的产物索引、当前状态和下一步。 |
+| `00-需求资料/` | 必需（唯一入口） | 保存需求摘要与 change record（新需求/补充/变更/返工/反馈驱动变更）、原始需求、截图、飞书导出、测试或线上反馈整理（必要时渲染到 `00-需求资料/反馈/`）。 |
+| `01-技术方案/` | 必需 | 保存面向人工阅读的技术方案，按已裁决深度档位（LIGHT/STANDARD/DEEP）深化，由 solution-design 执行 binding 生成。 |
+| `02-方案审核/` | 必需 | 保存 solution-gate 产物：adversarial_scan 的 Finding Ledger 与 formal_verdict 的 Gate Result + 设计深度裁决（depth + decision_status）；两角色必须由不同 Agent binding 执行。 |
+| `03-任务规划/` | 必需 | 保存 task-planning 的任务计划与实现前一致性审计结论（v2 新增节点）。 |
+| `04-实现记录/` | 实际实现时必需 | 保存实现摘要、涉及模块、验证情况、未完成项和残余风险；每项声明引用 diff、测试输出或 journal 事件证据。 |
+| `05-代码审核/` | 实际实现时必需 | 保存代码审查报告（Review Summary，含 Finding Ledger / closure review）。 |
+| `06-知识同步/` | 必需 | 保存 knowledge-sync 结果（decision = NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT、候选稳定事实、目标路径、reconcile result、残余风险、evidence digest）；无新增稳定事实时输出 NO_CHANGE 也是有效 current revision。 |
+| `07-交付总结/` | Delivery Tail 时必需 | 属于 C03 Delivery Tail，不映射节点能力；保存交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人；与 delivery checkpoint（READY_FOR_MANUAL_GIT_HANDOFF）单独登记。 |
+| `manifest.md` | 进入实现或 Delivery Tail 时必需 | 保存该需求的产物索引、当前 generation、七节点 current revision/Gate、Design Depth Decision、Delivery Tail 与 external evidence references。 |
 
-当需求产生实际代码、配置或行为实现时，`03-实现记录`、`04-代码审核`、`05-测试验收` 均为 Shared Documentation Governance Tail 的必需证据，不得因路径是 Direct、修改较小或未进入 Speckit 而静默省略。Development Path 与 Shared Tail 的正式语义遵循 `ai-sdlc/development-path-governance.md`。
+当需求产生实际代码、配置或行为实现时，`04-实现记录`、`05-代码审核` 均为必需证据，不得因修改较小而静默省略。节点准入的确定性检查由 LOOP runtime 执行，不再依赖人工 Gate Skill（`sdlc-gate-runner` 已退役）。
 
 ### Manifest 必需性
 
 - 一旦需求进入实际代码、配置或行为实现，Manifest 必须存在。
-- 一旦执行 Development Path、进入 Shared Tail 或形成 Tail Completion Gate，Manifest 必须存在。
-- Manifest 承载：当前 Development Path Decision 指针，Tail required、scope、status，当前证据路径和 version 指针，Activity Log，Change History，Re-Gate Records，blocking state。
-- Manifest 不能被 Delivery Summary、Pipeline result、Stage Summary、workflow-status snapshot、聊天结论或单独的 03/04/05 文件替代。
+- 一旦进入 knowledge-sync 或 C03 Delivery Tail，Manifest 必须存在。
+- Manifest 承载：当前 generation、Design Depth Decision、七节点 current revision/Gate、Delivery Tail 与 external evidence references、Activity Log、Change History、Re-Gate Records、blocking state。
+- Manifest 不能被 Delivery Summary、workflow-status snapshot、聊天结论或单独的节点文件替代。
 - 不进入实现的纯文档、纯分析或纯治理事项，可以正式判定 Manifest 为 `not_applicable`，但必须记录明确范围、原因、证据、decision source 和 decision owner。
 - 不要求迁移历史 Manifest；不修改 Artifact Manifest Template；不创建第二份 Manifest schema。
 
@@ -92,38 +97,24 @@ library/{requirement_id}/
 
 推荐使用 `templates/artifact-manifest-template.md`，至少维护以下信息：
 
-- Metadata：需求 ID、仓库、当前阶段、当前状态、关联 `specs/**` 和分支。
-- Development Path Decision：方案审阅后基于复杂度和风险决定直接实现、唤醒 Speckit pipeline，或阻塞返修。
-- Shared Documentation Governance Tail：`manifest.md` 是 Tail 当前状态和证据指针的权威，应记录 Tail required、scope、status、evidence 和 decisions；Tail 语义遵循 `ai-sdlc/development-path-governance.md`。
-- Artifact Index：当前有效产物路径、版本、Gate 结果和更新时间。
+- Metadata：需求 ID、仓库、当前 generation、当前节点、当前状态、关联分支。
+- Design Depth Decision：solution-gate 正式裁决输出的深度档位（LIGHT/STANDARD/DEEP）与 decision_status（DECIDED/BLOCKED_UNKNOWN）；`BLOCKED_UNKNOWN` 不进入实现；深度档位或 decision_status 变化必须重新过 solution-gate。
+- Artifact Index：七节点（00-06）当前有效产物路径、版本、状态和 Gate/结论；`07-交付总结` 单独登记，不映射节点能力。
+- External Evidence References：content-addressed evidence（可复现测试输出、运行日志、外部系统回执）引用，由相应节点 revision 或 Delivery Tail 引用。
 - Activity Log：当天发生的关键动作，供人工追踪和后续日报读取。
-- Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、测试口径等变化事件。
+- Change History：需求变更、规格遗漏、Review 遗漏、实现 Bug、反馈驱动变更等变化事件。
 - Replaced Artifact Paths：仅记录旧路径、拆分文件或迁移文件被稳定路径替代的情况。
 - Re-Gate Records：变更后从哪个节点重新 Gate、结果是什么、下一步是什么。
 - Stage Summaries：记录不作为 Gate 的阶段性总结，例如测试后的上线准入结论。
-- Speckit Process Products：记录 `specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md` 和 `observability.md` 的路径、状态和版本；manifest 是状态权威源。
-- business_domain_sync：是否需要知识沉淀、是否已执行、目标路径和残余风险。新写统一使用 `business_domain_sync`；旧字段 `Speckit Sync` 只作为历史 Manifest 的兼容读取入口，不要求迁移历史 Manifest。
 
 Activity Log 应记录工作流动作，而不是聊天全文。
 
 示例：
 
 ```text
-2026-06-30 | Codex / sdlc-solution-reviewer | 方案审核 | 02-方案审核 | ..._方案审核.md | PASS | Reviewed Version 1.0.0，建议 DIRECT_IMPLEMENTATION
-2026-06-30 | Codex | 唤醒 Speckit | 02-方案审核 | ..._方案审核.md | SPECKIT_PIPELINE_REQUIRED | 复杂度高，进入完整 SDD
+2026-08-22 | binding-A / sdlc-solution-gate (adversarial_scan) | 对抗扫描 | 02-方案审核 | ..._方案审核.md | Finding Ledger 首轮建立（3 项 finding） | Reviewed Version 1.0.0
+2026-08-22 | binding-B / sdlc-solution-gate (formal_verdict) | 正式裁决 | 02-方案审核 | ..._方案审核.md | PASS | depth=STANDARD, decision_status=DECIDED
 ```
-
-Development Path Decision 只记录当前有效决策。它必须包含 Complexity、Complexity Triggers 和 Full SDD Override，并遵循 `ai-sdlc/complexity-routing.md`。历史决策变化必须同时写入 Activity Log 和 Change History。
-
-Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
-
-上线准入结论属于 Stage Summaries：
-
-- 可引用测试验收、代码审核、当前有效 Gate 和 manifest 状态。
-- 只能说明当前证据下是否具备上线条件。
-- 不作为进入任何节点的门槛。
-- 不代表需求已结束。
-- 不编排上线、灰度、投产、回滚执行或外部发布动作。
 
 ## 文件命名
 
@@ -136,18 +127,21 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 示例：
 
 ```text
+20260629-ai-sdlc-standard_需求摘要.md
 20260629-ai-sdlc-standard_技术方案.html
 20260629-ai-sdlc-standard_方案审核.html
+20260629-ai-sdlc-standard_任务计划.md
 20260629-ai-sdlc-standard_实现记录.md
 20260629-ai-sdlc-standard_代码审核.html
-20260629-ai-sdlc-standard_测试验收.html
+20260629-ai-sdlc-standard_知识同步结果.md
+20260629-ai-sdlc-standard_交付总结.md
 ```
 
 字段说明：
 
 - `requirement_id`：需求 ID，必须与需求目录名一致。
 - `artifact_type`：产物类型，建议与目录名保持一致。
-- `ext`：文档默认 HTML；实现记录或 manifest 可使用 Markdown。
+- `ext`：文档默认 HTML；实现记录、任务计划、知识同步结果或 manifest 可使用 Markdown。
 
 ## 版本规则
 
@@ -164,9 +158,9 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 新版本适用场景：
 
 - 用户补充需求边界。
-- 方案审阅发现 Specification Missing。
+- 方案审核发现 Specification Missing。
 - 实现阶段发现原方案理解错误。
-- Code Review 或测试反馈导致方案、实现记录、测试验收需要更新。
+- Code Review 或测试反馈导致方案、实现记录需要更新。
 - 风险接受内容发生变化。
 
 规则：
@@ -202,12 +196,13 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 
 | 变化 | 最早受影响节点 | 必需动作 |
 | --- | --- | --- |
-| 需求目标、范围或成功标准变化 | `00-需求资料` | 更新需求资料，重新生成或修订技术方案。 |
-| 行为约束、异常处理、兼容性、数据来源、状态流转变化 | `01-技术方案` | 更新稳定技术方案文件的内部版本，重新方案审核。 |
-| 开发路径建议变化 | `02-方案审核` | 更新稳定方案审核或 Gate 记录，更新 Development Path Decision。 |
-| 实现偏离方案 | `03-实现记录` 或 `01-技术方案` | 判断是 Implementation Bug 还是 Specification Missing，再决定回退节点。 |
-| 代码审核发现阻塞项 | `04-代码审核` | 修复后更新实现记录，必要时重新代码审核。 |
-| 测试反馈暴露规格遗漏 | `05-测试验收` 和 `01-技术方案` | 记录测试反馈，回到技术方案并重新方案审核。 |
+| 需求目标、范围或成功标准变化（含测试/线上反馈） | `00-需求资料` | 经 intake 建立 change record（`FEEDBACK_DRIVEN_CHANGE` 等）开启新 generation，更新需求资料，重新生成或修订技术方案。 |
+| 行为约束、异常处理、兼容性、数据来源、状态流转变化 | `01-技术方案` | 更新稳定技术方案文件的内部版本，重新过 solution-gate。 |
+| 方案缺口或深度裁决变化 | `02-方案审核` | 更新 Finding Ledger / Gate 记录，重新正式裁决（depth 或 decision_status 变化必须重新裁决）。 |
+| 任务遗漏、顺序或验证计划错误 | `03-任务规划` | 更新任务计划；若根因是方案缺失，改标 SOLUTION 并回到 `01-技术方案`。 |
+| 实现偏离方案 | `04-实现记录` 或 `01-技术方案` | 判断是 Implementation Bug 还是 Specification Missing，再决定回退节点。 |
+| 代码审核发现阻塞项 | `05-代码审核` | 修复后更新实现记录，必要时重新代码审核。 |
+| 知识沉淀事实错误 | `06-知识同步` | 更新知识同步结果；若发现上游事实错误，按根因回到更早节点。 |
 
 每次 Re-Gate 必须在 `manifest.md` 的 Re-Gate Records 中记录触发原因、回退节点、Gate 产物、结果和下一步。
 
@@ -218,41 +213,42 @@ Stage Summaries 只记录阶段性状态，不替代 Gate Decisions。
 ```text
 library/20260629-ai-sdlc-standard/
 ├── 00-需求资料/
-│   └── 20260629-ai-sdlc-standard_需求资料.md
+│   ├── 20260629-ai-sdlc-standard_需求摘要.md
+│   └── 反馈/
 ├── 01-技术方案/
 │   └── 20260629-ai-sdlc-standard_技术方案.html
 ├── 02-方案审核/
 │   └── 20260629-ai-sdlc-standard_方案审核.html
-├── 03-实现记录/
+├── 03-任务规划/
+│   └── 20260629-ai-sdlc-standard_任务计划.md
+├── 04-实现记录/
 │   └── 20260629-ai-sdlc-standard_实现记录.md
-├── 04-交付总结/
-│   └── 20260629-ai-sdlc-standard_交付总结.md
-├── 04-代码审核/
+├── 05-代码审核/
 │   └── 20260629-ai-sdlc-standard_代码审核.html
-├── 05-测试验收/
-│   └── 20260629-ai-sdlc-standard_测试验收.html
+├── 06-知识同步/
+│   └── 20260629-ai-sdlc-standard_知识同步结果.md
+├── 07-交付总结/
+│   └── 20260629-ai-sdlc-standard_交付总结.md
 └── manifest.md
 ```
 
-## 与 specs/ 的边界
+## 与 .specify/ 的边界（禁止写入）
 
-`specs/**` 和 `library/{requirement_id}/**` 不能互相替代。
-
-推荐边界：
-
-```text
-specs/**                 = SpecKit 机器事实源
-library/{requirement_id}/ = 人工交接与门禁视图
-```
+`specs/**` 不再承担机器事实源职责，旧文件只读历史；`.specify/**` 是禁止写入边界。
 
 具体规则：
 
-- `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md` 仍由 SpecKit 工作流维护；`specs/spec.md`、`specs/plan.md`、`specs/tasks.md` 只属于历史或反例表述，不是当前 runtime path。
-- `specs/{feature}/implementation.md`、`specs/{feature}/workflow-status.md`、`specs/{feature}/debug-guide.md` 和 `specs/{feature}/observability.md` 记录新轨实现阶段过程事实；其中 `specs/{feature}/workflow-status.md` 只是机器侧快照，manifest 是状态权威源。
-- `library/{requirement_id}/01-技术方案/` 可以引用或渲染 `specs/**`，但不是 SpecKit 写入源。
-- `library/{requirement_id}/03-实现记录/` 可以引用 tasks 完成情况、代码 diff 和测试命令。
-- `library/{requirement_id}/04-交付总结/` 汇总最终交付范围、验证结果、遗留风险、发布或回滚说明。
-- 如果 `library` 与 `specs/**` 不一致，必须以 `specs/**` 和当前代码事实为准，并在后续审核或实现记录中说明差异。
+- LOOP 节点产物只写入 `library/{requirement_id}/{节点目录}/`；`library` 与 `.specify/**` 不得互相写入。
+- 旧 `specs/**` 文件可作历史输入引用，但只有 v2 capability execution 产生的 revision 能成为 current；不得恢复 specs-run、sync source mode 或 pipeline 语义。
+- 历史 v1 `03-实现记录 / 04-代码审核 / 05-测试验收` 文件保持只读历史，不自动重命名、不自动提升为 current；若确需复用，必须在新 generation 中显式导入为 evidence 并重新生成 v2 revision。
+- 如果旧文件与当前代码事实不一致，以当前代码事实为准，并在后续审核或实现记录中说明差异。
+
+## Evidence 存储边界
+
+可复现测试输出、运行日志与外部系统回执不属于节点产物：
+
+- 写入 content-addressed evidence store，以 `loop-artifact:v1:<kind>:sha256:<digest>` 形式引用，由相应节点 revision 或 Delivery Tail 引用。
+- 原始测试/线上反馈先经 `requirement-intake` 分类为 `FEEDBACK_DRIVEN_CHANGE` 开启新 generation；必要时渲染到 `00-需求资料/反馈/`，其来源作为 intake source ref，不作为节点 current 产物。
 
 ## 进入下一节点的判断规则
 
@@ -262,10 +258,12 @@ library/{requirement_id}/ = 人工交接与门禁视图
 2. 文件名符合命名规则。
 3. 文件位于当前需求目录下的规定节点文件夹。
 4. 文档 Metadata 必须包含当前内部 `Version`。
-5. 如果上一节点是 Gate，文档内必须包含 Gate Result 和 Reviewed Artifact Version。
-6. Gate Result 必须是 `PASS` 或 `PASS_WITH_RISK`。
-7. `PASS_WITH_RISK` 必须包含风险接受说明。
+5. 如果上一节点是 solution-gate（`02-方案审核`），文档内必须包含 Gate Result、Reviewed Artifact Version 与设计深度裁决（depth + decision_status）。
+6. Gate Result 必须是 `PASS` 或 `PASS_WITH_RISK`，且 decision_status = `DECIDED`（`BLOCKED_UNKNOWN` 不进入实现）。
+7. `PASS_WITH_RISK` 必须包含风险接受说明（Critical 与未接受 High 始终阻塞）。
 8. manifest Artifact Index 中的路径和版本必须与当前文件一致。
+
+节点准入的确定性检查（generation、current revision、Gate、深度裁决、finding 状态）由 LOOP runtime 执行，不依赖人工 Gate Skill。
 
 ## 最小门禁链路
 
@@ -274,74 +272,64 @@ library/{requirement_id}/ = 人工交接与门禁视图
 必须存在：
 
 ```text
-library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.html
-library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.html
+library/{requirement_id}/01-技术方案/{requirement_id}_技术方案.md
+library/{requirement_id}/02-方案审核/{requirement_id}_方案审核.md
+library/{requirement_id}/03-任务规划/{requirement_id}_任务计划.md
 ```
 
-且方案审核结论允许继续。
+且方案审核结论允许继续（PASS / PASS_WITH_RISK，decision_status = DECIDED）。
 
 ### 进入代码审核
+
+必须存在：
+
+```text
+library/{requirement_id}/04-实现记录/{requirement_id}_实现记录.md
+```
+
+实现记录用于说明执行 binding 实际改了什么、跑过什么验证、还有哪些残余风险，便于 Reviewer 审查。
+
+### 进入知识同步
 
 建议存在：
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
+library/{requirement_id}/05-代码审核/{requirement_id}_代码审核.md
 ```
 
-实现记录用于说明 Codex 实际改了什么、跑过什么验证、还有哪些残余风险，便于 DeepSeek 或其他 Reviewer 审查。
+且当前 generation 七节点 current revisions 有效、无未关闭 blocking finding。
 
-### 进入交付总结
+### 进入交付总结（C03 Delivery Tail）
 
 最终交付前建议存在或建议生成：
 
 ```text
-library/{requirement_id}/04-交付总结/{requirement_id}_交付总结.md
+library/{requirement_id}/07-交付总结/{requirement_id}_交付总结.md
 ```
 
-交付总结用于说明最终交付范围、验证结果、遗留风险、发布或回滚说明和下一责任人。
+交付总结用于说明最终交付范围、验证结果、遗留风险、发布或回滚说明和下一责任人；不输出 Gate。
 
 ### 进入修复
 
 如果存在代码审核报告：
 
 ```text
-library/{requirement_id}/04-代码审核/{requirement_id}_代码审核.html
+library/{requirement_id}/05-代码审核/{requirement_id}_代码审核.html
 ```
 
-且其中存在 Critical 或 High，必须先修复。
+且其中存在 Critical 或 High，必须先修复或按根因回流最早受影响节点（方案缺口回 `solution-design` / `task-planning`，不得只修代码）。
 
-### 处理测试反馈
+### 处理测试/线上反馈
 
-当测试同事反馈 Bug、截图、复现步骤或验收问题时，写入：
+测试反馈、线上反馈不再是节点产物（`05-测试验收` 已退役）：先经 `requirement-intake` 分类为 `FEEDBACK_DRIVEN_CHANGE` 开启新 generation，必要时渲染到 `00-需求资料/反馈/`。intake 确认事实后，按 v2 finding 类别（REQUIREMENT / SOLUTION / PLANNING / IMPLEMENTATION / REVIEW / KNOWLEDGE）建立 finding 或直接形成新的 requirement revision。
 
-```text
-library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.html
-```
+## 知识同步边界
 
-测试验收不是自动化测试报告，而是测试反馈结构化入口。它必须尽量判断反馈属于：
+`library/{requirement_id}/06-知识同步/` 只保存 knowledge-sync 结果产物（decision、候选稳定事实、source revision IDs、目标路径、diff/proposal、reconcile result、未执行项、残余风险与 evidence digest）。
 
-- Implementation Bug
-- Specification Missing
-- Review Missing
-- Requirement Change
-- Test Case / Test Expectation Issue
-- Environment / Data Issue
-
-## 知识沉淀边界
-
-`library/{requirement_id}/` 不单独设置知识沉淀目录。
-
-知识沉淀由 Speckit Sync 或等价工作流负责：
-
-```text
-specs/** + 实现结果
-  -> .specify/business_domain/**
-  -> 必要时 .specify/memory/**
-  -> 必要时 .specify/workflow/**
-  -> 必要时 .specify/coding_guide/**
-```
-
-`manifest.md` 可以记录 Sync 是否执行、输出路径和残余风险，但不把 `library` 作为长期知识库事实源。
+- 知识同步默认只读；明确写授权后才写入目标知识（Checklist / Schema / 长期知识库）。
+- 目标知识更新必须可回溯到 source revision IDs 与 evidence；`library` 不作为长期知识库事实源。
+- 新写统一遵循 v2 knowledge-sync 语义；不恢复 Speckit Sync / sync source mode。
 
 ## 与现有 html-doc-style 路径的关系
 
@@ -352,3 +340,9 @@ specs/** + 实现结果
 - AI SDLC 过程产物优先写入 `library/{requirement_id}/{节点目录}/`。
 - 如果团队仍需要 `library/技术方案/` 或 `library/代码审核/` 汇总目录，可额外复制最终版文档，但不得替代需求目录内的门禁产物。
 - 下一个节点判断是否可进入时，只认 `library/{requirement_id}/` 下的标准产物。
+
+## Revision Record
+
+| Version | Date | Status | Summary |
+| --- | --- | --- | --- |
+| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 重基线（Decision-044/045）：目录结构与职责切换为 v2 七节点（00-06）+ C03 Delivery Tail（07）；新增 03-任务规划、06-知识同步，04/05 为原 03/04 顺延，05-测试验收 退役；Manifest 规则更新为 Design Depth Decision、current generation、七节点 current revision/Gate、Delivery Tail 与 external evidence references；specs/**/.specify/** 机器产物与 pipeline/sync source mode 语义删除（.specify/** 保留为禁止写入边界）；测试/线上反馈改为外部 change input 经 intake 重入。 |

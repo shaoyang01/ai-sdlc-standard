@@ -1,5 +1,8 @@
 # Requirement Change Control
 
+> 状态：Draft（2026-08-22，C02-WP3.5 合同重基线，Decision-044/045；收口后升 Accepted）
+> 关联：[LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §5.3 · [LOOP Requirement Change Classification Contract](loop-change-classification.md) · [Complexity Routing](complexity-routing.md) · [Artifact Storage](artifact-storage.md) · [Artifact Versioning](artifact-versioning.md)
+
 ## 目标
 
 本标准定义需求开发过程中发生变更、返工、理解错误或测试反馈时，如何继续当前 DocFlow 流程。
@@ -79,13 +82,13 @@ Decision Scope: DELTA_CHANGE
 规则：
 
 - Aggregate Requirement Scope 只能作为上下文，用来理解原目标、原实现和原 Gate 状态。
-- Current Change Scope / Delta Scope 才是本次 Development Path Decision 的主要判断对象。
-- 原需求中的 DB/MQ/schedule/多模块/长期知识库沉淀等复杂度触发因素，不得自动继承为本次 Delta Scope 的复杂度触发因素。
+- Current Change Scope / Delta Scope 才是本次 `solution-gate` 深度裁决的主要判断对象。
+- 原需求中的 DB/MQ/schedule/多模块/长期知识库沉淀等深度触发因素，不得自动继承为本次 Delta Scope 的深度触发因素。
 - Re-Gate 通过后，后续实现只执行 Delta Scope，不重新实现完整原需求。
-- 如果 Delta Scope 自身新增 DB schema、MQ consumer、schedule、关键数据写入、跨模块协作、状态机或长期知识库沉淀，才可以按 Delta Complexity 输出 `SPECKIT_PIPELINE_REQUIRED`。
-- 如果 Delta Scope 只是补充遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件或局部兼容规则，且 `01-技术方案` 与 `02-方案审核` 已覆盖该 Delta Scope，可继续 `DIRECT_IMPLEMENTATION`。
-- 如果补充内容影响行为但没有技术方案新版本，必须 `BLOCKED_NEEDS_REVISION`，Earliest Affected Node = `01-技术方案`。
-- 如果方案审核未覆盖新的 Delta Scope，必须重新 `02-方案审核` 或保持 `BLOCKED_NEEDS_REVISION`。
+- 如果 Delta Scope 自身新增 DB schema、MQ consumer、schedule、关键数据写入、跨模块协作、状态机或长期知识库沉淀，才可以按 Delta Depth 输出 `DEEP`。
+- 如果 Delta Scope 只是补充遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件或局部兼容规则，且 `01-技术方案` 与 `02-方案审核` 已覆盖该 Delta Scope，可裁决 `LIGHT` / `STANDARD`。
+- 如果补充内容影响行为但没有技术方案新版本，必须 `decision_status = BLOCKED_UNKNOWN`，Earliest Affected Node = `01-技术方案`。
+- 如果方案审核未覆盖新的 Delta Scope，必须重新 `02-方案审核` 或保持 `BLOCKED_UNKNOWN`。
 
 ## 变更来源分类
 
@@ -101,16 +104,17 @@ Decision Scope: DELTA_CHANGE
 
 ## 影响节点判断
 
-从最早受影响节点重新走。
+从最早受影响节点重新走（v2 链，见 [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §5.3 与 [C02-WP3.5 影响分析](../docs/LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md) §3 A3）：
 
 | 变更影响 | 受影响节点 | 必需动作 |
 | --- | --- | --- |
-| 原始需求或业务目标 | `00-需求资料` | 更新需求资料稳定文件的内部版本，重新确认需求。 |
-| 技术方案、行为约束、异常、兼容、数据、接口、状态 | `01-技术方案` | 更新技术方案稳定文件的内部版本，重新方案审核。 |
-| 方案审核结论或风险接受 | `02-方案审核` | 更新方案审核稳定文件的内部版本，重新 Gate。 |
-| 实现范围、验证结果、未完成项 | `03-实现记录` | 更新实现记录稳定文件的内部版本，必要时重新代码审核。 |
-| 代码审查发现阻塞问题 | `04-代码审核` | 修复后重新代码审核或更新审核结论。 |
-| 测试反馈、验收口径、线上验证 | `05-测试验收` | 更新测试验收稳定文件的内部版本并分类处理。 |
+| 原始需求或业务目标（含测试/线上反馈） | `00-需求资料`（requirement-intake） | 建立/更新 change record，更新需求资料稳定文件的内部版本，重新确认需求。 |
+| 技术方案、行为约束、异常、兼容、数据、接口、状态 | `01-技术方案`（solution-design） | 更新技术方案稳定文件的内部版本，重新过方案门禁。 |
+| 方案门禁结论、风险接受或设计深度裁决 | `02-方案审核`（solution-gate） | 更新方案审核稳定文件的内部版本，重新 Gate 与深度裁决。 |
+| 任务遗漏、顺序、依赖或验证计划 | `03-任务规划`（task-planning） | 更新任务计划稳定文件的内部版本并重排下游。 |
+| 实现范围、验证结果、未完成项 | `04-实现记录`（implementation） | 更新实现记录稳定文件的内部版本，必要时重新代码审核。 |
+| 代码审查发现阻塞问题 | `05-代码审核`（code-review） | 修复后重新代码审核或更新审核结论。 |
+| 稳定事实、对账或知识目标 | `06-知识同步`（knowledge-sync） | 更新知识同步稳定文件的内部版本并重跑对账。 |
 
 ## 版本规则
 
@@ -189,21 +193,22 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 
 处理：
 
-1. 更新 `05-测试验收` 稳定文件并提升内部 Version。
+1. 原始测试反馈先经 `requirement-intake` 分类（changeKind=FEEDBACK_DRIVEN_CHANGE）进入新 generation。
 2. 分类为 Implementation Bug。
 3. 修复代码。
-4. 更新 `03-实现记录`。
+4. 更新 `04-实现记录`。
 5. 根据风险决定是否重新代码审核。
+6. 更新 `06-知识同步`（如存在可复用规则/checklist/schema 改进）。
 
 ### 测试反馈是规格遗漏
 
 处理：
 
-1. 更新 `05-测试验收` 稳定文件并提升内部 Version。
+1. 原始测试反馈先经 `requirement-intake` 分类（changeKind=FEEDBACK_DRIVEN_CHANGE）进入新 generation。
 2. 分类为 Specification Missing。
 3. 回到 `01-技术方案`。
-4. 更新 Specification Checklist 或 Schema，如该遗漏具有复用价值。
-5. 重新方案审核。
+4. 更新 Specification Checklist 或 Schema，如该遗漏具有复用价值（经 knowledge-sync 沉淀）。
+5. 重新过方案门禁。
 
 ### 需求变成独立交付
 
@@ -224,7 +229,7 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 - Current Change Scope / Delta Scope
 - Original Implemented / Approved Scope
 - Out of Delta Scope
-- Development Path Decision Source
+- Design Depth Decision Source（solution-gate 深度裁决依据）
 - Change Date
 - Change Source
 - Change Type
@@ -236,7 +241,7 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 - Current Effective Version
 - Next Step
 - Re-Gate Records
-- Delta Development Path Decision
+- Design Depth Decision（solution-gate 深度裁决引用）
 
 在 manifest 模板升级前，可以先记录在 `Blocking Issues`、`Next Step` 或新增临时小节中。
 
@@ -249,18 +254,18 @@ library/20260629-order-rule/02-方案审核/20260629-order-rule_方案审核.htm
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 ```
 
-## 与 Speckit Sync 的关系
+## 与 knowledge-sync 的关系
 
 变更控制只处理过程产物和 Gate 状态。
 
-稳定事实是否进入 `.specify/business_domain/**`，由 Speckit Sync 或等价同步流程决定。
+稳定事实是否进入 `.specify/business_domain/**` 或长期知识库，由 `knowledge-sync` 节点（decision = NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT）决定。
 
 规则：
 
 - 变更未通过 Gate 前，不进入长期知识库。
 - 已 stale 的旧 Gate 或旧正文结论不得同步为当前事实。
-- 测试暴露的通用 Checklist 缺口，可以在 Sync 阶段沉淀。
-- Manifest 只记录 Sync 是否执行、目标路径和残余风险。
+- 测试暴露的通用 Checklist 缺口，经 requirement-intake 重入并验证后可以在 knowledge-sync 沉淀。
+- Manifest 只记录知识同步是否执行、目标路径和残余风险。
 
 ## 最小执行要求
 

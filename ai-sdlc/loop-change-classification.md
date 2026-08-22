@@ -3,6 +3,8 @@
 > 状态：1.1.0 Accepted（2026-08-21，Round 9 独立复审 PASS，C02-WP1 重开后重新收口，Decision-041；内容等同 1.0.6 Draft，仅状态前进。前身为 1.0.0 Accepted，Decision-038；0.1.0 Draft，Decision-037）
 > 关联：[LOOP Entry Contract](loop-entry-contract.md) §4/§6/§7/§8 · [Change Control](change-control.md) · [Development Path Governance](development-path-governance.md) · [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) · [C02 有界实现规划](../docs/LOOP-CORE-C02-PLAN.md) §5/§6
 
+> **v2 交叉引用确认（2026-08-22，Decision-044）**：本合同零节点耦合，**原位保留**，条款不做升版。v2 单轨重基线对本合同的影响仅两点确认：(1) 原始测试/线上反馈按本合同的 `FEEDBACK_DRIVEN_CHANGE` 分类经 `requirement-intake` 重入（`test-validation` 不再是 LOOP 节点，不产生 finding）；(2) 本合同的分类记录是 v2 finding 与最早受影响节点路由的前置事实面（[Finding Lifecycle Contract](loop-finding-lifecycle.md) §2）。canonical 链定义见 [LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §4 与 [C02-WP3.5 影响分析与实施规划](../docs/LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md) §3 A3。
+
 ## 1. Purpose
 
 定义 LOOP 的需求变更分类持久合同：同一 Requirement 的每次入口变化都形成固定 schema、可恢复、可审计的 change record，持久化在 run journal 中，而不是只存在于 prompt 或聊天摘要。

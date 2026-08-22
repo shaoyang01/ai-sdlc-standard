@@ -68,7 +68,7 @@ const IMPL_INPUT = {
     parsed_at: "2026-01-01T00:00:00.000Z",
   },
   designOutput: {
-    node: "tech-design",
+    node: "solution-design",
     result: "design_completed",
     design: {
       approach: "single_service",
@@ -437,7 +437,7 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
       codexProcessRunner: processRunner,
       codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
     });
-    const request = { ...makeRequest("tech-design", "tech-design"), input: { api_key: "secret-value" } };
+    const request = { ...makeRequest("solution-design", "solution-design"), input: { api_key: "secret-value" } };
     const result = await gateway.execute(request);
     assert(tracking.calls === 0, "sensitive input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "sensitive input: fails closed to shadow_output");
@@ -456,7 +456,7 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
       codexProcessRunner: processRunner,
       codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
     });
-    const result = await gateway.execute(makeRequest("test-validation", "test-validation"));
+    const result = await gateway.execute(makeRequest("knowledge-sync", "knowledge-sync"));
     assert(result.artifacts[0].type === "shadow_output", "sensitive output: fails closed to shadow_output");
     assert(
       result.output["codex_fallback_reason"] === "prohibited_output_content",
@@ -476,7 +476,7 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
       codexProcessRunner: processRunner,
       codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
     });
-    const result = await gateway.execute(makeRequest("test-validation", "test-validation"));
+    const result = await gateway.execute(makeRequest("knowledge-sync", "knowledge-sync"));
     assert(result.artifacts[0].type === "shadow_output", "oversized output: fails closed to shadow_output");
     assert(
       result.output["codex_fallback_reason"] === "output_too_large",
@@ -501,7 +501,7 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
     });
     const circular: Record<string, unknown> = { name: "loop" };
     circular.self = circular;
-    const request = { ...makeRequest("tech-design", "tech-design"), input: circular };
+    const request = { ...makeRequest("solution-design", "solution-design"), input: circular };
     const result = await gateway.execute(request);
     assert(tracking.calls === 0, "circular input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "circular input: fails closed to shadow_output");
@@ -521,7 +521,7 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
       codexProcessRunner: processRunner,
       codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
     });
-    const request = { ...makeRequest("tech-design", "tech-design"), input: { big: BigInt(9007199254740991) } };
+    const request = { ...makeRequest("solution-design", "solution-design"), input: { big: BigInt(9007199254740991) } };
     const result = await gateway.execute(request);
     assert(tracking.calls === 0, "unserializable input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "unserializable input: fails closed to shadow_output");
