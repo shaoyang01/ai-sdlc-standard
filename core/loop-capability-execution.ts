@@ -17,6 +17,7 @@ import {
 } from "../loop/types";
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
+import { historicalRestartAuthorized } from "./loop-regate";
 
 // v2 (C02-WP3.5-B, A2): every execution event records its executionRole.
 // v3 (Round 1 corrections): the adversarial_scan role MUST persist its
@@ -373,10 +374,30 @@ function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityE
  * expanded by solution-gate's adversarial_scan / formal_verdict roles); the
  * formal_verdict dispatch must target a different agent than the
  * adversarial_scan execution of the same solution-gate round (v2, A2/G1).
+ *
+ * WP4 generation restarts: a backward jump to a point earlier than the
+ * canonical successor is rejected unless the caller proves a pending Re-Gate
+ * plan authorizes exactly that target index via
+ * `context.allowedRestartTargetIndex`. The store derives this authorization
+ * from OPEN blocking findings and current-revision facts inside the same
+ * transaction — callers can never self-authorize a restart, and with no
+ * pending plan the strictly linear v2 chain rules apply unchanged.
  */
+export interface LoopCapabilityChainValidationContext {
+  /** Point index authorized for a generation restart (null/undefined = none). */
+  allowedRestartTargetIndex?: number | null;
+  /**
+   * Reduced findings enabling historical restart re-validation on read
+   * paths (see historicalRestartAuthorized). Append paths omit this so a
+   * jump is only legal at the exact live-pending target.
+   */
+  historicalFindings?: import("./loop-regate").RegateFindingFacts[];
+}
+
 export function validateLoopCapabilityExecutionChain(
   events: readonly LoopCapabilityExecutionEvent[],
   expectedRunId: string,
+  context?: LoopCapabilityChainValidationContext,
 ): void {
   let active: LoopCapabilityExecutionEvent | null = null;
   const lastAttempts = new Map<string, number>();
@@ -421,13 +442,67 @@ export function validateLoopCapabilityExecutionChain(
             point.executionRole === previous.executionRole,
         );
         const nextPoint = LOOP_CAPABILITY_EXECUTION_POINTS[previousIndex + 1];
-        if (
-          previous.nextStepEligibility !== "ELIGIBLE" || nextPoint === undefined ||
-          event.capability !== nextPoint.capability ||
-          event.executionRole !== nextPoint.executionRole
-        ) {
+        const thisIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+          (point) =>
+            point.capability === event.capability &&
+            point.executionRole === event.executionRole,
+        );
+        const isCanonicalNext =
+          previous.nextStepEligibility === "ELIGIBLE" && nextPoint !== undefined &&
+          event.capability === nextPoint.capability &&
+          event.executionRole === nextPoint.executionRole;
+        // WP4: a backward jump is a generation restart and is legal only at
+        // the exact point index authorized by the pending Re-Gate plan
+        // (append time) or covered by an immutable historical finding
+        // (read-path re-validation of an already-recorded jump).
+        const restartTarget = context?.allowedRestartTargetIndex ?? null;
+        const historicalOk = context?.historicalFindings !== undefined &&
+          historicalRestartAuthorized(context.historicalFindings, thisIndex);
+        const isAuthorizedRestart =
+          !isCanonicalNext &&
+          thisIndex < previousIndex + 1 &&
+          ((restartTarget !== null && thisIndex === restartTarget) || historicalOk);
+        if (!isCanonicalNext && !isAuthorizedRestart) {
           invalid("capability execution must follow the canonical eligible chain");
         }
+        if (!isCanonicalNext) {
+          // Generation restart: the rebuilt point consumes the REUSED
+          // upstream output — the last succeeded execution of the point
+          // immediately before the restart target. A restart landing on
+          // requirement intake re-consumes the normalized source instead.
+          if (thisIndex === 0) {
+            if (!event.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:")) {
+              invalid("requirement intake must consume a normalized Requirement source");
+            }
+          } else {
+            const upstreamPoint = LOOP_CAPABILITY_EXECUTION_POINTS[thisIndex - 1]!;
+            let upstreamSucceeded: LoopCapabilityExecutionEvent | undefined;
+            for (let j = index - 1; j >= 0; j -= 1) {
+              const candidate = events[j]!;
+              if (
+                candidate.status === "succeeded" &&
+                candidate.capability === upstreamPoint.capability &&
+                candidate.executionRole === upstreamPoint.executionRole
+              ) {
+                upstreamSucceeded = candidate;
+                break;
+              }
+            }
+            if (
+              upstreamSucceeded === undefined ||
+              upstreamSucceeded.nextStepEligibility !== "ELIGIBLE"
+            ) {
+              invalid("generation restart requires an eligible reused upstream output");
+            }
+            if (
+              event.inputArtifactRef !== upstreamSucceeded.outputArtifactRef ||
+              event.inputArtifactVersion !== upstreamSucceeded.outputArtifactVersion ||
+              event.inputDigest !== upstreamSucceeded.outputDigest
+            ) {
+              invalid("restart input must match the reused upstream output");
+            }
+          }
+        } else {
         // v2 (A2, G1): the formal_verdict dispatch must go to a different
         // agent than the adversarial_scan that produced the consumed ledger.
         if (
@@ -459,6 +534,7 @@ export function validateLoopCapabilityExecutionChain(
           event.inputDigest !== previous.outputDigest
         ) {
           invalid("capability input must match the predecessor's effective output");
+        }
         }
       } else {
         invalid("a new capability cannot start before the active attempt terminates");

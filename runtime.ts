@@ -29,6 +29,10 @@ import {
 import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
 import { LoopCapabilityEntry } from "./core/loop-capability-entry";
 import { LoopArtifactStore, type LoopArtifactKind } from "./core/loop-artifact-store";
+import {
+  LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
+  createLoopArtifactRevision,
+} from "./core/loop-artifact-revision";
 import { recoverRunContext } from "./core/loop-recovery";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
@@ -353,7 +357,16 @@ export async function run(
   // or blocked — it must NOT be coerced back to the first point.
   let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
   let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
+  // WP4: Re-Gate generations can legally re-dispatch earlier points; the
+  // bound keeps a pathological finding/rebuild cycle from running forever
+  // (bounded retry semantics carried over from C01).
+  const maxDispatches = LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
+  let dispatches = 0;
   while (next !== null) {
+    if (dispatches >= maxDispatches) {
+      break;
+    }
+    dispatches += 1;
     if (!firstDispatch && recovery !== undefined) {
       const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
         LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
@@ -380,13 +393,67 @@ export async function run(
       inputArtifactRef: inputRef,
       inputArtifactVersion: inputVersion,
       inputDigest,
-      outputArtifactVersion: "1.0.0",
+      // WP4: the output version is generation-scoped — attempt N of a point
+      // produces semver N.0.0, so a rebuild never collides with a prior
+      // generation's occupied semver.
+      outputArtifactVersion: `${(recovery?.executionPointStates.find(
+        (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
+      )?.lastAttempt ?? 0) + 1}.0.0`,
       input: { inputArtifactRef: inputRef },
     });
     firstDispatch = false;
     journalRunId = executed.runId;
     recovery = executed.recoveryContext;
     if (executed.execution.success !== true) {
+      break;
+    }
+    // WP4: bind the node product as an artifact revision authored by this
+    // succeeded producer execution. Currents are the facts Re-Gate planning
+    // (and finding source binding) consume; upstream chains to the reused or
+    // rebuilt current of the previous node.
+    const produced = runStore.listCapabilityExecutions(journalRunId).at(-1);
+    // The adversarial_scan round's product is its Finding Ledger (already
+    // persisted by the gateway), not the node artifact — only the
+    // formal_verdict round may author the solution-gate node revision.
+    const isScanRound =
+      produced !== undefined &&
+      produced.capability === "solution-gate" &&
+      produced.executionRole === "adversarial_scan";
+    if (
+      produced !== undefined && produced.status === "succeeded" &&
+      !isScanRound &&
+      produced.capability === next.capability && produced.executionRole === next.executionRole &&
+      produced.outputArtifactRef !== null && produced.outputDigest !== null
+    ) {
+      const priorForNode = runStore.listArtifactRevisions(journalRunId)
+        .filter((item) => item.nodeId === next.capability);
+      const nodeIdx = NODE_CAPABILITY_IDS.indexOf(next.capability);
+      const upstreamNodeId = nodeIdx > 0 ? NODE_CAPABILITY_IDS[nodeIdx - 1]! : null;
+      const upstreamCurrent = upstreamNodeId === null
+        ? undefined
+        : runStore.getCurrentArtifactRevision(journalRunId, upstreamNodeId);
+      runStore.appendArtifactRevision(createLoopArtifactRevision({
+        runId: journalRunId,
+        requirementId,
+        nodeId: next.capability,
+        sequence: priorForNode.length + 1,
+        generation: produced.attempt,
+        stablePath: `library/${requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[next.capability].stablePathSegment}/${requirementId}_${next.capability}.md`,
+        artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[next.capability].artifactKind,
+        semver: `${produced.attempt}.0.0`,
+        artifactRef: produced.outputArtifactRef,
+        digest: produced.outputDigest,
+        producerExecutionId: produced.executionEventId,
+        producerExecutionRole: produced.executionRole,
+        gateResult: produced.gateResult,
+        upstreamRevisionIds: upstreamCurrent === undefined ? [] : [upstreamCurrent.revisionId],
+        createdAt: now(),
+      }));
+    }
+    // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
+    // must reflect the fresh current, not the pre-append projection.
+    recovery = recoverRunContext(runStore, requirementId);
+    if (recovery === undefined) {
       break;
     }
     next = recovery.nextExecutionPoint;

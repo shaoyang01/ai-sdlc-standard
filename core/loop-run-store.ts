@@ -41,6 +41,12 @@ import {
   type LoopCapabilityExecutionEvent,
 } from "./loop-capability-execution";
 import {
+  planRegateFromFacts,
+  type CurrentRevisionFacts,
+  type RegateFindingFacts,
+} from "./loop-regate";
+import type { NodeCapabilityId } from "../loop/types";
+import {
   canonicalizeLoopRequirementChangeRecord,
   validateLoopRequirementChangeChain,
   validateLoopRequirementChangeRecord,
@@ -1717,7 +1723,8 @@ export class LoopRunStore {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
         }
         try {
-          validateLoopCapabilityExecutionChain([...current, event], event.runId);
+          const regateContext = this.regateChainContextInTransaction(db, event.runId);
+          validateLoopCapabilityExecutionChain([...current, event], event.runId, regateContext);
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
@@ -1836,7 +1843,10 @@ export class LoopRunStore {
           reasonCode: "ENTRY_RECOVERY",
         });
         try {
-          validateLoopCapabilityExecutionChain([...current, failed], runId);
+          const regateContext = this.regateChainContextInTransaction(db, runId);
+          validateLoopCapabilityExecutionChain([...current, failed], runId, {
+            historicalFindings: regateContext.historicalFindings,
+          });
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability interruption transition is invalid");
@@ -2533,6 +2543,41 @@ export class LoopRunStore {
   }
 
   /**
+   * WP4: raw per-node CURRENT pointer facts WITHOUT the ACTIVE-only
+   * assertion of getCurrentArtifactRevision. After a finding invalidation
+   * the pointer legitimately targets a STALE revision; Re-Gate planning
+   * consumes exactly those facts (validity + createdAt), while consumption
+   * paths keep using the fail-closed getter.
+   */
+  listCurrentRevisionFacts(runId: string): ReadonlyArray<{
+    nodeId: NodeCapabilityId;
+    validity: string;
+    createdAt: string;
+  }> {
+    if (
+      typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
+      /[\x00-\x1f\x7f-\x9f]/.test(runId)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "runId must be a safe trimmed non-empty string");
+    }
+    const db = this.connection();
+    return Object.freeze(
+      (
+        db.prepare(
+          `SELECT c.node_id AS node_id, r.validity AS validity, r.created_at AS created_at
+           FROM loop_artifact_current c
+           JOIN loop_artifact_revisions r ON r.revision_id = c.revision_id
+           WHERE c.run_id = ?`,
+        ).all(runId) as ReadonlyArray<{ node_id: string; validity: string; created_at: string }>
+      ).map((row) => Object.freeze({
+        nodeId: row.node_id as NodeCapabilityId,
+        validity: row.validity,
+        createdAt: row.created_at,
+      })),
+    );
+  }
+
+  /**
    * Append one immutable C02 WP-3 finding and atomically propagate its
    * dependency invalidation. Findings use their own per-run sequence and
    * never mutate the delivery-stage cursor, the capability-attempt stream,
@@ -3127,6 +3172,87 @@ export class LoopRunStore {
     );
   }
 
+  /**
+   * WP4: derive the chain-validation context from journal facts inside the
+   * caller's transaction. `allowedRestartTargetIndex` is the LIVE pending
+   * Re-Gate target (append-time strictness); `historicalFindings` enables
+   * read-path re-validation of already-recorded restarts against immutable
+   * finding facts. Pure journal data — no skill surface, no caller input.
+   */
+  /** Per-point MAX(attempt) for Re-Gate mid-wave role refinement (WP4). */
+  private regatePointLastAttempts(
+    db: Database.Database,
+    runId: string,
+  ): Map<string, number> {
+    const rows = db.prepare(
+      `SELECT capability, execution_role, MAX(attempt) AS last_attempt
+       FROM loop_capability_executions WHERE run_id = ?
+       GROUP BY capability, execution_role`,
+    ).all(runId) as ReadonlyArray<{
+      capability: string;
+      execution_role: string;
+      last_attempt: number;
+    }>;
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      map.set(`${row.capability}:${row.execution_role}`, row.last_attempt);
+    }
+    return map;
+  }
+
+  private regateChainContextInTransaction(
+    db: Database.Database,
+    runId: string,
+  ): {
+    allowedRestartTargetIndex: number | null;
+    historicalFindings: RegateFindingFacts[];
+  } {
+    // NOTE: deliberately avoids the validating readers (readFindings… /
+    // readRunSnapshot… / readArtifactRevisions…) — findings reading pulls
+    // artifact revisions, revisions reading validates the capability chain,
+    // and the capability chain now validates against this helper's facts:
+    // using them here would close an infinite reader recursion. The reduced
+    // facts below are raw rows; full validation stays with the callers.
+    const runRow = db.prepare(
+      "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
+    ).get(runId) as { requirement_id?: string } | undefined;
+    if (runRow === undefined) {
+      return { allowedRestartTargetIndex: null, historicalFindings: [] };
+    }
+    const findingRows = db.prepare(
+      `SELECT finding_id, severity, status, earliest_affected_node_id, created_at
+       FROM loop_findings WHERE run_id = ? ORDER BY sequence ASC`,
+    ).all(runId) as ReadonlyArray<{
+      finding_id: string;
+      severity: string;
+      status: string;
+      earliest_affected_node_id: string;
+      created_at: string;
+    }>;
+    const historicalFindings: RegateFindingFacts[] = findingRows.map((row) => ({
+      findingId: row.finding_id,
+      severity: row.severity,
+      status: row.status,
+      earliestAffectedNodeId: row.earliest_affected_node_id as RegateFindingFacts["earliestAffectedNodeId"],
+      createdAt: row.created_at,
+    }));
+    const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
+    const pointerRows = db.prepare(
+      `SELECT c.node_id AS node_id, r.validity AS validity
+       FROM loop_artifact_current c
+       JOIN loop_artifact_revisions r ON r.revision_id = c.revision_id
+       WHERE c.run_id = ?`,
+    ).all(runId) as ReadonlyArray<{ node_id: string; validity: string }>;
+    for (const row of pointerRows) {
+      currentByNode.set(row.node_id as NodeCapabilityId, { validity: row.validity });
+    }
+    const plan = planRegateFromFacts(historicalFindings, currentByNode, this.regatePointLastAttempts(db, runId));
+    return {
+      allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
+      historicalFindings,
+    };
+  }
+
   private readCapabilityExecutionsInTransaction(
     db: Database.Database,
     runId: string,
@@ -3149,7 +3275,10 @@ export class LoopRunStore {
       return event;
     });
     try {
-      validateLoopCapabilityExecutionChain(events, runId);
+      const regateContext = this.regateChainContextInTransaction(db, runId);
+      validateLoopCapabilityExecutionChain(events, runId, {
+        historicalFindings: regateContext.historicalFindings,
+      });
     } catch (error) {
       if (error instanceof LoopRunJournalError) corrupt("persisted capability execution chain is invalid");
       throw error;

@@ -21,6 +21,7 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
+import { planRegateFromFacts, type CurrentRevisionFacts } from "./loop-regate";
 import type {
   LoopCapabilityExecutionEvent,
   LoopCapabilityExecutionStatus,
@@ -282,11 +283,18 @@ export function recoverRunContext(
     },
   );
   let nextExecutionPoint: RunRecoveryContext["nextExecutionPoint"] = null;
-  for (const pointState of executionPointStates) {
+  let linearStopIdx: number | null = null;
+  const pointIndexOf = (point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }): number =>
+    LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      (candidate) => candidate.capability === point.capability && candidate.executionRole === point.executionRole,
+    );
+  for (let i = 0; i < executionPointStates.length; i += 1) {
+    const pointState = executionPointStates[i]!;
     const point = {
       capability: pointState.capability,
       executionRole: pointState.executionRole,
     };
+    linearStopIdx = i;
     if (pointState.status === "failed") {
       nextExecutionPoint = pointState.retryable === true ? point : null;
       break;
@@ -303,6 +311,51 @@ export function recoverRunContext(
       nextExecutionPoint = null;
       break;
     }
+  }
+  // WP4 generation awareness: OPEN blocking findings with an incomplete
+  // rebuild scope override the linear successor with the Re-Gate restart
+  // target. An unadjudicated block at or before the target is never
+  // bypassed; a COMPLETED linear projection becomes READY again while a
+  // wave is pending.
+  let regateTargetIndex: number | null = null;
+  let regateOverrideApplied = false;
+  if (capabilityExecutions.length > 0) {
+    const findings = store.listFindings(state.identity.runId);
+    if (findings.length > 0) {
+      const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
+      for (const fact of store.listCurrentRevisionFacts(state.identity.runId)) {
+        currentByNode.set(fact.nodeId, { validity: fact.validity });
+      }
+      const pointLastAttempts = new Map<string, number>(
+        executionPointStates.map((state) => [
+          `${state.capability}:${state.executionRole}`,
+          state.lastAttempt,
+        ]),
+      );
+      const plan = planRegateFromFacts(
+        findings.map((finding) => ({
+          findingId: finding.findingId,
+          severity: finding.severity,
+          status: finding.status,
+          earliestAffectedNodeId: finding.earliestAffectedNodeId,
+          createdAt: finding.createdAt,
+        })),
+        currentByNode,
+        pointLastAttempts,
+      );
+      if (plan.kind === "regate" && plan.restartPointIndex !== null) {
+        regateTargetIndex = plan.restartPointIndex;
+      }
+    }
+  }
+  if (
+    regateTargetIndex !== null &&
+    (nextExecutionPoint === null || pointIndexOf(nextExecutionPoint) > regateTargetIndex) &&
+    !(nextExecutionPoint === null && linearStopIdx !== null && linearStopIdx < regateTargetIndex)
+  ) {
+    const target = LOOP_CAPABILITY_EXECUTION_POINTS[regateTargetIndex]!;
+    nextExecutionPoint = { capability: target.capability, executionRole: target.executionRole };
+    regateOverrideApplied = true;
   }
   const capabilityStates = NODE_CAPABILITY_IDS.map((capability): CapabilityRecoveryState => {
     const events = capabilityExecutions.filter((event) => event.capability === capability);
@@ -335,9 +388,11 @@ export function recoverRunContext(
     : capabilityExecutions[capabilityExecutions.length - 1]!;
   // v2: the chain status and next pointer derive from the point-wise
   // projection; `nextCapability` stays as the capability projection of it.
+  // WP4: a pending Re-Gate wave downgrades a linearly COMPLETED projection
+  // to READY — the chain owes a rebuild generation before it is complete.
   const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
     executionPointStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
-      ? "COMPLETED"
+      ? (regateOverrideApplied ? "READY" : "COMPLETED")
       : lastCapabilityExecution?.status === "started"
         ? "RUNNING"
         : lastCapabilityExecution !== null && nextExecutionPoint === null
