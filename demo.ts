@@ -1,34 +1,34 @@
-// Demo — Shadow SDLC Pipeline
-// ============================
-// Runs the full SDLC pipeline with a sample requirement.
-// Safe to execute: all agent calls are shadow-mode simulations.
-// By default this runs in shadow mode.
-// To opt into Codex adapter, set SDLC_EXECUTION_MODE=codex.
-// Optional:
-//   SDLC_POLICY_MEMORY=enabled      persists read-only feedback memory to local SQLite.
-//   SDLC_POLICY_MEMORY_READ=enabled reads local SQLite memory as advisory policy signals.
+// Demo — v2 Single-Rail Runtime
+// ==============================
+// Runs the v2 seven-node chain for a sample requirement with the default
+// deterministic shadow capability gateway: every execution point is journaled
+// in an append-only LoopRunStore (v6) with the dual-agent solution-gate.
+// Real dispatch (codex real runner) and production entry wiring are separate,
+// explicitly authorized work packages.
 
 import { run } from "./runtime";
 
-run("build payment system with order sync across inventory service and repo-A calls repo-B")
+run("build payment system with order sync across inventory service and repo-A calls repo-B", {
+  requirementId: `REQ-DEMO-${Date.now()}`,
+})
   .then((result) => {
-    const { execution_trace, artifacts, feedback, fanout_results, final_status, requirement_id } = result;
-    const traceSummary = execution_trace.map((t) => ({ node: t.node, agent: t.agent, status: t.status }));
     console.log(JSON.stringify({
-      requirement_id,
-      final_status,
-      trace_summary: traceSummary,
-      artifact_count: artifacts.length,
-      feedback_summary: {
-        agent_scores: feedback.agent_scores,
-        policy_suggestions: feedback.policy_suggestions,
-        shadow_routing_decisions: feedback.shadow_routing_decisions,
-        evolution_proposal_count: feedback.evolution_proposals?.length ?? 0,
-      },
-      fanout_results,
+      requirement_id: result.requirement_id,
+      run_id: result.run_id,
+      final_status: result.final_status,
+      chain_status: result.chain_status,
+      trace_summary: result.execution_trace.map((entry) => ({
+        capability: entry.capability,
+        role: entry.executionRole,
+        agent: entry.agent,
+        status: entry.status,
+        gate: entry.gateResult,
+      })),
+      journal_path: result.journal_path,
+      completed_at: result.completed_at,
     }, null, 2));
   })
   .catch((error) => {
-    console.error("SDLC pipeline failed:", error);
+    console.error("SDLC v2 runtime failed:", error);
     process.exit(1);
   });

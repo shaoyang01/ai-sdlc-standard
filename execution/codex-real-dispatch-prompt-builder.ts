@@ -5,7 +5,26 @@
 // No child_process, network, filesystem, or CLI imports.
 // Does not dump raw Runtime context, raw artifacts, or full patch content.
 
-import type { RequirementSummary } from "../core/runtime-executors";
+// Structural match for the implementation executor input so callers can pass
+// the real typed object without creating a circular dependency between
+// execution/ and core/. The legacy Development Path execution mode was
+// retired by the single-rail re-baseline (Decision-044) and is not part of
+// the prompt contract anymore.
+export interface RequirementSummary {
+  requirement_id: string;
+  multi_repo: boolean;
+  main_repo: string;
+  sub_requirements: { repo: string; task: string }[];
+}
+
+export interface CodexPromptBuilderInput {
+  requirement: string;
+  requirementId: string;
+  summary: RequirementSummary;
+  designOutput: unknown;
+  reviewOutput: unknown;
+  complexity?: "low" | "medium" | "high";
+}
 
 export interface PromptBuilderResult {
   ok: boolean;
@@ -27,18 +46,6 @@ export const DEFAULT_PROMPT_BUILDER_LIMITS: PromptBuilderLimits = {
   maxDesignChars: 4000,
   maxReviewChars: 2000,
 };
-
-// Structural match for ImplementationExecutorInput so callers can pass the real
-// typed object without creating a circular dependency between execution/ and core/.
-export interface CodexPromptBuilderInput {
-  requirement: string;
-  requirementId: string;
-  summary: RequirementSummary;
-  designOutput: unknown;
-  reviewOutput: unknown;
-  complexity?: "low" | "medium" | "high";
-  executionMode: "direct" | "speckit";
-}
 
 const PROHIBITED_PATTERNS = [
   "secret",
@@ -110,7 +117,6 @@ export function buildCodexPrompt(
     summaryPreview,
     input.requirementId,
     input.complexity ?? "",
-    input.executionMode,
   ].join(" ");
 
   if (containsProhibitedContent(candidateText)) {
@@ -124,7 +130,6 @@ export function buildCodexPrompt(
   const prompt = [
     "# Task Summary",
     `Requirement ID: ${input.requirementId}`,
-    `Execution mode: ${input.executionMode}`,
     `Complexity: ${input.complexity ?? "unspecified"}`,
     "",
     "# Requirement",

@@ -147,7 +147,7 @@ async function main() {
           parsed_at: new Date().toISOString(),
         },
         designOutput: {
-          node: "tech-design",
+          node: "solution-design",
           result: "design_completed",
           design: {
             approach: "minimal_read_only_smoke",
@@ -159,7 +159,7 @@ async function main() {
           },
         },
         reviewOutput: {
-          node: "review",
+          node: "code-review",
           result: "PASS",
         },
         complexity: "low",

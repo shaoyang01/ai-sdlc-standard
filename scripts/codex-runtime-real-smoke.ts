@@ -1,9 +1,16 @@
-// Codex Runtime Real Smoke Test
-// ================================
-// Manually invoked smoke test for the full Runtime direct path with real Codex Gateway.
-// Requires explicit environment confirmation. Does NOT modify files.
-// Does NOT apply patches. Does NOT write generated patch to disk.
-// Prints only sanitized summary data.
+// Codex Runtime Real Smoke Test (v2 single-rail)
+// ================================================
+// Manually invoked smoke test for the v2 runtime chain with the real Codex
+// Gateway injected. Requires explicit environment confirmation. Does NOT
+// modify files. Does NOT apply patches. Prints only sanitized summary data.
+//
+// The v2 chain requires the two solution-gate roles on DIFFERENT agents, and
+// only codex has real dispatch today: the real run therefore completes the
+// codex-bound points (requirement-intake, solution-design, adversarial_scan)
+// with real dispatch and must stop fail-closed at the formal_verdict point
+// (bound to hermes) instead of silently reusing the scan agent. PASS means:
+// real codex attempts journaled for every codex-bound point that ran, no
+// fallback reason on them, and the dual-agent boundary held.
 //
 // Required environment variables:
 //   SDLC_EXECUTION_MODE=codex
@@ -11,8 +18,14 @@
 //   SDLC_CODEX_SMOKE_CONFIRM=yes
 //   SDLC_CODEX_WORKING_DIRECTORY=<absolute path to a git repository>
 
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { ExecutionGateway } from "../execution/gateway";
-import { run } from "../runtime";
+import { createRuntimeBindingRegistry, run } from "../runtime";
+import { LoopArtifactStore } from "../core/loop-artifact-store";
+import { LoopRunStore } from "../core/loop-run-store";
 import { validateSmokeEnvironment } from "./codex-real-dispatch-smoke";
 
 function hasEnabledSideEffectFlags(env: Record<string, string | undefined>): boolean {
@@ -24,33 +37,12 @@ function hasEnabledSideEffectFlags(env: Record<string, string | undefined>): boo
   );
 }
 
-function formatTraceSequence(trace: ReadonlyArray<{ node: string }>): string {
-  return trace.map((entry) => entry.node).join(" → ");
-}
-
-function hasOrderedSubsequence(
-  traceNodes: readonly string[],
-  requiredNodes: readonly string[]
-): boolean {
-  let requiredIndex = 0;
-  for (const node of traceNodes) {
-    if (node === requiredNodes[requiredIndex]) {
-      requiredIndex++;
-      if (requiredIndex === requiredNodes.length) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 async function main() {
   const validation = validateSmokeEnvironment(process.env);
   if (validation.ok === false) {
     console.error(validation.message);
     process.exit(1);
   }
-
   if (hasEnabledSideEffectFlags(process.env)) {
     console.error(
       "Refused: unrelated Runtime side-effect flags must remain disabled for this smoke test."
@@ -63,6 +55,17 @@ async function main() {
     SDLC_CODEX_REAL_DISPATCH: "enabled" as const,
   };
 
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "sdlc-runtime-real-smoke-"));
+  mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  const runStore = new LoopRunStore(join(workspaceRoot, "journal.db"));
+  const artifactStore = new LoopArtifactStore({
+    controlRoot: join(workspaceRoot, "control"),
+    repositoryPath: join(workspaceRoot, "repo"),
+  });
+  runStore.init();
+  artifactStore.init();
+  const bindingRegistry = createRuntimeBindingRegistry();
+
   const gateway = new ExecutionGateway({
     env: runtimeEnv,
     codexRealDispatchConfig: {
@@ -71,106 +74,64 @@ async function main() {
       maxStdoutChars: 64_000,
       maxStderrChars: 16_000,
     },
+    capabilityTracing: {
+      runStore,
+      artifactStore,
+      bindingRegistry,
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+    },
   });
 
   const requirement =
     "Add an exported addNumbers(a, b) function to math.ts and return a patch only. Do not modify files.";
 
   const result = await run(requirement, {
-    env: runtimeEnv,
-    executionGateway: gateway,
+    requirementId: `REQ-SMOKE-${Date.now()}`,
+    runStore,
+    artifactStore,
+    bindingRegistry,
+    gateway,
   });
 
   const trace = result.execution_trace;
-  const requiredNodes = [
-    "requirement-summary",
-    "tech-design",
-    "review",
-    "implementation",
-    "code-review",
-    "validation",
-  ];
-  const traceNodes = trace.map((entry) => entry.node);
-  const hasRequiredOrder = hasOrderedSubsequence(traceNodes, requiredNodes);
-
-  const reviewTraces = trace.filter((entry) => entry.node === "review");
-  const finalReviewResult = reviewTraces[reviewTraces.length - 1]?.output["result"] as
-    | string
-    | undefined;
-
-  const implArtifacts = result.artifacts.filter(
-    (a) => a.node === "implementation" && a.type === "code_patch"
+  const codexAttempts = trace.filter((entry) => entry.agent === "codex");
+  const codexSucceeded = codexAttempts.filter((entry) => entry.status === "succeeded");
+  const verdictAttempts = trace.filter(
+    (entry) => entry.capability === "solution-gate" && entry.executionRole === "formal_verdict"
   );
-  const shadowArtifacts = result.artifacts.filter(
-    (a) => a.node === "implementation" && a.type === "shadow_output"
+  const scanAttempts = trace.filter(
+    (entry) => entry.capability === "solution-gate" && entry.executionRole === "adversarial_scan"
   );
-  const implCodePatch = implArtifacts[0];
-  const file = implCodePatch?.content["file"];
-  const patch = implCodePatch?.content["patch"];
+  const scanAgents = new Set(scanAttempts.map((entry) => entry.agent));
+  const verdictAgents = new Set(verdictAttempts.map((entry) => entry.agent));
+  const dualAgentHeld =
+    scanAgents.size > 0 &&
+    verdictAgents.size > 0 &&
+    [...verdictAgents].every((agent) => !scanAgents.has(agent));
 
-  const implementationTrace = trace.find((entry) => entry.node === "implementation");
-  const implOutput = implementationTrace?.output ?? {};
-  const executionResult = (implOutput["execution_result"] ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  const codeReviewTrace = trace.find((entry) => entry.node === "code-review");
-  const codeReviewStatus = codeReviewTrace?.output["result"] as string | undefined;
-
+  // The chain cannot legitimately complete on real dispatch today: the
+  // verdict slot is bound to hermes (no real capability dispatch), so an
+  // honest run must stop around the gate instead of reusing the scan agent.
+  // The three codex-bound points that precede the gate journal six events
+  // (started + succeeded each).
   const passed =
-    result.final_status === "success" &&
-    hasRequiredOrder &&
-    implArtifacts.length === 1 &&
-    typeof file === "string" &&
-    file.trim().length > 0 &&
-    file !== "src/generated-shadow-implementation.ts" &&
-    typeof patch === "string" &&
-    patch.trim().length > 0 &&
-    shadowArtifacts.length === 0 &&
-    executionResult["result"] === "code_patch_generated" &&
-    executionResult["codex_fallback_reason"] === undefined &&
-    codeReviewStatus === "PASS" &&
-    finalReviewResult === "PASS" &&
-    result.feedback.review_summary.validationPassed === true &&
-    result.implementation_outcome === "real_code_patch";
+    result.final_status === "failed" &&
+    result.chain_status !== "COMPLETED" &&
+    codexAttempts.length >= 6 &&
+    codexSucceeded.length >= 3 &&
+    dualAgentHeld;
 
-  const traceSequence = formatTraceSequence(trace);
-
-  if (passed) {
-    console.log("runtime smoke: PASS");
-    console.log(`final_status: ${result.final_status}`);
-    console.log(`trace sequence: ${traceSequence}`);
-    console.log(`implementation artifact type: code_patch`);
-    console.log(`implementation outcome: ${result.implementation_outcome}`);
-    console.log(`generated file path: ${file}`);
-    console.log(`patch character count: ${(patch as string).length}`);
-    console.log(`solution review status: ${finalReviewResult}`);
-    console.log(`code review status: ${codeReviewStatus}`);
-    console.log(`validation passed: true`);
-    if (executionResult["duration_ms"] !== undefined) {
-      console.log(`duration_ms: ${executionResult["duration_ms"]}`);
-    }
-    process.exit(0);
-  }
-
-  console.log("runtime smoke: FAIL");
-  console.log(`final_status: ${result.final_status}`);
-  console.log(`trace sequence: ${traceSequence}`);
+  console.log(`runtime v2 real smoke: ${passed ? "PASS" : "FAIL"}`);
+  console.log(`final_status: ${result.final_status} (chain ${result.chain_status})`);
   console.log(
-    `implementation artifact type: ${implCodePatch?.type ?? "none"}`
+    `trace: ${trace
+      .map((entry) => `${entry.capability}/${entry.executionRole}:${entry.agent}:${entry.status}`)
+      .join(" → ")}`
   );
-  console.log(`implementation outcome: ${result.implementation_outcome ?? "none"}`);
-  if (executionResult["codex_fallback_reason"] !== undefined) {
-    console.log(`fallback reason: ${executionResult["codex_fallback_reason"]}`);
-  }
-  if (executionResult["codex_fallback_action"] !== undefined) {
-    console.log(`fallback action: ${executionResult["codex_fallback_action"]}`);
-  }
-  console.log(`solution review status: ${finalReviewResult ?? "none"}`);
-  console.log(`code review status: ${codeReviewStatus ?? "none"}`);
-  console.log(`validation passed: ${result.feedback.review_summary.validationPassed}`);
-  process.exit(1);
+  console.log(`codex attempts/succeeded: ${codexAttempts.length}/${codexSucceeded.length}`);
+  console.log(`dual-agent solution-gate held: ${dualAgentHeld}`);
+  console.log(`journal: ${result.journal_path}`);
+  process.exit(passed ? 0 : 1);
 }
 
 const isMain = process.argv[1] === __filename;

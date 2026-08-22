@@ -14,9 +14,10 @@ import {
   readPolicyMemoryAgentSummaries,
 } from "../core/policy-memory-store";
 import { buildMemoryPolicySuggestions } from "../core/policy-memory-analyzer";
+import { buildMemoryShadowRoutingDecisions } from "../core/memory-routing-shadow";
+import { buildEvolutionProposals } from "../core/evolution-proposal-analyzer";
 import { createArtifact } from "../core/artifact";
 import { RuntimeFeedback } from "../core/feedback-types";
-import { run } from "../runtime";
 
 const TEST_DB_DIR = ".sdlc-runtime-test";
 const TEST_DB_PATH = path.join(TEST_DB_DIR, "policy-memory-read.sqlite");
@@ -162,42 +163,19 @@ async function test() {
     assert(avoidAgent!.confidence <= 0.8, "confidence is below 0.8");
     console.log("");
 
-    // ── Test 7: Runtime with memory read appends advisory suggestions ──
-    console.log("Test 7: Runtime appends memory suggestions without changing routing");
+    // ── Test 7: Advisory chain remains available standalone ──
+    // The v2 single-rail runtime (WP3.5-C) retired the in-run memory hook:
+    // agent choice is the BindingRegistry's authority. The advisory chain
+    // (suggestions → shadow routing decisions → evolution proposals) stays
+    // available as standalone, read-only functions for callers that want it.
+    console.log("Test 7: Advisory chain composes standalone without affecting any binding");
     process.env.SDLC_POLICY_MEMORY_READ = "enabled";
 
-    const runtimeResult = await run("simple task");
-    assert(runtimeResult.feedback !== undefined, "runtime result has feedback");
-    assert(
-      Array.isArray(runtimeResult.feedback.policy_suggestions),
-      "policy_suggestions is array"
-    );
-
-    // Verify the normal trace order is unchanged (memory read does not affect routing)
-    const traceNodes = runtimeResult.execution_trace.map((t) => t.node);
-    assert(traceNodes.includes("requirement-summary"), "normal routing: requirement-summary exists");
-    assert(traceNodes.includes("validation"), "normal routing: validation exists");
-    assert(runtimeResult.final_status === "success", "normal routing: final status is success");
-
-    // Verify memory-derived suggestions appear in feedback
-    const suggestions = runtimeResult.feedback.policy_suggestions;
-
-    // Memory-derived prefer_agent for high-performing codex
-    const memPrefer = suggestions.find(
-      (s) => s.type === "prefer_agent" && s.agent === "codex" && s.reason.includes("Historical memory")
-    );
-    assert(memPrefer !== undefined, "memory-derived prefer_agent for codex exists in runtime feedback");
-    assert(memPrefer!.confidence === 0.65, "prefer_agent confidence is 0.65");
-
-    // Memory-derived avoid_agent for low-performing hermes
-    const memAvoid = suggestions.find(
-      (s) => s.type === "avoid_agent" && s.agent === "hermes" && s.reason.includes("Historical memory")
-    );
-    assert(memAvoid !== undefined, "memory-derived avoid_agent for hermes exists in runtime feedback");
-    assert(memAvoid!.confidence === 0.6, "avoid_agent confidence is 0.6");
-
-    // Verify shadow routing decisions are present and advisory-only
-    const shadowDecisions = runtimeResult.feedback.shadow_routing_decisions;
+    const currentAgentsByNode: Record<string, string> = { implementation: "codex" };
+    const shadowDecisions = buildMemoryShadowRoutingDecisions({
+      suggestions: memSuggestions,
+      currentAgentsByNode,
+    });
     assert(shadowDecisions !== undefined, "shadow_routing_decisions exists");
     assert(Array.isArray(shadowDecisions), "shadow_routing_decisions is array");
 
@@ -208,19 +186,24 @@ async function test() {
     assert(implDecision!.applied === false, "decision is not applied");
     assert(implDecision!.source === "memory", "decision source is memory");
     assert(typeof implDecision!.confidence === "number", "decision has confidence");
-
-    // Verify actual trace agent is unchanged (decision is advisory only)
-    const implTrace = runtimeResult.execution_trace.find((t) => t.node === "implementation");
-    assert(implTrace !== undefined, "implementation in trace exists");
-    // Shadow currentAgent should match the actual agent from trace
     assert(
-      implDecision!.currentAgent === implTrace!.agent,
-      `shadow currentAgent (${implDecision!.currentAgent}) matches trace agent (${implTrace!.agent})`
+      implDecision!.currentAgent === currentAgentsByNode["implementation"],
+      "shadow currentAgent matches the supplied chain state"
     );
-    // Memory does not change the actual agent used
+    console.log("");
 
-    // Verify evolution proposals exist when memory signals are present
-    const evoProposals = runtimeResult.feedback.evolution_proposals;
+    // Evolution proposals remain derivable from a feedback object carrying the
+    // memory suggestions, and stay read-only.
+    const evoProposals = buildEvolutionProposals({
+      requirementId: "REQ-PM-READ",
+      feedback: {
+        agent_scores: [],
+        node_outcomes: [],
+        review_summary: { bugfixAttempts: 0, validationPassed: true },
+        policy_suggestions: [...memSuggestions],
+        shadow_routing_decisions: [...shadowDecisions],
+      },
+    });
     assert(evoProposals !== undefined, "evolution_proposals exists");
     const policyAdj = evoProposals!.find(
       (p) => p.type === "policy_adjustment" && p.relatedAgent === "hermes"

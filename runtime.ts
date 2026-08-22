@@ -1,608 +1,418 @@
-// SDLC Runtime — Graph Interpreter
-// =================================
-// Wired to SDLC Graph Kernel as SINGLE source of truth.
-// No inline flow table. No duplicated transition logic.
-// Graph defines the path — Runtime executes it.
+// SDLC Runtime — v2 Single-Rail Chain Runner (C02-WP3.5-C)
+// ==========================================================
+// The v2 seven-node single-rail chain is the ONLY runtime authority:
+// requirement-intake → solution-design → solution-gate (adversarial_scan +
+// formal_verdict, always two different agents) → task-planning →
+// implementation → code-review → knowledge-sync.
 //
-// Entry: run(requirement: string) → RuntimeResult
+// Every execution point is dispatched through LoopCapabilityEntry with full
+// capability tracing: the append-only LoopRunStore (v6) journal, the
+// content-addressed artifact store and the immutable BindingRegistry. The
+// legacy five-node graph interpreter, its state-machine VM, the legacy LOOP
+// kernel and the DocFlow engine are retired — there is no second state
+// machine and no legacy entry: requests carrying retired runtime options or
+// legacy node names fail closed.
+//
+// Entry: run(requirement: string, options?) → RuntimeResult
 
-import { NodeType, GraphNode } from "./sdlc_graph/types";
-import { getNextNode, isTerminal } from "./sdlc_graph/transitions";
-import { SDLC_NODES, SDLC_EDGES } from "./sdlc_graph/graph";
-import { ExecutionContext } from "./core/execution-context";
-import { buildExecutionContext } from "./core/context-builder";
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
-  createGraphRunConfig,
-  createExecutedEvent,
-  createSkippedEvent,
-  type GraphReplayEvent,
-  type GraphReplayTrace,
-} from "./core/graph-replay-trace";
-import { selectAgent } from "./core/agent-decision";
-import { inferComplexity } from "./core/complexity-inference";
-import { resolveAgentByPolicy } from "./core/agent-policy-engine";
-import { createInitialState, updateState, ExecutionState } from "./core/execution-state";
-import { transition, replayExecution } from "./core/state-machine-vm";
-import { SolutionChallengeState, createShadowReadyChallengeState } from "./core/solution-challenge-state";
-import { normalizeSolutionChallengeOutput as normalizeSolutionOutput } from "./core/solution-challenge-state";
+  CAPABILITY_ARTIFACT_TYPES,
+  getEnabledBinding,
+  INITIAL_BINDING_REGISTRY,
+  replaceBinding,
+  type BindingRegistry,
+} from "./core/agent-capability-bindings";
+import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
+import { LoopCapabilityEntry } from "./core/loop-capability-entry";
+import { LoopArtifactStore, type LoopArtifactKind } from "./core/loop-artifact-store";
+import { recoverRunContext } from "./core/loop-recovery";
+import { LoopRunStore } from "./core/loop-run-store";
+import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
-  createDefaultExecutors,
-  DEFAULT_EXECUTORS,
-  executeDocFlowNode,
-  type NodeExecutor,
-  type RuntimeExecutorMap,
-  type FanoutResult,
-  type RuntimeExecutionGateway,
-  type ImplementationOutcome,
-} from "./core/runtime-executors";
-import { executionGateway } from "./execution";
-import { Artifact } from "./core/artifact";
-import { artifactsFromNodeOutput } from "./core/node-artifacts";
-import { analyzeRuntimeFeedback } from "./core/feedback-analyzer";
-import { RuntimeFeedback } from "./core/feedback-types";
-import { isPolicyMemoryEnabled, isPolicyMemoryReadEnabled, getPolicyMemoryPath } from "./core/policy-memory-config";
-import { buildPolicyMemoryRecord } from "./core/policy-memory-builder";
-import { appendPolicyMemoryRecord, readPolicyMemoryAgentSummaries } from "./core/policy-memory-store";
-import { buildMemoryPolicySuggestions } from "./core/policy-memory-analyzer";
-import { buildMemoryShadowRoutingDecisions } from "./core/memory-routing-shadow";
-import { buildEvolutionProposals } from "./core/evolution-proposal-analyzer";
-import { getSkillFlowRuntimeIntegrationConfig } from "./core/skill-flow-runtime-integration-config";
-import { decideSkillFlowRuntimeIntegration } from "./core/skill-flow-runtime-integration";
-import type { SkillFlowRuntimeIntegrationResult } from "./core/skill-flow-runtime-integration-types";
-import { buildOptionalKimiRuntimeShadowAttachment } from "./core/kimi-runtime-shadow-attachment";
-import type { KimiRuntimeShadowAttachment } from "./execution/kimi-runtime-attachment-contract";
-import { buildHermesRuntimeShadowAttachmentFromRequest } from "./core/hermes-runtime-shadow-attachment";
-import type { HermesRuntimeShadowAttachmentBuildResult } from "./core/hermes-runtime-shadow-attachment";
-import { isHermesRuntimeAttachmentEnabled } from "./execution/hermes-runtime-attachment-contract";
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_IDS,
+  type CapabilityExecutionRole,
+  type NodeCapabilityId,
+} from "./loop/types";
+import type { AgentName, ExecutionRequest, ExecutionResult } from "./execution/types";
 
 // ─── Types ────────────────────────────────────────────
 
-type LoopAgent = "kimi" | "codex" | "hermes";
-
-// RuntimeNode extends Graph Kernel NodeType with runtime-managed nodes
-type RuntimeNode = NodeType | "code-review" | "bugfix";
-
-interface ExecutionTraceEntry {
-  node: RuntimeNode;
-  agent: LoopAgent;
-  status: "success" | "failure";
-  output: Record<string, unknown>;
-  timestamp: string;
+export interface RuntimeChainEntry {
+  capability: NodeCapabilityId;
+  executionRole: CapabilityExecutionRole;
+  agent: AgentName;
+  attempt: number;
+  status: LoopCapabilityExecutionEvent["status"];
+  gateResult: LoopCapabilityExecutionEvent["gateResult"];
+  outputArtifactRef: string | null;
+  outputDigest: string | null;
 }
 
-interface RuntimeResult {
+export interface RuntimeResult {
   requirement_id: string;
-  execution_trace: ExecutionTraceEntry[];
-  artifacts: Artifact[];
-  feedback: RuntimeFeedback;
-  fanout_results?: FanoutResult;
-  final_status: "success" | "partial" | "failed";
-  implementation_outcome: ImplementationOutcome;
+  run_id: string;
+  final_status: "success" | "failed";
+  chain_status: "COMPLETED" | "READY" | "RUNNING" | "BLOCKED";
+  execution_trace: readonly RuntimeChainEntry[];
+  next_execution_point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole } | null;
+  workspace_root: string;
+  /** Set only when the runtime created the store; null when stores are injected. */
+  journal_path: string | null;
   completed_at: string;
-  graph_status: "running" | "completed" | "failed";
-  graph_replay_trace: GraphReplayTrace;
-  skill_flow_shadow_integration?: SkillFlowRuntimeIntegrationResult;
-  kimi_runtime_shadow_attachment?: KimiRuntimeShadowAttachment;
-  hermes_runtime_shadow_attachment?: HermesRuntimeShadowAttachmentBuildResult;
+}
+
+/** Anything the runtime executes must go through this minimal gateway shape. */
+export interface RuntimeCapabilityGateway {
+  execute(request: ExecutionRequest): Promise<ExecutionResult>;
 }
 
 export interface RuntimeOptions {
-  hermesRuntimeShadowAttachmentBuilder?: typeof buildHermesRuntimeShadowAttachmentFromRequest;
-  env?: Record<string, string | undefined>;
-  executors?: Partial<RuntimeExecutorMap>;
-  executionGateway?: RuntimeExecutionGateway;
-  executionId?: string;
-  requirementSummaryMode?: "deterministic" | "kimi_gateway";
-  solutionChallengeMode?: "disabled" | "shadow" | "gateway_shadow";
+  /** Stable requirement id; defaults to a timestamped REQ id. */
+  requirementId?: string;
+  /** Workspace root for the journal, artifacts and repo/control dirs. */
+  workspaceRoot?: string;
+  /** Injected stores (both or neither); used by tests and future entries. */
+  runStore?: LoopRunStore;
+  artifactStore?: LoopArtifactStore;
+  /**
+   * Injected binding registry. The default registers the dual-agent
+   * solution-gate required by the v2 chain: adversarial_scan stays on codex
+   * while formal_verdict moves to hermes.
+   */
+  bindingRegistry?: BindingRegistry;
+  /** Injected execution gateway; defaults to the deterministic shadow runner. */
+  gateway?: RuntimeCapabilityGateway;
 }
 
-// ─── Agent Map (to be migrated to Graph Kernel agent registry) ──
+// The runtime input contract is CLOSED at runtime, not just at the type
+// level: JavaScript callers and boundary payloads bypass TypeScript, so any
+// own-property outside this allowlist is rejected fail-closed instead of
+// being silently dropped.
+const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
+  "requirementId",
+  "workspaceRoot",
+  "runStore",
+  "artifactStore",
+  "bindingRegistry",
+  "gateway",
+]);
 
-const AGENT_MAP: Record<NodeType, LoopAgent> = {
-  "requirement-summary": "kimi",
-  "tech-design":          "kimi",
-  "solution-challenge":   "kimi",
-  "review":               "codex",
-  "implementation":       "codex",
-  "validation":           "hermes",
-};
+// Options of the retired five-node interpreter. They fail with a specific
+// message so legacy callers see the migration reason, not a generic typo.
+const RETIRED_RUNTIME_OPTIONS: readonly string[] = Object.freeze([
+  "requirementSummaryMode",
+  "solutionChallengeMode",
+  "executors",
+  "executionGateway",
+  "hermesRuntimeShadowAttachmentBuilder",
+  "env",
+]);
 
-function getAgent(node: NodeType): LoopAgent {
-  return AGENT_MAP[node] || "kimi";
-}
-
-// Build a node→agent map from execution trace for shadow routing context
-function buildCurrentAgentsByNode(
-  trace: ReadonlyArray<{ node: string; agent: string }>
-): Record<string, string> {
-  const map: Record<string, string> = {};
-  for (const entry of trace) {
-    if (!(entry.node in map)) {
-      map[entry.node] = entry.agent;
+function validateRuntimeOptions(options: RuntimeOptions): void {
+  for (const key of Object.keys(options)) {
+    if (RETIRED_RUNTIME_OPTIONS.includes(key)) {
+      invalid(
+        `runtime option "${key}" belongs to the retired five-node interpreter ` +
+          "(or carries no v2 semantics); the v2 single-rail runtime has no such option",
+      );
+    }
+    if (!RUNTIME_OPTION_ALLOWLIST.includes(key)) {
+      invalid(
+        `unknown runtime option "${key}"; the v2 runtime accepts exactly: ` +
+          `${RUNTIME_OPTION_ALLOWLIST.join(", ")}`,
+      );
     }
   }
-  return map;
 }
 
-// ─── Code Review + Bugfix Loop ────────────────────────
-// Bounded retry loop: review → optional bugfix → re-review.
-// Runs after implementation, before validation.
-// Default shadow path passes on first review.
-
-const MAX_BUGFIX_ATTEMPTS = 2;
-
-interface ReviewLoopResult {
-  artifacts: Artifact[];
-  traceEntries: ExecutionTraceEntry[];
-  finalReviewStatus: "PASS" | "FAIL";
+function invalid(message: string): never {
+  throw new LoopRunJournalError("INVALID_INPUT", message);
 }
 
-export async function runCodeReviewBugfixLoop(input: {
-  requirementId: string;
-  artifacts: Artifact[];
-  agent: LoopAgent;
-  gateway?: RuntimeExecutionGateway;
-}): Promise<ReviewLoopResult> {
-  const collectedArtifacts: Artifact[] = [];
-  const traceEntries: ExecutionTraceEntry[] = [];
-  let currentArtifacts = input.artifacts;
-  let attempts = 0;
-  const gateway = input.gateway ?? executionGateway;
+function requireSafeId(value: string, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    invalid(`${label} must be a safe trimmed non-empty string`);
+  }
+  return value;
+}
 
-  while (attempts <= MAX_BUGFIX_ATTEMPTS) {
-    // ── Code Review (via Execution Gateway) ──
-    const review = await gateway.execute({
-      type: "code_review",
-      node: "code-review",
-      agent: input.agent,
-      requirementId: input.requirementId,
-      input: { artifacts: currentArtifacts },
-      metadata: { attempt: attempts },
-    });
+// ─── Deterministic shadow capability gateway ──────────
+// The default dispatch surface: resolves the enabled binding per execution
+// point from the registry (so the solution-gate dual-agent separation comes
+// from the registry, not from the request), persists the started/terminal
+// capability events through the run journal and stores the node product (plus
+// the scan round's immutable Finding Ledger) in the artifact store. Real
+// dispatch (codex real runner) is injected via options.gateway; production
+// entry wiring is a separately authorized work package (WP5).
 
-    collectedArtifacts.push(...(review.artifacts as Artifact[]));
-    traceEntries.push({
-      node: "code-review",
-      agent: input.agent,
-      status: review.output["result"] === "PASS" ? "success" : "failure",
-      output: review.output,
-      timestamp: new Date().toISOString(),
-    });
+const SHADOW_EXECUTOR_VERSIONS: Readonly<Record<AgentName, string>> = Object.freeze({
+  codex: "1.0.0",
+  kimi: "1.0.0",
+  hermes: "1.0.0",
+});
 
-    if (review.output["result"] === "PASS") {
-      return {
-        artifacts: collectedArtifacts,
-        traceEntries,
-        finalReviewStatus: "PASS",
+export function createDeterministicCapabilityGateway(options: {
+  runStore: LoopRunStore;
+  artifactStore: LoopArtifactStore;
+  bindingRegistry: BindingRegistry;
+  now: () => string;
+}): RuntimeCapabilityGateway {
+  const { runStore, artifactStore, bindingRegistry, now } = options;
+  return Object.freeze({
+    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+      const context = request.loopExecution;
+      if (context === undefined) {
+        invalid("capability dispatch requires a loopExecution tracing context");
+      }
+      // Closed dispatch contract: node must repeat the canonical capability
+      // exactly. A canonical type paired with a retired or arbitrary node name
+      // is a legacy/malformed dispatch and is rejected BEFORE any journal
+      // write — never silently canonicalized.
+      if (request.node !== request.type) {
+        invalid(
+          `dispatch node "${String(request.node)}" must equal the canonical capability ` +
+            `"${String(request.type)}"; mismatched or legacy node names are rejected`,
+        );
+      }
+      const capability = request.type as NodeCapabilityId;
+      if (!NODE_CAPABILITY_IDS.includes(capability)) {
+        invalid(`"${String(request.type)}" is not a v2 chain capability; the legacy node set is retired`);
+      }
+      const executionRole = context.executionRole as CapabilityExecutionRole;
+      const binding = getEnabledBinding(bindingRegistry, capability, executionRole);
+      const agent = binding.agent;
+      const existing = runStore.listCapabilityExecutions(context.runId);
+      const sequence = existing.length + 1;
+      const consumedRef = typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null;
+      const consumedDigest =
+        typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null;
+      const base = {
+        schemaVersion: 3 as const,
+        runId: context.runId,
+        capability,
+        executionRole,
+        nodeId: capability,
+        attempt: context.attempt,
+        bindingId: binding.bindingId,
+        bindingVersion: binding.bindingVersion,
+        bindingRegistryVersion: bindingRegistry.version,
+        executorAgent: agent,
+        executorAdapter: binding.adapter,
+        executorVersion: SHADOW_EXECUTOR_VERSIONS[agent],
+        inputArtifactRef: context.inputArtifactRef,
+        inputArtifactVersion: context.inputArtifactVersion,
+        inputDigest: context.inputDigest,
+        consumedFindingsRef: consumedRef,
+        consumedFindingsDigest: consumedDigest,
       };
-    }
-
-    attempts++;
-    if (attempts > MAX_BUGFIX_ATTEMPTS) {
-      return {
-        artifacts: collectedArtifacts,
-        traceEntries,
-        finalReviewStatus: "FAIL",
-      };
-    }
-
-    // ── Bugfix (via Execution Gateway) ──
-    const findings = review.output["findings"] as ReadonlyArray<{ severity: string; message: string; artifactId?: string; file?: string }>;
-    const bugfix = await gateway.execute({
-      type: "bugfix",
-      node: "bugfix",
-      agent: input.agent,
-      requirementId: input.requirementId,
-      input: { artifacts: currentArtifacts, findings: findings || [] },
-      metadata: { attempt: attempts },
-    });
-
-    collectedArtifacts.push(...(bugfix.artifacts as Artifact[]));
-    traceEntries.push({
-      node: "bugfix",
-      agent: input.agent,
-      status: "success",
-      output: bugfix.output,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Update current artifacts for re-review (append bugfix artifacts)
-    currentArtifacts = [...currentArtifacts, ...(bugfix.artifacts as Artifact[])];
-  }
-
-  // Should not reach here due to loop bounds, but satisfy exhaustiveness
-  return {
-    artifacts: collectedArtifacts,
-    traceEntries,
-    finalReviewStatus: "FAIL",
-  };
+      runStore.appendCapabilityExecution(Object.freeze({
+        ...base,
+        executionEventId: `${context.runId}:capability:${sequence}:started`,
+        sequence,
+        status: "started" as const,
+        createdAt: now(),
+        outputArtifactRef: null,
+        outputArtifactVersion: null,
+        outputDigest: null,
+        gateResult: null,
+        unresolvedFindingsRef: null,
+        unresolvedFindingsDigest: null,
+        nextStepEligibility: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+      }));
+      const product = artifactStore.put(
+        CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
+        `runtime shadow product for ${capability}/${executionRole} attempt ${context.attempt}`,
+      );
+      const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
+      const ledger = isScanRound
+        ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
+        : null;
+      const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
+        ? ("PASS" as const)
+        : ("NOT_APPLICABLE" as const);
+      runStore.appendCapabilityExecution(Object.freeze({
+        ...base,
+        executionEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
+        sequence: sequence + 1,
+        status: "succeeded" as const,
+        createdAt: now(),
+        outputArtifactRef: product.artifactRef,
+        outputArtifactVersion: context.outputArtifactVersion,
+        outputDigest: product.digest,
+        gateResult,
+        unresolvedFindingsRef: ledger?.artifactRef ?? null,
+        unresolvedFindingsDigest: ledger?.digest ?? null,
+        nextStepEligibility: "ELIGIBLE" as const,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+      }));
+      return Object.freeze({
+        success: true,
+        node: capability,
+        agent,
+        output: Object.freeze({
+          result: "SUCCESS",
+          capability,
+          executionRole,
+          gate_result: gateResult,
+          artifact_ref: product.artifactRef,
+        }),
+        artifacts: Object.freeze([]),
+      });
+    },
+  });
 }
 
-function resolveImplementationOutcome(
-  implementationOutput: Record<string, unknown> | undefined
-): ImplementationOutcome {
-  const outcome = implementationOutput?.["implementation_outcome"];
-  if (
-    outcome === "real_code_patch" ||
-    outcome === "shadow_code_patch" ||
-    outcome === "fanout" ||
-    outcome === "speckit" ||
-    outcome === "failed"
-  ) {
-    return outcome;
-  }
-  return "failed";
+// ─── Default dual-agent registry ──────────────────────
+// The initial registry enables codex for every execution point, which would
+// collide with the v2 rule that one solution-gate round's adversarial_scan
+// and formal_verdict are executed by different agents. The runtime default
+// moves the formal_verdict slot to hermes; callers may inject any registry
+// that keeps the two gate roles on different enabled agents.
+
+export function createRuntimeBindingRegistry(): BindingRegistry {
+  return replaceBinding(
+    INITIAL_BINDING_REGISTRY,
+    "binding-codex-solution-gate-formal_verdict",
+    "binding-hermes-solution-gate-formal_verdict",
+  ).registry;
 }
 
-// ─── MAIN RUNTIME — GRAPH INTERPRETER ───────────────────
-// Graph Kernel is the SINGLE source of truth for transitions.
+// ─── MAIN RUNTIME — v2 SINGLE-RAIL CHAIN RUNNER ───────
 
 export async function run(
   requirement: string,
   options: RuntimeOptions = {}
 ): Promise<RuntimeResult> {
-  const env = options.env ?? process.env;
-  const solutionChallengeMode = options.solutionChallengeMode ?? "disabled";
-  const requirementId = `REQ-${Date.now()}`;
+  if (typeof requirement !== "string" || requirement.trim().length === 0) {
+    invalid("requirement must be a non-empty string");
+  }
+  validateRuntimeOptions(options);
+  const requirementId = requireSafeId(options.requirementId ?? `REQ-${Date.now()}`, "requirementId");
 
-  // Validate executionId: empty or whitespace-only strings are rejected.
-  let executionId: string;
-  if (options.executionId === undefined) {
-    executionId = requirementId;
-  } else {
-    const trimmed = options.executionId.trim();
-    if (trimmed.length === 0) {
-      throw new Error("executionId cannot be empty or whitespace-only");
-    }
-    executionId = trimmed;
+  const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));
+  mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  if ((options.runStore === undefined) !== (options.artifactStore === undefined)) {
+    invalid("runStore and artifactStore must be injected together");
+  }
+  const runStore = options.runStore ?? new LoopRunStore(join(workspaceRoot, "journal.db"));
+  const artifactStore =
+    options.artifactStore ??
+    new LoopArtifactStore({
+      controlRoot: join(workspaceRoot, "control"),
+      repositoryPath: join(workspaceRoot, "repo"),
+    });
+  if (options.runStore === undefined) {
+    runStore.init();
+    artifactStore.init();
   }
 
-  const runConfig = createGraphRunConfig({
-    requirementSummaryMode: options.requirementSummaryMode,
-    solutionChallengeMode,
+  const bindingRegistry = options.bindingRegistry ?? createRuntimeBindingRegistry();
+  const now = (): string => new Date().toISOString();
+  const gateway =
+    options.gateway ??
+    createDeterministicCapabilityGateway({ runStore, artifactStore, bindingRegistry, now });
+  const entry = new LoopCapabilityEntry({
+    runStore,
+    artifactStore,
+    bindingRegistry,
+    gateway,
+    now,
   });
 
-  const trace: ExecutionTraceEntry[] = [];
-  const canonicalEvents: GraphReplayEvent[] = [];
-  const legacyContext: Record<string, unknown> = { raw_text: requirement, requirement_id: requirementId, execution_mode: "direct" };
-  const runtimeGateway = options.executionGateway ?? executionGateway;
+  const identity: LoopRunIdentity = Object.freeze({
+    runId: `run-${requirementId}-${Date.now()}`,
+    requirementId,
+    repository: "local",
+    repositoryPath: join(workspaceRoot, "repo"),
+    baseBranch: "main",
+    expectedBaseSha: "0".repeat(40),
+    taskBranch: `runtime/${requirementId}`,
+    controlRoot: join(workspaceRoot, "control"),
+    createdAt: now(),
+  });
 
-  // ─── ExecutionContext — created once, persists across all nodes ───
-  const execCtx: ExecutionContext = buildExecutionContext(
-    "requirement-summary",
-    { requirement, requirement_id: requirementId },
-    { requirementId, complexity: "medium" }
-  );
+  // The chain's first input is the normalized Requirement source artifact.
+  const source = artifactStore.put("requirement_summary", requirement);
+  let inputRef = source.artifactRef;
+  let inputVersion = "1.0.0";
+  let inputDigest = source.digest;
 
-  // ─── State Machine VM — single graph cursor ─────────────
-  let vmState: ExecutionState = createInitialState(execCtx);
-  const artifacts: Artifact[] = [];
-  let sequence = 0;
-
-  // State-driven execution loop — VM is the only cursor
-  const executors: RuntimeExecutorMap = {
-    ...createDefaultExecutors(runtimeGateway, {
-      requirementSummaryMode: options.requirementSummaryMode,
-      solutionChallengeMode,
-      solutionChallengeGateway: runtimeGateway,
-    }),
-    ...options.executors,
-  };
-
-  while (vmState.currentNode && vmState.status === "running") {
-    const currentNode = vmState.currentNode;
-
-    // Update ExecutionContext for current node
-    execCtx.node = currentNode;
-    execCtx.input = { requirement, requirement_id: requirementId };
-    execCtx.metadata.complexity = inferComplexity(requirement);
-
-    // Canonical trace input omits raw requirement text to preserve observability guardrails
-    const canonicalInput = { requirement_id: requirementId };
-
-    // Agent selection: policy engine → decision layer → AGENT_MAP fallback
-    const policyAgent = resolveAgentByPolicy(execCtx, currentNode);
-    const agent = (policyAgent ?? selectAgent(currentNode, execCtx) ?? getAgent(currentNode)) as LoopAgent;
-
-    // ── Skip solution-challenge when disabled ──
-    if (currentNode === "solution-challenge" && solutionChallengeMode === "disabled") {
-      const skipOutput = { result: "SKIPPED" };
-      sequence++;
-      const skippedEvent = createSkippedEvent(
-        executionId,
-        sequence,
-        "solution-challenge",
-        agent,
-        canonicalInput,
-        "solution_challenge_disabled",
-        skipOutput
-      );
-      canonicalEvents.push(skippedEvent);
-      execCtx.trace.push(skippedEvent);
-
-      const routingOutput = { result: "PASS", solution_challenge: createShadowReadyChallengeState() };
-      const nextNode = getNextNode("solution-challenge", routingOutput, vmState.retryCount);
-      vmState = transition(vmState, nextNode, skippedEvent, vmState.retryCount);
-      continue;
-    }
-
-    const rawOutput = await executeDocFlowNode(currentNode, legacyContext, execCtx, executors);
-
-    // ── Normalize solution-challenge output (single boundary) ──
-    let nodeOutput: Record<string, unknown> = rawOutput;
-    if (currentNode === "solution-challenge") {
-      if (solutionChallengeMode === "gateway_shadow") {
-        // gateway shadow: validated internally, routingEffect drives the route
-        nodeOutput = { ...rawOutput, routingEffect: "shadow_pass_through" };
-      } else {
-        nodeOutput = normalizeSolutionOutput(rawOutput);
+  let recovery = recoverRunContext(runStore, requirementId);
+  let firstDispatch = recovery === undefined;
+  // null nextExecutionPoint on an existing run means the chain is completed
+  // or blocked — it must NOT be coerced back to the first point.
+  let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
+  let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
+  while (next !== null) {
+    if (!firstDispatch && recovery !== undefined) {
+      const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
+        LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+          (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
+        ) - 1
+      ];
+      const predecessorState = predecessor === undefined
+        ? undefined
+        : recovery.executionPointStates.find(
+            (state) =>
+              state.capability === predecessor.capability && state.executionRole === predecessor.executionRole,
+          );
+      if (predecessorState !== undefined) {
+        inputRef = predecessorState.effectiveOutputArtifactRef ?? inputRef;
+        inputVersion = predecessorState.effectiveOutputArtifactVersion ?? inputVersion;
+        inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
       }
     }
-
-    legacyContext[currentNode] = nodeOutput;
-
-    // Create the single canonical event for this node
-    sequence++;
-    const canonicalEvent = createExecutedEvent(
-      executionId,
-      sequence,
-      currentNode,
-      agent,
-      canonicalInput,
-      nodeOutput
-    );
-    canonicalEvents.push(canonicalEvent);
-    execCtx.trace.push(canonicalEvent);
-
-    // Collect standardized artifacts from node output
-    const nodeArtifacts = artifactsFromNodeOutput({
+    const executed = await entry.execute({
       requirementId,
-      node: currentNode,
-      agent,
-      output: nodeOutput,
-      index: artifacts.length,
+      ...(firstDispatch ? { identity } : {}),
+      capability: next.capability,
+      executionRole: next.executionRole,
+      inputArtifactRef: inputRef,
+      inputArtifactVersion: inputVersion,
+      inputDigest,
+      outputArtifactVersion: "1.0.0",
+      input: { inputArtifactRef: inputRef },
     });
-    artifacts.push(...nodeArtifacts);
-
-    // Collect gateway artifacts from solution-challenge gateway_shadow mode
-    if (currentNode === "solution-challenge" && Array.isArray(nodeOutput["gateway_artifacts"])) {
-      const gwArts = nodeOutput["gateway_artifacts"] as ReadonlyArray<Artifact>;
-      artifacts.push(...gwArts);
+    firstDispatch = false;
+    journalRunId = executed.runId;
+    recovery = executed.recoveryContext;
+    if (executed.execution.success !== true) {
+      break;
     }
-
-    // Observability trace keeps its existing shape and content
-    trace.push({
-      node: currentNode,
-      agent,
-      status: nodeOutput["result"] === "FAIL" ? "failure" : "success",
-      output: nodeOutput,
-      timestamp: new Date().toISOString(),
-    });
-
-    // ── Persist challenge state for FOLLOW_UP_VERIFICATION ──
-    if (currentNode === "solution-challenge") {
-      const shadowCycle = nodeOutput["shadow_challenge_cycle"] as Record<string, unknown> | undefined;
-      const scState = nodeOutput["solution_challenge"] as SolutionChallengeState | undefined;
-      const obs = nodeOutput["solution_challenge_observation"] as Record<string, unknown> | undefined;
-
-      if (shadowCycle) {
-        // Gateway shadow mode: build cycle state from shadow_challenge_cycle
-        execCtx.metadata.solutionChallenge = {
-          mode: (shadowCycle["mode"] as "INITIAL_CHALLENGE" | "FOLLOW_UP_VERIFICATION") ?? "INITIAL_CHALLENGE",
-          currentCycle: Math.min(Math.max((shadowCycle["currentCycle"] as number) ?? 1, 1), 2) as 1 | 2,
-          maxCycles: 2 as const,
-          exhausted: (shadowCycle["exhausted"] as boolean) ?? false,
-          status: "READY_FOR_GATE",
-          findingIds: (obs?.availability === "available" ? obs["findingIds"] : (shadowCycle["previousFindingIds"] ?? [])) as string[] | undefined,
-          reportPath: null,
-          artifactStatus: "shadow_only" as const,
-        };
-      } else if (scState) {
-        execCtx.metadata.solutionChallenge = scState;
-      }
-    }
-
-    // ─── Code Review + Bugfix Loop (after implementation, before validation) ───
-    if (currentNode === "implementation") {
-      const reviewResult = await runCodeReviewBugfixLoop({
-        requirementId,
-        artifacts: [...artifacts],
-        agent: "codex",
-        gateway: runtimeGateway,
-      });
-      artifacts.push(...reviewResult.artifacts);
-      trace.push(...reviewResult.traceEntries);
-    }
-
-    // Compute retryCount for the next transition
-    let newRetryCount = vmState.retryCount;
-    if (currentNode === "review" && nodeOutput["result"] === "FAIL") {
-      newRetryCount++;
-    } else if (currentNode === "tech-design") {
-      // retryCount persists across re-design cycles
-    } else {
-      newRetryCount = 0; // reset on non-loop nodes
-    }
-
-    // Graph Kernel decides the next node once per step
-    const nextNode = getNextNode(currentNode, nodeOutput, newRetryCount);
-
-    // VM transition — single cursor, single source of retry truth
-    vmState = transition(vmState, nextNode, canonicalEvent, newRetryCount);
+    next = recovery.nextExecutionPoint;
   }
 
-  // Terminal validation: the VM must end at a completed terminal state.
-  if (vmState.currentNode !== null || vmState.status !== "completed") {
-    throw new Error(`Runtime graph did not reach a completed terminal state: currentNode=${vmState.currentNode}, status=${vmState.status}`);
-  }
-
-  // ─── Final Status ─────────────────────────────────────
-  // NOTE: final_status currently reflects FANOUT COMPLETION STATUS only.
-  // Validation and code-review failures are intentionally surfaced through
-  // feedback.review_summary, policy_suggestions, trace status, and artifacts.
-  // Do not turn this into a quality-gate status without an explicit Runtime
-  // semantic decision that also addresses code-review failure handling.
-  const implementationOutput = legacyContext["implementation"] as Record<string, unknown> | undefined;
-  const fanoutResult = implementationOutput?.fanout_result as FanoutResult | undefined;
-  const failedCount = (fanoutResult?.repo_results || []).filter((r: { status: string }) => r.status === "failed").length;
-  const succeededCount = (fanoutResult?.repo_results || []).filter((r: { status: string }) => r.status === "success").length;
-
-  let finalStatus: "success" | "partial" | "failed";
-  if (failedCount === 0) finalStatus = "success";
-  else if (succeededCount > 0) finalStatus = "partial";
-  else finalStatus = "failed";
-
-  const implementationOutcome = resolveImplementationOutcome(implementationOutput);
-
-  // ─── Feedback Analysis — read-only, non-persistent ────
-  let feedback = analyzeRuntimeFeedback({
-    requirementId,
-    executionTrace: trace,
-    artifacts,
-    finalStatus,
-  });
-
-  // ─── Optional Memory Read — advisory only, does not affect routing ──
-  if (isPolicyMemoryReadEnabled()) {
-    try {
-      const memorySummary = readPolicyMemoryAgentSummaries(getPolicyMemoryPath());
-      const memorySuggestions = buildMemoryPolicySuggestions({
-        memory: memorySummary,
-        node: "implementation",
-      });
-      if (memorySuggestions.length > 0) {
-        // Build shadow routing decisions from memory suggestions
-        const currentAgentsByNode = buildCurrentAgentsByNode(trace);
-        const shadowDecisions = buildMemoryShadowRoutingDecisions({
-          suggestions: memorySuggestions,
-          currentAgentsByNode,
-        });
-
-        feedback = {
-          ...feedback,
-          policy_suggestions: [
-            ...feedback.policy_suggestions,
-            ...memorySuggestions,
-          ],
-          shadow_routing_decisions: [
-            ...(feedback.shadow_routing_decisions ?? []),
-            ...shadowDecisions,
-          ],
-        };
-      }
-    } catch (error) {
-      console.warn("Policy memory read failed:", error);
-    }
-  }
-
-  // ─── Evolution Proposals — read-only, never applied ───
-  const evolutionProposals = buildEvolutionProposals({
-    requirementId,
-    feedback,
-  });
-  if (evolutionProposals.length > 0) {
-    feedback = {
-      ...feedback,
-      evolution_proposals: evolutionProposals,
-    };
-  }
-
-  // ─── Optional Policy Memory Write (disabled by default) ─────
-  if (isPolicyMemoryEnabled()) {
-    try {
-      const record = buildPolicyMemoryRecord({
-        requirementId,
-        finalStatus,
-        feedback,
-        artifacts,
-        executionTrace: trace,
-      });
-      appendPolicyMemoryRecord(getPolicyMemoryPath(), record);
-    } catch (error) {
-      console.warn("Policy memory write failed:", error);
-    }
-  }
-
-  // ─── Optional Skill Flow Shadow Integration (disabled by default) ──
-  // Sidecar only — does not affect routing, agent selection, or final_status.
-  let skillFlowShadowIntegration: SkillFlowRuntimeIntegrationResult | undefined;
-  const integrationConfig = getSkillFlowRuntimeIntegrationConfig();
-  if (integrationConfig.enabled) {
-    try {
-      skillFlowShadowIntegration = decideSkillFlowRuntimeIntegration(integrationConfig, {
-        requirementId,
-        flowId: "main_docflow",
-        triggerNode: "runtime-completed",
-        reason: "feature-flagged runtime shadow comparison",
-        inputArtifacts: artifacts.map((a) => a.id),
-        mode: "shadow_only",
-      });
-    } catch (error) {
-      console.warn("Skill flow shadow integration failed:", error);
-    }
-  }
-
-  // ─── Optional Kimi Runtime Shadow Attachment (disabled by default) ──
-  let kimiRuntimeShadowAttachment: KimiRuntimeShadowAttachment | undefined;
-  try {
-    kimiRuntimeShadowAttachment = await buildOptionalKimiRuntimeShadowAttachment({
-      request: {
-        type: "llm_task",
-        node: "requirement-summary",
-        agent: "kimi",
-        requirementId,
-        input: { requirement },
-      },
-    });
-  } catch (error) {
-    console.warn("Kimi runtime shadow attachment failed:", error);
-  }
-
-  // ─── Optional Hermes Runtime Shadow Attachment (disabled by default) ──
-  let hermesRuntimeShadowAttachment: HermesRuntimeShadowAttachmentBuildResult | undefined;
-  if (isHermesRuntimeAttachmentEnabled(env)) {
-    const hermesBuilder =
-      options.hermesRuntimeShadowAttachmentBuilder ??
-      buildHermesRuntimeShadowAttachmentFromRequest;
-    try {
-      hermesRuntimeShadowAttachment = await hermesBuilder({
-        request: {
-          type: "validation",
-          node: "validation",
-          agent: "hermes",
-          requirementId,
-          input: { requirement },
-        },
-        env,
-      });
-    } catch (error) {
-      console.warn("Hermes runtime shadow attachment failed:", error);
-    }
-  }
-
-  return {
+  const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
+  const chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
+  const finalStatus = chainStatus === "COMPLETED" ? "success" : "failed";
+  return Object.freeze({
     requirement_id: requirementId,
-    execution_trace: trace,
-    artifacts,
-    feedback,
-    fanout_results: fanoutResult,
+    run_id: journalRunId ?? identity.runId,
     final_status: finalStatus,
-    implementation_outcome: implementationOutcome,
-    completed_at: new Date().toISOString(),
-    graph_status: vmState.status,
-    graph_replay_trace: {
-      executionId,
-      runConfig,
-      events: canonicalEvents,
-    },
-    ...(skillFlowShadowIntegration
-      ? { skill_flow_shadow_integration: skillFlowShadowIntegration }
-      : {}),
-    ...(kimiRuntimeShadowAttachment
-      ? { kimi_runtime_shadow_attachment: kimiRuntimeShadowAttachment }
-      : {}),
-    ...(hermesRuntimeShadowAttachment
-      ? { hermes_runtime_shadow_attachment: hermesRuntimeShadowAttachment }
-      : {}),
-  };
+    chain_status: chainStatus,
+    execution_trace: Object.freeze(events.map((event) => Object.freeze({
+      capability: event.capability,
+      executionRole: event.executionRole,
+      agent: event.executorAgent,
+      attempt: event.attempt,
+      status: event.status,
+      gateResult: event.gateResult,
+      outputArtifactRef: event.outputArtifactRef,
+      outputDigest: event.outputDigest,
+    }))),
+    next_execution_point: recovery?.nextExecutionPoint ?? null,
+    workspace_root: workspaceRoot,
+    journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+    completed_at: now(),
+  });
 }

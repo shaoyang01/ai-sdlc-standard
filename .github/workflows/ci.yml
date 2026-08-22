@@ -52,9 +52,10 @@ jobs:
 
       - run: npm ci
 
+      # The auto-discovering parallel runner (scripts/run-tests-parallel.mjs)
+      # enumerates tests/*.test.ts, including the WP3.5-C cutover tests; no
+      # per-file steps are pinned here.
       - run: npm test
-
-      - run: npx --no-install tsx tests/solution-challenge-graph.test.ts
 
   standards:
     name: ci-standards

@@ -1,7 +1,7 @@
 {
   "name": "ai-sdlc-runtime",
   "version": "0.1.0",
-  "description": "AI SDLC Runtime — Deterministic Graph VM for SDLC Pipeline Execution",
+  "description": "AI SDLC Runtime — v2 Single-Rail Capability Chain Runtime",
   "private": true,
   "scripts": {
     "dev": "tsx demo.ts",
@@ -9,8 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test:loop-patch-mutations": "npx --no-install tsx scripts/loop-delivery-04-mutation-harness.ts",
     "smoke:codex-real": "tsx scripts/codex-real-dispatch-smoke.ts",
-    "smoke:codex-runtime-real": "tsx scripts/codex-runtime-real-smoke.ts",
-    "test:solution-challenge": "tsx tests/solution-challenge-graph.test.ts"
+    "smoke:codex-runtime-real": "tsx scripts/codex-runtime-real-smoke.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

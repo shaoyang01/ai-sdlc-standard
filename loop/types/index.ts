@@ -1,59 +1,11 @@
-// LOOP Types — Deterministic Workflow Engine
-// ===========================================
+// LOOP Types — v2 Single-Rail Capability Chain (C02-WP3.5)
+// =========================================================
 // Pure data types. No intelligence, no inference.
-
-export type DocFlowNode = "requirement-summary" | "tech-design" | "review" | "implementation" | "validation";
-
-export type LoopAgent = "kimi" | "codex" | "hermes";
-
-/**
- * @deprecated C02-WP3.5 (Decision-044): Direct/Speckit path split is
- * cancelled; solution-gate depth-tier decisions replace path selection.
- * Kept only until runtime consumers are rebaselined (WP3.5-B/C); the residue
- * audit (WP3.5-F/WP6) requires its removal from active code.
- */
-export type ExecutionMode = "direct" | "speckit";
-
-export interface LoopContext {
-  node: DocFlowNode;
-  requirement_id: string;
-  payload: Record<string, unknown>;
-  execution_mode: ExecutionMode;
-  history: LoopHistoryEntry[];
-}
-
-export interface LoopHistoryEntry {
-  node: DocFlowNode;
-  agent: LoopAgent;
-  started_at: string;
-  completed_at: string;
-  status: "success" | "failure";
-  error: string | null;
-}
-
-export interface LoopResult {
-  next_node: DocFlowNode | null;
-  agent: LoopAgent;
-  payload: Record<string, unknown>;
-}
-
-// Static flow table entry
-export interface FlowTableEntry {
-  current: DocFlowNode;
-  next: DocFlowNode | null; // null = terminal
-}
-
-/**
- * @deprecated C01 WP-2 (Decision-020/023): static node->agent binding
- * conflicts with capability decoupling. Node selection must use
- * NodeCapabilityContract; choosing the executing agent is the binding
- * layer's job (WP-3). Kept only for legacy engine compatibility.
- * Agent mapping entry.
- */
-export interface AgentMapEntry {
-  node: DocFlowNode;
-  agent: LoopAgent;
-}
+//
+// The legacy five-node DocFlow flow-table types (DocFlowNode, ExecutionMode,
+// LoopContext, LoopHistoryEntry, LoopResult, FlowTableEntry, AgentMapEntry)
+// were retired with the old kernel by WP3.5-C: the v2 seven-node capability
+// chain below is the only runtime authority.
 
 // ── Node Capability Contract (v2 single-rail, C02-WP3.5) ──
 // Agent-neutral capability surface. A node declares the capability it needs;
