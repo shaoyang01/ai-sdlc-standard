@@ -93,9 +93,15 @@ const MAX_BUSY_TIMEOUT_MS = 5000;
 // hash drift is STORE_CORRUPT.
 const LOOP_RUN_STORE_FORMAT_VERSION = 6;
 
-// The LOOP business tables. A user_version=0 database carrying ANY of these
-// is pre-versioning history, never a fresh store (D3 rule 3).
-const LOOP_BUSINESS_TABLES: readonly string[] = [
+/**
+ * The COMPLETE LOOP physical table catalogue (Round 1 corrections, H2): every
+ * table this store's DDL creates — main tables AND self-owned child tables.
+ * A user_version=0 database carrying ANY of these is pre-versioning history,
+ * never a fresh store (D3 rule 3). Shared verbatim with the v2 cutover
+ * preflight so owner detection and store fresh-detection can never drift.
+ */
+export const LOOP_PHYSICAL_TABLES: readonly string[] = [
+  // main tables
   "loop_runs",
   "loop_stage_states",
   "loop_events",
@@ -103,7 +109,17 @@ const LOOP_BUSINESS_TABLES: readonly string[] = [
   "loop_requirement_changes",
   "loop_artifact_revisions",
   "loop_findings",
+  // self-owned child tables (mirrors the fresh-v6 DDL exactly)
+  "loop_change_source_refs",
+  "loop_change_confirmed_facts",
+  "loop_change_trigger_evidence",
+  "loop_artifact_revision_upstreams",
+  "loop_artifact_current",
+  "loop_finding_invalidations",
+  "loop_finding_proofs",
+  "loop_finding_scopes",
 ];
+const LOOP_BUSINESS_TABLES = LOOP_PHYSICAL_TABLES;
 
 export type CapabilityExecutionAppendResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
@@ -325,6 +341,8 @@ type CapabilityExecutionRow = {
   gate_result: string | null;
   unresolved_findings_ref: string | null;
   unresolved_findings_digest: string | null;
+  consumed_findings_ref: string | null;
+  consumed_findings_digest: string | null;
   next_step_eligibility: string | null;
   error_code: string | null;
   retryable: number | null;
@@ -503,7 +521,7 @@ function eventToRow(event: LoopRunEvent): EventRow {
 
 function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 2,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 3,
     executionEventId: row.execution_event_id,
     runId: row.run_id,
     sequence: asPersistedSafeInteger(row.sequence),
@@ -528,6 +546,8 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     gateResult: row.gate_result as LoopCapabilityExecutionEvent["gateResult"],
     unresolvedFindingsRef: row.unresolved_findings_ref,
     unresolvedFindingsDigest: row.unresolved_findings_digest,
+    consumedFindingsRef: row.consumed_findings_ref,
+    consumedFindingsDigest: row.consumed_findings_digest,
     nextStepEligibility: row.next_step_eligibility as LoopCapabilityExecutionEvent["nextStepEligibility"],
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
@@ -562,6 +582,8 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     gate_result: event.gateResult,
     unresolved_findings_ref: event.unresolvedFindingsRef,
     unresolved_findings_digest: event.unresolvedFindingsDigest,
+    consumed_findings_ref: event.consumedFindingsRef,
+    consumed_findings_digest: event.consumedFindingsDigest,
     next_step_eligibility: event.nextStepEligibility,
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
@@ -1172,6 +1194,8 @@ export class LoopRunStore {
               gate_result TEXT,
               unresolved_findings_ref TEXT,
               unresolved_findings_digest TEXT,
+              consumed_findings_ref TEXT,
+              consumed_findings_digest TEXT,
               next_step_eligibility TEXT,
               error_code TEXT,
               retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
@@ -2565,11 +2589,32 @@ export class LoopRunStore {
         if (current.some((item) => item.sequence === record.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "finding sequence is occupied");
         }
-        if (
-          record.sourceRevisionId !== null &&
-          !revisions.some((item) => item.revisionId === record.sourceRevisionId)
-        ) {
-          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision does not exist in the run");
+        // Round 1 (H1-4): a finding binds to the CURRENT revision of its own
+        // source capability — verified inside this transaction BEFORE any
+        // invalidation action runs.
+        if (record.sourceRevisionId !== null) {
+          const source = revisions.find((item) => item.revisionId === record.sourceRevisionId);
+          if (source === undefined) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision does not exist in the run");
+          }
+          if (source.nodeId !== record.sourceCapability) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision belongs to another node");
+          }
+          if (source.validity !== "ACTIVE") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "source artifact revision is no longer an active current",
+            );
+          }
+          const pointer = db.prepare(
+            "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
+          ).get(record.runId, record.sourceCapability) as { revision_id?: unknown } | undefined;
+          if (pointer === undefined || pointer.revision_id !== record.sourceRevisionId) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "source artifact revision is not the current revision of the source capability",
+            );
+          }
         }
         try {
           validateLoopFindingChain([...current, record], findingChain.invalidations, record.runId);
@@ -3064,9 +3109,10 @@ export class LoopRunStore {
         input_artifact_version, input_digest, output_artifact_ref,
         output_artifact_version, output_digest, gate_result,
         unresolved_findings_ref, unresolved_findings_digest,
+        consumed_findings_ref, consumed_findings_digest,
         next_step_eligibility, error_code, retryable, reason_code,
         canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
       row.capability, row.execution_role, row.node_id, row.attempt, row.status,
@@ -3075,7 +3121,8 @@ export class LoopRunStore {
       row.executor_version, row.input_artifact_ref, row.input_artifact_version,
       row.input_digest, row.output_artifact_ref, row.output_artifact_version,
       row.output_digest, row.gate_result, row.unresolved_findings_ref,
-      row.unresolved_findings_digest, row.next_step_eligibility, row.error_code,
+      row.unresolved_findings_digest, row.consumed_findings_ref,
+      row.consumed_findings_digest, row.next_step_eligibility, row.error_code,
       row.retryable, row.reason_code, row.canonical_sha256,
     );
   }
@@ -3531,6 +3578,16 @@ export class LoopRunStore {
         corrupt("finding does not match the run identity");
       }
     }
+    // Round 1 (H1-4): re-verify the STATIC node binding of every finding's
+    // source revision on every read path (currency may legitimately change
+    // later; the node binding never can).
+    const readRevisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
+    for (const record of findings) {
+      const source = readRevisions.find((item) => item.revisionId === record.sourceRevisionId);
+      if (source === undefined || source.nodeId !== record.sourceCapability) {
+        corrupt("finding source revision does not match the source capability");
+      }
+    }
     const invalidations: LoopFindingInvalidation[] = [];
     const invalidationQuery = db.prepare(
       "SELECT * FROM loop_finding_invalidations WHERE finding_id = ? ORDER BY invalidation_index ASC",
@@ -3701,6 +3758,7 @@ export class LoopRunStore {
       ["output_artifact_ref", "TEXT", 0, 0], ["output_artifact_version", "TEXT", 0, 0],
       ["output_digest", "TEXT", 0, 0], ["gate_result", "TEXT", 0, 0],
       ["unresolved_findings_ref", "TEXT", 0, 0], ["unresolved_findings_digest", "TEXT", 0, 0],
+      ["consumed_findings_ref", "TEXT", 0, 0], ["consumed_findings_digest", "TEXT", 0, 0],
       ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
       ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],

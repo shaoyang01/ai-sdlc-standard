@@ -18,9 +18,13 @@ import {
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
 
-// v2 (C02-WP3.5-B, A2): every execution event records its executionRole and
-// the schema version advances to 2. The v1 schema is not silently accepted.
-export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 2 as const;
+// v2 (C02-WP3.5-B, A2): every execution event records its executionRole.
+// v3 (Round 1 corrections): the adversarial_scan role MUST persist its
+// Finding Ledger (an empty ledger is still an immutable artifact) and the
+// formal_verdict role MUST record the exact ledger ref/digest it consumed —
+// the chain validator binds them to the same solution-gate round. The v2
+// schema is not silently accepted.
+export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 3 as const;
 
 export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
@@ -52,6 +56,9 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   gateResult: LoopCapabilityGateResult | null;
   unresolvedFindingsRef: string | null;
   unresolvedFindingsDigest: string | null;
+  /** v3: the Finding Ledger this formal_verdict execution consumed. */
+  consumedFindingsRef: string | null;
+  consumedFindingsDigest: string | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   errorCode: string | null;
   retryable: boolean | null;
@@ -64,7 +71,8 @@ const EVENT_FIELDS = [
   "bindingRegistryVersion", "executorAgent", "executorAdapter", "executorVersion",
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
   "outputArtifactVersion", "outputDigest", "gateResult", "unresolvedFindingsRef",
-  "unresolvedFindingsDigest", "nextStepEligibility", "errorCode", "retryable", "reasonCode",
+  "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
+  "nextStepEligibility", "errorCode", "retryable", "reasonCode",
 ] as const;
 
 const AGENTS: readonly AgentName[] = ["kimi", "codex", "hermes"];
@@ -218,6 +226,22 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     invalid("unresolved findings reference and digest must match");
   }
   if ((findingRef === null) !== (findingDigest === null)) invalid("unresolved finding ref and digest must appear together");
+  // v3 (Round 1): the formal_verdict role must record the exact Finding
+  // Ledger it consumed; every other role must leave the binding empty.
+  const isVerdictRole = event.capability === "solution-gate" && event.executionRole === "formal_verdict";
+  const isScanRole = event.capability === "solution-gate" && event.executionRole === "adversarial_scan";
+  const consumedRef = nullableArtifactRef(event.consumedFindingsRef, "consumedFindingsRef");
+  const consumedDigest = nullableDigest(event.consumedFindingsDigest, "consumedFindingsDigest");
+  if ((consumedRef === null) !== (consumedDigest === null)) invalid("consumed ledger ref and digest must appear together");
+  if (consumedRef !== null && (consumedRef.kind !== "capability_findings" || consumedRef.digest !== consumedDigest)) {
+    invalid("consumed ledger reference and digest must match");
+  }
+  if (isVerdictRole && consumedRef === null) {
+    invalid("formal_verdict must record the Finding Ledger it consumes");
+  }
+  if (!isVerdictRole && (event.consumedFindingsRef !== null || event.consumedFindingsDigest !== null)) {
+    invalid("only the formal_verdict role may bind a consumed Finding Ledger");
+  }
   if (event.gateResult !== null && (typeof event.gateResult !== "string" || !GATE_RESULTS.includes(event.gateResult as LoopCapabilityGateResult))) {
     invalid("gateResult must be canonical or null");
   }
@@ -242,6 +266,9 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     ) {
       invalid("started capability execution must not contain result fields");
     }
+    // The consumed-ledger claim is part of the dispatch claim itself so a
+    // recovered verdict cannot swap ledgers between start and terminal.
+    void consumedRef;
   } else if (event.status === "succeeded") {
     if (outputRef === null || outputVersion === null || outputDigest === null) {
       invalid("succeeded capability execution requires output ref, version and digest");
@@ -265,8 +292,12 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (event.gateResult === "FAIL" && event.nextStepEligibility === "ELIGIBLE") {
       invalid("failed Gate must not make the next step eligible");
     }
-    // The adversarial_scan ledger is the scan's product, not a blocker: it is
-    // consumed by the formal_verdict execution that follows it.
+    // v3: the scan round always persists an immutable Finding Ledger — an
+    // empty ledger is still an artifact. Its findings do not block the chain:
+    // they are the formal_verdict execution's input.
+    if (isScanRole && findingRef === null) {
+      invalid("adversarial_scan must persist its Finding Ledger");
+    }
     if (gateRole !== "adversarial_scan" && findingRef !== null && event.nextStepEligibility === "ELIGIBLE") {
       invalid("unresolved findings must not make the next step eligible");
     }
@@ -309,6 +340,8 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     gateResult: event.gateResult,
     unresolvedFindingsRef: event.unresolvedFindingsRef,
     unresolvedFindingsDigest: event.unresolvedFindingsDigest,
+    consumedFindingsRef: event.consumedFindingsRef,
+    consumedFindingsDigest: event.consumedFindingsDigest,
     nextStepEligibility: event.nextStepEligibility,
     errorCode: event.errorCode,
     retryable: event.retryable,
@@ -395,6 +428,22 @@ export function validateLoopCapabilityExecutionChain(
           event.executorAgent === previous.executorAgent
         ) {
           invalid("formal_verdict must be executed by a different agent than adversarial_scan");
+        }
+        // v3 (Round 1): the verdict consumes exactly THIS round's persisted
+        // Finding Ledger — no reuse of older rounds, no missing ledger.
+        if (
+          previous.capability === "solution-gate" &&
+          previous.executionRole === "adversarial_scan"
+        ) {
+          if (previous.unresolvedFindingsRef === null) {
+            invalid("adversarial_scan round without a persisted Finding Ledger cannot be consumed");
+          }
+          if (
+            event.consumedFindingsRef !== previous.unresolvedFindingsRef ||
+            event.consumedFindingsDigest !== previous.unresolvedFindingsDigest
+          ) {
+            invalid("formal_verdict must consume exactly this round's Finding Ledger");
+          }
         }
         if (
           event.inputArtifactRef !== previous.outputArtifactRef ||

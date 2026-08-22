@@ -124,6 +124,9 @@ export interface ExecutionPointRecoveryState {
   gateResult: LoopCapabilityGateResult | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   retryable: boolean | null;
+  /** v3 (Round 1): the persisted Finding Ledger of a scan round. */
+  unresolvedFindingsRef: string | null;
+  unresolvedFindingsDigest: string | null;
 }
 
 const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
@@ -273,6 +276,8 @@ export function recoverRunContext(
         gateResult: lastSucceeded?.gateResult ?? null,
         nextStepEligibility: last?.nextStepEligibility ?? null,
         retryable: last?.retryable ?? null,
+        unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
+        unresolvedFindingsDigest: lastSucceeded?.unresolvedFindingsDigest ?? null,
       });
     },
   );
