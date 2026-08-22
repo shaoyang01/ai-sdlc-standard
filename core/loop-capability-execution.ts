@@ -349,6 +349,10 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
   });
 }
 
+// The consumed-ledger claim is part of the attempt's dispatch identity: a
+// terminal event may not substitute a different Finding Ledger than the one
+// its started event claimed, so the binding holds across the attempt's whole
+// lifecycle — start, terminal and every retry — not just the start instant.
 function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityExecutionEvent): boolean {
   return a.runId === b.runId && a.capability === b.capability && a.executionRole === b.executionRole &&
     a.nodeId === b.nodeId &&
@@ -356,7 +360,9 @@ function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityE
     a.bindingRegistryVersion === b.bindingRegistryVersion && a.executorAgent === b.executorAgent &&
     a.executorAdapter === b.executorAdapter && a.executorVersion === b.executorVersion &&
     a.inputArtifactRef === b.inputArtifactRef && a.inputArtifactVersion === b.inputArtifactVersion &&
-    a.inputDigest === b.inputDigest;
+    a.inputDigest === b.inputDigest &&
+    a.consumedFindingsRef === b.consumedFindingsRef &&
+    a.consumedFindingsDigest === b.consumedFindingsDigest;
 }
 
 /**
@@ -402,7 +408,9 @@ export function validateLoopCapabilityExecutionChain(
           event.executionRole !== previous.executionRole ||
           event.inputArtifactRef !== previous.inputArtifactRef ||
           event.inputArtifactVersion !== previous.inputArtifactVersion ||
-          event.inputDigest !== previous.inputDigest
+          event.inputDigest !== previous.inputDigest ||
+          event.consumedFindingsRef !== previous.consumedFindingsRef ||
+          event.consumedFindingsDigest !== previous.consumedFindingsDigest
         ) {
           invalid("only a retryable failed capability may be retried");
         }
