@@ -148,8 +148,8 @@ async function main(): Promise<void> {
   const bindingContractsBefore = INITIAL_BINDING_REGISTRY.bindings.map(({ enabled: _enabled, ...contract }) => contract);
   const replacement = replaceBinding(
     INITIAL_BINDING_REGISTRY,
-    "binding-codex-solution-design",
-    "binding-kimi-solution-design",
+    "binding-codex-solution-design-primary",
+    "binding-kimi-solution-design-primary",
   );
   validateBindingRegistry(replacement.registry);
   ok(true, "replacement snapshot passes the production validator");
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
   ok(NODE_CAPABILITY_CONTRACTS.every((contract) => Object.isFrozen(contract.inputArtifacts) && Object.isFrozen(contract.prohibited)),
     "nested contract arrays are frozen at runtime");
   throws(
-    () => replaceBinding(replacement.registry, "binding-codex-solution-design", "binding-kimi-solution-design"),
+    () => replaceBinding(replacement.registry, "binding-codex-solution-design-primary", "binding-kimi-solution-design-primary"),
     "a disabled source cannot be replayed as a replacement",
   );
   const drifted = registrySnapshot("2", (binding) => binding.capability === "solution-design" && binding.agent === "codex"
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   Object.freeze(accessorBindings);
   throws(() => validateBindingRegistry(Object.freeze({ version: "2", bindings: accessorBindings })),
     "runtime validation rejects accessor elements before invoking them");
-  const overflowingTimeout = registrySnapshot("2", (binding) => binding.bindingId === "binding-codex-solution-design"
+  const overflowingTimeout = registrySnapshot("2", (binding) => binding.bindingId === "binding-codex-solution-design-primary"
     ? { ...binding, timeoutMs: 2_147_483_648 }
     : binding);
   throws(() => validateBindingRegistry(overflowingTimeout), "runtime validation rejects timeout values that Node would clamp");
@@ -211,6 +211,7 @@ async function main(): Promise<void> {
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
@@ -227,6 +228,7 @@ async function main(): Promise<void> {
     const unavailable = await entry(runStore, artifactStore, kimiRegistry).execute({
       requirementId: id.requirementId,
       capability: "solution-design",
+      executionRole: "primary" as const,
       ...techInput,
       outputArtifactVersion: "1.0.0",
       input: { requirementSummaryRef: techInput.inputArtifactRef },
@@ -242,8 +244,8 @@ async function main(): Promise<void> {
 
     const codexRegistry = replaceBinding(
       kimiRegistry,
-      "binding-kimi-solution-design",
-      "binding-codex-solution-design",
+      "binding-kimi-solution-design-primary",
+      "binding-codex-solution-design-primary",
     ).registry;
     let freshDispatches = 0;
     const retry = await entry(runStore, artifactStore, codexRegistry, runner((request) => {
@@ -252,6 +254,7 @@ async function main(): Promise<void> {
     })).execute({
       requirementId: id.requirementId,
       capability: "solution-design",
+      executionRole: "primary" as const,
       ...techInput,
       outputArtifactVersion: "1.0.0",
       input: { requirementSummaryRef: techInput.inputArtifactRef },
@@ -272,6 +275,7 @@ async function main(): Promise<void> {
     ]))).execute({
       requirementId: id.requirementId,
       capability: "solution-gate",
+      executionRole: "adversarial_scan" as const,
       inputArtifactRef: techState.effectiveOutputArtifactRef!,
       inputArtifactVersion: techState.effectiveOutputArtifactVersion!,
       inputDigest: techState.effectiveOutputDigest!,
@@ -279,8 +283,10 @@ async function main(): Promise<void> {
       input: { designRef: techState.effectiveOutputArtifactRef },
     });
     ok(challenge.execution.success === true, "qualified challenge output is recorded as executed");
-    equal(challenge.recoveryContext.capabilityChainStatus, "BLOCKED", "unresolved findings still block progression after replacement");
-    equal(challenge.recoveryContext.nextCapability, null, "blocked findings cannot auto-advance to review or Re-Gate");
+    // v2 (A2): the scan's finding ledger does not block the chain — it is the
+    // formal_verdict role's input; the node stays on solution-gate.
+    equal(challenge.recoveryContext.capabilityChainStatus, "READY", "scan findings leave the verdict point dispatchable");
+    equal(challenge.recoveryContext.nextCapability, "solution-gate", "chain waits on the formal_verdict role of the same node");
     ok(challenge.recoveryContext.capabilityStates[2]?.unresolvedFindingsRef !== null,
       "unresolved findings remain durable recovery facts");
     artifactStore.close();
@@ -299,7 +305,7 @@ async function main(): Promise<void> {
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 timeout source");
-    const timeoutRegistry = registrySnapshot("10", (binding) => binding.bindingId === "binding-codex-requirement-intake"
+    const timeoutRegistry = registrySnapshot("10", (binding) => binding.bindingId === "binding-codex-requirement-intake-primary"
       ? { ...binding, timeoutMs: 5 }
       : binding);
     const lateRunner = runner((request) => new Promise((resolve) => {
@@ -309,6 +315,7 @@ async function main(): Promise<void> {
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
@@ -331,6 +338,7 @@ async function main(): Promise<void> {
     })).execute({
       requirementId: id.requirementId,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
@@ -372,6 +380,7 @@ async function main(): Promise<void> {
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
@@ -390,6 +399,7 @@ async function main(): Promise<void> {
     })).execute({
       requirementId: id.requirementId,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,

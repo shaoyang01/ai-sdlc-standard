@@ -22,18 +22,21 @@ import type { LoopArtifactKind } from "./loop-artifact-store";
 import type { LoopCapabilityGateResult } from "./loop-capability-execution";
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord, validateRequirementId } from "./loop-run-state";
-import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import { NODE_CAPABILITY_EXECUTION_ROLES, NODE_CAPABILITY_IDS, type CapabilityExecutionRole, type NodeCapabilityId } from "../loop/types";
 
-export const LOOP_ARTIFACT_REVISION_SCHEMA_VERSION = 1 as const;
+// v2 (C02-WP3.5-B, A4): the revision records the producing execution's role
+// so only the formal_verdict role can bind a conclusive Gate product as the
+// node current. The v1 schema is not silently accepted.
+export const LOOP_ARTIFACT_REVISION_SCHEMA_VERSION = 2 as const;
 
 export const LOOP_ARTIFACT_REVISION_VALIDITIES = ["ACTIVE", "STALE", "SUPERSEDED"] as const;
 export type LoopArtifactRevisionValidity = (typeof LOOP_ARTIFACT_REVISION_VALIDITIES)[number];
 
 // Gate-producing capabilities mirror the capability execution contract
-// (v2, A2): exactly solution-gate produces conclusive Gate results; every
-// other capability records NOT_APPLICABLE. Role-level enforcement (only the
-// formal_verdict role may write PASS/FAIL/PASS_WITH_RISK) lands with the
-// executionRole model in WP3.5-B.
+// (v2, A2): exactly solution-gate produces conclusive Gate results, and only
+// through its formal_verdict execution role (the adversarial_scan role always
+// records NOT_APPLICABLE); every other capability is bound to the primary
+// role and records NOT_APPLICABLE.
 export const LOOP_ARTIFACT_GATE_CAPABILITIES = ["solution-gate"] as const;
 
 // The revision artifact kinds are exactly the canonical LoopArtifactKind
@@ -95,6 +98,7 @@ export type LoopArtifactRevision = Readonly<{
   artifactRef: string;
   digest: string;
   producerExecutionId: string;
+  producerExecutionRole: CapabilityExecutionRole;
   gateResult: LoopCapabilityGateResult | null;
   validity: LoopArtifactRevisionValidity;
   supersededBy: string | null;
@@ -115,6 +119,7 @@ export type LoopArtifactRevisionDraft = Readonly<{
   artifactRef: string;
   digest: string;
   producerExecutionId: string;
+  producerExecutionRole: CapabilityExecutionRole;
   gateResult: LoopCapabilityGateResult | null;
   upstreamRevisionIds: readonly string[];
   createdAt: string;
@@ -123,14 +128,15 @@ export type LoopArtifactRevisionDraft = Readonly<{
 const RECORD_FIELDS = [
   "schemaVersion", "revisionId", "runId", "requirementId", "nodeId",
   "sequence", "generation", "stablePath", "artifactKind", "semver",
-  "artifactRef", "digest", "producerExecutionId", "gateResult", "validity",
+  "artifactRef", "digest", "producerExecutionId", "producerExecutionRole",
+  "gateResult", "validity",
   "supersededBy", "upstreamRevisionIds", "createdAt",
 ] as const;
 
 const DRAFT_FIELDS = [
   "runId", "requirementId", "nodeId", "sequence", "generation", "stablePath",
   "artifactKind", "semver", "artifactRef", "digest", "producerExecutionId",
-  "gateResult", "upstreamRevisionIds", "createdAt",
+  "producerExecutionRole", "gateResult", "upstreamRevisionIds", "createdAt",
 ] as const;
 
 // Manifest Artifact Index rows that map to a canonical capability (v2, A4).
@@ -421,6 +427,17 @@ export function validateLoopArtifactRevision(value: unknown): void {
   ) {
     invalid("producerExecutionId must reference a capability execution of the same run");
   }
+  // v2 (A2): the producing execution role must be one of the node's required
+  // roles, and only the formal_verdict role may bind a conclusive Gate
+  // product as the node current.
+  const requiredRoles = NODE_CAPABILITY_EXECUTION_ROLES[nodeId];
+  if (
+    typeof record.producerExecutionRole !== "string" ||
+    !(requiredRoles as readonly string[]).includes(record.producerExecutionRole)
+  ) {
+    invalid("producerExecutionRole must be a required role of the node");
+  }
+  const producerExecutionRole = record.producerExecutionRole as CapabilityExecutionRole;
   if (
     record.gateResult !== null &&
     (typeof record.gateResult !== "string" || !GATE_RESULTS.includes(record.gateResult as LoopCapabilityGateResult))
@@ -428,11 +445,14 @@ export function validateLoopArtifactRevision(value: unknown): void {
     invalid("gateResult must be a canonical Gate result or null");
   }
   if (isLoopArtifactGateCapability(nodeId)) {
+    if (producerExecutionRole !== "formal_verdict") {
+      invalid("Gate node revisions must be produced by the formal_verdict role");
+    }
     if (record.gateResult !== "PASS" && record.gateResult !== "PASS_WITH_RISK") {
       invalid("Gate node revisions require a conclusive passing Gate result");
     }
-  } else if (record.gateResult !== "NOT_APPLICABLE") {
-    invalid("non-Gate node revisions must use NOT_APPLICABLE");
+  } else if (record.gateResult !== "NOT_APPLICABLE" || producerExecutionRole !== "primary") {
+    invalid("non-Gate node revisions must be primary-produced and use NOT_APPLICABLE");
   }
   if (
     typeof record.validity !== "string" ||
@@ -490,6 +510,7 @@ export function canonicalizeLoopArtifactRevision(record: LoopArtifactRevision): 
     artifactRef: record.artifactRef,
     digest: record.digest,
     producerExecutionId: record.producerExecutionId,
+    producerExecutionRole: record.producerExecutionRole,
     gateResult: record.gateResult,
     validity: record.validity,
     supersededBy: record.supersededBy,
@@ -528,6 +549,7 @@ export function createLoopArtifactRevision(draft: unknown): LoopArtifactRevision
     artifactRef: record.artifactRef,
     digest: record.digest,
     producerExecutionId: record.producerExecutionId,
+    producerExecutionRole: record.producerExecutionRole,
     gateResult: record.gateResult,
     validity: "ACTIVE",
     supersededBy: null,

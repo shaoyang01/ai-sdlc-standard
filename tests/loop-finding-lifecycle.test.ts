@@ -135,11 +135,13 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 
 /** Drives the canonical single-pass capability chain inside one run. */
 function makeCapabilityDriver(store: LoopRunStore, runId: string) {
-  let sequence = 0;
-  const attempts = new Map<NodeCapabilityId, number>();
-  function nextAttempt(capability: NodeCapabilityId): number {
-    const attempt = (attempts.get(capability) ?? 0) + 1;
-    attempts.set(capability, attempt);
+  // Continue the persisted event sequence so multiple drivers can share a run.
+  let sequence = store.listCapabilityExecutions(runId).length;
+  const attempts = new Map<string, number>();
+  function nextAttempt(capability: NodeCapabilityId, executionRole: string): number {
+    const key = `${capability}:${executionRole}`;
+    const attempt = (attempts.get(key) ?? 0) + 1;
+    attempts.set(key, attempt);
     return attempt;
   }
   let predecessor = {
@@ -153,18 +155,22 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     overrides: Partial<LoopCapabilityExecutionEvent>,
   ): LoopCapabilityExecutionEvent {
     sequence += 1;
+    const executionRole = capability === "solution-gate"
+      ? (overrides.executionRole ?? "formal_verdict")
+      : "primary";
     return Object.freeze({
-      schemaVersion: 1,
+      schemaVersion: 2,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
       capability,
+      executionRole,
       nodeId: capability,
       attempt: 1,
       status,
       createdAt: nextTs(),
-      bindingId: `binding-codex-${capability}`,
-      bindingVersion: "1.0.0",
+      bindingId: `binding-codex-${capability}-${executionRole}`,
+      bindingVersion: "2.0.0",
       bindingRegistryVersion: "1",
       executorAgent: "codex",
       executorAdapter: "codex-real-dispatch",
@@ -188,7 +194,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
   return {
     /** Append only the started event, leaving an active execution claim. */
     start(capability: NodeCapabilityId): LoopCapabilityExecutionEvent {
-      const started = event(capability, "started", { attempt: nextAttempt(capability) });
+      const started = event(capability, "started", { attempt: nextAttempt(capability, "primary") });
       store.appendCapabilityExecution(started);
       return started;
     },
@@ -200,12 +206,65 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     ): LoopCapabilityExecutionEvent {
       const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(capability);
       const gateResult = isGate ? gate ?? "PASS" : "NOT_APPLICABLE";
-      const attempt = nextAttempt(capability);
-      const started = event(capability, "started", { attempt });
+      // Chain off the actual journal tail so multiple drivers share one run.
+      const lastSucceeded = [...store.listCapabilityExecutions(runId)]
+        .reverse()
+        .find((item) => item.status === "succeeded");
+      if (lastSucceeded?.outputArtifactRef !== null && lastSucceeded !== undefined) {
+        predecessor = {
+          ref: lastSucceeded.outputArtifactRef!,
+          version: lastSucceeded.outputArtifactVersion!,
+          digest: lastSucceeded.outputDigest!,
+        };
+      }
+      let scanInput: { ref: string; version: string; digest: string } | null = null;
+      if (isGate) {
+        // v2: the scan round runs first on a different agent.
+        const scanAttempt = nextAttempt(capability, "adversarial_scan");
+        const scanRef = `loop-artifact:v1:solution_review:sha256:${dg("a")}`;
+        scanInput = { ref: scanRef, version: "1.0.0", digest: dg("a") };
+        const scanStarted = event(capability, "started", {
+          attempt: scanAttempt,
+          executionRole: "adversarial_scan",
+          executorAgent: "kimi",
+          executorAdapter: "kimi-cli",
+          bindingId: `binding-kimi-${capability}-adversarial_scan`,
+        });
+        store.appendCapabilityExecution(scanStarted);
+        store.appendCapabilityExecution(event(capability, "succeeded", {
+          attempt: scanAttempt,
+          executionRole: "adversarial_scan",
+          executorAgent: "kimi",
+          executorAdapter: "kimi-cli",
+          bindingId: `binding-kimi-${capability}-adversarial_scan`,
+          outputArtifactRef: scanRef,
+          outputArtifactVersion: "1.0.0",
+          outputDigest: dg("a"),
+          gateResult: "NOT_APPLICABLE",
+          nextStepEligibility: "ELIGIBLE",
+        }));
+      }
+      const executionRole = isGate ? "formal_verdict" : "primary";
+      const attempt = nextAttempt(capability, executionRole);
+      const started = event(capability, "started", {
+        attempt,
+        executionRole,
+        ...(scanInput ? {
+          inputArtifactRef: scanInput.ref,
+          inputArtifactVersion: scanInput.version,
+          inputDigest: scanInput.digest,
+        } : {}),
+      });
       store.appendCapabilityExecution(started);
       const outputRef = `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind}:sha256:${output.digest}`;
       const succeeded = event(capability, "succeeded", {
         attempt,
+        executionRole,
+        ...(scanInput ? {
+          inputArtifactRef: scanInput.ref,
+          inputArtifactVersion: scanInput.version,
+          inputDigest: scanInput.digest,
+        } : {}),
         outputArtifactRef: outputRef,
         outputArtifactVersion: output.version,
         outputDigest: output.digest,
@@ -239,6 +298,7 @@ function revisionDraft(o: {
   const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(o.nodeId);
   const output = NODE_OUT[o.nodeId];
   return {
+    producerExecutionRole: isGate ? "formal_verdict" : "primary",
     runId: "run-001",
     requirementId: "req-001",
     nodeId: o.nodeId,
@@ -265,6 +325,14 @@ function driveNodes(
   const revisions = new Map<NodeCapabilityId, LoopArtifactRevision>();
   let upstream: string[] = [];
   for (const nodeId of nodes) {
+    // Idempotent: a node whose v2 current already exists (seeded by
+    // withRunningStore) is reused instead of re-driven.
+    const existing = store.listArtifactRevisions("run-001").find((item) => item.nodeId === nodeId);
+    if (existing !== undefined) {
+      revisions.set(nodeId, existing);
+      upstream = [existing.revisionId];
+      continue;
+    }
     const execution = driver.succeed(nodeId, NODE_OUT[nodeId]);
     const revision = store.appendArtifactRevision(createLoopArtifactRevision(
       revisionDraft({ nodeId, producerExecutionId: execution.executionEventId, upstreamRevisionIds: upstream }),
@@ -273,6 +341,13 @@ function driveNodes(
     upstream = [revision.revisionId];
   }
   return revisions;
+}
+
+/** Seeds intake+design executions and returns the design revision id. */
+function seedSourceRevision(store: LoopRunStore): string {
+  const driver = makeCapabilityDriver(store, "run-001");
+  const revisions = driveNodes(store, driver, ["requirement-intake", "solution-design"]);
+  return revisions.get("solution-design")!.revisionId;
 }
 
 function findingDraft(o: {
@@ -290,7 +365,7 @@ function findingDraft(o: {
     requirementId: o.requirementId ?? "req-001",
     sequence: o.sequence,
     sourceCapability: o.sourceCapability,
-    sourceRevisionId: o.sourceRevisionId ?? null,
+    sourceRevisionId: o.sourceRevisionId ?? "run-001:revision:solution-design:1",
     severity: o.severity ?? "HIGH",
     category: o.category,
     evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
@@ -406,13 +481,16 @@ function withRunningStore(fn: (store: LoopRunStore, dir: string) => void): void 
   withStore((store, dir) => {
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    // v2: every finding names an existing same-run source revision, so the
+    // fixture seeds the intake and solution-design currents up front.
+    seedSourceRevision(store);
     fn(store, dir);
   });
 }
 
 console.log("finding lifecycle: schema constants and canonical tokens");
 {
-  assert(LOOP_FINDING_SCHEMA_VERSION === 1, "finding schema version is 1");
+  assert(LOOP_FINDING_SCHEMA_VERSION === 2, "finding schema version is 2");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
   assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
     "six canonical categories");
@@ -577,7 +655,7 @@ console.log("finding lifecycle: malformed and incoherent drafts fail closed (neg
   const created = createLoopFinding(base);
   expectThrow("INVALID_INPUT", () => validateLoopFinding({ ...created, findingId: "run-001:finding:9" }),
     "forged finding id rejected");
-  expectThrow("INVALID_INPUT", () => validateLoopFinding({ ...created, schemaVersion: 2 }),
+  expectThrow("INVALID_INPUT", () => validateLoopFinding({ ...created, schemaVersion: 1 }),
     "unknown schema version rejected");
   expectThrow("INVALID_INPUT", () => validateLoopFinding({ ...created, status: "TRIAGED" }),
     "unknown status rejected");
@@ -791,7 +869,9 @@ console.log("finding lifecycle: pure gate derivation");
 
 console.log("finding lifecycle: store append binds run and requirement");
 withRunningStore((store) => {
+  const sourceRevisionId = seedSourceRevision(store);
   const finding = createLoopFinding(findingDraft({
+    sourceRevisionId,
     sequence: 1, sourceCapability: "code-review", category: "REVIEW",
     earliestAffectedNodeId: "code-review",
   }));
@@ -824,7 +904,9 @@ withStore((store) => {
 
 console.log("finding lifecycle: exact replay is idempotent, conflicts fail closed");
 withRunningStore((store) => {
+  const sourceRevisionId = seedSourceRevision(store);
   const finding = createLoopFinding(findingDraft({
+    sourceRevisionId,
     sequence: 1, sourceCapability: "code-review", category: "REVIEW",
     earliestAffectedNodeId: "code-review",
   }));
@@ -834,7 +916,8 @@ withRunningStore((store) => {
   assert(store.listFindings("run-001").length === 1, "replay leaves a single persisted finding");
   const sameIdDifferent = createLoopFinding(findingDraft({
     sequence: 1, sourceCapability: "code-review", category: "REVIEW",
-    earliestAffectedNodeId: "code-review", severity: "LOW",
+    earliestAffectedNodeId: "code-review",
+    sourceRevisionId: store.listArtifactRevisions("run-001").find((r) => r.nodeId === "solution-design")!.revisionId, severity: "LOW",
   }));
   expectThrow("EVENT_ID_CONFLICT", () => store.appendFinding(sameIdDifferent),
     "same finding id with different content rejected");
@@ -844,6 +927,7 @@ withRunningStore((store) => {
   expectThrow("ILLEGAL_TRANSITION", () => store.appendFinding(createLoopFinding(findingDraft({
     sequence: 3, sourceCapability: "code-review", category: "REVIEW",
     earliestAffectedNodeId: "code-review",
+    sourceRevisionId: store.listArtifactRevisions("run-001").find((r) => r.nodeId === "solution-design")!.revisionId,
   }))), "finding sequence gap rejected");
   const notBornOpen = acceptLoopFindingRisk(finding, RISK_EVIDENCE);
   expectThrow("INVALID_INPUT", () => store.appendFinding(notBornOpen),
@@ -861,7 +945,11 @@ console.log("finding lifecycle: concurrent writers use CAS/conflict semantics");
   try {
     storeA.createRun(makeIdentity());
     storeA.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+    const driver = makeCapabilityDriver(storeA, "run-001");
+    const seeded = driveNodes(storeA, driver, ["requirement-intake", "solution-design"]);
+    const sourceRevisionId = seeded.get("solution-design")!.revisionId;
     const winner = createLoopFinding(findingDraft({
+      sourceRevisionId,
       sequence: 1, sourceCapability: "code-review", category: "REVIEW",
       earliestAffectedNodeId: "code-review",
     }));
@@ -2111,104 +2199,36 @@ console.log("finding lifecycle: closed store behavior");
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("finding lifecycle: v4 to v5 migration is atomic and retryable");
+console.log("finding lifecycle: pre-v6 journals are rejected as unsupported history");
 {
   const dir = mkdtempSync(join(tmpdir(), "loop-finding-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  // Simulate a pre-WP3 journal: no finding tables, format marker v4.
-  const v4 = new Database(path);
-  v4.exec("DROP TABLE loop_finding_proofs");
-  v4.exec("DROP TABLE loop_finding_scopes");
-  v4.exec("DROP TABLE loop_finding_invalidations");
-  v4.exec("DROP TABLE loop_findings");
-  v4.pragma("user_version = 4");
-  v4.close();
-  const store2 = new LoopRunStore(path);
-  store2.init();
-  assert(store2.getSnapshot("run-001") !== undefined, "v4 run remains readable after v5 migration");
-  assert(store2.listFindings("run-001").length === 0, "migrated journal has an empty finding chain");
-  assert(store2.listFindingInvalidations("run-001").length === 0, "migrated journal has no invalidation edges");
-  store2.close();
-  const migrated = new Database(path, { readonly: true });
-  assert(migrated.pragma("user_version", { simple: true }) === 5, "migration atomically records format v5");
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_findings'").get() !== undefined,
-    "migration creates the finding table",
-  );
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_invalidations'").get() !== undefined,
-    "migration creates the invalidation table",
-  );
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_proofs'").get() !== undefined,
-    "migration creates the closure proof table",
-  );
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_scopes'").get() !== undefined,
-    "migration creates the invalidation scope table",
-  );
-  migrated.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-finding-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  const v4 = new Database(path);
-  v4.exec("DROP TABLE loop_finding_proofs");
-  v4.exec("DROP TABLE loop_finding_scopes");
-  v4.exec("DROP TABLE loop_finding_invalidations");
-  v4.exec("DROP TABLE loop_findings");
-  v4.pragma("user_version = 4");
-  // A bogus pre-existing table makes the migration's schema verification fail.
-  v4.exec("CREATE TABLE loop_findings (bogus TEXT)");
-  v4.close();
-  const store2 = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store2.init(), "wrong-schema finding table aborts migration");
-  store2.close();
-  const probe = new Database(path, { readonly: true });
-  assert(probe.pragma("user_version", { simple: true }) === 4, "user_version unchanged after migration rollback");
-  assert(
-    probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_finding_invalidations'").get() === undefined,
-    "invalidation table not persisted after rollback",
-  );
-  probe.close();
-  // The failed migration is retryable: removing the bogus table lets init succeed.
-  const fix = new Database(path);
-  fix.exec("DROP TABLE loop_findings");
-  fix.close();
-  const store3 = new LoopRunStore(path);
-  store3.init();
-  assert(store3.getSnapshot("run-001") !== undefined, "repaired journal migrates and reads back");
-  store3.close();
-  const retry = new Database(path, { readonly: true });
-  assert(retry.pragma("user_version", { simple: true }) === 5, "retry completes the v5 migration");
-  retry.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-finding-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  const raw = new Database(path);
-  raw.exec("DROP TABLE loop_finding_proofs");
-  raw.exec("DROP TABLE loop_finding_scopes");
-  raw.exec("DROP TABLE loop_finding_invalidations");
-  raw.exec("DROP TABLE loop_findings");
+  // A journal marked v4 is known history: init refuses it outright — there is
+  // no v4→v5 semantic migration on the v2 cutover.
+  const historicalPath = join(dir, "historical.db");
+  const seed = new Database(historicalPath);
+  seed.pragma("user_version = 4");
+  seed.close();
+  const rejected = new LoopRunStore(historicalPath);
+  let historicalRejected = false;
+  try {
+    rejected.init();
+  } catch (error) {
+    historicalRejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
+  }
+  assert(historicalRejected, "v4 journal rejected with UNSUPPORTED_HISTORICAL_FORMAT");
+  // An unversioned database that already carries LOOP tables is history too.
+  const unversionedPath = join(dir, "unversioned.db");
+  const raw = new Database(unversionedPath);
+  raw.exec("CREATE TABLE loop_runs (run_id TEXT PRIMARY KEY)");
   raw.close();
-  const store2 = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store2.init(), "v5 marker with missing finding tables is rejected");
-  store2.close();
+  const rejected2 = new LoopRunStore(unversionedPath);
+  let unversionedRejected = false;
+  try {
+    rejected2.init();
+  } catch (error) {
+    unversionedRejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
+  }
+  assert(unversionedRejected, "unversioned database with LOOP tables rejected as history");
   rmSync(dir, { recursive: true, force: true });
 }
 {
@@ -2290,6 +2310,9 @@ function driveBoundNodes(
       artifactRef: stored.artifactRef,
       digest: stored.digest,
       producerExecutionId: execution.executionEventId,
+      producerExecutionRole: (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(nodeId)
+        ? "formal_verdict"
+        : "primary",
       gateResult: (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(nodeId)
         ? "PASS"
         : "NOT_APPLICABLE",
@@ -2330,6 +2353,7 @@ function driveBoundNodes(
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
+      producerExecutionRole: "primary",
       gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),
@@ -2371,6 +2395,7 @@ function driveBoundNodes(
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
+      producerExecutionRole: "primary",
       gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),
@@ -2422,6 +2447,7 @@ function driveBoundNodes(
       artifactRef: storedValidation.artifactRef,
       digest: storedValidation.digest,
       producerExecutionId: validation.executionEventId,
+      producerExecutionRole: "primary",
       gateResult: "NOT_APPLICABLE",
       upstreamRevisionIds: [revisions.get("code-review")!.revisionId],
       createdAt: nextTs(),

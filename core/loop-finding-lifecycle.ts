@@ -4,9 +4,12 @@
 // process.env, ExecutionGateway, or Agent adapter imports.
 //
 // Canonical findings bind every review/test/intake problem to the run journal:
-// the fixed severity/category enums, the category ↔ sourceCapability routing
-// matrix, the evidence reference, the earliest affected node and the fixed
-// status state machine (OPEN → RESOLVED / ACCEPTED_RISK → SUPERSEDED).
+// the fixed severity/category enums, the six problem-layer categories whose
+// canonical earliest affected node is fixed per category (category expresses
+// WHERE the root cause lives, not where it was found — v2, A3), the mandatory
+// non-empty source capability and same-run current source revision, the
+// evidence reference and the fixed status state machine
+// (OPEN → RESOLVED / ACCEPTED_RISK → SUPERSEDED).
 // Invalidation propagation along the linear NODE_CAPABILITY_IDS order is
 // computed by the run store inside the append transaction — callers never
 // submit invalidation lists. This model never invents business facts and
@@ -20,7 +23,11 @@ import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord, validateRequirementId } from "./loop-run-state";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 
-export const LOOP_FINDING_SCHEMA_VERSION = 1 as const;
+// v2 (C02-WP3.5-B, A3): a finding must name the current revision it was
+// raised against — `sourceRevisionId` is mandatory and must reference a
+// revision of the same run. The v1 schema allowed null and is not silently
+// accepted.
+export const LOOP_FINDING_SCHEMA_VERSION = 2 as const;
 
 export const LOOP_FINDING_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type LoopFindingSeverity = (typeof LOOP_FINDING_SEVERITIES)[number];
@@ -90,7 +97,7 @@ export type LoopFinding = Readonly<{
   requirementId: string;
   sequence: number;
   sourceCapability: NodeCapabilityId;
-  sourceRevisionId: string | null;
+  sourceRevisionId: string;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -113,7 +120,7 @@ export type LoopFindingDraft = Readonly<{
   requirementId: string;
   sequence: number;
   sourceCapability: NodeCapabilityId;
-  sourceRevisionId: string | null;
+  sourceRevisionId: string;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -383,11 +390,11 @@ export function validateLoopFinding(value: unknown): void {
   validateRequirementId(record.requirementId, "requirementId");
   const sequence = positiveInteger(record.sequence, "sequence");
   const sourceCapability = nodeCapabilityId(record.sourceCapability, "sourceCapability");
-  if (record.sourceRevisionId !== null) {
-    const sourceRevisionId = text(record.sourceRevisionId, "sourceRevisionId");
-    if (parseRevisionReference(sourceRevisionId, runId) === null) {
-      invalid("sourceRevisionId must reference a revision of the same run");
-    }
+  // v2 (A3): the source revision is mandatory and must reference a revision
+  // of the same run.
+  const sourceRevisionId = text(record.sourceRevisionId, "sourceRevisionId");
+  if (parseRevisionReference(sourceRevisionId, runId) === null) {
+    invalid("sourceRevisionId must reference a revision of the same run");
   }
   if (
     typeof record.severity !== "string" ||

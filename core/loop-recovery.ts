@@ -15,7 +15,12 @@ import { types as utilTypes } from "node:util";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunSnapshot } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
-import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import {
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_IDS,
+  type CapabilityExecutionRole,
+  type NodeCapabilityId,
+} from "../loop/types";
 import type {
   LoopCapabilityExecutionEvent,
   LoopCapabilityExecutionStatus,
@@ -65,6 +70,14 @@ export interface RunRecoveryContext {
   capabilityStates: readonly CapabilityRecoveryState[];
   capabilityChainStatus: "READY" | "RUNNING" | "BLOCKED" | "COMPLETED";
   nextCapability: NodeCapabilityId | null;
+  /**
+   * v2 (A2): the next dispatchable (capability, executionRole) point of the
+   * eight-point chain, or null when the chain is blocked/running/complete.
+   * The capability-level `nextCapability` is derived from it.
+   */
+  nextExecutionPoint: Readonly<{ capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }> | null;
+  /** Point-wise recovery states of the eight v2 execution points. */
+  executionPointStates: readonly ExecutionPointRecoveryState[];
   lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
 }
 
@@ -72,6 +85,7 @@ export interface CapabilityRecoveryState {
   capability: NodeCapabilityId;
   status: LoopCapabilityExecutionStatus | "not_started";
   lastAttempt: number;
+  lastExecutionRole: CapabilityExecutionRole | null;
   bindingId: string | null;
   bindingVersion: string | null;
   bindingRegistryVersion: string | null;
@@ -88,6 +102,28 @@ export interface CapabilityRecoveryState {
   errorCode: string | null;
   retryable: boolean | null;
   reasonCode: string | null;
+}
+
+/**
+ * Recovery projection of one v2 execution point (capability + executionRole):
+ * the per-capability state grouped across roles cannot distinguish
+ * solution-gate's scan and verdict progress, so dispatch decisions consume
+ * this point-wise projection.
+ */
+export interface ExecutionPointRecoveryState {
+  capability: NodeCapabilityId;
+  executionRole: CapabilityExecutionRole;
+  status: LoopCapabilityExecutionStatus | "not_started";
+  lastAttempt: number;
+  bindingId: string | null;
+  bindingVersion: string | null;
+  executorAgent: string | null;
+  effectiveOutputArtifactRef: string | null;
+  effectiveOutputArtifactVersion: string | null;
+  effectiveOutputDigest: string | null;
+  gateResult: LoopCapabilityGateResult | null;
+  nextStepEligibility: LoopNextStepEligibility | null;
+  retryable: boolean | null;
 }
 
 const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
@@ -209,14 +245,68 @@ export function recoverRunContext(
   }
   const state = snapshot.state;
   const capabilityExecutions = store.listCapabilityExecutions(snapshot.state.identity.runId);
-  const capabilityStates = NODE_CAPABILITY_IDS.map((capability): CapabilityRecoveryState => {
-    const events = capabilityExecutions.filter((event) => event.capability === capability);
+  const stateForEvents = (events: readonly LoopCapabilityExecutionEvent[]) => {
     const last = events.length === 0 ? undefined : events[events.length - 1];
     const lastSucceeded = [...events].reverse().find((event) => event.status === "succeeded");
+    return { last, lastSucceeded };
+  };
+  // v2: point-wise projection over the eight execution points. Dispatch
+  // decisions consume this; the capability-level states below aggregate both
+  // solution-gate roles for compatibility.
+  const executionPointStates = LOOP_CAPABILITY_EXECUTION_POINTS.map(
+    ({ capability, executionRole }): ExecutionPointRecoveryState => {
+      const events = capabilityExecutions.filter(
+        (event) => event.capability === capability && event.executionRole === executionRole,
+      );
+      const { last, lastSucceeded } = stateForEvents(events);
+      return Object.freeze({
+        capability,
+        executionRole,
+        status: last?.status ?? "not_started",
+        lastAttempt: last?.attempt ?? 0,
+        bindingId: last?.bindingId ?? null,
+        bindingVersion: last?.bindingVersion ?? null,
+        executorAgent: last?.executorAgent ?? null,
+        effectiveOutputArtifactRef: lastSucceeded?.outputArtifactRef ?? null,
+        effectiveOutputArtifactVersion: lastSucceeded?.outputArtifactVersion ?? null,
+        effectiveOutputDigest: lastSucceeded?.outputDigest ?? null,
+        gateResult: lastSucceeded?.gateResult ?? null,
+        nextStepEligibility: last?.nextStepEligibility ?? null,
+        retryable: last?.retryable ?? null,
+      });
+    },
+  );
+  let nextExecutionPoint: RunRecoveryContext["nextExecutionPoint"] = null;
+  for (const pointState of executionPointStates) {
+    const point = {
+      capability: pointState.capability,
+      executionRole: pointState.executionRole,
+    };
+    if (pointState.status === "failed") {
+      nextExecutionPoint = pointState.retryable === true ? point : null;
+      break;
+    }
+    if (pointState.status === "started") {
+      nextExecutionPoint = null;
+      break;
+    }
+    if (pointState.status === "not_started") {
+      nextExecutionPoint = point;
+      break;
+    }
+    if (pointState.nextStepEligibility !== "ELIGIBLE") {
+      nextExecutionPoint = null;
+      break;
+    }
+  }
+  const capabilityStates = NODE_CAPABILITY_IDS.map((capability): CapabilityRecoveryState => {
+    const events = capabilityExecutions.filter((event) => event.capability === capability);
+    const { last, lastSucceeded } = stateForEvents(events);
     return Object.freeze({
       capability,
       status: last?.status ?? "not_started",
       lastAttempt: last?.attempt ?? 0,
+      lastExecutionRole: last?.executionRole ?? null,
       bindingId: last?.bindingId ?? null,
       bindingVersion: last?.bindingVersion ?? null,
       bindingRegistryVersion: last?.bindingRegistryVersion ?? null,
@@ -235,40 +325,20 @@ export function recoverRunContext(
       reasonCode: last?.reasonCode ?? null,
     });
   });
-  let nextCapability: NodeCapabilityId | null = null;
-  for (const capabilityState of capabilityStates) {
-    if (capabilityState.status === "failed") {
-      nextCapability = capabilityState.retryable === true ? capabilityState.capability : null;
-      break;
-    }
-    // An active claim is not dispatchable work: it must first be closed by the
-    // supported entry's interruption recovery path. Reporting it as the next
-    // capability would promise a transition that the journal correctly
-    // rejects while the started attempt remains open.
-    if (capabilityState.status === "started") {
-      nextCapability = null;
-      break;
-    }
-    if (capabilityState.status === "not_started") {
-      nextCapability = capabilityState.capability;
-      break;
-    }
-    if (capabilityState.nextStepEligibility !== "ELIGIBLE") {
-      nextCapability = null;
-      break;
-    }
-  }
   const lastCapabilityExecution = capabilityExecutions.length === 0
     ? null
     : capabilityExecutions[capabilityExecutions.length - 1]!;
+  // v2: the chain status and next pointer derive from the point-wise
+  // projection; `nextCapability` stays as the capability projection of it.
   const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
-    capabilityStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
+    executionPointStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
       ? "COMPLETED"
       : lastCapabilityExecution?.status === "started"
         ? "RUNNING"
-        : lastCapabilityExecution !== null && nextCapability === null
+        : lastCapabilityExecution !== null && nextExecutionPoint === null
           ? "BLOCKED"
           : "READY";
+  const nextCapability = nextExecutionPoint?.capability ?? null;
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
@@ -283,6 +353,8 @@ export function recoverRunContext(
     capabilityStates: Object.freeze(capabilityStates),
     capabilityChainStatus,
     nextCapability,
+    nextExecutionPoint: nextExecutionPoint === null ? null : Object.freeze(nextExecutionPoint),
+    executionPointStates: Object.freeze(executionPointStates),
     lastCapabilityExecution,
     lastExecution:
       lastExecutionEvent === undefined

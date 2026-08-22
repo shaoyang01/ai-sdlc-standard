@@ -90,16 +90,17 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 
 function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     executionEventId: "run-001:capability:1:started",
     runId: "run-001",
     sequence: 1,
     capability: "requirement-intake",
+    executionRole: "primary",
     nodeId: "requirement-intake",
     attempt: 1,
     status: "started",
     createdAt: nextTs(),
-    bindingId: "binding-codex-requirement-intake",
+    bindingId: "binding-codex-requirement-intake-primary",
     bindingVersion: "1.0.0",
     bindingRegistryVersion: "1",
     executorAgent: "codex",
@@ -1100,95 +1101,39 @@ console.log("change classification: closed store behavior");
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("change classification: v2 to v3 migration is atomic and retryable");
+console.log("change classification: pre-v6 journals are rejected as unsupported history");
 {
   const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  // Simulate a pre-WP1 journal: no change tables, format marker v2.
-  const v2 = new Database(path);
-  for (const table of [
-    "loop_change_trigger_evidence", "loop_change_confirmed_facts",
-    "loop_change_source_refs", "loop_requirement_changes",
-  ]) {
-    v2.exec(`DROP TABLE ${table}`);
+  // A journal marked v3 is known history: init refuses it outright — no
+  // v2→v3 semantic migration survives the v6 cutover.
+  const historicalPath = join(dir, "historical.db");
+  const seed = new Database(historicalPath);
+  seed.pragma("user_version = 3");
+  seed.close();
+  const rejected = new LoopRunStore(historicalPath);
+  let historicalRejected = false;
+  try {
+    rejected.init();
+  } catch (error) {
+    historicalRejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
   }
-  v2.pragma("user_version = 2");
-  v2.close();
-  const store2 = new LoopRunStore(path);
-  store2.init();
-  assert(store2.getSnapshot("run-001") !== undefined, "v2 run remains readable after v3 migration");
-  assert(store2.listRequirementChanges("run-001").length === 0, "migrated journal has an empty change chain");
-  store2.close();
-  const migrated = new Database(path, { readonly: true });
-  assert(migrated.pragma("user_version", { simple: true }) === 5, "migration atomically records format v5");
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_requirement_changes'").get() !== undefined,
-    "migration creates the requirement change table",
-  );
-  migrated.close();
+  assert(historicalRejected, "v3 journal rejected with UNSUPPORTED_HISTORICAL_FORMAT");
   rmSync(dir, { recursive: true, force: true });
 }
 {
+  // A fresh store still initializes to v6 and reads back empty.
   const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
   const path = join(dir, "journal.db");
   const store1 = new LoopRunStore(path);
   store1.init();
   store1.createRun(makeIdentity());
+  assert(store1.listRequirementChanges("run-001").length === 0, "fresh v6 journal has an empty change chain");
   store1.close();
-  const v2 = new Database(path);
-  for (const table of [
-    "loop_change_trigger_evidence", "loop_change_confirmed_facts",
-    "loop_change_source_refs", "loop_requirement_changes",
-  ]) {
-    v2.exec(`DROP TABLE ${table}`);
-  }
-  v2.pragma("user_version = 2");
-  // A bogus pre-existing table makes the migration's schema verification fail.
-  v2.exec("CREATE TABLE loop_requirement_changes (bogus TEXT)");
-  v2.close();
-  const store2 = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store2.init(), "wrong-schema change table aborts migration");
-  store2.close();
   const probe = new Database(path, { readonly: true });
-  assert(probe.pragma("user_version", { simple: true }) === 2, "user_version unchanged after migration rollback");
-  assert(
-    probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_change_source_refs'").get() === undefined,
-    "child tables not persisted after rollback",
-  );
+  assert(probe.pragma("user_version", { simple: true }) === 6, "fresh journal records format v6");
   probe.close();
-  // The failed migration is retryable: removing the bogus table lets init succeed.
-  const fix = new Database(path);
-  fix.exec("DROP TABLE loop_requirement_changes");
-  fix.close();
-  const store3 = new LoopRunStore(path);
-  store3.init();
-  assert(store3.getSnapshot("run-001") !== undefined, "repaired journal migrates and reads back");
-  store3.close();
-  const retry = new Database(path, { readonly: true });
-  assert(retry.pragma("user_version", { simple: true }) === 5, "retry completes the v5 migration");
-  retry.close();
   rmSync(dir, { recursive: true, force: true });
 }
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-change-cls-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  const raw = new Database(path);
-  raw.exec("DROP TABLE loop_requirement_changes");
-  raw.close();
-  const store2 = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store2.init(), "v3 marker with missing change table is rejected");
-  store2.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-
 console.log(`Results: ${passed} passed, ${failed} failed`);
 if (failed > 0) {
   process.exitCode = 1;

@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 
-import { NODE_CAPABILITY_IDS } from "../loop/types";
+import { LOOP_CAPABILITY_EXECUTION_POINTS, NODE_CAPABILITY_IDS } from "../loop/types";
 import {
   INITIAL_BINDING_REGISTRY,
   getBinding,
@@ -45,6 +45,7 @@ const AGENTS = ["codex", "kimi", "hermes"] as const;
 const BINDING_FIELDS = [
   "bindingId",
   "capability",
+  "executionRole",
   "agent",
   "adapter",
   "bindingVersion",
@@ -98,31 +99,46 @@ function makeRequest(type: ExecutionRequestType, capability: string): ExecutionR
 }
 
 async function main(): Promise<void> {
-console.log("binding: full-capability matrix (7 capabilities x 3 agents)");
-assert(INITIAL_BINDING_REGISTRY.bindings.length === 21, "exactly 21 bindings");
+console.log("binding: full-capability/role matrix (8 execution points x 3 agents)");
+assert(INITIAL_BINDING_REGISTRY.bindings.length === 24, "exactly 24 bindings");
 {
-  const pairs = new Set(INITIAL_BINDING_REGISTRY.bindings.map((b) => `${b.agent}:${b.capability}`));
-  assert(pairs.size === 21, "agent:capability pairs are unique");
+  const slots = new Set(
+    INITIAL_BINDING_REGISTRY.bindings.map((b) => `${b.agent}:${b.capability}:${b.executionRole}`),
+  );
+  assert(slots.size === 24, "agent:capability:role slots are unique");
   for (const agent of AGENTS) {
-    for (const capability of NODE_CAPABILITY_IDS) {
-      assert(pairs.has(`${agent}:${capability}`), `binding exists for ${agent}:${capability}`);
+    for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+      assert(
+        slots.has(`${agent}:${point.capability}:${point.executionRole}`),
+        `binding exists for ${agent}:${point.capability}:${point.executionRole}`,
+      );
     }
   }
   const ids = new Set(INITIAL_BINDING_REGISTRY.bindings.map((b) => b.bindingId));
-  assert(ids.size === 21, "bindingIds are unique");
+  assert(ids.size === 24, "bindingIds are unique");
   for (const id of ids) {
-    assert(/^binding-[a-z]+-[a-z]+(-[a-z]+)*$/.test(id), `bindingId ${id} matches format`);
+    assert(/^binding-[a-z]+-[a-z-]+-(primary|adversarial_scan|formal_verdict)$/.test(id), `bindingId ${id} matches format`);
   }
 }
 
-console.log("binding: initial enablement (codex enabled, kimi/hermes disabled)");
+console.log("binding: initial enablement (codex enabled, kimi/hermes disabled, per role slot)");
+for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-codex-${point.capability}-${point.executionRole}`)?.enabled === true, `codex ${point.capability}/${point.executionRole} enabled`);
+  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-kimi-${point.capability}-${point.executionRole}`)?.enabled === false, `kimi ${point.capability}/${point.executionRole} disabled`);
+  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-hermes-${point.capability}-${point.executionRole}`)?.enabled === false, `hermes ${point.capability}/${point.executionRole} disabled`);
+  // Exactly one enabled binding per (capability, role) slot (fail-closed invariant).
+  const enabled = getEnabledBinding(INITIAL_BINDING_REGISTRY, point.capability, point.executionRole);
+  assert(enabled.bindingId === `binding-codex-${point.capability}-${point.executionRole}`, `slot ${point.capability}/${point.executionRole} has exactly one enabled binding`);
+}
+// solution-gate carries exactly the two fixed roles; every other node primary.
 for (const capability of NODE_CAPABILITY_IDS) {
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-codex-${capability}`)?.enabled === true, `codex ${capability} enabled`);
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-kimi-${capability}`)?.enabled === false, `kimi ${capability} disabled`);
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-hermes-${capability}`)?.enabled === false, `hermes ${capability} disabled`);
-  // Exactly one enabled binding per capability (fail-closed invariant).
-  const enabled = getEnabledBinding(INITIAL_BINDING_REGISTRY, capability);
-  assert(enabled.bindingId === `binding-codex-${capability}`, `capability ${capability} has exactly one enabled binding`);
+  const roles = [...new Set(
+    INITIAL_BINDING_REGISTRY.bindings
+      .filter((b) => b.capability === capability)
+      .map((b) => b.executionRole),
+  )].sort();
+  const expected = capability === "solution-gate" ? ["adversarial_scan", "formal_verdict"] : ["primary"];
+  assert(JSON.stringify(roles) === JSON.stringify(expected), `capability ${capability} binds roles ${expected.join("/")}`);
 }
 
 console.log("binding: schema integrity");
@@ -184,9 +200,12 @@ console.log("binding: TS-AST lock on interface field set (fail-closed)");
 console.log("binding: no Git fields anywhere");
 {
   const gitWords = ["commit", "push", "pr", "merge", "publish", "repository", "branch"];
-  const fieldsJson = JSON.stringify(INITIAL_BINDING_REGISTRY.bindings).toLowerCase();
+  // Match field NAMES only (key pattern), not arbitrary values — the role
+  // value "primary" legitimately contains the substring "pr".
+  const keys = Object.keys(INITIAL_BINDING_REGISTRY.bindings[0] as unknown as Record<string, unknown>);
+  const fieldsJson = JSON.stringify(keys).toLowerCase();
   for (const word of gitWords) {
-    assert(!fieldsJson.includes(`"${word}`), `no Git field '${word}' in binding schema or values`);
+    assert(!fieldsJson.includes(`"${word}"`), `no Git field '${word}' in binding schema`);
   }
 }
 
@@ -210,21 +229,21 @@ console.log("binding: replaceBinding returns usable immutable snapshot");
 {
   const result = replaceBinding(
     INITIAL_BINDING_REGISTRY,
-    "binding-codex-implementation",
-    "binding-kimi-implementation",
+    "binding-codex-implementation-primary",
+    "binding-kimi-implementation-primary",
   );
   const next = result.registry;
-  assert(result.disabled.bindingId === "binding-codex-implementation" && result.disabled.enabled === false, "codex binding disabled in snapshot");
-  assert(result.enabled.bindingId === "binding-kimi-implementation" && result.enabled.enabled === true, "kimi binding enabled in snapshot");
+  assert(result.disabled.bindingId === "binding-codex-implementation-primary" && result.disabled.enabled === false, "codex binding disabled in snapshot");
+  assert(result.enabled.bindingId === "binding-kimi-implementation-primary" && result.enabled.enabled === true, "kimi binding enabled in snapshot");
 
-  // The new snapshot is usable: the enabled binding resolves per capability.
-  const enabled = getEnabledBinding(next, "implementation");
-  assert(enabled.bindingId === "binding-kimi-implementation", "snapshot resolves kimi as enabled executor for implementation");
+  // The new snapshot is usable: the enabled binding resolves per slot.
+  const enabled = getEnabledBinding(next, "implementation", "primary");
+  assert(enabled.bindingId === "binding-kimi-implementation-primary", "snapshot resolves kimi as enabled executor for implementation/primary");
   assert(enabled.agent === "kimi", "snapshot enabled executor agent is kimi");
 
   // The input registry is untouched.
   assert(
-    getBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation")?.enabled === true,
+    getBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation-primary")?.enabled === true,
     "initial registry unchanged by replaceBinding",
   );
 
@@ -235,11 +254,11 @@ console.log("binding: replaceBinding returns usable immutable snapshot");
     assert(Object.isFrozen(binding), `snapshot binding ${binding.bindingId} frozen`);
   }
 
-  // Every capability still has exactly one enabled binding in the snapshot.
-  for (const capability of NODE_CAPABILITY_IDS) {
-    getEnabledBinding(next, capability);
+  // Every execution point still has exactly one enabled binding in the snapshot.
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    getEnabledBinding(next, point.capability, point.executionRole);
   }
-  assert(true, "every capability keeps exactly one enabled binding after replacement");
+  assert(true, "every execution point keeps exactly one enabled binding after replacement");
 
   // Node contracts untouched by replacement.
   assert(JSON.stringify(NODE_CAPABILITY_CONTRACTS).includes('"capability":"implementation"'), "node contracts intact");
@@ -247,7 +266,7 @@ console.log("binding: replaceBinding returns usable immutable snapshot");
   // Invalid replacements rejected.
   let crossCapabilityRejected = false;
   try {
-    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation", "binding-kimi-requirement-intake");
+    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation-primary", "binding-kimi-requirement-intake-primary");
   } catch {
     crossCapabilityRejected = true;
   }
@@ -255,7 +274,7 @@ console.log("binding: replaceBinding returns usable immutable snapshot");
 
   let unknownRejected = false;
   try {
-    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-unknown-x", "binding-kimi-implementation");
+    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-unknown-x", "binding-kimi-implementation-primary");
   } catch {
     unknownRejected = true;
   }
@@ -263,7 +282,7 @@ console.log("binding: replaceBinding returns usable immutable snapshot");
 
   let sameAgentRejected = false;
   try {
-    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation", "binding-codex-requirement-intake");
+    replaceBinding(INITIAL_BINDING_REGISTRY, "binding-codex-implementation-primary", "binding-codex-requirement-intake-primary");
   } catch {
     sameAgentRejected = true;
   }

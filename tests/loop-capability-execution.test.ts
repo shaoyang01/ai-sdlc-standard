@@ -29,7 +29,12 @@ import {
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
 import { RUNTIME_CAPABILITY_BY_EXECUTION_POINT } from "../core/runtime-capability-map";
-import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import {
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_IDS,
+  type CapabilityExecutionRole,
+  type NodeCapabilityId,
+} from "../loop/types";
 import { createArtifact } from "../core/artifact";
 
 let passed = 0;
@@ -80,12 +85,13 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     runId: "run-wp4b-001",
     sequence: 1,
     capability: "requirement-intake",
+    executionRole: "primary",
     nodeId: "requirement-intake",
     attempt: 1,
     status: "started",
     createdAt: TS,
-    bindingId: "binding-codex-requirement-intake",
-    bindingVersion: "1.0.0",
+    bindingId: "binding-codex-requirement-intake-primary",
+    bindingVersion: "2.0.0",
     bindingRegistryVersion: "1",
     executorAgent: "codex",
     executorAdapter: "codex-real-dispatch",
@@ -173,6 +179,7 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
     requirementId: id.requirementId,
     identity: id,
     capability: "requirement-intake",
+    executionRole: "primary" as const,
     inputArtifactRef: source.artifactRef,
     inputArtifactVersion: "1.0.0",
     inputDigest: source.digest,
@@ -197,6 +204,7 @@ function techRequest(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>
   return Object.freeze({
     requirementId: fixture.id.requirementId,
     capability: "solution-design" as const,
+    executionRole: "primary" as const,
     inputArtifactRef: fixture.techInput.artifactRef,
     inputArtifactVersion: fixture.techInput.version,
     inputDigest: fixture.techInput.digest,
@@ -240,8 +248,15 @@ async function main(): Promise<void> {
     executionEventId: "run-wp4b-001:capability:1:failed",
     status: "failed", nextStepEligibility: "ELIGIBLE", errorCode: "X", retryable: true,
   })), "failed execution cannot make next step eligible");
+  // v2 (A2): the execution role is a required, capability-bound scalar.
+  throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({
+    executionRole: "adversarial_scan" as CapabilityExecutionRole,
+  })), "primary node cannot claim a gate role");
+  throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionEvent(event({
+    bindingId: "binding-codex-requirement-intake",
+  })), "bindingId must carry agent, capability and role");
   throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionChain([
-    event({ capability: "solution-design", nodeId: "solution-design", bindingId: "binding-codex-solution-design" }),
+    event({ capability: "solution-design", nodeId: "solution-design", bindingId: "binding-codex-solution-design-primary" }),
   ], "run-wp4b-001"), "capability chain cannot skip requirement intake");
   ok(canonicalizeLoopCapabilityExecutionEvent(event()).includes('"executorAgent":"codex"'), "canonical form contains executor snapshot");
 
@@ -267,33 +282,200 @@ async function main(): Promise<void> {
     "solution-gate", "GATE_RESULT: PASS\nGATE_RESULT: FAIL",
   )["gateResult"] === undefined, "duplicate Gate markers fail closed");
 
-  console.log("WP-4B: v1 journal migration and v2 schema marker are fail-closed");
+  console.log("WP3.5-B: journal v6 cutover is declarative and fail-closed");
   const migrationRoot = mkdtempSync(join(tmpdir(), "loop-wp4b-migration-"));
   try {
     mkdirSync(join(migrationRoot, "repo"));
-    const migrationPath = join(migrationRoot, "journal.db");
-    const migrationStore = new LoopRunStore(migrationPath);
-    migrationStore.init();
-    migrationStore.createRun(identity(migrationRoot));
-    migrationStore.close();
-    const v1 = new Database(migrationPath);
-    v1.exec("DROP TABLE loop_capability_executions");
-    v1.pragma("user_version = 1");
-    v1.close();
-    const upgraded = new LoopRunStore(migrationPath);
-    upgraded.init();
-    ok(upgraded.getSnapshot("run-wp4b-001") !== undefined, "v1 run remains readable after v2 migration");
-    upgraded.close();
-    const migrated = new Database(migrationPath);
-    ok(migrated.pragma("user_version", { simple: true }) === 5, "v1 migration atomically records format v5");
-    ok(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='loop_capability_executions'").get() !== undefined,
-      "v1 migration creates the capability execution table");
-    migrated.exec("DROP TABLE loop_capability_executions");
-    migrated.close();
-    const corruptV2 = new LoopRunStore(migrationPath);
-    throwsCode("STORE_CORRUPT", () => corruptV2.init(), "current marker with missing capability table is rejected");
+    // A supported v6 store initializes and stays readable.
+    const v6Path = join(migrationRoot, "journal.db");
+    const v6Store = new LoopRunStore(v6Path);
+    v6Store.init();
+    v6Store.createRun(identity(migrationRoot));
+    v6Store.close();
+    const v6db = new Database(v6Path);
+    ok(v6db.pragma("user_version", { simple: true }) === 6, "fresh store declares format v6");
+    v6db.close();
+    const reopened = new LoopRunStore(v6Path);
+    reopened.init();
+    ok(reopened.getSnapshot("run-wp4b-001") !== undefined, "v6 run remains readable");
+    reopened.close();
+
+    // Known historical formats 1..5 are rejected — never migrated.
+    for (const historical of [1, 2, 3, 4, 5]) {
+      const historicalPath = join(migrationRoot, `historical-${historical}.db`);
+      const seed = new Database(historicalPath);
+      seed.pragma(`user_version = ${historical}`);
+      seed.close();
+      const rejected = new LoopRunStore(historicalPath);
+      throwsCode("UNSUPPORTED_HISTORICAL_FORMAT", () => rejected.init(), `format ${historical} is rejected as unsupported history`);
+    }
+
+    // A declared version above the supported one is a future format.
+    const futurePath = join(migrationRoot, "future.db");
+    const futureSeed = new Database(futurePath);
+    futureSeed.pragma("user_version = 7");
+    futureSeed.close();
+    const futureRejected = new LoopRunStore(futurePath);
+    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 7 is rejected as a future format");
+
+    // An unversioned database that already carries LOOP business tables is
+    // history, never a fresh store; an empty v0 database initializes fresh.
+    const unversionedPath = join(migrationRoot, "unversioned.db");
+    const unversionedSeed = new Database(unversionedPath);
+    unversionedSeed.exec("CREATE TABLE loop_runs (run_id TEXT PRIMARY KEY)");
+    unversionedSeed.close();
+    const unversionedRejected = new LoopRunStore(unversionedPath);
+    throwsCode("UNSUPPORTED_HISTORICAL_FORMAT", () => unversionedRejected.init(), "unversioned database with LOOP tables is rejected as history");
+
+    const freshPath = join(migrationRoot, "fresh-empty.db");
+    new Database(freshPath).close();
+    const freshStore = new LoopRunStore(freshPath);
+    freshStore.init();
+    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 6, "empty unversioned database initializes fresh to v6");
+    freshStore.close();
+
+    // Inside the declared v6 format, drift is STORE_CORRUPT — not a format
+    // error.
+    const corruptV6 = new Database(v6Path);
+    corruptV6.exec("DROP TABLE loop_capability_executions");
+    corruptV6.close();
+    const corruptRejected = new LoopRunStore(v6Path);
+    throwsCode("STORE_CORRUPT", () => corruptRejected.init(), "v6 marker with missing capability table is corrupt inside the supported format");
   } finally {
     rmSync(migrationRoot, { recursive: true, force: true });
+  }
+
+  console.log("WP3.5-B: eight-point chain enforces scan/verdict separation");
+  {
+    const ledgerDigest = "e".repeat(64);
+    const ledgerRef = `loop-artifact:v1:capability_findings:sha256:${ledgerDigest}`;
+    const scanOutputDigest = "f".repeat(64);
+    const scanOutputRef = `loop-artifact:v1:solution_review:sha256:${scanOutputDigest}`;
+    // solution-design consumes the intake product and produces the design.
+    const intakeProductDigest = "b".repeat(64);
+    const intakeProductRef = `loop-artifact:v1:requirement_summary:sha256:${intakeProductDigest}`;
+    const designDigest = "c".repeat(64);
+    const designRef = `loop-artifact:v1:technical_design:sha256:${designDigest}`;
+    const intakeOutput = event({
+      executionEventId: "run-wp4b-001:capability:2:succeeded",
+      sequence: 2,
+      status: "succeeded",
+      outputArtifactRef: intakeProductRef,
+      outputArtifactVersion: "1.0.0",
+      outputDigest: intakeProductDigest,
+      gateResult: "NOT_APPLICABLE",
+      nextStepEligibility: "ELIGIBLE",
+    });
+    const designStarted = event({
+      executionEventId: "run-wp4b-001:capability:3:started",
+      sequence: 3,
+      capability: "solution-design",
+      nodeId: "solution-design",
+      attempt: 1,
+      bindingId: "binding-codex-solution-design-primary",
+      inputArtifactRef: intakeProductRef,
+      inputArtifactVersion: "1.0.0",
+      inputDigest: intakeProductDigest,
+    });
+    const designSucceeded = event({
+      ...designStarted,
+      executionEventId: "run-wp4b-001:capability:4:succeeded",
+      sequence: 4,
+      status: "succeeded",
+      outputArtifactRef: designRef,
+      outputArtifactVersion: "1.0.0",
+      outputDigest: designDigest,
+      gateResult: "NOT_APPLICABLE",
+      nextStepEligibility: "ELIGIBLE",
+    });
+    const scanStarted = event({
+      executionEventId: "run-wp4b-001:capability:5:started",
+      sequence: 5,
+      capability: "solution-gate",
+      executionRole: "adversarial_scan",
+      nodeId: "solution-gate",
+      attempt: 1,
+      bindingId: "binding-codex-solution-gate-adversarial_scan",
+      inputArtifactRef: designRef,
+      inputArtifactVersion: "1.0.0",
+      inputDigest: designDigest,
+    });
+    const scanSucceeded = event({
+      ...scanStarted,
+      executionEventId: "run-wp4b-001:capability:6:succeeded",
+      sequence: 6,
+      status: "succeeded",
+      outputArtifactRef: scanOutputRef,
+      outputArtifactVersion: "1.0.0",
+      outputDigest: scanOutputDigest,
+      gateResult: "NOT_APPLICABLE",
+      nextStepEligibility: "ELIGIBLE",
+      unresolvedFindingsRef: ledgerRef,
+      unresolvedFindingsDigest: ledgerDigest,
+    });
+    validateLoopCapabilityExecutionChain([event(), intakeOutput, designStarted, designSucceeded, scanStarted, scanSucceeded], "run-wp4b-001");
+    ok(true, "scan role succeeds with NOT_APPLICABLE Gate despite carrying findings");
+
+    // The verdict dispatch to the SAME agent fails closed at the chain level.
+    const verdictSameAgent = event({
+      executionEventId: "run-wp4b-001:capability:7:started",
+      sequence: 7,
+      capability: "solution-gate",
+      executionRole: "formal_verdict",
+      nodeId: "solution-gate",
+      attempt: 1,
+      bindingId: "binding-codex-solution-gate-formal_verdict",
+      inputArtifactRef: scanOutputRef,
+      inputArtifactVersion: "1.0.0",
+      inputDigest: scanOutputDigest,
+    });
+    throwsCode(
+      "INVALID_INPUT",
+      () => validateLoopCapabilityExecutionChain([event(), intakeOutput, designStarted, designSucceeded, scanStarted, scanSucceeded, verdictSameAgent], "run-wp4b-001"),
+      "formal_verdict dispatched to the adversarial_scan agent is rejected",
+    );
+
+    // A different agent may take the verdict, and it must return a conclusive
+    // Gate result on success.
+    const verdictStarted = event({
+      ...verdictSameAgent,
+      executorAgent: "hermes" as const,
+      executorAdapter: "hermes-cli",
+      bindingId: "binding-hermes-solution-gate-formal_verdict",
+      inputArtifactRef: scanOutputRef,
+      inputDigest: scanOutputDigest,
+    });
+    const reviewDigest = "d".repeat(64);
+    const reviewRef = `loop-artifact:v1:solution_review:sha256:${reviewDigest}`;
+    throwsCode("INVALID_INPUT", () => validateLoopCapabilityExecutionChain([
+      event(), intakeOutput, designStarted, designSucceeded, scanStarted, scanSucceeded, verdictStarted,
+      event({
+        ...verdictStarted,
+        executionEventId: "run-wp4b-001:capability:8:succeeded",
+        sequence: 8,
+        status: "succeeded",
+        outputArtifactRef: reviewRef,
+        outputArtifactVersion: "1.0.0",
+        outputDigest: reviewDigest,
+        gateResult: "NOT_APPLICABLE",
+        nextStepEligibility: "ELIGIBLE",
+      }),
+    ], "run-wp4b-001"), "formal_verdict success without a conclusive Gate result is rejected");
+    validateLoopCapabilityExecutionChain([
+      event(), intakeOutput, designStarted, designSucceeded, scanStarted, scanSucceeded, verdictStarted,
+      event({
+        ...verdictStarted,
+        executionEventId: "run-wp4b-001:capability:8:succeeded",
+        sequence: 8,
+        status: "succeeded",
+        outputArtifactRef: reviewRef,
+        outputArtifactVersion: "1.0.0",
+        outputDigest: reviewDigest,
+        gateResult: "PASS_WITH_RISK",
+        nextStepEligibility: "ELIGIBLE",
+      }),
+    ], "run-wp4b-001");
+    ok(true, "different-agent formal_verdict with a conclusive Gate completes the node");
   }
 
   console.log("WP-4B: execution claim is exclusive across the two journal streams");
@@ -317,7 +499,7 @@ async function main(): Promise<void> {
     rmSync(claimRoot, { recursive: true, force: true });
   }
 
-  console.log("WP-4B: Gate-producing capabilities fail closed without a structured Gate result");
+  console.log("WP3.5-B: traced scan dispatch succeeds and the same-agent verdict dispatch is firewalled");
   const gateRoot = mkdtempSync(join(tmpdir(), "loop-wp4b-gate-"));
   try {
     mkdirSync(join(gateRoot, "repo"));
@@ -342,7 +524,7 @@ async function main(): Promise<void> {
         sequence,
         capability,
         nodeId,
-        bindingId: `binding-codex-${capability}`,
+        bindingId: `binding-codex-${capability}-primary`,
         inputArtifactRef: inputRef,
         inputDigest,
       });
@@ -358,7 +540,7 @@ async function main(): Promise<void> {
         outputArtifactRef: outputRef,
         outputArtifactVersion: "1.0.0",
         outputDigest,
-        gateResult: capability === "solution-gate" ? "PASS" : "NOT_APPLICABLE",
+        gateResult: "NOT_APPLICABLE",
         nextStepEligibility: "ELIGIBLE",
       }));
       inputRef = outputRef;
@@ -367,24 +549,7 @@ async function main(): Promise<void> {
     }
     const gateGateway = new ExecutionGateway({
       env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexRunner: {
-        run: async (request) => ({
-          success: true,
-          node: request.node,
-          agent: request.agent,
-          output: { result: "capability_completed" },
-          artifacts: [createArtifact({
-            id: "solution-gate-without-gate",
-            requirementId: request.requirementId,
-            node: request.node,
-            type: "solution_review",
-            content: { node_output: "review completed but no machine Gate" },
-            agent: request.agent,
-            source: "execution_gateway",
-            createdAt: TS,
-          })],
-        }),
-      },
+      codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
       capabilityTracing: {
         runStore: gateStore,
         artifactStore: gateArtifacts,
@@ -393,7 +558,8 @@ async function main(): Promise<void> {
         now: () => TS,
       },
     });
-    const gateResult = await gateGateway.execute({
+    // The adversarial_scan dispatch runs first and never writes a Gate result.
+    const scanResult = await gateGateway.execute({
       type: "solution-gate",
       node: "solution-gate",
       agent: "codex",
@@ -402,24 +568,47 @@ async function main(): Promise<void> {
       loopExecution: {
         runId: gateIdentity.runId,
         attempt: 1,
+        executionRole: "adversarial_scan" as CapabilityExecutionRole,
         inputArtifactRef: inputRef,
         inputArtifactVersion: "1.0.0",
         inputDigest,
         outputArtifactVersion: "1.0.0",
       },
     });
-    ok(gateResult.success === false, "missing Gate result is not reported as capability success");
+    ok(scanResult.success === true, "adversarial_scan dispatch succeeds without a Gate marker");
     const gateEvents = gateStore.listCapabilityExecutions(gateIdentity.runId);
-    ok(gateEvents.at(-1)?.status === "failed", "missing Gate result becomes a durable failed attempt");
-    ok(gateEvents.at(-1)?.errorCode === "OUTPUT_CONTRACT_VIOLATION", "failed Gate outcome records a stable reason code");
-    ok(gateEvents.at(-1)?.outputArtifactRef === null, "missing Gate result never produces an effective output artifact");
+    ok(gateEvents.at(-1)?.status === "succeeded", "scan outcome is recorded as a succeeded attempt");
+    ok(gateEvents.at(-1)?.executionRole === "adversarial_scan", "scan attempt records the adversarial_scan role");
+    ok(gateEvents.at(-1)?.gateResult === "NOT_APPLICABLE", "scan Gate result is fixed to NOT_APPLICABLE");
+
+    // The formal_verdict dispatch to the SAME agent is firewalled before
+    // dispatch (the store re-validates before promotion).
+    const gateEntry = new LoopCapabilityEntry({
+      runStore: gateStore,
+      artifactStore: gateArtifacts,
+      bindingRegistry: INITIAL_BINDING_REGISTRY,
+      gateway: gateGateway,
+      now: () => TS,
+    });
+    // The verdict consumes the scan's effective output triple.
+    const scanEvent = gateEvents.at(-1)!;
+    await rejectsCode("ILLEGAL_TRANSITION", () => gateEntry.execute({
+      requirementId: gateIdentity.requirementId,
+      capability: "solution-gate",
+      executionRole: "formal_verdict",
+      inputArtifactRef: scanEvent.outputArtifactRef!,
+      inputArtifactVersion: scanEvent.outputArtifactVersion!,
+      inputDigest: scanEvent.outputDigest!,
+      outputArtifactVersion: "1.0.0",
+      input: { designRef: inputRef },
+    }), "same-agent formal_verdict dispatch is rejected by the pre-dispatch firewall");
     gateArtifacts.close();
     gateStore.close();
   } finally {
     rmSync(gateRoot, { recursive: true, force: true });
   }
 
-  console.log("WP-4B: supported entry completes and recovers the full seven-capability chain");
+  console.log("WP3.5-B: supported entry completes and recovers the full eight-point chain");
   const chainRoot = mkdtempSync(join(tmpdir(), "loop-wp4b-chain-"));
   try {
     mkdirSync(join(chainRoot, "repo"));
@@ -431,21 +620,95 @@ async function main(): Promise<void> {
     });
     chainStore.init();
     chainArtifacts.init();
-    const chainGateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
-      capabilityTracing: {
-        runStore: chainStore,
-        artifactStore: chainArtifacts,
-        bindingRegistry: INITIAL_BINDING_REGISTRY,
-        executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
-        now: () => TS,
+    // v2: the formal_verdict slot is bound to a second agent so the scan and
+    // verdict roles of one solution-gate round are provably executed by
+    // different agents.
+    const chainRegistry = replaceBinding(
+      INITIAL_BINDING_REGISTRY,
+      "binding-codex-solution-gate-formal_verdict",
+      "binding-hermes-solution-gate-formal_verdict",
+    ).registry;
+    const stubNow = (): string => TS;
+    const chainGateway = {
+      execute: async (request: import("../execution/types").ExecutionRequest) => {
+        const context = request.loopExecution as Record<string, unknown>;
+        const runId = String(context.runId);
+        const capability = request.type as NodeCapabilityId;
+        const executionRole = String(context.executionRole);
+        const agent = (request.agent ?? "codex") as "codex" | "kimi" | "hermes";
+        const existing = chainStore.listCapabilityExecutions(runId);
+        const sequence = existing.length + 1;
+        const base = {
+          schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+          runId,
+          capability,
+          executionRole: executionRole as CapabilityExecutionRole,
+          nodeId: String(request.node),
+          attempt: Number(context.attempt),
+          bindingId: `binding-${agent}-${capability}-${executionRole}`,
+          bindingVersion: "2.0.0",
+          bindingRegistryVersion: chainRegistry.version,
+          executorAgent: agent,
+          executorAdapter: agent === "codex" ? "codex-real-dispatch" : `${agent}-cli`,
+          executorVersion: "1.0.0",
+          inputArtifactRef: String(context.inputArtifactRef),
+          inputArtifactVersion: String(context.inputArtifactVersion),
+          inputDigest: String(context.inputDigest),
+        };
+        chainStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence}:started`,
+          sequence,
+          status: "started" as const,
+          createdAt: stubNow(),
+          outputArtifactRef: null,
+          outputArtifactVersion: null,
+          outputDigest: null,
+          gateResult: null,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: null,
+          errorCode: null,
+          retryable: null,
+          reasonCode: null,
+        }));
+        const output = chainArtifacts.put(
+          CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
+          `stub node product for ${capability}/${executionRole} @${sequence}`,
+        );
+        const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
+          ? "PASS" as const
+          : "NOT_APPLICABLE" as const;
+        chainStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence + 1}:succeeded`,
+          sequence: sequence + 1,
+          status: "succeeded" as const,
+          createdAt: stubNow(),
+          outputArtifactRef: output.artifactRef,
+          outputArtifactVersion: String(context.outputArtifactVersion),
+          outputDigest: output.digest,
+          gateResult,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: "ELIGIBLE" as const,
+          errorCode: null,
+          retryable: null,
+          reasonCode: null,
+        }));
+        return Object.freeze({
+          success: true,
+          node: request.node,
+          agent,
+          output: Object.freeze({ result: "capability_completed" }),
+          artifacts: Object.freeze([]),
+        });
       },
-    });
+    } as unknown as ExecutionGateway;
     const chainEntry = new LoopCapabilityEntry({
       runStore: chainStore,
       artifactStore: chainArtifacts,
-      bindingRegistry: INITIAL_BINDING_REGISTRY,
+      bindingRegistry: chainRegistry,
       gateway: chainGateway,
       now: () => TS,
     });
@@ -456,49 +719,40 @@ async function main(): Promise<void> {
       digest: chainSource.digest,
     };
     let chainRecovery = recoverRunContext(chainStore, chainIdentity.requirementId);
-    for (let index = 0; index < NODE_CAPABILITY_IDS.length; index += 1) {
-      const capability = NODE_CAPABILITY_IDS[index]!;
-      const capabilityInput = capability === "implementation"
-        ? {
-            implementationExecutorInput: {
-              requirement: "implement the approved design",
-              requirementId: chainIdentity.requirementId,
-              summary: {
-                requirement_id: chainIdentity.requirementId,
-                multi_repo: false,
-                main_repo: "example",
-                sub_requirements: [],
-                parsed_at: TS,
-              },
-              designOutput: { artifactRef: chainInput.artifactRef },
-              reviewOutput: { result: "PASS" },
-              complexity: "low",
-              executionMode: "direct",
-            },
-          }
-        : { previousArtifactRef: chainInput.artifactRef };
+    for (let index = 0; index < LOOP_CAPABILITY_EXECUTION_POINTS.length; index += 1) {
+      const point = LOOP_CAPABILITY_EXECUTION_POINTS[index]!;
       const step = await chainEntry.execute({
         requirementId: chainIdentity.requirementId,
         ...(index === 0 ? { identity: chainIdentity } : {}),
-        capability,
+        capability: point.capability,
+        executionRole: point.executionRole,
         inputArtifactRef: chainInput.artifactRef,
         inputArtifactVersion: chainInput.version,
         inputDigest: chainInput.digest,
         outputArtifactVersion: "1.0.0",
-        input: capabilityInput,
+        input: { previousArtifactRef: chainInput.artifactRef },
       });
-      ok(step.execution.success === true, `${capability} produces a qualified traced result`);
+      ok(step.execution.success === true, `${point.capability}/${point.executionRole} produces a qualified traced result`);
       chainRecovery = step.recoveryContext;
-      const state = chainRecovery.capabilityStates[index]!;
+      const pointState = chainRecovery.executionPointStates[index]!;
       chainInput = {
-        artifactRef: state.effectiveOutputArtifactRef!,
-        version: state.effectiveOutputArtifactVersion!,
-        digest: state.effectiveOutputDigest!,
+        artifactRef: pointState.effectiveOutputArtifactRef!,
+        version: pointState.effectiveOutputArtifactVersion!,
+        digest: pointState.effectiveOutputDigest!,
       };
     }
     ok(chainRecovery?.capabilityChainStatus === "COMPLETED", "recovery distinguishes a completed capability chain");
     ok(chainRecovery?.nextCapability === null, "completed capability chain has no next capability");
-    ok(chainStore.listCapabilityExecutions(chainIdentity.runId).length === 14, "seven attempts persist fourteen immutable events");
+    ok(chainRecovery?.nextExecutionPoint === null, "completed chain has no next execution point");
+    ok(chainStore.listCapabilityExecutions(chainIdentity.runId).length === 16, "eight attempts persist sixteen immutable events");
+    const verdictEvents = chainStore.listCapabilityExecutions(chainIdentity.runId).filter(
+      (item) => item.capability === "solution-gate",
+    );
+    ok(
+      verdictEvents.some((item) => item.executionRole === "adversarial_scan" && item.executorAgent === "codex") &&
+      verdictEvents.some((item) => item.executionRole === "formal_verdict" && item.executorAgent === "hermes"),
+      "solution-gate records both roles with different executor agents",
+    );
     const reopened = recoverRunContext(chainStore, chainIdentity.requirementId);
     ok(reopened?.capabilityChainStatus === "COMPLETED", "another entry recovers the completed chain without reinterpretation");
     chainArtifacts.close();
@@ -547,7 +801,7 @@ async function main(): Promise<void> {
       inputArtifactRef: claimedFixture.techInput.artifactRef,
       inputArtifactVersion: claimedFixture.techInput.version,
       inputDigest: claimedFixture.techInput.digest,
-      bindingId: "binding-codex-solution-design",
+      bindingId: "binding-codex-solution-design-primary",
     });
     claimedFixture.runStore.appendCapabilityExecution(started);
     const running = recoverRunContext(claimedFixture.runStore, claimedFixture.id.requirementId)!;
@@ -687,6 +941,7 @@ async function main(): Promise<void> {
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
+      executionRole: "primary" as const,
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
@@ -714,6 +969,7 @@ async function main(): Promise<void> {
     await rejectsCode("INVALID_INPUT", () => entry.execute({
       requirementId: id.requirementId,
       capability: "solution-design",
+      executionRole: "primary" as const,
       inputArtifactRef: unrelated.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: unrelated.digest,
@@ -727,8 +983,8 @@ async function main(): Promise<void> {
     // failed attempt rather than a fabricated success.
     const replacement = replaceBinding(
       INITIAL_BINDING_REGISTRY,
-      "binding-codex-solution-design",
-      "binding-kimi-solution-design",
+      "binding-codex-solution-design-primary",
+      "binding-kimi-solution-design-primary",
     );
     ok(replacement.registry.version === "2", "binding replacement increments registry snapshot version");
     const replacedGateway = new ExecutionGateway({
@@ -752,6 +1008,7 @@ async function main(): Promise<void> {
     const second = await replacedEntry.execute({
       requirementId: id.requirementId,
       capability: "solution-design",
+      executionRole: "primary" as const,
       inputArtifactRef: currentOutput.effectiveOutputArtifactRef!,
       inputArtifactVersion: currentOutput.effectiveOutputArtifactVersion!,
       inputDigest: currentOutput.effectiveOutputDigest!,
@@ -764,8 +1021,8 @@ async function main(): Promise<void> {
     ok(second.recoveryContext.nextCapability === "solution-design", "retryable failure remains recoverable at the same capability");
     const allEvents = runStore.listCapabilityExecutions(id.runId);
     ok(allEvents.length === 4, "replacement attempt adds started and failed events");
-    ok(allEvents[0]?.bindingId === "binding-codex-requirement-intake", "historical binding snapshot remains unchanged");
-    ok(allEvents[2]?.bindingId === "binding-kimi-solution-design", "new attempt records replacement binding");
+    ok(allEvents[0]?.bindingId === "binding-codex-requirement-intake-primary", "historical binding snapshot remains unchanged");
+    ok(allEvents[2]?.bindingId === "binding-kimi-solution-design-primary", "new attempt records replacement binding");
     ok(allEvents[2]?.bindingRegistryVersion === "2", "new attempt records replacement registry version");
     ok(allEvents[2]?.executorVersion === "2.0.0", "new attempt records replacement executor version");
     ok(allEvents[3]?.status === "failed" && allEvents[3]?.retryable === true, "failure is persisted as a retryable attempt");

@@ -51,7 +51,7 @@ import {
   evaluateHermesGatewayRealDispatchGuardrails,
   type HermesGatewayRealDispatchGuardrailLimits,
 } from "./hermes-gateway-real-dispatch-guardrails";
-import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import { NODE_CAPABILITY_IDS, NODE_CAPABILITY_EXECUTION_ROLES, type CapabilityExecutionRole, type NodeCapabilityId } from "../loop/types";
 import {
   CAPABILITY_ARTIFACT_TYPES,
   getEnabledBinding,
@@ -149,7 +149,8 @@ export class ExecutionGateway {
     }
     const context = readPlainDataRecord(request.loopExecution, "loopExecution");
     const contextKeys = [
-      "runId", "attempt", "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactVersion",
+      "runId", "attempt", "executionRole", "inputArtifactRef", "inputArtifactVersion", "inputDigest",
+      "outputArtifactVersion",
     ];
     if (
       Object.keys(context).length !== contextKeys.length ||
@@ -167,6 +168,16 @@ export class ExecutionGateway {
     const inputArtifactVersion = this.requireSemanticVersion(context.inputArtifactVersion, "loopExecution.inputArtifactVersion");
     const inputDigest = this.requireDigest(context.inputDigest, "loopExecution.inputDigest");
     const outputArtifactVersion = this.requireSemanticVersion(context.outputArtifactVersion, "loopExecution.outputArtifactVersion");
+    // v2 (A2): the dispatch role must be one of the capability's required
+    // roles; the enabled binding is resolved for the exact role slot.
+    const executionRoleValue = context.executionRole;
+    if (
+      typeof executionRoleValue !== "string" ||
+      !(NODE_CAPABILITY_EXECUTION_ROLES[capability] as readonly string[]).includes(executionRoleValue)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "loopExecution.executionRole must be a required role of the capability");
+    }
+    const executionRole = executionRoleValue as CapabilityExecutionRole;
     validateBindingRegistry(tracing.bindingRegistry);
     const snapshot = tracing.runStore.getSnapshot(runId);
     if (snapshot === undefined) {
@@ -176,7 +187,7 @@ export class ExecutionGateway {
       throw new LoopRunJournalError("INVALID_INPUT", "loop execution Requirement ID does not match the run");
     }
     tracing.artifactStore.read(inputArtifactRef, inputDigest);
-    const binding = getEnabledBinding(tracing.bindingRegistry, capability);
+    const binding = getEnabledBinding(tracing.bindingRegistry, capability, executionRole);
     const executorVersion = this.requireSemanticVersion(
       tracing.executorVersions[binding.agent],
       "capability tracing executor version",
@@ -195,6 +206,7 @@ export class ExecutionGateway {
       schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
       runId,
       capability,
+      executionRole,
       nodeId: request.node,
       attempt,
       bindingId: binding.bindingId,
@@ -310,7 +322,7 @@ export class ExecutionGateway {
     let gateResult: LoopCapabilityGateResult;
     let findings: unknown[];
     try {
-      ({ gateResult, findings } = this.readCapabilityOutcome(result, capability));
+      ({ gateResult, findings } = this.readCapabilityOutcome(result, capability, executionRole));
     } catch {
       this.appendCapabilityFailure(
         tracing,
@@ -377,7 +389,11 @@ export class ExecutionGateway {
       gateResult,
       unresolvedFindingsRef: findingsDescriptor?.artifactRef ?? null,
       unresolvedFindingsDigest: findingsDescriptor?.digest ?? null,
-      nextStepEligibility: gateResult === "FAIL" || findings.length > 0 ? "BLOCKED" : "ELIGIBLE",
+      nextStepEligibility:
+        gateResult === "FAIL" ||
+        (findings.length > 0 && !(capability === "solution-gate" && executionRole === "adversarial_scan"))
+          ? "BLOCKED"
+          : "ELIGIBLE",
       errorCode: null,
       retryable: null,
       reasonCode: null,
@@ -454,20 +470,24 @@ export class ExecutionGateway {
   private readCapabilityOutcome(
     result: ExecutionResult,
     capability: NodeCapabilityId,
+    executionRole: string,
   ): { gateResult: LoopCapabilityGateResult; findings: unknown[] } {
-    const requiresGate = capability === "solution-gate";
+    // v2 (A2): only the formal_verdict role may return a conclusive Gate
+    // result; the adversarial_scan role always records NOT_APPLICABLE.
+    const isVerdictRole = capability === "solution-gate" && executionRole === "formal_verdict";
+    const isScanRole = capability === "solution-gate" && executionRole === "adversarial_scan";
     const gateValue = result.output["gateResult"] ?? result.output["gate_result"];
     let gateResult: LoopCapabilityGateResult = "NOT_APPLICABLE";
-    if (requiresGate) {
+    if (isVerdictRole) {
       if (gateValue !== "PASS" && gateValue !== "FAIL" && gateValue !== "PASS_WITH_RISK") {
-        throw new Error("Gate-producing capability omitted a canonical Gate result");
+        throw new Error("formal_verdict omitted a canonical Gate result");
       }
       gateResult = gateValue;
-    } else if (gateValue !== undefined && gateValue !== "NOT_APPLICABLE") {
-      throw new Error("non-Gate capability returned a non-canonical Gate result");
+    } else if (!isScanRole && gateValue !== undefined && gateValue !== "NOT_APPLICABLE") {
+      throw new Error("non-verdict execution returned a non-canonical Gate result");
     }
 
-    const requiresFindings = capability === "solution-gate" || capability === "code-review";
+    const requiresFindings = isVerdictRole || capability === "code-review";
     const rawFindings = result.output["unresolvedFindings"] ?? result.output["unresolved_findings"];
     if (requiresFindings && !Array.isArray(rawFindings)) {
       throw new Error("finding-producing capability omitted unresolved findings");

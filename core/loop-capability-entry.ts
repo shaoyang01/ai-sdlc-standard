@@ -9,6 +9,11 @@ import { types as utilTypes } from "node:util";
 import type { ExecutionResult } from "../execution/types";
 import type { NodeCapabilityId } from "../loop/types";
 import {
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_EXECUTION_ROLES,
+  type CapabilityExecutionRole,
+} from "../loop/types";
+import {
   getBinding,
   getEnabledBinding,
   validateBindingRegistry,
@@ -42,6 +47,8 @@ export interface LoopCapabilityEntryRequest {
   requirementId: string;
   identity?: LoopRunIdentity;
   capability: NodeCapabilityId;
+  /** v2 (A2): the required execution role to dispatch for this capability. */
+  executionRole: CapabilityExecutionRole;
   inputArtifactRef: string;
   inputArtifactVersion: string;
   inputDigest: string;
@@ -62,8 +69,8 @@ export interface LoopCapabilityEntryResult {
 }
 
 const REQUEST_FIELDS = [
-  "requirementId", "identity", "capability", "inputArtifactRef", "inputArtifactVersion",
-  "inputDigest", "outputArtifactVersion", "input", "skill",
+  "requirementId", "identity", "capability", "executionRole", "inputArtifactRef",
+  "inputArtifactVersion", "inputDigest", "outputArtifactVersion", "input", "skill",
 ] as const;
 
 export class LoopCapabilityEntry {
@@ -91,6 +98,15 @@ export class LoopCapabilityEntry {
     }
     validateRequirementId(request.requirementId);
     const nodeId = request.capability;
+    // v2 (A2): the requested role must be one of the capability's required
+    // roles — primary everywhere except solution-gate's two fixed roles.
+    const requiredRoles = NODE_CAPABILITY_EXECUTION_ROLES[request.capability];
+    if (
+      typeof request.executionRole !== "string" ||
+      !(requiredRoles as readonly string[]).includes(request.executionRole)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "executionRole must be a required role of the capability");
+    }
     if (request.identity !== undefined) {
       if (utilTypes.isProxy(request.identity)) {
         throw new LoopRunJournalError("INVALID_INPUT", "run identity must not be a Proxy");
@@ -140,30 +156,42 @@ export class LoopCapabilityEntry {
       : null;
     if (
       recovery.capabilityChainStatus === "RUNNING" &&
-      (interruptedAttempt?.status !== "started" || interruptedAttempt.capability !== request.capability)
+      (interruptedAttempt?.status !== "started" ||
+        interruptedAttempt.capability !== request.capability ||
+        interruptedAttempt.executionRole !== request.executionRole)
     ) {
       throw new LoopRunJournalError("ILLEGAL_TRANSITION", "request does not match the active capability execution");
     }
     // The content-addressed store independently checks ref syntax, kind,
     // containment and digest before any execution side effect.
     this.options.artifactStore.read(request.inputArtifactRef, request.inputDigest);
-    const capabilityIndex = recovery.capabilityStates.findIndex(
-      (state) => state.capability === request.capability,
+    // v2 (A2): the predecessor is the previous EXECUTION POINT of the
+    // eight-point chain, not the previous capability — solution-gate's two
+    // roles chain scan → verdict inside one node.
+    const pointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      (point) => point.capability === request.capability && point.executionRole === request.executionRole,
     );
-    if (capabilityIndex < 0) {
-      throw new LoopRunJournalError("STORE_CORRUPT", "recovery context is missing a canonical capability");
+    if (pointIndex < 0) {
+      throw new LoopRunJournalError("INVALID_INPUT", "request is not a canonical execution point");
     }
-    if (capabilityIndex === 0) {
+    if (pointIndex === 0) {
       if (!request.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:")) {
         throw new LoopRunJournalError("INVALID_INPUT", "requirement intake requires a normalized Requirement source");
       }
     } else {
-      const predecessor = recovery.capabilityStates[capabilityIndex - 1]!;
+      const previousPoint = LOOP_CAPABILITY_EXECUTION_POINTS[pointIndex - 1]!;
+      const previousSucceeded = [...this.options.runStore.listCapabilityExecutions(
+        recovery.snapshot.state.identity.runId,
+      )].reverse().find(
+        (event) => event.status === "succeeded" &&
+          event.capability === previousPoint.capability &&
+          event.executionRole === previousPoint.executionRole,
+      );
       if (
-        predecessor.nextStepEligibility !== "ELIGIBLE" ||
-        predecessor.effectiveOutputArtifactRef !== request.inputArtifactRef ||
-        predecessor.effectiveOutputArtifactVersion !== request.inputArtifactVersion ||
-        predecessor.effectiveOutputDigest !== request.inputDigest
+        previousSucceeded === undefined || previousSucceeded.nextStepEligibility !== "ELIGIBLE" ||
+        previousSucceeded.outputArtifactRef !== request.inputArtifactRef ||
+        previousSucceeded.outputArtifactVersion !== request.inputArtifactVersion ||
+        previousSucceeded.outputDigest !== request.inputDigest
       ) {
         throw new LoopRunJournalError("INVALID_INPUT", "capability input does not match the predecessor's effective output");
       }
@@ -199,12 +227,38 @@ export class LoopCapabilityEntry {
         throw new LoopRunJournalError("STORE_FAILURE", "run recovery failed after interrupted capability closure");
       }
     }
-    if (recovery.nextCapability !== request.capability) {
-      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requested capability is not the next recoverable capability");
+    if (recovery.nextExecutionPoint === null ||
+      recovery.nextExecutionPoint.capability !== request.capability ||
+      recovery.nextExecutionPoint.executionRole !== request.executionRole) {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requested execution point is not the next recoverable point");
     }
-    const capabilityState = recovery.capabilityStates.find((state) => state.capability === request.capability)!;
-    const attempt = capabilityState.lastAttempt + 1;
-    const binding = getEnabledBinding(this.options.bindingRegistry, request.capability);
+    // v2 dispatch-time role firewall (A2/G1): before dispatching the
+    // formal_verdict role, the enabled binding's agent must differ from the
+    // adversarial_scan agent of the same solution-gate round. The store
+    // re-validates this before the result is promoted to current.
+    const binding = getEnabledBinding(this.options.bindingRegistry, request.capability, request.executionRole);
+    if (request.capability === "solution-gate" && request.executionRole === "formal_verdict") {
+      const scan = [...this.options.runStore.listCapabilityExecutions(
+        recovery.snapshot.state.identity.runId,
+      )].reverse().find(
+        (event) => event.status === "succeeded" &&
+          event.capability === "solution-gate" && event.executionRole === "adversarial_scan",
+      );
+      if (scan !== undefined && scan.executorAgent === binding.agent) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "formal_verdict must be dispatched to a different agent than adversarial_scan",
+        );
+      }
+    }
+    // Attempts are tracked per execution point, not per capability.
+    const pointState = recovery.executionPointStates.find(
+      (state) => state.capability === request.capability && state.executionRole === request.executionRole,
+    );
+    if (pointState === undefined) {
+      throw new LoopRunJournalError("STORE_CORRUPT", "recovery context is missing a canonical execution point");
+    }
+    const attempt = pointState.lastAttempt + 1;
     const execution = await this.options.gateway.execute({
       type: request.capability,
       node: nodeId,
@@ -215,6 +269,7 @@ export class LoopCapabilityEntry {
       loopExecution: {
         runId: recovery.snapshot.state.identity.runId,
         attempt,
+        executionRole: request.executionRole,
         inputArtifactRef: request.inputArtifactRef,
         inputArtifactVersion: request.inputArtifactVersion,
         inputDigest: request.inputDigest,
