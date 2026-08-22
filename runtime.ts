@@ -87,18 +87,48 @@ export interface RuntimeOptions {
   bindingRegistry?: BindingRegistry;
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
-  env?: Record<string, string | undefined>;
 }
 
-// Options of the retired five-node interpreter. Passing any of them is the
-// legacy entry and MUST fail closed instead of silently degrading the chain.
+// The runtime input contract is CLOSED at runtime, not just at the type
+// level: JavaScript callers and boundary payloads bypass TypeScript, so any
+// own-property outside this allowlist is rejected fail-closed instead of
+// being silently dropped.
+const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
+  "requirementId",
+  "workspaceRoot",
+  "runStore",
+  "artifactStore",
+  "bindingRegistry",
+  "gateway",
+]);
+
+// Options of the retired five-node interpreter. They fail with a specific
+// message so legacy callers see the migration reason, not a generic typo.
 const RETIRED_RUNTIME_OPTIONS: readonly string[] = Object.freeze([
   "requirementSummaryMode",
   "solutionChallengeMode",
   "executors",
   "executionGateway",
   "hermesRuntimeShadowAttachmentBuilder",
+  "env",
 ]);
+
+function validateRuntimeOptions(options: RuntimeOptions): void {
+  for (const key of Object.keys(options)) {
+    if (RETIRED_RUNTIME_OPTIONS.includes(key)) {
+      invalid(
+        `runtime option "${key}" belongs to the retired five-node interpreter ` +
+          "(or carries no v2 semantics); the v2 single-rail runtime has no such option",
+      );
+    }
+    if (!RUNTIME_OPTION_ALLOWLIST.includes(key)) {
+      invalid(
+        `unknown runtime option "${key}"; the v2 runtime accepts exactly: ` +
+          `${RUNTIME_OPTION_ALLOWLIST.join(", ")}`,
+      );
+    }
+  }
+}
 
 function invalid(message: string): never {
   throw new LoopRunJournalError("INVALID_INPUT", message);
@@ -138,6 +168,16 @@ export function createDeterministicCapabilityGateway(options: {
       const context = request.loopExecution;
       if (context === undefined) {
         invalid("capability dispatch requires a loopExecution tracing context");
+      }
+      // Closed dispatch contract: node must repeat the canonical capability
+      // exactly. A canonical type paired with a retired or arbitrary node name
+      // is a legacy/malformed dispatch and is rejected BEFORE any journal
+      // write — never silently canonicalized.
+      if (request.node !== request.type) {
+        invalid(
+          `dispatch node "${String(request.node)}" must equal the canonical capability ` +
+            `"${String(request.type)}"; mismatched or legacy node names are rejected`,
+        );
       }
       const capability = request.type as NodeCapabilityId;
       if (!NODE_CAPABILITY_IDS.includes(capability)) {
@@ -256,15 +296,7 @@ export async function run(
   if (typeof requirement !== "string" || requirement.trim().length === 0) {
     invalid("requirement must be a non-empty string");
   }
-  const optionKeys = Object.keys(options);
-  for (const retired of RETIRED_RUNTIME_OPTIONS) {
-    if (optionKeys.includes(retired)) {
-      invalid(
-        `runtime option "${retired}" belongs to the retired five-node interpreter; ` +
-          "the v2 single-rail runtime has no legacy modes",
-      );
-    }
-  }
+  validateRuntimeOptions(options);
   const requirementId = requireSafeId(options.requirementId ?? `REQ-${Date.now()}`, "requirementId");
 
   const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));

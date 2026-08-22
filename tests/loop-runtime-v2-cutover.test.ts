@@ -159,24 +159,56 @@ async function main(): Promise<void> {
     rmSync(root, { recursive: true, force: true });
   }
 
-  console.log("C3: legacy runtime options fail closed");
+  console.log("C3: the runtime option contract is closed fail-closed");
   {
-    for (const retired of [
-      "solutionChallengeMode",
-      "requirementSummaryMode",
-      "executors",
-      "executionGateway",
-    ] as const) {
-      await expectReject(
-        "INVALID_INPUT",
-        () =>
-          run("any requirement", {
-            [retired]: retired === "executors" ? {} : "disabled",
-          } as never),
-        `retired option "${retired}" is rejected fail-closed`,
+    const root3 = mkdtempSync(join(tmpdir(), "loop-wp35c-options-"));
+    try {
+      mkdirSync(join(root3, "repo"), { recursive: true });
+      const guardStore = new LoopRunStore(join(root3, "journal.db"));
+      const guardArtifacts = new LoopArtifactStore({
+        controlRoot: join(root3, "control"),
+        repositoryPath: join(root3, "repo"),
+      });
+      guardStore.init();
+      guardArtifacts.init();
+      // Injected stores let every rejection assert the absence of journal
+      // side effects (no run, no capability events) after the boundary.
+      const rejectedOptions: ReadonlyArray<Record<string, unknown>> = [
+        ...[
+          "solutionChallengeMode",
+          "requirementSummaryMode",
+          "executors",
+          "executionGateway",
+          "hermesRuntimeShadowAttachmentBuilder",
+          "env",
+        ].map((retired) => ({ [retired]: retired === "executors" ? {} : "disabled" })),
+        { unknownRetiredLikeOption: "x" },
+        { anythingElse: 1 },
+      ];
+      for (const badOptions of rejectedOptions) {
+        await expectReject(
+          "INVALID_INPUT",
+          () =>
+            run("any requirement", {
+              runStore: guardStore,
+              artifactStore: guardArtifacts,
+              ...badOptions,
+            } as never),
+          `option set ${JSON.stringify(Object.keys(badOptions))} is rejected fail-closed`,
+        );
+      }
+      ok(
+        guardStore.findLatestRunByRequirement("REQ-OPTION-GUARD") === undefined,
+        "rejected option sets never created a run",
       );
+      ok(
+        guardStore.listRunsByRequirement("REQ-OPTION-GUARD").length === 0,
+        "rejected option sets journaled zero runs",
+      );
+      await expectReject("INVALID_INPUT", () => run("   "), "blank requirement is rejected");
+    } finally {
+      rmSync(root3, { recursive: true, force: true });
     }
-    await expectReject("INVALID_INPUT", () => run("   "), "blank requirement is rejected");
   }
 
   console.log("C4: retired node names are rejected at the dispatch boundary");
@@ -221,6 +253,96 @@ async function main(): Promise<void> {
             input: {},
           } as never),
         "capability dispatch without a loopExecution tracing context is rejected",
+      );
+      // Asymmetric bypass 1: canonical type paired with a RETIRED node name.
+      await expectReject(
+        "INVALID_INPUT",
+        () =>
+          gateway.execute({
+            type: "requirement-intake",
+            node: "requirement-summary",
+            agent: "codex",
+            requirementId: "REQ-NODE-MISMATCH",
+            input: {},
+            loopExecution: {} as never,
+          }),
+        "a canonical capability with a retired node name is rejected before any journal write",
+      );
+      // Asymmetric bypass 2: canonical type paired with an arbitrary wrong node.
+      await expectReject(
+        "INVALID_INPUT",
+        () =>
+          gateway.execute({
+            type: "requirement-intake",
+            node: "totally-arbitrary-node",
+            agent: "codex",
+            requirementId: "REQ-NODE-MISMATCH",
+            input: {},
+            loopExecution: {} as never,
+          }),
+        "a canonical capability with an arbitrary mismatched node is rejected",
+      );
+      ok(
+        runStore.listRunsByRequirement("REQ-LEGACY").length === 0 &&
+          runStore.listRunsByRequirement("REQ-NODE-MISMATCH").length === 0,
+        "rejected dispatches never created a run",
+      );
+
+      // Positive control: a canonical same-value node dispatch succeeds and
+      // journals exactly the started/terminal pair for that capability.
+      const identity = Object.freeze({
+        runId: "run-wp35c-node-guard",
+        requirementId: "REQ-NODE-OK",
+        repository: "local",
+        repositoryPath: join(root2, "repo"),
+        baseBranch: "main",
+        expectedBaseSha: "0".repeat(40),
+        taskBranch: "runtime/wp35c-node-guard",
+        controlRoot: join(root2, "control"),
+        createdAt: new Date().toISOString(),
+      });
+      runStore.createRun(identity);
+      runStore.appendEvent(Object.freeze({
+        eventId: `${identity.runId}:2:run_started`,
+        runId: identity.runId,
+        sequence: 2,
+        kind: "run_started" as const,
+        stage: null,
+        attempt: 0,
+        createdAt: new Date().toISOString(),
+        inputDigest: null,
+        outputArtifactRef: null,
+        outputDigest: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+        bindingId: null,
+        bindingVersion: null,
+        inputArtifactRef: null,
+      }));
+      const source = artifactStore.put("requirement_summary", "node guard source");
+      const dispatched = await gateway.execute({
+        type: "requirement-intake",
+        node: "requirement-intake",
+        agent: "codex",
+        requirementId: "REQ-NODE-OK",
+        input: { inputArtifactRef: source.artifactRef },
+        loopExecution: {
+          runId: identity.runId,
+          attempt: 1,
+          executionRole: "primary",
+          inputArtifactRef: source.artifactRef,
+          inputArtifactVersion: "1.0.0",
+          inputDigest: source.digest,
+          outputArtifactVersion: "1.0.0",
+        },
+      });
+      ok(dispatched.success === true, "a same-value canonical dispatch succeeds");
+      const guardEvents = runStore.listCapabilityExecutions(identity.runId);
+      ok(guardEvents.length === 2, "exactly the started/terminal pair was journaled");
+      ok(
+        guardEvents.every((event) => event.capability === "requirement-intake"),
+        "both events carry the canonical capability",
       );
     } finally {
       rmSync(root2, { recursive: true, force: true });

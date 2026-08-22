@@ -492,7 +492,6 @@ async function test() {
         },
       });
       const runtimeResult = await run("build a user login page with database storage", {
-        env: {},
         runStore,
         artifactStore,
         bindingRegistry,

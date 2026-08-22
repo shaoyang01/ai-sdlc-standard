@@ -29,7 +29,7 @@ async function test() {
   const testEnv: Record<string, string | undefined> = {};
   let result;
   try {
-    result = await run("build a user registration form with email validation", { env: testEnv });
+    result = await run("build a user registration form with email validation");
     assert(true, "run() completed without throwing");
   } catch (e) {
     assert(false, `run() threw: ${e}`);

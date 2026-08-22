@@ -91,7 +91,6 @@ async function main() {
     artifactStore,
     bindingRegistry,
     gateway,
-    env: runtimeEnv,
   });
 
   const trace = result.execution_trace;
