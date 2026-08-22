@@ -129,12 +129,20 @@ async function main(): Promise<void> {
     ok(report.failureCount === 2, "both candidates are failures");
   });
 
-  console.log("preflight: non-SQLite files and owner-unconfirmable SQLite fail");
+  console.log("preflight: corrupt SQLite and owner-unconfirmable SQLite fail; plain files ignored");
   withRoot("garbage", (root) => {
-    writeFileSync(join(root, "fake.db"), "this is not sqlite at all");
+    // Round 1 (H2): candidates are discovered by magic header. A plain text
+    // file is not a candidate at all; a file WITH the magic header but
+    // unreadable as SQLite still fails closed.
+    writeFileSync(join(root, "notes.txt"), "this is not sqlite at all");
+    const corrupt = Buffer.alloc(4096);
+    Buffer.from("SQLite format 3\x00", "latin1").copy(corrupt, 0);
+    writeFileSync(join(root, "corrupt.db"), corrupt);
     new Database(join(root, "foreign.db")).exec("CREATE TABLE other_app (id INTEGER)");
     const report = preflightLoopRunStoreV2Cutover([root]);
-    ok(verdictOf(report, "fake.db")?.verdict === "FAIL_NOT_SQLITE", "non-SQLite .db file fails");
+    ok(verdictOf(report, "notes.txt") === undefined, "plain text files are not candidates");
+    ok(verdictOf(report, "corrupt.db")?.verdict === "FAIL_NOT_SQLITE",
+      "magic-bearing but unreadable SQLite fails as NOT_SQLITE");
     ok(verdictOf(report, "foreign.db")?.verdict === "FAIL_OWNER_UNKNOWN", "SQLite without LOOP tables has no confirmable owner");
     ok(report.failureCount === 2, "both garbage candidates fail");
   });

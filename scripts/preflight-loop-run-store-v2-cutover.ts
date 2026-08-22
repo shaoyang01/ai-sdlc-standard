@@ -23,21 +23,16 @@ import { openSync, readSync, closeSync, statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 
+// Round 1 (H2): owner detection shares the store's COMPLETE physical table
+// catalogue — main tables and every self-owned child table — so a v0
+// database carrying e.g. only loop_artifact_current classifies as history.
+import { LOOP_PHYSICAL_TABLES } from "../core/loop-run-store";
+
 const SUPPORTED_FORMAT_VERSION = 6;
 const SQLITE_MAGIC = "SQLite format 3\x00";
 const CANDIDATE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 
-// The LOOP business table names (mirrors core/loop-run-store.ts). An SQLite
-// file carrying none of them cannot be confirmed as a LOOP journal.
-const LOOP_BUSINESS_TABLES: readonly string[] = [
-  "loop_runs",
-  "loop_stage_states",
-  "loop_events",
-  "loop_capability_executions",
-  "loop_requirement_changes",
-  "loop_artifact_revisions",
-  "loop_findings",
-];
+const LOOP_BUSINESS_TABLES = LOOP_PHYSICAL_TABLES;
 
 export type PreflightVerdict =
   | "OK_V6"
@@ -105,10 +100,23 @@ function listCandidateFiles(root: string): string[] {
         continue;
       }
       if (!entry.isFile()) continue;
-      const dot = entry.name.lastIndexOf(".");
-      const extension = dot === -1 ? "" : entry.name.slice(dot).toLowerCase();
-      if (!CANDIDATE_EXTENSIONS.has(extension)) continue;
-      candidates.push(fullPath);
+      // Round 1 (H2): extension-less SQLite journals must not be missed. A
+      // file is a candidate when its read-only header carries the SQLite
+      // magic string — regardless of its name — or when it is a zero-byte
+      // placeholder using a conventional sqlite extension.
+      let size = 0;
+      try {
+        size = statSync(fullPath).size;
+      } catch {
+        continue;
+      }
+      if (size === 0) {
+        const dot = entry.name.lastIndexOf(".");
+        const extension = dot === -1 ? "" : entry.name.slice(dot).toLowerCase();
+        if (CANDIDATE_EXTENSIONS.has(extension)) candidates.push(fullPath);
+        continue;
+      }
+      if (hasSqliteMagic(fullPath)) candidates.push(fullPath);
     }
   };
   walk(root);

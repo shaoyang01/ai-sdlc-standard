@@ -138,7 +138,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       ? (overrides.executionRole ?? "formal_verdict")
       : "primary";
     return Object.freeze({
-      schemaVersion: 2,
+      schemaVersion: 3,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -163,6 +163,8 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       gateResult: null,
       unresolvedFindingsRef: null,
       unresolvedFindingsDigest: null,
+      consumedFindingsRef: null,
+      consumedFindingsDigest: null,
       nextStepEligibility: null,
       errorCode: null,
       retryable: null,
@@ -229,6 +231,8 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
           outputDigest: scanDigest,
           gateResult: "NOT_APPLICABLE",
           nextStepEligibility: "ELIGIBLE",
+          unresolvedFindingsRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
+          unresolvedFindingsDigest: dg("a"),
         }));
       }
       const executionRole = isGate ? "formal_verdict" : "primary";
@@ -239,6 +243,8 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
           inputArtifactRef: scanRef,
           inputArtifactVersion: scanVersion,
           inputDigest: scanDigest,
+          consumedFindingsRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
+          consumedFindingsDigest: dg("a"),
         } : {}),
       });
       store.appendCapabilityExecution(started);
@@ -250,6 +256,8 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
           inputArtifactRef: scanRef,
           inputArtifactVersion: scanVersion,
           inputDigest: scanDigest,
+          consumedFindingsRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
+          consumedFindingsDigest: dg("a"),
         } : {}),
         outputArtifactRef: outputRef,
         outputArtifactVersion: output.version,

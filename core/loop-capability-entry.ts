@@ -237,6 +237,25 @@ export class LoopCapabilityEntry {
     // adversarial_scan agent of the same solution-gate round. The store
     // re-validates this before the result is promoted to current.
     const binding = getEnabledBinding(this.options.bindingRegistry, request.capability, request.executionRole);
+    // v3 (Round 1): the formal_verdict dispatch consumes the scan round's
+    // persisted Finding Ledger; without it there is nothing to adjudicate.
+    let consumedLedger: { ref: string; digest: string } | undefined;
+    if (request.capability === "solution-gate" && request.executionRole === "formal_verdict") {
+      const executions = this.options.runStore.listCapabilityExecutions(recovery.snapshot.state.identity.runId);
+      const scan = [...executions].reverse().find(
+        (item) => item.status === "succeeded" &&
+          item.capability === "solution-gate" && item.executionRole === "adversarial_scan",
+      );
+      if (
+        scan === undefined || scan.unresolvedFindingsRef === null || scan.unresolvedFindingsDigest === null
+      ) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "formal_verdict dispatch requires the adversarial_scan Finding Ledger",
+        );
+      }
+      consumedLedger = { ref: scan.unresolvedFindingsRef, digest: scan.unresolvedFindingsDigest };
+    }
     if (request.capability === "solution-gate" && request.executionRole === "formal_verdict") {
       const scan = [...this.options.runStore.listCapabilityExecutions(
         recovery.snapshot.state.identity.runId,
@@ -274,6 +293,10 @@ export class LoopCapabilityEntry {
         inputArtifactVersion: request.inputArtifactVersion,
         inputDigest: request.inputDigest,
         outputArtifactVersion: request.outputArtifactVersion,
+        ...(consumedLedger === undefined ? {} : {
+          consumedFindingsRef: consumedLedger.ref,
+          consumedFindingsDigest: consumedLedger.digest,
+        }),
       },
     });
     const after = recoverRunContext(this.options.runStore, request.requirementId);

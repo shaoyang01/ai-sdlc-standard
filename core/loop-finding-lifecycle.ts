@@ -391,10 +391,16 @@ export function validateLoopFinding(value: unknown): void {
   const sequence = positiveInteger(record.sequence, "sequence");
   const sourceCapability = nodeCapabilityId(record.sourceCapability, "sourceCapability");
   // v2 (A3): the source revision is mandatory and must reference a revision
-  // of the same run.
+  // of the same run. Round 1 (H1-4): the referenced revision's embedded node
+  // must equal the source capability — a finding binds to the current
+  // revision of the capability that produced it, never to another node's.
   const sourceRevisionId = text(record.sourceRevisionId, "sourceRevisionId");
-  if (parseRevisionReference(sourceRevisionId, runId) === null) {
+  const parsedSource = parseRevisionReference(sourceRevisionId, runId);
+  if (parsedSource === null) {
     invalid("sourceRevisionId must reference a revision of the same run");
+  }
+  if (parsedSource !== null && parsedSource.nodeId !== sourceCapability) {
+    invalid("sourceRevisionId must be a revision of the sourceCapability node");
   }
   if (
     typeof record.severity !== "string" ||

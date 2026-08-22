@@ -152,10 +152,17 @@ export class ExecutionGateway {
       "runId", "attempt", "executionRole", "inputArtifactRef", "inputArtifactVersion", "inputDigest",
       "outputArtifactVersion",
     ];
+    const consumedKeys = ["consumedFindingsRef", "consumedFindingsDigest"];
+    const keys = Object.keys(context);
+    const requiredPresent = contextKeys.every((key) => key in context);
+    const unknownKeys = keys.some((key) => !contextKeys.includes(key) && !consumedKeys.includes(key));
+    const hasConsumedRef = "consumedFindingsRef" in context;
+    const hasConsumedDigest = "consumedFindingsDigest" in context;
+    const consumedPairOk = hasConsumedRef === hasConsumedDigest;
     if (
-      Object.keys(context).length !== contextKeys.length ||
-      contextKeys.some((key) => !(key in context)) ||
-      Object.keys(context).some((key) => !contextKeys.includes(key))
+      !requiredPresent || unknownKeys || !consumedPairOk ||
+      (hasConsumedRef && typeof context.consumedFindingsRef !== "string") ||
+      (hasConsumedDigest && typeof context.consumedFindingsDigest !== "string")
     ) {
       throw new LoopRunJournalError("INVALID_INPUT", "loopExecution must contain exactly the canonical fields");
     }
@@ -218,6 +225,9 @@ export class ExecutionGateway {
       inputArtifactRef,
       inputArtifactVersion,
       inputDigest,
+      // v3: the formal_verdict dispatch claims its Finding Ledger up front.
+      consumedFindingsRef: hasConsumedRef ? (context.consumedFindingsRef as string) : null,
+      consumedFindingsDigest: hasConsumedDigest ? (context.consumedFindingsDigest as string) : null,
     } as const;
     const started: LoopCapabilityExecutionEvent = Object.freeze({
       ...base,
@@ -349,9 +359,11 @@ export class ExecutionGateway {
       });
       if (outputEnvelope === undefined) throw new Error("capability output is not serializable");
       outputDescriptor = tracing.artifactStore.put(CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind, outputEnvelope);
-      if (findings.length === 0) {
+      const isScanDispatch = capability === "solution-gate" && executionRole === "adversarial_scan";
+      if (findings.length === 0 && !isScanDispatch) {
         findingsDescriptor = null;
       } else {
+        // v3: an empty scan round still writes its immutable empty ledger.
         const findingEnvelope = JSON.stringify({
           schema: "loop-capability-findings:v1",
           requirementId: request.requirementId,
@@ -491,6 +503,12 @@ export class ExecutionGateway {
     const rawFindings = result.output["unresolvedFindings"] ?? result.output["unresolved_findings"];
     if (requiresFindings && !Array.isArray(rawFindings)) {
       throw new Error("finding-producing capability omitted unresolved findings");
+    }
+    // v3 (Round 1): the scan round always persists an immutable Finding
+    // Ledger — an empty ledger is still an artifact, so it must return an
+    // (possibly empty) findings array.
+    if (isScanRole && !Array.isArray(rawFindings)) {
+      throw new Error("adversarial_scan omitted its Finding Ledger");
     }
     if (rawFindings !== undefined && !Array.isArray(rawFindings)) {
       throw new Error("unresolved findings must be an array");

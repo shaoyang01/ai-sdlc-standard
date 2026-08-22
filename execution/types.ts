@@ -65,6 +65,9 @@ export type ExecutionRequest = Readonly<{
     inputArtifactVersion: string;
     inputDigest: string;
     outputArtifactVersion: string;
+    /** v3 (Round 1): formal_verdict claims the exact Finding Ledger it consumes. */
+    consumedFindingsRef?: string;
+    consumedFindingsDigest?: string;
   }>;
 }>;
 

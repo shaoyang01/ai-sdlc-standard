@@ -105,6 +105,8 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     gateResult: null,
     unresolvedFindingsRef: null,
     unresolvedFindingsDigest: null,
+    consumedFindingsRef: null,
+    consumedFindingsDigest: null,
     nextStepEligibility: null,
     errorCode: null,
     retryable: null,
@@ -413,6 +415,7 @@ async function main(): Promise<void> {
       unresolvedFindingsRef: ledgerRef,
       unresolvedFindingsDigest: ledgerDigest,
     });
+    void scanSucceeded;
     validateLoopCapabilityExecutionChain([event(), intakeOutput, designStarted, designSucceeded, scanStarted, scanSucceeded], "run-wp4b-001");
     ok(true, "scan role succeeds with NOT_APPLICABLE Gate despite carrying findings");
 
@@ -428,6 +431,8 @@ async function main(): Promise<void> {
       inputArtifactRef: scanOutputRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: scanOutputDigest,
+      consumedFindingsRef: ledgerRef,
+      consumedFindingsDigest: ledgerDigest,
     });
     throwsCode(
       "INVALID_INPUT",
@@ -444,6 +449,8 @@ async function main(): Promise<void> {
       bindingId: "binding-hermes-solution-gate-formal_verdict",
       inputArtifactRef: scanOutputRef,
       inputDigest: scanOutputDigest,
+      consumedFindingsRef: ledgerRef,
+      consumedFindingsDigest: ledgerDigest,
     });
     const reviewDigest = "d".repeat(64);
     const reviewRef = `loop-artifact:v1:solution_review:sha256:${reviewDigest}`;
@@ -638,6 +645,9 @@ async function main(): Promise<void> {
         const agent = (request.agent ?? "codex") as "codex" | "kimi" | "hermes";
         const existing = chainStore.listCapabilityExecutions(runId);
         const sequence = existing.length + 1;
+        if (process.env["R1_DEBUG"] && executionRole === "formal_verdict") {
+          console.error("DBG verdict context keys:", Object.keys(context).join(","), "consumed:", String(context.consumedFindingsRef).slice(0, 40));
+        }
         const base = {
           schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
           runId,
@@ -654,6 +664,10 @@ async function main(): Promise<void> {
           inputArtifactRef: String(context.inputArtifactRef),
           inputArtifactVersion: String(context.inputArtifactVersion),
           inputDigest: String(context.inputDigest),
+          consumedFindingsRef:
+            typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
+          consumedFindingsDigest:
+            typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
         };
         chainStore.appendCapabilityExecution(Object.freeze({
           ...base,
@@ -667,6 +681,8 @@ async function main(): Promise<void> {
           gateResult: null,
           unresolvedFindingsRef: null,
           unresolvedFindingsDigest: null,
+          consumedFindingsRef: base.consumedFindingsRef,
+          consumedFindingsDigest: base.consumedFindingsDigest,
           nextStepEligibility: null,
           errorCode: null,
           retryable: null,
@@ -676,6 +692,12 @@ async function main(): Promise<void> {
           CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
           `stub node product for ${capability}/${executionRole} @${sequence}`,
         );
+        // v3: the scan round always persists an immutable (possibly empty)
+        // Finding Ledger artifact.
+        const isScanPoint = capability === "solution-gate" && executionRole === "adversarial_scan";
+        const ledgerEnvelope = isScanPoint
+          ? chainArtifacts.put("capability_findings", `[] scan round @${sequence}`)
+          : null;
         const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
           ? "PASS" as const
           : "NOT_APPLICABLE" as const;
@@ -689,8 +711,10 @@ async function main(): Promise<void> {
           outputArtifactVersion: String(context.outputArtifactVersion),
           outputDigest: output.digest,
           gateResult,
-          unresolvedFindingsRef: null,
-          unresolvedFindingsDigest: null,
+          unresolvedFindingsRef: ledgerEnvelope?.artifactRef ?? null,
+          unresolvedFindingsDigest: ledgerEnvelope?.digest ?? null,
+          consumedFindingsRef: base.consumedFindingsRef,
+          consumedFindingsDigest: base.consumedFindingsDigest,
           nextStepEligibility: "ELIGIBLE" as const,
           errorCode: null,
           retryable: null,
