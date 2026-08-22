@@ -30,10 +30,6 @@ import {
   validateRequirementId,
 } from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
-import {
-  runtimeExecutionPointForCapability,
-  type RuntimeCapabilityExecutionPoint,
-} from "./runtime-capability-map";
 
 export interface LoopCapabilityEntryOptions {
   runStore: LoopRunStore;

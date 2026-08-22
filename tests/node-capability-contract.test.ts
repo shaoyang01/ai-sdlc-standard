@@ -1,15 +1,15 @@
-// Node Capability Contract — Tests (C01 WP-2)
-// ============================================
+// Node Capability Contract — Tests (C01 WP-2, rebaselined by C02-WP3.5-C)
+// =======================================================================
 // The document ai-sdlc/node-capability-contract.md §4 is the single source
 // of truth. This test PARSES the document directly and deep-compares it with
 // the machine projection core/node-capability-contracts.ts — no third copy.
 // Any unilateral drift on either side fails. Additional guards: canonical
-// list shape, field completeness, agent neutrality (all fields including the
-// capability id), and AgentMapEntry @deprecated attachment.
+// list shape, field completeness, and agent neutrality (all fields including
+// the capability id). The AgentMapEntry @deprecated attachment guard retired
+// with the legacy type in WP3.5-C.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import ts from "typescript";
 
 import { NODE_CAPABILITY_IDS } from "../loop/types";
 import { NODE_CAPABILITY_CONTRACTS } from "../core/node-capability-contracts";
@@ -237,40 +237,6 @@ for (const contract of NODE_CAPABILITY_CONTRACTS) {
       !haystack.includes(agentName),
       `contract ${contract.capability}: no agent name '${agentName}' in any field`,
     );
-  }
-}
-
-console.log("node capability: AgentMapEntry @deprecated directly attached");
-{
-  const typesPath = resolve(process.cwd(), "loop/types/index.ts");
-  const sourceText = readFileSync(typesPath, "utf8");
-  const sourceFile = ts.createSourceFile("index.ts", sourceText, ts.ScriptTarget.Latest, true);
-
-  let agentMapEntry: ts.InterfaceDeclaration | undefined;
-  function visit(node: ts.Node): void {
-    if (ts.isInterfaceDeclaration(node) && node.name.text === "AgentMapEntry") {
-      agentMapEntry = node;
-    }
-    ts.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-
-  assert(agentMapEntry !== undefined, "AgentMapEntry declaration exists");
-  if (agentMapEntry !== undefined) {
-    // jsDoc is populated by createSourceFile with setParentNodes=true but is
-    // not declared on InterfaceDeclaration's public type; read it via the
-    // JSDocContainer shape.
-    const jsDocs = (agentMapEntry as unknown as { jsDoc?: readonly ts.JSDoc[] }).jsDoc ?? [];
-    assert(jsDocs.length === 1, "AgentMapEntry has exactly one attached jsdoc block");
-    const tags = jsDocs[0].tags ?? [];
-    assert(
-      tags.some((tag) => tag.tagName.text === "deprecated"),
-      "AgentMapEntry carries @deprecated tag",
-    );
-    // The jsdoc must be directly attached to the declaration: only
-    // whitespace may sit between the jsdoc end and the declaration start.
-    const between = sourceText.slice(jsDocs[0].end, agentMapEntry.pos);
-    assert(between.trim().length === 0, "jsdoc directly attached (no comment in between)");
   }
 }
 

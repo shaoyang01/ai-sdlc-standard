@@ -16,10 +16,9 @@ import {
   NODE_CAPABILITY_EXECUTION_ROLES,
   NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
-  type LoopAgent,
   type NodeCapabilityId,
 } from "../loop/types";
-import type { ExecutionArtifactType } from "../execution/types";
+import type { AgentName, ExecutionArtifactType } from "../execution/types";
 import { types as utilTypes } from "node:util";
 
 export type BindingFailurePolicy = "retry_other_binding" | "block";
@@ -34,7 +33,7 @@ export interface AgentCapabilityBinding {
   bindingId: string;
   capability: NodeCapabilityId;
   executionRole: CapabilityExecutionRole;
-  agent: LoopAgent;
+  agent: AgentName;
   adapter: string;
   bindingVersion: string;
   inputFormat: string;
@@ -51,7 +50,7 @@ export interface BindingRegistry {
   readonly bindings: ReadonlyArray<Readonly<AgentCapabilityBinding>>;
 }
 
-const ADAPTER_BY_AGENT: Record<LoopAgent, string> = {
+const ADAPTER_BY_AGENT: Record<AgentName, string> = {
   codex: "codex-real-dispatch",
   kimi: "kimi-cli",
   hermes: "hermes-cli",
@@ -60,7 +59,7 @@ const ADAPTER_BY_AGENT: Record<LoopAgent, string> = {
 const BINDING_VERSION = "2.0.0";
 const BINDING_TIMEOUT_MS = 120_000;
 const REGISTRY_VERSION = "1";
-const LOOP_AGENTS: readonly LoopAgent[] = ["codex", "kimi", "hermes"];
+const LOOP_AGENTS: readonly AgentName[] = ["codex", "kimi", "hermes"];
 const BINDING_FIELDS = [
   "bindingId", "capability", "executionRole", "agent", "adapter", "bindingVersion", "inputFormat",
   "outputContract", "validator", "allowedSideEffects", "timeoutMs", "failurePolicy", "enabled",
@@ -192,12 +191,12 @@ export function validateBindingRegistry(value: unknown): asserts value is Bindin
       invalidRegistry("binding executionRole must be a required role of the capability");
     }
     const agent = binding.agent;
-    if (typeof agent !== "string" || !LOOP_AGENTS.includes(agent as LoopAgent)) {
+    if (typeof agent !== "string" || !LOOP_AGENTS.includes(agent as AgentName)) {
       invalidRegistry("binding agent must be supported");
     }
     const typedCapability = capability as NodeCapabilityId;
     const typedRole = executionRole as CapabilityExecutionRole;
-    const typedAgent = agent as LoopAgent;
+    const typedAgent = agent as AgentName;
     const bindingId = safeText(binding.bindingId, "binding.bindingId");
     if (
       bindingId !== `binding-${typedAgent}-${typedCapability}-${typedRole}` || ids.has(bindingId)

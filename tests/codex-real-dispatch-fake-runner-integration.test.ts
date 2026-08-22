@@ -4,8 +4,6 @@
 // No child_process, network, or filesystem writes.
 
 import { run } from "../runtime";
-import { ExecutionContext } from "../core/execution-context";
-import { buildImplementationExecutorInput } from "../core/runtime-executors";
 import { ExecutionGateway } from "../execution/gateway";
 import {
   buildCodexPrompt,
@@ -63,7 +61,6 @@ async function test() {
     },
     reviewOutput: { node: "review", result: "PASS" },
     complexity: "medium" as const,
-    executionMode: "direct" as const,
   };
 
   const requestWithImplInput: ExecutionRequest = {
@@ -457,69 +454,83 @@ async function test() {
   assert(!shadowModeResult.artifacts.some((a) => a.type === "implementation_record"), "shadow mode did not produce implementation_record");
   console.log("");
 
-  // ── Test 15: Runtime with fake runner via custom implementation executor ──
-  console.log("Test 15: Runtime integration with fake runner");
+  // ── Test 15: v2 runtime with the real traced Gateway (fake codex runner) ──
+  // The v2 chain routes every point through the traced ExecutionGateway. With
+  // the fake codex runner the codex-bound points complete with real tracing;
+  // the formal_verdict slot is bound to hermes (dual-agent rule), which has
+  // no real capability dispatch, so the honest chain stops fail-closed at the
+  // gate instead of reusing the scan agent.
+  console.log("Test 15: v2 runtime integration with the traced fake runner");
   process.env.SDLC_EXECUTION_MODE = "codex";
-  const fakeRunner = createCodexFakeRunner({ scenario: "success_code_patch" });
+  {
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { LoopRunStore } = await import("../core/loop-run-store");
+    const { LoopArtifactStore } = await import("../core/loop-artifact-store");
+    const { createRuntimeBindingRegistry } = await import("../runtime");
 
-  const codexImplementationExecutor = async (
-    context: Record<string, unknown>,
-    execCtx: ExecutionContext
-  ) => {
-    const input = buildImplementationExecutorInput(context, execCtx);
-    const request: ExecutionRequest = {
-      type: "code_generation",
-      node: "implementation",
-      agent: "codex",
-      requirementId: input.requirementId,
-      input: { implementationExecutorInput: input },
-    };
+    const root = mkdtempSync(join(tmpdir(), "sdlc-fake-runner-v2-"));
+    try {
+      mkdirSync(join(root, "repo"), { recursive: true });
+      const runStore = new LoopRunStore(join(root, "journal.db"));
+      const artifactStore = new LoopArtifactStore({
+        controlRoot: join(root, "control"),
+        repositoryPath: join(root, "repo"),
+      });
+      runStore.init();
+      artifactStore.init();
+      const bindingRegistry = createRuntimeBindingRegistry();
+      const tracedGateway = new ExecutionGateway({
+        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+        codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
+        capabilityTracing: {
+          runStore,
+          artifactStore,
+          bindingRegistry,
+          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+        },
+      });
+      const runtimeResult = await run("build a user login page with database storage", {
+        env: {},
+        runStore,
+        artifactStore,
+        bindingRegistry,
+        gateway: tracedGateway,
+      });
 
-    // Route through a Gateway instance with the fake runner injected.
-    const gateway = new ExecutionGateway({ codexRunner: fakeRunner });
-    const result = await gateway.execute(request);
-
-    const codePatchArtifact = result.artifacts.find((a) => a.type === "implementation_record");
-    if (!codePatchArtifact) {
-      return {
-        node: "implementation",
-        mode: input.executionMode,
-        result: "codex_fallback_shadow",
-        code: "",
-        artifacts: result.artifacts,
-      };
+      const trace = runtimeResult.execution_trace;
+      const codexPoints = trace.filter(
+        (entry) => entry.status === "succeeded" && entry.agent === "codex"
+      );
+      assert(codexPoints.length >= 3, "codex-bound points complete through the traced gateway");
+      assert(
+        trace.some(
+          (entry) =>
+            entry.capability === "solution-gate" &&
+            entry.executionRole === "adversarial_scan" &&
+            entry.status === "succeeded"
+        ),
+        "adversarial_scan succeeded with tracing"
+      );
+      const verdict = trace.find(
+        (entry) => entry.capability === "solution-gate" && entry.executionRole === "formal_verdict"
+      );
+      assert(verdict !== undefined, "formal_verdict attempt was journaled");
+      assert(verdict!.agent === "hermes", "verdict dispatched to the different enabled agent");
+      assert(verdict!.status !== "succeeded", "verdict without real hermes dispatch fails closed");
+      assert(runtimeResult.final_status === "failed", "chain does not fake a full completion");
+      assert(runtimeResult.chain_status !== "COMPLETED", "chain status is not COMPLETED");
+      const scanAgents = new Set(
+        trace
+          .filter((entry) => entry.executionRole === "adversarial_scan")
+          .map((entry) => entry.agent)
+      );
+      assert(!scanAgents.has(verdict!.agent), "dual-agent solution-gate held end to end");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
-
-    return {
-      node: "implementation",
-      mode: input.executionMode,
-      result: "codex_fake_implementation_completed",
-      code: codePatchArtifact.content["patch"] as string,
-      artifacts: [codePatchArtifact],
-    };
-  };
-
-  const runtimeResult = await run("build a user login page with database storage", {
-    env: {},
-    executors: {
-      implementation: codexImplementationExecutor as any,
-    },
-  });
-
-  assert(runtimeResult.final_status === "success", "runtime completes with success");
-  assert(runtimeResult.feedback.review_summary.codeReviewStatus === "PASS", "code review passes");
-  assert(runtimeResult.feedback.review_summary.validationPassed === true, "validation passes");
-
-  const codexArtifact = runtimeResult.artifacts.find(
-    (a) => a.node === "implementation" && a.type === "implementation_record" && a.id.includes("codex-fake")
-  );
-  assert(codexArtifact !== undefined, "runtime produced codex-fake code_patch artifact");
-  assert(
-    !(runtimeResult.artifacts as any[]).some((a) =>
-      a.content["raw_stdout"] || a.content["raw_stderr"] || a.content["raw_prompt"]
-    ),
-    "no raw prompt/stdout/stderr exposed in artifacts"
-  );
+  }
   console.log("");
 
   // ── Cleanup ──

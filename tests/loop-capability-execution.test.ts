@@ -28,7 +28,6 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
-import { RUNTIME_CAPABILITY_BY_EXECUTION_POINT } from "../core/runtime-capability-map";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
@@ -262,15 +261,7 @@ async function main(): Promise<void> {
   ], "run-wp4b-001"), "capability chain cannot skip requirement intake");
   ok(canonicalizeLoopCapabilityExecutionEvent(event()).includes('"executorAgent":"codex"'), "canonical form contains executor snapshot");
 
-  console.log("WP-4B: v2 Runtime bridge covers the six legacy-graph execution points");
-  const mapped = Object.values(RUNTIME_CAPABILITY_BY_EXECUTION_POINT);
-  ok(mapped.length === 6, "exactly six legacy-graph execution points (validation retired)");
-  ok(new Set(mapped).size === 5, "legacy-graph projection covers five distinct v2 capabilities (solution-gate for both challenge and review points)");
-  ok(
-    (["requirement-intake", "solution-design", "solution-gate", "implementation", "code-review"] as NodeCapabilityId[])
-      .every((capability) => mapped.includes(capability)),
-    "every v2 capability with a legacy-graph home is covered (task-planning/knowledge-sync have no old-graph point)",
-  );
+  console.log("WP-4B: capability prompt contract for the v2 execution points");
   const reviewPrompt = buildCapabilityPrompt({
     type: "solution-gate", node: "solution-gate", agent: "codex", requirementId: "REQ-WP4B", input: {},
   }, "solution-gate", "{}");
