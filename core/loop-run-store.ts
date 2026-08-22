@@ -27,7 +27,6 @@ import {
 import {
   applyLoopRunEvent,
   canonicalizeLoopRunEvent,
-  canonicalizeLoopRunEventLegacy,
   canonicalizeLoopRunIdentity,
   createInitialLoopRunState,
   createLoopRunCreatedEvent,
@@ -87,7 +86,24 @@ import { NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-const LOOP_RUN_STORE_FORMAT_VERSION = 5;
+// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v6. Known
+// historical formats 1..5 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
+// they are never semantically migrated. A declared version above 6 is
+// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v6, schema or canonical
+// hash drift is STORE_CORRUPT.
+const LOOP_RUN_STORE_FORMAT_VERSION = 6;
+
+// The LOOP business tables. A user_version=0 database carrying ANY of these
+// is pre-versioning history, never a fresh store (D3 rule 3).
+const LOOP_BUSINESS_TABLES: readonly string[] = [
+  "loop_runs",
+  "loop_stage_states",
+  "loop_events",
+  "loop_capability_executions",
+  "loop_requirement_changes",
+  "loop_artifact_revisions",
+  "loop_findings",
+];
 
 export type CapabilityExecutionAppendResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
@@ -184,15 +200,6 @@ function validatePersistedEvent(event: unknown): void {
 function canonicalizePersistedEvent(event: LoopRunEvent): string {
   try {
     return canonicalizeLoopRunEvent(event);
-  } catch (error) {
-    if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
-    throw error;
-  }
-}
-
-function canonicalizePersistedEventLegacy(event: LoopRunEvent): string {
-  try {
-    return canonicalizeLoopRunEventLegacy(event);
   } catch (error) {
     if (error instanceof LoopRunJournalError) corrupt("persisted event canonicalization failed");
     throw error;
@@ -298,6 +305,7 @@ type CapabilityExecutionRow = {
   sequence: number;
   schema_version: number;
   capability: string;
+  execution_role: string;
   node_id: string;
   attempt: number;
   status: string;
@@ -377,6 +385,7 @@ type ArtifactRevisionRow = {
   artifact_ref: string;
   digest: string;
   producer_execution_id: string;
+  producer_execution_role: string;
   gate_result: string | null;
   validity: string;
   superseded_by: string | null;
@@ -463,9 +472,7 @@ function rowToEvent(row: EventRow): LoopRunEvent {
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
-    // C01 WP-4: legacy rows without the columns map to null; their stored
-    // hash is verified against the legacy form and rewritten to the extended
-    // form by the init() migration.
+    // C01 WP-4 provenance columns; v6 journals always carry them.
     bindingId: row.binding_id ?? null,
     bindingVersion: row.binding_version ?? null,
     inputArtifactRef: row.input_artifact_ref ?? null,
@@ -496,11 +503,12 @@ function eventToRow(event: LoopRunEvent): EventRow {
 
 function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 1,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 2,
     executionEventId: row.execution_event_id,
     runId: row.run_id,
     sequence: asPersistedSafeInteger(row.sequence),
     capability: row.capability as LoopCapabilityExecutionEvent["capability"],
+    executionRole: row.execution_role as LoopCapabilityExecutionEvent["executionRole"],
     nodeId: row.node_id,
     attempt: asPersistedSafeInteger(row.attempt),
     status: row.status as LoopCapabilityExecutionEvent["status"],
@@ -534,6 +542,7 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     sequence: event.sequence,
     schema_version: event.schemaVersion,
     capability: event.capability,
+    execution_role: event.executionRole,
     node_id: event.nodeId,
     attempt: event.attempt,
     status: event.status,
@@ -746,7 +755,7 @@ function rowToArtifactRevision(db: Database.Database, row: ArtifactRevisionRow):
     return upstreamRow.upstream_revision_id;
   });
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 1,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 2,
     revisionId: row.revision_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
@@ -759,6 +768,7 @@ function rowToArtifactRevision(db: Database.Database, row: ArtifactRevisionRow):
     artifactRef: row.artifact_ref,
     digest: row.digest,
     producerExecutionId: row.producer_execution_id,
+    producerExecutionRole: row.producer_execution_role as LoopArtifactRevision["producerExecutionRole"],
     gateResult: row.gate_result as LoopArtifactRevision["gateResult"],
     validity: row.validity as LoopArtifactRevision["validity"],
     supersededBy: row.superseded_by,
@@ -772,15 +782,15 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
     `INSERT INTO loop_artifact_revisions (
       revision_id, run_id, requirement_id, node_id, sequence, schema_version,
       generation, stable_path, artifact_kind, semver, artifact_ref, digest,
-      producer_execution_id, gate_result, validity, superseded_by, created_at,
-      canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      producer_execution_id, producer_execution_role, gate_result, validity,
+      superseded_by, created_at, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.revisionId, record.runId, record.requirementId, record.nodeId,
     record.sequence, record.schemaVersion, record.generation, record.stablePath,
     record.artifactKind, record.semver, record.artifactRef, record.digest,
-    record.producerExecutionId, record.gateResult, record.validity,
-    record.supersededBy, record.createdAt,
+    record.producerExecutionId, record.producerExecutionRole, record.gateResult,
+    record.validity, record.supersededBy, record.createdAt,
     sha256Hex(canonicalizeLoopArtifactRevision(record)),
   );
   const upstreamInsert = db.prepare(
@@ -796,7 +806,7 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 function rowToFinding(row: FindingRow): LoopFinding {
   return Object.freeze({
     // The schema version is a fixed model constant, not a persisted column.
-    schemaVersion: 1,
+    schemaVersion: 2,
     findingId: row.finding_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
@@ -1021,160 +1031,160 @@ export class LoopRunStore {
         storageFailure();
       }
 
-      // schema creation
+      // v6 format gate and schema creation (C02-WP3.5-B, D3): the declared
+      // user_version is read BEFORE any table creation or migration. Known
+      // historical formats are rejected outright — no semantic rewrite, no
+      // alias, no fallback path.
       try {
-        db.exec(`
-          CREATE TABLE IF NOT EXISTS loop_runs (
-            run_id TEXT PRIMARY KEY,
-            requirement_id TEXT NOT NULL,
-            repository TEXT NOT NULL,
-            repository_path TEXT NOT NULL,
-            base_branch TEXT NOT NULL,
-            expected_base_sha TEXT NOT NULL,
-            task_branch TEXT NOT NULL,
-            control_root TEXT NOT NULL,
-            status TEXT NOT NULL,
-            current_stage TEXT,
-            current_attempt INTEGER NOT NULL,
-            fix_round INTEGER NOT NULL,
-            last_sequence INTEGER NOT NULL,
-            last_event_id TEXT NOT NULL,
-            blocking_reason_code TEXT,
-            failure_reason_code TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            identity_sha256 TEXT NOT NULL
-          );
-          CREATE INDEX IF NOT EXISTS idx_loop_runs_status ON loop_runs(status);
-
-          CREATE TABLE IF NOT EXISTS loop_stage_states (
-            run_id TEXT NOT NULL,
-            stage TEXT NOT NULL,
-            status TEXT NOT NULL,
-            attempt INTEGER NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (run_id, stage),
-            FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-          );
-          CREATE INDEX IF NOT EXISTS idx_loop_stage_states_run_id ON loop_stage_states(run_id);
-
-          CREATE TABLE IF NOT EXISTS loop_events (
-            event_id TEXT PRIMARY KEY,
-            run_id TEXT NOT NULL,
-            sequence INTEGER NOT NULL,
-            kind TEXT NOT NULL,
-            stage TEXT,
-            attempt INTEGER NOT NULL,
-            created_at TEXT NOT NULL,
-            input_digest TEXT,
-            output_artifact_ref TEXT,
-            output_digest TEXT,
-            error_code TEXT,
-            retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
-            reason_code TEXT,
-            binding_id TEXT,
-            binding_version TEXT,
-            input_artifact_ref TEXT,
-            canonical_sha256 TEXT NOT NULL,
-            UNIQUE (run_id, sequence),
-            FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-          );
-          CREATE INDEX IF NOT EXISTS idx_loop_events_run_id ON loop_events(run_id);
-        `);
-
-        // C01 WP-4/WP-4B and C02 WP-1/WP-2/WP-3 migrations are one atomic unit.
-        // v0 adds the three legacy provenance columns and normalizes historical
-        // event hashes (marker v1); v2 adds the orthogonal capability-attempt
-        // journal; v3 adds the requirement change classification tables; v4
-        // adds the artifact revision and current authority tables; v5 is
-        // current and adds the finding lifecycle and invalidation tables.
-        // Any failure rolls back all migration DDL/data and user_version.
+        // v6 cutover (C02-WP3.5-B, D3): exactly one supported format. The
+        // declared user_version gates every operation below BEFORE any DDL or
+        // data access; known historical formats are rejected outright and
+        // never semantically migrated. Any failure rolls back all DDL and
+        // user_version together.
         db.transaction(() => {
           const formatVersion = db.pragma("user_version", { simple: true });
           if (
             typeof formatVersion !== "number" ||
             !Number.isSafeInteger(formatVersion) ||
-            formatVersion < 0 ||
-            formatVersion > LOOP_RUN_STORE_FORMAT_VERSION
+            formatVersion < 0
           ) {
             corrupt("unknown journal format version");
           }
-          const eventColumns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
-          const existing = new Set(eventColumns.map((column) => column.name));
-          const provenanceColumns: ReadonlyArray<{ name: string; ddl: string }> = [
-            { name: "binding_id", ddl: "ALTER TABLE loop_events ADD COLUMN binding_id TEXT" },
-            { name: "binding_version", ddl: "ALTER TABLE loop_events ADD COLUMN binding_version TEXT" },
-            { name: "input_artifact_ref", ddl: "ALTER TABLE loop_events ADD COLUMN input_artifact_ref TEXT" },
-          ];
-          for (const column of provenanceColumns) {
-            if (!existing.has(column.name)) {
-              if (formatVersion !== 0) corrupt("normalized journal is missing provenance columns");
-              db.exec(column.ddl);
-            }
+          if (formatVersion > LOOP_RUN_STORE_FORMAT_VERSION) {
+            throw new LoopRunJournalError(
+              "UNSUPPORTED_FUTURE_FORMAT",
+              "journal format version is newer than this build supports",
+            );
           }
-          if (formatVersion === 0) {
-            this.normalizeEventHashesToExtendedForm(db);
+          if (formatVersion >= 1 && formatVersion < LOOP_RUN_STORE_FORMAT_VERSION) {
+            throw new LoopRunJournalError(
+              "UNSUPPORTED_HISTORICAL_FORMAT",
+              "pre-v6 journal formats are unsupported history and are never migrated",
+            );
           }
-          const capabilityTableExists = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'",
-          ).get() !== undefined;
-          // v2 introduced the capability-attempt journal: any journal already
-          // marked v2 or later must carry the table; only v0/v1 journals may
-          // legitimately lack it (created below in the same transaction).
-          if (formatVersion >= 2 && !capabilityTableExists) {
-            corrupt("normalized journal is missing capability execution table");
+          const loopTableExists = LOOP_BUSINESS_TABLES.some((table) =>
+            db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
+              undefined,
+          );
+          // D3 rule 3: user_version=0 is a fresh database ONLY when no LOOP
+          // business table exists; an unversioned database carrying legacy
+          // tables is pre-versioning history, never a fresh store.
+          if (formatVersion === 0 && loopTableExists) {
+            throw new LoopRunJournalError(
+              "UNSUPPORTED_HISTORICAL_FORMAT",
+              "unversioned database already carries LOOP business tables",
+            );
           }
-          if (!capabilityTableExists) {
-            db.exec(`
-              CREATE TABLE loop_capability_executions (
-                execution_event_id TEXT PRIMARY KEY,
-                run_id TEXT NOT NULL,
-                sequence INTEGER NOT NULL,
-                schema_version INTEGER NOT NULL,
-                capability TEXT NOT NULL,
-                node_id TEXT NOT NULL,
-                attempt INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                binding_id TEXT NOT NULL,
-                binding_version TEXT NOT NULL,
-                binding_registry_version TEXT NOT NULL,
-                executor_agent TEXT NOT NULL,
-                executor_adapter TEXT NOT NULL,
-                executor_version TEXT NOT NULL,
-                input_artifact_ref TEXT NOT NULL,
-                input_artifact_version TEXT NOT NULL,
-                input_digest TEXT NOT NULL,
-                output_artifact_ref TEXT,
-                output_artifact_version TEXT,
-                output_digest TEXT,
-                gate_result TEXT,
-                unresolved_findings_ref TEXT,
-                unresolved_findings_digest TEXT,
-                next_step_eligibility TEXT,
-                error_code TEXT,
-                retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
-                reason_code TEXT,
-                canonical_sha256 TEXT NOT NULL,
-                UNIQUE (run_id, sequence),
-                FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-              );
-              CREATE INDEX idx_loop_capability_executions_run_id
-                ON loop_capability_executions(run_id);
-            `);
+          if (formatVersion === LOOP_RUN_STORE_FORMAT_VERSION) {
+            // Already v6: no DDL, no rewrite. Any missing or drifted
+            // table/column/constraint inside the declared format is
+            // STORE_CORRUPT.
+            this.verifyBaseTablesSchema(db);
+            this.verifyCapabilityExecutionTableSchema(db);
+            this.verifyRequirementChangeTablesSchema(db);
+            this.verifyArtifactRevisionTablesSchema(db);
+            this.verifyFindingTablesSchema(db);
+            return;
           }
+          // Fresh unversioned database: create the complete v6 schema in one
+          // shot. There is deliberately no per-version migration chain.
+          db.exec(`
+            CREATE TABLE loop_runs (
+              run_id TEXT PRIMARY KEY,
+              requirement_id TEXT NOT NULL,
+              repository TEXT NOT NULL,
+              repository_path TEXT NOT NULL,
+              base_branch TEXT NOT NULL,
+              expected_base_sha TEXT NOT NULL,
+              task_branch TEXT NOT NULL,
+              control_root TEXT NOT NULL,
+              status TEXT NOT NULL,
+              current_stage TEXT,
+              current_attempt INTEGER NOT NULL,
+              fix_round INTEGER NOT NULL,
+              last_sequence INTEGER NOT NULL,
+              last_event_id TEXT NOT NULL,
+              blocking_reason_code TEXT,
+              failure_reason_code TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              identity_sha256 TEXT NOT NULL
+            );
+            CREATE INDEX idx_loop_runs_status ON loop_runs(status);
+
+            CREATE TABLE loop_stage_states (
+              run_id TEXT NOT NULL,
+              stage TEXT NOT NULL,
+              status TEXT NOT NULL,
+              attempt INTEGER NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (run_id, stage),
+              FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_loop_stage_states_run_id ON loop_stage_states(run_id);
+
+            CREATE TABLE loop_events (
+              event_id TEXT PRIMARY KEY,
+              run_id TEXT NOT NULL,
+              sequence INTEGER NOT NULL,
+              kind TEXT NOT NULL,
+              stage TEXT,
+              attempt INTEGER NOT NULL,
+              created_at TEXT NOT NULL,
+              input_digest TEXT,
+              output_artifact_ref TEXT,
+              output_digest TEXT,
+              error_code TEXT,
+              retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
+              reason_code TEXT,
+              binding_id TEXT,
+              binding_version TEXT,
+              input_artifact_ref TEXT,
+              canonical_sha256 TEXT NOT NULL,
+              UNIQUE (run_id, sequence),
+              FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_loop_events_run_id ON loop_events(run_id);
+
+            CREATE TABLE loop_capability_executions (
+              execution_event_id TEXT PRIMARY KEY,
+              run_id TEXT NOT NULL,
+              sequence INTEGER NOT NULL,
+              schema_version INTEGER NOT NULL,
+              capability TEXT NOT NULL,
+              execution_role TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              attempt INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              binding_id TEXT NOT NULL,
+              binding_version TEXT NOT NULL,
+              binding_registry_version TEXT NOT NULL,
+              executor_agent TEXT NOT NULL,
+              executor_adapter TEXT NOT NULL,
+              executor_version TEXT NOT NULL,
+              input_artifact_ref TEXT NOT NULL,
+              input_artifact_version TEXT NOT NULL,
+              input_digest TEXT NOT NULL,
+              output_artifact_ref TEXT,
+              output_artifact_version TEXT,
+              output_digest TEXT,
+              gate_result TEXT,
+              unresolved_findings_ref TEXT,
+              unresolved_findings_digest TEXT,
+              next_step_eligibility TEXT,
+              error_code TEXT,
+              retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
+              reason_code TEXT,
+              canonical_sha256 TEXT NOT NULL,
+              UNIQUE (run_id, sequence),
+              FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_loop_capability_executions_run_id
+              ON loop_capability_executions(run_id);
+          `);
           this.verifyCapabilityExecutionTableSchema(db);
-          const changeTableExists = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_requirement_changes'",
-          ).get() !== undefined;
-          // v3 introduced the requirement change journal: any journal already
-          // marked v3 or later must carry the table; only v0-v2 journals may
-          // legitimately lack it (created above in the same transaction).
-          if (formatVersion >= 3 && !changeTableExists) {
-            corrupt("current journal is missing requirement change table");
-          }
-          if (!changeTableExists) {
-            db.exec(`
+          db.exec(`
               CREATE TABLE loop_requirement_changes (
                 change_record_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL,
@@ -1228,21 +1238,9 @@ export class LoopRunStore {
                 FOREIGN KEY (change_record_id)
                   REFERENCES loop_requirement_changes(change_record_id) ON DELETE CASCADE
               );
-            `);
-          }
+          `);
           this.verifyRequirementChangeTablesSchema(db);
-          const revisionTableExists = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_artifact_revisions'",
-          ).get() !== undefined;
-          // v4 introduced the artifact revision authority: any journal already
-          // marked v4 or later must carry the tables; older journals get them
-          // below in the same transaction. C01 and WP1 history is never
-          // rewritten.
-          if (formatVersion >= 4 && !revisionTableExists) {
-            corrupt("current journal is missing artifact revision table");
-          }
-          if (!revisionTableExists) {
-            db.exec(`
+          db.exec(`
               CREATE TABLE loop_artifact_revisions (
                 revision_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL,
@@ -1257,6 +1255,7 @@ export class LoopRunStore {
                 artifact_ref TEXT NOT NULL,
                 digest TEXT NOT NULL,
                 producer_execution_id TEXT NOT NULL,
+                producer_execution_role TEXT NOT NULL,
                 gate_result TEXT,
                 validity TEXT NOT NULL,
                 superseded_by TEXT,
@@ -1290,31 +1289,16 @@ export class LoopRunStore {
                 FOREIGN KEY (revision_id)
                   REFERENCES loop_artifact_revisions(revision_id) ON DELETE CASCADE
               );
-            `);
-          }
+          `);
           this.verifyArtifactRevisionTablesSchema(db);
-          const findingTableExists = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_findings'",
-          ).get() !== undefined;
-          // v5 introduced the finding lifecycle tables: the findings main
-          // table, the invalidation edge table, the closure proof table and
-          // the invalidation scope table. Any journal already marked v5 must
-          // carry them; older journals get them below in the same
-          // transaction. C01/WP1/WP2 history is never rewritten. (The proof
-          // and scope tables joined the v5 definition by contract 0.1.1
-          // before any v5 journal reached an accepted baseline.)
-          if (formatVersion >= 5 && !findingTableExists) {
-            corrupt("current journal is missing finding table");
-          }
-          if (!findingTableExists) {
-            db.exec(`
+          db.exec(`
               CREATE TABLE loop_findings (
                 finding_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL,
                 requirement_id TEXT NOT NULL,
                 sequence INTEGER NOT NULL,
                 source_capability TEXT NOT NULL,
-                source_revision_id TEXT,
+                source_revision_id TEXT NOT NULL,
                 severity TEXT NOT NULL,
                 category TEXT NOT NULL,
                 evidence_ref TEXT NOT NULL,
@@ -1376,12 +1360,10 @@ export class LoopRunStore {
                 FOREIGN KEY (finding_id)
                   REFERENCES loop_findings(finding_id) ON DELETE CASCADE
               );
-            `);
-          }
+          `);
+          this.verifyBaseTablesSchema(db);
           this.verifyFindingTablesSchema(db);
-          if (formatVersion < LOOP_RUN_STORE_FORMAT_VERSION) {
-            db.exec(`PRAGMA user_version = ${LOOP_RUN_STORE_FORMAT_VERSION}`);
-          }
+          db.exec(`PRAGMA user_version = ${LOOP_RUN_STORE_FORMAT_VERSION}`);
         }).immediate();
       } catch (error) {
         if (error instanceof LoopRunJournalError) throw error;
@@ -2249,6 +2231,29 @@ export class LoopRunStore {
         if (producer.gateResult !== record.gateResult) {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revision Gate result does not match the producer execution");
         }
+        // v2 (A2): the producing role is bound at append time — the revision
+        // must name the exact role of the succeeded execution that produced it.
+        if (producer.executionRole !== record.producerExecutionRole) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revision producing role does not match the producer execution");
+        }
+        // v2 promote-time role firewall (A2/G1): before a solution-gate
+        // revision may become the node current, its formal_verdict producer
+        // must be a different agent than the adversarial_scan execution of
+        // the same solution-gate round.
+        if (record.nodeId === "solution-gate") {
+          const scan = capabilityExecutions.filter(
+            (item) => item.capability === "solution-gate" &&
+              item.executionRole === "adversarial_scan" && item.status === "succeeded",
+          ).pop();
+          if (
+            scan === undefined || scan.executorAgent === producer.executorAgent
+          ) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "solution-gate current requires a formal_verdict agent different from adversarial_scan",
+            );
+          }
+        }
         // Blob binding (fifth binding): the producer journal match only proves
         // the claimed output triple; the physical blob must also exist in the
         // bound artifact store with a matching digest before the revision may
@@ -3053,24 +3058,25 @@ export class LoopRunStore {
     db.prepare(
       `INSERT INTO loop_capability_executions (
         execution_event_id, run_id, sequence, schema_version, capability,
-        node_id, attempt, status, created_at, binding_id, binding_version,
-        binding_registry_version, executor_agent, executor_adapter,
-        executor_version, input_artifact_ref, input_artifact_version,
-        input_digest, output_artifact_ref, output_artifact_version,
-        output_digest, gate_result, unresolved_findings_ref,
-        unresolved_findings_digest, next_step_eligibility, error_code,
-        retryable, reason_code, canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        execution_role, node_id, attempt, status, created_at, binding_id,
+        binding_version, binding_registry_version, executor_agent,
+        executor_adapter, executor_version, input_artifact_ref,
+        input_artifact_version, input_digest, output_artifact_ref,
+        output_artifact_version, output_digest, gate_result,
+        unresolved_findings_ref, unresolved_findings_digest,
+        next_step_eligibility, error_code, retryable, reason_code,
+        canonical_sha256
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
-      row.capability, row.node_id, row.attempt, row.status, row.created_at,
-      row.binding_id, row.binding_version, row.binding_registry_version,
-      row.executor_agent, row.executor_adapter, row.executor_version,
-      row.input_artifact_ref, row.input_artifact_version, row.input_digest,
-      row.output_artifact_ref, row.output_artifact_version, row.output_digest,
-      row.gate_result, row.unresolved_findings_ref, row.unresolved_findings_digest,
-      row.next_step_eligibility, row.error_code, row.retryable, row.reason_code,
-      row.canonical_sha256,
+      row.capability, row.execution_role, row.node_id, row.attempt, row.status,
+      row.created_at, row.binding_id, row.binding_version,
+      row.binding_registry_version, row.executor_agent, row.executor_adapter,
+      row.executor_version, row.input_artifact_ref, row.input_artifact_version,
+      row.input_digest, row.output_artifact_ref, row.output_artifact_version,
+      row.output_digest, row.gate_result, row.unresolved_findings_ref,
+      row.unresolved_findings_digest, row.next_step_eligibility, row.error_code,
+      row.retryable, row.reason_code, row.canonical_sha256,
     );
   }
 
@@ -3105,33 +3111,63 @@ export class LoopRunStore {
   }
 
   /**
-   * Verifies and rewrites persisted event hashes to the extended canonical
-   * form. Runs inside the caller's migration transaction (init), so any
-   * failure rolls back the column additions and hash rewrites together.
-   * Every row whose stored hash does not match the extended form must match
-   * the legacy 13-field form (and have all provenance fields null) — it is
-   * then rewritten to the extended hash. Any other mismatch (including
-   * tampered historical rows) aborts the migration with STORE_CORRUPT.
-   * user_version flips to 1 as the last step of the legacy-event phase; the
-   * caller then creates/verifies the capability table and publishes v2 in
-   * the same outer transaction.
+   * Verifies the base run/state/event tables against the exact v6 DDL. There
+   * is no migration path: any drift inside a declared-v6 database is
+   * STORE_CORRUPT.
    */
-  private normalizeEventHashesToExtendedForm(db: Database.Database): void {
-    const rows = db.prepare("SELECT * FROM loop_events").all() as EventRow[];
-    const update = db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE event_id = ?");
-    for (const row of rows) {
-      const event = rowToEvent(row);
-      validatePersistedEvent(event);
-      const extendedSha = sha256Hex(canonicalizePersistedEvent(event));
-      if (extendedSha === row.canonical_sha256) continue;
-      const legacyCompatible =
-        event.bindingId === null && event.bindingVersion === null && event.inputArtifactRef === null;
-      if (!legacyCompatible || sha256Hex(canonicalizePersistedEventLegacy(event)) !== row.canonical_sha256) {
-        corrupt("persisted event canonical hash mismatch");
-      }
-      update.run(extendedSha, row.event_id);
+  private verifyBaseTablesSchema(db: Database.Database): void {
+    verifyTableColumns(db, "loop_runs", "run table", [
+      ["run_id", "TEXT", 0, 1], ["requirement_id", "TEXT", 1, 0],
+      ["repository", "TEXT", 1, 0], ["repository_path", "TEXT", 1, 0],
+      ["base_branch", "TEXT", 1, 0], ["expected_base_sha", "TEXT", 1, 0],
+      ["task_branch", "TEXT", 1, 0], ["control_root", "TEXT", 1, 0],
+      ["status", "TEXT", 1, 0], ["current_stage", "TEXT", 0, 0],
+      ["current_attempt", "INTEGER", 1, 0], ["fix_round", "INTEGER", 1, 0],
+      ["last_sequence", "INTEGER", 1, 0], ["last_event_id", "TEXT", 1, 0],
+      ["blocking_reason_code", "TEXT", 0, 0], ["failure_reason_code", "TEXT", 0, 0],
+      ["created_at", "TEXT", 1, 0], ["updated_at", "TEXT", 1, 0],
+      ["identity_sha256", "TEXT", 1, 0],
+    ]);
+    const statusIndex = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_loop_runs_status'",
+    ).get();
+    if (statusIndex === undefined) corrupt("run status index is missing");
+    verifyTableColumns(db, "loop_stage_states", "stage state table", [
+      ["run_id", "TEXT", 1, 1], ["stage", "TEXT", 1, 2],
+      ["status", "TEXT", 1, 0], ["attempt", "INTEGER", 1, 0],
+      ["updated_at", "TEXT", 1, 0],
+    ]);
+    verifyTableForeignKeys(db, "loop_stage_states", "stage state table", [
+      { from: "run_id", references: "loop_runs", to: "run_id" },
+    ]);
+    verifyTableColumns(db, "loop_events", "event table", [
+      ["event_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
+      ["sequence", "INTEGER", 1, 0], ["kind", "TEXT", 1, 0],
+      ["stage", "TEXT", 0, 0], ["attempt", "INTEGER", 1, 0],
+      ["created_at", "TEXT", 1, 0], ["input_digest", "TEXT", 0, 0],
+      ["output_artifact_ref", "TEXT", 0, 0], ["output_digest", "TEXT", 0, 0],
+      ["error_code", "TEXT", 0, 0], ["retryable", "INTEGER", 0, 0],
+      ["reason_code", "TEXT", 0, 0], ["binding_id", "TEXT", 0, 0],
+      ["binding_version", "TEXT", 0, 0], ["input_artifact_ref", "TEXT", 0, 0],
+      ["canonical_sha256", "TEXT", 1, 0],
+    ]);
+    verifyUniqueIndex(db, "loop_events", "event table", ["run_id", "sequence"]);
+    verifyTableForeignKeys(db, "loop_events", "event table", [
+      { from: "run_id", references: "loop_runs", to: "run_id" },
+    ]);
+    const eventIndex = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_loop_events_run_id'",
+    ).get();
+    if (eventIndex === undefined) corrupt("event run index is missing");
+    const tableSql = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'loop_events'",
+    ).get() as { sql?: unknown } | undefined;
+    if (
+      typeof tableSql?.sql !== "string" ||
+      !tableSql.sql.includes("CHECK (retryable IS NULL OR retryable IN (0, 1))")
+    ) {
+      corrupt("event retryable constraint is missing");
     }
-    db.exec("PRAGMA user_version = 1");
   }
 
   private readRequirementChangesInTransaction(
@@ -3231,7 +3267,8 @@ export class LoopRunStore {
       ["generation", "INTEGER", 0, 0], ["stable_path", "TEXT", 1, 0],
       ["artifact_kind", "TEXT", 1, 0], ["semver", "TEXT", 1, 0],
       ["artifact_ref", "TEXT", 1, 0], ["digest", "TEXT", 1, 0],
-      ["producer_execution_id", "TEXT", 1, 0], ["gate_result", "TEXT", 0, 0],
+      ["producer_execution_id", "TEXT", 1, 0],
+      ["producer_execution_role", "TEXT", 1, 0], ["gate_result", "TEXT", 0, 0],
       ["validity", "TEXT", 1, 0], ["superseded_by", "TEXT", 0, 0],
       ["created_at", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
     ]);
@@ -3270,7 +3307,7 @@ export class LoopRunStore {
     verifyTableColumns(db, "loop_findings", "finding table", [
       ["finding_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
       ["requirement_id", "TEXT", 1, 0], ["sequence", "INTEGER", 1, 0],
-      ["source_capability", "TEXT", 1, 0], ["source_revision_id", "TEXT", 0, 0],
+      ["source_capability", "TEXT", 1, 0], ["source_revision_id", "TEXT", 1, 0],
       ["severity", "TEXT", 1, 0], ["category", "TEXT", 1, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["earliest_affected_node_id", "TEXT", 1, 0], ["status", "TEXT", 1, 0],
@@ -3397,6 +3434,10 @@ export class LoopRunStore {
       }
       if (producer.gateResult !== record.gateResult) {
         corrupt("artifact revision Gate result does not match the producer execution");
+      }
+      // v2 (A2): the persisted producing role must match the execution stream.
+      if (producer.executionRole !== record.producerExecutionRole) {
+        corrupt("artifact revision producing role does not match the producer execution");
       }
     }
     // Re-verify the blob binding on every read: a persisted revision whose
@@ -3649,7 +3690,8 @@ export class LoopRunStore {
     const expected: ReadonlyArray<readonly [string, string, number, number]> = [
       ["execution_event_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
       ["sequence", "INTEGER", 1, 0], ["schema_version", "INTEGER", 1, 0],
-      ["capability", "TEXT", 1, 0], ["node_id", "TEXT", 1, 0],
+      ["capability", "TEXT", 1, 0], ["execution_role", "TEXT", 1, 0],
+      ["node_id", "TEXT", 1, 0],
       ["attempt", "INTEGER", 1, 0], ["status", "TEXT", 1, 0],
       ["created_at", "TEXT", 1, 0], ["binding_id", "TEXT", 1, 0],
       ["binding_version", "TEXT", 1, 0], ["binding_registry_version", "TEXT", 1, 0],
@@ -3746,8 +3788,8 @@ export class LoopRunStore {
     const events = eventRows.map((eventRow) => {
       const event = rowToEvent(eventRow);
       validatePersistedEvent(event);
-      // init() has already normalized any legacy hashes to the extended
-      // form, so exactly one hash format is valid here.
+      // Exactly one hash format (the extended canonical form) is valid in a
+      // v6 journal — historical formats are rejected at init before any read.
       if (sha256Hex(canonicalizePersistedEvent(event)) !== eventRow.canonical_sha256) {
         corrupt("persisted event canonical hash mismatch");
       }

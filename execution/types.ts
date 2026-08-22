@@ -59,6 +59,8 @@ export type ExecutionRequest = Readonly<{
   loopExecution?: Readonly<{
     runId: string;
     attempt: number;
+    /** v2 (C02-WP3.5-B, A2): the required execution role being dispatched. */
+    executionRole: import("../loop/types").CapabilityExecutionRole;
     inputArtifactRef: string;
     inputArtifactVersion: string;
     inputDigest: string;

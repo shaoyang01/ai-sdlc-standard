@@ -513,94 +513,32 @@ function test(): void {
 
     // ── Finding C: raw retryable canonicality ──
     console.log("raw retryable canonicality");
-    const retryDir = mkdtempSync(join(tempRoot, "retry-"));
-    const retryDbPath = join(retryDir, "journal.db");
     {
-      const setup = new Database(retryDbPath);
-      setup.exec(`
-        CREATE TABLE loop_runs (
-          run_id TEXT PRIMARY KEY,
-          requirement_id TEXT NOT NULL,
-          repository TEXT NOT NULL,
-          repository_path TEXT NOT NULL,
-          base_branch TEXT NOT NULL,
-          expected_base_sha TEXT NOT NULL,
-          task_branch TEXT NOT NULL,
-          control_root TEXT NOT NULL,
-          status TEXT NOT NULL,
-          current_stage TEXT,
-          current_attempt INTEGER NOT NULL,
-          fix_round INTEGER NOT NULL,
-          last_sequence INTEGER NOT NULL,
-          last_event_id TEXT NOT NULL,
-          blocking_reason_code TEXT,
-          failure_reason_code TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          identity_sha256 TEXT NOT NULL
-        );
-        CREATE INDEX idx_loop_runs_status ON loop_runs(status);
-        CREATE TABLE loop_stage_states (
-          run_id TEXT NOT NULL,
-          stage TEXT NOT NULL,
-          status TEXT NOT NULL,
-          attempt INTEGER NOT NULL,
-          updated_at TEXT NOT NULL,
-          PRIMARY KEY (run_id, stage),
-          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-        );
-        CREATE INDEX idx_loop_stage_states_run_id ON loop_stage_states(run_id);
-        CREATE TABLE loop_events (
-          event_id TEXT PRIMARY KEY,
-          run_id TEXT NOT NULL,
-          sequence INTEGER NOT NULL,
-          kind TEXT NOT NULL,
-          stage TEXT,
-          attempt INTEGER NOT NULL,
-          created_at TEXT NOT NULL,
-          input_digest TEXT,
-          output_artifact_ref TEXT,
-          output_digest TEXT,
-          error_code TEXT,
-          retryable INTEGER,
-          reason_code TEXT,
-          canonical_sha256 TEXT NOT NULL,
-          UNIQUE (run_id, sequence),
-          FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-        );
-        CREATE INDEX idx_loop_events_run_id ON loop_events(run_id);
-      `);
+      // A hand-built pre-versioning journal (LOOP tables, user_version 0) is
+      // history on the v2 cutover: init refuses it instead of migrating.
+      const legacyDir = mkdtempSync(join(tempRoot, "retry-legacy-"));
+      const legacyPath = join(legacyDir, "journal.db");
+      const setup = new Database(legacyPath);
+      setup.exec("CREATE TABLE loop_runs (run_id TEXT PRIMARY KEY)");
       setup.close();
-
-      const store = new LoopRunStore(retryDbPath);
-      store.init();
-      store.createRun(makeIdentity());
-      store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-      store.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1, retryable: false }));
-      store.close();
+      const legacyStore = new LoopRunStore(legacyPath);
+      expectThrow("UNSUPPORTED_HISTORICAL_FORMAT", () => legacyStore.init(),
+        "unversioned journal with LOOP tables rejected");
+      rmSync(legacyDir, { recursive: true, force: true });
 
       // raw retryable = 2 without touching canonical hash must be rejected
-      {
-        const db = new Database(retryDbPath);
-        db.prepare("UPDATE loop_events SET retryable = ? WHERE event_id = ?").run(2, "run-001:3:stage_started:prepare_workspace");
-        db.close();
-        const store2 = new LoopRunStore(retryDbPath);
-        store2.init();
-        expectThrow("STORE_CORRUPT", () => store2.getRun("run-001"), "raw retryable=2 rejected via getRun");
-        expectThrow("STORE_CORRUPT", () => store2.listEvents("run-001"), "raw retryable=2 rejected via listEvents");
-        store2.close();
-      }
-      // schema CHECK for new databases
-      {
-        const freshDir = mkdtempSync(join(tempRoot, "retry-fresh-"));
-        const freshStore = new LoopRunStore(join(freshDir, "journal.db"));
-        freshStore.init();
-        const db = new Database(join(freshDir, "journal.db"), { readonly: true });
-        const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'loop_events'").get() as { sql: string }).sql;
-        assert(sql.includes("retryable IS NULL OR retryable IN (0, 1)"), "new schema has retryable CHECK constraint");
-        db.close();
-        freshStore.close();
-      }
+      const retryDir2 = mkdtempSync(join(tempRoot, "retry-tamper-"));
+      const retryDbPath = join(retryDir2, "journal.db");
+      const seeded = openStore(retryDir2);
+      seeded.createRun(makeIdentity());
+      seeded.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
+      seeded.appendEvent(makeEvent({ sequence: 3, kind: "stage_started", stage: "prepare_workspace", attempt: 1, retryable: false }));
+      seeded.close();
+      // The v6 schema carries the retryable CHECK directly: an out-of-range
+      // raw value cannot even be persisted.
+      const sql = (new Database(retryDbPath).prepare("SELECT sql FROM sqlite_master WHERE name = 'loop_events'").get() as { sql: string }).sql;
+      assert(sql.includes("retryable IS NULL OR retryable IN (0, 1)"), "new schema has retryable CHECK constraint");
+      rmSync(retryDir2, { recursive: true, force: true });
     }
 
     // ── Finding D: safe bounded error messages ──
@@ -1105,7 +1043,7 @@ function test(): void {
       const OrigExec = Database.prototype.exec;
       try {
         Database.prototype.exec = function(this: Database.Database, sql: string): Database.Database {
-          if (sql.includes("CREATE TABLE IF NOT EXISTS loop_runs")) {
+          if (sql.includes("CREATE TABLE loop_runs (")) {
             const err = new Error("SQLITE_NOMEM_SENTINEL") as NodeJS.ErrnoException;
             err.code = "SQLITE_NOMEM";
             throw err;
@@ -1161,7 +1099,7 @@ function test(): void {
       let closeCallCount = 0;
       try {
         Database.prototype.exec = function(this: Database.Database, sql: string): Database.Database {
-          if (sql.includes("CREATE TABLE IF NOT EXISTS loop_runs")) {
+          if (sql.includes("CREATE TABLE loop_runs (")) {
             const err = new Error("E") as NodeJS.ErrnoException;
             err.code = "SQLITE_ERROR";
             throw err;

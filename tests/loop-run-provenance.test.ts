@@ -304,11 +304,11 @@ withStore((store) => {
   );
 });
 
-console.log("provenance: legacy journal migration (pre-extension columns)");
+console.log("provenance: legacy journals are rejected as unsupported history on the v2 cutover");
 {
   const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
   const path = join(dir, "journal.db");
-  // Build a legacy journal without the provenance columns.
+  // Build a legacy journal without the provenance columns (pre-extension v0).
   const db = new Database(path);
   db.exec(`
     CREATE TABLE loop_runs (
@@ -320,110 +320,25 @@ console.log("provenance: legacy journal migration (pre-extension columns)");
       blocking_reason_code TEXT, failure_reason_code TEXT, created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL, identity_sha256 TEXT NOT NULL
     );
-    CREATE TABLE loop_stage_states (
-      run_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL,
-      attempt INTEGER NOT NULL, updated_at TEXT NOT NULL,
-      PRIMARY KEY (run_id, stage),
-      FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-    );
-    CREATE TABLE loop_events (
-      event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, sequence INTEGER NOT NULL,
-      kind TEXT NOT NULL, stage TEXT, attempt INTEGER NOT NULL, created_at TEXT NOT NULL,
-      input_digest TEXT, output_artifact_ref TEXT, output_digest TEXT, error_code TEXT,
-      retryable INTEGER, reason_code TEXT, canonical_sha256 TEXT NOT NULL,
-      UNIQUE (run_id, sequence),
-      FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-    );
   `);
   db.close();
   const store = new LoopRunStore(path);
-  store.init();
+  let rejected = false;
   try {
-    store.createRun(makeIdentity());
-    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const snapshot = store.getSnapshot("run-001");
-    const created = snapshot?.events[0];
-    assert(created?.bindingId === null, "legacy event reads bindingId as null");
-    assert(created?.bindingVersion === null, "legacy event reads bindingVersion as null");
-    assert(created?.inputArtifactRef === null, "legacy event reads inputArtifactRef as null");
-    // New provenance events work after migration.
-    recordNodeExecution(store, {
-      runId: "run-001",
-      stage: "prepare_workspace",
-      attempt: 1,
-      kind: "stage_started",
-      createdAt: TS,
-      provenance: { bindingId: "binding-codex-implementation", bindingVersion: "1.0.0", inputArtifactRef: null },
-    });
-    assert(
-      store.getSnapshot("run-001")?.events.some((e) => e.bindingId === "binding-codex-implementation"),
-      "provenance writable after migration",
-    );
-  } finally {
-    store.close();
-    rmSync(dir, { recursive: true, force: true });
+    store.init();
+  } catch (error) {
+    rejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
   }
+  assert(rejected, "unversioned journal with LOOP tables rejected with UNSUPPORTED_HISTORICAL_FORMAT");
+  rmSync(dir, { recursive: true, force: true });
 }
-
-// ── real historical-data regression (pre-extension rows with legacy hashes) ──
-// The legacy canonical form is re-derived here from the 13 pre-extension
-// fields (not imported from production code) so this test anchors the exact
-// serialization historical journals were persisted with.
-
-function legacyEventSha256(event: LoopRunEvent): string {
-  const ordered = {
-    eventId: event.eventId,
-    runId: event.runId,
-    sequence: event.sequence,
-    kind: event.kind,
-    stage: event.stage,
-    attempt: event.attempt,
-    createdAt: event.createdAt,
-    inputDigest: event.inputDigest,
-    outputArtifactRef: event.outputArtifactRef,
-    outputDigest: event.outputDigest,
-    errorCode: event.errorCode,
-    retryable: event.retryable,
-    reasonCode: event.reasonCode,
-  };
-  return createHash("sha256").update(JSON.stringify(ordered), "utf8").digest("hex");
-}
-
-// The extended canonical form, likewise re-derived independently so the
-// migration assertions anchor the exact post-migration serialization.
-function extendedEventSha256(event: LoopRunEvent): string {
-  const ordered = {
-    eventId: event.eventId,
-    runId: event.runId,
-    sequence: event.sequence,
-    kind: event.kind,
-    stage: event.stage,
-    attempt: event.attempt,
-    createdAt: event.createdAt,
-    inputDigest: event.inputDigest,
-    outputArtifactRef: event.outputArtifactRef,
-    outputDigest: event.outputDigest,
-    errorCode: event.errorCode,
-    retryable: event.retryable,
-    reasonCode: event.reasonCode,
-    bindingId: event.bindingId,
-    bindingVersion: event.bindingVersion,
-    inputArtifactRef: event.inputArtifactRef,
-  };
-  return createHash("sha256").update(JSON.stringify(ordered), "utf8").digest("hex");
-}
-
-/**
- * Builds a journal exactly as the pre-extension store would have persisted
- * it: schema without the provenance columns, one run whose events carry a
- * canonical_sha256 computed over the legacy 13-field form. With
- * `withRunStarted`, a second (run_started) event is appended and the run row
- * is advanced consistently.
- */
-function seedHistoricalLegacyJournal(path: string, opts?: { withRunStarted?: boolean }): void {
-  const identity = makeIdentity();
-  const db = new Database(path);
-  db.exec(`
+console.log("provenance: historical runs stay frozen — no append path exists");
+{
+  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
+  const path = join(dir, "journal.db");
+  // Minimal pre-versioning journal: LOOP tables present, user_version 0.
+  const db0 = new Database(path);
+  db0.exec(`
     CREATE TABLE loop_runs (
       run_id TEXT PRIMARY KEY, requirement_id TEXT NOT NULL, repository TEXT NOT NULL,
       repository_path TEXT NOT NULL, base_branch TEXT NOT NULL, expected_base_sha TEXT NOT NULL,
@@ -433,197 +348,20 @@ function seedHistoricalLegacyJournal(path: string, opts?: { withRunStarted?: boo
       blocking_reason_code TEXT, failure_reason_code TEXT, created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL, identity_sha256 TEXT NOT NULL
     );
-    CREATE TABLE loop_stage_states (
-      run_id TEXT NOT NULL, stage TEXT NOT NULL, status TEXT NOT NULL,
-      attempt INTEGER NOT NULL, updated_at TEXT NOT NULL,
-      PRIMARY KEY (run_id, stage),
-      FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-    );
-    CREATE TABLE loop_events (
-      event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, sequence INTEGER NOT NULL,
-      kind TEXT NOT NULL, stage TEXT, attempt INTEGER NOT NULL, created_at TEXT NOT NULL,
-      input_digest TEXT, output_artifact_ref TEXT, output_digest TEXT, error_code TEXT,
-      retryable INTEGER, reason_code TEXT, canonical_sha256 TEXT NOT NULL,
-      UNIQUE (run_id, sequence),
-      FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
-    );
   `);
-  const identitySha = createHash("sha256").update(canonicalizeLoopRunIdentity(identity), "utf8").digest("hex");
-  const created = makeEvent({ sequence: 1, kind: "run_created", attempt: 0 });
-  const started = opts?.withRunStarted === true ? makeEvent({ sequence: 2, kind: "run_started" }) : null;
-  const last = started ?? created;
-  db.prepare(
-    `INSERT INTO loop_runs (
-      run_id, requirement_id, repository, repository_path, base_branch,
-      expected_base_sha, task_branch, control_root, status, current_stage,
-      current_attempt, fix_round, last_sequence, last_event_id,
-      blocking_reason_code, failure_reason_code, created_at, updated_at,
-      identity_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    identity.runId,
-    identity.requirementId,
-    identity.repository,
-    identity.repositoryPath,
-    identity.baseBranch,
-    identity.expectedBaseSha,
-    identity.taskBranch,
-    identity.controlRoot,
-    started === null ? "created" : "running",
-    null,
-    0,
-    0,
-    last.sequence,
-    last.eventId,
-    null,
-    null,
-    identity.createdAt,
-    last.createdAt,
-    identitySha,
-  );
-  const stageInsert = db.prepare(
-    "INSERT INTO loop_stage_states (run_id, stage, status, attempt, updated_at) VALUES (?, ?, ?, ?, ?)",
-  );
-  for (const stage of LOOP_STAGE_NAMES) {
-    stageInsert.run(identity.runId, stage, "pending", 0, identity.createdAt);
-  }
-  const eventInsert = db.prepare(
-    `INSERT INTO loop_events (
-      event_id, run_id, sequence, kind, stage, attempt, created_at,
-      input_digest, output_artifact_ref, output_digest, error_code,
-      retryable, reason_code, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const legacyEvent of started === null ? [created] : [created, started]) {
-    eventInsert.run(
-      legacyEvent.eventId,
-      legacyEvent.runId,
-      legacyEvent.sequence,
-      legacyEvent.kind,
-      legacyEvent.stage,
-      legacyEvent.attempt,
-      legacyEvent.createdAt,
-      legacyEvent.inputDigest,
-      legacyEvent.outputArtifactRef,
-      legacyEvent.outputDigest,
-      legacyEvent.errorCode,
-      legacyEvent.retryable,
-      legacyEvent.reasonCode,
-      legacyEventSha256(legacyEvent),
-    );
-  }
-  db.close();
-}
-
-console.log("provenance: historical legacy rows read back after migration");
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
-  const path = join(dir, "journal.db");
-  seedHistoricalLegacyJournal(path);
-  const created = makeEvent({ sequence: 1, kind: "run_created", attempt: 0 });
-  const legacyHash = legacyEventSha256(created);
-  const extendedHash = extendedEventSha256(created);
-
+  db0.close();
   const store = new LoopRunStore(path);
-  store.init();
+  let rejected = false;
   try {
-    const snapshot = store.getSnapshot("run-001");
-    assert(snapshot !== undefined, "historical run snapshot reads back");
-    assert(snapshot?.state.status === "created", "historical run status replays as created");
-    const createdEvent = snapshot?.events[0];
-    assert(createdEvent?.kind === "run_created", "historical run_created event present");
-    assert(createdEvent?.bindingId === null, "historical event provenance reads as null");
-    assert(createdEvent?.bindingVersion === null, "historical binding version reads as null");
-    assert(createdEvent?.inputArtifactRef === null, "historical input artifact ref reads as null");
-    const context = recoverRunContext(store, "req-001");
-    assert(context?.status === "created", "historical run recoverable via recoverRunContext");
-  } finally {
-    store.close();
+    store.init();
+  } catch (error) {
+    rejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
   }
-  // The migration verifies the legacy hash, then atomically rewrites it to
-  // the extended form and marks the journal normalized.
-  const db = new Database(path, { readonly: true });
-  const row = db.prepare("SELECT canonical_sha256 FROM loop_events WHERE sequence = 1").get() as
-    | { canonical_sha256: string }
-    | undefined;
-  const formatVersion = db.pragma("user_version", { simple: true });
-  db.close();
-  assert(row?.canonical_sha256 === extendedHash, "legacy hash atomically rewritten to extended form");
-  assert(row?.canonical_sha256 !== legacyHash, "stored hash no longer the legacy form");
-  assert(formatVersion === 5, "journal migrated through finding-lifecycle schema (user_version = 5)");
+  assert(rejected, "legacy journal is not opened for appends");
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("provenance: new provenance events append onto historical run");
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
-  const path = join(dir, "journal.db");
-  seedHistoricalLegacyJournal(path);
-
-  const store = new LoopRunStore(path);
-  store.init();
-  try {
-    store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    recordNodeExecution(store, {
-      runId: "run-001",
-      stage: "prepare_workspace",
-      attempt: 1,
-      kind: "stage_started",
-      createdAt: TS,
-      provenance: {
-        bindingId: "binding-codex-implementation",
-        bindingVersion: "1.0.0",
-        inputArtifactRef: "library/req-001/01-技术方案/req-001_技术方案.md@v2",
-      },
-    });
-    const snapshot = store.getSnapshot("run-001");
-    assert(snapshot?.events.length === 3, "historical run accepts new events after migration");
-    assert(
-      snapshot?.events.some((e) => e.bindingId === "binding-codex-implementation") === true,
-      "new provenance event persisted on historical run",
-    );
-    const context = recoverRunContext(store, "req-001");
-    assert(context?.currentStage === "prepare_workspace", "historical run continues to new stage");
-    assert(
-      context?.lastExecution?.bindingId === "binding-codex-implementation",
-      "recovery exposes new provenance on historical run",
-    );
-  } finally {
-    store.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-console.log("provenance: tampered historical row is still STORE_CORRUPT");
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
-  const path = join(dir, "journal.db");
-  seedHistoricalLegacyJournal(path);
-  // Tamper with the persisted hash itself: the init() migration cannot
-  // verify it against either form and aborts before opening the store.
-  const db = new Database(path);
-  db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE sequence = 1").run("0".repeat(64));
-  db.close();
-  const store = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store.init(), "tampered legacy hash rejected at migration");
-  store.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
-  const path = join(dir, "journal.db");
-  seedHistoricalLegacyJournal(path);
-  // Tamper with event content while keeping the original legacy hash.
-  const db = new Database(path);
-  db.prepare("UPDATE loop_events SET input_digest = ? WHERE sequence = 1").run("f".repeat(64));
-  db.close();
-  const store = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store.init(), "tampered legacy content rejected at migration");
-  store.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-
-console.log("provenance: extended row carrying a valid legacy hash is STORE_CORRUPT");
+console.log("provenance: an extended row carrying a valid legacy hash is STORE_CORRUPT");
 {
   const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
   const path = join(dir, "journal.db");
@@ -633,11 +371,10 @@ console.log("provenance: extended row carrying a valid legacy hash is STORE_CORR
   store1.createRun(makeIdentity());
   store1.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
   store1.close();
-  // Replace one extended hash with the valid legacy hash of the same event.
-  // After migration the format source is fixed, so this downgrade must fail.
-  const legacyHash = legacyEventSha256(makeEvent({ sequence: 2, kind: "run_started" }));
+  // Corrupt one persisted hash: inside a declared v6 journal this is
+  // corruption of the supported format, rejected on read.
   const db = new Database(path);
-  db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE sequence = 2").run(legacyHash);
+  db.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE sequence = 2").run("0".repeat(64));
   db.close();
   const store2 = new LoopRunStore(path);
   store2.init();
@@ -650,65 +387,9 @@ console.log("provenance: extended row carrying a valid legacy hash is STORE_CORR
   }
 }
 
-console.log("provenance: failed migration rolls back columns, hashes and user_version");
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
-  const path = join(dir, "journal.db");
-  // Two historical events: the first has a valid legacy hash, the second is
-  // corrupt. The migration must fail on the second row without persisting
-  // any partial work from the first.
-  seedHistoricalLegacyJournal(path, { withRunStarted: true });
-  const firstLegacyHash = legacyEventSha256(makeEvent({ sequence: 1, kind: "run_created", attempt: 0 }));
-  const db0 = new Database(path);
-  db0.prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE sequence = 2").run("0".repeat(64));
-  db0.close();
-
-  const store = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store.init(), "corrupt second event aborts migration");
-  store.close();
-
-  const db = new Database(path, { readonly: true });
-  const rows = db.prepare("SELECT sequence, canonical_sha256 FROM loop_events ORDER BY sequence ASC").all() as Array<{
-    sequence: number;
-    canonical_sha256: string;
-  }>;
-  const columns = db.prepare("PRAGMA table_info(loop_events)").all() as Array<{ name: string }>;
-  const formatVersion = db.pragma("user_version", { simple: true });
-  db.close();
-  assert(rows[0]?.canonical_sha256 === firstLegacyHash, "first row hash not rewritten after rollback");
-  assert(rows[1]?.canonical_sha256 === "0".repeat(64), "corrupt row untouched after rollback");
-  assert(formatVersion === 0, "user_version still 0 after rollback");
-  assert(
-    !columns.some((c) => c.name === "binding_id" || c.name === "binding_version" || c.name === "input_artifact_ref"),
-    "provenance columns not persisted after rollback",
-  );
-  const dbCapability = new Database(path, { readonly: true });
-  const capabilityTable = dbCapability
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_capability_executions'")
-    .get();
-  dbCapability.close();
-  assert(capabilityTable === undefined, "capability execution table not persisted after rollback");
-  // The failed migration is retryable: fixing the corruption lets init succeed.
-  const dbFix = new Database(path);
-  dbFix
-    .prepare("UPDATE loop_events SET canonical_sha256 = ? WHERE sequence = 2")
-    .run(legacyEventSha256(makeEvent({ sequence: 2, kind: "run_started" })));
-  dbFix.close();
-  const store2 = new LoopRunStore(path);
-  store2.init();
-  try {
-    const snapshot = store2.getSnapshot("run-001");
-    assert(snapshot?.events.length === 2, "repaired journal migrates and reads back");
-    assert(snapshot?.state.status === "running", "repaired journal replays to running");
-  } finally {
-    store2.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 console.log("provenance: unknown journal format version is STORE_CORRUPT");
 {
-  for (const badVersion of [6, -1]) {
+  for (const badVersion of [-1]) {
     const dir = mkdtempSync(join(tmpdir(), "loop-provenance-"));
     const path = join(dir, "journal.db");
     const store = new LoopRunStore(path);

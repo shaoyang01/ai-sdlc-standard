@@ -115,11 +115,12 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 /** Drives the canonical single-pass capability chain inside one run. */
 function makeCapabilityDriver(store: LoopRunStore, runId: string) {
   let sequence = 0;
-  const attempts = new Map<NodeCapabilityId, number>();
+  const attempts = new Map<string, number>();
   /** Begin the next attempt of a capability (retry after a retryable failure). */
-  function nextAttempt(capability: NodeCapabilityId): number {
-    const attempt = (attempts.get(capability) ?? 0) + 1;
-    attempts.set(capability, attempt);
+  function nextAttempt(capability: NodeCapabilityId, executionRole: string): number {
+    const key = `${capability}:${executionRole}`;
+    const attempt = (attempts.get(key) ?? 0) + 1;
+    attempts.set(key, attempt);
     return attempt;
   }
   let predecessor = {
@@ -133,18 +134,22 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     overrides: Partial<LoopCapabilityExecutionEvent>,
   ): LoopCapabilityExecutionEvent {
     sequence += 1;
+    const executionRole = capability === "solution-gate"
+      ? (overrides.executionRole ?? "formal_verdict")
+      : "primary";
     return Object.freeze({
-      schemaVersion: 1,
+      schemaVersion: 2,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
       capability,
+      executionRole,
       nodeId: capability,
       attempt: 1,
       status,
       createdAt: nextTs(),
-      bindingId: `binding-codex-${capability}`,
-      bindingVersion: "1.0.0",
+      bindingId: `binding-codex-${capability}-${executionRole}`,
+      bindingVersion: "2.0.0",
       bindingRegistryVersion: "1",
       executorAgent: "codex",
       executorAdapter: "codex-real-dispatch",
@@ -168,13 +173,13 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
   return {
     /** Append only the started event, leaving an active execution claim. */
     start(capability: NodeCapabilityId): LoopCapabilityExecutionEvent {
-      const started = event(capability, "started", { attempt: nextAttempt(capability) });
+      const started = event(capability, "started", { attempt: nextAttempt(capability, "primary") });
       store.appendCapabilityExecution(started);
       return started;
     },
     /** Append started + failed(retryable) and return the failed event. */
     fail(capability: NodeCapabilityId): LoopCapabilityExecutionEvent {
-      const attempt = nextAttempt(capability);
+      const attempt = nextAttempt(capability, "primary");
       const started = event(capability, "started", { attempt });
       store.appendCapabilityExecution(started);
       const failed = event(capability, "failed", {
@@ -195,12 +200,57 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     ): LoopCapabilityExecutionEvent {
       const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(capability);
       const gateResult = isGate ? gate ?? "PASS" : "NOT_APPLICABLE";
-      const attempt = nextAttempt(capability);
-      const started = event(capability, "started", { attempt });
+      let scanRef = "";
+      let scanVersion = "1.0.0";
+      let scanDigest = "";
+      if (isGate) {
+        // v2: the scan round runs first, bound to a different agent; its
+        // ledger rides in unresolvedFindingsRef and its Gate is fixed to
+        // NOT_APPLICABLE.
+        const scanAttempt = nextAttempt(capability, "adversarial_scan");
+        scanRef = `loop-artifact:v1:solution_review:sha256:${dg("a")}`;
+        scanDigest = dg("a");
+        const scanStarted = event(capability, "started", {
+          attempt: scanAttempt,
+          executionRole: "adversarial_scan",
+          executorAgent: "kimi",
+          executorAdapter: "kimi-cli",
+          bindingId: `binding-kimi-${capability}-adversarial_scan`,
+        });
+        store.appendCapabilityExecution(scanStarted);
+        store.appendCapabilityExecution(event(capability, "succeeded", {
+          attempt: scanAttempt,
+          executionRole: "adversarial_scan",
+          executorAgent: "kimi",
+          executorAdapter: "kimi-cli",
+          bindingId: `binding-kimi-${capability}-adversarial_scan`,
+          outputArtifactRef: scanRef,
+          outputArtifactVersion: scanVersion,
+          outputDigest: scanDigest,
+          gateResult: "NOT_APPLICABLE",
+          nextStepEligibility: "ELIGIBLE",
+        }));
+      }
+      const executionRole = isGate ? "formal_verdict" : "primary";
+      const attempt = nextAttempt(capability, executionRole);
+      const started = event(capability, "started", {
+        attempt, executionRole,
+        ...(isGate ? {
+          inputArtifactRef: scanRef,
+          inputArtifactVersion: scanVersion,
+          inputDigest: scanDigest,
+        } : {}),
+      });
       store.appendCapabilityExecution(started);
       const outputRef = `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind}:sha256:${output.digest}`;
       const succeeded = event(capability, "succeeded", {
         attempt,
+        executionRole,
+        ...(isGate ? {
+          inputArtifactRef: scanRef,
+          inputArtifactVersion: scanVersion,
+          inputDigest: scanDigest,
+        } : {}),
         outputArtifactRef: outputRef,
         outputArtifactVersion: output.version,
         outputDigest: output.digest,
@@ -230,6 +280,7 @@ type RevisionDraftOptions = {
 function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
   const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(o.nodeId);
   return {
+    producerExecutionRole: isGate ? "formal_verdict" : "primary",
     runId: "run-001",
     requirementId: o.requirementId ?? "req-001",
     nodeId: o.nodeId,
@@ -258,7 +309,8 @@ function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
 const CANONICAL_REVISION_FIELD_ORDER = [
   "schemaVersion", "revisionId", "runId", "requirementId", "nodeId",
   "sequence", "generation", "stablePath", "artifactKind", "semver",
-  "artifactRef", "digest", "producerExecutionId", "gateResult", "validity",
+  "artifactRef", "digest", "producerExecutionId", "producerExecutionRole",
+  "gateResult", "validity",
   "supersededBy", "upstreamRevisionIds", "createdAt",
 ] as const;
 
@@ -348,7 +400,7 @@ const DESIGN_OUT = { version: "1.0.0", digest: dg("d") };
 
 console.log("artifact revision: schema constants and canonical tokens");
 {
-  assert(LOOP_ARTIFACT_REVISION_SCHEMA_VERSION === 1, "revision schema version is 1");
+  assert(LOOP_ARTIFACT_REVISION_SCHEMA_VERSION === 2, "revision schema version is 2");
   assert(
     LOOP_ARTIFACT_REVISION_VALIDITIES.join(",") === "ACTIVE,STALE,SUPERSEDED",
     "three canonical validity tokens",
@@ -1115,14 +1167,14 @@ withRunningStore((store, dir) => {
       `INSERT INTO loop_artifact_revisions (
         revision_id, run_id, requirement_id, node_id, sequence, schema_version,
         generation, stable_path, artifact_kind, semver, artifact_ref, digest,
-        producer_execution_id, gate_result, validity, superseded_by, created_at,
-        canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        producer_execution_id, producer_execution_role, gate_result, validity,
+        superseded_by, created_at, canonical_sha256
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      "run-001:revision:solution-design:1", "run-001", "req-001", "solution-design", 1, 1,
+      "run-001:revision:solution-design:1", "run-001", "req-001", "solution-design", 1, 2,
       null, "01-技术方案/forged.md", "capability_output", "1.0.0",
       `loop-artifact:v1:capability_output:sha256:${dg("7")}`, dg("7"),
-      "run-001:capability:99:succeeded", "NOT_APPLICABLE", "ACTIVE", null,
+      "run-001:capability:99:succeeded", "formal_verdict", "NOT_APPLICABLE", "ACTIVE", null,
       nextTs(), "0".repeat(64),
     );
   } finally {
@@ -1399,79 +1451,22 @@ console.log("artifact revision: closed store behavior");
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("artifact revision: v3 to v4 migration is atomic and retryable");
+console.log("artifact revision: pre-v6 journals are rejected as unsupported history");
 {
   const dir = mkdtempSync(join(tmpdir(), "loop-artifact-rev-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  // Simulate a pre-WP2 journal: no revision tables, format marker v3.
-  const v3 = new Database(path);
-  for (const table of [
-    "loop_artifact_current", "loop_artifact_revision_upstreams", "loop_artifact_revisions",
-  ]) {
-    v3.exec(`DROP TABLE ${table}`);
+  // A journal marked v4 is known history: init must refuse it outright.
+  const historicalPath = join(dir, "historical.db");
+  const seed = new Database(historicalPath);
+  seed.pragma("user_version = 4");
+  seed.close();
+  const rejected = new LoopRunStore(historicalPath);
+  let historicalRejected = false;
+  try {
+    rejected.init();
+  } catch (error) {
+    historicalRejected = error instanceof LoopRunJournalError && error.code === "UNSUPPORTED_HISTORICAL_FORMAT";
   }
-  v3.pragma("user_version = 3");
-  v3.close();
-  const store2 = new LoopRunStore(path);
-  store2.init();
-  assert(store2.getSnapshot("run-001") !== undefined, "v3 run remains readable after v4 migration");
-  assert(store2.listArtifactRevisions("run-001").length === 0, "migrated journal has an empty revision chain");
-  store2.close();
-  const migrated = new Database(path, { readonly: true });
-  assert(migrated.pragma("user_version", { simple: true }) === 5, "migration atomically records format v5");
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_artifact_revisions'").get() !== undefined,
-    "migration creates the artifact revision table",
-  );
-  assert(
-    migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_artifact_current'").get() !== undefined,
-    "migration creates the current pointer table",
-  );
-  migrated.close();
-  rmSync(dir, { recursive: true, force: true });
-}
-{
-  const dir = mkdtempSync(join(tmpdir(), "loop-artifact-rev-"));
-  const path = join(dir, "journal.db");
-  const store1 = new LoopRunStore(path);
-  store1.init();
-  store1.createRun(makeIdentity());
-  store1.close();
-  const v3 = new Database(path);
-  for (const table of [
-    "loop_artifact_current", "loop_artifact_revision_upstreams", "loop_artifact_revisions",
-  ]) {
-    v3.exec(`DROP TABLE ${table}`);
-  }
-  v3.pragma("user_version = 3");
-  // A bogus pre-existing table makes the migration's schema verification fail.
-  v3.exec("CREATE TABLE loop_artifact_revisions (bogus TEXT)");
-  v3.close();
-  const store2 = new LoopRunStore(path);
-  expectThrow("STORE_CORRUPT", () => store2.init(), "wrong-schema revision table aborts migration");
-  store2.close();
-  const probe = new Database(path, { readonly: true });
-  assert(probe.pragma("user_version", { simple: true }) === 3, "user_version unchanged after migration rollback");
-  assert(
-    probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'loop_artifact_current'").get() === undefined,
-    "pointer table not persisted after rollback",
-  );
-  probe.close();
-  // The failed migration is retryable: removing the bogus table lets init succeed.
-  const fix = new Database(path);
-  fix.exec("DROP TABLE loop_artifact_revisions");
-  fix.close();
-  const store3 = new LoopRunStore(path);
-  store3.init();
-  assert(store3.getSnapshot("run-001") !== undefined, "repaired journal migrates and reads back");
-  store3.close();
-  const retry = new Database(path, { readonly: true });
-  assert(retry.pragma("user_version", { simple: true }) === 5, "retry completes the v5 migration");
-  retry.close();
+  assert(historicalRejected, "v4 journal rejected with UNSUPPORTED_HISTORICAL_FORMAT");
   rmSync(dir, { recursive: true, force: true });
 }
 {

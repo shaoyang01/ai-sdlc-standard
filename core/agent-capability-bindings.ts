@@ -1,24 +1,39 @@
-// Agent Capability Bindings — versioned executor selection (C01 WP-3)
+// Agent Capability Bindings — versioned executor selection (C01 WP-3,
+// upgraded to the v2 executionRole model by C02-WP3.5-B)
 // ===================================================================
-// The binding layer selects an enabled executor for a node capability and
-// validates its output against the node contract (WP-2). Bindings are
-// immutable configuration: every operation returns a NEW deeply frozen
-// registry snapshot; nothing is ever mutated in place. Replacing a binding
-// never changes Requirement ID, artifact schema, finding semantics, Re-Gate
-// routing or the manual Git boundary (LOOP Core Contract §6). Full-
-// capability matrix per Decision-020: every supported agent can execute
-// every node; initial state codex enabled, kimi/hermes disabled pending
-// real-environment review.
+// The binding layer selects an enabled executor for a (capability,
+// executionRole) slot and validates its output against the node contract
+// (WP-2). Bindings are immutable configuration: every operation returns a NEW
+// deeply frozen registry snapshot; nothing is ever mutated in place.
+// Replacing a binding never changes Requirement ID, artifact schema, finding
+// semantics, Re-Gate routing or the manual Git boundary (LOOP Core Contract
+// §6). Full-capability matrix per Decision-020: every supported agent can
+// execute every required execution role; initial state codex enabled,
+// kimi/hermes disabled pending real-environment review.
 
-import { NODE_CAPABILITY_IDS, type LoopAgent, type NodeCapabilityId } from "../loop/types";
+import {
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_EXECUTION_ROLES,
+  NODE_CAPABILITY_IDS,
+  type CapabilityExecutionRole,
+  type LoopAgent,
+  type NodeCapabilityId,
+} from "../loop/types";
 import type { ExecutionArtifactType } from "../execution/types";
 import { types as utilTypes } from "node:util";
 
 export type BindingFailurePolicy = "retry_other_binding" | "block";
 
+// v2 (C02-WP3.5, A2): the binding unique key is upgraded from
+// (capability, agent) to (capability, executionRole, agent) and the binding
+// id carries all three. Every required (capability, role) slot of the eight
+// execution points has exactly one enabled binding; solution-gate's two roles
+// are separately bound so the runtime can prove scan and verdict agents
+// differ.
 export interface AgentCapabilityBinding {
   bindingId: string;
   capability: NodeCapabilityId;
+  executionRole: CapabilityExecutionRole;
   agent: LoopAgent;
   adapter: string;
   bindingVersion: string;
@@ -42,12 +57,12 @@ const ADAPTER_BY_AGENT: Record<LoopAgent, string> = {
   hermes: "hermes-cli",
 };
 
-const BINDING_VERSION = "1.0.0";
+const BINDING_VERSION = "2.0.0";
 const BINDING_TIMEOUT_MS = 120_000;
 const REGISTRY_VERSION = "1";
 const LOOP_AGENTS: readonly LoopAgent[] = ["codex", "kimi", "hermes"];
 const BINDING_FIELDS = [
-  "bindingId", "capability", "agent", "adapter", "bindingVersion", "inputFormat",
+  "bindingId", "capability", "executionRole", "agent", "adapter", "bindingVersion", "inputFormat",
   "outputContract", "validator", "allowedSideEffects", "timeoutMs", "failurePolicy", "enabled",
 ] as const;
 const REGISTRY_FIELDS = ["version", "bindings"] as const;
@@ -155,13 +170,13 @@ export function validateBindingRegistry(value: unknown): asserts value is Bindin
   if (!Number.isSafeInteger(versionNumber)) invalidRegistry("registry.version must be safely representable");
   const bindings = frozenDataArray(
     registry.bindings,
-    NODE_CAPABILITY_IDS.length * LOOP_AGENTS.length,
+    LOOP_CAPABILITY_EXECUTION_POINTS.length * LOOP_AGENTS.length,
     "registry.bindings",
   );
 
   const ids = new Set<string>();
-  const pairs = new Set<string>();
-  const enabledCounts = new Map<NodeCapabilityId, number>();
+  const slots = new Set<string>();
+  const enabledCounts = new Map<string, number>();
   for (const rawBinding of bindings) {
     const binding = exactDataFields(rawBinding, BINDING_FIELDS, "binding");
     if (!Object.isFrozen(rawBinding)) invalidRegistry("every binding must be frozen");
@@ -169,26 +184,36 @@ export function validateBindingRegistry(value: unknown): asserts value is Bindin
     if (typeof capability !== "string" || !NODE_CAPABILITY_IDS.includes(capability as NodeCapabilityId)) {
       invalidRegistry("binding capability must be canonical");
     }
+    const executionRole = binding.executionRole;
+    if (
+      typeof executionRole !== "string" ||
+      !(NODE_CAPABILITY_EXECUTION_ROLES[capability as NodeCapabilityId] as readonly string[]).includes(executionRole)
+    ) {
+      invalidRegistry("binding executionRole must be a required role of the capability");
+    }
     const agent = binding.agent;
     if (typeof agent !== "string" || !LOOP_AGENTS.includes(agent as LoopAgent)) {
       invalidRegistry("binding agent must be supported");
     }
     const typedCapability = capability as NodeCapabilityId;
+    const typedRole = executionRole as CapabilityExecutionRole;
     const typedAgent = agent as LoopAgent;
     const bindingId = safeText(binding.bindingId, "binding.bindingId");
-    if (bindingId !== `binding-${typedAgent}-${typedCapability}` || ids.has(bindingId)) {
-      invalidRegistry("bindingId must be unique and match agent/capability");
+    if (
+      bindingId !== `binding-${typedAgent}-${typedCapability}-${typedRole}` || ids.has(bindingId)
+    ) {
+      invalidRegistry("bindingId must be unique and match agent/capability/role");
     }
     ids.add(bindingId);
-    const pair = `${typedAgent}:${typedCapability}`;
-    if (pairs.has(pair)) invalidRegistry("agent/capability pairs must be unique");
-    pairs.add(pair);
+    const slot = `${typedAgent}:${typedCapability}:${typedRole}`;
+    if (slots.has(slot)) invalidRegistry("agent/capability/role slots must be unique");
+    slots.add(slot);
     if (binding.adapter !== ADAPTER_BY_AGENT[typedAgent]) invalidRegistry("binding adapter must match agent");
     const bindingVersion = safeText(binding.bindingVersion, "binding.bindingVersion");
     if (!SEMVER_RE.test(bindingVersion)) invalidRegistry("binding version must be semantic");
     if (binding.inputFormat !== "artifact-reference:v1") invalidRegistry("binding input format is non-canonical");
-    if (binding.outputContract !== "node-output-contract:v1") invalidRegistry("binding output contract is non-canonical");
-    if (binding.validator !== "node-output-contract:v1") invalidRegistry("binding validator is non-canonical");
+    if (binding.outputContract !== "node-output-contract:v2") invalidRegistry("binding output contract is non-canonical");
+    if (binding.validator !== "node-output-contract:v2") invalidRegistry("binding validator is non-canonical");
     const allowedSideEffects = frozenDataArray(
       binding.allowedSideEffects,
       CANONICAL_ALLOWED_SIDE_EFFECTS.length,
@@ -207,14 +232,17 @@ export function validateBindingRegistry(value: unknown): asserts value is Bindin
       invalidRegistry("binding failure policy is unsupported");
     }
     if (typeof binding.enabled !== "boolean") invalidRegistry("binding enabled flag must be boolean");
-    if (binding.enabled) enabledCounts.set(typedCapability, (enabledCounts.get(typedCapability) ?? 0) + 1);
+    const roleSlot = `${typedCapability}:${typedRole}`;
+    if (binding.enabled) enabledCounts.set(roleSlot, (enabledCounts.get(roleSlot) ?? 0) + 1);
   }
-  for (const capability of NODE_CAPABILITY_IDS) {
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
     for (const agent of LOOP_AGENTS) {
-      if (!pairs.has(`${agent}:${capability}`)) invalidRegistry("registry capability matrix is incomplete");
+      if (!slots.has(`${agent}:${point.capability}:${point.executionRole}`)) {
+        invalidRegistry("registry capability/role matrix is incomplete");
+      }
     }
-    if (enabledCounts.get(capability) !== 1) {
-      invalidRegistry("every capability must have exactly one enabled binding");
+    if (enabledCounts.get(`${point.capability}:${point.executionRole}`) !== 1) {
+      invalidRegistry("every capability execution role must have exactly one enabled binding");
     }
   }
 }
@@ -235,17 +263,18 @@ function deepFreeze<T>(value: T): Readonly<T> {
 
 function buildBindings(): AgentCapabilityBinding[] {
   const bindings: AgentCapabilityBinding[] = [];
-  for (const capability of NODE_CAPABILITY_IDS) {
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
     for (const agent of ["codex", "kimi", "hermes"] as const) {
       bindings.push({
-        bindingId: `binding-${agent}-${capability}`,
-        capability,
+        bindingId: `binding-${agent}-${point.capability}-${point.executionRole}`,
+        capability: point.capability,
+        executionRole: point.executionRole,
         agent,
         adapter: ADAPTER_BY_AGENT[agent],
         bindingVersion: BINDING_VERSION,
         inputFormat: "artifact-reference:v1",
-        outputContract: "node-output-contract:v1",
-        validator: "node-output-contract:v1",
+        outputContract: "node-output-contract:v2",
+        validator: "node-output-contract:v2",
         allowedSideEffects: ["workspace-local-write", "run-journal-write"],
         timeoutMs: BINDING_TIMEOUT_MS,
         failurePolicy: "retry_other_binding",
@@ -257,9 +286,9 @@ function buildBindings(): AgentCapabilityBinding[] {
 }
 
 /**
- * Initial registry: 7 capabilities x 3 agents = 21 bindings, codex enabled,
- * kimi/hermes disabled. The registry and every nested object/array are
- * deeply frozen — runtime mutation is impossible.
+ * Initial registry: 8 execution points x 3 agents = 24 bindings, codex
+ * enabled, kimi/hermes disabled. The registry and every nested object/array
+ * are deeply frozen — runtime mutation is impossible.
  */
 export const INITIAL_BINDING_REGISTRY: BindingRegistry = deepFreeze({
   version: REGISTRY_VERSION,
@@ -272,25 +301,35 @@ export function getBinding(registry: BindingRegistry, bindingId: string): AgentC
 }
 
 /**
- * Returns the single enabled binding for a capability. Fail-closed: zero or
- * multiple enabled bindings for one capability is a registry violation.
+ * Returns the single enabled binding for a (capability, executionRole) slot.
+ * Fail-closed: zero or multiple enabled bindings for one slot is a registry
+ * violation; requesting a role the capability does not require is one too.
  */
-export function getEnabledBinding(registry: BindingRegistry, capability: NodeCapabilityId): AgentCapabilityBinding {
+export function getEnabledBinding(
+  registry: BindingRegistry,
+  capability: NodeCapabilityId,
+  executionRole: CapabilityExecutionRole,
+): AgentCapabilityBinding {
   validateBindingRegistry(registry);
-  const enabled = registry.bindings.filter((binding) => binding.capability === capability && binding.enabled);
+  if (!(NODE_CAPABILITY_EXECUTION_ROLES[capability] as readonly string[]).includes(executionRole)) {
+    throw new Error(`capability ${capability} does not require execution role ${executionRole}`);
+  }
+  const enabled = registry.bindings.filter(
+    (binding) => binding.capability === capability && binding.executionRole === executionRole && binding.enabled,
+  );
   if (enabled.length !== 1) {
     throw new Error(
-      `capability ${capability} must have exactly one enabled binding, found ${enabled.length}`,
+      `capability ${capability} role ${executionRole} must have exactly one enabled binding, found ${enabled.length}`,
     );
   }
   return enabled[0];
 }
 
 /**
- * Replace the executor for a capability: produces a NEW deeply frozen
- * registry snapshot with `fromBindingId` disabled and `toBindingId` enabled.
- * The input registry and the node contracts are never modified. Every
- * capability keeps exactly one enabled binding.
+ * Replace the executor for a (capability, executionRole) slot: produces a NEW
+ * deeply frozen registry snapshot with `fromBindingId` disabled and
+ * `toBindingId` enabled. The input registry and the node contracts are never
+ * modified. Every slot keeps exactly one enabled binding.
  */
 export function replaceBinding(
   registry: BindingRegistry,
@@ -303,8 +342,8 @@ export function replaceBinding(
   if (from === undefined || to === undefined) {
     throw new Error(`unknown binding id: ${from === undefined ? fromBindingId : toBindingId}`);
   }
-  if (from.capability !== to.capability) {
-    throw new Error("replacement bindings must serve the same capability");
+  if (from.capability !== to.capability || from.executionRole !== to.executionRole) {
+    throw new Error("replacement bindings must serve the same capability execution role");
   }
   if (from.agent === to.agent) {
     throw new Error("replacement must change the executor agent");
@@ -336,10 +375,10 @@ export function replaceBinding(
     bindings,
   }) as BindingRegistry;
   validateBindingRegistry(next);
-  // Fail-closed invariant: every capability still has exactly one enabled
-  // binding in the resulting snapshot.
-  for (const capability of NODE_CAPABILITY_IDS) {
-    getEnabledBinding(next, capability);
+  // Fail-closed invariant: every capability execution role still has exactly
+  // one enabled binding in the resulting snapshot.
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    getEnabledBinding(next, point.capability, point.executionRole);
   }
   return Object.freeze({
     registry: next,

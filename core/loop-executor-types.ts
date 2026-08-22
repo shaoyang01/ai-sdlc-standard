@@ -136,7 +136,13 @@ export type LoopRunJournalErrorCode =
   | "STORE_CLOSED"
   | "STORE_BUSY"
   | "STORE_FAILURE"
-  | "STORE_CORRUPT";
+  | "STORE_CORRUPT"
+  // v2 cutover (C02-WP3.5-B, D3): known pre-v6 journal formats and v0
+  // databases that already carry LOOP business tables are unsupported
+  // history — never semantically migrated, never treated as corrupt.
+  | "UNSUPPORTED_HISTORICAL_FORMAT"
+  // A journal whose declared format is newer than this build supports.
+  | "UNSUPPORTED_FUTURE_FORMAT";
 
 /**
  * Options for LoopRunStore. busyTimeoutMs defaults to 2000 (integer 1..5000).

@@ -9,13 +9,18 @@ import type { AgentName } from "../execution/types";
 import { types as utilTypes } from "node:util";
 import { CAPABILITY_ARTIFACT_TYPES } from "./agent-capability-bindings";
 import {
+  LOOP_CAPABILITY_EXECUTION_POINTS,
+  NODE_CAPABILITY_EXECUTION_ROLES,
   NODE_CAPABILITY_IDS,
+  type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord } from "./loop-run-state";
 
-export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 1 as const;
+// v2 (C02-WP3.5-B, A2): every execution event records its executionRole and
+// the schema version advances to 2. The v1 schema is not silently accepted.
+export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 2 as const;
 
 export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
@@ -27,6 +32,7 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   runId: string;
   sequence: number;
   capability: NodeCapabilityId;
+  executionRole: CapabilityExecutionRole;
   nodeId: string;
   attempt: number;
   status: LoopCapabilityExecutionStatus;
@@ -53,7 +59,7 @@ export type LoopCapabilityExecutionEvent = Readonly<{
 }>;
 
 const EVENT_FIELDS = [
-  "schemaVersion", "executionEventId", "runId", "sequence", "capability", "nodeId",
+  "schemaVersion", "executionEventId", "runId", "sequence", "capability", "executionRole", "nodeId",
   "attempt", "status", "createdAt", "bindingId", "bindingVersion",
   "bindingRegistryVersion", "executorAgent", "executorAdapter", "executorVersion",
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
@@ -155,6 +161,16 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   if (typeof event.capability !== "string" || !NODE_CAPABILITY_IDS.includes(event.capability as NodeCapabilityId)) {
     invalid("capability must be a canonical NodeCapabilityId");
   }
+  // v2 (A2): the execution role must be one of the capability's required
+  // roles — primary everywhere except solution-gate's two fixed roles.
+  const requiredRoles = NODE_CAPABILITY_EXECUTION_ROLES[event.capability as NodeCapabilityId];
+  if (
+    typeof event.executionRole !== "string" ||
+    requiredRoles === undefined ||
+    !(requiredRoles as readonly string[]).includes(event.executionRole)
+  ) {
+    invalid("executionRole must be a required role of the capability");
+  }
   const nodeId = text(event.nodeId, "nodeId");
   if (nodeId !== event.capability) {
     invalid("nodeId must match the canonical capability execution point");
@@ -173,8 +189,8 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     invalid("executorAgent must be a supported agent");
   }
   const executorAgent = event.executorAgent as AgentName;
-  if (bindingId !== `binding-${executorAgent}-${event.capability}`) {
-    invalid("bindingId must match the executor and capability");
+  if (bindingId !== `binding-${executorAgent}-${event.capability}-${event.executionRole}`) {
+    invalid("bindingId must match the executor, capability and execution role");
   }
   const executorAdapter = text(event.executorAdapter, "executorAdapter");
   if (executorAdapter !== ADAPTER_BY_AGENT[executorAgent]) {
@@ -189,8 +205,9 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   const outputVersion = nullableVersion(event.outputArtifactVersion, "outputArtifactVersion");
   const outputDigest = nullableDigest(event.outputDigest, "outputDigest");
   // v2 (A4): the execution output reference kind is the node's canonical
-  // product kind, matching the artifact revision binding. The C01-era
-  // capability_output envelope kind is no longer a valid node product.
+  // product kind for BOTH solution-gate roles — the scan's Finding Ledger
+  // rides in unresolvedFindingsRef (capability_findings) while the node
+  // product remains solution_review.
   if (outputRef !== null &&
       (outputRef.kind !== CAPABILITY_ARTIFACT_TYPES[event.capability] || outputRef.digest !== outputDigest)) {
     invalid("output artifact reference must be a matching capability output");
@@ -235,17 +252,22 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (errorCode !== null || event.retryable !== null || reasonCode !== null) {
       invalid("succeeded capability execution must not contain failure fields");
     }
-    const gateCapability = event.capability === "solution-gate";
-    if (gateCapability && event.gateResult === "NOT_APPLICABLE") {
-      invalid("Gate-producing capability requires a conclusive Gate result");
+    // v2 role-level Gate rules (A2): only formal_verdict may write a
+    // conclusive Gate result; the adversarial_scan role always records
+    // NOT_APPLICABLE; every non-Gate capability stays NOT_APPLICABLE.
+    const gateRole = event.capability === "solution-gate" ? event.executionRole : null;
+    if (gateRole === "formal_verdict" && event.gateResult === "NOT_APPLICABLE") {
+      invalid("formal_verdict requires a conclusive Gate result");
     }
-    if (!gateCapability && event.gateResult !== "NOT_APPLICABLE") {
-      invalid("non-Gate capability must use NOT_APPLICABLE");
+    if (gateRole !== "formal_verdict" && event.gateResult !== "NOT_APPLICABLE") {
+      invalid("non-verdict execution roles must use NOT_APPLICABLE");
     }
     if (event.gateResult === "FAIL" && event.nextStepEligibility === "ELIGIBLE") {
       invalid("failed Gate must not make the next step eligible");
     }
-    if (findingRef !== null && event.nextStepEligibility === "ELIGIBLE") {
+    // The adversarial_scan ledger is the scan's product, not a blocker: it is
+    // consumed by the formal_verdict execution that follows it.
+    if (gateRole !== "adversarial_scan" && findingRef !== null && event.nextStepEligibility === "ELIGIBLE") {
       invalid("unresolved findings must not make the next step eligible");
     }
   } else {
@@ -267,6 +289,7 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     runId: event.runId,
     sequence: event.sequence,
     capability: event.capability,
+    executionRole: event.executionRole,
     nodeId: event.nodeId,
     attempt: event.attempt,
     status: event.status,
@@ -294,7 +317,8 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
 }
 
 function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityExecutionEvent): boolean {
-  return a.runId === b.runId && a.capability === b.capability && a.nodeId === b.nodeId &&
+  return a.runId === b.runId && a.capability === b.capability && a.executionRole === b.executionRole &&
+    a.nodeId === b.nodeId &&
     a.attempt === b.attempt && a.bindingId === b.bindingId && a.bindingVersion === b.bindingVersion &&
     a.bindingRegistryVersion === b.bindingRegistryVersion && a.executorAgent === b.executorAgent &&
     a.executorAdapter === b.executorAdapter && a.executorVersion === b.executorVersion &&
@@ -304,15 +328,19 @@ function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityE
 
 /**
  * Verify a complete per-run attempt chain. One capability execution may be
- * active at a time; attempts are strictly increasing per capability and every
- * terminal event must close the exact preceding started snapshot.
+ * active at a time; attempts are strictly increasing per execution point and
+ * every terminal event must close the exact preceding started snapshot. The
+ * chain advances along the eight v2 execution points (the seven-node chain
+ * expanded by solution-gate's adversarial_scan / formal_verdict roles); the
+ * formal_verdict dispatch must target a different agent than the
+ * adversarial_scan execution of the same solution-gate round (v2, A2/G1).
  */
 export function validateLoopCapabilityExecutionChain(
   events: readonly LoopCapabilityExecutionEvent[],
   expectedRunId: string,
 ): void {
   let active: LoopCapabilityExecutionEvent | null = null;
-  const lastAttempts = new Map<NodeCapabilityId, number>();
+  const lastAttempts = new Map<string, number>();
   const ids = new Set<string>();
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index]!;
@@ -328,7 +356,8 @@ export function validateLoopCapabilityExecutionChain(
       if (active !== null) invalid("only one capability execution may be active");
       const previous = index === 0 ? undefined : events[index - 1];
       if (previous === undefined) {
-        if (event.capability !== NODE_CAPABILITY_IDS[0]) {
+        const firstPoint = LOOP_CAPABILITY_EXECUTION_POINTS[0]!;
+        if (event.capability !== firstPoint.capability || event.executionRole !== firstPoint.executionRole) {
           invalid("the first capability execution must be requirement intake");
         }
         if (!event.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:")) {
@@ -337,6 +366,7 @@ export function validateLoopCapabilityExecutionChain(
       } else if (previous.status === "failed") {
         if (
           previous.retryable !== true || event.capability !== previous.capability ||
+          event.executionRole !== previous.executionRole ||
           event.inputArtifactRef !== previous.inputArtifactRef ||
           event.inputArtifactVersion !== previous.inputArtifactVersion ||
           event.inputDigest !== previous.inputDigest
@@ -344,12 +374,27 @@ export function validateLoopCapabilityExecutionChain(
           invalid("only a retryable failed capability may be retried");
         }
       } else if (previous.status === "succeeded") {
-        const previousIndex = NODE_CAPABILITY_IDS.indexOf(previous.capability);
+        const previousIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+          (point) =>
+            point.capability === previous.capability &&
+            point.executionRole === previous.executionRole,
+        );
+        const nextPoint = LOOP_CAPABILITY_EXECUTION_POINTS[previousIndex + 1];
         if (
-          previous.nextStepEligibility !== "ELIGIBLE" ||
-          event.capability !== NODE_CAPABILITY_IDS[previousIndex + 1]
+          previous.nextStepEligibility !== "ELIGIBLE" || nextPoint === undefined ||
+          event.capability !== nextPoint.capability ||
+          event.executionRole !== nextPoint.executionRole
         ) {
           invalid("capability execution must follow the canonical eligible chain");
+        }
+        // v2 (A2, G1): the formal_verdict dispatch must go to a different
+        // agent than the adversarial_scan that produced the consumed ledger.
+        if (
+          previous.capability === "solution-gate" &&
+          previous.executionRole === "adversarial_scan" &&
+          event.executorAgent === previous.executorAgent
+        ) {
+          invalid("formal_verdict must be executed by a different agent than adversarial_scan");
         }
         if (
           event.inputArtifactRef !== previous.outputArtifactRef ||
@@ -361,10 +406,11 @@ export function validateLoopCapabilityExecutionChain(
       } else {
         invalid("a new capability cannot start before the active attempt terminates");
       }
-      const expectedAttempt = (lastAttempts.get(event.capability) ?? 0) + 1;
+      const slot = `${event.capability}:${event.executionRole}`;
+      const expectedAttempt = (lastAttempts.get(slot) ?? 0) + 1;
       if (event.attempt !== expectedAttempt) invalid("capability attempt must increment by one");
       active = event;
-      lastAttempts.set(event.capability, event.attempt);
+      lastAttempts.set(slot, event.attempt);
     } else {
       if (active === null || !sameAttemptIdentity(active, event)) {
         invalid("terminal capability event must close the active attempt");
