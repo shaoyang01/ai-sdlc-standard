@@ -66,11 +66,13 @@ interface TestEnv {
 function makeEnv(): TestEnv {
   const root = mkdtempSync(join(tmpdir(), "loop-wp4-regate-"));
   mkdirSync(join(root, "repo"), { recursive: true });
-  const runStore = new LoopRunStore(join(root, "journal.db"));
   const artifactStore = new LoopArtifactStore({
     controlRoot: join(root, "control"),
     repositoryPath: join(root, "repo"),
   });
+  // Round 2 close-out B1: bind the artifact store so decision-delta and
+  // revision blob integrity hold in these scenarios too.
+  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
   runStore.init();
   artifactStore.init();
   const bindingRegistry = createRuntimeBindingRegistry();
@@ -630,11 +632,13 @@ async function main(): Promise<void> {
   {
     const root = mkdtempSync(join(tmpdir(), "loop-wp4-failverdict-"));
     mkdirSync(join(root, "repo"), { recursive: true });
-    const runStore = new LoopRunStore(join(root, "journal.db"));
     const artifactStore = new LoopArtifactStore({
       controlRoot: join(root, "control"),
       repositoryPath: join(root, "repo"),
     });
+    // Round 2 close-out B1: bind the artifact store so decision-delta and
+    // revision blob integrity hold in these scenarios too.
+    const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const bindingRegistry = createRuntimeBindingRegistry();
@@ -751,11 +755,13 @@ async function main(): Promise<void> {
   {
     const root = mkdtempSync(join(tmpdir(), "loop-wp4-riskscope-"));
     mkdirSync(join(root, "repo"), { recursive: true });
-    const runStore = new LoopRunStore(join(root, "journal.db"));
     const artifactStore = new LoopArtifactStore({
       controlRoot: join(root, "control"),
       repositoryPath: join(root, "repo"),
     });
+    // Round 2 close-out B1: bind the artifact store so decision-delta and
+    // revision blob integrity hold in these scenarios too.
+    const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const bindingRegistry = createRuntimeBindingRegistry();
@@ -1149,6 +1155,8 @@ async function main(): Promise<void> {
       gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(),
     });
     ok(first.final_status === "success", "generation 1 completes within the round budget");
+    ok(env.runStore.countRegateRounds(first.run_id) === 0,
+      "a plain linear chain (including same-point retries) consumes no rounds");
     openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w9" });
     const second = await run("migrate billing export", {
       requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
@@ -1162,12 +1170,25 @@ async function main(): Promise<void> {
       sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
       severity: "HIGH", category: "SOLUTION", sequence: 1,
     });
+    // Round 2 close-out B3: the over-budget wave performs ZERO external
+    // dispatches — the permit transaction blocks it before any agent runs.
+    const orderBeforeThird = env.dispatchOrder.length;
     const third = await run("migrate billing export", {
       requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
       gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
     });
+    console.log("DBG9b:", JSON.stringify({
+      before: orderBeforeThird,
+      after: env.dispatchOrder.length,
+      thirdChain: third.chain_status,
+      blocking: recoverRunContext(env.runStore, requirementId)!.blockingReasonCode,
+      rounds: env.runStore.countRegateRounds(first.run_id),
+      tail: env.dispatchOrder.slice(-4),
+    }));
+    ok(env.dispatchOrder.length === orderBeforeThird,
+      "the over-budget wave performs zero dispatches");
     ok(third.final_status === "failed" && third.chain_status === "BLOCKED",
-      "a second wave beyond the round budget blocks honestly");
+      "the over-budget wave is blocked honestly without executing");
     const recoveryBlocked = recoverRunContext(env.runStore, requirementId)!;
     ok(
       recoveryBlocked.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED",
@@ -1196,6 +1217,14 @@ async function main(): Promise<void> {
     // durable block is persisted for finishing what the release authorized;
     // the run still ends honestly BLOCKED on the unresolved regression.
     const postReleaseRecovery = recoverRunContext(env.runStore, requirementId)!;
+    console.log("DBG9:", JSON.stringify({
+      blocking: postReleaseRecovery.blockingReasonCode,
+      next: postReleaseRecovery.nextExecutionPoint,
+      chain: postReleaseRecovery.capabilityChainStatus,
+      fifthNext: fifth.next_execution_point,
+      fifthChain: fifth.chain_status,
+      dispatchesAfterThird: env.dispatchOrder.length - orderBeforeThird,
+    }));
     ok(postReleaseRecovery.blockingReasonCode === null,
       "no durable block persists after the released wave completes");
     ok(
@@ -1204,6 +1233,8 @@ async function main(): Promise<void> {
     );
     ok(fifth.final_status === "failed",
       "the unresolved regression keeps the run honestly blocked");
+    ok(env.dispatchOrder.length > orderBeforeThird,
+      "post-release the released wave actually resumed dispatching");
   }
 
     // ── W10: causal evidence and generation authority are store-enforced ──

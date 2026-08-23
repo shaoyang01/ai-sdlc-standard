@@ -204,7 +204,7 @@ export function classifyCandidate(path: string): PreflightCandidate {
 /**
  * Run the read-only cutover scan over explicit roots. Returns the report;
  * `report.failureCount === 0 && !report.requiresGovernanceStop` means every
- * candidate is either a supported v6 journal or a genuinely fresh database.
+ * candidate is either a supported v7 journal or a genuinely fresh database.
  */
 export function preflightLoopRunStoreV2Cutover(roots: readonly string[]): PreflightReport {
   const resolvedRoots = roots.map((root) => root);

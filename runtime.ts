@@ -345,13 +345,18 @@ export async function run(
   if ((options.runStore === undefined) !== (options.artifactStore === undefined)) {
     invalid("runStore and artifactStore must be injected together");
   }
-  const runStore = options.runStore ?? new LoopRunStore(join(workspaceRoot, "journal.db"));
   const artifactStore =
     options.artifactStore ??
     new LoopArtifactStore({
       controlRoot: join(workspaceRoot, "control"),
       repositoryPath: join(workspaceRoot, "repo"),
     });
+  // Round 2 close-out B1: the runtime's own journal store BINDS the artifact
+  // store — decision-delta physical integrity must hold on the default path,
+  // not only when callers inject both stores.
+  const runStore =
+    options.runStore ??
+    new LoopRunStore(join(workspaceRoot, "journal.db"), { artifactStore });
   if (options.runStore === undefined) {
     runStore.init();
     artifactStore.init();
@@ -428,7 +433,6 @@ export async function run(
     }
   }
   let dispatches = 0;
-  let seenRounds = journalRunId === null ? 0 : runStore.countRegateRounds(journalRunId);
   while (next !== null) {
     if (dispatches >= maxDispatches) {
       // Safety bound only: stop this invocation honestly WITHOUT persisting
@@ -436,6 +440,20 @@ export async function run(
       break;
     }
     dispatches += 1;
+    // Round 2 close-out B3: the round budget is adjudicated BEFORE any
+    // external work as a single-transaction execution permit. An over-budget
+    // backward wave performs zero agent dispatches and zero revision writes;
+    // the durable block is persisted inside the same permit transaction.
+    if (journalRunId !== null) {
+      const targetPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+        (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
+      );
+      const permit = runStore.authorizeRegateDispatch(journalRunId, targetPointIndex, maxRegateRounds);
+      if (!permit.allowed) {
+        recovery = recoverRunContext(runStore, requirementId);
+        break;
+      }
+    }
     if (!firstDispatch && recovery !== undefined) {
       const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
         LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
@@ -529,20 +547,6 @@ export async function run(
       break;
     }
     next = recovery.nextExecutionPoint;
-    // WP4 Round 2 review H4: the durable budget counts PERSISTED BACKWARD
-    // JUMPS (Re-Gate rounds), not raw dispatches. A new jump beyond the
-    // round budget is a pathological cycle — persist the honest block so
-    // fresh agents resume into BLOCKED; only an explicit release decision
-    // (RISK_ACCEPTED / SCOPE_RESET) clears it.
-    const roundsNow = runStore.countRegateRounds(journalRunId);
-    if (roundsNow > seenRounds) {
-      if (roundsNow > maxRegateRounds) {
-        runStore.markRunRegateBlocked(journalRunId, "REGATE_ROUND_BUDGET_EXHAUSTED");
-        recovery = recoverRunContext(runStore, requirementId);
-        break;
-      }
-      seenRounds = roundsNow;
-    }
   }
 
   const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);

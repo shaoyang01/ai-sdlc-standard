@@ -452,6 +452,12 @@ export function validateLoopRequirementChangeChain(
   const ids = new Set<string>();
   let requirementId: string | null = null;
   let classifiedSeen = false;
+  // Round 2 close-out B2: the generation authority transition is a REPLAY
+  // invariant, not only an append-time guard. Every CLASSIFIED
+  // FEEDBACK_DRIVEN_CHANGE must close the chain's current authoritative
+  // generation (baseline 1); skips and rewinds fail closed on every read,
+  // so a non-monotonic persisted chain can never be recovered as authority.
+  let authoritativeGeneration = 1;
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index]!;
     validateLoopRequirementChangeRecord(record);
@@ -470,6 +476,18 @@ export function validateLoopRequirementChangeChain(
     if (record.status === "CLASSIFIED") {
       if (record.changeKind === "NEW_REQUIREMENT" && classifiedSeen) {
         invalid("new requirement classification is only valid as the first classified record");
+      }
+      if (
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.previousGeneration !== null
+      ) {
+        if (record.previousGeneration !== authoritativeGeneration) {
+          invalid(
+            `feedback wave must close the current authoritative generation ${authoritativeGeneration}, ` +
+              `got ${record.previousGeneration}`,
+          );
+        }
+        authoritativeGeneration = record.previousGeneration + 1;
       }
       classifiedSeen = true;
     }

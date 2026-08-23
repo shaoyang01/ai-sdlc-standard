@@ -2862,6 +2862,113 @@ export class LoopRunStore {
     }));
   }
 
+  /**
+   * Single-transaction execution permit (Round 2 close-out B3): decides
+   * whether dispatching `targetPointIndex` is allowed BEFORE any external
+   * work happens. The prospective backward-jump round is computed and, when
+   * it exceeds the budget, REGATE_ROUND_BUDGET_EXHAUSTED is persisted in the
+   * SAME immediate transaction — an over-budget wave performs ZERO agent
+   * dispatches and zero revision writes. An active capability execution
+   * claim denies concurrent permits without persisting anything, so
+   * competing connections serialize on the existing claim invariant instead
+   * of racing past the budget.
+   */
+  authorizeRegateDispatch(
+    runId: string,
+    targetPointIndex: number,
+    maxRounds: number,
+  ): { allowed: boolean; blockedPersisted: boolean } {
+    safeIdInput(runId, "runId");
+    if (
+      !Number.isSafeInteger(targetPointIndex) || targetPointIndex < 0 ||
+      targetPointIndex >= LOOP_CAPABILITY_EXECUTION_POINTS.length
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "targetPointIndex must be a canonical point index");
+    }
+    if (!Number.isSafeInteger(maxRounds) || maxRounds < 1) {
+      throw new LoopRunJournalError("INVALID_INPUT", "maxRounds must be a positive safe integer");
+    }
+    const db = this.connection();
+    try {
+      return db.transaction((): { allowed: boolean; blockedPersisted: boolean } => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        const state = snapshot.state;
+        if (
+          state.status === "blocked" ||
+          (state.blockingReasonCode !== null && state.blockingReasonCode !== undefined)
+        ) {
+          return { allowed: false, blockedPersisted: false };
+        }
+        if (state.status !== "running") {
+          return { allowed: false, blockedPersisted: false };
+        }
+        const events = this.readCapabilityExecutionsInTransaction(db, runId);
+        // Budget basis: every explicit release decision RAISES the allowed
+        // round count by one (monotonic, no cross-stream sequence compare).
+        // A release authorizes completing the in-flight work it admits;
+        // further waves beyond the raised allowance re-block.
+        const releaseRow = db.prepare(
+          `SELECT COUNT(*) AS n FROM loop_events
+           WHERE run_id = ? AND kind = 'run_resumed'
+             AND reason_code IN ('RISK_ACCEPTED', 'SCOPE_RESET')`,
+        ).get(runId) as { n: number };
+        const releases = Number(releaseRow.n);
+        const effectiveMaxRounds = maxRounds + releases;
+        const points = LOOP_CAPABILITY_EXECUTION_POINTS;
+        let rounds = 0;
+        let prevIdx = -1;
+        for (const event of events) {
+          if (event.status !== "started") continue;
+          const idx = points.findIndex(
+            (point) => point.capability === event.capability && point.executionRole === event.executionRole,
+          );
+          if (prevIdx >= 0 && idx !== prevIdx && idx < prevIdx + 1) rounds += 1;
+          prevIdx = idx;
+        }
+        const last = events[events.length - 1];
+        if (last !== undefined && last.status === "started") {
+          // Active execution claim: another connection is mid-dispatch.
+          // Deny without persisting — the budget is adjudicated after the
+          // claim settles.
+          return { allowed: false, blockedPersisted: false };
+        }
+        const isJump = prevIdx >= 0 && targetPointIndex !== prevIdx && targetPointIndex < prevIdx + 1;
+        const prospective = rounds + (isJump ? 1 : 0);
+        if (prospective > effectiveMaxRounds) {
+          const sequence = state.lastSequence + 1;
+          this.appendEvent(Object.freeze({
+            eventId: `${runId}:${sequence}:run_blocked`,
+            runId,
+            sequence,
+            kind: "run_blocked" as const,
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: null,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: "REGATE_ROUND_BUDGET_EXHAUSTED",
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: null,
+          }));
+          return { allowed: false, blockedPersisted: true };
+        }
+        return { allowed: true, blockedPersisted: false };
+      }).immediate();
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      storageFailure();
+    }
+  }
+
   markRunRegateBlocked(runId: string, reasonCode: string): void {
     if (
       typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
@@ -3636,6 +3743,25 @@ export class LoopRunStore {
         if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
         if (error instanceof LoopRunJournalError) corrupt("persisted capability execution is invalid");
         throw error;
+      }
+      // Round 2 close-out B1 (re-review): a persisted materialized decision
+      // must remain physically reproducible — every validating read of an
+      // event carrying a decision delta re-reads the blob when an artifact
+      // store is bound (append-time verification alone cannot cover later
+      // deletion or content drift).
+      if (
+        event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null &&
+        this.artifactStore !== null
+      ) {
+        try {
+          this.artifactStore.read(event.decisionDeltaRef, event.decisionDeltaDigest);
+        } catch (error) {
+          if (error instanceof LoopArtifactStoreError &&
+            (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH")) {
+            corrupt("decision delta blob is missing or altered");
+          }
+          storageFailure();
+        }
       }
       return event;
     });
