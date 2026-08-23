@@ -784,7 +784,7 @@ async function main(): Promise<void> {
           requirementId: chainIdentity.requirementId,
           nodeId: produced.capability,
           sequence: priorForNode.length + 1,
-          generation: produced.attempt,
+          generation: chainStore.getRunGeneration(chainIdentity.runId),
           stablePath: `library/${chainIdentity.requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].stablePathSegment}/${chainIdentity.requirementId}_${produced.capability}.md`,
           artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].artifactKind,
           semver: `${produced.attempt}.0.0`,

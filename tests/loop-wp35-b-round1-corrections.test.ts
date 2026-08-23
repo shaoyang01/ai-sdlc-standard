@@ -330,7 +330,7 @@ async function main(): Promise<void> {
           requirementId: "REQ-R1-001",
           nodeId,
           sequence,
-          generation: null,
+          generation: 1,
           stablePath: `library/REQ-R1-001/${SEGMENT[nodeId]}/doc.md`,
           artifactKind: KIND[nodeId] as never,
           semver,

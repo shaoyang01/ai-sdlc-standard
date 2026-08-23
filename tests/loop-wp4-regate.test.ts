@@ -139,7 +139,8 @@ function recordRevisionForLastSucceeded(
     requirementId,
     nodeId: capability,
     sequence: priorForNode.length + 1,
-    generation: produced.attempt,
+    // Round 2 review H3: run feedback-opened generation, not the attempt.
+    generation: env.runStore.getRunGeneration(runId),
     stablePath: `library/${requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].stablePathSegment}/${requirementId}_${capability}.md`,
     artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind,
     semver: `${produced.attempt}.0.0`,

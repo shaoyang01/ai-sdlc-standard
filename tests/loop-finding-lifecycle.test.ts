@@ -332,7 +332,9 @@ function revisionDraft(o: {
     requirementId: "req-001",
     nodeId: o.nodeId,
     sequence: o.sequence ?? 1,
-    generation: null,
+    // Round 2 review H3: store binds generation to the run's
+    // feedback-opened generation; runs without feedback records are gen 1.
+    generation: 1,
     stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].stablePathSegment}/req-001_${o.nodeId}.md`,
     artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind,
     semver: o.semver ?? output.version,
@@ -2441,7 +2443,7 @@ function driveBoundNodes(
       requirementId: "req-001",
       nodeId,
       sequence: existingForNode + 1,
-      generation: null,
+      generation: 1,
       stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].stablePathSegment}/req-001_${nodeId}.md`,
       artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].artifactKind,
       semver: `${existingForNode + 1}.0.0`,

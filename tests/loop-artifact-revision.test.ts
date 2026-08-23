@@ -283,6 +283,7 @@ type RevisionDraftOptions = {
   requirementId?: string;
   gateResult?: LoopArtifactRevisionDraft["gateResult"];
   createdAt?: string;
+  generation?: LoopArtifactRevisionDraft["generation"];
 };
 
 function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
@@ -293,7 +294,10 @@ function revisionDraft(o: RevisionDraftOptions): LoopArtifactRevisionDraft {
     requirementId: o.requirementId ?? "req-001",
     nodeId: o.nodeId,
     sequence: o.sequence,
-    generation: null,
+    // Round 2 review H3: the store binds generation to the run's
+    // feedback-opened generation authority; runs without a verified
+    // FEEDBACK_DRIVEN_CHANGE record are in generation 1.
+    generation: o.generation !== undefined ? o.generation : 1,
     stablePath: o.stablePath ??
       `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].stablePathSegment}/req-001_${o.nodeId}.md`,
     artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind,
@@ -454,9 +458,11 @@ console.log("artifact revision: positive construction across nodes");
   }));
   validateLoopArtifactRevision(gateRevision);
   assert(gateRevision.gateResult === "PASS_WITH_RISK", "Gate revision carries a conclusive passing result");
+  // Model level: generation stays nullable; the STORE binds non-null
+  // revisions to the run's feedback-opened generation authority (H3).
   const withGeneration = createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("d"),
-    producerExecutionId: "run-001:capability:4:succeeded",
+    producerExecutionId: "run-001:capability:4:succeeded", generation: null,
   }));
   assert(withGeneration.generation === null, "generation reference is nullable");
   const withUpstream = createLoopArtifactRevision({

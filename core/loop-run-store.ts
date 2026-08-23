@@ -2309,6 +2309,35 @@ export class LoopRunStore {
             );
           }
         }
+        // Round 2 review H3: the revision's generation is bound to the RUN's
+        // generation authority — the latest verified CLASSIFIED
+        // FEEDBACK_DRIVEN_CHANGE record opens previousGeneration + 1, and
+        // generation 1 is the baseline. Node attempts never influence this
+        // number, so a retry cannot fork generations across nodes, and no
+        // caller can stamp an arbitrary generation onto a revision.
+        const changeRecords = this.readRequirementChangesInTransaction(
+          db,
+          record.runId,
+          snapshot.state.identity.requirementId,
+        );
+        let runGeneration = 1;
+        for (let index = changeRecords.length - 1; index >= 0; index -= 1) {
+          const change = changeRecords[index]!;
+          if (
+            change.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+            change.status === "CLASSIFIED" &&
+            change.previousGeneration !== null
+          ) {
+            runGeneration = change.previousGeneration + 1;
+            break;
+          }
+        }
+        if (record.generation !== runGeneration) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "artifact revision generation must equal the run's current feedback-opened generation",
+          );
+        }
         // Blob binding (fifth binding): the producer journal match only proves
         // the claimed output triple; the physical blob must also exist in the
         // bound artifact store with a matching digest before the revision may
@@ -2656,6 +2685,30 @@ export class LoopRunStore {
    * instructions) may clear it. Recovery surfaces the code so a fresh agent
    * resumes into an honest BLOCKED instead of silently re-looping.
    */
+  /**
+   * The run's current Re-Gate generation authority (Round 2 review H3):
+   * derived from the verified change chain — the latest CLASSIFIED
+   * FEEDBACK_DRIVEN_CHANGE record with a non-null previousGeneration opens
+   * previousGeneration + 1; with no such record the run is in generation 1.
+   * Node attempts never influence this number, so retries cannot fork
+   * generations across nodes. Revision appends bind to this value
+   * fail-closed inside their own transaction.
+   */
+  getRunGeneration(runId: string): number {
+    const records = this.listRequirementChanges(runId);
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      const record = records[index]!;
+      if (
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.status === "CLASSIFIED" &&
+        record.previousGeneration !== null
+      ) {
+        return record.previousGeneration + 1;
+      }
+    }
+    return 1;
+  }
+
   markRunRegateBlocked(runId: string, reasonCode: string): void {
     if (
       typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||

@@ -470,7 +470,10 @@ export async function run(
         requirementId,
         nodeId: next.capability,
         sequence: priorForNode.length + 1,
-        generation: produced.attempt,
+        // Round 2 review H3: generation is the RUN's feedback-opened
+        // generation, never the node's attempt — retries keep the
+        // generation uniform across nodes.
+        generation: runStore.getRunGeneration(journalRunId),
         stablePath: `library/${requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[next.capability].stablePathSegment}/${requirementId}_${next.capability}.md`,
         artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[next.capability].artifactKind,
         semver: `${produced.attempt}.0.0`,
