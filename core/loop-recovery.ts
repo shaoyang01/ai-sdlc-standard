@@ -21,6 +21,7 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
+import { planRegateFromFacts, type CurrentRevisionFacts } from "./loop-regate";
 import type {
   LoopCapabilityExecutionEvent,
   LoopCapabilityExecutionStatus,
@@ -79,6 +80,21 @@ export interface RunRecoveryContext {
   /** Point-wise recovery states of the eight v2 execution points. */
   executionPointStates: readonly ExecutionPointRecoveryState[];
   lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
+  /**
+   * WP4: durable convergence projection — the v2 finding gate over ALL
+   * open/closed findings and current validity. COMPLETED chains with a
+   * BLOCKED gate are not done.
+   */
+  findingGate: { status: "ELIGIBLE" | "BLOCKED"; blockingFindingIds: readonly string[] };
+  /**
+   * WP4: depth decision bound to the latest formal_verdict round.
+   * PASS → DECIDED; FAIL / missing / PASS_WITH_RISK without a current
+   * ACCEPTED_RISK proof → BLOCKED_UNKNOWN (implementation must not start).
+   */
+  solutionGateDecision: {
+    status: "DECIDED" | "BLOCKED_UNKNOWN";
+    boundVerdictArtifactRef: string | null;
+  } | null;
 }
 
 export interface CapabilityRecoveryState {
@@ -282,11 +298,18 @@ export function recoverRunContext(
     },
   );
   let nextExecutionPoint: RunRecoveryContext["nextExecutionPoint"] = null;
-  for (const pointState of executionPointStates) {
+  let linearStopIdx: number | null = null;
+  const pointIndexOf = (point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }): number =>
+    LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      (candidate) => candidate.capability === point.capability && candidate.executionRole === point.executionRole,
+    );
+  for (let i = 0; i < executionPointStates.length; i += 1) {
+    const pointState = executionPointStates[i]!;
     const point = {
       capability: pointState.capability,
       executionRole: pointState.executionRole,
     };
+    linearStopIdx = i;
     if (pointState.status === "failed") {
       nextExecutionPoint = pointState.retryable === true ? point : null;
       break;
@@ -303,6 +326,61 @@ export function recoverRunContext(
       nextExecutionPoint = null;
       break;
     }
+  }
+  let regateTargetIndex: number | null = null;
+  let regateOverrideApplied = false;
+  const findings = capabilityExecutions.length > 0
+    ? store.listFindings(state.identity.runId)
+    : [];
+  const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
+  for (const fact of store.listRegateCurrentFacts(state.identity.runId)) {
+    currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
+  }
+  const pointLastAttempts = new Map<string, number>(
+    executionPointStates.map((state) => [
+      `${state.capability}:${state.executionRole}`,
+      state.lastAttempt,
+    ]),
+  );
+  // WP4 H3: external feedback re-enters ONLY through a verified WP1
+  // FEEDBACK_DRIVEN_CHANGE record; it drives a full new generation
+  // regardless of whether any finding exists.
+  const changeRecords = store.listRequirementChanges(state.identity.runId);
+  const latestFeedback = [...changeRecords]
+    .reverse()
+    .find(
+      (record) =>
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.status === "CLASSIFIED" &&
+        record.previousGeneration !== null,
+    );
+  const feedbackChange =
+    latestFeedback === undefined || latestFeedback.previousGeneration === null
+      ? null
+      : { previousGeneration: latestFeedback.previousGeneration };
+  const plan = planRegateFromFacts(
+    findings.map((finding) => ({
+      findingId: finding.findingId,
+      severity: finding.severity,
+      status: finding.status,
+      earliestAffectedNodeId: finding.earliestAffectedNodeId,
+      createdAt: finding.createdAt,
+    })),
+    currentByNode,
+    pointLastAttempts,
+    feedbackChange,
+  );
+  if (plan.kind === "regate" && plan.restartPointIndex !== null) {
+    regateTargetIndex = plan.restartPointIndex;
+  }
+  if (
+    regateTargetIndex !== null &&
+    (nextExecutionPoint === null || pointIndexOf(nextExecutionPoint) > regateTargetIndex) &&
+    !(nextExecutionPoint === null && linearStopIdx !== null && linearStopIdx < regateTargetIndex)
+  ) {
+    const target = LOOP_CAPABILITY_EXECUTION_POINTS[regateTargetIndex]!;
+    nextExecutionPoint = { capability: target.capability, executionRole: target.executionRole };
+    regateOverrideApplied = true;
   }
   const capabilityStates = NODE_CAPABILITY_IDS.map((capability): CapabilityRecoveryState => {
     const events = capabilityExecutions.filter((event) => event.capability === capability);
@@ -335,9 +413,11 @@ export function recoverRunContext(
     : capabilityExecutions[capabilityExecutions.length - 1]!;
   // v2: the chain status and next pointer derive from the point-wise
   // projection; `nextCapability` stays as the capability projection of it.
+  // WP4: a pending Re-Gate wave downgrades a linearly COMPLETED projection
+  // to READY — the chain owes a rebuild generation before it is complete.
   const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
     executionPointStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
-      ? "COMPLETED"
+      ? (regateOverrideApplied ? "READY" : "COMPLETED")
       : lastCapabilityExecution?.status === "started"
         ? "RUNNING"
         : lastCapabilityExecution !== null && nextExecutionPoint === null
@@ -347,6 +427,43 @@ export function recoverRunContext(
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
+  // WP4 convergence projection (H2): the finding gate over ALL findings and
+  // the depth decision bound to the latest formal_verdict round. A
+  // PASS_WITH_RISK verdict is DECIDED only with a current ACCEPTED_RISK
+  // proof; everything else is BLOCKED_UNKNOWN and must not reach
+  // task-planning or beyond.
+  const findingGate = capabilityExecutions.length > 0
+    ? store.computeFindingGate(state.identity.runId)
+    : { status: "ELIGIBLE" as const, blockingFindings: [] as readonly string[], reasonCodes: [] as readonly string[] };
+  const verdictEvents = capabilityExecutions.filter(
+    (event) => event.capability === "solution-gate" && event.executionRole === "formal_verdict",
+  );
+  const lastVerdict = verdictEvents.length === 0 ? null : verdictEvents[verdictEvents.length - 1]!;
+  let solutionGateDecision: RunRecoveryContext["solutionGateDecision"] = null;
+  if (lastVerdict !== null) {
+    const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
+    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
+      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
+    } else if (
+      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
+      findings.some((finding) => finding.status === "ACCEPTED_RISK")
+    ) {
+      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
+    } else {
+      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
+    }
+  }
+  // BLOCKED_UNKNOWN must not enter implementation: once the chain has reached
+  // task-planning, cut the next pointer so the run blocks honestly.
+  const taskPlanningIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+    (point) => point.capability === "task-planning",
+  );
+  if (
+    solutionGateDecision?.status === "BLOCKED_UNKNOWN" &&
+    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx
+  ) {
+    nextExecutionPoint = null;
+  }
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,
@@ -361,6 +478,8 @@ export function recoverRunContext(
     nextExecutionPoint: nextExecutionPoint === null ? null : Object.freeze(nextExecutionPoint),
     executionPointStates: Object.freeze(executionPointStates),
     lastCapabilityExecution,
+    findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
+    solutionGateDecision,
     lastExecution:
       lastExecutionEvent === undefined
         ? null
