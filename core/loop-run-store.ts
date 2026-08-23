@@ -1729,10 +1729,11 @@ export class LoopRunStore {
           // findings never authorize new writes — resolved/accepted findings
           // must not let a stale scope re-trigger downstream rebuilds.
           try {
+            // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
+            // live pending target derived above in this transaction.
             validateLoopCapabilityExecutionChain([...current, event], event.runId, {
               allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
               historicalFindings: regateContext.historicalFindings,
-              historicalReplayMode: false,
               feedbackChange: regateContext.feedbackChange,
             });
           } catch (error) {
@@ -1745,6 +1746,7 @@ export class LoopRunStore {
           }
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
+            process.stderr?.write?.(`LIVE_MSG: ${(error as Error).message}\nLIVE_STACK: ${(error as Error).stack?.split("\n").slice(1, 6).join(" | ")}\n`);
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
           }
           throw error;
@@ -2572,6 +2574,8 @@ export class LoopRunStore {
   listRegateCurrentFacts(runId: string): ReadonlyArray<{
     nodeId: NodeCapabilityId;
     revisionId: string;
+    artifactRef: string;
+    digest: string;
     validity: string;
     createdAt: string;
     generation: number | null;
@@ -2592,6 +2596,8 @@ export class LoopRunStore {
       return Object.freeze(db.transaction((): Array<{
         nodeId: NodeCapabilityId;
         revisionId: string;
+        artifactRef: string;
+        digest: string;
         validity: string;
         createdAt: string;
         generation: number | null;
@@ -2607,6 +2613,8 @@ export class LoopRunStore {
         const facts: Array<{
           nodeId: NodeCapabilityId;
           revisionId: string;
+          artifactRef: string;
+          digest: string;
           validity: string;
           createdAt: string;
           generation: number | null;
@@ -2618,6 +2626,8 @@ export class LoopRunStore {
           facts.push(Object.freeze({
             nodeId: record.nodeId,
             revisionId: record.revisionId,
+            artifactRef: record.artifactRef,
+            digest: record.digest,
             validity: record.validity,
             createdAt: record.createdAt,
             generation: record.generation,
@@ -2627,6 +2637,8 @@ export class LoopRunStore {
       })() as Array<{
         nodeId: NodeCapabilityId;
         revisionId: string;
+        artifactRef: string;
+        digest: string;
         validity: string;
         createdAt: string;
         generation: number | null;
@@ -3323,14 +3335,19 @@ export class LoopRunStore {
       return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null };
     }
     const findingRows = db.prepare(
-      `SELECT finding_id, severity, status, earliest_affected_node_id, created_at
-       FROM loop_findings WHERE run_id = ? ORDER BY sequence ASC`,
+      `SELECT f.finding_id AS finding_id, f.severity AS severity, f.status AS status,
+              f.earliest_affected_node_id AS earliest_affected_node_id,
+              f.created_at AS created_at, r.sequence AS source_rev_sequence
+       FROM loop_findings f
+       LEFT JOIN loop_artifact_revisions r ON r.revision_id = f.source_revision_id
+       WHERE f.run_id = ? ORDER BY f.sequence ASC`,
     ).all(runId) as ReadonlyArray<{
       finding_id: string;
       severity: string;
       status: string;
       earliest_affected_node_id: string;
       created_at: string;
+      source_rev_sequence: number | null;
     }>;
     const historicalFindings: RegateFindingFacts[] = findingRows.map((row) => ({
       findingId: row.finding_id,
@@ -3338,6 +3355,8 @@ export class LoopRunStore {
       status: row.status,
       earliestAffectedNodeId: row.earliest_affected_node_id as RegateFindingFacts["earliestAffectedNodeId"],
       createdAt: row.created_at,
+      sourceRevisionSequence:
+        row.source_rev_sequence === null ? null : Number(row.source_rev_sequence),
     }));
     const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const pointerRows = db.prepare(
@@ -3369,6 +3388,7 @@ export class LoopRunStore {
       feedbackChange,
     );
     process.stderr?.write?.(`REGATE_PLAN_OUT ${plan.kind} idx=${String(plan.restartPointIndex)}\n`);
+    process.stderr?.write?.(`RP_DBG kind=${plan.kind} idx=${plan.restartPointIndex} fb=${JSON.stringify(feedbackChange)}\n`);
     return {
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,

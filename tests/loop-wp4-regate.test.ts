@@ -188,8 +188,40 @@ async function main(): Promise<void> {
     const before = pointDispatchCounts(env, first.run_id);
     ok(before.get("solution-design:primary") === 1, "design ran once");
 
-    const findingId = appendBlockingFinding(env, {
+    // Generation 2 is opened by a verified FEEDBACK_DRIVEN_CHANGE record
+    // (H3 path): every node is rebuilt once (attempt 2).
+    env.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
       runId: first.run_id,
+      requirementId,
+      sequence: 1,
+      status: "CLASSIFIED",
+      changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE",
+      previousGeneration: 1,
+      currentChangeScope: "外部反馈：注册表单需支持手机号",
+      confirmedFactsPreserved: ["email validation stays"],
+      sourceRefs: [{
+        sourceType: "CONVERSATION",
+        locator: "feedback:uat-1",
+        priority: 1,
+        sourceVersion: null,
+        observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:uat-1"],
+      classificationReason: "线下测试反馈经 intake 分类为反馈驱动变更",
+      blockedReasonCode: null,
+      createdAt: futureIso(1000),
+    }));
+    const second = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(second.final_status === "success" && second.chain_status === "COMPLETED", "feedback generation completes");
+    const counts2 = pointDispatchCounts(env, second.run_id);
+    ok(counts2.get("requirement-intake:primary") === 2 && counts2.get("knowledge-sync:primary") === 2, "full generation 2 rebuilt");
+
+    // Causal regression: a HIGH SOLUTION finding raised AGAINST the gen2 fix
+    // product. It re-drives the wave from solution-design; upstream intake
+    // is reused read-only.
+    const findingId = appendBlockingFinding(env, {
+      runId: second.run_id,
       requirementId,
       sourceCapability: "solution-design",
       earliestAffectedNodeId: "solution-design",
@@ -197,11 +229,10 @@ async function main(): Promise<void> {
       sequence: 1,
     });
 
-    // Resolution before rebuild is fail-closed: the bound revision went STALE.
     let rejectedBeforeRebuild = false;
     try {
-      env.runStore.resolveFinding(first.run_id, findingId, {
-        resolvedByRevisionId: env.runStore.getCurrentArtifactRevision(first.run_id, "solution-design")!.revisionId,
+      env.runStore.resolveFinding(second.run_id, findingId, {
+        resolvedByRevisionId: env.runStore.getCurrentArtifactRevision(second.run_id, "solution-design")!.revisionId,
         resolutionEvidenceRef: "loop-artifact:v1:solution_review:sha256:deadbeef",
         resolutionEvidenceDigest: "deadbeef",
       });
@@ -210,32 +241,29 @@ async function main(): Promise<void> {
     }
     ok(rejectedBeforeRebuild, "resolution before rebuild is rejected");
 
-    // Wave completes but the finding is still OPEN — the run must NOT claim
-    // success/COMPLETED while the convergence gate is BLOCKED.
-    const second = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(second.chain_status === "BLOCKED", "open finding keeps the run BLOCKED after rebuild");
-    ok(second.final_status === "failed", "unresolved finding prevents success");
+    const third = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(third.chain_status === "BLOCKED", "open finding keeps the run BLOCKED after rebuild");
+    ok(third.final_status === "failed", "unresolved finding prevents success");
     const recoveryAfterWave = recoverRunContext(env.runStore, requirementId)!;
     ok(recoveryAfterWave.findingGate.status === "BLOCKED", "finding gate BLOCKED while open");
-    const after = pointDispatchCounts(env, second.run_id);
-    ok(after.get("requirement-intake:primary") === 1, "upstream intake is reused read-only");
-    ok(after.get("solution-design:primary") === 2, "solution-design rebuilt");
-    ok(after.get("solution-gate:adversarial_scan") === 2, "gate scan rebuilt");
-    ok(after.get("solution-gate:formal_verdict") === 2, "gate verdict rebuilt");
-    ok(after.get("knowledge-sync:primary") === 2, "knowledge-sync rebuilt");
+    const after = pointDispatchCounts(env, third.run_id);
+    ok(after.get("requirement-intake:primary") === 2, "upstream intake reused across the causal wave");
+    ok(after.get("solution-design:primary") === 3, "solution-design rebuilt by causal regression");
+    ok(after.get("solution-gate:adversarial_scan") === 3, "gate scan rebuilt");
+    ok(after.get("solution-gate:formal_verdict") === 3, "gate verdict rebuilt");
+    ok(after.get("knowledge-sync:primary") === 3, "knowledge-sync rebuilt");
 
-    // After the wave, resolution succeeds against the rebuilt current.
-    const rebuiltDesign = env.runStore.getCurrentArtifactRevision(second.run_id, "solution-design")!;
+    const rebuiltDesign = env.runStore.getCurrentArtifactRevision(third.run_id, "solution-design")!;
     ok(rebuiltDesign.validity === "ACTIVE", "rebuilt design revision is ACTIVE");
-    const resolved = env.runStore.resolveFinding(second.run_id, findingId, {
+    const resolved = env.runStore.resolveFinding(third.run_id, findingId, {
       resolvedByRevisionId: rebuiltDesign.revisionId,
       resolutionEvidenceRef: `loop-artifact:v1:${rebuiltDesign.artifactKind}:sha256:${rebuiltDesign.digest}`,
       resolutionEvidenceDigest: rebuiltDesign.digest,
     });
     ok(resolved.record.status === "RESOLVED", "finding resolves after rebuild");
-    const third = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(third.final_status === "success" && third.chain_status === "COMPLETED", "resolved run completes successfully");
-    ok(env.runStore.computeFindingGate(third.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
+    const fourth = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED", "resolved run completes successfully");
+    ok(env.runStore.computeFindingGate(fourth.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
   }
 
   // ── W2: multi-finding conflict — earliest affected node wins ──
@@ -244,7 +272,32 @@ async function main(): Promise<void> {
     const env = makeEnv();
     const requirementId = "REQ-WP4-W2";
     const first = await run("migrate billing export", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(first.final_status === "success", "first generation completes");
+    ok(first.final_status === "success", "gen1 completes");
+    // Feedback record opens generation 2 so later findings bind to fix-wave
+    // products (sequence >= 2) and classify as causal regressions.
+    env.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
+      runId: first.run_id,
+      requirementId,
+      sequence: 1,
+      status: "CLASSIFIED",
+      changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE",
+      previousGeneration: 1,
+      currentChangeScope: "feedback opens generation 2",
+      confirmedFactsPreserved: ["billing export stays idempotent"],
+      sourceRefs: [{
+        sourceType: "CONVERSATION",
+        locator: "feedback:w2",
+        priority: 1,
+        sourceVersion: null,
+        observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:w2"],
+      classificationReason: "外部反馈开启新代际",
+      blockedReasonCode: null,
+      createdAt: new Date(Date.now() + 1000).toISOString(),
+    }));
+    await run("migrate billing export", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const orderBefore = env.dispatchOrder.length;
     appendBlockingFinding(env, {
       runId: first.run_id,
@@ -282,21 +335,12 @@ async function main(): Promise<void> {
       category: "REVIEW",
       sequence: 1,
     });
-    // Frozen v2 contract: ANY OPEN finding blocks the gate and its stale
-    // scope drives a rebuild wave — severity does not exempt it.
+    // Round 2 semantics: a non-causal improvement (raised against an
+    // original-generation product) never re-drives a backward wave.
     const second = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const afterCounts = pointDispatchCounts(env, second.run_id);
-    ok(afterCounts.get("code-review:primary") === 2, "code-review rebuilt for improvement");
-    ok(afterCounts.get("knowledge-sync:primary") === 2, "downstream rebuilt for improvement");
-    ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run BLOCKED");
-    const reviewCurrent = env.runStore.getCurrentArtifactRevision(second.run_id, "code-review")!;
-    env.runStore.resolveFinding(second.run_id, improvementId, {
-      resolvedByRevisionId: reviewCurrent.revisionId,
-      resolutionEvidenceRef: `loop-artifact:v1:${reviewCurrent.artifactKind}:sha256:${reviewCurrent.digest}`,
-      resolutionEvidenceDigest: reviewCurrent.digest,
-    });
-    const third = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(third.final_status === "success" && third.chain_status === "COMPLETED", "resolved improvement completes");
+    ok((afterCounts.get("code-review:primary") ?? 0) === 0, "improvement does not drive a rebuild wave");
+    ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run honestly BLOCKED");
   }
 
   // ── W4: REQUIREMENT feedback re-enters at requirement-intake ──
@@ -464,6 +508,7 @@ async function main(): Promise<void> {
       status: "OPEN",
       earliestAffectedNodeId: "solution-design",
       createdAt: futureIso(),
+      sourceRevisionSequence: 2,
     }];
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([
       ["requirement-intake", { validity: "ACTIVE", generation: 1 }],
@@ -569,6 +614,7 @@ async function main(): Promise<void> {
       severity: "HIGH",
       status: "RESOLVED",
       earliestAffectedNodeId: "solution-design",
+      sourceRevisionSequence: 1,
       createdAt: new Date().toISOString(),
     }];
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([

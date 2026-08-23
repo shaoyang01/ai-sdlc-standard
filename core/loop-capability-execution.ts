@@ -431,6 +431,7 @@ export function validateLoopCapabilityExecutionChain(
     if (ids.has(event.executionEventId)) invalid("capability execution event id must be unique");
     ids.add(event.executionEventId);
     if (event.status === "started") {
+      process.stderr?.write?.(`VSTART ${event.executionEventId} idx=${LOOP_CAPABILITY_EXECUTION_POINTS.findIndex((pt) => pt.capability === event.capability && pt.executionRole === event.executionRole)}\n`);
       if (active !== null) invalid("only one capability execution may be active");
       const previous = index === 0 ? undefined : events[index - 1];
       if (previous === undefined) {
@@ -475,27 +476,30 @@ export function validateLoopCapabilityExecutionChain(
         // (read-path re-validation of an already-recorded jump).
         const restartTarget = context?.allowedRestartTargetIndex ?? null;
         const replayMode = context?.historicalReplayMode === true;
-        // Historical authorization is stable forever: the covering finding is
-        // an immutable journal fact. It validates already-recorded jumps on
-        // every replay.
-        const historicalOk = context?.historicalFindings !== undefined &&
+        // Recorded backward jumps are validated by immutable journal facts
+        // (covering finding / feedback record) on every replay — they were
+        // live-authorized when appended and stay authorized forever.
+        const historicalOk =
+          context?.historicalFindings !== undefined &&
           historicalRestartAuthorized(context.historicalFindings, thisIndex);
-        // Live exact-target authorization applies ONLY to the newly appended
-        // event in append mode — closed/resolved findings can never authorize
-        // fresh writes (Round 2 H1).
-        const liveExact =
-          !replayMode &&
-          index === events.length - 1 &&
-          restartTarget !== null && thisIndex === restartTarget;
-        const feedbackOk =
+        const historicalFeedbackOk =
           thisIndex === 0 &&
           context?.feedbackChange !== null &&
           context?.feedbackChange !== undefined;
+        // Round 2 H1: the NEWLY appended event (last position, append mode)
+        // is authorized EXCLUSIVELY by the exact live pending Re-Gate target
+        // derived in the appending transaction — resolved or risk-accepted
+        // findings can never authorize fresh writes.
+        const liveExact =
+          index === events.length - 1 &&
+          !context?.historicalReplayMode &&
+          restartTarget !== null && thisIndex === restartTarget;
         const isAuthorizedRestart =
           !isCanonicalNext &&
           thisIndex < previousIndex + 1 &&
-          (liveExact || historicalOk || feedbackOk);
+          (liveExact || historicalOk || historicalFeedbackOk);
         if (!isCanonicalNext && !isAuthorizedRestart) {
+          process.stderr?.write?.(`REJECT_DBG idx=${thisIndex} prevIdx=${previousIndex} len=${events.length} index=${index} evId=${event.executionEventId} prevId=${previous.executionEventId} elig=${previous.nextStepEligibility} allowed=${String(restartTarget)} replay=${String(replayMode)}\n`);
           invalid("capability execution must follow the canonical eligible chain");
         }
         if (!isCanonicalNext) {

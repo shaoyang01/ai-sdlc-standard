@@ -329,6 +329,12 @@ export function recoverRunContext(
   }
   let regateTargetIndex: number | null = null;
   let regateOverrideApplied = false;
+  const revisions = capabilityExecutions.length > 0
+    ? store.listArtifactRevisions(state.identity.runId)
+    : [];
+  const seqByRevisionId = new Map(
+    revisions.map((revision) => [revision.revisionId, revision.sequence]),
+  );
   const findings = capabilityExecutions.length > 0
     ? store.listFindings(state.identity.runId)
     : [];
@@ -365,6 +371,7 @@ export function recoverRunContext(
       status: finding.status,
       earliestAffectedNodeId: finding.earliestAffectedNodeId,
       createdAt: finding.createdAt,
+      sourceRevisionSequence: seqByRevisionId.get(finding.sourceRevisionId) ?? null,
     })),
     currentByNode,
     pointLastAttempts,
@@ -441,12 +448,50 @@ export function recoverRunContext(
   const lastVerdict = verdictEvents.length === 0 ? null : verdictEvents[verdictEvents.length - 1]!;
   let solutionGateDecision: RunRecoveryContext["solutionGateDecision"] = null;
   if (lastVerdict !== null) {
+    // The decision binds to the CURRENT gate node revision: the verdict's
+    // output must still be the ACTIVE current of solution-gate. A later
+    // generation that superseded the verdict invalidates the decision.
+    const gateCurrentFact = store
+      .listRegateCurrentFacts(state.identity.runId)
+      .find((fact) => fact.nodeId === "solution-gate");
+    const boundToCurrentGate =
+      lastVerdict.status === "succeeded" &&
+      gateCurrentFact !== undefined &&
+      gateCurrentFact.validity === "ACTIVE" &&
+      gateCurrentFact.artifactRef === lastVerdict.outputArtifactRef &&
+      gateCurrentFact.digest === lastVerdict.outputDigest;
     const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
-    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
+    // PASS_WITH_RISK is DECIDED only with an ACCEPTED_RISK proof from the
+    // SAME decision scope: the risk-accepted finding's source revision must
+    // carry the same generation as the verdict round (same wave).
+    let pwrProofSameScope = false;
+    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
+      // Same decision scope: the risk-accepted finding must originate from a
+      // revision of the same wave as the verdict (generation <= verdict's).
+      const verdictGen = store
+        .listArtifactRevisions(state.identity.runId)
+        .find((item) => item.artifactRef === lastVerdict.outputArtifactRef)
+        ?.generation ?? null;
+      pwrProofSameScope = findings.some((finding) => {
+        if (finding.status !== "ACCEPTED_RISK") return false;
+        const sourceRev = store
+          .listArtifactRevisions(state.identity.runId)
+          .find((item) => item.revisionId === finding.sourceRevisionId);
+        return (
+          sourceRev !== undefined &&
+          verdictGen !== null &&
+          sourceRev.generation !== null &&
+          sourceRev.generation <= verdictGen
+        );
+      });
+    }
+    if (lastVerdict.status === "succeeded" && !boundToCurrentGate) {
+      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
+    } else if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else if (
       lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
-      findings.some((finding) => finding.status === "ACCEPTED_RISK")
+      pwrProofSameScope
     ) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else {
@@ -454,16 +499,24 @@ export function recoverRunContext(
     }
   }
   // BLOCKED_UNKNOWN must not enter implementation: once the chain has reached
-  // task-planning, cut the next pointer so the run blocks honestly.
+  // task-planning, cut the next pointer so the run blocks honestly — UNLESS a
+  // pending Re-Gate wave restarts at or before the formal-verdict point, in
+  // which case the wave itself re-adjudicates the gate (Round 2 H2: the cut
+  // must never deadlock the wave against a stale-bound verdict).
   const taskPlanningIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
     (point) => point.capability === "task-planning",
   );
+  const formalVerdictIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+    (point) => point.capability === "solution-gate" && point.executionRole === "formal_verdict",
+  );
   if (
     solutionGateDecision?.status === "BLOCKED_UNKNOWN" &&
-    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx
+    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx &&
+    !(regateTargetIndex !== null && regateTargetIndex <= formalVerdictIdx)
   ) {
     nextExecutionPoint = null;
   }
+  process.stderr?.write?.(`REC_DBG findings=${findings.length} target=${String(regateTargetIndex)} applied=${String(regateOverrideApplied)} linearStop=${String(linearStopIdx)} next=${JSON.stringify(nextExecutionPoint)} chain=${capabilityChainStatus}\n`);
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,

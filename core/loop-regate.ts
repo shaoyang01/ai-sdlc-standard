@@ -38,6 +38,14 @@ export interface RegateFindingFacts {
   earliestAffectedNodeId: NodeCapabilityId;
   /** Kept only as a deterministic tie-breaker between same-node findings. */
   createdAt: string;
+  /**
+   * Sequence of the finding's source revision within its node (Round 2 H2):
+   * sequence >= 2 means the finding was raised against a FIX-WAVE product
+   * (a causal regression that re-drives the wave); sequence 1 findings on
+   * original-generation artifacts are improvement candidates that block
+   * completion but never re-drive a backward restart.
+   */
+  sourceRevisionSequence: number | null;
 }
 
 /** Reduced facts for a node's CURRENT artifact revision pointer. */
@@ -120,6 +128,17 @@ export function nodeNeedsRebuild(
 }
 
 /**
+ * G1 causal classification (Round 2 H2): a finding re-drives the wave only
+ * when it was raised against a fix-wave product. `sourceRevisionSequence`
+ * comes from the finding's own persisted source revision; unknown (null)
+ * conservatively counts as causal so unclassifiable findings still fail
+ * closed.
+ */
+function isCausalRegression(finding: RegateFindingFacts): boolean {
+  return finding.sourceRevisionSequence === null || finding.sourceRevisionSequence >= 2;
+}
+
+/**
  * Plans the next dispatch under open Re-Gate obligations. Deterministic and
  * side-effect free: identical facts always yield the identical plan, so a
  * fresh agent can recover the same next action from the journal alone.
@@ -163,10 +182,16 @@ export function planRegateFromFacts(
     });
   }
   // Frozen v2 contract: ANY open finding blocks its scope's validity and
-  // drives a rebuild wave — severity never exempts a finding from the
-  // current-authority rules (computeFindingGate blocks on every OPEN).
+  // completion (computeFindingGate blocks on every OPEN). Round 2 H2: only
+  // CAUSAL regressions — OPEN findings raised against a fix-wave product
+  // (source revision sequence >= 2) — RE-DRIVE a backward wave. Findings on
+  // original-generation artifacts (sequence 1) are improvement candidates:
+  // they keep completion blocked until resolved but never re-route the chain.
   const pending = findings.filter(
-    (finding) => finding.status === "OPEN" && scopeIncomplete(finding, currentByNode),
+    (finding) =>
+      finding.status === "OPEN" &&
+      scopeIncomplete(finding, currentByNode) &&
+      isCausalRegression(finding),
   );
   if (pending.length === 0) {
     return Object.freeze({
