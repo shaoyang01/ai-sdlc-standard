@@ -660,7 +660,7 @@ async function main(): Promise<void> {
         const existing = runStore.listCapabilityExecutions(runId);
         const sequence = existing.length + 1;
         const base = {
-          schemaVersion: 3 as const,
+          schemaVersion: 4 as const,
           runId,
           capability,
           executionRole,
@@ -679,6 +679,10 @@ async function main(): Promise<void> {
             typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
           consumedFindingsDigest:
             typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
+          decisionDepth: null,
+          decisionScopeId: null,
+          decisionDeltaRef: null,
+          decisionDeltaDigest: null,
         };
         runStore.appendCapabilityExecution(Object.freeze({
           ...base,

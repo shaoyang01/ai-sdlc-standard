@@ -203,7 +203,7 @@ export function createDeterministicCapabilityGateway(options: {
       const consumedDigest =
         typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null;
       const base = {
-        schemaVersion: 3 as const,
+        schemaVersion: 4 as const,
         runId: context.runId,
         capability,
         executionRole,
@@ -220,6 +220,12 @@ export function createDeterministicCapabilityGateway(options: {
         inputDigest: context.inputDigest,
         consumedFindingsRef: consumedRef,
         consumedFindingsDigest: consumedDigest,
+        // v4 (Round 2 review H1): the depth decision rides on the succeeded
+        // formal_verdict event only; started and non-verdict events carry nulls.
+        decisionDepth: null,
+        decisionScopeId: null,
+        decisionDeltaRef: null,
+        decisionDeltaDigest: null,
       };
       runStore.appendCapabilityExecution(Object.freeze({
         ...base,
@@ -243,12 +249,22 @@ export function createDeterministicCapabilityGateway(options: {
         `runtime shadow product for ${capability}/${executionRole} attempt ${context.attempt}`,
       );
       const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
+      const isVerdictRound = capability === "solution-gate" && executionRole === "formal_verdict";
       const ledger = isScanRound
         ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
         : null;
-      const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
+      const gateResult = isVerdictRound
         ? ("PASS" as const)
         : ("NOT_APPLICABLE" as const);
+      // v4: the deterministic shadow adjudication materializes its depth
+      // choice ON the verdict — STANDARD scope, with an immutable delta
+      // artifact recording what the choice changes.
+      const decisionScopeId = isVerdictRound
+        ? `${context.runId}:decision:${context.attempt}`
+        : null;
+      const delta = isVerdictRound
+        ? artifactStore.put("solution_review", `depth=STANDARD shadow decision delta for ${context.runId} attempt ${context.attempt}`)
+        : null;
       runStore.appendCapabilityExecution(Object.freeze({
         ...base,
         executionEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
@@ -261,6 +277,10 @@ export function createDeterministicCapabilityGateway(options: {
         gateResult,
         unresolvedFindingsRef: ledger?.artifactRef ?? null,
         unresolvedFindingsDigest: ledger?.digest ?? null,
+        decisionDepth: isVerdictRound ? ("STANDARD" as const) : null,
+        decisionScopeId,
+        decisionDeltaRef: delta?.artifactRef ?? null,
+        decisionDeltaDigest: delta?.digest ?? null,
         nextStepEligibility: "ELIGIBLE" as const,
         errorCode: null,
         retryable: null,

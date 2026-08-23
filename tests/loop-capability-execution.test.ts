@@ -107,6 +107,10 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     unresolvedFindingsDigest: null,
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
+    decisionDepth: null,
+    decisionScopeId: null,
+    decisionDeltaRef: null,
+    decisionDeltaDigest: null,
     nextStepEligibility: null,
     errorCode: null,
     retryable: null,
@@ -425,6 +429,10 @@ async function main(): Promise<void> {
       inputDigest: scanOutputDigest,
       consumedFindingsRef: ledgerRef,
       consumedFindingsDigest: ledgerDigest,
+      decisionDepth: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
     });
     throwsCode(
       "INVALID_INPUT",
@@ -443,6 +451,10 @@ async function main(): Promise<void> {
       inputDigest: scanOutputDigest,
       consumedFindingsRef: ledgerRef,
       consumedFindingsDigest: ledgerDigest,
+      decisionDepth: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
     });
     const reviewDigest = "d".repeat(64);
     const reviewRef = `loop-artifact:v1:solution_review:sha256:${reviewDigest}`;
@@ -457,6 +469,10 @@ async function main(): Promise<void> {
         outputArtifactVersion: "1.0.0",
         outputDigest: reviewDigest,
         gateResult: "NOT_APPLICABLE",
+        decisionDepth: "STANDARD" as const,
+        decisionScopeId: "run-wp4b-001:decision:1",
+        decisionDeltaRef: reviewRef,
+        decisionDeltaDigest: reviewDigest,
         nextStepEligibility: "ELIGIBLE",
       }),
     ], "run-wp4b-001"), "formal_verdict success without a conclusive Gate result is rejected");
@@ -471,6 +487,10 @@ async function main(): Promise<void> {
         outputArtifactVersion: "1.0.0",
         outputDigest: reviewDigest,
         gateResult: "PASS_WITH_RISK",
+        decisionDepth: "STANDARD" as const,
+        decisionScopeId: "run-wp4b-001:decision:1",
+        decisionDeltaRef: reviewRef,
+        decisionDeltaDigest: reviewDigest,
         nextStepEligibility: "ELIGIBLE",
       }),
     ], "run-wp4b-001");
@@ -675,6 +695,10 @@ async function main(): Promise<void> {
           unresolvedFindingsDigest: null,
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
+          decisionDepth: null,
+          decisionScopeId: null,
+          decisionDeltaRef: null,
+          decisionDeltaDigest: null,
           nextStepEligibility: null,
           errorCode: null,
           retryable: null,
@@ -690,9 +714,16 @@ async function main(): Promise<void> {
         const ledgerEnvelope = isScanPoint
           ? chainArtifacts.put("capability_findings", `[] scan round @${sequence}`)
           : null;
-        const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
+        const isVerdictPoint = capability === "solution-gate" && executionRole === "formal_verdict";
+        const gateResult = isVerdictPoint
           ? "PASS" as const
           : "NOT_APPLICABLE" as const;
+        // v4: the stub verdict materializes its STANDARD depth decision with
+        // an immutable delta artifact, mirroring runtime.ts.
+        const decisionScopeId = isVerdictPoint ? `${runId}:decision:${context.attempt}` : null;
+        const decisionDelta = isVerdictPoint
+          ? chainArtifacts.put("solution_review", `depth=STANDARD decision delta for ${runId} attempt ${context.attempt}`)
+          : null;
         chainStore.appendCapabilityExecution(Object.freeze({
           ...base,
           executionEventId: `${runId}:capability:${sequence + 1}:succeeded`,
@@ -707,6 +738,10 @@ async function main(): Promise<void> {
           unresolvedFindingsDigest: ledgerEnvelope?.digest ?? null,
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
+          decisionDepth: isVerdictPoint ? ("STANDARD" as const) : null,
+          decisionScopeId,
+          decisionDeltaRef: decisionDelta?.artifactRef ?? null,
+          decisionDeltaDigest: decisionDelta?.digest ?? null,
           nextStepEligibility: "ELIGIBLE" as const,
           errorCode: null,
           retryable: null,

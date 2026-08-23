@@ -138,7 +138,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       ? (overrides.executionRole ?? "formal_verdict")
       : "primary";
     return Object.freeze({
-      schemaVersion: 3,
+      schemaVersion: 4,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -165,6 +165,10 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       unresolvedFindingsDigest: null,
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
+      decisionDepth: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? "STANDARD" as const : null,
+      decisionScopeId: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `runId:decision:1` : null,
+      decisionDeltaRef: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${sha256Hex("decision-delta")}` : null,
+      decisionDeltaDigest: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? sha256Hex("decision-delta") : null,
       nextStepEligibility: null,
       errorCode: null,
       retryable: null,
@@ -1692,6 +1696,16 @@ function withBoundStore(
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+function sha256Hex(input: string): string {
+  let h1 = 0x12345678, h2 = 0x9abcdef0;
+  for (let i = 0; i < input.length; i += 1) {
+    h1 = (h1 * 31 + input.charCodeAt(i)) >>> 0;
+    h2 = (h2 * 17 + input.charCodeAt(i)) >>> 0;
+  }
+  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).repeat(4).slice(0, 64);
+}
+
 
 function blobPath(dir: string, kind: string, digest: string): string {
   return join(dir, "control", "artifacts", "v1", kind, digest.slice(0, 2), `${digest}.blob`);

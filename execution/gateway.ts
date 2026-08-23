@@ -228,6 +228,11 @@ export class ExecutionGateway {
       // v3: the formal_verdict dispatch claims its Finding Ledger up front.
       consumedFindingsRef: hasConsumedRef ? (context.consumedFindingsRef as string) : null,
       consumedFindingsDigest: hasConsumedDigest ? (context.consumedFindingsDigest as string) : null,
+      // v4: the depth decision rides on the succeeded verdict event only.
+      decisionDepth: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
     } as const;
     const started: LoopCapabilityExecutionEvent = Object.freeze({
       ...base,
@@ -389,6 +394,23 @@ export class ExecutionGateway {
         error: "capability output could not be recorded safely",
       });
     }
+    // v4 (Round 2 review H1): a succeeded formal_verdict materializes its
+    // depth decision on the event — STANDARD scope with an immutable delta
+    // artifact recording what the choice changes.
+    const isVerdictDispatch = capability === "solution-gate" && executionRole === "formal_verdict";
+    const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
+    const deltaDescriptor = isVerdictDispatch
+      ? tracing.artifactStore.put(
+          "solution_review",
+          JSON.stringify({
+            schema: "loop-decision-delta:v1",
+            requirementId: request.requirementId,
+            runId,
+            attempt,
+            decisionDepth: "STANDARD",
+          }),
+        )
+      : null;
     const succeeded: LoopCapabilityExecutionEvent = Object.freeze({
       ...base,
       executionEventId: `${runId}:capability:${startedSequence + 1}:succeeded`,
@@ -401,6 +423,10 @@ export class ExecutionGateway {
       gateResult,
       unresolvedFindingsRef: findingsDescriptor?.artifactRef ?? null,
       unresolvedFindingsDigest: findingsDescriptor?.digest ?? null,
+      decisionDepth: isVerdictDispatch ? ("STANDARD" as const) : null,
+      decisionScopeId,
+      decisionDeltaRef: deltaDescriptor?.artifactRef ?? null,
+      decisionDeltaDigest: deltaDescriptor?.digest ?? null,
       nextStepEligibility:
         gateResult === "FAIL" ||
         (findings.length > 0 && !(capability === "solution-gate" && executionRole === "adversarial_scan"))

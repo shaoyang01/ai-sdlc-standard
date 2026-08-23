@@ -92,7 +92,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   const agent = o.agent ?? "codex";
   const succeeded = o.status === "succeeded";
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -119,6 +119,10 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     unresolvedFindingsDigest: succeeded && o.findingsRef ? o.findingsRef.slice(-64) : null,
     consumedFindingsRef: o.consumedRef ?? null,
     consumedFindingsDigest: o.consumedRef ? o.consumedRef.slice(-64) : null,
+    decisionDepth: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "STANDARD" as const : null,
+    decisionScopeId: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `${RUN}:decision:${(o as { _attempt?: number })._attempt ?? nextAttempt(o.capability, o.executionRole)}` : null,
+    decisionDeltaRef: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${dg("decision-delta")}` : null,
+    decisionDeltaDigest: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? dg("decision-delta") : null,
     nextStepEligibility: succeeded ? "ELIGIBLE" : o.status === "failed" ? "BLOCKED" : null,
     errorCode: o.status === "failed" ? o.errorCode ?? "EXEC_FAILED" : null,
     retryable: o.status === "failed" ? o.retryable ?? true : null,

@@ -25,7 +25,16 @@ import { historicalRestartAuthorized } from "./loop-regate";
 // formal_verdict role MUST record the exact ledger ref/digest it consumed —
 // the chain validator binds them to the same solution-gate round. The v2
 // schema is not silently accepted.
-export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 3 as const;
+// v4 (C02-WP4 Round 2 review H1): the depth decision is MATERIALIZED on the
+// verdict event itself. A succeeded formal_verdict must carry decisionDepth
+// (LIGHT | STANDARD | DEEP), the decisionScopeId it adjudicates, and a
+// decision delta (ref/digest pair) recording what the depth choice changes;
+// every other event must leave all four null. Recovery refuses to derive a
+// DECIDED admission from gateResult alone.
+export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 4 as const;
+
+export const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
+export type DecisionDepth = (typeof DECISION_DEPTHS)[number];
 
 export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
@@ -60,6 +69,16 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   /** v3: the Finding Ledger this formal_verdict execution consumed. */
   consumedFindingsRef: string | null;
   consumedFindingsDigest: string | null;
+  /**
+   * v4 (Round 2 review H1): the MATERIALIZED depth decision. A succeeded
+   * formal_verdict must declare the depth it chose, the decision scope it
+   * adjudicates, and a delta artifact recording what that choice changes;
+   * every other event carries all four as null.
+   */
+  decisionDepth: DecisionDepth | null;
+  decisionScopeId: string | null;
+  decisionDeltaRef: string | null;
+  decisionDeltaDigest: string | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   errorCode: string | null;
   retryable: boolean | null;
@@ -73,6 +92,7 @@ const EVENT_FIELDS = [
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
   "outputArtifactVersion", "outputDigest", "gateResult", "unresolvedFindingsRef",
   "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
+  "decisionDepth", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
   "nextStepEligibility", "errorCode", "retryable", "reasonCode",
 ] as const;
 
@@ -242,6 +262,34 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   }
   if (!isVerdictRole && (event.consumedFindingsRef !== null || event.consumedFindingsDigest !== null)) {
     invalid("only the formal_verdict role may bind a consumed Finding Ledger");
+  }
+  // v4 (Round 2 review H1): the MATERIALIZED depth decision. The choice is
+  // an immutable fact ON the verdict event — never inferred downstream from
+  // gateResult — and no other execution may carry it.
+  const hasDepth = event.decisionDepth !== null;
+  const hasScope = event.decisionScopeId !== null;
+  const hasDelta = event.decisionDeltaRef !== null || event.decisionDeltaDigest !== null;
+  const isSucceededVerdict = isVerdictRole && event.status === "succeeded";
+  if (
+    event.decisionDepth !== null &&
+    (typeof event.decisionDepth !== "string" || !DECISION_DEPTHS.includes(event.decisionDepth as DecisionDepth))
+  ) {
+    invalid("decisionDepth must be a canonical decision depth or null");
+  }
+  const scopeId = event.decisionScopeId === null ? null : text(event.decisionScopeId, "decisionScopeId");
+  const deltaRef = nullableArtifactRef(event.decisionDeltaRef, "decisionDeltaRef");
+  const deltaDigest = nullableDigest(event.decisionDeltaDigest, "decisionDeltaDigest");
+  if ((deltaRef === null) !== (deltaDigest === null)) invalid("decision delta ref and digest must appear together");
+  if (deltaRef !== null && deltaRef.digest !== deltaDigest) {
+    invalid("decision delta reference and digest must match");
+  }
+  if (isSucceededVerdict) {
+    if (!hasDepth || !hasScope || !hasDelta) {
+      invalid("succeeded formal_verdict must materialize decisionDepth, decisionScopeId and a decision delta");
+    }
+    void scopeId;
+  } else if (hasDepth || hasScope || hasDelta) {
+    invalid("only a succeeded formal_verdict may carry a materialized depth decision");
   }
   if (event.gateResult !== null && (typeof event.gateResult !== "string" || !GATE_RESULTS.includes(event.gateResult as LoopCapabilityGateResult))) {
     invalid("gateResult must be canonical or null");

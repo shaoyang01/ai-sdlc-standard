@@ -349,6 +349,10 @@ type CapabilityExecutionRow = {
   unresolved_findings_digest: string | null;
   consumed_findings_ref: string | null;
   consumed_findings_digest: string | null;
+  decision_depth: string | null;
+  decision_scope_id: string | null;
+  decision_delta_ref: string | null;
+  decision_delta_digest: string | null;
   next_step_eligibility: string | null;
   error_code: string | null;
   retryable: number | null;
@@ -529,7 +533,7 @@ function eventToRow(event: LoopRunEvent): EventRow {
 
 function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 3,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 4,
     executionEventId: row.execution_event_id,
     runId: row.run_id,
     sequence: asPersistedSafeInteger(row.sequence),
@@ -556,6 +560,10 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     unresolvedFindingsDigest: row.unresolved_findings_digest,
     consumedFindingsRef: row.consumed_findings_ref,
     consumedFindingsDigest: row.consumed_findings_digest,
+    decisionDepth: row.decision_depth as LoopCapabilityExecutionEvent["decisionDepth"],
+    decisionScopeId: row.decision_scope_id,
+    decisionDeltaRef: row.decision_delta_ref,
+    decisionDeltaDigest: row.decision_delta_digest,
     nextStepEligibility: row.next_step_eligibility as LoopCapabilityExecutionEvent["nextStepEligibility"],
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
@@ -592,6 +600,10 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     unresolved_findings_digest: event.unresolvedFindingsDigest,
     consumed_findings_ref: event.consumedFindingsRef,
     consumed_findings_digest: event.consumedFindingsDigest,
+    decision_depth: event.decisionDepth,
+    decision_scope_id: event.decisionScopeId,
+    decision_delta_ref: event.decisionDeltaRef,
+    decision_delta_digest: event.decisionDeltaDigest,
     next_step_eligibility: event.nextStepEligibility,
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
@@ -1208,6 +1220,10 @@ export class LoopRunStore {
               unresolved_findings_digest TEXT,
               consumed_findings_ref TEXT,
               consumed_findings_digest TEXT,
+              decision_depth TEXT,
+              decision_scope_id TEXT,
+              decision_delta_ref TEXT,
+              decision_delta_digest TEXT,
               next_step_eligibility TEXT,
               error_code TEXT,
               retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
@@ -3321,9 +3337,11 @@ export class LoopRunStore {
         output_artifact_version, output_digest, gate_result,
         unresolved_findings_ref, unresolved_findings_digest,
         consumed_findings_ref, consumed_findings_digest,
+        decision_depth, decision_scope_id, decision_delta_ref,
+        decision_delta_digest,
         next_step_eligibility, error_code, retryable, reason_code,
         canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
       row.capability, row.execution_role, row.node_id, row.attempt, row.status,
@@ -3333,7 +3351,9 @@ export class LoopRunStore {
       row.input_digest, row.output_artifact_ref, row.output_artifact_version,
       row.output_digest, row.gate_result, row.unresolved_findings_ref,
       row.unresolved_findings_digest, row.consumed_findings_ref,
-      row.consumed_findings_digest, row.next_step_eligibility, row.error_code,
+      row.consumed_findings_digest, row.decision_depth,
+      row.decision_scope_id, row.decision_delta_ref,
+      row.decision_delta_digest, row.next_step_eligibility, row.error_code,
       row.retryable, row.reason_code, row.canonical_sha256,
     );
   }
@@ -4087,6 +4107,8 @@ export class LoopRunStore {
       ["output_digest", "TEXT", 0, 0], ["gate_result", "TEXT", 0, 0],
       ["unresolved_findings_ref", "TEXT", 0, 0], ["unresolved_findings_digest", "TEXT", 0, 0],
       ["consumed_findings_ref", "TEXT", 0, 0], ["consumed_findings_digest", "TEXT", 0, 0],
+      ["decision_depth", "TEXT", 0, 0], ["decision_scope_id", "TEXT", 0, 0],
+      ["decision_delta_ref", "TEXT", 0, 0], ["decision_delta_digest", "TEXT", 0, 0],
       ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
       ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],

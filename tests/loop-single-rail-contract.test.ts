@@ -95,7 +95,7 @@ function main(): void {
   );
 
   console.log("single rail: schema versions advanced, no silent compatibility");
-  ok(LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION === 3, "capability execution schema is v3");
+  ok(LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION === 4, "capability execution schema is v4");
   ok(LOOP_FINDING_SCHEMA_VERSION === 3, "finding schema is v3 (direct causal evidence)");
   ok(LOOP_ARTIFACT_REVISION_SCHEMA_VERSION === 2, "artifact revision schema is v2");
 

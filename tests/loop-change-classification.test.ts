@@ -90,7 +90,7 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 
 function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     executionEventId: "run-001:capability:1:started",
     runId: "run-001",
     sequence: 1,
@@ -117,6 +117,10 @@ function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
     unresolvedFindingsDigest: null,
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
+    decisionDepth: null,
+    decisionScopeId: null,
+    decisionDeltaRef: null,
+    decisionDeltaDigest: null,
     nextStepEligibility: null,
     errorCode: null,
     retryable: null,

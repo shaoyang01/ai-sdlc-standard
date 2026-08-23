@@ -466,13 +466,20 @@ export function recoverRunContext(
         );
       });
     }
+    // Round 2 review H1: the depth choice must be MATERIALIZED on the
+    // verdict event itself — gateResult alone never admits implementation.
+    const decisionMaterialized =
+      lastVerdict.decisionDepth !== null && lastVerdict.decisionScopeId !== null;
     if (lastVerdict.status === "succeeded" && !boundToCurrentGate) {
       solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
-    } else if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
+    } else if (
+      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS" &&
+      decisionMaterialized
+    ) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else if (
       lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
-      pwrProofSameScope
+      decisionMaterialized && pwrProofSameScope
     ) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else {
