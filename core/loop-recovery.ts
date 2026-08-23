@@ -418,19 +418,6 @@ export function recoverRunContext(
   const lastCapabilityExecution = capabilityExecutions.length === 0
     ? null
     : capabilityExecutions[capabilityExecutions.length - 1]!;
-  // v2: the chain status and next pointer derive from the point-wise
-  // projection; `nextCapability` stays as the capability projection of it.
-  // WP4: a pending Re-Gate wave downgrades a linearly COMPLETED projection
-  // to READY — the chain owes a rebuild generation before it is complete.
-  const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
-    executionPointStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
-      ? (regateOverrideApplied ? "READY" : "COMPLETED")
-      : lastCapabilityExecution?.status === "started"
-        ? "RUNNING"
-        : lastCapabilityExecution !== null && nextExecutionPoint === null
-          ? "BLOCKED"
-          : "READY";
-  const nextCapability = nextExecutionPoint?.capability ?? null;
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
@@ -509,13 +496,31 @@ export function recoverRunContext(
   const formalVerdictIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
     (point) => point.capability === "solution-gate" && point.executionRole === "formal_verdict",
   );
+  let depthDecisionBlocked = false;
   if (
     solutionGateDecision?.status === "BLOCKED_UNKNOWN" &&
     linearStopIdx !== null && linearStopIdx >= taskPlanningIdx &&
     !(regateTargetIndex !== null && regateTargetIndex <= formalVerdictIdx)
   ) {
     nextExecutionPoint = null;
+    depthDecisionBlocked = true;
   }
+  // Project all externally visible dispatch state only after Re-Gate and
+  // depth-decision admission have both finalized the pointer. This keeps the
+  // capability projection and chain status consistent with nextExecutionPoint.
+  const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
+    depthDecisionBlocked
+      ? "BLOCKED"
+      : executionPointStates.every(
+        (item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE",
+      )
+        ? (regateOverrideApplied ? "READY" : "COMPLETED")
+        : lastCapabilityExecution?.status === "started"
+          ? "RUNNING"
+          : lastCapabilityExecution !== null && nextExecutionPoint === null
+            ? "BLOCKED"
+            : "READY";
+  const nextCapability = nextExecutionPoint?.capability ?? null;
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,

@@ -7,20 +7,19 @@
 //
 // Inputs are reduced facts only:
 // - findings: status / severity / earliestAffectedNodeId / createdAt;
-// - currentByNode: per-node CURRENT revision facts (validity + createdAt).
+// - currentByNode: per-node CURRENT revision facts (validity + generation).
 //
 // Semantics (plan §C02-WP4, impact analysis §8 F row 4):
-// - Only OPEN findings with blocking severity (CRITICAL | HIGH) force a
-//   Re-Gate generation. MEDIUM/LOW are recorded improvements (G1 §3) and
-//   never restart the chain.
+// - Every OPEN finding blocks completion. Only causal regressions raised
+//   against a fix-wave product re-drive a Re-Gate generation; findings on
+//   the original product remain improvement obligations without rerouting.
 // - A finding's rebuild scope is its canonical downstream set (itself
 //   included). The scope is incomplete while any node in it has no current
-//   revision, a non-ACTIVE current, or a current authored no later than the
-//   finding itself.
+//   revision or a non-ACTIVE current.
 // - The restart target is the FIRST node of the governing finding's scope
-//   (earliest start index; tie → oldest finding) that still needs a
-//   rebuild. Upstream nodes are reused read-only; everything from the
-//   target on must be rebuilt and re-gated.
+//   (earliest start index; tie → oldest finding) that still needs a rebuild.
+//   Upstream nodes are reused read-only; everything from the target on must
+//   be rebuilt and re-gated.
 
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -71,7 +70,7 @@ export interface RegatePlan {
   restartPointIndex: number | null;
   /** Canonical node of the restart point (null when kind === "none"). */
   restartNode: NodeCapabilityId | null;
-  /** Findings driving this plan (blocking severity, incomplete scope). */
+  /** Causal OPEN findings driving this plan (incomplete scope). */
   governingFindingIds: readonly string[];
   /** Earliest affected node of the governing set. */
   earliestAffectedNode: NodeCapabilityId | null;
@@ -263,13 +262,13 @@ export function planRegateFromFacts(
 /**
  * Historical restart authorization (read-path counterpart of the live
  * pending-plan check): a recorded backward jump to `targetPointIndex` is
- * accepted during full-chain re-validation iff some blocking-severity,
- * non-superseded finding whose rebuild scope covers the target node exists
- * anywhere in the run. Findings and revisions are immutable journal facts,
- * so re-validation never retroactively rejects a jump that was authorized
- * when it happened — while a journal with no covering finding still fails
- * closed. Creation-time comparisons are deliberately NOT used here:
- * findings may carry forward-dated createdAt by contract.
+ * accepted during full-chain re-validation iff some non-superseded causal
+ * finding whose rebuild scope covers the target node exists anywhere in the
+ * run. Finding source revisions are immutable journal facts, so replay can
+ * distinguish a fix-wave regression from an original-product improvement.
+ * A journal with no covering causal finding fails closed. Creation-time
+ * comparisons are deliberately NOT used here: findings may carry
+ * forward-dated createdAt by contract.
  */
 export function historicalRestartAuthorized(
   findings: readonly RegateFindingFacts[],
@@ -280,6 +279,7 @@ export function historicalRestartAuthorized(
   const targetIdx = NODE_CAPABILITY_IDS.indexOf(targetNode);
   return findings.some((finding) =>
     finding.status !== "SUPERSEDED" &&
+    isCausalRegression(finding) &&
     NODE_CAPABILITY_IDS.indexOf(finding.earliestAffectedNodeId) <= targetIdx,
   );
 }

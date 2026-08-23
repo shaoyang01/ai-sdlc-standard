@@ -750,6 +750,20 @@ async function main(): Promise<void> {
       });
       ok(step.execution.success === true, `${point.capability}/${point.executionRole} produces a qualified traced result`);
       chainRecovery = step.recoveryContext;
+      if (point.capability === "solution-gate" && point.executionRole === "formal_verdict") {
+        ok(
+          chainRecovery.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
+          "verdict without its current gate revision remains BLOCKED_UNKNOWN",
+        );
+        ok(
+          chainRecovery.nextExecutionPoint === null && chainRecovery.nextCapability === null,
+          "blocked depth decision exposes no contradictory next dispatch projection",
+        );
+        ok(
+          chainRecovery.capabilityChainStatus === "BLOCKED",
+          "blocked depth decision projects a BLOCKED capability chain",
+        );
+      }
       // Round 2 H2: the depth decision binds to the CURRENT gate-node
       // revision, so a compliant driver authors a node revision after every
       // succeeded execution (mirroring runtime.ts). Scan rounds persist only

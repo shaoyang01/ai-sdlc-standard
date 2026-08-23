@@ -35,7 +35,12 @@ import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
 import { createLoopRequirementChangeRecord } from "../core/loop-change-classification";
 import { recoverRunContext } from "../core/loop-recovery";
-import { planRegateFromFacts, type CurrentRevisionFacts, type RegateFindingFacts } from "../core/loop-regate";
+import {
+  historicalRestartAuthorized,
+  planRegateFromFacts,
+  type CurrentRevisionFacts,
+  type RegateFindingFacts,
+} from "../core/loop-regate";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
@@ -299,6 +304,39 @@ async function main(): Promise<void> {
     const fourth = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED", "resolved run completes successfully");
     ok(env.runStore.computeFindingGate(fourth.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
+
+    // Round 2 H1 regression: the immutable RESOLVED finding remains valid
+    // replay evidence for the historical jump that it originally caused,
+    // but it must not authorize a NEW append after the live plan is gone.
+    const completedEvents = env.runStore.listCapabilityExecutions(fourth.run_id);
+    const priorDesignStart = [...completedEvents].reverse().find(
+      (event) => event.status === "started" && event.capability === "solution-design",
+    )!;
+    const intakeCurrent = env.runStore.getCurrentArtifactRevision(fourth.run_id, "requirement-intake")!;
+    let resolvedFindingReauthorized = false;
+    let resolvedFindingRejectionCode: string | null = null;
+    let resolvedFindingRejectionMessage: string | null = null;
+    try {
+      env.runStore.appendCapabilityExecution(Object.freeze({
+        ...priorDesignStart,
+        executionEventId: `${fourth.run_id}:capability:${completedEvents.length + 1}:started`,
+        sequence: completedEvents.length + 1,
+        attempt: priorDesignStart.attempt + 1,
+        createdAt: futureIso(30_000),
+        inputArtifactRef: intakeCurrent.artifactRef,
+        inputArtifactVersion: intakeCurrent.semver,
+        inputDigest: intakeCurrent.digest,
+      }));
+      resolvedFindingReauthorized = true;
+    } catch (error) {
+      resolvedFindingRejectionCode = error instanceof LoopRunJournalError ? error.code : null;
+      resolvedFindingRejectionMessage = error instanceof Error ? error.message : null;
+    }
+    ok(
+      resolvedFindingRejectionCode === "ILLEGAL_TRANSITION",
+      `resolved finding restart fails at the store transition boundary (got ${resolvedFindingRejectionCode}: ${resolvedFindingRejectionMessage})`,
+    );
+    ok(!resolvedFindingReauthorized, "resolved finding cannot authorize a fresh backward append");
   }
 
   // ── W2: multi-finding conflict — earliest affected node wins ──
@@ -420,6 +458,39 @@ async function main(): Promise<void> {
     ok(counts.get("knowledge-sync:primary") === 2, "full chain rebuilt");
     const rebuilt = env.runStore.listRegateCurrentFacts(first.run_id);
     ok(rebuilt.every((fact) => fact.validity === "ACTIVE" && (fact.generation ?? 0) >= 2), "every node carries generation 2");
+
+    // The feedback record remains immutable replay evidence, but once every
+    // current has consumed its generation it cannot authorize generation 3.
+    const completedEvents = env.runStore.listCapabilityExecutions(first.run_id);
+    const priorIntakeStart = completedEvents.find(
+      (event) => event.status === "started" && event.capability === "requirement-intake",
+    )!;
+    const forgedSource = env.artifactStore.put(
+      "requirement_summary",
+      "unclassified feedback must not open another generation",
+    );
+    let consumedFeedbackReauthorized = false;
+    let consumedFeedbackRejectionCode: string | null = null;
+    try {
+      env.runStore.appendCapabilityExecution(Object.freeze({
+        ...priorIntakeStart,
+        executionEventId: `${first.run_id}:capability:${completedEvents.length + 1}:started`,
+        sequence: completedEvents.length + 1,
+        attempt: priorIntakeStart.attempt + 2,
+        createdAt: futureIso(30_000),
+        inputArtifactRef: forgedSource.artifactRef,
+        inputArtifactVersion: "3.0.0",
+        inputDigest: forgedSource.digest,
+      }));
+      consumedFeedbackReauthorized = true;
+    } catch (error) {
+      consumedFeedbackRejectionCode = error instanceof LoopRunJournalError ? error.code : null;
+    }
+    ok(
+      consumedFeedbackRejectionCode === "ILLEGAL_TRANSITION",
+      `consumed feedback restart fails at the store transition boundary (got ${consumedFeedbackRejectionCode})`,
+    );
+    ok(!consumedFeedbackReauthorized, "consumed feedback cannot authorize a fresh backward append");
   }
 
   // ── W5: FAIL verdict blocks and surfaces BLOCKED_UNKNOWN ──
@@ -658,6 +729,32 @@ async function main(): Promise<void> {
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const plan = planRegateFromFacts(facts, currents);
     ok(plan.kind === "none" && plan.restartPointIndex === null, "no findings → no restart authorization");
+
+    const originalProductFinding: RegateFindingFacts = {
+      findingId: "original-product-improvement",
+      severity: "MEDIUM",
+      status: "OPEN",
+      earliestAffectedNodeId: "solution-design",
+      sourceRevisionSequence: 1,
+      createdAt: new Date().toISOString(),
+    };
+    const causalFinding: RegateFindingFacts = {
+      ...originalProductFinding,
+      findingId: "fix-wave-regression",
+      severity: "HIGH",
+      sourceRevisionSequence: 2,
+    };
+    const designPoint = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      (point) => point.capability === "solution-design",
+    );
+    ok(
+      !historicalRestartAuthorized([originalProductFinding], designPoint),
+      "original-product improvement cannot authorize a historical restart",
+    );
+    ok(
+      historicalRestartAuthorized([causalFinding], designPoint),
+      "fix-wave causal finding can validate its recorded historical restart",
+    );
   }
 
   // ── W8: resolved findings never re-authorize a backward jump ──

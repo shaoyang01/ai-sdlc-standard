@@ -478,10 +478,13 @@ export function validateLoopCapabilityExecutionChain(
         // Recorded backward jumps are validated by immutable journal facts
         // (covering finding / feedback record) on every replay — they were
         // live-authorized when appended and stay authorized forever.
+        const isNewAppendEvent = !replayMode && index === events.length - 1;
         const historicalOk =
+          !isNewAppendEvent &&
           context?.historicalFindings !== undefined &&
           historicalRestartAuthorized(context.historicalFindings, thisIndex);
         const historicalFeedbackOk =
+          !isNewAppendEvent &&
           thisIndex === 0 &&
           context?.feedbackChange !== null &&
           context?.feedbackChange !== undefined;
@@ -490,8 +493,7 @@ export function validateLoopCapabilityExecutionChain(
         // derived in the appending transaction — resolved or risk-accepted
         // findings can never authorize fresh writes.
         const liveExact =
-          index === events.length - 1 &&
-          !context?.historicalReplayMode &&
+          isNewAppendEvent &&
           restartTarget !== null && thisIndex === restartTarget;
         const isAuthorizedRestart =
           !isCanonicalNext &&
