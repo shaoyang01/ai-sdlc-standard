@@ -1776,6 +1776,25 @@ export class LoopRunStore {
           }
           throw error;
         }
+        // v4 (re-review F1): the decision delta is physically bound like
+        // revision outputs and finding evidence — the blob must exist in the
+        // artifact store with a matching digest before the verdict lands.
+        if (event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null) {
+          if (this.artifactStore !== null) {
+            try {
+              this.artifactStore.read(event.decisionDeltaRef, event.decisionDeltaDigest);
+            } catch (error) {
+              if (error instanceof LoopArtifactStoreError &&
+                (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH")) {
+                throw new LoopRunJournalError(
+                  "ILLEGAL_TRANSITION",
+                  "decision delta blob is missing in the bound artifact store",
+                );
+              }
+              throw error;
+            }
+          }
+        }
         this.insertCapabilityExecutionRow(db, row);
         return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
       }).immediate() as CapabilityExecutionAppendResult;
@@ -2036,6 +2055,35 @@ export class LoopRunStore {
         if (current.some((item) => item.sequence === record.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "requirement change sequence is occupied");
         }
+        // Round 2 re-review F3: a FEEDBACK_DRIVEN_CHANGE record must cite the
+        // run's CURRENT authoritative generation as previousGeneration — the
+        // generation it closes. Skipping ahead (previousGeneration beyond the
+        // authority), regressing behind it, or re-citing an already-superseded
+        // generation would fork or rewind the generation authority derived
+        // from this very chain. Baseline: no prior feedback record means the
+        // run sits in generation 1, so previousGeneration must be exactly 1.
+        if (
+          record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+          record.status === "CLASSIFIED" &&
+          record.previousGeneration !== null
+        ) {
+          let authoritative = 1;
+          for (const item of current) {
+            if (
+              item.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+              item.status === "CLASSIFIED" &&
+              item.previousGeneration !== null
+            ) {
+              authoritative = item.previousGeneration + 1;
+            }
+          }
+          if (record.previousGeneration !== authoritative) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              `FEEDBACK_DRIVEN_CHANGE must close the current generation ${authoritative}, got ${record.previousGeneration}`,
+            );
+          }
+        }
         // Cross-run NEW_REQUIREMENT uniqueness: NEW_REQUIREMENT is only legal
         // while the requirement has no classified change record in ANY run.
         // The chain validator covers the current run; this check binds the
@@ -2266,6 +2314,12 @@ export class LoopRunStore {
         const status = snapshot.state.status;
         if (status === "completed" || status === "failed" || status === "cancelled") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "terminal run must not accept artifact revisions");
+        }
+        // Round 2 re-review F4: a durably blocked run accepts no further
+        // writes on any append boundary — only releaseRunRegateBlock may
+        // return it to running.
+        if (status === "blocked") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "blocked run must not accept artifact revisions");
         }
         if (snapshot.state.currentStage !== null) {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revisions require no active delivery stage");
@@ -2752,7 +2806,10 @@ export class LoopRunStore {
       const idx = points.findIndex(
         (point) => point.capability === event.capability && point.executionRole === event.executionRole,
       );
-      if (prevIdx >= 0 && idx < prevIdx + 1) rounds += 1;
+      // Round 2 re-review F4: a same-point RETRY repeats the previous
+      // start's index and is NOT a generation restart — only a move to an
+      // EARLIER point consumes a round.
+      if (prevIdx >= 0 && idx !== prevIdx && idx < prevIdx + 1) rounds += 1;
       prevIdx = idx;
     }
     return rounds;
@@ -2921,6 +2978,17 @@ export class LoopRunStore {
               "ILLEGAL_TRANSITION",
               "source artifact revision is not the current revision of the source capability",
             );
+          }
+        }
+        // Round 2 re-review F2: DIRECT causal evidence must reference a REAL
+        // revision of this run — a declared REGRESSION whose introducing
+        // revision does not exist is rejected before any invalidation runs.
+        if (record.causeKind === "REGRESSION") {
+          if (record.introducedByRevisionId === null) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "regression finding requires introducedByRevisionId");
+          }
+          if (!revisions.some((item) => item.revisionId === record.introducedByRevisionId)) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "introducedByRevisionId does not exist in the run");
           }
         }
         try {
@@ -4003,6 +4071,7 @@ export class LoopRunStore {
       } catch (error) {
         if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
         if (error instanceof LoopRunJournalError) corrupt("persisted finding is invalid");
+
         throw error;
       }
       return record;
@@ -4020,6 +4089,17 @@ export class LoopRunStore {
       const source = readRevisions.find((item) => item.revisionId === record.sourceRevisionId);
       if (source === undefined || source.nodeId !== record.sourceCapability) {
         corrupt("finding source revision does not match the source capability");
+      }
+    }
+    // Round 2 re-review F2: replay-boundary re-verification of DIRECT causal
+    // evidence — a persisted REGRESSION whose introducing revision has
+    // vanished from the verified revision chain is corruption.
+    for (const record of findings) {
+      if (
+        record.causeKind === "REGRESSION" &&
+        !readRevisions.some((item) => item.revisionId === record.introducedByRevisionId)
+      ) {
+        corrupt("regression finding references a missing introducing revision");
       }
     }
     const invalidations: LoopFindingInvalidation[] = [];

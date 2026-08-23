@@ -391,6 +391,13 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     unresolvedFindingsDigest: event.unresolvedFindingsDigest,
     consumedFindingsRef: event.consumedFindingsRef,
     consumedFindingsDigest: event.consumedFindingsDigest,
+    // v4 (Round 2 review H1 + re-review F1): the materialized depth decision
+    // is part of the canonical hash — a persisted verdict's scope/depth/
+    // delta cannot be rewritten without hash-drift detection.
+    decisionDepth: event.decisionDepth,
+    decisionScopeId: event.decisionScopeId,
+    decisionDeltaRef: event.decisionDeltaRef,
+    decisionDeltaDigest: event.decisionDeltaDigest,
     nextStepEligibility: event.nextStepEligibility,
     errorCode: event.errorCode,
     retryable: event.retryable,

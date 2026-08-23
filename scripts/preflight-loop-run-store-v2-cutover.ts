@@ -35,7 +35,7 @@ const CANDIDATE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 const LOOP_BUSINESS_TABLES = LOOP_PHYSICAL_TABLES;
 
 export type PreflightVerdict =
-  | "OK_V6"
+  | "OK_V7"
   | "FRESH_EMPTY"
   | "FAIL_HISTORICAL_FORMAT"
   | "FAIL_UNVERSIONED_WITH_TABLES"
@@ -152,9 +152,12 @@ export function classifyCandidate(path: string): PreflightCandidate {
     }
     // Declared-format gates come first: they carry the most specific
     // diagnosis even when the owner cannot be confirmed.
-    if (declaredFormatVersion >= 1 && declaredFormatVersion <= 5) {
+    if (declaredFormatVersion >= 1 && declaredFormatVersion <= SUPPORTED_FORMAT_VERSION - 1) {
       return {
         ...base,
+        // Round 2 re-review F5: the fresh-cutover boundary moves with the
+        // supported format — EVERY older declared version (including the
+        // previous supported one) takes the no-migration rejection path.
         verdict: declaredFormatVersion === 5 ? "STOP_AND_RE_RULE" : "FAIL_HISTORICAL_FORMAT",
         detail: declaredFormatVersion === 5
           ? "real v5 journal found: STOP_AND_RE_RULE — re-request governance before any cutover"
@@ -185,7 +188,7 @@ export function classifyCandidate(path: string): PreflightCandidate {
     if (loopTablesFound.length === 0) {
       return { ...base, verdict: "FAIL_OWNER_UNKNOWN", detail: "no LOOP business table found; owner cannot be confirmed" };
     }
-    return { ...base, verdict: "OK_V6", detail: "supported v7 journal format" };
+    return { ...base, verdict: "OK_V7", detail: `supported v${SUPPORTED_FORMAT_VERSION} journal format` };
   } catch {
     return {
       path, sizeBytes, verdict: "FAIL_NOT_SQLITE", declaredFormatVersion: null,
@@ -216,7 +219,7 @@ export function preflightLoopRunStoreV2Cutover(roots: readonly string[]): Prefli
   // Every non-passing verdict counts as a failure; a v5 journal is both a
   // failure and the distinct STOP_AND_RE_RULE governance stop (D3 rule 5).
   const blocking = candidates.filter(
-    (candidate) => candidate.verdict !== "OK_V6" && candidate.verdict !== "FRESH_EMPTY",
+    (candidate) => candidate.verdict !== "OK_V7" && candidate.verdict !== "FRESH_EMPTY",
   );
   const requiresGovernanceStop = candidates.some((candidate) => candidate.verdict === "STOP_AND_RE_RULE");
   return Object.freeze({

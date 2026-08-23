@@ -1206,7 +1206,81 @@ async function main(): Promise<void> {
       "the unresolved regression keeps the run honestly blocked");
   }
 
-    console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);
+    // ── W10: causal evidence and generation authority are store-enforced ──
+  console.log("W10: declared causality binds real revisions; generation cannot skip or regress");
+  {
+    const env = makeEnv();
+    const requirementId = "REQ-WP4-W10";
+    const first = await run("tiny scope", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+
+    // F2 negative: REGRESSION citing a nonexistent introducing revision.
+    const designCurrent = env.runStore.getCurrentArtifactRevision(first.run_id, "solution-design")!;
+    let f2Code: string | null = null;
+    try {
+      env.runStore.appendFinding(createLoopFinding({
+        runId: first.run_id, requirementId, sequence: 1,
+        sourceCapability: "solution-design", sourceRevisionId: designCurrent.revisionId,
+        causeKind: "REGRESSION", introducedByRevisionId: `${first.run_id}:revision:solution-design:999`,
+        severity: "HIGH", category: "SOLUTION",
+        evidenceRef: `loop-artifact:v1:solution_review:sha256:${"c".repeat(64)}`,
+        evidenceDigest: "c".repeat(64),
+        earliestAffectedNodeId: "solution-design",
+        createdAt: new Date(Date.now() + 1000).toISOString(),
+      }));
+    } catch (error) {
+      f2Code = error instanceof LoopRunJournalError ? error.code : null;
+    }
+    ok(f2Code === "ILLEGAL_TRANSITION", `nonexistent introducedByRevisionId rejected (got ${f2Code})`);
+
+    // F3 negative: skipping ahead beyond the authoritative generation.
+    const skipRecord = createLoopRequirementChangeRecord({
+      runId: first.run_id, requirementId, sequence: 1,
+      status: "CLASSIFIED", changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE", previousGeneration: 3,
+      currentChangeScope: "skip attempt",
+      confirmedFactsPreserved: ["billing export stays idempotent"], sourceRefs: [{
+        sourceType: "CONVERSATION", locator: "feedback:w10-skip", priority: 1,
+        sourceVersion: null, observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:w10-skip"],
+      classificationReason: "skip", blockedReasonCode: null,
+      createdAt: futureIso(1000),
+    });
+    let f3SkipCode: string | null = null;
+    try {
+      env.runStore.appendRequirementChange(skipRecord);
+    } catch (error) {
+      f3SkipCode = error instanceof LoopRunJournalError ? error.code : null;
+    }
+    ok(f3SkipCode === "ILLEGAL_TRANSITION", `generation skip rejected (got ${f3SkipCode})`);
+
+    // Legitimate wave still lands (previousGeneration === current authority).
+    openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w10-ok" });
+    ok(env.runStore.getRunGeneration(first.run_id) === 2, "well-formed feedback opens generation 2");
+
+    // F3 regression: another record citing the superseded generation 1.
+    const regressRecord = createLoopRequirementChangeRecord({
+      runId: first.run_id, requirementId, sequence: 2,
+      status: "CLASSIFIED", changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE", previousGeneration: 1,
+      currentChangeScope: "rewind attempt",
+      confirmedFactsPreserved: ["billing export stays idempotent"],
+      sourceRefs: [{ sourceType: "CONVERSATION", locator: "feedback:w10-rewind", priority: 1,
+        sourceVersion: null, observedAt: new Date().toISOString() }],
+      triggerEvidence: ["source:feedback:w10-rewind"],
+      classificationReason: "rewind", blockedReasonCode: null,
+      createdAt: futureIso(2000),
+    });
+    let f3RewindCode: string | null = null;
+    try {
+      env.runStore.appendRequirementChange(regressRecord);
+    } catch (error) {
+      f3RewindCode = error instanceof LoopRunJournalError ? error.code : null;
+    }
+    ok(f3RewindCode === "ILLEGAL_TRANSITION", `generation rewind rejected (got ${f3RewindCode})`);
+  }
+
+  console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);
 }
 
 main().then(

@@ -134,7 +134,23 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 }
 
 /** Drives the canonical single-pass capability chain inside one run. */
-function makeCapabilityDriver(store: LoopRunStore, runId: string) {
+function makeCapabilityDriver(
+  store: LoopRunStore,
+  runId: string,
+  artifactStore?: LoopArtifactStore,
+) {
+  // Round 2 re-review F1: when a store is bound, the verdict's decision
+  // delta must be a REAL blob so append-time physical verification passes.
+  const putDelta = (): { artifactRef: string; digest: string } =>
+    artifactStore === undefined
+      ? {
+          artifactRef: `loop-artifact:v1:solution_review:sha256:${sha256Hex("decision-delta")}`,
+          digest: sha256Hex("decision-delta"),
+        }
+      : (() => {
+          const d = artifactStore.put("solution_review", `decision delta ${nextTs()}`);
+          return { artifactRef: d.artifactRef, digest: d.digest };
+        })();
   // Continue the persisted event sequence so multiple drivers can share a run.
   let sequence = store.listCapabilityExecutions(runId).length;
   const attempts = new Map<string, number>();
@@ -158,6 +174,9 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     const executionRole = capability === "solution-gate"
       ? (overrides.executionRole ?? "formal_verdict")
       : "primary";
+    const isSucceededVerdict =
+      status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict";
+    const deltaBinding = isSucceededVerdict ? putDelta() : null;
     return Object.freeze({
       schemaVersion: 4,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
@@ -186,10 +205,10 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       unresolvedFindingsDigest: null,
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
-      decisionDepth: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? "STANDARD" as const : null,
-      decisionScopeId: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `runId:decision:1` : null,
-      decisionDeltaRef: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${sha256Hex("decision-delta")}` : null,
-      decisionDeltaDigest: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? sha256Hex("decision-delta") : null,
+      decisionDepth: isSucceededVerdict ? ("STANDARD" as const) : null,
+      decisionScopeId: isSucceededVerdict ? `${runId}:decision:1` : null,
+      decisionDeltaRef: deltaBinding?.artifactRef ?? null,
+      decisionDeltaDigest: deltaBinding?.digest ?? null,
       nextStepEligibility: null,
       errorCode: null,
       retryable: null,
@@ -417,12 +436,12 @@ function findingDraft(o: {
     // capability itself. Store-level scenarios for deeper capabilities must
     // ensure that node's current exists (or expect the fail-closed guard).
     sourceRevisionId: o.sourceRevisionId ?? `run-001:revision:${o.sourceCapability}:1`,
-    // v3 direct causal evidence: default REGRESSION bound to the fix-wave
-    // revision that introduced it (sequence 2 of the same node).
+    // v3/v4 direct causal evidence: default REGRESSION bound to the finding's
+    // own source revision (which store fixtures guarantee to exist).
     causeKind,
     introducedByRevisionId: o.introducedByRevisionId ??
       (causeKind === "REGRESSION"
-        ? `run-001:revision:${o.sourceCapability}:2`
+        ? (o.sourceRevisionId ?? `run-001:revision:${o.sourceCapability}:1`)
         : null),
     severity: o.severity ?? "HIGH",
     category: o.category,
@@ -2493,7 +2512,7 @@ function driveBoundNodes(
     // rejected at write time when the artifact store is bound.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
@@ -2519,7 +2538,7 @@ function driveBoundNodes(
     // deleting the blob afterwards fails every read path closed.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
@@ -2543,7 +2562,7 @@ function driveBoundNodes(
     // exists is consumed by the gate once the downstream current is ACTIVE.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",

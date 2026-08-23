@@ -420,7 +420,10 @@ async function main(): Promise<void> {
       db.pragma("user_version = 6");
       db.close();
       const report = preflightLoopRunStoreV2Cutover([dir]);
-      ok(report.failureCount === 0 && !report.requiresGovernanceStop, "extension-less v6 journal passes");
+      // v6->v7 fresh cutover (re-review F5): the previous supported format
+      // takes the no-migration rejection path like every other older one.
+      ok(report.failureCount === 1 && report.candidates[0]?.verdict === "FAIL_HISTORICAL_FORMAT",
+        "extension-less v6 journal is rejected as unsupported history");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
