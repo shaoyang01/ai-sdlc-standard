@@ -176,6 +176,41 @@ function appendBlockingFinding(env: TestEnv, o: {
   return finding.findingId;
 }
 
+/**
+ * Round 2 H2 setup: opens generation 2 via a verified FEEDBACK_DRIVEN_CHANGE
+ * record so a subsequently appended finding binds to fix-wave products
+ * (sequence >= 2) and classifies as a causal regression — making a backward
+ * restart at the earliest affected node live-authorized.
+ */
+function openFeedbackGeneration(env: TestEnv, o: {
+  runId: string;
+  requirementId: string;
+  locator: string;
+}): void {
+  env.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
+    runId: o.runId,
+    requirementId: o.requirementId,
+    sequence: 1,
+    status: "CLASSIFIED",
+    changeKind: "FEEDBACK_DRIVEN_CHANGE",
+    payloadForm: "DELTA_CHANGE",
+    previousGeneration: 1,
+    currentChangeScope: "feedback opens generation 2",
+    confirmedFactsPreserved: ["small fix behavior stays"],
+    sourceRefs: [{
+      sourceType: "CONVERSATION",
+      locator: o.locator,
+      priority: 1,
+      sourceVersion: null,
+      observedAt: new Date().toISOString(),
+    }],
+    triggerEvidence: [`source:${o.locator}`],
+    classificationReason: "外部反馈开启新代际",
+    blockedReasonCode: null,
+    createdAt: futureIso(1000),
+  }));
+}
+
 async function main(): Promise<void> {
   // ── W1: solution-design 回流 — reuse upstream, rebuild downstream, then RESOLVED ──
   console.log("W1: solution-design re-gate wave rebuilds downstream and unblocks resolution");
@@ -337,9 +372,14 @@ async function main(): Promise<void> {
     });
     // Round 2 semantics: a non-causal improvement (raised against an
     // original-generation product) never re-drives a backward wave.
+    const beforeCounts = pointDispatchCounts(env, first.run_id);
     const second = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const afterCounts = pointDispatchCounts(env, second.run_id);
-    ok((afterCounts.get("code-review:primary") ?? 0) === 0, "improvement does not drive a rebuild wave");
+    ok(
+      NODE_CAPABILITY_IDS.every((node) =>
+        (afterCounts.get(`${node}:primary`) ?? 0) === (beforeCounts.get(`${node}:primary`) ?? 0)),
+      "improvement does not drive a rebuild wave",
+    );
     ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run honestly BLOCKED");
   }
 
@@ -535,6 +575,12 @@ async function main(): Promise<void> {
     // canonical successor (gate scan), unchanged by the skill field.
     const requirementId = "REQ-WP4-W6-ENTRY";
     const first = await run("small fix", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    // Round 2 H2: the restart must be live-authorized, so the finding has to
+    // be a causal regression raised against a fix-wave product. A feedback
+    // record opens generation 2 first; the HIGH SOLUTION finding then binds
+    // to the generation-2 solution-design revision (sequence 2).
+    openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w6-entry" });
+    await run("small fix", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     appendBlockingFinding(env, {
       runId: first.run_id,
       requirementId,
@@ -544,6 +590,9 @@ async function main(): Promise<void> {
       sequence: 1,
     });
     const intakeRevision = env.runStore.getCurrentArtifactRevision(first.run_id, "requirement-intake")!;
+    const designLastAttempt = env.runStore.listCapabilityExecutions(first.run_id)
+      .filter((event) => event.capability === "solution-design")
+      .reduce((max, event) => Math.max(max, event.attempt), 0);
     await env.entry.execute({
       requirementId,
       capability: "solution-design",
@@ -551,7 +600,7 @@ async function main(): Promise<void> {
       inputArtifactRef: intakeRevision.artifactRef,
       inputArtifactVersion: intakeRevision.semver,
       inputDigest: intakeRevision.digest,
-      outputArtifactVersion: "2.0.0",
+      outputArtifactVersion: `${designLastAttempt + 1}.0.0`,
       input: { inputArtifactRef: intakeRevision.artifactRef },
       skill: "sdlc-speckit-pipeline",
     });
@@ -569,6 +618,8 @@ async function main(): Promise<void> {
     // action — proving the skill field is metadata-inert end to end.
     const env2 = makeEnv();
     const first2 = await run("small fix", { requirementId, runStore: env2.runStore, artifactStore: env2.artifactStore, gateway: env2.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    openFeedbackGeneration(env2, { runId: first2.run_id, requirementId, locator: "feedback:w6-control" });
+    await run("small fix", { requirementId, runStore: env2.runStore, artifactStore: env2.artifactStore, gateway: env2.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     appendBlockingFinding(env2, {
       runId: first2.run_id,
       requirementId,
@@ -578,6 +629,9 @@ async function main(): Promise<void> {
       sequence: 1,
     });
     const intake2 = env2.runStore.getCurrentArtifactRevision(first2.run_id, "requirement-intake")!;
+    const designLastAttempt2 = env2.runStore.listCapabilityExecutions(first2.run_id)
+      .filter((event) => event.capability === "solution-design")
+      .reduce((max, event) => Math.max(max, event.attempt), 0);
     await env2.entry.execute({
       requirementId,
       capability: "solution-design",
@@ -585,7 +639,7 @@ async function main(): Promise<void> {
       inputArtifactRef: intake2.artifactRef,
       inputArtifactVersion: intake2.semver,
       inputDigest: intake2.digest,
-      outputArtifactVersion: "2.0.0",
+      outputArtifactVersion: `${designLastAttempt2 + 1}.0.0`,
       input: { inputArtifactRef: intake2.artifactRef },
     });
     recordRevisionForLastSucceeded(env2, first2.run_id, requirementId, "solution-design");

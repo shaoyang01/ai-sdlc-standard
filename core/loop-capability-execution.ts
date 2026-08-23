@@ -431,7 +431,6 @@ export function validateLoopCapabilityExecutionChain(
     if (ids.has(event.executionEventId)) invalid("capability execution event id must be unique");
     ids.add(event.executionEventId);
     if (event.status === "started") {
-      process.stderr?.write?.(`VSTART ${event.executionEventId} idx=${LOOP_CAPABILITY_EXECUTION_POINTS.findIndex((pt) => pt.capability === event.capability && pt.executionRole === event.executionRole)}\n`);
       if (active !== null) invalid("only one capability execution may be active");
       const previous = index === 0 ? undefined : events[index - 1];
       if (previous === undefined) {
@@ -499,7 +498,6 @@ export function validateLoopCapabilityExecutionChain(
           thisIndex < previousIndex + 1 &&
           (liveExact || historicalOk || historicalFeedbackOk);
         if (!isCanonicalNext && !isAuthorizedRestart) {
-          process.stderr?.write?.(`REJECT_DBG idx=${thisIndex} prevIdx=${previousIndex} len=${events.length} index=${index} evId=${event.executionEventId} prevId=${previous.executionEventId} elig=${previous.nextStepEligibility} allowed=${String(restartTarget)} replay=${String(replayMode)}\n`);
           invalid("capability execution must follow the canonical eligible chain");
         }
         if (!isCanonicalNext) {

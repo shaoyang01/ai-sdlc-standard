@@ -15,6 +15,7 @@ import {
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
+import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunIdentity } from "../core/loop-executor-types";
 import {
   CAPABILITY_ARTIFACT_TYPES,
@@ -749,6 +750,39 @@ async function main(): Promise<void> {
       });
       ok(step.execution.success === true, `${point.capability}/${point.executionRole} produces a qualified traced result`);
       chainRecovery = step.recoveryContext;
+      // Round 2 H2: the depth decision binds to the CURRENT gate-node
+      // revision, so a compliant driver authors a node revision after every
+      // succeeded execution (mirroring runtime.ts). Scan rounds persist only
+      // their Finding Ledger and never author the solution-gate revision.
+      const produced = chainStore.listCapabilityExecutions(chainIdentity.runId).at(-1)!;
+      const isChainScanRound =
+        produced.capability === "solution-gate" && produced.executionRole === "adversarial_scan";
+      if (!isChainScanRound) {
+        const priorForNode = chainStore.listArtifactRevisions(chainIdentity.runId)
+          .filter((item) => item.nodeId === produced.capability);
+        const nodeIdx = NODE_CAPABILITY_IDS.indexOf(produced.capability);
+        const upstreamNodeId = nodeIdx > 0 ? NODE_CAPABILITY_IDS[nodeIdx - 1]! : null;
+        const upstreamCurrent = upstreamNodeId === null
+          ? undefined
+          : chainStore.getCurrentArtifactRevision(chainIdentity.runId, upstreamNodeId);
+        chainStore.appendArtifactRevision(createLoopArtifactRevision({
+          runId: chainIdentity.runId,
+          requirementId: chainIdentity.requirementId,
+          nodeId: produced.capability,
+          sequence: priorForNode.length + 1,
+          generation: produced.attempt,
+          stablePath: `library/${chainIdentity.requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].stablePathSegment}/${chainIdentity.requirementId}_${produced.capability}.md`,
+          artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].artifactKind,
+          semver: `${produced.attempt}.0.0`,
+          artifactRef: produced.outputArtifactRef!,
+          digest: produced.outputDigest!,
+          producerExecutionId: produced.executionEventId,
+          producerExecutionRole: produced.executionRole,
+          gateResult: produced.gateResult,
+          upstreamRevisionIds: upstreamCurrent === undefined ? [] : [upstreamCurrent.revisionId],
+          createdAt: stubNow(),
+        }));
+      }
       const pointState = chainRecovery.executionPointStates[index]!;
       chainInput = {
         artifactRef: pointState.effectiveOutputArtifactRef!,

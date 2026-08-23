@@ -516,7 +516,6 @@ export function recoverRunContext(
   ) {
     nextExecutionPoint = null;
   }
-  process.stderr?.write?.(`REC_DBG findings=${findings.length} target=${String(regateTargetIndex)} applied=${String(regateOverrideApplied)} linearStop=${String(linearStopIdx)} next=${JSON.stringify(nextExecutionPoint)} chain=${capabilityChainStatus}\n`);
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,

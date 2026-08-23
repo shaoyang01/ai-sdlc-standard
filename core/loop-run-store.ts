@@ -1728,25 +1728,16 @@ export class LoopRunStore {
           // pending Re-Gate target derived in this transaction. Historical
           // findings never authorize new writes — resolved/accepted findings
           // must not let a stale scope re-trigger downstream rebuilds.
-          try {
-            // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
-            // live pending target derived above in this transaction.
-            validateLoopCapabilityExecutionChain([...current, event], event.runId, {
-              allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
-              historicalFindings: regateContext.historicalFindings,
-              feedbackChange: regateContext.feedbackChange,
-            });
-          } catch (error) {
-            if (error instanceof LoopRunJournalError) {
-              const pts = ["requirement-intake:primary","solution-design:primary","solution-gate:adversarial_scan","solution-gate:formal_verdict","task-planning:primary","implementation:primary","code-review:primary","knowledge-sync:primary"];
-              const idxOf = (cap: string, role: string) => pts.indexOf(`${cap}:${role}`);
-              const prevEv2 = [...current].reverse().find((e) => e.status === "succeeded");
-            }
-            throw error;
-          }
+          //
+          // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
+          // live pending target derived above in this transaction.
+          validateLoopCapabilityExecutionChain([...current, event], event.runId, {
+            allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
+            historicalFindings: regateContext.historicalFindings,
+            feedbackChange: regateContext.feedbackChange,
+          });
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
-            process.stderr?.write?.(`LIVE_MSG: ${(error as Error).message}\nLIVE_STACK: ${(error as Error).stack?.split("\n").slice(1, 6).join(" | ")}\n`);
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
           }
           throw error;
@@ -3387,8 +3378,6 @@ export class LoopRunStore {
       this.regatePointLastAttempts(db, runId),
       feedbackChange,
     );
-    process.stderr?.write?.(`REGATE_PLAN_OUT ${plan.kind} idx=${String(plan.restartPointIndex)}\n`);
-    process.stderr?.write?.(`RP_DBG kind=${plan.kind} idx=${plan.restartPointIndex} fb=${JSON.stringify(feedbackChange)}\n`);
     return {
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,
