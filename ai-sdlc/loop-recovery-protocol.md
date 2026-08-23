@@ -134,6 +134,7 @@ recoverRunContext(store, requirementId)
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.1.0 | 2026-08-23 | Draft | C02-WP4 Round 2 复审修正（H1/H2/H3/H4）：深度裁决落地为 verdict 事件上的不可变字段（decisionDepth/decisionScopeId/decisionDelta，事件 schema v4），恢复侧 DECIDED 不再由 gateResult 推断；Gate 锚定改为 current 的身份绑定（revisionId+producerExecutionId），PASS_WITH_RISK 准入要求 ACCEPTED_RISK 关闭 scope 与 verdict decisionScopeId 完全相等；generation 改为 run 级权威（最新 CLASSIFIED FEEDBACK 记录开启 prevGeneration+1），revision 落库 fail-closed 绑定该值，retry 不再分叉代际；预算语义重做——REGATE_ROUND_BUDGET_EXHAUSTED 仅按持久化回跳波次（countRegateRounds）触发，线性进度永不持久阻塞，新增 RISK_ACCEPTED/SCOPE_RESET 显式解除路径。 |
 | 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 合同重基线（Decision-044/045）：恢复上下文切换为 v2 七节点 current map（新增 task-planning/knowledge-sync 恢复语义，knowledge-sync 恢复不得重复写入或覆盖较新知识 revision）；solution-gate 双角色（adversarial_scan/formal_verdict）执行记录均可恢复且同一 revision 两角色 executorAgent 不同；恢复内容增加设计深度裁决（depth + decision_status）与 Finding Ledger/closure round；删除 test-validation 与旧五节点恢复语义；格式边界固定为 v1 旧格式 journal 打开返回 UNSUPPORTED_HISTORICAL_FORMAT（不得伪装 STORE_CORRUPT）、v2 store 格式 v6（具体实现属 WP3.5-B）。 |
 | 0.1.0 | 2026-08-19 | Accepted | WP-4 交付：事件溯源字段（bindingId/bindingVersion/inputArtifactRef）、recordNodeExecution、recoverRunContext、checkpoint 复用裁剪。 |
 | 0.1.1 | 2026-08-19 | Accepted | 复审修正：旧库事件的 canonical 哈希按扩展前 13 字段集计算，读取侧接受旧字段集哈希（溯源字段全 null 时），补真实历史数据回归；修正"canonical 哈希与旧数据兼容"的不准确表述。 |
