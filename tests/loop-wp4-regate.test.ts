@@ -33,6 +33,7 @@ import { LoopRunStore } from "../core/loop-run-store";
 import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
+import { createLoopRequirementChangeRecord } from "../core/loop-change-classification";
 import { recoverRunContext } from "../core/loop-recovery";
 import { planRegateFromFacts, type CurrentRevisionFacts, type RegateFindingFacts } from "../core/loop-regate";
 import {
@@ -209,9 +210,13 @@ async function main(): Promise<void> {
     }
     ok(rejectedBeforeRebuild, "resolution before rebuild is rejected");
 
+    // Wave completes but the finding is still OPEN — the run must NOT claim
+    // success/COMPLETED while the convergence gate is BLOCKED.
     const second = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(second.final_status === "success", "second generation completes");
-    ok(second.chain_status === "COMPLETED", "second generation chain COMPLETED");
+    ok(second.chain_status === "BLOCKED", "open finding keeps the run BLOCKED after rebuild");
+    ok(second.final_status === "failed", "unresolved finding prevents success");
+    const recoveryAfterWave = recoverRunContext(env.runStore, requirementId)!;
+    ok(recoveryAfterWave.findingGate.status === "BLOCKED", "finding gate BLOCKED while open");
     const after = pointDispatchCounts(env, second.run_id);
     ok(after.get("requirement-intake:primary") === 1, "upstream intake is reused read-only");
     ok(after.get("solution-design:primary") === 2, "solution-design rebuilt");
@@ -228,7 +233,9 @@ async function main(): Promise<void> {
       resolutionEvidenceDigest: rebuiltDesign.digest,
     });
     ok(resolved.record.status === "RESOLVED", "finding resolves after rebuild");
-    ok(env.runStore.computeFindingGate(second.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
+    const third = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(third.final_status === "success" && third.chain_status === "COMPLETED", "resolved run completes successfully");
+    ok(env.runStore.computeFindingGate(third.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
   }
 
   // ── W2: multi-finding conflict — earliest affected node wins ──
@@ -266,8 +273,7 @@ async function main(): Promise<void> {
     const env = makeEnv();
     const requirementId = "REQ-WP4-W3";
     const first = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    const orderBefore = env.dispatchOrder.length;
-    appendBlockingFinding(env, {
+    const improvementId = appendBlockingFinding(env, {
       runId: first.run_id,
       requirementId,
       sourceCapability: "code-review",
@@ -276,9 +282,21 @@ async function main(): Promise<void> {
       category: "REVIEW",
       sequence: 1,
     });
+    // Frozen v2 contract: ANY OPEN finding blocks the gate and its stale
+    // scope drives a rebuild wave — severity does not exempt it.
     const second = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    ok(env.dispatchOrder.length === orderBefore, "no dispatch after improvement-only finding");
-    ok(second.chain_status === "COMPLETED", "chain stays completed");
+    const afterCounts = pointDispatchCounts(env, second.run_id);
+    ok(afterCounts.get("code-review:primary") === 2, "code-review rebuilt for improvement");
+    ok(afterCounts.get("knowledge-sync:primary") === 2, "downstream rebuilt for improvement");
+    ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run BLOCKED");
+    const reviewCurrent = env.runStore.getCurrentArtifactRevision(second.run_id, "code-review")!;
+    env.runStore.resolveFinding(second.run_id, improvementId, {
+      resolvedByRevisionId: reviewCurrent.revisionId,
+      resolutionEvidenceRef: `loop-artifact:v1:${reviewCurrent.artifactKind}:sha256:${reviewCurrent.digest}`,
+      resolutionEvidenceDigest: reviewCurrent.digest,
+    });
+    const third = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(third.final_status === "success" && third.chain_status === "COMPLETED", "resolved improvement completes");
   }
 
   // ── W4: REQUIREMENT feedback re-enters at requirement-intake ──
@@ -287,18 +305,37 @@ async function main(): Promise<void> {
     const env = makeEnv();
     const requirementId = "REQ-WP4-W4";
     const first = await run("build invoicing report", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
-    appendBlockingFinding(env, {
+    ok(first.final_status === "success", "first generation completes");
+    // WP4 Round 1 H3 fix: external feedback re-enters ONLY through a
+    // verified WP1 FEEDBACK_DRIVEN_CHANGE record — never as a raw finding.
+    env.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
       runId: first.run_id,
       requirementId,
-      sourceCapability: "requirement-intake",
-      earliestAffectedNodeId: "requirement-intake",
-      category: "REQUIREMENT",
       sequence: 1,
-    });
+      status: "CLASSIFIED",
+      changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE",
+      previousGeneration: 1,
+      currentChangeScope: "外部测试反馈：新增 CSV 导出格式",
+      confirmedFactsPreserved: ["invoice numbering stays stable"],
+      sourceRefs: [{
+        sourceType: "CONVERSATION",
+        locator: "feedback:uat-round-1",
+        priority: 1,
+        sourceVersion: null,
+        observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:uat-round-1"],
+      classificationReason: "线下测试反馈经 intake 分类为反馈驱动变更，开启新代际",
+      blockedReasonCode: null,
+      createdAt: futureIso(1000),
+    }));
     await run("build invoicing report", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const counts = pointDispatchCounts(env, first.run_id);
-    ok(counts.get("requirement-intake:primary") === 2, "intake re-dispatched for requirement feedback");
+    ok(counts.get("requirement-intake:primary") === 2, "intake re-dispatched for change-record feedback");
     ok(counts.get("knowledge-sync:primary") === 2, "full chain rebuilt");
+    const rebuilt = env.runStore.listRegateCurrentFacts(first.run_id);
+    ok(rebuilt.every((fact) => fact.validity === "ACTIVE" && (fact.generation ?? 0) >= 2), "every node carries generation 2");
   }
 
   // ── W5: FAIL verdict blocks and surfaces BLOCKED_UNKNOWN ──
@@ -429,8 +466,8 @@ async function main(): Promise<void> {
       createdAt: futureIso(),
     }];
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([
-      ["requirement-intake", { validity: "ACTIVE" }],
-      ["solution-design", { validity: "STALE" }],
+      ["requirement-intake", { validity: "ACTIVE", generation: 1 }],
+      ["solution-design", { validity: "STALE", generation: 1 }],
     ]);
     const plan = planRegateFromFacts(facts, currents);
     const serialized = JSON.stringify(plan);
@@ -522,6 +559,50 @@ async function main(): Promise<void> {
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const plan = planRegateFromFacts(facts, currents);
     ok(plan.kind === "none" && plan.restartPointIndex === null, "no findings → no restart authorization");
+  }
+
+  // ── W8: resolved findings never re-authorize a backward jump ──
+  console.log("W8: historical/resolved findings cannot self-authorize restarts");
+  {
+    const facts: RegateFindingFacts[] = [{
+      findingId: "resolved-f",
+      severity: "HIGH",
+      status: "RESOLVED",
+      earliestAffectedNodeId: "solution-design",
+      createdAt: new Date().toISOString(),
+    }];
+    const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([
+      ["solution-design", { validity: "ACTIVE", generation: 2 }],
+    ]);
+    // Live pending plan (what the store passes at append time) ignores the
+    // resolved finding entirely.
+    const live = planRegateFromFacts(facts, currents);
+    ok(live.kind === "none" && live.restartPointIndex === null, "resolved finding yields no live restart target");
+  }
+
+  // ── W9: dispatch budget exhaustion durably blocks the run ──
+  console.log("W9: budget exhaustion persists REGATE_ROUND_BUDGET_EXHAUSTED and refuses re-dispatch");
+  {
+    const env = makeEnv();
+    const requirementId = "REQ-WP4-W9";
+    const orderBefore = env.dispatchOrder.length;
+    const first = await run("tiny scope", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
+    });
+    ok(first.chain_status === "BLOCKED" && first.final_status === "failed", "budget exhaustion blocks honestly");
+    const recoveryBlocked = recoverRunContext(env.runStore, requirementId)!;
+    ok(
+      recoveryBlocked.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED",
+      `blocking reason persisted (got ${recoveryBlocked.blockingReasonCode})`,
+    );
+    const orderAfterFirst = env.dispatchOrder.length;
+    const second = await run("tiny scope", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 99,
+    });
+    ok(second.chain_status === "BLOCKED", "blocked run stays blocked even with fresh budget");
+    ok(env.dispatchOrder.length === orderAfterFirst && env.dispatchOrder.length === orderBefore + 2, "no further dispatch after durable block");
   }
 
   console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);

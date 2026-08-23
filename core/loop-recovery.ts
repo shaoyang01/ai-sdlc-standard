@@ -80,6 +80,21 @@ export interface RunRecoveryContext {
   /** Point-wise recovery states of the eight v2 execution points. */
   executionPointStates: readonly ExecutionPointRecoveryState[];
   lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
+  /**
+   * WP4: durable convergence projection — the v2 finding gate over ALL
+   * open/closed findings and current validity. COMPLETED chains with a
+   * BLOCKED gate are not done.
+   */
+  findingGate: { status: "ELIGIBLE" | "BLOCKED"; blockingFindingIds: readonly string[] };
+  /**
+   * WP4: depth decision bound to the latest formal_verdict round.
+   * PASS → DECIDED; FAIL / missing / PASS_WITH_RISK without a current
+   * ACCEPTED_RISK proof → BLOCKED_UNKNOWN (implementation must not start).
+   */
+  solutionGateDecision: {
+    status: "DECIDED" | "BLOCKED_UNKNOWN";
+    boundVerdictArtifactRef: string | null;
+  } | null;
 }
 
 export interface CapabilityRecoveryState {
@@ -312,41 +327,51 @@ export function recoverRunContext(
       break;
     }
   }
-  // WP4 generation awareness: OPEN blocking findings with an incomplete
-  // rebuild scope override the linear successor with the Re-Gate restart
-  // target. An unadjudicated block at or before the target is never
-  // bypassed; a COMPLETED linear projection becomes READY again while a
-  // wave is pending.
   let regateTargetIndex: number | null = null;
   let regateOverrideApplied = false;
-  if (capabilityExecutions.length > 0) {
-    const findings = store.listFindings(state.identity.runId);
-    if (findings.length > 0) {
-      const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
-      for (const fact of store.listCurrentRevisionFacts(state.identity.runId)) {
-        currentByNode.set(fact.nodeId, { validity: fact.validity });
-      }
-      const pointLastAttempts = new Map<string, number>(
-        executionPointStates.map((state) => [
-          `${state.capability}:${state.executionRole}`,
-          state.lastAttempt,
-        ]),
-      );
-      const plan = planRegateFromFacts(
-        findings.map((finding) => ({
-          findingId: finding.findingId,
-          severity: finding.severity,
-          status: finding.status,
-          earliestAffectedNodeId: finding.earliestAffectedNodeId,
-          createdAt: finding.createdAt,
-        })),
-        currentByNode,
-        pointLastAttempts,
-      );
-      if (plan.kind === "regate" && plan.restartPointIndex !== null) {
-        regateTargetIndex = plan.restartPointIndex;
-      }
-    }
+  const findings = capabilityExecutions.length > 0
+    ? store.listFindings(state.identity.runId)
+    : [];
+  const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
+  for (const fact of store.listRegateCurrentFacts(state.identity.runId)) {
+    currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
+  }
+  const pointLastAttempts = new Map<string, number>(
+    executionPointStates.map((state) => [
+      `${state.capability}:${state.executionRole}`,
+      state.lastAttempt,
+    ]),
+  );
+  // WP4 H3: external feedback re-enters ONLY through a verified WP1
+  // FEEDBACK_DRIVEN_CHANGE record; it drives a full new generation
+  // regardless of whether any finding exists.
+  const changeRecords = store.listRequirementChanges(state.identity.runId);
+  const latestFeedback = [...changeRecords]
+    .reverse()
+    .find(
+      (record) =>
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.status === "CLASSIFIED" &&
+        record.previousGeneration !== null,
+    );
+  const feedbackChange =
+    latestFeedback === undefined || latestFeedback.previousGeneration === null
+      ? null
+      : { previousGeneration: latestFeedback.previousGeneration };
+  const plan = planRegateFromFacts(
+    findings.map((finding) => ({
+      findingId: finding.findingId,
+      severity: finding.severity,
+      status: finding.status,
+      earliestAffectedNodeId: finding.earliestAffectedNodeId,
+      createdAt: finding.createdAt,
+    })),
+    currentByNode,
+    pointLastAttempts,
+    feedbackChange,
+  );
+  if (plan.kind === "regate" && plan.restartPointIndex !== null) {
+    regateTargetIndex = plan.restartPointIndex;
   }
   if (
     regateTargetIndex !== null &&
@@ -402,6 +427,43 @@ export function recoverRunContext(
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
+  // WP4 convergence projection (H2): the finding gate over ALL findings and
+  // the depth decision bound to the latest formal_verdict round. A
+  // PASS_WITH_RISK verdict is DECIDED only with a current ACCEPTED_RISK
+  // proof; everything else is BLOCKED_UNKNOWN and must not reach
+  // task-planning or beyond.
+  const findingGate = capabilityExecutions.length > 0
+    ? store.computeFindingGate(state.identity.runId)
+    : { status: "ELIGIBLE" as const, blockingFindings: [] as readonly string[], reasonCodes: [] as readonly string[] };
+  const verdictEvents = capabilityExecutions.filter(
+    (event) => event.capability === "solution-gate" && event.executionRole === "formal_verdict",
+  );
+  const lastVerdict = verdictEvents.length === 0 ? null : verdictEvents[verdictEvents.length - 1]!;
+  let solutionGateDecision: RunRecoveryContext["solutionGateDecision"] = null;
+  if (lastVerdict !== null) {
+    const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
+    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
+      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
+    } else if (
+      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
+      findings.some((finding) => finding.status === "ACCEPTED_RISK")
+    ) {
+      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
+    } else {
+      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
+    }
+  }
+  // BLOCKED_UNKNOWN must not enter implementation: once the chain has reached
+  // task-planning, cut the next pointer so the run blocks honestly.
+  const taskPlanningIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+    (point) => point.capability === "task-planning",
+  );
+  if (
+    solutionGateDecision?.status === "BLOCKED_UNKNOWN" &&
+    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx
+  ) {
+    nextExecutionPoint = null;
+  }
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,
@@ -416,6 +478,8 @@ export function recoverRunContext(
     nextExecutionPoint: nextExecutionPoint === null ? null : Object.freeze(nextExecutionPoint),
     executionPointStates: Object.freeze(executionPointStates),
     lastCapabilityExecution,
+    findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
+    solutionGateDecision,
     lastExecution:
       lastExecutionEvent === undefined
         ? null

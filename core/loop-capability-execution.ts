@@ -384,14 +384,32 @@ function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityE
  * pending plan the strictly linear v2 chain rules apply unchanged.
  */
 export interface LoopCapabilityChainValidationContext {
-  /** Point index authorized for a generation restart (null/undefined = none). */
+  /**
+   * Live pending Re-Gate target point index. In append mode (see
+   * historicalReplayMode) this is the ONLY authorized restart target and it
+   * must equal the new event's point exactly.
+   */
   allowedRestartTargetIndex?: number | null;
   /**
-   * Reduced findings enabling historical restart re-validation on read
-   * paths (see historicalRestartAuthorized). Append paths omit this so a
-   * jump is only legal at the exact live-pending target.
+   * Reduced findings enabling historical restart re-validation of
+   * already-recorded jumps (see historicalRestartAuthorized).
    */
   historicalFindings?: import("./loop-regate").RegateFindingFacts[];
+  /**
+   * Replay mode (read paths / full-history re-validation): backward jumps
+   * are authorized by the immutable covering-finding rule alone. Append
+   * mode leaves this false — a new jump must match the live target exactly,
+   * so closed/resolved findings can never authorize fresh writes (Round 2
+   * review H1).
+   */
+  historicalReplayMode?: boolean;
+  /**
+   * Latest verified FEEDBACK_DRIVEN_CHANGE record fact (WP1). A recorded
+   * backward jump landing on requirement-intake (point 0) that opens the
+   * record's next generation is authorized by this immutable change record
+   * even when no finding covers the target.
+   */
+  feedbackChange?: { previousGeneration: number } | null;
 }
 
 export function validateLoopCapabilityExecutionChain(
@@ -456,12 +474,27 @@ export function validateLoopCapabilityExecutionChain(
         // (append time) or covered by an immutable historical finding
         // (read-path re-validation of an already-recorded jump).
         const restartTarget = context?.allowedRestartTargetIndex ?? null;
+        const replayMode = context?.historicalReplayMode === true;
+        // Historical authorization is stable forever: the covering finding is
+        // an immutable journal fact. It validates already-recorded jumps on
+        // every replay.
         const historicalOk = context?.historicalFindings !== undefined &&
           historicalRestartAuthorized(context.historicalFindings, thisIndex);
+        // Live exact-target authorization applies ONLY to the newly appended
+        // event in append mode — closed/resolved findings can never authorize
+        // fresh writes (Round 2 H1).
+        const liveExact =
+          !replayMode &&
+          index === events.length - 1 &&
+          restartTarget !== null && thisIndex === restartTarget;
+        const feedbackOk =
+          thisIndex === 0 &&
+          context?.feedbackChange !== null &&
+          context?.feedbackChange !== undefined;
         const isAuthorizedRestart =
           !isCanonicalNext &&
           thisIndex < previousIndex + 1 &&
-          ((restartTarget !== null && thisIndex === restartTarget) || historicalOk);
+          (liveExact || historicalOk || feedbackOk);
         if (!isCanonicalNext && !isAuthorizedRestart) {
           invalid("capability execution must follow the canonical eligible chain");
         }

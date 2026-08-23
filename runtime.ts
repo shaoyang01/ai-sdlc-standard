@@ -91,6 +91,12 @@ export interface RuntimeOptions {
   bindingRegistry?: BindingRegistry;
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
+  /**
+   * WP4: dispatch budget for one run() invocation. Re-Gate generations can
+   * legally re-dispatch earlier points; exceeding the budget durably blocks
+   * the run (REGATE_ROUND_BUDGET_EXHAUSTED) instead of looping forever.
+   */
+  maxDispatches?: number;
 }
 
 // The runtime input contract is CLOSED at runtime, not just at the type
@@ -104,6 +110,7 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "artifactStore",
   "bindingRegistry",
   "gateway",
+  "maxDispatches",
 ]);
 
 // Options of the retired five-node interpreter. They fail with a specific
@@ -360,10 +367,36 @@ export async function run(
   // WP4: Re-Gate generations can legally re-dispatch earlier points; the
   // bound keeps a pathological finding/rebuild cycle from running forever
   // (bounded retry semantics carried over from C01).
-  const maxDispatches = LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
+  const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
+  if (
+    typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
+  ) {
+    invalid("maxDispatches must be a positive safe integer");
+  }
+  // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
+  // user decision / risk acceptance / scope reset may clear the block.
+  if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
+    if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
+      return Object.freeze({
+        requirement_id: requirementId,
+        run_id: recovery.snapshot.state.identity.runId,
+        final_status: "failed" as const,
+        chain_status: "BLOCKED" as const,
+        execution_trace: Object.freeze([]),
+        next_execution_point: null,
+        workspace_root: workspaceRoot,
+        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+        completed_at: now(),
+      });
+    }
+  }
   let dispatches = 0;
   while (next !== null) {
     if (dispatches >= maxDispatches) {
+      // WP4 (H4): budget exhaustion is a durable, honest block — persisted on
+      // the run so fresh agents resume into BLOCKED, never into a silent loop.
+      runStore.markRunRegateBlocked(journalRunId ?? identity.runId, "REGATE_ROUND_BUDGET_EXHAUSTED");
+      recovery = recoverRunContext(runStore, requirementId);
       break;
     }
     dispatches += 1;
@@ -460,8 +493,25 @@ export async function run(
   }
 
   const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
-  const chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
-  const finalStatus = chainStatus === "COMPLETED" ? "success" : "failed";
+  let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
+  // WP4 convergence (H2): linear completion is not done. The run finishes
+  // successfully only when the finding gate is ELIGIBLE and the depth
+  // decision is DECIDED; otherwise it blocks honestly.
+  const findingGate = recovery?.findingGate ?? { status: "ELIGIBLE" as const, blockingFindingIds: [] };
+  const decision = recovery?.solutionGateDecision ?? null;
+  const completedOk =
+    chainStatus === "COMPLETED" &&
+    findingGate.status === "ELIGIBLE" &&
+    decision !== null && decision.status === "DECIDED";
+  if (chainStatus === "COMPLETED" && !completedOk) {
+    chainStatus = "BLOCKED";
+  }
+  if (recovery !== undefined && recovery.blockingReasonCode !== null) {
+    // WP4 H4: durable block (e.g., REGATE_ROUND_BUDGET_EXHAUSTED) always
+    // reports BLOCKED regardless of the capability projection.
+    chainStatus = "BLOCKED";
+  }
+  const finalStatus = completedOk ? "success" : "failed";
   return Object.freeze({
     requirement_id: requirementId,
     run_id: journalRunId ?? identity.runId,

@@ -1724,7 +1724,25 @@ export class LoopRunStore {
         }
         try {
           const regateContext = this.regateChainContextInTransaction(db, event.runId);
-          validateLoopCapabilityExecutionChain([...current, event], event.runId, regateContext);
+          // WP4 Round 1 H1 fix: append-time authorization is ONLY the live
+          // pending Re-Gate target derived in this transaction. Historical
+          // findings never authorize new writes — resolved/accepted findings
+          // must not let a stale scope re-trigger downstream rebuilds.
+          try {
+            validateLoopCapabilityExecutionChain([...current, event], event.runId, {
+              allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
+              historicalFindings: regateContext.historicalFindings,
+              historicalReplayMode: false,
+              feedbackChange: regateContext.feedbackChange,
+            });
+          } catch (error) {
+            if (error instanceof LoopRunJournalError) {
+              const pts = ["requirement-intake:primary","solution-design:primary","solution-gate:adversarial_scan","solution-gate:formal_verdict","task-planning:primary","implementation:primary","code-review:primary","knowledge-sync:primary"];
+              const idxOf = (cap: string, role: string) => pts.indexOf(`${cap}:${role}`);
+              const prevEv2 = [...current].reverse().find((e) => e.status === "succeeded");
+            }
+            throw error;
+          }
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
@@ -1846,6 +1864,8 @@ export class LoopRunStore {
           const regateContext = this.regateChainContextInTransaction(db, runId);
           validateLoopCapabilityExecutionChain([...current, failed], runId, {
             historicalFindings: regateContext.historicalFindings,
+            historicalReplayMode: true,
+            feedbackChange: regateContext.feedbackChange,
           });
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
@@ -2549,10 +2569,12 @@ export class LoopRunStore {
    * consumes exactly those facts (validity + createdAt), while consumption
    * paths keep using the fail-closed getter.
    */
-  listCurrentRevisionFacts(runId: string): ReadonlyArray<{
+  listRegateCurrentFacts(runId: string): ReadonlyArray<{
     nodeId: NodeCapabilityId;
+    revisionId: string;
     validity: string;
     createdAt: string;
+    generation: number | null;
   }> {
     if (
       typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
@@ -2561,20 +2583,100 @@ export class LoopRunStore {
       throw new LoopRunJournalError("INVALID_INPUT", "runId must be a safe trimmed non-empty string");
     }
     const db = this.connection();
-    return Object.freeze(
-      (
-        db.prepare(
-          `SELECT c.node_id AS node_id, r.validity AS validity, r.created_at AS created_at
-           FROM loop_artifact_current c
-           JOIN loop_artifact_revisions r ON r.revision_id = c.revision_id
-           WHERE c.run_id = ?`,
-        ).all(runId) as ReadonlyArray<{ node_id: string; validity: string; created_at: string }>
-      ).map((row) => Object.freeze({
-        nodeId: row.node_id as NodeCapabilityId,
-        validity: row.validity,
-        createdAt: row.created_at,
-      })),
-    );
+    try {
+      // WP4 Round 1 H5 fix: ONE transaction, fully validated readers —
+      // snapshot (run/events/capability chain/change chain/revision chain +
+      // pointer consistency), then per-pointer node ownership and integrity.
+      // Legal STALE planning facts are preserved; tampered pointers,
+      // missing/mismatched revisions or hash drift surface as STORE_CORRUPT.
+      return Object.freeze(db.transaction((): Array<{
+        nodeId: NodeCapabilityId;
+        revisionId: string;
+        validity: string;
+        createdAt: string;
+        generation: number | null;
+      }> => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return [];
+        const requirementId = snapshot.state.identity.requirementId;
+        const records = this.readArtifactRevisionsInTransaction(db, runId, requirementId);
+        const byId = new Map(records.map((record) => [record.revisionId, record]));
+        const pointerRows = db.prepare(
+          "SELECT node_id, revision_id FROM loop_artifact_current WHERE run_id = ?",
+        ).all(runId) as ReadonlyArray<{ node_id: string; revision_id: string }>;
+        const facts: Array<{
+          nodeId: NodeCapabilityId;
+          revisionId: string;
+          validity: string;
+          createdAt: string;
+          generation: number | null;
+        }> = [];
+        for (const row of pointerRows) {
+          const record = byId.get(row.revision_id);
+          if (record === undefined) corrupt("regate facts: current pointer target is missing");
+          if (record.nodeId !== row.node_id) corrupt("regate facts: current pointer crosses nodes");
+          facts.push(Object.freeze({
+            nodeId: record.nodeId,
+            revisionId: record.revisionId,
+            validity: record.validity,
+            createdAt: record.createdAt,
+            generation: record.generation,
+          }));
+        }
+        return facts;
+      })() as Array<{
+        nodeId: NodeCapabilityId;
+        revisionId: string;
+        validity: string;
+        createdAt: string;
+        generation: number | null;
+      }>);
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
+   * WP4 (H4): durably record a Re-Gate round-budget exhaustion as a blocking
+   * fact on a RUNNING run. Guarded UPDATE, idempotent for the same reason;
+   * only user decision / risk acceptance / scope reset (explicit future
+   * instructions) may clear it. Recovery surfaces the code so a fresh agent
+   * resumes into an honest BLOCKED instead of silently re-looping.
+   */
+  markRunRegateBlocked(runId: string, reasonCode: string): void {
+    if (
+      typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
+      typeof reasonCode !== "string" || reasonCode.length === 0 || reasonCode.trim() !== reasonCode ||
+      /[\x00-\x1f\x7f-\x9f]/.test(runId) || /[\x00-\x1f\x7f-\x9f]/.test(reasonCode)
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "runId and reasonCode must be safe trimmed strings");
+    }
+    const snapshot = this.getSnapshot(runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "run not found");
+    }
+    const state = snapshot.state;
+    const sequence = state.lastSequence + 1;
+    this.appendEvent(Object.freeze({
+      eventId: `${runId}:${sequence}:run_blocked`,
+      runId,
+      sequence,
+      kind: "run_blocked" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: new Date().toISOString(),
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
   }
 
   /**
@@ -3206,6 +3308,7 @@ export class LoopRunStore {
   ): {
     allowedRestartTargetIndex: number | null;
     historicalFindings: RegateFindingFacts[];
+    feedbackChange: { previousGeneration: number } | null;
   } {
     // NOTE: deliberately avoids the validating readers (readFindings… /
     // readRunSnapshot… / readArtifactRevisions…) — findings reading pulls
@@ -3217,7 +3320,7 @@ export class LoopRunStore {
       "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
     ).get(runId) as { requirement_id?: string } | undefined;
     if (runRow === undefined) {
-      return { allowedRestartTargetIndex: null, historicalFindings: [] };
+      return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null };
     }
     const findingRows = db.prepare(
       `SELECT finding_id, severity, status, earliest_affected_node_id, created_at
@@ -3238,18 +3341,38 @@ export class LoopRunStore {
     }));
     const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const pointerRows = db.prepare(
-      `SELECT c.node_id AS node_id, r.validity AS validity
+      `SELECT c.node_id AS node_id, r.validity AS validity, r.generation AS generation
        FROM loop_artifact_current c
        JOIN loop_artifact_revisions r ON r.revision_id = c.revision_id
        WHERE c.run_id = ?`,
-    ).all(runId) as ReadonlyArray<{ node_id: string; validity: string }>;
+    ).all(runId) as ReadonlyArray<{ node_id: string; validity: string; generation: number | null }>;
     for (const row of pointerRows) {
-      currentByNode.set(row.node_id as NodeCapabilityId, { validity: row.validity });
+      currentByNode.set(row.node_id as NodeCapabilityId, {
+        validity: row.validity,
+        generation: row.generation === null ? null : Number(row.generation),
+      });
     }
-    const plan = planRegateFromFacts(historicalFindings, currentByNode, this.regatePointLastAttempts(db, runId));
+    const feedbackRow = db.prepare(
+      `SELECT previous_generation FROM loop_requirement_changes
+       WHERE run_id = ? AND change_kind = 'FEEDBACK_DRIVEN_CHANGE' AND status = 'CLASSIFIED'
+         AND previous_generation IS NOT NULL
+       ORDER BY sequence DESC LIMIT 1`,
+    ).get(runId) as { previous_generation?: number | null } | undefined;
+    const feedbackChange =
+      feedbackRow === undefined || feedbackRow.previous_generation === null
+        ? null
+        : { previousGeneration: Number(feedbackRow.previous_generation) };
+    const plan = planRegateFromFacts(
+      historicalFindings,
+      currentByNode,
+      this.regatePointLastAttempts(db, runId),
+      feedbackChange,
+    );
+    process.stderr?.write?.(`REGATE_PLAN_OUT ${plan.kind} idx=${String(plan.restartPointIndex)}\n`);
     return {
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,
+      feedbackChange,
     };
   }
 
@@ -3278,9 +3401,14 @@ export class LoopRunStore {
       const regateContext = this.regateChainContextInTransaction(db, runId);
       validateLoopCapabilityExecutionChain(events, runId, {
         historicalFindings: regateContext.historicalFindings,
+        historicalReplayMode: true,
+        feedbackChange: regateContext.feedbackChange,
       });
     } catch (error) {
-      if (error instanceof LoopRunJournalError) corrupt("persisted capability execution chain is invalid");
+      if (error instanceof LoopRunJournalError) {
+        corrupt("persisted capability execution chain is invalid");
+      }
+      throw error;
       throw error;
     }
     return Object.freeze(events);

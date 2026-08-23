@@ -30,12 +30,6 @@ import {
 } from "../loop/types";
 import { downstreamNodeIds } from "./loop-finding-lifecycle";
 
-/** Severities that force a Re-Gate generation when found OPEN. */
-export const REGATE_BLOCKING_SEVERITIES: readonly string[] = Object.freeze([
-  "CRITICAL",
-  "HIGH",
-]);
-
 /** Reduced journal facts for one finding (no evidence blobs, no skill). */
 export interface RegateFindingFacts {
   findingId: string;
@@ -49,6 +43,18 @@ export interface RegateFindingFacts {
 /** Reduced facts for a node's CURRENT artifact revision pointer. */
 export interface CurrentRevisionFacts {
   validity: string;
+  /** Re-Gate generation tag recorded by the runner (attempt number). */
+  generation: number | null;
+}
+
+/**
+ * Reduced fact of the latest verified FEEDBACK_DRIVEN_CHANGE record (WP1).
+ * `previousGeneration` opens generation previousGeneration + 1: the wave is
+ * consumed once every canonical node's CURRENT revision carries a strictly
+ * greater generation.
+ */
+export interface FeedbackChangeFact {
+  previousGeneration: number;
 }
 
 export interface RegatePlan {
@@ -84,13 +90,6 @@ export function firstExecutionPointIndexForNode(nodeId: NodeCapabilityId): numbe
 
 function nodeIndexOf(nodeId: NodeCapabilityId): number {
   return NODE_CAPABILITY_IDS.indexOf(nodeId);
-}
-
-function isBlockingOpen(finding: RegateFindingFacts): boolean {
-  return (
-    finding.status === "OPEN" &&
-    REGATE_BLOCKING_SEVERITIES.includes(finding.severity)
-  );
 }
 
 function scopeIncomplete(
@@ -129,9 +128,45 @@ export function planRegateFromFacts(
   findings: readonly RegateFindingFacts[],
   currentByNode: ReadonlyMap<NodeCapabilityId, CurrentRevisionFacts>,
   pointLastAttempts?: PointLastAttempts,
+  feedbackChange?: FeedbackChangeFact | null,
 ): RegatePlan {
+  // WP4 Round 1 H3 fix: external feedback re-enters ONLY through a verified
+  // WP1 FEEDBACK_DRIVEN_CHANGE record, which opens the next generation. The
+  // feedback wave starts at requirement-intake and takes precedence: a full
+  // rebuild subsumes any finding-driven scope.
+  let feedbackLaggingIdx: number | null = null;
+  if (feedbackChange !== undefined && feedbackChange !== null) {
+    const lagging = NODE_CAPABILITY_IDS.findIndex((nodeId) => {
+      const current = currentByNode.get(nodeId);
+      return current === undefined || (current.generation ?? 0) <= feedbackChange.previousGeneration;
+    });
+    if (lagging >= 0) feedbackLaggingIdx = lagging;
+  }
+  if (feedbackLaggingIdx !== null) {
+    const targetNode = NODE_CAPABILITY_IDS[feedbackLaggingIdx]!;
+    let fbPointIndex = firstExecutionPointIndexForNode(targetNode);
+    if (targetNode === "solution-gate" && pointLastAttempts !== undefined) {
+      const scanAtt = pointLastAttempts.get("solution-gate:adversarial_scan") ?? 0;
+      const verdictAtt = pointLastAttempts.get("solution-gate:formal_verdict") ?? 0;
+      if (scanAtt > verdictAtt) {
+        fbPointIndex = firstExecutionPointIndexForNode("solution-gate") + 1;
+      }
+    }
+    return Object.freeze({
+      kind: "regate" as const,
+      restartPointIndex: fbPointIndex,
+      restartNode: targetNode,
+      governingFindingIds: Object.freeze([]),
+      earliestAffectedNode: NODE_CAPABILITY_IDS[0]!,
+      reusedUpstreamNodes: Object.freeze(NODE_CAPABILITY_IDS.slice(0, feedbackLaggingIdx)),
+      nodesToRebuild: Object.freeze(NODE_CAPABILITY_IDS.slice(feedbackLaggingIdx)),
+    });
+  }
+  // Frozen v2 contract: ANY open finding blocks its scope's validity and
+  // drives a rebuild wave — severity never exempts a finding from the
+  // current-authority rules (computeFindingGate blocks on every OPEN).
   const pending = findings.filter(
-    (finding) => isBlockingOpen(finding) && scopeIncomplete(finding, currentByNode),
+    (finding) => finding.status === "OPEN" && scopeIncomplete(finding, currentByNode),
   );
   if (pending.length === 0) {
     return Object.freeze({
@@ -219,7 +254,6 @@ export function historicalRestartAuthorized(
   if (targetNode === undefined) return false;
   const targetIdx = NODE_CAPABILITY_IDS.indexOf(targetNode);
   return findings.some((finding) =>
-    REGATE_BLOCKING_SEVERITIES.includes(finding.severity) &&
     finding.status !== "SUPERSEDED" &&
     NODE_CAPABILITY_IDS.indexOf(finding.earliestAffectedNodeId) <= targetIdx,
   );
