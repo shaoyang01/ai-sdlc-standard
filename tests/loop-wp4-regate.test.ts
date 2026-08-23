@@ -430,6 +430,66 @@ async function main(): Promise<void> {
     ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run honestly BLOCKED");
   }
 
+  // ── W3b: causality is the DECLARED fact, never the revision sequence ──
+  console.log("W3b: causeKind decides waves in both directions");
+  {
+    // Negative (production path): an IMPROVEMENT raised against a fix-wave
+    // product (source revision sequence 2) must not re-drive a backward
+    // wave — the sequence heuristic would have misclassified it as causal.
+    const envNeg = makeEnv();
+    const reqNeg = "REQ-WP4-W3B-NEG";
+    const firstNeg = await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    openFeedbackGeneration(envNeg, { runId: firstNeg.run_id, requirementId: reqNeg, locator: "feedback:w3b-neg" });
+    await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    const beforeNeg = pointDispatchCounts(envNeg, firstNeg.run_id);
+    const designCurrentNeg = envNeg.runStore.getCurrentArtifactRevision(firstNeg.run_id, "solution-design")!;
+    ok(designCurrentNeg.sequence === 2, "negative case binds to a sequence-2 fix-wave product");
+    appendBlockingFinding(envNeg, {
+      runId: firstNeg.run_id,
+      requirementId: reqNeg,
+      sourceCapability: "solution-design",
+      earliestAffectedNodeId: "solution-design",
+      severity: "MEDIUM",
+      category: "SOLUTION",
+      sequence: 1,
+      causeKind: "IMPROVEMENT",
+    });
+    const afterNegRun = await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    const countsNeg = pointDispatchCounts(envNeg, afterNegRun.run_id);
+    ok(
+      NODE_CAPABILITY_IDS.every((node) =>
+        (countsNeg.get(`${node}:primary`) ?? 0) === (beforeNeg.get(`${node}:primary`) ?? 0)),
+      "sequence-2 improvement does not re-drive a wave",
+    );
+    ok(afterNegRun.chain_status === "BLOCKED" && afterNegRun.final_status === "failed", "open improvement still blocks completion honestly");
+
+    // Positive (production path): a HIGH finding declared REGRESSION and
+    // bound to a sequence-1 baseline revision DOES re-drive its rebuild
+    // scope — direct evidence works in the direction the sequence heuristic
+    // silently dropped.
+    const envPos = makeEnv();
+    const reqPos = "REQ-WP4-W3B-POS";
+    const firstPos = await run("migrate billing export", { requirementId: reqPos, runStore: envPos.runStore, artifactStore: envPos.artifactStore, gateway: envPos.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    const sourceRevisionPos = envPos.runStore.getCurrentArtifactRevision(firstPos.run_id, "solution-design")!;
+    ok(sourceRevisionPos.sequence === 1, "positive case binds to a sequence-1 product");
+    const orderBeforePos = envPos.dispatchOrder.length;
+    appendBlockingFinding(envPos, {
+      runId: firstPos.run_id,
+      requirementId: reqPos,
+      sourceCapability: "solution-design",
+      earliestAffectedNodeId: "solution-design",
+      severity: "HIGH",
+      category: "SOLUTION",
+      sequence: 1,
+      causeKind: "REGRESSION",
+    });
+    await run("migrate billing export", { requirementId: reqPos, runStore: envPos.runStore, artifactStore: envPos.artifactStore, gateway: envPos.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(
+      envPos.dispatchOrder[orderBeforePos]?.capability === "solution-design",
+      "sequence-1 declared regression re-drives its rebuild scope",
+    );
+  }
+
   // ── W4: REQUIREMENT feedback re-enters at requirement-intake ──
   console.log("W4: requirement-category feedback opens a new full generation");
   {
