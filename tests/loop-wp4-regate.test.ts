@@ -1177,14 +1177,6 @@ async function main(): Promise<void> {
       requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
       gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
     });
-    console.log("DBG9b:", JSON.stringify({
-      before: orderBeforeThird,
-      after: env.dispatchOrder.length,
-      thirdChain: third.chain_status,
-      blocking: recoverRunContext(env.runStore, requirementId)!.blockingReasonCode,
-      rounds: env.runStore.countRegateRounds(first.run_id),
-      tail: env.dispatchOrder.slice(-4),
-    }));
     ok(env.dispatchOrder.length === orderBeforeThird,
       "the over-budget wave performs zero dispatches");
     ok(third.final_status === "failed" && third.chain_status === "BLOCKED",
@@ -1217,14 +1209,6 @@ async function main(): Promise<void> {
     // durable block is persisted for finishing what the release authorized;
     // the run still ends honestly BLOCKED on the unresolved regression.
     const postReleaseRecovery = recoverRunContext(env.runStore, requirementId)!;
-    console.log("DBG9:", JSON.stringify({
-      blocking: postReleaseRecovery.blockingReasonCode,
-      next: postReleaseRecovery.nextExecutionPoint,
-      chain: postReleaseRecovery.capabilityChainStatus,
-      fifthNext: fifth.next_execution_point,
-      fifthChain: fifth.chain_status,
-      dispatchesAfterThird: env.dispatchOrder.length - orderBeforeThird,
-    }));
     ok(postReleaseRecovery.blockingReasonCode === null,
       "no durable block persists after the released wave completes");
     ok(
