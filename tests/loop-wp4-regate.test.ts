@@ -563,6 +563,68 @@ async function main(): Promise<void> {
     ok(!consumedFeedbackReauthorized, "consumed feedback cannot authorize a fresh backward append");
   }
 
+  // ── W4b: generation is run-scoped — the reviewer's fork is unauthorable ──
+  console.log("W4b: retry-forked node generations cannot be authored; feedback restarts at intake");
+  {
+    // Production path: open generation 2, complete it, then prove a revision
+    // stamped outside the run's generation authority (the old attempt-as-
+    // generation bug, e.g. an intake attempt 3 while the run sits at 2) is
+    // rejected at the store boundary.
+    const env = makeEnv();
+    const requirementId = "REQ-WP4-W4B";
+    const first = await run("build invoicing report", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    ok(env.runStore.getRunGeneration(first.run_id) === 1, "fresh run sits in generation 1");
+    openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w4b" });
+    ok(env.runStore.getRunGeneration(first.run_id) === 2, "verified feedback record opens generation 2");
+    await run("build invoicing report", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    const genAfterWave = env.runStore.getRunGeneration(first.run_id);
+    const rebuilt = env.runStore.listRegateCurrentFacts(first.run_id);
+    ok(
+      rebuilt.every((fact) => fact.generation === genAfterWave),
+      "every node current carries the same run generation after a full wave",
+    );
+
+    // The fork attempt: stamp a node revision with its would-be ATTEMPT
+    // number instead of the run generation. This must fail closed.
+    const lastExecution = env.runStore.listCapabilityExecutions(first.run_id).at(-1)!;
+    let forkRejectedCode: string | null = null;
+    try {
+      env.runStore.appendArtifactRevision(createLoopArtifactRevision({
+        runId: first.run_id,
+        requirementId,
+        nodeId: "knowledge-sync",
+        sequence: 3,
+        generation: lastExecution.attempt + 1,
+        stablePath: `library/${requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION["knowledge-sync"].stablePathSegment}/${requirementId}_knowledge-sync.md`,
+        artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION["knowledge-sync"].artifactKind,
+        semver: `${lastExecution.attempt + 1}.0.0`,
+        artifactRef: lastExecution.outputArtifactRef!,
+        digest: lastExecution.outputDigest!,
+        producerExecutionId: lastExecution.executionEventId,
+        producerExecutionRole: lastExecution.executionRole,
+        gateResult: lastExecution.gateResult,
+        upstreamRevisionIds: [],
+        createdAt: futureIso(1000),
+      }));
+    } catch (error) {
+      forkRejectedCode = error instanceof LoopRunJournalError ? error.code : null;
+    }
+    ok(forkRejectedCode === "ILLEGAL_TRANSITION", `attempt-stamped generation is rejected at the store boundary (got ${forkRejectedCode})`);
+
+    // Planner contract: with uniform generations and previousGeneration=2,
+    // the wave opens at requirement-intake — never skips a "fresher-looking"
+    // upstream node.
+    const uniformCurrents = new Map<NodeCapabilityId, CurrentRevisionFacts>(
+      NODE_CAPABILITY_IDS.map((node) => [node, { validity: "ACTIVE", generation: 2 }]),
+    );
+    const plan = planRegateFromFacts([], uniformCurrents, undefined, { previousGeneration: 2 });
+    ok(
+      plan.kind === "regate" && plan.restartNode === "requirement-intake" &&
+        plan.restartPointIndex === 0,
+      "previousGeneration=2 with all nodes at generation 2 opens the full new generation at intake",
+    );
+  }
+
   // ── W5: FAIL verdict blocks and surfaces BLOCKED_UNKNOWN ──
   console.log("W5: FAIL formal verdict blocks before task-planning with BLOCKED_UNKNOWN");
   {
