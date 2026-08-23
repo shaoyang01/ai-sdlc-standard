@@ -1117,32 +1117,96 @@ async function main(): Promise<void> {
     ok(live.kind === "none" && live.restartPointIndex === null, "resolved finding yields no live restart target");
   }
 
-  // ── W9: dispatch budget exhaustion durably blocks the run ──
-  console.log("W9: budget exhaustion persists REGATE_ROUND_BUDGET_EXHAUSTED and refuses re-dispatch");
+  // ── W9: the round budget counts Re-Gate rounds, releases by decision ──
+  console.log("W9: plain linear progress never blocks; round budget counts waves; release clears");
   {
+    // (1) A truncated LINEAR invocation must not persist any durable block —
+    // the next invocation resumes and completes normally.
+    const envLin = makeEnv();
+    const reqLin = "REQ-WP4-W9-LINEAR";
+    const partial = await run("tiny scope", {
+      requirementId: reqLin, runStore: envLin.runStore, artifactStore: envLin.artifactStore,
+      gateway: envLin.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
+    });
+    ok(partial.chain_status !== "BLOCKED" || partial.final_status === "success",
+      "linear truncation is not a durable block");
+    ok(!envLin.runStore.listEvents(partial.run_id).some((e2) => e2.kind === "run_blocked"),
+      "no run_blocked event is written for a linear safety stop");
+    const resumed = await run("tiny scope", {
+      requirementId: reqLin, runStore: envLin.runStore, artifactStore: envLin.artifactStore,
+      gateway: envLin.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+    });
+    ok(resumed.final_status === "success" && resumed.chain_status === "COMPLETED",
+      "the next invocation resumes the truncated linear chain to completion");
+
+    // (2) The durable budget counts PERSISTED BACKWARD JUMPS. With a
+    // one-round budget, the feedback wave fits but the next causal wave
+    // exhausts it and persists REGATE_ROUND_BUDGET_EXHAUSTED.
     const env = makeEnv();
     const requirementId = "REQ-WP4-W9";
-    const orderBefore = env.dispatchOrder.length;
-    const first = await run("tiny scope", {
+    const first = await run("migrate billing export", {
       requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
-      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(),
     });
-    ok(first.chain_status === "BLOCKED" && first.final_status === "failed", "budget exhaustion blocks honestly");
+    ok(first.final_status === "success", "generation 1 completes within the round budget");
+    openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w9" });
+    const second = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(second.final_status === "success", "the feedback wave consumes exactly the one allowed round");
+    ok(env.runStore.countRegateRounds(first.run_id) === 1, "one backward jump persisted");
+
+    appendBlockingFinding(env, {
+      runId: first.run_id, requirementId,
+      sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
+      severity: "HIGH", category: "SOLUTION", sequence: 1,
+    });
+    const third = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(third.final_status === "failed" && third.chain_status === "BLOCKED",
+      "a second wave beyond the round budget blocks honestly");
     const recoveryBlocked = recoverRunContext(env.runStore, requirementId)!;
     ok(
       recoveryBlocked.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED",
       `blocking reason persisted (got ${recoveryBlocked.blockingReasonCode})`,
     );
-    const orderAfterFirst = env.dispatchOrder.length;
-    const second = await run("tiny scope", {
+
+    // (3) Release path: an explicit RISK_ACCEPTED decision clears the
+    // durable block; the budget still guards any further waves.
+    const orderBeforeRelease = env.dispatchOrder.length;
+    const fourth = await run("migrate billing export", {
       requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
-      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 99,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
     });
-    ok(second.chain_status === "BLOCKED", "blocked run stays blocked even with fresh budget");
-    ok(env.dispatchOrder.length === orderAfterFirst && env.dispatchOrder.length === orderBefore + 2, "no further dispatch after durable block");
+    ok(fourth.chain_status === "BLOCKED" && env.dispatchOrder.length === orderBeforeRelease,
+      "blocked run refuses re-dispatch before release");
+    env.runStore.releaseRunRegateBlock(first.run_id, { kind: "RISK_ACCEPTED" });
+    const recoveryReleased = recoverRunContext(env.runStore, requirementId)!;
+    ok(recoveryReleased.blockingReasonCode === null, "release clears the durable block");
+    const fifth = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(fifth.chain_status === "BLOCKED",
+      "post-release the budget still guards new waves");
+    // Post-release: the interrupted wave RESUMES to completion — no new
+    // durable block is persisted for finishing what the release authorized;
+    // the run still ends honestly BLOCKED on the unresolved regression.
+    const postReleaseRecovery = recoverRunContext(env.runStore, requirementId)!;
+    ok(postReleaseRecovery.blockingReasonCode === null,
+      "no durable block persists after the released wave completes");
+    ok(
+      env.runStore.getCurrentArtifactRevision(first.run_id, "solution-gate")!.validity === "ACTIVE",
+      "the released wave finished rebuilding downstream",
+    );
+    ok(fifth.final_status === "failed",
+      "the unresolved regression keeps the run honestly blocked");
   }
 
-  console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);
+    console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);
 }
 
 main().then(

@@ -88,7 +88,7 @@ import {
   type LoopFindingProof,
 } from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
-import { NODE_CAPABILITY_IDS } from "../loop/types";
+import { LOOP_CAPABILITY_EXECUTION_POINTS, NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
@@ -2733,6 +2733,76 @@ export class LoopRunStore {
       }
     }
     return 1;
+  }
+
+  /**
+   * The number of PERSISTED backward jumps (Re-Gate rounds) in the verified
+   * execution stream (Round 2 review H4). Raw dispatch counts conflate
+   * linear progress with pathological cycles; only a jump to an earlier
+   * point consumes a round. Feedback waves and causal waves both count —
+   * they are both generation restarts.
+   */
+  countRegateRounds(runId: string): number {
+    const events = this.listCapabilityExecutions(runId);
+    const points = LOOP_CAPABILITY_EXECUTION_POINTS;
+    let rounds = 0;
+    let prevIdx = -1;
+    for (const event of events) {
+      if (event.status !== "started") continue;
+      const idx = points.findIndex(
+        (point) => point.capability === event.capability && point.executionRole === event.executionRole,
+      );
+      if (prevIdx >= 0 && idx < prevIdx + 1) rounds += 1;
+      prevIdx = idx;
+    }
+    return rounds;
+  }
+
+  /**
+   * The explicit release decision for a durably blocked run (Round 2 review
+   * H4): RISK_ACCEPTED or SCOPE_RESET appends a run_resumed event carrying
+   * the release code, clearing REGATE_ROUND_BUDGET_EXHAUSTED. Only the
+   * budget-exhausted block is releasable here; other blocks need their own
+   * governance paths.
+   */
+  releaseRunRegateBlock(
+    runId: string,
+    release: { kind: "RISK_ACCEPTED" | "SCOPE_RESET" },
+  ): void {
+    safeIdInput(runId, "runId");
+    if (
+      release === null || typeof release !== "object" ||
+      (release.kind !== "RISK_ACCEPTED" && release.kind !== "SCOPE_RESET")
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "release.kind must be RISK_ACCEPTED or SCOPE_RESET");
+    }
+    const snapshot = this.getSnapshot(runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "run not found");
+    }
+    if (snapshot.state.blockingReasonCode !== "REGATE_ROUND_BUDGET_EXHAUSTED") {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only a REGATE_ROUND_BUDGET_EXHAUSTED block is releasable");
+    }
+    const state = snapshot.state;
+    const sequence = state.lastSequence + 1;
+    this.appendEvent(Object.freeze({
+      eventId: `${runId}:${sequence}:run_resumed`,
+      runId,
+      sequence,
+      kind: "run_resumed" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: new Date().toISOString(),
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: release.kind,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
   }
 
   markRunRegateBlocked(runId: string, reasonCode: string): void {

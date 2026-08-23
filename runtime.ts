@@ -92,11 +92,20 @@ export interface RuntimeOptions {
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
   /**
-   * WP4: dispatch budget for one run() invocation. Re-Gate generations can
-   * legally re-dispatch earlier points; exceeding the budget durably blocks
-   * the run (REGATE_ROUND_BUDGET_EXHAUSTED) instead of looping forever.
+   * WP4 Round 2 review H4 correction: pure LOOP SAFETY BOUND for one run()
+   * invocation. Hitting it stops the invocation WITHOUT persisting any
+   * durable block — plain linear progress must never be mistaken for a
+   * pathological Re-Gate cycle. The durable REGATE_ROUND_BUDGET_EXHAUSTED
+   * block is reserved for the round budget below.
    */
   maxDispatches?: number;
+  /**
+   * WP4 Round 2 review H4: maximum number of persisted backward jumps
+   * (Re-Gate rounds) per run. Exceeding it is a durable, honest block
+   * (REGATE_ROUND_BUDGET_EXHAUSTED) that only an explicit release decision
+   * (RISK_ACCEPTED / SCOPE_RESET) can clear.
+   */
+  maxRegateRounds?: number;
 }
 
 // The runtime input contract is CLOSED at runtime, not just at the type
@@ -111,6 +120,7 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "bindingRegistry",
   "gateway",
   "maxDispatches",
+  "maxRegateRounds",
 ]);
 
 // Options of the retired five-node interpreter. They fail with a specific
@@ -384,17 +394,24 @@ export async function run(
   // or blocked — it must NOT be coerced back to the first point.
   let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
   let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
-  // WP4: Re-Gate generations can legally re-dispatch earlier points; the
-  // bound keeps a pathological finding/rebuild cycle from running forever
-  // (bounded retry semantics carried over from C01).
+  // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
+  // bound — hitting it stops the invocation WITHOUT a durable block. The
+  // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
+  // budget (persisted backward jumps) below.
   const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
   if (
     typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
   ) {
     invalid("maxDispatches must be a positive safe integer");
   }
+  const maxRegateRounds = options.maxRegateRounds ?? LOOP_CAPABILITY_EXECUTION_POINTS.length;
+  if (
+    typeof maxRegateRounds !== "number" || !Number.isSafeInteger(maxRegateRounds) || maxRegateRounds < 1
+  ) {
+    invalid("maxRegateRounds must be a positive safe integer");
+  }
   // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
-  // user decision / risk acceptance / scope reset may clear the block.
+  // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
   if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
     if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
       return Object.freeze({
@@ -411,12 +428,11 @@ export async function run(
     }
   }
   let dispatches = 0;
+  let seenRounds = journalRunId === null ? 0 : runStore.countRegateRounds(journalRunId);
   while (next !== null) {
     if (dispatches >= maxDispatches) {
-      // WP4 (H4): budget exhaustion is a durable, honest block — persisted on
-      // the run so fresh agents resume into BLOCKED, never into a silent loop.
-      runStore.markRunRegateBlocked(journalRunId ?? identity.runId, "REGATE_ROUND_BUDGET_EXHAUSTED");
-      recovery = recoverRunContext(runStore, requirementId);
+      // Safety bound only: stop this invocation honestly WITHOUT persisting
+      // a durable block — plain linear progress resumes on the next call.
       break;
     }
     dispatches += 1;
@@ -513,6 +529,20 @@ export async function run(
       break;
     }
     next = recovery.nextExecutionPoint;
+    // WP4 Round 2 review H4: the durable budget counts PERSISTED BACKWARD
+    // JUMPS (Re-Gate rounds), not raw dispatches. A new jump beyond the
+    // round budget is a pathological cycle — persist the honest block so
+    // fresh agents resume into BLOCKED; only an explicit release decision
+    // (RISK_ACCEPTED / SCOPE_RESET) clears it.
+    const roundsNow = runStore.countRegateRounds(journalRunId);
+    if (roundsNow > seenRounds) {
+      if (roundsNow > maxRegateRounds) {
+        runStore.markRunRegateBlocked(journalRunId, "REGATE_ROUND_BUDGET_EXHAUSTED");
+        recovery = recoverRunContext(runStore, requirementId);
+        break;
+      }
+      seenRounds = roundsNow;
+    }
   }
 
   const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
