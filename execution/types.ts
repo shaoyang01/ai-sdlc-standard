@@ -98,4 +98,12 @@ export type ExecutionResult = Readonly<{
   artifacts: ReadonlyArray<ExecutionArtifact>;
   error?: string;
   hermes_gateway_real_dispatch?: HermesGatewayRealDispatchResult | HermesPhase2ShadowEnablementSidecar;
+  /**
+   * Round 3 review F2: on the loop capability-tracing path, the exact
+   * succeeded terminal journal event THIS dispatch committed. Callers binding
+   * downstream facts (e.g. the node artifact revision) must use this identity
+   * instead of re-reading the journal tail, which a concurrent entry could
+   * have advanced.
+   */
+  capabilityTerminalEventId?: string;
 }>;

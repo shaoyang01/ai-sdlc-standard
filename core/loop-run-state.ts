@@ -468,7 +468,27 @@ export function applyLoopRunEvent(state: LoopRunState, event: LoopRunEvent): Loo
       });
     }
     case "run_resumed": {
-      if (state.status !== "paused") illegal("run_resumed is only allowed from paused");
+      // Round 2 review H4: a durably BLOCKED run is releasable ONLY by an
+      // explicit decision event carrying the release code — the projection
+      // clears blockingReasonCode so fresh agents resume into running.
+      if (state.status === "blocked") {
+        if (
+          event.reasonCode !== "RISK_ACCEPTED" &&
+          event.reasonCode !== "SCOPE_RESET"
+        ) {
+          illegal("releasing a blocked run requires a RISK_ACCEPTED or SCOPE_RESET decision");
+        }
+        return Object.freeze({
+          ...base,
+          status: "running",
+          currentStage: null,
+          currentAttempt: 0,
+          fixRound: state.fixRound,
+          blockingReasonCode: null,
+          failureReasonCode: state.failureReasonCode,
+        });
+      }
+      if (state.status !== "paused") illegal("run_resumed is only allowed from paused or blocked");
       return Object.freeze({
         ...base,
         status: "running",

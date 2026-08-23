@@ -32,6 +32,20 @@ import {
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "../core/loop-executor-types";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: seeded multi-point chains must close the terminal→revision
+// window between points — materialize each succeeded producer's revision
+// exactly as the runtime replay would.
+function seedProducerRevision(store: LoopRunStore, event: LoopCapabilityExecutionEvent): void {
+  if (
+    event.status !== "succeeded" || event.outputArtifactRef === null ||
+    (event.capability === "solution-gate" && event.executionRole === "adversarial_scan")
+  ) {
+    return;
+  }
+  materializeProducerRevision(store, REQUIREMENT, RUN, event, () => TS);
+}
 
 let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
@@ -92,7 +106,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   const agent = o.agent ?? "codex";
   const succeeded = o.status === "succeeded";
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -119,6 +133,10 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     unresolvedFindingsDigest: succeeded && o.findingsRef ? o.findingsRef.slice(-64) : null,
     consumedFindingsRef: o.consumedRef ?? null,
     consumedFindingsDigest: o.consumedRef ? o.consumedRef.slice(-64) : null,
+    decisionDepth: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "STANDARD" as const : null,
+    decisionScopeId: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `${RUN}:decision:${(o as { _attempt?: number })._attempt ?? nextAttempt(o.capability, o.executionRole)}` : null,
+    decisionDeltaRef: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${dg("decision-delta")}` : null,
+    decisionDeltaDigest: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? dg("decision-delta") : null,
     nextStepEligibility: succeeded ? "ELIGIBLE" : o.status === "failed" ? "BLOCKED" : null,
     errorCode: o.status === "failed" ? o.errorCode ?? "EXEC_FAILED" : null,
     retryable: o.status === "failed" ? o.retryable ?? true : null,
@@ -283,6 +301,7 @@ async function main(): Promise<void> {
       ];
       for (const event of chain) {
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       const verdictTerminal = chain[chain.length - 1]!;
       ok(verdictTerminal.executionEventId === `${RUN}:capability:8:succeeded`,
@@ -347,6 +366,7 @@ async function main(): Promise<void> {
       ];
       for (const event of chain) {
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       store.close();
 

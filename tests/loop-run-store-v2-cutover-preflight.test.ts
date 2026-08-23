@@ -1,8 +1,8 @@
 // LOOP Run Store v2 Cutover Preflight — Tests (C02-WP3.5-B, D3 rules 4-6)
 // ========================================================================
 // Covers the read-only journal scanner end to end:
-// - fresh v0 databases and healthy v6 journals pass;
-// - v1..v5, future formats, unversioned-with-LOOP-tables, non-SQLite files
+// - fresh v0 databases and healthy v7 journals pass;
+// - v1..v6, future formats, unversioned-with-LOOP-tables, non-SQLite files
 //   and owner-unconfirmable SQLite files all fail;
 // - a real v5 journal reports STOP_AND_RE_RULE with the distinct exit code;
 // - the script itself enforces explicit roots and non-zero exit semantics.
@@ -47,9 +47,9 @@ function identity(root: string): LoopRunIdentity {
   });
 }
 
-/** A healthy v6 journal created by the runtime itself. */
-function seedV6Journal(root: string): string {
-  const store = new LoopRunStore(join(root, "v6-journal.db"));
+/** A healthy v7 journal created by the runtime itself. */
+function seedV7Journal(root: string): string {
+  const store = new LoopRunStore(join(root, "v7-journal.db"));
   store.init();
   store.createRun(identity(root));
   store.close();
@@ -78,14 +78,14 @@ function withRoot(name: string, fn: (root: string) => void): void {
 }
 
 async function main(): Promise<void> {
-  console.log("preflight: fresh v0 and healthy v6 pass");
+  console.log("preflight: fresh v0 and healthy v7 pass");
   withRoot("pass", (root) => {
-    seedV6Journal(root);
+    seedV7Journal(root);
     new Database(join(root, "empty-v0.db")).close();
     const report = preflightLoopRunStoreV2Cutover([root]);
     ok(report.candidateCount === 2, "both candidate files discovered");
-    ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v6");
-    ok(verdictOf(report, "v6-journal.db")?.verdict === "OK_V6", "runtime-created journal classifies as OK_V6");
+    ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v7");
+    ok(verdictOf(report, "v7-journal.db")?.verdict === "OK_V7", "runtime-created journal classifies as OK_V7");
     ok(verdictOf(report, "empty-v0.db")?.verdict === "FRESH_EMPTY", "empty unversioned database is FRESH_EMPTY");
   });
 
@@ -116,12 +116,12 @@ async function main(): Promise<void> {
 
   console.log("preflight: future format and unversioned-with-tables fail");
   withRoot("future", (root) => {
-    seedVersionedFile(root, "future.db", 7);
+    seedVersionedFile(root, "future.db", 8);
     const db = new Database(join(root, "unversioned.db"));
     db.exec("CREATE TABLE loop_findings (finding_id TEXT PRIMARY KEY)");
     db.close();
     const report = preflightLoopRunStoreV2Cutover([root]);
-    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 6 fails as future");
+    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 7 fails as future");
     ok(
       verdictOf(report, "unversioned.db")?.verdict === "FAIL_UNVERSIONED_WITH_TABLES",
       "unversioned database carrying LOOP tables fails",
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
 
   console.log("preflight: canonical JSON digest is stable and content-bound");
   withRoot("digest", (root) => {
-    seedV6Journal(root);
+    seedV7Journal(root);
     const report = preflightLoopRunStoreV2Cutover([root]);
     const first = canonicalPreflightReportJson(report);
     const second = canonicalPreflightReportJson(preflightLoopRunStoreV2Cutover([root]));
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
     // Healthy roots → exit 0 with JSON + Markdown + digest on stdout.
     const passDir = join(root, "pass-root");
     mkdirSync(passDir, { recursive: true });
-    seedV6Journal(passDir);
+    seedV7Journal(passDir);
     const passing = run(passDir);
     ok(passing.status === 0, "all-pass scan exits 0");
     ok(passing.stdout.includes('"schema": "loop-run-store-v2-cutover-preflight:v1"'), "stdout carries the JSON inventory");

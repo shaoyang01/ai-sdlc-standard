@@ -134,7 +134,23 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 }
 
 /** Drives the canonical single-pass capability chain inside one run. */
-function makeCapabilityDriver(store: LoopRunStore, runId: string) {
+function makeCapabilityDriver(
+  store: LoopRunStore,
+  runId: string,
+  artifactStore?: LoopArtifactStore,
+) {
+  // Round 2 re-review F1: when a store is bound, the verdict's decision
+  // delta must be a REAL blob so append-time physical verification passes.
+  const putDelta = (): { artifactRef: string; digest: string } =>
+    artifactStore === undefined
+      ? {
+          artifactRef: `loop-artifact:v1:solution_review:sha256:${sha256Hex("decision-delta")}`,
+          digest: sha256Hex("decision-delta"),
+        }
+      : (() => {
+          const d = artifactStore.put("solution_review", `decision delta ${nextTs()}`);
+          return { artifactRef: d.artifactRef, digest: d.digest };
+        })();
   // Continue the persisted event sequence so multiple drivers can share a run.
   let sequence = store.listCapabilityExecutions(runId).length;
   const attempts = new Map<string, number>();
@@ -158,8 +174,11 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
     const executionRole = capability === "solution-gate"
       ? (overrides.executionRole ?? "formal_verdict")
       : "primary";
+    const isSucceededVerdict =
+      status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict";
+    const deltaBinding = isSucceededVerdict ? putDelta() : null;
     return Object.freeze({
-      schemaVersion: 3,
+      schemaVersion: 4,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -186,6 +205,10 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       unresolvedFindingsDigest: null,
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
+      decisionDepth: isSucceededVerdict ? ("STANDARD" as const) : null,
+      decisionScopeId: isSucceededVerdict ? `${runId}:decision:1` : null,
+      decisionDeltaRef: deltaBinding?.artifactRef ?? null,
+      decisionDeltaDigest: deltaBinding?.digest ?? null,
       nextStepEligibility: null,
       errorCode: null,
       retryable: null,
@@ -332,7 +355,9 @@ function revisionDraft(o: {
     requirementId: "req-001",
     nodeId: o.nodeId,
     sequence: o.sequence ?? 1,
-    generation: null,
+    // Round 2 review H3: store binds generation to the run's
+    // feedback-opened generation; runs without feedback records are gen 1.
+    generation: 1,
     stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].stablePathSegment}/req-001_${o.nodeId}.md`,
     artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind,
     semver: o.semver ?? output.version,
@@ -396,9 +421,12 @@ function findingDraft(o: {
   earliestAffectedNodeId: NodeCapabilityId;
   severity?: LoopFindingDraft["severity"];
   sourceRevisionId?: string | null;
+  causeKind?: LoopFindingDraft["causeKind"];
+  introducedByRevisionId?: string | null;
   requirementId?: string;
   createdAt?: string;
 }): LoopFindingDraft {
+  const causeKind = o.causeKind ?? "REGRESSION";
   return {
     runId: "run-001",
     requirementId: o.requirementId ?? "req-001",
@@ -408,6 +436,13 @@ function findingDraft(o: {
     // capability itself. Store-level scenarios for deeper capabilities must
     // ensure that node's current exists (or expect the fail-closed guard).
     sourceRevisionId: o.sourceRevisionId ?? `run-001:revision:${o.sourceCapability}:1`,
+    // v3/v4 direct causal evidence: default REGRESSION bound to the finding's
+    // own source revision (which store fixtures guarantee to exist).
+    causeKind,
+    introducedByRevisionId: o.introducedByRevisionId ??
+      (causeKind === "REGRESSION"
+        ? (o.sourceRevisionId ?? `run-001:revision:${o.sourceCapability}:1`)
+        : null),
     severity: o.severity ?? "HIGH",
     category: o.category,
     evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
@@ -426,6 +461,7 @@ const RISK_EVIDENCE = Object.freeze({
   riskAcceptedBy: "user:shaoyang01",
   riskAcceptanceEvidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("4")}`,
   riskAcceptanceEvidenceDigest: dg("4"),
+  decisionScopeId: "run-001:decision:1",
 });
 
 /**
@@ -441,6 +477,8 @@ function canonicalizeFindingUnchecked(record: LoopFinding): string {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,
@@ -532,7 +570,7 @@ function withRunningStore(fn: (store: LoopRunStore, dir: string) => void): void 
 
 console.log("finding lifecycle: schema constants and canonical tokens");
 {
-  assert(LOOP_FINDING_SCHEMA_VERSION === 2, "finding schema version is 2");
+  assert(LOOP_FINDING_SCHEMA_VERSION === 4, "finding schema version is 4");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
   assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
     "six canonical categories");
@@ -1560,6 +1598,7 @@ function canonicalizeProofUnchecked(proof: LoopFindingProof): string {
     evidenceRef: proof.evidenceRef,
     evidenceDigest: proof.evidenceDigest,
     riskAcceptedBy: proof.riskAcceptedBy,
+    riskAcceptedScopeId: proof.riskAcceptedScopeId,
   });
 }
 
@@ -1605,6 +1644,7 @@ function appendAndResolveFinding(
     evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
     evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
     riskAcceptedBy: null,
+    riskAcceptedScopeId: null,
   });
   const db = new Database(join(dir, "journal.db"));
   try {
@@ -1750,6 +1790,7 @@ function appendAndResolveFinding(
         evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("7")}`,
         evidenceDigest: dg("7"),
         riskAcceptedBy: null,
+        riskAcceptedScopeId: null,
       });
       db.prepare("UPDATE loop_finding_proofs SET evidence_ref = ?, evidence_digest = ?, canonical_sha256 = ? WHERE finding_id = ?")
         .run(tampered.evidenceRef, tampered.evidenceDigest,
@@ -1776,11 +1817,13 @@ function appendAndResolveFinding(
         `INSERT INTO loop_finding_proofs (
           finding_id, proof_kind, revision_id, revision_node_id,
           revision_artifact_ref, revision_artifact_digest,
-          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          evidence_ref, evidence_digest, risk_accepted_by,
+          risk_accepted_scope_id, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         forged.findingId, forged.proofKind, null, null, null, null,
         forged.evidenceRef, forged.evidenceDigest, forged.riskAcceptedBy,
+        forged.riskAcceptedScopeId,
         createHash("sha256").update(canonicalizeLoopFindingProof(forged, "run-001")).digest("hex"),
       );
     } finally {
@@ -1813,12 +1856,13 @@ function appendAndResolveFinding(
         `INSERT INTO loop_finding_proofs (
           finding_id, proof_kind, revision_id, revision_node_id,
           revision_artifact_ref, revision_artifact_digest,
-          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          evidence_ref, evidence_digest, risk_accepted_by,
+          risk_accepted_scope_id, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         finding.findingId, "RESOLUTION", validationRevision.revisionId, "knowledge-sync",
         validationRevision.artifactRef, validationRevision.digest,
-        RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null,
+        RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null, null,
         createHash("sha256").update(canonicalizeProofUnchecked(Object.freeze({
           findingId: finding.findingId,
           proofKind: "RESOLUTION",
@@ -1829,6 +1873,7 @@ function appendAndResolveFinding(
           evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
           evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
           riskAcceptedBy: null,
+          riskAcceptedScopeId: null,
         }))).digest("hex"),
       );
     } finally {
@@ -2396,6 +2441,16 @@ function withBoundFindingStore(
   }
 }
 
+function sha256Hex(input: string): string {
+  let h1 = 0x12345678, h2 = 0x9abcdef0;
+  for (let i = 0; i < input.length; i += 1) {
+    h1 = (h1 * 31 + input.charCodeAt(i)) >>> 0;
+    h2 = (h2 * 17 + input.charCodeAt(i)) >>> 0;
+  }
+  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).repeat(4).slice(0, 64);
+}
+
+
 function findingBlobPath(dir: string, kind: string, digest: string): string {
   return join(dir, "control", "artifacts", "v1", kind, digest.slice(0, 2), `${digest}.blob`);
 }
@@ -2429,7 +2484,7 @@ function driveBoundNodes(
       requirementId: "req-001",
       nodeId,
       sequence: existingForNode + 1,
-      generation: null,
+      generation: 1,
       stablePath: `library/req-001/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].stablePathSegment}/req-001_${nodeId}.md`,
       artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].artifactKind,
       semver: `${existingForNode + 1}.0.0`,
@@ -2457,7 +2512,7 @@ function driveBoundNodes(
     // rejected at write time when the artifact store is bound.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
@@ -2483,7 +2538,7 @@ function driveBoundNodes(
     // deleting the blob afterwards fails every read path closed.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
@@ -2495,6 +2550,7 @@ function driveBoundNodes(
       riskAcceptedBy: "user:shaoyang01",
       riskAcceptanceEvidenceRef: evidence.artifactRef,
       riskAcceptanceEvidenceDigest: evidence.digest,
+      decisionScopeId: "run-001:decision:1",
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");
@@ -2506,7 +2562,7 @@ function driveBoundNodes(
     // exists is consumed by the gate once the downstream current is ACTIVE.
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
-    const driver = makeCapabilityDriver(store, "run-001");
+    const driver = makeCapabilityDriver(store, "run-001", artifactStore);
     const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
     const finding = store.appendFinding(createLoopFinding(findingDraft({
       sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
@@ -2517,6 +2573,7 @@ function driveBoundNodes(
       riskAcceptedBy: "user:shaoyang01",
       riskAcceptanceEvidenceRef: evidence.artifactRef,
       riskAcceptanceEvidenceDigest: evidence.digest,
+      decisionScopeId: "run-001:decision:1",
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");

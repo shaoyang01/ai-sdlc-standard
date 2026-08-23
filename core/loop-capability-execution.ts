@@ -25,7 +25,16 @@ import { historicalRestartAuthorized } from "./loop-regate";
 // formal_verdict role MUST record the exact ledger ref/digest it consumed —
 // the chain validator binds them to the same solution-gate round. The v2
 // schema is not silently accepted.
-export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 3 as const;
+// v4 (C02-WP4 Round 2 review H1): the depth decision is MATERIALIZED on the
+// verdict event itself. A succeeded formal_verdict must carry decisionDepth
+// (LIGHT | STANDARD | DEEP), the decisionScopeId it adjudicates, and a
+// decision delta (ref/digest pair) recording what the depth choice changes;
+// every other event must leave all four null. Recovery refuses to derive a
+// DECIDED admission from gateResult alone.
+export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 4 as const;
+
+export const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
+export type DecisionDepth = (typeof DECISION_DEPTHS)[number];
 
 export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
@@ -60,6 +69,16 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   /** v3: the Finding Ledger this formal_verdict execution consumed. */
   consumedFindingsRef: string | null;
   consumedFindingsDigest: string | null;
+  /**
+   * v4 (Round 2 review H1): the MATERIALIZED depth decision. A succeeded
+   * formal_verdict must declare the depth it chose, the decision scope it
+   * adjudicates, and a delta artifact recording what that choice changes;
+   * every other event carries all four as null.
+   */
+  decisionDepth: DecisionDepth | null;
+  decisionScopeId: string | null;
+  decisionDeltaRef: string | null;
+  decisionDeltaDigest: string | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   errorCode: string | null;
   retryable: boolean | null;
@@ -73,6 +92,7 @@ const EVENT_FIELDS = [
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
   "outputArtifactVersion", "outputDigest", "gateResult", "unresolvedFindingsRef",
   "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
+  "decisionDepth", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
   "nextStepEligibility", "errorCode", "retryable", "reasonCode",
 ] as const;
 
@@ -243,6 +263,34 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   if (!isVerdictRole && (event.consumedFindingsRef !== null || event.consumedFindingsDigest !== null)) {
     invalid("only the formal_verdict role may bind a consumed Finding Ledger");
   }
+  // v4 (Round 2 review H1): the MATERIALIZED depth decision. The choice is
+  // an immutable fact ON the verdict event — never inferred downstream from
+  // gateResult — and no other execution may carry it.
+  const hasDepth = event.decisionDepth !== null;
+  const hasScope = event.decisionScopeId !== null;
+  const hasDelta = event.decisionDeltaRef !== null || event.decisionDeltaDigest !== null;
+  const isSucceededVerdict = isVerdictRole && event.status === "succeeded";
+  if (
+    event.decisionDepth !== null &&
+    (typeof event.decisionDepth !== "string" || !DECISION_DEPTHS.includes(event.decisionDepth as DecisionDepth))
+  ) {
+    invalid("decisionDepth must be a canonical decision depth or null");
+  }
+  const scopeId = event.decisionScopeId === null ? null : text(event.decisionScopeId, "decisionScopeId");
+  const deltaRef = nullableArtifactRef(event.decisionDeltaRef, "decisionDeltaRef");
+  const deltaDigest = nullableDigest(event.decisionDeltaDigest, "decisionDeltaDigest");
+  if ((deltaRef === null) !== (deltaDigest === null)) invalid("decision delta ref and digest must appear together");
+  if (deltaRef !== null && deltaRef.digest !== deltaDigest) {
+    invalid("decision delta reference and digest must match");
+  }
+  if (isSucceededVerdict) {
+    if (!hasDepth || !hasScope || !hasDelta) {
+      invalid("succeeded formal_verdict must materialize decisionDepth, decisionScopeId and a decision delta");
+    }
+    void scopeId;
+  } else if (hasDepth || hasScope || hasDelta) {
+    invalid("only a succeeded formal_verdict may carry a materialized depth decision");
+  }
   if (event.gateResult !== null && (typeof event.gateResult !== "string" || !GATE_RESULTS.includes(event.gateResult as LoopCapabilityGateResult))) {
     invalid("gateResult must be canonical or null");
   }
@@ -343,6 +391,13 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     unresolvedFindingsDigest: event.unresolvedFindingsDigest,
     consumedFindingsRef: event.consumedFindingsRef,
     consumedFindingsDigest: event.consumedFindingsDigest,
+    // v4 (Round 2 review H1 + re-review F1): the materialized depth decision
+    // is part of the canonical hash — a persisted verdict's scope/depth/
+    // delta cannot be rewritten without hash-drift detection.
+    decisionDepth: event.decisionDepth,
+    decisionScopeId: event.decisionScopeId,
+    decisionDeltaRef: event.decisionDeltaRef,
+    decisionDeltaDigest: event.decisionDeltaDigest,
     nextStepEligibility: event.nextStepEligibility,
     errorCode: event.errorCode,
     retryable: event.retryable,
@@ -475,26 +530,30 @@ export function validateLoopCapabilityExecutionChain(
         // (read-path re-validation of an already-recorded jump).
         const restartTarget = context?.allowedRestartTargetIndex ?? null;
         const replayMode = context?.historicalReplayMode === true;
-        // Historical authorization is stable forever: the covering finding is
-        // an immutable journal fact. It validates already-recorded jumps on
-        // every replay.
-        const historicalOk = context?.historicalFindings !== undefined &&
+        // Recorded backward jumps are validated by immutable journal facts
+        // (covering finding / feedback record) on every replay — they were
+        // live-authorized when appended and stay authorized forever.
+        const isNewAppendEvent = !replayMode && index === events.length - 1;
+        const historicalOk =
+          !isNewAppendEvent &&
+          context?.historicalFindings !== undefined &&
           historicalRestartAuthorized(context.historicalFindings, thisIndex);
-        // Live exact-target authorization applies ONLY to the newly appended
-        // event in append mode — closed/resolved findings can never authorize
-        // fresh writes (Round 2 H1).
-        const liveExact =
-          !replayMode &&
-          index === events.length - 1 &&
-          restartTarget !== null && thisIndex === restartTarget;
-        const feedbackOk =
+        const historicalFeedbackOk =
+          !isNewAppendEvent &&
           thisIndex === 0 &&
           context?.feedbackChange !== null &&
           context?.feedbackChange !== undefined;
+        // Round 2 H1: the NEWLY appended event (last position, append mode)
+        // is authorized EXCLUSIVELY by the exact live pending Re-Gate target
+        // derived in the appending transaction — resolved or risk-accepted
+        // findings can never authorize fresh writes.
+        const liveExact =
+          isNewAppendEvent &&
+          restartTarget !== null && thisIndex === restartTarget;
         const isAuthorizedRestart =
           !isCanonicalNext &&
           thisIndex < previousIndex + 1 &&
-          (liveExact || historicalOk || feedbackOk);
+          (liveExact || historicalOk || historicalFeedbackOk);
         if (!isCanonicalNext && !isAuthorizedRestart) {
           invalid("capability execution must follow the canonical eligible chain");
         }
@@ -584,4 +643,29 @@ export function validateLoopCapabilityExecutionChain(
       active = null;
     }
   }
+}
+
+/**
+ * Pending revision materialization (Round 3 review F2): a succeeded producer
+ * execution whose node revision has NOT landed yet holds the terminal→revision
+ * window closed. Derived purely from journal facts — the earliest succeeded
+ * execution carrying a node output (scan rounds author their Finding Ledger,
+ * never a node revision) whose executionEventId no artifact revision names as
+ * its producer. While such a producer exists, no entry may dispatch again;
+ * recovery finalizes (or replays) the revision materialization instead of
+ * re-calling the agent.
+ */
+export function findPendingRevisionProducerExecution(
+  events: readonly LoopCapabilityExecutionEvent[],
+  revisions: readonly Readonly<{ producerExecutionId: string }>[],
+): LoopCapabilityExecutionEvent | null {
+  const materialized = new Set(revisions.map((revision) => revision.producerExecutionId));
+  for (const event of events) {
+    if (event.status !== "succeeded") continue;
+    if (event.outputArtifactRef === null || event.outputDigest === null) continue;
+    if (event.capability === "solution-gate" && event.executionRole === "adversarial_scan") continue;
+    if (materialized.has(event.executionEventId)) continue;
+    return event;
+  }
+  return null;
 }

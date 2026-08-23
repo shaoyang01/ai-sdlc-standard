@@ -7,20 +7,19 @@
 //
 // Inputs are reduced facts only:
 // - findings: status / severity / earliestAffectedNodeId / createdAt;
-// - currentByNode: per-node CURRENT revision facts (validity + createdAt).
+// - currentByNode: per-node CURRENT revision facts (validity + generation).
 //
 // Semantics (plan §C02-WP4, impact analysis §8 F row 4):
-// - Only OPEN findings with blocking severity (CRITICAL | HIGH) force a
-//   Re-Gate generation. MEDIUM/LOW are recorded improvements (G1 §3) and
-//   never restart the chain.
+// - Every OPEN finding blocks completion. Only causal regressions raised
+//   against a fix-wave product re-drive a Re-Gate generation; findings on
+//   the original product remain improvement obligations without rerouting.
 // - A finding's rebuild scope is its canonical downstream set (itself
 //   included). The scope is incomplete while any node in it has no current
-//   revision, a non-ACTIVE current, or a current authored no later than the
-//   finding itself.
+//   revision or a non-ACTIVE current.
 // - The restart target is the FIRST node of the governing finding's scope
-//   (earliest start index; tie → oldest finding) that still needs a
-//   rebuild. Upstream nodes are reused read-only; everything from the
-//   target on must be rebuilt and re-gated.
+//   (earliest start index; tie → oldest finding) that still needs a rebuild.
+//   Upstream nodes are reused read-only; everything from the target on must
+//   be rebuilt and re-gated.
 
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -38,6 +37,15 @@ export interface RegateFindingFacts {
   earliestAffectedNodeId: NodeCapabilityId;
   /** Kept only as a deterministic tie-breaker between same-node findings. */
   createdAt: string;
+  /**
+   * DIRECT causal evidence (Round 2 review H2): the raising capability
+   * declares REGRESSION (re-drives its rebuild scope) or IMPROVEMENT (blocks
+   * completion only). Restart authorization is never inferred from a
+   * revision's sequence number — both false positives (a sequence-2
+   * improvement) and false negatives (a sequence-1 baseline invalidation)
+   * are impossible by construction.
+   */
+  causeKind: "REGRESSION" | "IMPROVEMENT";
 }
 
 /** Reduced facts for a node's CURRENT artifact revision pointer. */
@@ -63,7 +71,7 @@ export interface RegatePlan {
   restartPointIndex: number | null;
   /** Canonical node of the restart point (null when kind === "none"). */
   restartNode: NodeCapabilityId | null;
-  /** Findings driving this plan (blocking severity, incomplete scope). */
+  /** Causal OPEN findings driving this plan (incomplete scope). */
   governingFindingIds: readonly string[];
   /** Earliest affected node of the governing set. */
   earliestAffectedNode: NodeCapabilityId | null;
@@ -120,6 +128,16 @@ export function nodeNeedsRebuild(
 }
 
 /**
+ * G1 causal classification (Round 2 review H2): a finding re-drives the wave
+ * only when its DIRECT declared cause kind is REGRESSION. The kind is a
+ * mandatory persisted fact on every finding — there is no inference from
+ * revision sequence numbers and no unknown default.
+ */
+function isCausalRegression(finding: RegateFindingFacts): boolean {
+  return finding.causeKind === "REGRESSION";
+}
+
+/**
  * Plans the next dispatch under open Re-Gate obligations. Deterministic and
  * side-effect free: identical facts always yield the identical plan, so a
  * fresh agent can recover the same next action from the journal alone.
@@ -163,10 +181,16 @@ export function planRegateFromFacts(
     });
   }
   // Frozen v2 contract: ANY open finding blocks its scope's validity and
-  // drives a rebuild wave — severity never exempts a finding from the
-  // current-authority rules (computeFindingGate blocks on every OPEN).
+  // completion (computeFindingGate blocks on every OPEN). Round 2 review H2:
+  // only CAUSAL regressions — findings whose declared causeKind is REGRESSION,
+  // bound to the fix-wave revision that introduced them — RE-DRIVE a backward
+  // wave. IMPROVEMENT findings keep completion blocked until resolved but
+  // never re-route the chain, regardless of their source revision's sequence.
   const pending = findings.filter(
-    (finding) => finding.status === "OPEN" && scopeIncomplete(finding, currentByNode),
+    (finding) =>
+      finding.status === "OPEN" &&
+      scopeIncomplete(finding, currentByNode) &&
+      isCausalRegression(finding),
   );
   if (pending.length === 0) {
     return Object.freeze({
@@ -238,13 +262,13 @@ export function planRegateFromFacts(
 /**
  * Historical restart authorization (read-path counterpart of the live
  * pending-plan check): a recorded backward jump to `targetPointIndex` is
- * accepted during full-chain re-validation iff some blocking-severity,
- * non-superseded finding whose rebuild scope covers the target node exists
- * anywhere in the run. Findings and revisions are immutable journal facts,
- * so re-validation never retroactively rejects a jump that was authorized
- * when it happened — while a journal with no covering finding still fails
- * closed. Creation-time comparisons are deliberately NOT used here:
- * findings may carry forward-dated createdAt by contract.
+ * accepted during full-chain re-validation iff some non-superseded causal
+ * finding whose rebuild scope covers the target node exists anywhere in the
+ * run. Finding source revisions are immutable journal facts, so replay can
+ * distinguish a fix-wave regression from an original-product improvement.
+ * A journal with no covering causal finding fails closed. Creation-time
+ * comparisons are deliberately NOT used here: findings may carry
+ * forward-dated createdAt by contract.
  */
 export function historicalRestartAuthorized(
   findings: readonly RegateFindingFacts[],
@@ -255,6 +279,7 @@ export function historicalRestartAuthorized(
   const targetIdx = NODE_CAPABILITY_IDS.indexOf(targetNode);
   return findings.some((finding) =>
     finding.status !== "SUPERSEDED" &&
+    isCausalRegression(finding) &&
     NODE_CAPABILITY_IDS.indexOf(finding.earliestAffectedNodeId) <= targetIdx,
   );
 }

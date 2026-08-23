@@ -62,6 +62,12 @@ export interface LoopCapabilityEntryResult {
   attempt: number;
   execution: ExecutionResult;
   recoveryContext: RunRecoveryContext;
+  /**
+   * Round 3 review F2: the exact succeeded terminal event id committed by
+   * THIS dispatch (null when the dispatch did not succeed). Revision
+   * materialization binds to this identity, never to the journal tail.
+   */
+  producerTerminalEventId: string | null;
 }
 
 const REQUEST_FIELDS = [
@@ -146,6 +152,17 @@ export class LoopCapabilityEntry {
     }
     if (recovery.status !== "running") {
       throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability entry requires a running run");
+    }
+    // Re-review F2-1: a supported entry must not treat the recovery pointer
+    // as directly dispatchable while a succeeded producer's node revision is
+    // still pending. The terminal→revision window closes only after the
+    // materialization replay lands; until then every entry fails closed
+    // before any input verification or agent dispatch.
+    if (recovery.pendingRevisionMaterialization !== null) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "pending revision materialization holds the dispatch window closed",
+      );
     }
     const interruptedAttempt = recovery.capabilityChainStatus === "RUNNING"
       ? recovery.lastCapabilityExecution
@@ -308,6 +325,7 @@ export class LoopCapabilityEntry {
       attempt,
       execution,
       recoveryContext: after,
+      producerTerminalEventId: execution.capabilityTerminalEventId ?? null,
     });
   }
 

@@ -20,6 +20,18 @@ import type { LoopRunIdentity } from "../core/loop-executor-types";
 import type { CodexRunner } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: a supported entry may only cross to the NEXT point after
+// the previous producer's node revision has landed — seed the runtime replay
+// before every cross-point dispatch in these scenarios.
+function lastSucceededProducer(runStore: LoopRunStore, runId: string, capability: NodeCapabilityId): Parameters<typeof materializeProducerRevision>[3] {
+  const produced = [...runStore.listCapabilityExecutions(runId)]
+    .reverse()
+    .find((event) => event.status === "succeeded" && event.capability === capability);
+  if (produced === undefined) throw new Error(`no succeeded producer for ${capability}`);
+  return produced;
+}
 import type { NodeCapabilityId } from "../loop/types";
 
 let passed = 0;
@@ -219,6 +231,11 @@ async function main(): Promise<void> {
       input: { requirement: "validate replacement guards" },
     });
     const intakeState = intake.recoveryContext.capabilityStates[0]!;
+    materializeProducerRevision(
+      runStore, id.requirementId, id.runId,
+      lastSucceededProducer(runStore, id.runId, "requirement-intake"),
+      () => TS,
+    );
     const techInput = {
       inputArtifactRef: intakeState.effectiveOutputArtifactRef!,
       inputArtifactVersion: intakeState.effectiveOutputArtifactVersion!,
@@ -256,7 +273,9 @@ async function main(): Promise<void> {
       capability: "solution-design",
       executionRole: "primary" as const,
       ...techInput,
-      outputArtifactVersion: "1.0.0",
+      // Runtime versioning: attempt N of a point produces semver N.0.0, so
+      // the producer's revision materialization stays bound to its output.
+      outputArtifactVersion: "2.0.0",
       input: { requirementSummaryRef: techInput.inputArtifactRef },
     });
     equal(retry.attempt, 2, "retry is recorded as a new attempt");
@@ -268,6 +287,11 @@ async function main(): Promise<void> {
     equal(techEvents[0]?.executorAgent, "kimi", "failed attempt preserves the replacement executor snapshot");
     equal(techEvents[2]?.executorAgent, "codex", "retry records the newly selected executor snapshot");
     equal(techEvents[0]?.inputDigest, techEvents[2]?.inputDigest, "retry preserves the verified input lineage");
+    materializeProducerRevision(
+      runStore, id.requirementId, id.runId,
+      lastSucceededProducer(runStore, id.runId, "solution-design"),
+      () => TS,
+    );
 
     const techState = retry.recoveryContext.capabilityStates[1]!;
     const challenge = await entry(runStore, artifactStore, codexRegistry, runner((request) => qualifiedResult(request, [

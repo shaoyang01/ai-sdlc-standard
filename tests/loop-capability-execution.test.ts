@@ -15,6 +15,7 @@ import {
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
+import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunIdentity } from "../core/loop-executor-types";
 import {
   CAPABILITY_ARTIFACT_TYPES,
@@ -28,6 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { materializeProducerRevision } from "../runtime";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
@@ -106,6 +108,10 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     unresolvedFindingsDigest: null,
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
+    decisionDepth: null,
+    decisionScopeId: null,
+    decisionDeltaRef: null,
+    decisionDeltaDigest: null,
     nextStepEligibility: null,
     errorCode: null,
     retryable: null,
@@ -188,6 +194,16 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
     input: { requirement: "recover an interrupted execution" },
   });
   const output = first.recoveryContext.capabilityStates[0]!;
+  // F2-1: land the intake producer's revision so later entries dispatch
+  // against an established current instead of an open terminal→revision
+  // window.
+  materializeProducerRevision(
+    runStore, id.requirementId, id.runId,
+    runStore.listCapabilityExecutions(id.runId).find(
+      (event) => event.executionEventId === first.producerTerminalEventId,
+    ) ?? runStore.listCapabilityExecutions(id.runId).at(-1)!,
+    () => TS,
+  );
   return Object.freeze({
     root,
     id,
@@ -286,7 +302,7 @@ async function main(): Promise<void> {
     v6Store.createRun(identity(migrationRoot));
     v6Store.close();
     const v6db = new Database(v6Path);
-    ok(v6db.pragma("user_version", { simple: true }) === 6, "fresh store declares format v6");
+    ok(v6db.pragma("user_version", { simple: true }) === 7, "fresh store declares format v7");
     v6db.close();
     const reopened = new LoopRunStore(v6Path);
     reopened.init();
@@ -294,7 +310,7 @@ async function main(): Promise<void> {
     reopened.close();
 
     // Known historical formats 1..5 are rejected — never migrated.
-    for (const historical of [1, 2, 3, 4, 5]) {
+    for (const historical of [1, 2, 3, 4, 5, 6]) {
       const historicalPath = join(migrationRoot, `historical-${historical}.db`);
       const seed = new Database(historicalPath);
       seed.pragma(`user_version = ${historical}`);
@@ -306,10 +322,10 @@ async function main(): Promise<void> {
     // A declared version above the supported one is a future format.
     const futurePath = join(migrationRoot, "future.db");
     const futureSeed = new Database(futurePath);
-    futureSeed.pragma("user_version = 7");
+    futureSeed.pragma("user_version = 8");
     futureSeed.close();
     const futureRejected = new LoopRunStore(futurePath);
-    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 7 is rejected as a future format");
+    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 8 is rejected as a future format");
 
     // An unversioned database that already carries LOOP business tables is
     // history, never a fresh store; an empty v0 database initializes fresh.
@@ -324,7 +340,7 @@ async function main(): Promise<void> {
     new Database(freshPath).close();
     const freshStore = new LoopRunStore(freshPath);
     freshStore.init();
-    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 6, "empty unversioned database initializes fresh to v6");
+    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 7, "empty unversioned database initializes fresh to v7");
     freshStore.close();
 
     // Inside the declared v6 format, drift is STORE_CORRUPT — not a format
@@ -424,6 +440,10 @@ async function main(): Promise<void> {
       inputDigest: scanOutputDigest,
       consumedFindingsRef: ledgerRef,
       consumedFindingsDigest: ledgerDigest,
+      decisionDepth: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
     });
     throwsCode(
       "INVALID_INPUT",
@@ -442,6 +462,10 @@ async function main(): Promise<void> {
       inputDigest: scanOutputDigest,
       consumedFindingsRef: ledgerRef,
       consumedFindingsDigest: ledgerDigest,
+      decisionDepth: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
     });
     const reviewDigest = "d".repeat(64);
     const reviewRef = `loop-artifact:v1:solution_review:sha256:${reviewDigest}`;
@@ -456,6 +480,10 @@ async function main(): Promise<void> {
         outputArtifactVersion: "1.0.0",
         outputDigest: reviewDigest,
         gateResult: "NOT_APPLICABLE",
+        decisionDepth: "STANDARD" as const,
+        decisionScopeId: "run-wp4b-001:decision:1",
+        decisionDeltaRef: reviewRef,
+        decisionDeltaDigest: reviewDigest,
         nextStepEligibility: "ELIGIBLE",
       }),
     ], "run-wp4b-001"), "formal_verdict success without a conclusive Gate result is rejected");
@@ -470,6 +498,10 @@ async function main(): Promise<void> {
         outputArtifactVersion: "1.0.0",
         outputDigest: reviewDigest,
         gateResult: "PASS_WITH_RISK",
+        decisionDepth: "STANDARD" as const,
+        decisionScopeId: "run-wp4b-001:decision:1",
+        decisionDeltaRef: reviewRef,
+        decisionDeltaDigest: reviewDigest,
         nextStepEligibility: "ELIGIBLE",
       }),
     ], "run-wp4b-001");
@@ -541,6 +573,13 @@ async function main(): Promise<void> {
         gateResult: "NOT_APPLICABLE",
         nextStepEligibility: "ELIGIBLE",
       }));
+      // F2-1: land the producer's revision before the next point starts so
+      // the seeded chain stays a legal precondition chain.
+      materializeProducerRevision(
+        gateStore, gateIdentity.requirementId, gateIdentity.runId,
+        gateStore.listCapabilityExecutions(gateIdentity.runId).at(-1)!,
+        () => TS,
+      );
       inputRef = outputRef;
       inputDigest = outputDigest;
       sequence += 2;
@@ -674,6 +713,10 @@ async function main(): Promise<void> {
           unresolvedFindingsDigest: null,
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
+          decisionDepth: null,
+          decisionScopeId: null,
+          decisionDeltaRef: null,
+          decisionDeltaDigest: null,
           nextStepEligibility: null,
           errorCode: null,
           retryable: null,
@@ -689,9 +732,16 @@ async function main(): Promise<void> {
         const ledgerEnvelope = isScanPoint
           ? chainArtifacts.put("capability_findings", `[] scan round @${sequence}`)
           : null;
-        const gateResult = capability === "solution-gate" && executionRole === "formal_verdict"
+        const isVerdictPoint = capability === "solution-gate" && executionRole === "formal_verdict";
+        const gateResult = isVerdictPoint
           ? "PASS" as const
           : "NOT_APPLICABLE" as const;
+        // v4: the stub verdict materializes its STANDARD depth decision with
+        // an immutable delta artifact, mirroring runtime.ts.
+        const decisionScopeId = isVerdictPoint ? `${runId}:decision:${context.attempt}` : null;
+        const decisionDelta = isVerdictPoint
+          ? chainArtifacts.put("solution_review", `depth=STANDARD decision delta for ${runId} attempt ${context.attempt}`)
+          : null;
         chainStore.appendCapabilityExecution(Object.freeze({
           ...base,
           executionEventId: `${runId}:capability:${sequence + 1}:succeeded`,
@@ -706,6 +756,10 @@ async function main(): Promise<void> {
           unresolvedFindingsDigest: ledgerEnvelope?.digest ?? null,
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
+          decisionDepth: isVerdictPoint ? ("STANDARD" as const) : null,
+          decisionScopeId,
+          decisionDeltaRef: decisionDelta?.artifactRef ?? null,
+          decisionDeltaDigest: decisionDelta?.digest ?? null,
           nextStepEligibility: "ELIGIBLE" as const,
           errorCode: null,
           retryable: null,
@@ -749,6 +803,53 @@ async function main(): Promise<void> {
       });
       ok(step.execution.success === true, `${point.capability}/${point.executionRole} produces a qualified traced result`);
       chainRecovery = step.recoveryContext;
+      if (point.capability === "solution-gate" && point.executionRole === "formal_verdict") {
+        ok(
+          chainRecovery.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
+          "verdict without its current gate revision remains BLOCKED_UNKNOWN",
+        );
+        ok(
+          chainRecovery.nextExecutionPoint === null && chainRecovery.nextCapability === null,
+          "blocked depth decision exposes no contradictory next dispatch projection",
+        );
+        ok(
+          chainRecovery.capabilityChainStatus === "BLOCKED",
+          "blocked depth decision projects a BLOCKED capability chain",
+        );
+      }
+      // Round 2 H2: the depth decision binds to the CURRENT gate-node
+      // revision, so a compliant driver authors a node revision after every
+      // succeeded execution (mirroring runtime.ts). Scan rounds persist only
+      // their Finding Ledger and never author the solution-gate revision.
+      const produced = chainStore.listCapabilityExecutions(chainIdentity.runId).at(-1)!;
+      const isChainScanRound =
+        produced.capability === "solution-gate" && produced.executionRole === "adversarial_scan";
+      if (!isChainScanRound) {
+        const priorForNode = chainStore.listArtifactRevisions(chainIdentity.runId)
+          .filter((item) => item.nodeId === produced.capability);
+        const nodeIdx = NODE_CAPABILITY_IDS.indexOf(produced.capability);
+        const upstreamNodeId = nodeIdx > 0 ? NODE_CAPABILITY_IDS[nodeIdx - 1]! : null;
+        const upstreamCurrent = upstreamNodeId === null
+          ? undefined
+          : chainStore.getCurrentArtifactRevision(chainIdentity.runId, upstreamNodeId);
+        chainStore.appendArtifactRevision(createLoopArtifactRevision({
+          runId: chainIdentity.runId,
+          requirementId: chainIdentity.requirementId,
+          nodeId: produced.capability,
+          sequence: priorForNode.length + 1,
+          generation: chainStore.getRunGeneration(chainIdentity.runId),
+          stablePath: `library/${chainIdentity.requirementId}/${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].stablePathSegment}/${chainIdentity.requirementId}_${produced.capability}.md`,
+          artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[produced.capability].artifactKind,
+          semver: `${produced.attempt}.0.0`,
+          artifactRef: produced.outputArtifactRef!,
+          digest: produced.outputDigest!,
+          producerExecutionId: produced.executionEventId,
+          producerExecutionRole: produced.executionRole,
+          gateResult: produced.gateResult,
+          upstreamRevisionIds: upstreamCurrent === undefined ? [] : [upstreamCurrent.revisionId],
+          createdAt: stubNow(),
+        }));
+      }
       const pointState = chainRecovery.executionPointStates[index]!;
       chainInput = {
         artifactRef: pointState.effectiveOutputArtifactRef!,
@@ -979,6 +1080,14 @@ async function main(): Promise<void> {
     const currentOutput = first.recoveryContext.capabilityStates[0]!;
     ok(currentOutput.effectiveOutputArtifactRef !== null, "recovery exposes effective output ref");
     ok(currentOutput.effectiveOutputDigest !== null, "recovery exposes effective output digest");
+    // F2-1: the second entry may only start after intake's revision landed.
+    materializeProducerRevision(
+      runStore, id.requirementId, id.runId,
+      runStore.listCapabilityExecutions(id.runId).find(
+        (event) => event.executionEventId === first.producerTerminalEventId,
+      )!,
+      () => TS,
+    );
 
     const unrelated = artifactStore.put("capability_output", "unrelated but valid artifact");
     await rejectsCode("INVALID_INPUT", () => entry.execute({

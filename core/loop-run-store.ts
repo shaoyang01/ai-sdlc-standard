@@ -36,6 +36,7 @@ import {
 } from "./loop-run-state";
 import {
   canonicalizeLoopCapabilityExecutionEvent,
+  findPendingRevisionProducerExecution,
   validateLoopCapabilityExecutionChain,
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
@@ -88,16 +89,16 @@ import {
   type LoopFindingProof,
 } from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
-import { NODE_CAPABILITY_IDS } from "../loop/types";
+import { LOOP_CAPABILITY_EXECUTION_POINTS, NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v6. Known
-// historical formats 1..5 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
-// they are never semantically migrated. A declared version above 6 is
-// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v6, schema or canonical
+// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v7. Known
+// historical formats 1..6 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
+// they are never semantically migrated. A declared version above 7 is
+// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v7, schema or canonical
 // hash drift is STORE_CORRUPT.
-const LOOP_RUN_STORE_FORMAT_VERSION = 6;
+const LOOP_RUN_STORE_FORMAT_VERSION = 7;
 
 /**
  * The COMPLETE LOOP physical table catalogue (Round 1 corrections, H2): every
@@ -349,6 +350,10 @@ type CapabilityExecutionRow = {
   unresolved_findings_digest: string | null;
   consumed_findings_ref: string | null;
   consumed_findings_digest: string | null;
+  decision_depth: string | null;
+  decision_scope_id: string | null;
+  decision_delta_ref: string | null;
+  decision_delta_digest: string | null;
   next_step_eligibility: string | null;
   error_code: string | null;
   retryable: number | null;
@@ -437,6 +442,8 @@ type FindingRow = {
   sequence: number;
   source_capability: string;
   source_revision_id: string | null;
+  cause_kind: string;
+  introduced_by_revision_id: string | null;
   severity: string;
   category: string;
   evidence_ref: string;
@@ -449,6 +456,7 @@ type FindingRow = {
   risk_accepted_by: string | null;
   risk_acceptance_evidence_ref: string | null;
   risk_acceptance_evidence_digest: string | null;
+  risk_accepted_scope_id: string | null;
   superseded_by: string | null;
   created_at: string;
   canonical_sha256: string;
@@ -471,6 +479,7 @@ type FindingProofRow = {
   evidence_ref: string;
   evidence_digest: string;
   risk_accepted_by: string | null;
+  risk_accepted_scope_id: string | null;
   canonical_sha256: string;
 };
 
@@ -527,7 +536,7 @@ function eventToRow(event: LoopRunEvent): EventRow {
 
 function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 3,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as 4,
     executionEventId: row.execution_event_id,
     runId: row.run_id,
     sequence: asPersistedSafeInteger(row.sequence),
@@ -554,6 +563,10 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     unresolvedFindingsDigest: row.unresolved_findings_digest,
     consumedFindingsRef: row.consumed_findings_ref,
     consumedFindingsDigest: row.consumed_findings_digest,
+    decisionDepth: row.decision_depth as LoopCapabilityExecutionEvent["decisionDepth"],
+    decisionScopeId: row.decision_scope_id,
+    decisionDeltaRef: row.decision_delta_ref,
+    decisionDeltaDigest: row.decision_delta_digest,
     nextStepEligibility: row.next_step_eligibility as LoopCapabilityExecutionEvent["nextStepEligibility"],
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
@@ -590,6 +603,10 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     unresolved_findings_digest: event.unresolvedFindingsDigest,
     consumed_findings_ref: event.consumedFindingsRef,
     consumed_findings_digest: event.consumedFindingsDigest,
+    decision_depth: event.decisionDepth,
+    decision_scope_id: event.decisionScopeId,
+    decision_delta_ref: event.decisionDeltaRef,
+    decision_delta_digest: event.decisionDeltaDigest,
     next_step_eligibility: event.nextStepEligibility,
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
@@ -834,13 +851,15 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 function rowToFinding(row: FindingRow): LoopFinding {
   return Object.freeze({
     // The schema version is a fixed model constant, not a persisted column.
-    schemaVersion: 2,
+    schemaVersion: 4,
     findingId: row.finding_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
     sequence: asPersistedSafeInteger(row.sequence),
     sourceCapability: row.source_capability as LoopFinding["sourceCapability"],
     sourceRevisionId: row.source_revision_id,
+    causeKind: row.cause_kind as LoopFinding["causeKind"],
+    introducedByRevisionId: row.introduced_by_revision_id,
     severity: row.severity as LoopFinding["severity"],
     category: row.category as LoopFinding["category"],
     evidenceRef: row.evidence_ref,
@@ -853,6 +872,7 @@ function rowToFinding(row: FindingRow): LoopFinding {
     riskAcceptedBy: row.risk_accepted_by,
     riskAcceptanceEvidenceRef: row.risk_acceptance_evidence_ref,
     riskAcceptanceEvidenceDigest: row.risk_acceptance_evidence_digest,
+    riskAcceptedScopeId: row.risk_accepted_scope_id,
     supersededBy: row.superseded_by,
     createdAt: row.created_at,
   });
@@ -862,20 +882,24 @@ function insertFindingRow(db: Database.Database, record: LoopFinding): void {
   db.prepare(
     `INSERT INTO loop_findings (
       finding_id, run_id, requirement_id, sequence, source_capability,
-      source_revision_id, severity, category, evidence_ref, evidence_digest,
+      source_revision_id, cause_kind, introduced_by_revision_id, severity,
+      category, evidence_ref, evidence_digest,
       earliest_affected_node_id, status, resolved_by_revision_id,
       resolution_evidence_ref, resolution_evidence_digest, risk_accepted_by,
       risk_acceptance_evidence_ref, risk_acceptance_evidence_digest,
+      risk_accepted_scope_id,
       superseded_by, created_at, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.findingId, record.runId, record.requirementId, record.sequence,
-    record.sourceCapability, record.sourceRevisionId, record.severity,
+    record.sourceCapability, record.sourceRevisionId, record.causeKind,
+    record.introducedByRevisionId, record.severity,
     record.category, record.evidenceRef, record.evidenceDigest,
     record.earliestAffectedNodeId, record.status, record.resolvedByRevisionId,
     record.resolutionEvidenceRef, record.resolutionEvidenceDigest,
     record.riskAcceptedBy, record.riskAcceptanceEvidenceRef,
-    record.riskAcceptanceEvidenceDigest, record.supersededBy, record.createdAt,
+    record.riskAcceptanceEvidenceDigest, record.riskAcceptedScopeId,
+    record.supersededBy, record.createdAt,
     sha256Hex(canonicalizeLoopFinding(record)),
   );
 }
@@ -891,6 +915,7 @@ function rowToFindingProof(row: FindingProofRow): LoopFindingProof {
     evidenceRef: row.evidence_ref,
     evidenceDigest: row.evidence_digest,
     riskAcceptedBy: row.risk_accepted_by,
+    riskAcceptedScopeId: row.risk_accepted_scope_id,
   });
 }
 
@@ -899,12 +924,14 @@ function insertFindingProofRow(db: Database.Database, proof: LoopFindingProof, r
     `INSERT INTO loop_finding_proofs (
       finding_id, proof_kind, revision_id, revision_node_id,
       revision_artifact_ref, revision_artifact_digest,
-      evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      evidence_ref, evidence_digest, risk_accepted_by,
+      risk_accepted_scope_id, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     proof.findingId, proof.proofKind, proof.revisionId, proof.revisionNodeId,
     proof.revisionArtifactRef, proof.revisionArtifactDigest,
     proof.evidenceRef, proof.evidenceDigest, proof.riskAcceptedBy,
+    proof.riskAcceptedScopeId,
     sha256Hex(canonicalizeLoopFindingProof(proof, runId)),
   );
 }
@@ -1202,6 +1229,10 @@ export class LoopRunStore {
               unresolved_findings_digest TEXT,
               consumed_findings_ref TEXT,
               consumed_findings_digest TEXT,
+              decision_depth TEXT,
+              decision_scope_id TEXT,
+              decision_delta_ref TEXT,
+              decision_delta_digest TEXT,
               next_step_eligibility TEXT,
               error_code TEXT,
               retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
@@ -1329,6 +1360,8 @@ export class LoopRunStore {
                 sequence INTEGER NOT NULL,
                 source_capability TEXT NOT NULL,
                 source_revision_id TEXT NOT NULL,
+                cause_kind TEXT NOT NULL,
+                introduced_by_revision_id TEXT,
                 severity TEXT NOT NULL,
                 category TEXT NOT NULL,
                 evidence_ref TEXT NOT NULL,
@@ -1341,6 +1374,7 @@ export class LoopRunStore {
                 risk_accepted_by TEXT,
                 risk_acceptance_evidence_ref TEXT,
                 risk_acceptance_evidence_digest TEXT,
+                risk_accepted_scope_id TEXT,
                 superseded_by TEXT,
                 created_at TEXT NOT NULL,
                 canonical_sha256 TEXT NOT NULL,
@@ -1374,6 +1408,7 @@ export class LoopRunStore {
                 evidence_ref TEXT NOT NULL,
                 evidence_digest TEXT NOT NULL,
                 risk_accepted_by TEXT,
+                risk_accepted_scope_id TEXT,
                 canonical_sha256 TEXT NOT NULL,
                 CHECK (proof_kind IN ('RESOLUTION', 'RISK_ACCEPTANCE')),
                 FOREIGN KEY (finding_id)
@@ -1722,32 +1757,53 @@ export class LoopRunStore {
         if (current.some((item) => item.sequence === event.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
         }
+        // Re-review F2-1: the terminal→revision window is a TRANSACTION
+        // invariant of every started append, not merely a permit rule. While
+        // a succeeded producer's node revision has not landed, no client —
+        // runtime, supported entry, or bare gateway — may open another
+        // capability attempt: the same-transaction check below makes the
+        // bypass impossible instead of delegating it to callers.
+        if (event.status === "started") {
+          const pendingProducer = findPendingRevisionProducerExecution(
+            current,
+            this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId),
+          );
+          if (pendingProducer !== null) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "a pending revision producer holds the dispatch window closed",
+            );
+          }
+        }
         try {
           const regateContext = this.regateChainContextInTransaction(db, event.runId);
           // WP4 Round 1 H1 fix: append-time authorization is ONLY the live
           // pending Re-Gate target derived in this transaction. Historical
           // findings never authorize new writes — resolved/accepted findings
           // must not let a stale scope re-trigger downstream rebuilds.
-          try {
-            validateLoopCapabilityExecutionChain([...current, event], event.runId, {
-              allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
-              historicalFindings: regateContext.historicalFindings,
-              historicalReplayMode: false,
-              feedbackChange: regateContext.feedbackChange,
-            });
-          } catch (error) {
-            if (error instanceof LoopRunJournalError) {
-              const pts = ["requirement-intake:primary","solution-design:primary","solution-gate:adversarial_scan","solution-gate:formal_verdict","task-planning:primary","implementation:primary","code-review:primary","knowledge-sync:primary"];
-              const idxOf = (cap: string, role: string) => pts.indexOf(`${cap}:${role}`);
-              const prevEv2 = [...current].reverse().find((e) => e.status === "succeeded");
-            }
-            throw error;
-          }
+          //
+          // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
+          // live pending target derived above in this transaction.
+          validateLoopCapabilityExecutionChain([...current, event], event.runId, {
+            allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
+            historicalFindings: regateContext.historicalFindings,
+            feedbackChange: regateContext.feedbackChange,
+          });
         } catch (error) {
           if (error instanceof LoopRunJournalError) {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
           }
           throw error;
+        }
+        // v4 (re-review F1): the decision delta is physically bound like
+        // revision outputs and finding evidence — the blob must exist in the
+        // artifact store with a matching digest before the verdict lands.
+        // Error mapping matches verifyRevisionBlob/verifyFindingEvidenceBlob:
+        // missing or digest-drifted blobs reject the transition, corrupt blob
+        // content fails closed as STORE_CORRUPT, and only genuine I/O faults
+        // surface as STORE_FAILURE.
+        if (event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null) {
+          this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "append");
         }
         this.insertCapabilityExecutionRow(db, row);
         return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
@@ -2009,6 +2065,35 @@ export class LoopRunStore {
         if (current.some((item) => item.sequence === record.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "requirement change sequence is occupied");
         }
+        // Round 2 re-review F3: a FEEDBACK_DRIVEN_CHANGE record must cite the
+        // run's CURRENT authoritative generation as previousGeneration — the
+        // generation it closes. Skipping ahead (previousGeneration beyond the
+        // authority), regressing behind it, or re-citing an already-superseded
+        // generation would fork or rewind the generation authority derived
+        // from this very chain. Baseline: no prior feedback record means the
+        // run sits in generation 1, so previousGeneration must be exactly 1.
+        if (
+          record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+          record.status === "CLASSIFIED" &&
+          record.previousGeneration !== null
+        ) {
+          let authoritative = 1;
+          for (const item of current) {
+            if (
+              item.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+              item.status === "CLASSIFIED" &&
+              item.previousGeneration !== null
+            ) {
+              authoritative = item.previousGeneration + 1;
+            }
+          }
+          if (record.previousGeneration !== authoritative) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              `FEEDBACK_DRIVEN_CHANGE must close the current generation ${authoritative}, got ${record.previousGeneration}`,
+            );
+          }
+        }
         // Cross-run NEW_REQUIREMENT uniqueness: NEW_REQUIREMENT is only legal
         // while the requirement has no classified change record in ANY run.
         // The chain validator covers the current run; this check binds the
@@ -2210,6 +2295,40 @@ export class LoopRunStore {
   }
 
   /**
+   * Decision-delta blob binding (Recovery §2.1 read-path parity with
+   * revisions and finding evidence): when an artifact store is bound, a
+   * materialized decision delta must reference a blob that physically exists
+   * with the declared digest. A missing or drifted blob rejects the
+   * transition on append (ILLEGAL_TRANSITION) and is journal corruption on
+   * read (STORE_CORRUPT); corrupt blob content fails closed as STORE_CORRUPT
+   * on both paths; only genuine artifact-store I/O failures translate to
+   * STORE_FAILURE.
+   */
+  private verifyDecisionDeltaBlob(ref: string, digest: string, mode: "append" | "read"): void {
+    if (this.artifactStore === null) return;
+    try {
+      this.artifactStore.read(ref, digest);
+    } catch (error) {
+      if (error instanceof LoopArtifactStoreError) {
+        if (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH") {
+          if (mode === "append") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "decision delta blob is missing in the bound artifact store",
+            );
+          }
+          corrupt("decision delta blob is missing in the bound artifact store");
+        }
+        if (error.code === "ARTIFACT_CORRUPT") {
+          corrupt("decision delta blob is corrupt in the bound artifact store");
+        }
+        storageFailure();
+      }
+      storageFailure();
+    }
+  }
+
+  /**
    * Append one immutable C02 WP-2 artifact revision. Revisions use their own
    * per-run+node sequence and never mutate the delivery-stage cursor, the
    * capability-attempt stream or the change chain. The owning run must exist,
@@ -2239,6 +2358,12 @@ export class LoopRunStore {
         const status = snapshot.state.status;
         if (status === "completed" || status === "failed" || status === "cancelled") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "terminal run must not accept artifact revisions");
+        }
+        // Round 2 re-review F4: a durably blocked run accepts no further
+        // writes on any append boundary — only releaseRunRegateBlock may
+        // return it to running.
+        if (status === "blocked") {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "blocked run must not accept artifact revisions");
         }
         if (snapshot.state.currentStage !== null) {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "artifact revisions require no active delivery stage");
@@ -2307,6 +2432,35 @@ export class LoopRunStore {
               "solution-gate current requires a formal_verdict agent different from adversarial_scan",
             );
           }
+        }
+        // Round 2 review H3: the revision's generation is bound to the RUN's
+        // generation authority — the latest verified CLASSIFIED
+        // FEEDBACK_DRIVEN_CHANGE record opens previousGeneration + 1, and
+        // generation 1 is the baseline. Node attempts never influence this
+        // number, so a retry cannot fork generations across nodes, and no
+        // caller can stamp an arbitrary generation onto a revision.
+        const changeRecords = this.readRequirementChangesInTransaction(
+          db,
+          record.runId,
+          snapshot.state.identity.requirementId,
+        );
+        let runGeneration = 1;
+        for (let index = changeRecords.length - 1; index >= 0; index -= 1) {
+          const change = changeRecords[index]!;
+          if (
+            change.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+            change.status === "CLASSIFIED" &&
+            change.previousGeneration !== null
+          ) {
+            runGeneration = change.previousGeneration + 1;
+            break;
+          }
+        }
+        if (record.generation !== runGeneration) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "artifact revision generation must equal the run's current feedback-opened generation",
+          );
         }
         // Blob binding (fifth binding): the producer journal match only proves
         // the claimed output triple; the physical blob must also exist in the
@@ -2572,6 +2726,8 @@ export class LoopRunStore {
   listRegateCurrentFacts(runId: string): ReadonlyArray<{
     nodeId: NodeCapabilityId;
     revisionId: string;
+    artifactRef: string;
+    digest: string;
     validity: string;
     createdAt: string;
     generation: number | null;
@@ -2592,6 +2748,8 @@ export class LoopRunStore {
       return Object.freeze(db.transaction((): Array<{
         nodeId: NodeCapabilityId;
         revisionId: string;
+        artifactRef: string;
+        digest: string;
         validity: string;
         createdAt: string;
         generation: number | null;
@@ -2607,6 +2765,8 @@ export class LoopRunStore {
         const facts: Array<{
           nodeId: NodeCapabilityId;
           revisionId: string;
+          artifactRef: string;
+          digest: string;
           validity: string;
           createdAt: string;
           generation: number | null;
@@ -2618,6 +2778,8 @@ export class LoopRunStore {
           facts.push(Object.freeze({
             nodeId: record.nodeId,
             revisionId: record.revisionId,
+            artifactRef: record.artifactRef,
+            digest: record.digest,
             validity: record.validity,
             createdAt: record.createdAt,
             generation: record.generation,
@@ -2627,6 +2789,8 @@ export class LoopRunStore {
       })() as Array<{
         nodeId: NodeCapabilityId;
         revisionId: string;
+        artifactRef: string;
+        digest: string;
         validity: string;
         createdAt: string;
         generation: number | null;
@@ -2645,6 +2809,225 @@ export class LoopRunStore {
    * instructions) may clear it. Recovery surfaces the code so a fresh agent
    * resumes into an honest BLOCKED instead of silently re-looping.
    */
+  /**
+   * The run's current Re-Gate generation authority (Round 2 review H3):
+   * derived from the verified change chain — the latest CLASSIFIED
+   * FEEDBACK_DRIVEN_CHANGE record with a non-null previousGeneration opens
+   * previousGeneration + 1; with no such record the run is in generation 1.
+   * Node attempts never influence this number, so retries cannot fork
+   * generations across nodes. Revision appends bind to this value
+   * fail-closed inside their own transaction.
+   */
+  getRunGeneration(runId: string): number {
+    const records = this.listRequirementChanges(runId);
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      const record = records[index]!;
+      if (
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.status === "CLASSIFIED" &&
+        record.previousGeneration !== null
+      ) {
+        return record.previousGeneration + 1;
+      }
+    }
+    return 1;
+  }
+
+  /**
+   * The number of PERSISTED backward jumps (Re-Gate rounds) in the verified
+   * execution stream (Round 2 review H4). Raw dispatch counts conflate
+   * linear progress with pathological cycles; only a jump to an earlier
+   * point consumes a round. Feedback waves and causal waves both count —
+   * they are both generation restarts.
+   */
+  countRegateRounds(runId: string): number {
+    const events = this.listCapabilityExecutions(runId);
+    const points = LOOP_CAPABILITY_EXECUTION_POINTS;
+    let rounds = 0;
+    let prevIdx = -1;
+    for (const event of events) {
+      if (event.status !== "started") continue;
+      const idx = points.findIndex(
+        (point) => point.capability === event.capability && point.executionRole === event.executionRole,
+      );
+      // Round 2 re-review F4: a same-point RETRY repeats the previous
+      // start's index and is NOT a generation restart — only a move to an
+      // EARLIER point consumes a round.
+      if (prevIdx >= 0 && idx !== prevIdx && idx < prevIdx + 1) rounds += 1;
+      prevIdx = idx;
+    }
+    return rounds;
+  }
+
+  /**
+   * The explicit release decision for a durably blocked run (Round 2 review
+   * H4): RISK_ACCEPTED or SCOPE_RESET appends a run_resumed event carrying
+   * the release code, clearing REGATE_ROUND_BUDGET_EXHAUSTED. Only the
+   * budget-exhausted block is releasable here; other blocks need their own
+   * governance paths.
+   */
+  releaseRunRegateBlock(
+    runId: string,
+    release: { kind: "RISK_ACCEPTED" | "SCOPE_RESET" },
+  ): void {
+    safeIdInput(runId, "runId");
+    if (
+      release === null || typeof release !== "object" ||
+      (release.kind !== "RISK_ACCEPTED" && release.kind !== "SCOPE_RESET")
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "release.kind must be RISK_ACCEPTED or SCOPE_RESET");
+    }
+    const snapshot = this.getSnapshot(runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "run not found");
+    }
+    if (snapshot.state.blockingReasonCode !== "REGATE_ROUND_BUDGET_EXHAUSTED") {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only a REGATE_ROUND_BUDGET_EXHAUSTED block is releasable");
+    }
+    const state = snapshot.state;
+    const sequence = state.lastSequence + 1;
+    this.appendEvent(Object.freeze({
+      eventId: `${runId}:${sequence}:run_resumed`,
+      runId,
+      sequence,
+      kind: "run_resumed" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: new Date().toISOString(),
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: release.kind,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
+  }
+
+  /**
+   * Single-transaction execution permit (Round 2 close-out B3): decides
+   * whether dispatching `targetPointIndex` is allowed BEFORE any external
+   * work happens. The prospective backward-jump round is computed and, when
+   * it exceeds the budget, REGATE_ROUND_BUDGET_EXHAUSTED is persisted in the
+   * SAME immediate transaction — an over-budget wave performs ZERO agent
+   * dispatches and zero revision writes. An active capability execution
+   * claim denies concurrent permits without persisting anything, so
+   * competing connections serialize on the existing claim invariant instead
+   * of racing past the budget.
+   */
+  authorizeRegateDispatch(
+    runId: string,
+    targetPointIndex: number,
+    maxRounds: number,
+  ): { allowed: boolean; blockedPersisted: boolean } {
+    safeIdInput(runId, "runId");
+    if (
+      !Number.isSafeInteger(targetPointIndex) || targetPointIndex < 0 ||
+      targetPointIndex >= LOOP_CAPABILITY_EXECUTION_POINTS.length
+    ) {
+      throw new LoopRunJournalError("INVALID_INPUT", "targetPointIndex must be a canonical point index");
+    }
+    if (!Number.isSafeInteger(maxRounds) || maxRounds < 1) {
+      throw new LoopRunJournalError("INVALID_INPUT", "maxRounds must be a positive safe integer");
+    }
+    const db = this.connection();
+    try {
+      return db.transaction((): { allowed: boolean; blockedPersisted: boolean } => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        const state = snapshot.state;
+        if (
+          state.status === "blocked" ||
+          (state.blockingReasonCode !== null && state.blockingReasonCode !== undefined)
+        ) {
+          return { allowed: false, blockedPersisted: false };
+        }
+        if (state.status !== "running") {
+          return { allowed: false, blockedPersisted: false };
+        }
+        const events = this.readCapabilityExecutionsInTransaction(db, runId);
+        // Budget basis: every explicit release decision RAISES the allowed
+        // round count by one (monotonic, no cross-stream sequence compare).
+        // A release authorizes completing the in-flight work it admits;
+        // further waves beyond the raised allowance re-block.
+        const releaseRow = db.prepare(
+          `SELECT COUNT(*) AS n FROM loop_events
+           WHERE run_id = ? AND kind = 'run_resumed'
+             AND reason_code IN ('RISK_ACCEPTED', 'SCOPE_RESET')`,
+        ).get(runId) as { n: number };
+        const releases = Number(releaseRow.n);
+        const effectiveMaxRounds = maxRounds + releases;
+        const points = LOOP_CAPABILITY_EXECUTION_POINTS;
+        let rounds = 0;
+        let prevIdx = -1;
+        for (const event of events) {
+          if (event.status !== "started") continue;
+          const idx = points.findIndex(
+            (point) => point.capability === event.capability && point.executionRole === event.executionRole,
+          );
+          if (prevIdx >= 0 && idx !== prevIdx && idx < prevIdx + 1) rounds += 1;
+          prevIdx = idx;
+        }
+        const last = events[events.length - 1];
+        if (last !== undefined && last.status === "started") {
+          // Active execution claim: another connection is mid-dispatch.
+          // Deny without persisting — the budget is adjudicated after the
+          // claim settles.
+          return { allowed: false, blockedPersisted: false };
+        }
+        // Round 3 review F2: a succeeded producer whose node revision has not
+        // landed yet holds the terminal→revision window closed. No entry may
+        // dispatch any point while materialization is pending — deny WITHOUT
+        // persisting a budget block, so the pending revision append itself
+        // and later linear progress stay admissible.
+        const pendingProducer = findPendingRevisionProducerExecution(
+          events,
+          this.readArtifactRevisionsInTransaction(db, runId, snapshot.state.identity.requirementId),
+        );
+        if (pendingProducer !== null) {
+          return { allowed: false, blockedPersisted: false };
+        }
+        const isJump = prevIdx >= 0 && targetPointIndex !== prevIdx && targetPointIndex < prevIdx + 1;
+        // Recovery 2.1.0 H4: the durable REGATE_ROUND_BUDGET_EXHAUSTED block
+        // is adjudicated ONLY for a persisted backward jump. Linear
+        // successors, same-point retries and scan→verdict progress never
+        // persist a budget block, regardless of the historical round count.
+        if (isJump && rounds + 1 > effectiveMaxRounds) {
+          const sequence = state.lastSequence + 1;
+          this.appendEvent(Object.freeze({
+            eventId: `${runId}:${sequence}:run_blocked`,
+            runId,
+            sequence,
+            kind: "run_blocked" as const,
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: null,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: "REGATE_ROUND_BUDGET_EXHAUSTED",
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: null,
+          }));
+          return { allowed: false, blockedPersisted: true };
+        }
+        return { allowed: true, blockedPersisted: false };
+      }).immediate();
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      const code = sqliteErrorCode(error);
+      if (isBusyCode(code)) busy();
+      storageFailure();
+    }
+  }
+
   markRunRegateBlocked(runId: string, reasonCode: string): void {
     if (
       typeof runId !== "string" || runId.length === 0 || runId.trim() !== runId ||
@@ -2761,6 +3144,17 @@ export class LoopRunStore {
               "ILLEGAL_TRANSITION",
               "source artifact revision is not the current revision of the source capability",
             );
+          }
+        }
+        // Round 2 re-review F2: DIRECT causal evidence must reference a REAL
+        // revision of this run — a declared REGRESSION whose introducing
+        // revision does not exist is rejected before any invalidation runs.
+        if (record.causeKind === "REGRESSION") {
+          if (record.introducedByRevisionId === null) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "regression finding requires introducedByRevisionId");
+          }
+          if (!revisions.some((item) => item.revisionId === record.introducedByRevisionId)) {
+            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "introducedByRevisionId does not exist in the run");
           }
         }
         try {
@@ -3046,11 +3440,13 @@ export class LoopRunStore {
         const updateResult = db.prepare(
           `UPDATE loop_findings SET
             status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
-            risk_acceptance_evidence_digest = ?, canonical_sha256 = ?
+            risk_acceptance_evidence_digest = ?, risk_accepted_scope_id = ?,
+            canonical_sha256 = ?
           WHERE finding_id = ? AND status = ?`,
         ).run(
           "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
-          accepted.riskAcceptanceEvidenceDigest, sha256Hex(canonicalizeLoopFinding(accepted)),
+          accepted.riskAcceptanceEvidenceDigest, accepted.riskAcceptedScopeId,
+          sha256Hex(canonicalizeLoopFinding(accepted)),
           findingId, "OPEN",
         );
         if (updateResult.changes !== 1) {
@@ -3111,10 +3507,12 @@ export class LoopRunStore {
             status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
             resolution_evidence_digest = ?, risk_accepted_by = ?,
             risk_acceptance_evidence_ref = ?, risk_acceptance_evidence_digest = ?,
+            risk_accepted_scope_id = ?,
             superseded_by = ?, canonical_sha256 = ?
           WHERE finding_id = ? AND status != ?`,
         ).run(
-          "SUPERSEDED", null, null, null, null, null, null, superseded.supersededBy,
+          "SUPERSEDED", null, null, null, null, null, null, null,
+          superseded.supersededBy,
           sha256Hex(canonicalizeLoopFinding(superseded)), findingId, "SUPERSEDED",
         );
         if (updateResult.changes !== 1) {
@@ -3257,9 +3655,11 @@ export class LoopRunStore {
         output_artifact_version, output_digest, gate_result,
         unresolved_findings_ref, unresolved_findings_digest,
         consumed_findings_ref, consumed_findings_digest,
+        decision_depth, decision_scope_id, decision_delta_ref,
+        decision_delta_digest,
         next_step_eligibility, error_code, retryable, reason_code,
         canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
       row.capability, row.execution_role, row.node_id, row.attempt, row.status,
@@ -3269,7 +3669,9 @@ export class LoopRunStore {
       row.input_digest, row.output_artifact_ref, row.output_artifact_version,
       row.output_digest, row.gate_result, row.unresolved_findings_ref,
       row.unresolved_findings_digest, row.consumed_findings_ref,
-      row.consumed_findings_digest, row.next_step_eligibility, row.error_code,
+      row.consumed_findings_digest, row.decision_depth,
+      row.decision_scope_id, row.decision_delta_ref,
+      row.decision_delta_digest, row.next_step_eligibility, row.error_code,
       row.retryable, row.reason_code, row.canonical_sha256,
     );
   }
@@ -3323,13 +3725,19 @@ export class LoopRunStore {
       return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null };
     }
     const findingRows = db.prepare(
-      `SELECT finding_id, severity, status, earliest_affected_node_id, created_at
-       FROM loop_findings WHERE run_id = ? ORDER BY sequence ASC`,
+      `SELECT f.finding_id AS finding_id, f.severity AS severity, f.status AS status,
+              f.earliest_affected_node_id AS earliest_affected_node_id,
+              f.cause_kind AS cause_kind, f.introduced_by_revision_id AS introduced_by_revision_id,
+              f.created_at AS created_at
+       FROM loop_findings f
+       WHERE f.run_id = ? ORDER BY f.sequence ASC`,
     ).all(runId) as ReadonlyArray<{
       finding_id: string;
       severity: string;
       status: string;
       earliest_affected_node_id: string;
+      cause_kind: string;
+      introduced_by_revision_id: string | null;
       created_at: string;
     }>;
     const historicalFindings: RegateFindingFacts[] = findingRows.map((row) => ({
@@ -3337,6 +3745,7 @@ export class LoopRunStore {
       severity: row.severity,
       status: row.status,
       earliestAffectedNodeId: row.earliest_affected_node_id as RegateFindingFacts["earliestAffectedNodeId"],
+      causeKind: row.cause_kind as RegateFindingFacts["causeKind"],
       createdAt: row.created_at,
     }));
     const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
@@ -3368,7 +3777,6 @@ export class LoopRunStore {
       this.regatePointLastAttempts(db, runId),
       feedbackChange,
     );
-    process.stderr?.write?.(`REGATE_PLAN_OUT ${plan.kind} idx=${String(plan.restartPointIndex)}\n`);
     return {
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,
@@ -3394,6 +3802,19 @@ export class LoopRunStore {
         if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
         if (error instanceof LoopRunJournalError) corrupt("persisted capability execution is invalid");
         throw error;
+      }
+      // Round 2 close-out B1 (re-review): a persisted materialized decision
+      // must remain physically reproducible — every validating read of an
+      // event carrying a decision delta re-reads the blob when an artifact
+      // store is bound (append-time verification alone cannot cover later
+      // deletion or content drift). Mapping matches verifyRevisionBlob:
+      // missing/drifted or corrupt blob content is STORE_CORRUPT; only
+      // genuine I/O faults surface as STORE_FAILURE.
+      if (
+        event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null &&
+        this.artifactStore !== null
+      ) {
+        this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "read");
       }
       return event;
     });
@@ -3612,6 +4033,7 @@ export class LoopRunStore {
       ["finding_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
       ["requirement_id", "TEXT", 1, 0], ["sequence", "INTEGER", 1, 0],
       ["source_capability", "TEXT", 1, 0], ["source_revision_id", "TEXT", 1, 0],
+      ["cause_kind", "TEXT", 1, 0], ["introduced_by_revision_id", "TEXT", 0, 0],
       ["severity", "TEXT", 1, 0], ["category", "TEXT", 1, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["earliest_affected_node_id", "TEXT", 1, 0], ["status", "TEXT", 1, 0],
@@ -3621,6 +4043,7 @@ export class LoopRunStore {
       ["risk_accepted_by", "TEXT", 0, 0],
       ["risk_acceptance_evidence_ref", "TEXT", 0, 0],
       ["risk_acceptance_evidence_digest", "TEXT", 0, 0],
+      ["risk_accepted_scope_id", "TEXT", 0, 0],
       ["superseded_by", "TEXT", 0, 0],
       ["created_at", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
     ]);
@@ -3648,6 +4071,7 @@ export class LoopRunStore {
       ["revision_artifact_digest", "TEXT", 0, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["risk_accepted_by", "TEXT", 0, 0],
+      ["risk_accepted_scope_id", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],
     ]);
     verifyTableForeignKeys(db, "loop_finding_proofs", "finding proof table", [
@@ -3826,6 +4250,7 @@ export class LoopRunStore {
       } catch (error) {
         if (error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT") throw error;
         if (error instanceof LoopRunJournalError) corrupt("persisted finding is invalid");
+
         throw error;
       }
       return record;
@@ -3843,6 +4268,17 @@ export class LoopRunStore {
       const source = readRevisions.find((item) => item.revisionId === record.sourceRevisionId);
       if (source === undefined || source.nodeId !== record.sourceCapability) {
         corrupt("finding source revision does not match the source capability");
+      }
+    }
+    // Round 2 re-review F2: replay-boundary re-verification of DIRECT causal
+    // evidence — a persisted REGRESSION whose introducing revision has
+    // vanished from the verified revision chain is corruption.
+    for (const record of findings) {
+      if (
+        record.causeKind === "REGRESSION" &&
+        !readRevisions.some((item) => item.revisionId === record.introducedByRevisionId)
+      ) {
+        corrupt("regression finding references a missing introducing revision");
       }
     }
     const invalidations: LoopFindingInvalidation[] = [];
@@ -4016,6 +4452,8 @@ export class LoopRunStore {
       ["output_digest", "TEXT", 0, 0], ["gate_result", "TEXT", 0, 0],
       ["unresolved_findings_ref", "TEXT", 0, 0], ["unresolved_findings_digest", "TEXT", 0, 0],
       ["consumed_findings_ref", "TEXT", 0, 0], ["consumed_findings_digest", "TEXT", 0, 0],
+      ["decision_depth", "TEXT", 0, 0], ["decision_scope_id", "TEXT", 0, 0],
+      ["decision_delta_ref", "TEXT", 0, 0], ["decision_delta_digest", "TEXT", 0, 0],
       ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
       ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],

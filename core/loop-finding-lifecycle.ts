@@ -27,7 +27,18 @@ import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 // raised against — `sourceRevisionId` is mandatory and must reference a
 // revision of the same run. The v1 schema allowed null and is not silently
 // accepted.
-export const LOOP_FINDING_SCHEMA_VERSION = 2 as const;
+// v3 (C02-WP4 Round 2 review H2): every finding carries DIRECT causal
+// evidence — `causeKind` declares REGRESSION (re-drives its rebuild scope)
+// or IMPROVEMENT (blocks completion only), and a REGRESSION must bind the
+// fix-wave revision that introduced it via `introducedByRevisionId`.
+// Restart authorization is never inferred from a revision's sequence number.
+// v4 (C02-WP4 Round 2 review H2): a risk acceptance binds to the EXACT
+// decision scope it closes under (`riskAcceptedScopeId`), so an arbitrary
+// stale ACCEPTED_RISK finding can never authorize an unrelated new verdict.
+export const LOOP_FINDING_SCHEMA_VERSION = 4 as const;
+
+export const LOOP_FINDING_CAUSE_KINDS = ["REGRESSION", "IMPROVEMENT"] as const;
+export type LoopFindingCauseKind = (typeof LOOP_FINDING_CAUSE_KINDS)[number];
 
 export const LOOP_FINDING_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type LoopFindingSeverity = (typeof LOOP_FINDING_SEVERITIES)[number];
@@ -98,6 +109,8 @@ export type LoopFinding = Readonly<{
   sequence: number;
   sourceCapability: NodeCapabilityId;
   sourceRevisionId: string;
+  causeKind: LoopFindingCauseKind;
+  introducedByRevisionId: string | null;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -110,6 +123,8 @@ export type LoopFinding = Readonly<{
   riskAcceptedBy: string | null;
   riskAcceptanceEvidenceRef: string | null;
   riskAcceptanceEvidenceDigest: string | null;
+  /** v4: the decisionScopeId of the verdict round this acceptance closes under. */
+  riskAcceptedScopeId: string | null;
   supersededBy: string | null;
   createdAt: string;
 }>;
@@ -121,6 +136,8 @@ export type LoopFindingDraft = Readonly<{
   sequence: number;
   sourceCapability: NodeCapabilityId;
   sourceRevisionId: string;
+  causeKind: LoopFindingCauseKind;
+  introducedByRevisionId: string | null;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -162,6 +179,8 @@ export type LoopFindingProof = Readonly<{
   evidenceRef: string;
   evidenceDigest: string;
   riskAcceptedBy: string | null;
+  /** v4: RISK_ACCEPTANCE proofs bind the exact decision scope accepted under. */
+  riskAcceptedScopeId: string | null;
 }>;
 
 /**
@@ -186,11 +205,13 @@ export type LoopFindingResolution = Readonly<{
   resolutionEvidenceDigest: string;
 }>;
 
-/** acceptFindingRisk closure payload: the acceptor and the risk evidence. */
+/** acceptFindingRisk closure payload: the acceptor, evidence and decision scope. */
 export type LoopFindingRiskAcceptance = Readonly<{
   riskAcceptedBy: string;
   riskAcceptanceEvidenceRef: string;
   riskAcceptanceEvidenceDigest: string;
+  /** v4: must equal the decisionScopeId of the current formal_verdict round. */
+  decisionScopeId: string;
 }>;
 
 export type LoopFindingGateResult = Readonly<{
@@ -201,15 +222,18 @@ export type LoopFindingGateResult = Readonly<{
 
 const RECORD_FIELDS = [
   "schemaVersion", "findingId", "runId", "requirementId", "sequence",
-  "sourceCapability", "sourceRevisionId", "severity", "category",
+  "sourceCapability", "sourceRevisionId", "causeKind", "introducedByRevisionId",
+  "severity", "category",
   "evidenceRef", "evidenceDigest", "earliestAffectedNodeId", "status",
   "resolvedByRevisionId", "resolutionEvidenceRef", "resolutionEvidenceDigest",
   "riskAcceptedBy", "riskAcceptanceEvidenceRef", "riskAcceptanceEvidenceDigest",
+  "riskAcceptedScopeId",
   "supersededBy", "createdAt",
 ] as const;
 
 const DRAFT_FIELDS = [
   "runId", "requirementId", "sequence", "sourceCapability", "sourceRevisionId",
+  "causeKind", "introducedByRevisionId",
   "severity", "category", "evidenceRef", "evidenceDigest",
   "earliestAffectedNodeId", "createdAt",
 ] as const;
@@ -219,7 +243,7 @@ const INVALIDATION_FIELDS = ["findingId", "invalidationIndex", "revisionId", "no
 const PROOF_FIELDS = [
   "findingId", "proofKind", "revisionId", "revisionNodeId",
   "revisionArtifactRef", "revisionArtifactDigest",
-  "evidenceRef", "evidenceDigest", "riskAcceptedBy",
+  "evidenceRef", "evidenceDigest", "riskAcceptedBy", "riskAcceptedScopeId",
 ] as const;
 
 const SCOPE_FIELDS = ["findingId", "edgeCount", "scopeDigest"] as const;
@@ -228,6 +252,7 @@ const RESOLUTION_FIELDS = ["resolvedByRevisionId", "resolutionEvidenceRef", "res
 
 const RISK_ACCEPTANCE_FIELDS = [
   "riskAcceptedBy", "riskAcceptanceEvidenceRef", "riskAcceptanceEvidenceDigest",
+  "decisionScopeId",
 ] as const;
 
 // The fixed status state machine (contract §2): RESOLVED and ACCEPTED_RISK
@@ -402,6 +427,23 @@ export function validateLoopFinding(value: unknown): void {
   if (parsedSource !== null && parsedSource.nodeId !== sourceCapability) {
     invalid("sourceRevisionId must be a revision of the sourceCapability node");
   }
+  // v3 (Round 2 review H2): DIRECT causal evidence. The cause kind is a
+  // mandatory declared fact, never inferred from revision sequence numbers;
+  // a REGRESSION must bind the same-run fix-wave revision that introduced it.
+  if (
+    typeof record.causeKind !== "string" ||
+    !(LOOP_FINDING_CAUSE_KINDS as readonly string[]).includes(record.causeKind)
+  ) {
+    invalid("causeKind must be a canonical finding cause kind");
+  }
+  if (record.causeKind === "REGRESSION") {
+    const introducedBy = text(record.introducedByRevisionId, "introducedByRevisionId");
+    if (parseRevisionReference(introducedBy, runId) === null) {
+      invalid("introducedByRevisionId must reference a revision of the same run");
+    }
+  } else if (record.introducedByRevisionId !== null) {
+    invalid("improvement findings must not carry introducedByRevisionId");
+  }
   if (
     typeof record.severity !== "string" ||
     !(LOOP_FINDING_SEVERITIES as readonly string[]).includes(record.severity)
@@ -442,7 +484,8 @@ export function validateLoopFinding(value: unknown): void {
   const hasRisk =
     record.riskAcceptedBy !== null ||
     record.riskAcceptanceEvidenceRef !== null ||
-    record.riskAcceptanceEvidenceDigest !== null;
+    record.riskAcceptanceEvidenceDigest !== null ||
+    record.riskAcceptedScopeId !== null;
   isoTimestamp(record.createdAt, "createdAt");
   if (record.findingId !== loopFindingId(runId, sequence)) {
     invalid("findingId must match run and sequence");
@@ -478,6 +521,9 @@ export function validateLoopFinding(value: unknown): void {
       record.riskAcceptanceEvidenceDigest,
       "risk acceptance evidence",
     );
+    // v4 (Round 2 review H2): the acceptance names the EXACT verdict round's
+    // decision scope — a stale acceptance can never authorize a new verdict.
+    text(record.riskAcceptedScopeId, "riskAcceptedScopeId");
     if (hasResolution || hasResolutionEvidence || record.supersededBy !== null) {
       invalid("risk-accepted findings must not carry resolution or supersede fields");
     }
@@ -509,6 +555,8 @@ export function canonicalizeLoopFinding(record: LoopFinding): string {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,
@@ -521,6 +569,7 @@ export function canonicalizeLoopFinding(record: LoopFinding): string {
     riskAcceptedBy: record.riskAcceptedBy,
     riskAcceptanceEvidenceRef: record.riskAcceptanceEvidenceRef,
     riskAcceptanceEvidenceDigest: record.riskAcceptanceEvidenceDigest,
+    riskAcceptedScopeId: record.riskAcceptedScopeId,
     supersededBy: record.supersededBy,
     createdAt: record.createdAt,
   });
@@ -573,6 +622,9 @@ export function validateLoopFindingProof(value: unknown, expectedRunId: string):
     if (record.riskAcceptedBy !== null) {
       invalid("resolution proofs must not carry a risk acceptor");
     }
+    if (record.riskAcceptedScopeId !== null) {
+      invalid("resolution proofs must not carry a decision scope");
+    }
     return;
   }
   if (
@@ -584,6 +636,9 @@ export function validateLoopFindingProof(value: unknown, expectedRunId: string):
     invalid("risk acceptance proofs must not carry revision binding fields");
   }
   text(record.riskAcceptedBy, "finding proof riskAcceptedBy");
+  // v4 (Round 2 review H2): the RISK_ACCEPTANCE proof binds the exact
+  // decision scope accepted under.
+  text(record.riskAcceptedScopeId, "finding proof riskAcceptedScopeId");
 }
 
 /** Fixed-order canonical representation used by the run-journal hash. */
@@ -599,6 +654,7 @@ export function canonicalizeLoopFindingProof(proof: LoopFindingProof, expectedRu
     evidenceRef: proof.evidenceRef,
     evidenceDigest: proof.evidenceDigest,
     riskAcceptedBy: proof.riskAcceptedBy,
+    riskAcceptedScopeId: proof.riskAcceptedScopeId,
   });
 }
 
@@ -628,6 +684,7 @@ export function createLoopFindingResolutionProof(
     evidenceRef: valid.resolutionEvidenceRef,
     evidenceDigest: valid.resolutionEvidenceDigest,
     riskAcceptedBy: null,
+    riskAcceptedScopeId: null,
   });
   validateLoopFindingProof(proof, finding.runId);
   return proof;
@@ -650,6 +707,7 @@ export function createLoopFindingRiskAcceptanceProof(
     evidenceRef: valid.riskAcceptanceEvidenceRef,
     evidenceDigest: valid.riskAcceptanceEvidenceDigest,
     riskAcceptedBy: valid.riskAcceptedBy,
+    riskAcceptedScopeId: valid.decisionScopeId,
   });
   validateLoopFindingProof(proof, finding.runId);
   return proof;
@@ -704,7 +762,8 @@ export function validateLoopFindingProofs(
       if (
         finding.riskAcceptedBy !== proof.riskAcceptedBy ||
         finding.riskAcceptanceEvidenceRef !== proof.evidenceRef ||
-        finding.riskAcceptanceEvidenceDigest !== proof.evidenceDigest
+        finding.riskAcceptanceEvidenceDigest !== proof.evidenceDigest ||
+        finding.riskAcceptedScopeId !== proof.riskAcceptedScopeId
       ) {
         invalid("risk acceptance proof must match the finding closure fields");
       }
@@ -792,10 +851,13 @@ export function validateLoopFindingRiskAcceptance(value: unknown): LoopFindingRi
     record.riskAcceptanceEvidenceDigest,
     "risk acceptance evidence",
   );
+  // v4 (Round 2 review H2): the acceptance binds the exact verdict round.
+  text(record.decisionScopeId, "decisionScopeId");
   return Object.freeze({
     riskAcceptedBy: record.riskAcceptedBy as string,
     riskAcceptanceEvidenceRef: record.riskAcceptanceEvidenceRef as string,
     riskAcceptanceEvidenceDigest: record.riskAcceptanceEvidenceDigest as string,
+    decisionScopeId: record.decisionScopeId as string,
   });
 }
 
@@ -817,6 +879,8 @@ export function createLoopFinding(draft: unknown): LoopFinding {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,
@@ -829,6 +893,7 @@ export function createLoopFinding(draft: unknown): LoopFinding {
     riskAcceptedBy: null,
     riskAcceptanceEvidenceRef: null,
     riskAcceptanceEvidenceDigest: null,
+    riskAcceptedScopeId: null,
     supersededBy: null,
     createdAt: record.createdAt,
   };
@@ -855,6 +920,7 @@ function transitionFinding(
     riskAcceptedBy: null,
     riskAcceptanceEvidenceRef: null,
     riskAcceptanceEvidenceDigest: null,
+    riskAcceptedScopeId: null,
     supersededBy: null,
     ...closure,
   };
@@ -882,6 +948,7 @@ export function acceptLoopFindingRisk(
     riskAcceptedBy: valid.riskAcceptedBy,
     riskAcceptanceEvidenceRef: valid.riskAcceptanceEvidenceRef,
     riskAcceptanceEvidenceDigest: valid.riskAcceptanceEvidenceDigest,
+    riskAcceptedScopeId: valid.decisionScopeId,
   });
 }
 

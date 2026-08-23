@@ -22,11 +22,12 @@ import {
   type NodeCapabilityId,
 } from "../loop/types";
 import { planRegateFromFacts, type CurrentRevisionFacts } from "./loop-regate";
-import type {
-  LoopCapabilityExecutionEvent,
-  LoopCapabilityExecutionStatus,
-  LoopCapabilityGateResult,
-  LoopNextStepEligibility,
+import {
+  findPendingRevisionProducerExecution,
+  type LoopCapabilityExecutionEvent,
+  type LoopCapabilityExecutionStatus,
+  type LoopCapabilityGateResult,
+  type LoopNextStepEligibility,
 } from "./loop-capability-execution";
 
 export interface NodeExecutionProvenance {
@@ -95,6 +96,16 @@ export interface RunRecoveryContext {
     status: "DECIDED" | "BLOCKED_UNKNOWN";
     boundVerdictArtifactRef: string | null;
   } | null;
+  /**
+   * Round 3 review F2: the earliest succeeded producer execution whose node
+   * revision has not been materialized yet, or null. While this is non-null
+   * the terminal→revision window is still open: callers MUST finalize (or
+   * replay) this producer's revision materialization instead of dispatching
+   * the agent again, and the dispatch permit denies new work.
+   */
+  pendingRevisionMaterialization: Readonly<{
+    producerExecution: LoopCapabilityExecutionEvent;
+  }> | null;
 }
 
 export interface CapabilityRecoveryState {
@@ -332,6 +343,17 @@ export function recoverRunContext(
   const findings = capabilityExecutions.length > 0
     ? store.listFindings(state.identity.runId)
     : [];
+  // Round 3 review F2: derive the pending revision materialization from the
+  // same verified reads the rest of this context consumes — a succeeded
+  // producer without its node revision keeps the terminal→revision window
+  // open and must be finalized before any further dispatch.
+  const artifactRevisions = capabilityExecutions.length > 0
+    ? store.listArtifactRevisions(state.identity.runId)
+    : [];
+  const pendingRevisionProducer = findPendingRevisionProducerExecution(
+    capabilityExecutions,
+    artifactRevisions,
+  );
   const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
   for (const fact of store.listRegateCurrentFacts(state.identity.runId)) {
     currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
@@ -364,6 +386,7 @@ export function recoverRunContext(
       severity: finding.severity,
       status: finding.status,
       earliestAffectedNodeId: finding.earliestAffectedNodeId,
+      causeKind: finding.causeKind,
       createdAt: finding.createdAt,
     })),
     currentByNode,
@@ -411,19 +434,6 @@ export function recoverRunContext(
   const lastCapabilityExecution = capabilityExecutions.length === 0
     ? null
     : capabilityExecutions[capabilityExecutions.length - 1]!;
-  // v2: the chain status and next pointer derive from the point-wise
-  // projection; `nextCapability` stays as the capability projection of it.
-  // WP4: a pending Re-Gate wave downgrades a linearly COMPLETED projection
-  // to READY — the chain owes a rebuild generation before it is complete.
-  const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
-    executionPointStates.every((item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE")
-      ? (regateOverrideApplied ? "READY" : "COMPLETED")
-      : lastCapabilityExecution?.status === "started"
-        ? "RUNNING"
-        : lastCapabilityExecution !== null && nextExecutionPoint === null
-          ? "BLOCKED"
-          : "READY";
-  const nextCapability = nextExecutionPoint?.capability ?? null;
   const lastExecutionEvent = [...snapshot.events].reverse().find(
     (event) => event.kind === "stage_started" || event.kind === "stage_succeeded" || event.kind === "stage_failed",
   );
@@ -441,12 +451,59 @@ export function recoverRunContext(
   const lastVerdict = verdictEvents.length === 0 ? null : verdictEvents[verdictEvents.length - 1]!;
   let solutionGateDecision: RunRecoveryContext["solutionGateDecision"] = null;
   if (lastVerdict !== null) {
+    // The decision binds to the CURRENT gate node revision: the verdict's
+    // output must still be the ACTIVE current of solution-gate. A later
+    // generation that superseded the verdict invalidates the decision.
+    const gateCurrentFact = store
+      .listRegateCurrentFacts(state.identity.runId)
+      .find((fact) => fact.nodeId === "solution-gate");
+    // Round 2 review H2: the binding is IDENTITY-based, not content-based —
+    // the current must BE the revision that verdict authored (revision id +
+    // producer execution id), so an equal-content older current cannot
+    // impersonate the decision's anchor.
+    const gateCurrentRevision = gateCurrentFact === undefined
+      ? undefined
+      : artifactRevisions
+        .find((item) => item.revisionId === gateCurrentFact.revisionId);
+    const boundToCurrentGate =
+      lastVerdict.status === "succeeded" &&
+      gateCurrentFact !== undefined &&
+      gateCurrentFact.validity === "ACTIVE" &&
+      gateCurrentFact.artifactRef === lastVerdict.outputArtifactRef &&
+      gateCurrentFact.digest === lastVerdict.outputDigest &&
+      gateCurrentRevision !== undefined &&
+      gateCurrentRevision.producerExecutionId === lastVerdict.executionEventId;
     const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
-    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS") {
+    // PASS_WITH_RISK is DECIDED only with an ACCEPTED_RISK proof from the
+    // SAME decision scope: the risk-accepted finding's source revision must
+    // carry the same generation as the verdict round (same wave).
+    let pwrProofSameScope = false;
+    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
+      // Round 2 review H2: same decision scope means the ACCEPTED_RISK
+      // closure names THIS verdict round's decisionScopeId — a generation
+      // comparison alone would let any old acceptance authorize any new
+      // verdict on equal-generation products.
+      pwrProofSameScope =
+        lastVerdict.decisionScopeId !== null &&
+        findings.some((finding) =>
+          finding.status === "ACCEPTED_RISK" &&
+          finding.riskAcceptedScopeId !== null &&
+          finding.riskAcceptedScopeId === lastVerdict.decisionScopeId);
+    }
+    // Round 2 review H1: the depth choice must be MATERIALIZED on the
+    // verdict event itself — gateResult alone never admits implementation.
+    const decisionMaterialized =
+      lastVerdict.decisionDepth !== null && lastVerdict.decisionScopeId !== null;
+    if (lastVerdict.status === "succeeded" && !boundToCurrentGate) {
+      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
+    } else if (
+      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS" &&
+      decisionMaterialized
+    ) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else if (
       lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
-      findings.some((finding) => finding.status === "ACCEPTED_RISK")
+      decisionMaterialized && pwrProofSameScope
     ) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else {
@@ -454,16 +511,41 @@ export function recoverRunContext(
     }
   }
   // BLOCKED_UNKNOWN must not enter implementation: once the chain has reached
-  // task-planning, cut the next pointer so the run blocks honestly.
+  // task-planning, cut the next pointer so the run blocks honestly — UNLESS a
+  // pending Re-Gate wave restarts at or before the formal-verdict point, in
+  // which case the wave itself re-adjudicates the gate (Round 2 H2: the cut
+  // must never deadlock the wave against a stale-bound verdict).
   const taskPlanningIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
     (point) => point.capability === "task-planning",
   );
+  const formalVerdictIdx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+    (point) => point.capability === "solution-gate" && point.executionRole === "formal_verdict",
+  );
+  let depthDecisionBlocked = false;
   if (
     solutionGateDecision?.status === "BLOCKED_UNKNOWN" &&
-    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx
+    linearStopIdx !== null && linearStopIdx >= taskPlanningIdx &&
+    !(regateTargetIndex !== null && regateTargetIndex <= formalVerdictIdx)
   ) {
     nextExecutionPoint = null;
+    depthDecisionBlocked = true;
   }
+  // Project all externally visible dispatch state only after Re-Gate and
+  // depth-decision admission have both finalized the pointer. This keeps the
+  // capability projection and chain status consistent with nextExecutionPoint.
+  const capabilityChainStatus: RunRecoveryContext["capabilityChainStatus"] =
+    depthDecisionBlocked
+      ? "BLOCKED"
+      : executionPointStates.every(
+        (item) => item.status === "succeeded" && item.nextStepEligibility === "ELIGIBLE",
+      )
+        ? (regateOverrideApplied ? "READY" : "COMPLETED")
+        : lastCapabilityExecution?.status === "started"
+          ? "RUNNING"
+          : lastCapabilityExecution !== null && nextExecutionPoint === null
+            ? "BLOCKED"
+            : "READY";
+  const nextCapability = nextExecutionPoint?.capability ?? null;
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,
@@ -480,6 +562,9 @@ export function recoverRunContext(
     lastCapabilityExecution,
     findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
     solutionGateDecision,
+    pendingRevisionMaterialization: pendingRevisionProducer === null
+      ? null
+      : Object.freeze({ producerExecution: pendingRevisionProducer }),
     lastExecution:
       lastExecutionEvent === undefined
         ? null

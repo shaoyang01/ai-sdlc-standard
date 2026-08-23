@@ -27,6 +27,20 @@ import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "../core/loop-executor-types";
 import { preflightLoopRunStoreV2Cutover } from "../scripts/preflight-loop-run-store-v2-cutover";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: seeded multi-point chains must close the terminal→revision
+// window between points — materialize each succeeded producer's revision
+// exactly as the runtime replay would.
+function seedProducerRevision(store: LoopRunStore, event: LoopCapabilityExecutionEvent): void {
+  if (
+    event.status !== "succeeded" || event.outputArtifactRef === null ||
+    (event.capability === "solution-gate" && event.executionRole === "adversarial_scan")
+  ) {
+    return;
+  }
+  materializeProducerRevision(store, "REQ-R1-001", RUN, event, () => TS);
+}
 
 let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
@@ -82,7 +96,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   seq += 1;
   const agent = o.agent ?? "codex";
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -109,6 +123,10 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     unresolvedFindingsDigest: o.status === "succeeded" && o.findingsRef ? o.findingsRef.slice(-64) : null,
     consumedFindingsRef: o.consumedRef ?? null,
     consumedFindingsDigest: o.consumedRef ? o.consumedRef.slice(-64) : null,
+    decisionDepth: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "STANDARD" as const : null,
+    decisionScopeId: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `${RUN}:decision:${(o as { _attempt?: number })._attempt ?? attempt(o.capability, o.executionRole)}` : null,
+    decisionDeltaRef: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${dg("decision-delta")}` : null,
+    decisionDeltaDigest: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? dg("decision-delta") : null,
     nextStepEligibility: o.status === "succeeded" ? o.eligible ?? "ELIGIBLE" : null,
     errorCode: null,
     retryable: null,
@@ -258,6 +276,7 @@ async function main(): Promise<void> {
       for (const event of driverEvents.slice(0, 8)) {
         // Only intake..verdict (first 8 events).
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       const context = recoverRunContext(store, "REQ-R1-001")!;
       const scanState = context.executionPointStates.find((p) => p.executionRole === "adversarial_scan")!;
@@ -275,6 +294,7 @@ async function main(): Promise<void> {
       runId: RUN, requirementId: "req-001", sequence: 1,
       sourceCapability: "solution-design",
       sourceRevisionId: `${RUN}:revision:requirement-intake:1`,
+      causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:requirement-intake:1`,
       severity: "HIGH", category: "SOLUTION",
       evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
       earliestAffectedNodeId: "solution-design", createdAt: TS,
@@ -284,6 +304,7 @@ async function main(): Promise<void> {
       runId: RUN, requirementId: "req-001", sequence: 1,
       sourceCapability: "solution-design",
       sourceRevisionId: `${RUN}:revision:solution-design:1`,
+      causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:solution-design:1`,
       severity: "HIGH", category: "SOLUTION",
       evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
       earliestAffectedNodeId: "solution-design", createdAt: TS,
@@ -306,10 +327,6 @@ async function main(): Promise<void> {
         outputDigest: null, errorCode: null, retryable: null, reasonCode: null,
         bindingId: null, bindingVersion: null, inputArtifactRef: null,
       }));
-      const ledgerRef = ref("capability_findings", "e");
-      for (const event of buildChain({ scanFindingsRef: ledgerRef }).events) {
-        store.appendCapabilityExecution(event);
-      }
       // Build revisions for intake(seq1) and design(seq1): design is current.
       const SEGMENT: Record<string, string> = {
         "requirement-intake": "00-需求资料",
@@ -328,7 +345,7 @@ async function main(): Promise<void> {
           requirementId: "REQ-R1-001",
           nodeId,
           sequence,
-          generation: null,
+          generation: 1,
           stablePath: `library/REQ-R1-001/${SEGMENT[nodeId]}/doc.md`,
           artifactKind: KIND[nodeId] as never,
           semver,
@@ -342,8 +359,23 @@ async function main(): Promise<void> {
         }));
       };
 
-      const intakeRev = appendRevision("requirement-intake", 1, "1.0.0", "b", []);
-      const designRev = appendRevision("solution-design", 1, "1.0.0", "d", [intakeRev.record.revisionId]);
+      // F2-1: the chain is appended point by point with each producer's
+      // revision landed BEFORE the next point starts — a legal precondition
+      // chain rather than a ride through the closed pending window.
+      const ledgerRef = ref("capability_findings", "e");
+      const chainEvents = buildChain({ scanFindingsRef: ledgerRef }).events;
+      const intakeRev = ((): ReturnType<typeof appendRevision> => {
+        for (const event of chainEvents.slice(0, 2)) store.appendCapabilityExecution(event);
+        return appendRevision("requirement-intake", 1, "1.0.0", "b", []);
+      })();
+      const designRev = ((): ReturnType<typeof appendRevision> => {
+        for (const event of chainEvents.slice(2, 4)) store.appendCapabilityExecution(event);
+        return appendRevision("solution-design", 1, "1.0.0", "d", [intakeRev.record.revisionId]);
+      })();
+      for (const event of chainEvents.slice(4)) {
+        store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
+      }
 
       // R7 first: same node but NOT current (explicitly marked STALE).
       store.markArtifactRevisionStale(RUN, designRev.record.revisionId);
@@ -351,6 +383,7 @@ async function main(): Promise<void> {
         runId: RUN, requirementId: "REQ-R1-001", sequence: 1,
         sourceCapability: "solution-design",
         sourceRevisionId: designRev.record.revisionId,
+      causeKind: "REGRESSION", introducedByRevisionId: designRev.record.revisionId,
         severity: "HIGH", category: "SOLUTION",
         evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
         earliestAffectedNodeId: "solution-design", createdAt: TS,
@@ -362,6 +395,7 @@ async function main(): Promise<void> {
         runId: RUN, requirementId: "REQ-R1-001", sequence: 2,
         sourceCapability: "solution-design",
         sourceRevisionId: intakeRev.record.revisionId,
+      causeKind: "REGRESSION", introducedByRevisionId: intakeRev.record.revisionId,
         severity: "HIGH", category: "SOLUTION",
         evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
         earliestAffectedNodeId: "solution-design", createdAt: TS,
@@ -373,6 +407,7 @@ async function main(): Promise<void> {
         runId: RUN, requirementId: "REQ-R1-001", sequence: 1,
         sourceCapability: "requirement-intake",
         sourceRevisionId: intakeRev.record.revisionId,
+      causeKind: "REGRESSION", introducedByRevisionId: intakeRev.record.revisionId,
         severity: "MEDIUM", category: "REQUIREMENT",
         evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
         earliestAffectedNodeId: "requirement-intake", createdAt: TS,
@@ -411,7 +446,10 @@ async function main(): Promise<void> {
       db.pragma("user_version = 6");
       db.close();
       const report = preflightLoopRunStoreV2Cutover([dir]);
-      ok(report.failureCount === 0 && !report.requiresGovernanceStop, "extension-less v6 journal passes");
+      // v6->v7 fresh cutover (re-review F5): the previous supported format
+      // takes the no-migration rejection path like every other older one.
+      ok(report.failureCount === 1 && report.candidates[0]?.verdict === "FAIL_HISTORICAL_FORMAT",
+        "extension-less v6 journal is rejected as unsupported history");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

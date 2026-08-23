@@ -90,7 +90,7 @@ function makeEvent(o: Partial<LoopRunEvent> & Pick<LoopRunEvent, "sequence" | "k
 
 function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     executionEventId: "run-001:capability:1:started",
     runId: "run-001",
     sequence: 1,
@@ -117,6 +117,10 @@ function capabilityStartedEvent(): LoopCapabilityExecutionEvent {
     unresolvedFindingsDigest: null,
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
+    decisionDepth: null,
+    decisionScopeId: null,
+    decisionDeltaRef: null,
+    decisionDeltaDigest: null,
     nextStepEligibility: null,
     errorCode: null,
     retryable: null,
@@ -1132,7 +1136,7 @@ console.log("change classification: pre-v6 journals are rejected as unsupported 
   assert(store1.listRequirementChanges("run-001").length === 0, "fresh v6 journal has an empty change chain");
   store1.close();
   const probe = new Database(path, { readonly: true });
-  assert(probe.pragma("user_version", { simple: true }) === 6, "fresh journal records format v6");
+  assert(probe.pragma("user_version", { simple: true }) === 7, "fresh journal records format v7");
   probe.close();
   rmSync(dir, { recursive: true, force: true });
 }
