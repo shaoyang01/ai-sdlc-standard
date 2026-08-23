@@ -1,6 +1,6 @@
 // Preflight: LOOP run-store v2 cutover journal scan (C02-WP3.5-B, D3)
 // =====================================================================
-// Read-only scanner for the v6 store cutover. It answers one question per
+// Read-only scanner for the v7 store cutover. It answers one question per
 // supported persistence root: are there any SQLite journals that the v2
 // runtime must refuse or that require a governance stop?
 //
@@ -28,7 +28,7 @@ import Database from "better-sqlite3";
 // database carrying e.g. only loop_artifact_current classifies as history.
 import { LOOP_PHYSICAL_TABLES } from "../core/loop-run-store";
 
-const SUPPORTED_FORMAT_VERSION = 6;
+const SUPPORTED_FORMAT_VERSION = 7;
 const SQLITE_MAGIC = "SQLite format 3\x00";
 const CANDIDATE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 
@@ -171,7 +171,7 @@ export function classifyCandidate(path: string): PreflightCandidate {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1",
       ).get();
       if (anyTable === undefined && sizeBytes <= 0x1000) {
-        return { ...base, verdict: "FRESH_EMPTY", detail: "unversioned database without LOOP tables; fresh v6 initialization is allowed" };
+        return { ...base, verdict: "FRESH_EMPTY", detail: "unversioned database without LOOP tables; fresh v7 initialization is allowed" };
       }
       return { ...base, verdict: "FAIL_OWNER_UNKNOWN", detail: "no LOOP business table found; owner cannot be confirmed" };
     }
@@ -185,7 +185,7 @@ export function classifyCandidate(path: string): PreflightCandidate {
     if (loopTablesFound.length === 0) {
       return { ...base, verdict: "FAIL_OWNER_UNKNOWN", detail: "no LOOP business table found; owner cannot be confirmed" };
     }
-    return { ...base, verdict: "OK_V6", detail: "supported v6 journal format" };
+    return { ...base, verdict: "OK_V6", detail: "supported v7 journal format" };
   } catch {
     return {
       path, sizeBytes, verdict: "FAIL_NOT_SQLITE", declaredFormatVersion: null,

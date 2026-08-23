@@ -161,6 +161,8 @@ function appendBlockingFinding(env: TestEnv, o: {
   severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   category: "REQUIREMENT" | "SOLUTION" | "PLANNING" | "IMPLEMENTATION" | "REVIEW" | "KNOWLEDGE";
   sequence: number;
+  /** Defaults to REGRESSION bound to the revision it was raised against. */
+  causeKind?: "REGRESSION" | "IMPROVEMENT";
 }): string {
   const current = env.runStore.getCurrentArtifactRevision(o.runId, o.sourceCapability);
   ok(current !== undefined, `${o.sourceCapability} current revision must exist`);
@@ -170,6 +172,12 @@ function appendBlockingFinding(env: TestEnv, o: {
     sequence: o.sequence,
     sourceCapability: o.sourceCapability,
     sourceRevisionId: current!.revisionId,
+    // v3 direct causal evidence: a REGRESSION binds the introducing
+    // fix-wave revision (the product it was raised against); an
+    // IMPROVEMENT carries no introducing revision.
+    causeKind: o.causeKind ?? "REGRESSION",
+    introducedByRevisionId:
+      (o.causeKind ?? "REGRESSION") === "REGRESSION" ? current!.revisionId : null,
     severity: o.severity ?? "HIGH",
     category: o.category,
     evidenceRef: `loop-artifact:v1:${current!.artifactKind}:sha256:${current!.digest}`,
@@ -407,6 +415,7 @@ async function main(): Promise<void> {
       severity: "MEDIUM",
       category: "REVIEW",
       sequence: 1,
+      causeKind: "IMPROVEMENT",
     });
     // Round 2 semantics: a non-causal improvement (raised against an
     // original-generation product) never re-drives a backward wave.
@@ -618,8 +627,8 @@ async function main(): Promise<void> {
       severity: "HIGH",
       status: "OPEN",
       earliestAffectedNodeId: "solution-design",
+      causeKind: "REGRESSION",
       createdAt: futureIso(),
-      sourceRevisionSequence: 2,
     }];
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([
       ["requirement-intake", { validity: "ACTIVE", generation: 1 }],
@@ -735,14 +744,14 @@ async function main(): Promise<void> {
       severity: "MEDIUM",
       status: "OPEN",
       earliestAffectedNodeId: "solution-design",
-      sourceRevisionSequence: 1,
+      causeKind: "IMPROVEMENT",
       createdAt: new Date().toISOString(),
     };
     const causalFinding: RegateFindingFacts = {
       ...originalProductFinding,
       findingId: "fix-wave-regression",
       severity: "HIGH",
-      sourceRevisionSequence: 2,
+      causeKind: "REGRESSION",
     };
     const designPoint = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
       (point) => point.capability === "solution-design",
@@ -765,7 +774,7 @@ async function main(): Promise<void> {
       severity: "HIGH",
       status: "RESOLVED",
       earliestAffectedNodeId: "solution-design",
-      sourceRevisionSequence: 1,
+      causeKind: "REGRESSION",
       createdAt: new Date().toISOString(),
     }];
     const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([

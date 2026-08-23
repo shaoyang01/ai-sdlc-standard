@@ -27,7 +27,15 @@ import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 // raised against — `sourceRevisionId` is mandatory and must reference a
 // revision of the same run. The v1 schema allowed null and is not silently
 // accepted.
-export const LOOP_FINDING_SCHEMA_VERSION = 2 as const;
+// v3 (C02-WP4 Round 2 review H2): every finding carries DIRECT causal
+// evidence — `causeKind` declares REGRESSION (re-drives its rebuild scope)
+// or IMPROVEMENT (blocks completion only), and a REGRESSION must bind the
+// fix-wave revision that introduced it via `introducedByRevisionId`.
+// Restart authorization is never inferred from a revision's sequence number.
+export const LOOP_FINDING_SCHEMA_VERSION = 3 as const;
+
+export const LOOP_FINDING_CAUSE_KINDS = ["REGRESSION", "IMPROVEMENT"] as const;
+export type LoopFindingCauseKind = (typeof LOOP_FINDING_CAUSE_KINDS)[number];
 
 export const LOOP_FINDING_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type LoopFindingSeverity = (typeof LOOP_FINDING_SEVERITIES)[number];
@@ -98,6 +106,8 @@ export type LoopFinding = Readonly<{
   sequence: number;
   sourceCapability: NodeCapabilityId;
   sourceRevisionId: string;
+  causeKind: LoopFindingCauseKind;
+  introducedByRevisionId: string | null;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -121,6 +131,8 @@ export type LoopFindingDraft = Readonly<{
   sequence: number;
   sourceCapability: NodeCapabilityId;
   sourceRevisionId: string;
+  causeKind: LoopFindingCauseKind;
+  introducedByRevisionId: string | null;
   severity: LoopFindingSeverity;
   category: LoopFindingCategory;
   evidenceRef: string;
@@ -201,7 +213,8 @@ export type LoopFindingGateResult = Readonly<{
 
 const RECORD_FIELDS = [
   "schemaVersion", "findingId", "runId", "requirementId", "sequence",
-  "sourceCapability", "sourceRevisionId", "severity", "category",
+  "sourceCapability", "sourceRevisionId", "causeKind", "introducedByRevisionId",
+  "severity", "category",
   "evidenceRef", "evidenceDigest", "earliestAffectedNodeId", "status",
   "resolvedByRevisionId", "resolutionEvidenceRef", "resolutionEvidenceDigest",
   "riskAcceptedBy", "riskAcceptanceEvidenceRef", "riskAcceptanceEvidenceDigest",
@@ -210,6 +223,7 @@ const RECORD_FIELDS = [
 
 const DRAFT_FIELDS = [
   "runId", "requirementId", "sequence", "sourceCapability", "sourceRevisionId",
+  "causeKind", "introducedByRevisionId",
   "severity", "category", "evidenceRef", "evidenceDigest",
   "earliestAffectedNodeId", "createdAt",
 ] as const;
@@ -402,6 +416,23 @@ export function validateLoopFinding(value: unknown): void {
   if (parsedSource !== null && parsedSource.nodeId !== sourceCapability) {
     invalid("sourceRevisionId must be a revision of the sourceCapability node");
   }
+  // v3 (Round 2 review H2): DIRECT causal evidence. The cause kind is a
+  // mandatory declared fact, never inferred from revision sequence numbers;
+  // a REGRESSION must bind the same-run fix-wave revision that introduced it.
+  if (
+    typeof record.causeKind !== "string" ||
+    !(LOOP_FINDING_CAUSE_KINDS as readonly string[]).includes(record.causeKind)
+  ) {
+    invalid("causeKind must be a canonical finding cause kind");
+  }
+  if (record.causeKind === "REGRESSION") {
+    const introducedBy = text(record.introducedByRevisionId, "introducedByRevisionId");
+    if (parseRevisionReference(introducedBy, runId) === null) {
+      invalid("introducedByRevisionId must reference a revision of the same run");
+    }
+  } else if (record.introducedByRevisionId !== null) {
+    invalid("improvement findings must not carry introducedByRevisionId");
+  }
   if (
     typeof record.severity !== "string" ||
     !(LOOP_FINDING_SEVERITIES as readonly string[]).includes(record.severity)
@@ -509,6 +540,8 @@ export function canonicalizeLoopFinding(record: LoopFinding): string {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,
@@ -817,6 +850,8 @@ export function createLoopFinding(draft: unknown): LoopFinding {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,

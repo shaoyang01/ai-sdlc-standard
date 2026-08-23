@@ -116,12 +116,12 @@ async function main(): Promise<void> {
 
   console.log("preflight: future format and unversioned-with-tables fail");
   withRoot("future", (root) => {
-    seedVersionedFile(root, "future.db", 7);
+    seedVersionedFile(root, "future.db", 8);
     const db = new Database(join(root, "unversioned.db"));
     db.exec("CREATE TABLE loop_findings (finding_id TEXT PRIMARY KEY)");
     db.close();
     const report = preflightLoopRunStoreV2Cutover([root]);
-    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 6 fails as future");
+    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 7 fails as future");
     ok(
       verdictOf(report, "unversioned.db")?.verdict === "FAIL_UNVERSIONED_WITH_TABLES",
       "unversioned database carrying LOOP tables fails",

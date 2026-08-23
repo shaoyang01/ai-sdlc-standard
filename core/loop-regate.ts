@@ -38,13 +38,14 @@ export interface RegateFindingFacts {
   /** Kept only as a deterministic tie-breaker between same-node findings. */
   createdAt: string;
   /**
-   * Sequence of the finding's source revision within its node (Round 2 H2):
-   * sequence >= 2 means the finding was raised against a FIX-WAVE product
-   * (a causal regression that re-drives the wave); sequence 1 findings on
-   * original-generation artifacts are improvement candidates that block
-   * completion but never re-drive a backward restart.
+   * DIRECT causal evidence (Round 2 review H2): the raising capability
+   * declares REGRESSION (re-drives its rebuild scope) or IMPROVEMENT (blocks
+   * completion only). Restart authorization is never inferred from a
+   * revision's sequence number — both false positives (a sequence-2
+   * improvement) and false negatives (a sequence-1 baseline invalidation)
+   * are impossible by construction.
    */
-  sourceRevisionSequence: number | null;
+  causeKind: "REGRESSION" | "IMPROVEMENT";
 }
 
 /** Reduced facts for a node's CURRENT artifact revision pointer. */
@@ -127,14 +128,13 @@ export function nodeNeedsRebuild(
 }
 
 /**
- * G1 causal classification (Round 2 H2): a finding re-drives the wave only
- * when it was raised against a fix-wave product. `sourceRevisionSequence`
- * comes from the finding's own persisted source revision; unknown (null)
- * conservatively counts as causal so unclassifiable findings still fail
- * closed.
+ * G1 causal classification (Round 2 review H2): a finding re-drives the wave
+ * only when its DIRECT declared cause kind is REGRESSION. The kind is a
+ * mandatory persisted fact on every finding — there is no inference from
+ * revision sequence numbers and no unknown default.
  */
 function isCausalRegression(finding: RegateFindingFacts): boolean {
-  return finding.sourceRevisionSequence === null || finding.sourceRevisionSequence >= 2;
+  return finding.causeKind === "REGRESSION";
 }
 
 /**
@@ -181,11 +181,11 @@ export function planRegateFromFacts(
     });
   }
   // Frozen v2 contract: ANY open finding blocks its scope's validity and
-  // completion (computeFindingGate blocks on every OPEN). Round 2 H2: only
-  // CAUSAL regressions — OPEN findings raised against a fix-wave product
-  // (source revision sequence >= 2) — RE-DRIVE a backward wave. Findings on
-  // original-generation artifacts (sequence 1) are improvement candidates:
-  // they keep completion blocked until resolved but never re-route the chain.
+  // completion (computeFindingGate blocks on every OPEN). Round 2 review H2:
+  // only CAUSAL regressions — findings whose declared causeKind is REGRESSION,
+  // bound to the fix-wave revision that introduced them — RE-DRIVE a backward
+  // wave. IMPROVEMENT findings keep completion blocked until resolved but
+  // never re-route the chain, regardless of their source revision's sequence.
   const pending = findings.filter(
     (finding) =>
       finding.status === "OPEN" &&

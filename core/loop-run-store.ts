@@ -92,12 +92,12 @@ import { NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v6. Known
-// historical formats 1..5 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
-// they are never semantically migrated. A declared version above 6 is
-// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v6, schema or canonical
+// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v7. Known
+// historical formats 1..6 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
+// they are never semantically migrated. A declared version above 7 is
+// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v7, schema or canonical
 // hash drift is STORE_CORRUPT.
-const LOOP_RUN_STORE_FORMAT_VERSION = 6;
+const LOOP_RUN_STORE_FORMAT_VERSION = 7;
 
 /**
  * The COMPLETE LOOP physical table catalogue (Round 1 corrections, H2): every
@@ -437,6 +437,8 @@ type FindingRow = {
   sequence: number;
   source_capability: string;
   source_revision_id: string | null;
+  cause_kind: string;
+  introduced_by_revision_id: string | null;
   severity: string;
   category: string;
   evidence_ref: string;
@@ -834,13 +836,15 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 function rowToFinding(row: FindingRow): LoopFinding {
   return Object.freeze({
     // The schema version is a fixed model constant, not a persisted column.
-    schemaVersion: 2,
+    schemaVersion: 3,
     findingId: row.finding_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
     sequence: asPersistedSafeInteger(row.sequence),
     sourceCapability: row.source_capability as LoopFinding["sourceCapability"],
     sourceRevisionId: row.source_revision_id,
+    causeKind: row.cause_kind as LoopFinding["causeKind"],
+    introducedByRevisionId: row.introduced_by_revision_id,
     severity: row.severity as LoopFinding["severity"],
     category: row.category as LoopFinding["category"],
     evidenceRef: row.evidence_ref,
@@ -862,15 +866,17 @@ function insertFindingRow(db: Database.Database, record: LoopFinding): void {
   db.prepare(
     `INSERT INTO loop_findings (
       finding_id, run_id, requirement_id, sequence, source_capability,
-      source_revision_id, severity, category, evidence_ref, evidence_digest,
+      source_revision_id, cause_kind, introduced_by_revision_id, severity,
+      category, evidence_ref, evidence_digest,
       earliest_affected_node_id, status, resolved_by_revision_id,
       resolution_evidence_ref, resolution_evidence_digest, risk_accepted_by,
       risk_acceptance_evidence_ref, risk_acceptance_evidence_digest,
       superseded_by, created_at, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.findingId, record.runId, record.requirementId, record.sequence,
-    record.sourceCapability, record.sourceRevisionId, record.severity,
+    record.sourceCapability, record.sourceRevisionId, record.causeKind,
+    record.introducedByRevisionId, record.severity,
     record.category, record.evidenceRef, record.evidenceDigest,
     record.earliestAffectedNodeId, record.status, record.resolvedByRevisionId,
     record.resolutionEvidenceRef, record.resolutionEvidenceDigest,
@@ -1329,6 +1335,8 @@ export class LoopRunStore {
                 sequence INTEGER NOT NULL,
                 source_capability TEXT NOT NULL,
                 source_revision_id TEXT NOT NULL,
+                cause_kind TEXT NOT NULL,
+                introduced_by_revision_id TEXT,
                 severity TEXT NOT NULL,
                 category TEXT NOT NULL,
                 evidence_ref TEXT NOT NULL,
@@ -3328,26 +3336,26 @@ export class LoopRunStore {
     const findingRows = db.prepare(
       `SELECT f.finding_id AS finding_id, f.severity AS severity, f.status AS status,
               f.earliest_affected_node_id AS earliest_affected_node_id,
-              f.created_at AS created_at, r.sequence AS source_rev_sequence
+              f.cause_kind AS cause_kind, f.introduced_by_revision_id AS introduced_by_revision_id,
+              f.created_at AS created_at
        FROM loop_findings f
-       LEFT JOIN loop_artifact_revisions r ON r.revision_id = f.source_revision_id
        WHERE f.run_id = ? ORDER BY f.sequence ASC`,
     ).all(runId) as ReadonlyArray<{
       finding_id: string;
       severity: string;
       status: string;
       earliest_affected_node_id: string;
+      cause_kind: string;
+      introduced_by_revision_id: string | null;
       created_at: string;
-      source_rev_sequence: number | null;
     }>;
     const historicalFindings: RegateFindingFacts[] = findingRows.map((row) => ({
       findingId: row.finding_id,
       severity: row.severity,
       status: row.status,
       earliestAffectedNodeId: row.earliest_affected_node_id as RegateFindingFacts["earliestAffectedNodeId"],
+      causeKind: row.cause_kind as RegateFindingFacts["causeKind"],
       createdAt: row.created_at,
-      sourceRevisionSequence:
-        row.source_rev_sequence === null ? null : Number(row.source_rev_sequence),
     }));
     const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const pointerRows = db.prepare(
@@ -3621,6 +3629,7 @@ export class LoopRunStore {
       ["finding_id", "TEXT", 0, 1], ["run_id", "TEXT", 1, 0],
       ["requirement_id", "TEXT", 1, 0], ["sequence", "INTEGER", 1, 0],
       ["source_capability", "TEXT", 1, 0], ["source_revision_id", "TEXT", 1, 0],
+      ["cause_kind", "TEXT", 1, 0], ["introduced_by_revision_id", "TEXT", 0, 0],
       ["severity", "TEXT", 1, 0], ["category", "TEXT", 1, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["earliest_affected_node_id", "TEXT", 1, 0], ["status", "TEXT", 1, 0],

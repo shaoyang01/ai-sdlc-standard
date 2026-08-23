@@ -287,7 +287,7 @@ async function main(): Promise<void> {
     v6Store.createRun(identity(migrationRoot));
     v6Store.close();
     const v6db = new Database(v6Path);
-    ok(v6db.pragma("user_version", { simple: true }) === 6, "fresh store declares format v6");
+    ok(v6db.pragma("user_version", { simple: true }) === 7, "fresh store declares format v7");
     v6db.close();
     const reopened = new LoopRunStore(v6Path);
     reopened.init();
@@ -295,7 +295,7 @@ async function main(): Promise<void> {
     reopened.close();
 
     // Known historical formats 1..5 are rejected — never migrated.
-    for (const historical of [1, 2, 3, 4, 5]) {
+    for (const historical of [1, 2, 3, 4, 5, 6]) {
       const historicalPath = join(migrationRoot, `historical-${historical}.db`);
       const seed = new Database(historicalPath);
       seed.pragma(`user_version = ${historical}`);
@@ -307,10 +307,10 @@ async function main(): Promise<void> {
     // A declared version above the supported one is a future format.
     const futurePath = join(migrationRoot, "future.db");
     const futureSeed = new Database(futurePath);
-    futureSeed.pragma("user_version = 7");
+    futureSeed.pragma("user_version = 8");
     futureSeed.close();
     const futureRejected = new LoopRunStore(futurePath);
-    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 7 is rejected as a future format");
+    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 8 is rejected as a future format");
 
     // An unversioned database that already carries LOOP business tables is
     // history, never a fresh store; an empty v0 database initializes fresh.
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
     new Database(freshPath).close();
     const freshStore = new LoopRunStore(freshPath);
     freshStore.init();
-    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 6, "empty unversioned database initializes fresh to v6");
+    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 7, "empty unversioned database initializes fresh to v7");
     freshStore.close();
 
     // Inside the declared v6 format, drift is STORE_CORRUPT — not a format

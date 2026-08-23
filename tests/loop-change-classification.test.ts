@@ -1132,7 +1132,7 @@ console.log("change classification: pre-v6 journals are rejected as unsupported 
   assert(store1.listRequirementChanges("run-001").length === 0, "fresh v6 journal has an empty change chain");
   store1.close();
   const probe = new Database(path, { readonly: true });
-  assert(probe.pragma("user_version", { simple: true }) === 6, "fresh journal records format v6");
+  assert(probe.pragma("user_version", { simple: true }) === 7, "fresh journal records format v7");
   probe.close();
   rmSync(dir, { recursive: true, force: true });
 }

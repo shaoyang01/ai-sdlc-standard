@@ -329,12 +329,6 @@ export function recoverRunContext(
   }
   let regateTargetIndex: number | null = null;
   let regateOverrideApplied = false;
-  const revisions = capabilityExecutions.length > 0
-    ? store.listArtifactRevisions(state.identity.runId)
-    : [];
-  const seqByRevisionId = new Map(
-    revisions.map((revision) => [revision.revisionId, revision.sequence]),
-  );
   const findings = capabilityExecutions.length > 0
     ? store.listFindings(state.identity.runId)
     : [];
@@ -370,8 +364,8 @@ export function recoverRunContext(
       severity: finding.severity,
       status: finding.status,
       earliestAffectedNodeId: finding.earliestAffectedNodeId,
+      causeKind: finding.causeKind,
       createdAt: finding.createdAt,
-      sourceRevisionSequence: seqByRevisionId.get(finding.sourceRevisionId) ?? null,
     })),
     currentByNode,
     pointLastAttempts,

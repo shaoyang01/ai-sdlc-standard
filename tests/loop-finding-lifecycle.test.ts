@@ -396,9 +396,12 @@ function findingDraft(o: {
   earliestAffectedNodeId: NodeCapabilityId;
   severity?: LoopFindingDraft["severity"];
   sourceRevisionId?: string | null;
+  causeKind?: LoopFindingDraft["causeKind"];
+  introducedByRevisionId?: string | null;
   requirementId?: string;
   createdAt?: string;
 }): LoopFindingDraft {
+  const causeKind = o.causeKind ?? "REGRESSION";
   return {
     runId: "run-001",
     requirementId: o.requirementId ?? "req-001",
@@ -408,6 +411,13 @@ function findingDraft(o: {
     // capability itself. Store-level scenarios for deeper capabilities must
     // ensure that node's current exists (or expect the fail-closed guard).
     sourceRevisionId: o.sourceRevisionId ?? `run-001:revision:${o.sourceCapability}:1`,
+    // v3 direct causal evidence: default REGRESSION bound to the fix-wave
+    // revision that introduced it (sequence 2 of the same node).
+    causeKind,
+    introducedByRevisionId: o.introducedByRevisionId ??
+      (causeKind === "REGRESSION"
+        ? `run-001:revision:${o.sourceCapability}:2`
+        : null),
     severity: o.severity ?? "HIGH",
     category: o.category,
     evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
@@ -441,6 +451,8 @@ function canonicalizeFindingUnchecked(record: LoopFinding): string {
     sequence: record.sequence,
     sourceCapability: record.sourceCapability,
     sourceRevisionId: record.sourceRevisionId,
+    causeKind: record.causeKind,
+    introducedByRevisionId: record.introducedByRevisionId,
     severity: record.severity,
     category: record.category,
     evidenceRef: record.evidenceRef,
@@ -532,7 +544,7 @@ function withRunningStore(fn: (store: LoopRunStore, dir: string) => void): void 
 
 console.log("finding lifecycle: schema constants and canonical tokens");
 {
-  assert(LOOP_FINDING_SCHEMA_VERSION === 2, "finding schema version is 2");
+  assert(LOOP_FINDING_SCHEMA_VERSION === 3, "finding schema version is 3");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
   assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
     "six canonical categories");
