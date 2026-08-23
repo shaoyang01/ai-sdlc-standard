@@ -746,6 +746,210 @@ async function main(): Promise<void> {
     ok(decision === "BLOCKED_UNKNOWN", "depth decision surfaces BLOCKED_UNKNOWN");
   }
 
+  // ── W5b: risk acceptance binds to the exact verdict decision scope ──
+  console.log("W5b: PASS_WITH_RISK admits only the acceptance naming THIS verdict's decisionScopeId");
+  {
+    const root = mkdtempSync(join(tmpdir(), "loop-wp4-riskscope-"));
+    mkdirSync(join(root, "repo"), { recursive: true });
+    const runStore = new LoopRunStore(join(root, "journal.db"));
+    const artifactStore = new LoopArtifactStore({
+      controlRoot: join(root, "control"),
+      repositoryPath: join(root, "repo"),
+    });
+    runStore.init();
+    artifactStore.init();
+    const bindingRegistry = createRuntimeBindingRegistry();
+    const now = (): string => new Date().toISOString();
+    // Wrapper: every round uses the deterministic shadow gateway except the
+    // formal_verdict round, which succeeds with a PASS_WITH_RISK verdict and
+    // materializes its own decision scope.
+    const inner = createDeterministicCapabilityGateway({
+      runStore,
+      artifactStore,
+      bindingRegistry,
+      now,
+    });
+    let riskScopeCounter = 0;
+    const riskGateway: RuntimeCapabilityGateway = {
+      async execute(request) {
+        const context = request.loopExecution!;
+        const isVerdict =
+          request.type === "solution-gate" &&
+          context.executionRole === "formal_verdict";
+        if (!isVerdict) return inner.execute(request);
+        const runId = context.runId;
+        const capability = request.type as NodeCapabilityId;
+        const executionRole = context.executionRole as CapabilityExecutionRole;
+        const existing = runStore.listCapabilityExecutions(runId);
+        const sequence = existing.length + 1;
+        const base = {
+          schemaVersion: 4 as const,
+          runId,
+          capability,
+          executionRole,
+          nodeId: capability,
+          attempt: context.attempt,
+          bindingId: `binding-hermes-${capability}-formal_verdict`,
+          bindingVersion: "2.0.0",
+          bindingRegistryVersion: bindingRegistry.version,
+          executorAgent: "hermes" as AgentName,
+          executorAdapter: "hermes-cli",
+          executorVersion: "1.0.0",
+          inputArtifactRef: context.inputArtifactRef,
+          inputArtifactVersion: context.inputArtifactVersion,
+          inputDigest: context.inputDigest,
+          consumedFindingsRef:
+            typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
+          consumedFindingsDigest:
+            typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
+          decisionDepth: null,
+          decisionScopeId: null,
+          decisionDeltaRef: null,
+          decisionDeltaDigest: null,
+        };
+        runStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence}:started`,
+          sequence,
+          status: "started" as const,
+          createdAt: now(),
+          outputArtifactRef: null,
+          outputArtifactVersion: null,
+          outputDigest: null,
+          gateResult: null,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: null,
+          errorCode: null,
+          retryable: null,
+          reasonCode: null,
+        }));
+        riskScopeCounter += 1;
+        const scopeId = `${runId}:decision:${riskScopeCounter}`;
+        const delta = artifactStore.put(
+          "solution_review",
+          `depth=STANDARD PASS_WITH_RISK delta for ${runId} scope ${scopeId}`,
+        );
+        const product = artifactStore.put(
+          LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[capability].artifactKind,
+          `PASS_WITH_RISK shadow verdict product for ${runId} attempt ${context.attempt}`,
+        );
+        runStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence + 1}:succeeded`,
+          sequence: sequence + 1,
+          status: "succeeded" as const,
+          createdAt: now(),
+          outputArtifactRef: product.artifactRef,
+          outputArtifactVersion: String(context.outputArtifactVersion),
+          outputDigest: product.digest,
+          gateResult: "PASS_WITH_RISK" as const,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          decisionDepth: "STANDARD" as const,
+          decisionScopeId: scopeId,
+          decisionDeltaRef: delta.artifactRef,
+          decisionDeltaDigest: delta.digest,
+          nextStepEligibility: "ELIGIBLE" as const,
+          errorCode: null,
+          retryable: null,
+          reasonCode: null,
+        }));
+        return Object.freeze({
+          success: true as const,
+          node: capability,
+          agent: "hermes" as const,
+          output: Object.freeze({ result: "SUCCESS", gate_result: "PASS_WITH_RISK" }),
+          artifacts: Object.freeze([]),
+        });
+      },
+    };
+
+    const driveRiskChain = async (rid: string) => {
+      const result = await run("small fix", { requirementId: rid, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
+      const verdictScopeId = runStore.listCapabilityExecutions(result.run_id)
+        .filter((e2) => e2.capability === "solution-gate" && e2.executionRole === "formal_verdict" && e2.status === "succeeded")
+        .at(-1)!.decisionScopeId as string;
+      return { result, verdictScopeId };
+    };
+
+    // Baseline: PASS_WITH_RISK without any acceptance stays sealed.
+    {
+      const requirementId = "REQ-WP4-W5B-0";
+      const { result } = await driveRiskChain(requirementId);
+      ok(result.final_status === "failed" && result.chain_status === "BLOCKED",
+        "PASS_WITH_RISK without an acceptance blocks before implementation");
+      const recovery = recoverRunContext(runStore, requirementId);
+      ok(recovery!.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
+        "no acceptance -> BLOCKED_UNKNOWN even though gate result is PASS_WITH_RISK");
+      ok(recovery!.nextExecutionPoint === null, "unadmitted verdict keeps implementation sealed");
+    }
+
+    // Negative: an acceptance naming a STALE decision scope cannot admit
+    // this verdict round.
+    {
+      const requirementId = "REQ-WP4-W5B-STALE";
+      const { result, verdictScopeId } = await driveRiskChain(requirementId);
+      ok(typeof verdictScopeId === "string" && verdictScopeId.length > 0,
+        "the risk verdict materialized its decision scope");
+      appendBlockingFinding({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
+        runId: result.run_id, requirementId,
+        sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
+        severity: "MEDIUM", category: "SOLUTION", sequence: 1,
+        causeKind: "IMPROVEMENT",
+      });
+      const evidence = artifactStore.put("capability_findings", "w5b stale-scope acceptance evidence");
+      runStore.acceptFindingRisk(result.run_id, `${result.run_id}:finding:1`, {
+        riskAcceptedBy: "user:shaoyang01",
+        riskAcceptanceEvidenceRef: evidence.artifactRef,
+        riskAcceptanceEvidenceDigest: evidence.digest,
+        decisionScopeId: `${result.run_id}:decision:999`,
+      }).record;
+      const recovery = recoverRunContext(runStore, requirementId);
+      ok(recovery!.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
+        "stale-scope acceptance does not admit the verdict");
+      ok(recovery!.nextExecutionPoint === null,
+        "stale-scope acceptance keeps implementation sealed");
+    }
+
+    // Positive: a finding raised in generation 1, accepted under the
+    // generation-2 verdict's OWN decision scope once that round has
+    // adjudicated, admits exactly that verdict.
+    {
+      const requirementId = "REQ-WP4-W5B-LIVE";
+      const { result: firstResult } = await driveRiskChain(requirementId);
+      appendBlockingFinding({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
+        runId: firstResult.run_id, requirementId,
+        sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
+        severity: "MEDIUM", category: "SOLUTION", sequence: 1,
+        causeKind: "IMPROVEMENT",
+      });
+      // Generation 2: every node rebuilds, the gate current becomes ACTIVE
+      // again and a NEW verdict materializes a NEW decision scope.
+      openFeedbackGeneration({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
+        runId: firstResult.run_id, requirementId, locator: "feedback:w5b-live",
+      });
+      const second = await run("small fix", { requirementId, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
+      ok(second.final_status === "failed" && second.chain_status === "BLOCKED",
+        "generation-2 verdict starts BLOCKED_UNKNOWN until its own scope is accepted");
+      const liveVerdictScopeId = runStore.listCapabilityExecutions(firstResult.run_id)
+        .filter((e2) => e2.capability === "solution-gate" && e2.executionRole === "formal_verdict" && e2.status === "succeeded")
+        .at(-1)!.decisionScopeId as string;
+      ok(liveVerdictScopeId !== `${firstResult.run_id}:decision:1`,
+        "the generation-2 verdict mints a fresh decision scope");
+      const evidence = artifactStore.put("capability_findings", "w5b matching-scope acceptance evidence");
+      runStore.acceptFindingRisk(firstResult.run_id, `${firstResult.run_id}:finding:1`, {
+        riskAcceptedBy: "user:shaoyang01",
+        riskAcceptanceEvidenceRef: evidence.artifactRef,
+        riskAcceptanceEvidenceDigest: evidence.digest,
+        decisionScopeId: liveVerdictScopeId,
+      }).record;
+      const recovery = recoverRunContext(runStore, requirementId);
+      ok(recovery!.solutionGateDecision?.status === "DECIDED",
+        "matching-scope acceptance admits the PASS_WITH_RISK verdict");
+    }
+  }
+
   // ── W6: skill-isolation invariants (audit preconditions) ──
   console.log("W6: Re-Gate plan carries no skill surface; forged skill is inert/rejected");
   {
