@@ -29,6 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { materializeProducerRevision } from "../runtime";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
@@ -193,6 +194,16 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
     input: { requirement: "recover an interrupted execution" },
   });
   const output = first.recoveryContext.capabilityStates[0]!;
+  // F2-1: land the intake producer's revision so later entries dispatch
+  // against an established current instead of an open terminal→revision
+  // window.
+  materializeProducerRevision(
+    runStore, id.requirementId, id.runId,
+    runStore.listCapabilityExecutions(id.runId).find(
+      (event) => event.executionEventId === first.producerTerminalEventId,
+    ) ?? runStore.listCapabilityExecutions(id.runId).at(-1)!,
+    () => TS,
+  );
   return Object.freeze({
     root,
     id,
@@ -562,6 +573,13 @@ async function main(): Promise<void> {
         gateResult: "NOT_APPLICABLE",
         nextStepEligibility: "ELIGIBLE",
       }));
+      // F2-1: land the producer's revision before the next point starts so
+      // the seeded chain stays a legal precondition chain.
+      materializeProducerRevision(
+        gateStore, gateIdentity.requirementId, gateIdentity.runId,
+        gateStore.listCapabilityExecutions(gateIdentity.runId).at(-1)!,
+        () => TS,
+      );
       inputRef = outputRef;
       inputDigest = outputDigest;
       sequence += 2;
@@ -1062,6 +1080,14 @@ async function main(): Promise<void> {
     const currentOutput = first.recoveryContext.capabilityStates[0]!;
     ok(currentOutput.effectiveOutputArtifactRef !== null, "recovery exposes effective output ref");
     ok(currentOutput.effectiveOutputDigest !== null, "recovery exposes effective output digest");
+    // F2-1: the second entry may only start after intake's revision landed.
+    materializeProducerRevision(
+      runStore, id.requirementId, id.runId,
+      runStore.listCapabilityExecutions(id.runId).find(
+        (event) => event.executionEventId === first.producerTerminalEventId,
+      )!,
+      () => TS,
+    );
 
     const unrelated = artifactStore.put("capability_output", "unrelated but valid artifact");
     await rejectsCode("INVALID_INPUT", () => entry.execute({

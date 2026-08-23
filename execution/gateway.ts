@@ -437,7 +437,11 @@ export class ExecutionGateway {
       reasonCode: null,
     });
     tracing.runStore.appendCapabilityExecution(succeeded);
-    return result;
+    // Round 3 review F2: hand the caller the EXACT terminal event this
+    // dispatch committed — downstream binding (artifact revision
+    // materialization) must never re-derive the producer from the journal
+    // tail, which a concurrent entry could have advanced meanwhile.
+    return Object.freeze({ ...result, capabilityTerminalEventId: succeeded.executionEventId });
   }
 
   private appendCapabilityFailure(

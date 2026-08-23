@@ -51,6 +51,16 @@ import {
 import type { LoopCapabilityExecutionEvent } from "../core/loop-capability-execution";
 import { LoopRunStore } from "../core/loop-run-store";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: synthetic multi-point chains must close the terminal→
+// revision window between points — materialize an intermediate producer's
+// revision exactly as the runtime replay would before the next point starts.
+function seedProducerRevision(store: LoopRunStore, produced: LoopCapabilityExecutionEvent): void {
+  const snapshot = store.getSnapshot(produced.runId);
+  if (snapshot === undefined) throw new Error("seed producer run does not exist");
+  materializeProducerRevision(store, snapshot.state.identity.requirementId, produced.runId, produced, nextTs);
+}
 
 let passed = 0;
 let failed = 0;
@@ -806,7 +816,8 @@ withStore((store) => {
 console.log("artifact revision: producer execution binding rejects any drift");
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  const intakeSeed = driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, intakeSeed);
   const design = driver.succeed("solution-design", DESIGN_OUT);
   const bind = (o: Partial<RevisionDraftOptions>) => () => store.appendArtifactRevision(
     createLoopArtifactRevision(revisionDraft({
@@ -840,8 +851,8 @@ withRunningStore((store) => {
   // Gate FAIL: the execution succeeded with a FAIL Gate result; any revision
   // claiming a passing Gate for it must be rejected.
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("solution-design", DESIGN_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
+  seedProducerRevision(store, driver.succeed("solution-design", DESIGN_OUT));
   const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "FAIL");
   expectThrow("ILLEGAL_TRANSITION", () => store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
@@ -850,8 +861,8 @@ withRunningStore((store) => {
 });
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("solution-design", DESIGN_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
+  seedProducerRevision(store, driver.succeed("solution-design", DESIGN_OUT));
   const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "PASS_WITH_RISK");
   const appended = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
@@ -922,7 +933,7 @@ console.log("artifact revision: concurrent writers use CAS/conflict semantics");
 console.log("artifact revision: same-node advance requires WP4-era execution evidence");
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
   const design = driver.succeed("solution-design", { version: "1.0.0", digest: dg("9") });
   const first = createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: "1.0.0", digest: dg("9"),
@@ -952,7 +963,7 @@ withRunningStore((store, dir) => {
     producerExecutionId: design.executionEventId, createdAt: nextTs(),
   }))), "producer-pinned candidate semver is already occupied by the current revision");
   const chain = store.listArtifactRevisions("run-001");
-  assert(chain.length === 1 && chain[0]!.validity === "ACTIVE", "rejected advances leave the chain untouched");
+  assert(chain.length === 2 && chain.every((item) => item.validity === "ACTIVE"), "rejected advances leave the chain untouched");
   const current = store.getCurrentArtifactRevision("run-001", "solution-design");
   assert(current !== undefined && current.revisionId === first.revisionId && current.validity === "ACTIVE",
     "current pointer still targets the first revision");
@@ -993,7 +1004,7 @@ withRunningStore((store) => {
   // Stale upstream: the pointer still targets the STALE revision, but a STALE
   // revision can never be consumed as an upstream.
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
   const design = driver.succeed("solution-design", DESIGN_OUT);
   const designRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
@@ -1134,11 +1145,11 @@ withRunningStore((store, dir) => {
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
   const intake = driver.succeed("requirement-intake", INTAKE_OUT);
-  const design = driver.succeed("solution-design", DESIGN_OUT);
   const intakeRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "requirement-intake", sequence: 1, semver: INTAKE_OUT.version, digest: INTAKE_OUT.digest,
     producerExecutionId: intake.executionEventId, stablePath: "library/req-001/00-需求资料/req-001_需求摘要.md",
   }))).record;
+  const design = driver.succeed("solution-design", DESIGN_OUT);
   const designRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
     producerExecutionId: design.executionEventId,
@@ -1268,8 +1279,8 @@ withRunningStore((store, dir) => {
 });
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
-  driver.succeed("solution-design", DESIGN_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
+  seedProducerRevision(store, driver.succeed("solution-design", DESIGN_OUT));
   const review = driver.succeed("solution-gate", { version: "1.0.0", digest: dg("f") }, "PASS");
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
@@ -1282,7 +1293,7 @@ withRunningStore((store, dir) => {
 });
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
   const design = driver.succeed("solution-design", DESIGN_OUT);
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
@@ -1298,7 +1309,7 @@ withRunningStore((store, dir) => {
 });
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
   const design = driver.succeed("solution-design", DESIGN_OUT);
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,
@@ -1314,7 +1325,7 @@ withRunningStore((store, dir) => {
 });
 withRunningStore((store, dir) => {
   const driver = makeCapabilityDriver(store, "run-001");
-  driver.succeed("requirement-intake", INTAKE_OUT);
+  seedProducerRevision(store, driver.succeed("requirement-intake", INTAKE_OUT));
   const design = driver.succeed("solution-design", DESIGN_OUT);
   const revision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-design", sequence: 1, semver: DESIGN_OUT.version, digest: DESIGN_OUT.digest,

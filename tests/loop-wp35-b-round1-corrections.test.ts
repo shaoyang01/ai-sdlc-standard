@@ -27,6 +27,20 @@ import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "../core/loop-executor-types";
 import { preflightLoopRunStoreV2Cutover } from "../scripts/preflight-loop-run-store-v2-cutover";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: seeded multi-point chains must close the terminal→revision
+// window between points — materialize each succeeded producer's revision
+// exactly as the runtime replay would.
+function seedProducerRevision(store: LoopRunStore, event: LoopCapabilityExecutionEvent): void {
+  if (
+    event.status !== "succeeded" || event.outputArtifactRef === null ||
+    (event.capability === "solution-gate" && event.executionRole === "adversarial_scan")
+  ) {
+    return;
+  }
+  materializeProducerRevision(store, "REQ-R1-001", RUN, event, () => TS);
+}
 
 let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
@@ -262,6 +276,7 @@ async function main(): Promise<void> {
       for (const event of driverEvents.slice(0, 8)) {
         // Only intake..verdict (first 8 events).
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       const context = recoverRunContext(store, "REQ-R1-001")!;
       const scanState = context.executionPointStates.find((p) => p.executionRole === "adversarial_scan")!;
@@ -312,10 +327,6 @@ async function main(): Promise<void> {
         outputDigest: null, errorCode: null, retryable: null, reasonCode: null,
         bindingId: null, bindingVersion: null, inputArtifactRef: null,
       }));
-      const ledgerRef = ref("capability_findings", "e");
-      for (const event of buildChain({ scanFindingsRef: ledgerRef }).events) {
-        store.appendCapabilityExecution(event);
-      }
       // Build revisions for intake(seq1) and design(seq1): design is current.
       const SEGMENT: Record<string, string> = {
         "requirement-intake": "00-需求资料",
@@ -348,8 +359,23 @@ async function main(): Promise<void> {
         }));
       };
 
-      const intakeRev = appendRevision("requirement-intake", 1, "1.0.0", "b", []);
-      const designRev = appendRevision("solution-design", 1, "1.0.0", "d", [intakeRev.record.revisionId]);
+      // F2-1: the chain is appended point by point with each producer's
+      // revision landed BEFORE the next point starts — a legal precondition
+      // chain rather than a ride through the closed pending window.
+      const ledgerRef = ref("capability_findings", "e");
+      const chainEvents = buildChain({ scanFindingsRef: ledgerRef }).events;
+      const intakeRev = ((): ReturnType<typeof appendRevision> => {
+        for (const event of chainEvents.slice(0, 2)) store.appendCapabilityExecution(event);
+        return appendRevision("requirement-intake", 1, "1.0.0", "b", []);
+      })();
+      const designRev = ((): ReturnType<typeof appendRevision> => {
+        for (const event of chainEvents.slice(2, 4)) store.appendCapabilityExecution(event);
+        return appendRevision("solution-design", 1, "1.0.0", "d", [intakeRev.record.revisionId]);
+      })();
+      for (const event of chainEvents.slice(4)) {
+        store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
+      }
 
       // R7 first: same node but NOT current (explicitly marked STALE).
       store.markArtifactRevisionStale(RUN, designRev.record.revisionId);

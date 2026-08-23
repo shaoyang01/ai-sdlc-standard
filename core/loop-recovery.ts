@@ -22,11 +22,12 @@ import {
   type NodeCapabilityId,
 } from "../loop/types";
 import { planRegateFromFacts, type CurrentRevisionFacts } from "./loop-regate";
-import type {
-  LoopCapabilityExecutionEvent,
-  LoopCapabilityExecutionStatus,
-  LoopCapabilityGateResult,
-  LoopNextStepEligibility,
+import {
+  findPendingRevisionProducerExecution,
+  type LoopCapabilityExecutionEvent,
+  type LoopCapabilityExecutionStatus,
+  type LoopCapabilityGateResult,
+  type LoopNextStepEligibility,
 } from "./loop-capability-execution";
 
 export interface NodeExecutionProvenance {
@@ -95,6 +96,16 @@ export interface RunRecoveryContext {
     status: "DECIDED" | "BLOCKED_UNKNOWN";
     boundVerdictArtifactRef: string | null;
   } | null;
+  /**
+   * Round 3 review F2: the earliest succeeded producer execution whose node
+   * revision has not been materialized yet, or null. While this is non-null
+   * the terminal→revision window is still open: callers MUST finalize (or
+   * replay) this producer's revision materialization instead of dispatching
+   * the agent again, and the dispatch permit denies new work.
+   */
+  pendingRevisionMaterialization: Readonly<{
+    producerExecution: LoopCapabilityExecutionEvent;
+  }> | null;
 }
 
 export interface CapabilityRecoveryState {
@@ -332,6 +343,17 @@ export function recoverRunContext(
   const findings = capabilityExecutions.length > 0
     ? store.listFindings(state.identity.runId)
     : [];
+  // Round 3 review F2: derive the pending revision materialization from the
+  // same verified reads the rest of this context consumes — a succeeded
+  // producer without its node revision keeps the terminal→revision window
+  // open and must be finalized before any further dispatch.
+  const artifactRevisions = capabilityExecutions.length > 0
+    ? store.listArtifactRevisions(state.identity.runId)
+    : [];
+  const pendingRevisionProducer = findPendingRevisionProducerExecution(
+    capabilityExecutions,
+    artifactRevisions,
+  );
   const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
   for (const fact of store.listRegateCurrentFacts(state.identity.runId)) {
     currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
@@ -441,8 +463,7 @@ export function recoverRunContext(
     // impersonate the decision's anchor.
     const gateCurrentRevision = gateCurrentFact === undefined
       ? undefined
-      : store
-        .listArtifactRevisions(state.identity.runId)
+      : artifactRevisions
         .find((item) => item.revisionId === gateCurrentFact.revisionId);
     const boundToCurrentGate =
       lastVerdict.status === "succeeded" &&
@@ -541,6 +562,9 @@ export function recoverRunContext(
     lastCapabilityExecution,
     findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
     solutionGateDecision,
+    pendingRevisionMaterialization: pendingRevisionProducer === null
+      ? null
+      : Object.freeze({ producerExecution: pendingRevisionProducer }),
     lastExecution:
       lastExecutionEvent === undefined
         ? null

@@ -32,6 +32,20 @@ import {
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "../core/loop-executor-types";
+import { materializeProducerRevision } from "../runtime";
+
+// Re-review F2-1: seeded multi-point chains must close the terminal→revision
+// window between points — materialize each succeeded producer's revision
+// exactly as the runtime replay would.
+function seedProducerRevision(store: LoopRunStore, event: LoopCapabilityExecutionEvent): void {
+  if (
+    event.status !== "succeeded" || event.outputArtifactRef === null ||
+    (event.capability === "solution-gate" && event.executionRole === "adversarial_scan")
+  ) {
+    return;
+  }
+  materializeProducerRevision(store, REQUIREMENT, RUN, event, () => TS);
+}
 
 let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
@@ -287,6 +301,7 @@ async function main(): Promise<void> {
       ];
       for (const event of chain) {
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       const verdictTerminal = chain[chain.length - 1]!;
       ok(verdictTerminal.executionEventId === `${RUN}:capability:8:succeeded`,
@@ -351,6 +366,7 @@ async function main(): Promise<void> {
       ];
       for (const event of chain) {
         store.appendCapabilityExecution(event);
+        seedProducerRevision(store, event);
       }
       store.close();
 

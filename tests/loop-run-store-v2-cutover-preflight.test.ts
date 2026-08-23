@@ -1,8 +1,8 @@
 // LOOP Run Store v2 Cutover Preflight — Tests (C02-WP3.5-B, D3 rules 4-6)
 // ========================================================================
 // Covers the read-only journal scanner end to end:
-// - fresh v0 databases and healthy v6 journals pass;
-// - v1..v5, future formats, unversioned-with-LOOP-tables, non-SQLite files
+// - fresh v0 databases and healthy v7 journals pass;
+// - v1..v6, future formats, unversioned-with-LOOP-tables, non-SQLite files
 //   and owner-unconfirmable SQLite files all fail;
 // - a real v5 journal reports STOP_AND_RE_RULE with the distinct exit code;
 // - the script itself enforces explicit roots and non-zero exit semantics.
@@ -78,13 +78,13 @@ function withRoot(name: string, fn: (root: string) => void): void {
 }
 
 async function main(): Promise<void> {
-  console.log("preflight: fresh v0 and healthy v6 pass");
+  console.log("preflight: fresh v0 and healthy v7 pass");
   withRoot("pass", (root) => {
     seedV7Journal(root);
     new Database(join(root, "empty-v0.db")).close();
     const report = preflightLoopRunStoreV2Cutover([root]);
     ok(report.candidateCount === 2, "both candidate files discovered");
-    ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v6");
+    ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v7");
     ok(verdictOf(report, "v7-journal.db")?.verdict === "OK_V7", "runtime-created journal classifies as OK_V7");
     ok(verdictOf(report, "empty-v0.db")?.verdict === "FRESH_EMPTY", "empty unversioned database is FRESH_EMPTY");
   });

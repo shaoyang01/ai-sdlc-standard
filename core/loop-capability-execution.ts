@@ -644,3 +644,28 @@ export function validateLoopCapabilityExecutionChain(
     }
   }
 }
+
+/**
+ * Pending revision materialization (Round 3 review F2): a succeeded producer
+ * execution whose node revision has NOT landed yet holds the terminal→revision
+ * window closed. Derived purely from journal facts — the earliest succeeded
+ * execution carrying a node output (scan rounds author their Finding Ledger,
+ * never a node revision) whose executionEventId no artifact revision names as
+ * its producer. While such a producer exists, no entry may dispatch again;
+ * recovery finalizes (or replays) the revision materialization instead of
+ * re-calling the agent.
+ */
+export function findPendingRevisionProducerExecution(
+  events: readonly LoopCapabilityExecutionEvent[],
+  revisions: readonly Readonly<{ producerExecutionId: string }>[],
+): LoopCapabilityExecutionEvent | null {
+  const materialized = new Set(revisions.map((revision) => revision.producerExecutionId));
+  for (const event of events) {
+    if (event.status !== "succeeded") continue;
+    if (event.outputArtifactRef === null || event.outputDigest === null) continue;
+    if (event.capability === "solution-gate" && event.executionRole === "adversarial_scan") continue;
+    if (materialized.has(event.executionEventId)) continue;
+    return event;
+  }
+  return null;
+}

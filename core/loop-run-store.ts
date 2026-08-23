@@ -36,6 +36,7 @@ import {
 } from "./loop-run-state";
 import {
   canonicalizeLoopCapabilityExecutionEvent,
+  findPendingRevisionProducerExecution,
   validateLoopCapabilityExecutionChain,
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
@@ -1756,6 +1757,24 @@ export class LoopRunStore {
         if (current.some((item) => item.sequence === event.sequence)) {
           throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
         }
+        // Re-review F2-1: the terminal→revision window is a TRANSACTION
+        // invariant of every started append, not merely a permit rule. While
+        // a succeeded producer's node revision has not landed, no client —
+        // runtime, supported entry, or bare gateway — may open another
+        // capability attempt: the same-transaction check below makes the
+        // bypass impossible instead of delegating it to callers.
+        if (event.status === "started") {
+          const pendingProducer = findPendingRevisionProducerExecution(
+            current,
+            this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId),
+          );
+          if (pendingProducer !== null) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "a pending revision producer holds the dispatch window closed",
+            );
+          }
+        }
         try {
           const regateContext = this.regateChainContextInTransaction(db, event.runId);
           // WP4 Round 1 H1 fix: append-time authorization is ONLY the live
@@ -1779,21 +1798,12 @@ export class LoopRunStore {
         // v4 (re-review F1): the decision delta is physically bound like
         // revision outputs and finding evidence — the blob must exist in the
         // artifact store with a matching digest before the verdict lands.
+        // Error mapping matches verifyRevisionBlob/verifyFindingEvidenceBlob:
+        // missing or digest-drifted blobs reject the transition, corrupt blob
+        // content fails closed as STORE_CORRUPT, and only genuine I/O faults
+        // surface as STORE_FAILURE.
         if (event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null) {
-          if (this.artifactStore !== null) {
-            try {
-              this.artifactStore.read(event.decisionDeltaRef, event.decisionDeltaDigest);
-            } catch (error) {
-              if (error instanceof LoopArtifactStoreError &&
-                (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH")) {
-                throw new LoopRunJournalError(
-                  "ILLEGAL_TRANSITION",
-                  "decision delta blob is missing in the bound artifact store",
-                );
-              }
-              throw error;
-            }
-          }
+          this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "append");
         }
         this.insertCapabilityExecutionRow(db, row);
         return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
@@ -2277,6 +2287,40 @@ export class LoopRunStore {
         }
         if (error.code === "ARTIFACT_CORRUPT") {
           corrupt("finding closure evidence blob is corrupt in the bound artifact store");
+        }
+        storageFailure();
+      }
+      storageFailure();
+    }
+  }
+
+  /**
+   * Decision-delta blob binding (Recovery §2.1 read-path parity with
+   * revisions and finding evidence): when an artifact store is bound, a
+   * materialized decision delta must reference a blob that physically exists
+   * with the declared digest. A missing or drifted blob rejects the
+   * transition on append (ILLEGAL_TRANSITION) and is journal corruption on
+   * read (STORE_CORRUPT); corrupt blob content fails closed as STORE_CORRUPT
+   * on both paths; only genuine artifact-store I/O failures translate to
+   * STORE_FAILURE.
+   */
+  private verifyDecisionDeltaBlob(ref: string, digest: string, mode: "append" | "read"): void {
+    if (this.artifactStore === null) return;
+    try {
+      this.artifactStore.read(ref, digest);
+    } catch (error) {
+      if (error instanceof LoopArtifactStoreError) {
+        if (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH") {
+          if (mode === "append") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "decision delta blob is missing in the bound artifact store",
+            );
+          }
+          corrupt("decision delta blob is missing in the bound artifact store");
+        }
+        if (error.code === "ARTIFACT_CORRUPT") {
+          corrupt("decision delta blob is corrupt in the bound artifact store");
         }
         storageFailure();
       }
@@ -2935,9 +2979,24 @@ export class LoopRunStore {
           // claim settles.
           return { allowed: false, blockedPersisted: false };
         }
+        // Round 3 review F2: a succeeded producer whose node revision has not
+        // landed yet holds the terminal→revision window closed. No entry may
+        // dispatch any point while materialization is pending — deny WITHOUT
+        // persisting a budget block, so the pending revision append itself
+        // and later linear progress stay admissible.
+        const pendingProducer = findPendingRevisionProducerExecution(
+          events,
+          this.readArtifactRevisionsInTransaction(db, runId, snapshot.state.identity.requirementId),
+        );
+        if (pendingProducer !== null) {
+          return { allowed: false, blockedPersisted: false };
+        }
         const isJump = prevIdx >= 0 && targetPointIndex !== prevIdx && targetPointIndex < prevIdx + 1;
-        const prospective = rounds + (isJump ? 1 : 0);
-        if (prospective > effectiveMaxRounds) {
+        // Recovery 2.1.0 H4: the durable REGATE_ROUND_BUDGET_EXHAUSTED block
+        // is adjudicated ONLY for a persisted backward jump. Linear
+        // successors, same-point retries and scan→verdict progress never
+        // persist a budget block, regardless of the historical round count.
+        if (isJump && rounds + 1 > effectiveMaxRounds) {
           const sequence = state.lastSequence + 1;
           this.appendEvent(Object.freeze({
             eventId: `${runId}:${sequence}:run_blocked`,
@@ -3748,20 +3807,14 @@ export class LoopRunStore {
       // must remain physically reproducible — every validating read of an
       // event carrying a decision delta re-reads the blob when an artifact
       // store is bound (append-time verification alone cannot cover later
-      // deletion or content drift).
+      // deletion or content drift). Mapping matches verifyRevisionBlob:
+      // missing/drifted or corrupt blob content is STORE_CORRUPT; only
+      // genuine I/O faults surface as STORE_FAILURE.
       if (
         event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null &&
         this.artifactStore !== null
       ) {
-        try {
-          this.artifactStore.read(event.decisionDeltaRef, event.decisionDeltaDigest);
-        } catch (error) {
-          if (error instanceof LoopArtifactStoreError &&
-            (error.code === "ARTIFACT_NOT_FOUND" || error.code === "ARTIFACT_DIGEST_MISMATCH")) {
-            corrupt("decision delta blob is missing or altered");
-          }
-          storageFailure();
-        }
+        this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "read");
       }
       return event;
     });

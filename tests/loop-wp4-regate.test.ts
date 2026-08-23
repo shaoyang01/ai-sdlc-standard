@@ -867,6 +867,9 @@ async function main(): Promise<void> {
           agent: "hermes" as const,
           output: Object.freeze({ result: "SUCCESS", gate_result: "PASS_WITH_RISK" }),
           artifacts: Object.freeze([]),
+          // Round 3 review F2: name the exact terminal event this dispatch
+          // committed so revision materialization binds to it.
+          capabilityTerminalEventId: `${runId}:capability:${sequence + 1}:succeeded`,
         });
       },
     };
@@ -1293,6 +1296,216 @@ async function main(): Promise<void> {
       f3RewindCode = error instanceof LoopRunJournalError ? error.code : null;
     }
     ok(f3RewindCode === "ILLEGAL_TRANSITION", `generation rewind rejected (got ${f3RewindCode})`);
+  }
+
+  // ── W11 (Round 3 review F3): linear progress never blocks on historical rounds ──
+  console.log("W11: historical rounds never persist a budget block for linear progress");
+  {
+    // (1) Two legal backward waves persisted; the second wave is truncated
+    // mid-wave by the maxDispatches safety bound. Resuming with a LOWER
+    // per-invocation budget must still allow the linear continuation — the
+    // durable budget block is reserved for NEW backward jumps only
+    // (Recovery 2.1.0 H4).
+    const env = makeEnv();
+    const requirementId = "REQ-WP4-W11";
+    const first = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+    });
+    ok(first.final_status === "success", "generation 1 completes");
+    openFeedbackGeneration(env, { runId: first.run_id, requirementId, locator: "feedback:w11-a" });
+    const second = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(second.final_status === "success", "feedback wave 1 completes within budget");
+    ok(env.runStore.countRegateRounds(first.run_id) === 1, "one persisted backward jump");
+    // A second verified feedback record opens generation 3.
+    env.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
+      runId: first.run_id, requirementId,
+      sequence: 2,
+      status: "CLASSIFIED",
+      changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE",
+      previousGeneration: 2,
+      currentChangeScope: "feedback opens generation 3",
+      confirmedFactsPreserved: ["billing export stays idempotent"],
+      sourceRefs: [{
+        sourceType: "CONVERSATION", locator: "feedback:w11-b", priority: 1,
+        sourceVersion: null, observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:w11-b"],
+      classificationReason: "外部反馈开启新代际",
+      blockedReasonCode: null,
+      createdAt: futureIso(2000),
+    }));
+    // Wave 2 starts (second legal jump) but is truncated after one dispatch.
+    const third = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+      maxRegateRounds: 2, maxDispatches: 1,
+    });
+    ok(env.runStore.countRegateRounds(first.run_id) === 2, "two persisted backward jumps");
+    ok(!env.runStore.listEvents(first.run_id).some((e2) => e2.kind === "run_blocked"),
+      "the truncated wave persists no durable block");
+    ok(third.chain_status !== "BLOCKED", "truncation is a plain safety stop");
+    // Resume with a LOWER budget: historical rounds (2) exceed it, but the
+    // pending work is a LINEAR continuation — it must complete without any
+    // durable REGATE_ROUND_BUDGET_EXHAUSTED block.
+    const orderBeforeResume = env.dispatchOrder.length;
+    const fourth = await run("migrate billing export", {
+      requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+      gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(env.dispatchOrder.length > orderBeforeResume,
+      "the linear continuation dispatches instead of blocking on historical rounds");
+    ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED",
+      "the linear continuation completes the truncated wave");
+    ok(!env.runStore.listEvents(first.run_id).some((e2) => e2.kind === "run_blocked"),
+      "no run_blocked event for linear progress over historical rounds");
+    ok(recoverRunContext(env.runStore, requirementId)!.blockingReasonCode === null,
+      "no blocking reason persists after the linear resume");
+
+    // (2) Same-point retryable retry over historical rounds: a retry is not
+    // a backward jump, so a lower per-invocation budget must not block it.
+    const envRetry = makeEnv();
+    const reqRetry = "REQ-WP4-W11-RETRY";
+    const retryFirst = await run("migrate billing export", {
+      requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
+      gateway: envRetry.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+    });
+    ok(retryFirst.final_status === "success", "retry scenario generation 1 completes");
+    openFeedbackGeneration(envRetry, { runId: retryFirst.run_id, requirementId: reqRetry, locator: "feedback:w11-r-a" });
+    const retrySecond = await run("migrate billing export", {
+      requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
+      gateway: envRetry.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(retrySecond.final_status === "success", "retry scenario feedback wave completes");
+    ok(envRetry.runStore.countRegateRounds(retryFirst.run_id) === 1, "retry scenario: one persisted jump");
+    envRetry.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
+      runId: retryFirst.run_id, requirementId: reqRetry,
+      sequence: 2,
+      status: "CLASSIFIED",
+      changeKind: "FEEDBACK_DRIVEN_CHANGE",
+      payloadForm: "DELTA_CHANGE",
+      previousGeneration: 2,
+      currentChangeScope: "feedback opens generation 3",
+      confirmedFactsPreserved: ["billing export stays idempotent"],
+      sourceRefs: [{
+        sourceType: "CONVERSATION", locator: "feedback:w11-r-b", priority: 1,
+        sourceVersion: null, observedAt: new Date().toISOString(),
+      }],
+      triggerEvidence: ["source:feedback:w11-r-b"],
+      classificationReason: "外部反馈开启新代际",
+      blockedReasonCode: null,
+      createdAt: futureIso(2000),
+    }));
+    // Flaky wrapper: the generation-3 intake dispatch (attempt 3) fails once,
+    // retryably; everything else delegates to the deterministic shadow.
+    const retryNow = (): string => new Date().toISOString();
+    const retryInner = createDeterministicCapabilityGateway({
+      runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
+      bindingRegistry: createRuntimeBindingRegistry(), now: retryNow,
+    });
+    const flakyGateway: RuntimeCapabilityGateway = {
+      async execute(request) {
+        const context = request.loopExecution!;
+        if (!(request.type === "requirement-intake" && context.attempt === 3)) {
+          return retryInner.execute(request);
+        }
+        const runId = context.runId;
+        const capability = request.type as NodeCapabilityId;
+        const executionRole = context.executionRole as CapabilityExecutionRole;
+        const sequence = envRetry.runStore.listCapabilityExecutions(runId).length + 1;
+        const base = {
+          schemaVersion: 4 as const,
+          runId,
+          capability,
+          executionRole,
+          nodeId: capability,
+          attempt: context.attempt,
+          bindingId: `binding-codex-${capability}-${executionRole}`,
+          bindingVersion: "2.0.0",
+          bindingRegistryVersion: createRuntimeBindingRegistry().version,
+          executorAgent: "codex" as AgentName,
+          executorAdapter: "codex-real-dispatch",
+          executorVersion: "1.0.0",
+          inputArtifactRef: context.inputArtifactRef,
+          inputArtifactVersion: context.inputArtifactVersion,
+          inputDigest: context.inputDigest,
+          consumedFindingsRef: null,
+          consumedFindingsDigest: null,
+          decisionDepth: null,
+          decisionScopeId: null,
+          decisionDeltaRef: null,
+          decisionDeltaDigest: null,
+        };
+        envRetry.runStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence}:started`,
+          sequence,
+          status: "started" as const,
+          createdAt: retryNow(),
+          outputArtifactRef: null,
+          outputArtifactVersion: null,
+          outputDigest: null,
+          gateResult: null,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: null,
+          errorCode: null,
+          retryable: null,
+          reasonCode: null,
+        }));
+        envRetry.runStore.appendCapabilityExecution(Object.freeze({
+          ...base,
+          executionEventId: `${runId}:capability:${sequence + 1}:failed`,
+          sequence: sequence + 1,
+          status: "failed" as const,
+          createdAt: retryNow(),
+          outputArtifactRef: null,
+          outputArtifactVersion: null,
+          outputDigest: null,
+          gateResult: null,
+          unresolvedFindingsRef: null,
+          unresolvedFindingsDigest: null,
+          nextStepEligibility: "BLOCKED" as const,
+          errorCode: "EXECUTOR_EXCEPTION",
+          retryable: true,
+          reasonCode: null,
+        }));
+        return Object.freeze({
+          success: false as const,
+          node: capability,
+          agent: "codex" as AgentName,
+          output: Object.freeze({ result: "FAILED", capability }),
+          artifacts: Object.freeze([]),
+          error: "capability execution failed",
+        });
+      },
+    };
+    // The retryable failure is admitted (jump 2 fits the budget) but stops
+    // the invocation WITHOUT a durable block.
+    const retryThird = await run("migrate billing export", {
+      requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
+      gateway: flakyGateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 2,
+    });
+    ok(envRetry.runStore.countRegateRounds(retryFirst.run_id) === 2, "retry scenario: two persisted jumps");
+    ok(retryThird.final_status === "failed", "the retryable failure stops the invocation honestly");
+    ok(!envRetry.runStore.listEvents(retryFirst.run_id).some((e2) => e2.kind === "run_blocked"),
+      "a retryable failure persists no durable block");
+    // Resume with a LOWER budget: the same-point retry must be admitted —
+    // historical rounds never block linear/retry progress.
+    const retryFourth = await run("migrate billing export", {
+      requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
+      gateway: flakyGateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 1,
+    });
+    ok(retryFourth.final_status === "success" && retryFourth.chain_status === "COMPLETED",
+      "the same-point retry completes the wave under a lower budget");
+    ok(envRetry.runStore.countRegateRounds(retryFirst.run_id) === 2,
+      "a same-point retry consumes no additional round");
+    ok(!envRetry.runStore.listEvents(retryFirst.run_id).some((e2) => e2.kind === "run_blocked"),
+      "no run_blocked event for the same-point retry over historical rounds");
   }
 
   console.log(`\nWP4 regate contract tests: ${passed} assertions passed`);
