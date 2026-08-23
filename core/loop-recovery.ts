@@ -435,36 +435,39 @@ export function recoverRunContext(
     const gateCurrentFact = store
       .listRegateCurrentFacts(state.identity.runId)
       .find((fact) => fact.nodeId === "solution-gate");
+    // Round 2 review H2: the binding is IDENTITY-based, not content-based —
+    // the current must BE the revision that verdict authored (revision id +
+    // producer execution id), so an equal-content older current cannot
+    // impersonate the decision's anchor.
+    const gateCurrentRevision = gateCurrentFact === undefined
+      ? undefined
+      : store
+        .listArtifactRevisions(state.identity.runId)
+        .find((item) => item.revisionId === gateCurrentFact.revisionId);
     const boundToCurrentGate =
       lastVerdict.status === "succeeded" &&
       gateCurrentFact !== undefined &&
       gateCurrentFact.validity === "ACTIVE" &&
       gateCurrentFact.artifactRef === lastVerdict.outputArtifactRef &&
-      gateCurrentFact.digest === lastVerdict.outputDigest;
+      gateCurrentFact.digest === lastVerdict.outputDigest &&
+      gateCurrentRevision !== undefined &&
+      gateCurrentRevision.producerExecutionId === lastVerdict.executionEventId;
     const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
     // PASS_WITH_RISK is DECIDED only with an ACCEPTED_RISK proof from the
     // SAME decision scope: the risk-accepted finding's source revision must
     // carry the same generation as the verdict round (same wave).
     let pwrProofSameScope = false;
     if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
-      // Same decision scope: the risk-accepted finding must originate from a
-      // revision of the same wave as the verdict (generation <= verdict's).
-      const verdictGen = store
-        .listArtifactRevisions(state.identity.runId)
-        .find((item) => item.artifactRef === lastVerdict.outputArtifactRef)
-        ?.generation ?? null;
-      pwrProofSameScope = findings.some((finding) => {
-        if (finding.status !== "ACCEPTED_RISK") return false;
-        const sourceRev = store
-          .listArtifactRevisions(state.identity.runId)
-          .find((item) => item.revisionId === finding.sourceRevisionId);
-        return (
-          sourceRev !== undefined &&
-          verdictGen !== null &&
-          sourceRev.generation !== null &&
-          sourceRev.generation <= verdictGen
-        );
-      });
+      // Round 2 review H2: same decision scope means the ACCEPTED_RISK
+      // closure names THIS verdict round's decisionScopeId — a generation
+      // comparison alone would let any old acceptance authorize any new
+      // verdict on equal-generation products.
+      pwrProofSameScope =
+        lastVerdict.decisionScopeId !== null &&
+        findings.some((finding) =>
+          finding.status === "ACCEPTED_RISK" &&
+          finding.riskAcceptedScopeId !== null &&
+          finding.riskAcceptedScopeId === lastVerdict.decisionScopeId);
     }
     // Round 2 review H1: the depth choice must be MATERIALIZED on the
     // verdict event itself — gateResult alone never admits implementation.

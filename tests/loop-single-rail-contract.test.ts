@@ -96,7 +96,7 @@ function main(): void {
 
   console.log("single rail: schema versions advanced, no silent compatibility");
   ok(LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION === 4, "capability execution schema is v4");
-  ok(LOOP_FINDING_SCHEMA_VERSION === 3, "finding schema is v3 (direct causal evidence)");
+  ok(LOOP_FINDING_SCHEMA_VERSION === 4, "finding schema is v4 (causal evidence + decision-scope binding)");
   ok(LOOP_ARTIFACT_REVISION_SCHEMA_VERSION === 2, "artifact revision schema is v2");
 
   console.log("single rail: six finding categories pin their earliest affected node");

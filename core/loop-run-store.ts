@@ -455,6 +455,7 @@ type FindingRow = {
   risk_accepted_by: string | null;
   risk_acceptance_evidence_ref: string | null;
   risk_acceptance_evidence_digest: string | null;
+  risk_accepted_scope_id: string | null;
   superseded_by: string | null;
   created_at: string;
   canonical_sha256: string;
@@ -477,6 +478,7 @@ type FindingProofRow = {
   evidence_ref: string;
   evidence_digest: string;
   risk_accepted_by: string | null;
+  risk_accepted_scope_id: string | null;
   canonical_sha256: string;
 };
 
@@ -848,7 +850,7 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 function rowToFinding(row: FindingRow): LoopFinding {
   return Object.freeze({
     // The schema version is a fixed model constant, not a persisted column.
-    schemaVersion: 3,
+    schemaVersion: 4,
     findingId: row.finding_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
@@ -869,6 +871,7 @@ function rowToFinding(row: FindingRow): LoopFinding {
     riskAcceptedBy: row.risk_accepted_by,
     riskAcceptanceEvidenceRef: row.risk_acceptance_evidence_ref,
     riskAcceptanceEvidenceDigest: row.risk_acceptance_evidence_digest,
+    riskAcceptedScopeId: row.risk_accepted_scope_id,
     supersededBy: row.superseded_by,
     createdAt: row.created_at,
   });
@@ -883,8 +886,9 @@ function insertFindingRow(db: Database.Database, record: LoopFinding): void {
       earliest_affected_node_id, status, resolved_by_revision_id,
       resolution_evidence_ref, resolution_evidence_digest, risk_accepted_by,
       risk_acceptance_evidence_ref, risk_acceptance_evidence_digest,
+      risk_accepted_scope_id,
       superseded_by, created_at, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.findingId, record.runId, record.requirementId, record.sequence,
     record.sourceCapability, record.sourceRevisionId, record.causeKind,
@@ -893,7 +897,8 @@ function insertFindingRow(db: Database.Database, record: LoopFinding): void {
     record.earliestAffectedNodeId, record.status, record.resolvedByRevisionId,
     record.resolutionEvidenceRef, record.resolutionEvidenceDigest,
     record.riskAcceptedBy, record.riskAcceptanceEvidenceRef,
-    record.riskAcceptanceEvidenceDigest, record.supersededBy, record.createdAt,
+    record.riskAcceptanceEvidenceDigest, record.riskAcceptedScopeId,
+    record.supersededBy, record.createdAt,
     sha256Hex(canonicalizeLoopFinding(record)),
   );
 }
@@ -909,6 +914,7 @@ function rowToFindingProof(row: FindingProofRow): LoopFindingProof {
     evidenceRef: row.evidence_ref,
     evidenceDigest: row.evidence_digest,
     riskAcceptedBy: row.risk_accepted_by,
+    riskAcceptedScopeId: row.risk_accepted_scope_id,
   });
 }
 
@@ -917,12 +923,14 @@ function insertFindingProofRow(db: Database.Database, proof: LoopFindingProof, r
     `INSERT INTO loop_finding_proofs (
       finding_id, proof_kind, revision_id, revision_node_id,
       revision_artifact_ref, revision_artifact_digest,
-      evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      evidence_ref, evidence_digest, risk_accepted_by,
+      risk_accepted_scope_id, canonical_sha256
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     proof.findingId, proof.proofKind, proof.revisionId, proof.revisionNodeId,
     proof.revisionArtifactRef, proof.revisionArtifactDigest,
     proof.evidenceRef, proof.evidenceDigest, proof.riskAcceptedBy,
+    proof.riskAcceptedScopeId,
     sha256Hex(canonicalizeLoopFindingProof(proof, runId)),
   );
 }
@@ -1365,6 +1373,7 @@ export class LoopRunStore {
                 risk_accepted_by TEXT,
                 risk_acceptance_evidence_ref TEXT,
                 risk_acceptance_evidence_digest TEXT,
+                risk_accepted_scope_id TEXT,
                 superseded_by TEXT,
                 created_at TEXT NOT NULL,
                 canonical_sha256 TEXT NOT NULL,
@@ -1398,6 +1407,7 @@ export class LoopRunStore {
                 evidence_ref TEXT NOT NULL,
                 evidence_digest TEXT NOT NULL,
                 risk_accepted_by TEXT,
+                risk_accepted_scope_id TEXT,
                 canonical_sha256 TEXT NOT NULL,
                 CHECK (proof_kind IN ('RESOLUTION', 'RISK_ACCEPTANCE')),
                 FOREIGN KEY (finding_id)
@@ -3126,11 +3136,13 @@ export class LoopRunStore {
         const updateResult = db.prepare(
           `UPDATE loop_findings SET
             status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
-            risk_acceptance_evidence_digest = ?, canonical_sha256 = ?
+            risk_acceptance_evidence_digest = ?, risk_accepted_scope_id = ?,
+            canonical_sha256 = ?
           WHERE finding_id = ? AND status = ?`,
         ).run(
           "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
-          accepted.riskAcceptanceEvidenceDigest, sha256Hex(canonicalizeLoopFinding(accepted)),
+          accepted.riskAcceptanceEvidenceDigest, accepted.riskAcceptedScopeId,
+          sha256Hex(canonicalizeLoopFinding(accepted)),
           findingId, "OPEN",
         );
         if (updateResult.changes !== 1) {
@@ -3191,10 +3203,12 @@ export class LoopRunStore {
             status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
             resolution_evidence_digest = ?, risk_accepted_by = ?,
             risk_acceptance_evidence_ref = ?, risk_acceptance_evidence_digest = ?,
+            risk_accepted_scope_id = ?,
             superseded_by = ?, canonical_sha256 = ?
           WHERE finding_id = ? AND status != ?`,
         ).run(
-          "SUPERSEDED", null, null, null, null, null, null, superseded.supersededBy,
+          "SUPERSEDED", null, null, null, null, null, null, null,
+          superseded.supersededBy,
           sha256Hex(canonicalizeLoopFinding(superseded)), findingId, "SUPERSEDED",
         );
         if (updateResult.changes !== 1) {
@@ -3712,6 +3726,7 @@ export class LoopRunStore {
       ["risk_accepted_by", "TEXT", 0, 0],
       ["risk_acceptance_evidence_ref", "TEXT", 0, 0],
       ["risk_acceptance_evidence_digest", "TEXT", 0, 0],
+      ["risk_accepted_scope_id", "TEXT", 0, 0],
       ["superseded_by", "TEXT", 0, 0],
       ["created_at", "TEXT", 1, 0], ["canonical_sha256", "TEXT", 1, 0],
     ]);
@@ -3739,6 +3754,7 @@ export class LoopRunStore {
       ["revision_artifact_digest", "TEXT", 0, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["risk_accepted_by", "TEXT", 0, 0],
+      ["risk_accepted_scope_id", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],
     ]);
     verifyTableForeignKeys(db, "loop_finding_proofs", "finding proof table", [

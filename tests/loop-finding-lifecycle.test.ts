@@ -442,6 +442,7 @@ const RISK_EVIDENCE = Object.freeze({
   riskAcceptedBy: "user:shaoyang01",
   riskAcceptanceEvidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("4")}`,
   riskAcceptanceEvidenceDigest: dg("4"),
+  decisionScopeId: "run-001:decision:1",
 });
 
 /**
@@ -550,7 +551,7 @@ function withRunningStore(fn: (store: LoopRunStore, dir: string) => void): void 
 
 console.log("finding lifecycle: schema constants and canonical tokens");
 {
-  assert(LOOP_FINDING_SCHEMA_VERSION === 3, "finding schema version is 3");
+  assert(LOOP_FINDING_SCHEMA_VERSION === 4, "finding schema version is 4");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
   assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
     "six canonical categories");
@@ -1578,6 +1579,7 @@ function canonicalizeProofUnchecked(proof: LoopFindingProof): string {
     evidenceRef: proof.evidenceRef,
     evidenceDigest: proof.evidenceDigest,
     riskAcceptedBy: proof.riskAcceptedBy,
+    riskAcceptedScopeId: proof.riskAcceptedScopeId,
   });
 }
 
@@ -1623,6 +1625,7 @@ function appendAndResolveFinding(
     evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
     evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
     riskAcceptedBy: null,
+    riskAcceptedScopeId: null,
   });
   const db = new Database(join(dir, "journal.db"));
   try {
@@ -1768,6 +1771,7 @@ function appendAndResolveFinding(
         evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("7")}`,
         evidenceDigest: dg("7"),
         riskAcceptedBy: null,
+        riskAcceptedScopeId: null,
       });
       db.prepare("UPDATE loop_finding_proofs SET evidence_ref = ?, evidence_digest = ?, canonical_sha256 = ? WHERE finding_id = ?")
         .run(tampered.evidenceRef, tampered.evidenceDigest,
@@ -1794,11 +1798,13 @@ function appendAndResolveFinding(
         `INSERT INTO loop_finding_proofs (
           finding_id, proof_kind, revision_id, revision_node_id,
           revision_artifact_ref, revision_artifact_digest,
-          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          evidence_ref, evidence_digest, risk_accepted_by,
+          risk_accepted_scope_id, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         forged.findingId, forged.proofKind, null, null, null, null,
         forged.evidenceRef, forged.evidenceDigest, forged.riskAcceptedBy,
+        forged.riskAcceptedScopeId,
         createHash("sha256").update(canonicalizeLoopFindingProof(forged, "run-001")).digest("hex"),
       );
     } finally {
@@ -1831,12 +1837,13 @@ function appendAndResolveFinding(
         `INSERT INTO loop_finding_proofs (
           finding_id, proof_kind, revision_id, revision_node_id,
           revision_artifact_ref, revision_artifact_digest,
-          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          evidence_ref, evidence_digest, risk_accepted_by,
+          risk_accepted_scope_id, canonical_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         finding.findingId, "RESOLUTION", validationRevision.revisionId, "knowledge-sync",
         validationRevision.artifactRef, validationRevision.digest,
-        RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null,
+        RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null, null,
         createHash("sha256").update(canonicalizeProofUnchecked(Object.freeze({
           findingId: finding.findingId,
           proofKind: "RESOLUTION",
@@ -1847,6 +1854,7 @@ function appendAndResolveFinding(
           evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
           evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
           riskAcceptedBy: null,
+          riskAcceptedScopeId: null,
         }))).digest("hex"),
       );
     } finally {
@@ -2523,6 +2531,7 @@ function driveBoundNodes(
       riskAcceptedBy: "user:shaoyang01",
       riskAcceptanceEvidenceRef: evidence.artifactRef,
       riskAcceptanceEvidenceDigest: evidence.digest,
+      decisionScopeId: "run-001:decision:1",
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");
@@ -2545,6 +2554,7 @@ function driveBoundNodes(
       riskAcceptedBy: "user:shaoyang01",
       riskAcceptanceEvidenceRef: evidence.artifactRef,
       riskAcceptanceEvidenceDigest: evidence.digest,
+      decisionScopeId: "run-001:decision:1",
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");
