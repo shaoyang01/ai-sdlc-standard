@@ -18,7 +18,7 @@
 //       rejections, forged bindings, configuration freeze.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -181,14 +181,33 @@ const ALL_POINTS = 8;
 
 
 function assertSameAuthorityFacts(a: NonNullable<ReturnType<typeof recoverRunContext>>, b: NonNullable<ReturnType<typeof recoverRunContext>>, label: string): void {
-  ok(a.generation === b.generation, `${label}: generation`);
-  ok(JSON.stringify(a.latestChangeRecord) === JSON.stringify(b.latestChangeRecord), `${label}: latestChangeRecord`);
-  ok(JSON.stringify(a.currentArtifactMap) === JSON.stringify(b.currentArtifactMap), `${label}: currentArtifactMap`);
-  ok(JSON.stringify(a.openFindings) === JSON.stringify(b.openFindings), `${label}: openFindings`);
-  ok(JSON.stringify(a.invalidatedRevisions) === JSON.stringify(b.invalidatedRevisions), `${label}: invalidatedRevisions`);
-  ok(JSON.stringify(a.regatePlan) === JSON.stringify(b.regatePlan), `${label}: regatePlan`);
-  ok(JSON.stringify(a.nextExecutionPoint) === JSON.stringify(b.nextExecutionPoint), `${label}: next action`);
-  ok(JSON.stringify(deriveDispatchCommand(a)) === JSON.stringify(deriveDispatchCommand(b)), `${label}: dispatch command`);
+  // C02-WP5 B2: STRUCTURAL deep equality over the ENTIRE recovery authority
+  // — any field drifting on one connection only (originRequirementInput,
+  // solutionGateDecision, findingGate, pendingRevisionMaterialization,
+  // execution states, ...) must fail this oracle. No exclusion list: every
+  // field of RunRecoveryContext is authoritative plain frozen data.
+  try {
+    assert.deepStrictEqual(b, a);
+  } catch (error) {
+    assert.fail(`${label}: recovery authorities diverge — ${(error as Error).message.split("\n")[0]}`);
+  }
+  passed += 1;
+  ok(JSON.stringify(deriveDispatchCommand(a)) === JSON.stringify(deriveDispatchCommand(b)),
+    `${label}: dispatch command identical`);
+}
+
+
+function countFilesRecursive(root: string): number {
+  let count = 0;
+  const stack: string[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.isDirectory()) stack.push(join(current, entry.name));
+      else count += 1;
+    }
+  }
+  return count;
 }
 
 async function main(): Promise<void> {
@@ -272,8 +291,23 @@ async function main(): Promise<void> {
         gen3Intake.inputDigest === originalIntake.inputDigest,
         "the generation-3 intake consumed the ORIGINAL pinned source, not the replacement text");
       const recoveryGen3 = recoverRunContext(env.runStore, requirementId)!;
+      ok(recoveryGen3.latestChangeRecord!.sequence === 2 &&
+        recoveryGen3.latestChangeRecord!.previousGeneration === 2 &&
+        recoveryGen3.latestChangeRecord!.changeKind === "FEEDBACK_DRIVEN_CHANGE",
+        "the change authority projects the LATEST record (sequence/generation/kind pinned)");
       ok(recoveryGen3.latestChangeRecord!.confirmedFactsPreserved.includes("login flow behavior stays"),
         "confirmed facts preserved across processes in the change authority");
+      // B2: the SAME non-trivial authority (non-empty change record,
+      // invalidated revisions, multiple attempts) recovered through a SECOND
+      // process must deep-equal the first connection — including origin
+      // source pinning and confirmed facts.
+      const gen3Other = secondProcess(env);
+      const recoveryGen3Other = recoverRunContext(gen3Other.runStore, requirementId)!;
+      assertSameAuthorityFacts(recoveryGen3, recoveryGen3Other, "gen-3 second process");
+      ok(recoveryGen3Other.latestChangeRecord!.confirmedFactsPreserved.includes("login flow behavior stays") &&
+        recoveryGen3Other.originRequirementInput !== null &&
+        recoveryGen3Other.originRequirementInput!.inputArtifactRef === originalIntake.inputArtifactRef,
+        "second process restores confirmed facts and the pinned origin source");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -669,6 +703,7 @@ async function main(): Promise<void> {
         now: () => new Date().toISOString(),
       });
       const eventsBeforeDeterministicSkill = env.runStore.listCapabilityExecutions(stopped.run_id).length;
+      const artifactsBeforeDeterministicSkill = countFilesRecursive(env.root);
       await expectCode("INVALID_INPUT", () => deterministic.execute({
         type: "solution-gate", node: "solution-gate", agent: "codex",
         requirementId, input: {}, skill: "sdlc-speckit-pipeline",
@@ -682,6 +717,11 @@ async function main(): Promise<void> {
       } as never), "deterministic gateway rejects skill metadata outright");
       ok(env.runStore.listCapabilityExecutions(stopped.run_id).length === eventsBeforeDeterministicSkill,
         "the rejected deterministic dispatch left zero journal side effects");
+      ok(countFilesRecursive(env.root) === artifactsBeforeDeterministicSkill,
+        "the rejected deterministic skill dispatch wrote zero artifact files");
+      const eventsBeforeForged = env.runStore.listCapabilityExecutions(stopped.run_id).length;
+      const runsBeforeForged = env.runStore.listRunsByRequirement("REQ-FORGED-IDENTITY").length;
+      const artifactsBeforeForged = countFilesRecursive(env.root);
       await expectCode("INVALID_INPUT", () => deterministic.execute({
         type: "solution-gate", node: "solution-gate", agent: "codex",
         requirementId: "REQ-FORGED-IDENTITY", input: {},
@@ -693,6 +733,11 @@ async function main(): Promise<void> {
           outputArtifactVersion: "1.0.0",
         },
       } as never), "deterministic gateway rejects a forged Requirement identity");
+      ok(env.runStore.listCapabilityExecutions(stopped.run_id).length === eventsBeforeForged &&
+        env.runStore.listRunsByRequirement("REQ-FORGED-IDENTITY").length === runsBeforeForged,
+        "forged identity rejection wrote zero journal events and zero runs");
+      ok(countFilesRecursive(env.root) === artifactsBeforeForged,
+        "forged identity rejection wrote zero artifact files");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -763,14 +808,20 @@ async function main(): Promise<void> {
       mismatchedStore.close();
       otherArtifacts.close();
 
-      // F3: neither owning module exports a registrar — the ONLY write path
-      // to either binding registry is the owning constructor.
+      // F3/B2: EXACT export audit — neither owning module exposes ANY
+      // registrar-shaped symbol (bind*/register*/...Registrar), and both
+      // read predicates exist. A renamed registrar cannot slip through.
       const storeModule = await import("../core/loop-run-store");
       const gatewayModule = await import("../execution/gateway");
-      ok(Object.keys(storeModule).every((key) => !/^bind/.test(key)),
-        "the run store module exposes no binding registrar");
-      ok(Object.keys(gatewayModule).every((key) => !/^bind/.test(key)),
-        "the gateway module exposes no binding registrar");
+      const registrarShaped = (key: string): boolean =>
+        /^bind/i.test(key) || /^register/i.test(key) || /registrar$/i.test(key);
+      ok(Object.keys(storeModule).filter(registrarShaped).join(",") === "",
+        `run store module exposes no registrar-shaped export (got ${Object.keys(storeModule).filter(registrarShaped).join(",")})`);
+      ok(Object.keys(gatewayModule).filter(registrarShaped).join(",") === "",
+        `gateway module exposes no registrar-shaped export (got ${Object.keys(gatewayModule).filter(registrarShaped).join(",")})`);
+      ok(typeof storeModule.isLoopRunStoreBoundToArtifactStore === "function" &&
+        typeof gatewayModule.isExecutionGatewayTracingBoundTo === "function",
+        "both read-only wiring predicates remain exported");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -930,8 +981,173 @@ async function main(): Promise<void> {
         "output blobs land in the ORIGINAL artifact store");
       ok(foreignRunStore.listRunsByRequirement("REQ-WP5-N5").length === 0,
         "the foreign run store received nothing");
+
+      // B2: the constructed stableEntry must ALSO execute — and against its
+      // construction-time pair, proving entry-side options are snapshotted
+      // (a mutable-options defect would route this run into the FOREIGN
+      // store and this assertion would fail).
+      const entryRequirementId = "REQ-WP5-N5-ENTRY";
+      const entrySource = env.artifactStore.put("requirement_summary", "N5 direct entry source");
+      await stableEntry.execute({
+        requirementId: entryRequirementId,
+        identity: Object.freeze({
+          runId: `run-${entryRequirementId}`,
+          requirementId: entryRequirementId,
+          repository: "local",
+          repositoryPath: join(env.root, "repo"),
+          baseBranch: "main",
+          expectedBaseSha: "0".repeat(40),
+          taskBranch: `runtime/${entryRequirementId}`,
+          controlRoot: join(env.root, "control"),
+          createdAt: new Date().toISOString(),
+        }),
+        capability: "requirement-intake",
+        executionRole: "primary",
+        inputArtifactRef: entrySource.artifactRef,
+        inputArtifactVersion: "1.0.0",
+        inputDigest: entrySource.digest,
+        outputArtifactVersion: "1.0.0",
+        input: {},
+      });
+      const entryEvents = env.runStore.listCapabilityExecutions(`run-${entryRequirementId}`);
+      ok(entryEvents.length === 2 && entryEvents[1]!.status === "succeeded",
+        "stableEntry journals into the ORIGINAL run store");
+      ok(foreignRunStore.listRunsByRequirement(entryRequirementId).length === 0,
+        "the mutated options never redirect the entry");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+
+  // ── B1R: crash-window recovery matrix (invariant 14) ──
+  console.log("B1R: bootstrap/active-claim crash windows recover without reinterpreting facts");
+  {
+    // Row: run_started 后、intake started 前 — durable anchor exists, ZERO
+    // claims yet. A resuming call passing CONTRADICTORY text must still
+    // dispatch the intake consuming the ANCHOR triple.
+    console.log("B1R.row2: pre-claim crash consumes the pinned anchor, not the resume text");
+    const envA = makeEnv("loop-wp5-b1r-preclaim-");
+    try {
+      const requirementId = "REQ-WP5-B1R-PRE";
+      const anchorSource = envA.artifactStore.put("requirement_summary", "ORIGINAL-PINNED-REQUIREMENT");
+      // Simulate the durable state right after atomic bootstrap, before any
+      // claim: run exists + run_started provenance + zero executions.
+      envA.runStore.bootstrapRunWithSource(Object.freeze({
+        runId: `run-${requirementId}`,
+        requirementId,
+        repository: "local",
+        repositoryPath: join(envA.root, "repo"),
+        baseBranch: "main",
+        expectedBaseSha: "0".repeat(40),
+        taskBranch: `runtime/${requirementId}`,
+        controlRoot: join(envA.root, "control"),
+        createdAt: new Date().toISOString(),
+      }), { artifactRef: anchorSource.artifactRef, digest: anchorSource.digest });
+      ok(envA.runStore.listCapabilityExecutions(`run-${requirementId}`).length === 0,
+        "fixture: bootstrapped run holds zero capability events");
+      const contradictory = envA.artifactStore.put("requirement_summary", "CONTRADICTORY-REPLACEMENT-TEXT");
+      const resumed = await run("CONTRADICTORY-REPLACEMENT-TEXT", {
+        requirementId, runStore: envA.runStore, artifactStore: envA.artifactStore,
+        gateway: envA.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
+      });
+      ok(resumed.final_status === "failed" || resumed.final_status === "success",
+        "the pre-claim crash resumes dispatching");
+      const intakeStarted = envA.runStore.listCapabilityExecutions(resumed.run_id)
+        .find((event) => event.capability === "requirement-intake")!;
+      ok(intakeStarted.inputArtifactRef === anchorSource.artifactRef &&
+        intakeStarted.inputDigest === anchorSource.digest &&
+        intakeStarted.inputArtifactRef !== contradictory.artifactRef,
+        "the recovered intake consumed the PINNED anchor, never the contradictory text");
+      ok(recoverRunContext(envA.runStore, requirementId)!.originRequirementInput!.inputArtifactRef
+        === anchorSource.artifactRef,
+        "origin authority remains the anchor after resume");
+    } finally {
+      rmSync(envA.root, { recursive: true, force: true });
+    }
+
+    // Row: intake started 后、terminal 前 — active claim across process death.
+    console.log("B1R.row3: active started claim resumes as ATTEMPT_INTERRUPTED + retry");
+    const envB = makeEnv("loop-wp5-b1r-active-");
+    try {
+      const requirementId = "REQ-WP5-B1R-ACT";
+      await run("build a panel", {
+        requirementId, runStore: envB.runStore, artifactStore: envB.artifactStore,
+        gateway: envB.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 1,
+      });
+      const runId = envB.runStore.listRunsByRequirement(requirementId)[0]!.state.identity.runId;
+      const beforeResume = recoverRunContext(envB.runStore, requirementId)!;
+      ok(beforeResume.capabilityChainStatus === "READY", "fixture: clean READY after one materialized point");
+      // Open an ACTIVE claim exactly as the authority would accept it.
+      const intakeCurrent = beforeResume.currentArtifactMap.find((fact) => fact.nodeId === "requirement-intake")!;
+      // Timestamps stay MONOTONIC against the journal tail (real crash
+      // claims are past-dated; only the fixture must respect the rule).
+      const journalTailTs = envB.runStore.listCapabilityExecutions(runId).at(-1)!.createdAt;
+      const claimTs = new Date(Date.parse(journalTailTs) + 5).toISOString();
+      const designStarted = Object.freeze({
+        schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+        executionEventId: `${runId}:capability:3:started`,
+        sequence: 3,
+        status: "started" as const,
+        runId,
+        capability: "solution-design" as const,
+        nodeId: "solution-design",
+        executionRole: "primary" as const,
+        attempt: 1,
+        bindingId: "binding-codex-solution-design-primary",
+        bindingVersion: "2.0.0",
+        bindingRegistryVersion: createRuntimeBindingRegistry().version,
+        executorAgent: "codex",
+        executorAdapter: "codex-real-dispatch",
+        executorVersion: "1.0.0",
+        inputArtifactRef: intakeCurrent.artifactRef,
+        inputArtifactVersion: intakeCurrent.semver,
+        inputDigest: intakeCurrent.digest,
+        consumedFindingsRef: null,
+        consumedFindingsDigest: null,
+        decisionDepth: null,
+        decisionScopeId: null,
+        decisionDeltaRef: null,
+        decisionDeltaDigest: null,
+        outputArtifactRef: null,
+        outputArtifactVersion: null,
+        outputDigest: null,
+        gateResult: null,
+        unresolvedFindingsRef: null,
+        unresolvedFindingsDigest: null,
+        nextStepEligibility: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+        createdAt: claimTs,
+      });
+      envB.runStore.claimNextCapabilityExecution(designStarted);
+      const crashed = recoverRunContext(envB.runStore, requirementId)!;
+      ok(crashed.capabilityChainStatus === "RUNNING" && crashed.nextExecutionPoint === null &&
+        crashed.lastCapabilityExecution?.status === "started",
+        "fixture: active started claim with no terminal — the crash window");
+      const resumed = await run("build a panel", {
+        requirementId, runStore: envB.runStore, artifactStore: envB.artifactStore,
+        gateway: envB.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+      });
+      ok(resumed.final_status === "success" && resumed.chain_status === "COMPLETED",
+        "the active-claim crash resumes to completion");
+      const designEvents = envB.runStore.listCapabilityExecutions(runId)
+        .filter((event) => event.capability === "solution-design");
+      ok(designEvents.length === 4, "design point holds exactly two attempts (four events)");
+      const interrupted = designEvents[1]!;
+      ok(interrupted.status === "failed" && interrupted.errorCode === "ATTEMPT_INTERRUPTED" &&
+        interrupted.retryable === true,
+        "the stale claim closed as a retryable ATTEMPT_INTERRUPTED");
+      ok(interrupted.inputArtifactRef === designStarted.inputArtifactRef &&
+        interrupted.bindingId === designStarted.bindingId,
+        "the interruption copies the persisted input and binding lineage");
+      const retried = designEvents[2]!;
+      ok(retried.status === "started" && retried.attempt === 2 &&
+        retried.inputArtifactRef === designStarted.inputArtifactRef,
+        "attempt two retries the SAME recorded input lineage");
+    } finally {
+      rmSync(envB.root, { recursive: true, force: true });
     }
   }
 

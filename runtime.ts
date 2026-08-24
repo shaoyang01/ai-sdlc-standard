@@ -331,10 +331,20 @@ export async function run(
     );
     recovery = recoverRunContext(runStore, requirementId);
   }
+  // C02-WP5 B1: explicit durable-state recovery BEFORE any dispatch decision.
+  // (1) A legacy/hand-crafted `created` run completes its start honestly
+  //     instead of silently reporting READY with an empty trace.
+  if (recovery !== undefined && recovery.status === "created") {
+    recovery = recoverRunContext(runStore, requirementId);
+    if (recovery !== undefined && recovery.status === "created") {
+      invalid("durable run is stuck in created state without bootstrap provenance");
+    }
+  }
   // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
   // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
-  // by its first intake claim — the `requirement` argument of a resuming
-  // call can never replace already-confirmed facts.
+  // atomically at bootstrap (run_started provenance) or by its first intake
+  // claim — the `requirement` argument of a resuming call can never replace
+  // already-confirmed facts.
   let inputRef: string;
   let inputVersion: string;
   let inputDigest: string;
@@ -374,6 +384,97 @@ export async function run(
   ) {
     invalid("maxRegateRounds must be a positive safe integer");
   }
+  let dispatches = 0;
+  // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
+  // through the existing interrupted-attempt semantics — the recorded input
+  // lineage is reused verbatim, the entry closes the stale claim as
+  // ATTEMPT_INTERRUPTED (retryable) and immediately claims attempt N+1. No
+  // confirmed fact is reinterpreted; concurrent resumers race on the store's
+  // claim CAS and exactly one wins deterministically.
+  if (
+    recovery !== undefined &&
+    recovery.capabilityChainStatus === "RUNNING" &&
+    recovery.lastCapabilityExecution?.status === "started"
+  ) {
+    if (dispatches >= maxDispatches) {
+      return Object.freeze({
+        requirement_id: requirementId,
+        run_id: recovery.snapshot.state.identity.runId,
+        final_status: "failed" as const,
+        chain_status: "RUNNING" as const,
+        execution_trace: Object.freeze([]),
+        next_execution_point: null,
+        workspace_root: workspaceRoot,
+        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+        completed_at: now(),
+      });
+    }
+    dispatches += 1;
+    const active = recovery.lastCapabilityExecution;
+    journalRunId = active!.runId;
+    const executed = await entry.execute({
+      requirementId,
+      capability: active!.capability,
+      executionRole: active!.executionRole,
+      inputArtifactRef: active!.inputArtifactRef,
+      inputArtifactVersion: active!.inputArtifactVersion,
+      inputDigest: active!.inputDigest,
+      outputArtifactVersion: `${active!.attempt + 1}.0.0`,
+      input: {},
+    });
+    recovery = executed.recoveryContext;
+    if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+      while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+        materializeProducerRevision(
+          runStore,
+          requirementId,
+          recovery.snapshot.state.identity.runId,
+          recovery.pendingRevisionMaterialization.producerExecution,
+          now,
+        );
+        recovery = recoverRunContext(runStore, requirementId);
+      }
+    }
+    if (!executed.execution.success) {
+      return Object.freeze({
+        requirement_id: requirementId,
+        run_id: journalRunId ?? identity.runId,
+        final_status: "failed" as const,
+        chain_status: recovery?.capabilityChainStatus ?? "RUNNING",
+        execution_trace: Object.freeze(
+          runStore.listCapabilityExecutions(journalRunId ?? identity.runId).map((event) => Object.freeze({
+            capability: event.capability,
+            executionRole: event.executionRole,
+            agent: event.executorAgent,
+            attempt: event.attempt,
+            status: event.status,
+            gateResult: event.gateResult,
+            outputArtifactRef: event.outputArtifactRef,
+            outputDigest: event.outputDigest,
+          })),
+        ),
+        next_execution_point: recovery?.nextExecutionPoint ?? null,
+        workspace_root: workspaceRoot,
+        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+        completed_at: now(),
+      });
+    }
+    if (executed.producerTerminalEventId !== null) {
+      const produced = runStore.listCapabilityExecutions(journalRunId!)
+        .find((item) => item.executionEventId === executed.producerTerminalEventId);
+      if (produced !== undefined && produced.status === "succeeded") {
+        materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
+      }
+    }
+    recovery = recoverRunContext(runStore, requirementId);
+    next = recovery?.nextExecutionPoint ?? null;
+    const cmd = recovery === undefined ? null : deriveDispatchCommand(recovery);
+    inputRef = cmd?.inputArtifactRef ?? "";
+    inputVersion = cmd?.inputArtifactVersion ?? "";
+    inputDigest = cmd?.inputDigest ?? "";
+    firstDispatch = false;
+  }
+
   // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
   // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
   if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
@@ -391,7 +492,6 @@ export async function run(
       });
     }
   }
-  let dispatches = 0;
   while (next !== null) {
     // Round 3 review F2: a concurrent entry may have committed a succeeded
     // producer since the last recovery recompute — finalize its revision

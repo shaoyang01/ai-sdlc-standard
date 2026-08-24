@@ -1538,7 +1538,95 @@ export class LoopRunStore {
     validateLoopRunIdentity(identity);
     const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
     try {
+      const snapshot = db.transaction((): LoopRunSnapshot =>
+        this.createRunInTransaction(db, identity),
+      ).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      return this.translateWriterError(error, () => {
+        return this.reclassifyCreateRunConstraint(db, identity.runId, identitySha);
+      });
+    }
+  }
+
+  /**
+   * C02-WP5 B1: atomic durable bootstrap for a FRESH requirement run — run
+   * creation, its run_started event and the ORIGINAL normalized Requirement
+   * source provenance land in ONE immediate transaction. A crash can no
+   * longer leave a created-but-unstarted run or a running run whose origin
+   * source triple is unpinned: either nothing is durable (fresh retry) or
+   * the authority carries its confirmed-facts anchor. The provenance rides
+   * on the run_started event's nullable input fields (v7 schema, validation
+   * already permits them); there is deliberately no second authority.
+   */
+  bootstrapRunWithSource(
+    identity: LoopRunIdentity,
+    source: { readonly artifactRef: string; readonly digest: string },
+  ): LoopRunState {
+    const db = this.connection();
+    validateLoopRunIdentity(identity);
+    if (typeof source.artifactRef !== "string" || source.artifactRef.length === 0) {
+      throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source artifactRef must be a non-empty string");
+    }
+    if (!/^[0-9a-f]{64}$/.test(source.digest)) {
+      throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source digest must be a lowercase SHA-256 hex");
+    }
+    if (!source.artifactRef.endsWith(`:${source.digest}`)) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "bootstrap source artifactRef and digest must be content-bound",
+      );
+    }
+    try {
       const snapshot = db.transaction((): LoopRunSnapshot => {
+        const snap = this.createRunInTransaction(db, identity);
+        if (snap.state.status === "created") {
+          const started: LoopRunEvent = Object.freeze({
+            eventId: `${identity.runId}:2:run_started`,
+            runId: identity.runId,
+            sequence: 2,
+            kind: "run_started",
+            stage: null,
+            attempt: 0,
+            createdAt: identity.createdAt,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: null,
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: source.artifactRef,
+            inputDigest: source.digest,
+          });
+          this.appendEvent(started);
+          return this.snapshotInTransaction(db, identity.runId);
+        }
+        // Already bootstrapped (idempotent replay): the recorded provenance
+        // must match exactly, otherwise this is an impostor resume.
+        const startedEvent = snap.events.find((event) => event.kind === "run_started");
+        if (
+          startedEvent === undefined ||
+          startedEvent.inputArtifactRef !== source.artifactRef ||
+          startedEvent.inputDigest !== source.digest
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "bootstrap source provenance does not match the durable run authority",
+          );
+        }
+        return snap;
+      }).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      storageFailure();
+    }
+  }
+
+  private createRunInTransaction(db: Database.Database, identity: LoopRunIdentity): LoopRunSnapshot {
+    const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
+    {
         // ── corruption-first: read full verified snapshot first ──
         const existingSnapshot = this.readRunSnapshotInTransaction(db, identity.runId);
         if (existingSnapshot !== undefined) {
@@ -1591,12 +1679,6 @@ export class LoopRunStore {
         }
         this.insertEventRow(db, eventRow);
         return this.snapshotInTransaction(db, identity.runId);
-      }).immediate() as LoopRunSnapshot;
-      return snapshot.state;
-    } catch (error) {
-      return this.translateWriterError(error, () => {
-        return this.reclassifyCreateRunConstraint(db, identity.runId, identitySha);
-      });
     }
   }
 

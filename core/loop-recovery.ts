@@ -762,6 +762,24 @@ function recoverRunContextInTransaction(
     invalidatedRevisions: Object.freeze(invalidatedRevisions),
     regatePlan: plan,
     originRequirementInput: (() => {
+      // B1: prefer the ATOMIC BOOTSTRAP provenance carried on run_started —
+      // it exists before the first claim, so even a crash between bootstrap
+      // and the intake dispatch leaves the confirmed-facts anchor durable.
+      const startedEvent = snapshot.events.find((event) => event.kind === "run_started");
+      if (
+        startedEvent !== undefined &&
+        startedEvent.inputArtifactRef !== null && startedEvent.inputDigest !== null &&
+        startedEvent.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:") &&
+        startedEvent.inputArtifactRef.endsWith(`:${startedEvent.inputDigest}`)
+      ) {
+        return Object.freeze({
+          inputArtifactRef: startedEvent.inputArtifactRef,
+          // Bootstrap sources are born at 1.0.0; the journal has no version
+          // column and no code path mints another bootstrap version.
+          inputArtifactVersion: "1.0.0",
+          inputDigest: startedEvent.inputDigest,
+        });
+      }
       const first = capabilityExecutions[0];
       if (
         first === undefined || first.capability !== "requirement-intake" ||

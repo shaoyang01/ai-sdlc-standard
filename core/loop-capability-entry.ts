@@ -188,9 +188,24 @@ export class LoopCapabilityEntry {
       if (request.identity.requirementId !== request.requirementId) {
         throw new LoopRunJournalError("INVALID_INPUT", "run identity Requirement ID mismatch");
       }
-      this.options.runStore.createRun(request.identity);
-      const startEvent = this.runLevelEvent(request.identity.runId, 2, "run_started", now);
-      this.options.runStore.appendEvent(startEvent);
+      // C02-WP5 B1: FRESH runs bootstrap ATOMICALLY — run creation, the
+      // run_started event and the original source provenance land in ONE
+      // transaction, so no crash window can leave a run whose confirmed
+      // source is unpinned. The intake request's kind-checked input triple
+      // IS the anchor.
+      if (
+        request.capability !== "requirement-intake" ||
+        !request.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:")
+      ) {
+        throw new LoopRunJournalError(
+          "INVALID_INPUT",
+          "a new Requirement run must start at requirement-intake with a normalized Requirement source",
+        );
+      }
+      this.options.runStore.bootstrapRunWithSource(request.identity, {
+        artifactRef: request.inputArtifactRef,
+        digest: request.inputDigest,
+      });
       recovery = recoverRunContext(this.options.runStore, request.requirementId);
     } else if (request.identity !== undefined) {
       if (canonicalizeLoopRunIdentity(request.identity) !== canonicalizeLoopRunIdentity(recovery.snapshot.state.identity)) {
@@ -201,6 +216,9 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("STORE_FAILURE", "run recovery failed after creation");
     }
     if (recovery.status === "created") {
+      // Legacy/hand-crafted created state without bootstrap provenance:
+      // complete the start honestly. New runs never reach this branch —
+      // bootstrapRunWithSource creates them running with provenance.
       this.options.runStore.appendEvent(this.runLevelEvent(
         recovery.snapshot.state.identity.runId,
         recovery.snapshot.state.lastSequence + 1,
