@@ -268,6 +268,9 @@ export async function run(
   }
   validateRuntimeOptions(options);
   const requirementId = requireSafeId(options.requirementId ?? `REQ-${Date.now()}`, "requirementId");
+  // R4-H2: set when this invocation completes a legacy created-only run —
+  // the resuming requirement text becomes the first intake source.
+  let bootstrapInput: { ref: string; version: string; digest: string } | null = null;
 
   const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));
   mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
@@ -341,14 +344,16 @@ export async function run(
       );
       recovery = recoverRunContext(runStore, requirementId);
     }
-    // C02-WP5 B1: explicit durable-state recovery BEFORE any dispatch decision.
-    // (1) A legacy/hand-crafted `created` run completes its start honestly
-    //     instead of silently reporting READY with an empty trace.
+    // C02-WP5 R4-H2: a legal created-only run (externally pre-created, no
+    // provenance yet) is completed under the resume lease via the guarded
+    // legacy start; the resuming requirement text then becomes the first
+    // intake source (first-writer-wins — no confirmed facts exist yet to
+    // violate).
     if (recovery !== undefined && recovery.status === "created") {
+      const source0 = artifactStore.put("requirement_summary", requirement);
+      runStore.ensureRunStarted(recovery.snapshot.state.identity.runId);
       recovery = recoverRunContext(runStore, requirementId);
-      if (recovery !== undefined && recovery.status === "created") {
-        invalid("durable run is stuck in created state without bootstrap provenance");
-      }
+      bootstrapInput = { ref: source0.artifactRef, version: "1.0.0", digest: source0.digest };
     }
     // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
     // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
@@ -373,6 +378,17 @@ export async function run(
       inputRef = command?.inputArtifactRef ?? "";
       inputVersion = command?.inputArtifactVersion ?? "";
       inputDigest = command?.inputDigest ?? "";
+      if (
+        command !== null && command.inputArtifactRef === null &&
+        recovery.nextExecutionPoint?.capability === "requirement-intake" &&
+        bootstrapInput !== null
+      ) {
+        // R4-H2: the created-only run just completed its legacy start under
+        // this invocation — the resuming text is the first intake source.
+        inputRef = bootstrapInput.ref;
+        inputVersion = bootstrapInput.version;
+        inputDigest = bootstrapInput.digest;
+      }
     }
     // null nextExecutionPoint on an existing run means the chain is completed
     // or blocked — it must NOT be coerced back to the first point.

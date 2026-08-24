@@ -18,7 +18,8 @@
 //       rejections, forged bindings, configuration freeze.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import Database from "better-sqlite3";
+import { mkdtempSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -1262,11 +1263,12 @@ async function main(): Promise<void> {
         "attempt 2 completed; no attempt inflation from the losing resumer");
       ok(resultA.final_status === "success" || resultB.final_status === "success",
         "at least one resumer drove the chain to completion");
-      ok(
-        (resultA.chain_status === "COMPLETED" || resultA.chain_status === "READY") &&
-        (resultB.chain_status === "COMPLETED" || resultB.chain_status === "READY"),
-        "neither resumer crashed the invocation — fencing is deterministic",
-      );
+      for (const r of [resultA, resultB]) {
+        if (r !== null) {
+          ok(r.chain_status === "COMPLETED" || r.chain_status === "READY",
+            "each successful resumer finished deterministically");
+        }
+      }
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -1275,7 +1277,7 @@ async function main(): Promise<void> {
   console.log("B1-1.lease: a held resume lease fails concurrent entry honestly");
   {
     const env = makeEnv("loop-wp5-b11-lease-");
-    process.env["SDLC_RESUME_LEASE_BUSY_TIMEOUT_MS"] = "60";
+    process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = "60";
     try {
       const requirementId = "REQ-WP5-B11-LEASE";
       const journalPath = env.runStore.databaseFilePath;
@@ -1303,9 +1305,9 @@ async function main(): Promise<void> {
         "the lease-blocked run performed zero journal side effects");
       releaseHolder();
       await holdPromise;
-      delete process.env["SDLC_RESUME_LEASE_BUSY_TIMEOUT_MS"];
+      delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
     } finally {
-      delete process.env["SDLC_RESUME_LEASE_BUSY_TIMEOUT_MS"];
+      delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
       rmSync(env.root, { recursive: true, force: true });
     }
   }
@@ -1420,6 +1422,229 @@ async function main(): Promise<void> {
         replayConflict = error instanceof LoopRunJournalError && error.code === "ILLEGAL_TRANSITION";
       }
       ok(replayConflict, "different provenance replay is ILLEGAL_TRANSITION");
+    } finally {
+      rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+
+  // ── R4-H1: lease binds to journal PHYSICAL identity (symlink aliases) ──
+  console.log("R4-H1.alias: symlink alias of the same journal cannot double-acquire");
+  {
+    const env = makeEnv("loop-wp5-r4h1-");
+    process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = "150";
+    try {
+      const realJournal = env.runStore.databaseFilePath;
+      const aliasJournal = join(env.root, "journal-alias.db");
+      symlinkSync(realJournal, aliasJournal);
+      // Canonical identity proof: both spellings resolve to one file.
+      ok(realpathSync(realJournal) === realpathSync(aliasJournal), "fixture: alias resolves to the same physical journal");
+
+      let releaseHolder!: () => void;
+      const holder = new Promise<void>((resolve) => { releaseHolder = resolve; });
+      const holdPromise = withResumeLease(realJournal, async () => { await holder; return null; });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      let aliasBusy = false;
+      try {
+        await withResumeLease(aliasJournal, async () => "should-not-run");
+      } catch (error) {
+        aliasBusy = error instanceof LoopRunJournalError && error.code === "STORE_BUSY";
+      }
+      ok(aliasBusy, "the ALIAS path cannot acquire a second lease for the same journal");
+      releaseHolder();
+      await holdPromise;
+      // After release, BOTH sides can acquire again (crash-recovery liveness).
+      const reacquireA = await withResumeLease(realJournal, async () => "a");
+      const reacquireB = await withResumeLease(aliasJournal, async () => "b");
+      ok(reacquireA === "a" && reacquireB === "b", "post-release, canonical and alias sides both re-acquire");
+
+      // Full matrix row: two resumers on one orphan claim through DIFFERENT
+      // path spellings still produce exactly ONE external dispatch.
+      const requirementId = "REQ-WP5-R4H1";
+      await run("build a console", {
+        requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+        gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 1,
+      });
+      const runId = env.runStore.listRunsByRequirement(requirementId)[0]!.state.identity.runId;
+      const beforeResume = recoverRunContext(env.runStore, requirementId)!;
+      const intakeCurrent = beforeResume.currentArtifactMap.find((fact) => fact.nodeId === "requirement-intake")!;
+      const tailTs = env.runStore.listCapabilityExecutions(runId).at(-1)!.createdAt;
+      env.runStore.claimNextCapabilityExecution(Object.freeze({
+        schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+        executionEventId: `${runId}:capability:3:started`,
+        sequence: 3, status: "started" as const, runId,
+        capability: "solution-design" as const, nodeId: "solution-design",
+        executionRole: "primary" as const, attempt: 1,
+        bindingId: "binding-codex-solution-design-primary",
+        bindingVersion: "2.0.0",
+        bindingRegistryVersion: createRuntimeBindingRegistry().version,
+        executorAgent: "codex", executorAdapter: "codex-real-dispatch", executorVersion: "1.0.0",
+        inputArtifactRef: intakeCurrent.artifactRef,
+        inputArtifactVersion: intakeCurrent.semver,
+        inputDigest: intakeCurrent.digest,
+        consumedFindingsRef: null, consumedFindingsDigest: null,
+        decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+        outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
+        gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
+        nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
+        createdAt: new Date(Date.parse(tailTs) + 5).toISOString(),
+      }));
+      const aliasArtifacts = new LoopArtifactStore({
+        controlRoot: join(env.root, "control"),
+        repositoryPath: join(env.root, "repo"),
+      });
+      const aliasRunStore = new LoopRunStore(aliasJournal, { artifactStore: aliasArtifacts });
+      aliasRunStore.init();
+      aliasArtifacts.init();
+      const [resA, resB] = await Promise.all([
+        run("build a console", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() })
+          .then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })),
+        run("build a console", { requirementId, runStore: aliasRunStore, artifactStore: aliasArtifacts, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() })
+          .then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })),
+      ]);
+      const dispatchCount = pointDispatchCounts(env.runStore, runId).get("solution-design:primary") ?? 0;
+      ok(dispatchCount === 2,
+        `alias pair produced exactly ONE resume dispatch (design attempts=${dispatchCount - 1})`);
+      const anySuccess = (resA.ok && resA.r.final_status === "success") || (resB.ok && resB.r.final_status === "success");
+      ok(anySuccess, "at least one alias-side resumer completed the chain");
+      aliasRunStore.close();
+      aliasArtifacts.close();
+    } finally {
+      delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
+      rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+  // ── R4-H2: closed provenance union at the EVENT level ──
+  console.log("R4-H2.probes: public appendEvent cannot persist partial/malformed provenance");
+  {
+    const env = makeEnv("loop-wp5-r4h2-");
+    try {
+      const requirementId = "REQ-WP5-R4H2";
+      const identity = Object.freeze({
+        runId: `run-${requirementId}`, requirementId, repository: "local",
+        repositoryPath: join(env.root, "repo"), baseBranch: "main",
+        expectedBaseSha: "0".repeat(40), taskBranch: `runtime/${requirementId}`,
+        controlRoot: join(env.root, "control"), createdAt: new Date().toISOString(),
+      });
+      env.runStore.createRun(identity);
+      const artifactsBaseline = countFilesRecursive(env.root);
+      const goodDigest = "ab".repeat(32);
+      const variants: Array<{ name: string; ref: string | null; digest: string | null }> = [
+        { name: "ref-only", ref: `loop-artifact:v1:requirement_summary:sha256:${goodDigest}`, digest: null },
+        { name: "digest-only", ref: null, digest: goodDigest },
+        { name: "wrong-kind", ref: `loop-artifact:v1:code_patch:sha256:${goodDigest}`, digest: goodDigest },
+        { name: "pair-mismatch", ref: `loop-artifact:v1:requirement_summary:sha256:${"ba".repeat(32)}`, digest: goodDigest },
+      ];
+      for (const variant of variants) {
+        const eventsBefore = env.runStore
+          .getSnapshot(identity.runId)!.events.length;
+        let rejected = false;
+        try {
+          env.runStore.appendEvent(Object.freeze({
+            eventId: `${identity.runId}:${eventsBefore + 1}:run_started`,
+            runId: identity.runId,
+            sequence: eventsBefore + 1,
+            kind: "run_started",
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: variant.digest,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: null,
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: variant.ref,
+          }));
+        } catch (error) {
+          rejected = error instanceof LoopRunJournalError && error.code === "INVALID_INPUT";
+        }
+        ok(rejected, `${variant.name}: public appendEvent rejects with INVALID_INPUT`);
+        ok(env.runStore.getSnapshot(identity.runId)!.events.length === eventsBefore,
+          `${variant.name}: zero event increment`);
+      }
+      ok(countFilesRecursive(env.root) === artifactsBaseline, "provenance probes wrote zero artifact files");
+
+      // Valid full pair via public appendEvent is accepted and recovers.
+      const validSource = env.artifactStore.put("requirement_summary", "R4H2 pinned source");
+      env.runStore.appendEvent(Object.freeze({
+        eventId: `${identity.runId}:2:run_started`,
+        runId: identity.runId,
+        sequence: 2,
+        kind: "run_started",
+        stage: null,
+        attempt: 0,
+        createdAt: new Date().toISOString(),
+        inputDigest: validSource.digest,
+        outputArtifactRef: null,
+        outputDigest: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+        bindingId: null,
+        bindingVersion: null,
+        inputArtifactRef: validSource.artifactRef,
+      }));
+      const recovered = recoverRunContext(env.runStore, requirementId)!;
+      ok(recovered.originRequirementInput !== null &&
+        recovered.originRequirementInput.inputArtifactRef === validSource.artifactRef,
+        "a complete valid pair written via public appendEvent recovers as origin");
+
+      // created-only run completed by TOP-LEVEL runtime.run (legacy start +
+      // first intake consuming the resuming text).
+      const createdRequirementId = "REQ-WP5-R4H2-CREATED";
+      const createdIdentity = Object.freeze({
+        runId: `run-${createdRequirementId}`, requirementId: createdRequirementId, repository: "local",
+        repositoryPath: join(env.root, "repo"), baseBranch: "main",
+        expectedBaseSha: "0".repeat(40), taskBranch: `runtime/${createdRequirementId}`,
+        controlRoot: join(env.root, "control"), createdAt: new Date().toISOString(),
+      });
+      env.runStore.createRun(createdIdentity);
+      const createdResult = await run("CREATED-RUN-RESUME-TEXT", {
+        requirementId: createdRequirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+        gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(),
+      });
+      if (!(createdResult.final_status === "success" && createdResult.chain_status === "COMPLETED")) {
+        console.log("[r4h2.created DEBUG]", JSON.stringify({
+          final: createdResult.final_status, chain: createdResult.chain_status,
+          trace: createdResult.execution_trace.map((t) => `${t.capability}:${t.status}`).join(","),
+        }));
+      }
+      ok(createdResult.final_status === "success" && createdResult.chain_status === "COMPLETED",
+        "top-level runtime completes a created-only run to COMPLETED");
+      const createdEvents = env.runStore.listCapabilityExecutions(createdResult.run_id);
+      ok(createdEvents.length === 16 &&
+        createdEvents[0]!.capability === "requirement-intake" &&
+        createdEvents[0]!.status === "started" &&
+        createdEvents[1]!.status === "succeeded",
+        "the legacy start completed and the chain dispatched exactly once (16 events)");
+      // ── kept LAST: once persisted corruption exists, every later read of
+      //      this journal fails corruption-first by design ──
+      // Partial persisted state (crafted via raw SQL bypassing validation)
+      // must read back STORE_CORRUPT, never silently degrade to legacy null.
+      const partialIdentity = Object.freeze({ ...identity, runId: `${identity.runId}-partial`, requirementId: `${requirementId}-PART` });
+      env.runStore.createRun(partialIdentity);
+      // The partial tuple must EXIST before tampering: complete the legacy
+      // start (all-null provenance), then flip one side via raw SQL.
+      env.runStore.ensureRunStarted(partialIdentity.runId);
+      // Raw-SQL tamper bypasses the write gate: flip one side of the tuple
+      // directly in the events row.
+      const tamperDb = new Database(join(env.root, "journal.db"));
+      tamperDb.prepare(
+        "UPDATE loop_events SET input_digest = ? WHERE run_id = ? AND kind = 'run_started'",
+      ).run(goodDigest, partialIdentity.runId);
+      tamperDb.close();
+      let corruptCode = false;
+      try {
+        recoverRunContext(env.runStore, partialIdentity.requirementId);
+      } catch (error) {
+        corruptCode = error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT";
+      }
+      ok(corruptCode, "partial persisted provenance reads back STORE_CORRUPT");
+
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }

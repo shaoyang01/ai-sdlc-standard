@@ -772,6 +772,15 @@ function recoverRunContextInTransaction(
       const startedEvent = snapshot.events.find((event) => event.kind === "run_started");
       if (
         startedEvent !== undefined &&
+        (startedEvent.inputArtifactRef !== null) !== (startedEvent.inputDigest !== null)
+      ) {
+        throw new LoopRunJournalError(
+          "STORE_CORRUPT",
+          "persisted run_started provenance is a partial tuple",
+        );
+      }
+      if (
+        startedEvent !== undefined &&
         startedEvent.inputArtifactRef !== null && startedEvent.inputDigest !== null
       ) {
         // B1-2: persisted provenance MUST satisfy the same closed validator

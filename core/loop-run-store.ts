@@ -1683,6 +1683,52 @@ export class LoopRunStore {
   }
 
   /**
+   * C02-WP5 R4-H2: complete the created->running transition for a LEGACY or
+   * externally pre-created run whose run_started event has not landed yet.
+   * Guarded and idempotent: running runs pass through unchanged; the appended
+   * start event carries NO provenance (all-null), matching the historical
+   * shape — confirmed-facts anchoring then follows the first intake claim.
+   */
+  ensureRunStarted(runId: string): LoopRunState {
+    const db = this.connection();
+    try {
+      const snapshot = db.transaction((): LoopRunSnapshot => {
+        const snap = this.readRunSnapshotInTransaction(db, runId);
+        if (snap === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        if (snap.state.status === "created") {
+          const started: LoopRunEvent = Object.freeze({
+            eventId: `${runId}:${snap.state.lastSequence + 1}:run_started`,
+            runId,
+            sequence: snap.state.lastSequence + 1,
+            kind: "run_started",
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: null,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: null,
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: null,
+          });
+          this.appendEvent(started);
+          return this.snapshotInTransaction(db, runId);
+        }
+        return snap;
+      }).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      storageFailure();
+    }
+  }
+
+  /**
    * Reclassification callback for createRun constraint violations.
    * Operates within the safe storage translation boundary.
    */

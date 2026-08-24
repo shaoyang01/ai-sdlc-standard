@@ -257,6 +257,31 @@ export function validateLoopRunEvent(event: unknown): void {
       throw new LoopRunJournalError("INVALID_INPUT", "run-level event must have attempt 0");
     }
   }
+  // C02-WP5 R4-H2: run_started provenance is a CLOSED union — both null
+  // (historical shape) or one complete validator-approved pair. A partial
+  // or malformed tuple can never enter the journal through ANY write path,
+  // so the public appendEvent cannot bypass the bootstrap gate.
+  if (canonicalKind === "run_started") {
+    const hasRef = record.inputArtifactRef !== null;
+    const hasDigest = record.inputDigest !== null;
+    if (hasRef !== hasDigest) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "run_started provenance must be both null or a complete source pair",
+      );
+    }
+    if (hasRef && hasDigest) {
+      try {
+        validateBootstrapSourceProvenance({
+          artifactRef: record.inputArtifactRef as string,
+          digest: record.inputDigest as string,
+        });
+      } catch (error) {
+        if (error instanceof LoopRunJournalError) throw error;
+        throw new LoopRunJournalError("INVALID_INPUT", "run_started provenance is invalid");
+      }
+    }
+  }
   if (STAGE_LEVEL_KINDS.includes(canonicalKind)) {
     if (stage === null) {
       throw new LoopRunJournalError("INVALID_INPUT", "stage-level event must have a stage");

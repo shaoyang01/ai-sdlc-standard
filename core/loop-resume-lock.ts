@@ -22,7 +22,7 @@
 // contend for real.
 
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { LoopRunJournalError } from "./loop-executor-types";
@@ -49,8 +49,29 @@ interface HeldLease {
   readonly db: Database.Database;
 }
 
+/**
+ * R4-H1: the lease must bind to the journal's PHYSICAL identity, not a path
+ * spelling. Symlinked aliases of the same file resolve to the same canonical
+ * target; a not-yet-created journal falls back to its canonical parent
+ * directory plus basename so first-run acquisition still works.
+ */
+function canonicalJournalPath(journalPath: string): string {
+  try {
+    return realpathSync(journalPath);
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === "ENOENT") {
+      return join(realpathSync(dirname(journalPath)), basename(journalPath));
+    }
+    throw error;
+  }
+}
+
 function leasePathFor(journalPath: string): string {
-  return join(dirname(journalPath), `${basename(journalPath)}.resume-lease.db`);
+  return join(
+    dirname(canonicalJournalPath(journalPath)),
+    `${basename(canonicalJournalPath(journalPath))}.resume-lease.db`,
+  );
 }
 
 function isSqliteBusy(error: unknown): boolean {
