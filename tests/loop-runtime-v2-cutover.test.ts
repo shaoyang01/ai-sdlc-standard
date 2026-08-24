@@ -23,7 +23,7 @@ import {
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
-import { bindGatewayTracing } from "../core/loop-entry-bindings";
+import { ExecutionGateway } from "../execution/gateway";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -70,13 +70,21 @@ async function main(): Promise<void> {
       bindingRegistry: createRuntimeBindingRegistry(),
       now: () => new Date().toISOString(),
     });
-    const spyGateway: RuntimeCapabilityGateway = {
-      execute: async (request) => {
+    const spyTracing = {
+      runStore,
+      artifactStore,
+      bindingRegistry: createRuntimeBindingRegistry(),
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+      now: () => new Date().toISOString(),
+    };
+    class SpyGateway extends ExecutionGateway {
+      constructor() { super({ capabilityTracing: spyTracing }); }
+      override async execute(request: import("../execution/types").ExecutionRequest) {
         dispatched.push(request);
         return innerGateway.execute(request);
-      },
-    };
-    bindGatewayTracing(spyGateway, runStore, artifactStore);
+      }
+    }
+    const spyGateway = new SpyGateway();
 
     const result = await run("build a user registration form with email validation", {
       requirementId: "REQ-WP35C-001",

@@ -24,6 +24,7 @@ import { NODE_CAPABILITY_CONTRACTS } from "../core/node-capability-contracts";
 import { isSupportedCodexRequestType } from "../execution/codex-real-dispatch-runner";
 import { createCodexFakeRunner } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { createCodexRealDispatchRunner } from "../execution/codex-real-dispatch-real-runner";
 import type { ExecutionRequest, ExecutionRequestType } from "../execution/types";
 
 let passed = 0;
@@ -338,25 +339,34 @@ console.log("binding: fake runner produces canonical artifact per capability (en
   assert(legacyRejected.artifacts[0].type === "shadow_output", "legacy review type still rejected by codex runner");
 }
 
-console.log("binding: Gateway routes all seven capabilities to real dispatch");
+console.log("binding: Gateway rejects untraced canonical requests (C02-WP5 firewall)");
 {
   const runner = createCodexFakeRunner({ scenario: "success_code_patch" });
   const gateway = new ExecutionGateway({
     env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
     codexRunner: runner,
   });
+  // C02-WP5 (Decision-047 §决策3 / clause 0.1.5): a canonical request without
+  // a durable loopExecution tracing context fails closed — it can never fall
+  // through to the legacy dispatch paths, whatever the env flags say.
   for (const capability of NODE_CAPABILITY_IDS) {
-    const result = await gateway.execute(makeRequest(capability, capability));
-    assert(result.success === true, `gateway: capability ${capability} succeeds`);
-    assert(
-      result.artifacts[0].type === CAPABILITY_ARTIFACT_TYPES[capability],
-      `gateway: capability ${capability} artifact '${result.artifacts[0].type}' matches contract`,
-    );
+    let rejected = false;
+    try {
+      await gateway.execute(makeRequest(capability, capability));
+    } catch (error) {
+      rejected = String((error as Error).message).includes("durable loop execution context");
+    }
+    assert(rejected, `gateway: untraced canonical ${capability} is rejected fail-closed`);
   }
-  // Default (no flags) still returns shadow for capability requests.
+  // Default (no flags): canonical stays rejected; legacy type still shadow.
   const shadowGateway = new ExecutionGateway({ env: {} });
-  const shadowResult = await shadowGateway.execute(makeRequest("requirement-intake", "requirement-intake"));
-  assert(shadowResult.artifacts[0].type === "shadow_output", "default env still returns shadow_output for capability requests");
+  let defaultRejected = false;
+  try {
+    await shadowGateway.execute(makeRequest("requirement-intake", "requirement-intake"));
+  } catch (error) {
+    defaultRejected = String((error as Error).message).includes("durable loop execution context");
+  }
+  assert(defaultRejected, "default env still rejects an untraced canonical request");
 }
 
 
@@ -371,8 +381,11 @@ console.log("binding: fake runner prompt is non-empty and includes input (all ca
   }
 }
 
-console.log("binding: real-dispatch branch (codexRealDispatchConfig + codexProcessRunner) covers all seven capabilities");
+console.log("binding: codex real-dispatch branch covers all seven capabilities (direct runner)");
 {
+  // C02-WP5 F4: untraced canonical requests can no longer reach this branch
+  // through ExecutionGateway (firewall), so the branch behavior is pinned at
+  // its public unit boundary — createCodexRealDispatchRunner.
   const tracking = { calls: 0, lastPrompt: "" };
   let expectedStdout = "capability output text";
   const processRunner = {
@@ -382,11 +395,7 @@ console.log("binding: real-dispatch branch (codexRealDispatchConfig + codexProce
       return { exitCode: 0, stdout: expectedStdout, durationMs: 10 };
     },
   };
-  const gateway = new ExecutionGateway({
-    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-    codexProcessRunner: processRunner,
-    codexRealDispatchConfig: { workingDirectory: "/tmp/binding-real-branch-test" },
-  });
+  const realRunner = createCodexRealDispatchRunner({ processRunner });
 
   for (const capability of NODE_CAPABILITY_IDS) {
     expectedStdout =
@@ -394,7 +403,7 @@ console.log("binding: real-dispatch branch (codexRealDispatchConfig + codexProce
         ? "FILE: src/a.ts\nPATCH:\n+export const a = 1;\n"
         : "capability output text";
     const request = makeRequest(capability, capability);
-    const result = await gateway.execute(request);
+    const result = await realRunner.run(request);
     assert(result.success === true, `real branch: ${capability} succeeds`);
     assert(
       result.artifacts[0].type === CAPABILITY_ARTIFACT_TYPES[capability],
@@ -411,27 +420,23 @@ console.log("binding: real-dispatch branch (codexRealDispatchConfig + codexProce
       assert(content["patch"] !== undefined, "real branch: implementation content is a parsed patch");
     } else {
       assert(result.output["result"] === "capability_completed", `real branch: ${capability} result is capability_completed`);
-      assert(content["node_output"] === "capability output text", `real branch: ${capability} content is capability text output`);
-      assert(content["parser_summary"] === "capability_text_output", `real branch: ${capability} parser summary is capability_text_output`);
+      assert(content["node_output"] === "capability output text", "real branch: capability text output");
+      assert(content["parser_summary"] === "capability_text_output", "real branch: parser summary is capability_text_output");
     }
   }
   assert(tracking.calls === 7, "real process runner invoked for all seven capabilities");
 }
 
-console.log("binding: real-dispatch branch fails closed on CLI errors for all capabilities");
+console.log("binding: codex real-dispatch branch fails closed on CLI errors for all capabilities");
 {
   const failingRunner = {
     async run(_prompt: string) {
       return { exitCode: 1, stdout: "", durationMs: 5 };
     },
   };
-  const gateway = new ExecutionGateway({
-    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-    codexProcessRunner: failingRunner,
-    codexRealDispatchConfig: { workingDirectory: "/tmp/binding-real-branch-test" },
-  });
+  const realRunner = createCodexRealDispatchRunner({ processRunner: failingRunner });
   for (const capability of NODE_CAPABILITY_IDS) {
-    const result = await gateway.execute(makeRequest(capability, capability));
+    const result = await realRunner.run(makeRequest(capability, capability));
     assert(
       result.artifacts[0].type === "shadow_output",
       `real branch: ${capability} CLI failure fails closed to shadow_output`,
@@ -439,8 +444,7 @@ console.log("binding: real-dispatch branch fails closed on CLI errors for all ca
   }
 }
 
-
-console.log("binding: capability safety fails closed (real branch, codexRealDispatchConfig + codexProcessRunner)");
+console.log("binding: capability safety fails closed (direct codex real-dispatch runner)");
 {
   // Sensitive input: process runner must never be invoked.
   {
@@ -451,13 +455,9 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
         return { exitCode: 0, stdout: "output", durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
-    });
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
     const request = { ...makeRequest("solution-design", "solution-design"), input: { api_key: "secret-value" } };
-    const result = await gateway.execute(request);
+    const result = await realRunner.run(request);
     assert(tracking.calls === 0, "sensitive input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "sensitive input: fails closed to shadow_output");
     assert(result.success === true, "sensitive input: shadow fallback keeps gateway success contract");
@@ -470,12 +470,8 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
         return { exitCode: 0, stdout: "analysis result with sk-ABCDEF1234567890 token", durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
-    });
-    const result = await gateway.execute(makeRequest("knowledge-sync", "knowledge-sync"));
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
+    const result = await realRunner.run(makeRequest("knowledge-sync", "knowledge-sync"));
     assert(result.artifacts[0].type === "shadow_output", "sensitive output: fails closed to shadow_output");
     assert(
       result.output["codex_fallback_reason"] === "prohibited_output_content",
@@ -490,12 +486,8 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
         return { exitCode: 0, stdout: "x".repeat(8001), durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
-    });
-    const result = await gateway.execute(makeRequest("knowledge-sync", "knowledge-sync"));
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
+    const result = await realRunner.run(makeRequest("knowledge-sync", "knowledge-sync"));
     assert(result.artifacts[0].type === "shadow_output", "oversized output: fails closed to shadow_output");
     assert(
       result.output["codex_fallback_reason"] === "output_too_large",
@@ -513,15 +505,11 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
         return { exitCode: 0, stdout: "output", durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
-    });
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
     const circular: Record<string, unknown> = { name: "loop" };
     circular.self = circular;
     const request = { ...makeRequest("solution-design", "solution-design"), input: circular };
-    const result = await gateway.execute(request);
+    const result = await realRunner.run(request);
     assert(tracking.calls === 0, "circular input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "circular input: fails closed to shadow_output");
   }
@@ -535,20 +523,16 @@ console.log("binding: capability safety fails closed (real branch, codexRealDisp
         return { exitCode: 0, stdout: "output", durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-safety-test" },
-    });
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
     const request = { ...makeRequest("solution-design", "solution-design"), input: { big: BigInt(9007199254740991) } };
-    const result = await gateway.execute(request);
+    const result = await realRunner.run(request);
     assert(tracking.calls === 0, "unserializable input: process runner not invoked");
     assert(result.artifacts[0].type === "shadow_output", "unserializable input: fails closed to shadow_output");
   }
 }
 
 
-console.log("binding: empty/blank capability output fails closed (real branch, six non-implementation capabilities)");
+console.log("binding: empty/blank capability output fails closed (direct codex real-dispatch runner, six non-implementation capabilities)");
 {
   const nonImplementation = NODE_CAPABILITY_IDS.filter((cap) => cap !== "implementation");
   for (const outputText of ["", "   \n\t  "]) {
@@ -557,13 +541,9 @@ console.log("binding: empty/blank capability output fails closed (real branch, s
         return { exitCode: 0, stdout: outputText, durationMs: 5 };
       },
     };
-    const gateway = new ExecutionGateway({
-      env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
-      codexProcessRunner: processRunner,
-      codexRealDispatchConfig: { workingDirectory: "/tmp/binding-empty-test" },
-    });
+    const realRunner = createCodexRealDispatchRunner({ processRunner });
     for (const capability of nonImplementation) {
-      const result = await gateway.execute(makeRequest(capability, capability));
+      const result = await realRunner.run(makeRequest(capability, capability));
       assert(
         result.artifacts[0].type === "shadow_output",
         `${capability}: ${outputText.length === 0 ? "empty" : "blank"} output fails closed to shadow_output`,

@@ -32,7 +32,6 @@ import { ExecutionGateway } from "../execution/gateway";
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
-import { bindGatewayTracing } from "../core/loop-entry-bindings";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
 import { createLoopRequirementChangeRecord } from "../core/loop-change-classification";
@@ -120,15 +119,19 @@ function openFeedbackGeneration(o: {
   runId: string;
   requirementId: string;
   locator: string;
+  /** Defaults to closing generation 1 (opening generation 2). */
+  closesGeneration?: number;
 }): void {
+  const previousGeneration = o.closesGeneration ?? 1;
+  const sequence = previousGeneration;
   o.runStore.appendRequirementChange(createLoopRequirementChangeRecord({
     runId: o.runId,
     requirementId: o.requirementId,
-    sequence: 1,
+    sequence,
     status: "CLASSIFIED",
     changeKind: "FEEDBACK_DRIVEN_CHANGE",
     payloadForm: "DELTA_CHANGE",
-    previousGeneration: 1,
+    previousGeneration,
     currentChangeScope: "WP5 contract test feedback wave",
     confirmedFactsPreserved: ["login flow behavior stays"],
     sourceRefs: [{
@@ -152,6 +155,7 @@ function appendRegressionFinding(o: {
   sourceCapability: NodeCapabilityId;
   earliestAffectedNodeId: NodeCapabilityId;
   sequence: number;
+  category?: "REQUIREMENT" | "SOLUTION" | "PLANNING" | "IMPLEMENTATION" | "REVIEW" | "KNOWLEDGE";
 }): string {
   const current = o.runStore.getCurrentArtifactRevision(o.runId, o.sourceCapability)!;
   const finding = createLoopFinding({
@@ -163,7 +167,7 @@ function appendRegressionFinding(o: {
     causeKind: "REGRESSION",
     introducedByRevisionId: current.revisionId,
     severity: "HIGH",
-    category: "IMPLEMENTATION",
+    category: o.category ?? "IMPLEMENTATION",
     evidenceRef: `loop-artifact:v1:${current.artifactKind}:sha256:${current.digest}`,
     evidenceDigest: current.digest,
     earliestAffectedNodeId: o.earliestAffectedNodeId,
@@ -174,6 +178,18 @@ function appendRegressionFinding(o: {
 }
 
 const ALL_POINTS = 8;
+
+
+function assertSameAuthorityFacts(a: NonNullable<ReturnType<typeof recoverRunContext>>, b: NonNullable<ReturnType<typeof recoverRunContext>>, label: string): void {
+  ok(a.generation === b.generation, `${label}: generation`);
+  ok(JSON.stringify(a.latestChangeRecord) === JSON.stringify(b.latestChangeRecord), `${label}: latestChangeRecord`);
+  ok(JSON.stringify(a.currentArtifactMap) === JSON.stringify(b.currentArtifactMap), `${label}: currentArtifactMap`);
+  ok(JSON.stringify(a.openFindings) === JSON.stringify(b.openFindings), `${label}: openFindings`);
+  ok(JSON.stringify(a.invalidatedRevisions) === JSON.stringify(b.invalidatedRevisions), `${label}: invalidatedRevisions`);
+  ok(JSON.stringify(a.regatePlan) === JSON.stringify(b.regatePlan), `${label}: regatePlan`);
+  ok(JSON.stringify(a.nextExecutionPoint) === JSON.stringify(b.nextExecutionPoint), `${label}: next action`);
+  ok(JSON.stringify(deriveDispatchCommand(a)) === JSON.stringify(deriveDispatchCommand(b)), `${label}: dispatch command`);
+}
 
 async function main(): Promise<void> {
   // ── P1: fresh run — full C02 fact base in one recovery context ──
@@ -239,6 +255,25 @@ async function main(): Promise<void> {
       ok(after.invalidatedRevisions.length >= 7, "the superseded generation-1 revisions stay auditable as STALE");
       ok(after.openFindings.length === 0, "feedback waves raise no findings by themselves");
       ok(after.capabilityChainStatus === "COMPLETED", "confirmed facts were not reinterpreted — chain simply completed again");
+
+      // F2: a THIRD generation driven by a call passing CONTRADICTORY
+      // requirement text — the wave must still consume the ORIGINAL pinned
+      // source, never the replacement content.
+      const originalIntake = env.runStore.listCapabilityExecutions(
+        env.runStore.listRunsByRequirement(requirementId)[0]!.state.identity.runId,
+      ).find((event) => event.capability === "requirement-intake" && event.attempt === 1)!;
+      openFeedbackGeneration({ runStore: env.runStore, runId: originalIntake.runId, requirementId, locator: "feedback:wp5-p2-gen3", closesGeneration: 2 });
+      const gen3 = await run("CONTRADICTORY-REPLACEMENT-REQUIREMENT", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+      ok(gen3.final_status === "success", "generation 3 completes despite the contradictory argument text");
+      const gen3Intake = env.runStore.listCapabilityExecutions(gen3.run_id)
+        .filter((event) => event.capability === "requirement-intake")
+        .at(-1)!;
+      ok(gen3Intake.attempt === 3 && gen3Intake.inputArtifactRef === originalIntake.inputArtifactRef &&
+        gen3Intake.inputDigest === originalIntake.inputDigest,
+        "the generation-3 intake consumed the ORIGINAL pinned source, not the replacement text");
+      const recoveryGen3 = recoverRunContext(env.runStore, requirementId)!;
+      ok(recoveryGen3.latestChangeRecord!.confirmedFactsPreserved.includes("login flow behavior stays"),
+        "confirmed facts preserved across processes in the change authority");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -325,9 +360,12 @@ async function main(): Promise<void> {
         "four points dispatched before the stop");
 
       // Thin consumer (Q3-A) over the SAME journal through a second process:
-      // deriveDispatchCommand alone must name the exact unique next action.
+      // the FULL recovered fact base and the derived command must match the
+      // first connection's exactly — not just generation or chain status.
       const other = secondProcess(env);
       const crossRecovery = recoverRunContext(other.runStore, requirementId)!;
+      const originRecovery = recoverRunContext(env.runStore, requirementId)!;
+      assertSameAuthorityFacts(originRecovery, crossRecovery, "cross-process recovery");
       const command = deriveDispatchCommand(crossRecovery);
       ok(command !== null && command.capability === "task-planning" && command.executionRole === "primary",
         "the thin store-level consumer derives the unique next action across processes");
@@ -610,6 +648,51 @@ async function main(): Promise<void> {
         skill: "unknown-skill",
       } as never);
       ok(typeof legacyResult.success === "boolean", "legacy fail-open path still executes");
+
+      // F4: canonical WITHOUT a loopExecution context never falls to the
+      // legacy path either — untraced or not, it fails closed.
+      const untraced = new ExecutionGateway();
+      await expectCode("INVALID_INPUT", () => untraced.execute({
+        type: "task-planning", node: "task-planning", agent: "codex",
+        requirementId, input: {}, skill: "sdlc-task-planning",
+      } as never), "untraced gateway rejects canonical dispatch carrying skill");
+      await expectCode("INVALID_INPUT", () => untraced.execute({
+        type: "task-planning", node: "task-planning", agent: "codex",
+        requirementId, input: {},
+      } as never), "untraced gateway rejects canonical dispatch without context");
+
+      // F4: the deterministic face enforces the same firewall directly.
+      const deterministic = createDeterministicCapabilityGateway({
+        runStore: env.runStore,
+        artifactStore: env.artifactStore,
+        bindingRegistry: createRuntimeBindingRegistry(),
+        now: () => new Date().toISOString(),
+      });
+      const eventsBeforeDeterministicSkill = env.runStore.listCapabilityExecutions(stopped.run_id).length;
+      await expectCode("INVALID_INPUT", () => deterministic.execute({
+        type: "solution-gate", node: "solution-gate", agent: "codex",
+        requirementId, input: {}, skill: "sdlc-speckit-pipeline",
+        loopExecution: {
+          runId: stopped.run_id, attempt: 1, executionRole: "adversarial_scan",
+          inputArtifactRef: designRevision.artifactRef,
+          inputArtifactVersion: designRevision.semver,
+          inputDigest: designRevision.digest,
+          outputArtifactVersion: "1.0.0",
+        },
+      } as never), "deterministic gateway rejects skill metadata outright");
+      ok(env.runStore.listCapabilityExecutions(stopped.run_id).length === eventsBeforeDeterministicSkill,
+        "the rejected deterministic dispatch left zero journal side effects");
+      await expectCode("INVALID_INPUT", () => deterministic.execute({
+        type: "solution-gate", node: "solution-gate", agent: "codex",
+        requirementId: "REQ-FORGED-IDENTITY", input: {},
+        loopExecution: {
+          runId: stopped.run_id, attempt: 1, executionRole: "adversarial_scan",
+          inputArtifactRef: designRevision.artifactRef,
+          inputArtifactVersion: designRevision.semver,
+          inputDigest: designRevision.digest,
+          outputArtifactVersion: "1.0.0",
+        },
+      } as never), "deterministic gateway rejects a forged Requirement identity");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
@@ -679,16 +762,130 @@ async function main(): Promise<void> {
       unboundStore.close();
       mismatchedStore.close();
       otherArtifacts.close();
+
+      // F3: neither owning module exports a registrar — the ONLY write path
+      // to either binding registry is the owning constructor.
+      const storeModule = await import("../core/loop-run-store");
+      const gatewayModule = await import("../execution/gateway");
+      ok(Object.keys(storeModule).every((key) => !/^bind/.test(key)),
+        "the run store module exposes no binding registrar");
+      ok(Object.keys(gatewayModule).every((key) => !/^bind/.test(key)),
+        "the gateway module exposes no binding registrar");
+    } finally {
+      rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+  // ── F1R: the claim is verified against the CURRENT recovery authority ──
+  console.log("F1R: a stale command cannot open an attempt after facts moved");
+  {
+    const env = makeEnv("loop-wp5-f1r-");
+    try {
+      const requirementId = "REQ-WP5-F1R";
+      // Stop after intake + solution-design (both materialized): recovery
+      // says the unique next action is the solution-gate scan.
+      await run("build a sidebar", {
+        requirementId, runStore: env.runStore, artifactStore: env.artifactStore,
+        gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
+      });
+      const runId = env.runStore.listRunsByRequirement(requirementId)[0]!.state.identity.runId;
+      const before = recoverRunContext(env.runStore, requirementId)!;
+      ok(before.nextExecutionPoint?.capability === "solution-gate", "fixture next action is the scan point");
+      const designCurrent = before.currentArtifactMap.find((fact) => fact.nodeId === "solution-design")!;
+      const nextSequence = env.runStore.listCapabilityExecutions(runId).length + 1;
+      // A well-formed scan claim matching the CURRENT command…
+      const staleScanStarted = Object.freeze({
+        schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+        executionEventId: `${runId}:capability:${nextSequence}:started`,
+        runId,
+        sequence: nextSequence,
+        status: "started" as const,
+        capability: "solution-gate" as const,
+        nodeId: "solution-gate",
+        executionRole: "adversarial_scan" as const,
+        attempt: 1,
+        bindingId: "binding-codex-solution-gate-adversarial_scan",
+        bindingVersion: "1.0.0",
+        bindingRegistryVersion: "1",
+        executorAgent: "codex",
+        executorAdapter: "codex-real-dispatch",
+        executorVersion: "1.0.0",
+        inputArtifactRef: designCurrent.artifactRef,
+        inputArtifactVersion: designCurrent.semver,
+        inputDigest: designCurrent.digest,
+        consumedFindingsRef: null,
+        consumedFindingsDigest: null,
+        decisionDepth: null,
+        decisionScopeId: null,
+        decisionDeltaRef: null,
+        decisionDeltaDigest: null,
+        outputArtifactRef: null,
+        outputArtifactVersion: null,
+        outputDigest: null,
+        gateResult: null,
+        unresolvedFindingsRef: null,
+        unresolvedFindingsDigest: null,
+        nextStepEligibility: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+        createdAt: new Date(Date.now() + 20000).toISOString(),
+      });
+      // …then the facts move UNDER it: a causal regression invalidates the
+      // solution-design current and re-routes the unique next action back to
+      // solution-design (exactly the reviewer's repro sequence).
+      appendRegressionFinding({
+        runStore: env.runStore, runId, requirementId,
+        sourceCapability: "solution-design", earliestAffectedNodeId: "solution-design",
+        category: "SOLUTION", sequence: 1,
+      });
+      const afterMove = recoverRunContext(env.runStore, requirementId)!;
+      ok(afterMove.nextExecutionPoint!.capability === "solution-design",
+        "the finding re-routed the unique next action before the claim");
+      const executionsBeforeClaim = env.runStore.listCapabilityExecutions(runId).length;
+      await expectCode("ILLEGAL_TRANSITION", () =>
+        env.runStore.claimNextCapabilityExecution(staleScanStarted),
+        "the store rejects a claim whose command is no longer the authority's");
+      ok(env.runStore.listCapabilityExecutions(runId).length === executionsBeforeClaim,
+        "the rejected stale claim left zero journal side effects");
+      // Positive control: the CURRENT authority's own command claims cleanly.
+      const intakeCurrent = afterMove.currentArtifactMap.find((fact) => fact.nodeId === "requirement-intake")!;
+      const freshDesignClaim = Object.freeze({
+        ...staleScanStarted,
+        executionEventId: `${runId}:capability:${executionsBeforeClaim + 1}:started`,
+        sequence: executionsBeforeClaim + 1,
+        capability: "solution-design" as const,
+        nodeId: "solution-design",
+        executionRole: "primary" as const,
+        bindingId: "binding-codex-solution-design-primary",
+        attempt: 2,
+        inputArtifactRef: intakeCurrent.artifactRef,
+        inputArtifactVersion: intakeCurrent.semver,
+        inputDigest: intakeCurrent.digest,
+        createdAt: new Date(Date.now() + 21000).toISOString(),
+      });
+      const claimed = env.runStore.claimNextCapabilityExecution(freshDesignClaim);
+      ok(claimed.appended === true && claimed.event.capability === "solution-design",
+        "the authority's own current command claims successfully");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
   }
 
   // ── N5: configuration freeze — post-construction mutation is inert ──
-  console.log("N5: construction-time configuration snapshot resists mutation");
+  console.log("N5: swapping stores after construction cannot redirect wiring");
   {
     const env = makeEnv("loop-wp5-freeze-");
     try {
+      mkdirSync(join(env.root, "foreign-repo"), { recursive: true });
+      const foreignArtifacts = new LoopArtifactStore({
+        controlRoot: join(env.root, "foreign-control"),
+        repositoryPath: join(env.root, "foreign-repo"),
+      });
+      foreignArtifacts.init();
+      const foreignRunStore = new LoopRunStore(join(env.root, "foreign.db"), { artifactStore: foreignArtifacts });
+      foreignRunStore.init();
+
       const tracing = {
         runStore: env.runStore,
         artifactStore: env.artifactStore,
@@ -702,7 +899,6 @@ async function main(): Promise<void> {
         capabilityTracing: tracing,
       };
       const stableGateway = new ExecutionGateway(mutableOptions);
-      bindGatewayTracing(stableGateway, env.runStore, env.artifactStore);
       const stableOptions = {
         runStore: env.runStore,
         artifactStore: env.artifactStore,
@@ -710,21 +906,30 @@ async function main(): Promise<void> {
         gateway: stableGateway,
       };
       const stableEntry = new LoopCapabilityEntry(stableOptions);
-      // Attempt to redirect every store after construction.
-      tracing.artifactStore = env.artifactStore;
-      mutableOptions.capabilityTracing = { ...tracing };
-      stableOptions.artifactStore = env.artifactStore;
+      // REAL mutation attempt: redirect every store to the FOREIGN pair.
+      tracing.runStore = foreignRunStore;
+      tracing.artifactStore = foreignArtifacts;
+      mutableOptions.capabilityTracing = {
+        ...tracing,
+        runStore: foreignRunStore,
+        artifactStore: foreignArtifacts,
+      };
+      stableOptions.runStore = foreignRunStore;
+      stableOptions.artifactStore = foreignArtifacts;
+
       const result = await run("build a footer", {
         requirementId: "REQ-WP5-N5", runStore: env.runStore, artifactStore: env.artifactStore,
-        gateway: stableGateway, bindingRegistry: createRuntimeBindingRegistry(),
+        gateway: stableGateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
       });
-      ok(result.final_status === "failed" || result.final_status === "success",
-        "execution proceeds against the construction-time snapshot");
+      ok(result.chain_status === "READY" && result.execution_trace.length === 4,
+        "the codex-served points dispatched against the construction-time snapshot");
       const events = env.runStore.listCapabilityExecutions(result.run_id);
-      ok(events.length >= 2, "executions journal into the original run store");
+      ok(events.length === 4, "executions journal into the ORIGINAL run store");
       const withOutput = events.find((event) => event.outputArtifactRef !== null)!;
       ok(withOutput !== undefined && env.artifactStore.read(withOutput.outputArtifactRef!, withOutput.outputDigest!).length > 0,
-        "output blobs land in the original artifact store");
+        "output blobs land in the ORIGINAL artifact store");
+      ok(foreignRunStore.listRunsByRequirement("REQ-WP5-N5").length === 0,
+        "the foreign run store received nothing");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }

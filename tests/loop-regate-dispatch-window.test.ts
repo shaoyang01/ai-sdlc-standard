@@ -30,7 +30,7 @@ import {
 } from "../runtime";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
-import { bindGatewayTracing } from "../core/loop-entry-bindings";
+import { ExecutionGateway } from "../execution/gateway";
 import { LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION } from "../core/loop-capability-execution";
 import { createLoopRequirementChangeRecord } from "../core/loop-change-classification";
 import { recoverRunContext } from "../core/loop-recovery";
@@ -90,6 +90,36 @@ function gatewayFor(store: LoopRunStore, artifactStore: LoopArtifactStore): Runt
     bindingRegistry: createRuntimeBindingRegistry(),
     now,
   });
+}
+
+// C02-WP5 F3: observation/script wrappers are real ExecutionGateway
+// subclasses registered by the base constructor — no out-of-module registrar.
+function wrapTraced(o: {
+  runStore: InstanceType<typeof LoopRunStore>;
+  artifactStore: InstanceType<typeof LoopArtifactStore>;
+  execute: (
+    request: import("../execution/types").ExecutionRequest,
+    inner: RuntimeCapabilityGateway,
+  ) => Promise<import("../execution/types").ExecutionResult>;
+}): ExecutionGateway {
+  const inner = gatewayFor(o.runStore, o.artifactStore);
+  class Wrapped extends ExecutionGateway {
+    constructor() {
+      super({
+        capabilityTracing: {
+          runStore: o.runStore,
+          artifactStore: o.artifactStore,
+          bindingRegistry: createRuntimeBindingRegistry(),
+          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+          now,
+        },
+      });
+    }
+    override async execute(request: import("../execution/types").ExecutionRequest) {
+      return o.execute(request, inner);
+    }
+  }
+  return new Wrapped();
 }
 
 function startedCount(
@@ -161,9 +191,10 @@ async function main(): Promise<void> {
         bFinalStatus?: string;
         bChainStatus?: string;
       } = {};
-      const innerA = gatewayFor(env.storeA, env.artifactStore);
-      const gatewayA: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const gatewayA = wrapTraced({
+        runStore: env.storeA,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerA) => {
           const result = await innerA.execute(request);
           const context = request.loopExecution!;
           if (
@@ -198,8 +229,7 @@ async function main(): Promise<void> {
           }
           return result;
         },
-      };
-      bindGatewayTracing(gatewayA, env.storeA, env.artifactStore);
+      });
       const aResult = await run("window race", {
         requirementId: env.requirementId,
         runStore: env.storeA,
@@ -245,9 +275,10 @@ async function main(): Promise<void> {
     const env = makeWindowEnv("crash");
     try {
       let crashed = false;
-      const innerA = gatewayFor(env.storeA, env.artifactStore);
-      const crashingGateway: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const crashingGateway = wrapTraced({
+        runStore: env.storeA,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerA) => {
           const result = await innerA.execute(request);
           if (
             !crashed &&
@@ -261,8 +292,7 @@ async function main(): Promise<void> {
           }
           return result;
         },
-      };
-      bindGatewayTracing(crashingGateway, env.storeA, env.artifactStore);
+      });
       let crashSurfaced = false;
       try {
         await run("window crash", {
@@ -315,9 +345,10 @@ async function main(): Promise<void> {
     const env = makeWindowEnv("verdict-crash");
     try {
       let crashed = false;
-      const innerA = gatewayFor(env.storeA, env.artifactStore);
-      const crashingGateway: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const crashingGateway = wrapTraced({
+        runStore: env.storeA,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerA) => {
           const result = await innerA.execute(request);
           if (
             !crashed &&
@@ -329,8 +360,7 @@ async function main(): Promise<void> {
           }
           return result;
         },
-      };
-      bindGatewayTracing(crashingGateway, env.storeA, env.artifactStore);
+      });
       let crashSurfaced = false;
       try {
         await run("window verdict crash", {
@@ -405,9 +435,10 @@ async function main(): Promise<void> {
       // the window with a LOWER budget (1 < 2 historical rounds).
       let barrierArmed = true;
       let bFinalStatus: string | null = null;
-      const innerA = gatewayFor(env.storeA, env.artifactStore);
-      const gatewayA: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const gatewayA = wrapTraced({
+        runStore: env.storeA,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerA) => {
           const result = await innerA.execute(request);
           const context = request.loopExecution!;
           if (
@@ -428,8 +459,7 @@ async function main(): Promise<void> {
           }
           return result;
         },
-      };
-      bindGatewayTracing(gatewayA, env.storeA, env.artifactStore);
+      });
       const third = await run("window budget", {
         requirementId: env.requirementId,
         runStore: env.storeA,
@@ -461,14 +491,14 @@ async function main(): Promise<void> {
         (point) => point.capability === "solution-design" && point.executionRole === "primary",
       );
       let agentCallsA = 0;
-      const innerA = gatewayFor(env.storeA, env.artifactStore);
-      const countingGatewayA: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const countingGatewayA = wrapTraced({
+        runStore: env.storeA,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerA) => {
           agentCallsA += 1;
           return innerA.execute(request);
         },
-      };
-      bindGatewayTracing(countingGatewayA, env.storeA, env.artifactStore);
+      });
       // Drive only requirement-intake through the real entry — its revision
       // is deliberately never materialized.
       const { LoopCapabilityEntry } = await import("../core/loop-capability-entry");
@@ -527,14 +557,14 @@ async function main(): Promise<void> {
       // closed with zero started events and zero external agent dispatches.
       const intakeOutput = lastSucceeded(env.storeB, runId, "requirement-intake");
       let agentCallsB = 0;
-      const innerB = gatewayFor(env.storeB, env.artifactStore);
-      const countingGatewayB: RuntimeCapabilityGateway = {
-        async execute(request) {
+      const countingGatewayB = wrapTraced({
+        runStore: env.storeB,
+        artifactStore: env.artifactStore,
+        execute: async (request, innerB) => {
           agentCallsB += 1;
           return innerB.execute(request);
         },
-      };
-      bindGatewayTracing(countingGatewayB, env.storeB, env.artifactStore);
+      });
       const entryB = new LoopCapabilityEntry({
         runStore: env.storeB,
         artifactStore: env.artifactStore,

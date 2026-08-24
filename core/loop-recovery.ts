@@ -148,6 +148,18 @@ export interface RunRecoveryContext {
    * agent needs to continue an interrupted wave.
    */
   regatePlan: RegatePlan;
+  /**
+   * C02-WP5 F2: the input triple the run's FIRST requirement-intake claim
+   * consumed — the persisted normalized Requirement source and therefore the
+   * confirmed-facts anchor of generation 1. Non-null for every recovered
+   * run; a recovery dispatch at the intake point MUST consume exactly this
+   * triple instead of caller-supplied replacement content.
+   */
+  originRequirementInput: Readonly<{
+    inputArtifactRef: string;
+    inputArtifactVersion: string;
+    inputDigest: string;
+  }> | null;
 }
 
 /** Reduced CURRENT-revision fact of one canonical node (C02-WP5). */
@@ -197,6 +209,13 @@ export interface InvalidatedRevisionFact {
 export interface DispatchCommand {
   capability: NodeCapabilityId;
   executionRole: CapabilityExecutionRole;
+  /**
+   * The next attempt number for the point (`lastAttempt + 1`). Started
+   * events carry no output version (schema requires null result fields), so
+   * the attempt number is the claim-time comparable form of the
+   * attempt-scoped N.0.0 output contract.
+   */
+  attempt: number;
   inputArtifactRef: string | null;
   inputArtifactVersion: string | null;
   inputDigest: string | null;
@@ -361,6 +380,16 @@ export function recordNodeExecution(
  * no run yet.
  */
 export function recoverRunContext(
+  store: LoopRunStore,
+  requirementId: string,
+): RunRecoveryContext | undefined {
+  // C02-WP5 F1: the whole projection is assembled against ONE consistent
+  // transaction — a concurrent writer can no longer produce a mixed context
+  // (e.g., findings read before its commit, generation read after it).
+  return store.readConsistent(() => recoverRunContextInTransaction(store, requirementId));
+}
+
+function recoverRunContextInTransaction(
   store: LoopRunStore,
   requirementId: string,
 ): RunRecoveryContext | undefined {
@@ -732,6 +761,20 @@ export function recoverRunContext(
     openFindings: Object.freeze(openFindings),
     invalidatedRevisions: Object.freeze(invalidatedRevisions),
     regatePlan: plan,
+    originRequirementInput: (() => {
+      const first = capabilityExecutions[0];
+      if (
+        first === undefined || first.capability !== "requirement-intake" ||
+        first.executionRole !== "primary"
+      ) {
+        return null;
+      }
+      return Object.freeze({
+        inputArtifactRef: first.inputArtifactRef,
+        inputArtifactVersion: first.inputArtifactVersion,
+        inputDigest: first.inputDigest,
+      });
+    })(),
     lastExecution:
       lastExecutionEvent === undefined
         ? null
@@ -769,11 +812,26 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
     throw new LoopRunJournalError("STORE_CORRUPT", "recovery context holds a non-canonical execution point");
   }
   if (pointIndex === 0) {
-    // Intake consumes the caller-supplied normalized Requirement source;
-    // the entry kind-checks the ref prefix before any dispatch.
+    // C02-WP5 F2: a recovered run pins the intake dispatch to the ORIGINAL
+    // persisted normalized Requirement source — the confirmed-facts anchor.
+    // Only a genuinely fresh run (no claim yet) leaves the source to the
+    // caller, kind-checked by the entry and the chain validator.
+    const origin = recovery.originRequirementInput;
+    if (origin !== null) {
+      return Object.freeze({
+        capability: next.capability,
+        executionRole: next.executionRole,
+        attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
+        inputArtifactRef: origin.inputArtifactRef,
+        inputArtifactVersion: origin.inputArtifactVersion,
+        inputDigest: origin.inputDigest,
+        outputArtifactVersion: `${recovery.executionPointStates[pointIndex]!.lastAttempt + 1}.0.0`,
+      });
+    }
     return Object.freeze({
       capability: next.capability,
       executionRole: next.executionRole,
+      attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
       inputArtifactRef: null,
       inputArtifactVersion: null,
       inputDigest: null,
@@ -817,6 +875,7 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
   return Object.freeze({
     capability: next.capability,
     executionRole: next.executionRole,
+    attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
     inputArtifactRef: predecessorState.effectiveOutputArtifactRef,
     inputArtifactVersion: predecessorState.effectiveOutputArtifactVersion,
     inputDigest: predecessorState.effectiveOutputDigest,

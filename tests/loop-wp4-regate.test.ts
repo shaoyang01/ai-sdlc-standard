@@ -30,7 +30,7 @@ import {
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
-import { bindGatewayTracing } from "../core/loop-entry-bindings";
+import { ExecutionGateway } from "../execution/gateway";
 import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
@@ -53,6 +53,43 @@ let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
   assert.ok(condition, message);
   passed += 1;
+}
+
+
+// C02-WP5 F3: scripted gateways are real ExecutionGateway subclasses — the
+// base constructor registers their durable tracing through the gateway
+// module's private registry; there is no out-of-module registrar anymore.
+function scriptedGateway(o: {
+  runStore: InstanceType<typeof LoopRunStore>;
+  artifactStore: InstanceType<typeof LoopArtifactStore>;
+  execute: (
+    request: import("../execution/types").ExecutionRequest,
+    inner: RuntimeCapabilityGateway,
+  ) => Promise<import("../execution/types").ExecutionResult>;
+}): ExecutionGateway {
+  const inner = createDeterministicCapabilityGateway({
+    runStore: o.runStore,
+    artifactStore: o.artifactStore,
+    bindingRegistry: createRuntimeBindingRegistry(),
+    now: () => new Date().toISOString(),
+  });
+  class Scripted extends ExecutionGateway {
+    constructor() {
+      super({
+        capabilityTracing: {
+          runStore: o.runStore,
+          artifactStore: o.artifactStore,
+          bindingRegistry: createRuntimeBindingRegistry(),
+          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+          now: () => new Date().toISOString(),
+        },
+      });
+    }
+    override async execute(request: import("../execution/types").ExecutionRequest) {
+      return o.execute(request, inner);
+    }
+  }
+  return new Scripted();
 }
 
 interface TestEnv {
@@ -78,24 +115,17 @@ function makeEnv(): TestEnv {
   artifactStore.init();
   const bindingRegistry = createRuntimeBindingRegistry();
   const dispatchOrder: Array<{ capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }> = [];
-  const inner = createDeterministicCapabilityGateway({
+  const gateway = scriptedGateway({
     runStore,
     artifactStore,
-    bindingRegistry,
-    now: () => new Date().toISOString(),
-  });
-  const gateway: RuntimeCapabilityGateway = {
-    execute: async (request) => {
+    execute: async (request, innerGateway) => {
       dispatchOrder.push({
         capability: request.type as NodeCapabilityId,
         executionRole: request.loopExecution!.executionRole as CapabilityExecutionRole,
       });
-      return inner.execute(request);
+      return innerGateway.execute(request);
     },
-  };
-  // C02-WP5 (clause 0.1.5): the wrapping gateway journals through the same
-  // store pair, so its tracing wiring is registered for entry verification.
-  bindGatewayTracing(gateway, runStore, artifactStore);
+  });
   const entry = new LoopCapabilityEntry({ runStore, artifactStore, bindingRegistry, gateway });
   return { root, runStore, artifactStore, gateway, entry, dispatchOrder };
 }
@@ -649,14 +679,10 @@ async function main(): Promise<void> {
     const now = (): string => new Date().toISOString();
     // Wrapper: every round uses the deterministic shadow gateway except the
     // formal_verdict round, which fails closed with a rejection code.
-    const inner = createDeterministicCapabilityGateway({
+    const failingGateway = scriptedGateway({
       runStore,
       artifactStore,
-      bindingRegistry,
-      now,
-    });
-    const failingGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+      execute: async (request, inner) => {
         const context = request.loopExecution!;
         const isVerdict =
           request.type === "solution-gate" &&
@@ -734,8 +760,7 @@ async function main(): Promise<void> {
           artifacts: Object.freeze([]),
         });
       },
-    };
-    bindGatewayTracing(failingGateway, runStore, artifactStore);
+    });
     const result = await run("build refund workflow", {
       requirementId: "REQ-WP4-W5",
       runStore,
@@ -774,15 +799,11 @@ async function main(): Promise<void> {
     // Wrapper: every round uses the deterministic shadow gateway except the
     // formal_verdict round, which succeeds with a PASS_WITH_RISK verdict and
     // materializes its own decision scope.
-    const inner = createDeterministicCapabilityGateway({
+    let riskScopeCounter = 0;
+    const riskGateway = scriptedGateway({
       runStore,
       artifactStore,
-      bindingRegistry,
-      now,
-    });
-    let riskScopeCounter = 0;
-    const riskGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+      execute: async (request, inner) => {
         const context = request.loopExecution!;
         const isVerdict =
           request.type === "solution-gate" &&
@@ -877,10 +898,9 @@ async function main(): Promise<void> {
           capabilityTerminalEventId: `${runId}:capability:${sequence + 1}:succeeded`,
         });
       },
-    };
+    });
 
     const driveRiskChain = async (rid: string) => {
-      bindGatewayTracing(riskGateway, runStore, artifactStore);
       const result = await run("small fix", { requirementId: rid, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
       const verdictScopeId = runStore.listCapabilityExecutions(result.run_id)
         .filter((e2) => e2.capability === "solution-gate" && e2.executionRole === "formal_verdict" && e2.status === "succeeded")
@@ -1435,12 +1455,10 @@ async function main(): Promise<void> {
     // Flaky wrapper: the generation-3 intake dispatch (attempt 3) fails once,
     // retryably; everything else delegates to the deterministic shadow.
     const retryNow = (): string => new Date().toISOString();
-    const retryInner = createDeterministicCapabilityGateway({
-      runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
-      bindingRegistry: createRuntimeBindingRegistry(), now: retryNow,
-    });
-    const flakyGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+    const flakyGateway = scriptedGateway({
+      runStore: envRetry.runStore,
+      artifactStore: envRetry.artifactStore,
+      execute: async (request, retryInner) => {
         const context = request.loopExecution!;
         if (!(request.type === "requirement-intake" && context.attempt === 3)) {
           return retryInner.execute(request);
@@ -1515,10 +1533,9 @@ async function main(): Promise<void> {
           error: "capability execution failed",
         });
       },
-    };
+    });
     // The retryable failure is admitted (jump 2 fits the budget) but stops
     // the invocation WITHOUT a durable block.
-    bindGatewayTracing(flakyGateway, envRetry.runStore, envRetry.artifactStore);
     const retryThird = await run("migrate billing export", {
       requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
       gateway: flakyGateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 2,

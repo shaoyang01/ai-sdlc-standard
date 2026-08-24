@@ -20,30 +20,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  CAPABILITY_ARTIFACT_TYPES,
-  getEnabledBinding,
   INITIAL_BINDING_REGISTRY,
   replaceBinding,
   type BindingRegistry,
 } from "./core/agent-capability-bindings";
 import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
 import { LoopCapabilityEntry } from "./core/loop-capability-entry";
-import { LoopArtifactStore, type LoopArtifactKind } from "./core/loop-artifact-store";
+import { LoopArtifactStore } from "./core/loop-artifact-store";
 import {
   LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
   createLoopArtifactRevision,
 } from "./core/loop-artifact-revision";
-import { recoverRunContext } from "./core/loop-recovery";
+import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
-import { bindGatewayTracing } from "./core/loop-entry-bindings";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "./loop/types";
-import type { AgentName, ExecutionRequest, ExecutionResult } from "./execution/types";
+import type { AgentName } from "./execution/types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -73,7 +70,7 @@ export interface RuntimeResult {
 
 /** Anything the runtime executes must go through this minimal gateway shape. */
 export interface RuntimeCapabilityGateway {
-  execute(request: ExecutionRequest): Promise<ExecutionResult>;
+  execute(request: import("./execution/types").ExecutionRequest): Promise<import("./execution/types").ExecutionResult>;
 }
 
 export interface RuntimeOptions {
@@ -163,166 +160,14 @@ function requireSafeId(value: string, label: string): string {
   return value;
 }
 
-// ─── Deterministic shadow capability gateway ──────────
-// The default dispatch surface: resolves the enabled binding per execution
-// point from the registry (so the solution-gate dual-agent separation comes
-// from the registry, not from the request), persists the started/terminal
-// capability events through the run journal and stores the node product (plus
-// the scan round's immutable Finding Ledger) in the artifact store. Real
-// dispatch (codex real runner) is injected via options.gateway; production
-// entry wiring is a separately authorized work package (WP5).
+// ─── Deterministic traced capability gateway ──────────
+// Moved into execution/gateway.ts (C02-WP5 F3): implemented as a real
+// ExecutionGateway subclass so its durable tracing is registered by the base
+// constructor through that module's PRIVATE registry — no out-of-module
+// registrar exists. Re-exported here for compatibility with existing callers.
 
-const SHADOW_EXECUTOR_VERSIONS: Readonly<Record<AgentName, string>> = Object.freeze({
-  codex: "1.0.0",
-  kimi: "1.0.0",
-  hermes: "1.0.0",
-});
-
-export function createDeterministicCapabilityGateway(options: {
-  runStore: LoopRunStore;
-  artifactStore: LoopArtifactStore;
-  bindingRegistry: BindingRegistry;
-  now: () => string;
-}): RuntimeCapabilityGateway {
-  const { runStore, artifactStore, bindingRegistry, now } = options;
-  const gateway = Object.freeze({
-    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-      const context = request.loopExecution;
-      if (context === undefined) {
-        invalid("capability dispatch requires a loopExecution tracing context");
-      }
-      // Closed dispatch contract: node must repeat the canonical capability
-      // exactly. A canonical type paired with a retired or arbitrary node name
-      // is a legacy/malformed dispatch and is rejected BEFORE any journal
-      // write — never silently canonicalized.
-      if (request.node !== request.type) {
-        invalid(
-          `dispatch node "${String(request.node)}" must equal the canonical capability ` +
-            `"${String(request.type)}"; mismatched or legacy node names are rejected`,
-        );
-      }
-      const capability = request.type as NodeCapabilityId;
-      if (!NODE_CAPABILITY_IDS.includes(capability)) {
-        invalid(`"${String(request.type)}" is not a v2 chain capability; the legacy node set is retired`);
-      }
-      const executionRole = context.executionRole as CapabilityExecutionRole;
-      const binding = getEnabledBinding(bindingRegistry, capability, executionRole);
-      const agent = binding.agent;
-      const existing = runStore.listCapabilityExecutions(context.runId);
-      const sequence = existing.length + 1;
-      const consumedRef = typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null;
-      const consumedDigest =
-        typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null;
-      const base = {
-        schemaVersion: 4 as const,
-        runId: context.runId,
-        capability,
-        executionRole,
-        nodeId: capability,
-        attempt: context.attempt,
-        bindingId: binding.bindingId,
-        bindingVersion: binding.bindingVersion,
-        bindingRegistryVersion: bindingRegistry.version,
-        executorAgent: agent,
-        executorAdapter: binding.adapter,
-        executorVersion: SHADOW_EXECUTOR_VERSIONS[agent],
-        inputArtifactRef: context.inputArtifactRef,
-        inputArtifactVersion: context.inputArtifactVersion,
-        inputDigest: context.inputDigest,
-        consumedFindingsRef: consumedRef,
-        consumedFindingsDigest: consumedDigest,
-        // v4 (Round 2 review H1): the depth decision rides on the succeeded
-        // formal_verdict event only; started and non-verdict events carry nulls.
-        decisionDepth: null,
-        decisionScopeId: null,
-        decisionDeltaRef: null,
-        decisionDeltaDigest: null,
-      };
-      runStore.appendCapabilityExecution(Object.freeze({
-        ...base,
-        executionEventId: `${context.runId}:capability:${sequence}:started`,
-        sequence,
-        status: "started" as const,
-        createdAt: now(),
-        outputArtifactRef: null,
-        outputArtifactVersion: null,
-        outputDigest: null,
-        gateResult: null,
-        unresolvedFindingsRef: null,
-        unresolvedFindingsDigest: null,
-        nextStepEligibility: null,
-        errorCode: null,
-        retryable: null,
-        reasonCode: null,
-      }));
-      const product = artifactStore.put(
-        CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
-        `runtime shadow product for ${capability}/${executionRole} attempt ${context.attempt}`,
-      );
-      const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
-      const isVerdictRound = capability === "solution-gate" && executionRole === "formal_verdict";
-      const ledger = isScanRound
-        ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
-        : null;
-      const gateResult = isVerdictRound
-        ? ("PASS" as const)
-        : ("NOT_APPLICABLE" as const);
-      // v4: the deterministic shadow adjudication materializes its depth
-      // choice ON the verdict — STANDARD scope, with an immutable delta
-      // artifact recording what the choice changes.
-      const decisionScopeId = isVerdictRound
-        ? `${context.runId}:decision:${context.attempt}`
-        : null;
-      const delta = isVerdictRound
-        ? artifactStore.put("solution_review", `depth=STANDARD shadow decision delta for ${context.runId} attempt ${context.attempt}`)
-        : null;
-      runStore.appendCapabilityExecution(Object.freeze({
-        ...base,
-        executionEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
-        sequence: sequence + 1,
-        status: "succeeded" as const,
-        createdAt: now(),
-        outputArtifactRef: product.artifactRef,
-        outputArtifactVersion: context.outputArtifactVersion,
-        outputDigest: product.digest,
-        gateResult,
-        unresolvedFindingsRef: ledger?.artifactRef ?? null,
-        unresolvedFindingsDigest: ledger?.digest ?? null,
-        decisionDepth: isVerdictRound ? ("STANDARD" as const) : null,
-        decisionScopeId,
-        decisionDeltaRef: delta?.artifactRef ?? null,
-        decisionDeltaDigest: delta?.digest ?? null,
-        nextStepEligibility: "ELIGIBLE" as const,
-        errorCode: null,
-        retryable: null,
-        reasonCode: null,
-      }));
-      return Object.freeze({
-        success: true,
-        node: capability,
-        agent,
-        output: Object.freeze({
-          result: "SUCCESS",
-          capability,
-          executionRole,
-          gate_result: gateResult,
-          artifact_ref: product.artifactRef,
-        }),
-        artifacts: Object.freeze([]),
-        // Round 3 review F2: hand the caller the EXACT terminal event this
-        // dispatch committed — revision materialization binds to this
-        // identity, never to the journal tail.
-        capabilityTerminalEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
-      });
-    },
-  });
-  // C02-WP5 (clause 0.1.5): register the deterministic gateway's durable
-  // tracing in the same non-virtual registry as ExecutionGateway so a
-  // supported entry can verify same-instance wiring for either dispatch
-  // surface.
-  bindGatewayTracing(gateway, runStore, artifactStore);
-  return gateway;
-}
+import { createDeterministicCapabilityGateway } from "./execution/gateway";
+export { createDeterministicCapabilityGateway };
 
 // ─── Default dual-agent registry ──────────────────────
 // The initial registry enables codex for every execution point, which would
@@ -470,12 +315,6 @@ export async function run(
     createdAt: now(),
   });
 
-  // The chain's first input is the normalized Requirement source artifact.
-  const source = artifactStore.put("requirement_summary", requirement);
-  let inputRef = source.artifactRef;
-  let inputVersion = "1.0.0";
-  let inputDigest = source.digest;
-
   let recovery = recoverRunContext(runStore, requirementId);
   // Round 3 review F2: a crashed or interrupted previous invocation may have
   // committed a succeeded producer whose node revision never landed. Finalize
@@ -492,7 +331,29 @@ export async function run(
     );
     recovery = recoverRunContext(runStore, requirementId);
   }
-  let firstDispatch = recovery === undefined;
+  // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
+  // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
+  // by its first intake claim — the `requirement` argument of a resuming
+  // call can never replace already-confirmed facts.
+  let inputRef: string;
+  let inputVersion: string;
+  let inputDigest: string;
+  let firstDispatch = false;
+  if (recovery === undefined) {
+    const source = artifactStore.put("requirement_summary", requirement);
+    inputRef = source.artifactRef;
+    inputVersion = "1.0.0";
+    inputDigest = source.digest;
+    firstDispatch = true;
+  } else {
+    // Derive the initial input from the recovered authority; for a non-intake
+    // next point this is the predecessor's effective output, and the per-
+    // iteration predecessor adoption below refines it after each dispatch.
+    const command = deriveDispatchCommand(recovery);
+    inputRef = command?.inputArtifactRef ?? "";
+    inputVersion = command?.inputArtifactVersion ?? "";
+    inputDigest = command?.inputDigest ?? "";
+  }
   // null nextExecutionPoint on an existing run means the chain is completed
   // or blocked — it must NOT be coerced back to the first point.
   let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;

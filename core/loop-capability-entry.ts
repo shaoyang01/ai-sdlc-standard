@@ -17,7 +17,7 @@
 //   recovered context — callers cannot self-select a non-current node or a
 //   stale input.
 
-import type { ExecutionGateway } from "../execution/gateway";
+import { ExecutionGateway, isExecutionGatewayTracingBoundTo } from "../execution/gateway";
 import { types as utilTypes } from "node:util";
 import type { ExecutionResult } from "../execution/types";
 import type { NodeCapabilityId } from "../loop/types";
@@ -33,10 +33,6 @@ import {
   type BindingRegistry,
 } from "./agent-capability-bindings";
 import type { LoopArtifactStore } from "./loop-artifact-store";
-import {
-  isExecutionGatewayTracingBoundTo,
-  isLoopRunStoreBoundToArtifactStore,
-} from "./loop-entry-bindings";
 import type { LoopRunEvent, LoopRunIdentity } from "./loop-executor-types";
 import { LoopRunJournalError } from "./loop-executor-types";
 import {
@@ -50,7 +46,7 @@ import {
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
-import { LoopRunStore } from "./loop-run-store";
+import { isLoopRunStoreBoundToArtifactStore, LoopRunStore } from "./loop-run-store";
 
 export interface LoopCapabilityEntryOptions {
   /**

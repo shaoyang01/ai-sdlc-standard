@@ -29,7 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
-import { bindGatewayTracing } from "../core/loop-entry-bindings";
+
 import { materializeProducerRevision } from "../runtime";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -674,8 +674,16 @@ async function main(): Promise<void> {
       "binding-hermes-solution-gate-formal_verdict",
     ).registry;
     const stubNow = (): string => TS;
-    const chainGateway = {
-      execute: async (request: import("../execution/types").ExecutionRequest) => {
+    const chainTracing = {
+      runStore: chainStore,
+      artifactStore: chainArtifacts,
+      bindingRegistry: chainRegistry,
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+      now: () => TS,
+    };
+    class ChainStubGateway extends ExecutionGateway {
+      constructor() { super({ capabilityTracing: chainTracing }); }
+      override async execute(request: import("../execution/types").ExecutionRequest) {
         const context = request.loopExecution as Record<string, unknown>;
         const runId = String(context.runId);
         const capability = request.type as NodeCapabilityId;
@@ -780,12 +788,9 @@ async function main(): Promise<void> {
           output: Object.freeze({ result: "capability_completed" }),
           artifacts: Object.freeze([]),
         });
-      },
-    } as unknown as ExecutionGateway;
-    // C02-WP5 (clause 0.1.5): register the stub's tracing wiring in the
-    // non-virtual registry — the entry verifies same-instance stores for any
-    // dispatch surface, real or scripted.
-    bindGatewayTracing(chainGateway, chainStore, chainArtifacts);
+      }
+    }
+    const chainGateway = new ChainStubGateway();
     const chainEntry = new LoopCapabilityEntry({
       runStore: chainStore,
       artifactStore: chainArtifacts,
