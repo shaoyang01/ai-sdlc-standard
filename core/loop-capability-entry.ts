@@ -43,6 +43,7 @@ import {
 import {
   canonicalizeLoopRunIdentity,
   readPlainDataRecord,
+  validateBootstrapSourceProvenance,
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
@@ -193,19 +194,22 @@ export class LoopCapabilityEntry {
       // transaction, so no crash window can leave a run whose confirmed
       // source is unpinned. The intake request's kind-checked input triple
       // IS the anchor.
-      if (
-        request.capability !== "requirement-intake" ||
-        !request.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:")
-      ) {
+      if (request.capability !== "requirement-intake") {
         throw new LoopRunJournalError(
           "INVALID_INPUT",
-          "a new Requirement run must start at requirement-intake with a normalized Requirement source",
+          "a new Requirement run must start at requirement-intake",
         );
       }
-      this.options.runStore.bootstrapRunWithSource(request.identity, {
+      // B1-2: the closed provenance validator runs BEFORE any durable write,
+      // and the physical blob is confirmed in the bound artifact store so a
+      // canonical-looking but missing source can never leave a half-valid
+      // running authority.
+      const bootstrapSource = validateBootstrapSourceProvenance({
         artifactRef: request.inputArtifactRef,
         digest: request.inputDigest,
       });
+      this.options.artifactStore.read(bootstrapSource.artifactRef, bootstrapSource.digest);
+      this.options.runStore.bootstrapRunWithSource(request.identity, bootstrapSource);
       recovery = recoverRunContext(this.options.runStore, request.requirementId);
     } else if (request.identity !== undefined) {
       if (canonicalizeLoopRunIdentity(request.identity) !== canonicalizeLoopRunIdentity(recovery.snapshot.state.identity)) {

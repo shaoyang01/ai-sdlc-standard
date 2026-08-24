@@ -673,3 +673,49 @@ export function applyLoopRunEvent(state: LoopRunState, event: LoopRunEvent): Loo
       return illegal("unknown event kind");
   }
 }
+
+// ── C02-WP5 B1-2: closed bootstrap source provenance validator ──
+import { types as utilTypes } from "node:util";
+// The SINGLE authority for what a run's original normalized Requirement
+// source may look like. Entry (write path), LoopRunStore.bootstrapRunWithSource
+// (persistence boundary) and recoverRunContext (read-back) all consume this
+// one validator, so a provenance accepted by the writer can never be ignored
+// by the reader. Plain-data boundary: Proxy / accessor / non-scalar fields
+// are rejected with INVALID_INPUT, never a raw TypeError.
+
+export interface BootstrapSourceProvenance {
+  readonly artifactRef: string;
+  readonly digest: string;
+}
+
+const BOOTSTRAP_SOURCE_KIND = "loop-artifact:v1:requirement_summary:sha256:";
+
+export function bootstrapSourceVersion(): string {
+  return "1.0.0";
+}
+
+export function validateBootstrapSourceProvenance(value: unknown): BootstrapSourceProvenance {
+  if (utilTypes.isProxy(value)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source must not be a Proxy");
+  }
+  const record = readPlainDataRecord(value, "bootstrap source");
+  requireFields(record, ["artifactRef", "digest"], "bootstrap source");
+  const artifactRef = record.artifactRef;
+  if (typeof artifactRef !== "string" || !artifactRef.startsWith(BOOTSTRAP_SOURCE_KIND)) {
+    throw new LoopRunJournalError(
+      "INVALID_INPUT",
+      `bootstrap source artifactRef must match the canonical ${BOOTSTRAP_SOURCE_KIND}<sha256> format`,
+    );
+  }
+  const digest = record.digest;
+  if (typeof digest !== "string" || !/^[0-9a-f]{64}$/.test(digest)) {
+    throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source digest must be a lowercase SHA-256 hex");
+  }
+  if (!artifactRef.endsWith(`:${digest}`)) {
+    throw new LoopRunJournalError(
+      "INVALID_INPUT",
+      "bootstrap source artifactRef and digest must be content-bound",
+    );
+  }
+  return Object.freeze({ artifactRef, digest });
+}

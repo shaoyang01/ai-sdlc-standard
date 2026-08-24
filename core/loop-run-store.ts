@@ -42,6 +42,7 @@ import {
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
 } from "./loop-capability-execution";
+import { validateBootstrapSourceProvenance } from "./loop-run-state";
 import { deriveDispatchCommand, recoverRunContext } from "./loop-recovery";
 import {
   planRegateFromFacts,
@@ -1055,6 +1056,14 @@ export class LoopRunStore {
     }
   }
 
+  /**
+   * C02-WP5 B1-1: the journal file path, exposed read-only so the runtime
+   * can scope its cross-process resume lease to exactly this database.
+   */
+  get databaseFilePath(): string {
+    return this.dbPath;
+  }
+
   private connection(): Database.Database {
     if (this.db === null) closed();
     return this.db;
@@ -1565,18 +1574,9 @@ export class LoopRunStore {
   ): LoopRunState {
     const db = this.connection();
     validateLoopRunIdentity(identity);
-    if (typeof source.artifactRef !== "string" || source.artifactRef.length === 0) {
-      throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source artifactRef must be a non-empty string");
-    }
-    if (!/^[0-9a-f]{64}$/.test(source.digest)) {
-      throw new LoopRunJournalError("INVALID_INPUT", "bootstrap source digest must be a lowercase SHA-256 hex");
-    }
-    if (!source.artifactRef.endsWith(`:${source.digest}`)) {
-      throw new LoopRunJournalError(
-        "INVALID_INPUT",
-        "bootstrap source artifactRef and digest must be content-bound",
-      );
-    }
+    // B1-2: the SAME closed validator the entry and recovery consume — no
+    // writer/reader split is possible.
+    validateBootstrapSourceProvenance(source);
     try {
       const snapshot = db.transaction((): LoopRunSnapshot => {
         const snap = this.createRunInTransaction(db, identity);

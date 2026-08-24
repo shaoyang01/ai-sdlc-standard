@@ -13,7 +13,11 @@
 import { types as utilTypes } from "node:util";
 
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunSnapshot } from "./loop-executor-types";
-import { readPlainDataRecord } from "./loop-run-state";
+import {
+  bootstrapSourceVersion,
+  readPlainDataRecord,
+  validateBootstrapSourceProvenance,
+} from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -768,16 +772,30 @@ function recoverRunContextInTransaction(
       const startedEvent = snapshot.events.find((event) => event.kind === "run_started");
       if (
         startedEvent !== undefined &&
-        startedEvent.inputArtifactRef !== null && startedEvent.inputDigest !== null &&
-        startedEvent.inputArtifactRef.startsWith("loop-artifact:v1:requirement_summary:sha256:") &&
-        startedEvent.inputArtifactRef.endsWith(`:${startedEvent.inputDigest}`)
+        startedEvent.inputArtifactRef !== null && startedEvent.inputDigest !== null
       ) {
+        // B1-2: persisted provenance MUST satisfy the same closed validator
+        // the write path used. A writer-accepted but reader-rejected value is
+        // tampered history — corruption-first, never silently ignored.
+        let origin;
+        try {
+          origin = validateBootstrapSourceProvenance({
+            artifactRef: startedEvent.inputArtifactRef,
+            digest: startedEvent.inputDigest,
+          });
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError(
+              "STORE_CORRUPT",
+              "persisted run_started provenance is not a canonical bootstrap source",
+            );
+          }
+          throw error;
+        }
         return Object.freeze({
-          inputArtifactRef: startedEvent.inputArtifactRef,
-          // Bootstrap sources are born at 1.0.0; the journal has no version
-          // column and no code path mints another bootstrap version.
-          inputArtifactVersion: "1.0.0",
-          inputDigest: startedEvent.inputDigest,
+          inputArtifactRef: origin.artifactRef,
+          inputArtifactVersion: bootstrapSourceVersion(),
+          inputDigest: origin.digest,
         });
       }
       const first = capabilityExecutions[0];

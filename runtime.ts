@@ -32,6 +32,7 @@ import {
   createLoopArtifactRevision,
 } from "./core/loop-artifact-revision";
 import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
+import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
@@ -303,200 +304,34 @@ export async function run(
     now,
   });
 
-  const identity: LoopRunIdentity = Object.freeze({
-    runId: `run-${requirementId}-${Date.now()}`,
-    requirementId,
-    repository: "local",
-    repositoryPath: join(workspaceRoot, "repo"),
-    baseBranch: "main",
-    expectedBaseSha: "0".repeat(40),
-    taskBranch: `runtime/${requirementId}`,
-    controlRoot: join(workspaceRoot, "control"),
-    createdAt: now(),
-  });
-
-  let recovery = recoverRunContext(runStore, requirementId);
-  // Round 3 review F2: a crashed or interrupted previous invocation may have
-  // committed a succeeded producer whose node revision never landed. Finalize
-  // (idempotently replay) that materialization BEFORE any dispatch decision —
-  // recovery completes the producer's revision instead of re-calling the
-  // agent, and the dispatch permit stays closed while it is pending.
-  while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
-    materializeProducerRevision(
-      runStore,
+  // C02-WP5 B1-1: cross-process resume lease — exactly one executor may run
+  // the recovery→claim→external-execution→terminal cycle for this journal at
+  // any time. Same-process nested invocations (F2 window barriers) reuse the
+  // held lease via AsyncLocalStorage; independent invocations queue on the
+  // companion database or fail honestly with STORE_BUSY.
+  const resumeJournalPath = options.runStore !== undefined
+    ? options.runStore.databaseFilePath
+    : join(workspaceRoot, "journal.db");
+  return withResumeLease(resumeJournalPath, async (): Promise<RuntimeResult> => {
+    const identity: LoopRunIdentity = Object.freeze({
+      runId: `run-${requirementId}-${Date.now()}`,
       requirementId,
-      recovery.snapshot.state.identity.runId,
-      recovery.pendingRevisionMaterialization.producerExecution,
-      now,
-    );
-    recovery = recoverRunContext(runStore, requirementId);
-  }
-  // C02-WP5 B1: explicit durable-state recovery BEFORE any dispatch decision.
-  // (1) A legacy/hand-crafted `created` run completes its start honestly
-  //     instead of silently reporting READY with an empty trace.
-  if (recovery !== undefined && recovery.status === "created") {
-    recovery = recoverRunContext(runStore, requirementId);
-    if (recovery !== undefined && recovery.status === "created") {
-      invalid("durable run is stuck in created state without bootstrap provenance");
-    }
-  }
-  // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
-  // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
-  // atomically at bootstrap (run_started provenance) or by its first intake
-  // claim — the `requirement` argument of a resuming call can never replace
-  // already-confirmed facts.
-  let inputRef: string;
-  let inputVersion: string;
-  let inputDigest: string;
-  let firstDispatch = false;
-  if (recovery === undefined) {
-    const source = artifactStore.put("requirement_summary", requirement);
-    inputRef = source.artifactRef;
-    inputVersion = "1.0.0";
-    inputDigest = source.digest;
-    firstDispatch = true;
-  } else {
-    // Derive the initial input from the recovered authority; for a non-intake
-    // next point this is the predecessor's effective output, and the per-
-    // iteration predecessor adoption below refines it after each dispatch.
-    const command = deriveDispatchCommand(recovery);
-    inputRef = command?.inputArtifactRef ?? "";
-    inputVersion = command?.inputArtifactVersion ?? "";
-    inputDigest = command?.inputDigest ?? "";
-  }
-  // null nextExecutionPoint on an existing run means the chain is completed
-  // or blocked — it must NOT be coerced back to the first point.
-  let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
-  let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
-  // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
-  // bound — hitting it stops the invocation WITHOUT a durable block. The
-  // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
-  // budget (persisted backward jumps) below.
-  const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
-  if (
-    typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
-  ) {
-    invalid("maxDispatches must be a positive safe integer");
-  }
-  const maxRegateRounds = options.maxRegateRounds ?? LOOP_CAPABILITY_EXECUTION_POINTS.length;
-  if (
-    typeof maxRegateRounds !== "number" || !Number.isSafeInteger(maxRegateRounds) || maxRegateRounds < 1
-  ) {
-    invalid("maxRegateRounds must be a positive safe integer");
-  }
-  let dispatches = 0;
-  // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
-  // through the existing interrupted-attempt semantics — the recorded input
-  // lineage is reused verbatim, the entry closes the stale claim as
-  // ATTEMPT_INTERRUPTED (retryable) and immediately claims attempt N+1. No
-  // confirmed fact is reinterpreted; concurrent resumers race on the store's
-  // claim CAS and exactly one wins deterministically.
-  if (
-    recovery !== undefined &&
-    recovery.capabilityChainStatus === "RUNNING" &&
-    recovery.lastCapabilityExecution?.status === "started"
-  ) {
-    if (dispatches >= maxDispatches) {
-      return Object.freeze({
-        requirement_id: requirementId,
-        run_id: recovery.snapshot.state.identity.runId,
-        final_status: "failed" as const,
-        chain_status: "RUNNING" as const,
-        execution_trace: Object.freeze([]),
-        next_execution_point: null,
-        workspace_root: workspaceRoot,
-        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-        completed_at: now(),
-      });
-    }
-    dispatches += 1;
-    const active = recovery.lastCapabilityExecution;
-    journalRunId = active!.runId;
-    const executed = await entry.execute({
-      requirementId,
-      capability: active!.capability,
-      executionRole: active!.executionRole,
-      inputArtifactRef: active!.inputArtifactRef,
-      inputArtifactVersion: active!.inputArtifactVersion,
-      inputDigest: active!.inputDigest,
-      outputArtifactVersion: `${active!.attempt + 1}.0.0`,
-      input: {},
+      repository: "local",
+      repositoryPath: join(workspaceRoot, "repo"),
+      baseBranch: "main",
+      expectedBaseSha: "0".repeat(40),
+      taskBranch: `runtime/${requirementId}`,
+      controlRoot: join(workspaceRoot, "control"),
+      createdAt: now(),
     });
-    recovery = executed.recoveryContext;
-    if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
-      while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
-        materializeProducerRevision(
-          runStore,
-          requirementId,
-          recovery.snapshot.state.identity.runId,
-          recovery.pendingRevisionMaterialization.producerExecution,
-          now,
-        );
-        recovery = recoverRunContext(runStore, requirementId);
-      }
-    }
-    if (!executed.execution.success) {
-      return Object.freeze({
-        requirement_id: requirementId,
-        run_id: journalRunId ?? identity.runId,
-        final_status: "failed" as const,
-        chain_status: recovery?.capabilityChainStatus ?? "RUNNING",
-        execution_trace: Object.freeze(
-          runStore.listCapabilityExecutions(journalRunId ?? identity.runId).map((event) => Object.freeze({
-            capability: event.capability,
-            executionRole: event.executionRole,
-            agent: event.executorAgent,
-            attempt: event.attempt,
-            status: event.status,
-            gateResult: event.gateResult,
-            outputArtifactRef: event.outputArtifactRef,
-            outputDigest: event.outputDigest,
-          })),
-        ),
-        next_execution_point: recovery?.nextExecutionPoint ?? null,
-        workspace_root: workspaceRoot,
-        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-        completed_at: now(),
-      });
-    }
-    if (executed.producerTerminalEventId !== null) {
-      const produced = runStore.listCapabilityExecutions(journalRunId!)
-        .find((item) => item.executionEventId === executed.producerTerminalEventId);
-      if (produced !== undefined && produced.status === "succeeded") {
-        materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
-      }
-    }
-    recovery = recoverRunContext(runStore, requirementId);
-    next = recovery?.nextExecutionPoint ?? null;
-    const cmd = recovery === undefined ? null : deriveDispatchCommand(recovery);
-    inputRef = cmd?.inputArtifactRef ?? "";
-    inputVersion = cmd?.inputArtifactVersion ?? "";
-    inputDigest = cmd?.inputDigest ?? "";
-    firstDispatch = false;
-  }
 
-  // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
-  // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
-  if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
-    if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
-      return Object.freeze({
-        requirement_id: requirementId,
-        run_id: recovery.snapshot.state.identity.runId,
-        final_status: "failed" as const,
-        chain_status: "BLOCKED" as const,
-        execution_trace: Object.freeze([]),
-        next_execution_point: null,
-        workspace_root: workspaceRoot,
-        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-        completed_at: now(),
-      });
-    }
-  }
-  while (next !== null) {
-    // Round 3 review F2: a concurrent entry may have committed a succeeded
-    // producer since the last recovery recompute — finalize its revision
-    // materialization (zero agent dispatches) before adjudicating a permit.
-    if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+    let recovery = recoverRunContext(runStore, requirementId);
+    // Round 3 review F2: a crashed or interrupted previous invocation may have
+    // committed a succeeded producer whose node revision never landed. Finalize
+    // (idempotently replay) that materialization BEFORE any dispatch decision —
+    // recovery completes the producer's revision instead of re-calling the
+    // agent, and the dispatch permit stays closed while it is pending.
+    while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
       materializeProducerRevision(
         runStore,
         requirementId,
@@ -505,137 +340,313 @@ export async function run(
         now,
       );
       recovery = recoverRunContext(runStore, requirementId);
+    }
+    // C02-WP5 B1: explicit durable-state recovery BEFORE any dispatch decision.
+    // (1) A legacy/hand-crafted `created` run completes its start honestly
+    //     instead of silently reporting READY with an empty trace.
+    if (recovery !== undefined && recovery.status === "created") {
+      recovery = recoverRunContext(runStore, requirementId);
+      if (recovery !== undefined && recovery.status === "created") {
+        invalid("durable run is stuck in created state without bootstrap provenance");
+      }
+    }
+    // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
+    // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
+    // atomically at bootstrap (run_started provenance) or by its first intake
+    // claim — the `requirement` argument of a resuming call can never replace
+    // already-confirmed facts.
+    let inputRef: string;
+    let inputVersion: string;
+    let inputDigest: string;
+    let firstDispatch = false;
+    if (recovery === undefined) {
+      const source = artifactStore.put("requirement_summary", requirement);
+      inputRef = source.artifactRef;
+      inputVersion = "1.0.0";
+      inputDigest = source.digest;
+      firstDispatch = true;
+    } else {
+      // Derive the initial input from the recovered authority; for a non-intake
+      // next point this is the predecessor's effective output, and the per-
+      // iteration predecessor adoption below refines it after each dispatch.
+      const command = deriveDispatchCommand(recovery);
+      inputRef = command?.inputArtifactRef ?? "";
+      inputVersion = command?.inputArtifactVersion ?? "";
+      inputDigest = command?.inputDigest ?? "";
+    }
+    // null nextExecutionPoint on an existing run means the chain is completed
+    // or blocked — it must NOT be coerced back to the first point.
+    let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
+    let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
+    // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
+    // bound — hitting it stops the invocation WITHOUT a durable block. The
+    // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
+    // budget (persisted backward jumps) below.
+    const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
+    if (
+      typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
+    ) {
+      invalid("maxDispatches must be a positive safe integer");
+    }
+    const maxRegateRounds = options.maxRegateRounds ?? LOOP_CAPABILITY_EXECUTION_POINTS.length;
+    if (
+      typeof maxRegateRounds !== "number" || !Number.isSafeInteger(maxRegateRounds) || maxRegateRounds < 1
+    ) {
+      invalid("maxRegateRounds must be a positive safe integer");
+    }
+    let dispatches = 0;
+    // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
+    // through the existing interrupted-attempt semantics — the recorded input
+    // lineage is reused verbatim, the entry closes the stale claim as
+    // ATTEMPT_INTERRUPTED (retryable) and immediately claims attempt N+1. No
+    // confirmed fact is reinterpreted; concurrent resumers race on the store's
+    // claim CAS and exactly one wins deterministically.
+    if (
+      recovery !== undefined &&
+      recovery.capabilityChainStatus === "RUNNING" &&
+      recovery.lastCapabilityExecution?.status === "started"
+    ) {
+      if (dispatches >= maxDispatches) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: recovery.snapshot.state.identity.runId,
+          final_status: "failed" as const,
+          chain_status: "RUNNING" as const,
+          execution_trace: Object.freeze([]),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
+      dispatches += 1;
+      const active = recovery.lastCapabilityExecution;
+      journalRunId = active!.runId;
+      const executed = await entry.execute({
+        requirementId,
+        capability: active!.capability,
+        executionRole: active!.executionRole,
+        inputArtifactRef: active!.inputArtifactRef,
+        inputArtifactVersion: active!.inputArtifactVersion,
+        inputDigest: active!.inputDigest,
+        outputArtifactVersion: `${active!.attempt + 1}.0.0`,
+        input: {},
+      });
+      recovery = executed.recoveryContext;
+      if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+        while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+          materializeProducerRevision(
+            runStore,
+            requirementId,
+            recovery.snapshot.state.identity.runId,
+            recovery.pendingRevisionMaterialization.producerExecution,
+            now,
+          );
+          recovery = recoverRunContext(runStore, requirementId);
+        }
+      }
+      if (!executed.execution.success) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: journalRunId ?? identity.runId,
+          final_status: "failed" as const,
+          chain_status: recovery?.capabilityChainStatus ?? "RUNNING",
+          execution_trace: Object.freeze(
+            runStore.listCapabilityExecutions(journalRunId ?? identity.runId).map((event) => Object.freeze({
+              capability: event.capability,
+              executionRole: event.executionRole,
+              agent: event.executorAgent,
+              attempt: event.attempt,
+              status: event.status,
+              gateResult: event.gateResult,
+              outputArtifactRef: event.outputArtifactRef,
+              outputDigest: event.outputDigest,
+            })),
+          ),
+          next_execution_point: recovery?.nextExecutionPoint ?? null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
+      if (executed.producerTerminalEventId !== null) {
+        const produced = runStore.listCapabilityExecutions(journalRunId!)
+          .find((item) => item.executionEventId === executed.producerTerminalEventId);
+        if (produced !== undefined && produced.status === "succeeded") {
+          materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
+        }
+      }
+      recovery = recoverRunContext(runStore, requirementId);
       next = recovery?.nextExecutionPoint ?? null;
-      continue;
+      const cmd = recovery === undefined ? null : deriveDispatchCommand(recovery);
+      inputRef = cmd?.inputArtifactRef ?? "";
+      inputVersion = cmd?.inputArtifactVersion ?? "";
+      inputDigest = cmd?.inputDigest ?? "";
+      firstDispatch = false;
     }
-    if (dispatches >= maxDispatches) {
-      // Safety bound only: stop this invocation honestly WITHOUT persisting
-      // a durable block — plain linear progress resumes on the next call.
-      break;
+
+    // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
+    // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
+    if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
+      if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: recovery.snapshot.state.identity.runId,
+          final_status: "failed" as const,
+          chain_status: "BLOCKED" as const,
+          execution_trace: Object.freeze([]),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
     }
-    dispatches += 1;
-    // Round 2 close-out B3: the round budget is adjudicated BEFORE any
-    // external work as a single-transaction execution permit. An over-budget
-    // backward wave performs zero agent dispatches and zero revision writes;
-    // the durable block is persisted inside the same permit transaction.
-    if (journalRunId !== null) {
-      const targetPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
-        (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
-      );
-      const permit = runStore.authorizeRegateDispatch(journalRunId, targetPointIndex, maxRegateRounds);
-      if (!permit.allowed) {
+    while (next !== null) {
+      // Round 3 review F2: a concurrent entry may have committed a succeeded
+      // producer since the last recovery recompute — finalize its revision
+      // materialization (zero agent dispatches) before adjudicating a permit.
+      if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+        materializeProducerRevision(
+          runStore,
+          requirementId,
+          recovery.snapshot.state.identity.runId,
+          recovery.pendingRevisionMaterialization.producerExecution,
+          now,
+        );
         recovery = recoverRunContext(runStore, requirementId);
+        next = recovery?.nextExecutionPoint ?? null;
+        continue;
+      }
+      if (dispatches >= maxDispatches) {
+        // Safety bound only: stop this invocation honestly WITHOUT persisting
+        // a durable block — plain linear progress resumes on the next call.
         break;
       }
-    }
-    if (!firstDispatch && recovery !== undefined) {
-      const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
-        LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      dispatches += 1;
+      // Round 2 close-out B3: the round budget is adjudicated BEFORE any
+      // external work as a single-transaction execution permit. An over-budget
+      // backward wave performs zero agent dispatches and zero revision writes;
+      // the durable block is persisted inside the same permit transaction.
+      if (journalRunId !== null) {
+        const targetPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
           (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
-        ) - 1
-      ];
-      const predecessorState = predecessor === undefined
-        ? undefined
-        : recovery.executionPointStates.find(
-            (state) =>
-              state.capability === predecessor.capability && state.executionRole === predecessor.executionRole,
-          );
-      if (predecessorState !== undefined) {
-        inputRef = predecessorState.effectiveOutputArtifactRef ?? inputRef;
-        inputVersion = predecessorState.effectiveOutputArtifactVersion ?? inputVersion;
-        inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
-      }
-    }
-    const executed = await entry.execute({
-      requirementId,
-      ...(firstDispatch ? { identity } : {}),
-      capability: next.capability,
-      executionRole: next.executionRole,
-      inputArtifactRef: inputRef,
-      inputArtifactVersion: inputVersion,
-      inputDigest,
-      // WP4: the output version is generation-scoped — attempt N of a point
-      // produces semver N.0.0, so a rebuild never collides with a prior
-      // generation's occupied semver.
-      outputArtifactVersion: `${(recovery?.executionPointStates.find(
-        (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
-      )?.lastAttempt ?? 0) + 1}.0.0`,
-      input: { inputArtifactRef: inputRef },
-    });
-    firstDispatch = false;
-    journalRunId = executed.runId;
-    recovery = executed.recoveryContext;
-    if (executed.execution.success !== true) {
-      break;
-    }
-    // WP4: bind the node product as an artifact revision authored by this
-    // succeeded producer execution. Currents are the facts Re-Gate planning
-    // (and finding source binding) consume; upstream chains to the reused or
-    // rebuilt current of the previous node.
-    // Round 3 review F2: the producer is the EXACT terminal event this
-    // dispatch committed (returned by the gateway/entry), never the journal
-    // tail — a concurrent entry could have advanced the tail meanwhile.
-    if (executed.producerTerminalEventId !== null) {
-      const produced = runStore.listCapabilityExecutions(journalRunId)
-        .find((item) => item.executionEventId === executed.producerTerminalEventId);
-      if (
-        produced === undefined || produced.status !== "succeeded" ||
-        produced.capability !== next.capability || produced.executionRole !== next.executionRole
-      ) {
-        throw new LoopRunJournalError(
-          "STORE_CORRUPT",
-          "the dispatched producer terminal event is missing from the run journal",
         );
+        const permit = runStore.authorizeRegateDispatch(journalRunId, targetPointIndex, maxRegateRounds);
+        if (!permit.allowed) {
+          recovery = recoverRunContext(runStore, requirementId);
+          break;
+        }
       }
-      materializeProducerRevision(runStore, requirementId, journalRunId, produced, now);
+      if (!firstDispatch && recovery !== undefined) {
+        const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
+          LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+            (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
+          ) - 1
+        ];
+        const predecessorState = predecessor === undefined
+          ? undefined
+          : recovery.executionPointStates.find(
+              (state) =>
+                state.capability === predecessor.capability && state.executionRole === predecessor.executionRole,
+            );
+        if (predecessorState !== undefined) {
+          inputRef = predecessorState.effectiveOutputArtifactRef ?? inputRef;
+          inputVersion = predecessorState.effectiveOutputArtifactVersion ?? inputVersion;
+          inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
+        }
+      }
+      const executed = await entry.execute({
+        requirementId,
+        ...(firstDispatch ? { identity } : {}),
+        capability: next.capability,
+        executionRole: next.executionRole,
+        inputArtifactRef: inputRef,
+        inputArtifactVersion: inputVersion,
+        inputDigest,
+        // WP4: the output version is generation-scoped — attempt N of a point
+        // produces semver N.0.0, so a rebuild never collides with a prior
+        // generation's occupied semver.
+        outputArtifactVersion: `${(recovery?.executionPointStates.find(
+          (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
+        )?.lastAttempt ?? 0) + 1}.0.0`,
+        input: { inputArtifactRef: inputRef },
+      });
+      firstDispatch = false;
+      journalRunId = executed.runId;
+      recovery = executed.recoveryContext;
+      if (executed.execution.success !== true) {
+        break;
+      }
+      // WP4: bind the node product as an artifact revision authored by this
+      // succeeded producer execution. Currents are the facts Re-Gate planning
+      // (and finding source binding) consume; upstream chains to the reused or
+      // rebuilt current of the previous node.
+      // Round 3 review F2: the producer is the EXACT terminal event this
+      // dispatch committed (returned by the gateway/entry), never the journal
+      // tail — a concurrent entry could have advanced the tail meanwhile.
+      if (executed.producerTerminalEventId !== null) {
+        const produced = runStore.listCapabilityExecutions(journalRunId)
+          .find((item) => item.executionEventId === executed.producerTerminalEventId);
+        if (
+          produced === undefined || produced.status !== "succeeded" ||
+          produced.capability !== next.capability || produced.executionRole !== next.executionRole
+        ) {
+          throw new LoopRunJournalError(
+            "STORE_CORRUPT",
+            "the dispatched producer terminal event is missing from the run journal",
+          );
+        }
+        materializeProducerRevision(runStore, requirementId, journalRunId, produced, now);
+      }
+      // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
+      // must reflect the fresh current, not the pre-append projection.
+      recovery = recoverRunContext(runStore, requirementId);
+      if (recovery === undefined) {
+        break;
+      }
+      next = recovery.nextExecutionPoint;
     }
-    // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
-    // must reflect the fresh current, not the pre-append projection.
-    recovery = recoverRunContext(runStore, requirementId);
-    if (recovery === undefined) {
-      break;
-    }
-    next = recovery.nextExecutionPoint;
-  }
 
-  const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
-  let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
-  // WP4 convergence (H2): linear completion is not done. The run finishes
-  // successfully only when the finding gate is ELIGIBLE and the depth
-  // decision is DECIDED; otherwise it blocks honestly.
-  const findingGate = recovery?.findingGate ?? { status: "ELIGIBLE" as const, blockingFindingIds: [] };
-  const decision = recovery?.solutionGateDecision ?? null;
-  const completedOk =
-    chainStatus === "COMPLETED" &&
-    findingGate.status === "ELIGIBLE" &&
-    decision !== null && decision.status === "DECIDED";
-  if (chainStatus === "COMPLETED" && !completedOk) {
-    chainStatus = "BLOCKED";
-  }
-  if (recovery !== undefined && recovery.blockingReasonCode !== null) {
-    // WP4 H4: durable block (e.g., REGATE_ROUND_BUDGET_EXHAUSTED) always
-    // reports BLOCKED regardless of the capability projection.
-    chainStatus = "BLOCKED";
-  }
-  const finalStatus = completedOk ? "success" : "failed";
-  return Object.freeze({
-    requirement_id: requirementId,
-    run_id: journalRunId ?? identity.runId,
-    final_status: finalStatus,
-    chain_status: chainStatus,
-    execution_trace: Object.freeze(events.map((event) => Object.freeze({
-      capability: event.capability,
-      executionRole: event.executionRole,
-      agent: event.executorAgent,
-      attempt: event.attempt,
-      status: event.status,
-      gateResult: event.gateResult,
-      outputArtifactRef: event.outputArtifactRef,
-      outputDigest: event.outputDigest,
-    }))),
-    next_execution_point: recovery?.nextExecutionPoint ?? null,
-    workspace_root: workspaceRoot,
-    journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-    completed_at: now(),
+    const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
+    let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
+    // WP4 convergence (H2): linear completion is not done. The run finishes
+    // successfully only when the finding gate is ELIGIBLE and the depth
+    // decision is DECIDED; otherwise it blocks honestly.
+    const findingGate = recovery?.findingGate ?? { status: "ELIGIBLE" as const, blockingFindingIds: [] };
+    const decision = recovery?.solutionGateDecision ?? null;
+    const completedOk =
+      chainStatus === "COMPLETED" &&
+      findingGate.status === "ELIGIBLE" &&
+      decision !== null && decision.status === "DECIDED";
+    if (chainStatus === "COMPLETED" && !completedOk) {
+      chainStatus = "BLOCKED";
+    }
+    if (recovery !== undefined && recovery.blockingReasonCode !== null) {
+      // WP4 H4: durable block (e.g., REGATE_ROUND_BUDGET_EXHAUSTED) always
+      // reports BLOCKED regardless of the capability projection.
+      chainStatus = "BLOCKED";
+    }
+    const finalStatus = completedOk ? "success" : "failed";
+    return Object.freeze({
+      requirement_id: requirementId,
+      run_id: journalRunId ?? identity.runId,
+      final_status: finalStatus,
+      chain_status: chainStatus,
+      execution_trace: Object.freeze(events.map((event) => Object.freeze({
+        capability: event.capability,
+        executionRole: event.executionRole,
+        agent: event.executorAgent,
+        attempt: event.attempt,
+        status: event.status,
+        gateResult: event.gateResult,
+        outputArtifactRef: event.outputArtifactRef,
+        outputDigest: event.outputDigest,
+      }))),
+      next_execution_point: recovery?.nextExecutionPoint ?? null,
+      workspace_root: workspaceRoot,
+      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+      completed_at: now(),
+    });
   });
 }
