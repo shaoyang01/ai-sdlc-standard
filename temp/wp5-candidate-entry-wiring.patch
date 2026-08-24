@@ -1,0 +1,401 @@
+diff --git b/core/loop-capability-entry.ts a/core/loop-capability-entry.ts
+index cb1e916..2ed755e 100644
+--- b/core/loop-capability-entry.ts
++++ a/core/loop-capability-entry.ts
+@@ -4,7 +4,7 @@
+ // input artifact, enforces the canonical next capability, and dispatches
+ // through an ExecutionGateway configured for durable capability tracing.
+ 
+-import type { ExecutionGateway } from "../execution/gateway";
++import { ExecutionGateway, isExecutionGatewayTracingBoundTo } from "../execution/gateway";
+ import { types as utilTypes } from "node:util";
+ import type { ExecutionResult } from "../execution/types";
+ import type { NodeCapabilityId } from "../loop/types";
+@@ -24,16 +24,28 @@ import {
+   validateLoopRunIdentity,
+   validateRequirementId,
+ } from "./loop-run-state";
+-import type { LoopRunStore } from "./loop-run-store";
++import { LoopRunStore, isLoopRunStoreBoundToArtifactStore } from "./loop-run-store";
+ import {
+   runtimeExecutionPointForCapability,
+   type RuntimeCapabilityExecutionPoint,
+ } from "./runtime-capability-map";
+ 
+ export interface LoopCapabilityEntryOptions {
++  /**
++   * The durable run journal. Must be constructed with
++   * `LoopRunStoreOptions.artifactStore` bound to the exact same
++   * `LoopArtifactStore` instance passed below — the C02-WP2 blob binding must
++   * not be bypassable by wiring the two stores separately.
++   */
+   runStore: LoopRunStore;
+   artifactStore: Pick<LoopArtifactStore, "read">;
+   bindingRegistry: BindingRegistry;
++  /**
++   * The dispatch gateway. Must be a real ExecutionGateway whose capability
++   * tracing writes into the exact same run store and artifact store
++   * instances; otherwise journal outputs and revision blobs would be split
++   * across disjoint stores.
++   */
+   gateway: Pick<ExecutionGateway, "execute">;
+   now?: () => string;
+ }
+@@ -74,7 +86,32 @@ export class LoopCapabilityEntry {
+       throw new LoopRunJournalError("INVALID_INPUT", "entry options must be an object");
+     }
+     validateBindingRegistry(options.bindingRegistry);
+-    this.options = options;
++    if (!(options.runStore instanceof LoopRunStore)) {
++      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires a LoopRunStore");
++    }
++    // All binding checks are non-virtual: they read construction-time private
++    // binding state (module-level WeakMaps), never overridable instance
++    // members — subclassing or monkey patching cannot forge them. The run
++    // store must be bound to the exact artifact store instance this entry
++    // reads through; otherwise C02-WP2 blob verification is silently skipped
++    // on every revision write and read path.
++    if (!isLoopRunStoreBoundToArtifactStore(options.runStore, options.artifactStore as LoopArtifactStore)) {
++      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires the run store bound to the same artifact store instance");
++    }
++    // The gateway must trace capability executions into the same store pair:
++    // a gateway writing outputs to a different artifact store would split the
++    // journal's output refs from the blobs later revisions are verified
++    // against.
++    if (
++      !(options.gateway instanceof ExecutionGateway) ||
++      !isExecutionGatewayTracingBoundTo(options.gateway, options.runStore, options.artifactStore)
++    ) {
++      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires the gateway tracing the same run store and artifact store instances");
++    }
++    // Snapshot and freeze the dependency configuration so post-construction
++    // mutation of the caller's options object cannot swap the gateway or the
++    // artifact store this entry uses.
++    this.options = Object.freeze({ ...options });
+   }
+ 
+   async execute(value: LoopCapabilityEntryRequest): Promise<LoopCapabilityEntryResult> {
+diff --git b/core/loop-run-store.ts a/core/loop-run-store.ts
+index a585a4e..728e57c 100644
+--- b/core/loop-run-store.ts
++++ a/core/loop-run-store.ts
+@@ -112,6 +112,27 @@ function corrupt(message: string): never {
+   throw new LoopRunJournalError("STORE_CORRUPT", `persisted run journal is corrupt: ${message}`);
+ }
+ 
++/**
++ * Construction-time artifact-store bindings, keyed by store instance. Kept in
++ * a module-level WeakMap (not on the instance) so the binding check below is
++ * non-virtual: no subclass override or monkey patch of an instance member can
++ * forge it, and no store capability leaks through the check.
++ */
++const LOOP_RUN_STORE_ARTIFACT_BINDINGS = new WeakMap<LoopRunStore, LoopArtifactStore>();
++
++/**
++ * Non-virtual identity check for the C02-WP2 blob binding: true only when
++ * `runStore` was constructed with `LoopRunStoreOptions.artifactStore` set to
++ * exactly `artifactStore`. Supported entries use this instead of any instance
++ * method so the check cannot be forged by subclassing or monkey patching.
++ */
++export function isLoopRunStoreBoundToArtifactStore(
++  runStore: LoopRunStore,
++  artifactStore: LoopArtifactStore,
++): boolean {
++  return LOOP_RUN_STORE_ARTIFACT_BINDINGS.get(runStore) === artifactStore;
++}
++
+ // ── persisted-data validation boundary ──
+ // Data read back from SQLite is untrusted: any validation or canonicalization
+ // failure while reading persisted rows is STORE_CORRUPT, never INVALID_INPUT.
+@@ -742,6 +763,7 @@ export class LoopRunStore {
+         throw new LoopRunJournalError("INVALID_INPUT", "artifactStore must be a LoopArtifactStore instance");
+       }
+       this.artifactStore = options.artifactStore;
++      LOOP_RUN_STORE_ARTIFACT_BINDINGS.set(this, options.artifactStore);
+     }
+   }
+ 
+diff --git b/execution/gateway.ts a/execution/gateway.ts
+index 8d2b6d7..a86e983 100644
+--- b/execution/gateway.ts
++++ a/execution/gateway.ts
+@@ -108,8 +108,55 @@ export interface ExecutionGatewayOptions {
+   }>;
+ }
+ 
++/**
++ * Construction-time capability-tracing bindings, keyed by gateway instance.
++ * Module-level so the binding check is non-virtual: no subclass override or
++ * monkey patch can forge which stores a gateway traces into.
++ */
++const GATEWAY_TRACING_BINDINGS = new WeakMap<ExecutionGateway, Readonly<{
++  runStore: LoopRunStore;
++  artifactStore: Pick<LoopArtifactStore, "put" | "read">;
++}>>();
++
++/**
++ * Non-virtual identity check for the durable capability tracing wiring
++ * (C02-WP2 blob binding): true only when `gateway` was constructed with
++ * capability tracing into exactly the given run store and artifact store
++ * instances. Supported entries use this instead of any instance method.
++ */
++export function isExecutionGatewayTracingBoundTo(
++  gateway: ExecutionGateway,
++  runStore: LoopRunStore,
++  artifactStore: Pick<LoopArtifactStore, "read">,
++): boolean {
++  const binding = GATEWAY_TRACING_BINDINGS.get(gateway);
++  return binding !== undefined &&
++    binding.runStore === runStore &&
++    binding.artifactStore === artifactStore;
++}
++
+ export class ExecutionGateway {
+-  constructor(private readonly options: ExecutionGatewayOptions = {}) {}
++  private readonly options: ExecutionGatewayOptions;
++
++  constructor(options: ExecutionGatewayOptions = {}) {
++    // Snapshot and freeze the dependency configuration: post-construction
++    // mutation of the caller's options objects (including the nested
++    // capabilityTracing record) must not redirect where executions are
++    // journaled or where output blobs are written.
++    const tracing = options.capabilityTracing === undefined
++      ? undefined
++      : Object.freeze({ ...options.capabilityTracing });
++    this.options = Object.freeze({
++      ...options,
++      ...(tracing === undefined ? {} : { capabilityTracing: tracing }),
++    });
++    if (tracing !== undefined) {
++      GATEWAY_TRACING_BINDINGS.set(this, Object.freeze({
++        runStore: tracing.runStore,
++        artifactStore: tracing.artifactStore,
++      }));
++    }
++  }
+ 
+   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+     const isCanonicalCapability =
+diff --git b/tests/loop-capability-execution.test.ts a/tests/loop-capability-execution.test.ts
+index e4d65b0..a214052 100644
+--- b/tests/loop-capability-execution.test.ts
++++ a/tests/loop-capability-execution.test.ts
+@@ -156,8 +156,8 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
+   const repo = join(root, "repo");
+   mkdirSync(repo);
+   const id = identity(root);
+-  const runStore = new LoopRunStore(join(root, "journal.db"));
+   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
++  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
+   runStore.init();
+   artifactStore.init();
+   const source = artifactStore.put("requirement_summary", "interruption recovery Requirement source");
+@@ -419,11 +419,11 @@ async function main(): Promise<void> {
+   try {
+     mkdirSync(join(chainRoot, "repo"));
+     const chainIdentity = identity(chainRoot);
+-    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"));
+     const chainArtifacts = new LoopArtifactStore({
+       controlRoot: chainIdentity.controlRoot,
+       repositoryPath: chainIdentity.repositoryPath,
+     });
++    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"), { artifactStore: chainArtifacts });
+     chainStore.init();
+     chainArtifacts.init();
+     const chainGateway = new ExecutionGateway({
+@@ -654,8 +654,8 @@ async function main(): Promise<void> {
+   const repo = join(root, "repo");
+   mkdirSync(repo);
+   const id = identity(root);
+-  const runStore = new LoopRunStore(join(root, "journal.db"));
+   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
++  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
+   runStore.init();
+   artifactStore.init();
+   try {
+diff --git b/tests/loop-validation-guards.test.ts a/tests/loop-validation-guards.test.ts
+index 390ec32..2e77758 100644
+--- b/tests/loop-validation-guards.test.ts
++++ a/tests/loop-validation-guards.test.ts
+@@ -179,6 +179,151 @@ async function main(): Promise<void> {
+     bindingRegistry: drifted,
+     gateway: null as unknown as ExecutionGateway,
+   }), "supported entry rejects a drifted registry before any journal can be touched");
++
++  console.log("WP-5: supported entry requires the run store bound to the same artifact store");
++  {
++    const bindRoot = mkdtempSync(join(tmpdir(), "loop-wp5-binding-"));
++    try {
++      mkdirSync(join(bindRoot, "repo"));
++      const id = identity(bindRoot, "BINDING");
++      const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
++      artifactStore.init();
++      const unboundStore = new LoopRunStore(join(bindRoot, "unbound.db"));
++      unboundStore.init();
++      const boundStore = new LoopRunStore(join(bindRoot, "bound.db"), { artifactStore });
++      boundStore.init();
++      const otherArtifacts = new LoopArtifactStore({
++        controlRoot: join(bindRoot, "other-control"),
++        repositoryPath: id.repositoryPath,
++      });
++      otherArtifacts.init();
++      const mismatchedStore = new LoopRunStore(join(bindRoot, "mismatched.db"), { artifactStore: otherArtifacts });
++      mismatchedStore.init();
++      throws(() => entry(unboundStore, artifactStore, INITIAL_BINDING_REGISTRY),
++        "entry rejects an unbound run store");
++      throws(() => entry(mismatchedStore, artifactStore, INITIAL_BINDING_REGISTRY),
++        "entry rejects a run store bound to a different artifact store instance");
++      // The gateway must trace into the same store pair: a gateway writing
++      // outputs to a different artifact store would split journal refs from
++      // the blobs revisions are verified against.
++      throws(() => new LoopCapabilityEntry({
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        gateway: gateway(boundStore, otherArtifacts, INITIAL_BINDING_REGISTRY),
++        now: () => TS,
++      }), "entry rejects a gateway tracing a different artifact store");
++      const foreignRunStore = new LoopRunStore(join(bindRoot, "foreign.db"), { artifactStore });
++      foreignRunStore.init();
++      throws(() => new LoopCapabilityEntry({
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        gateway: gateway(foreignRunStore, artifactStore, INITIAL_BINDING_REGISTRY),
++        now: () => TS,
++      }), "entry rejects a gateway tracing a different run store");
++      throws(() => new LoopCapabilityEntry({
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        gateway: { execute: async () => Promise.reject(new Error("unused")) } as unknown as ExecutionGateway,
++        now: () => TS,
++      }), "entry rejects an execute-only object that is not a traced ExecutionGateway");
++      ok(entry(boundStore, artifactStore, INITIAL_BINDING_REGISTRY) instanceof LoopCapabilityEntry,
++        "entry accepts the same-instance binding");
++      // Binding checks are non-virtual (construction-time WeakMap state):
++      // neither subclass overrides nor monkey-patched instance members can
++      // forge them.
++      class OverrideRunStore extends LoopRunStore {
++        isBoundToArtifactStore(): boolean { return true; }
++      }
++      const forgedStore = new OverrideRunStore(join(bindRoot, "forged.db"));
++      forgedStore.init();
++      throws(() => entry(forgedStore, artifactStore, INITIAL_BINDING_REGISTRY),
++        "subclass override cannot forge the artifact store binding");
++      Object.assign(unboundStore, { isBoundToArtifactStore: () => true });
++      throws(() => entry(unboundStore, artifactStore, INITIAL_BINDING_REGISTRY),
++        "monkey-patched instance member cannot forge the artifact store binding");
++      class OverrideGateway extends ExecutionGateway {
++        isCapabilityTracingBoundTo(): boolean { return true; }
++      }
++      const forgedGateway = new OverrideGateway({
++        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
++        capabilityTracing: {
++          runStore: boundStore,
++          artifactStore: otherArtifacts,
++          bindingRegistry: INITIAL_BINDING_REGISTRY,
++          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
++          now: () => TS,
++        },
++      });
++      throws(() => new LoopCapabilityEntry({
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        gateway: forgedGateway,
++        now: () => TS,
++      }), "subclass override cannot forge the gateway tracing binding");
++      forgedStore.close();
++      // Post-construction mutation of the caller's configuration objects
++      // cannot swap the entry's or the gateway's store wiring: both snapshot
++      // and freeze their dependency configuration at construction.
++      const originalTracing = {
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
++        now: () => TS,
++      };
++      const stableGatewayOptions = {
++        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
++        codexRunner: runner((request) => qualifiedResult(request)),
++        capabilityTracing: originalTracing,
++      };
++      const stableGateway = new ExecutionGateway(stableGatewayOptions);
++      const stableEntryOptions = {
++        runStore: boundStore,
++        artifactStore,
++        bindingRegistry: INITIAL_BINDING_REGISTRY,
++        gateway: stableGateway,
++        now: () => TS,
++      };
++      const stableEntry = new LoopCapabilityEntry(stableEntryOptions);
++      originalTracing.artifactStore = otherArtifacts;
++      stableGatewayOptions.capabilityTracing = { ...originalTracing };
++      stableEntryOptions.gateway = gateway(boundStore, otherArtifacts, INITIAL_BINDING_REGISTRY);
++      stableEntryOptions.artifactStore = otherArtifacts;
++      const stableSource = artifactStore.put("requirement_summary", "WP-5 binding stability source");
++      const executed = await stableEntry.execute({
++        requirementId: id.requirementId,
++        identity: id,
++        capability: "requirement-intake",
++        inputArtifactRef: stableSource.artifactRef,
++        inputArtifactVersion: "1.0.0",
++        inputDigest: stableSource.digest,
++        outputArtifactVersion: "1.0.0",
++        input: { requirement: "binding stability" },
++      });
++      ok(executed.execution.success === true,
++        "entry executes against its construction-time dependency snapshot");
++      const stableEvents = boundStore.listCapabilityExecutions(id.runId);
++      ok(stableEvents.length === 2 && stableEvents[1]?.status === "succeeded",
++        "execution journals into the original run store");
++      const stableRef = stableEvents[1]?.outputArtifactRef ?? null;
++      const stableDigest = stableEvents[1]?.outputDigest ?? null;
++      ok(stableRef !== null && stableDigest !== null &&
++        artifactStore.read(stableRef, stableDigest).length > 0,
++        "output blob stays in the original artifact store");
++      foreignRunStore.close();
++      unboundStore.close();
++      boundStore.close();
++      mismatchedStore.close();
++      otherArtifacts.close();
++      artifactStore.close();
++    } finally {
++      rmSync(bindRoot, { recursive: true, force: true });
++    }
++  }
+   const gitExpanded = registrySnapshot("2", (binding) => binding.capability === "tech-design" && binding.agent === "codex"
+     ? { ...binding, allowedSideEffects: Object.freeze(["workspace-local-write", "git-push"] as unknown as string[]) }
+     : binding);
+@@ -201,8 +346,8 @@ async function main(): Promise<void> {
+   try {
+     mkdirSync(join(replacementRoot, "repo"));
+     const id = identity(replacementRoot, "REPLACEMENT");
+-    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"));
+     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
++    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"), { artifactStore });
+     runStore.init();
+     artifactStore.init();
+     const source = artifactStore.put("requirement_summary", "WP-5 replacement source");
+@@ -294,8 +439,8 @@ async function main(): Promise<void> {
+   try {
+     mkdirSync(join(failureRoot, "repo"));
+     const id = identity(failureRoot, "TIMEOUT");
+-    const runStore = new LoopRunStore(join(failureRoot, "journal.db"));
+     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
++    const runStore = new LoopRunStore(join(failureRoot, "journal.db"), { artifactStore });
+     runStore.init();
+     artifactStore.init();
+     const source = artifactStore.put("requirement_summary", "WP-5 timeout source");
+@@ -350,8 +495,8 @@ async function main(): Promise<void> {
+   try {
+     mkdirSync(join(outputRoot, "repo"));
+     const id = identity(outputRoot, "OUTPUT");
+-    const runStore = new LoopRunStore(join(outputRoot, "journal.db"));
+     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
++    const runStore = new LoopRunStore(join(outputRoot, "journal.db"), { artifactStore });
+     runStore.init();
+     artifactStore.init();
+     const source = artifactStore.put("requirement_summary", "WP-5 output source");
