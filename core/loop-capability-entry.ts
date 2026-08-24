@@ -220,15 +220,12 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("STORE_FAILURE", "run recovery failed after creation");
     }
     if (recovery.status === "created") {
-      // Legacy/hand-crafted created state without bootstrap provenance:
-      // complete the start honestly. New runs never reach this branch —
-      // bootstrapRunWithSource creates them running with provenance.
-      this.options.runStore.appendEvent(this.runLevelEvent(
-        recovery.snapshot.state.identity.runId,
-        recovery.snapshot.state.lastSequence + 1,
-        "run_started",
-        now,
-      ));
+      // R5-H2: ensureRunStarted is the SINGLE created->running arbiter for
+      // every entry. A racing winner (top-level runtime or another entry)
+      // converges this side idempotently inside the store's immediate
+      // transaction instead of surfacing EVENT_ID_CONFLICT from a raw
+      // start-event append; both sides then re-recover the same running run.
+      this.options.runStore.ensureRunStarted(recovery.snapshot.state.identity.runId);
       recovery = recoverRunContext(this.options.runStore, request.requirementId);
       if (recovery === undefined) {
         throw new LoopRunJournalError("STORE_FAILURE", "run recovery failed after start");
@@ -441,31 +438,5 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("INVALID_INPUT", "entry clock must return an ISO timestamp");
     }
     return value;
-  }
-
-  private runLevelEvent(
-    runId: string,
-    sequence: number,
-    kind: "run_started",
-    createdAt: string,
-  ): LoopRunEvent {
-    return Object.freeze({
-      eventId: `${runId}:${sequence}:${kind}`,
-      runId,
-      sequence,
-      kind,
-      stage: null,
-      attempt: 0,
-      createdAt,
-      inputDigest: null,
-      outputArtifactRef: null,
-      outputDigest: null,
-      errorCode: null,
-      retryable: null,
-      reasonCode: null,
-      bindingId: null,
-      bindingVersion: null,
-      inputArtifactRef: null,
-    });
   }
 }

@@ -21,7 +21,7 @@ import { strict as assert } from "node:assert";
 import Database from "better-sqlite3";
 import { mkdtempSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   createDeterministicCapabilityGateway,
@@ -1261,7 +1261,7 @@ async function main(): Promise<void> {
         "the stale claim was interrupted exactly once");
       ok(designEvents[3]!.status === "succeeded" && designEvents[3]!.attempt === 2,
         "attempt 2 completed; no attempt inflation from the losing resumer");
-      ok(resultA.final_status === "success" || resultB.final_status === "success",
+      ok((ra.ok && ra.r.final_status === "success") || (rb.ok && rb.r.final_status === "success"),
         "at least one resumer drove the chain to completion");
       for (const r of [resultA, resultB]) {
         if (r !== null) {
@@ -1496,10 +1496,21 @@ async function main(): Promise<void> {
       const aliasRunStore = new LoopRunStore(aliasJournal, { artifactStore: aliasArtifacts });
       aliasRunStore.init();
       aliasArtifacts.init();
+      // R5-H1: the ALIAS side must run its own gateway bound to the alias
+      // store pair — reusing env.gateway would trip the 0.1.5 wiring
+      // rejection before the lease is ever contended, so "exactly once"
+      // could not prove cross-spelling single dispatch.
+      const aliasBindingRegistry = createRuntimeBindingRegistry();
+      const aliasGateway = createDeterministicCapabilityGateway({
+        runStore: aliasRunStore,
+        artifactStore: aliasArtifacts,
+        bindingRegistry: aliasBindingRegistry,
+        now: () => new Date().toISOString(),
+      });
       const [resA, resB] = await Promise.all([
         run("build a console", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() })
           .then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })),
-        run("build a console", { requirementId, runStore: aliasRunStore, artifactStore: aliasArtifacts, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() })
+        run("build a console", { requirementId, runStore: aliasRunStore, artifactStore: aliasArtifacts, gateway: aliasGateway, bindingRegistry: aliasBindingRegistry })
           .then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })),
       ]);
       const dispatchCount = pointDispatchCounts(env.runStore, runId).get("solution-design:primary") ?? 0;
@@ -1512,6 +1523,108 @@ async function main(): Promise<void> {
     } finally {
       delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
       rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+  // ── R5-H1: a DANGLING leaf symlink converges every spelling to ONE lease ──
+  console.log("R5-H1.probes: dangling file symlink <-> future target stays one lease identity");
+  {
+    // Contention probes must fail FAST: an earlier fixture may have removed
+    // the short budget, so pin it locally and restore the prior value.
+    const previousBudget = process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
+    process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = "250";
+    const root = mkdtempSync(join(tmpdir(), "loop-wp5-r5h1-"));
+    try {
+      mkdirSync(join(root, "repo"), { recursive: true });
+      const future = join(root, "future.db");
+      const danglingAlias = join(root, "future-alias.db");
+      // The target intentionally does NOT exist yet: the alias is a dangling
+      // file symlink — exactly the shape that minted parallel leases before.
+      symlinkSync(future, danglingAlias);
+
+      // (i) Same-process NESTED invocation across spellings reuses ONE held
+      // lease (identity convergence instead of self-deadlock or second lease).
+      let nestedRan = false;
+      await withResumeLease(danglingAlias, async () => {
+        await withResumeLease(future, async () => { nestedRan = true; });
+      });
+      ok(nestedRan, "nested cross-spelling invocation reuses the held lease");
+
+      // (ii) Same-process PARALLEL contention in both directions.
+      let releaseA!: () => void;
+      const heldA = new Promise<void>((resolve) => { releaseA = resolve; });
+      const holdTarget = withResumeLease(future, async () => { await heldA; return null; });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      let busyViaAlias = false;
+      try {
+        await withResumeLease(danglingAlias, async () => "should-not-run");
+      } catch (error) {
+        busyViaAlias = error instanceof LoopRunJournalError && error.code === "STORE_BUSY";
+      }
+      releaseA();
+      await holdTarget;
+      ok(busyViaAlias, "target-spelling holder blocks the dangling-alias spelling");
+      let releaseB!: () => void;
+      const heldB = new Promise<void>((resolve) => { releaseB = resolve; });
+      const holdAlias = withResumeLease(danglingAlias, async () => { await heldB; return null; });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      let busyViaTarget = false;
+      try {
+        await withResumeLease(future, async () => "should-not-run");
+      } catch (error) {
+        busyViaTarget = error instanceof LoopRunJournalError && error.code === "STORE_BUSY";
+      }
+      releaseB();
+      await holdAlias;
+      ok(busyViaTarget, "dangling-alias holder blocks the target spelling");
+
+      // (iii) Independent native handle ≈ cross-process: while held, a raw
+      // second connection to the SINGLE companion database cannot take the
+      // exclusive transaction.
+      await withResumeLease(danglingAlias, async () => {
+        const companion = join(root, "future.db.resume-lease.db");
+        ok(realpathSync(dirname(companion)) === realpathSync(root),
+          "the companion lease lives beside the FUTURE target, not the alias");
+        const foreign = new Database(companion);
+        foreign.pragma("busy_timeout = 0");
+        let foreignBusy = false;
+        try {
+          foreign.exec("BEGIN IMMEDIATE");
+        } catch {
+          foreignBusy = true;
+        }
+        foreign.close();
+        ok(foreignBusy, "a second native handle contends on the one companion lease");
+        return null;
+      });
+
+      // (iv) First-run THROUGH the dangling alias materializes the journal at
+      // the future target, after which both spellings keep reacquiring.
+      const artifacts = new LoopArtifactStore({
+        controlRoot: join(root, "control"),
+        repositoryPath: join(root, "repo"),
+      });
+      const storeViaAlias = new LoopRunStore(danglingAlias, { artifactStore: artifacts });
+      storeViaAlias.init();
+      artifacts.init();
+      ok(realpathSync(future) === realpathSync(danglingAlias),
+        "first run created the journal at the symlink TARGET");
+      const storeViaTarget = new LoopRunStore(future, { artifactStore: artifacts });
+      storeViaTarget.init();
+      const reacquireAlias = await withResumeLease(danglingAlias, async () => "a");
+      const reacquireTarget = await withResumeLease(future, async () => "b");
+      ok(reacquireAlias === "a" && reacquireTarget === "b",
+        "post-creation, both spellings still reacquire (crash-recovery liveness)");
+      storeViaAlias.close();
+      storeViaTarget.close();
+      artifacts.close();
+    } finally {
+      if (previousBudget === undefined) {
+        delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
+      } else {
+        process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = previousBudget;
+      }
+      rmSync(root, { recursive: true, force: true });
     }
   }
 
@@ -1645,6 +1758,105 @@ async function main(): Promise<void> {
       }
       ok(corruptCode, "partial persisted provenance reads back STORE_CORRUPT");
 
+    } finally {
+      rmSync(env.root, { recursive: true, force: true });
+    }
+  }
+
+  // ── R5-H2: created->running converges through ONE arbiter writer ──
+  console.log("R5-H2.convergence: ensureRunStarted is the single created->running arbiter");
+  {
+    const env = makeEnv("loop-wp5-r5h2-");
+    try {
+      const requirementId = "REQ-WP5-R5H2";
+      const identity = Object.freeze({
+        runId: `run-${requirementId}`, requirementId, repository: "local",
+        repositoryPath: join(env.root, "repo"), baseBranch: "main",
+        expectedBaseSha: "0".repeat(40), taskBranch: `runtime/${requirementId}`,
+        controlRoot: join(env.root, "control"), createdAt: new Date().toISOString(),
+      });
+      const source = env.artifactStore.put("requirement_summary", "R5-H2 convergence source");
+      const intakeRequest = Object.freeze({
+        requirementId,
+        capability: "requirement-intake" as const,
+        executionRole: "primary" as const,
+        inputArtifactRef: source.artifactRef,
+        inputArtifactVersion: "1.0.0",
+        inputDigest: source.digest,
+        outputArtifactVersion: "1.0.0",
+        input: {},
+      });
+      const startedCount = (runId: string): number =>
+        env.runStore.listEvents(runId).filter((event) => event.kind === "run_started").length;
+
+      // Row 1 — deterministic barrier: the second connection WINS
+      // ensureRunStarted between the entry's recovery read and its own ensure
+      // call. The entry must converge idempotently — never surface
+      // EVENT_ID_CONFLICT from a raw start-event append.
+      env.runStore.createRun(identity);
+      const other = secondProcess(env);
+      type EnsureFn = LoopRunStore["ensureRunStarted"];
+      const originalEnsure = env.runStore.ensureRunStarted.bind(env.runStore) as EnsureFn;
+      const barrier = { fired: false };
+      (env.runStore as { ensureRunStarted: EnsureFn }).ensureRunStarted = ((runId: string) => {
+        if (!barrier.fired) {
+          barrier.fired = true;
+          other.runStore.ensureRunStarted(runId);
+        }
+        return originalEnsure(runId);
+      }) as EnsureFn;
+      const stepLoser = await env.entry.execute(intakeRequest);
+      ok(barrier.fired, "fixture: the cross-connection ensure fired inside the window");
+      ok(stepLoser.execution.success === true,
+        "the entry racing a finished ensure converges instead of EVENT_ID_CONFLICT");
+      ok(startedCount(identity.runId) === 1,
+        "ensure-wins row persists exactly ONE run_started");
+
+      // Row 2 — entry wins first: plain sequential completion stays honest.
+      const requirementIdB = `${requirementId}-ENTRY-FIRST`;
+      const identityB = Object.freeze({ ...identity, runId: `run-${requirementIdB}`, requirementId: requirementIdB });
+      env.runStore.createRun(identityB);
+      const stepWinner = await env.entry.execute({ ...intakeRequest, requirementId: requirementIdB });
+      ok(stepWinner.execution.success === true, "entry-first start completes normally");
+      ok(startedCount(identityB.runId) === 1, "entry-first row persists exactly ONE run_started");
+
+      // Row 3 — double ensure across two connections still one event.
+      const requirementIdC = `${requirementId}-DOUBLE`;
+      const identityC = Object.freeze({ ...identity, runId: `run-${requirementIdC}`, requirementId: requirementIdC });
+      env.runStore.createRun(identityC);
+      other.runStore.ensureRunStarted(identityC.runId);
+      env.runStore.ensureRunStarted(identityC.runId);
+      ok(startedCount(identityC.runId) === 1 &&
+        env.runStore.getRun(identityC.runId)?.status === "running",
+        "double ensure across connections converges to one start event");
+
+      // Row 4 — differently-clocked entries share the same arbiter.
+      const requirementIdD = `${requirementId}-CLOCKS`;
+      const identityD = Object.freeze({ ...identity, runId: `run-${requirementIdD}`, requirementId: requirementIdD });
+      env.runStore.createRun(identityD);
+      const clockedEntry = new LoopCapabilityEntry({
+        runStore: other.runStore,
+        artifactStore: other.artifactStore,
+        bindingRegistry: createRuntimeBindingRegistry(),
+        gateway: other.gateway,
+        now: () => "2000-01-01T00:00:00.000Z",
+      });
+      const stepClocked = await clockedEntry.execute({ ...intakeRequest, requirementId: requirementIdD });
+      ok(stepClocked.execution.success === true, "a differently-clocked entry starts the legacy run normally");
+      ok(startedCount(identityD.runId) === 1,
+        "different clocks never duplicate the start event");
+
+      // First intake pins the winning source exactly once; strictly one
+      // external dispatch for the intake point.
+      const dispatches = pointDispatchCounts(env.runStore, identity.runId).get("requirement-intake:primary") ?? 0;
+      ok(dispatches === 1, `exactly one intake dispatch across the racing writers (got ${dispatches})`);
+      const executions = env.runStore.listCapabilityExecutions(identity.runId);
+      ok(executions.length === 2 && executions[0]!.status === "started" && executions[1]!.status === "succeeded",
+        "the intake attempt persists started+succeeded with no attempt inflation");
+      ok(executions[1]!.inputArtifactRef === source.artifactRef && executions[1]!.inputDigest === source.digest,
+        "first-writer-wins: the surviving intake pins the original source provenance");
+      other.runStore.close();
+      other.artifactStore.close();
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }

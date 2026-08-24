@@ -22,12 +22,15 @@
 // contend for real.
 
 import Database from "better-sqlite3";
-import { mkdirSync, realpathSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { mkdirSync, readlinkSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { LoopRunJournalError } from "./loop-executor-types";
 
 const HELD_LEASES = new AsyncLocalStorage<{ readonly lockPath: string }>();
+
+/** Bound for resolving chains of dangling symlinks (fail closed, never loop). */
+const MAX_DANGLING_SYMLINK_HOPS = 16;
 
 function leaseWaitBudgetMs(): number {
   // Test hook: SDLC_RESUME_LEASE_WAIT_BUDGET_MS shortens queueing so
@@ -50,28 +53,64 @@ interface HeldLease {
 }
 
 /**
- * R4-H1: the lease must bind to the journal's PHYSICAL identity, not a path
- * spelling. Symlinked aliases of the same file resolve to the same canonical
- * target; a not-yet-created journal falls back to its canonical parent
- * directory plus basename so first-run acquisition still works.
+ * R4-H1 + R5-H1: the lease must bind to the journal's PHYSICAL identity, not
+ * a path spelling. Existing files (and every alias to them) resolve through
+ * realpath; a not-yet-created journal falls back to its canonical parent
+ * directory plus leaf so first-run acquisition still works.
+ *
+ * R5-H1: an ABSENT leaf can still be a DANGLING file symlink whose target has
+ * not been created yet — realpath fails on it, but readlink works on the link
+ * itself. Every spelling (the link alias, chained dangling links, and the
+ * future target path) therefore converges to ONE canonical future identity;
+ * without this, each spelling minted its own companion lease and a second
+ * resumer could acquire a parallel lease for the same future journal.
  */
 function canonicalJournalPath(journalPath: string): string {
-  try {
-    return realpathSync(journalPath);
-  } catch (error) {
-    const code = (error as { code?: unknown }).code;
-    if (code === "ENOENT") {
-      return join(realpathSync(dirname(journalPath)), basename(journalPath));
+  // The parent directory must exist: resolving it first maps directory-level
+  // aliases (symlinked ancestors, relative spellings) onto one physical root.
+  const parent = realpathSync(dirname(journalPath));
+  let cursor = join(parent, basename(journalPath));
+  for (let hops = 0; hops <= MAX_DANGLING_SYMLINK_HOPS; hops += 1) {
+    try {
+      return realpathSync(cursor);
+    } catch (error) {
+      if ((error as { code?: unknown }).code !== "ENOENT") throw error;
     }
-    throw error;
+    let target: string;
+    try {
+      target = readlinkSync(cursor);
+    } catch {
+      // Absent plain name (no symlink): canonical as spelled under the real
+      // parent — identical for every spelling of the same location.
+      return cursor;
+    }
+    // Dangling symlink hop: relative targets resolve against the link's own
+    // REAL directory; absolute targets are taken as-is.
+    if (!isAbsolute(target)) {
+      target = join(dirname(cursor), target);
+    }
+    // Fold intermediate-directory symlinks (e.g. macOS /var -> /private/var)
+    // into the identity even though the final leaf is still absent.
+    const parentOfTarget = (() => {
+      try {
+        return realpathSync(dirname(target));
+      } catch {
+        return dirname(target);
+      }
+    })();
+    cursor = join(parentOfTarget, basename(target));
   }
+  throw new LoopRunJournalError(
+    "STORE_FAILURE",
+    "journal path resolves through too many dangling symlink hops",
+  );
 }
 
 function leasePathFor(journalPath: string): string {
-  return join(
-    dirname(canonicalJournalPath(journalPath)),
-    `${basename(canonicalJournalPath(journalPath))}.resume-lease.db`,
-  );
+  // R5-H1: both components derive from ONE canonical computation, so no
+  // spelling can observe a partially-resolved identity.
+  const canonical = canonicalJournalPath(journalPath);
+  return join(dirname(canonical), `${basename(canonical)}.resume-lease.db`);
 }
 
 function isSqliteBusy(error: unknown): boolean {
