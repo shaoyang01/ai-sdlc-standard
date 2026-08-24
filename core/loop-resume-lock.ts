@@ -22,7 +22,8 @@
 // contend for real.
 
 import Database from "better-sqlite3";
-import { mkdirSync, readlinkSync, realpathSync } from "node:fs";
+import { lstatSync, mkdirSync, readlinkSync, realpathSync } from "node:fs";
+import type { Stats } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { LoopRunJournalError } from "./loop-executor-types";
@@ -53,57 +54,59 @@ interface HeldLease {
 }
 
 /**
- * R4-H1 + R5-H1: the lease must bind to the journal's PHYSICAL identity, not
- * a path spelling. Existing files (and every alias to them) resolve through
- * realpath; a not-yet-created journal falls back to its canonical parent
- * directory plus leaf so first-run acquisition still works.
+ * R4-H1 + R5-H1 + R6-H1: the lease must bind to the journal's PHYSICAL
+ * identity, not a path spelling. Resolution is a strictly PER-COMPONENT walk:
+ * lstat inspects exactly one entry without following anything, readlink is
+ * only ever called on an entry lstat just proved to be a symlink, and the hop
+ * counter is therefore ours alone — the OS resolver never walks a chain for
+ * us, so a native ELOOP can never preempt the bounded STORE_FAILURE surface.
  *
- * R5-H1: an ABSENT leaf can still be a DANGLING file symlink whose target has
- * not been created yet — realpath fails on it, but readlink works on the link
- * itself. Every spelling (the link alias, chained dangling links, and the
- * future target path) therefore converges to ONE canonical future identity;
- * without this, each spelling minted its own companion lease and a second
- * resumer could acquire a parallel lease for the same future journal.
+ * Error contract (identical for every spelling of the same journal):
+ * - missing PARENT directory: realpathSync(dirname) at the top propagates the
+ *   NATIVE ENOENT before any lease state can be touched (pre-existing,
+ *   unchanged surface — no directories, no companion);
+ * - absent plain leaf: canonical as spelled under the real parent;
+ * - dangling leaf symlinks converge every spelling (link alias, chained
+ *   links, future target path) onto ONE identity; intermediate directory
+ *   aliases fold in per hop;
+ * - a MISSING parent anywhere inside a hop's target propagates that NATIVE
+ *   ENOENT too — never masked, never "fixed" by creating directories here
+ *   (mkdirSync belongs to withResumeLease, after successful resolution);
+ * - more than MAX_DANGLING_SYMLINK_HOPS links, and symlink loops, uniformly
+ *   fail with LoopRunJournalError("STORE_FAILURE");
+ * - EACCES / EIO / ... propagate natively — nothing is blanket-caught.
  */
 function canonicalJournalPath(journalPath: string): string {
-  // The parent directory must exist: resolving it first maps directory-level
-  // aliases (symlinked ancestors, relative spellings) onto one physical root.
   const parent = realpathSync(dirname(journalPath));
   let cursor = join(parent, basename(journalPath));
-  for (let hops = 0; hops <= MAX_DANGLING_SYMLINK_HOPS; hops += 1) {
+  for (let hops = 0; ; hops += 1) {
+    let stat: Stats;
     try {
-      return realpathSync(cursor);
+      stat = lstatSync(cursor);
     } catch (error) {
-      if ((error as { code?: unknown }).code !== "ENOENT") throw error;
+      if ((error as { code?: unknown }).code === "ENOENT") {
+        return cursor;
+      }
+      throw error;
     }
-    let target: string;
-    try {
-      target = readlinkSync(cursor);
-    } catch {
-      // Absent plain name (no symlink): canonical as spelled under the real
-      // parent — identical for every spelling of the same location.
+    if (!stat.isSymbolicLink()) {
+      // Concrete entry under an already-realized parent: fully canonical.
       return cursor;
     }
-    // Dangling symlink hop: relative targets resolve against the link's own
-    // REAL directory; absolute targets are taken as-is.
-    if (!isAbsolute(target)) {
-      target = join(dirname(cursor), target);
+    if (hops >= MAX_DANGLING_SYMLINK_HOPS) {
+      throw new LoopRunJournalError(
+        "STORE_FAILURE",
+        `journal path resolves through more than ${MAX_DANGLING_SYMLINK_HOPS} symlink hops`,
+      );
     }
-    // Fold intermediate-directory symlinks (e.g. macOS /var -> /private/var)
-    // into the identity even though the final leaf is still absent.
-    const parentOfTarget = (() => {
-      try {
-        return realpathSync(dirname(target));
-      } catch {
-        return dirname(target);
-      }
-    })();
-    cursor = join(parentOfTarget, basename(target));
+    const target = readlinkSync(cursor);
+    const absoluteTarget = isAbsolute(target) ? target : join(dirname(cursor), target);
+    // Fold intermediate-directory aliases (e.g. macOS /var -> /private/var)
+    // into the identity; a missing directory inside the TARGET is part of the
+    // caller-visible error surface and propagates its native ENOENT.
+    const targetParent = realpathSync(dirname(absoluteTarget));
+    cursor = join(targetParent, basename(absoluteTarget));
   }
-  throw new LoopRunJournalError(
-    "STORE_FAILURE",
-    "journal path resolves through too many dangling symlink hops",
-  );
 }
 
 function leasePathFor(journalPath: string): string {

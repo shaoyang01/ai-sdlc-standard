@@ -19,7 +19,7 @@
 
 import { strict as assert } from "node:assert";
 import Database from "better-sqlite3";
-import { mkdtempSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -1618,6 +1618,130 @@ async function main(): Promise<void> {
       storeViaAlias.close();
       storeViaTarget.close();
       artifacts.close();
+    } finally {
+      if (previousBudget === undefined) {
+        delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
+      } else {
+        process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = previousBudget;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  // ── R6-H1: the symlink error surface is bounded, uniform, side-effect-free ──
+  console.log("R6-H1.probes: hop cap -> STORE_FAILURE; loops; missing target parents stay native ENOENT");
+  {
+    const previousBudget = process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
+    process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"] = "250";
+    const root = mkdtempSync(join(tmpdir(), "loop-wp5-r6h1-"));
+    try {
+      mkdirSync(join(root, "repo"), { recursive: true });
+      type LeaseOutcome = "ACQUIRED" | "STORE_BUSY" | "STORE_FAILURE" | "ENOENT" | "OTHER";
+      const outcomeOf = async (spelling: string): Promise<LeaseOutcome> => {
+        try {
+          return await withResumeLease(spelling, async () => "ACQUIRED" as const);
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            if (error.code === "STORE_FAILURE") return "STORE_FAILURE";
+            if (error.code === "STORE_BUSY") return "STORE_BUSY";
+          }
+          if ((error as { code?: unknown }).code === "ENOENT") return "ENOENT";
+          return "OTHER";
+        }
+      };
+      /** Builds link-1..link-n -> future.db (dangling) and returns the deepest link. */
+      const buildChain = (name: string, hops: number): string => {
+        const dir = join(root, name);
+        mkdirSync(dir);
+        let pointee = join(dir, "future.db");
+        for (let i = 1; i <= hops; i += 1) {
+          const link = join(dir, `link-${i}`);
+          symlinkSync(pointee, link);
+          pointee = link;
+        }
+        return pointee;
+      };
+
+      // Hop-bound rows: 1 and 16 resolve (bound inclusive); 17 fails closed.
+      ok((await outcomeOf(buildChain("chain-1", 1))) === "ACQUIRED",
+        "a one-hop dangling chain acquires");
+      ok((await outcomeOf(buildChain("chain-16", 16))) === "ACQUIRED",
+        "a sixteen-hop dangling chain acquires at the inclusive bound");
+      const chain17 = await outcomeOf(buildChain("chain-17", 17));
+      ok(chain17 === "STORE_FAILURE",
+        `seventeen hops fail closed as OUR STORE_FAILURE, never native ELOOP (got ${chain17})`);
+
+      // Symlink loop: alternation exhausts our counter — again OUR error.
+      const loopDir = join(root, "loop");
+      mkdirSync(loopDir);
+      const loopA = join(loopDir, "l1");
+      const loopB = join(loopDir, "l2");
+      symlinkSync(loopB, loopA);
+      symlinkSync(loopA, loopB);
+      const loopOutcome = await outcomeOf(loopA);
+      ok(loopOutcome === "STORE_FAILURE",
+        `symlink loops fail closed as OUR STORE_FAILURE, never native ELOOP (got ${loopOutcome})`);
+      // POSIX errno strings are identical across macOS/Linux; Windows is not
+      // dynamically verified in this environment (registered known fact).
+
+      // Missing TARGET parent: BOTH spellings surface the same NATIVE ENOENT,
+      // and resolution creates neither directories nor companion leases.
+      const voidDir = join(root, "void-target-dir");
+      const directVoid = join(voidDir, "future.db");
+      const aliasVoid = join(root, "alias-into-void.db");
+      symlinkSync(directVoid, aliasVoid);
+      const directVoidOutcome = await outcomeOf(directVoid);
+      ok(directVoidOutcome === "ENOENT",
+        `direct target spelling propagates native ENOENT for a missing parent (got ${directVoidOutcome})`);
+      const aliasVoidOutcome = await outcomeOf(aliasVoid);
+      ok(aliasVoidOutcome === "ENOENT",
+        `dangling alias spelling propagates the SAME native ENOENT (got ${aliasVoidOutcome})`);
+      ok(!existsSync(voidDir),
+        "resolution created NO directory for the missing target parent");
+      ok(!existsSync(join(root, "void-target-dir", "future.db.resume-lease.db")),
+        "no companion lease was minted for an unresolvable journal");
+
+      // Relative vs absolute dangling targets converge to one identity.
+      const relDir = join(root, "rel");
+      mkdirSync(relDir);
+      const relFuture = join(relDir, "future.db");
+      const absAlias = join(relDir, "abs-link.db");
+      const relAlias = join(relDir, "rel-link.db");
+      symlinkSync(relFuture, absAlias);
+      symlinkSync("future.db", relAlias);
+      let nestedRan = false;
+      let releaseRel!: () => void;
+      const heldRel = new Promise<void>((resolve) => { releaseRel = resolve; });
+      const holdDirect = withResumeLease(relFuture, async () => {
+        // INSIDE the held context, both other spellings must REUSE the very
+        // same lease (identity convergence) instead of self-contending.
+        await withResumeLease(absAlias, async () => {
+          await withResumeLease(relFuture, async () => {
+            nestedRan = true;
+            // Stay held (gated) until the external probes have finished.
+            await heldRel;
+          });
+        });
+        return null;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      let busyViaAbsolute = false;
+      try {
+        await withResumeLease(absAlias, async () => "should-not-run");
+      } catch (error) {
+        busyViaAbsolute = error instanceof LoopRunJournalError && error.code === "STORE_BUSY";
+      }
+      let busyViaRelative = false;
+      try {
+        await withResumeLease(relAlias, async () => "should-not-run");
+      } catch (error) {
+        busyViaRelative = error instanceof LoopRunJournalError && error.code === "STORE_BUSY";
+      }
+      releaseRel();
+      await holdDirect;
+      ok(nestedRan, "held-context nesting across absolute/relative aliases reuses ONE lease");
+      ok(busyViaAbsolute && busyViaRelative,
+        "outside the holder, absolute AND relative alias spellings contend on the SAME companion");
     } finally {
       if (previousBudget === undefined) {
         delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
