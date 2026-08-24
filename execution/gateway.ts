@@ -109,28 +109,93 @@ export interface ExecutionGatewayOptions {
   }>;
 }
 
+// C02-WP5 (clauses 0.1.5/0.1.6): construction-time capability-tracing
+// registry. Module-level and PRIVATE to this file — the only write path is
+// the ExecutionGateway constructor below, so neither subclass overrides,
+// monkey-patched members nor out-of-module callers can register a tracing
+// identity for a gateway this module did not construct. Supported entries
+// consume the read-only predicate.
+const GATEWAY_TRACING_BINDINGS = new WeakMap<ExecutionGateway, Readonly<{
+  runStore: LoopRunStore;
+  artifactStore: Pick<LoopArtifactStore, "put" | "read">;
+}>>();
+
+/**
+ * Non-virtual identity check for durable capability tracing wiring: true
+ * only when `gateway` was constructed by this module with capability tracing
+ * into exactly the given run store and artifact store instances. There is no
+ * public way to alter or add a binding after construction.
+ */
+export function isExecutionGatewayTracingBoundTo(
+  gateway: object,
+  runStore: LoopRunStore,
+  artifactStore: Pick<LoopArtifactStore, "read" | "put">,
+): boolean {
+  const binding = GATEWAY_TRACING_BINDINGS.get(gateway as ExecutionGateway);
+  return binding !== undefined &&
+    binding.runStore === runStore &&
+    binding.artifactStore === artifactStore;
+}
+
 export class ExecutionGateway {
-  constructor(private readonly options: ExecutionGatewayOptions = {}) {}
+  private readonly options: ExecutionGatewayOptions;
+
+  constructor(options: ExecutionGatewayOptions = {}) {
+    // C02-WP5 (clauses 0.1.5/0.1.6): snapshot and freeze the dependency
+    // configuration — post-construction mutation of the caller's options
+    // object (including the nested capabilityTracing record) must not
+    // redirect where executions are journaled or where output blobs are
+    // written.
+    const tracing = options.capabilityTracing === undefined
+      ? undefined
+      : Object.freeze({ ...options.capabilityTracing });
+    this.options = Object.freeze({
+      ...options,
+      ...(tracing === undefined ? {} : { capabilityTracing: tracing }),
+    });
+    if (tracing !== undefined) {
+      GATEWAY_TRACING_BINDINGS.set(this, Object.freeze({
+        runStore: tracing.runStore,
+        artifactStore: tracing.artifactStore,
+      }));
+    }
+  }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
     const isCanonicalCapability =
       typeof request?.type === "string" && NODE_CAPABILITY_IDS.includes(request.type as NodeCapabilityId);
-    if (
-      this.options.capabilityTracing !== undefined && isCanonicalCapability &&
-      request.loopExecution === undefined
-    ) {
+    if (isCanonicalCapability) {
+      // WP5 skill-isolation carryover + F4: a canonical dispatch must never
+      // reach the legacy skill-registry path — with or without a loop
+      // execution context. The rejection is fail-closed; fail-open remains
+      // available ONLY for legacy non-C02 requests below.
+      if ("skill" in request || "flowId" in request) {
+        throw new LoopRunJournalError(
+          "INVALID_INPUT",
+          "canonical capability dispatch must not carry skill metadata",
+        );
+      }
+      if (request.loopExecution === undefined) {
+        throw new LoopRunJournalError(
+          "INVALID_INPUT",
+          "canonical capability request requires durable loop execution context",
+        );
+      }
+      return this.executeCapabilityWithTracing(request);
+    }
+    if (request.loopExecution !== undefined) {
+      // Preserved WP3.5-C boundary: a loopExecution context on a non-
+      // canonical request type fails closed — never dispatched as legacy.
       throw new LoopRunJournalError(
         "INVALID_INPUT",
-        "canonical capability request requires durable loop execution context",
+        "loop execution context requires a canonical capability request",
       );
     }
     // ── Skill Validation — metadata only, does not affect dispatch ──
+    // Legacy non-canonical requests keep the historical fail-open behavior.
     const skillValidation = validateExecutionRequestSkill(request);
     const enriched = { ...request, skillValidation };
 
-    if (request.loopExecution !== undefined) {
-      return this.executeCapabilityWithTracing(enriched);
-    }
     const primaryResult = await this.executePrimary(enriched);
     return this.attachHermesGatewayRealDispatch(enriched, primaryResult);
   }
@@ -251,7 +316,10 @@ export class ExecutionGateway {
       retryable: null,
       reasonCode: null,
     });
-    const claim = tracing.runStore.appendCapabilityExecution(started);
+    // C02-WP5 F1: the started append is an ATOMIC CLAIM — the store derives
+    // the unique dispatch command from a single-transaction recovery
+    // authority and rejects any stale command before the attempt exists.
+    const claim = tracing.runStore.claimNextCapabilityExecution(started);
     if (!claim.appended) {
       return Object.freeze({
         success: false,
@@ -762,3 +830,192 @@ export class ExecutionGateway {
 }
 
 export const executionGateway = new ExecutionGateway();
+
+// ─── Deterministic traced capability gateway (moved from runtime.ts) ────
+// The default dispatch surface for the v2 single-rail runtime: resolves the
+// enabled binding per execution point from the registry, journals the
+// started/terminal capability events through the run store and stores the
+// node product (plus the scan round's immutable Finding Ledger) in the
+// artifact store. Implemented as a real ExecutionGateway subclass so its
+// durable tracing is registered by the BASE constructor through this
+// module's private registry — there is no out-of-module registrar.
+
+function deterministicInvalid(message: string): never {
+  throw new LoopRunJournalError("INVALID_INPUT", message);
+}
+
+const SHADOW_EXECUTOR_VERSIONS: Readonly<Record<"codex" | "kimi" | "hermes", string>> = Object.freeze({
+  codex: "1.0.0",
+  kimi: "1.0.0",
+  hermes: "1.0.0",
+});
+
+export function createDeterministicCapabilityGateway(options: {
+  runStore: LoopRunStore;
+  artifactStore: LoopArtifactStore;
+  bindingRegistry: BindingRegistry;
+  now: () => string;
+}): ExecutionGateway {
+  const { runStore, artifactStore, bindingRegistry, now } = options;
+  class DeterministicTracedGateway extends ExecutionGateway {
+    constructor() {
+      super({
+        capabilityTracing: {
+          runStore,
+          artifactStore,
+          bindingRegistry,
+          executorVersions: SHADOW_EXECUTOR_VERSIONS,
+          now,
+        },
+      });
+    }
+
+    override async execute(request: ExecutionRequest): Promise<ExecutionResult> {
+      // F4: the canonical firewall lives at the outermost entry of BOTH
+      // gateway faces — skill/flowId metadata is rejected before anything
+      // else, and the run identity must match the tracing context.
+      if ("skill" in request || "flowId" in request) {
+        deterministicInvalid("canonical capability dispatch must not carry skill metadata");
+      }
+      const context = request.loopExecution;
+      if (context === undefined) {
+        deterministicInvalid("capability dispatch requires a loopExecution tracing context");
+      }
+      if (
+        typeof request.type !== "string" || !NODE_CAPABILITY_IDS.includes(request.type as NodeCapabilityId)
+      ) {
+        deterministicInvalid(`"${String(request.type)}" is not a v2 chain capability; the legacy node set is retired`);
+      }
+      if (request.node !== request.type) {
+        deterministicInvalid(
+          `dispatch node "${String(request.node)}" must equal the canonical capability ` +
+            `"${String(request.type)}"; mismatched or legacy node names are rejected`,
+        );
+      }
+      const capability = request.type as NodeCapabilityId;
+      const executionRole = context.executionRole as CapabilityExecutionRole;
+      const binding = getEnabledBinding(bindingRegistry, capability, executionRole);
+      const agent = binding.agent;
+      // F4: the request's Requirement identity must match the journaled run.
+      const claimSnapshot = runStore.getSnapshot(context.runId);
+      if (claimSnapshot === undefined) {
+        throw new LoopRunJournalError("RUN_NOT_FOUND", "loop execution run does not exist");
+      }
+      if (claimSnapshot.state.identity.requirementId !== request.requirementId) {
+        deterministicInvalid("loop execution Requirement ID does not match the run");
+      }
+      const existing = runStore.listCapabilityExecutions(context.runId);
+      const sequence = existing.length + 1;
+      const consumedRef = typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null;
+      const consumedDigest =
+        typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null;
+      const base = {
+        schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+        runId: context.runId,
+        capability,
+        executionRole,
+        nodeId: capability,
+        attempt: context.attempt,
+        bindingId: binding.bindingId,
+        bindingVersion: binding.bindingVersion,
+        bindingRegistryVersion: bindingRegistry.version,
+        executorAgent: agent,
+        executorAdapter: binding.adapter,
+        executorVersion: SHADOW_EXECUTOR_VERSIONS[agent],
+        inputArtifactRef: context.inputArtifactRef,
+        inputArtifactVersion: context.inputArtifactVersion,
+        inputDigest: context.inputDigest,
+        consumedFindingsRef: consumedRef,
+        consumedFindingsDigest: consumedDigest,
+        decisionDepth: null,
+        decisionScopeId: null,
+        decisionDeltaRef: null,
+        decisionDeltaDigest: null,
+      };
+      // F1: the started append is an ATOMIC CLAIM — the store derives the
+      // unique dispatch command from a single-transaction recovery authority
+      // and rejects any stale command before the attempt exists.
+      const claim = runStore.claimNextCapabilityExecution(Object.freeze({
+        ...base,
+        executionEventId: `${context.runId}:capability:${sequence}:started`,
+        sequence,
+        status: "started" as const,
+        createdAt: now(),
+        outputArtifactRef: null,
+        outputArtifactVersion: null,
+        outputDigest: null,
+        gateResult: null,
+        unresolvedFindingsRef: null,
+        unresolvedFindingsDigest: null,
+        nextStepEligibility: null,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+      }));
+      if (!claim.appended) {
+        return Object.freeze({
+          success: false,
+          node: capability,
+          agent,
+          output: Object.freeze({ result: "FAIL", reason: "execution_already_claimed" }),
+          artifacts: Object.freeze([]),
+          error: "capability execution is already active",
+        });
+      }
+      const product = artifactStore.put(
+        CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
+        `runtime shadow product for ${capability}/${executionRole} attempt ${context.attempt}`,
+      );
+      const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
+      const isVerdictRound = capability === "solution-gate" && executionRole === "formal_verdict";
+      const ledger = isScanRound
+        ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
+        : null;
+      const gateResult = isVerdictRound
+        ? ("PASS" as const)
+        : ("NOT_APPLICABLE" as const);
+      const decisionScopeId = isVerdictRound
+        ? `${context.runId}:decision:${context.attempt}`
+        : null;
+      const delta = isVerdictRound
+        ? artifactStore.put("solution_review", `depth=STANDARD shadow decision delta for ${context.runId} attempt ${context.attempt}`)
+        : null;
+      runStore.appendCapabilityExecution(Object.freeze({
+        ...base,
+        executionEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
+        sequence: sequence + 1,
+        status: "succeeded" as const,
+        createdAt: now(),
+        outputArtifactRef: product.artifactRef,
+        outputArtifactVersion: context.outputArtifactVersion,
+        outputDigest: product.digest,
+        gateResult,
+        unresolvedFindingsRef: ledger?.artifactRef ?? null,
+        unresolvedFindingsDigest: ledger?.digest ?? null,
+        decisionDepth: isVerdictRound ? ("STANDARD" as const) : null,
+        decisionScopeId,
+        decisionDeltaRef: delta?.artifactRef ?? null,
+        decisionDeltaDigest: delta?.digest ?? null,
+        nextStepEligibility: "ELIGIBLE" as const,
+        errorCode: null,
+        retryable: null,
+        reasonCode: null,
+      }));
+      return Object.freeze({
+        success: true,
+        node: capability,
+        agent,
+        output: Object.freeze({
+          result: "SUCCESS",
+          capability,
+          executionRole,
+          gate_result: gateResult,
+          artifact_ref: product.artifactRef,
+        }),
+        artifacts: Object.freeze([]),
+        capabilityTerminalEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
+      });
+    }
+  }
+  return new DeterministicTracedGateway();
+}

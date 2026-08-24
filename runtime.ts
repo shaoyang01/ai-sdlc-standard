@@ -20,20 +20,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  CAPABILITY_ARTIFACT_TYPES,
-  getEnabledBinding,
   INITIAL_BINDING_REGISTRY,
   replaceBinding,
   type BindingRegistry,
 } from "./core/agent-capability-bindings";
 import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
 import { LoopCapabilityEntry } from "./core/loop-capability-entry";
-import { LoopArtifactStore, type LoopArtifactKind } from "./core/loop-artifact-store";
+import { LoopArtifactStore } from "./core/loop-artifact-store";
 import {
   LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
   createLoopArtifactRevision,
 } from "./core/loop-artifact-revision";
-import { recoverRunContext } from "./core/loop-recovery";
+import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
+import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
@@ -42,7 +41,7 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "./loop/types";
-import type { AgentName, ExecutionRequest, ExecutionResult } from "./execution/types";
+import type { AgentName } from "./execution/types";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -72,7 +71,7 @@ export interface RuntimeResult {
 
 /** Anything the runtime executes must go through this minimal gateway shape. */
 export interface RuntimeCapabilityGateway {
-  execute(request: ExecutionRequest): Promise<ExecutionResult>;
+  execute(request: import("./execution/types").ExecutionRequest): Promise<import("./execution/types").ExecutionResult>;
 }
 
 export interface RuntimeOptions {
@@ -162,160 +161,14 @@ function requireSafeId(value: string, label: string): string {
   return value;
 }
 
-// ─── Deterministic shadow capability gateway ──────────
-// The default dispatch surface: resolves the enabled binding per execution
-// point from the registry (so the solution-gate dual-agent separation comes
-// from the registry, not from the request), persists the started/terminal
-// capability events through the run journal and stores the node product (plus
-// the scan round's immutable Finding Ledger) in the artifact store. Real
-// dispatch (codex real runner) is injected via options.gateway; production
-// entry wiring is a separately authorized work package (WP5).
+// ─── Deterministic traced capability gateway ──────────
+// Moved into execution/gateway.ts (C02-WP5 F3): implemented as a real
+// ExecutionGateway subclass so its durable tracing is registered by the base
+// constructor through that module's PRIVATE registry — no out-of-module
+// registrar exists. Re-exported here for compatibility with existing callers.
 
-const SHADOW_EXECUTOR_VERSIONS: Readonly<Record<AgentName, string>> = Object.freeze({
-  codex: "1.0.0",
-  kimi: "1.0.0",
-  hermes: "1.0.0",
-});
-
-export function createDeterministicCapabilityGateway(options: {
-  runStore: LoopRunStore;
-  artifactStore: LoopArtifactStore;
-  bindingRegistry: BindingRegistry;
-  now: () => string;
-}): RuntimeCapabilityGateway {
-  const { runStore, artifactStore, bindingRegistry, now } = options;
-  return Object.freeze({
-    async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-      const context = request.loopExecution;
-      if (context === undefined) {
-        invalid("capability dispatch requires a loopExecution tracing context");
-      }
-      // Closed dispatch contract: node must repeat the canonical capability
-      // exactly. A canonical type paired with a retired or arbitrary node name
-      // is a legacy/malformed dispatch and is rejected BEFORE any journal
-      // write — never silently canonicalized.
-      if (request.node !== request.type) {
-        invalid(
-          `dispatch node "${String(request.node)}" must equal the canonical capability ` +
-            `"${String(request.type)}"; mismatched or legacy node names are rejected`,
-        );
-      }
-      const capability = request.type as NodeCapabilityId;
-      if (!NODE_CAPABILITY_IDS.includes(capability)) {
-        invalid(`"${String(request.type)}" is not a v2 chain capability; the legacy node set is retired`);
-      }
-      const executionRole = context.executionRole as CapabilityExecutionRole;
-      const binding = getEnabledBinding(bindingRegistry, capability, executionRole);
-      const agent = binding.agent;
-      const existing = runStore.listCapabilityExecutions(context.runId);
-      const sequence = existing.length + 1;
-      const consumedRef = typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null;
-      const consumedDigest =
-        typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null;
-      const base = {
-        schemaVersion: 4 as const,
-        runId: context.runId,
-        capability,
-        executionRole,
-        nodeId: capability,
-        attempt: context.attempt,
-        bindingId: binding.bindingId,
-        bindingVersion: binding.bindingVersion,
-        bindingRegistryVersion: bindingRegistry.version,
-        executorAgent: agent,
-        executorAdapter: binding.adapter,
-        executorVersion: SHADOW_EXECUTOR_VERSIONS[agent],
-        inputArtifactRef: context.inputArtifactRef,
-        inputArtifactVersion: context.inputArtifactVersion,
-        inputDigest: context.inputDigest,
-        consumedFindingsRef: consumedRef,
-        consumedFindingsDigest: consumedDigest,
-        // v4 (Round 2 review H1): the depth decision rides on the succeeded
-        // formal_verdict event only; started and non-verdict events carry nulls.
-        decisionDepth: null,
-        decisionScopeId: null,
-        decisionDeltaRef: null,
-        decisionDeltaDigest: null,
-      };
-      runStore.appendCapabilityExecution(Object.freeze({
-        ...base,
-        executionEventId: `${context.runId}:capability:${sequence}:started`,
-        sequence,
-        status: "started" as const,
-        createdAt: now(),
-        outputArtifactRef: null,
-        outputArtifactVersion: null,
-        outputDigest: null,
-        gateResult: null,
-        unresolvedFindingsRef: null,
-        unresolvedFindingsDigest: null,
-        nextStepEligibility: null,
-        errorCode: null,
-        retryable: null,
-        reasonCode: null,
-      }));
-      const product = artifactStore.put(
-        CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind,
-        `runtime shadow product for ${capability}/${executionRole} attempt ${context.attempt}`,
-      );
-      const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
-      const isVerdictRound = capability === "solution-gate" && executionRole === "formal_verdict";
-      const ledger = isScanRound
-        ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
-        : null;
-      const gateResult = isVerdictRound
-        ? ("PASS" as const)
-        : ("NOT_APPLICABLE" as const);
-      // v4: the deterministic shadow adjudication materializes its depth
-      // choice ON the verdict — STANDARD scope, with an immutable delta
-      // artifact recording what the choice changes.
-      const decisionScopeId = isVerdictRound
-        ? `${context.runId}:decision:${context.attempt}`
-        : null;
-      const delta = isVerdictRound
-        ? artifactStore.put("solution_review", `depth=STANDARD shadow decision delta for ${context.runId} attempt ${context.attempt}`)
-        : null;
-      runStore.appendCapabilityExecution(Object.freeze({
-        ...base,
-        executionEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
-        sequence: sequence + 1,
-        status: "succeeded" as const,
-        createdAt: now(),
-        outputArtifactRef: product.artifactRef,
-        outputArtifactVersion: context.outputArtifactVersion,
-        outputDigest: product.digest,
-        gateResult,
-        unresolvedFindingsRef: ledger?.artifactRef ?? null,
-        unresolvedFindingsDigest: ledger?.digest ?? null,
-        decisionDepth: isVerdictRound ? ("STANDARD" as const) : null,
-        decisionScopeId,
-        decisionDeltaRef: delta?.artifactRef ?? null,
-        decisionDeltaDigest: delta?.digest ?? null,
-        nextStepEligibility: "ELIGIBLE" as const,
-        errorCode: null,
-        retryable: null,
-        reasonCode: null,
-      }));
-      return Object.freeze({
-        success: true,
-        node: capability,
-        agent,
-        output: Object.freeze({
-          result: "SUCCESS",
-          capability,
-          executionRole,
-          gate_result: gateResult,
-          artifact_ref: product.artifactRef,
-        }),
-        artifacts: Object.freeze([]),
-        // Round 3 review F2: hand the caller the EXACT terminal event this
-        // dispatch committed — revision materialization binds to this
-        // identity, never to the journal tail.
-        capabilityTerminalEventId: `${context.runId}:capability:${sequence + 1}:succeeded`,
-      });
-    },
-  });
-}
+import { createDeterministicCapabilityGateway } from "./execution/gateway";
+export { createDeterministicCapabilityGateway };
 
 // ─── Default dual-agent registry ──────────────────────
 // The initial registry enables codex for every execution point, which would
@@ -415,6 +268,9 @@ export async function run(
   }
   validateRuntimeOptions(options);
   const requirementId = requireSafeId(options.requirementId ?? `REQ-${Date.now()}`, "requirementId");
+  // R4-H2: set when this invocation completes a legacy created-only run —
+  // the resuming requirement text becomes the first intake source.
+  let bootstrapInput: { ref: string; version: string; digest: string } | null = null;
 
   const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));
   mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
@@ -451,84 +307,34 @@ export async function run(
     now,
   });
 
-  const identity: LoopRunIdentity = Object.freeze({
-    runId: `run-${requirementId}-${Date.now()}`,
-    requirementId,
-    repository: "local",
-    repositoryPath: join(workspaceRoot, "repo"),
-    baseBranch: "main",
-    expectedBaseSha: "0".repeat(40),
-    taskBranch: `runtime/${requirementId}`,
-    controlRoot: join(workspaceRoot, "control"),
-    createdAt: now(),
-  });
-
-  // The chain's first input is the normalized Requirement source artifact.
-  const source = artifactStore.put("requirement_summary", requirement);
-  let inputRef = source.artifactRef;
-  let inputVersion = "1.0.0";
-  let inputDigest = source.digest;
-
-  let recovery = recoverRunContext(runStore, requirementId);
-  // Round 3 review F2: a crashed or interrupted previous invocation may have
-  // committed a succeeded producer whose node revision never landed. Finalize
-  // (idempotently replay) that materialization BEFORE any dispatch decision —
-  // recovery completes the producer's revision instead of re-calling the
-  // agent, and the dispatch permit stays closed while it is pending.
-  while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
-    materializeProducerRevision(
-      runStore,
+  // C02-WP5 B1-1: cross-process resume lease — exactly one executor may run
+  // the recovery→claim→external-execution→terminal cycle for this journal at
+  // any time. Same-process nested invocations (F2 window barriers) reuse the
+  // held lease via AsyncLocalStorage; independent invocations queue on the
+  // companion database or fail honestly with STORE_BUSY.
+  const resumeJournalPath = options.runStore !== undefined
+    ? options.runStore.databaseFilePath
+    : join(workspaceRoot, "journal.db");
+  return withResumeLease(resumeJournalPath, async (): Promise<RuntimeResult> => {
+    const identity: LoopRunIdentity = Object.freeze({
+      runId: `run-${requirementId}-${Date.now()}`,
       requirementId,
-      recovery.snapshot.state.identity.runId,
-      recovery.pendingRevisionMaterialization.producerExecution,
-      now,
-    );
-    recovery = recoverRunContext(runStore, requirementId);
-  }
-  let firstDispatch = recovery === undefined;
-  // null nextExecutionPoint on an existing run means the chain is completed
-  // or blocked — it must NOT be coerced back to the first point.
-  let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
-  let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
-  // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
-  // bound — hitting it stops the invocation WITHOUT a durable block. The
-  // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
-  // budget (persisted backward jumps) below.
-  const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
-  if (
-    typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
-  ) {
-    invalid("maxDispatches must be a positive safe integer");
-  }
-  const maxRegateRounds = options.maxRegateRounds ?? LOOP_CAPABILITY_EXECUTION_POINTS.length;
-  if (
-    typeof maxRegateRounds !== "number" || !Number.isSafeInteger(maxRegateRounds) || maxRegateRounds < 1
-  ) {
-    invalid("maxRegateRounds must be a positive safe integer");
-  }
-  // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
-  // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
-  if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
-    if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
-      return Object.freeze({
-        requirement_id: requirementId,
-        run_id: recovery.snapshot.state.identity.runId,
-        final_status: "failed" as const,
-        chain_status: "BLOCKED" as const,
-        execution_trace: Object.freeze([]),
-        next_execution_point: null,
-        workspace_root: workspaceRoot,
-        journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-        completed_at: now(),
-      });
-    }
-  }
-  let dispatches = 0;
-  while (next !== null) {
-    // Round 3 review F2: a concurrent entry may have committed a succeeded
-    // producer since the last recovery recompute — finalize its revision
-    // materialization (zero agent dispatches) before adjudicating a permit.
-    if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+      repository: "local",
+      repositoryPath: join(workspaceRoot, "repo"),
+      baseBranch: "main",
+      expectedBaseSha: "0".repeat(40),
+      taskBranch: `runtime/${requirementId}`,
+      controlRoot: join(workspaceRoot, "control"),
+      createdAt: now(),
+    });
+
+    let recovery = recoverRunContext(runStore, requirementId);
+    // Round 3 review F2: a crashed or interrupted previous invocation may have
+    // committed a succeeded producer whose node revision never landed. Finalize
+    // (idempotently replay) that materialization BEFORE any dispatch decision —
+    // recovery completes the producer's revision instead of re-calling the
+    // agent, and the dispatch permit stays closed while it is pending.
+    while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
       materializeProducerRevision(
         runStore,
         requirementId,
@@ -537,137 +343,326 @@ export async function run(
         now,
       );
       recovery = recoverRunContext(runStore, requirementId);
+    }
+    // C02-WP5 R4-H2: a legal created-only run (externally pre-created, no
+    // provenance yet) is completed under the resume lease via the guarded
+    // legacy start; the resuming requirement text then becomes the first
+    // intake source (first-writer-wins — no confirmed facts exist yet to
+    // violate).
+    if (recovery !== undefined && recovery.status === "created") {
+      const source0 = artifactStore.put("requirement_summary", requirement);
+      runStore.ensureRunStarted(recovery.snapshot.state.identity.runId);
+      recovery = recoverRunContext(runStore, requirementId);
+      bootstrapInput = { ref: source0.artifactRef, version: "1.0.0", digest: source0.digest };
+    }
+    // C02-WP5 F2: the normalized Requirement source is persisted ONLY for a
+    // genuinely fresh run. A recovered run consumes the ORIGINAL source pinned
+    // atomically at bootstrap (run_started provenance) or by its first intake
+    // claim — the `requirement` argument of a resuming call can never replace
+    // already-confirmed facts.
+    let inputRef: string;
+    let inputVersion: string;
+    let inputDigest: string;
+    let firstDispatch = false;
+    if (recovery === undefined) {
+      const source = artifactStore.put("requirement_summary", requirement);
+      inputRef = source.artifactRef;
+      inputVersion = "1.0.0";
+      inputDigest = source.digest;
+      firstDispatch = true;
+    } else {
+      // Derive the initial input from the recovered authority; for a non-intake
+      // next point this is the predecessor's effective output, and the per-
+      // iteration predecessor adoption below refines it after each dispatch.
+      const command = deriveDispatchCommand(recovery);
+      inputRef = command?.inputArtifactRef ?? "";
+      inputVersion = command?.inputArtifactVersion ?? "";
+      inputDigest = command?.inputDigest ?? "";
+      if (
+        command !== null && command.inputArtifactRef === null &&
+        recovery.nextExecutionPoint?.capability === "requirement-intake" &&
+        bootstrapInput !== null
+      ) {
+        // R4-H2: the created-only run just completed its legacy start under
+        // this invocation — the resuming text is the first intake source.
+        inputRef = bootstrapInput.ref;
+        inputVersion = bootstrapInput.version;
+        inputDigest = bootstrapInput.digest;
+      }
+    }
+    // null nextExecutionPoint on an existing run means the chain is completed
+    // or blocked — it must NOT be coerced back to the first point.
+    let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
+    let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
+    // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
+    // bound — hitting it stops the invocation WITHOUT a durable block. The
+    // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
+    // budget (persisted backward jumps) below.
+    const maxDispatches = options.maxDispatches ?? LOOP_CAPABILITY_EXECUTION_POINTS.length * 8;
+    if (
+      typeof maxDispatches !== "number" || !Number.isSafeInteger(maxDispatches) || maxDispatches < 1
+    ) {
+      invalid("maxDispatches must be a positive safe integer");
+    }
+    const maxRegateRounds = options.maxRegateRounds ?? LOOP_CAPABILITY_EXECUTION_POINTS.length;
+    if (
+      typeof maxRegateRounds !== "number" || !Number.isSafeInteger(maxRegateRounds) || maxRegateRounds < 1
+    ) {
+      invalid("maxRegateRounds must be a positive safe integer");
+    }
+    let dispatches = 0;
+    // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
+    // through the existing interrupted-attempt semantics — the recorded input
+    // lineage is reused verbatim, the entry closes the stale claim as
+    // ATTEMPT_INTERRUPTED (retryable) and immediately claims attempt N+1. No
+    // confirmed fact is reinterpreted; concurrent resumers race on the store's
+    // claim CAS and exactly one wins deterministically.
+    if (
+      recovery !== undefined &&
+      recovery.capabilityChainStatus === "RUNNING" &&
+      recovery.lastCapabilityExecution?.status === "started"
+    ) {
+      if (dispatches >= maxDispatches) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: recovery.snapshot.state.identity.runId,
+          final_status: "failed" as const,
+          chain_status: "RUNNING" as const,
+          execution_trace: Object.freeze([]),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
+      dispatches += 1;
+      const active = recovery.lastCapabilityExecution;
+      journalRunId = active!.runId;
+      const executed = await entry.execute({
+        requirementId,
+        capability: active!.capability,
+        executionRole: active!.executionRole,
+        inputArtifactRef: active!.inputArtifactRef,
+        inputArtifactVersion: active!.inputArtifactVersion,
+        inputDigest: active!.inputDigest,
+        outputArtifactVersion: `${active!.attempt + 1}.0.0`,
+        input: {},
+      });
+      recovery = executed.recoveryContext;
+      if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+        while (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+          materializeProducerRevision(
+            runStore,
+            requirementId,
+            recovery.snapshot.state.identity.runId,
+            recovery.pendingRevisionMaterialization.producerExecution,
+            now,
+          );
+          recovery = recoverRunContext(runStore, requirementId);
+        }
+      }
+      if (!executed.execution.success) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: journalRunId ?? identity.runId,
+          final_status: "failed" as const,
+          chain_status: recovery?.capabilityChainStatus ?? "RUNNING",
+          execution_trace: Object.freeze(
+            runStore.listCapabilityExecutions(journalRunId ?? identity.runId).map((event) => Object.freeze({
+              capability: event.capability,
+              executionRole: event.executionRole,
+              agent: event.executorAgent,
+              attempt: event.attempt,
+              status: event.status,
+              gateResult: event.gateResult,
+              outputArtifactRef: event.outputArtifactRef,
+              outputDigest: event.outputDigest,
+            })),
+          ),
+          next_execution_point: recovery?.nextExecutionPoint ?? null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
+      if (executed.producerTerminalEventId !== null) {
+        const produced = runStore.listCapabilityExecutions(journalRunId!)
+          .find((item) => item.executionEventId === executed.producerTerminalEventId);
+        if (produced !== undefined && produced.status === "succeeded") {
+          materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
+        }
+      }
+      recovery = recoverRunContext(runStore, requirementId);
       next = recovery?.nextExecutionPoint ?? null;
-      continue;
+      const cmd = recovery === undefined ? null : deriveDispatchCommand(recovery);
+      inputRef = cmd?.inputArtifactRef ?? "";
+      inputVersion = cmd?.inputArtifactVersion ?? "";
+      inputDigest = cmd?.inputDigest ?? "";
+      firstDispatch = false;
     }
-    if (dispatches >= maxDispatches) {
-      // Safety bound only: stop this invocation honestly WITHOUT persisting
-      // a durable block — plain linear progress resumes on the next call.
-      break;
+
+    // WP4 (H4): a durably blocked run never re-dispatches — only an explicit
+    // release decision (RISK_ACCEPTED / SCOPE_RESET) may clear the block.
+    if ((options.runStore !== undefined || recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined)) {
+      if (recovery?.blockingReasonCode !== null && recovery?.blockingReasonCode !== undefined) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: recovery.snapshot.state.identity.runId,
+          final_status: "failed" as const,
+          chain_status: "BLOCKED" as const,
+          execution_trace: Object.freeze([]),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          completed_at: now(),
+        });
+      }
     }
-    dispatches += 1;
-    // Round 2 close-out B3: the round budget is adjudicated BEFORE any
-    // external work as a single-transaction execution permit. An over-budget
-    // backward wave performs zero agent dispatches and zero revision writes;
-    // the durable block is persisted inside the same permit transaction.
-    if (journalRunId !== null) {
-      const targetPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
-        (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
-      );
-      const permit = runStore.authorizeRegateDispatch(journalRunId, targetPointIndex, maxRegateRounds);
-      if (!permit.allowed) {
+    while (next !== null) {
+      // Round 3 review F2: a concurrent entry may have committed a succeeded
+      // producer since the last recovery recompute — finalize its revision
+      // materialization (zero agent dispatches) before adjudicating a permit.
+      if (recovery !== undefined && recovery.pendingRevisionMaterialization !== null) {
+        materializeProducerRevision(
+          runStore,
+          requirementId,
+          recovery.snapshot.state.identity.runId,
+          recovery.pendingRevisionMaterialization.producerExecution,
+          now,
+        );
         recovery = recoverRunContext(runStore, requirementId);
+        next = recovery?.nextExecutionPoint ?? null;
+        continue;
+      }
+      if (dispatches >= maxDispatches) {
+        // Safety bound only: stop this invocation honestly WITHOUT persisting
+        // a durable block — plain linear progress resumes on the next call.
         break;
       }
-    }
-    if (!firstDispatch && recovery !== undefined) {
-      const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
-        LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      dispatches += 1;
+      // Round 2 close-out B3: the round budget is adjudicated BEFORE any
+      // external work as a single-transaction execution permit. An over-budget
+      // backward wave performs zero agent dispatches and zero revision writes;
+      // the durable block is persisted inside the same permit transaction.
+      if (journalRunId !== null) {
+        const targetPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
           (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
-        ) - 1
-      ];
-      const predecessorState = predecessor === undefined
-        ? undefined
-        : recovery.executionPointStates.find(
-            (state) =>
-              state.capability === predecessor.capability && state.executionRole === predecessor.executionRole,
-          );
-      if (predecessorState !== undefined) {
-        inputRef = predecessorState.effectiveOutputArtifactRef ?? inputRef;
-        inputVersion = predecessorState.effectiveOutputArtifactVersion ?? inputVersion;
-        inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
-      }
-    }
-    const executed = await entry.execute({
-      requirementId,
-      ...(firstDispatch ? { identity } : {}),
-      capability: next.capability,
-      executionRole: next.executionRole,
-      inputArtifactRef: inputRef,
-      inputArtifactVersion: inputVersion,
-      inputDigest,
-      // WP4: the output version is generation-scoped — attempt N of a point
-      // produces semver N.0.0, so a rebuild never collides with a prior
-      // generation's occupied semver.
-      outputArtifactVersion: `${(recovery?.executionPointStates.find(
-        (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
-      )?.lastAttempt ?? 0) + 1}.0.0`,
-      input: { inputArtifactRef: inputRef },
-    });
-    firstDispatch = false;
-    journalRunId = executed.runId;
-    recovery = executed.recoveryContext;
-    if (executed.execution.success !== true) {
-      break;
-    }
-    // WP4: bind the node product as an artifact revision authored by this
-    // succeeded producer execution. Currents are the facts Re-Gate planning
-    // (and finding source binding) consume; upstream chains to the reused or
-    // rebuilt current of the previous node.
-    // Round 3 review F2: the producer is the EXACT terminal event this
-    // dispatch committed (returned by the gateway/entry), never the journal
-    // tail — a concurrent entry could have advanced the tail meanwhile.
-    if (executed.producerTerminalEventId !== null) {
-      const produced = runStore.listCapabilityExecutions(journalRunId)
-        .find((item) => item.executionEventId === executed.producerTerminalEventId);
-      if (
-        produced === undefined || produced.status !== "succeeded" ||
-        produced.capability !== next.capability || produced.executionRole !== next.executionRole
-      ) {
-        throw new LoopRunJournalError(
-          "STORE_CORRUPT",
-          "the dispatched producer terminal event is missing from the run journal",
         );
+        const permit = runStore.authorizeRegateDispatch(journalRunId, targetPointIndex, maxRegateRounds);
+        if (!permit.allowed) {
+          recovery = recoverRunContext(runStore, requirementId);
+          break;
+        }
       }
-      materializeProducerRevision(runStore, requirementId, journalRunId, produced, now);
+      if (!firstDispatch && recovery !== undefined) {
+        const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[
+          LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+            (point) => point.capability === next!.capability && point.executionRole === next!.executionRole,
+          ) - 1
+        ];
+        const predecessorState = predecessor === undefined
+          ? undefined
+          : recovery.executionPointStates.find(
+              (state) =>
+                state.capability === predecessor.capability && state.executionRole === predecessor.executionRole,
+            );
+        if (predecessorState !== undefined) {
+          inputRef = predecessorState.effectiveOutputArtifactRef ?? inputRef;
+          inputVersion = predecessorState.effectiveOutputArtifactVersion ?? inputVersion;
+          inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
+        }
+      }
+      const executed = await entry.execute({
+        requirementId,
+        ...(firstDispatch ? { identity } : {}),
+        capability: next.capability,
+        executionRole: next.executionRole,
+        inputArtifactRef: inputRef,
+        inputArtifactVersion: inputVersion,
+        inputDigest,
+        // WP4: the output version is generation-scoped — attempt N of a point
+        // produces semver N.0.0, so a rebuild never collides with a prior
+        // generation's occupied semver.
+        outputArtifactVersion: `${(recovery?.executionPointStates.find(
+          (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
+        )?.lastAttempt ?? 0) + 1}.0.0`,
+        input: { inputArtifactRef: inputRef },
+      });
+      firstDispatch = false;
+      journalRunId = executed.runId;
+      recovery = executed.recoveryContext;
+      if (executed.execution.success !== true) {
+        break;
+      }
+      // WP4: bind the node product as an artifact revision authored by this
+      // succeeded producer execution. Currents are the facts Re-Gate planning
+      // (and finding source binding) consume; upstream chains to the reused or
+      // rebuilt current of the previous node.
+      // Round 3 review F2: the producer is the EXACT terminal event this
+      // dispatch committed (returned by the gateway/entry), never the journal
+      // tail — a concurrent entry could have advanced the tail meanwhile.
+      if (executed.producerTerminalEventId !== null) {
+        const produced = runStore.listCapabilityExecutions(journalRunId)
+          .find((item) => item.executionEventId === executed.producerTerminalEventId);
+        if (
+          produced === undefined || produced.status !== "succeeded" ||
+          produced.capability !== next.capability || produced.executionRole !== next.executionRole
+        ) {
+          throw new LoopRunJournalError(
+            "STORE_CORRUPT",
+            "the dispatched producer terminal event is missing from the run journal",
+          );
+        }
+        materializeProducerRevision(runStore, requirementId, journalRunId, produced, now);
+      }
+      // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
+      // must reflect the fresh current, not the pre-append projection.
+      recovery = recoverRunContext(runStore, requirementId);
+      if (recovery === undefined) {
+        break;
+      }
+      next = recovery.nextExecutionPoint;
     }
-    // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
-    // must reflect the fresh current, not the pre-append projection.
-    recovery = recoverRunContext(runStore, requirementId);
-    if (recovery === undefined) {
-      break;
-    }
-    next = recovery.nextExecutionPoint;
-  }
 
-  const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
-  let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
-  // WP4 convergence (H2): linear completion is not done. The run finishes
-  // successfully only when the finding gate is ELIGIBLE and the depth
-  // decision is DECIDED; otherwise it blocks honestly.
-  const findingGate = recovery?.findingGate ?? { status: "ELIGIBLE" as const, blockingFindingIds: [] };
-  const decision = recovery?.solutionGateDecision ?? null;
-  const completedOk =
-    chainStatus === "COMPLETED" &&
-    findingGate.status === "ELIGIBLE" &&
-    decision !== null && decision.status === "DECIDED";
-  if (chainStatus === "COMPLETED" && !completedOk) {
-    chainStatus = "BLOCKED";
-  }
-  if (recovery !== undefined && recovery.blockingReasonCode !== null) {
-    // WP4 H4: durable block (e.g., REGATE_ROUND_BUDGET_EXHAUSTED) always
-    // reports BLOCKED regardless of the capability projection.
-    chainStatus = "BLOCKED";
-  }
-  const finalStatus = completedOk ? "success" : "failed";
-  return Object.freeze({
-    requirement_id: requirementId,
-    run_id: journalRunId ?? identity.runId,
-    final_status: finalStatus,
-    chain_status: chainStatus,
-    execution_trace: Object.freeze(events.map((event) => Object.freeze({
-      capability: event.capability,
-      executionRole: event.executionRole,
-      agent: event.executorAgent,
-      attempt: event.attempt,
-      status: event.status,
-      gateResult: event.gateResult,
-      outputArtifactRef: event.outputArtifactRef,
-      outputDigest: event.outputDigest,
-    }))),
-    next_execution_point: recovery?.nextExecutionPoint ?? null,
-    workspace_root: workspaceRoot,
-    journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
-    completed_at: now(),
+    const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
+    let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
+    // WP4 convergence (H2): linear completion is not done. The run finishes
+    // successfully only when the finding gate is ELIGIBLE and the depth
+    // decision is DECIDED; otherwise it blocks honestly.
+    const findingGate = recovery?.findingGate ?? { status: "ELIGIBLE" as const, blockingFindingIds: [] };
+    const decision = recovery?.solutionGateDecision ?? null;
+    const completedOk =
+      chainStatus === "COMPLETED" &&
+      findingGate.status === "ELIGIBLE" &&
+      decision !== null && decision.status === "DECIDED";
+    if (chainStatus === "COMPLETED" && !completedOk) {
+      chainStatus = "BLOCKED";
+    }
+    if (recovery !== undefined && recovery.blockingReasonCode !== null) {
+      // WP4 H4: durable block (e.g., REGATE_ROUND_BUDGET_EXHAUSTED) always
+      // reports BLOCKED regardless of the capability projection.
+      chainStatus = "BLOCKED";
+    }
+    const finalStatus = completedOk ? "success" : "failed";
+    return Object.freeze({
+      requirement_id: requirementId,
+      run_id: journalRunId ?? identity.runId,
+      final_status: finalStatus,
+      chain_status: chainStatus,
+      execution_trace: Object.freeze(events.map((event) => Object.freeze({
+        capability: event.capability,
+        executionRole: event.executionRole,
+        agent: event.executorAgent,
+        attempt: event.attempt,
+        status: event.status,
+        gateResult: event.gateResult,
+        outputArtifactRef: event.outputArtifactRef,
+        outputDigest: event.outputDigest,
+      }))),
+      next_execution_point: recovery?.nextExecutionPoint ?? null,
+      workspace_root: workspaceRoot,
+      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+      completed_at: now(),
+    });
   });
 }

@@ -29,6 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+
 import { materializeProducerRevision } from "../runtime";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -170,8 +171,10 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
   const repo = join(root, "repo");
   mkdirSync(repo);
   const id = identity(root);
-  const runStore = new LoopRunStore(join(root, "journal.db"));
+  // C02-WP5 (clause 0.1.4): supported entries require the run journal bound
+  // to the same artifact store instance they read through.
   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
+  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
   runStore.init();
   artifactStore.init();
   const source = artifactStore.put("requirement_summary", "interruption recovery Requirement source");
@@ -217,7 +220,10 @@ async function completedIntakeFixture(prefix: string): Promise<Readonly<{
   });
 }
 
-function techRequest(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>) {
+function techRequest(
+  fixture: Awaited<ReturnType<typeof completedIntakeFixture>>,
+  attempt = 1,
+) {
   return Object.freeze({
     requirementId: fixture.id.requirementId,
     capability: "solution-design" as const,
@@ -225,7 +231,9 @@ function techRequest(fixture: Awaited<ReturnType<typeof completedIntakeFixture>>
     inputArtifactRef: fixture.techInput.artifactRef,
     inputArtifactVersion: fixture.techInput.version,
     inputDigest: fixture.techInput.digest,
-    outputArtifactVersion: "1.0.0",
+    // C02-WP5: the output version is attempt-scoped (N.0.0); the entry
+    // enforces the recovered next-attempt number.
+    outputArtifactVersion: `${attempt}.0.0`,
     input: { requirementSummaryRef: fixture.techInput.artifactRef },
   });
 }
@@ -534,11 +542,11 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(gateRoot, "repo"));
     const gateIdentity = identity(gateRoot);
-    const gateStore = new LoopRunStore(join(gateRoot, "journal.db"));
     const gateArtifacts = new LoopArtifactStore({
       controlRoot: gateIdentity.controlRoot,
       repositoryPath: gateIdentity.repositoryPath,
     });
+    const gateStore = new LoopRunStore(join(gateRoot, "journal.db"), { artifactStore: gateArtifacts });
     gateStore.init();
     gateArtifacts.init();
     gateStore.createRun(gateIdentity);
@@ -650,11 +658,11 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(chainRoot, "repo"));
     const chainIdentity = identity(chainRoot);
-    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"));
     const chainArtifacts = new LoopArtifactStore({
       controlRoot: chainIdentity.controlRoot,
       repositoryPath: chainIdentity.repositoryPath,
     });
+    const chainStore = new LoopRunStore(join(chainRoot, "journal.db"), { artifactStore: chainArtifacts });
     chainStore.init();
     chainArtifacts.init();
     // v2: the formal_verdict slot is bound to a second agent so the scan and
@@ -666,8 +674,16 @@ async function main(): Promise<void> {
       "binding-hermes-solution-gate-formal_verdict",
     ).registry;
     const stubNow = (): string => TS;
-    const chainGateway = {
-      execute: async (request: import("../execution/types").ExecutionRequest) => {
+    const chainTracing = {
+      runStore: chainStore,
+      artifactStore: chainArtifacts,
+      bindingRegistry: chainRegistry,
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+      now: () => TS,
+    };
+    class ChainStubGateway extends ExecutionGateway {
+      constructor() { super({ capabilityTracing: chainTracing }); }
+      override async execute(request: import("../execution/types").ExecutionRequest) {
         const context = request.loopExecution as Record<string, unknown>;
         const runId = String(context.runId);
         const capability = request.type as NodeCapabilityId;
@@ -772,8 +788,9 @@ async function main(): Promise<void> {
           output: Object.freeze({ result: "capability_completed" }),
           artifacts: Object.freeze([]),
         });
-      },
-    } as unknown as ExecutionGateway;
+      }
+    }
+    const chainGateway = new ChainStubGateway();
     const chainEntry = new LoopCapabilityEntry({
       runStore: chainStore,
       artifactStore: chainArtifacts,
@@ -933,7 +950,7 @@ async function main(): Promise<void> {
       claimedFixture.runStore.listCapabilityExecutions(claimedFixture.id.runId).length === 3,
       "mismatched recovery input leaves the active claim unchanged",
     );
-    const resumed = await recoveryEntry(claimedFixture).execute(techRequest(claimedFixture));
+    const resumed = await recoveryEntry(claimedFixture).execute(techRequest(claimedFixture, 2));
     ok(resumed.attempt === 2 && resumed.execution.success === true, "claim-persisted interruption resumes as attempt two");
     const events = claimedFixture.runStore.listCapabilityExecutions(claimedFixture.id.runId);
     const interrupted = events[3]!;
@@ -983,7 +1000,7 @@ async function main(): Promise<void> {
       recoverRunContext(dispatchFixture.runStore, dispatchFixture.id.requirementId)?.capabilityChainStatus === "RUNNING",
       "dispatch-in-progress claim is durable before the runner returns",
     );
-    const resumed = await recoveryEntry(dispatchFixture).execute(techRequest(dispatchFixture));
+    const resumed = await recoveryEntry(dispatchFixture).execute(techRequest(dispatchFixture, 2));
     ok(resumed.attempt === 2 && resumed.execution.success === true, "another entry closes and retries an in-dispatch interruption");
     releaseDispatch();
     await rejectsCode(
@@ -1017,7 +1034,7 @@ async function main(): Promise<void> {
     terminalFixture.runStore.appendCapabilityExecution = originalAppend;
     const stranded = recoverRunContext(terminalFixture.runStore, terminalFixture.id.requirementId)!;
     ok(stranded.capabilityChainStatus === "RUNNING" && stranded.nextCapability === null, "terminal-write interruption is recovered honestly as active");
-    const resumed = await recoveryEntry(terminalFixture).execute(techRequest(terminalFixture));
+    const resumed = await recoveryEntry(terminalFixture).execute(techRequest(terminalFixture, 2));
     ok(resumed.attempt === 2 && resumed.execution.success === true, "new entry recovers after terminal write loss");
     const events = terminalFixture.runStore.listCapabilityExecutions(terminalFixture.id.runId);
     ok(events.length === 6 && events[3]?.errorCode === "ATTEMPT_INTERRUPTED", "terminal-write recovery closes the abandoned attempt before retry");
@@ -1029,8 +1046,8 @@ async function main(): Promise<void> {
   const repo = join(root, "repo");
   mkdirSync(repo);
   const id = identity(root);
-  const runStore = new LoopRunStore(join(root, "journal.db"));
   const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: repo });
+  const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
   runStore.init();
   artifactStore.init();
   try {

@@ -23,6 +23,7 @@ import {
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
+import { ExecutionGateway } from "../execution/gateway";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -52,11 +53,11 @@ async function main(): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "loop-wp35c-cutover-"));
   try {
     mkdirSync(join(root, "repo"), { recursive: true });
-    const runStore = new LoopRunStore(join(root, "journal.db"));
     const artifactStore = new LoopArtifactStore({
       controlRoot: join(root, "control"),
       repositoryPath: join(root, "repo"),
     });
+    const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
 
@@ -69,12 +70,21 @@ async function main(): Promise<void> {
       bindingRegistry: createRuntimeBindingRegistry(),
       now: () => new Date().toISOString(),
     });
-    const spyGateway: RuntimeCapabilityGateway = {
-      execute: async (request) => {
+    const spyTracing = {
+      runStore,
+      artifactStore,
+      bindingRegistry: createRuntimeBindingRegistry(),
+      executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+      now: () => new Date().toISOString(),
+    };
+    class SpyGateway extends ExecutionGateway {
+      constructor() { super({ capabilityTracing: spyTracing }); }
+      override async execute(request: import("../execution/types").ExecutionRequest) {
         dispatched.push(request);
         return innerGateway.execute(request);
-      },
-    };
+      }
+    }
+    const spyGateway = new SpyGateway();
 
     const result = await run("build a user registration form with email validation", {
       requirementId: "REQ-WP35C-001",
@@ -216,11 +226,11 @@ async function main(): Promise<void> {
     const root2 = mkdtempSync(join(tmpdir(), "loop-wp35c-legacy-"));
     try {
       mkdirSync(join(root2, "repo"), { recursive: true });
-      const runStore = new LoopRunStore(join(root2, "journal.db"));
       const artifactStore = new LoopArtifactStore({
         controlRoot: join(root2, "control"),
         repositoryPath: join(root2, "repo"),
       });
+      const runStore = new LoopRunStore(join(root2, "journal.db"), { artifactStore });
       runStore.init();
       artifactStore.init();
       const gateway = createDeterministicCapabilityGateway({

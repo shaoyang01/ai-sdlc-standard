@@ -213,8 +213,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(replacementRoot, "repo"));
     const id = identity(replacementRoot, "REPLACEMENT");
-    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(replacementRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 replacement source");
@@ -324,8 +324,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(failureRoot, "repo"));
     const id = identity(failureRoot, "TIMEOUT");
-    const runStore = new LoopRunStore(join(failureRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(failureRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 timeout source");
@@ -366,7 +366,8 @@ async function main(): Promise<void> {
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
-      outputArtifactVersion: "1.0.0",
+      // C02-WP5: the retried attempt's output version is attempt-scoped.
+      outputArtifactVersion: "2.0.0",
       input: { requirement: "timeout must be recoverable" },
     });
     equal(retry.attempt, 2, "timeout recovery starts a fresh attempt");
@@ -382,8 +383,8 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(outputRoot, "repo"));
     const id = identity(outputRoot, "OUTPUT");
-    const runStore = new LoopRunStore(join(outputRoot, "journal.db"));
     const artifactStore = new LoopArtifactStore({ controlRoot: id.controlRoot, repositoryPath: id.repositoryPath });
+    const runStore = new LoopRunStore(join(outputRoot, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 output source");
@@ -427,7 +428,8 @@ async function main(): Promise<void> {
       inputArtifactRef: source.artifactRef,
       inputArtifactVersion: "1.0.0",
       inputDigest: source.digest,
-      outputArtifactVersion: "1.0.0",
+      // C02-WP5: the retried attempt's output version is attempt-scoped.
+      outputArtifactVersion: "2.0.0",
       input: { requirement: "unqualified output must fail" },
     });
     equal(retry.attempt, 2, "unqualified output retry is a new attempt");

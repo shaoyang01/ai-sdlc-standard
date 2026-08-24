@@ -19,6 +19,7 @@
 | --- | --- | --- | --- |
 | [Decision-001～045](../AI-SDLC-Decision-Records.md) | Historical～2026-08-22 | Historical volume | 既有 Decision 历史卷；Decision-044 为单轨重基线，Decision-045 为 Skill 收敛映射。 |
 | [Decision-046](Decision-046-decision-record-modularization.md) | 2026-08-22 | Accepted | Decision Record 模块化与历史卷冻结。 |
+| [Decision-047](Decision-047-c02-wp5-cross-entry-recovery-authorization.md) | 2026-08-24 | Accepted | 授权实施 C02-WP5 跨入口恢复与生产入口接线（Q1/Q2/Q3 均按推荐方案；H3 归属 C03-B 不变）。 |
 
 ## 新增流程
 

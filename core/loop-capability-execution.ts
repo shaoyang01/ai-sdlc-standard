@@ -409,7 +409,11 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
 // terminal event may not substitute a different Finding Ledger than the one
 // its started event claimed, so the binding holds across the attempt's whole
 // lifecycle — start, terminal and every retry — not just the start instant.
-function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityExecutionEvent): boolean {
+//
+// C02-WP5 export: the store's terminal-write CAS reuses this exact identity
+// so "the terminal closes the still-tail claim" is enforced with the same
+// comparison the chain validator uses.
+export function sameAttemptIdentity(a: LoopCapabilityExecutionEvent, b: LoopCapabilityExecutionEvent): boolean {
   return a.runId === b.runId && a.capability === b.capability && a.executionRole === b.executionRole &&
     a.nodeId === b.nodeId &&
     a.attempt === b.attempt && a.bindingId === b.bindingId && a.bindingVersion === b.bindingVersion &&

@@ -37,10 +37,13 @@ import {
 import {
   canonicalizeLoopCapabilityExecutionEvent,
   findPendingRevisionProducerExecution,
+  sameAttemptIdentity,
   validateLoopCapabilityExecutionChain,
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
 } from "./loop-capability-execution";
+import { validateBootstrapSourceProvenance } from "./loop-run-state";
+import { deriveDispatchCommand, recoverRunContext } from "./loop-recovery";
 import {
   planRegateFromFacts,
   type CurrentRevisionFacts,
@@ -90,6 +93,28 @@ import {
 } from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
 import { LOOP_CAPABILITY_EXECUTION_POINTS, NODE_CAPABILITY_IDS } from "../loop/types";
+
+// C02-WP5 (clause 0.1.4/0.1.6): construction-time blob-binding registry.
+// Module-level so the same-instance determination is non-virtual (no
+// subclass override or monkey-patched member can forge it). The WeakMap is
+// PRIVATE to this module: the ONLY write path is the constructor below when
+// `LoopRunStoreOptions.artifactStore` is provided — no registrar is exported,
+// so an unbound store can never be presented to a supported entry as bound.
+const LOOP_RUN_STORE_ARTIFACT_BINDINGS = new WeakMap<LoopRunStore, LoopArtifactStore>();
+
+/**
+ * Non-virtual identity check for the C02-WP2 blob binding: true only when
+ * `runStore` was constructed with `LoopRunOptions.artifactStore` set to
+ * exactly `artifactStore`. Supported entries use this instead of any
+ * instance method; there is no public way to alter the binding after
+ * construction.
+ */
+export function isLoopRunStoreBoundToArtifactStore(
+  runStore: LoopRunStore,
+  artifactStore: LoopArtifactStore,
+): boolean {
+  return LOOP_RUN_STORE_ARTIFACT_BINDINGS.get(runStore) === artifactStore;
+}
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
@@ -1025,7 +1050,18 @@ export class LoopRunStore {
         throw new LoopRunJournalError("INVALID_INPUT", "artifactStore must be a LoopArtifactStore instance");
       }
       this.artifactStore = options.artifactStore;
+      // C02-WP5 (clause 0.1.4): the ONLY registration site — inside the
+      // owning constructor, through this module's private WeakMap.
+      LOOP_RUN_STORE_ARTIFACT_BINDINGS.set(this, options.artifactStore);
     }
+  }
+
+  /**
+   * C02-WP5 B1-1: the journal file path, exposed read-only so the runtime
+   * can scope its cross-process resume lease to exactly this database.
+   */
+  get databaseFilePath(): string {
+    return this.dbPath;
   }
 
   private connection(): Database.Database {
@@ -1511,7 +1547,86 @@ export class LoopRunStore {
     validateLoopRunIdentity(identity);
     const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
     try {
+      const snapshot = db.transaction((): LoopRunSnapshot =>
+        this.createRunInTransaction(db, identity),
+      ).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      return this.translateWriterError(error, () => {
+        return this.reclassifyCreateRunConstraint(db, identity.runId, identitySha);
+      });
+    }
+  }
+
+  /**
+   * C02-WP5 B1: atomic durable bootstrap for a FRESH requirement run — run
+   * creation, its run_started event and the ORIGINAL normalized Requirement
+   * source provenance land in ONE immediate transaction. A crash can no
+   * longer leave a created-but-unstarted run or a running run whose origin
+   * source triple is unpinned: either nothing is durable (fresh retry) or
+   * the authority carries its confirmed-facts anchor. The provenance rides
+   * on the run_started event's nullable input fields (v7 schema, validation
+   * already permits them); there is deliberately no second authority.
+   */
+  bootstrapRunWithSource(
+    identity: LoopRunIdentity,
+    source: { readonly artifactRef: string; readonly digest: string },
+  ): LoopRunState {
+    const db = this.connection();
+    validateLoopRunIdentity(identity);
+    // B1-2: the SAME closed validator the entry and recovery consume — no
+    // writer/reader split is possible.
+    validateBootstrapSourceProvenance(source);
+    try {
       const snapshot = db.transaction((): LoopRunSnapshot => {
+        const snap = this.createRunInTransaction(db, identity);
+        if (snap.state.status === "created") {
+          const started: LoopRunEvent = Object.freeze({
+            eventId: `${identity.runId}:2:run_started`,
+            runId: identity.runId,
+            sequence: 2,
+            kind: "run_started",
+            stage: null,
+            attempt: 0,
+            createdAt: identity.createdAt,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: null,
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: source.artifactRef,
+            inputDigest: source.digest,
+          });
+          this.appendEvent(started);
+          return this.snapshotInTransaction(db, identity.runId);
+        }
+        // Already bootstrapped (idempotent replay): the recorded provenance
+        // must match exactly, otherwise this is an impostor resume.
+        const startedEvent = snap.events.find((event) => event.kind === "run_started");
+        if (
+          startedEvent === undefined ||
+          startedEvent.inputArtifactRef !== source.artifactRef ||
+          startedEvent.inputDigest !== source.digest
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "bootstrap source provenance does not match the durable run authority",
+          );
+        }
+        return snap;
+      }).immediate() as LoopRunSnapshot;
+      return snapshot.state;
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      storageFailure();
+    }
+  }
+
+  private createRunInTransaction(db: Database.Database, identity: LoopRunIdentity): LoopRunSnapshot {
+    const identitySha = sha256Hex(canonicalizeLoopRunIdentity(identity));
+    {
         // ── corruption-first: read full verified snapshot first ──
         const existingSnapshot = this.readRunSnapshotInTransaction(db, identity.runId);
         if (existingSnapshot !== undefined) {
@@ -1564,12 +1679,52 @@ export class LoopRunStore {
         }
         this.insertEventRow(db, eventRow);
         return this.snapshotInTransaction(db, identity.runId);
+    }
+  }
+
+  /**
+   * C02-WP5 R4-H2: complete the created->running transition for a LEGACY or
+   * externally pre-created run whose run_started event has not landed yet.
+   * Guarded and idempotent: running runs pass through unchanged; the appended
+   * start event carries NO provenance (all-null), matching the historical
+   * shape — confirmed-facts anchoring then follows the first intake claim.
+   */
+  ensureRunStarted(runId: string): LoopRunState {
+    const db = this.connection();
+    try {
+      const snapshot = db.transaction((): LoopRunSnapshot => {
+        const snap = this.readRunSnapshotInTransaction(db, runId);
+        if (snap === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+        }
+        if (snap.state.status === "created") {
+          const started: LoopRunEvent = Object.freeze({
+            eventId: `${runId}:${snap.state.lastSequence + 1}:run_started`,
+            runId,
+            sequence: snap.state.lastSequence + 1,
+            kind: "run_started",
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: null,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: null,
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: null,
+          });
+          this.appendEvent(started);
+          return this.snapshotInTransaction(db, runId);
+        }
+        return snap;
       }).immediate() as LoopRunSnapshot;
       return snapshot.state;
     } catch (error) {
-      return this.translateWriterError(error, () => {
-        return this.reclassifyCreateRunConstraint(db, identity.runId, identitySha);
-      });
+      if (error instanceof LoopRunJournalError) throw error;
+      storageFailure();
     }
   }
 
@@ -1732,17 +1887,36 @@ export class LoopRunStore {
     validateLoopCapabilityExecutionEvent(event);
     const row = capabilityExecutionToRow(event);
     try {
+      return db.transaction((): CapabilityExecutionAppendResult =>
+        this.appendCapabilityExecutionInTransaction(db, event, row),
+      ).immediate() as CapabilityExecutionAppendResult;
+    } catch (error) {
+      return this.reclassifyCapabilityAppendError(db, event, error);
+    }
+  }
+
+  /**
+   * C02-WP5 F1: atomic dispatch claim for STARTED events only. Inside ONE
+   * immediate transaction this method assembles the full recovery authority
+   * (snapshot, executions, findings, revisions, current pointers, change
+   * chain — one consistent read set), derives the unique next dispatch
+   * command from it and rejects the claim unless the event matches that
+   * command exactly. A stale command — one whose target node, input triple
+   * or attempt-scoped output version was invalidated between an earlier
+   * recovery and this claim — can no longer open an attempt, so the
+   * terminal-write CAS never has to salvage a wrong claim. Exact replay of
+   * an identical started event stays an idempotent no-op.
+   */
+  claimNextCapabilityExecution(event: LoopCapabilityExecutionEvent): CapabilityExecutionAppendResult {
+    if (event.status !== "started") {
+      throw new LoopRunJournalError("INVALID_INPUT", "claim accepts started events only");
+    }
+    const db = this.connection();
+    validateLoopCapabilityExecutionEvent(event);
+    try {
       return db.transaction((): CapabilityExecutionAppendResult => {
-        const snapshot = this.readRunSnapshotInTransaction(db, event.runId);
-        if (snapshot === undefined) {
-          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
-        }
-        if (snapshot.state.status !== "running") {
-          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires a running run");
-        }
-        if (snapshot.state.currentStage !== null) {
-          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires no active delivery stage");
-        }
+        // Idempotent exact replay first: a replayed started event must stay a
+        // no-op even though the active claim makes the derived command null.
         const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
         const existing = current.find((item) => item.executionEventId === event.executionEventId);
         if (existing !== undefined) {
@@ -1754,95 +1928,217 @@ export class LoopRunStore {
           }
           throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
         }
-        if (current.some((item) => item.sequence === event.sequence)) {
-          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+        // Single-transaction recovery authority.
+        const snapshot = this.readRunSnapshotInTransaction(db, event.runId);
+        if (snapshot === undefined) {
+          throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
         }
-        // Re-review F2-1: the terminal→revision window is a TRANSACTION
-        // invariant of every started append, not merely a permit rule. While
-        // a succeeded producer's node revision has not landed, no client —
-        // runtime, supported entry, or bare gateway — may open another
-        // capability attempt: the same-transaction check below makes the
-        // bypass impossible instead of delegating it to callers.
-        if (event.status === "started") {
-          const pendingProducer = findPendingRevisionProducerExecution(
-            current,
-            this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId),
+        const requirementId = snapshot.state.identity.requirementId;
+        const recovery = recoverRunContext(this, requirementId);
+        if (
+          recovery === undefined ||
+          recovery.snapshot.state.identity.runId !== event.runId
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "stale claim: the run is no longer the requirement's latest authority",
           );
-          if (pendingProducer !== null) {
-            throw new LoopRunJournalError(
-              "ILLEGAL_TRANSITION",
-              "a pending revision producer holds the dispatch window closed",
-            );
-          }
         }
-        try {
-          const regateContext = this.regateChainContextInTransaction(db, event.runId);
-          // WP4 Round 1 H1 fix: append-time authorization is ONLY the live
-          // pending Re-Gate target derived in this transaction. Historical
-          // findings never authorize new writes — resolved/accepted findings
-          // must not let a stale scope re-trigger downstream rebuilds.
-          //
-          // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
-          // live pending target derived above in this transaction.
-          validateLoopCapabilityExecutionChain([...current, event], event.runId, {
-            allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
-            historicalFindings: regateContext.historicalFindings,
-            feedbackChange: regateContext.feedbackChange,
-          });
-        } catch (error) {
-          if (error instanceof LoopRunJournalError) {
-            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
-          }
-          throw error;
+        const command = deriveDispatchCommand(recovery);
+        if (command === null) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "recovery authority derives no dispatchable action for this claim",
+          );
         }
-        // v4 (re-review F1): the decision delta is physically bound like
-        // revision outputs and finding evidence — the blob must exist in the
-        // artifact store with a matching digest before the verdict lands.
-        // Error mapping matches verifyRevisionBlob/verifyFindingEvidenceBlob:
-        // missing or digest-drifted blobs reject the transition, corrupt blob
-        // content fails closed as STORE_CORRUPT, and only genuine I/O faults
-        // surface as STORE_FAILURE.
-        if (event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null) {
-          this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "append");
+        if (command.capability !== event.capability || command.executionRole !== event.executionRole) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "claim does not match the unique next action of the recovery authority",
+          );
         }
-        this.insertCapabilityExecutionRow(db, row);
-        return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
+        // Started events persist null result fields, so the attempt NUMBER
+        // is the claim-time comparable form of the attempt-scoped output.
+        if (command.attempt !== event.attempt) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "claim attempt does not match the recovered next attempt",
+          );
+        }
+        if (
+          command.inputArtifactRef !== null && (
+            command.inputArtifactRef !== event.inputArtifactRef ||
+            command.inputArtifactVersion !== event.inputArtifactVersion ||
+            command.inputDigest !== event.inputDigest
+          )
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "claim input does not match the recovered dispatch command",
+          );
+        }
+        return this.appendCapabilityExecutionInTransaction(
+          db,
+          event,
+          capabilityExecutionToRow(event),
+        );
       }).immediate() as CapabilityExecutionAppendResult;
     } catch (error) {
-      if (error instanceof LoopRunJournalError) throw error;
-      const code = sqliteErrorCode(error);
-      if (isBusyCode(code)) busy();
-      if (isConstraintCode(code)) {
-        try {
-          const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
-          const existing = current.find((item) => item.executionEventId === event.executionEventId);
-          if (
-            existing !== undefined &&
-            canonicalizeLoopCapabilityExecutionEvent(existing) === canonicalizeLoopCapabilityExecutionEvent(event)
-          ) {
-            return Object.freeze({ event: existing, appended: false });
-          }
-          if (existing !== undefined) {
-            throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
-          }
-          if (current.some((item) => item.sequence === event.sequence)) {
-            throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
-          }
-        } catch (reclassifyError) {
-          if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
-          storageFailure();
-        }
-      }
-      storageFailure();
+      return this.reclassifyCapabilityAppendError(db, event, error);
     }
   }
 
   /**
-   * Atomically close the exact active capability claim after a previous
-   * process disappeared before recording its terminal event. The terminal
-   * event copies the persisted started snapshot; callers cannot substitute a
-   * binding, executor, capability, attempt or input lineage while recovering.
+   * C02-WP5 F1: run a read function against ONE consistent transaction so a
+   * recovery projection can never be assembled from pre- and post-commit
+   * fragments of concurrent writers.
    */
+  readConsistent<T>(fn: () => T): T {
+    return this.connection().transaction(fn).immediate() as T;
+  }
+
+  private reclassifyCapabilityAppendError(
+    db: Database.Database,
+    event: LoopCapabilityExecutionEvent,
+    error: unknown,
+  ): CapabilityExecutionAppendResult {
+    if (error instanceof LoopRunJournalError) throw error;
+    const code = sqliteErrorCode(error);
+    if (isBusyCode(code)) busy();
+    if (isConstraintCode(code)) {
+      try {
+        const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
+        const existing = current.find((item) => item.executionEventId === event.executionEventId);
+        if (
+          existing !== undefined &&
+          canonicalizeLoopCapabilityExecutionEvent(existing) === canonicalizeLoopCapabilityExecutionEvent(event)
+        ) {
+          return Object.freeze({ event: existing, appended: false });
+        }
+        if (existing !== undefined) {
+          throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
+        }
+        if (current.some((item) => item.sequence === event.sequence)) {
+          throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+        }
+      } catch (reclassifyError) {
+        if (reclassifyError instanceof LoopRunJournalError) throw reclassifyError;
+        storageFailure();
+      }
+    }
+    storageFailure();
+  }
+
+  /**
+   * In-transaction body shared by appendCapabilityExecution and
+   * claimNextCapabilityExecution: run/state checks, idempotent replay,
+   * sequence-conflict detection, the F2-1 pending-revision window for
+   * started appends, the WP5 terminal-write CAS for terminal events, live
+   * Re-Gate authorization via chain validation, decision-delta blob binding
+   * and the final insert.
+   */
+  private appendCapabilityExecutionInTransaction(
+    db: Database.Database,
+    event: LoopCapabilityExecutionEvent,
+    row: CapabilityExecutionRow,
+  ): CapabilityExecutionAppendResult {
+    const snapshot = this.readRunSnapshotInTransaction(db, event.runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("RUN_NOT_FOUND", "run does not exist");
+    }
+    if (snapshot.state.status !== "running") {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires a running run");
+    }
+    if (snapshot.state.currentStage !== null) {
+      throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution requires no active delivery stage");
+    }
+    const current = this.readCapabilityExecutionsInTransaction(db, event.runId);
+    const existing = current.find((item) => item.executionEventId === event.executionEventId);
+    if (existing !== undefined) {
+      if (
+        canonicalizeLoopCapabilityExecutionEvent(existing) ===
+        canonicalizeLoopCapabilityExecutionEvent(event)
+      ) {
+        return Object.freeze({ event: existing, appended: false });
+      }
+      throw new LoopRunJournalError("EVENT_ID_CONFLICT", "capability execution event id already exists");
+    }
+    if (current.some((item) => item.sequence === event.sequence)) {
+      throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+    }
+    // Re-review F2-1: the terminal→revision window is a TRANSACTION
+    // invariant of every started append, not merely a permit rule. While
+    // a succeeded producer's node revision has not landed, no client —
+    // runtime, supported entry, or bare gateway — may open another
+    // capability attempt: the same-transaction check below makes the
+    // bypass impossible instead of delegating it to callers.
+    if (event.status === "started") {
+      const pendingProducer = findPendingRevisionProducerExecution(
+        current,
+        this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId),
+      );
+      if (pendingProducer !== null) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "a pending revision producer holds the dispatch window closed",
+        );
+      }
+    }
+    // C02-WP5 terminal-write CAS: a terminal event may only close a claim
+    // that is STILL the journal tail. Anything that landed after the
+    // started event — an interrupt by another entry, a later attempt, any
+    // interloper — means this result is late; promoting it could elevate
+    // a stale-generation product over the current authority. The chain
+    // validator would reject most shapes anyway; this explicit
+    // same-transaction check names the invariant and keeps it enforced
+    // independently of future validator drift.
+    if (event.status !== "started") {
+      const tail = current[current.length - 1];
+      if (
+        tail === undefined || tail.status !== "started" ||
+        !sameAttemptIdentity(tail, event)
+      ) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "a terminal capability event may only close the active tail claim",
+        );
+      }
+    }
+    try {
+      const regateContext = this.regateChainContextInTransaction(db, event.runId);
+      // WP4 Round 1 H1 fix: append-time authorization is ONLY the live
+      // pending Re-Gate target derived in this transaction. Historical
+      // findings never authorize new writes — resolved/accepted findings
+      // must not let a stale scope re-trigger downstream rebuilds.
+      //
+      // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
+      // live pending target derived above in this transaction.
+      validateLoopCapabilityExecutionChain([...current, event], event.runId, {
+        allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
+        historicalFindings: regateContext.historicalFindings,
+        feedbackChange: regateContext.feedbackChange,
+      });
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) {
+        throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
+      }
+      throw error;
+    }
+    // v4 (re-review F1): the decision delta is physically bound like
+    // revision outputs and finding evidence — the blob must exist in the
+    // artifact store with a matching digest before the verdict lands.
+    // Error mapping matches verifyRevisionBlob/verifyFindingEvidenceBlob:
+    // missing or digest-drifted blobs reject the transition, corrupt blob
+    // content fails closed as STORE_CORRUPT, and only genuine I/O faults
+    // surface as STORE_FAILURE.
+    if (event.decisionDeltaRef !== null && event.decisionDeltaDigest !== null) {
+      this.verifyDecisionDeltaBlob(event.decisionDeltaRef, event.decisionDeltaDigest, "append");
+    }
+    this.insertCapabilityExecutionRow(db, row);
+    return Object.freeze({ event: Object.freeze({ ...event }), appended: true });
+  }
+
+
   interruptCapabilityExecution(
     runId: string,
     expectedStartedEventId: string,

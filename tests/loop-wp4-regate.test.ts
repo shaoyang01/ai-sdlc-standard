@@ -30,6 +30,7 @@ import {
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
+import { ExecutionGateway } from "../execution/gateway";
 import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
@@ -52,6 +53,43 @@ let passed = 0;
 function ok(condition: unknown, message: string): asserts condition {
   assert.ok(condition, message);
   passed += 1;
+}
+
+
+// C02-WP5 F3: scripted gateways are real ExecutionGateway subclasses — the
+// base constructor registers their durable tracing through the gateway
+// module's private registry; there is no out-of-module registrar anymore.
+function scriptedGateway(o: {
+  runStore: InstanceType<typeof LoopRunStore>;
+  artifactStore: InstanceType<typeof LoopArtifactStore>;
+  execute: (
+    request: import("../execution/types").ExecutionRequest,
+    inner: RuntimeCapabilityGateway,
+  ) => Promise<import("../execution/types").ExecutionResult>;
+}): ExecutionGateway {
+  const inner = createDeterministicCapabilityGateway({
+    runStore: o.runStore,
+    artifactStore: o.artifactStore,
+    bindingRegistry: createRuntimeBindingRegistry(),
+    now: () => new Date().toISOString(),
+  });
+  class Scripted extends ExecutionGateway {
+    constructor() {
+      super({
+        capabilityTracing: {
+          runStore: o.runStore,
+          artifactStore: o.artifactStore,
+          bindingRegistry: createRuntimeBindingRegistry(),
+          executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
+          now: () => new Date().toISOString(),
+        },
+      });
+    }
+    override async execute(request: import("../execution/types").ExecutionRequest) {
+      return o.execute(request, inner);
+    }
+  }
+  return new Scripted();
 }
 
 interface TestEnv {
@@ -77,21 +115,17 @@ function makeEnv(): TestEnv {
   artifactStore.init();
   const bindingRegistry = createRuntimeBindingRegistry();
   const dispatchOrder: Array<{ capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }> = [];
-  const inner = createDeterministicCapabilityGateway({
+  const gateway = scriptedGateway({
     runStore,
     artifactStore,
-    bindingRegistry,
-    now: () => new Date().toISOString(),
-  });
-  const gateway: RuntimeCapabilityGateway = {
-    execute: async (request) => {
+    execute: async (request, innerGateway) => {
       dispatchOrder.push({
         capability: request.type as NodeCapabilityId,
         executionRole: request.loopExecution!.executionRole as CapabilityExecutionRole,
       });
-      return inner.execute(request);
+      return innerGateway.execute(request);
     },
-  };
+  });
   const entry = new LoopCapabilityEntry({ runStore, artifactStore, bindingRegistry, gateway });
   return { root, runStore, artifactStore, gateway, entry, dispatchOrder };
 }
@@ -645,14 +679,10 @@ async function main(): Promise<void> {
     const now = (): string => new Date().toISOString();
     // Wrapper: every round uses the deterministic shadow gateway except the
     // formal_verdict round, which fails closed with a rejection code.
-    const inner = createDeterministicCapabilityGateway({
+    const failingGateway = scriptedGateway({
       runStore,
       artifactStore,
-      bindingRegistry,
-      now,
-    });
-    const failingGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+      execute: async (request, inner) => {
         const context = request.loopExecution!;
         const isVerdict =
           request.type === "solution-gate" &&
@@ -730,7 +760,7 @@ async function main(): Promise<void> {
           artifacts: Object.freeze([]),
         });
       },
-    };
+    });
     const result = await run("build refund workflow", {
       requirementId: "REQ-WP4-W5",
       runStore,
@@ -769,15 +799,11 @@ async function main(): Promise<void> {
     // Wrapper: every round uses the deterministic shadow gateway except the
     // formal_verdict round, which succeeds with a PASS_WITH_RISK verdict and
     // materializes its own decision scope.
-    const inner = createDeterministicCapabilityGateway({
+    let riskScopeCounter = 0;
+    const riskGateway = scriptedGateway({
       runStore,
       artifactStore,
-      bindingRegistry,
-      now,
-    });
-    let riskScopeCounter = 0;
-    const riskGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+      execute: async (request, inner) => {
         const context = request.loopExecution!;
         const isVerdict =
           request.type === "solution-gate" &&
@@ -872,7 +898,7 @@ async function main(): Promise<void> {
           capabilityTerminalEventId: `${runId}:capability:${sequence + 1}:succeeded`,
         });
       },
-    };
+    });
 
     const driveRiskChain = async (rid: string) => {
       const result = await run("small fix", { requirementId: rid, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
@@ -990,9 +1016,9 @@ async function main(): Promise<void> {
     }
     ok(rejectedForgedOption, "forged skill runtime option rejected");
 
-    // A forged skill on a Re-Gate restart dispatch is metadata-inert: the
-    // authorized generation restart proceeds and the next action is the
-    // canonical successor (gate scan), unchanged by the skill field.
+    // C02-WP5 skill-isolation carryover: the canonical entry now REJECTS
+    // skill metadata fail-closed before the gateway (no fail-open on the
+    // supported entry; legacy non-C02 requests keep their own path).
     const requirementId = "REQ-WP4-W6-ENTRY";
     const first = await run("small fix", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     // Round 2 H2: the restart must be live-authorized, so the finding has to
@@ -1013,6 +1039,33 @@ async function main(): Promise<void> {
     const designLastAttempt = env.runStore.listCapabilityExecutions(first.run_id)
       .filter((event) => event.capability === "solution-design")
       .reduce((max, event) => Math.max(max, event.attempt), 0);
+    let forgedSkillRejected = false;
+    try {
+      await env.entry.execute({
+        requirementId,
+        capability: "solution-design",
+        executionRole: "primary",
+        inputArtifactRef: intakeRevision.artifactRef,
+        inputArtifactVersion: intakeRevision.semver,
+        inputDigest: intakeRevision.digest,
+        outputArtifactVersion: `${designLastAttempt + 1}.0.0`,
+        input: { inputArtifactRef: intakeRevision.artifactRef },
+        skill: "sdlc-speckit-pipeline",
+      } as never);
+    } catch (error) {
+      forgedSkillRejected = error instanceof LoopRunJournalError && error.code === "INVALID_INPUT";
+    }
+    ok(forgedSkillRejected, "canonical entry rejects forged skill metadata before any dispatch");
+    ok(
+      env.runStore.listCapabilityExecutions(first.run_id).at(-1)!.status === "succeeded" &&
+        env.runStore.listCapabilityExecutions(first.run_id).at(-1)!.capability !== undefined &&
+        env.runStore.listCapabilityExecutions(first.run_id)
+          .filter((event) => event.capability === "solution-design")
+          .reduce((max, event) => Math.max(max, event.attempt), 0) === designLastAttempt,
+      "the rejected request left no dispatch behind",
+    );
+    // The clean request (no skill surface) proceeds and lands on the same
+    // canonical next action as the control flow below.
     await env.entry.execute({
       requirementId,
       capability: "solution-design",
@@ -1022,10 +1075,9 @@ async function main(): Promise<void> {
       inputDigest: intakeRevision.digest,
       outputArtifactVersion: `${designLastAttempt + 1}.0.0`,
       input: { inputArtifactRef: intakeRevision.artifactRef },
-      skill: "sdlc-speckit-pipeline",
     });
     const after = env.runStore.listCapabilityExecutions(first.run_id).at(-1)!;
-    ok(after.capability === "solution-design" && after.status === "succeeded", "restart dispatched despite forged skill");
+    ok(after.capability === "solution-design" && after.status === "succeeded", "clean restart dispatch succeeded");
     recordRevisionForLastSucceeded(env, first.run_id, requirementId, "solution-design");
     const recoveryAfter = recoverRunContext(env.runStore, requirementId);
     ok(
@@ -1067,7 +1119,7 @@ async function main(): Promise<void> {
     ok(
       JSON.stringify(recoveryControl!.nextExecutionPoint) ===
         JSON.stringify(recoveryAfter!.nextExecutionPoint),
-      "with-skill and without-skill flows produce the identical next action",
+      "rejected-skill and clean flows produce the identical next action",
     );
   }
 
@@ -1403,12 +1455,10 @@ async function main(): Promise<void> {
     // Flaky wrapper: the generation-3 intake dispatch (attempt 3) fails once,
     // retryably; everything else delegates to the deterministic shadow.
     const retryNow = (): string => new Date().toISOString();
-    const retryInner = createDeterministicCapabilityGateway({
-      runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
-      bindingRegistry: createRuntimeBindingRegistry(), now: retryNow,
-    });
-    const flakyGateway: RuntimeCapabilityGateway = {
-      async execute(request) {
+    const flakyGateway = scriptedGateway({
+      runStore: envRetry.runStore,
+      artifactStore: envRetry.artifactStore,
+      execute: async (request, retryInner) => {
         const context = request.loopExecution!;
         if (!(request.type === "requirement-intake" && context.attempt === 3)) {
           return retryInner.execute(request);
@@ -1483,7 +1533,7 @@ async function main(): Promise<void> {
           error: "capability execution failed",
         });
       },
-    };
+    });
     // The retryable failure is admitted (jump 2 fits the budget) but stops
     // the invocation WITHOUT a durable block.
     const retryThird = await run("migrate billing export", {

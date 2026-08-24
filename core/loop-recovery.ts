@@ -13,7 +13,11 @@
 import { types as utilTypes } from "node:util";
 
 import { LoopRunJournalError, type LoopRunEvent, type LoopRunSnapshot } from "./loop-executor-types";
-import { readPlainDataRecord } from "./loop-run-state";
+import {
+  bootstrapSourceVersion,
+  readPlainDataRecord,
+  validateBootstrapSourceProvenance,
+} from "./loop-run-state";
 import type { LoopRunStore } from "./loop-run-store";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -21,7 +25,7 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
-import { planRegateFromFacts, type CurrentRevisionFacts } from "./loop-regate";
+import { planRegateFromFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
 import {
   findPendingRevisionProducerExecution,
   type LoopCapabilityExecutionEvent,
@@ -106,6 +110,120 @@ export interface RunRecoveryContext {
   pendingRevisionMaterialization: Readonly<{
     producerExecution: LoopCapabilityExecutionEvent;
   }> | null;
+  /**
+   * C02-WP5 (G6): the run's orchestration generation authority derived from
+   * the verified change chain — generation 1 baseline, or the latest
+   * CLASSIFIED FEEDBACK_DRIVEN_CHANGE record's previousGeneration + 1.
+   */
+  generation: number;
+  /**
+   * C02-WP5 (G6): the latest WP1 change record in the run (sequence order),
+   * reduced to the facts another entry needs to resume without
+   * reinterpreting confirmed facts. Null before the first change lands.
+   */
+  latestChangeRecord: Readonly<{
+    changeRecordId: string;
+    sequence: number;
+    status: string;
+    changeKind: string | null;
+    payloadForm: string | null;
+    previousGeneration: number | null;
+    currentChangeScope: string | null;
+    confirmedFactsPreserved: readonly string[];
+  }> | null;
+  /**
+   * C02-WP5 (G6): per-node CURRENT artifact revision identity map — stable
+   * path, internal SemVer, immutable ref/digest, validity and Gate — read
+   * through the verified regate-facts reader. This is the machine-checkable
+   * answer to "which artifact version is currently authoritative per node".
+   */
+  currentArtifactMap: readonly CurrentArtifactFact[];
+  /** C02-WP5 (G6): all OPEN findings bound to their earliest affected node. */
+  openFindings: readonly OpenFindingFact[];
+  /**
+   * C02-WP5 (G6): every revision that has lost current eligibility — STALE
+   * via finding invalidation or SUPERSEDED by a newer generation — so a
+   * resuming entry can see exactly which historical versions are non-current.
+   */
+  invalidatedRevisions: readonly InvalidatedRevisionFact[];
+  /**
+   * C02-WP5: the Re-Gate plan projection over the recovered facts — the
+   * governing findings, reused upstream nodes and rebuild scope a fresh
+   * agent needs to continue an interrupted wave.
+   */
+  regatePlan: RegatePlan;
+  /**
+   * C02-WP5 F2: the input triple the run's FIRST requirement-intake claim
+   * consumed — the persisted normalized Requirement source and therefore the
+   * confirmed-facts anchor of generation 1. Non-null for every recovered
+   * run; a recovery dispatch at the intake point MUST consume exactly this
+   * triple instead of caller-supplied replacement content.
+   */
+  originRequirementInput: Readonly<{
+    inputArtifactRef: string;
+    inputArtifactVersion: string;
+    inputDigest: string;
+  }> | null;
+}
+
+/** Reduced CURRENT-revision fact of one canonical node (C02-WP5). */
+export interface CurrentArtifactFact {
+  nodeId: NodeCapabilityId;
+  revisionId: string;
+  stablePath: string;
+  semver: string;
+  artifactKind: string;
+  artifactRef: string;
+  digest: string;
+  validity: string;
+  generation: number | null;
+  gateResult: LoopCapabilityGateResult | null;
+}
+
+/** Reduced OPEN-finding fact (C02-WP5). */
+export interface OpenFindingFact {
+  findingId: string;
+  severity: string;
+  category: string;
+  causeKind: string;
+  sourceCapability: NodeCapabilityId;
+  sourceRevisionId: string;
+  earliestAffectedNodeId: NodeCapabilityId;
+  createdAt: string;
+}
+
+/** Reduced STALE-revision fact (C02-WP5). */
+export interface InvalidatedRevisionFact {
+  nodeId: NodeCapabilityId;
+  revisionId: string;
+  semver: string;
+  artifactRef: string;
+  digest: string;
+  supersededBy: string | null;
+}
+
+/**
+ * C02-WP5: the dispatch command an entry must execute next, derived ONLY
+ * from the recovery context. `inputArtifactRef === null` marks the intake
+ * point, where the normalized Requirement source is caller-supplied content
+ * (kind-checked at the entry); every later point pins the exact input triple
+ * to the predecessor point's effective output AND — when that predecessor
+ * authors a node revision — to that node's ACTIVE current.
+ */
+export interface DispatchCommand {
+  capability: NodeCapabilityId;
+  executionRole: CapabilityExecutionRole;
+  /**
+   * The next attempt number for the point (`lastAttempt + 1`). Started
+   * events carry no output version (schema requires null result fields), so
+   * the attempt number is the claim-time comparable form of the
+   * attempt-scoped N.0.0 output contract.
+   */
+  attempt: number;
+  inputArtifactRef: string | null;
+  inputArtifactVersion: string | null;
+  inputDigest: string | null;
+  outputArtifactVersion: string;
 }
 
 export interface CapabilityRecoveryState {
@@ -269,6 +387,16 @@ export function recoverRunContext(
   store: LoopRunStore,
   requirementId: string,
 ): RunRecoveryContext | undefined {
+  // C02-WP5 F1: the whole projection is assembled against ONE consistent
+  // transaction — a concurrent writer can no longer produce a mixed context
+  // (e.g., findings read before its commit, generation read after it).
+  return store.readConsistent(() => recoverRunContextInTransaction(store, requirementId));
+}
+
+function recoverRunContextInTransaction(
+  store: LoopRunStore,
+  requirementId: string,
+): RunRecoveryContext | undefined {
   const snapshot = store.findLatestRunByRequirement(requirementId);
   if (snapshot === undefined) {
     return undefined;
@@ -355,7 +483,10 @@ export function recoverRunContext(
     artifactRevisions,
   );
   const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
-  for (const fact of store.listRegateCurrentFacts(state.identity.runId)) {
+  const regateFacts = capabilityExecutions.length > 0
+    ? store.listRegateCurrentFacts(state.identity.runId)
+    : [];
+  for (const fact of regateFacts) {
     currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
   }
   const pointLastAttempts = new Map<string, number>(
@@ -546,6 +677,58 @@ export function recoverRunContext(
             ? "BLOCKED"
             : "READY";
   const nextCapability = nextExecutionPoint?.capability ?? null;
+  // C02-WP5 (G6): surface the full recovery facts — generation authority,
+  // latest change record, per-node current revision identity map, open
+  // findings, invalidated revisions and the Re-Gate plan projection — so a
+  // fresh entry can resume from the journal alone without reinterpreting
+  // confirmed facts.
+  const currentArtifactMap: CurrentArtifactFact[] = regateFacts.map((fact) => {
+    const record = artifactRevisions.find((item) => item.revisionId === fact.revisionId);
+    if (record === undefined) {
+      throw new LoopRunJournalError(
+        "STORE_CORRUPT",
+        "recovery context: current pointer target is missing from the verified revision chain",
+      );
+    }
+    return Object.freeze({
+      nodeId: fact.nodeId,
+      revisionId: fact.revisionId,
+      stablePath: record.stablePath,
+      semver: record.semver,
+      artifactKind: record.artifactKind,
+      artifactRef: fact.artifactRef,
+      digest: fact.digest,
+      validity: fact.validity,
+      generation: fact.generation,
+      gateResult: record.gateResult,
+    });
+  });
+  const openFindings: OpenFindingFact[] = findings
+    .filter((finding) => finding.status === "OPEN")
+    .map((finding) => Object.freeze({
+      findingId: finding.findingId,
+      severity: finding.severity,
+      category: finding.category,
+      causeKind: finding.causeKind,
+      sourceCapability: finding.sourceCapability,
+      sourceRevisionId: finding.sourceRevisionId,
+      earliestAffectedNodeId: finding.earliestAffectedNodeId,
+      createdAt: finding.createdAt,
+    }));
+  // Invariant 5: invalidation is not deletion — a historical revision loses
+  // current eligibility by being marked STALE (finding invalidation) or
+  // SUPERSEDED (a newer generation's rebuild); both stay fully auditable.
+  const invalidatedRevisions: InvalidatedRevisionFact[] = artifactRevisions
+    .filter((record) => record.validity !== "ACTIVE")
+    .map((record) => Object.freeze({
+      nodeId: record.nodeId,
+      revisionId: record.revisionId,
+      semver: record.semver,
+      artifactRef: record.artifactRef,
+      digest: record.digest,
+      supersededBy: record.supersededBy,
+    }));
+  const latestChange = changeRecords.length === 0 ? null : changeRecords[changeRecords.length - 1]!;
   return Object.freeze({
     snapshot,
     currentStage: state.currentStage,
@@ -565,6 +748,78 @@ export function recoverRunContext(
     pendingRevisionMaterialization: pendingRevisionProducer === null
       ? null
       : Object.freeze({ producerExecution: pendingRevisionProducer }),
+    generation: store.getRunGeneration(state.identity.runId),
+    latestChangeRecord: latestChange === null
+      ? null
+      : Object.freeze({
+          changeRecordId: latestChange.changeRecordId,
+          sequence: latestChange.sequence,
+          status: latestChange.status,
+          changeKind: latestChange.changeKind,
+          payloadForm: latestChange.payloadForm,
+          previousGeneration: latestChange.previousGeneration,
+          currentChangeScope: latestChange.currentChangeScope,
+          confirmedFactsPreserved: latestChange.confirmedFactsPreserved,
+        }),
+    currentArtifactMap: Object.freeze(currentArtifactMap),
+    openFindings: Object.freeze(openFindings),
+    invalidatedRevisions: Object.freeze(invalidatedRevisions),
+    regatePlan: plan,
+    originRequirementInput: (() => {
+      // B1: prefer the ATOMIC BOOTSTRAP provenance carried on run_started —
+      // it exists before the first claim, so even a crash between bootstrap
+      // and the intake dispatch leaves the confirmed-facts anchor durable.
+      const startedEvent = snapshot.events.find((event) => event.kind === "run_started");
+      if (
+        startedEvent !== undefined &&
+        (startedEvent.inputArtifactRef !== null) !== (startedEvent.inputDigest !== null)
+      ) {
+        throw new LoopRunJournalError(
+          "STORE_CORRUPT",
+          "persisted run_started provenance is a partial tuple",
+        );
+      }
+      if (
+        startedEvent !== undefined &&
+        startedEvent.inputArtifactRef !== null && startedEvent.inputDigest !== null
+      ) {
+        // B1-2: persisted provenance MUST satisfy the same closed validator
+        // the write path used. A writer-accepted but reader-rejected value is
+        // tampered history — corruption-first, never silently ignored.
+        let origin;
+        try {
+          origin = validateBootstrapSourceProvenance({
+            artifactRef: startedEvent.inputArtifactRef,
+            digest: startedEvent.inputDigest,
+          });
+        } catch (error) {
+          if (error instanceof LoopRunJournalError) {
+            throw new LoopRunJournalError(
+              "STORE_CORRUPT",
+              "persisted run_started provenance is not a canonical bootstrap source",
+            );
+          }
+          throw error;
+        }
+        return Object.freeze({
+          inputArtifactRef: origin.artifactRef,
+          inputArtifactVersion: bootstrapSourceVersion(),
+          inputDigest: origin.digest,
+        });
+      }
+      const first = capabilityExecutions[0];
+      if (
+        first === undefined || first.capability !== "requirement-intake" ||
+        first.executionRole !== "primary"
+      ) {
+        return null;
+      }
+      return Object.freeze({
+        inputArtifactRef: first.inputArtifactRef,
+        inputArtifactVersion: first.inputArtifactVersion,
+        inputDigest: first.inputDigest,
+      });
+    })(),
     lastExecution:
       lastExecutionEvent === undefined
         ? null
@@ -578,6 +833,98 @@ export function recoverRunContext(
             outputArtifactRef: lastExecutionEvent.outputArtifactRef,
             reasonCode: lastExecutionEvent.reasonCode,
           }),
+  });
+}
+
+/**
+ * C02-WP5: derive the unique next dispatch command from a recovered context.
+ * This is the ONLY sanctioned way to obtain what an entry may execute next —
+ * callers cannot self-select a non-current node or a stale input. Returns
+ * null when nothing is dispatchable (blocked / running / completed / pending
+ * materialization). Throws ILLEGAL_TRANSITION when the derived input would
+ * violate current-pointer authority: the predecessor point's effective
+ * output must BE that node's ACTIVE current revision.
+ */
+export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCommand | null {
+  const next = recovery.nextExecutionPoint;
+  if (next === null || recovery.pendingRevisionMaterialization !== null) {
+    return null;
+  }
+  const pointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+    (point) => point.capability === next.capability && point.executionRole === next.executionRole,
+  );
+  if (pointIndex < 0) {
+    throw new LoopRunJournalError("STORE_CORRUPT", "recovery context holds a non-canonical execution point");
+  }
+  if (pointIndex === 0) {
+    // C02-WP5 F2: a recovered run pins the intake dispatch to the ORIGINAL
+    // persisted normalized Requirement source — the confirmed-facts anchor.
+    // Only a genuinely fresh run (no claim yet) leaves the source to the
+    // caller, kind-checked by the entry and the chain validator.
+    const origin = recovery.originRequirementInput;
+    if (origin !== null) {
+      return Object.freeze({
+        capability: next.capability,
+        executionRole: next.executionRole,
+        attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
+        inputArtifactRef: origin.inputArtifactRef,
+        inputArtifactVersion: origin.inputArtifactVersion,
+        inputDigest: origin.inputDigest,
+        outputArtifactVersion: `${recovery.executionPointStates[pointIndex]!.lastAttempt + 1}.0.0`,
+      });
+    }
+    return Object.freeze({
+      capability: next.capability,
+      executionRole: next.executionRole,
+      attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
+      inputArtifactRef: null,
+      inputArtifactVersion: null,
+      inputDigest: null,
+      outputArtifactVersion: `${recovery.executionPointStates[pointIndex]!.lastAttempt + 1}.0.0`,
+    });
+  }
+  const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[pointIndex - 1]!;
+  const predecessorState = recovery.executionPointStates[pointIndex - 1]!;
+  if (
+    predecessorState.status !== "succeeded" ||
+    predecessorState.nextStepEligibility !== "ELIGIBLE" ||
+    predecessorState.effectiveOutputArtifactRef === null ||
+    predecessorState.effectiveOutputArtifactVersion === null ||
+    predecessorState.effectiveOutputDigest === null
+  ) {
+    throw new LoopRunJournalError(
+      "ILLEGAL_TRANSITION",
+      "dispatch command requires an eligible predecessor execution point",
+    );
+  }
+  // Claim-time current-pointer binding: when the predecessor point authors a
+  // node revision (every point except the scan round, whose product is its
+  // Finding Ledger), the consumed input must be EXACTLY that node's ACTIVE
+  // current — path/version/ref/digest authority, fail-closed on stale.
+  const predecessorAuthorsNodeRevision =
+    !(predecessor.capability === "solution-gate" && predecessor.executionRole === "adversarial_scan");
+  if (predecessorAuthorsNodeRevision) {
+    const fact = recovery.currentArtifactMap.find((item) => item.nodeId === predecessor.capability);
+    if (
+      fact === undefined || fact.validity !== "ACTIVE" ||
+      fact.artifactRef !== predecessorState.effectiveOutputArtifactRef ||
+      fact.digest !== predecessorState.effectiveOutputDigest ||
+      fact.semver !== predecessorState.effectiveOutputArtifactVersion
+    ) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "predecessor output is not the node's ACTIVE current revision",
+      );
+    }
+  }
+  return Object.freeze({
+    capability: next.capability,
+    executionRole: next.executionRole,
+    attempt: recovery.executionPointStates[pointIndex]!.lastAttempt + 1,
+    inputArtifactRef: predecessorState.effectiveOutputArtifactRef,
+    inputArtifactVersion: predecessorState.effectiveOutputArtifactVersion,
+    inputDigest: predecessorState.effectiveOutputDigest,
+    outputArtifactVersion: `${recovery.executionPointStates[pointIndex]!.lastAttempt + 1}.0.0`,
   });
 }
 
