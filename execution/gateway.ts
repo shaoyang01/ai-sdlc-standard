@@ -59,6 +59,7 @@ import {
   validateNodeOutputArtifact,
   type BindingRegistry,
 } from "../core/agent-capability-bindings";
+import { bindGatewayTracing } from "../core/loop-entry-bindings";
 import type { LoopRunStore } from "../core/loop-run-store";
 import type { LoopArtifactKind, LoopArtifactStore } from "../core/loop-artifact-store";
 import {
@@ -110,7 +111,28 @@ export interface ExecutionGatewayOptions {
 }
 
 export class ExecutionGateway {
-  constructor(private readonly options: ExecutionGatewayOptions = {}) {}
+  private readonly options: ExecutionGatewayOptions;
+
+  constructor(options: ExecutionGatewayOptions = {}) {
+    // C02-WP5 (clauses 0.1.5/0.1.6): snapshot and freeze the dependency
+    // configuration — post-construction mutation of the caller's options
+    // object (including the nested capabilityTracing record) must not
+    // redirect where executions are journaled or where output blobs are
+    // written.
+    const tracing = options.capabilityTracing === undefined
+      ? undefined
+      : Object.freeze({ ...options.capabilityTracing });
+    this.options = Object.freeze({
+      ...options,
+      ...(tracing === undefined ? {} : { capabilityTracing: tracing }),
+    });
+    if (tracing !== undefined) {
+      // Non-virtual construction-time registration (clause 0.1.5): supported
+      // entries verify same-instance tracing through the module-level
+      // registry, never through overridable instance members.
+      bindGatewayTracing(this, tracing.runStore, tracing.artifactStore);
+    }
+  }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
     const isCanonicalCapability =
@@ -124,13 +146,32 @@ export class ExecutionGateway {
         "canonical capability request requires durable loop execution context",
       );
     }
+    if (request.loopExecution !== undefined) {
+      if (!isCanonicalCapability) {
+        // Preserved WP3.5-C boundary: a loopExecution context on a non-
+        // canonical request type fails closed — never dispatched as legacy.
+        throw new LoopRunJournalError(
+          "INVALID_INPUT",
+          "loop execution context requires a canonical capability request",
+        );
+      }
+      // WP5 skill-isolation carryover: a canonical dispatch must not carry
+      // skill metadata at all and must not consult the skill registry. The
+      // rejection is fail-closed — fail-open remains available ONLY for
+      // legacy non-C02 requests on the path below.
+      if ("skill" in request || "flowId" in request) {
+        throw new LoopRunJournalError(
+          "INVALID_INPUT",
+          "canonical capability dispatch must not carry skill metadata",
+        );
+      }
+      return this.executeCapabilityWithTracing(request);
+    }
     // ── Skill Validation — metadata only, does not affect dispatch ──
+    // Legacy non-canonical requests keep the historical fail-open behavior.
     const skillValidation = validateExecutionRequestSkill(request);
     const enriched = { ...request, skillValidation };
 
-    if (request.loopExecution !== undefined) {
-      return this.executeCapabilityWithTracing(enriched);
-    }
     const primaryResult = await this.executePrimary(enriched);
     return this.attachHermesGatewayRealDispatch(enriched, primaryResult);
   }

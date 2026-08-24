@@ -1,8 +1,21 @@
-// C01 Supported Capability Entry (WP-4B)
-// ========================================
+// C02 Supported Capability Entry (C01 WP-4B / C02-WP5 production wiring)
+// ========================================================================
 // Creates or recovers one durable Requirement run, verifies the immutable
 // input artifact, enforces the canonical next capability, and dispatches
 // through an ExecutionGateway configured for durable capability tracing.
+//
+// C02-WP5: the entry is the FIRST SUPPORTED PRODUCTION ENTRY consuming the
+// C02 orchestration authority:
+// - construction-time non-virtual wiring checks pin the run journal to the
+//   exact artifact store instance (WP2 clause 0.1.4) and the gateway's
+//   durable tracing to the exact same store pair (clause 0.1.5);
+// - dependency configuration is snapshot and frozen at construction so post-
+//   construction mutation cannot redirect stores (clause 0.1.6);
+// - requests carry no skill surface: skill/flowId metadata is rejected
+//   before the gateway is reached (skill-isolation carryover);
+// - the executed request must equal the dispatch command derived from the
+//   recovered context — callers cannot self-select a non-current node or a
+//   stale input.
 
 import type { ExecutionGateway } from "../execution/gateway";
 import { types as utilTypes } from "node:util";
@@ -20,21 +33,41 @@ import {
   type BindingRegistry,
 } from "./agent-capability-bindings";
 import type { LoopArtifactStore } from "./loop-artifact-store";
+import {
+  isExecutionGatewayTracingBoundTo,
+  isLoopRunStoreBoundToArtifactStore,
+} from "./loop-entry-bindings";
 import type { LoopRunEvent, LoopRunIdentity } from "./loop-executor-types";
 import { LoopRunJournalError } from "./loop-executor-types";
-import { recoverRunContext, type RunRecoveryContext } from "./loop-recovery";
+import {
+  deriveDispatchCommand,
+  recoverRunContext,
+  type RunRecoveryContext,
+} from "./loop-recovery";
 import {
   canonicalizeLoopRunIdentity,
   readPlainDataRecord,
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
-import type { LoopRunStore } from "./loop-run-store";
+import { LoopRunStore } from "./loop-run-store";
 
 export interface LoopCapabilityEntryOptions {
+  /**
+   * The durable run journal. Must be constructed with
+   * `LoopRunStoreOptions.artifactStore` bound to the exact same
+   * `LoopArtifactStore` instance passed below — the C02-WP2 blob binding
+   * must not be bypassable by wiring the two stores separately.
+   */
   runStore: LoopRunStore;
-  artifactStore: Pick<LoopArtifactStore, "read">;
+  artifactStore: LoopArtifactStore;
   bindingRegistry: BindingRegistry;
+  /**
+   * The dispatch gateway. Its durable capability tracing must write into the
+   * exact same run store and artifact store instances this entry uses;
+   * otherwise journal outputs and revision blobs would be split across
+   * disjoint stores.
+   */
   gateway: Pick<ExecutionGateway, "execute">;
   now?: () => string;
 }
@@ -50,7 +83,6 @@ export interface LoopCapabilityEntryRequest {
   inputDigest: string;
   outputArtifactVersion: string;
   input: Record<string, unknown>;
-  skill?: string;
 }
 
 export interface LoopCapabilityEntryResult {
@@ -72,7 +104,7 @@ export interface LoopCapabilityEntryResult {
 
 const REQUEST_FIELDS = [
   "requirementId", "identity", "capability", "executionRole", "inputArtifactRef",
-  "inputArtifactVersion", "inputDigest", "outputArtifactVersion", "input", "skill",
+  "inputArtifactVersion", "inputDigest", "outputArtifactVersion", "input",
 ] as const;
 
 export class LoopCapabilityEntry {
@@ -83,7 +115,31 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("INVALID_INPUT", "entry options must be an object");
     }
     validateBindingRegistry(options.bindingRegistry);
-    this.options = options;
+    // C02-WP5 (clause 0.1.4): all wiring checks are non-virtual — they read
+    // construction-time module-level binding state, never overridable
+    // instance members, so subclassing or monkey patching cannot forge them.
+    if (!(options.runStore instanceof LoopRunStore)) {
+      throw new LoopRunJournalError("INVALID_INPUT", "capability entry requires a LoopRunStore");
+    }
+    if (!isLoopRunStoreBoundToArtifactStore(options.runStore, options.artifactStore)) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "capability entry requires the run store bound to the same artifact store instance",
+      );
+    }
+    // C02-WP5 (clause 0.1.5): the gateway must trace capability executions
+    // into the same store pair — a gateway writing outputs elsewhere would
+    // split the journal's output refs from the blobs revisions verify against.
+    if (!isExecutionGatewayTracingBoundTo(options.gateway, options.runStore, options.artifactStore)) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "capability entry requires the gateway tracing the same run store and artifact store instances",
+      );
+    }
+    // C02-WP5 (clause 0.1.6): snapshot and freeze the dependency configuration
+    // so post-construction mutation of the caller's options object cannot swap
+    // the gateway or the artifact store this entry uses.
+    this.options = Object.freeze({ ...options });
   }
 
   async execute(value: LoopCapabilityEntryRequest): Promise<LoopCapabilityEntryResult> {
@@ -91,10 +147,20 @@ export class LoopCapabilityEntry {
       throw new LoopRunJournalError("INVALID_INPUT", "capability entry request must not be a Proxy");
     }
     const request = readPlainDataRecord(value, "capability entry request") as unknown as LoopCapabilityEntryRequest;
-    const keys = Object.keys(request);
+    // WP5 skill-isolation carryover: the canonical entry rejects skill
+    // surface BEFORE the gateway — there is no fail-open here. Legacy
+    // non-C02 requests keep their own path inside the gateway.
+    const requestKeys = Object.keys(request);
+    if (requestKeys.includes("skill") || requestKeys.includes("flowId")) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "canonical capability entry must not carry skill metadata",
+      );
+    }
+    const keys = requestKeys;
     if (
       keys.some((key) => !(REQUEST_FIELDS as readonly string[]).includes(key)) ||
-      REQUEST_FIELDS.filter((field) => field !== "identity" && field !== "skill").some((field) => !(field in request))
+      REQUEST_FIELDS.filter((field) => field !== "identity").some((field) => !(field in request))
     ) {
       throw new LoopRunJournalError("INVALID_INPUT", "capability entry request fields are invalid");
     }
@@ -245,6 +311,29 @@ export class LoopCapabilityEntry {
       recovery.nextExecutionPoint.executionRole !== request.executionRole) {
       throw new LoopRunJournalError("ILLEGAL_TRANSITION", "requested execution point is not the next recoverable point");
     }
+    // C02-WP5: the executed request must equal the dispatch command derived
+    // from the recovered context. The input triple is pinned to the
+    // predecessor point's effective output AND to that node's ACTIVE current
+    // revision; only the intake point keeps its caller-supplied normalized
+    // source (kind-checked below). A stale or self-selected input fails
+    // closed here before any claim is taken.
+    const command = deriveDispatchCommand(recovery);
+    if (
+      command === null ||
+      command.capability !== request.capability ||
+      command.executionRole !== request.executionRole ||
+      command.outputArtifactVersion !== request.outputArtifactVersion ||
+      (command.inputArtifactRef !== null && (
+        command.inputArtifactRef !== request.inputArtifactRef ||
+        command.inputArtifactVersion !== request.inputArtifactVersion ||
+        command.inputDigest !== request.inputDigest
+      ))
+    ) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "request does not match the dispatch command derived from the recovery context",
+      );
+    }
     // v2 dispatch-time role firewall (A2/G1): before dispatching the
     // formal_verdict role, the enabled binding's agent must differ from the
     // adversarial_scan agent of the same solution-gate round. The store
@@ -297,7 +386,6 @@ export class LoopCapabilityEntry {
       agent: binding.agent,
       requirementId: request.requirementId,
       input: request.input,
-      ...(request.skill === undefined ? {} : { skill: request.skill }),
       loopExecution: {
         runId: recovery.snapshot.state.identity.runId,
         attempt,

@@ -36,6 +36,7 @@ import {
 import { recoverRunContext } from "./core/loop-recovery";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
+import { bindGatewayTracing } from "./core/loop-entry-bindings";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
@@ -184,7 +185,7 @@ export function createDeterministicCapabilityGateway(options: {
   now: () => string;
 }): RuntimeCapabilityGateway {
   const { runStore, artifactStore, bindingRegistry, now } = options;
-  return Object.freeze({
+  const gateway = Object.freeze({
     async execute(request: ExecutionRequest): Promise<ExecutionResult> {
       const context = request.loopExecution;
       if (context === undefined) {
@@ -315,6 +316,12 @@ export function createDeterministicCapabilityGateway(options: {
       });
     },
   });
+  // C02-WP5 (clause 0.1.5): register the deterministic gateway's durable
+  // tracing in the same non-virtual registry as ExecutionGateway so a
+  // supported entry can verify same-instance wiring for either dispatch
+  // surface.
+  bindGatewayTracing(gateway, runStore, artifactStore);
+  return gateway;
 }
 
 // ─── Default dual-agent registry ──────────────────────

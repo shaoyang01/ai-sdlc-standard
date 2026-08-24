@@ -23,6 +23,7 @@ import {
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { recoverRunContext } from "../core/loop-recovery";
 import { LoopRunStore } from "../core/loop-run-store";
+import { bindGatewayTracing } from "../core/loop-entry-bindings";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -52,11 +53,11 @@ async function main(): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "loop-wp35c-cutover-"));
   try {
     mkdirSync(join(root, "repo"), { recursive: true });
-    const runStore = new LoopRunStore(join(root, "journal.db"));
     const artifactStore = new LoopArtifactStore({
       controlRoot: join(root, "control"),
       repositoryPath: join(root, "repo"),
     });
+    const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
     runStore.init();
     artifactStore.init();
 
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
         return innerGateway.execute(request);
       },
     };
+    bindGatewayTracing(spyGateway, runStore, artifactStore);
 
     const result = await run("build a user registration form with email validation", {
       requirementId: "REQ-WP35C-001",
@@ -216,11 +218,11 @@ async function main(): Promise<void> {
     const root2 = mkdtempSync(join(tmpdir(), "loop-wp35c-legacy-"));
     try {
       mkdirSync(join(root2, "repo"), { recursive: true });
-      const runStore = new LoopRunStore(join(root2, "journal.db"));
       const artifactStore = new LoopArtifactStore({
         controlRoot: join(root2, "control"),
         repositoryPath: join(root2, "repo"),
       });
+      const runStore = new LoopRunStore(join(root2, "journal.db"), { artifactStore });
       runStore.init();
       artifactStore.init();
       const gateway = createDeterministicCapabilityGateway({

@@ -470,16 +470,17 @@ async function test() {
     const { LoopArtifactStore } = await import("../core/loop-artifact-store");
     const { createRuntimeBindingRegistry } = await import("../runtime");
 
-    const root = mkdtempSync(join(tmpdir(), "sdlc-fake-runner-v2-"));
-    try {
-      mkdirSync(join(root, "repo"), { recursive: true });
-      const runStore = new LoopRunStore(join(root, "journal.db"));
-      const artifactStore = new LoopArtifactStore({
-        controlRoot: join(root, "control"),
-        repositoryPath: join(root, "repo"),
-      });
-      runStore.init();
-      artifactStore.init();
+      const root = mkdtempSync(join(tmpdir(), "sdlc-fake-runner-v2-"));
+      try {
+        mkdirSync(join(root, "repo"), { recursive: true });
+        // C02-WP5 (clause 0.1.4): the run journal binds the artifact store.
+        const artifactStore = new LoopArtifactStore({
+          controlRoot: join(root, "control"),
+          repositoryPath: join(root, "repo"),
+        });
+        const runStore = new LoopRunStore(join(root, "journal.db"), { artifactStore });
+        runStore.init();
+        artifactStore.init();
       const bindingRegistry = createRuntimeBindingRegistry();
       const tracedGateway = new ExecutionGateway({
         env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },

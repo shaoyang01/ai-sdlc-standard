@@ -30,6 +30,7 @@ import {
 } from "../runtime";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
+import { bindGatewayTracing } from "../core/loop-entry-bindings";
 import { LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION } from "../core/loop-capability-execution";
 import { createLoopRequirementChangeRecord } from "../core/loop-change-classification";
 import { recoverRunContext } from "../core/loop-recovery";
@@ -198,6 +199,7 @@ async function main(): Promise<void> {
           return result;
         },
       };
+      bindGatewayTracing(gatewayA, env.storeA, env.artifactStore);
       const aResult = await run("window race", {
         requirementId: env.requirementId,
         runStore: env.storeA,
@@ -260,6 +262,7 @@ async function main(): Promise<void> {
           return result;
         },
       };
+      bindGatewayTracing(crashingGateway, env.storeA, env.artifactStore);
       let crashSurfaced = false;
       try {
         await run("window crash", {
@@ -327,6 +330,7 @@ async function main(): Promise<void> {
           return result;
         },
       };
+      bindGatewayTracing(crashingGateway, env.storeA, env.artifactStore);
       let crashSurfaced = false;
       try {
         await run("window verdict crash", {
@@ -425,6 +429,7 @@ async function main(): Promise<void> {
           return result;
         },
       };
+      bindGatewayTracing(gatewayA, env.storeA, env.artifactStore);
       const third = await run("window budget", {
         requirementId: env.requirementId,
         runStore: env.storeA,
@@ -463,6 +468,7 @@ async function main(): Promise<void> {
           return innerA.execute(request);
         },
       };
+      bindGatewayTracing(countingGatewayA, env.storeA, env.artifactStore);
       // Drive only requirement-intake through the real entry — its revision
       // is deliberately never materialized.
       const { LoopCapabilityEntry } = await import("../core/loop-capability-entry");
@@ -528,6 +534,7 @@ async function main(): Promise<void> {
           return innerB.execute(request);
         },
       };
+      bindGatewayTracing(countingGatewayB, env.storeB, env.artifactStore);
       const entryB = new LoopCapabilityEntry({
         runStore: env.storeB,
         artifactStore: env.artifactStore,

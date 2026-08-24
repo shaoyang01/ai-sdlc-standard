@@ -37,6 +37,7 @@ import {
 import {
   canonicalizeLoopCapabilityExecutionEvent,
   findPendingRevisionProducerExecution,
+  sameAttemptIdentity,
   validateLoopCapabilityExecutionChain,
   validateLoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionEvent,
@@ -89,6 +90,7 @@ import {
   type LoopFindingProof,
 } from "./loop-finding-lifecycle";
 import { LoopArtifactStore, LoopArtifactStoreError } from "./loop-artifact-store";
+import { bindRunStoreToArtifactStore } from "./loop-entry-bindings";
 import { LOOP_CAPABILITY_EXECUTION_POINTS, NODE_CAPABILITY_IDS } from "../loop/types";
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
@@ -1025,6 +1027,10 @@ export class LoopRunStore {
         throw new LoopRunJournalError("INVALID_INPUT", "artifactStore must be a LoopArtifactStore instance");
       }
       this.artifactStore = options.artifactStore;
+      // C02-WP5 (clause 0.1.4): register the construction-time blob binding
+      // in the module-level non-virtual registry so a supported entry can
+      // verify same-instance wiring without trusting any instance member.
+      bindRunStoreToArtifactStore(this, options.artifactStore);
     }
   }
 
@@ -1772,6 +1778,26 @@ export class LoopRunStore {
             throw new LoopRunJournalError(
               "ILLEGAL_TRANSITION",
               "a pending revision producer holds the dispatch window closed",
+            );
+          }
+        }
+        // C02-WP5 terminal-write CAS: a terminal event may only close a claim
+        // that is STILL the journal tail. Anything that landed after the
+        // started event — an interrupt by another entry, a later attempt, any
+        // interloper — means this result is late; promoting it could elevate
+        // a stale-generation product over the current authority. The chain
+        // validator would reject most shapes anyway; this explicit
+        // same-transaction check names the invariant and keeps it enforced
+        // independently of future validator drift.
+        if (event.status !== "started") {
+          const tail = current[current.length - 1];
+          if (
+            tail === undefined || tail.status !== "started" ||
+            !sameAttemptIdentity(tail, event)
+          ) {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "a terminal capability event may only close the active tail claim",
             );
           }
         }

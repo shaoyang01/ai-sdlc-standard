@@ -30,6 +30,7 @@ import {
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
+import { bindGatewayTracing } from "../core/loop-entry-bindings";
 import { LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION, createLoopArtifactRevision } from "../core/loop-artifact-revision";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { createLoopFinding } from "../core/loop-finding-lifecycle";
@@ -92,6 +93,9 @@ function makeEnv(): TestEnv {
       return inner.execute(request);
     },
   };
+  // C02-WP5 (clause 0.1.5): the wrapping gateway journals through the same
+  // store pair, so its tracing wiring is registered for entry verification.
+  bindGatewayTracing(gateway, runStore, artifactStore);
   const entry = new LoopCapabilityEntry({ runStore, artifactStore, bindingRegistry, gateway });
   return { root, runStore, artifactStore, gateway, entry, dispatchOrder };
 }
@@ -731,6 +735,7 @@ async function main(): Promise<void> {
         });
       },
     };
+    bindGatewayTracing(failingGateway, runStore, artifactStore);
     const result = await run("build refund workflow", {
       requirementId: "REQ-WP4-W5",
       runStore,
@@ -875,6 +880,7 @@ async function main(): Promise<void> {
     };
 
     const driveRiskChain = async (rid: string) => {
+      bindGatewayTracing(riskGateway, runStore, artifactStore);
       const result = await run("small fix", { requirementId: rid, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
       const verdictScopeId = runStore.listCapabilityExecutions(result.run_id)
         .filter((e2) => e2.capability === "solution-gate" && e2.executionRole === "formal_verdict" && e2.status === "succeeded")
@@ -990,9 +996,9 @@ async function main(): Promise<void> {
     }
     ok(rejectedForgedOption, "forged skill runtime option rejected");
 
-    // A forged skill on a Re-Gate restart dispatch is metadata-inert: the
-    // authorized generation restart proceeds and the next action is the
-    // canonical successor (gate scan), unchanged by the skill field.
+    // C02-WP5 skill-isolation carryover: the canonical entry now REJECTS
+    // skill metadata fail-closed before the gateway (no fail-open on the
+    // supported entry; legacy non-C02 requests keep their own path).
     const requirementId = "REQ-WP4-W6-ENTRY";
     const first = await run("small fix", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     // Round 2 H2: the restart must be live-authorized, so the finding has to
@@ -1013,6 +1019,33 @@ async function main(): Promise<void> {
     const designLastAttempt = env.runStore.listCapabilityExecutions(first.run_id)
       .filter((event) => event.capability === "solution-design")
       .reduce((max, event) => Math.max(max, event.attempt), 0);
+    let forgedSkillRejected = false;
+    try {
+      await env.entry.execute({
+        requirementId,
+        capability: "solution-design",
+        executionRole: "primary",
+        inputArtifactRef: intakeRevision.artifactRef,
+        inputArtifactVersion: intakeRevision.semver,
+        inputDigest: intakeRevision.digest,
+        outputArtifactVersion: `${designLastAttempt + 1}.0.0`,
+        input: { inputArtifactRef: intakeRevision.artifactRef },
+        skill: "sdlc-speckit-pipeline",
+      } as never);
+    } catch (error) {
+      forgedSkillRejected = error instanceof LoopRunJournalError && error.code === "INVALID_INPUT";
+    }
+    ok(forgedSkillRejected, "canonical entry rejects forged skill metadata before any dispatch");
+    ok(
+      env.runStore.listCapabilityExecutions(first.run_id).at(-1)!.status === "succeeded" &&
+        env.runStore.listCapabilityExecutions(first.run_id).at(-1)!.capability !== undefined &&
+        env.runStore.listCapabilityExecutions(first.run_id)
+          .filter((event) => event.capability === "solution-design")
+          .reduce((max, event) => Math.max(max, event.attempt), 0) === designLastAttempt,
+      "the rejected request left no dispatch behind",
+    );
+    // The clean request (no skill surface) proceeds and lands on the same
+    // canonical next action as the control flow below.
     await env.entry.execute({
       requirementId,
       capability: "solution-design",
@@ -1022,10 +1055,9 @@ async function main(): Promise<void> {
       inputDigest: intakeRevision.digest,
       outputArtifactVersion: `${designLastAttempt + 1}.0.0`,
       input: { inputArtifactRef: intakeRevision.artifactRef },
-      skill: "sdlc-speckit-pipeline",
     });
     const after = env.runStore.listCapabilityExecutions(first.run_id).at(-1)!;
-    ok(after.capability === "solution-design" && after.status === "succeeded", "restart dispatched despite forged skill");
+    ok(after.capability === "solution-design" && after.status === "succeeded", "clean restart dispatch succeeded");
     recordRevisionForLastSucceeded(env, first.run_id, requirementId, "solution-design");
     const recoveryAfter = recoverRunContext(env.runStore, requirementId);
     ok(
@@ -1067,7 +1099,7 @@ async function main(): Promise<void> {
     ok(
       JSON.stringify(recoveryControl!.nextExecutionPoint) ===
         JSON.stringify(recoveryAfter!.nextExecutionPoint),
-      "with-skill and without-skill flows produce the identical next action",
+      "rejected-skill and clean flows produce the identical next action",
     );
   }
 
@@ -1486,6 +1518,7 @@ async function main(): Promise<void> {
     };
     // The retryable failure is admitted (jump 2 fits the budget) but stops
     // the invocation WITHOUT a durable block.
+    bindGatewayTracing(flakyGateway, envRetry.runStore, envRetry.artifactStore);
     const retryThird = await run("migrate billing export", {
       requirementId: reqRetry, runStore: envRetry.runStore, artifactStore: envRetry.artifactStore,
       gateway: flakyGateway, bindingRegistry: createRuntimeBindingRegistry(), maxRegateRounds: 2,
