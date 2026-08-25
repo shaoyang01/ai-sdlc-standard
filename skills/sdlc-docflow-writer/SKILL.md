@@ -164,3 +164,13 @@ Not allowed:
 - Modify `.specify/business_domain/**`
 - Commit or push git changes
 - Treat Lark/Feishu publication as complete when authorization failed
+
+## 非节点边界（C03-A / Decision-045 / LOOP-CORE-C03-PLAN INV1）
+
+`sdlc-docflow-writer` 是 **non-node utility skill**：
+
+- 不注册为 LOOP 节点能力，不出现在 runtime 的 NODE_CAPABILITY_IDS 中；
+- 不拥有 Gate 裁决权、节点准入权或任何流程推进权；
+- 在 LOOP 内只负责渲染、落盘与发布**已被节点确认**的内容（Markdown/HTML/飞书等），
+  输入一律来自节点已产出并经 Gate 确认的产物；
+- 与七个 canonical 节点 Skill 的关系是渲染服务，而非对等节点。

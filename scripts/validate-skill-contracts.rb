@@ -4865,3 +4865,50 @@ else
   errors.each { |error| warn "- #{error}" }
   exit 1
 end
+
+# ── C03-A canonical topology (LOOP-CORE-C03-PLAN §6 A4/A5; Decision-045) ──
+# The seven canonical node skills must exist as authored packages with a
+# known-skills contract each; their names MUST stay aligned with the runtime
+# NODE_CAPABILITY_IDS (checked in tests/loop-wp6-completion-contracts.test.ts
+# and the node-capability contract suite). docflow-writer is a non-node
+# utility: it must exist but is asserted NOT to claim node membership.
+CANONICAL_NODE_SKILLS = [
+  "sdlc-requirement-intake",
+  "sdlc-solution-design",
+  "sdlc-solution-gate",
+  "sdlc-task-planning",
+  "sdlc-implementation",
+  "sdlc-code-review",
+  "sdlc-knowledge-sync"
+].freeze
+
+NON_NODE_UTILITY_SKILLS = ["sdlc-docflow-writer"].freeze
+
+canonical_errors = []
+CANONICAL_NODE_SKILLS.each do |name|
+  skill_md = File.join(SKILL_DIR, name, "SKILL.md")
+  contract = File.join(CONTRACT_DIR, "#{name}.md")
+  canonical_errors << "canonical skill #{name} missing #{relative(skill_md)}" unless File.exist?(skill_md)
+  canonical_errors << "canonical skill #{name} missing #{relative(contract)}" unless File.exist?(contract)
+  next unless File.exist?(skill_md)
+
+  body = File.read(skill_md)
+  canonical_errors << "canonical skill #{name} lacks the capability source trace table" unless body.include?("能力来源对照表")
+  canonical_errors << "canonical skill #{name} must not claim Gate adjudication authority" if body =~ /Gate\s*裁决权[^\n]*本包|拥有\s*Gate\s*裁决/
+end
+
+canonical_errors << "non-node utility sdlc-docflow-writer missing non-node boundary declaration" unless
+  File.exist?(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")) &&
+  File.read(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")).include?("非节点边界")
+
+sg = File.join(SKILL_DIR, "sdlc-solution-gate", "SKILL.md")
+if File.exist?(sg)
+  sg_body = File.read(sg)
+  %w[adversarial_scan formal_verdict].each do |role|
+    canonical_errors << "solution-gate dual-role firewall clause missing #{role}" unless sg_body.include?(role)
+  end
+  canonical_errors << "solution-gate dual-role firewall must bind the two roles to different Agent bindings" unless
+    sg_body =~ /不同\s*Agent|different Agent/i
+end
+
+errors.concat(canonical_errors.map { |e| "C03-A canonical topology: #{e}" })
