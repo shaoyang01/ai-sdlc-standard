@@ -4859,7 +4859,6 @@ if errors.empty?
   puts "PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true" if r2_next_step_diags.empty?
   puts "PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true" if r2_selftest_diags.empty?
   puts "PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true" if r3_side_effect_diags.empty? && r3_selftest_diags.empty?
-  puts "skill contract validation ok"
 else
   warn "skill contract validation failed:"
   errors.each { |error| warn "- #{error}" }

@@ -14,7 +14,7 @@ version: 0.1.0
 1. Review/challenge only the approved In Scope and decisions already introduced by the specification.
 2. Judge against the declared current delivery phase, not the system's ideal final form.
 3. Do not introduce new business goals, user scenarios, product capabilities, or platform initiatives.
-4. Every BLOCKING **or REQUIRED** finding must cite a scope basis; search the full specification for an existing or equivalent mechanism before raising BLOCKING or REQUIRED（行为等价即可满足，机制名缺失不构成 BLOCKING 或 REQUIRED）。严重度阶梯与三条闭合析取支见本清单后续条款及 `references/sdlc-solution-challenger/finding-classification.md`。
+4. Every BLOCKING **or REQUIRED** finding must cite a scope basis; search the full specification for an existing or equivalent mechanism before raising BLOCKING or REQUIRED（行为等价即可满足，机制名缺失不构成 BLOCKING 或 REQUIRED）。严重度阶梯与三条闭合析取支见 `references/sdlc-solution-challenger/finding-classification.md`。
 5. adversarial_scan role：只产出对抗扫描发现（Finding Ledger 内容），不做裁决。
 6. formal_verdict role：只消费本轮 scan 的 Ledger 做裁决并输出深度档位（LIGHT/STANDARD/DEEP）；两角色由不同 Agent binding 承载，禁止同一执行者合并执行。
 7. Do not write or rewrite the specification; do not modify production code.
