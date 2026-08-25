@@ -3,6 +3,8 @@
 > 角色：本文件是 canonical human-readable current repository status/index（仓库当前人类可读状态/索引）。
 > 优先级：Git commit/tree/diff、可执行测试、PR 事实和 CI 是实现事实权威；它们在任何冲突中都优先于本文件，本文件永远不覆盖代码、测试、PR 或 CI。
 
+> **时效提示（2026-08-26 补充）**：本文件是 Document Governance 阶段边界处的冻结快照（snapshot_mode 见下），由 `scripts/validate-capability-metadata-chain.rb` 钉住，不随 LOOP-CORE 程序推进自动更新。其 A/B 两节描述的是该阶段边界的事实，**不代表当前项目状态**。当前项目状态（LOOP-CORE-02 已完成、LOOP-CORE-03 进行中）的权威来源是：`ai-project-control-plane` 的 STATE、`docs/decisions/` 决策索引、以及 `docs/AI-SDLC-Autonomous-Delivery-Roadmap.md`（LOOP Core 规划面）。
+
 ## 基线
 
 - Repository：`shaoyang01/ai-sdlc-standard`

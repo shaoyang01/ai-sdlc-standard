@@ -2,6 +2,8 @@
 
 > 本指南说明如何阅读和使用 `ROADMAP.md`，避免把路线图当成短期 TODO 或已完成能力清单。
 
+> **路线图消歧（2026-08-26 补充）**：本仓库有两份 Roadmap，职责不同。根目录 `ROADMAP.md`（本指南的对象）负责 Standard Package、Skill、DocFlow、Speckit 与落地路线；`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` 是 LOOP Core 程序的权威规划面（LOOP-CORE-01～03 等阶段定义与完成条件），控制平面（ai-project-control-plane）§15.6 与 STATE 引用的 "Roadmap" 指后者。查 LOOP Core 当前执行状态不要看本指南或根 `ROADMAP.md`，以控制平面 STATE 与 `docs/decisions/` 决策索引为准。
+
 ## ROADMAP 的作用
 
 `ROADMAP.md` 是本标准包后续推进的主索引。
