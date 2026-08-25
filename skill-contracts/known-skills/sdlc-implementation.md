@@ -46,8 +46,8 @@ blocking_conditions:
 
 ## Capability Source Trace（Decision-045 冻结映射）
 
-| 来源旧包 | 吸收位置 |
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-implement` | 本包 Core Rules 全量吸收 |
-| `sdlc-implementation-recorder` | 本包 Core Rules 全量吸收 |
-
+| `sdlc-speckit-implement` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 6 个文件见 `references/sdlc-speckit-implement/` |
+| `sdlc-implementation-recorder` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 4 个文件见 `references/sdlc-implementation-recorder/` |
+| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 5 个文件见 `references/sdlc-speckit-checklist/` |

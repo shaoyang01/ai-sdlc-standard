@@ -48,8 +48,7 @@ blocking_conditions:
 
 ## Capability Source Trace（Decision-045 冻结映射）
 
-| 来源旧包 | 吸收位置 |
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-requirement-normalizer` | 本包 Core Rules 全量吸收 |
-| `sdlc-test-feedback-classifier` | 本包 Core Rules 全量吸收 |
-
+| `sdlc-requirement-normalizer` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 4 个文件见 `references/sdlc-requirement-normalizer/` |
+| `sdlc-test-feedback-classifier` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 4 个文件见 `references/sdlc-test-feedback-classifier/` |
