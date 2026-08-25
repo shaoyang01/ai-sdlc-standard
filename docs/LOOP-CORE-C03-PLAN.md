@@ -1,7 +1,8 @@
 # LOOP-CORE-03 有界实现规划（C03 Single-Rail Skill Delivery — Bounded Implementation Plan）
 
-> 规划状态：**DRAFT FOR CURRENT USER REVIEW**（2026-08-25 起草；本文档在接受前仅为草案，
-> 不构成任何实施授权、不消费 `LOOP_CORE_C03_ENTRY_AUTHORIZATION_GATE`）
+> 规划状态：**ACCEPTED**（2026-08-25，Current User 裁决接受全部五项裁决点的建议方案，
+> Decision-050；本规划成为正式合同。接受前仅为草案，不构成任何实施授权、不消费
+> `LOOP_CORE_C03_ENTRY_AUTHORIZATION_GATE`——三包实施授权仍逐包单独申请）
 > 日期：2026-08-25
 > 上游依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.2.3 §4 `LOOP-CORE-03`
@@ -218,18 +219,20 @@ C03-A ──> C03-B ──> C03-C
 | validator 回归破坏既有门禁 | A4/B5 每步跑全量 standards |
 | 特殊 Gate 迁移改变语义 | c1/c2 只做承接不改判定规则；输出结构兼容测试 |
 
-## 11. 待 Current User 裁决点
+## 11. 裁决记录
 
-1. **Q1 交付节奏**：建议 A 阶段八包在同一实施分支串行交付、整包送审（而非逐包 PR）；
-2. **Q2 特殊 Gate 承接落点**：建议 `development_path_entry` 迁入 runtime 确定性守卫、
+Current User 于 2026-08-25 裁决（Decision-050）：五项裁决点全部按建议方案成立。
+
+1. **Q1 交付节奏 ✅**：A 阶段八包在同一实施分支串行交付、整包送审（而非逐包 PR）；
+2. **Q2 特殊 Gate 承接落点 ✅**：`development_path_entry` 迁入 runtime 确定性守卫、
    `documentation_governance_tail_completion` 迁入 C03-C 的 Delivery Tail 流程
-   （对齐 Decision-045 既有裁定方向，请确认无异议）;
-3. **Q3 删除范围**：确认 B 阶段删除清单为「20 个旧包目录 + 20 份旧合同 + manifest/
+   （对齐 Decision-045 既有裁定方向）;
+3. **Q3 删除范围 ✅**：B 阶段删除清单为「20 个旧包目录 + 20 份旧合同 + manifest/
    registry 对应条目 + gate-runner 场景校验器」，docflow-writer 全套保留；
-4. **Q4 安装副本盘点责任**：全局副本位于用户环境（仓外），建议由实施方盘点并给出处
-   置记录，位置清单随 b6 提交说明留痕；
-5. **Q5 授权粒度确认**：三包逐包授权（既定），A 阶段授权预计在本文档 Accepted 后立
-   即申请。
+4. **Q4 安装副本盘点责任 ✅**：由实施方盘点并给出处置记录，位置清单随 b6 提交说明
+   留痕；
+5. **Q5 授权粒度 ✅**：三包逐包授权（既定），C03-A 实施授权在本文档 Accepted 后另
+   行申请——本规划 Accepted 不等于任何实施授权。
 
 ## 12. 进度管理与收口
 
@@ -243,3 +246,4 @@ C03-A ──> C03-B ──> C03-C
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-25 | Draft for Current User review | 初稿：三工作包分解（沿用影响分析 F row 7～9）、十项设计不变量、现状审计、缺口 G1～G6、待裁决点 Q1～Q5。 |
+| 0.2.0 | 2026-08-25 | Accepted | Current User 裁决接受全部五项裁决点建议方案（Decision-050）；规划状态 Draft → **Accepted**，成为 LOOP-CORE-03 正式实施合同。三包实施授权仍逐包单独申请；本修订随 PR #105 合并持久化。 |
