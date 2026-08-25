@@ -501,7 +501,16 @@ async function main(): Promise<void> {
         "B1-1: single run authority");
       ok(env.runStore.listCapabilityExecutions(runId).length === 18,
         `B1-1: journal holds exactly the 9-point event pairs (got ${env.runStore.listCapabilityExecutions(runId).length})`);
-      const expectedArtifacts = countFilesRecursive(env.root);
+      // O-1（Round-1 观察项落实）：artifact 轴成为有效断言——胜出的恢复
+      // 派发必须在本 store 落一个 solution_design 产品 blob。
+      // O-1（Round-1 观察项落实）：artifact 轴的有效断言——attempt 2 的
+      // 产品必须真实落库且内容为「新派发」产物（非 attempt 1 的复用）。
+      const retrySucceeded = env.runStore.listCapabilityExecutions(runId)
+        .find((event) => event.capability === "solution-design" &&
+          event.attempt === 2 && event.status === "succeeded")!;
+      const retryContent = env.artifactStore.read(retrySucceeded.outputArtifactRef!, retrySucceeded.outputDigest!);
+      ok(retryContent.includes("attempt 2"),
+        "B1-1: the winning resume dispatch persisted ITS OWN node product blob");
     } finally {
       delete process.env["SDLC_RESUME_LEASE_WAIT_BUDGET_MS"];
       rmSync(env.root, { recursive: true, force: true });
@@ -609,14 +618,24 @@ async function main(): Promise<void> {
       ok(blockedRecovery.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED",
         "round exhaustion escalates to a durable honest BLOCK");
       // 显式释放路径存在且受守卫（错误 release code 不清块）。
-      let wrongReleaseRejected = false;
+      let wrongReleaseCode = "";
       try {
-        env.runStore.releaseRunRegateBlock(requirementId in {} ? first.run_id : first.run_id, "WRONG_CODE" as never);
+        env.runStore.releaseRunRegateBlock(first.run_id, { kind: "WRONG_CODE" } as never);
       } catch (error) {
-        wrongReleaseRejected = true;
+        wrongReleaseCode = error instanceof LoopRunJournalError ? error.code : String(error);
       }
-      ok(wrongReleaseRejected || recoverRunContext(env.runStore, requirementId)!.blockingReasonCode !== null,
-        "release requires the correct escalation code");
+      ok(wrongReleaseCode === "INVALID_INPUT",
+        `S8/O-3: a wrong release kind is rejected with INVALID_INPUT (got ${wrongReleaseCode})`);
+      let scopeResetAccepted = false;
+      try {
+        env.runStore.releaseRunRegateBlock(first.run_id, { kind: "SCOPE_RESET" });
+        scopeResetAccepted = true;
+      } catch {
+        scopeResetAccepted = false;
+      }
+      ok(scopeResetAccepted &&
+        recoverRunContext(env.runStore, requirementId)!.blockingReasonCode === null,
+        "S8: only an explicit SCOPE_RESET clears the durable block");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }
