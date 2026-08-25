@@ -1,0 +1,139 @@
+# Conflict And Blocking
+
+## Blocking Conditions
+
+Stop when:
+
+- Implementation is not verified.
+- Source artifacts are missing or stale.
+- Target path is unclear.
+- L1/L2 are unconfirmed for a missing `.specify/business_domain/**` L4 target.
+- L4 id cannot be reserved for create-if-missing.
+- naming_pattern_source, shape_profile_source, or shape_confidence is missing for create-if-missing.
+- standard template fallback is attempted without explicit fallback conditions.
+- standard template fallback is explicitly active, but Project Type Profiles or selected fallback template cannot be resolved.
+- Target owner is unclear for an existing or new business-domain document.
+- User did not authorize writing to the target.
+- User did not explicitly authorize create-if-missing when the business-domain L4 target is missing.
+- Proposed fact conflicts with existing knowledge.
+- Proposed fact is not stable or reusable.
+- Proposed fact is only valid for a one-off requirement.
+- Proposed fact depends on unresolved review or test feedback.
+- Sync would require modifying production code, spec, plan, or tasks.
+- Standard entry coverage audit is `BLOCKED` when the sync target is `.specify/business_domain/**`.
+- Duplicate sync risk: pipeline sync already executed for the same facts.
+- Duplicate sync risk: library sync already executed for the same facts.
+- Same stable fact already synced to the target document.
+- Unknown rail (rail not identifiable from context or user confirmation).
+- Unknown sync source mode (mode not `speckit_driven`, `library_driven`, or `hybrid`).
+- Unknown business_domain naming pattern (cannot determine target document naming convention).
+- Target L4 ambiguous (multiple candidate L4 documents or none identifiable).
+- Target shape unknown (existing document structure not understood).
+- Conflicting existing fact in target document.
+- Missing implementation evidence for direct business_domain write.
+- Missing verification evidence for direct business_domain write.
+- Canonical naming unknown.
+- naming_pattern_source missing.
+- shape_profile_source missing.
+- Shape confidence `low` without user confirmation.
+- Shape confidence `unknown`.
+- Standard template fallback attempted in existing project without explicit conditions.
+- Whole-document rewrite attempted on existing L4.
+- Duplicate semantic L4 candidate (same domain concept, different path or id).
+- L2 main document index update missing.
+- `01DomainCatalog.md` update missing.
+- Create-if-missing would use standard skeleton without project-shape confirmation.
+- Standard template fallback not allowed in existing projects without explicit conditions.
+- safe insertion point unknown for direct update
+- existing shape understood but section mapping low confidence
+- proposed update injects New-Rail fixed sections
+- proposed update rewrites whole document
+- proposed update deletes existing facts
+- semantic_conflict
+- code_drift
+- doc_drift
+- stale_fact
+- scope_conflict
+- duplicate_fact
+- source_priority_conflict
+- missing implementation evidence for direct update
+- missing verification evidence for direct update
+- duplicate sync guard unresolved
+- pipeline_sync_executed=true and result=synced without supplemental authorization
+- implementation evidence missing in library_driven mode
+- verification evidence missing in library_driven mode
+- 02-方案审核 missing / failed / blocked
+- manifest source freshness conflict
+- library artifact current effective version unknown
+- source_of_truth unclear in library_driven mode
+
+## Entry Coverage Blocking
+
+Before writing stable facts to `.specify/business_domain/**`, run the standard strict audit when `.specify/entry-coverage-profile.yaml` exists:
+
+```bash
+${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict
+```
+
+Block Sync when:
+
+- the runner exits non-zero;
+- `.specify/reports/entry_coverage/entry_coverage_report.md` status is `BLOCKED` or `PENDING`;
+- `unarchived_entries.md`, `unarchived_services.md`, or `cross_domain_conflicts.md` contains blocking rows relevant to the sync target.
+
+If business-domain documents are intentionally not initialized yet, route to business-domain bootstrap or owner confirmation before Sync writes long-term facts.
+
+## Create-If-Missing Blocking
+
+Block create-if-missing instead of creating or writing to `99PendingConfirmation` when:
+
+- confirmed L1/L2 route is missing;
+- target owner is unclear;
+- create-if-missing authorization is missing or only implied by generic write authorization;
+- L4 id reservation is ambiguous;
+- project canonical naming cannot be resolved;
+- project shape profile cannot be resolved;
+- shape confidence is unknown or low without user confirmation;
+- standard template fallback is explicitly active, but Project Type Profiles or selected fallback template cannot be resolved;
+- standard template fallback is attempted without user confirmation or standard_template_fallback_allowed=true;
+- create-if-missing would use standard template shape in an existing project with detectable project shape;
+- Selected L4 Template and templates/business-domain-l4 are used only in standard template fallback mode;
+- the L2 main document index cannot be updated;
+- `01DomainCatalog.md` cannot be updated;
+- candidate facts are proposed, unverified, one-off, or only requirement-specific;
+- existing business_domain facts conflict with the proposed document;
+- entry coverage audit cannot run or returns `BLOCKED` / `PENDING`.
+
+The blocked result must explain the earliest Re-Gate node: business-domain bootstrap, owner confirmation, Plan route correction, implementation evidence, test/review closure, or code-doc reconcile.
+
+## Conflict Handling
+
+When source and target conflict:
+
+- Do not overwrite target knowledge silently.
+- Identify both statements and source evidence.
+- Determine whether the conflict is code drift, document drift, or new requirement behavior.
+- Recommend the earliest affected Re-Gate node.
+- Recommend `sdlc-speckit-code-doc-reconcile` when a code/document consistency audit is needed.
+
+## Re-Gate Routing
+
+Route blockers to:
+
+- `01-技术方案` when domain behavior is missing or changed.
+- `02-方案审核` when risk acceptance or review decision is missing.
+- `sdlc-speckit-implement` when implementation evidence is incomplete.
+- `sdlc-implementation-recorder` when implementation record is missing.
+- `sdlc-test-feedback-sync` when test feedback exposes reusable checklist or schema gaps.
+- `sdlc-speckit-code-doc-reconcile` when code and knowledge disagree.
+
+## No-Write Mode
+
+Use no-write mode when:
+
+- Authorization is missing.
+- Target path is unclear.
+- The user asks for a proposal only.
+- The repository is read-only.
+
+In no-write mode, output proposed changes and manifest recommendations without editing target files.

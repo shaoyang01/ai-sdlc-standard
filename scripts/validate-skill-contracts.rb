@@ -4859,6 +4859,143 @@ if errors.empty?
   puts "PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true" if r2_next_step_diags.empty?
   puts "PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true" if r2_selftest_diags.empty?
   puts "PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true" if r3_side_effect_diags.empty? && r3_selftest_diags.empty?
+else
+  warn "skill contract validation failed:"
+  errors.each { |error| warn "- #{error}" }
+  exit 1
+end
+
+# ── C03-A canonical topology (LOOP-CORE-C03-PLAN §6 A4/A5; Decision-045) ──
+# The seven canonical node skills must exist as authored packages with a
+# known-skills contract each. Name alignment against the runtime
+# NODE_CAPABILITY_IDS is enforced IN THIS FILE by extracting the constant
+# from loop/types/index.ts (see RUNTIME_NODE_IDS below) — there is no
+# external test performing this comparison. docflow-writer is a non-node
+# utility: it must exist but is asserted NOT to claim node membership.
+CANONICAL_NODE_SKILLS = [
+  "sdlc-requirement-intake",
+  "sdlc-solution-design",
+  "sdlc-solution-gate",
+  "sdlc-task-planning",
+  "sdlc-implementation",
+  "sdlc-code-review",
+  "sdlc-knowledge-sync"
+].freeze
+
+NON_NODE_UTILITY_SKILLS = ["sdlc-docflow-writer"].freeze
+
+canonical_errors = []
+CANONICAL_NODE_SKILLS.each do |name|
+  skill_md = File.join(SKILL_DIR, name, "SKILL.md")
+  contract = File.join(CONTRACT_DIR, "#{name}.md")
+  canonical_errors << "canonical skill #{name} missing #{relative(skill_md)}" unless File.exist?(skill_md)
+  canonical_errors << "canonical skill #{name} missing #{relative(contract)}" unless File.exist?(contract)
+  next unless File.exist?(skill_md)
+
+  body = File.read(skill_md)
+  canonical_errors << "canonical skill #{name} lacks the capability source trace table" unless body.include?("能力来源对照表")
+  # R4/B-4: negation-aware authority-claim detection. A line counts as a
+  # claim only when it pairs an ownership verb with Gate adjudication AND
+  # carries no negation marker anywhere in the same line.
+  claim_line = body.lines.find do |ln|
+    ln =~ /Gate\s*裁决/ && ln =~ /拥有|承载|具备|持有/ && ln !~ /不|无|未|非|排除|禁止|不得/
+  end
+  canonical_errors << "canonical skill #{name} must not claim Gate adjudication authority (line: #{claim_line.strip})" if claim_line
+end
+
+# Self-test for the negation-aware detector (red/green pinned).
+begin
+  detector = lambda do |text|
+    text.lines.any? { |ln| ln =~ /Gate\s*裁决/ && ln =~ /拥有|承载|具备|持有/ && ln !~ /不|无|未|非|排除|禁止|不得/ }
+  end
+  raise "self-test F1: negation must NOT be flagged" if detector.call("本包不拥有 Gate 裁决权。\n")
+  raise "self-test F2: 无 wording must NOT be flagged" if detector.call("无 Gate 裁决权威。\n")
+  raise "self-test F3: bare claim MUST be flagged" unless detector.call("本包拥有 Gate 裁决权。\n")
+  puts "CANONICAL_AUTHORITY_DETECTOR_SELF_TEST_VERIFIED true"
+rescue StandardError => e
+  errors << "C03-A canonical topology: #{e.message}"
+end
+
+canonical_errors << "non-node utility sdlc-docflow-writer missing non-node boundary declaration" unless
+  File.exist?(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")) &&
+  File.read(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")).include?("非节点边界")
+
+sg = File.join(SKILL_DIR, "sdlc-solution-gate", "SKILL.md")
+if File.exist?(sg)
+  sg_body = File.read(sg)
+  %w[adversarial_scan formal_verdict].each do |role|
+    canonical_errors << "solution-gate dual-role firewall clause missing #{role}" unless sg_body.include?(role)
+  end
+  canonical_errors << "solution-gate dual-role firewall must bind the two roles to different Agent bindings" unless
+    sg_body =~ /不同\s*Agent|different Agent/i
+end
+
+# B-5: extract NODE_CAPABILITY_IDS from the runtime source of truth
+# (loop/types/index.ts) by slicing between the constant declaration and the
+# closing "] as const" — the prefix itself contains "[]" so a naive regex on
+# brackets would misfire.
+TYPES_SOURCE = File.join(ROOT, "loop", "types", "index.ts")
+runtime_node_ids = []
+types_text = File.exist?(TYPES_SOURCE) ? File.read(TYPES_SOURCE) : ""
+decl_idx = types_text.index("NODE_CAPABILITY_IDS")
+if decl_idx.nil?
+  canonical_errors << "unable to locate NODE_CAPABILITY_IDS in #{relative(TYPES_SOURCE)}"
+else
+  close_idx = types_text.index("] as const", decl_idx)
+  if close_idx.nil?
+    canonical_errors << "unable to locate the NODE_CAPABILITY_IDS closing bracket"
+  else
+    # Runtime constants carry BARE capability names ("requirement-intake");
+    # plan-side canonical skills are the same names with the "sdlc-" package
+    # prefix. Compare on the stripped form.
+    runtime_node_ids = types_text[decl_idx..close_idx].scan(/"([a-z][a-z-]+)"/).flatten
+    if runtime_node_ids.empty?
+      canonical_errors << "NODE_CAPABILITY_IDS extraction yielded no capability ids"
+    else
+      plan_capability_names = CANONICAL_NODE_SKILLS.map { |n| n.sub(/\Asdlc-/, "") }
+      if runtime_node_ids.sort != plan_capability_names.sort
+        canonical_errors << "NODE_CAPABILITY_IDS drift: runtime=#{runtime_node_ids.sort.inspect} plan=#{plan_capability_names.sort.inspect}"
+      end
+    end
+  end
+end
+
+# B-6: mechanically link the solution-gate dual-role firewall clause to the
+# C02 BindingRegistry structure — three facts must coexist:
+#   (a) loop/types declares BOTH execution-role literals;
+#   (b) runtime createRuntimeBindingRegistry swaps formal_verdict to hermes
+#       while adversarial_scan stays codex (different agents);
+#   (c) the solution-gate SKILL.md carries the dual-role firewall clause.
+roles_declared = types_text.include?("\"adversarial_scan\"") && types_text.include?("\"formal_verdict\"")
+runtime_source_path = File.join(ROOT, "runtime.ts")
+runtime_text = File.exist?(runtime_source_path) ? File.read(runtime_source_path) : ""
+scan_kept_codex = runtime_text.include?("binding-codex-solution-gate-formal_verdict")
+verdict_moved_hermes = runtime_text.include?("binding-hermes-solution-gate-formal_verdict")
+sg_skill_path = File.join(SKILL_DIR, "sdlc-solution-gate", "SKILL.md")
+sg_skill = File.exist?(sg_skill_path) ? File.read(sg_skill_path) : ""
+contract_firewall = sg_skill.include?("adversarial_scan") && sg_skill.include?("formal_verdict") &&
+                    sg_skill =~ /不同\s*Agent|different Agent/i
+unless roles_declared && scan_kept_codex && verdict_moved_hermes && contract_firewall
+  canonical_errors << "solution-gate dual-role firewall not mechanically linked to C02 BindingRegistry " \
+                      "(roles_declared=#{!!roles_declared}, scan_kept_codex=#{!!scan_kept_codex}, " \
+                      "verdict_moved_hermes=#{!!verdict_moved_hermes}, contract_firewall=#{!!contract_firewall})"
+end
+
+errors.concat(canonical_errors.map { |e| "C03-A canonical topology: #{e}" })
+
+if errors.empty?
+  puts "SINGLE_RAIL_REBASELINE_VALIDATED true" if single_rail_baseline_diags.empty? && single_rail_selftest_diags.empty?
+  puts "GRP01_BINDINGS_VALIDATED true" if grp01_baseline_diags.empty? && grp01_selftest_diags.empty?
+  puts "GRP01_RESOLUTION_AND_FIVE_SKILL_GLOBAL_FIRST_VALIDATED true" if grp01_r3_r4_baseline_diags.empty? && GRP01_R3_R4_SELFTEST_DIAGS.empty?
+  puts "PIPELINE_BOUNDARY_BOOTSTRAP_WRITE_FAIL_CLOSED true" if r1_bootstrap_write_diags.empty?
+  puts "PIPELINE_BOUNDARY_BOOTSTRAP_DRY_RUN_ONLY true" if r1_bootstrap_dry_run_diags.empty?
+  puts "PIPELINE_BOUNDARY_RESULT_MATRIX_VALIDATED true" if r1_matrix_diags.empty?
+  puts "PIPELINE_BOUNDARY_TAIL_ENTRY_ELIGIBILITY_FAIL_CLOSED true" if r1_tail_entry_diags.empty?
+  puts "PIPELINE_BOUNDARY_SELFTESTS_PASS true" if r1_selftest_diags.empty?
+  puts "PIPELINE_BOUNDARY_ACTIVE_RUNTIME_CONDITIONALITY_VERIFIED true" if r2_active_diags.empty?
+  puts "PIPELINE_BOUNDARY_MANIFEST_NEXT_STEP_MATRIX_VERIFIED true" if r2_next_step_diags.empty?
+  puts "PIPELINE_BOUNDARY_EQUIVALENT_SEMANTIC_SELFTESTS_PASS true" if r2_selftest_diags.empty?
+  puts "PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true" if r3_side_effect_diags.empty? && r3_selftest_diags.empty?
   puts "skill contract validation ok"
 else
   warn "skill contract validation failed:"
