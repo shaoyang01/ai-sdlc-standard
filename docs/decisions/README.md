@@ -21,6 +21,7 @@
 | [Decision-046](Decision-046-decision-record-modularization.md) | 2026-08-22 | Accepted | Decision Record 模块化与历史卷冻结。 |
 | [Decision-047](Decision-047-c02-wp5-cross-entry-recovery-authorization.md) | 2026-08-24 | Accepted | 授权实施 C02-WP5 跨入口恢复与生产入口接线（Q1/Q2/Q3 均按推荐方案；H3 归属 C03-B 不变）。 |
 | [Decision-048](Decision-048-c02-wp6-validation-guards-authorization.md) | 2026-08-25 | Accepted | 授权实施 C02-WP6 Validation Guards and Completion Acceptance（C02 最终综合验收包；R-A/R-B/R-C 延续裁定固化）。 |
+| [Decision-049](Decision-049-c02-completed.md) | 2026-08-25 | Accepted | 消费 C02 最终授权，登记 LOOP-CORE-02 = COMPLETED；O-2 移交 C03-B；下一转换为 C03 授权申请。 |
 
 ## 新增流程
 
