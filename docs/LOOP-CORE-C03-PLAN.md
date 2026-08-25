@@ -3,8 +3,8 @@
 > 规划状态：**ACCEPTED**（2026-08-25，Current User 裁决接受全部五项裁决点的建议方案，
 > Decision-050；本规划成为正式合同。接受前仅为草案，不构成任何实施授权、不消费
 > `LOOP_CORE_C03_ENTRY_AUTHORIZATION_GATE`——三包实施授权仍逐包单独申请）
-> 执行状态：**C03-A CLOSED（2026-08-25，Decision-051）· C03-B CURRENT_USER_HOLD · C03-C 未授权**
-> （C03-B 挂起原因：旧版 sdlc-* Skill 仍在日常开发中活跃使用，原子切换时点由 Current User 根据使用节奏决定；挂起期间双拓扑中间态合法持续，新八包内容冻结。）
+> 执行状态：**C03-A CLOSED（2026-08-25，Decision-051）· C03-B AUTHORIZED（2026-08-25，Decision-052，HOLD 已解除）· C03-C 未授权**
+> （C03-B HOLD 解除裁决：Current User 明确 go/no-go —— 旧版 sdlc-* Skill 退役时点 = 随 C03-B 实施一次性原子切换；解除后按规划 §6 C03-B b1～b7 执行，独立复审后收口。）
 > 日期：2026-08-25
 > 上游依据：
 > - [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.2.3 §4 `LOOP-CORE-03`
@@ -250,3 +250,4 @@ Current User 于 2026-08-25 裁决（Decision-050）：五项裁决点全部按�
 | 0.1.0 | 2026-08-25 | Draft for Current User review | 初稿：三工作包分解（沿用影响分析 F row 7～9）、十项设计不变量、现状审计、缺口 G1～G6、待裁决点 Q1～Q5。 |
 | 0.2.0 | 2026-08-25 | Accepted | Current User 裁决接受全部五项裁决点建议方案（Decision-050）；规划状态 Draft → **Accepted**，成为 LOOP-CORE-03 正式实施合同。三包实施授权仍逐包单独申请；本修订随 PR #105 合并持久化。 |
 | 1.0.0 | 2026-08-25 | Accepted | 登记 **C03-A 收口与 C03-B 挂起**（Decision-051）：C03-A 经三轮独立复审收口（R3 PASS 无 P1/P2；基线 PR #106 head `d579d14`），授权 `C03_A_CANONICAL_SKILL_DELIVERY` 消费。**C03-B 进入 CURRENT_USER_HOLD**——旧版 sdlc-* Skill 仍在日常开发中活跃使用，原子切换时点由 Current User 决定；挂起期间双拓扑中间态合法持续、新八包内容冻结、H3 维持 OPEN 归 C03-B。C03-C 因依赖 B 顺延不可开始。 |
+| 1.0.1 | 2026-08-25 | Accepted | 登记 **C03-B 授权与 HOLD 解除**（Decision-052）：Current User 明确 go/no-go —— 旧版 sdlc-* Skill 退役时点 = 随 C03-B 实施一次性原子切换；`C03_B_REGISTRY_AND_INSTALL_CUTOVER`（F row 8）授权成立，范围＝规划 §6 C03-B b1～b7（manifest/registry/known-skills/旧 skills 目录原子切换、校验器收尾、安装副本盘点重建、H3 关闭双重验证），排除任何超出清单的行为变更。实施按既定节奏：单独分支、Draft PR、独立完整复审、Current User 收口裁决。 |
