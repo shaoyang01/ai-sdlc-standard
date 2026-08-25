@@ -87,3 +87,13 @@ this skill must follow `ai-sdlc/artifact-versioning.md`:
 This Skill supersedes the routing role of `html-doc-style`.
 
 `html-doc-style` may remain as a legacy HTML rendering reference. Route DocFlow artifacts through `sdlc-docflow-writer`.
+
+## 非节点边界（C03-A / Decision-045 / LOOP-CORE-C03-PLAN INV1）
+
+`sdlc-docflow-writer` 是 **non-node utility skill**：
+
+- 不注册为 LOOP 节点能力，不属于 runtime `NODE_CAPABILITY_IDS`；
+- 不拥有 Gate 裁决权、节点准入权或任何流程推进权；
+- 在 LOOP 内只负责渲染、落盘与发布已被节点确认的内容（Markdown/HTML/飞书等），
+  输入一律来自节点已产出并经 Gate 确认的产物；
+- 与七个 canonical 节点 Skill 的关系是渲染服务，而非对等节点。

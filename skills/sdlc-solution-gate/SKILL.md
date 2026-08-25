@@ -22,18 +22,10 @@ version: 0.1.0
 9. Residual clarification 只能追溯到已批准 DocFlow 产物或显式用户确认；触及 Scope/state/data/failure/compatibility/acceptance 时停止并回流 solution-design。
 10. Gate 推进与 generation 权威属于 LOOP runtime；本 Skill 不推进任何流程。
 
-## 能力来源对照表（Decision-045 冻结映射）
+## 能力来源对照表
 
-| 来源旧包 | 吸收说明 |
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-solution-challenger` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-solution-reviewer` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-speckit-clarify` | 核心规则与职责已全量吸收至本包 |
-
-## 双角色防火墙
-
-本 Skill 服务于 solution-gate 的两个执行角色：**adversarial_scan**（对抗扫描，
-Finding Ledger 产出）与 **formal_verdict**（裁决 + 深度档位）。LOOP runtime 的
-BindingRegistry 强制两角色绑定不同 Agent；本包不提供合并执行的路径，也不承载
-Gate 推进权——推进一律由 runtime 编排完成。
-
+| `sdlc-solution-challenger` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-solution-challenger/` |
+| `sdlc-solution-reviewer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-solution-reviewer/` |
+| `sdlc-speckit-clarify` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-speckit-clarify/` |

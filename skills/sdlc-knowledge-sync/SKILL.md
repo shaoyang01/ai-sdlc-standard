@@ -20,16 +20,15 @@ version: 0.1.0
 7. Default read-only audit; do not modify production code.
 8. Do not overwrite classified feedback results; use `ai-sdlc/change-control.md` for Specification Missing / Review Missing / Requirement Change.
 
-## 能力来源对照表（Decision-045 冻结映射）
+9. create-if-missing 授权链：目标知识条目缺失时，必须先经显式 create-if-missing 授权才可建目；无授权即停。
+10. entry coverage 审计：同步完成后核对知识条目对实现事实的覆盖面，漏项记为 `待补同步项`。
+11. duplicate sync guard：同一事实已有等价条目时拒绝重复写入（幂等守卫）。
+12. 原始反馈仍从 requirement-intake 重入——本包只消费已分类反馈，绝不替代 intake 分类职能（Decision-045 固定边界）。
 
-| 来源旧包 | 吸收说明 |
+## 能力来源对照表
+
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-sync` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-speckit-code-doc-reconcile` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-test-feedback-sync` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-speckit-sync` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-sync/` |
+| `sdlc-speckit-code-doc-reconcile` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-code-doc-reconcile/` |
+| `sdlc-test-feedback-sync` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-test-feedback-sync/` |

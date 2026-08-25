@@ -6,13 +6,13 @@
 name: sdlc-knowledge-sync
 version: 0.1.0
 category: Sync Skill
-stage: Knowledge Sync
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
   - LOOP runtime recovery-context pinned inputs（当前有效上游产物）
 output_artifacts:
-  - .specify/business_domain/ 及声明知识目标
+  - 按节点语义的指定输出产物
 required_schema:
   - ai-sdlc/node-capability-contract.md
 side_effects:
@@ -22,9 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: true
 can_execute_commands: false
 blocking_conditions:
-
   - sync target path lacks explicit authorization
-  - facts are unverified or unresolved```
+  - facts are unverified or unresolved (kept as 待确认同步项)
 ```
 
 ## Responsibilities

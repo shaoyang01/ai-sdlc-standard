@@ -6,7 +6,7 @@
 name: sdlc-solution-gate
 version: 0.1.0
 category: Auditor Skill / Reviewer Skill
-stage: Solution Gate（adversarial_scan 与 formal_verdict 双角色）
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
@@ -22,10 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: false
 blocking_conditions:
-  - Every blocking/required finding must cite a scope basis; search the full specification for an equivalent mechanism before raising BLOCKING（行为等价即可满足，机制名缺失不构成 BLO
-
-  - scan ledger for this round is missing
-  - both gate roles resolve to the same Agent binding```
+  - this round's scan Finding Ledger is missing
+  - both gate roles would resolve to the same Agent binding
 ```
 
 ## Responsibilities

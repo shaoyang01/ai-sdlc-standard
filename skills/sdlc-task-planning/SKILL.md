@@ -20,15 +20,12 @@ version: 0.1.0
 7. Do not modify production code; task execution belongs to `sdlc-implementation`。
 8. Use `library/{requirement_id}/03-任务规划/` as the default local output node.
 
-## 能力来源对照表（Decision-045 冻结映射）
+9. Checklist internal check：任务集产出后运行 speckit-checklist 迁移件做可追溯性自检（checklist 为本包内部校验能力，不对外独立服务）。
 
-| 来源旧包 | 吸收说明 |
+## 能力来源对照表
+
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-tasks` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-speckit-analyze` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-speckit-tasks` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-speckit-tasks/` |
+| `sdlc-speckit-analyze` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-analyze/` |
+| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-checklist/` |

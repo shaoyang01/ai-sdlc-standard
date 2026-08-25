@@ -22,15 +22,12 @@ version: 0.1.0
 9. Preserve missing file/line/symbol/spec basis as Missing Information.
 10. Use `library/{requirement_id}/04-代码审核/` as the default local output node.
 
-## 能力来源对照表（Decision-045 冻结映射）
+11. Severity ladder（finding 分级）：CRITICAL=违反已批准事实且不可合入；HIGH=合入前必须修复或显式风险接受；MEDIUM=合入前应修或有跟进项；LOW=改进项。
+12. Gate adjudication rules：存在 CRITICAL 或未接受 HIGH → FAIL；仅 MEDIUM/LOW 且有跟进约定 → PASS_WITH_RISK（须列明风险接受字段）；全清 → PASS。风险接受必须带接受者与证据。
 
-| 来源旧包 | 吸收说明 |
+## 能力来源对照表
+
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-code-review-excellence` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-code-review-normalizer` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-code-review-excellence` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-code-review-excellence/` |
+| `sdlc-code-review-normalizer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-code-review-normalizer/` |

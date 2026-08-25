@@ -21,15 +21,12 @@ version: 0.1.0
 8. Do not self-review code quality（属 `sdlc-code-review`）；完成声明必须引用 diff、测试输出或 journal 事件。
 9. Use `library/{requirement_id}/03-实现记录/` as the default evidence node.
 
-## 能力来源对照表（Decision-045 冻结映射）
+10. Checklist internal check：实现前运行 speckit-checklist 迁移件核对任务-产物追溯性（本包内部校验能力，不对外独立服务）。
 
-| 来源旧包 | 吸收说明 |
+## 能力来源对照表
+
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-implement` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-implementation-recorder` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-speckit-implement` | Core Rules 全部条款吸收至本包；references 迁移件 6 个文件见 `references/sdlc-speckit-implement/` |
+| `sdlc-implementation-recorder` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-implementation-recorder/` |
+| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-checklist/` |

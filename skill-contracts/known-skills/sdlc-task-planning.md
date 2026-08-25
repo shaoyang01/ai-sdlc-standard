@@ -6,7 +6,7 @@
 name: sdlc-task-planning
 version: 0.1.0
 category: Producer Skill
-stage: Task Planning
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
@@ -22,10 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: false
 blocking_conditions:
-  - Stop when task breakdown requires changing Scope, plan, compatibility, exception, retry, idempotency, transaction, rollback, or test behavior（回流 solution-design
-
-  - task breakdown requires scope/plan/compatibility changes (route back to solution-design)
-  - approved artifacts are stale or inconsistent```
+  - task breakdown requires scope/plan/compatibility/rollback changes (route back to solution-design)
+  - approved upstream artifacts are stale or inconsistent
 ```
 
 ## Responsibilities

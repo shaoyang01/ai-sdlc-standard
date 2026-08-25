@@ -5,8 +5,8 @@
 ```yaml
 name: sdlc-requirement-intake
 version: 0.1.0
-category: Intake Skill / Producer Skill / Sync Skill
-stage: Requirement Intake
+category: Intake Skill / Producer Skill
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
@@ -22,9 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: false
 blocking_conditions:
-
-  - generation-skip or conflicting change records are rejected by the store
-  - required source is missing or unreadable```
+  - generation-skipping or conflicting change records are rejected
+  - required source is missing or unreadable
 ```
 
 ## Responsibilities

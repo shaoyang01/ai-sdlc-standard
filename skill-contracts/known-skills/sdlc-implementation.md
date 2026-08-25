@@ -6,13 +6,13 @@
 name: sdlc-implementation
 version: 0.1.0
 category: Executor Skill / Producer Skill
-stage: Implementation
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
   - LOOP runtime recovery-context pinned inputs（当前有效上游产物）
 output_artifacts:
-  - library/{requirement_id}/03-实现记录/
+  - 按节点语义的指定输出产物
 required_schema:
   - ai-sdlc/node-capability-contract.md
 side_effects:
@@ -22,10 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: true
 blocking_conditions:
-  - Stop when implementation requires undefined behavior, unapproved Scope change, missing technical decision, or route/source-boundary conflict.
-
   - implementation requires undefined behavior or unapproved scope change
-  - verification evidence is missing (记录为 验证缺口)```
+  - verification evidence is missing (recorded as 验证缺口)
 ```
 
 ## Responsibilities

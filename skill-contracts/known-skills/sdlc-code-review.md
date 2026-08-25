@@ -6,13 +6,13 @@
 name: sdlc-code-review
 version: 0.1.0
 category: Reviewer Skill
-stage: Code Review
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
   - LOOP runtime recovery-context pinned inputs（当前有效上游产物）
 output_artifacts:
-  - library/{requirement_id}/04-代码审核/
+  - 按节点语义的指定输出产物
 required_schema:
   - ai-sdlc/node-capability-contract.md
 side_effects:
@@ -22,9 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: false
 blocking_conditions:
-
-  - finding lacks file location and specification basis (recorded as Missing Information)
-  - approved artifacts are stale```
+  - a finding lacks file location and specification basis (recorded as Missing Information)
+  - referenced approved artifacts are stale
 ```
 
 ## Responsibilities

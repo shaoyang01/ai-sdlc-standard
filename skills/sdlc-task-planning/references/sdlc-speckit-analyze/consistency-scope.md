@@ -1,0 +1,70 @@
+# Consistency Scope
+
+## Global-First Anchor
+
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`
+(sections 1, 2 and 7), before the detailed consistency audit:
+
+- Anchor the current goal, Scope (in/out), non-goals, and acceptance from the current route, spec, plan, tasks, and approved DocFlow artifacts.
+- Enumerate the frozen applicable material surfaces (section 7); mark each surface as applicable or `NOT_APPLICABLE` (不涉及).
+- The consistency dimensions below are interpretations of the shared surface list; they never narrow it.
+
+## Consistency Dimensions
+
+Audit these dimensions across DocFlow, spec, plan, and tasks:
+
+- Business goal and in-scope / out-of-scope boundary.
+- Functional behavior and acceptance criteria.
+- State transition and data lifecycle.
+- API, DB, cache, MQ, schedule, listener, and external integration behavior.
+- Failure, timeout, exception, retry, idempotency, transaction, rollback, and compatibility strategy.
+- Observability, logging, metrics, alerting, rollout, and release support.
+- Test strategy and verification task coverage.
+- Accepted risks, deferred items, and Re-Gate decisions.
+- Artifact currency and stale status.
+
+## Allowed Findings
+
+Allowed findings include:
+
+- Missing traceability.
+- Inconsistent wording that changes implementation meaning.
+- Plan item missing a task.
+- Task missing approved plan basis.
+- Acceptance criterion missing verification.
+- Risk accepted in solution review but absent from plan or tasks.
+- Stale or replaced artifact still being used.
+- Manifest state not matching current artifacts.
+
+## Blocked Analysis Decisions
+
+Return to upstream Re-Gate when resolving a finding would require:
+
+- Changing approved Scope.
+- Adding business behavior.
+- Changing API, DB, cache, MQ, schedule, listener, state, transaction, rollback, or compatibility behavior.
+- Changing acceptance criteria or test oracle.
+- Adding implementation work not supported by spec and plan.
+- Accepting or hiding a new risk.
+
+## Earliest Affected Node
+
+Route findings to the earliest affected node:
+
+- Requirement meaning or business goal issue -> `00-需求资料` or `01-技术方案`.
+- Technical specification issue -> `01-技术方案`.
+- Solution review gap or unaccepted risk -> `02-方案审核`.
+- SpecKit spec mismatch -> `sdlc-speckit-specify`.
+- Residual ambiguity -> `sdlc-speckit-clarify`.
+- Technical plan issue -> `sdlc-speckit-plan`.
+- Task breakdown issue -> `sdlc-speckit-tasks`.
+
+Do not route all findings to implementation. Implementation starts only after Analyze Gate passes.
+
+## Bounded Continuation
+
+Per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md`:
+
+- Record every material blocker (from Allowed Findings or Blocked Analysis Decisions) and continue the remaining reliable bounded consistency scan; do not fail-fast on the first blocker.
+- A blocker that requires upstream Re-Gate is still recorded and routed to the earliest affected node; it does not end the scan.
+- Hard-stop only for: missing/unreadable required source, fundamentally indeterminable scope, or continuation requiring invented behavior.

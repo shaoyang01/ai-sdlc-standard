@@ -23,15 +23,9 @@ version: 0.1.0
 10. Apply `ai-sdlc/change-control.md` for Supplement / Change / Rework / Feedback-Driven Change；feedback 波次开启新 generation 由 runtime 编排，本 Skill 不推进流程。
 11. Use `ess/test-feedback-schema.md` as the feedback output structure.
 
-## 能力来源对照表（Decision-045 冻结映射）
+## 能力来源对照表
 
-| 来源旧包 | 吸收说明 |
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-requirement-normalizer` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-test-feedback-classifier` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-requirement-normalizer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-requirement-normalizer/` |
+| `sdlc-test-feedback-classifier` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-test-feedback-classifier/` |

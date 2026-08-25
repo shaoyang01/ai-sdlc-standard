@@ -21,16 +21,13 @@ version: 0.1.0
 8. After drafting, recommend `sdlc-solution-gate` adversarial_scan as the next step（推进由 runtime 完成）。
 9. Apply the Goal-Anchored Global Reasoning contract（先建全局模型、后做整模影响自检），不扩展 ESS sections/schemas/Gate architecture。
 
-## 能力来源对照表（Decision-045 冻结映射）
+10. Depth-tier delivery clause：按 solution-gate 裁决的深度档位（LIGHT/STANDARD/DEEP）交付对应深度的方案与实施计划内容——LIGHT 精简主干、STANDARD 全要素、DEEP 含替代方案与风险推演；档位未裁决前不产出正式方案内容。
+11. GAR 五要素自检覆盖：业务目标 / 用户意图 / 当前问题 / 初步范围 / 不确定点逐一建模；共享合同全文见 `${AI_SDLC_STANDARD_HOME}/ai-sdlc/goal-anchored-global-reasoning.md` 与本包 references/sdlc-specification-writer/ 迁移件。
 
-| 来源旧包 | 吸收说明 |
+## 能力来源对照表
+
+| 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-specification-writer` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-speckit-specify` | 核心规则与职责已全量吸收至本包 |
-| `sdlc-speckit-plan` | 核心规则与职责已全量吸收至本包 |
-
-## 边界
-
-本包不承载 Gate 裁决、节点准入或任何流程推进权；调度与输入选择由 LOOP runtime
-的恢复上下文决定（INV1/INV7，见 LOOP-CORE-C03-PLAN §5）。
-
+| `sdlc-specification-writer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-specification-writer/` |
+| `sdlc-speckit-specify` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-speckit-specify/` |
+| `sdlc-speckit-plan` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-plan/` |

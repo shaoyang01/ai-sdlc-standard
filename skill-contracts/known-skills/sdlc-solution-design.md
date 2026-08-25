@@ -6,7 +6,7 @@
 name: sdlc-solution-design
 version: 0.1.0
 category: Producer Skill
-stage: Solution Design
+stage: per LOOP-CORE-C03-PLAN §6 C03-A
 standard_package: ai-sdlc-standard
 status: active
 input_artifacts:
@@ -22,9 +22,8 @@ can_modify_docs: true
 can_modify_knowledge_base: false
 can_execute_commands: false
 blocking_conditions:
-
   - runtime inputs are missing or not the pinned recovery context
-  - drafting requires undefined behavior or unapproved scope```
+  - drafting requires undefined behavior or unapproved scope change
 ```
 
 ## Responsibilities
