@@ -668,6 +668,16 @@ export function findPendingRevisionProducerExecution(
     if (event.status !== "succeeded") continue;
     if (event.outputArtifactRef === null || event.outputDigest === null) continue;
     if (event.capability === "solution-gate" && event.executionRole === "adversarial_scan") continue;
+    // WP6 discovery: a FAIL adjudication authors NO node revision by contract
+    // ("Gate node revisions require a conclusive passing Gate result"), so it
+    // must not hold the terminal->revision window open — the depth decision
+    // projection alone seals the chain honestly.
+    if (
+      event.capability === "solution-gate" && event.executionRole === "formal_verdict" &&
+      event.gateResult !== "PASS" && event.gateResult !== "PASS_WITH_RISK"
+    ) {
+      continue;
+    }
     if (materialized.has(event.executionEventId)) continue;
     return event;
   }

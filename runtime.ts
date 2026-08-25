@@ -213,6 +213,16 @@ export function materializeProducerRevision(
   if (producer.capability === "solution-gate" && producer.executionRole === "adversarial_scan") {
     return;
   }
+  // WP6 discovery: a FAIL adjudication authors no node revision — the
+  // artifact-revision contract only admits conclusive passing Gates. The
+  // BLOCKED_UNKNOWN projection seals the chain; materializing would crash
+  // the invocation with INVALID_INPUT instead of failing closed honestly.
+  if (
+    producer.capability === "solution-gate" && producer.executionRole === "formal_verdict" &&
+    producer.gateResult !== "PASS" && producer.gateResult !== "PASS_WITH_RISK"
+  ) {
+    return;
+  }
   if (producer.outputArtifactRef === null || producer.outputDigest === null) {
     return;
   }
