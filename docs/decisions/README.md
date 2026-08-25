@@ -23,7 +23,6 @@
 | [Decision-048](Decision-048-c02-wp6-validation-guards-authorization.md) | 2026-08-25 | Accepted | 授权实施 C02-WP6 Validation Guards and Completion Acceptance（C02 最终综合验收包；R-A/R-B/R-C 延续裁定固化）。 |
 | [Decision-049](Decision-049-c02-completed.md) | 2026-08-25 | Accepted | 消费 C02 最终授权，登记 LOOP-CORE-02 = COMPLETED；O-2 移交 C03-B；下一转换为 C03 授权申请。 |
 | [Decision-050](Decision-050-c03-plan-accepted.md) | 2026-08-25 | Accepted | 接受 LOOP-CORE-C03 有界实现规划（三包 A/B/C 沿用冻结 ID；Q1～Q5 全按建议方案成立）。 |
-| [Decision-051](Decision-051-c03a-closed-c03b-held.md) | 2026-08-25 | Accepted | C03-A 收口（Round 3 PASS）；C03-B 进入 CURRENT_USER_HOLD（旧版在用）。 |
 | [Decision-051](Decision-051-c03a-closed-c03b-held.md) | 2026-08-25 | Accepted | C03-A 收口（Round 3 PASS）；**C03-B 进入 CURRENT_USER_HOLD**——旧版 Skill 仍在生产使用，切换时点待用户确认。 |
 
 ## 新增流程
