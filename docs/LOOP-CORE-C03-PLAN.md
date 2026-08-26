@@ -3,7 +3,7 @@
 > 规划状态：**ACCEPTED**（2026-08-25，Current User 裁决接受全部五项裁决点的建议方案，
 > Decision-050；本规划成为正式合同。接受前仅为草案，不构成任何实施授权、不消费
 > `LOOP_CORE_C03_ENTRY_AUTHORIZATION_GATE`——三包实施授权仍逐包单独申请）
-> 执行状态：**C03-A CLOSED（2026-08-25，Decision-051）· C03-B CLOSED（2026-08-26，PR #108 merge，Round 5 PASS）· C03-C AUTHORIZED（2026-08-26，Decision-054，O-1 in scope，实施中）**
+> 执行状态：**C03-A CLOSED（2026-08-25，Decision-051）· C03-B CLOSED（2026-08-26，PR #108 merge，Round 5 PASS）· C03-C CLOSED（2026-08-26，Decision-054，Round 1 PASS，PR #109，CI 四 job 全绿，c1/c2/c3 + runtime 消费面切换 + O-1）**
 > （C03-B HOLD 解除裁决：Current User 明确 go/no-go —— 旧版 sdlc-* Skill 退役时点 = 随 C03-B 实施一次性原子切换；解除后按规划 §6 C03-B b1～b7 执行，独立复审后收口。）
 > 日期：2026-08-25
 > 上游依据：
