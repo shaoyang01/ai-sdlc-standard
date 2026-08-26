@@ -5770,8 +5770,8 @@ function makeA1Input(deliveryRef: string, overrides: Partial<{
       tail_status: "completed",
       completion_evidence: [
         { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
-        { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2 },
         { path: "05-代码审核/acceptance.md", version: "v1", digest_sha256: sha3 },
+        { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2 },
         { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: sha5 },
         { path: "docs/regate-evidence.md", version: "v1", digest_sha256: sha6 },
         { path: "docs/sync-evidence.md", version: "v1", digest_sha256: sha4 },
