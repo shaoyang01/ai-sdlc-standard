@@ -42,7 +42,7 @@ blocking_conditions:
 7. Normalization must not turn vague advice into blocking without file location + impact; scope-expanding suggestions route back to planning.
 8. Root-cause routing: 方案缺口→solution-design；任务缺口→task-planning；实现缺陷→implementation；审查合同自身缺口→code-review。
 9. Preserve missing file/line/symbol/spec basis as Missing Information.
-10. Use `library/{requirement_id}/04-代码审核/` as the default local output node.
+10. Use `library/{requirement_id}/05-代码审核/` as the default local output node.
 
 
 ## Capability Source Trace（Decision-045 冻结映射）

@@ -97,10 +97,10 @@ const D_MANIFEST = "8".repeat(64);
 const D_GATE = "9".repeat(64);
 
 const VALID_FILES = [
-  "03-实现记录/implementation-record.md",
-  "04-代码审核/code-review.md",
-  "05-测试验收/tail-gate.md",
-  "05-测试验收/test-acceptance.md",
+  "04-实现记录/implementation-record.md",
+  "05-代码审核/code-review.md",
+  "05-代码审核/tail-gate.md",
+  "05-代码审核/test-acceptance.md",
   "core/loop-requirement-design-orchestrator.ts",
   "docs/entry-coverage-evidence.md",
   "docs/manifest.md",
@@ -139,9 +139,9 @@ function makeValidInput(): Record<string, unknown> {
     implementation_files: ["core/loop-requirement-design-orchestrator.ts", "tests/loop-governance-tail-result.test.ts"],
     files: VALID_FILES,
     docflow: {
-      implementation_record: { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
-      code_review: { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW, result: "PASS" },
-      test_acceptance: { path: "05-测试验收/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT, result: "PASS" },
+      implementation_record: { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
+      code_review: { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW, result: "PASS" },
+      test_acceptance: { path: "05-代码审核/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT, result: "PASS" },
     },
     business_domain_sync: {
       decision: "SYNC_REQUIRED",
@@ -172,25 +172,25 @@ function makeValidInput(): Record<string, unknown> {
       digest_sha256: D_MANIFEST,
       tail_status: "completed",
       completion_evidence: [
-        { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
-        { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW },
-        { path: "05-测试验收/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT },
+        { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
+        { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW },
+        { path: "05-代码审核/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT },
         { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: D_ENTRY },
         { path: "docs/reconcile-evidence.md", version: "v1", digest_sha256: D_RECONCILE },
         { path: "docs/regate-evidence.md", version: "v1", digest_sha256: D_REGATE },
         { path: "docs/sync-evidence.md", version: "v1", digest_sha256: D_SYNC },
       ],
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: D_GATE },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: D_GATE },
     },
     tail_gate: {
-      path: "05-测试验收/tail-gate.md",
+      path: "05-代码审核/tail-gate.md",
       version: "gate-v1",
       digest_sha256: D_GATE,
       result: "PASS",
       persisted: true,
       read_back_verified: true,
       reviewed_manifest_version: "manifest-v1",
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: D_GATE },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: D_GATE },
     },
     blocking_items: [],
     elapsed_ms: 1234,
@@ -377,9 +377,9 @@ async function sectionSchema(): Promise<void> {
     check(value.implementation_files.every((file) => value.files.includes(file)), "implementation files are a subset of files");
     check(implSet.size === value.implementation_files.length, "implementation files no duplicates");
     check(new Set(value.files).size === value.files.length, "files no duplicates");
-    check(value.docflow.implementation_record.path.includes("03-实现记录"), "03 path present");
-    check(value.docflow.code_review.path.includes("04-代码审核"), "04 path present");
-    check(value.docflow.test_acceptance.path.includes("05-测试验收"), "05 path present");
+    check(value.docflow.implementation_record.path.includes("04-实现记录"), "03 path present");
+    check(value.docflow.code_review.path.includes("05-代码审核"), "04 path present");
+    check(value.docflow.test_acceptance.path.includes("05-代码审核"), "05 path present");
     check(value.manifest.path.split("/").pop() === "manifest.md", "manifest file named manifest.md");
     check(value.manifest.path !== value.tail_gate.path, "manifest path differs from tail gate path");
     check(value.blocking_items.length === 0, "blocking_items empty in value");
@@ -457,7 +457,7 @@ function sectionConditionalMatrix(): void {
   const fullBasis = {
     scope: "documentation_governance_tail",
     reason: "no business domain write required for this requirement",
-    evidence: "03-实现记录/implementation-record.md",
+    evidence: "04-实现记录/implementation-record.md",
     decision_source: "sdlc-gate-runner",
     decision_owner: "project-controller",
     version_basis: "v1",
@@ -702,14 +702,14 @@ function sectionFailClosed(): void {
   expectBuildFailure("unsorted implementation files", (input) => { (input.implementation_files as string[]).reverse(); }, "invalid_input", { diagnostic: "implementation_files must be strictly sorted ascending with no duplicates" });
 
   // docflow 03/04/05 and result enums
-  expectBuildFailure("03 path outside dir", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "docs/sync-evidence.md", version: "v1", digest_sha256: D_IMPL }; }, "invalid_input", { diagnostic: "docflow.implementation_record.path must live under 03-实现记录" });
-  expectBuildFailure("04 path outside dir", (input) => { (input.docflow as Record<string, unknown>).code_review = { path: "docs/manifest.md", version: "v1", digest_sha256: D_REVIEW, result: "PASS" }; }, "invalid_input", { diagnostic: "docflow.code_review.path must live under 04-代码审核" });
-  expectBuildFailure("05 path outside dir", (input) => { (input.docflow as Record<string, unknown>).test_acceptance = { path: "docs/manifest.md", version: "v1", digest_sha256: D_ACCEPT, result: "PASS" }; }, "invalid_input", { diagnostic: "docflow.test_acceptance.path must live under 05-测试验收" });
+  expectBuildFailure("03 path outside dir", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "docs/sync-evidence.md", version: "v1", digest_sha256: D_IMPL }; }, "invalid_input", { diagnostic: "docflow.implementation_record.path must live under 04-实现记录" });
+  expectBuildFailure("04 path outside dir", (input) => { (input.docflow as Record<string, unknown>).code_review = { path: "docs/manifest.md", version: "v1", digest_sha256: D_REVIEW, result: "PASS" }; }, "invalid_input", { diagnostic: "docflow.code_review.path must live under 05-代码审核" });
+  expectBuildFailure("05 path outside dir", (input) => { (input.docflow as Record<string, unknown>).test_acceptance = { path: "docs/manifest.md", version: "v1", digest_sha256: D_ACCEPT, result: "PASS" }; }, "invalid_input", { diagnostic: "docflow.test_acceptance.path must live under 05-代码审核" });
   expectBuildFailure("code review FAIL", (input) => { (input.docflow as Record<string, unknown>).code_review = { ...(input.docflow as Record<string, unknown>).code_review as Record<string, unknown>, result: "FAIL" }; }, "invalid_input", { diagnostic: "docflow.code_review.result must be PASS or PASS_WITH_RISK" });
   expectBuildFailure("test acceptance pending", (input) => { (input.docflow as Record<string, unknown>).test_acceptance = { ...(input.docflow as Record<string, unknown>).test_acceptance as Record<string, unknown>, result: "pending" }; }, "invalid_input", { diagnostic: "docflow.test_acceptance.result must be PASS or PASS_WITH_RISK" });
   expectBuildFailure("empty version", (input) => { (input.docflow as Record<string, unknown>).code_review = { ...(input.docflow as Record<string, unknown>).code_review as Record<string, unknown>, version: "" }; }, "invalid_input", { diagnostic: "docflow.code_review.version must be a trimmed non-empty string" });
-  expectBuildFailure("empty digest", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: "" }; }, "invalid_input", { diagnostic: "docflow.implementation_record.digest_sha256 must be 64 lowercase hex" });
-  expectBuildFailure("evidence path not in files", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "03-实现记录/other.md", version: "v1", digest_sha256: D_IMPL }; }, "invalid_input", { diagnostic: "docflow.implementation_record.path must appear in root files" });
+  expectBuildFailure("empty digest", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: "" }; }, "invalid_input", { diagnostic: "docflow.implementation_record.digest_sha256 must be 64 lowercase hex" });
+  expectBuildFailure("evidence path not in files", (input) => { (input.docflow as Record<string, unknown>).implementation_record = { path: "04-实现记录/other.md", version: "v1", digest_sha256: D_IMPL }; }, "invalid_input", { diagnostic: "docflow.implementation_record.path must appear in root files" });
 
   // business_domain_sync matrix
   expectBuildFailure("sync required but not authorized", (input) => { (input.business_domain_sync as Record<string, unknown>).write_authorized = false; }, "invalid_input", { diagnostic: "business_domain_sync.write_authorized must be true when decision is SYNC_REQUIRED" });
@@ -759,7 +759,7 @@ function sectionFailClosed(): void {
   }, "invalid_input", { diagnostic: "manifest.completion_evidence must include business_domain_sync evidence" });
   expectBuildFailure("completion evidence missing review", (input) => {
     (input.manifest as Record<string, unknown>).completion_evidence = ((input.manifest as Record<string, unknown>).completion_evidence as Array<Record<string, unknown>>)
-      .filter((entry) => entry.path !== "04-代码审核/code-review.md");
+      .filter((entry) => entry.path !== "05-代码审核/code-review.md");
   }, "invalid_input", { diagnostic: "manifest.completion_evidence must include code_review" });
   expectBuildFailure("completion evidence unsorted", (input) => {
     const entries = (input.manifest as Record<string, unknown>).completion_evidence as Array<Record<string, unknown>>;
@@ -776,7 +776,7 @@ function sectionFailClosed(): void {
     const entries = (input.manifest as Record<string, unknown>).completion_evidence as Array<Record<string, unknown>>;
     (input.manifest as Record<string, unknown>).completion_evidence = [
       ...entries,
-      { path: "03-实现记录/extra-evidence.md", version: "v1", digest_sha256: "a".repeat(64) },
+      { path: "04-实现记录/extra-evidence.md", version: "v1", digest_sha256: "a".repeat(64) },
     ];
   }, "invalid_input", { diagnostic: "manifest.completion_evidence[7].path must appear in root files" });
   expectBuildFailure("completion evidence empty", (input) => { (input.manifest as Record<string, unknown>).completion_evidence = []; }, "invalid_input", { diagnostic: "manifest.completion_evidence must not be empty" });
@@ -786,12 +786,12 @@ function sectionFailClosed(): void {
   expectBuildFailure("tail gate read-back false", (input) => { (input.tail_gate as Record<string, unknown>).read_back_verified = false; }, "invalid_input", { diagnostic: "tail_gate.read_back_verified must be true" });
   expectBuildFailure("tail gate reviewed version mismatch", (input) => { (input.tail_gate as Record<string, unknown>).reviewed_manifest_version = "other-version"; }, "invalid_input", { diagnostic: "tail_gate.reviewed_manifest_version must equal manifest.version" });
   expectBuildFailure("tail gate result failed", (input) => { (input.tail_gate as Record<string, unknown>).result = "FAIL"; }, "invalid_input", { diagnostic: "tail_gate.result must be PASS or PASS_WITH_RISK" });
-  expectBuildFailure("tail gate outside 05", (input) => { (input.tail_gate as Record<string, unknown>).path = "docs/manifest.md"; }, "invalid_input", { diagnostic: "tail_gate.path must live under 05-测试验收" });
+  expectBuildFailure("tail gate outside 05", (input) => { (input.tail_gate as Record<string, unknown>).path = "docs/manifest.md"; }, "invalid_input", { diagnostic: "tail_gate.path must live under 05-代码审核" });
   expectBuildFailure("manifest completion source mismatch", (input) => {
-    (input.manifest as Record<string, unknown>).completion_decision_source = { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW };
+    (input.manifest as Record<string, unknown>).completion_decision_source = { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW };
   }, "invalid_input", { diagnostic: "manifest.completion_decision_source must exactly equal the tail gate file path/version/digest" });
   expectBuildFailure("tail gate completion source mismatch", (input) => {
-    (input.tail_gate as Record<string, unknown>).completion_decision_source = { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL };
+    (input.tail_gate as Record<string, unknown>).completion_decision_source = { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL };
   }, "invalid_input", { diagnostic: "tail_gate.completion_decision_source must exactly equal the tail gate file path/version/digest" });
 
   // root cross constraints
@@ -806,9 +806,9 @@ function sectionFailClosed(): void {
     // distinct-semantic-paths cross constraint fires.
     (input.business_domain_sync as Record<string, unknown>).evidence = { path: "docs/manifest.md", version: "v1", digest_sha256: D_SYNC };
     (input.manifest as Record<string, unknown>).completion_evidence = [
-      { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
-      { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW },
-      { path: "05-测试验收/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT },
+      { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: D_IMPL },
+      { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: D_REVIEW },
+      { path: "05-代码审核/test-acceptance.md", version: "v1", digest_sha256: D_ACCEPT },
       { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: D_ENTRY },
       { path: "docs/manifest.md", version: "v1", digest_sha256: D_SYNC },
       { path: "docs/reconcile-evidence.md", version: "v1", digest_sha256: D_RECONCILE },

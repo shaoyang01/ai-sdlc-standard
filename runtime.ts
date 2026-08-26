@@ -36,6 +36,15 @@ import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
+  developmentPathEntryGuard,
+  checkDocumentationGovernanceTailCompletion,
+  buildManualHandoffChecklist,
+  type SolutionGateVerdict,
+  type DesignDepth,
+  type NodeEvidenceStatus,
+  type ManualHandoffChecklist,
+} from "./core/loop-c03-delivery-tail";
+import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
@@ -61,12 +70,19 @@ export interface RuntimeResult {
   run_id: string;
   final_status: "success" | "failed";
   chain_status: "COMPLETED" | "READY" | "RUNNING" | "BLOCKED";
+  blocking_reason_code?: string | null;
   execution_trace: readonly RuntimeChainEntry[];
   next_execution_point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole } | null;
   workspace_root: string;
   /** Set only when the runtime created the store; null when stores are injected. */
   journal_path: string | null;
   completed_at: string;
+  /** C03-D d2: manual handoff checklist status (null when chain not completed or c2/c3 not invoked). */
+  manual_handoff_status?: ManualHandoffChecklist["status"] | null;
+  /** C03-D d2: manual handoff checklist reason (null when not invoked). */
+  manual_handoff_reason?: string | null;
+  /** C03-D d2: artifact ref of the persisted manual handoff checklist (null when not persisted). */
+  manual_handoff_artifact_ref?: string | null;
 }
 
 /** Anything the runtime executes must go through this minimal gateway shape. */
@@ -528,6 +544,10 @@ export async function run(
         });
       }
     }
+    // C03-D d1/d2: carry the c1 guard's resolved depth out of the chain loop
+    // so the d2 tail aggregation can persist the truthful depth (not a
+    // hardcoded value) in the governance_tail_result artifact.
+    let resolvedImplementationDepth: DesignDepth | null = null;
     while (next !== null) {
       // Round 3 review F2: a concurrent entry may have committed a succeeded
       // producer since the last recovery recompute — finalize its revision
@@ -582,6 +602,59 @@ export async function run(
           inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
         }
       }
+      // C03-D d1: development_path_entry guard (Decision-044 single-rail:
+      // solution-gate depth verdict is the sole authority for entering
+      // implementation). Invoked BEFORE dispatching the implementation node.
+      let implementationDepth: DesignDepth | null = null;
+      if (next.capability === "implementation" && journalRunId !== null) {
+        const verdictEvents = runStore.listCapabilityExecutions(journalRunId)
+          .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict");
+        const lastVerdict = verdictEvents.length > 0 ? verdictEvents[verdictEvents.length - 1]! : null;
+        const gateDecision = recovery?.solutionGateDecision ?? null;
+        const verdict: SolutionGateVerdict = {
+          gateResult: (lastVerdict?.gateResult as SolutionGateVerdict["gateResult"]) ?? "FAIL",
+          depth: (lastVerdict?.decisionDepth as DesignDepth | null) ?? null,
+          decisionStatus: gateDecision?.status ?? "BLOCKED_UNKNOWN",
+          // C03-D d1: when the solution-gate has already DECIDED, there are no
+          // gate-blocking findings — code-review findings that trigger a rebuild
+          // must NOT block re-entry into implementation (that is the whole point
+          // of a rebuild wave). Only BLOCKED_UNKNOWN carries blocking findings.
+          blockingFindings: gateDecision?.status === "DECIDED" ? [] : (recovery?.findingGate.blockingFindingIds ?? []),
+          riskAcceptanceRefs: (recovery?.openFindings ?? [])
+            .filter((f) => (f as { status?: string }).status === "ACCEPTED_RISK")
+            .map((f) => (f as { riskAcceptanceEvidenceRef?: string }).riskAcceptanceEvidenceRef ?? "")
+            .filter(Boolean),
+          verdictArtifactRef: gateDecision?.boundVerdictArtifactRef,
+        };
+        const entryDecision = developmentPathEntryGuard(verdict);
+        if (!entryDecision.allowed) {
+          return Object.freeze({
+            requirement_id: requirementId,
+            run_id: journalRunId,
+            final_status: "failed" as const,
+            chain_status: "BLOCKED" as const,
+            blocking_reason_code: "DEVELOPMENT_PATH_ENTRY_DENIED" as const,
+            execution_trace: Object.freeze(
+              runStore.listCapabilityExecutions(journalRunId).map((event) => Object.freeze({
+                capability: event.capability,
+                executionRole: event.executionRole,
+                agent: event.executorAgent,
+                attempt: event.attempt,
+                status: event.status,
+                gateResult: event.gateResult,
+                outputArtifactRef: event.outputArtifactRef,
+                outputDigest: event.outputDigest,
+              })),
+            ),
+            next_execution_point: null,
+            workspace_root: workspaceRoot,
+            journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+            completed_at: now(),
+          });
+        }
+        implementationDepth = entryDecision.depth;
+        resolvedImplementationDepth = entryDecision.depth;
+      }
       const executed = await entry.execute({
         requirementId,
         ...(firstDispatch ? { identity } : {}),
@@ -596,7 +669,10 @@ export async function run(
         outputArtifactVersion: `${(recovery?.executionPointStates.find(
           (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
         )?.lastAttempt ?? 0) + 1}.0.0`,
-        input: { inputArtifactRef: inputRef },
+        input: {
+          inputArtifactRef: inputRef,
+          ...(implementationDepth !== null ? { designDepth: implementationDepth } : {}),
+        },
       });
       firstDispatch = false;
       journalRunId = executed.runId;
@@ -654,6 +730,102 @@ export async function run(
       chainStatus = "BLOCKED";
     }
     const finalStatus = completedOk ? "success" : "failed";
+
+    // C03-D d2: c2/c3 delivery tail integration — when the chain completes
+    // successfully, build the documentation governance tail completion check
+    // (c2) and the manual handoff checklist (c3), persist the checklist to
+    // the artifact store, and expose the status in the RuntimeResult.
+    let manualHandoffStatus: ManualHandoffChecklist["status"] | null = null;
+    let manualHandoffReason: string | null = null;
+    let manualHandoffArtifactRef: string | null = null;
+    if (completedOk && journalRunId !== null) {
+      // Build per-node evidence from the execution journal.
+      const nodeIds: NodeCapabilityId[] = [
+        "requirement-intake", "solution-design", "solution-gate",
+        "task-planning", "implementation", "code-review", "knowledge-sync",
+      ];
+      const evidence: NodeEvidenceStatus[] = nodeIds.map((cap) => {
+        const nodeEvents = events.filter((e) => e.capability === cap && e.status === "succeeded");
+        const last = nodeEvents.length > 0 ? nodeEvents[nodeEvents.length - 1]! : null;
+        const artifact = recovery?.currentArtifactMap.find((a) => a.nodeId === cap) ?? null;
+        return {
+          capability: cap,
+          artifactPresent: last !== null || artifact !== null,
+          artifactRef: last?.outputArtifactRef ?? artifact?.artifactRef ?? null,
+          version: last?.outputArtifactVersion ?? artifact?.semver ?? null,
+          gateMet: last?.gateResult === "PASS" || last?.gateResult === "PASS_WITH_RISK" ? true : last?.gateResult === "FAIL" ? false : null,
+          notes: last !== null ? `succeeded attempt ${last.attempt}` : "no succeeded execution",
+        };
+      });
+
+      // c2: documentation governance tail completion check.
+      const tailStatus = checkDocumentationGovernanceTailCompletion(evidence);
+
+      // c3: manual handoff checklist aggregation.
+      const implEvent = events.find((e) => e.capability === "implementation" && e.status === "succeeded") ?? null;
+      const reviewEvent = events.find((e) => e.capability === "code-review" && e.status === "succeeded") ?? null;
+      const syncEvent = events.find((e) => e.capability === "knowledge-sync" && e.status === "succeeded") ?? null;
+      const residualRisks = (recovery?.openFindings ?? [])
+        .filter((f) => (f as { status?: string }).status === "OPEN")
+        .map((f, i) => ({
+          id: `risk-${i}`,
+          description: (f as { description?: string }).description ?? "open finding",
+          severity: "medium" as const,
+          acceptanceRef: null,
+        }));
+      const checklist = buildManualHandoffChecklist({
+        runId: journalRunId,
+        requirementId,
+        generation: recovery?.generation ?? 1,
+        implementationRecord: {
+          present: implEvent !== null,
+          artifactRef: implEvent?.outputArtifactRef ?? null,
+          summary: implEvent !== null ? `implementation succeeded attempt ${implEvent.attempt}` : "implementation not executed",
+          unexecutedItems: [],
+        },
+        codeReview: {
+          present: reviewEvent !== null,
+          artifactRef: reviewEvent?.outputArtifactRef ?? null,
+          summary: reviewEvent !== null ? `code review succeeded attempt ${reviewEvent.attempt}` : "code review not executed",
+          openFindings: [],
+          closureReviewDone: reviewEvent?.gateResult === "PASS" || reviewEvent?.gateResult === "PASS_WITH_RISK",
+        },
+        knowledgeSync: {
+          present: syncEvent !== null,
+          artifactRef: syncEvent?.outputArtifactRef ?? null,
+          // C03-D R1-F3: the execution event model does not carry a knowledge-sync
+          // decision (NO_CHANGE/APPLY_LOCAL/PROPOSAL_ONLY/BLOCKED_CONFLICT); that
+          // semantic lives in the node's output artifact content. Persisting a
+          // hardcoded "APPLY_LOCAL" would fabricate an audit fact. Use null until
+          // the event model is extended to materialize the decision.
+          decision: null,
+          summary: syncEvent !== null ? `knowledge sync succeeded attempt ${syncEvent.attempt}` : "knowledge sync not executed",
+        },
+        residualRisks,
+        recoveryInstructions: "Resume from the last succeeded node; re-run failed nodes with the same requirementId.",
+        evidenceDigest: null,
+        tailStatus,
+        // C03-D R1-F3: derive pathEntry.depth from the c1 guard's actual verdict
+        // (resolvedImplementationDepth), not a hardcoded value.
+        pathEntry: resolvedImplementationDepth !== null
+          ? { allowed: true as const, reason: "c1 guard passed at implementation dispatch", depth: resolvedImplementationDepth }
+          : { allowed: false as const, reason: "no formal_verdict event with materialized depth found", blockingFindings: [] as string[] },
+      });
+
+      manualHandoffStatus = checklist.status;
+      manualHandoffReason = checklist.reason;
+
+      // Persist the checklist to the artifact store.
+      try {
+        const stored = artifactStore.put("governance_tail_result", JSON.stringify(checklist) + "\n");
+        manualHandoffArtifactRef = stored.artifactRef;
+      } catch {
+        // Persistence failure is non-fatal: the checklist is still in-memory
+        // and exposed via RuntimeResult. The caller may retry persistence.
+        manualHandoffArtifactRef = null;
+      }
+    }
+
     return Object.freeze({
       requirement_id: requirementId,
       run_id: journalRunId ?? identity.runId,
@@ -673,6 +845,9 @@ export async function run(
       workspace_root: workspaceRoot,
       journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
       completed_at: now(),
+      manual_handoff_status: manualHandoffStatus,
+      manual_handoff_reason: manualHandoffReason,
+      manual_handoff_artifact_ref: manualHandoffArtifactRef,
     });
   });
 }

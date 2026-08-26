@@ -28,6 +28,7 @@
 | [Decision-054](Decision-054-c03c-authorized-o1-in-scope.md) | 2026-08-26 | Accepted | 授权 C03-C Delivery Tail Integration（c1～c3 + runtime 消费面切换：agent-skill-registry / FLOW_DEFINITIONS / metadata inventory 更新为 7+1）；O-1 观察项（OPERATION_GUIDE.md 旧 ID）本轮一并处理。 |
 | [Decision-055](Decision-055-artifact-numbering-authority.md) | 2026-08-26 | Accepted | 裁决制品目录编号权威为 WP3.5 单轨方案（00-需求资料～06-知识同步）；legacy runtime 编号（03-实现记录/04-代码审核/05-测试验收）废弃，迁移列为后续包输入。 |
 | [Decision-056](Decision-056-c03d-runtime-integration-artifact-path-migration.md) | 2026-08-26 | Accepted | 授权 C03-D Runtime Integration & Artifact Path Migration（c1/c2/c3 接入 runtime 调度路径 + 制品路径常量迁移到 WP3.5 新编号）；Q1~Q4 全部按推荐方案 A 裁决。 |
+| [Decision-057](Decision-057-c03d-runtime-integration-closed.md) | 2026-08-26 | Accepted / C03-D CLOSED | C03-D 收口裁决：三轮独立复审后 Round 3 PASS；d1 c1 守卫接入 runtime implementation 前置、d2 c2/c3 接入 chain 完成后尾聚合、d3 制品路径迁移 WP3.5 单轨、d4 runtime 级接线测试（负向变异实证）；PR #111（head 4252b6d）四 job 全绿。C03-A/B/C/D 全部 CLOSED，LOOP-CORE-03 待 C05 真实单仓验收。 |
 
 ## 新增流程
 

@@ -123,7 +123,7 @@ withStore((store) => {
       bindingVersion: "1.0.0",
       inputArtifactRef: "library/req-001/01-技术方案/req-001_技术方案.md@v2",
     },
-    outputArtifactRef: "library/req-001/03-实现记录/req-001_实现记录.md@v1",
+    outputArtifactRef: "library/req-001/04-实现记录/req-001_实现记录.md@v1",
   });
 
   const snapshot = store.getSnapshot("run-001");
@@ -136,7 +136,7 @@ withStore((store) => {
     started?.inputArtifactRef === "library/req-001/01-技术方案/req-001_技术方案.md@v2",
     "started event carries inputArtifactRef",
   );
-  assert(succeeded?.outputArtifactRef === "library/req-001/03-实现记录/req-001_实现记录.md@v1", "succeeded event carries outputArtifactRef");
+  assert(succeeded?.outputArtifactRef === "library/req-001/04-实现记录/req-001_实现记录.md@v1", "succeeded event carries outputArtifactRef");
 });
 
 console.log("provenance: provenance survives reopen (durable round-trip)");

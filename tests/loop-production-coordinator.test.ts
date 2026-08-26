@@ -175,10 +175,10 @@ function cleanupAll(): void {
 const TS = "2026-08-04T00:00:00.000Z";
 const DELIVERY_FILES = ["core/d09b.ts", "tests/d09b.test.ts"];
 const A1_FILES = [
-  "03-实现记录/implementation-record.md",
-  "04-代码审核/code-review.md",
-  "05-测试验收/acceptance.md",
-  "05-测试验收/tail-gate.md",
+  "04-实现记录/implementation-record.md",
+  "05-代码审核/acceptance.md",
+  "05-代码审核/code-review.md",
+  "05-代码审核/tail-gate.md",
   "core/d09b.ts",
   "docs/entry-coverage-evidence.md",
   "docs/manifest.md",
@@ -678,9 +678,9 @@ function makeTailPackage(overrides: Record<string, unknown> = {}): LoopGovernanc
     implementation_files: [...DELIVERY_FILES],
     files: [...A1_FILES],
     docflow: {
-      implementation_record: { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
-      code_review: { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2(), result: "PASS" },
-      test_acceptance: { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3(), result: "PASS" },
+      implementation_record: { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+      code_review: { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2(), result: "PASS" },
+      test_acceptance: { path: "05-代码审核/acceptance.md", version: "v1", digest_sha256: sha3(), result: "PASS" },
     },
     business_domain_sync: {
       decision: "SYNC_REQUIRED", write_authorized: true, execution_status: "completed",
@@ -705,20 +705,20 @@ function makeTailPackage(overrides: Record<string, unknown> = {}): LoopGovernanc
       path: "docs/manifest.md", version: "manifest-v1", digest_sha256: sha7,
       tail_status: "completed",
       completion_evidence: [
-        { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
-        { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2() },
-        { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3() },
+        { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+        { path: "05-代码审核/acceptance.md", version: "v1", digest_sha256: sha3() },
+        { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2() },
         { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: sha5 },
         { path: "docs/regate-evidence.md", version: "v1", digest_sha256: sha6 },
         { path: "docs/sync-evidence.md", version: "v1", digest_sha256: sha4 },
       ],
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
     },
     tail_gate: {
-      path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8,
+      path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8,
       result: "PASS", persisted: true, read_back_verified: true,
       reviewed_manifest_version: "manifest-v1",
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
     },
     blocking_items: [],
     elapsed_ms: 1234,
@@ -1733,7 +1733,7 @@ async function sectionTail(): Promise<void> {
   {
     const { coordinator, tail } = harness();
     const pkg = makeTailPackage();
-    const gate = { ...(pkg.tail_gate as any), completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: "0".repeat(64) } };
+    const gate = { ...(pkg.tail_gate as any), completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: "0".repeat(64) } };
     tail.result = { status: "completed", reasonCode: "GOVERNANCE_TAIL_COMPLETED", safeMessage: "ok", completionPackage: makeTailPackage({ tail_gate: gate }) };
     const result = await coordinator.execute(makeRequest());
     chk(result.status === "failed" && result.reasonCode === "A1_BUILD_FAILED", "completion decision source mismatch fails");

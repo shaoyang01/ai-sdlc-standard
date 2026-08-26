@@ -20,7 +20,7 @@ version: 0.1.0
 7. Normalization must not turn vague advice into blocking without file location + impact; scope-expanding suggestions route back to planning.
 8. Root-cause routing: 方案缺口→solution-design；任务缺口→task-planning；实现缺陷→implementation；审查合同自身缺口→code-review。
 9. Preserve missing file/line/symbol/spec basis as Missing Information.
-10. Use `library/{requirement_id}/04-代码审核/` as the default local output node.
+10. Use `library/{requirement_id}/05-代码审核/` as the default local output node.
 
 11. Severity ladder（finding 分级）：CRITICAL=违反已批准事实且不可合入；HIGH=合入前必须修复或显式风险接受；MEDIUM=合入前应修或有跟进项；LOW=改进项。
 12. Gate adjudication rules：存在 CRITICAL 或未接受 HIGH → FAIL；仅 MEDIUM/LOW 且有跟进约定 → PASS_WITH_RISK（须列明风险接受字段）；全清 → PASS。风险接受必须带接受者与证据。
