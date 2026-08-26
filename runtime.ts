@@ -37,8 +37,12 @@ import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
   developmentPathEntryGuard,
+  checkDocumentationGovernanceTailCompletion,
+  buildManualHandoffChecklist,
   type SolutionGateVerdict,
   type DesignDepth,
+  type NodeEvidenceStatus,
+  type ManualHandoffChecklist,
 } from "./core/loop-c03-delivery-tail";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -66,12 +70,19 @@ export interface RuntimeResult {
   run_id: string;
   final_status: "success" | "failed";
   chain_status: "COMPLETED" | "READY" | "RUNNING" | "BLOCKED";
+  blocking_reason_code?: string | null;
   execution_trace: readonly RuntimeChainEntry[];
   next_execution_point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole } | null;
   workspace_root: string;
   /** Set only when the runtime created the store; null when stores are injected. */
   journal_path: string | null;
   completed_at: string;
+  /** C03-D d2: manual handoff checklist status (null when chain not completed or c2/c3 not invoked). */
+  manual_handoff_status?: ManualHandoffChecklist["status"] | null;
+  /** C03-D d2: manual handoff checklist reason (null when not invoked). */
+  manual_handoff_reason?: string | null;
+  /** C03-D d2: artifact ref of the persisted manual handoff checklist (null when not persisted). */
+  manual_handoff_artifact_ref?: string | null;
 }
 
 /** Anything the runtime executes must go through this minimal gateway shape. */
@@ -710,6 +721,93 @@ export async function run(
       chainStatus = "BLOCKED";
     }
     const finalStatus = completedOk ? "success" : "failed";
+
+    // C03-D d2: c2/c3 delivery tail integration — when the chain completes
+    // successfully, build the documentation governance tail completion check
+    // (c2) and the manual handoff checklist (c3), persist the checklist to
+    // the artifact store, and expose the status in the RuntimeResult.
+    let manualHandoffStatus: ManualHandoffChecklist["status"] | null = null;
+    let manualHandoffReason: string | null = null;
+    let manualHandoffArtifactRef: string | null = null;
+    if (completedOk && journalRunId !== null) {
+      // Build per-node evidence from the execution journal.
+      const nodeIds: NodeCapabilityId[] = [
+        "requirement-intake", "solution-design", "solution-gate",
+        "task-planning", "implementation", "code-review", "knowledge-sync",
+      ];
+      const evidence: NodeEvidenceStatus[] = nodeIds.map((cap) => {
+        const nodeEvents = events.filter((e) => e.capability === cap && e.status === "succeeded");
+        const last = nodeEvents.length > 0 ? nodeEvents[nodeEvents.length - 1]! : null;
+        const artifact = recovery?.currentArtifactMap.find((a) => a.nodeId === cap) ?? null;
+        return {
+          capability: cap,
+          artifactPresent: last !== null || artifact !== null,
+          artifactRef: last?.outputArtifactRef ?? artifact?.artifactRef ?? null,
+          version: last?.outputArtifactVersion ?? artifact?.semver ?? null,
+          gateMet: last?.gateResult === "PASS" || last?.gateResult === "PASS_WITH_RISK" ? true : last?.gateResult === "FAIL" ? false : null,
+          notes: last !== null ? `succeeded attempt ${last.attempt}` : "no succeeded execution",
+        };
+      });
+
+      // c2: documentation governance tail completion check.
+      const tailStatus = checkDocumentationGovernanceTailCompletion(evidence);
+
+      // c3: manual handoff checklist aggregation.
+      const implEvent = events.find((e) => e.capability === "implementation" && e.status === "succeeded") ?? null;
+      const reviewEvent = events.find((e) => e.capability === "code-review" && e.status === "succeeded") ?? null;
+      const syncEvent = events.find((e) => e.capability === "knowledge-sync" && e.status === "succeeded") ?? null;
+      const residualRisks = (recovery?.openFindings ?? [])
+        .filter((f) => (f as { status?: string }).status === "OPEN")
+        .map((f, i) => ({
+          id: `risk-${i}`,
+          description: (f as { description?: string }).description ?? "open finding",
+          severity: "medium" as const,
+          acceptanceRef: null,
+        }));
+      const checklist = buildManualHandoffChecklist({
+        runId: journalRunId,
+        requirementId,
+        generation: recovery?.generation ?? 1,
+        implementationRecord: {
+          present: implEvent !== null,
+          artifactRef: implEvent?.outputArtifactRef ?? null,
+          summary: implEvent !== null ? `implementation succeeded attempt ${implEvent.attempt}` : "implementation not executed",
+          unexecutedItems: [],
+        },
+        codeReview: {
+          present: reviewEvent !== null,
+          artifactRef: reviewEvent?.outputArtifactRef ?? null,
+          summary: reviewEvent !== null ? `code review succeeded attempt ${reviewEvent.attempt}` : "code review not executed",
+          openFindings: [],
+          closureReviewDone: reviewEvent?.gateResult === "PASS" || reviewEvent?.gateResult === "PASS_WITH_RISK",
+        },
+        knowledgeSync: {
+          present: syncEvent !== null,
+          artifactRef: syncEvent?.outputArtifactRef ?? null,
+          decision: syncEvent !== null ? "APPLY_LOCAL" : null,
+          summary: syncEvent !== null ? `knowledge sync succeeded attempt ${syncEvent.attempt}` : "knowledge sync not executed",
+        },
+        residualRisks,
+        recoveryInstructions: "Resume from the last succeeded node; re-run failed nodes with the same requirementId.",
+        evidenceDigest: null,
+        tailStatus,
+        pathEntry: { allowed: true, reason: "c1 guard passed at implementation dispatch", depth: "STANDARD" as const },
+      });
+
+      manualHandoffStatus = checklist.status;
+      manualHandoffReason = checklist.reason;
+
+      // Persist the checklist to the artifact store.
+      try {
+        const stored = artifactStore.put("governance_tail_result", JSON.stringify(checklist) + "\n");
+        manualHandoffArtifactRef = stored.artifactRef;
+      } catch {
+        // Persistence failure is non-fatal: the checklist is still in-memory
+        // and exposed via RuntimeResult. The caller may retry persistence.
+        manualHandoffArtifactRef = null;
+      }
+    }
+
     return Object.freeze({
       requirement_id: requirementId,
       run_id: journalRunId ?? identity.runId,
@@ -729,6 +827,9 @@ export async function run(
       workspace_root: workspaceRoot,
       journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
       completed_at: now(),
+      manual_handoff_status: manualHandoffStatus,
+      manual_handoff_reason: manualHandoffReason,
+      manual_handoff_artifact_ref: manualHandoffArtifactRef,
     });
   });
 }
