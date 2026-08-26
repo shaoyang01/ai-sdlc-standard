@@ -101,7 +101,7 @@ function buildSkilllessAgentExecutionStage(
     selectedAgent: agent,
     inputArtifacts: ["01-技术方案", "02-方案审核"],
     outputArtifacts: ["Code changes"],
-    downstreamConsumers: ["sdlc-implementation-recorder"],
+    downstreamConsumers: ["sdlc-implementation"],
     status: "planned",
     executionRequestPreview: {
       type: "code_generation",
@@ -123,32 +123,15 @@ const FLOW_DEFINITIONS: Record<string, {
   hasSkilllessAgent: boolean;
 }> = {
   main_docflow: {
-    entrySkill: "sdlc-requirement-normalizer",
-    skills: ["sdlc-requirement-normalizer", "sdlc-specification-writer", "sdlc-solution-reviewer"],
+    entrySkill: "sdlc-requirement-intake",
+    skills: ["sdlc-requirement-intake", "sdlc-solution-design", "sdlc-solution-gate", "sdlc-task-planning"],
     controllers: [],
     hasSkilllessAgent: false,
   },
   direct_implementation_path: {
-    skills: ["sdlc-implementation-recorder", "sdlc-code-review-excellence", "sdlc-code-review-normalizer", "sdlc-test-feedback-classifier", "sdlc-test-feedback-sync"],
+    skills: ["sdlc-implementation", "sdlc-code-review", "sdlc-knowledge-sync"],
     controllers: [],
     hasSkilllessAgent: true,
-  },
-  speckit_pipeline: {
-    entrySkill: "sdlc-speckit-pipeline",
-    leadSkill: "sdlc-speckit-pipeline",
-    skills: ["sdlc-speckit-specify", "sdlc-speckit-clarify", "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement", "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile"],
-    controllers: ["PREFLIGHT_CONTROLLER", "DOMAIN_ROUTE_CONTROLLER"],
-    hasSkilllessAgent: false,
-  },
-  code_review_subflow: {
-    skills: ["sdlc-code-review-excellence", "sdlc-code-review-normalizer"],
-    controllers: [],
-    hasSkilllessAgent: false,
-  },
-  test_feedback_subflow: {
-    skills: ["sdlc-test-feedback-classifier", "sdlc-test-feedback-sync"],
-    controllers: [],
-    hasSkilllessAgent: false,
   },
 };
 
@@ -251,13 +234,6 @@ export function planGlobalEntryFlow(input: {
   inputArtifacts?: string[];
 }): SkillFlowPlan {
   return planFlowById({ flowId: "main_docflow", ...input });
-}
-
-export function planSpeckitFlow(input: {
-  requirementId: string;
-  inputArtifacts?: string[];
-}): SkillFlowPlan {
-  return planFlowById({ flowId: "speckit_pipeline", ...input });
 }
 
 export function planDirectImplementationPath(input: {

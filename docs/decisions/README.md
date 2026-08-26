@@ -25,6 +25,8 @@
 | [Decision-050](Decision-050-c03-plan-accepted.md) | 2026-08-25 | Accepted | 接受 LOOP-CORE-C03 有界实现规划（三包 A/B/C 沿用冻结 ID；Q1～Q5 全按建议方案成立）。 |
 | [Decision-051](Decision-051-c03a-closed-c03b-held.md) | 2026-08-25 / 2026-08-26 更新 | Accepted / C03-B CLOSED | C03-A 收口（Round 3 PASS）；C03-B 先 CURRENT_USER_HOLD（旧版 Skill 仍在生产使用），后经 Decision-052 授权实施，五轮复审后 Round 5 PASS 收口（单一原子提交 2f822a2，PR #108）。 |
 | [Decision-053](Decision-053-control-plane-authority-and-exchange-closure.md) | 2026-08-26 | Accepted | 确认控制平面为当前执行状态与授权/收口登记权威（CP `285fe59` 标签 ACTIVE 化）；恢复 Exchange 必经收口流程，近期直同步登记为历史偏离。 |
+| [Decision-054](Decision-054-c03c-authorized-o1-in-scope.md) | 2026-08-26 | Accepted | 授权 C03-C Delivery Tail Integration（c1～c3 + runtime 消费面切换：agent-skill-registry / FLOW_DEFINITIONS / metadata inventory 更新为 7+1）；O-1 观察项（OPERATION_GUIDE.md 旧 ID）本轮一并处理。 |
+| [Decision-055](Decision-055-artifact-numbering-authority.md) | 2026-08-26 | Accepted | 裁决制品目录编号权威为 WP3.5 单轨方案（00-需求资料～06-知识同步）；legacy runtime 编号（03-实现记录/04-代码审核/05-测试验收）废弃，迁移列为后续包输入。 |
 
 ## 新增流程
 

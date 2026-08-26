@@ -1,12 +1,12 @@
-// Regression Test — Shadow Skill Flow Orchestrator
-// ==================================================
+// Regression Test — Shadow Skill Flow Orchestrator (7+1 Topology)
+// ===================================================================
 // Verifies shadow execution of SkillFlowPlan produces correct
 // deterministic results. No runtime, no agents, no Gateway.
+// C03-C update: speckit_pipeline retired per Decision-044; 7+1 topology.
 
 import {
   planGlobalEntryFlow,
   planDirectImplementationPath,
-  planSpeckitFlow,
   planFlowById,
 } from "../core/skill-flow-orchestrator";
 import { executeSkillFlowShadow } from "../core/skill-flow-shadow-orchestrator";
@@ -25,26 +25,31 @@ async function test() {
     }
   }
 
-  console.log("Shadow Skill Flow Orchestrator Test\n");
+  console.log("Shadow Skill Flow Orchestrator Test (7+1 Topology)\n");
 
-  // ── Test 1: Global entry shadow execution ──
-  console.log("Test 1: Global entry shadow execution");
+  // ── Test 1: Global entry shadow execution (main_docflow, 4 nodes) ──
+  console.log("Test 1: Global entry shadow execution (main_docflow)");
   const globalPlan = planGlobalEntryFlow({ requirementId: "REQ-SHADOW-1" });
   const globalResult = executeSkillFlowShadow(globalPlan);
   assert(globalResult.mode === "shadow_only", "mode is shadow_only");
   assert(globalResult.status === "shadow_success", "status is shadow_success");
   assert(globalResult.stageResults.length === globalPlan.stages.length, "stage count matches plan");
-  // 3 skill stages → 3 artifacts
+  // 4 skill stages → 4 artifacts
   const skillArtifacts = globalResult.artifacts.filter((a) => a.type === "shadow_skill_output");
-  assert(skillArtifacts.length === 3, "3 shadow_skill_output artifacts");
-  assert(globalResult.stageResults[0].skill === "sdlc-requirement-normalizer", "first stage is requirement-normalizer");
+  assert(skillArtifacts.length === 4, "4 shadow_skill_output artifacts (intake/design/gate/task-planning)");
+  assert(globalResult.stageResults[0].skill === "sdlc-requirement-intake", "first stage is requirement-intake");
   const firstArtifact = skillArtifacts[0];
-  assert(firstArtifact.content["skill"] === "sdlc-requirement-normalizer", "artifact has skill name");
+  assert(firstArtifact.content["skill"] === "sdlc-requirement-intake", "artifact has skill name");
   assert(firstArtifact.content["mode"] === "shadow_only", "artifact mode is shadow_only");
   assert((firstArtifact.content["message"] as string).includes("no real skill invoked"), "message mentions no real skill");
+  // No retired IDs
+  const globalJson = JSON.stringify(globalResult);
+  assert(!globalJson.includes("sdlc-requirement-normalizer"), "no requirement-normalizer (retired)");
+  assert(!globalJson.includes("sdlc-specification-writer"), "no specification-writer (retired)");
+  assert(!globalJson.includes("sdlc-solution-reviewer"), "no solution-reviewer (retired)");
   console.log("");
 
-  // ── Test 2: Direct implementation remains skillless ──
+  // ── Test 2: Direct implementation remains skillless (3 nodes + skillless) ──
   console.log("Test 2: Direct implementation remains skillless");
   const directPlan = planDirectImplementationPath({ requirementId: "REQ-DIRECT-SHADOW" });
   const directResult = executeSkillFlowShadow(directPlan);
@@ -60,48 +65,33 @@ async function test() {
   assert(skilllessArtifact !== undefined, "shadow_skillless_output artifact exists");
   assert(skilllessArtifact!.content["skill"] === null, "artifact skill is null");
   assert((skilllessArtifact!.content["message"] as string).includes("no real agent invoked"), "message mentions no real agent");
-  // Must NOT reference sdlc-speckit-implement anywhere
+  // 3 skill stages (implementation/code-review/knowledge-sync)
+  const directSkillArtifacts = directResult.artifacts.filter((a) => a.type === "shadow_skill_output");
+  assert(directSkillArtifacts.length === 3, "3 shadow_skill_output artifacts (implementation/code-review/knowledge-sync)");
+  // Must NOT reference retired speckit IDs
   const directJson = JSON.stringify(directResult);
-  assert(!directJson.includes("sdlc-speckit-implement"), "JSON does NOT include sdlc-speckit-implement");
+  assert(!directJson.includes("sdlc-speckit-implement"), "JSON does NOT include speckit-implement");
+  assert(!directJson.includes("sdlc-implementation-recorder"), "no implementation-recorder (retired)");
+  assert(!directJson.includes("sdlc-code-review-excellence"), "no code-review-excellence (retired)");
+  assert(!directJson.includes("sdlc-code-review-normalizer"), "no code-review-normalizer (retired)");
   console.log("");
 
-  // ── Test 3: Speckit shadow execution preserves order ──
-  console.log("Test 3: Speckit shadow execution preserves canonical order");
-  const speckitPlan = planSpeckitFlow({ requirementId: "REQ-SPECKIT-SHADOW" });
+  // ── Test 3: Retired speckit flow returns invalid ──
+  console.log("Test 3: Retired speckit flow returns invalid (Decision-044)");
+  const speckitPlan = planFlowById({ flowId: "speckit_pipeline", requirementId: "REQ-SP" });
+  assert(speckitPlan.status === "invalid", "speckit_pipeline is invalid (retired)");
   const speckitResult = executeSkillFlowShadow(speckitPlan);
-  assert(speckitResult.stageResults[0].skill === "sdlc-speckit-pipeline", "first stage is speckit-pipeline");
-  const srSkills = speckitResult.stageResults.map((s) => s.skill ?? s.stageName);
-  const ppIdx = srSkills.indexOf("sdlc-speckit-pipeline");
-  const pfIdx = srSkills.indexOf("PREFLIGHT_CONTROLLER");
-  const drIdx = srSkills.indexOf("DOMAIN_ROUTE_CONTROLLER");
-  const spIdx = srSkills.indexOf("sdlc-speckit-specify");
-  assert(ppIdx < pfIdx, "pipeline before PREFLIGHT");
-  assert(pfIdx < drIdx, "PREFLIGHT before DOMAIN_ROUTE");
-  assert(drIdx < spIdx, "DOMAIN_ROUTE before specify");
-  const siIdx = srSkills.indexOf("sdlc-speckit-implement");
-  const aiIdx = srSkills.indexOf("sdlc-speckit-analyze");
-  const syncIdx = srSkills.indexOf("sdlc-speckit-sync");
-  assert(aiIdx < siIdx, "analyze before implement");
-  assert(siIdx < syncIdx, "implement before sync");
-  // Speckit-implement artifact exists
-  const siArtifact = speckitResult.artifacts.find(
-    (a) => a.skill === "sdlc-speckit-implement"
-  );
-  assert(siArtifact !== undefined, "speckit-implement artifact exists");
-  assert(siArtifact!.content["skill"] === "sdlc-speckit-implement", "artifact has speckit-implement skill");
+  assert(speckitResult.status === "shadow_failed", "speckit shadow returns shadow_failed");
+  assert(speckitResult.stageResults.length === 0, "no stage results for retired flow");
   console.log("");
 
-  // ── Test 4: Controller stages do not invoke skills ──
-  console.log("Test 4: Controller stages are not skills");
-  const controllerResults = speckitResult.stageResults.filter(
-    (s) => s.kind === "controller"
-  );
-  assert(controllerResults.length >= 2, "at least 2 controller stages");
-  for (const cr of controllerResults) {
-    assert(cr.skill === undefined, `${cr.stageName}: no skill`);
-    assert(cr.artifacts.length === 0, `${cr.stageName}: no artifacts produced`);
-    assert(cr.output["mode"] === "shadow_only", `${cr.stageName}: mode is shadow_only`);
-  }
+  // ── Test 4: No controller stages in 7+1 topology ──
+  console.log("Test 4: No controller stages in 7+1 topology (speckit PREFLIGHT/DOMAIN_ROUTE retired)");
+  const allControllerResults = [
+    ...globalResult.stageResults.filter((s) => s.kind === "controller"),
+    ...directResult.stageResults.filter((s) => s.kind === "controller"),
+  ];
+  assert(allControllerResults.length === 0, "no controller stages in active flows (speckit controllers retired)");
   console.log("");
 
   // ── Test 5: Invalid plan shadow failure ──
@@ -116,7 +106,7 @@ async function test() {
 
   // ── Test 6: Safety boundaries ──
   console.log("Test 6: Safety boundaries");
-  for (const result of [globalResult, directResult, speckitResult]) {
+  for (const result of [globalResult, directResult]) {
     assert(result.safety.shadowOnly === true, `${result.flowId}: shadowOnly`);
     assert(result.safety.invokesRealAgents === false, `${result.flowId}: no real agents`);
     assert(result.safety.invokesRealSkills === false, `${result.flowId}: no real skills`);

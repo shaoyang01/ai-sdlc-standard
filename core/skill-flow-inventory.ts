@@ -14,8 +14,8 @@ export type SkillFlowInventory = Readonly<{
   skills: ReadonlyArray<Record<string, unknown>>;
   flows: ReadonlyArray<Record<string, unknown>>;
   runtime_relationships: ReadonlyArray<Record<string, unknown>>;
-  recommendations: Record<string, unknown>;
-  safety_boundaries: Record<string, unknown>;
+  retired_flows: ReadonlyArray<Record<string, unknown>>;
+  summary: Record<string, unknown>;
 }>;
 
 export function loadSkillFlowInventory(

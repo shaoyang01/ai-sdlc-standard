@@ -1,7 +1,9 @@
-// Regression Test — Skill Flow Inventory (Metadata-only)
-// =======================================================
+// Regression Test — Skill Flow Inventory (Metadata-only, 7+1 Topology)
+// =======================================================================
 // Verifies the machine-readable skill flow inventory is correct.
 // Static metadata test. No runtime, no DB, no agents.
+// C03-C update: inventory rewritten to 7+1 single-rail topology
+// (Decision-044/045); speckit_pipeline/code_review_subflow/test_feedback_subflow retired.
 
 import { loadSkillFlowInventory } from "../core/skill-flow-inventory";
 import * as fs from "node:fs";
@@ -20,7 +22,7 @@ async function test() {
     }
   }
 
-  console.log("Skill Flow Inventory Test\n");
+  console.log("Skill Flow Inventory Test (7+1 Topology)\n");
   const inv = loadSkillFlowInventory("metadata/capabilities/shared/skill-flow-inventory.json");
   const defaultInv = loadSkillFlowInventory();
 
@@ -34,82 +36,81 @@ async function test() {
 
   // ── Test 1: Basic structure ──
   console.log("Test 1: Basic structure");
-  assert(inv.version === 1, "version is 1");
+  assert(inv.version === 2, "version is 2 (C03-C 7+1 update)");
   assert(
     inv.source_report === "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md",
     "source report points to archived report body"
   );
-  assert(defaultInv.version === 1, "default loader loads relocated shared skill flow inventory");
+  assert(defaultInv.version === 2, "default loader loads relocated shared skill flow inventory");
   assert(
     defaultInv.global_entry_skill === inv.global_entry_skill,
     "default loader matches explicit path"
   );
-  assert(inv.global_entry_skill === "sdlc-requirement-normalizer", "global entry is requirement-normalizer");
+  assert(inv.global_entry_skill === "sdlc-requirement-intake", "global entry is requirement-intake");
   assert(Array.isArray(inv.skills), "skills is array");
-  assert(inv.skills.length === 21, `21 skills (got ${inv.skills.length})`);
+  assert(inv.skills.length === 8, `8 skills (7 nodes + docflow-writer) (got ${inv.skills.length})`);
   assert(Array.isArray(inv.flows), "flows is array");
+  assert(inv.flows.length === 2, "2 active flows (main_docflow + direct_implementation_path)");
   assert(Array.isArray(inv.runtime_relationships), "runtime_relationships is array");
+  assert(Array.isArray(inv.retired_flows), "retired_flows is array");
+  assert(inv.retired_flows.length === 3, "3 retired flows (speckit_pipeline + code_review_subflow + test_feedback_subflow)");
   console.log("");
 
   // ── Test 2: Global entry correctness ──
   console.log("Test 2: Global entry correctness");
-  const entry = findSkill("sdlc-requirement-normalizer");
-  assert(entry !== undefined, "requirement-normalizer exists");
+  const entry = findSkill("sdlc-requirement-intake");
+  assert(entry !== undefined, "requirement-intake exists");
   assert(entry!["role"] === "global_entry", "role is global_entry");
 
-  const crn = findSkill("sdlc-code-review-normalizer");
-  assert(crn !== undefined, "code-review-normalizer exists");
-  assert(crn!["role"] !== "global_entry", "code-review-normalizer is NOT global_entry");
-  assert(crn!["role"] === "subflow_normalizer", "code-review-normalizer is subflow_normalizer");
+  const codeReview = findSkill("sdlc-code-review");
+  assert(codeReview !== undefined, "code-review exists");
+  assert(codeReview!["role"] !== "global_entry", "code-review is NOT global_entry");
+  assert(codeReview!["role"] === "flow_internal", "code-review is flow_internal");
+
+  const docflow = findSkill("sdlc-docflow-writer");
+  assert(docflow !== undefined, "docflow-writer exists");
+  assert(docflow!["role"] === "utility", "docflow-writer is utility (non-node)");
   console.log("");
 
   // ── Test 3: Direct implementation is skillless ──
-  console.log("Test 3: Direct implementation is skillless");
+  console.log("Test 3: Direct implementation path");
   const directFlow = findFlow("direct_implementation_path");
   assert(directFlow !== undefined, "direct implementation flow exists");
   const directStages = directFlow!["stages"] as string[];
   assert(directStages.some((s) => s.includes("DIRECT_IMPLEMENTATION_AGENT_EXECUTION")),
     "direct flow includes skillless agent execution stage");
   assert(!directStages.some((s) => s.includes("speckit-implement")),
-    "direct flow does NOT include sdlc-speckit-implement");
+    "direct flow does NOT include sdlc-speckit-implement (retired)");
   console.log("");
 
-  // ── Test 4: Speckit implementation is internal stage ──
-  console.log("Test 4: Speckit implementation correctness");
-  const speckitFlow = findFlow("speckit_pipeline");
-  assert(speckitFlow !== undefined, "speckit pipeline flow exists");
-  const speckitStages = speckitFlow!["stages"] as string[];
-  assert(speckitStages.includes("Implement"), "speckit flow includes Implement stage");
-  const speckitEdges = speckitFlow!["edges"] as Array<Record<string, unknown>>;
-  const implEdge = speckitEdges.find((e) => e["from"] === "sdlc-speckit-implement");
-  assert(implEdge !== undefined, "speckit-implement is an internal edge source");
-  assert(implEdge!["to"] === "sdlc-speckit-sync", "speckit-implement → speckit-sync");
-
-  // Verify speckit stage order: analyze → implement → sync
-  const siIndex = speckitStages.indexOf("Implement");
-  const analyzeIndex = speckitStages.indexOf("Analyze");
-  const syncIndex = speckitStages.indexOf("Sync");
-  assert(analyzeIndex < siIndex, "Analyze before Implement");
-  assert(siIndex < syncIndex, "Implement before Sync");
+  // ── Test 4: Main docflow has 4 nodes ──
+  console.log("Test 4: Main docflow (4 nodes)");
+  const mainFlow = findFlow("main_docflow");
+  assert(mainFlow !== undefined, "main docflow exists");
+  assert(mainFlow!["entrySkill"] === "sdlc-requirement-intake", "main entry is requirement-intake");
+  const mainEdges = mainFlow!["edges"] as Array<Record<string, unknown>>;
+  assert(mainEdges.some((e) => e["from"] === "sdlc-requirement-intake" && e["to"] === "sdlc-solution-design"),
+    "intake → design edge exists");
+  assert(mainEdges.some((e) => e["from"] === "sdlc-solution-design" && e["to"] === "sdlc-solution-gate"),
+    "design → gate edge exists");
+  assert(mainEdges.some((e) => e["from"] === "sdlc-solution-gate" && e["to"] === "sdlc-task-planning"),
+    "gate → task-planning edge exists");
   console.log("");
 
-  // ── Test 5: Runtime relationships ──
-  console.log("Test 5: Runtime relationships");
-  const implRel = inv.runtime_relationships.find((r) => r["runtimeNode"] === "implementation");
-  assert(implRel !== undefined, "implementation runtime relationship exists");
-  assert(implRel!["relationshipType"] === "skillless_agent_execution", "implementation is skillless_agent_execution");
-  assert(implRel!["runtimeInvokesSkill"] === false, "implementation does not invoke skill");
-  const implSkills = implRel!["relatedSkills"] as string[];
-  assert(implSkills.includes("sdlc-speckit-pipeline"), "implementation relatedSkills includes sdlc-speckit-pipeline");
-  assert(!implSkills.includes("sdlc-speckit-implement"), "implementation relatedSkills does NOT include sdlc-speckit-implement");
-  const implNotes = implRel!["notes"] as string;
-  assert(implNotes.includes("Direct implementation is skillless"), "notes mention direct implementation is skillless");
-  assert(implNotes.includes("sdlc-speckit-pipeline"), "notes mention sdlc-speckit-pipeline");
-
-  const bugfixRel = inv.runtime_relationships.find((r) => r["runtimeNode"] === "bugfix");
-  assert(bugfixRel !== undefined, "bugfix runtime relationship exists");
-  assert((bugfixRel!["relatedSkills"] as string[]).length === 0, "bugfix has no related skills");
-  assert(bugfixRel!["relationshipType"] === "no_evidence", "bugfix has no evidence of skill mapping");
+  // ── Test 5: Retired flows ──
+  console.log("Test 5: Retired flows (Decision-044 single-rail)");
+  const retiredSpeckit = inv.retired_flows.find((f) => f["id"] === "speckit_pipeline");
+  assert(retiredSpeckit !== undefined, "speckit_pipeline is retired");
+  assert(retiredSpeckit!["retired_by"] === "Decision-044 (single-track)", "speckit retired by Decision-044");
+  const retiredCR = inv.retired_flows.find((f) => f["id"] === "code_review_subflow");
+  assert(retiredCR !== undefined, "code_review_subflow is retired");
+  assert(retiredCR!["absorbed_into"] === "sdlc-code-review (direct_implementation_path)", "code_review absorbed into code-review");
+  const retiredTF = inv.retired_flows.find((f) => f["id"] === "test_feedback_subflow");
+  assert(retiredTF !== undefined, "test_feedback_subflow is retired");
+  // Active flows do NOT include retired IDs
+  assert(!inv.flows.some((f) => f["id"] === "speckit_pipeline"), "speckit_pipeline NOT in active flows");
+  assert(!inv.flows.some((f) => f["id"] === "code_review_subflow"), "code_review_subflow NOT in active flows");
+  assert(!inv.flows.some((f) => f["id"] === "test_feedback_subflow"), "test_feedback_subflow NOT in active flows");
   console.log("");
 
   // ── Test 6: All skills are runtimeInvoked: false ──
@@ -119,31 +120,30 @@ async function test() {
   }
   console.log("");
 
-  // ── Test 7: Safety boundaries ──
-  console.log("Test 7: Safety boundaries");
-  const sb = inv.safety_boundaries;
-  assert(sb["metadata_only"] === true, "metadata_only is true");
-  assert(sb["changes_runtime_behavior"] === false, "does not change runtime behavior");
-  assert(sb["changes_graph_routing"] === false, "does not change graph routing");
-  assert(sb["changes_agent_selection"] === false, "does not change agent selection");
-  assert(sb["invokes_sdlc_skills"] === false, "does not invoke sdlc skills");
-  assert(sb["renames_skills"] === false, "does not rename skills");
-  assert(sb["adds_new_skills"] === false, "does not add new skills");
+  // ── Test 7: No legacy skill IDs in active inventory ──
+  console.log("Test 7: No legacy skill IDs in active inventory (C03-C cutover)");
+  const legacyIds = [
+    "sdlc-requirement-normalizer", "sdlc-specification-writer", "sdlc-solution-reviewer",
+    "sdlc-solution-challenger", "sdlc-implementation-recorder", "sdlc-code-review-excellence",
+    "sdlc-code-review-normalizer", "sdlc-test-feedback-classifier", "sdlc-test-feedback-sync",
+    "sdlc-gate-runner", "sdlc-speckit-pipeline", "sdlc-speckit-specify", "sdlc-speckit-clarify",
+    "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement",
+    "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile", "sdlc-speckit-checklist",
+  ];
+  for (const legacy of legacyIds) {
+    assert(!inv.skills.some((s) => s["name"] === legacy), `${legacy} NOT in active skills`);
+  }
   console.log("");
 
-  // ── Test 8: Recommendations ──
-  console.log("Test 8: Recommendations");
-  const recs = inv.recommendations;
-  const doNotContinue = recs["do_not_continue"] as string[];
-  assert(doNotContinue.some((r) => r.includes("runtime_node_to_skill_inference")),
-    "recommends against runtime node to skill inference");
-  assert(doNotContinue.some((r) => r.includes("speckit_implement_to_generic_implementation")),
-    "recommends against mapping speckit-implement to generic implementation");
-  assert(recs["recommended_next_pr"] === "deprecate_runtime_auto_skill_annotation",
-    "recommended_next_pr is deprecate_runtime_auto_skill_annotation");
-  const futureWork = recs["recommended_future_work"] as string[];
-  assert(futureWork.some((r) => r.includes("skillless")),
-    "recommends modeling direct implementation as skillless");
+  // ── Test 8: Summary ──
+  console.log("Test 8: Summary");
+  const summary = inv.summary;
+  assert(summary["active_skill_count"] === 8, "active_skill_count is 8");
+  assert(summary["flow_node_count"] === 7, "flow_node_count is 7");
+  assert(summary["cross_cutting_utility_count"] === 1, "cross_cutting_utility_count is 1");
+  assert(summary["active_flow_count"] === 2, "active_flow_count is 2");
+  assert(summary["retired_flow_count"] === 3, "retired_flow_count is 3");
+  assert(String(summary["topology"]).includes("7+1"), "topology mentions 7+1");
   console.log("");
 
   // ── Test 9: Archived report body and root compatibility note ──

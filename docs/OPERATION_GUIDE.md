@@ -1,5 +1,7 @@
 # 完整操作指南
 
+> `[HISTORICAL — pre-C03-B]` 本指南第 9～14 章的 Skill 调用示例（sdlc-requirement-normalizer / sdlc-specification-writer / sdlc-solution-reviewer / sdlc-implementation-recorder / sdlc-code-review-normalizer 等）描述的是 C03-B 原子切换之前的旧 21 包拓扑。C03-B 后现役 Skill 拓扑已切换为 **7+1**（`sdlc-requirement-intake` / `sdlc-solution-design` / `sdlc-solution-gate` / `sdlc-task-planning` / `sdlc-implementation` / `sdlc-code-review` / `sdlc-knowledge-sync` + `sdlc-docflow-writer`）。第 1～8 章的通用操作步骤（安装、校验、初始化、Skill 同步）仍然有效，仅 Skill 名称以当前 7+1 为准。当前现役状态以 `registry/skill-registry.md` 和 `manifest.yaml` 为准。
+
 > 本指南面向真实业务代码库试跑 AI SDLC Standard，覆盖标准库安装、Skill 同步、目标代码库初始化、第一条真实需求的 DocFlow 闭环。
 
 ## 1. 总体流程

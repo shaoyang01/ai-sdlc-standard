@@ -53,11 +53,11 @@ async function test() {
     agent: "codex",
     requirementId: "REQ-VALID",
     input: {},
-    skill: "sdlc-speckit-implement",
+    skill: "sdlc-implementation",
   });
   assert(validResult.success === true, "request with valid skill succeeds");
   const validArtifact = validResult.artifacts[0];
-  assert(validArtifact.content["skill"] === "sdlc-speckit-implement", "artifact has skill name");
+  assert(validArtifact.content["skill"] === "sdlc-implementation", "artifact has skill name");
   const validSV = validArtifact.content["skill_validation"] as Record<string, unknown> | null;
   assert(validSV !== null, "skill_validation is present");
   assert(validSV!["valid"] === true, "skill validation is valid");
@@ -72,11 +72,11 @@ async function test() {
     agent: "kimi",
     requirementId: "REQ-INVALID",
     input: {},
-    skill: "sdlc-speckit-implement",
+    skill: "sdlc-implementation",
   });
   assert(invalidResult.success === true, "execution still succeeds with invalid skill metadata");
   const invalidArtifact = invalidResult.artifacts[0];
-  assert(invalidArtifact.content["skill"] === "sdlc-speckit-implement", "artifact preserves skill name");
+  assert(invalidArtifact.content["skill"] === "sdlc-implementation", "artifact preserves skill name");
   const invalidSV = invalidArtifact.content["skill_validation"] as Record<string, unknown> | null;
   assert(invalidSV !== null, "skill_validation is present");
   // Skill is known, so validation passes even when agent doesn't match
@@ -99,7 +99,7 @@ async function test() {
     agent: "codex",
     requirementId: "REQ-DISP2",
     input: {},
-    skill: "sdlc-speckit-implement",
+    skill: "sdlc-implementation",
   });
   assert(withoutSkill.success === withSkill.success, "same success behavior");
   assert(withoutSkill.node === withSkill.node, "same node");
@@ -131,11 +131,11 @@ async function test() {
     agent: "codex",
     requirementId: "REQ-CR",
     input: { artifacts: [] },
-    skill: "sdlc-code-review-excellence",
+    skill: "sdlc-code-review",
   });
   assert(codeReviewResult.success === true, "code_review with skill succeeds");
   const crArtifact = codeReviewResult.artifacts[0];
-  assert(crArtifact.content["skill"] === "sdlc-code-review-excellence", "code_review artifact has skill name");
+  assert(crArtifact.content["skill"] === "sdlc-code-review", "code_review artifact has skill name");
   const crSV = crArtifact.content["skill_validation"] as Record<string, unknown> | null;
   assert(crSV !== null, "code_review skill_validation is present");
   assert(crSV!["attempted"] === true, "code_review skill validation was attempted");
@@ -150,11 +150,11 @@ async function test() {
     requirementId: "REQ-BF",
     input: { artifacts: [], findings: [] },
     metadata: { attempt: 1 },
-    skill: "sdlc-speckit-implement",
+    skill: "sdlc-implementation",
   });
   assert(bugfixResult.success === true, "bugfix with skill succeeds");
   const bfArtifact = bugfixResult.artifacts[0];
-  assert(bfArtifact.content["skill"] === "sdlc-speckit-implement", "bugfix artifact has skill name");
+  assert(bfArtifact.content["skill"] === "sdlc-implementation", "bugfix artifact has skill name");
   const bfSV = bfArtifact.content["skill_validation"] as Record<string, unknown> | null;
   assert(bfSV !== null, "bugfix skill_validation is present");
   console.log("");
@@ -168,7 +168,7 @@ async function test() {
     requirementId: "REQ-BF-INV",
     input: { artifacts: [], findings: [] },
     metadata: { attempt: 1 },
-    skill: "sdlc-speckit-implement",
+    skill: "sdlc-implementation",
   });
   assert(invalidBugfixResult.success === true, "bugfix with known skill still succeeds");
   const ibfArtifact = invalidBugfixResult.artifacts[0];

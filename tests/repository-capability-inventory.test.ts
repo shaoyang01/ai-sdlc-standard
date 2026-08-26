@@ -1,7 +1,10 @@
-// Regression Test — Repository Capability Inventory (Static Metadata)
-// ===================================================================
+// Regression Test — Repository Capability Inventory (Static Metadata, 7+1)
+// ==========================================================================
 // Verifies the machine-readable capability inventory accurately
 // reflects the repository state. No runtime, no DB, no agents.
+// C03-C update: inventory rewritten to 8 active skills (7+1 topology);
+// legacy 21-package topology retired; runtime module inventory removed
+// (this file is skill-focused, not runtime-module-focused).
 
 import { loadRepositoryCapabilityInventory } from "../core/repository-capability-inventory";
 import * as fs from "node:fs";
@@ -20,14 +23,14 @@ async function test() {
     }
   }
 
-  console.log("Repository Capability Inventory Test\n");
+  console.log("Repository Capability Inventory Test (7+1 Topology)\n");
 
   const inv = loadRepositoryCapabilityInventory("metadata/capabilities/shared/existing-skills-inventory.json");
   const defaultInv = loadRepositoryCapabilityInventory();
 
   // ── Loader default path ──
   console.log("Test 0: Loader default path resolves relocated shared inventory");
-  assert(defaultInv.version === 1, "default loader loads relocated shared inventory");
+  assert(defaultInv.version === 2, "default loader loads relocated shared inventory (v2)");
   assert(
     defaultInv.skills.length === inv.skills.length,
     "default loader matches explicit path"
@@ -36,17 +39,11 @@ async function test() {
 
   // ── Basic structure ──
   console.log("Test 1: Basic structure");
-  assert(inv.version === 1, "version is 1");
+  assert(inv.version === 2, "version is 2 (C03-C 7+1 update)");
   assert(inv.generated_by === "static_repository_scan", "generated_by is static_repository_scan");
   assert(Array.isArray(inv.skills), "skills is array");
   assert(Array.isArray(inv.skill_registry_files), "skill_registry_files is array");
   assert(Array.isArray(inv.runtime_entrypoints), "runtime_entrypoints is array");
-  assert(Array.isArray(inv.execution_adapters), "execution_adapters is array");
-  assert(Array.isArray(inv.policy_modules), "policy_modules is array");
-  assert(Array.isArray(inv.memory_modules), "memory_modules is array");
-  assert(Array.isArray(inv.feedback_modules), "feedback_modules is array");
-  assert(Array.isArray(inv.evolution_modules), "evolution_modules is array");
-  assert(Array.isArray(inv.potentially_unconnected_modules), "potentially_unconnected_modules is array");
   assert(typeof inv.summary === "object", "summary is object");
   console.log("");
 
@@ -56,6 +53,7 @@ async function test() {
     Number(inv.summary["existing_sdlc_skill_count"]) === inv.skills.length,
     `summary count (${inv.summary["existing_sdlc_skill_count"]}) matches skills array length (${inv.skills.length})`
   );
+  assert(inv.skills.length === 8, "8 active skills (7 nodes + docflow-writer)");
   console.log("");
 
   // ── All skills start with sdlc- ──
@@ -66,48 +64,66 @@ async function test() {
       String(skill["name"]).startsWith("sdlc-"),
       `skill name starts with sdlc-: ${skill["name"]}`
     );
-    assert(Array.isArray(skill["sourceFiles"]), `skill ${skill["name"]} has sourceFiles array`);
     assert(Array.isArray(skill["referenceFiles"]), `skill ${skill["name"]} has referenceFiles array`);
-    assert((skill["referenceFiles"] as unknown[]).length >= 4, `skill ${skill["name"]} has at least 4 reference files`);
+  }
+  console.log("");
+
+  // ── 7+1 topology skills present ──
+  console.log("Test 4: 7+1 topology skills present");
+  const expectedSkills = [
+    "sdlc-requirement-intake",
+    "sdlc-solution-design",
+    "sdlc-solution-gate",
+    "sdlc-task-planning",
+    "sdlc-implementation",
+    "sdlc-code-review",
+    "sdlc-knowledge-sync",
+    "sdlc-docflow-writer",
+  ];
+  for (const sk of expectedSkills) {
+    assert(inv.skills.some((s) => s["name"] === sk), `${sk} present in inventory`);
+  }
+  console.log("");
+
+  // ── No legacy skill IDs ──
+  console.log("Test 5: No legacy skill IDs in active inventory (C03-C cutover)");
+  const legacyIds = [
+    "sdlc-requirement-normalizer", "sdlc-specification-writer", "sdlc-solution-reviewer",
+    "sdlc-solution-challenger", "sdlc-implementation-recorder", "sdlc-code-review-excellence",
+    "sdlc-code-review-normalizer", "sdlc-test-feedback-classifier", "sdlc-test-feedback-sync",
+    "sdlc-gate-runner", "sdlc-speckit-pipeline", "sdlc-speckit-specify", "sdlc-speckit-clarify",
+    "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement",
+    "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile", "sdlc-speckit-checklist",
+  ];
+  for (const legacy of legacyIds) {
+    assert(!inv.skills.some((s) => s["name"] === legacy), `${legacy} NOT in active skills`);
+  }
+  console.log("");
+
+  // ── Skills are runtime-referenced (C03-C consumption-face cutover) ──
+  console.log("Test 6: Skills are runtime-referenced (C03-C cutover)");
+  for (const skill of inv.skills) {
+    assert(skill["referencedByRuntime"] === true, `${skill["name"]}: referencedByRuntime is true`);
   }
   console.log("");
 
   // ── Summary statistics ──
-  console.log("Test 4: Summary statistics");
-  assert(inv.summary["skills_with_skill_md_count"] === 21, "all 21 skills have SKILL.md");
-  assert(inv.summary["skills_with_manifest_count"] === 21, "all 21 skills are in manifest");
-  assert(inv.summary["skills_with_contract_count"] === 21, "all 21 skills have contracts");
-  assert(inv.summary["skills_registered_count"] === 21, "all 21 skills are registered");
-  assert(inv.summary["skills_runtime_referenced_count"] === 0, "no skills are runtime-referenced");
-  assert(inv.summary["execution_adapter_count"] === 4, "4 execution adapters");
-  assert(inv.summary["feature_flagged_real_adapter_count"] === 1, "1 feature-flagged real adapter (codex)");
-  assert(inv.summary["shadow_only_adapter_count"] === 3, "3 shadow-only adapters");
+  console.log("Test 7: Summary statistics");
+  assert(inv.summary["existing_sdlc_skill_count"] === 8, "8 active skills");
+  assert(inv.summary["flow_node_count"] === 7, "7 flow nodes");
+  assert(inv.summary["cross_cutting_utility_count"] === 1, "1 cross-cutting utility (docflow-writer)");
+  assert(String(inv.summary["topology"]).includes("7+1"), "topology mentions 7+1");
   console.log("");
 
-  // ── Codex adapter is feature-flagged ──
-  console.log("Test 5: Codex adapter status");
-  const codex = inv.execution_adapters.find((a) => a["name"] === "codex-adapter");
-  assert(codex !== undefined, "codex adapter exists");
-  assert(codex!["executionMode"] === "feature_flagged_real", "codex is feature-flagged real");
-  assert(codex!["defaultEnabled"] === false, "codex is not default enabled");
-  console.log("");
-
-  // ── Kimi/Hermes are shadow only ──
-  console.log("Test 6: Kimi/Hermes adapters not implemented");
-  const kimiAdapter = inv.execution_adapters.find((a) => a["name"] === "kimi-adapter");
-  const hermesAdapter = inv.execution_adapters.find((a) => a["name"] === "hermes-adapter");
-  assert(kimiAdapter === undefined, "no kimi adapter (not implemented)");
-  assert(hermesAdapter === undefined, "no hermes adapter (not implemented)");
-  // Shadow adapter covers all agents
-  const shadow = inv.execution_adapters.find((a) => a["name"] === "shadow-agent-adapter");
-  assert(shadow !== undefined, "shadow adapter exists");
-  const shadowAgents = shadow!["supportedAgents"] as string[];
-  assert(shadowAgents.includes("kimi"), "shadow adapter supports kimi");
-  assert(shadowAgents.includes("hermes"), "shadow adapter supports hermes");
+  // ── Runtime entrypoints include C03-C cutover files ──
+  console.log("Test 8: Runtime entrypoints include C03-C cutover files");
+  const entrypointNames = inv.runtime_entrypoints.map((e) => e["name"]);
+  assert(entrypointNames.includes("agent-skill-registry"), "agent-skill-registry is a runtime entrypoint");
+  assert(entrypointNames.includes("skill-flow-orchestrator"), "skill-flow-orchestrator is a runtime entrypoint");
   console.log("");
 
   // ── Archived documentation body and root compatibility note ──
-  console.log("Test 7: archived REPOSITORY_CAPABILITY_INVENTORY.md body and root note");
+  console.log("Test 9: archived REPOSITORY_CAPABILITY_INVENTORY.md body and root note");
   const archivedMd = fs.readFileSync(
     "docs/reports/archive/capabilities/REPOSITORY_CAPABILITY_INVENTORY.md",
     "utf-8"
@@ -126,33 +142,6 @@ async function test() {
   assert(rootNote.includes("temporary compatibility reference"), "root note is a temporary compatibility reference");
   assert(rootNote.includes("at least 30 days"), "root note declares minimum 30-day retention");
   assert(rootNote.includes("separate governance decision"), "root note removal requires a separate governance decision");
-  console.log("");
-
-  // ── Routing vs Agent Selection distinction ──
-  console.log("Test 8: Routing vs Agent Selection distinction");
-  const policyEngine = inv.policy_modules.find((m) => m["name"] === "agent-policy-engine");
-  assert(policyEngine !== undefined, "agent-policy-engine exists");
-  assert(policyEngine!["changesGraphRouting"] === false, "agent-policy-engine does NOT change graph routing");
-  assert(policyEngine!["changesActualAgentSelection"] === true, "agent-policy-engine DOES change actual agent selection");
-
-  const agentDecision = inv.policy_modules.find((m) => m["name"] === "agent-decision");
-  assert(agentDecision !== undefined, "agent-decision exists");
-  assert(agentDecision!["changesGraphRouting"] === false, "agent-decision does NOT change graph routing");
-  assert(agentDecision!["changesActualAgentSelection"] === true, "agent-decision DOES change actual agent selection");
-
-  const memoryAnalyzer = inv.policy_modules.find((m) => m["name"] === "policy-memory-analyzer");
-  assert(memoryAnalyzer !== undefined, "policy-memory-analyzer exists");
-  assert(memoryAnalyzer!["changesGraphRouting"] === false, "memory-analyzer does NOT change graph routing");
-  assert(memoryAnalyzer!["changesActualAgentSelection"] === false, "memory-analyzer does NOT change actual agent selection");
-  assert(memoryAnalyzer!["onlyProducesSuggestions"] === true, "memory-analyzer only produces suggestions");
-
-  const feedbackAnalyzer = inv.feedback_modules.find((m) => m["name"] === "feedback-analyzer");
-  assert(feedbackAnalyzer !== undefined, "feedback-analyzer exists");
-  assert(feedbackAnalyzer!["changesActualAgentSelection"] === false, "feedback-analyzer does NOT change actual agent selection");
-
-  const evoAnalyzer = inv.evolution_modules.find((m) => m["name"] === "evolution-proposal-analyzer");
-  assert(evoAnalyzer !== undefined, "evolution-proposal-analyzer exists");
-  assert(evoAnalyzer!["changesActualAgentSelection"] === false, "evolution-analyzer does NOT change actual agent selection");
   console.log("");
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
