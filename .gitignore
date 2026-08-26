@@ -7,5 +7,6 @@ Thumbs.db
 .sdlc-runtime/
 .sdlc-runtime-test/
 .reasonix/
+temp/
 
 node_modules/

@@ -61,13 +61,12 @@ Requirement-level workspace under `library/{requirement_id}/`:
 ## Validation
 
 ```bash
-ruby scripts/validate-skill-contracts.rb            # skill contract consistency
-ruby scripts/validate-product-parity-fixtures.rb    # product parity fixtures
+ruby scripts/validate-skill-contracts.rb            # skill contract consistency (7+1 topology)
 ruby scripts/validate-capability-metadata-chain.rb  # repository capability/status governance
 git diff --check                                    # whitespace validation
 ```
 
-前两个 Ruby validators 是 portable Standard Package validators；metadata-chain validator 是本仓库治理校验。All four commands pass. README 仍不是 canonical current project status；当前状态继续见 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)。
+`validate-skill-contracts.rb` 是 portable Standard Package validator；metadata-chain validator 是本仓库治理校验。All commands pass. README 仍不是 canonical current project status；当前状态继续见 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)。
 
 ## Operational Redlines
 

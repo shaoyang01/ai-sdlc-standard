@@ -80,7 +80,7 @@ library/{requirement_id}/
 | `07-交付总结/` | Delivery Tail 时必需 | 属于 C03 Delivery Tail，不映射节点能力；保存交付摘要、验证结果、遗留风险、发布或回滚说明和下一责任人；与 delivery checkpoint（READY_FOR_MANUAL_GIT_HANDOFF）单独登记。 |
 | `manifest.md` | 进入实现或 Delivery Tail 时必需 | 保存该需求的产物索引、当前 generation、七节点 current revision/Gate、Design Depth Decision、Delivery Tail 与 external evidence references。 |
 
-当需求产生实际代码、配置或行为实现时，`04-实现记录`、`05-代码审核` 均为必需证据，不得因修改较小而静默省略。节点准入的确定性检查由 LOOP runtime 执行，不再依赖人工 Gate Skill（`sdlc-gate-runner` 已退役）。
+当需求产生实际代码、配置或行为实现时，`04-实现记录`、`05-代码审核` 均为必需证据，不得因修改较小而静默省略。节点准入的确定性检查由 LOOP runtime 执行，不再依赖人工 Gate Skill（`sdlc-gate-runner` 已退役）。[RETIRED — C03-B]
 
 ### Manifest 必需性
 

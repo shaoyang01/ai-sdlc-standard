@@ -83,7 +83,7 @@ Rules:
 
 ## Gate / Admission Rules（准入规则）
 
-In v2, only solution-gate (formal_verdict) outputs a conclusive Gate; node admission checks are executed deterministically by the LOOP runtime (generation, current revision, Gate result, Design Depth Decision, finding status). `sdlc-gate-runner` is retired.
+In v2, only solution-gate (formal_verdict) outputs a conclusive Gate; node admission checks are executed deterministically by the LOOP runtime (generation, current revision, Gate result, Design Depth Decision, finding status). `sdlc-gate-runner` is retired. [RETIRED — C03-B]
 
 **PASS**: all required artifacts Produced/Reused, OR Deferred with accepted_by + verification_alternative + re_gate_required, OR Not Applicable with valid project-type justification; Gate Result is PASS / PASS_WITH_RISK and `decision_status = DECIDED`.
 

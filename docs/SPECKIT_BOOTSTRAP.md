@@ -189,7 +189,7 @@ New AI SDLC Speckit Rail
 - 新版 `sdlc-*` Skill 正常运行时读取标准包共享文档和新 project-context。
 - 新版 Skill 不得把 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` 当作正常输入。
 - 旧版文档在 runtime bootstrap 中只被保留给旧 rail，不参与新版生成、对比或迁移。
-- `sdlc-speckit-pipeline` 运行期只能调度 `sdlc-speckit-*` 子 Skill；legacy `speckit-*` Skill 只能作为标准包开发期 parity fixture。
+- `[RETIRED — C03-B]` `sdlc-speckit-pipeline` 及 `sdlc-speckit-*` 子 Skill 族已退役，相关能力吸收进 7+1 新包（`sdlc-implementation`、`sdlc-knowledge-sync` 等）；legacy `speckit-*` Skill 只能作为标准包开发期 parity fixture。
 - `ProjectWorkflowGuide.md` 承载项目本地 pipeline workflow、确认策略、发布、分支、验证和回滚约束。
 - `ProjectDocumentationGuide.md` 承载项目本地 business_domain、L4、EntryCoverage、文档索引和文档形态约束。
 

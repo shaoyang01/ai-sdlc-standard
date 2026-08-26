@@ -1,5 +1,7 @@
 # AI SDLC Standard Roadmap
 
+> `[HISTORICAL — pre-C03-B]` 本文件描述的是 C03-B 原子切换之前的旧拓扑（21 个 sdlc-* / sdlc-speckit-* Skill）规划与推进记录。C03-B 后现役 Skill 拓扑已切换为 **7+1**（`sdlc-requirement-intake` / `sdlc-solution-design` / `sdlc-solution-gate` / `sdlc-task-planning` / `sdlc-implementation` / `sdlc-code-review` / `sdlc-knowledge-sync` + `sdlc-docflow-writer`）。当前现役状态以 `docs/CURRENT_STATUS.md`、`registry/skill-registry.md` 和 `manifest.yaml` 为准。本文件保留为历史规划档案，其中的旧 Skill ID 引用不再代表现役能力。
+
 > Version: v0.1.0  
 > Status: draft / portable standard package  
 > Purpose: 跟踪 `ai-sdlc-standard` 从标准包、Prompt Skill、投放脚本到真实项目验证的推进方向。

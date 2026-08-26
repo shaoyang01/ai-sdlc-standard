@@ -1,7 +1,7 @@
 # LOOP Entry Contract（统一入口合同）
 
 > 状态：Accepted（2026-08-19，WP-1 交付，Decision-021）
-> 关联：[LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §3 · [Change Control](change-control.md) · [Artifact Storage](artifact-storage.md) · [Requirement Normalizer Skill](../skills/sdlc-requirement-normalizer/SKILL.md)
+> 关联：[LOOP Core Contract](../docs/LOOP_CORE_CONTRACT.md) §3 · [Change Control](change-control.md) · [Artifact Storage](artifact-storage.md) · [Requirement Intake Skill](../skills/sdlc-requirement-intake/SKILL.md)
 
 ## 1. Purpose
 
@@ -82,10 +82,10 @@
 - 需求资料：`library/{requirement_id}/00-需求资料/{requirement_id}_需求摘要.md`（默认输出节点，规则见 Artifact Storage）。
 - 运行记录：run journal 中的 run（含 identity、阶段事件、attempt、blocking/failure 原因码）。
 
-## 10. 与 sdlc-requirement-normalizer 的关系
+## 10. 与 sdlc-requirement-intake 的关系
 
-- `sdlc-requirement-normalizer` 是入口 Skill 的既有实现候选：本合同是其合同面，Skill 执行体按本合同与自身 SKILL.md 执行。
-- 本合同补充 normalizer 合同未覆盖的部分：运行记录创建/恢复调用、Requirement ID 查询校验、跨入口恢复语义。
+- `sdlc-requirement-intake` 是入口 Skill 的现役实现（C03-A 交付，吸收原 requirement-normalizer 与 test-feedback-classifier 能力）：本合同是其合同面，Skill 执行体按本合同与自身 SKILL.md 执行。
+- 本合同补充 intake 合同未覆盖的部分：运行记录创建/恢复调用、Requirement ID 查询校验、跨入口恢复语义。
 
 ## Revision Record
 

@@ -22,7 +22,7 @@
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
 
-本模板只用于产出结论性 Gate；只有 solution-gate 的 `formal_verdict` 输出结论性 Gate（PASS / FAIL / PASS_WITH_RISK），`adversarial_scan` 角色产出的 Finding Ledger 不给正式 Gate。其他节点的确定性准入由 LOOP runtime 执行（generation、current revision、Gate、设计深度裁决、finding 状态），不产出本模板；`sdlc-gate-runner` 已退役。
+本模板只用于产出结论性 Gate；只有 solution-gate 的 `formal_verdict` 输出结论性 Gate（PASS / FAIL / PASS_WITH_RISK），`adversarial_scan` 角色产出的 Finding Ledger 不给正式 Gate。其他节点的确定性准入由 LOOP runtime 执行（generation、current revision、Gate、设计深度裁决、finding 状态），不产出本模板；`sdlc-gate-runner` 已退役。[RETIRED — C03-B]
 
 ## Conclusion
 

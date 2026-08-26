@@ -75,20 +75,22 @@ DIRECT_IMPLEMENTATION
 测试反馈沉淀
 ```
 
-可用 Skill：
+可用 Skill（C03-B 后 7+1 拓扑）：
 
 | 阶段 | 可用 Skill | 当前作用 |
 | --- | --- | --- |
-| 需求归一化 | `sdlc-requirement-normalizer` | 归一化原始需求并保留来源信息。 |
-| 规格生成 | `sdlc-specification-writer` | 按 ESS 生成可审计技术规格。 |
-| 方案审阅 | `sdlc-solution-reviewer` | 全局方案审核 Gate，输出开发路径建议。 |
-| 文档输出 | `sdlc-docflow-writer` | 将标准产物输出为 Markdown、HTML 或飞书文档。 |
-| 实现记录 | `sdlc-implementation-recorder` | 根据实现证据生成实现记录。 |
-| 代码审核归一化 | `sdlc-code-review-normalizer` | 将 DeepSeek、Codex、人工 Review 归一成 Code Review Schema。 |
-| 测试反馈分类 | `sdlc-test-feedback-classifier` | 判断测试反馈属于规格遗漏、实现缺陷、需求变化等。 |
-| 测试反馈同步 | `sdlc-test-feedback-sync` | 将稳定反馈转成 Checklist、Schema、manifest 或 change-control 建议。 |
+| 需求摄入 | `sdlc-requirement-intake` | 归一化原始需求、分类测试反馈，产出标准化需求工件。 |
+| 方案设计 | `sdlc-solution-design` | 按已审阅需求产出技术规格与方案设计。 |
+| 方案门禁 | `sdlc-solution-gate` | 对抗式扫描与正式裁决分离的双角色防火墙，输出开发路径决策与风险。 |
+| 任务规划 | `sdlc-task-planning` | 将已批准方案拆解为具体任务并分析跨任务一致性。 |
+| 实现 | `sdlc-implementation` | 修改代码并记录实现证据。 |
+| 代码审核 | `sdlc-code-review` | 执行代码审核、归一化原始发现并分类，不修复代码。 |
+| 知识同步 | `sdlc-knowledge-sync` | 将授权稳定事实写入长期知识库，并对账 code-doc 漂移。 |
+| 文档输出 | `sdlc-docflow-writer` | 将标准产物输出为 Markdown、HTML 或飞书文档（非节点，仅内容渲染）。 |
 
-## 方案审核 Gate
+> `[RETIRED — C03-B]` 以下章节（方案审核 Gate、复杂需求 Speckit 流程）描述的是旧 Speckit pipeline 流程，相关 Skill（`sdlc-requirement-normalizer`、`sdlc-specification-writer`、`sdlc-solution-reviewer`、`sdlc-speckit-pipeline` 及 `sdlc-speckit-*` 子族）已退役，能力吸收进上述 7+1 新包。保留为历史档案。
+
+## 方案审核 Gate [RETIRED — C03-B]
 
 每个进入实现的需求都应先有：
 
@@ -120,7 +122,7 @@ BLOCKED_NEEDS_REVISION
 - `BLOCKED_NEEDS_REVISION` 回到方案修订。
 - 用户要求 full SDD 可以覆盖直接实现路径，但不能跳过 `01-技术方案` 和 `02-方案审核`。
 
-## 复杂需求 Speckit 流程
+## 复杂需求 Speckit 流程 [RETIRED — C03-B]
 
 当 `02-方案审核` 建议为：
 

@@ -73,7 +73,7 @@ requirement-intake -> solution-design -> solution-gate -> task-planning
 
 - 位置：`knowledge-sync` 之后；输出 `READY_FOR_MANUAL_GIT_HANDOFF` 或如实的 `blocked` / `failed`。
 - delivery checkpoint 的 generation/CAS 机器底座保留；`READY_FOR_MANUAL_GIT_HANDOFF` 只交付可人工处理的变更包，不产生 commit/push/PR/Ready/merge/发布。
-- 确定性准入检查（current revision、blocking finding、风险接受证据、下一节点 eligibility）由 LOOP runtime 执行；专业内容判断由节点 Skill 承担；治理尾部检查由 Delivery Tail/checkpoint 承担（`sdlc-gate-runner` 不复活）。
+- 确定性准入检查（current revision、blocking finding、风险接受证据、下一节点 eligibility）由 LOOP runtime 执行；专业内容判断由节点 Skill 承担；治理尾部检查由 Delivery Tail/checkpoint 承担（`sdlc-gate-runner` 不复活）。[RETIRED — C03-B]
 - 用户确认边界成为显式人工 Gate。
 
 ## Topic 07 状态说明

@@ -32,7 +32,7 @@ references/
 
 ```yaml
 ---
-name: sdlc-solution-reviewer
+name: sdlc-solution-gate
 description: |
   ...
 version: 0.1.0
@@ -50,8 +50,8 @@ skill-contracts/known-skills/{skill-name}.md
 例如：
 
 ```text
-skills/sdlc-solution-reviewer/SKILL.md
-skill-contracts/known-skills/sdlc-solution-reviewer.md
+skills/sdlc-solution-gate/SKILL.md
+skill-contracts/known-skills/sdlc-solution-gate.md
 ```
 
 合同 YAML 元数据必须包含当前 validator 要求的字段：

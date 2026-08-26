@@ -12,7 +12,7 @@ business_domain_sync:
   mode: none | speckit_driven | library_driven | hybrid
   decision_source: "<skill-or-actor>"
   decision_artifact: "<decision-artifact-path>"
-  current_sync_owner: sdlc-speckit-sync | none
+  current_sync_owner: sdlc-knowledge-sync | none
   source_of_truth:
     - "<source-artifact-path>"
 
