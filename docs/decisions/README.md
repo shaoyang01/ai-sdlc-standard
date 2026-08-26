@@ -27,6 +27,7 @@
 | [Decision-053](Decision-053-control-plane-authority-and-exchange-closure.md) | 2026-08-26 | Accepted | 确认控制平面为当前执行状态与授权/收口登记权威（CP `285fe59` 标签 ACTIVE 化）；恢复 Exchange 必经收口流程，近期直同步登记为历史偏离。 |
 | [Decision-054](Decision-054-c03c-authorized-o1-in-scope.md) | 2026-08-26 | Accepted | 授权 C03-C Delivery Tail Integration（c1～c3 + runtime 消费面切换：agent-skill-registry / FLOW_DEFINITIONS / metadata inventory 更新为 7+1）；O-1 观察项（OPERATION_GUIDE.md 旧 ID）本轮一并处理。 |
 | [Decision-055](Decision-055-artifact-numbering-authority.md) | 2026-08-26 | Accepted | 裁决制品目录编号权威为 WP3.5 单轨方案（00-需求资料～06-知识同步）；legacy runtime 编号（03-实现记录/04-代码审核/05-测试验收）废弃，迁移列为后续包输入。 |
+| [Decision-056](Decision-056-c03d-runtime-integration-artifact-path-migration.md) | 2026-08-26 | Accepted | 授权 C03-D Runtime Integration & Artifact Path Migration（c1/c2/c3 接入 runtime 调度路径 + 制品路径常量迁移到 WP3.5 新编号）；Q1~Q4 全部按推荐方案 A 裁决。 |
 
 ## 新增流程
 
