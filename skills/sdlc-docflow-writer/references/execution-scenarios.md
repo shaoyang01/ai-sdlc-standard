@@ -8,8 +8,8 @@ Use these scenarios as dry-run checks before writing or publishing DocFlow artif
 | --- | --- | --- | --- | --- |
 | 生成订单下发规则 HTML 技术方案 | `01-技术方案` | HTML | `20260629-order-dispatch-rule` | Write `library/20260629-order-dispatch-rule/01-技术方案/20260629-order-dispatch-rule_技术方案.html` and update `manifest.md`. |
 | 生成方案审核报告 20260629-ai-sdlc-standard | `02-方案审核` | unknown | `20260629-ai-sdlc-standard` | Ask for Markdown, HTML, or Lark/Feishu before writing. |
-| 生成飞书代码审核报告，更新这个文档 URL | `04-代码审核` | Lark/Feishu | from URL/context, or unknown | Read `lark-cli skills read lark-doc`; confirm append, overwrite, or section replacement if the update mode is unspecified. |
-| 整理测试反馈成文档，已有稳定文件 | `05-测试验收` | user-specified | existing requirement ID | Update the same stable file, increment Metadata Version, and append 修订记录. |
+| 生成飞书代码审核报告，更新这个文档 URL | `05-代码审核` | Lark/Feishu | from URL/context, or unknown | Read `lark-cli skills read lark-doc`; confirm append, overwrite, or section replacement if the update mode is unspecified. |
+| 整理测试反馈成文档，已有稳定文件 | `05-代码审核` | user-specified | existing requirement ID | Update the same stable file, increment Metadata Version, and append 修订记录. |
 | 只发飞书，不要本地备份 | inferred from intent | Lark/Feishu | provided or generated | Publish through `lark-cli`; update `manifest.md` with the URL when possible; do not create a local Gate artifact unless requested. |
 | 生成技术文档 | `01-技术方案` | unknown | possibly unknown | Ask for the output format first; ask for a short requirement name only if the ID cannot be safely generated. |
 

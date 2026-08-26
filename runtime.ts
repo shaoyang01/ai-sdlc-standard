@@ -544,6 +544,10 @@ export async function run(
         });
       }
     }
+    // C03-D d1/d2: carry the c1 guard's resolved depth out of the chain loop
+    // so the d2 tail aggregation can persist the truthful depth (not a
+    // hardcoded value) in the governance_tail_result artifact.
+    let resolvedImplementationDepth: DesignDepth | null = null;
     while (next !== null) {
       // Round 3 review F2: a concurrent entry may have committed a succeeded
       // producer since the last recovery recompute — finalize its revision
@@ -649,6 +653,7 @@ export async function run(
           });
         }
         implementationDepth = entryDecision.depth;
+        resolvedImplementationDepth = entryDecision.depth;
       }
       const executed = await entry.execute({
         requirementId,
@@ -788,14 +793,23 @@ export async function run(
         knowledgeSync: {
           present: syncEvent !== null,
           artifactRef: syncEvent?.outputArtifactRef ?? null,
-          decision: syncEvent !== null ? "APPLY_LOCAL" : null,
+          // C03-D R1-F3: the execution event model does not carry a knowledge-sync
+          // decision (NO_CHANGE/APPLY_LOCAL/PROPOSAL_ONLY/BLOCKED_CONFLICT); that
+          // semantic lives in the node's output artifact content. Persisting a
+          // hardcoded "APPLY_LOCAL" would fabricate an audit fact. Use null until
+          // the event model is extended to materialize the decision.
+          decision: null,
           summary: syncEvent !== null ? `knowledge sync succeeded attempt ${syncEvent.attempt}` : "knowledge sync not executed",
         },
         residualRisks,
         recoveryInstructions: "Resume from the last succeeded node; re-run failed nodes with the same requirementId.",
         evidenceDigest: null,
         tailStatus,
-        pathEntry: { allowed: true, reason: "c1 guard passed at implementation dispatch", depth: "STANDARD" as const },
+        // C03-D R1-F3: derive pathEntry.depth from the c1 guard's actual verdict
+        // (resolvedImplementationDepth), not a hardcoded value.
+        pathEntry: resolvedImplementationDepth !== null
+          ? { allowed: true as const, reason: "c1 guard passed at implementation dispatch", depth: resolvedImplementationDepth }
+          : { allowed: false as const, reason: "no formal_verdict event with materialized depth found", blockingFindings: [] as string[] },
       });
 
       manualHandoffStatus = checklist.status;

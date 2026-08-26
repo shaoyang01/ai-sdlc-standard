@@ -63,8 +63,7 @@ blocking_conditions:
 ## Gate Rules
 
 - `02-方案审核` is a Gate artifact for entering code implementation.
-- `04-代码审核` can become a Gate artifact when Critical or High findings exist.
-- `05-测试验收` is a feedback classification artifact, not an automated testing requirement.
+- `05-代码审核` can become a Gate artifact when Critical or High findings exist; test acceptance feedback is classified under this same node (WP3.5 renumbering).
 
 ## Output Contract
 

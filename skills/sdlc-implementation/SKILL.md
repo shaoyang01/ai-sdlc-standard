@@ -19,7 +19,7 @@ version: 0.1.0
 6. Stop when implementation requires undefined behavior, unapproved Scope change, missing technical decision, or route/source-boundary conflict.
 7. Record implementation facts only: no chat memory as evidence; mark missing verification as `验证缺口`; mark spec mismatch as `方案偏离`。
 8. Do not self-review code quality（属 `sdlc-code-review`）；完成声明必须引用 diff、测试输出或 journal 事件。
-9. Use `library/{requirement_id}/03-实现记录/` as the default evidence node.
+9. Use `library/{requirement_id}/04-实现记录/` as the default evidence node.
 
 10. Checklist internal check：实现前运行 speckit-checklist 迁移件核对任务-产物追溯性（本包内部校验能力，不对外独立服务）。
 
