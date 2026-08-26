@@ -5693,10 +5693,10 @@ let a2DriftChangesPassed = false;
 const D09A2_ORCH_REF = `loop-artifact:v1:orchestration_result:sha256:${"1".repeat(64)}`;
 const D09A2_EXEC_REF = `loop-artifact:v1:executor_input:sha256:${"2".repeat(64)}`;
 const D09A2_A1_FILES = [
-  "03-实现记录/implementation-record.md",
-  "04-代码审核/code-review.md",
-  "05-测试验收/acceptance.md",
-  "05-测试验收/tail-gate.md",
+  "04-实现记录/implementation-record.md",
+  "05-代码审核/code-review.md",
+  "05-代码审核/acceptance.md",
+  "05-代码审核/tail-gate.md",
   "core/test.ts",
   "docs/entry-coverage-evidence.md",
   "docs/manifest.md",
@@ -5741,9 +5741,9 @@ function makeA1Input(deliveryRef: string, overrides: Partial<{
     implementation_files: implementationFiles,
     files,
     docflow: {
-      implementation_record: { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
-      code_review: { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2, result: "PASS" },
-      test_acceptance: { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3, result: "PASS" },
+      implementation_record: { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+      code_review: { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2, result: "PASS" },
+      test_acceptance: { path: "05-代码审核/acceptance.md", version: "v1", digest_sha256: sha3, result: "PASS" },
     },
     business_domain_sync: {
       decision: "SYNC_REQUIRED", write_authorized: true, execution_status: "completed",
@@ -5769,20 +5769,20 @@ function makeA1Input(deliveryRef: string, overrides: Partial<{
       path: "docs/manifest.md", version: "manifest-v1", digest_sha256: sha7,
       tail_status: "completed",
       completion_evidence: [
-        { path: "03-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
-        { path: "04-代码审核/code-review.md", version: "v1", digest_sha256: sha2 },
-        { path: "05-测试验收/acceptance.md", version: "v1", digest_sha256: sha3 },
+        { path: "04-实现记录/implementation-record.md", version: "v1", digest_sha256: sha1 },
+        { path: "05-代码审核/code-review.md", version: "v1", digest_sha256: sha2 },
+        { path: "05-代码审核/acceptance.md", version: "v1", digest_sha256: sha3 },
         { path: "docs/entry-coverage-evidence.md", version: "v1", digest_sha256: sha5 },
         { path: "docs/regate-evidence.md", version: "v1", digest_sha256: sha6 },
         { path: "docs/sync-evidence.md", version: "v1", digest_sha256: sha4 },
       ],
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
     },
     tail_gate: {
-      path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8,
+      path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8,
       result: "PASS", persisted: true, read_back_verified: true,
       reviewed_manifest_version: "manifest-v1",
-      completion_decision_source: { path: "05-测试验收/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
+      completion_decision_source: { path: "05-代码审核/tail-gate.md", version: "gate-v1", digest_sha256: sha8 },
     },
     blocking_items: [],
     elapsed_ms: 1234,
@@ -5982,7 +5982,7 @@ async function testA2GovernedPositive(): Promise<void> {
 
   // A1 final files include implementation + governance evidence
   chk("governed", JSON.stringify(result.files) === JSON.stringify(D09A2_A1_FILES), "a2-pos: governed files are A1 final files");
-  chk("governed", result.files.includes("docs/manifest.md") && result.files.includes("05-测试验收/tail-gate.md"), "a2-pos: A1 files include governance evidence");
+  chk("governed", result.files.includes("docs/manifest.md") && result.files.includes("05-代码审核/tail-gate.md"), "a2-pos: A1 files include governance evidence");
 
   // Governed trace: governance_tail between delivery and workspace
   const traceStages = result.trace.map((t) => `${t.sequence}:${t.stage}:${t.outcome}`);

@@ -175,9 +175,25 @@ const UPSTREAM_REF_RE = /^loop-artifact:v1:(orchestration_result|executor_input|
 const DRIVE_RE = /^[A-Za-z]:/;
 const INDEX_KEY_RE = /^(0|[1-9][0-9]*)$/;
 
-const DIR_03 = "03-实现记录";
-const DIR_04 = "04-代码审核";
-const DIR_05 = "05-测试验收";
+// WP3.5 single-rail artifact directory numbering (Decision-055 authority).
+// Legacy pre-C03-D numbers (03-实现记录/04-代码审核/05-测试验收) are
+// deprecated; LEGACY_DIR_ALIASES below provides read-backward compatibility.
+const DIR_03 = "03-任务规划";
+const DIR_04 = "04-实现记录";
+const DIR_05 = "05-代码审核";
+const DIR_06 = "06-知识同步";
+
+/**
+ * Legacy directory aliases for read-backward compatibility (Decision-056 Q3=A).
+ * When reading an existing on-disk artifact whose path uses a legacy directory,
+ * the reader may fall back to the alias. New writes MUST use the WP3.5 numbers
+ * above; this map is for read resolution only, never for output path construction.
+ */
+export const LEGACY_DIR_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  "04-实现记录": "03-实现记录",
+  "05-代码审核": "04-代码审核",
+  "06-知识同步": "05-测试验收",
+});
 
 const EVIDENCE_RESULTS: readonly string[] = ["PASS", "PASS_WITH_RISK"];
 const SYNC_DECISIONS: readonly string[] = ["SYNC_REQUIRED", "NOT_REQUIRED"];
@@ -593,8 +609,8 @@ function validateFinalWorkspace(
 
 function validateDocFlow(value: unknown, budget: Budget, files: Set<string>): LoopGovernanceTailDocFlow {
   const record = scanPlainObject(value, DOCFLOW_KEYS, "docflow");
-  const implementationRecord = validateEvidenceRef(record.implementation_record, "docflow.implementation_record", budget, files, DIR_03);
-  const codeReview = validateReviewRecord(record.code_review, "docflow.code_review", budget, files, DIR_04);
+  const implementationRecord = validateEvidenceRef(record.implementation_record, "docflow.implementation_record", budget, files, DIR_04);
+  const codeReview = validateReviewRecord(record.code_review, "docflow.code_review", budget, files, DIR_05);
   const testAcceptance = validateReviewRecord(record.test_acceptance, "docflow.test_acceptance", budget, files, DIR_05);
   return freeze({ implementation_record: implementationRecord, code_review: codeReview, test_acceptance: testAcceptance });
 }
