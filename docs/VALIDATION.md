@@ -1,26 +1,24 @@
 # 校验指南
 
-> 本指南说明当前仓库真实存在的校验能力，以及在真实项目试跑前应做的人工检查。
+> 本指南说明当前仓库真实存在的校验能力，以及在真实项目试跑前应做的人工检查。C03-B 原子切换后，旧 Speckit pipeline 专属校验章节（见文末历史档案标注起）保留为历史档案，不再代表现役校验能力。
 
 ## 当前自动校验脚本
 
-当前仓库原有四个自动校验脚本，另新增 Compact Prompt Contract 校验脚本
-（见「Compact Prompt Contract Validation」）：
+当前仓库现役自动校验脚本（C03-B 原子切换后）：
 
 ```bash
 ruby scripts/validate-skill-contracts.rb
-ruby scripts/validate-product-parity-fixtures.rb
 ruby scripts/validate-capability-metadata-chain.rb
-ruby scripts/validate-gate-runner-scenarios.rb
+ruby scripts/validate-compact-prompt-contracts.rb
 ```
 
 ### A. Portable Standard Package validators
 
-- `validate-skill-contracts.rb`：标准包内部契约一致性验证。
-- `validate-product-parity-fixtures.rb`：标准包 product parity fixture 回归验证。
-- `validate-gate-runner-scenarios.rb`：Gate Runner 两个特殊 Gate 的 validation-only 场景一致性验证。
+- `validate-skill-contracts.rb`：标准包内部契约一致性验证（含 7+1 拓扑、零悬空引用、canonical 权威检测、双角色防火墙、节点名单与 runtime 对齐）。
 
-这三个脚本属于标准包内部契约、product parity 与 Gate Runner scenario 验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
+> **[RETIRED — C03-B]** `validate-product-parity-fixtures.rb`（product parity fixture 回归）与 `validate-gate-runner-scenarios.rb`（Gate Runner 场景一致性）随 gate-runner / speckit-pipeline 族退役已删除。下文对应两章保留为历史档案，不再代表现役校验能力。
+
+`validate-skill-contracts.rb` 属于标准包内部契约验证，可作为 portable package 开发和验收入口；`manifest.yaml` 继续只管理 Standard Package 的正式入口。
 
 ### B. Repository governance validator
 
@@ -243,8 +241,8 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
 
 职责划分：
 
-- `validate-skill-contracts.rb` 负责逐文件精确检查：精确字段、固定 pipe-delimited scalar、精确 heading、唯一性计数与 forbidden regression；Tail Completion owner 精确为 `sdlc-gate-runner`；Manifest 只有一个 canonical Tail 根区段；Sync decision、execution status 与 execution result 分离；Library-driven decision 的 Metadata 唯一；legacy `## Speckit Sync` 不得作为新写 heading 存在。
-- expanded parity fixture 负责跨文件语义 parity：`documentation_governance_tail`、`development_path_entry`、`documentation_governance_tail_completion`、`actual_implementation_required` 等跨模板词项及 forbidden 回归。
+- `validate-skill-contracts.rb` 负责逐文件精确检查：精确字段、固定 pipe-delimited scalar、精确 heading、唯一性计数与 forbidden regression；Tail Completion 由 runtime `loop-governance-tail-result-v1` 机制处理（`core/loop-governance-tail-result.ts`，reason_code=`GOVERNANCE_TAIL_COMPLETED`），原 `sdlc-gate-runner` 已随 C03-B 退役，新 Skill owner 待 C03-C Delivery Tail Integration 定义；Manifest 只有一个 canonical Tail 根区段；Sync decision、execution status 与 execution result 分离；Library-driven decision 的 Metadata 唯一；legacy `## Speckit Sync` 不得作为新写 heading 存在。[RETIRED — C03-B]
+- `[RETIRED — C03-B]` expanded parity fixture（`validate-product-parity-fixtures.rb`）已随 speckit-pipeline 族退役删除；原负责的跨文件语义 parity（`documentation_governance_tail`、`development_path_entry`、`documentation_governance_tail_completion`、`actual_implementation_required` 等）由 `validate-skill-contracts.rb` 的 7+1 拓扑一致性与 forbidden regression 检查承接。
 
 边界：
 
@@ -252,7 +250,9 @@ PCE-01-C1R Project Validation Profile Applicability（如实记录）：
 - 不运行 Gate Runner，不执行 Sync，不执行 Reconcile，不读取实例 Manifest，不验证真实需求是否完成 Tail。
 - runtime enforcement 由后续运行时任务覆盖；Sync/Reconcile 输出消费由后续集成任务覆盖；Pipeline 边界由后续集成任务覆盖；实例级场景由后续场景验证覆盖。
 
-## Gate Runner Scenario Conformance 校验
+## Gate Runner Scenario Conformance 校验 [RETIRED — C03-B]
+
+> 本章为历史档案。`validate-gate-runner-scenarios.rb` 与 `fixtures/gate-runner-scenarios/` 随 C03-B gate-runner 退役已删除。`development_path_entry` 承接迁入 LOOP runtime 确定性守卫（C03-C c1），`documentation_governance_tail_completion` 迁入 C03-C Delivery Tail 流程（c2）。本章内容不再代表现役校验能力。
 
 `fixtures/gate-runner-scenarios/scenarios.yaml` 与 `scripts/validate-gate-runner-scenarios.rb` 组成标准包开发期 validation-only 场景一致性验证 harness：
 
@@ -336,7 +336,7 @@ Runner 独立计算每个场景的 actual outcome，并与 expected 全字段深
 
 - `.github/workflows/ci.yml` 仅在 `ci-standards` 增加一次 `ruby scripts/validate-gate-runner-scenarios.rb`；不修改其他 job、trigger、version、permission。
 
-## Pipeline Core Boundary Static Validation
+## Pipeline Core Boundary Static Validation [RETIRED — C03-B]
 
 `validate-skill-contracts.rb` 新增 Topic 07-E Pipeline Core Boundary 静态合同校验：
 
@@ -616,9 +616,9 @@ PIPELINE_BOUNDARY_CONTRACT_SIDE_EFFECT_CONDITIONALITY_VERIFIED true
 8. skills/sdlc-* 下是否仍使用 ../../ai-sdlc、../../ess、../../templates、../../skill-contracts 等相对标准路径。
 9. 新版 sdlc-* Skill 是否把旧版 .specify/memory、.specify/workflow、.specify/coding_guide 当作正常输入。
 10. bootstrap 脚本是否具备 project-context candidate 策略，且不再依赖单一 --force。
-11. New-Rail Enhanced Pipeline 是否声明 ProjectWorkflowGuide / ProjectDocumentationGuide、`sdlc-speckit-*` only、development-time fixture、Clarify 边界确认策略和 legacy path no-read/no-write 红线。
-12. Frontend Process Products 是否声明并接入 implement / pipeline / reconcile：`specs/{feature}/implementation.md`、`workflow-status.md`、`debug-guide.md`、`observability.md`、`03-实现记录`、`04-交付总结`，且 manifest is status authority。
-13. Feature-scoped path consistency 是否通过：当前 runtime 路径必须使用 `specs/{feature}/spec.md`、`specs/{feature}/plan.md`、`specs/{feature}/tasks.md`、`specs/{feature}/route.md`；implement 只能沿用 route artifact，不重新解释 route。
+11. [RETIRED — C03-B] New-Rail Enhanced Pipeline 声明检查（随 sdlc-speckit-* 族退役，校验器已移除此检查）。
+12. [RETIRED — C03-B] Frontend Process Products 声明检查（随 sdlc-speckit-implement/pipeline 退役，校验器已移除此检查）。
+13. [RETIRED — C03-B] Feature-scoped path consistency 检查（随 sdlc-speckit-implement 退役，校验器已移除此检查）。
 ```
 
 成功时输出：
@@ -813,7 +813,7 @@ scripts/audit-entry-coverage.rb <target-project-path> --strict
 14. --requirement-id 或 --feature 传入时，应区分 current_requirement、historical_repository_residue、repository_wide、unmatched scope。
 ```
 
-## Speckit sync create-if-missing 校验
+## Speckit sync create-if-missing 校验 [RETIRED — C03-B]
 
 `sdlc-speckit-sync` 只有在 business_domain 路由已确认时，才允许用 create-if-missing 创建缺失 L4。
 
@@ -845,7 +845,7 @@ Revision History Update:
 7. 不得把缺失目标写入 99PendingConfirmation 当作长期同步结果。
 ```
 
-## Project-Type L4 Templates 校验
+## Project-Type L4 Templates 校验 [RETIRED — C03-B]
 
 标准包必须提供项目类型化 L4 skeleton 模板：
 
@@ -876,10 +876,14 @@ backend-business-service
 4. data-pipeline-etl L4 必须包含 Trigger And Runtime、Input Contract、Output Contract、SQL Lineage、Partition / Window / Checkpoint、Replay And Idempotency、Downstream Consumer Contract。
 5. library-shared-component L4 必须包含 Public API、Consumer Scenario、Compatibility、Deprecation / Migration、Test Evidence。
 6. `scripts/bootstrap-business-domain.sh --confirmed` 必须从 domain map 或 `.specify/project-governance-profile.yaml` 的 `project_type_profiles` 选择 L4 模板。
-7. `sdlc-speckit-sync` create-if-missing 必须从 `specs/{feature}/route.md` 或 Pipeline Domain Route Summary 读取 Project Type Profiles，并记录 Selected L4 Template。
+7. [RETIRED — C03-B] `sdlc-speckit-sync` create-if-missing（同步能力现属 sdlc-knowledge-sync，此检查点随旧 Speckit 族退役）。
 8. 通用 L4 skeleton 不得作为所有项目类型的唯一默认输出；只能在缺少 profile 时记录 conservative backend-business-service fallback。
 9. 不得引入 legacy Skill 或 `.specify/memory/**`、`.specify/workflow/**`、`.specify/coding_guide/**` runtime dependency。
 ```
+
+---
+
+> `[HISTORICAL — pre-C03-B]` 以下章节（Frontend Process Products、Feature-Scoped Path Consistency、Speckit specify/route/clarify/plan/tasks/analyze/implement/sync/reconcile、Rail Routing 等）描述的是 C03-B 原子切换之前的旧 Speckit pipeline 校验规则。对应的校验器（validate-product-parity-fixtures.rb、validate-gate-runner-scenarios.rb）与 sdlc-speckit-* 族 Skill 已在 C03-B b4/b5 中退役删除。这些章节保留为历史档案，不再代表现役校验能力；现役校验以本文档前半部分（validate-skill-contracts.rb / validate-capability-metadata-chain.rb / validate-compact-prompt-contracts.rb）为准。
 
 ## Frontend Process Products 校验
 
@@ -1569,7 +1573,9 @@ scripts/bootstrap-business-domain.sh <target-project-path> --domain-map .specify
 7. Complex Speckit pipeline 闭环
 ```
 
-## Fixture-Based Product Parity Validator 校验
+## Fixture-Based Product Parity Validator 校验 [RETIRED — C03-B]
+
+> 本章为历史档案。`validate-product-parity-fixtures.rb` 与 `fixtures/speckit-product-parity/` 随 C03-B speckit-pipeline 族退役已删除。相关产品语义校验能力已由 `validate-skill-contracts.rb` 的 7+1 拓扑一致性检查覆盖。本章内容不再代表现役校验能力。
 
 ### 概述
 
@@ -1898,16 +1904,15 @@ Status 必须是 `Produced` / `Reused` / `Not Applicable` / `Deferred` 之一。
   npx --no-install tsx tests/loop-governance-tail-result.test.ts
   ```
 
-- **Full validation commands**：
+- **Full validation commands**（C03-B 后现役）：
 
   ```bash
   npm run typecheck
   npm test
   npm run test:loop-patch-mutations
   ruby scripts/validate-skill-contracts.rb
-  ruby scripts/validate-product-parity-fixtures.rb
   ruby scripts/validate-capability-metadata-chain.rb
-  ruby scripts/validate-gate-runner-scenarios.rb
+  ruby scripts/validate-compact-prompt-contracts.rb
   git diff --check
   ```
 

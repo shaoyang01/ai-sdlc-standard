@@ -74,11 +74,7 @@ jobs:
 
       - run: ruby scripts/validate-skill-contracts.rb
 
-      - run: ruby scripts/validate-product-parity-fixtures.rb
-
       - run: ruby scripts/validate-capability-metadata-chain.rb
-
-      - run: ruby scripts/validate-gate-runner-scenarios.rb
 
       - run: ruby -c scripts/lib/compact_prompt.rb
 

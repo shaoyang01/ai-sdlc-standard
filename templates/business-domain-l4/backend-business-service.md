@@ -60,7 +60,7 @@
 
 ## Sync Notes
 
-Future `sdlc-speckit-sync` may add verified stable facts here after implementation, verification, and entry coverage checks.
+Future `sdlc-knowledge-sync` may add verified stable facts here after implementation, verification, and entry coverage checks.
 
 ## Revision History
 

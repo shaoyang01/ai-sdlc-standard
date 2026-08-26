@@ -1,5 +1,7 @@
 # C02-WP3.5 单轨生命周期重基线：阶段 2 影响分析与实施规划
 
+> `[HISTORICAL — pre-C03-B]` 本文档为 C02-WP3.5 单轨退役的影响分析记录（Decision-044/045 已接受并在 C03-B 中实施）。文中引用的旧 Skill ID（sdlc-gate-runner、sdlc-speckit-* 等）均为退役决策描述，不代表现役能力。当前现役拓扑以 `registry/skill-registry.md` 和 `manifest.yaml` 为准。
+
 > Version: 0.1.0
 > Status: **DRAFT FOR CURRENT USER REVIEW**
 > Date: 2026-08-22

@@ -56,7 +56,7 @@
 
 ## Next Action
 
-- [ ] Route to sdlc-speckit-code-doc-reconcile
+- [ ] Route to sdlc-knowledge-sync
 - [ ] Return to 01-技术方案 / 02-方案审核
 - [ ] Confirm source priority
 - [ ] Accept conflict resolution option

@@ -23,15 +23,14 @@ Examples:
 
 | Skill | Category | Reason |
 | --- | --- | --- |
-| `sdlc-requirement-normalizer` | Intake Skill / Producer Skill | Converts raw requirement input into a normalized requirement artifact. |
-| `sdlc-specification-writer` | Producer Skill | Writes a technical specification from approved requirement input. |
-| `sdlc-solution-reviewer` | Auditor Skill | Reviews a solution and decides path/risk without implementing. |
-| `sdlc-code-review-excellence` | Reviewer Skill / Auditor Skill | Executes code review and classifies findings without fixing code. |
-| `sdlc-code-review-normalizer` | Reviewer Skill / Producer Skill | Converts raw review feedback into a standard report artifact. |
-| `sdlc-speckit-implement` | Executor Skill / Producer Skill | Modifies code and records implementation evidence. |
+| `sdlc-requirement-intake` | Intake Skill / Producer Skill | Normalizes raw requirement input and classifies test feedback into a normalized requirement artifact. |
+| `sdlc-solution-design` | Producer Skill | Writes technical specification and solution design from approved requirement input. |
+| `sdlc-solution-gate` | Auditor Skill / Reviewer Skill | Challenges and reviews a solution, decides path/risk without implementing; dual-role firewall separates adversarial scan from formal verdict. |
+| `sdlc-task-planning` | Producer Skill | Breaks an approved solution into concrete tasks and analyzes cross-task consistency. |
+| `sdlc-implementation` | Executor Skill / Producer Skill | Modifies code and records implementation evidence. |
+| `sdlc-code-review` | Reviewer Skill | Executes code review, normalizes raw findings, and classifies them without fixing code. |
+| `sdlc-knowledge-sync` | Sync Skill | Writes authorized stable facts to long-term knowledge targets and reconciles code-doc drift. |
 | `sdlc-docflow-writer` | Producer Skill / Renderer Skill / Publisher Skill | Writes and renders DocFlow artifacts, including Lark/Feishu publishing when authorized. |
-| `sdlc-speckit-sync` | Sync Skill / Producer Skill | Writes authorized stable facts to long-term knowledge targets. |
-| `sdlc-speckit-pipeline` | Workflow Skill / Executor Skill / Sync Skill | Orchestrates child stages and delegates side effects to child Skills. |
 
 ## Category Definitions
 
