@@ -611,7 +611,11 @@ export async function run(
           gateResult: (lastVerdict?.gateResult as SolutionGateVerdict["gateResult"]) ?? "FAIL",
           depth: (lastVerdict?.decisionDepth as DesignDepth | null) ?? null,
           decisionStatus: gateDecision?.status ?? "BLOCKED_UNKNOWN",
-          blockingFindings: recovery?.findingGate.blockingFindingIds ?? [],
+          // C03-D d1: when the solution-gate has already DECIDED, there are no
+          // gate-blocking findings — code-review findings that trigger a rebuild
+          // must NOT block re-entry into implementation (that is the whole point
+          // of a rebuild wave). Only BLOCKED_UNKNOWN carries blocking findings.
+          blockingFindings: gateDecision?.status === "DECIDED" ? [] : (recovery?.findingGate.blockingFindingIds ?? []),
           riskAcceptanceRefs: (recovery?.openFindings ?? [])
             .filter((f) => (f as { status?: string }).status === "ACCEPTED_RISK")
             .map((f) => (f as { riskAcceptanceEvidenceRef?: string }).riskAcceptanceEvidenceRef ?? "")
