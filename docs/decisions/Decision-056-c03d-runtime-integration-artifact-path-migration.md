@@ -2,7 +2,14 @@
 
 ## 状态
 
-DRAFT（2026-08-26，草案待审；Current User 裁决接受后成为正式授权）
+**Accepted（2026-08-26，Current User 裁决：全部按推荐方案 Q1=A/Q2=A/Q3=A/Q4=A，授权 C03-D 实施）**
+
+## 裁决记录
+
+- Q1（c1 blocked 时 chain_status 语义）：A — `chain_status=BLOCKED`，`blocking_reason_code=DEVELOPMENT_PATH_ENTRY_DENIED`，与现有 WP4 durable block 语义一致。
+- Q2（c3 READY 时 checkpoint 推进）：A — 自动推进到 `completed` terminal phase；c3 READY 本身是尾部完成权威判定，人工确认点在 git 操作侧。
+- Q3（制品路径迁移向后兼容）：A — `LEGACY_DIR_ALIASES` 读取回退（新路径不存在时回退旧路径），新写入一律用新路径，不提供自动迁移脚本。
+- Q4（c1 depth 注入方式）：A — 通过 `entry.execute` request metadata 注入，不修改 `LoopCapabilityEntryRequest` 接口签名（C02 已收口接口不动）。
 
 ## 背景
 
