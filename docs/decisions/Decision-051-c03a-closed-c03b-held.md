@@ -41,3 +41,13 @@ C03-A 实现 PR #106 已合并（`06b8d75` 后续 merge），收口修正至 `d5
 
 - WP6/WP5 同款收口流程先例；Decision-050 Q5（逐包授权）；H3 裁决（原子切换唯一性）；
 - Current User 指令「C03-A 收口，但先不要开启 C03-B，因为目前还在使用旧版 SKILL 进行开发」（2026-08-25）。
+
+## 状态更新（2026-08-26，Current User 裁决：C03-B 收口）
+
+**C03-B 从 CURRENT_USER_HOLD → CLOSED。**
+
+- HOLD 解除：Decision-052（2026-08-26）授权 C03-B 实施，HOLD 正式释放。
+- 实施基线：单一原子提交 `2f822a2`（aace600 之上仅 1 提交），PR #108 合并。
+- 复审全链路：Round 1（F1/F2/F3）→ Round 2（H1/H2）→ Round 3（R3-F1/R3-F2）→ Round 4（R4-F1）→ **Round 5 PASS**，五轮已关闭项零回归，INV1~10 与 b1~b7 全绿，三面一致 8/8/8/8，CI 四 job 全绿。
+- 交付内容：manifest/registry/known-skills 三面 7+1 拓扑、20 旧包退役删除、校验器缩减+references/category/旧ID 扫描、本机 b6 安装副本 8/8 一致、H3 finding CLOSED（CP 1753f2b）。
+- C03-C（runtime 消费面切换：agent-skill-registry 内存表、skill-flow-orchestrator FLOW_DEFINITIONS、metadata inventory）顺延，需单独授权。
