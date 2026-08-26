@@ -9,15 +9,10 @@ import * as path from "node:path";
 export type RepositoryCapabilityInventory = Readonly<{
   version: number;
   generated_by: string;
+  updated_for: string;
   skills: ReadonlyArray<Record<string, unknown>>;
   skill_registry_files: ReadonlyArray<Record<string, unknown>>;
   runtime_entrypoints: ReadonlyArray<Record<string, unknown>>;
-  execution_adapters: ReadonlyArray<Record<string, unknown>>;
-  policy_modules: ReadonlyArray<Record<string, unknown>>;
-  feedback_modules: ReadonlyArray<Record<string, unknown>>;
-  memory_modules: ReadonlyArray<Record<string, unknown>>;
-  evolution_modules: ReadonlyArray<Record<string, unknown>>;
-  potentially_unconnected_modules: ReadonlyArray<Record<string, unknown>>;
   summary: Record<string, unknown>;
 }>;
 
