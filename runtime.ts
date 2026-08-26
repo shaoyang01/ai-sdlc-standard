@@ -36,6 +36,11 @@ import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import {
+  developmentPathEntryGuard,
+  type SolutionGateVerdict,
+  type DesignDepth,
+} from "./core/loop-c03-delivery-tail";
+import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
@@ -582,6 +587,54 @@ export async function run(
           inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
         }
       }
+      // C03-D d1: development_path_entry guard (Decision-044 single-rail:
+      // solution-gate depth verdict is the sole authority for entering
+      // implementation). Invoked BEFORE dispatching the implementation node.
+      let implementationDepth: DesignDepth | null = null;
+      if (next.capability === "implementation" && journalRunId !== null) {
+        const verdictEvents = runStore.listCapabilityExecutions(journalRunId)
+          .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict");
+        const lastVerdict = verdictEvents.length > 0 ? verdictEvents[verdictEvents.length - 1]! : null;
+        const gateDecision = recovery?.solutionGateDecision ?? null;
+        const verdict: SolutionGateVerdict = {
+          gateResult: (lastVerdict?.gateResult as SolutionGateVerdict["gateResult"]) ?? "FAIL",
+          depth: (lastVerdict?.decisionDepth as DesignDepth | null) ?? null,
+          decisionStatus: gateDecision?.status ?? "BLOCKED_UNKNOWN",
+          blockingFindings: recovery?.findingGate.blockingFindingIds ?? [],
+          riskAcceptanceRefs: (recovery?.openFindings ?? [])
+            .filter((f) => (f as { status?: string }).status === "ACCEPTED_RISK")
+            .map((f) => (f as { riskAcceptanceEvidenceRef?: string }).riskAcceptanceEvidenceRef ?? "")
+            .filter(Boolean),
+          verdictArtifactRef: gateDecision?.boundVerdictArtifactRef,
+        };
+        const entryDecision = developmentPathEntryGuard(verdict);
+        if (!entryDecision.allowed) {
+          return Object.freeze({
+            requirement_id: requirementId,
+            run_id: journalRunId,
+            final_status: "failed" as const,
+            chain_status: "BLOCKED" as const,
+            blocking_reason_code: "DEVELOPMENT_PATH_ENTRY_DENIED" as const,
+            execution_trace: Object.freeze(
+              runStore.listCapabilityExecutions(journalRunId).map((event) => Object.freeze({
+                capability: event.capability,
+                executionRole: event.executionRole,
+                agent: event.executorAgent,
+                attempt: event.attempt,
+                status: event.status,
+                gateResult: event.gateResult,
+                outputArtifactRef: event.outputArtifactRef,
+                outputDigest: event.outputDigest,
+              })),
+            ),
+            next_execution_point: null,
+            workspace_root: workspaceRoot,
+            journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+            completed_at: now(),
+          });
+        }
+        implementationDepth = entryDecision.depth;
+      }
       const executed = await entry.execute({
         requirementId,
         ...(firstDispatch ? { identity } : {}),
@@ -596,7 +649,10 @@ export async function run(
         outputArtifactVersion: `${(recovery?.executionPointStates.find(
           (state) => state.capability === next!.capability && state.executionRole === next!.executionRole,
         )?.lastAttempt ?? 0) + 1}.0.0`,
-        input: { inputArtifactRef: inputRef },
+        input: {
+          inputArtifactRef: inputRef,
+          ...(implementationDepth !== null ? { designDepth: implementationDepth } : {}),
+        },
       });
       firstDispatch = false;
       journalRunId = executed.runId;
