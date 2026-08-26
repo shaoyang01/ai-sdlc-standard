@@ -176,8 +176,8 @@ const TS = "2026-08-04T00:00:00.000Z";
 const DELIVERY_FILES = ["core/d09b.ts", "tests/d09b.test.ts"];
 const A1_FILES = [
   "04-实现记录/implementation-record.md",
-  "05-代码审核/code-review.md",
   "05-代码审核/acceptance.md",
+  "05-代码审核/code-review.md",
   "05-代码审核/tail-gate.md",
   "core/d09b.ts",
   "docs/entry-coverage-evidence.md",

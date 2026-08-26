@@ -5694,8 +5694,8 @@ const D09A2_ORCH_REF = `loop-artifact:v1:orchestration_result:sha256:${"1".repea
 const D09A2_EXEC_REF = `loop-artifact:v1:executor_input:sha256:${"2".repeat(64)}`;
 const D09A2_A1_FILES = [
   "04-实现记录/implementation-record.md",
-  "05-代码审核/code-review.md",
   "05-代码审核/acceptance.md",
+  "05-代码审核/code-review.md",
   "05-代码审核/tail-gate.md",
   "core/test.ts",
   "docs/entry-coverage-evidence.md",
