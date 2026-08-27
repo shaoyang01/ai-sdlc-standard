@@ -37,6 +37,7 @@
 | [Decision-063](Decision-063-c03e-plan-accepted.md) | 2026-08-27 | Accepted / C03-E plan accepted | 接受 C03-E v0.3.0 与 Q1～Q7 推荐值；Current User 接受本轮不执行双 binding Solution Gate 的剩余风险；不授权任务规划、实施、Agent CLI、E0～E5 或 C05。 |
 | [Decision-064](Decision-064-c03e-early-provider-feasibility-plan-amendment.md) | 2026-08-27 | Accepted / Plan amendment accepted | 接受 C03-E v0.4.0 A1：拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者间前置三 Agent direct CLI 可达性预检，且不得替代 E5 production adapter/full-run 验收；不授权任务规划、CLI 或实施。 |
 | [Decision-065](Decision-065-c03e-e0-active-contract-preflight-authorized.md) | 2026-08-27 | Accepted / E0 AUTHORIZED | 授权 C03-E E0 活动合同收口包（E0.1～E0.5）：清理 solution-gate 旧 Direct/Speckit 路径判定、校准两份 capabilities metadata 为单轨 7+1 当前事实、validator 闭包扫描退役 ID/旧路由/role firewall、清理 active tests；不改 runtime dispatch、不调 Agent CLI、不含 E2-P/E1～E5/C05；独立分支单一 PR，独立复审后单独收口。 |
+| [Decision-066](Decision-066-cross-project-governance-state-and-pkb-ingress-boundary.md) | 2026-08-28 | Accepted | 统一产品 Decision、CP Governance/STATE、Exchange、PKB、Handoff/current 权威边界和授权/收口顺序；PKB 自写不经 Exchange，AI-SDLC 写入 PKB 必须经标准 Publisher；E0 授权有效但继续暂停。 |
 
 ## 新增流程
 
