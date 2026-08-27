@@ -1,6 +1,6 @@
 # AI-SDLC LOOP Core Roadmap
 
-> Version: 2.3.3
+> Version: 2.3.4
 > Planning baseline: [LOOP Core Contract](LOOP_CORE_CONTRACT.md)
 > Authority: 这是 `ai-sdlc` 的稳定 Roadmap planning surface。当前执行指针、Gate、授权、live finding、PR/CI/HEAD 和执行尝试只记录在 `ai-project-control-plane` 的 STATE 及执行证据中。
 
@@ -117,7 +117,7 @@ Project: ai-sdlc
 - **scope**：C03-A～D 已交付的单轨 Skill、注册切换、Delivery Tail 与 runtime 接线；C03-E Real Multi-Agent Autonomous Dispatch，覆盖真实 Kimi/Codex/Hermes CLI adapter、受控进程调用、输出校验、durable journal、自动推进、失败恢复和 Re-Gate；清理活动 Skill reference 中已退役的 Direct/Speckit 路径语义；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill，且不用于治理 LOOP；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
 - **out_of_scope**：业务仓 commit、push、Draft PR、Ready、merge、发布；Personal-KB 项目产物发布；scheduler、daemon、UI、服务端控制平面或新增 Provider；以未验证测试、shadow executor、Markdown 自述或历史 CI 替代真实执行证据；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill或 Direct/Speckit 路径分流；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
 - **completion_contract**：C03-A～E 均完成；生产入口默认不再使用 deterministic shadow；每个节点由 runtime 真实调用所选 binding 并记录不可伪造的 started/terminal event、adapter/版本、输入输出 digest 与尝试结果；正常路径无需用户切换 Agent，失败或不合格输出可恢复；无 blocking finding 时只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生业务仓远程 Git 副作用。
-- **continuity**：C03-E 的 Accepted 规划见 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.3.0 与 Decision-063；Q1～Q7 已按推荐值冻结，Current User 已接受本轮不执行双 binding Solution Gate 的剩余风险，但未授予任务规划或实施权限。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
+- **continuity**：C03-E 当前 Accepted 合同仍为 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.3.0 与 Decision-063；v0.4.0-draft / Decision-064 仅提出在 E0 后前置三 Agent `PROVIDER_REACHABILITY_ONLY` 预检，修订 A1 尚待 Current User 接受。Q1～Q7 仍按原推荐值冻结，未授予任务规划、Agent CLI 或实施权限。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把 direct CLI 可达性、人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
 
 ### LOOP-CORE-04 — Speckit Projection and SDD Integration（已取消）
 
@@ -259,6 +259,7 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.3.4 | 2026-08-27 | Amendment draft pointer | Decision-064 授权起草 C03-E v0.4.0-draft：拟拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间增加独立授权的 E2-P 三 Agent direct CLI 可达性预检，并保持 E5 production adapter canary 与完整自主 run 不变；A1 尚未接受，不产生任务规划、CLI 或实施授权。 |
 | 2.3.3 | 2026-08-27 | Accepted baseline pointer | Decision-063 接受 C03-E 详细规划 v0.3.0 与 Q1～Q7 推荐值，并显式接受不执行本轮双 binding Solution Gate 的剩余风险；Task Gate、实施、Agent CLI、E0～E5 与下一 C05 均未授权。 |
 | 2.3.2 | 2026-08-27 | User-directed priority correction | 将 PKB 项目产物投影从 Core C03-F 移至后期 `LOOP-ADVANCED-04`；Core 主线恢复为 C03-E 真实多 Agent 自主调度 → 下一条真实 C05，PKB 不阻塞全自主 MVP。 |
 | 2.3.1 | 2026-08-27 | User-directed controlled replan | 新增 C03-F Personal-KB Project Artifact Projection：Requirement 最终文本产物与选定 `.specify/**` 文档进入 PKB 项目命名空间，原始机器证据以索引/digest 管理；自动内容不得进入全局知识或自动 stable，发布失败不回滚业务交付。 |

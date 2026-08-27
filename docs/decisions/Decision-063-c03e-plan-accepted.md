@@ -5,6 +5,9 @@
 Accepted / C03-E plan accepted（2026-08-27，Current User 明确指示直接通过方案，并强调
 本裁决不是实施授权）
 
+> 2026-08-27 后续状态说明：Decision-064 仅授权起草 v0.4.0-draft 的前置 Provider
+> 可达性修订。修订 A1 尚未接受，因此本 Decision 与 v0.3.0 仍是当前有效方案合同。
+
 ## 背景
 
 - Decision-062 已授权并完成 C03-E 详细规划，产品 PR #116 将 v0.2.0 草案合入

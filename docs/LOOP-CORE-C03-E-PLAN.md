@@ -1,16 +1,19 @@
 # LOOP-CORE-C03-E 详细规划：Real Multi-Agent Autonomous Dispatch
 
-> 规划状态：**ACCEPTED**
+> 规划状态：**ACCEPTED BASELINE / AMENDMENT REVIEW PENDING**
 >
-> 规划版本：**0.3.0**
+> 规划版本：**0.4.0-draft**
 >
 > 日期：2026-08-27
 >
-> 规划裁决：Current User 已接受本方案及 Q1～Q7 推荐值（Decision-063）；本裁决不是实施授权。
+> 规划裁决：v0.3.0 及 Q1～Q7 仍按 Decision-063 保持 Accepted；Current User 已授权起草
+> “E2 前置最小真实 CLI 可达性预检”修订（Decision-064），修订内容尚待单独接受。
 >
 > 深度状态：**DEEP / CURRENT_USER_RISK_ACCEPTED_WITHOUT_DUAL_BINDING_GATE**。Current User 明确选择直接通过方案并接受本轮不调用双 Agent 执行 Solution Gate 的剩余风险。
 >
-> 禁止事项：方案通过不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现分支/实现 PR、启动 E0～E5 或下一轮 C05，也不授权业务仓 commit/push/PR/merge/release。
+> 禁止事项：本次方案修订不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现
+> 分支/实现 PR、启动 E0、E2-P、E1～E5 或下一轮 C05，也不授权业务仓
+> commit/push/PR/merge/release。
 
 ## 1. 文档定位与目标
 
@@ -30,14 +33,15 @@ Re-Gate，并最终停在以下三个终态之一：
 
 - 经当前 Source 核验的现状与缺口；
 - 生产入口、真实 adapter、输出校验、journal、恢复和人工边界的统一系统模型；
-- E0～E5 的有界工作项、目标代码面、依赖、验收与负向证据；
+- E0、E2-P、E1～E5 的有界工作项、目标代码面、依赖、验收与负向证据；
 - 编码前数据场景、风险、迁移顺序和 Current User 裁决结果；
 - Solution Gate 风险接受与后续 Task Gate 的明确停驻条件。
 
 ### 1.2 本稿不交付什么
 
 - 本轮不生成可直接执行的 `sdlc-task-planning` 任务集；实施授权尚未成立，Task Gate 继续关闭；
-- 不实现或试跑任何 adapter；不探测 CLI 版本、登录态、凭据或命令参数；
+- 不实现或试跑任何 adapter；不探测 CLI 版本、登录态、凭据或命令参数；E2-P 只是本稿
+  新增的后续受授权执行点，不是本轮已执行事实；
 - 不重开 `wms-monitor/20260827-dashboard-page`；其线下测试仍是非阻塞后续工作；
 - 不实现 Personal-KB 投影；它属于 `LOOP-ADVANCED-04`。
 
@@ -47,13 +51,13 @@ Re-Gate，并最终停在以下三个终态之一：
 
 - [Decision-060](decisions/Decision-060-c05-closure-and-autonomy-replan.md)：业务与人工链
   PASS，Core autonomy `CHANGES_REQUESTED`，受控新增 C03-E；
-- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.3 的
+- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.4 的
   `LOOP-CORE-03` / `LOOP-CORE-05`；
 - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) 的七节点、binding、Re-Gate、恢复与人工
   Git 边界；
 - C03-A～D 已收口事实与 C02 的 artifact revision、finding lifecycle、recovery、CAS
   和 role firewall 合同；
-- 产品事实基线：`feature/loop-runtime-v1@80816ebd938aef59846ecf0c752ff73a82aae4d3`。
+- 产品事实基线：`feature/loop-runtime-v1@ce04f4d7e6bf2fe39e71fb75e25893510c69747b`。
 
 ### 2.2 Source 核验结果
 
@@ -261,8 +265,10 @@ journal 需在现有 capability event v4 之外绑定或升级出以下固定标
 - output normalizer 与版本；
 - “不可证明安全的 CLI 参数/权限模式 = provider unavailable”，不得放宽后继续。
 
-本规划不猜测本机各 CLI 的实际版本或最终 argv。精确 profile 只能在后续受授权的 E2
-实现中按已有合同编码，并在单独授权的 E5 real canary 中验证；本轮不调用 CLI。
+本规划不猜测本机各 CLI 的实际版本或最终 argv。E2-P 在 E0 收口后、E1～E4 大规模实现
+前，以单独授权的最小真实 CLI 预检采集 executable/version、非交互启动、鉴权和基础 I/O
+事实；E2 再据此编码精确 profile。E5 仍须通过已实现的 production adapter 做正式 real
+canary 与全链验收。E2-P 结果不得替代 E5；本轮不调用 CLI。
 
 ## 5. 工作区、产物与恢复模型
 
@@ -306,10 +312,12 @@ journal 需在现有 capability event v4 之外绑定或升级出以下固定标
 
 该策略需要 Q2/Q3 接受后才能成为实施合同；当前 `retry_other_binding` 不直接沿用到生产。
 
-## 6. E0～E5 详细工作项
+## 6. E0、E2-P、E1～E5 详细工作项
 
-本节 ID 是方案条款，不是已过 Task Gate 的执行任务。E0～E4 建议作为**一个实施包、一个
-实现分支、一次完整独立复审**；E5 使用单独授权和单独证据面。
+本节 ID 是方案条款，不是已过 Task Gate 的执行任务。修订 A1 拟将原 E0～E4 单包拆成：
+**E0 活动合同收口包**、独立授权的 **E2-P Provider 可达性预检**、**E1～E4 runtime
+实施包**。E0 必须先独立复核收口；E2-P PASS 后才允许启动 E1～E4。E1～E4 使用一个
+实现分支、一个原子 PR 和一次完整独立复审；E5 使用另一份独立授权和正式验收证据面。
 
 ### E0 — Active Contract Preflight
 
@@ -325,6 +333,45 @@ journal 需在现有 capability event v4 之外绑定或升级出以下固定标
 | E0.5 | active tests | 删除把 Direct stage 当成功条件的 active assertions；历史 archive 测试不进入生产门禁 | CI standards/typecheck/tests 全绿 |
 
 E0 不改 runtime dispatch 行为，不删除历史 Decision/报告中的历史提及。
+
+### E2-P — Provider Feasibility Preflight（前置、独立授权、非 Adapter 验收）
+
+**目标**：在投入 E1～E4 大规模实现前，尽早证明本机的 Kimi、Codex、Hermes CLI 至少
+具备可被自动化接入的基础条件，提前暴露 executable、版本、非交互模式、鉴权和基础 I/O
+不兼容。
+
+执行位置与授权：
+
+- 仅在 E0 完成并经复核收口后执行；
+- 必须取得明确的 `E2_P_REAL_CLI_PREFLIGHT_AUTHORIZED` 外部调用授权；E0 合同收口包与
+  E1～E4 runtime 实施包授权均不自动包含该权限，方案接受也不包含；
+- 在隔离临时 fixture 中直接调用 provider CLI，不通过尚未完成的 production adapter；
+- 不读取真实业务需求、不进入业务仓工作区、不修改产品代码、不请求 Git 或发布副作用；
+- 每个 provider 只执行一个最小、无业务语义的探针；获授权的外部副作用仅限一次模型请求
+  所必需的网络调用、provider 计费与服务端审计记录，其他外部写入均不允许。
+
+最小探针矩阵：
+
+| Provider | 必须证明 | PASS 下限 | 不得声称 |
+| --- | --- | --- | --- |
+| Kimi | executable/version、非交互启动、当前凭据可用、stdin 输入与结构化文本输出 | 有界时间内 exit 0；无交互提示；输出可被确定性截取；安全摘要与 digest 可记录 | requirement-intake/solution-design 等 canonical role 已可用 |
+| Codex | executable/version、非交互启动、当前凭据可用、stdin 输入与结果 transport | 有界时间内 exit 0；无工作区写入；输出边界可确定 | implementation adapter、patch、workspace 隔离已可用 |
+| Hermes | executable/version、非交互启动、当前凭据可用、stdin 输入与结果 transport | 有界时间内 exit 0；无交互提示；输出边界可确定 | formal verdict/code-review 主结果已可用 |
+
+证据合同：
+
+- 证据类型固定为 `PROVIDER_REACHABILITY_ONLY`，记录 provider、resolved executable
+  identity、version、argv profile draft digest、started/terminal、exit/signal/timeout、stdout/
+  stderr byte count、sanitized output digest 和临时工作区 pre/post digest；
+- 原始 prompt、完整 stdout/stderr、凭据和环境变量值不得进入 Git、journal 或规划文档；
+- 任一 provider 缺命令、要求交互登录、鉴权失败、无法有界退出、输出 transport 不可确定或
+  产生未授权副作用时，结果为 `PROVIDER_FEASIBILITY_BLOCKED`，不得开始 E1～E4；
+- 三个 provider 全部 PASS 只允许 E1～E4 继续，不产生“adapter ready”“canonical capability
+  ready”或 C03-E PASS。
+
+E2-P 不验证 Skill 装载、canonical envelope、生产 Gateway、节点输出合同、attempt promotion、
+Re-Gate、journal recovery、工作区写入或 role firewall。这些仍由 E2～E4 自动证据和 E5
+真实 adapter canary/全链 run 证明。
 
 ### E1 — Production Entry and Run Ownership
 
@@ -377,7 +424,9 @@ E1 验收：
 - adapter 无 commit/push/PR/merge/release 权限。
 
 E2 验收：fake process runner 覆盖三个 profile 的成功、缺命令、非零退出、signal、timeout、
-截断、泄密、malformed result 和 cleanup failure；本包不以 fake 结果声称 real CLI 可用。
+截断、泄密、malformed result 和 cleanup failure；profile 必须绑定 E2-P 已验证的 provider
+identity/version 与 transport 事实。E2-P 只能减少未知量，本包仍不以 fake 结果或 E2-P
+结果声称 real adapter 可用。
 
 ### E3 — Output Validation, Automatic Progression and Re-Gate
 
@@ -423,13 +472,14 @@ E4 验收：对 started/spawn/result/validation/terminal/revision 各 crash wind
 
 ### E5 — Autonomous Runtime Acceptance（独立授权）
 
-E5 不与 E0～E4 实施授权混合，分三层证据：
+E5 不与 E0、E2-P 或 E1～E4 的授权混合，分三层证据：
 
 1. **自动负向矩阵**：fake runner + fault injection 证明 fail-closed、恢复、Re-Gate、并发和
    Git 边界；只能证明机制，不能证明 provider 可用。
-2. **真实 CLI canary**：Kimi/Codex/Hermes 分别在隔离 fixture 上执行最小 canonical
-   capability，记录真实 executable/profile/version、started/terminal、output digest；需单独
-   外部 Agent 调用授权。
+2. **真实 Adapter canary**：Kimi/Codex/Hermes 分别通过 production gateway 和已实现 adapter
+   在隔离 fixture 上执行最小 canonical capability，记录真实 executable/profile/version、
+   started/terminal、output/validation/promotion digest；需单独外部 Agent 调用授权。E2-P
+   的 direct CLI 可达性结果不得替代本层。
 3. **真实自主 fixture run**：一次入口启动，按 Accepted binding 跑完整八 execution point，
    `manual_agent_switch_count=0`，至少一次受控 Re-Gate/恢复，最终只输出人工 Git handoff。
 
@@ -456,6 +506,8 @@ E5 PASS 后才请求下一条真实业务 C05 授权。E5 或 C05 任一失败�
 | S14 | code-review 发现方案级缺口 | 回流 solution-design，再过双角色 Gate | 否 |
 | S15 | 七节点通过但用户未授权 Git | `READY_FOR_MANUAL_GIT_HANDOFF`，零 commit/push/PR/merge | 是，线下 Git |
 | S16 | real adapter 失败但 deterministic runner 可成功 | real run 仍失败/阻塞；shadow 结果标记非验收证据 | 否 |
+| S17 | E0 已收口，但 Kimi CLI 需要交互登录或 Hermes 鉴权失败 | E2-P 记 `PROVIDER_FEASIBILITY_BLOCKED`；E1～E4 不启动 | 是，修复环境并重新授权预检 |
+| S18 | E2-P 三个 direct CLI 探针均 PASS，但 E5 中 Codex canonical result 不合格 | E5 FAIL；不得用 E2-P PASS 降级放行 | 否，回流 E2/E3 |
 
 编码前必须把上述数据固化为 fixtures/mutations；实现时发现新状态或副作用语义，不得在
 代码里就地发明，必须回流本规划并重新过 Gate。
@@ -484,6 +536,8 @@ E5 PASS 后才请求下一条真实业务 C05 授权。E5 或 C05 任一失败�
 11. **INV-E11 单轨合同**：无 Direct/Speckit fork、无 DocFlow 治理、无第二状态机。
 12. **INV-E12 可恢复事实**：fresh operator 不依赖旧聊天即可从 request、journal、artifact、
     workspace evidence 恢复。
+13. **INV-E13 证据不替代**：E2-P 只证明 provider reachability；fake runner、direct CLI
+    preflight、real adapter canary 和 full autonomous run 四类证据不得互相替代。
 
 ## 9. 推荐 bounds（待 Q4 裁决）
 
@@ -506,6 +560,8 @@ E5 PASS 后才请求下一条真实业务 C05 授权。E5 或 C05 任一失败�
 
 ```text
 E0 active contract closure
+  -> separately authorized E2-P provider feasibility preflight
+  -> Provider Feasibility Gate PASS
   -> E1 production entry
   -> E2 real adapter + production gateway
   -> E3 validation/progression/Re-Gate
@@ -516,10 +572,10 @@ E0 active contract closure
   -> separately authorized next real C05
 ```
 
-实施期建议单分支/单 PR 承载 E0～E4，使默认入口切换、adapter、schema、recovery 与负向测试
-在一个 retained commit boundary 内原子成立；禁止中间 commit 让 production entry 指向
-shadow、sidecar 或半完成 journal schema。必要时采用 squash 或明确 retained-commit
-验证策略。
+实施期建议 E0 使用独立合同收口分支/PR；E0 经复核收口和 E2-P PASS 后，再以单分支/单 PR
+承载 E1～E4，使默认入口切换、adapter、schema、recovery 与负向测试在一个 retained commit
+boundary 内原子成立。禁止中间 commit 让 production entry 指向 shadow、sidecar 或半完成
+journal schema。必要时采用 squash 或明确 retained-commit 验证策略。
 
 迁移原则：
 
@@ -529,14 +585,18 @@ shadow、sidecar 或半完成 journal schema。必要时采用 squash 或明确 
   需要跨版本恢复时停止并回 Current User，不默认重写历史 journal；
 - old sidecar/contract-only modules 不得继续被 production factory 引用；删除还是 archive 由
   实现期 dependency scan 决定，但不可形成第二条活跃路径；
-- E0 先行且与 runtime 原子合入，避免旧 path decision 再次污染真实 run。
+- E0 先行并独立收口，避免旧 path decision 污染后续 profile 探针与真实 run；E1～E4 内部
+  仍必须原子合入。
+- E2-P 只采集实现输入，不写生产代码；E2 profile 必须引用其 provider identity/version 与
+  transport 事实。CLI 版本或登录态变化会使该事实 stale，必须在 E5 重新证明。
 
 ## 11. 验收与证据矩阵
 
 | 完成合同 | 自动证据 | 真实证据 | 失败条件 |
 | --- | --- | --- | --- |
 | production entry 真实身份 | request parser、base drift、path/mutation tests | E5 fixture 的 repo/base/run identity | 假仓库、未 pin SHA、任意 gateway 注入 |
-| 三 Agent real adapter | fake runner 全状态矩阵 | 三个独立 real CLI canary | 任一 provider 用 shadow/sidecar 替代 |
+| provider 基础可达性 | 无；E0 只冻结活动合同 | E2-P 三个 direct CLI `PROVIDER_REACHABILITY_ONLY` 探针 | 把未调用、help/version-only 或交互登录状态写成 PASS |
+| 三 Agent real adapter | fake runner 全状态矩阵 | E5 三个经 production gateway 的 real adapter canary | 任一 provider 用 E2-P、shadow/sidecar 替代 |
 | 自动推进 | 八点成功链 + exact output validation | 一次入口完整 real fixture | 人工切换 Agent 或手工搬运产物 |
 | Gate firewall | binding/ledger mutation tests | Codex scan + Hermes verdict journal | 同 Agent、错 ledger、depth 未 materialize |
 | Re-Gate | finding lifecycle + stale downstream negative tests | fixture 至少一次有效回流 | 只改 Markdown 状态、不失效下游 |
@@ -544,22 +604,24 @@ shadow、sidecar 或半完成 journal schema。必要时采用 squash 或明确 
 | 人工边界 | human reason allowlist mutation tests | handoff 停在人工 Git | Agent switch prompt 或自动 Git |
 | 可复核 journal | schema/readback/tamper/rehashed blob tests | E5 journal + artifact digest | 仅执行者自述、缺 terminal/process/promotion 证据 |
 
-E0～E4 的代码复审必须覆盖合同 → 不变量 → attack surface → 实现/测试证据，并对最终树与
-所有 retained commits 做负向闭合验证。CI 通过只是基线，不自动形成 PASS 或用户收口。
+E0 与 E1～E4 的代码复审都必须覆盖合同 → 不变量 → attack surface → 实现/测试证据，
+并对各自最终树与所有 retained commits 做负向闭合验证。CI 通过只是基线，不自动形成
+PASS 或用户收口。
 
 ## 12. 风险与控制
 
 | 风险 | 控制 |
 | --- | --- |
 | 三套历史 adapter/runner 继续并行漂移 | production factory 只引用统一 adapter/profile/runner；旧路径消费面测试为零 |
-| CLI 参数或登录态随版本变化 | profile/version pin + E5 canary；不通过时 unavailable，不猜测修复 |
+| CLI 参数或登录态随版本变化 | E2-P 提前采样 + profile/version pin + E5 正式复验；不通过时 unavailable，不猜测修复 |
 | timeout 后子进程仍存活 | process-group TERM/KILL + cleanup evidence；cleanup 不确定则 blocked |
 | Agent 已写文件但 runtime 未记 terminal | attempt 隔离 + pre/post digest + staging recovery，不盲 retry |
 | stdout 泄露业务/凭据 | stdin 输入、结构化小输出、redaction/secret scan、原始流不持久化 |
 | retry_other_binding 绕过角色/能力选择 | 首版禁止自动跨 binding fallback，变更需新 registry version 和裁决 |
 | 旧 Direct/Speckit 语义再生 | manifest active references 闭包扫描 + mutation test |
-| 假 runner 被误报真实验收 | evidence type 标记 + E5 real canary + full real fixture 三层证据 |
-| E0～E4 中间提交不可运行 | 单实施包、原子 retained boundary、per-commit validator |
+| E2-P 被误报 Adapter 验收 | `PROVIDER_REACHABILITY_ONLY` 强制分类；不得满足 E2/E5 完成合同 |
+| 假 runner 被误报真实验收 | evidence type 标记 + E2-P direct CLI + E5 adapter canary + full real fixture 四层证据隔离 |
+| E1～E4 中间提交不可运行 | 单 runtime 实施包、原子 retained boundary、per-commit validator |
 | 项目又依赖人工切换 | `manual_agent_switch_count` 与 human reason allowlist 成为 E5 硬门 |
 
 ## 13. Current User 裁决结果
@@ -574,12 +636,27 @@ E0～E4 的代码复审必须覆盖合同 → 不变量 → attack surface → �
 4. **Q4 bounds**：接受 §9 的首版 timeout、输出和总预算建议；profile 不能满足即阻塞。
 5. **Q5 attempt promotion**：所有节点使用 attempt staging；implementation 使用隔离 worktree
    + patch/workspace digest，验证后才 promotion。
-6. **Q6 授权粒度**：E0～E4 一个实施包；E5 单独外部 Agent 调用授权；下一 C05 再单独授权。
+6. **Q6 原接受值**：E0～E4 一个实施包；E5 单独外部 Agent 调用授权；下一 C05 再单独授权。
 7. **Q7 历史 journal**：采用声明式 cutover；若 preflight 发现需要恢复的真实 v4 journal，
    停止重裁，不自动迁移/重写。
 
 上述裁决冻结方案语义；后续若要改变 binding、fallback、retry、bounds、promotion、授权
 粒度或 journal cutover，必须重新进入方案裁决，不得由实现阶段自行漂移。
+
+### 13.1 待接受修订 A1：提前真实接触 Provider
+
+Decision-064 已授权起草、尚未接受以下修订：
+
+1. 原 E0～E4 单包拆为 E0 活动合同收口包与 E1～E4 runtime 实施包；
+2. E0 独立复核收口后插入 Provider Feasibility Gate，E2-P 需要独立的真实 Agent CLI
+   调用授权；
+3. E2-P 三 Agent 全 PASS 才允许授权/启动 E1～E4；任一失败均先停止，不把适配风险推迟到 E5；
+4. E5 保留独立授权，且必须重新通过 production gateway/adapter 做三 Agent canonical canary
+   和完整自主 run；E2-P 不能抵扣 E5；
+5. 下一 C05 的独立授权边界不变。
+
+A1 若被接受，将作为 Q6 的窄幅修订；Q1～Q5、Q7 和 Decision-063 的其余边界保持不变。
+在 Current User 明确接受 A1 前，v0.3.0 的 Q6 仍是当前有效合同，不得执行 E2-P。
 
 ## 14. 后续 Gate
 
@@ -599,19 +676,22 @@ E0～E4 的代码复审必须覆盖合同 → 不变量 → attack surface → �
 1. 本计划状态为 `ACCEPTED`（已满足，Decision-063）；
 2. Q1～Q7 已有明确裁决（已满足，全部接受推荐值）；
 3. Solution Gate 为 PASS 或有明确风险接受（已满足，Current User 风险接受）；
-4. E0～E4 实施授权另行成立（**未满足**）；
-5. task 集具备目标文件/模块、依赖、source trace、verification 和 exclusions；
-6. 任务一致性审计无 stale artifact、未接受风险或 readiness blocker。
+4. v0.4.0-draft 的 A1 已由 Current User 明确接受（**未满足**）；
+5. E0 合同收口包与 E1～E4 runtime 实施包的授权分别成立（**均未满足**）；
+6. task 集具备目标文件/模块、依赖、source trace、verification 和 exclusions；
+7. 任务一致性审计无 stale artifact、未接受风险或 readiness blocker。
 
 ## 15. 授权边界与下一有效动作
 
-Current User 本轮只裁决方案通过，不授予实施权限。因此下一有效动作是：
+Current User 本轮只授权方案修订，不授予修订接受、任务规划或实施权限。因此下一有效动作是：
 
-> 单独决定是否授予 E0～E4 实施包授权。若未来授权成立，必须先执行
-> `sdlc-task-planning` 形成稳定任务集并通过 Task Gate，不能从“方案通过”直接跳到代码实施。
+> 单独决定是否接受修订 A1。只有 A1 接受后，才重新进入 E0 合同收口包的授权判断；若
+> 未来授权成立，必须先执行 `sdlc-task-planning` 形成稳定任务集并通过 Task Gate，不能从
+> “方案修订”直接跳到 CLI 预检或代码实施。E0 收口后仍需另行授权 E2-P；E2-P PASS 后
+> 才进入 E1～E4 runtime 实施包授权判断。
 
 明确未授权：运行时代码、Skill/reference/validator/metadata 的实际修改；任何 Agent CLI
-调用；任务规划；E0～E5；下一条 C05；业务仓 Git 与远程发布。
+调用；任务规划；E0、E2-P、E1～E5；下一条 C05；业务仓 Git 与远程发布。
 
 ## Revision Record
 
@@ -620,3 +700,4 @@ Current User 本轮只裁决方案通过，不授予实施权限。因此下一�
 | 0.1.0 | 2026-08-27 | Draft for Current User review | 根据 C05 只读复审建立 E0～E5、初始场景矩阵、完成合同与授权边界。 |
 | 0.2.0 | 2026-08-27 | Draft for Current User review | 经 Decision-062 规划授权，核验真实 Source，补齐生产入口、统一 adapter/profile、严格 output contract、attempt staging/promotion、process journal、恢复、人机边界、E0～E5 工作项、S01～S16、证据矩阵、bounds 与 Q1～Q7；未过 Solution Gate/Task Gate，不授权实施。 |
 | 0.3.0 | 2026-08-27 | Accepted | Decision-063 接受 Q1～Q7 全部推荐值；Current User 显式接受本轮不执行双 binding Solution Gate 的剩余风险。Task Gate 因实施授权未成立继续关闭；不授权代码、Agent CLI、E0～E5 或 C05。 |
+| 0.4.0-draft | 2026-08-27 | Amendment review pending | Decision-064 授权方案修订：拟拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间插入独立授权的 E2-P 三 Agent direct CLI 可达性预检；E5 保留 production adapter canary 与完整自主 run。仅起草，不代表接受、CLI 或实施授权。 |
