@@ -104,8 +104,19 @@ Decision / Governance / STATE / evidence 权威分工；唯一的项目专项分
 
 ## 实现状态
 
-本 Decision 随 ACP-R2 第一批治理合同落盘。Control Plane、Exchange、PKB 和
-STATE 迁移仍在执行中；完成前不得宣称治理整改或 publication 已收口。
+本 Decision 随 ACP-R2 第一批治理合同落盘。以下是该落盘时点的历史状态：
+Control Plane、Exchange、PKB 和 STATE 迁移仍在执行中；完成前不得宣称治理
+整改或 publication 已收口。
+
+### 2026-08-28 实现状态补充
+
+- AI-SDLC 产品侧的权威边界和 Roadmap continuity 修正已进入本提交；Roadmap
+  不再保存会与 Decision/STATE 漂移的动态授权断言。
+- 跨仓 publication 的当前进度只由 Control Plane STATE 登记，本 Decision
+  不复制或冻结 Exchange/PKB current 状态。
+- Decision-065 的 E0 授权持续有效；E0 明确为 `started: false` 且由 Current
+  User 暂停。治理整改和 publication 完成均不自动恢复 E0。
+- E2-P、E1～E5 与下一轮 C05 没有因本补充获得授权。
 
 ## 依据
 
