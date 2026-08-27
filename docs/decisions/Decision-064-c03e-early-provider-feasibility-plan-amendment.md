@@ -1,9 +1,11 @@
-# Decision-064：授权起草 C03-E 前置 Provider 可达性修订
+# Decision-064：接受 C03-E 前置 Provider 可达性修订
 
 ## 状态
 
-Accepted / Plan amendment drafting authorized（2026-08-27；只授权方案修订，修订内容待
-Current User 接受）
+Accepted / Plan amendment accepted（2026-08-27）
+
+> 状态沿革：Current User 先授权起草 v0.4.0-draft，随后明确“同意当前的修改方案，升级成
+> accepted”。A1 现已生效，但该接受不包含任务规划、Agent CLI 或实施授权。
 
 ## 背景
 
@@ -20,8 +22,8 @@ adapter 验收”、E5 正式验收不降级，以及本轮零 CLI、零代码�
 
 ## 决策
 
-1. 授权把 `LOOP-CORE-C03-E-PLAN.md` 修订为 v0.4.0-draft。
-2. 原 E0～E4 单实施包拟拆为 E0 活动合同收口包与 E1～E4 runtime 实施包；修订稿在 E0
+1. 接受 `LOOP-CORE-C03-E-PLAN.md` v0.4.0 与 A1 修订。
+2. 原 E0～E4 单实施包拆为 E0 活动合同收口包与 E1～E4 runtime 实施包；本方案在 E0
    独立复核收口后、E1～E4 实现前新增 `E2-P — Provider Feasibility Preflight`：
    对 Kimi、Codex、Hermes 分别做一次隔离、最小、无业务数据的真实 CLI 探针。授权允许
    每个 provider 一次模型请求所必需的网络调用、计费和服务端审计记录，不允许其他外部写入。
@@ -32,8 +34,9 @@ adapter 验收”、E5 正式验收不降级，以及本轮零 CLI、零代码�
    E1～E4 runtime 实施包授权均不自动包含该权限。
 5. E5 不取消、不缩减：仍须独立授权，通过 production gateway/adapter 完成三个 real
    canonical canary 和一次完整八 execution point 自主 run。
-6. 本 Decision 只授权起草修订，不接受修订 A1，不授权任务规划、运行时代码、Agent CLI、
-   E0、E2-P、E1～E5、下一 C05 或业务仓远程 Git 动作。
+6. A1 只修订 Q6 授权粒度；Q1～Q5、Q7、Solution Gate 风险接受和人工 Git 边界不变。
+7. 本 Decision 不授权任务规划、运行时代码、Agent CLI、E0、E2-P、E1～E5、下一 C05
+   或业务仓远程 Git 动作。
 
 ## 原因
 
@@ -43,19 +46,21 @@ adapter 验收”、E5 正式验收不降级，以及本轮零 CLI、零代码�
 
 ## 影响
 
-- v0.3.0 与 Decision-063 继续是当前 Accepted 合同；v0.4.0-draft 仅为待审修订。
-- 下一有效动作变为 Current User 接受或退回修订 A1，而不是任务规划、实现或 CLI 预检。
-- A1 若接受，将窄幅修订 Q6 授权粒度；Q1～Q5、Q7、下一 C05 和人工 Git 边界保持不变。
-- CP/PKB 的动态状态不在本轮直接推进；待修订接受后再按明确授权同步。
+- v0.4.0 与本 Decision 成为当前 Accepted 合同；v0.3.0 保留为历史已接受基线。
+- 当前控制门改为 E0 活动合同收口包授权待决，Task Gate 继续关闭。
+- E0 收口后才允许请求 E2-P 授权；E2-P PASS 后才允许请求 E1～E4 授权。
+- CP/PKB 同步属于本次“完整项目治理流程”授权范围，但不得把同步写成实施开始。
 
 ## 实现状态
 
-本 Decision 仅落盘规划文档、Roadmap 指针和 Decision 治理记录。无 runtime、Skill、reference、
-validator、metadata 或测试代码修改；无 Agent CLI 调用；无 E0～E5 执行。
+本 Decision 落盘规划文档、Roadmap 指针和 Decision 治理记录，并在产品 PR 合入后同步
+控制平面与 PKB。无 runtime、Skill、reference、validator、metadata 或测试代码修改；无
+Agent CLI 调用；无 E0～E5 执行。
 
 ## 依据
 
 - Current User 指令：“那就先做方案修订吧”；
+- Current User 指令：“同意当前的修改方案，升级成accepted吧，把完整项目治理流程走完”；
 - [Decision-063](Decision-063-c03e-plan-accepted.md)；
-- [C03-E 详细规划](../LOOP-CORE-C03-E-PLAN.md) v0.4.0-draft；
-- [LOOP Core Roadmap](../AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.4。
+- [C03-E 详细规划](../LOOP-CORE-C03-E-PLAN.md) v0.4.0；
+- [LOOP Core Roadmap](../AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.5。

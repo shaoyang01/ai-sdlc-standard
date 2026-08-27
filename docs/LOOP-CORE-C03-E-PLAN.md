@@ -1,17 +1,18 @@
 # LOOP-CORE-C03-E 详细规划：Real Multi-Agent Autonomous Dispatch
 
-> 规划状态：**ACCEPTED BASELINE / AMENDMENT REVIEW PENDING**
+> 规划状态：**ACCEPTED**
 >
-> 规划版本：**0.4.0-draft**
+> 规划版本：**0.4.0**
 >
 > 日期：2026-08-27
 >
-> 规划裁决：v0.3.0 及 Q1～Q7 仍按 Decision-063 保持 Accepted；Current User 已授权起草
-> “E2 前置最小真实 CLI 可达性预检”修订（Decision-064），修订内容尚待单独接受。
+> 规划裁决：Current User 已接受 A1“E2 前置最小真实 CLI 可达性预检”修订；Decision-064
+> 将 Q6 更新为 E0、E2-P、E1～E4、E5、下一 C05 分段授权。本裁决不是任务规划、CLI
+> 调用或实施授权。
 >
 > 深度状态：**DEEP / CURRENT_USER_RISK_ACCEPTED_WITHOUT_DUAL_BINDING_GATE**。Current User 明确选择直接通过方案并接受本轮不调用双 Agent 执行 Solution Gate 的剩余风险。
 >
-> 禁止事项：本次方案修订不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现
+> 禁止事项：方案接受不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现
 > 分支/实现 PR、启动 E0、E2-P、E1～E5 或下一轮 C05，也不授权业务仓
 > commit/push/PR/merge/release。
 
@@ -40,8 +41,8 @@ Re-Gate，并最终停在以下三个终态之一：
 ### 1.2 本稿不交付什么
 
 - 本轮不生成可直接执行的 `sdlc-task-planning` 任务集；实施授权尚未成立，Task Gate 继续关闭；
-- 不实现或试跑任何 adapter；不探测 CLI 版本、登录态、凭据或命令参数；E2-P 只是本稿
-  新增的后续受授权执行点，不是本轮已执行事实；
+- 不实现或试跑任何 adapter；不探测 CLI 版本、登录态、凭据或命令参数；E2-P 是后续
+  必须单独授权的执行点，不是本轮已执行事实；
 - 不重开 `wms-monitor/20260827-dashboard-page`；其线下测试仍是非阻塞后续工作；
 - 不实现 Personal-KB 投影；它属于 `LOOP-ADVANCED-04`。
 
@@ -51,7 +52,7 @@ Re-Gate，并最终停在以下三个终态之一：
 
 - [Decision-060](decisions/Decision-060-c05-closure-and-autonomy-replan.md)：业务与人工链
   PASS，Core autonomy `CHANGES_REQUESTED`，受控新增 C03-E；
-- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.4 的
+- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.5 的
   `LOOP-CORE-03` / `LOOP-CORE-05`；
 - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) 的七节点、binding、Re-Gate、恢复与人工
   Git 边界；
@@ -314,7 +315,7 @@ canary 与全链验收。E2-P 结果不得替代 E5；本轮不调用 CLI。
 
 ## 6. E0、E2-P、E1～E5 详细工作项
 
-本节 ID 是方案条款，不是已过 Task Gate 的执行任务。修订 A1 拟将原 E0～E4 单包拆成：
+本节 ID 是方案条款，不是已过 Task Gate 的执行任务。修订 A1 已将原 E0～E4 单包拆成：
 **E0 活动合同收口包**、独立授权的 **E2-P Provider 可达性预检**、**E1～E4 runtime
 实施包**。E0 必须先独立复核收口；E2-P PASS 后才允许启动 E1～E4。E1～E4 使用一个
 实现分支、一个原子 PR 和一次完整独立复审；E5 使用另一份独立授权和正式验收证据面。
@@ -626,8 +627,8 @@ PASS 或用户收口。
 
 ## 13. Current User 裁决结果
 
-2026-08-27，Current User 指示“直接通过”，并明确该指令是方案通过、不是实施授权。
-因此以下 Q1～Q7 按规划推荐值全部接受：
+2026-08-27，Current User 先通过 v0.3.0，并明确该指令是方案通过、不是实施授权；随后又
+明确接受 A1 修订。以下为 v0.4.0 最终有效裁决：
 
 1. **Q1 初始 binding**：接受 §3.2 的 Kimi/Codex/Hermes 分工；不做动态路由。
 2. **Q2 fallback**：首版禁止 real -> shadow 和自动跨 Agent fallback。
@@ -636,16 +637,18 @@ PASS 或用户收口。
 4. **Q4 bounds**：接受 §9 的首版 timeout、输出和总预算建议；profile 不能满足即阻塞。
 5. **Q5 attempt promotion**：所有节点使用 attempt staging；implementation 使用隔离 worktree
    + patch/workspace digest，验证后才 promotion。
-6. **Q6 原接受值**：E0～E4 一个实施包；E5 单独外部 Agent 调用授权；下一 C05 再单独授权。
+6. **Q6 修订值**：E0 活动合同收口包、E2-P 真实 CLI 可达性预检、E1～E4 runtime
+   实施包、E5 正式真实验收与下一 C05 各自单独授权；前一阶段收口/PASS 是后一阶段进入
+   授权判断的前提，不产生自动授权。
 7. **Q7 历史 journal**：采用声明式 cutover；若 preflight 发现需要恢复的真实 v4 journal，
    停止重裁，不自动迁移/重写。
 
 上述裁决冻结方案语义；后续若要改变 binding、fallback、retry、bounds、promotion、授权
 粒度或 journal cutover，必须重新进入方案裁决，不得由实现阶段自行漂移。
 
-### 13.1 待接受修订 A1：提前真实接触 Provider
+### 13.1 已接受修订 A1：提前真实接触 Provider
 
-Decision-064 已授权起草、尚未接受以下修订：
+Decision-064 已接受以下修订：
 
 1. 原 E0～E4 单包拆为 E0 活动合同收口包与 E1～E4 runtime 实施包；
 2. E0 独立复核收口后插入 Provider Feasibility Gate，E2-P 需要独立的真实 Agent CLI
@@ -655,8 +658,8 @@ Decision-064 已授权起草、尚未接受以下修订：
    和完整自主 run；E2-P 不能抵扣 E5；
 5. 下一 C05 的独立授权边界不变。
 
-A1 若被接受，将作为 Q6 的窄幅修订；Q1～Q5、Q7 和 Decision-063 的其余边界保持不变。
-在 Current User 明确接受 A1 前，v0.3.0 的 Q6 仍是当前有效合同，不得执行 E2-P。
+A1 已作为 Q6 的窄幅修订生效；Q1～Q5、Q7 和 Decision-063 的其余边界保持不变。A1
+接受只改变授权分段，不授权执行 E0、E2-P、E1～E5 中的任何一个阶段。
 
 ## 14. 后续 Gate
 
@@ -669,26 +672,30 @@ A1 若被接受，将作为 Q6 的窄幅修订；Q1～Q5、Q7 和 Decision-063 �
   cutover、provider profile 安全、真实证据与 fake 证据隔离、Git 边界；
 - 实现后的独立代码复审、负向测试和 E5 真实验收仍必须执行，不因本次风险接受而省略。
 
-### 14.2 Task Gate（当前关闭）
+### 14.2 Task Gate（分段关闭）
 
-只有以下条件全部满足，才允许 `sdlc-task-planning` 生成稳定 task ID：
+E0 Task Gate 当前关闭。只有以下条件全部满足，才允许 `sdlc-task-planning` 生成 E0 稳定
+task ID：
 
 1. 本计划状态为 `ACCEPTED`（已满足，Decision-063）；
 2. Q1～Q7 已有明确裁决（已满足，全部接受推荐值）；
 3. Solution Gate 为 PASS 或有明确风险接受（已满足，Current User 风险接受）；
-4. v0.4.0-draft 的 A1 已由 Current User 明确接受（**未满足**）；
-5. E0 合同收口包与 E1～E4 runtime 实施包的授权分别成立（**均未满足**）；
-6. task 集具备目标文件/模块、依赖、source trace、verification 和 exclusions；
-7. 任务一致性审计无 stale artifact、未接受风险或 readiness blocker。
+4. v0.4.0 的 A1 已由 Current User 明确接受（已满足，Decision-064）；
+5. E0 活动合同收口包授权另行成立（**未满足**）；
+6. E0 task 集具备目标文件/模块、依赖、source trace、verification 和 exclusions；
+7. E0 任务一致性审计无 stale artifact、未接受风险或 readiness blocker。
+
+E1～E4 Task Gate 不因 E0 授权而开启；它还必须等待 E0 独立收口、E2-P 获单独授权并三
+Agent 全部 PASS、E1～E4 runtime 实施包授权另行成立，再生成相应稳定 task ID。
 
 ## 15. 授权边界与下一有效动作
 
-Current User 本轮只授权方案修订，不授予修订接受、任务规划或实施权限。因此下一有效动作是：
+Current User 本轮接受方案修订，但不授予任务规划、Agent CLI 或实施权限。因此下一有效
+动作是：
 
-> 单独决定是否接受修订 A1。只有 A1 接受后，才重新进入 E0 合同收口包的授权判断；若
-> 未来授权成立，必须先执行 `sdlc-task-planning` 形成稳定任务集并通过 Task Gate，不能从
-> “方案修订”直接跳到 CLI 预检或代码实施。E0 收口后仍需另行授权 E2-P；E2-P PASS 后
-> 才进入 E1～E4 runtime 实施包授权判断。
+> 单独决定是否授权 E0 活动合同收口包。若未来授权成立，必须先执行
+> `sdlc-task-planning` 形成稳定任务集并通过 Task Gate，不能从“方案接受”直接跳到代码
+> 实施。E0 收口后仍需另行授权 E2-P；E2-P PASS 后才进入 E1～E4 runtime 实施包授权判断。
 
 明确未授权：运行时代码、Skill/reference/validator/metadata 的实际修改；任何 Agent CLI
 调用；任务规划；E0、E2-P、E1～E5；下一条 C05；业务仓 Git 与远程发布。
@@ -700,4 +707,4 @@ Current User 本轮只授权方案修订，不授予修订接受、任务规划�
 | 0.1.0 | 2026-08-27 | Draft for Current User review | 根据 C05 只读复审建立 E0～E5、初始场景矩阵、完成合同与授权边界。 |
 | 0.2.0 | 2026-08-27 | Draft for Current User review | 经 Decision-062 规划授权，核验真实 Source，补齐生产入口、统一 adapter/profile、严格 output contract、attempt staging/promotion、process journal、恢复、人机边界、E0～E5 工作项、S01～S16、证据矩阵、bounds 与 Q1～Q7；未过 Solution Gate/Task Gate，不授权实施。 |
 | 0.3.0 | 2026-08-27 | Accepted | Decision-063 接受 Q1～Q7 全部推荐值；Current User 显式接受本轮不执行双 binding Solution Gate 的剩余风险。Task Gate 因实施授权未成立继续关闭；不授权代码、Agent CLI、E0～E5 或 C05。 |
-| 0.4.0-draft | 2026-08-27 | Amendment review pending | Decision-064 授权方案修订：拟拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间插入独立授权的 E2-P 三 Agent direct CLI 可达性预检；E5 保留 production adapter canary 与完整自主 run。仅起草，不代表接受、CLI 或实施授权。 |
+| 0.4.0 | 2026-08-27 | Accepted | Decision-064 接受 A1：拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间插入独立授权的 E2-P 三 Agent direct CLI 可达性预检；E5 保留 production adapter canary 与完整自主 run。只接受方案，不授权任务规划、CLI、实施或 C05。 |
