@@ -1,16 +1,16 @@
 # LOOP-CORE-C03-E 详细规划：Real Multi-Agent Autonomous Dispatch
 
-> 规划状态：**DRAFT_FOR_CURRENT_USER_REVIEW**
+> 规划状态：**ACCEPTED**
 >
-> 规划版本：**0.2.0**
+> 规划版本：**0.3.0**
 >
 > 日期：2026-08-27
 >
-> 规划授权：Current User 已授权完善详细规划（Decision-062）；本授权只允许修改规划文档与治理记录。
+> 规划裁决：Current User 已接受本方案及 Q1～Q7 推荐值（Decision-063）；本裁决不是实施授权。
 >
-> 深度状态：**DEEP_CANDIDATE / PENDING_SOLUTION_GATE**。本稿按高风险外部进程与恢复问题给出完整候选设计，但未经过双 binding 方案门，不是 Accepted 实施合同。
+> 深度状态：**DEEP / CURRENT_USER_RISK_ACCEPTED_WITHOUT_DUAL_BINDING_GATE**。Current User 明确选择直接通过方案并接受本轮不调用双 Agent 执行 Solution Gate 的剩余风险。
 >
-> 禁止事项：本稿不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现分支/实现 PR、启动 E5 或下一轮 C05，也不授权业务仓 commit/push/PR/merge/release。
+> 禁止事项：方案通过不授权修改运行时代码、调用任何 Agent CLI、创建 C03-E 实现分支/实现 PR、启动 E0～E5 或下一轮 C05，也不授权业务仓 commit/push/PR/merge/release。
 
 ## 1. 文档定位与目标
 
@@ -31,12 +31,12 @@ Re-Gate，并最终停在以下三个终态之一：
 - 经当前 Source 核验的现状与缺口；
 - 生产入口、真实 adapter、输出校验、journal、恢复和人工边界的统一系统模型；
 - E0～E5 的有界工作项、目标代码面、依赖、验收与负向证据；
-- 编码前数据场景、风险、迁移顺序和待 Current User 裁决项；
-- 后续 Solution Gate 与 Task Gate 的明确停驻条件。
+- 编码前数据场景、风险、迁移顺序和 Current User 裁决结果；
+- Solution Gate 风险接受与后续 Task Gate 的明确停驻条件。
 
 ### 1.2 本稿不交付什么
 
-- 不生成可直接执行的 `sdlc-task-planning` 任务集；方案未 Accepted，Task Gate 必须关闭；
+- 本轮不生成可直接执行的 `sdlc-task-planning` 任务集；实施授权尚未成立，Task Gate 继续关闭；
 - 不实现或试跑任何 adapter；不探测 CLI 版本、登录态、凭据或命令参数；
 - 不重开 `wms-monitor/20260827-dashboard-page`；其线下测试仍是非阻塞后续工作；
 - 不实现 Personal-KB 投影；它属于 `LOOP-ADVANCED-04`。
@@ -47,7 +47,7 @@ Re-Gate，并最终停在以下三个终态之一：
 
 - [Decision-060](decisions/Decision-060-c05-closure-and-autonomy-replan.md)：业务与人工链
   PASS，Core autonomy `CHANGES_REQUESTED`，受控新增 C03-E；
-- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.2 的
+- [LOOP Core Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) v2.3.3 的
   `LOOP-CORE-03` / `LOOP-CORE-05`；
 - [LOOP Core Contract](LOOP_CORE_CONTRACT.md) 的七节点、binding、Re-Gate、恢复与人工
   Git 边界；
@@ -562,9 +562,10 @@ E0～E4 的代码复审必须覆盖合同 → 不变量 → attack surface → �
 | E0～E4 中间提交不可运行 | 单实施包、原子 retained boundary、per-commit validator |
 | 项目又依赖人工切换 | `manual_agent_switch_count` 与 human reason allowlist 成为 E5 硬门 |
 
-## 13. Current User 待裁决点
+## 13. Current User 裁决结果
 
-本稿合入只表示“详细规划已形成”，不自动接受以下建议：
+2026-08-27，Current User 指示“直接通过”，并明确该指令是方案通过、不是实施授权。
+因此以下 Q1～Q7 按规划推荐值全部接受：
 
 1. **Q1 初始 binding**：接受 §3.2 的 Kimi/Codex/Hermes 分工；不做动态路由。
 2. **Q2 fallback**：首版禁止 real -> shadow 和自动跨 Agent fallback。
@@ -577,38 +578,40 @@ E0～E4 的代码复审必须覆盖合同 → 不变量 → attack surface → �
 7. **Q7 历史 journal**：采用声明式 cutover；若 preflight 发现需要恢复的真实 v4 journal，
    停止重裁，不自动迁移/重写。
 
-只有 Current User 明确接受或调整 Q1～Q7，且双 binding Solution Gate 完成后，本计划才能
-升级为 `ACCEPTED`。本轮不会自行代替用户作裁决。
+上述裁决冻结方案语义；后续若要改变 binding、fallback、retry、bounds、promotion、授权
+粒度或 journal cutover，必须重新进入方案裁决，不得由实现阶段自行漂移。
 
 ## 14. 后续 Gate
 
-### 14.1 Solution Gate（当前未执行）
+### 14.1 Solution Gate（未执行，风险已由 Current User 接受）
 
-- adversarial scan 与 formal verdict 必须由不同 Agent binding；
-- 因本轮禁止调用 Agent CLI，当前保持 `PENDING_SOLUTION_GATE`；
-- Gate 应重点挑战：process cleanup、attempt promotion 原子性、journal schema cutover、
-  provider profile 安全、真实证据与 fake 证据隔离、Git 边界。
+- 状态：`NOT_RUN / CURRENT_USER_RISK_ACCEPTED`；
+- Current User 选择直接通过方案，不再把本轮双 binding adversarial scan/formal verdict 作为
+  `ACCEPTED` 的前置条件；本裁决不授权调用 Codex、Hermes 或其他 Agent CLI；
+- 被接受的剩余风险集中在 process cleanup、attempt promotion 原子性、journal schema
+  cutover、provider profile 安全、真实证据与 fake 证据隔离、Git 边界；
+- 实现后的独立代码复审、负向测试和 E5 真实验收仍必须执行，不因本次风险接受而省略。
 
 ### 14.2 Task Gate（当前关闭）
 
 只有以下条件全部满足，才允许 `sdlc-task-planning` 生成稳定 task ID：
 
-1. 本计划状态为 `ACCEPTED`；
-2. Q1～Q7 已有明确裁决；
-3. Solution Gate 为 PASS 或有明确风险接受；
-4. E0～E4 实施授权另行成立；
+1. 本计划状态为 `ACCEPTED`（已满足，Decision-063）；
+2. Q1～Q7 已有明确裁决（已满足，全部接受推荐值）；
+3. Solution Gate 为 PASS 或有明确风险接受（已满足，Current User 风险接受）；
+4. E0～E4 实施授权另行成立（**未满足**）；
 5. task 集具备目标文件/模块、依赖、source trace、verification 和 exclusions；
 6. 任务一致性审计无 stale artifact、未接受风险或 readiness blocker。
 
 ## 15. 授权边界与下一有效动作
 
-Current User 本轮只授权完善详细规划与治理记录。因此本稿完成后的唯一下一有效动作是：
+Current User 本轮只裁决方案通过，不授予实施权限。因此下一有效动作是：
 
-> Current User 审阅 Q1～Q7，并决定是否授权双 binding Solution Gate；在规划 Accepted 与
-> 独立实施授权之前，E0～E4 不得开始。
+> 单独决定是否授予 E0～E4 实施包授权。若未来授权成立，必须先执行
+> `sdlc-task-planning` 形成稳定任务集并通过 Task Gate，不能从“方案通过”直接跳到代码实施。
 
 明确未授权：运行时代码、Skill/reference/validator/metadata 的实际修改；任何 Agent CLI
-调用；E5；下一条 C05；业务仓 Git 与远程发布。
+调用；任务规划；E0～E5；下一条 C05；业务仓 Git 与远程发布。
 
 ## Revision Record
 
@@ -616,3 +619,4 @@ Current User 本轮只授权完善详细规划与治理记录。因此本稿完�
 | --- | --- | --- | --- |
 | 0.1.0 | 2026-08-27 | Draft for Current User review | 根据 C05 只读复审建立 E0～E5、初始场景矩阵、完成合同与授权边界。 |
 | 0.2.0 | 2026-08-27 | Draft for Current User review | 经 Decision-062 规划授权，核验真实 Source，补齐生产入口、统一 adapter/profile、严格 output contract、attempt staging/promotion、process journal、恢复、人机边界、E0～E5 工作项、S01～S16、证据矩阵、bounds 与 Q1～Q7；未过 Solution Gate/Task Gate，不授权实施。 |
+| 0.3.0 | 2026-08-27 | Accepted | Decision-063 接受 Q1～Q7 全部推荐值；Current User 显式接受本轮不执行双 binding Solution Gate 的剩余风险。Task Gate 因实施授权未成立继续关闭；不授权代码、Agent CLI、E0～E5 或 C05。 |
