@@ -34,6 +34,7 @@
 | [Decision-060](Decision-060-c05-closure-and-autonomy-replan.md) | 2026-08-27 | Accepted direction / C03-E planning pending | 收口 wms-monitor 业务需求但不把人工切换 Agent 冒充 Core 全自主 PASS；受控重开 C03，新增 C03-E 真实多 Agent CLI 自主调度，并以下一条真实需求重验 C05。 |
 | [Decision-061](Decision-061-pkb-project-artifact-projection-direction.md) | 2026-08-27 | Accepted direction / Advanced planning pending | 新增后期 LOOP-ADVANCED-04：把 Requirement 最终 LOOP/`.specify` 产物以 provenance/digest 投影到 Personal-KB；不阻塞当前 C03-E 全自主主线。 |
 | [Decision-062](Decision-062-c03e-detailed-planning-authorized.md) | 2026-08-27 | Accepted / Detailed planning authorized | 授权把 C03-E 完善为 0.2.0 详细草案；只允许规划文档和治理记录，不授权代码、Agent CLI、E0～E5 或 C05。 |
+| [Decision-063](Decision-063-c03e-plan-accepted.md) | 2026-08-27 | Accepted / C03-E plan accepted | 接受 C03-E v0.3.0 与 Q1～Q7 推荐值；Current User 接受本轮不执行双 binding Solution Gate 的剩余风险；不授权任务规划、实施、Agent CLI、E0～E5 或 C05。 |
 
 ## 新增流程
 

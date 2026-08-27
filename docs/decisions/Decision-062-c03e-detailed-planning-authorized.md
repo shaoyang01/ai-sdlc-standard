@@ -57,9 +57,11 @@ journal 和 crash recovery。若在这些合同未冻结时直接授权实施，
 
 ## 实现状态
 
-本 Decision 只登记规划授权。C03-E 0.2.0 详细草案与本治理记录在纯文档分支形成；无
-生产代码变更、无 Agent CLI 调用、无 E0～E5 或 C05 run。规划是否 Accepted 及产品 PR/
-CP/PKB 的最终不可变引用在后续合入与登记完成后更新。
+本 Decision 的规划授权已消费。C03-E 0.2.0 详细草案经产品 PR #116 合入
+`feature/loop-runtime-v1`（merge `0bbe7c3e70b1858159f8eb5c185f076963a8e038`），CP 登记
+`86b08f2`，PKB 登记 `3bb4b6e`；四项产品 CI 与 PKB 校验通过。全程无生产代码变更、无
+Agent CLI 调用、无 E0～E5 或 C05 run。后续方案接受裁决见
+[Decision-063](Decision-063-c03e-plan-accepted.md)。
 
 ## 依据
 
