@@ -31,6 +31,8 @@
 | [Decision-057](Decision-057-c03d-runtime-integration-closed.md) | 2026-08-26 | Accepted / C03-D CLOSED | C03-D 收口裁决：三轮独立复审后 Round 3 PASS；d1 c1 守卫接入 runtime implementation 前置、d2 c2/c3 接入 chain 完成后尾聚合、d3 制品路径迁移 WP3.5 单轨、d4 runtime 级接线测试（负向变异实证）；PR #111（head 4252b6d）四 job 全绿。C03-A/B/C/D 全部 CLOSED，LOOP-CORE-03 待 C05 真实单仓验收。 |
 | [Decision-058](Decision-058-c03-implementation-completed.md) | 2026-08-26 | Accepted | C03 实施阶段完成登记：A/B/C/D 四包全部经独立复审 PASS 收口，route_state → C03_IMPLEMENTATION_COMPLETED，current_gate → LOOP_CORE_C05_AUTHORIZATION_GATE；LOOP-CORE-03 最终 COMPLETED 待 C05 真实单仓验收通过后单独裁决（PR #113）。 |
 | [Decision-059](Decision-059-c05-real-single-repo-acceptance-authorized.md) | 2026-08-27 | Accepted / C05 AUTHORIZED | 授权 C05 真实单仓验收：以 wms-monitor 需求 20260827-dashboard-page（指调大盘页面，前端对接冻结后端）为验收对象、基线 3e318dad6，Kimi 为入口 Agent；无远程 Git 副作用、产出人工 Git 交接包；完成合同含七节点贯通 + 至少一次有效 Re-Gate + binding/输入版本追溯 + 可恢复证据；PASS 后单独裁决 LOOP-CORE-03 COMPLETED。 |
+| [Decision-060](Decision-060-c05-closure-and-autonomy-replan.md) | 2026-08-27 | Accepted direction / C03-E planning pending | 收口 wms-monitor 业务需求但不把人工切换 Agent 冒充 Core 全自主 PASS；受控重开 C03，新增 C03-E 真实多 Agent CLI 自主调度，并以下一条真实需求重验 C05。 |
+| [Decision-061](Decision-061-pkb-project-artifact-projection-direction.md) | 2026-08-27 | Accepted direction / Advanced planning pending | 新增后期 LOOP-ADVANCED-04：把 Requirement 最终 LOOP/`.specify` 产物以 provenance/digest 投影到 Personal-KB；不阻塞当前 C03-E 全自主主线。 |
 
 ## 新增流程
 

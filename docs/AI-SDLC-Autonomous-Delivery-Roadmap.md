@@ -1,6 +1,6 @@
 # AI-SDLC LOOP Core Roadmap
 
-> Version: 2.2.3
+> Version: 2.3.2
 > Planning baseline: [LOOP Core Contract](LOOP_CORE_CONTRACT.md)
 > Authority: 这是 `ai-sdlc` 的稳定 Roadmap planning surface。当前执行指针、Gate、授权、live finding、PR/CI/HEAD 和执行尝试只记录在 `ai-project-control-plane` 的 STATE 及执行证据中。
 
@@ -8,7 +8,7 @@
 
 本 Roadmap 采用 `ai-project-control-plane/protocols/PROJECT_CONTROL.md` §14 的完整规划合同。其目标不是把 Agent、代码文件、PR 或会话列成阶段，而是让 fresh Controller 仅凭权威文档和仓库事实，恢复：当前产品目标、剩余可接受结果、依赖、完成条件、持续性关系和已知 Definition Gap。
 
-LOOP 产品的目标是把一份需求来源，经由标准产物、可替换 Agent 协作、最早受影响节点 Re-Gate、实现、审核和验收，推进到 `READY_FOR_MANUAL_GIT_HANDOFF`。该状态只交付用户可人工处理的变更包；commit、push、PR、Ready、merge 和发布均不属于 LOOP Core。
+LOOP 产品的目标是让用户只需向任一已支持入口提交一次需求，由 LOOP runtime 按 binding 自动调用真实 Agent CLI，经由标准产物、最早受影响节点 Re-Gate、实现、审核和验收，连续推进到 `READY_FOR_MANUAL_GIT_HANDOFF`。正常路径不得要求用户为推进流程而机械切换 Kimi、Codex、Hermes 等 Agent；业务仓 commit、push、PR、Ready、merge 和发布仍不属于 LOOP Core。
 
 本文件与其他权威材料的分工如下：
 
@@ -33,7 +33,8 @@ Project: ai-sdlc
 │   └── Sub-requirement: LOOP-CORE-05
 ├── Requirement: LOOP-ADVANCED-01
 ├── Requirement: LOOP-ADVANCED-02
-└── Requirement: LOOP-ADVANCED-03
+├── Requirement: LOOP-ADVANCED-03
+└── Requirement: LOOP-ADVANCED-04
 ```
 
 - `definition_status` 只取 `DEFINED` 或 `PLANNING_REQUIRED`。
@@ -52,14 +53,14 @@ Project: ai-sdlc
 - **title**：Artifact-Driven Single-Repository Delivery Core
 - **definition_status**：`DEFINED`
 - **definition_provenance**：`user_accepted`
-- **objective**：使任意已支持 Agent 入口能以同一套产物和 Gate 启动或恢复一个单仓需求，并在单轨七节点链（requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync）中完成设计、实现、审核和知识同步，交付人工 Git 交接包。
+- **objective**：使任意已支持 Agent 入口能以同一套产物和 Gate 启动或恢复一个单仓需求，由 LOOP runtime 按 capability binding 自动调用真实 Agent CLI，并在单轨七节点链（requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync）中完成设计、实现、审核和知识同步，交付人工 Git 交接包。
 - **rationale**：需求和设计细节散落在不同聊天或 Agent 上会导致遗漏；当前首要价值是可靠完成设计—开发—验收循环，而不是无人监督地发布远程 Git 变更。
-- **inputs_or_prerequisites**：LOOP Core Contract；目标项目适用的 Standard Package/DocFlow 合同；已支持 Agent 的实际适配能力；目标仓库事实。
-- **expected_output**：可恢复的 Requirement 运行记录、有效产物链、可追溯的 Agent binding 尝试、单轨实现结果、审核与验收结论，以及 `READY_FOR_MANUAL_GIT_HANDOFF` 或如实的 `blocked`/`failed` 结果。
+- **inputs_or_prerequisites**：LOOP Core Contract；目标项目的冻结需求、方案、测试与文档合同；已支持 Agent 的实际适配能力；目标仓库事实。
+- **expected_output**：可恢复的 Requirement 运行记录、有效产物链、真实 CLI capability execution journal、可追溯的 Agent binding/adapter/输入输出版本、单轨实现结果、审核与验收结论，以及 `READY_FOR_MANUAL_GIT_HANDOFF` 或如实的 `blocked`/`failed` 结果。
 - **depends_on**：无上游 Roadmap Requirement。
 - **scope**：C01～C03 与 C05 定义的统一入口、产物协调、单轨交付和真实单仓验收；C04 已取消（Decision-044）。
-- **out_of_scope**：自动 commit/push/PR/Ready/merge/发布；为远程 Git 副作用设计的恢复；多仓事务；平台化队列、UI、daemon、registry 或新 Provider 接入；Direct/Speckit 双轨路径分流（Decision-044 已裁决不恢复）。
-- **completion_contract**：C01～C03 与 C05 均按各自完成合同完成；至少一个真实单仓需求在单轨链中证明完整产物链、有效 Re-Gate、可追溯 binding 与人工 Git 交接；不存在把远程 Git 副作用误写为 Core 成功条件的残留合同。
+- **out_of_scope**：业务仓自动 commit/push/PR/Ready/merge/发布；为业务仓远程 Git 副作用设计的恢复；多仓业务事务；Personal-KB 项目产物发布；平台化队列、UI、daemon、registry 或新 Provider 接入；Direct/Speckit 双轨路径分流（Decision-044 已裁决不恢复）。
+- **completion_contract**：C01～C03 与 C05 均按各自完成合同完成；至少一个真实单仓需求由一次入口启动后，经真实 Agent CLI 自动贯通单轨链，证明完整产物链、有效 Re-Gate、可恢复执行、可追溯 binding 与人工 Git 交接；正常完成路径 `manual_agent_switch_count = 0`；不存在把 shadow executor、自述记录或业务仓远程 Git 副作用误写为 Core 成功条件的残留合同。
 - **continuity**：C01～C03 与 C05 的子项共同覆盖 Core（C04 已取消）；若执行中发现新的 material outcome，必须暂停受影响范围、受控重排本父目标的子项覆盖后再恢复，不能通过会话或 Handoff 隐式扩展。
 
 ## 4. Core Sub-requirements
@@ -100,23 +101,23 @@ Project: ai-sdlc
 - **completion_contract**：对同一 Requirement 可明确分类新需求、补充、变更、返工和反馈；有效 finding 会失效受影响下游产物并回流正确最早节点；后续节点只消费有效上游版本和 Gate 结论；中断后可由另一入口/binding 继续而不重解释已确认事实。
 - **continuity**：业务目标、范围、验收或来源冲突回流 requirement-intake；架构、接口、数据、异常、兼容性和风险问题回流 solution-design；实现错误仅在不改变已批准行为时可停留在 implementation；代码审核揭示方案缺口必须回流 solution-design 并重新过 solution-gate；线下测试/线上反馈不是 LOOP 节点，经 requirement-intake 分类为新输入开启新 generation。
 
-### LOOP-CORE-03 — Single-Rail Skill Delivery and Manual Handoff
+### LOOP-CORE-03 — Single-Rail Skill Delivery, Autonomous Runtime and Manual Handoff
 
 - **id**：`LOOP-CORE-03`
 - **type**：Sub-requirement
 - **parent**：`LOOP-CORE-00`
-- **title**：Single-Rail Skill Delivery and Manual Handoff
+- **title**：Single-Rail Skill Delivery, Autonomous Runtime and Manual Handoff
 - **definition_status**：`DEFINED`
 - **definition_provenance**：`user_accepted`
-- **objective**：在 C02 单轨链的有效方案与深度裁决之上，交付与七节点一一对应的 canonical Skill 集，以及一个不拥有 LOOP 生命周期状态的通用文档 Skill `sdlc-docflow-writer`（完整收敛映射见 Decision-045），并在一个真实目标仓库中完成受约束的实现、文档治理、代码审核和知识同步，交付人工 Git 交接包。
+- **objective**：在 C02 单轨链的有效方案与深度裁决之上，交付与七节点一一对应的 canonical Skill 集，并由 LOOP runtime 通过生产级 adapter 自动调用真实 Agent CLI，完成节点推进、Re-Gate、恢复、实现、代码审核和知识同步，最终交付人工 Git 交接包。`sdlc-docflow-writer` 仅作为不拥有 LOOP 生命周期状态的通用文档 Skill 保留，不用于治理或推进 LOOP。
 - **rationale**：近期需要首先证明完整的单仓产品闭环可用；工作区改动成功不能被误读为远程交付成功。Skill 收敛后每节点有唯一执行能力归属；非节点通用文档生成仍有独立使用价值，但不得取得节点、Gate 或流程推进权威；Delivery Tail 语义不随双轨取消而改变。
 - **inputs_or_prerequisites**：C02 的审核通过方案、深度裁决、有效 finding/Gate；目标仓库事实；适用测试、代码审核和文档治理约束。
-- **expected_output**：七个 canonical 节点 Skill、一个 `non-node utility skill`（`sdlc-docflow-writer`）及其合同/注册/校验器；工作区改动、实现记录、代码审核、知识同步结论、未执行项、残余风险、恢复说明和 `READY_FOR_MANUAL_GIT_HANDOFF` 或明确失败结果。
+- **expected_output**：七个 canonical 节点 Skill、一个 `non-node utility skill` 及其合同/注册/校验器；真实 CLI adapter 与受控进程执行面；持久化 capability execution journal；自动节点推进、Re-Gate 和恢复；工作区改动、实现记录、代码审核、知识同步结论、未执行项、残余风险、恢复说明和 `READY_FOR_MANUAL_GIT_HANDOFF` 或明确失败结果。
 - **depends_on**：`LOOP-CORE-02`。
-- **scope**：单轨 Skill 交付与收敛；`sdlc-speckit-pipeline` 删除后由 LOOP runtime 接管编排职责；`sdlc-gate-runner` 删除后由 LOOP runtime 承接确定性节点准入、由专业节点 Skill 承接内容判断、由 C03 Delivery Tail 承接治理尾部检查；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill；Direct 路径原义的受约束实现；文档治理；实现错误和方案缺口的 Re-Gate；代码审核与人工 Git 交接清单；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
-- **out_of_scope**：commit、push、Draft PR、Ready、merge、发布；以未验证测试或历史 CI 替代本次验收；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill 或独立 Speckit 产物轨道；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
-- **completion_contract**：无 blocking finding 时，工作区与当前产物一致，且已记录改动文件、验证命令及结果、未执行检查、残余风险和恢复说明；只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生远程 Git 副作用。否则输出可继续的 `blocked`/`failed` 结论。
-- **continuity**：C03 定义 Core 的共同交付尾部。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把局部修复当作完整闭环通过。
+- **scope**：C03-A～D 已交付的单轨 Skill、注册切换、Delivery Tail 与 runtime 接线；C03-E Real Multi-Agent Autonomous Dispatch，覆盖真实 Kimi/Codex/Hermes CLI adapter、受控进程调用、输出校验、durable journal、自动推进、失败恢复和 Re-Gate；清理活动 Skill reference 中已退役的 Direct/Speckit 路径语义；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill，且不用于治理 LOOP；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
+- **out_of_scope**：业务仓 commit、push、Draft PR、Ready、merge、发布；Personal-KB 项目产物发布；scheduler、daemon、UI、服务端控制平面或新增 Provider；以未验证测试、shadow executor、Markdown 自述或历史 CI 替代真实执行证据；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill或 Direct/Speckit 路径分流；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
+- **completion_contract**：C03-A～E 均完成；生产入口默认不再使用 deterministic shadow；每个节点由 runtime 真实调用所选 binding 并记录不可伪造的 started/terminal event、adapter/版本、输入输出 digest 与尝试结果；正常路径无需用户切换 Agent，失败或不合格输出可恢复；无 blocking finding 时只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生业务仓远程 Git 副作用。
+- **continuity**：C03-E 的有界规划见 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md)。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
 
 ### LOOP-CORE-04 — Speckit Projection and SDD Integration（已取消）
 
@@ -148,12 +149,12 @@ Project: ai-sdlc
 - **definition_provenance**：`user_accepted`
 - **objective**：以真实单仓需求证明 Core 的产物链、binding、返工、证据和人工 Git 边界在中断、输入不完整或 Agent 不可用时仍可恢复。
 - **rationale**：已有代码组件、文档或样例不能替代真实需求上的端到端证明。
-- **inputs_or_prerequisites**：C03；真实需求来源、目标仓库和适用执行授权。
+- **inputs_or_prerequisites**：完成 C03-E 的真实 CLI 自主调度；真实需求来源、目标仓库和适用执行授权。
 - **expected_output**：可复核的真实 run evidence、至少一次有效 Re-Gate、binding/输入版本追溯，以及最终人工 Git 交接包或如实的失败/阻塞结论。
 - **depends_on**：`LOOP-CORE-03`；真实需求证据。（原对 `LOOP-CORE-04` 的条件性依赖随 C04 取消而移除，Decision-044。）
 - **scope**：真实需求验收；中断/不可用恢复；输入输出版本追溯；对已验证、未验证、失败和未授权动作的明确区分。
 - **out_of_scope**：用虚构样例、聊天摘要、旧 PR/CI 或执行者自述替代验证；自动 Git 发布。
-- **completion_contract**：至少一个真实单仓需求从已支持入口启动或恢复；标准产物贯通设计、实现、审核和验收；至少一个有效 finding 回流正确最早节点；每次执行可追溯 binding 和输入；在无远程 Git 副作用条件下输出人工 Git 交接包，或在条件不满足时输出可恢复失败/阻塞。
+- **completion_contract**：至少一个新的真实单仓需求从已支持入口一次启动或恢复；runtime 真实调用所选 Agent CLI，正常路径不要求人工切换 Agent；标准产物贯通设计、实现、审核和验收；至少一个有效 finding 回流正确最早节点；机器 journal 可追溯每次 binding、输入输出版本和 terminal result；在无业务仓远程 Git 副作用条件下输出人工 Git 交接包，或在条件不满足时输出可恢复失败/阻塞。
 - **continuity**：验收产物须让 fresh operator 无需旧会话即可区分已通过、待验证、失败、阻塞和未授权动作；若真实验证发现 Parent Core 覆盖缺口，必须受控重排 C01～C05 后再继续。
 
 ## 5. Advanced Requirements and Explicit Definition Gaps
@@ -215,6 +216,25 @@ Project: ai-sdlc
 - **continuity**：新增 Provider 必须通过 C01 的 binding 合同接入，不得把节点重新绑定为固定 Agent 角色。
 - **NOT_YET_AUTHORITATIVELY_DEFINED**：产品规模、服务所有权、观测指标、隔离/权限模型、Provider 准入、成本和风险边界。
 
+### LOOP-ADVANCED-04 — Personal-KB Project Artifact Projection
+
+- **id**：`LOOP-ADVANCED-04`
+- **type**：Requirement
+- **parent**：`ai-sdlc`
+- **title**：Personal-KB Project Artifact Projection
+- **definition_status**：`PLANNING_REQUIRED`
+- **definition_provenance**：`user_accepted`
+- **objective**：在 LOOP Core 全自主运行通过真实验收后，把各项目最终 `library/<requirement-id>/` 产物与相关 `.specify/**` 文档受控投影到 Personal-KB 项目命名空间，为后续开发提供跨项目可查询知识。
+- **rationale**：项目产物具有长期开发价值，但 PKB 是独立仓库和写入系统；其 writer、Git、权限、敏感性与知识状态不应扩张或阻塞 Core 自主运行 MVP。
+- **inputs_or_prerequisites**：`LOOP-CORE-05`；Personal-KB 当前外部项目发布、单 writer、validator、Query 与 stable 权限合同。
+- **expected_output**：Requirement 级项目档案、source provenance/digest、evidence index、PKB publication receipt 与跨项目 Query 证据。
+- **depends_on**：`LOOP-CORE-05`。
+- **scope**：最终人类可读 LOOP 产物、与 Requirement 有 lineage 的 `.specify/**` 文档、机器证据索引、项目命名空间发布、幂等与失败恢复。
+- **out_of_scope**：反向阻塞或重开已完成业务需求；无差别复制构建产物/原始大日志/敏感数据；自动写入全局知识/决策/Prompt/系统目录；自动 stable；绕过 Personal-KB 自身授权与 Git 边界。
+- **completion_contract**：在 standing authorization、PKB Git 策略、历史回填范围和敏感性合同经双方规划确认前不得实施；完成后至少一个新 Requirement 的项目档案实际发布并可由现有只读 Query 命中。
+- **continuity**：有界草案见 [LOOP-ADVANCED-04 规划](LOOP-ADVANCED-04-PLAN.md)；发布失败只影响 Advanced publication，不改变 Core 或业务 handoff 结果。
+- **NOT_YET_AUTHORITATIVELY_DEFINED**：自动发布授权粒度、PKB commit/push 策略、历史 `library/.specify` 回填范围、raw evidence 大小/类型阈值。
+
 ## 6. Historical Capability Inventory
 
 以下材料保留为历史事实与可能的复用候选，不再构成当前 Core 的顺序、依赖或完成声明：
@@ -239,6 +259,9 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.3.2 | 2026-08-27 | User-directed priority correction | 将 PKB 项目产物投影从 Core C03-F 移至后期 `LOOP-ADVANCED-04`；Core 主线恢复为 C03-E 真实多 Agent 自主调度 → 下一条真实 C05，PKB 不阻塞全自主 MVP。 |
+| 2.3.1 | 2026-08-27 | User-directed controlled replan | 新增 C03-F Personal-KB Project Artifact Projection：Requirement 最终文本产物与选定 `.specify/**` 文档进入 PKB 项目命名空间，原始机器证据以索引/digest 管理；自动内容不得进入全局知识或自动 stable，发布失败不回滚业务交付。 |
+| 2.3.0 | 2026-08-27 | User-directed controlled replan | C05 真实需求证明人工七节点交付可用，但未证明 runtime 真实调用多 Agent CLI；按 C05 continuity 重开 C03，新增 C03-E Real Multi-Agent Autonomous Dispatch，并把下一条真实需求的零人工 Agent 切换与机器 execution journal 纳入 C05 完成合同。业务需求的线下视觉/SSO/后端联通验证不反向阻塞其 LOOP 收口。 |
 | 2.2.3 | 2026-08-22 | Accepted baseline pointer | 阶段 2 A～G 已获 Current User 验收（PR #93 合入 `491c0e2`），scope 指针由"待审稿"更新为已验收实施规划基线；阶段 3 自 WP3.5-A 起逐包实施。WP3.5-A 执行状态、复审 finding 与收口边界仍由控制平面 STATE 与执行证据记录，本 Roadmap 不登记动态执行事实。 |
 | 2.2.2 | 2026-08-22 | Accepted baseline / draft pointer | 为 C02-WP3.5 增加阶段 2 A～G 独立待审稿入口；仅改善规划可恢复性，不表示 Current User 已接受该稿，不产生任何实施或外部同步授权。 |
 | 2.2.1 | 2026-08-22 | Accepted | 按 Decision-045 固化 Skill 收敛拓扑：七个 canonical 节点 Skill + 一个非节点通用文档 Skill `sdlc-docflow-writer`；`sdlc-gate-runner` 与 `sdlc-speckit-pipeline` 退役删除，前者的确定性准入、专业判断与 Delivery Tail 检查分别迁移到 LOOP runtime、节点 Skill 与 C03。 |
