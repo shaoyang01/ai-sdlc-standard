@@ -5,8 +5,9 @@
 > 本文件不是开工前的原始 Task Gate 产物。E1～E4 实施于授权后在另一台机器上
 > 启动，其事前任务集/Task Gate 未形成可恢复落盘记录（产品仓、CP、Exchange/PKB
 > 均不可考）。按 Current User 2026-08-28 裁决「事后重建+追认」，本文件基于
-> **已落盘事实**重建稳定任务集并补做 §14.2 第 6/7 条审计；它不伪装为事前产物，
-> Task Gate 是否追认 PASS 仍由 Current User 独立裁决。
+> **已落盘事实**重建稳定任务集并补做 §14.2 第 6/7 条审计；它不伪装为事前产物。
+> Task Gate 已经 Current User 于 **Decision-072（2026-08-28）事后追认 PASS**；
+> 本文件保留事后重建形态，追认裁决正文以 Decision-072 为准。
 >
 > 重建基线：分支 `feature/c03-e1-e4-runtime-implementation` @ `b842b18`；
 > 规划基线 `docs/LOOP-CORE-C03-E-PLAN.md` v0.4.0；授权 Decision-071。
@@ -22,7 +23,7 @@
 | 5a | E0 独立收口 | Decision-068（复审 R2 PASS，PR#123 merge `158536b`） | ✅ |
 | 5b | E2-P 单独授权且三 Agent 全 PASS | Decision-069/070（Kimi 0.38.0 / Codex 0.150.1 / Hermes 0.20.5） | ✅ |
 | 5c | E1～E4 实施包授权另行成立 | Decision-071 `E1_E4_RUNTIME_IMPLEMENTATION` | ✅ |
-| 6 | 稳定任务集（目标/依赖/source trace/verification/exclusions） | 本文件 §2 | ✅（事后重建，待追认） |
+| 6 | 稳定任务集（目标/依赖/source trace/verification/exclusions） | 本文件 §2 | ✅（事后重建，Decision-072 事后追认 PASS） |
 | 7 | 一致性审计无 stale artifact/未接受风险/readiness blocker | 本文件 §3 | ⚠️ 3 项 blocker 已识别，均不阻断本追认、阻断后续阶段（见 §3.4） |
 
 ## 2. 稳定任务集
@@ -125,8 +126,9 @@ production factory 仍只选 deterministic shadow（装配点 `runtime.ts:325`
   目标 kimi 不一致（E2-T8）。该 Q1 对齐已由 **W1 实现（`7f36b8d`）**；**暂不关闭**——
   待 W1 独立只读复审 PASS、且 W2 接线开关保持默认 deterministic shadow（真实激活仍未
   授权）后方解除；production gateway 真实派发前若未对齐，adapter 仍抛 BINDING_MISMATCH。
-- **B2（本文件）**：Task Gate 事前记录缺失，经本文件事后重建，待 Current User 追认；
-  追认前不得进入 C-T1 之后的收口。
+- **B2（本文件，已关闭）**：Task Gate 事前记录缺失，经本文件事后重建；Current User
+  已在 **Decision-072 事后追认 Task Gate PASS**，B2 关闭。事后追认不改变"事前 Task
+  Gate 记录缺失"这一历史事实，仅以重建+追认闭合。
 - **B3（阻断收口）**：E4（E4-T1～T5）未开始；C-T1 复审前必须完成。
 
 ### 3.5 未接受风险 / stale artifact
@@ -135,13 +137,16 @@ production factory 仍只选 deterministic shadow（装配点 `runtime.ts:325`
 - stale artifact：未发现。旧 sidecar/spawn runner 仍被生产路径引用是**已知待办**（E2-T7），
   非 stale 漂移。
 
-## 4. 请 Current User 追认
+## 4. Current User 追认结果（Decision-072，2026-08-28）
 
-基于以上事后重建与审计，请示明：
+本节原为追认请示，已经 Decision-072 裁决，结果如下：
 
-1. 是否追认 E1～E4 Task Gate 为 **PASS（事后追认）**，接受任务集 §2 为剩余工作的稳定基线；
-2. 是否授权按关键路径继续 E2-T6 接线（默认 shadow、不激活真实 Agent，仍在 Decision-071 范围内）；
+1. **Task Gate 事后追认 PASS**：接受本文件 §2 稳定任务集为剩余工作的稳定基线；
+   明确为事后追认，不改变"事前 Task Gate 落盘记录缺失"的事实，以事后重建+本追认闭合；
+2. **授权继续接线**：在 Decision-071 `E1_E4_RUNTIME_IMPLEMENTATION` 授权范围内，按
+   关键路径推进 E2-T6（real-vs-deterministic 选择开关，**默认 deterministic shadow、
+   不激活真实 Agent**）；
 3. B1/B3 按本文件节点控制，无异议。
 
-追认后：补 CP STATE 登记（active_work=IN_PROGRESS / started:true / Task Gate 追认引用），
-本文件随 `feature/c03-e1-e4-runtime-implementation` 分支留存。
+追认后的 CP STATE 登记已完成（active_work=IN_PROGRESS / started:true，lifecycle 引用
+Decision-072）；本文件随 `feature/c03-e1-e4-runtime-implementation` 分支留存。
