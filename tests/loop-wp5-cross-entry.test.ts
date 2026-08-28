@@ -998,7 +998,7 @@ async function main(): Promise<void> {
         gateway: stableGateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
       });
       ok(result.chain_status === "READY" && result.execution_trace.length === 4,
-        "the codex-served points dispatched against the construction-time snapshot");
+        "the Q1-bound points dispatch against the construction-time snapshot");
       const events = env.runStore.listCapabilityExecutions(result.run_id);
       ok(events.length === 4, "executions journal into the ORIGINAL run store");
       const withOutput = events.find((event) => event.outputArtifactRef !== null)!;

@@ -43,7 +43,7 @@
 - **Decision A（2026-08-28）**：E3 哨兵信封 `<!--@loop-output-begin/end-->` 是**唯一** agent I/O 契约。legacy 行标记（`GATE_RESULT:`/`UNRESOLVED_FINDINGS_JSON:`，在 codex-real-dispatch-*）随旧 sidecar 归档淘汰，新代码不得再发射；但**复用** `buildCapabilityTextArtifact`（已带 source:"execution_gateway"）造 canonical artifact。
 - Q1 绑定：Kimi×4（intake/design/task-planning/knowledge-sync）、Codex（scan+implementation）、Hermes（verdict+code-review）。scan≠verdict firewall。
 - AgentName === provider id === `kimi|codex|hermes`。§9：implementation 30min，其余 10min，runner 默认 120s 不变。
-- 注意：`INITIAL_BINDING_REGISTRY`（冻结）当前 intake 仍绑 codex，与 Q1 目标 kimi 不一致；production wiring 时必须让 registry 与 Q1 对齐，否则真实 adapter 会抛 BINDING_MISMATCH（单测用 fake adapter 隔离了此点）。
+- 注意（**W1 `7f36b8d` 已对齐，本条为当时快照**）：本 HANDOFF 时点 `INITIAL_BINDING_REGISTRY`（冻结）intake 仍绑 codex，与 Q1 目标 kimi 不一致；W1 已将 INITIAL 按 Q1 八槽直返对齐（Kimi×4/Codex×2/Hermes×2），该 B1 缺口在 W1 复审 PASS 后闭合。原始风险记录：未对齐时真实 adapter 会抛 BINDING_MISMATCH（单测用 fake adapter 隔离此点）。
 
 ## 4. 下一步：接线（不是新写）+ 激活授权检查点
 

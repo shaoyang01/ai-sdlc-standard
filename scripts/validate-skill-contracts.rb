@@ -940,24 +940,33 @@ else
 end
 
 # B-6: mechanically link the solution-gate dual-role firewall clause to the
-# C02 BindingRegistry structure — three facts must coexist:
+# Q1 BindingRegistry. Since W1 (Decision-073) INITIAL returns the Q1 slot map
+# directly (the former runtime swap patch was removed), three facts coexist:
 #   (a) loop/types declares BOTH execution-role literals;
-#   (b) runtime createRuntimeBindingRegistry swaps formal_verdict to hermes
-#       while adversarial_scan stays codex (different agents);
+#   (b) the Q1 slot map in core/agent-capability-bindings.ts assigns
+#       adversarial_scan->codex and formal_verdict->hermes (different agents),
+#       and createRuntimeBindingRegistry returns INITIAL directly with no
+#       replaceBinding verdict-swap patch;
 #   (c) the solution-gate SKILL.md carries the dual-role firewall clause.
 roles_declared = types_text.include?("\"adversarial_scan\"") && types_text.include?("\"formal_verdict\"")
+bindings_source_path = File.join(ROOT, "core", "agent-capability-bindings.ts")
+bindings_text = File.exist?(bindings_source_path) ? File.read(bindings_source_path) : ""
+q1_scan_codex = bindings_text.include?("\"solution-gate:adversarial_scan\": \"codex\"")
+q1_verdict_hermes = bindings_text.include?("\"solution-gate:formal_verdict\": \"hermes\"")
 runtime_source_path = File.join(ROOT, "runtime.ts")
 runtime_text = File.exist?(runtime_source_path) ? File.read(runtime_source_path) : ""
-scan_kept_codex = runtime_text.include?("binding-codex-solution-gate-formal_verdict")
-verdict_moved_hermes = runtime_text.include?("binding-hermes-solution-gate-formal_verdict")
+runtime_returns_initial = runtime_text.include?("return INITIAL_BINDING_REGISTRY")
+runtime_has_no_swap = !runtime_text.include?("replaceBinding")
+dual_agent_bound = q1_scan_codex && q1_verdict_hermes && runtime_returns_initial && runtime_has_no_swap
 sg_skill_path = File.join(SKILL_DIR, "sdlc-solution-gate", "SKILL.md")
 sg_skill = File.exist?(sg_skill_path) ? File.read(sg_skill_path) : ""
 contract_firewall = sg_skill.include?("adversarial_scan") && sg_skill.include?("formal_verdict") &&
                     sg_skill =~ /不同\s*Agent|different Agent/i
-unless roles_declared && scan_kept_codex && verdict_moved_hermes && contract_firewall
-  canonical_errors << "solution-gate dual-role firewall not mechanically linked to C02 BindingRegistry " \
-                      "(roles_declared=#{!!roles_declared}, scan_kept_codex=#{!!scan_kept_codex}, " \
-                      "verdict_moved_hermes=#{!!verdict_moved_hermes}, contract_firewall=#{!!contract_firewall})"
+unless roles_declared && dual_agent_bound && contract_firewall
+  canonical_errors << "solution-gate dual-role firewall not mechanically linked to Q1 BindingRegistry " \
+                      "(roles_declared=#{!!roles_declared}, q1_scan_codex=#{!!q1_scan_codex}, " \
+                      "q1_verdict_hermes=#{!!q1_verdict_hermes}, runtime_returns_initial=#{!!runtime_returns_initial}, " \
+                      "runtime_has_no_swap=#{!!runtime_has_no_swap}, contract_firewall=#{!!contract_firewall})"
 end
 
 errors.concat(canonical_errors.map { |e| "C03-A canonical topology: #{e}" })

@@ -27,9 +27,16 @@ async function main(): Promise<void> {
   const kimi = createKimiFakeRunner();
   const hermes = createHermesFakeRunner();
 
-  // Kimi owns its four Q1 capabilities and produces canonical artifacts.
+  // Kimi owns its four Q1 capabilities (all primary role) and produces canonical artifacts.
   for (const capability of ["requirement-intake", "solution-design", "task-planning", "knowledge-sync"] as const) {
-    const result = await kimi.run(fakeRequest({ type: capability, agent: "kimi", node: capability }));
+    const result = await kimi.run(
+      fakeRequest({
+        type: capability,
+        agent: "kimi",
+        node: capability,
+        loopExecution: { executionRole: "primary" } as ExecutionRequest["loopExecution"],
+      }),
+    );
     ok(result.success === true && result.artifacts[0] !== undefined, `kimi ${capability} succeeds with an artifact`);
   }
 
@@ -78,6 +85,36 @@ async function main(): Promise<void> {
     hermesRoleRejected = true;
   }
   ok(hermesRoleRejected, "hermes runner rejects adversarial_scan (codex-owned)");
+
+  // Hermes serves code-review at its PRIMARY role (F2 regression: a single
+  // runner-wide formal_verdict requirement previously made code-review unservable).
+  const review = await hermes.run(
+    fakeRequest({
+      type: "code-review",
+      agent: "hermes",
+      node: "code-review",
+      loopExecution: { executionRole: "primary" } as ExecutionRequest["loopExecution"],
+    }),
+  );
+  ok(review.success === true && review.artifacts[0] !== undefined, "hermes code-review/primary succeeds with an artifact");
+
+  // code-review has no formal_verdict role — the wrong role is rejected.
+  for (const role of [undefined, "formal_verdict"] as const) {
+    let reviewRoleRejected = false;
+    try {
+      await hermes.run(
+        fakeRequest({
+          type: "code-review",
+          agent: "hermes",
+          node: "code-review",
+          loopExecution: role === undefined ? undefined : ({ executionRole: role } as ExecutionRequest["loopExecution"]),
+        }),
+      );
+    } catch {
+      reviewRoleRejected = true;
+    }
+    ok(reviewRoleRejected, `hermes code-review rejects role ${String(role)} (only primary is legal)`);
+  }
 
   // Agent routing of MultiAgentFakeGateway itself is covered end-to-end by the
   // loop state-machine tests (wp5/validation-guards/fake-runner-integration),

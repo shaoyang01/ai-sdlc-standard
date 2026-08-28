@@ -27,6 +27,15 @@ export interface NodeCapabilityFakeRunner {
 
 type FakeAgentName = "kimi" | "hermes";
 
+/**
+ * Required execution role for one owned capability. Returns null to skip the
+ * role check; a concrete role requires request.loopExecution.executionRole to
+ * match. A single runner can own capabilities with DIFFERENT legal roles
+ * (Hermes owns solution-gate/formal_verdict AND code-review/primary), so the
+ * expected role is selected per capability rather than fixed for the runner.
+ */
+type RequiredRoleSelector = (capability: NodeCapabilityId) => CapabilityExecutionRole | null;
+
 function fakeCapabilityOutcome(capability: NodeCapabilityId): Readonly<Record<string, unknown>> {
   if (capability === "solution-gate") {
     // Only formal_verdict reaches this runner for solution-gate (the scan is
@@ -42,7 +51,7 @@ function fakeCapabilityOutcome(capability: NodeCapabilityId): Readonly<Record<st
 function createNodeCapabilityFakeRunner(
   agent: FakeAgentName,
   owns: ReadonlySet<NodeCapabilityId>,
-  requiredRole: CapabilityExecutionRole | null,
+  requiredRole: RequiredRoleSelector,
 ): NodeCapabilityFakeRunner {
   return {
     async run(request: ExecutionRequest): Promise<ExecutionResult> {
@@ -55,9 +64,10 @@ function createNodeCapabilityFakeRunner(
           `${agent} fake runner does not own capability "${request.type}" (Q1 assigns it elsewhere)`,
         );
       }
-      if (requiredRole !== null && request.loopExecution?.executionRole !== requiredRole) {
+      const expectedRole = requiredRole(capability);
+      if (expectedRole !== null && request.loopExecution?.executionRole !== expectedRole) {
         throw new Error(
-          `${agent} fake runner for ${capability} requires executionRole ${requiredRole}, ` +
+          `${agent} fake runner for ${capability} requires executionRole ${expectedRole}, ` +
             `got ${String(request.loopExecution?.executionRole)}`,
         );
       }
@@ -108,15 +118,18 @@ export function createKimiFakeRunner(): NodeCapabilityFakeRunner {
       "task-planning",
       "knowledge-sync",
     ]),
-    null,
+    () => "primary",
   );
 }
 
-/** Hermes fake runner: owns the Q1 formal_verdict and code-review points. */
+/**
+ * Hermes fake runner: solution-gate is served only at formal_verdict (the scan
+ * is Codex's), while code-review uses the primary role.
+ */
 export function createHermesFakeRunner(): NodeCapabilityFakeRunner {
   return createNodeCapabilityFakeRunner(
     "hermes",
     new Set<NodeCapabilityId>(["solution-gate", "code-review"]),
-    "formal_verdict",
+    (capability) => (capability === "solution-gate" ? "formal_verdict" : "primary"),
   );
 }
