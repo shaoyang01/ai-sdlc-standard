@@ -637,7 +637,10 @@ export class ExecutionGateway {
     return text;
   }
 
-  private async executePrimary(enriched: ExecutionRequest): Promise<ExecutionResult> {
+  // C03-E E1 integration: protected (was private) so RealCapabilityGateway can
+  // override ONLY the product source while reusing executeCapabilityWithTracing's
+  // single canonical tracing state machine. Behaviour unchanged.
+  protected async executePrimary(enriched: ExecutionRequest): Promise<ExecutionResult> {
     // ── Code Review Route ──
     if (enriched.type === "code_review") {
       const attempt = (enriched.metadata?.["attempt"] as number) ?? 0;

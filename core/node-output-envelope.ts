@@ -102,7 +102,11 @@ function asNonEmptyText(value: unknown, label: string, max: number): string {
  * caller (real gateway) must treat that as an executor output failure, never as
  * a successful node result.
  */
-export function parseNodeOutputEnvelope(raw: string, capability: NodeCapabilityId): ParsedNodeOutputEnvelope {
+export function parseNodeOutputEnvelope(
+  raw: string,
+  capability: NodeCapabilityId,
+  options?: { readonly isVerdict?: boolean },
+): ParsedNodeOutputEnvelope {
   if (typeof raw !== "string") fail("ENVELOPE_NOT_JSON", "agent output must be text");
 
   const beginCount = countOccurrences(raw, NODE_OUTPUT_ENVELOPE_BEGIN);
@@ -139,19 +143,22 @@ export function parseNodeOutputEnvelope(raw: string, capability: NodeCapabilityI
   const summary = asNonEmptyText(record.summary, "summary", MAX_SUMMARY).trim();
   const body = asNonEmptyText(record.body, "body", MAX_BODY);
 
-  // ── gate verdict, gated by node kind ──
-  const isGate = isLoopArtifactGateCapability(capability);
+  // ── gate verdict, gated by ROLE not just capability ──
+  // Only solution-gate/formal_verdict may issue a verdict; its adversarial_scan
+  // role is forced to NOT_APPLICABLE by the gateway and must not claim one.
+  // Default (no option) keeps the capability-level gate behaviour.
+  const isVerdict = options?.isVerdict ?? isLoopArtifactGateCapability(capability);
   let gateResult: NodeGateVerdict | null = null;
   const hasGate = "gateResult" in record && record.gateResult !== null;
-  if (isGate) {
-    if (!hasGate) fail("ENVELOPE_BAD_GATE", `gate node ${capability} must declare gateResult`);
+  if (isVerdict) {
+    if (!hasGate) fail("ENVELOPE_BAD_GATE", `verdict role on ${capability} must declare gateResult`);
     const verdict = record.gateResult;
     if (typeof verdict !== "string" || !(GATE_AGENT_VERDICTS as readonly string[]).includes(verdict)) {
       fail("ENVELOPE_BAD_GATE", "gateResult must be PASS, FAIL or PASS_WITH_RISK");
     }
     gateResult = verdict as NodeGateVerdict;
   } else if (hasGate) {
-    fail("ENVELOPE_BAD_GATE", `non-gate node ${capability} must not declare gateResult`);
+    fail("ENVELOPE_BAD_GATE", `non-verdict role on ${capability} must not declare gateResult`);
   }
 
   // ── risk acceptance refs ──

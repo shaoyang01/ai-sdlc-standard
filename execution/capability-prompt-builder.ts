@@ -76,7 +76,8 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     fail("CAPABILITY_PROMPT_INPUT_TOO_LARGE", `inputText exceeds ${MAX_PROMPT_INPUT_CHARS} chars`);
   }
 
-  const isGate = capability === "solution-gate";
+  const isVerdict = capability === "solution-gate" && input.executionRole === "formal_verdict";
+  const isScan = capability === "solution-gate" && input.executionRole === "adversarial_scan";
   const wantsFindings = FINDINGS_CAPABILITIES.has(capability);
 
   const lines: string[] = [
@@ -98,13 +99,17 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     '- "body": string, the full node product in markdown (non-empty).',
   ];
 
-  if (isGate) {
+  if (isVerdict) {
     lines.push(
       '- "gateResult": one of "PASS", "FAIL", "PASS_WITH_RISK" (you may NOT use NOT_APPLICABLE).',
       '- "riskAcceptanceRefs": string array; REQUIRED non-empty when gateResult is PASS_WITH_RISK, otherwise omit or [].',
     );
+  } else if (isScan) {
+    lines.push(
+      '- Do NOT include "gateResult": the adversarial scan produces findings only; the formal verdict is a separate role.',
+    );
   } else {
-    lines.push('- Do NOT include "gateResult" — only the solution-gate node may issue a verdict.');
+    lines.push('- Do NOT include "gateResult" — only the solution-gate formal_verdict role may issue a verdict.');
   }
 
   if (wantsFindings) {
