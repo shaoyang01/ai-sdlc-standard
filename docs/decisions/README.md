@@ -41,6 +41,7 @@
 | [Decision-067](Decision-067-c03e-e0-resumed-and-execution-started.md) | 2026-08-28 | Accepted / E0 IN_PROGRESS | ACP-R2 治理收敛完成收口后恢复 E0 授权，移除用户暂停，route_state 推进为 C03_E_E0_IN_PROGRESS；创建独立实施分支 feature/c03-e0-active-contract-preflight，开始执行 E0.1～E0.5；E2-P/E1～E5 仍未授权。 |
 | [Decision-068](Decision-068-c03e-e0-active-contract-preflight-closed.md) | 2026-08-28 | Accepted / C03-E E0 CLOSED | E0 活动合同收口包收口裁决：两轮独立复审（R1 FAIL→B1/B2 修复 5bb60be→R2 PASS）后 PR #123 合入 feature/loop-runtime-v1（merge 158536b）；route_state 转 C03_E_E0_COMPLETED_AWAITING_E2P_AUTHORIZATION，active_work/lifecycle 回 IDLE，E0 授权消费移出；顺带修正 STATE v2 缺 pause 键的既有不合规；E2-P/E1～E5/C05 仍未授权。 |
 | [Decision-069](Decision-069-c03e-e2p-provider-feasibility-preflight-authorized.md) | 2026-08-28 | Accepted / E2-P AUTHORIZED | 授权 C03-E E2-P Provider 可达性预检并授予 E2_P_REAL_CLI_PREFLIGHT_AUTHORIZED 真实 CLI 外部调用权：隔离 fixture 中对 Kimi/Codex/Hermes 各执行一个最小无业务语义探针，外部副作用仅限每 provider 一次模型请求的网络/计费/审计，证据固定 PROVIDER_REACHABILITY_ONLY 且脱敏；全 PASS 仅进入 E1～E4 授权判断，任一 BLOCKED 停止；不授权 production adapter/E1～E5/C05。 |
+| [Decision-070](Decision-070-c03e-e2p-provider-reachability-passed.md) | 2026-08-28 | Accepted / E2-P PASSED | E2-P 结果收口：隔离 fixture 三 provider 最小探针全部 PASS（Kimi 0.38.0 / Codex 0.150.1 / Hermes 0.20.5，均 exit 0、非交互、凭据可用、固定 token 可确定截取；证据 record + 可复现脚本入库），Provider Feasibility Gate PASS；E2-P 授权 consumed，route_state 转 C03_E_E2P_PASSED_AWAITING_E1_E4_AUTHORIZATION，active_work/lifecycle 回 IDLE；按 INV-E13 不构成 adapter ready，E1～E4/E5/C05 仍待单独授权。 |
 
 ## 新增流程
 
