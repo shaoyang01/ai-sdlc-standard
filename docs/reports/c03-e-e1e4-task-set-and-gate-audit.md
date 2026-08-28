@@ -51,7 +51,7 @@
 | E2-T5 | argv 注入闭合：`shell:false`、executable allowlist、动态需求只走 stdin；13 个绕过变体全拦 | E2-T1/T2 内 | E2-T2 | R1 B1 → `23f9880`，R2 PASS | DONE | 13 绕过变体负向测试；argv 零动态内容审计 |
 | E2-T6 | production factory 接线 + real-vs-deterministic 选择开关（**默认 deterministic shadow，不得静默切 real**） | `core/loop-autonomous-delivery-loop.ts`/`loop-production-coordinator.ts`/`runtime.ts` 装配点 `runtime.ts:325` | E2-T4 | 规划 §6 E2；HANDOFF §4.1-4.2 | PENDING（当前新模块生产路径零引用，未激活） | 选择开关默认值断言；shadow 回归全绿 |
 | E2-T7 | 淘汰生产路径三个自定义 spawn runner；Kimi/Hermes sidecar 归档（不被 factory 选中）；Codex `shadow_fallback` 改 fail-closed | `execution/` 旧 runner | E2-T6 | 规划 §6 E2 | PENDING | production factory 不引用归档符号 |
-| E2-T8 | Q1 binding 对齐：intake/design/task-planning/knowledge-sync→kimi，scan+implementation→codex，verdict+code-review→hermes | binding registry | E2-T6 | Q1 裁决；HANDOFF §3 | PENDING（**激活前 blocker B1**：现 INITIAL 注册表 intake 仍 codex，不对齐会 BINDING_MISMATCH） | 7×3 矩阵与 Q1 逐格断言 |
+| E2-T8 | Q1 binding 对齐：intake/design/task-planning/knowledge-sync→kimi，scan+implementation→codex，verdict+code-review→hermes | binding registry | E2-T6 | Q1 裁决；HANDOFF §3 | IMPLEMENTED `7f36b8d`（W1：INITIAL 已按 Q1 八槽对齐 + 三 Agent 专门 fake runner + Q1 矩阵测试，全套件 138 文件 0 失败）；独立只读复审进行中，复审 PASS 且 W2 开关保持 deterministic 默认后 B1 方解除 | 7×3 矩阵与 Q1 逐格断言 |
 
 ### E3 — Output Validation / Auto-Progression / Re-Gate（规划 §6 E3）
 
@@ -79,6 +79,15 @@
 
 **关键路径**：E2-T6（接线开关）→ E1-T3/T4 + E2-T7/T8 + E3-T2 → E4 全部 → C-T1。
 E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本任务集，须另行授权。
+
+> **施工序 W1～W7 ↔ 正式任务映射**（实施顺序，非新任务；权威定义见
+> `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
+> W1=E2-T8（Q1 绑定，已实现 `7f36b8d`、复审中）→ W2=E2-T6（gateway 开关，默认
+> deterministic）→ W3=E1-T3/T4（loop-run + identity/preflight）→ W4=E2-T7/D-073
+> （A 链冻结标注）→ W5=E3-T2（九类无效输出不推进 e2e）→ W6=E4-T1～T5 →
+> W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
+> 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工
+> （E2-T8 无依赖且是激活前 blocker，E2-T6 总开关最后装），二者不矛盾。
 
 ## 3. 任务一致性审计（规划 §14.2 第 7 条）
 
@@ -112,9 +121,10 @@ production factory 仍只选 deterministic shadow（装配点 `runtime.ts:325`
 
 ### 3.4 Readiness blockers（不阻断本次追认，阻断后续阶段）
 
-- **B1（阻断真实激活）**：INITIAL_BINDING_REGISTRY 的 intake 仍绑 codex，与 Q1
-  目标 kimi 不一致（E2-T8）。接线合入可不解决，但 production gateway 真实派发前
-  必须对齐，否则 adapter 抛 BINDING_MISMATCH。
+- **B1（阻断真实激活）**：INITIAL_BINDING_REGISTRY 的 intake 原绑 codex、与 Q1
+  目标 kimi 不一致（E2-T8）。该 Q1 对齐已由 **W1 实现（`7f36b8d`）**；**暂不关闭**——
+  待 W1 独立只读复审 PASS、且 W2 接线开关保持默认 deterministic shadow（真实激活仍未
+  授权）后方解除；production gateway 真实派发前若未对齐，adapter 仍抛 BINDING_MISMATCH。
 - **B2（本文件）**：Task Gate 事前记录缺失，经本文件事后重建，待 Current User 追认；
   追认前不得进入 C-T1 之后的收口。
 - **B3（阻断收口）**：E4（E4-T1～T5）未开始；C-T1 复审前必须完成。
