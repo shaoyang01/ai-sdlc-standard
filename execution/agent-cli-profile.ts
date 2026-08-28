@@ -90,10 +90,9 @@ export const AGENT_CLI_BOUNDS: AgentCliBounds = Object.freeze({
   runForegroundBudgetMs: 2 * 60 * 60 * 1000, // 2 h; stays resumable, never faked
 });
 
-// Per-attempt timeouts (§9). NOTE: implementation 30 min exceeds the current
-// LoopPosixProcessRunner MAX_TO=600000 (10 min); the E2 integration task must
-// raise that runner ceiling to at least IMPL_TIMEOUT_MS before wiring the real
-// route — a profile that cannot meet a bound must fail closed, never relax it.
+// Per-attempt timeouts (§9). The LoopPosixProcessRunner ceiling was raised to
+// MAX_TO=1800000 (a135a36) to accept the 30 min implementation attempt while
+// its conservative default stays 120 s; non-implementation stays at 10 min.
 const NON_IMPL_TIMEOUT_MS = 10 * 60 * 1000;
 const IMPL_TIMEOUT_MS = 30 * 60 * 1000;
 

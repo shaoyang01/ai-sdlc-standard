@@ -129,14 +129,15 @@ function asTrimmedString(v: unknown, label: string): string {
   if (typeof v !== "string") {
     throw new RealCapabilityAdapterError("REAL_ADAPTER_INVALID_INPUT", `${label} must be a string`, null, false);
   }
-  const t = v.trim();
-  if (t.length === 0 || t !== v.trim()) {
+  // Reject (not silently trim) surrounding whitespace: callers must hand in a
+  // already-trimmed value, consistent with this package's fail-closed style.
+  if (v.length === 0 || v !== v.trim()) {
     throw new RealCapabilityAdapterError("REAL_ADAPTER_INVALID_INPUT", `${label} must be trimmed non-empty`, null, false);
   }
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v)) {
     throw new RealCapabilityAdapterError("REAL_ADAPTER_INVALID_INPUT", `${label} has control chars`, null, false);
   }
-  return t;
+  return v;
 }
 
 /**
@@ -195,7 +196,9 @@ export class RealCapabilityAdapter {
     const providerId = asTrimmedString(req.providerId, "providerId") as AgentCliProviderId;
     const requirementId = asTrimmedString(req.requirementId, "requirementId");
     const node = asTrimmedString(req.node, "node");
-    const runId = asTrimmedString(req.runId, "runId");
+    // runId is validated for shape but never used to build argv or file names
+    // (usage file is derived from closed enums — see usageFileName below).
+    asTrimmedString(req.runId, "runId");
     const cwd = asTrimmedString(req.cwd, "cwd");
     const prompt = asTrimmedString(req.prompt, "prompt");
     if (!Number.isSafeInteger(req.attempt) || req.attempt < 1) {
@@ -238,8 +241,11 @@ export class RealCapabilityAdapter {
     const capabilityClass = req.capability === "implementation" ? "implementation" : "non-implementation";
     const timeoutMs = profile.timeoutMsByCapabilityClass[capabilityClass];
 
-    // Hermes writes a usage/cost file inside the attempt workspace.
-    const usageFileName = `.usage-${runId}-${req.attempt}.json`;
+    // Hermes writes a usage/cost file inside the attempt workspace. The name is
+    // derived ONLY from closed enums + the safe-int attempt, never from a
+    // caller free-text field such as runId, so argv stays fully static (Round 1
+    // B1: a runId carrying "/" or ".." previously reached argv here).
+    const usageFileName = `.usage-${req.capability}-${req.executionRole}-${req.attempt}.json`;
     const args: string[] = [...profile.staticArgs];
     if (profile.usageFileArg !== null) {
       args.push(...profile.usageFileArg, usageFileName);
@@ -307,7 +313,10 @@ export class RealCapabilityAdapter {
       fail("REAL_ADAPTER_TIMEOUT", "agent cli attempt timed out", true);
     }
     if (res.stdoutTruncated || res.stderrTruncated) {
-      fail("REAL_ADAPTER_OUTPUT_TRUNCATED", "bounded stream was truncated", true);
+      // Truncation means the Agent output exceeded its bound — a business/output
+      // condition, not a side-effect-free infrastructure fault, so it must not
+      // be auto-retried under Q3 (infrastructure=false).
+      fail("REAL_ADAPTER_OUTPUT_TRUNCATED", "bounded stream was truncated", false);
     }
     if (res.signal !== null) {
       fail("REAL_ADAPTER_SIGNAL_KILLED", "agent cli killed by signal", true);

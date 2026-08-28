@@ -138,6 +138,20 @@ function main(): void {
     { now: () => NOW, runId: "has space" },
     "runId with whitespace rejected",
   );
+  // B1: runId is embedded in derived file names; it must be one safe segment.
+  for (const badRunId of ["../../tmp/escape", "/etc/passwd", "run\\x", "a..b", "run/id"]) {
+    expectCode(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      validRequest(),
+      { now: () => NOW, runId: badRunId },
+      `traversal runId "${badRunId}" rejected`,
+    );
+  }
+  {
+    // A normal dotted/hyphenated run id is accepted.
+    const parsed = parseProductionEntryRequest(validRequest(), { now: () => NOW, runId: "run.20260828-001" });
+    ok(parsed.identity.runId === "run.20260828-001", "safe dotted runId accepted");
+  }
   expectCode(
     "PRODUCTION_ENTRY_INVALID_INPUT",
     validRequest(),

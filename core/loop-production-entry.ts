@@ -84,7 +84,10 @@ const REQUEST_FIELDS: readonly string[] = Object.freeze([
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const SEMVER_RE = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 const SHA40_RE = /^[0-9a-f]{40}$/;
-const SAFE_TEXT_RE = /^[^\s]+$/; // no whitespace for ids/refs used on disk/events
+// runId is minted by the CLI and later embedded in derived file names inside the
+// attempt workspace, so it must be a single safe path segment — never a path
+// separator or a `..` traversal (Round 1 B1).
+const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function asSafeText(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0 || value.trim() !== value || /[\x00-\x1f\x7f]/.test(value)) {
@@ -179,7 +182,12 @@ export function parseProductionEntryRequest(
   if (typeof createdAt !== "string" || !ISO_RE.test(createdAt)) {
     fail("PRODUCTION_ENTRY_INVALID_INPUT", "now() must return an ISO timestamp");
   }
-  if (!SAFE_TEXT_RE.test(runId)) fail("PRODUCTION_ENTRY_INVALID_INPUT", "runId must not contain whitespace");
+  if (!RUN_ID_RE.test(runId) || runId.includes("..")) {
+    fail(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      "runId must be a single safe path segment ([A-Za-z0-9._-], no '..' or separator)",
+    );
+  }
 
   const identity: LoopRunIdentity = Object.freeze({
     runId,

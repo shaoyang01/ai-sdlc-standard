@@ -112,8 +112,34 @@ async function main(): Promise<void> {
     );
     ok(out.success && out.agent === "hermes", "hermes text-final success");
     ok(
-      JSON.stringify(runner.last?.args) === JSON.stringify(["-z", "--usage-file", ".usage-run-9-2.json"]),
-      "hermes static argv + workspace usage file",
+      JSON.stringify(runner.last?.args) ===
+        JSON.stringify(["-z", "--usage-file", ".usage-code-review-primary-2.json"]),
+      "hermes static argv + workspace usage file named from closed enums",
+    );
+    ok((runner.last?.args ?? []).join(" ").includes("run-9") === false, "usage file name does NOT embed runId (B1)");
+    ok((runner.last?.args ?? []).some((a) => a.includes("/") || a.includes("..")) === false, "argv has no path separator/traversal (B1)");
+  }
+
+  // B1 regression: even if a caller supplies a traversal runId, it must never
+  // reach argv — the usage file name is derived from closed enums only.
+  {
+    const runner = new FakeRunner(() => result({ stdout: "verdict ok" }));
+    const out = await new RealCapabilityAdapter(runner).execute(
+      baseReq({
+        providerId: "hermes",
+        node: "solution-gate",
+        capability: "solution-gate",
+        executionRole: "formal_verdict",
+        runId: "../../tmp/escape-probe",
+        attempt: 1,
+      }),
+    );
+    ok(out.success, "adapter completes with traversal-shaped runId");
+    const argv = runner.last?.args ?? [];
+    ok(argv.some((a) => a.includes("..") || a.includes("/") || a.includes("escape")) === false, "traversal runId never reaches argv");
+    ok(
+      JSON.stringify(argv) === JSON.stringify(["-z", "--usage-file", ".usage-solution-gate-formal_verdict-1.json"]),
+      "usage file named from capability/role/attempt only",
     );
   }
 
