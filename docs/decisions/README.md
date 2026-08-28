@@ -44,6 +44,7 @@
 | [Decision-070](Decision-070-c03e-e2p-provider-reachability-passed.md) | 2026-08-28 | Accepted / E2-P PASSED | E2-P 结果收口：隔离 fixture 三 provider 最小探针全部 PASS（Kimi 0.38.0 / Codex 0.150.1 / Hermes 0.20.5，均 exit 0、非交互、凭据可用、固定 token 可确定截取；证据 record + 可复现脚本入库），Provider Feasibility Gate PASS；E2-P 授权 consumed，route_state 转 C03_E_E2P_PASSED_AWAITING_E1_E4_AUTHORIZATION，active_work/lifecycle 回 IDLE；按 INV-E13 不构成 adapter ready，E1～E4/E5/C05 仍待单独授权。 |
 | [Decision-071](Decision-071-c03e-e1-e4-runtime-implementation-authorized.md) | 2026-08-28 | Accepted / E1～E4 AUTHORIZED | 授权 C03-E E1～E4 runtime 实施包（E1 生产入口/run ownership、E2 统一 adapter+production gateway、E3 输出校验/自动推进/Re-Gate、E4 持久恢复与人机边界）：单分支单 PR、一个 retained boundary 内 E1→E4 原子成立；自动证据只用 fake runner，不调真实 CLI/不发模型请求；沿用 Q1～Q5 与 §9 bounds；完成后独立全量复审+Current User 收口；不含 E5/下一 C05/生产远程 Git 发布。 |
 | [Decision-072](Decision-072-c03e-e1e4-task-gate-ratified-and-wiring-authorized.md) | 2026-08-28 | Accepted / Task Gate ratified (post-hoc), wiring IN_PROGRESS | 事后追认 E1～E4 Task Gate PASS（事前记录缺失，任务集/审计经 b5e9206 事后重建，不伪造历史）；接受重建任务集为剩余工作基线；授权在 D-071 范围内继续 E2-T6 接线（默认 shadow、不激活真实 Agent）；B1 Q1 binding 对齐阻断真实激活、B3 E4 阻断收口；不含 E5/真实 spawn 激活/下一 C05。 |
+| [Decision-073](Decision-073-canonical-runtime-b-as-sole-production-path-a-frozen.md) | 2026-08-28 | Accepted / Path B sole, Path A frozen | canonical runtime 七节点图（B）为唯一生产候选路径；第一版 sdlc-* 时期的 D0x 编排链 A（D08/D09/D06/D05+spawn runner，无生产入口、未投产）冻结退役、新代码零依赖，物理删除分批；D03 workspace/publisher Git 交付/governance tail 外围能力由 B 继承；删除条件=B 外围补齐+E5 canary 真实证据；不改变 E5/真实激活授权边界。 |
 
 ## 新增流程
 
