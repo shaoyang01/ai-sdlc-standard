@@ -106,6 +106,15 @@ export interface RuntimeOptions {
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
   /**
+   * Where node capabilities come from (W2, wiring-design §3). Defaults to
+   * "deterministic" — the traced shadow, behaviour unchanged. "real" builds a
+   * RealCapabilityGateway and requires a Q1 registry plus realGatewayDeps; it
+   * fails closed rather than silently dropping back to the shadow.
+   */
+  capabilitySource?: CapabilitySource;
+  /** Real CLI adapter + attempt-workspace resolver; required iff capabilitySource === "real". */
+  realGatewayDeps?: RealCapabilityGatewayDeps;
+  /**
    * WP4 Round 2 review H4 correction: pure LOOP SAFETY BOUND for one run()
    * invocation. Hitting it stops the invocation WITHOUT persisting any
    * durable block — plain linear progress must never be mistaken for a
@@ -133,6 +142,8 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "artifactStore",
   "bindingRegistry",
   "gateway",
+  "capabilitySource",
+  "realGatewayDeps",
   "maxDispatches",
   "maxRegateRounds",
 ]);
@@ -163,6 +174,13 @@ function validateRuntimeOptions(options: RuntimeOptions): void {
       );
     }
   }
+  // W2 closed enum for the capability source, and no silent source/gateway conflict.
+  if (options.capabilitySource !== undefined && !isCapabilitySource(options.capabilitySource)) {
+    invalid(`capabilitySource must be "deterministic" | "real", got ${String(options.capabilitySource)}`);
+  }
+  if (options.capabilitySource === "real" && options.gateway !== undefined) {
+    invalid('capabilitySource "real" is mutually exclusive with an injected gateway');
+  }
 }
 
 function invalid(message: string): never {
@@ -184,6 +202,13 @@ function requireSafeId(value: string, label: string): string {
 
 import { createDeterministicCapabilityGateway } from "./execution/gateway";
 export { createDeterministicCapabilityGateway };
+import {
+  createCapabilityGateway,
+  DEFAULT_CAPABILITY_SOURCE,
+  isCapabilitySource,
+  type CapabilitySource,
+} from "./execution/capability-gateway-source";
+import type { RealCapabilityGatewayDeps } from "./execution/real-capability-gateway";
 
 // ─── Default Q1 three-agent registry ──────────────────
 // C03-E W1 (Decision-073): INITIAL_BINDING_REGISTRY now carries the full Q1
@@ -321,9 +346,17 @@ export async function run(
 
   const bindingRegistry = options.bindingRegistry ?? createRuntimeBindingRegistry();
   const now = (): string => new Date().toISOString();
+  const capabilitySource = options.capabilitySource ?? DEFAULT_CAPABILITY_SOURCE;
   const gateway =
     options.gateway ??
-    createDeterministicCapabilityGateway({ runStore, artifactStore, bindingRegistry, now });
+    createCapabilityGateway({
+      source: capabilitySource,
+      runStore,
+      artifactStore,
+      bindingRegistry,
+      now,
+      realDeps: options.realGatewayDeps,
+    });
   const entry = new LoopCapabilityEntry({
     runStore,
     artifactStore,

@@ -353,6 +353,28 @@ export function getEnabledBinding(
 }
 
 /**
+ * W2 anti-silent-cutover guard (wiring-design §3b): a registry is "Q1-shaped"
+ * iff every one of the eight execution points has the Q1-assigned agent as
+ * its sole enabled binding. Missing slot, non-unique enablement, or a drifted
+ * enabled agent all return false (never throw) so the real capability source
+ * refuses to start instead of silently dispatching on a non-Q1 map.
+ */
+export function isQ1BindingRegistry(registry: BindingRegistry): boolean {
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    let enabled: AgentCapabilityBinding;
+    try {
+      enabled = getEnabledBinding(registry, point.capability, point.executionRole);
+    } catch {
+      return false;
+    }
+    if (enabled.agent !== q1SlotAgent(point.capability, point.executionRole)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Replace the executor for a (capability, executionRole) slot: produces a NEW
  * deeply frozen registry snapshot with `fromBindingId` disabled and
  * `toBindingId` enabled. The input registry and the node contracts are never

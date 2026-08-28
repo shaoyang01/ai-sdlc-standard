@@ -847,11 +847,15 @@ function deterministicInvalid(message: string): never {
   throw new LoopRunJournalError("INVALID_INPUT", message);
 }
 
-const SHADOW_EXECUTOR_VERSIONS: Readonly<Record<"codex" | "kimi" | "hermes", string>> = Object.freeze({
+// Single source of truth for the recorded executor version of each agent CLI.
+// The deterministic shadow gateway and the real gateway both record this same
+// version string; exported so the W2 capability-source factory does not fork it.
+export const CAPABILITY_EXECUTOR_VERSIONS: Readonly<Record<"codex" | "kimi" | "hermes", string>> = Object.freeze({
   codex: "1.0.0",
   kimi: "1.0.0",
   hermes: "1.0.0",
 });
+const SHADOW_EXECUTOR_VERSIONS = CAPABILITY_EXECUTOR_VERSIONS;
 
 export function createDeterministicCapabilityGateway(options: {
   runStore: LoopRunStore;
