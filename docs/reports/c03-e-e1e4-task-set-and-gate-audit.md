@@ -37,8 +37,8 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | E1-T1 | production request v1 fail-closed 解析（exact schema、未知字段/非法路径 spawn 前拒绝） | `core/loop-production-entry.ts`（232 行） | — | 规划 §6 E1；Decision A | DONE `3da342b` | `tests/loop-production-entry.test.ts` 46 断言 |
 | E1-T2 | canonical 节点 prompt builder（哨兵/字段名单一事实源） | `execution/capability-prompt-builder.ts`（127 行） | E3-T1 | Decision A（2026-08-28） | DONE `eb8b5c5` | `tests/capability-prompt-builder.test.ts` 33 断言 |
-| E1-T3 | 本地入口 `scripts/loop-run.ts`：仅 `--request-file`/`--resume`/`--capability-source`/`--help`，closed 字段集，无 token/cmd/argv/env 承载 | `scripts/loop-run.ts`（新增） | E1-T1,T4,E2-T6 | 规划 §6 E1；HANDOFF §4.3；wiring §4 | IMPLEMENTED（W3 `bfd95c8`，**待独立复审**）：纯封闭 argv parser（未知 flag/位置参/缺值/重复/坏 source 全拒、注入形值保持惰性字符串），读封闭 request→parse identity→受控读 sourceFiles→只读 git inspect（不建 worktree、不 spawn Agent）→runProduction→封闭结果集；CLI 烟囱 help=0/拒绝=1 | 契约测试：注入面 fuzz 全拒绝（14 断言） |
-| E1-T4 | `runtime.ts` 消费真实 `LoopRunIdentity` 与注入 gateway；现 `run()` 标记 test-only/非生产 | `runtime.ts`（冻结面） | E2-T6 | 规划 §6 E1；wiring §5 | IMPLEMENTED（W3 `bfd95c8`，**待独立复审**）：新增薄生产门 `runProduction`（只认 parse 产物、只读 preflight 拦 base drift/dirty、拒 real、复用同一 run 内核不复制）；`productionIdentity ?? local 占位` 并经 journal 复验+一致性 fail-closed；scratch repo mkdir 仅自建 stores 分支；非生产 run() 行为不变（141 文件 0 失败） | 既有套件回归 0 差异 + 生产门 18 断言 |
+| E1-T3 | 本地入口 `scripts/loop-run.ts`：仅 `--request-file`/`--resume`/`--capability-source`/`--help`，closed 字段集，无 token/cmd/argv/env 承载 | `scripts/loop-run.ts`（新增） | E1-T1,T4,E2-T6 | 规划 §6 E1；HANDOFF §4.3；wiring §4 | ✅ **PASS（W3，独立复审 `598cc72`，零阻塞；建议 S1 已并入已知错误桶）**：纯封闭 argv parser（未知 flag/位置参/缺值/重复/坏 source 全拒、注入形值保持惰性字符串），读封闭 request→parse identity→受控读 sourceFiles→只读 git inspect（不建 worktree、不 spawn Agent）→runProduction→封闭结果集；CLI 烟囱 help=0/拒绝=1 | 契约测试：注入面 fuzz 全拒绝（14 断言） |
+| E1-T4 | `runtime.ts` 消费真实 `LoopRunIdentity` 与注入 gateway；现 `run()` 标记 test-only/非生产 | `runtime.ts`（冻结面） | E2-T6 | 规划 §6 E1；wiring §5 | ✅ **PASS（W3，独立复审 `598cc72`，零阻塞；建议 S2 已补自建 stores 门测）**：新增薄生产门 `runProduction`（只认 parse 产物、只读 preflight 拦 base drift/dirty、拒 real、复用同一 run 内核不复制）；`productionIdentity ?? local 占位` 并经 journal 复验+一致性 fail-closed；scratch repo mkdir 仅自建 stores 分支；非生产 run() 行为不变（141 文件 0 失败） | 既有套件回归 0 差异 + 生产门 18 断言 |
 | E1-T5 | production-entry 契约与 resume 恢复测试 | `tests/` | E1-T3,T4 | 规划 §6 E1 验收 | PARTIAL（解析侧 46 断言已 DONE；resume 随 T3/T4） | fail-closed 分支全覆盖 |
 
 ### E2 — Real CLI Adapters and Production Gateway（规划 §6 E2）
@@ -84,7 +84,7 @@ E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本�
 > **施工序 W1～W7 ↔ 正式任务映射**（实施顺序，非新任务；权威定义见
 > `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
 > **W1=E2-T8（Q1 绑定，✅ PASS，独立复审 R2 `a698808`）** → **W2=E2-T6（gateway 开关，✅ PASS `b94a382`，默认
-> deterministic）** → W3=E1-T3/T4（loop-run + production identity/preflight，已实现 `bfd95c8`、待独立复审）→ W4=E2-T7/D-073
+> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → W4=E2-T7/D-073
 > （A 链冻结标注）→ W5=E3-T2（九类无效输出不推进 e2e）→ W6=E4-T1～T5 →
 > W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
 > 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工

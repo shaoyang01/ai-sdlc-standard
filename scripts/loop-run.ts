@@ -21,8 +21,8 @@ import {
   parseProductionEntryRequest,
   ProductionEntryError,
 } from "../core/loop-production-entry";
-import { LoopPosixProcessRunner } from "../core/loop-posix-process-runner";
-import { LoopGitWorkspaceManager } from "../core/loop-git-workspace";
+import { LoopPosixProcessRunner, LoopPosixProcessRunnerError } from "../core/loop-posix-process-runner";
+import { LoopGitWorkspaceManager, LoopGitWorkspaceError } from "../core/loop-git-workspace";
 import { isCapabilitySource, type CapabilitySource } from "../execution/capability-gateway-source";
 import { runProduction, ProductionRunError } from "../runtime";
 import { LoopRunJournalError } from "../core/loop-executor-types";
@@ -233,8 +233,12 @@ if (isMain) {
         error instanceof LoopRunCliError ||
         error instanceof ProductionEntryError ||
         error instanceof ProductionRunError ||
-        error instanceof LoopRunJournalError
+        error instanceof LoopRunJournalError ||
+        error instanceof LoopGitWorkspaceError ||
+        error instanceof LoopPosixProcessRunnerError
       ) {
+        // Known, classifiable failure (incl. read-only preflight infrastructure):
+        // report the real code at exit=1, never the generic UNEXPECTED bucket.
         process.stderr.write(`LOOP_RUN_ERROR ${error.code ?? error.name}: ${error.message}\n`);
         process.exitCode = 1;
       } else {

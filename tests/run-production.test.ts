@@ -3,7 +3,7 @@
 // fails closed on drift/dirty; real is refused; the chain kernel records the
 // REAL identity (not the local placeholder); non-production run() is unchanged.
 
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -168,6 +168,18 @@ async function main(): Promise<void> {
     maxDispatches: 2,
   });
   ok(resume.run_id === "run-w3-001", "re-invoking the same parsed entry resumes under the same runId");
+
+  // (S2) Self-built stores branch (the CLI's real path): with NO stores
+  // injected, runProduction builds the control-plane journal itself.
+  const selfControl = join(root, "c-self");
+  mkdirSync(selfControl, { recursive: true });
+  const selfParsed = parsedEntry({ repo, control: selfControl, runId: "run-w3-self" });
+  const selfResult = await runProduction(selfParsed, "build it", {
+    inspectWorkspace: clean,
+    maxDispatches: 2,
+  });
+  ok(selfResult.run_id === "run-w3-self", "self-built-stores branch runs under the parsed identity");
+  ok(existsSync(join(selfControl, "journal.db")), "self-built branch lands journal.db under controlRoot");
 
   // (10) Kernel guard: productionIdentity must match the run requirementId / carry a real SHA.
   const s4 = stores(join(root, "c4"), repo);
