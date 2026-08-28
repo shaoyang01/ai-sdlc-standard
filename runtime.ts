@@ -34,6 +34,12 @@ import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
 import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
+import { validateLoopRunIdentity } from "./core/loop-run-state";
+import {
+  PRODUCTION_ENTRY_SCHEMA,
+  type ParsedProductionEntry,
+} from "./core/loop-production-entry";
+import type { LoopGitWorkspaceSnapshot } from "./core/loop-git-workspace";
 import {
   developmentPathEntryGuard,
   checkDocumentationGovernanceTailCompletion,
@@ -115,6 +121,13 @@ export interface RuntimeOptions {
   /** Real CLI adapter + attempt-workspace resolver; required iff capabilitySource === "real". */
   realGatewayDeps?: RealCapabilityGatewayDeps;
   /**
+   * Production ONLY (W3 / E1-T4): a journal-validated identity minted by
+   * parseProductionEntryRequest and supplied through runProduction(). When
+   * absent, run() is the non-production / test entry and mints a local
+   * placeholder identity (unchanged behaviour).
+   */
+  productionIdentity?: LoopRunIdentity;
+  /**
    * WP4 Round 2 review H4 correction: pure LOOP SAFETY BOUND for one run()
    * invocation. Hitting it stops the invocation WITHOUT persisting any
    * durable block — plain linear progress must never be mistaken for a
@@ -144,6 +157,7 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "gateway",
   "capabilitySource",
   "realGatewayDeps",
+  "productionIdentity",
   "maxDispatches",
   "maxRegateRounds",
 ]);
@@ -323,7 +337,11 @@ export async function run(
   let bootstrapInput: { ref: string; version: string; digest: string } | null = null;
 
   const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));
-  mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  // Only the self-built (non-production) path needs a scratch repo dir; when
+  // stores are injected (production / tests) their repository paths are real.
+  if (options.runStore === undefined) {
+    mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  }
   if ((options.runStore === undefined) !== (options.artifactStore === undefined)) {
     invalid("runStore and artifactStore must be injected together");
   }
@@ -374,7 +392,7 @@ export async function run(
     ? options.runStore.databaseFilePath
     : join(workspaceRoot, "journal.db");
   return withResumeLease(resumeJournalPath, async (): Promise<RuntimeResult> => {
-    const identity: LoopRunIdentity = Object.freeze({
+    const localIdentity: LoopRunIdentity = Object.freeze({
       runId: `run-${requirementId}-${Date.now()}`,
       requirementId,
       repository: "local",
@@ -385,6 +403,18 @@ export async function run(
       controlRoot: join(workspaceRoot, "control"),
       createdAt: now(),
     });
+    const identity: LoopRunIdentity = options.productionIdentity ?? localIdentity;
+    if (options.productionIdentity !== undefined) {
+      // Production door (W3 / E1-T4): re-validate through the journal authority
+      // and pin consistency. The non-production local-identity path is untouched.
+      validateLoopRunIdentity(identity);
+      if (identity.requirementId !== requirementId) {
+        invalid("productionIdentity.requirementId must match the run requirementId");
+      }
+      if (identity.expectedBaseSha === "0".repeat(40)) {
+        invalid("production identity must carry a real expectedBaseSha, not the local placeholder");
+      }
+    }
 
     let recovery = recoverRunContext(runStore, requirementId);
     // Round 3 review F2: a crashed or interrupted previous invocation may have
@@ -881,5 +911,135 @@ export async function run(
       manual_handoff_reason: manualHandoffReason,
       manual_handoff_artifact_ref: manualHandoffArtifactRef,
     });
+  });
+}
+
+// ─── PRODUCTION DOOR — C03-E W3 (E1-T3/T4, wiring §4/§5) ──────────────
+// The single production entry into the chain kernel. It accepts ONLY the
+// frozen product of parseProductionEntryRequest (never raw JSON), runs a
+// read-only preflight BEFORE any dispatch, and then delegates to the same run()
+// kernel with the real identity — no second interpreter. It does NOT create a
+// git worktree (that is workspaceManager.prepare(), deferred to the authorized
+// E5 real activation) and it does NOT select the real capability source.
+
+/** Read-only slice of the git snapshot the production preflight consumes. */
+export type ProductionPreflightSnapshot = Pick<LoopGitWorkspaceSnapshot, "baseDrifted" | "taskHasChanges">;
+
+export type ProductionRunErrorCode =
+  | "PRODUCTION_ENTRY_NOT_PARSED"
+  | "PRODUCTION_ENTRY_INVALID_INPUT"
+  | "PRODUCTION_REAL_NOT_AUTHORIZED"
+  | "PRODUCTION_BASE_DRIFT"
+  | "PRODUCTION_DIRTY_SOURCE";
+
+export class ProductionRunError extends Error {
+  constructor(
+    public readonly code: ProductionRunErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProductionRunError";
+  }
+}
+
+export interface ProductionRunDeps {
+  /**
+   * Read-only git preflight (workspaceManager.inspect bound to a manager). It
+   * must NEVER create a worktree. Omit only in tests that isolate the kernel.
+   */
+  inspectWorkspace?: (identity: LoopRunIdentity) => Promise<ProductionPreflightSnapshot>;
+  /** W3: only "deterministic" (default); "real" is refused pending E5 grant. */
+  capabilitySource?: CapabilitySource;
+  /** Inject both or neither; when omitted, real stores are built under controlRoot. */
+  runStore?: LoopRunStore;
+  artifactStore?: LoopArtifactStore;
+  gateway?: RuntimeCapabilityGateway;
+  maxDispatches?: number;
+  maxRegateRounds?: number;
+}
+
+export async function runProduction(
+  parsed: ParsedProductionEntry,
+  requirementText: string,
+  deps: ProductionRunDeps = {},
+): Promise<RuntimeResult> {
+  // (0) Closed door: must be the frozen product of the production-entry parser.
+  const request = (parsed as { request?: unknown })?.request as
+    | { schema?: unknown; mode?: unknown }
+    | undefined;
+  const identity = (parsed as { identity?: LoopRunIdentity })?.identity;
+  if (
+    request?.schema !== PRODUCTION_ENTRY_SCHEMA ||
+    request.mode !== "real" ||
+    identity === undefined
+  ) {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_NOT_PARSED",
+      "runProduction requires the frozen result of parseProductionEntryRequest, never raw JSON",
+    );
+  }
+  if (typeof requirementText !== "string" || requirementText.trim().length === 0) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "requirementText must be a non-empty string");
+  }
+  if (deps.capabilitySource !== undefined && !isCapabilitySource(deps.capabilitySource)) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "capabilitySource must be deterministic|real");
+  }
+  // (1) Real capability dispatch stays dormant at the production door in W3.
+  if (deps.capabilitySource === "real") {
+    throw new ProductionRunError(
+      "PRODUCTION_REAL_NOT_AUTHORIZED",
+      "capability-source real is dormant; the E5 real CLI canary requires separate authorization",
+    );
+  }
+  const source: CapabilitySource = deps.capabilitySource ?? DEFAULT_CAPABILITY_SOURCE;
+
+  // (2) Read-only preflight BEFORE any dispatch. Duplicate runId is rejected by
+  // the store's createRun uniqueness and concurrent resume by withResumeLease
+  // (STORE_BUSY); base drift / dirty source are checked here.
+  if (deps.inspectWorkspace !== undefined) {
+    const snapshot = await deps.inspectWorkspace(identity);
+    if (snapshot.baseDrifted) {
+      throw new ProductionRunError(
+        "PRODUCTION_BASE_DRIFT",
+        `repository base moved away from expectedBaseSha ${identity.expectedBaseSha}`,
+      );
+    }
+    if (snapshot.taskHasChanges) {
+      throw new ProductionRunError(
+        "PRODUCTION_DIRTY_SOURCE",
+        "task branch/worktree has uncommitted changes; refuse to start a production run",
+      );
+    }
+  }
+
+  // (3) Stores: inject both/neither, else build the shared control-plane journal
+  // under controlRoot (one repository journal; --resume keys by requirementId).
+  if ((deps.runStore === undefined) !== (deps.artifactStore === undefined)) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "runStore and artifactStore must be injected together");
+  }
+  let runStore: LoopRunStore = deps.runStore as LoopRunStore;
+  let artifactStore: LoopArtifactStore = deps.artifactStore as LoopArtifactStore;
+  if (deps.runStore === undefined) {
+    artifactStore = new LoopArtifactStore({
+      controlRoot: identity.controlRoot,
+      repositoryPath: identity.repositoryPath,
+    });
+    runStore = new LoopRunStore(join(identity.controlRoot, "journal.db"), { artifactStore });
+    runStore.init();
+    artifactStore.init();
+  }
+
+  // (4) Delegate to the single chain kernel with the real identity — no copy.
+  return run(requirementText, {
+    requirementId: identity.requirementId,
+    workspaceRoot: identity.controlRoot,
+    runStore,
+    artifactStore,
+    bindingRegistry: createRuntimeBindingRegistry(),
+    productionIdentity: identity,
+    capabilitySource: source,
+    ...(deps.gateway !== undefined ? { gateway: deps.gateway } : {}),
+    ...(deps.maxDispatches !== undefined ? { maxDispatches: deps.maxDispatches } : {}),
+    ...(deps.maxRegateRounds !== undefined ? { maxRegateRounds: deps.maxRegateRounds } : {}),
   });
 }
