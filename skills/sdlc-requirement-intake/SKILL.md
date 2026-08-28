@@ -14,7 +14,7 @@ version: 0.1.0
 1. Normalize requirement intake and classify test feedback only.
 2. Do not write technical specifications or review/approve any solution.
 3. Do not modify production code, `specs/**`, or `.specify/business_domain/**`.
-4. Do not decide Development Path（该权威已由 C02 runtime/solution-gate 承接）。
+4. Do not decide Gate verdict（该权威已由 C02 runtime/solution-gate 承接；Development Path 双轨判定已随 C03-E E0 退役）。
 5. Dispatch/consumption authority belongs to the LOOP runtime recovery context: 只处理恢复结果指定的输入。
 6. Do not invent business goals, scope, or acceptance criteria.
 7. Preserve uncertainty as `待确认事项`; preserve source conflicts as `来源冲突`.

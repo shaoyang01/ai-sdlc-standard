@@ -56,5 +56,5 @@ adversarial_scan（对抗扫描/Finding Ledger 产出）与 formal_verdict（裁
 | 来源旧包 | 吸收落点 |
 | --- | --- |
 | `sdlc-solution-challenger` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 5 个文件见 `references/sdlc-solution-challenger/` |
-| `sdlc-solution-reviewer` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 4 个文件见 `references/sdlc-solution-reviewer/` |
-| `sdlc-speckit-clarify` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 4 个文件见 `references/sdlc-speckit-clarify/` |
+| `sdlc-solution-reviewer` | Core Rules 全部条款吸收至本包 Core Rules 清单；references 迁移件 2 个文件见 `references/sdlc-solution-reviewer/`（另 2 个 Direct/Speckit 路径文件已在 C03-E E0.1 退役删除） |
+| `sdlc-speckit-clarify` | Core Rules 全部条款吸收至本包 Core Rules 清单；原 `references/sdlc-speckit-clarify/` 迁移件已在 C03-E E0.1 全部退役删除 |

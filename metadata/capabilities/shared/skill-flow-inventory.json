@@ -67,7 +67,7 @@
         "sdlc-solution-challenger",
         "sdlc-gate-runner"
       ],
-      "notes": "Gate adjudication authority belongs to LOOP runtime (INV1). Both gate roles resolve to the same Agent binding. Gate Result is PASS / FAIL / PASS_WITH_RISK; no separate path decision.",
+      "notes": "Gate adjudication authority belongs to LOOP runtime (INV1). Both gate roles (adversarial_scan / formal_verdict) must resolve to different Agent bindings (Decision-044 dual-role firewall). Gate Result is PASS / FAIL / PASS_WITH_RISK; no separate path decision.",
       "confidence": "high"
     },
     {
