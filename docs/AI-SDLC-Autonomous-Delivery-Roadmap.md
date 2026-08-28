@@ -235,6 +235,25 @@ Project: ai-sdlc
 - **continuity**：有界草案见 [LOOP-ADVANCED-04 规划](LOOP-ADVANCED-04-PLAN.md)；发布失败只影响 Advanced publication，不改变 Core 或业务 handoff 结果。
 - **NOT_YET_AUTHORITATIVELY_DEFINED**：自动发布授权粒度、PKB commit/push 策略、历史 `library/.specify` 回填范围、raw evidence 大小/类型阈值。
 
+### LOOP-ADVANCED-05 — Configurable Binding Console and Agent Scoring
+
+- **id**：`LOOP-ADVANCED-05`
+- **type**：Requirement
+- **parent**：`ai-sdlc`
+- **title**：Configurable Binding Console and Agent Scoring
+- **definition_status**：`PLANNING_REQUIRED`
+- **definition_provenance**：`user_accepted`
+- **objective**：在 Core 真实多 Agent 自主运行通过验收后，提供一个把 ai-sdlc 与 Personal-KB 结合的工作台，用版本化配置管理 Node Capability / Execution Role → Agent Provider 的绑定关系（替代 C03-E 首版内置的固定 Q1 分工），并沉淀各 Agent 跨运行的成功率、质量与成本打分，支撑可解释、可审计的人工绑定调整。
+- **rationale**：首版用静态固定 binding 证明闭环，长期不应把 Kimi/Codex/Hermes 分工焊死；但在缺乏跨运行证据时也不应直接上运行时动态路由。工作台与历史打分让绑定由人基于证据调整，而不是由单次运行的分数自动决定。
+- **inputs_or_prerequisites**：`LOOP-CORE-05`；`LOOP-ADVANCED-04`；C03-E 首版固定 binding 与其 execution journal 中沉淀的 binding、Agent/adapter 版本、attempt 与结果证据。
+- **expected_output**：可版本化的 point→provider 绑定配置合同及其 fail-closed 校验器；ai-sdlc×PKB 工作台配置面；Agent 打分指标、来源与审计记录；配置变更的版本与回滚边界。
+- **depends_on**：`LOOP-CORE-05`、`LOOP-ADVANCED-04`。
+- **scope**：静态可配置的节点/角色→Provider 绑定与绑定版本；Agent 跨运行打分、观测与推荐；工作台配置面与配置变更审计。
+- **out_of_scope**：运行时按分数自动切换 Agent 的动态路由；放开 solution-gate 的 adversarial_scan 与 formal_verdict 必须由不同 binding 承载的强制隔离；无证据的自动 re-balance；scheduler、daemon、服务端控制平面或对外平台（归 `LOOP-ADVANCED-03`）。
+- **completion_contract**：在语义完成权威规划并获得独立授权前不得实施；完成后绑定可由版本化配置切换，gate 双角色防火墙在任何配置下始终 fail-closed，每次切换可审计，且不改变 Requirement ID、产物 schema、finding 语义、Re-Gate 路由或人工 Git 边界。
+- **continuity**：C03-E 首版（E1～E4/E5）仍使用内置 Q1 固定分工（Kimi 承担 requirement-intake / solution-design / task-planning / knowledge-sync，Codex 承担 solution-gate adversarial_scan 与 implementation，Hermes 承担 solution-gate formal_verdict 与 code-review）；本 Advanced 项不改变 C03-E 范围，也不把配置化绑定提前为 E1～E4 需求。
+- **NOT_YET_AUTHORITATIVELY_DEFINED**：工作台形态（本地 / Web / IDE）与部署边界；打分指标、权重与数据来源；配置存储、权限与多项目策略；ai-sdlc 与 Personal-KB 的具体结合方式；打分对绑定调整是推荐还是约束。
+
 ## 6. Historical Capability Inventory
 
 以下材料保留为历史事实与可能的复用候选，不再构成当前 Core 的顺序、依赖或完成声明：
@@ -259,6 +278,7 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.3.6 | 2026-08-28 | User-directed advanced addition | 新增 `LOOP-ADVANCED-05` Configurable Binding Console and Agent Scoring：远期以 ai-sdlc×PKB 工作台做版本化节点→Agent 绑定配置与 Agent 打分；C03-E 首版仍用内置 Q1 固定分工，配置化与动态路由不提前为 E1～E4 需求，solution-gate 双角色不同 binding 的防火墙在任何配置下保持 fail-closed。未授权实施。 |
 | 2.3.5 | 2026-08-27 | Accepted amendment pointer | Decision-064 接受 C03-E v0.4.0 A1：拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间增加独立授权的 E2-P 三 Agent direct CLI 可达性预检；E5 production adapter canary 与完整自主 run 不变。下一控制门为 E0 授权，不产生任务规划、CLI 或实施授权。 |
 | 2.3.4 | 2026-08-27 | Amendment draft pointer | Decision-064 授权起草 C03-E v0.4.0-draft：拟拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间增加独立授权的 E2-P 三 Agent direct CLI 可达性预检，并保持 E5 production adapter canary 与完整自主 run 不变；A1 尚未接受，不产生任务规划、CLI 或实施授权。 |
 | 2.3.3 | 2026-08-27 | Accepted baseline pointer | Decision-063 接受 C03-E 详细规划 v0.3.0 与 Q1～Q7 推荐值，并显式接受不执行本轮双 binding Solution Gate 的剩余风险；Task Gate、实施、Agent CLI、E0～E5 与下一 C05 均未授权。 |
