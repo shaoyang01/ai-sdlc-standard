@@ -1,5 +1,6 @@
 {
-  "version": 1,
+  "version": 2,
+  "updated_for": "C03-E E0 active contract preflight (calibrate shadow/real/adapter/wiring facts, remove deprecated runtime_node_mapping)",
   "runtime": {
     "status": "shadow-first",
     "default_execution_mode": "shadow",
@@ -76,7 +77,6 @@
   "skills": {
     "agent_skill_registry": "implemented_metadata_only",
     "agent_skill_registry_model": "flow_stage_metadata",
-    "agent_skill_registry_runtime_node_mapping": "deprecated",
     "skill_registry_canonical_flow_source": "metadata/capabilities/shared/skill-flow-inventory.json",
     "skill_registry_affects_runtime": false,
     "skill_invocation_contract": "implemented_metadata_only",

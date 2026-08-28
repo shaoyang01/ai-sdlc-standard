@@ -78,10 +78,9 @@ async function test() {
   console.log("");
 
   // ── Test 4: implementation is flow_internal ──
-  console.log("Test 4: implementation is flow_internal (direct_implementation_path)");
+  console.log("Test 4: implementation is flow_internal");
   const impl = getSkillFlowBinding("sdlc-implementation");
   assert(impl !== undefined, "implementation exists");
-  assert(impl!.flowIds.includes("direct_implementation_path"), "belongs to direct_implementation_path");
   assert(impl!.stage.includes("Implementation"), "stage includes Implementation");
   assert(impl!.role === "flow_internal", "role is flow_internal");
   console.log("");
@@ -100,12 +99,6 @@ async function test() {
   assert(mainFlow.some((b) => b.skill === "sdlc-solution-design"), "main includes solution-design");
   assert(mainFlow.some((b) => b.skill === "sdlc-solution-gate"), "main includes solution-gate");
   assert(mainFlow.some((b) => b.skill === "sdlc-task-planning"), "main includes task-planning");
-
-  const directFlow = getSkillsByFlowId("direct_implementation_path");
-  const directSkills = ["sdlc-implementation", "sdlc-code-review", "sdlc-knowledge-sync"];
-  for (const sk of directSkills) {
-    assert(directFlow.some((b) => b.skill === sk), `direct path includes ${sk}`);
-  }
   console.log("");
 
   // ── Test 7: Downstream lookups ──

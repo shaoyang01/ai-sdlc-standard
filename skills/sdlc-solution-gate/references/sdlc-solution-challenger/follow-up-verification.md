@@ -54,7 +54,7 @@ The second cycle must be FOLLOW_UP_VERIFICATION.
 - `challenge_cycle.exhausted: true`;
 - recommended next step: `ESCALATE_TO_SOLUTION_REVIEWER`.
 
-`ESCALATE_TO_SOLUTION_REVIEWER` is a handoff action (not a Gate decision, not a Direct/Speckit decision). The formal Gate review can elevate remaining concerns as needed.
+`ESCALATE_TO_SOLUTION_REVIEWER` is a handoff action (not a Gate decision, not a path decision). The formal Gate review can elevate remaining concerns as needed.
 
 Never output `READY_FOR_GATE` while BLOCKING or REQUIRED findings remain.
 
@@ -63,7 +63,7 @@ Never output `READY_FOR_GATE` while BLOCKING or REQUIRED findings remain.
 When the cycle limit is reached and BLOCKING/REQUIRED findings remain:
 - Output `NEEDS_REVISION` with `challenge_cycle.exhausted: true`
 - Recommend `ESCALATE_TO_SOLUTION_REVIEWER`
-- The formal Gate review can then decide whether to `BLOCKED_NEEDS_REVISION` or accept the remaining risks
+- The formal Gate review can then decide whether to `FAIL` or accept the remaining risks
 
 When all BLOCKING/REQUIRED findings are closed:
 - Output `READY_FOR_GATE`

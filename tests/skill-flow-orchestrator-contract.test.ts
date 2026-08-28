@@ -1,14 +1,13 @@
-// Regression Test — Skill Flow Orchestrator Contract (Plan-only, 7+1 Topology)
+// Regression Test — Skill Flow Orchestrator Contract (Plan-only, Single-Track 7+1)
 // =================================================================================
 // Verifies the orchestrator produces correct plans without executing
 // anything. Pure tests. No runtime, no agents, no DB, no Gateway.
-// C03-C update: speckit_pipeline, code_review_subflow, test_feedback_subflow
-// retired per Decision-044 single-track; 7+1 topology (main_docflow 4 nodes +
-// direct_implementation_path 3 nodes + docflow-writer utility).
+// C03-E E0.5 update: direct_implementation_path success-condition assertions
+// removed (dual-track retired per Decision-044/E0.2); only global entry
+// flow and retired-flow rejection are tested.
 
 import {
   planGlobalEntryFlow,
-  planDirectImplementationPath,
   planFlowById,
 } from "../core/skill-flow-orchestrator";
 
@@ -26,7 +25,7 @@ async function test() {
     }
   }
 
-  console.log("Skill Flow Orchestrator Contract Test (7+1 Topology)\n");
+  console.log("Skill Flow Orchestrator Contract Test (Single-Track 7+1)\n");
 
   // ── Test 1: Global entry flow (main_docflow, 4 nodes) ──
   console.log("Test 1: Global entry flow (main_docflow)");
@@ -51,28 +50,8 @@ async function test() {
   assert(gateIdx < taskIdx, "gate before task-planning");
   console.log("");
 
-  // ── Test 2: Direct implementation path (3 nodes + skillless) ──
-  console.log("Test 2: Direct implementation path (skillless + 3 nodes)");
-  const directPlan = planDirectImplementationPath({ requirementId: "REQ-DIRECT" });
-  assert(directPlan.status === "planned", "status is planned");
-  const directAgent = directPlan.stages.find((s) => s.stageName === "DIRECT_IMPLEMENTATION_AGENT_EXECUTION");
-  assert(directAgent !== undefined, "includes DIRECT_IMPLEMENTATION_AGENT_EXECUTION");
-  assert(directAgent!.kind === "skillless_agent_execution", "kind is skillless_agent_execution");
-  assert(directAgent!.skill === undefined, "skill is undefined");
-  assert(directAgent!.executionRequestPreview?.skill === undefined, "preview skill is undefined");
-  assert(directPlan.stages.some((s) => s.skill === "sdlc-implementation"), "includes implementation");
-  assert(directPlan.stages.some((s) => s.skill === "sdlc-code-review"), "includes code-review");
-  assert(directPlan.stages.some((s) => s.skill === "sdlc-knowledge-sync"), "includes knowledge-sync");
-  assert(directPlan.stages.length === 4, "4 stages (skillless + implementation + code-review + knowledge-sync)");
-  // No retired speckit IDs
-  assert(!directPlan.stages.some((s) => s.skill === "sdlc-speckit-implement"), "does NOT include speckit-implement");
-  assert(!directPlan.stages.some((s) => s.skill === "sdlc-implementation-recorder"), "does NOT include implementation-recorder");
-  assert(!directPlan.stages.some((s) => s.skill === "sdlc-code-review-excellence"), "does NOT include code-review-excellence");
-  assert(!directPlan.stages.some((s) => s.skill === "sdlc-code-review-normalizer"), "does NOT include code-review-normalizer");
-  console.log("");
-
-  // ── Test 3: Retired flows return invalid ──
-  console.log("Test 3: Retired flows return invalid (Decision-044 single-track)");
+  // ── Test 2: Retired flows return invalid ──
+  console.log("Test 2: Retired flows return invalid (Decision-044 single-track)");
   const speckitPlan = planFlowById({ flowId: "speckit_pipeline", requirementId: "REQ-SP" });
   assert(speckitPlan.status === "invalid", "speckit_pipeline is invalid (retired)");
   assert(speckitPlan.stages.length === 0, "speckit_pipeline has no stages");
@@ -82,8 +61,8 @@ async function test() {
   assert(tfPlan.status === "invalid", "test_feedback_subflow is invalid (retired, absorbed into knowledge-sync)");
   console.log("");
 
-  // ── Test 4: Unknown flow ──
-  console.log("Test 4: Unknown flow");
+  // ── Test 3: Unknown flow ──
+  console.log("Test 3: Unknown flow");
   const unknownPlan = planFlowById({ flowId: "unknown_flow", requirementId: "REQ-X" });
   assert(unknownPlan.status === "invalid", "status is invalid");
   assert(unknownPlan.stages.length === 0, "no stages");
@@ -91,8 +70,8 @@ async function test() {
   assert(unknownPlan.safety.planOnly === true, "planOnly remains true");
   console.log("");
 
-  // ── Test 5: Previews carry explicit skill metadata only ──
-  console.log("Test 5: Execution request previews");
+  // ── Test 4: Previews carry explicit skill metadata only ──
+  console.log("Test 4: Execution request previews");
   for (const stage of globalPlan.stages) {
     if (stage.kind === "skill" && stage.executionRequestPreview) {
       assert(stage.executionRequestPreview.skill === stage.skill, `${stage.skill}: preview skill matches`);
@@ -100,23 +79,18 @@ async function test() {
       assert(stage.executionRequestPreview.requirementId === globalPlan.requirementId, `${stage.skill}: preview requirementId matches`);
     }
   }
-  // Skillless stages have no skill in preview
-  const skilllessStage = directPlan.stages.find((s) => s.kind === "skillless_agent_execution");
-  assert(skilllessStage!.executionRequestPreview!.skill === undefined, "skillless preview has no skill");
   console.log("");
 
-  // ── Test 6: No runtime side effects ──
-  console.log("Test 6: No runtime side effects");
-  for (const plan of [globalPlan, directPlan]) {
-    assert(plan.safety.changesRuntimeBehavior === false, `${plan.flowId}: no runtime behavior change`);
-    assert(plan.safety.affectsRouting === false, `${plan.flowId}: no routing effect`);
-    assert(plan.safety.affectsAgentSelection === false, `${plan.flowId}: no agent selection effect`);
-    assert(plan.safety.planOnly === true, `${plan.flowId}: planOnly`);
-  }
+  // ── Test 5: No runtime side effects ──
+  console.log("Test 5: No runtime side effects");
+  assert(globalPlan.safety.changesRuntimeBehavior === false, `${globalPlan.flowId}: no runtime behavior change`);
+  assert(globalPlan.safety.affectsRouting === false, `${globalPlan.flowId}: no routing effect`);
+  assert(globalPlan.safety.affectsAgentSelection === false, `${globalPlan.flowId}: no agent selection effect`);
+  assert(globalPlan.safety.planOnly === true, `${globalPlan.flowId}: planOnly`);
   console.log("");
 
-  // ── Test 7: No retired skill IDs in any active plan ──
-  console.log("Test 7: No retired skill IDs in active plans (C03-C cutover)");
+  // ── Test 6: No retired skill IDs in active plan ──
+  console.log("Test 6: No retired skill IDs in active plans (C03-C cutover)");
   const retiredIds = [
     "sdlc-requirement-normalizer", "sdlc-specification-writer", "sdlc-solution-reviewer",
     "sdlc-solution-challenger", "sdlc-implementation-recorder", "sdlc-code-review-excellence",
@@ -125,11 +99,9 @@ async function test() {
     "sdlc-speckit-plan", "sdlc-speckit-tasks", "sdlc-speckit-analyze", "sdlc-speckit-implement",
     "sdlc-speckit-sync", "sdlc-speckit-code-doc-reconcile", "sdlc-speckit-checklist",
   ];
-  for (const plan of [globalPlan, directPlan]) {
-    for (const stage of plan.stages) {
-      if (stage.skill) {
-        assert(!retiredIds.includes(stage.skill), `${plan.flowId}: ${stage.skill} is not a retired ID`);
-      }
+  for (const stage of globalPlan.stages) {
+    if (stage.skill) {
+      assert(!retiredIds.includes(stage.skill), `${globalPlan.flowId}: ${stage.skill} is not a retired ID`);
     }
   }
   console.log("");

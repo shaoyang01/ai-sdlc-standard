@@ -30,7 +30,8 @@ async function test() {
 
   // ── Version ──
   console.log("Test 1: Version");
-  assert(caps.version === 1, "version is 1");
+  assert(caps.version === 2, "version is 2 (C03-E E0.3 calibration)");
+  assert(typeof caps["updated_for"] === "string" && caps["updated_for"].length > 0, "updated_for field present");
   console.log("");
 
   // ── Runtime defaults ──
