@@ -5,6 +5,7 @@
 
 import { run } from "../runtime";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway } from "./fixtures/multi-agent-fake-gateway";
 import {
   buildCodexPrompt,
   DEFAULT_PROMPT_BUILDER_LIMITS,
@@ -482,9 +483,12 @@ async function test() {
         runStore.init();
         artifactStore.init();
       const bindingRegistry = createRuntimeBindingRegistry();
-      const tracedGateway = new ExecutionGateway({
-        env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+      // C03-E W1 (Q1): Kimi/Codex points run their specialized fake runners;
+      // Hermes (formal_verdict/code-review) is deliberately unavailable so the
+      // chain still stops fail-closed at the verdict instead of reusing scan.
+      const tracedGateway = new MultiAgentFakeGateway({
         codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
+        unavailableAgents: new Set(["hermes"]),
         capabilityTracing: {
           runStore,
           artifactStore,
@@ -503,7 +507,7 @@ async function test() {
       const codexPoints = trace.filter(
         (entry) => entry.status === "succeeded" && entry.agent === "codex"
       );
-      assert(codexPoints.length >= 3, "codex-bound points complete through the traced gateway");
+      assert(codexPoints.length === 1, "the codex-bound adversarial_scan point completes through tracing (implementation falls back without ImplementationExecutorInput)");
       assert(
         trace.some(
           (entry) =>

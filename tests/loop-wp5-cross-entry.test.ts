@@ -30,6 +30,7 @@ import {
   type RuntimeCapabilityGateway,
 } from "../runtime";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway } from "./fixtures/multi-agent-fake-gateway";
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
@@ -586,7 +587,7 @@ async function main(): Promise<void> {
         sequence: executions.length + 1,
         capability: "solution-design" as const,
         nodeId: "solution-design",
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         inputArtifactRef: executions[1]!.outputArtifactRef,
         inputArtifactVersion: executions[1]!.outputArtifactVersion,
         inputDigest: executions[1]!.outputDigest,
@@ -930,7 +931,9 @@ async function main(): Promise<void> {
         capability: "solution-design" as const,
         nodeId: "solution-design",
         executionRole: "primary" as const,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         attempt: 2,
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -971,7 +974,7 @@ async function main(): Promise<void> {
         codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
         capabilityTracing: tracing,
       };
-      const stableGateway = new ExecutionGateway(mutableOptions);
+      const stableGateway = new MultiAgentFakeGateway(mutableOptions);
       const stableOptions = {
         runStore: env.runStore,
         artifactStore: env.artifactStore,
@@ -1126,11 +1129,11 @@ async function main(): Promise<void> {
         nodeId: "solution-design",
         executionRole: "primary" as const,
         attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex",
-        executorAdapter: "codex-real-dispatch",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -1210,11 +1213,11 @@ async function main(): Promise<void> {
         nodeId: "solution-design",
         executionRole: "primary" as const,
         attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex",
-        executorAdapter: "codex-real-dispatch",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -1475,10 +1478,10 @@ async function main(): Promise<void> {
         sequence: 3, status: "started" as const, runId,
         capability: "solution-design" as const, nodeId: "solution-design",
         executionRole: "primary" as const, attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex", executorAdapter: "codex-real-dispatch", executorVersion: "1.0.0",
+        executorAgent: "kimi", executorAdapter: "kimi-cli", executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
         inputDigest: intakeCurrent.digest,

@@ -21,7 +21,6 @@ import { join } from "node:path";
 
 import {
   INITIAL_BINDING_REGISTRY,
-  replaceBinding,
   type BindingRegistry,
 } from "./core/agent-capability-bindings";
 import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
@@ -186,19 +185,19 @@ function requireSafeId(value: string, label: string): string {
 import { createDeterministicCapabilityGateway } from "./execution/gateway";
 export { createDeterministicCapabilityGateway };
 
-// ─── Default dual-agent registry ──────────────────────
-// The initial registry enables codex for every execution point, which would
-// collide with the v2 rule that one solution-gate round's adversarial_scan
-// and formal_verdict are executed by different agents. The runtime default
-// moves the formal_verdict slot to hermes; callers may inject any registry
-// that keeps the two gate roles on different enabled agents.
+// ─── Default Q1 three-agent registry ──────────────────
+// C03-E W1 (Decision-073): INITIAL_BINDING_REGISTRY now carries the full Q1
+// slot map directly — Kimi owns requirement-intake/solution-design/
+// task-planning/knowledge-sync, Codex owns adversarial_scan/implementation,
+// Hermes owns formal_verdict/code-review — so one solution-gate round's
+// adversarial_scan (codex) and formal_verdict (hermes) already run on
+// different agents. The former "codex everywhere, then move formal_verdict to
+// hermes" replacement is obsolete; the runtime default registry is the
+// initial registry itself. Callers may still inject any registry that keeps
+// the two gate roles on different enabled agents.
 
 export function createRuntimeBindingRegistry(): BindingRegistry {
-  return replaceBinding(
-    INITIAL_BINDING_REGISTRY,
-    "binding-codex-solution-gate-formal_verdict",
-    "binding-hermes-solution-gate-formal_verdict",
-  ).registry;
+  return INITIAL_BINDING_REGISTRY;
 }
 
 // ─── MAIN RUNTIME — v2 SINGLE-RAIL CHAIN RUNNER ───────

@@ -19,6 +19,7 @@ import { LoopRunStore } from "../core/loop-run-store";
 import type { LoopRunIdentity } from "../core/loop-executor-types";
 import type { CodexRunner } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway, type MultiAgentFakeGatewayOptions } from "./fixtures/multi-agent-fake-gateway";
 import type { ExecutionRequest, ExecutionResult } from "../execution/types";
 import { materializeProducerRevision } from "../runtime";
 
@@ -122,10 +123,15 @@ function gateway(
   artifactStore: LoopArtifactStore,
   bindingRegistry: BindingRegistry,
   codexRunner?: CodexRunner,
+  unavailableAgents?: ReadonlySet<string>,
+  extra: Partial<MultiAgentFakeGatewayOptions> = {},
 ): ExecutionGateway {
-  return new ExecutionGateway({
-    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+  // C03-E W1 (Q1): route every node to its bound agent's fake runner; the
+  // optional unavailableAgents set simulates a bound agent with no executor.
+  return new MultiAgentFakeGateway({
+    ...extra,
     ...(codexRunner === undefined ? {} : { codexRunner }),
+    unavailableAgents,
     capabilityTracing: {
       runStore,
       artifactStore,
@@ -141,12 +147,14 @@ function entry(
   artifactStore: LoopArtifactStore,
   bindingRegistry: BindingRegistry,
   codexRunner?: CodexRunner,
+  unavailableAgents?: ReadonlySet<string>,
+  extra: Partial<MultiAgentFakeGatewayOptions> = {},
 ): LoopCapabilityEntry {
   return new LoopCapabilityEntry({
     runStore,
     artifactStore,
     bindingRegistry,
-    gateway: gateway(runStore, artifactStore, bindingRegistry, codexRunner),
+    gateway: gateway(runStore, artifactStore, bindingRegistry, codexRunner, unavailableAgents, extra),
     now: () => TS,
   });
 }
@@ -158,10 +166,12 @@ async function main(): Promise<void> {
   const contractsBefore = JSON.stringify(NODE_CAPABILITY_CONTRACTS);
   const artifactTypesBefore = JSON.stringify(CAPABILITY_ARTIFACT_TYPES);
   const bindingContractsBefore = INITIAL_BINDING_REGISTRY.bindings.map(({ enabled: _enabled, ...contract }) => contract);
+  // Q1 (C03-E W1): solution-design is Kimi-enabled by default, so the legal
+  // enabled→disabled replacement under test is Kimi→Codex.
   const replacement = replaceBinding(
     INITIAL_BINDING_REGISTRY,
-    "binding-codex-solution-design-primary",
     "binding-kimi-solution-design-primary",
+    "binding-codex-solution-design-primary",
   );
   validateBindingRegistry(replacement.registry);
   ok(true, "replacement snapshot passes the production validator");
@@ -178,7 +188,7 @@ async function main(): Promise<void> {
   ok(NODE_CAPABILITY_CONTRACTS.every((contract) => Object.isFrozen(contract.inputArtifacts) && Object.isFrozen(contract.prohibited)),
     "nested contract arrays are frozen at runtime");
   throws(
-    () => replaceBinding(replacement.registry, "binding-codex-solution-design-primary", "binding-kimi-solution-design-primary"),
+    () => replaceBinding(replacement.registry, "binding-kimi-solution-design-primary", "binding-hermes-solution-design-primary"),
     "a disabled source cannot be replayed as a replacement",
   );
   const drifted = registrySnapshot("2", (binding) => binding.capability === "solution-design" && binding.agent === "codex"
@@ -241,8 +251,10 @@ async function main(): Promise<void> {
       inputArtifactVersion: intakeState.effectiveOutputArtifactVersion!,
       inputDigest: intakeState.effectiveOutputDigest!,
     };
-    const kimiRegistry = replacement.registry;
-    const unavailable = await entry(runStore, artifactStore, kimiRegistry).execute({
+    // Q1: solution-design is Kimi-enabled in INITIAL with no Kimi runner
+    // injected here, so this attempt is executor-unavailable (recoverable).
+    const kimiRegistry = INITIAL_BINDING_REGISTRY;
+    const unavailable = await entry(runStore, artifactStore, kimiRegistry, undefined, new Set(["kimi"])).execute({
       requirementId: id.requirementId,
       capability: "solution-design",
       executionRole: "primary" as const,
@@ -329,13 +341,13 @@ async function main(): Promise<void> {
     runStore.init();
     artifactStore.init();
     const source = artifactStore.put("requirement_summary", "WP-5 timeout source");
-    const timeoutRegistry = registrySnapshot("10", (binding) => binding.bindingId === "binding-codex-requirement-intake-primary"
+    const timeoutRegistry = registrySnapshot("10", (binding) => binding.bindingId === "binding-kimi-requirement-intake-primary"
       ? { ...binding, timeoutMs: 5 }
       : binding);
     const lateRunner = runner((request) => new Promise((resolve) => {
       setTimeout(() => resolve(qualifiedResult(request)), 30);
     }));
-    const timedOut = await entry(runStore, artifactStore, timeoutRegistry, lateRunner).execute({
+    const timedOut = await entry(runStore, artifactStore, timeoutRegistry, undefined, undefined, { kimiRunnerOverride: lateRunner }).execute({
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
@@ -356,10 +368,10 @@ async function main(): Promise<void> {
       "late executor completion is discarded and cannot rewrite the journal");
     const retryRegistry = registrySnapshot("11");
     let retryDispatches = 0;
-    const retry = await entry(runStore, artifactStore, retryRegistry, runner((request) => {
+    const retry = await entry(runStore, artifactStore, retryRegistry, undefined, undefined, { kimiRunnerOverride: runner((request) => {
       retryDispatches += 1;
       return qualifiedResult(request);
-    })).execute({
+    })}).execute({
       requirementId: id.requirementId,
       capability: "requirement-intake",
       executionRole: "primary" as const,
@@ -401,7 +413,7 @@ async function main(): Promise<void> {
         createdAt: TS,
       })]),
     }));
-    const unqualified = await entry(runStore, artifactStore, INITIAL_BINDING_REGISTRY, unqualifiedRunner).execute({
+    const unqualified = await entry(runStore, artifactStore, INITIAL_BINDING_REGISTRY, undefined, undefined, { kimiRunnerOverride: unqualifiedRunner }).execute({
       requirementId: id.requirementId,
       identity: id,
       capability: "requirement-intake",
@@ -418,10 +430,10 @@ async function main(): Promise<void> {
       "unqualified artifact never becomes effective output");
     equal(unqualified.recoveryContext.nextCapability, "requirement-intake", "unqualified attempt is recoverable");
     let freshDispatches = 0;
-    const retry = await entry(runStore, artifactStore, INITIAL_BINDING_REGISTRY, runner((request) => {
+    const retry = await entry(runStore, artifactStore, INITIAL_BINDING_REGISTRY, undefined, undefined, { kimiRunnerOverride: runner((request) => {
       freshDispatches += 1;
       return qualifiedResult(request);
-    })).execute({
+    })}).execute({
       requirementId: id.requirementId,
       capability: "requirement-intake",
       executionRole: "primary" as const,

@@ -29,6 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway } from "./fixtures/multi-agent-fake-gateway";
 
 import { materializeProducerRevision } from "../runtime";
 import {
@@ -147,8 +148,10 @@ function tracedGateway(
   artifactStore: LoopArtifactStore,
   codexRunner: CodexRunner = createCodexFakeRunner({ scenario: "success_code_patch" }),
 ): ExecutionGateway {
-  return new ExecutionGateway({
-    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+  // C03-E W1 (Q1): route every node to its bound agent's specialized fake
+  // runner (Kimi/Codex/Hermes) instead of dropping non-Codex agents onto the
+  // shadow adapter.
+  return new MultiAgentFakeGateway({
     codexRunner,
     capabilityTracing: {
       runStore,
@@ -542,6 +545,14 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(gateRoot, "repo"));
     const gateIdentity = identity(gateRoot);
+    // Q1 makes formal_verdict=hermes by default; to exercise the same-agent
+    // pre-dispatch firewall we force formal_verdict back onto codex (the
+    // adversarial_scan agent) so scan and verdict share one agent.
+    const sameAgentRegistry = replaceBinding(
+      INITIAL_BINDING_REGISTRY,
+      "binding-hermes-solution-gate-formal_verdict",
+      "binding-codex-solution-gate-formal_verdict",
+    ).registry;
     const gateArtifacts = new LoopArtifactStore({
       controlRoot: gateIdentity.controlRoot,
       repositoryPath: gateIdentity.repositoryPath,
@@ -598,7 +609,7 @@ async function main(): Promise<void> {
       capabilityTracing: {
         runStore: gateStore,
         artifactStore: gateArtifacts,
-        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        bindingRegistry: sameAgentRegistry,
         executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
         now: () => TS,
       },
@@ -631,7 +642,7 @@ async function main(): Promise<void> {
     const gateEntry = new LoopCapabilityEntry({
       runStore: gateStore,
       artifactStore: gateArtifacts,
-      bindingRegistry: INITIAL_BINDING_REGISTRY,
+      bindingRegistry: sameAgentRegistry,
       gateway: gateGateway,
       now: () => TS,
     });
@@ -665,14 +676,9 @@ async function main(): Promise<void> {
     const chainStore = new LoopRunStore(join(chainRoot, "journal.db"), { artifactStore: chainArtifacts });
     chainStore.init();
     chainArtifacts.init();
-    // v2: the formal_verdict slot is bound to a second agent so the scan and
-    // verdict roles of one solution-gate round are provably executed by
-    // different agents.
-    const chainRegistry = replaceBinding(
-      INITIAL_BINDING_REGISTRY,
-      "binding-codex-solution-gate-formal_verdict",
-      "binding-hermes-solution-gate-formal_verdict",
-    ).registry;
+    // Q1 (C03-E W1): INITIAL_BINDING_REGISTRY already binds scan=codex and
+    // verdict=hermes to different agents, so no replacement is needed.
+    const chainRegistry = INITIAL_BINDING_REGISTRY;
     const stubNow = (): string => TS;
     const chainTracing = {
       runStore: chainStore,

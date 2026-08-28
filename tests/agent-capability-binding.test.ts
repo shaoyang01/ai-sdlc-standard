@@ -122,14 +122,30 @@ assert(INITIAL_BINDING_REGISTRY.bindings.length === 24, "exactly 24 bindings");
   }
 }
 
-console.log("binding: initial enablement (codex enabled, kimi/hermes disabled, per role slot)");
+console.log("binding: initial enablement (Q1 slot→agent matrix, per role slot)");
+const Q1_SLOT_AGENT_TEST: Readonly<Record<string, string>> = Object.freeze({
+  "requirement-intake:primary": "kimi",
+  "solution-design:primary": "kimi",
+  "solution-gate:adversarial_scan": "codex",
+  "solution-gate:formal_verdict": "hermes",
+  "task-planning:primary": "kimi",
+  "implementation:primary": "codex",
+  "code-review:primary": "hermes",
+  "knowledge-sync:primary": "kimi",
+});
 for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-codex-${point.capability}-${point.executionRole}`)?.enabled === true, `codex ${point.capability}/${point.executionRole} enabled`);
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-kimi-${point.capability}-${point.executionRole}`)?.enabled === false, `kimi ${point.capability}/${point.executionRole} disabled`);
-  assert(getBinding(INITIAL_BINDING_REGISTRY, `binding-hermes-${point.capability}-${point.executionRole}`)?.enabled === false, `hermes ${point.capability}/${point.executionRole} disabled`);
+  const slot = `${point.capability}:${point.executionRole}`;
+  const expectedAgent = Q1_SLOT_AGENT_TEST[slot];
+  for (const agent of ["codex", "kimi", "hermes"] as const) {
+    assert(
+      getBinding(INITIAL_BINDING_REGISTRY, `binding-${agent}-${point.capability}-${point.executionRole}`)?.enabled
+        === (agent === expectedAgent),
+      `${agent} ${point.capability}/${point.executionRole} ${agent === expectedAgent ? "enabled" : "disabled"} per Q1`,
+    );
+  }
   // Exactly one enabled binding per (capability, role) slot (fail-closed invariant).
   const enabled = getEnabledBinding(INITIAL_BINDING_REGISTRY, point.capability, point.executionRole);
-  assert(enabled.bindingId === `binding-codex-${point.capability}-${point.executionRole}`, `slot ${point.capability}/${point.executionRole} has exactly one enabled binding`);
+  assert(enabled.bindingId === `binding-${expectedAgent}-${point.capability}-${point.executionRole}`, `slot ${point.capability}/${point.executionRole} has exactly one enabled binding`);
 }
 // solution-gate carries exactly the two fixed roles; every other node primary.
 for (const capability of NODE_CAPABILITY_IDS) {
@@ -221,9 +237,10 @@ console.log("binding: registry is deeply frozen (immutable)");
   }
   // Runtime mutation attempt must not stick.
   const first = registry.bindings[0];
-  (first as { enabled: boolean }).enabled = !first.enabled;
+  const enabledBeforeMutation = first.enabled;
+  (first as { enabled: boolean }).enabled = !enabledBeforeMutation;
   const original = INITIAL_BINDING_REGISTRY.bindings[0];
-  assert(original.enabled === true, "mutation attempt on frozen binding does not stick");
+  assert(original.enabled === enabledBeforeMutation, "mutation attempt on frozen binding does not stick");
 }
 
 console.log("binding: replaceBinding returns usable immutable snapshot");
@@ -558,6 +575,42 @@ console.log("binding: empty/blank capability output fails closed (direct codex r
       );
     }
   }
+}
+
+console.log("binding: C03-E W1 Q1 slot→agent matrix (Decision-073)");
+{
+  const Q1_EXPECTED: Readonly<Record<string, string>> = Object.freeze({
+    "requirement-intake:primary": "kimi",
+    "solution-design:primary": "kimi",
+    "solution-gate:adversarial_scan": "codex",
+    "solution-gate:formal_verdict": "hermes",
+    "task-planning:primary": "kimi",
+    "implementation:primary": "codex",
+    "code-review:primary": "hermes",
+    "knowledge-sync:primary": "kimi",
+  });
+  const count: Record<string, number> = { codex: 0, kimi: 0, hermes: 0 };
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    const slot = `${point.capability}:${point.executionRole}`;
+    const expected = Q1_EXPECTED[slot];
+    assert(expected !== undefined, `${slot}: has a Q1 expected agent`);
+    const slotBindings = INITIAL_BINDING_REGISTRY.bindings.filter(
+      (b) => b.capability === point.capability && b.executionRole === point.executionRole,
+    );
+    assert(slotBindings.length === 3, `${slot}: three candidate bindings`);
+    const enabled = slotBindings.filter((b) => b.enabled);
+    assert(enabled.length === 1, `${slot}: exactly one enabled binding`);
+    assert(enabled[0]!.agent === expected, `${slot}: enabled agent is ${expected}`);
+    assert(slotBindings.filter((b) => !b.enabled).length === 2, `${slot}: other two disabled`);
+    count[enabled[0]!.agent] += 1;
+    const viaGetter = getEnabledBinding(INITIAL_BINDING_REGISTRY, point.capability, point.executionRole);
+    assert(viaGetter.agent === expected, `${slot}: getEnabledBinding resolves to ${expected}`);
+  }
+  assert(count.kimi === 4 && count.codex === 2 && count.hermes === 2, "Q1 distribution is kimi×4 codex×2 hermes×2");
+  const scan = getEnabledBinding(INITIAL_BINDING_REGISTRY, "solution-gate", "adversarial_scan");
+  const verdict = getEnabledBinding(INITIAL_BINDING_REGISTRY, "solution-gate", "formal_verdict");
+  assert(scan.agent === "codex" && verdict.agent === "hermes", "solution-gate scan=codex verdict=hermes");
+  assert(scan.agent !== verdict.agent, "solution-gate scan and verdict use different agents");
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`);
