@@ -51,7 +51,7 @@
 | E2-T4 | `RealCapabilityGateway`：只 override `executePrimary`，复用基类唯一 tracing 状态机，不造第二套 | `execution/real-capability-gateway.ts`（203 行）；`execution/gateway.ts` executePrimary private→protected（+4/-1，零行为变化） | E2-T2,E3-T1,E1-T2 | Decision A | DONE `c3abf17` | `tests/real-capability-gateway.test.ts` 18 断言 |
 | E2-T5 | argv 注入闭合：`shell:false`、executable allowlist、动态需求只走 stdin；13 个绕过变体全拦 | E2-T1/T2 内 | E2-T2 | R1 B1 → `23f9880`，R2 PASS | DONE | 13 绕过变体负向测试；argv 零动态内容审计 |
 | E2-T6 | production factory 接线 + real-vs-deterministic 选择开关（**默认 deterministic shadow，不得静默切 real**） | 开关工厂 `execution/capability-gateway-source.ts` + `runtime.ts` 装配点（路径 A 的 autonomous-loop/coordinator 按方法二 W4 冻结、不接入） | E2-T4 | 规划 §6 E2；HANDOFF §4.1-4.2；wiring §3 | ✅ **PASS（W2，独立复审 `b94a382`，零阻塞零建议）**：`199aeea` 单一工厂 `createCapabilityGateway`，deterministic 逐字复用、real 三条件（显式 source + Q1 + realDeps）fail-closed 绝不回落 shadow，选择逻辑唯一权威、版本单一真值；反向探针 + 139 文件 0 失败 / 16 断言独立确认，默认零行为变化，real 仍休眠（W3 loop-run）、D-071 保持 | 选择开关默认值断言；shadow 回归全绿 |
-| E2-T7 | 淘汰生产路径三个自定义 spawn runner；Kimi/Hermes sidecar 归档（不被 factory 选中）；Codex `shadow_fallback` 改 fail-closed | `execution/` 旧 runner | E2-T6 | 规划 §6 E2 | PENDING | production factory 不引用归档符号 |
+| E2-T7 | 淘汰生产路径三个自定义 spawn runner；Kimi/Hermes sidecar 归档（不被 factory 选中）；Codex `shadow_fallback` 改 fail-closed | `execution/` 旧 runner | E2-T6 | 规划 §6 E2；wiring §7 | **W4 冻结步 IMPLEMENTED（待独立复审）**：三个自定义 spawn runner 精确对象由引用图闭合（`docs/reports/c03-e-w4-spawn-reference-graph.md` §6：Codex/Kimi/Hermes）；路径 A 四编排 + L0/L1 共 17 文件加 FROZEN banner；validator B-7 机械锁定新装配（factory/CLI/kernel）零 import 冻结符号（双向探针已证）。**物理淘汰、sidecar 归档移除、shadow_fallback fail-closed 属 E5 canary 后的删除批次，本期不删不改（wiring §7 物理删除条件）** | production factory 不引用归档符号（B-7 机械锁定 + 双向探针） |
 | E2-T8 | Q1 binding 对齐：intake/design/task-planning/knowledge-sync→kimi，scan+implementation→codex，verdict+code-review→hermes | binding registry | E2-T6 | Q1 裁决；HANDOFF §3 | ✅ **PASS（W1，独立复审 R2 `a698808`）**：`7f36b8d` 实现 + `10b798c` 修 R1 阻塞 F1/F2；R2 反向探针 + ci-standards 6 步 + tsc + 全套件 138 文件 0 失败独立确认，I1～I5 不变量保持；进 W2 | 7×3 矩阵与 Q1 逐格断言 |
 
 ### E3 — Output Validation / Auto-Progression / Re-Gate（规划 §6 E3）
@@ -84,8 +84,7 @@ E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本�
 > **施工序 W1～W7 ↔ 正式任务映射**（实施顺序，非新任务；权威定义见
 > `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
 > **W1=E2-T8（Q1 绑定，✅ PASS，独立复审 R2 `a698808`）** → **W2=E2-T6（gateway 开关，✅ PASS `b94a382`，默认
-> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → W4=E2-T7/D-073
-> （A 链冻结标注）→ W5=E3-T2（九类无效输出不推进 e2e）→ W6=E4-T1～T5 →
+> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，已实现、待独立复审）** → W5=E3-T2（九类无效输出不推进 e2e）→ W6=E4-T1～T5 →
 > W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
 > 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工
 > （E2-T8 无依赖且是激活前 blocker，E2-T6 总开关最后装），二者不矛盾。

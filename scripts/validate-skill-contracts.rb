@@ -971,6 +971,57 @@ end
 
 errors.concat(canonical_errors.map { |e| "C03-A canonical topology: #{e}" })
 
+# ── B-7: W4 Path-A freeze (E2-T7 / Decision-073) ──
+# (a) every file on the frozen Path-A / legacy Agent-spawn list carries the
+#     FROZEN banner marker; (b) the NEW Path-B assembly surface (factory, CLI,
+#     chain kernel) imports NONE of the frozen modules — it may reach L2
+#     gateways only. Reference graph and layer definitions:
+#     docs/reports/c03-e-w4-spawn-reference-graph.md
+FROZEN_BANNER = "[FROZEN: PATH A RETIREMENT"
+W4_FROZEN_FILES = %w[
+  core/loop-requirement-design-orchestrator.ts
+  core/loop-production-coordinator.ts
+  core/loop-autonomous-delivery-loop.ts
+  core/loop-codex-implementation-adapter.ts
+  core/kimi-runtime-shadow-attachment.ts
+  core/hermes-runtime-shadow-attachment.ts
+  execution/kimi-cli-command-executor.ts
+  execution/hermes-cli-command-executor.ts
+  execution/codex-adapter.ts
+  execution/codex-cli-process-runner.ts
+  execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner.ts
+  execution/codex-real-dispatch-runner.ts
+  execution/codex-real-dispatch-real-runner.ts
+  execution/kimi-gateway-real-dispatch.ts
+  execution/hermes-gateway-real-dispatch.ts
+  execution/kimi-gateway-shadow-sidecar.ts
+  execution/hermes-gateway-shadow-sidecar.ts
+].freeze
+W4_NEW_ASSEMBLY = %w[
+  execution/capability-gateway-source.ts
+  scripts/loop-run.ts
+  runtime.ts
+].freeze
+frozen_basenames = W4_FROZEN_FILES.map { |f| File.basename(f).sub(/\.ts$/, "") }
+W4_FROZEN_FILES.each do |rel|
+  frozen_path = File.join(ROOT, rel)
+  frozen_text = File.exist?(frozen_path) ? File.read(frozen_path) : ""
+  unless frozen_text.include?(FROZEN_BANNER)
+    errors << "B-7 W4 Path-A freeze: #{rel} is on the frozen list but missing the FROZEN banner marker"
+  end
+end
+W4_NEW_ASSEMBLY.each do |rel|
+  assembly_path = File.join(ROOT, rel)
+  assembly_text = File.exist?(assembly_path) ? File.read(assembly_path) : ""
+  specifiers = assembly_text.scan(/(?:from|import|require)\s*\(?\s*["']([^"']+)["']/).flatten
+  specifiers.each do |spec|
+    base = File.basename(spec).sub(/\.(ts|js)$/, "")
+    if frozen_basenames.include?(base)
+      errors << "B-7 W4 new Path-B assembly #{rel} imports frozen Path-A/legacy-spawn module #{spec.inspect} (reach L2 gateways only, see W4 reference graph)"
+    end
+  end
+end
+
 # ── C03-B R2 closure validation (H1-d / H1-e) ──
 # H1-d: category-guide ↔ known-skills contract exact consistency.
 # Round 2 found 3/8 category mismatches that the validator did not catch.
