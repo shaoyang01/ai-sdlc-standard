@@ -39,6 +39,7 @@
 | [Decision-065](Decision-065-c03e-e0-active-contract-preflight-authorized.md) | 2026-08-27 | Accepted / E0 AUTHORIZED | 授权 C03-E E0 活动合同收口包（E0.1～E0.5）：清理 solution-gate 旧 Direct/Speckit 路径判定、校准两份 capabilities metadata 为单轨 7+1 当前事实、validator 闭包扫描退役 ID/旧路由/role firewall、清理 active tests；不改 runtime dispatch、不调 Agent CLI、不含 E2-P/E1～E5/C05；独立分支单一 PR，独立复审后单独收口。 |
 | [Decision-066](Decision-066-cross-project-governance-state-and-pkb-ingress-boundary.md) | 2026-08-28 | Accepted | 统一产品 Decision、CP Governance/STATE、Exchange、PKB、Handoff/current 权威边界和授权/收口顺序；PKB 自写不经 Exchange，AI-SDLC 写入 PKB 必须经标准 Publisher；E0 授权有效但继续暂停。 |
 | [Decision-067](Decision-067-c03e-e0-resumed-and-execution-started.md) | 2026-08-28 | Accepted / E0 IN_PROGRESS | ACP-R2 治理收敛完成收口后恢复 E0 授权，移除用户暂停，route_state 推进为 C03_E_E0_IN_PROGRESS；创建独立实施分支 feature/c03-e0-active-contract-preflight，开始执行 E0.1～E0.5；E2-P/E1～E5 仍未授权。 |
+| [Decision-068](Decision-068-c03e-e0-active-contract-preflight-closed.md) | 2026-08-28 | Accepted / C03-E E0 CLOSED | E0 活动合同收口包收口裁决：两轮独立复审（R1 FAIL→B1/B2 修复 5bb60be→R2 PASS）后 PR #123 合入 feature/loop-runtime-v1（merge 158536b）；route_state 转 C03_E_E0_COMPLETED_AWAITING_E2P_AUTHORIZATION，active_work/lifecycle 回 IDLE，E0 授权消费移出；顺带修正 STATE v2 缺 pause 键的既有不合规；E2-P/E1～E5/C05 仍未授权。 |
 
 ## 新增流程
 
