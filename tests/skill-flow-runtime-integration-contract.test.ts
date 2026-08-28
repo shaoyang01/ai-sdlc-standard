@@ -109,24 +109,7 @@ async function test() {
   assert(invalidResult.warnings.some((w) => w.includes("real")), "warning includes invalid value");
   console.log("");
 
-  // ── Test 5: Direct implementation remains skillless ──
-  console.log("Test 5: Direct implementation remains skillless in shadow integration");
-  const directShadowConfig = getSkillFlowRuntimeIntegrationConfig({
-    SDLC_SKILL_FLOW_RUNTIME_INTEGRATION: "shadow",
-  });
-  const directResult = decideSkillFlowRuntimeIntegration(directShadowConfig, {
-    requirementId: "REQ-DIRECT-SFI",
-    flowId: "direct_implementation_path",
-    reason: "test skillless shadow",
-    inputArtifacts: [],
-    mode: "shadow_only",
-  });
-  assert(directResult.decision === "enabled_shadow_only", "direct path shadow enabled");
-  assert(directResult.shadowPlanCreated === true, "direct plan created");
-  assert(directResult.shadowExecutionCreated === true, "direct execution created");
-  console.log("");
-
-  // ── Test 6: Unknown flow under shadow flag preserves warnings ──
+  // ── Test 5: Unknown flow under shadow flag preserves warnings ──
   console.log("Test 6: Unknown flow under shadow flag preserves warnings");
   const unknownConfig = getSkillFlowRuntimeIntegrationConfig({
     SDLC_SKILL_FLOW_RUNTIME_INTEGRATION: "shadow",

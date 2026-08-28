@@ -165,13 +165,7 @@ skills:
     contract: skill-contracts/known-skills/sdlc-solution-gate.md
     references:
       - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/checklist.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/development-path-decision.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/output-report.md
       - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/review-workflow.md
-      - skills/sdlc-solution-gate/references/sdlc-speckit-clarify/clarification-scope.md
-      - skills/sdlc-solution-gate/references/sdlc-speckit-clarify/coverage-check.md
-      - skills/sdlc-solution-gate/references/sdlc-speckit-clarify/output-and-manifest.md
-      - skills/sdlc-solution-gate/references/sdlc-speckit-clarify/regate-routing.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/challenge-workflow.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/finding-classification.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/follow-up-verification.md

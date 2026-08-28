@@ -1091,6 +1091,119 @@ if File.exist?(MANIFEST_PATH)
   end
 end
 
+# ── C03-E E0.4: extended retired-path-term closure scan ──
+# E0 active-contract preflight: the retired-ID scan above covers only
+# manifest entrypoints. E0.4 extends the closure to all active
+# (non-archive) contract, skill, and metadata files, and adds retired
+# path-decision terms (Direct/Speckit dual-rail artifacts) that must not
+# appear in active contracts. Archive context and explicit historical
+# markers are exempt, matching the precision model above.
+RETIRED_PATH_TERMS = %w[
+  DIRECT_IMPLEMENTATION
+  SPECKIT_PIPELINE_REQUIRED
+  BLOCKED_NEEDS_REVISION
+  Development\ Path\ Decision
+  Full\ SDD\ Override
+  direct_implementation_path
+  speckit_pipeline
+  sdlc-speckit-pipeline
+  sdlc-speckit-specify
+  sdlc-speckit-clarify
+  sdlc-speckit-plan
+  sdlc-speckit-tasks
+  sdlc-speckit-analyze
+  sdlc-speckit-implement
+  sdlc-speckit-sync
+  sdlc-speckit-code-doc-reconcile
+  sdlc-speckit-checklist
+].freeze
+
+E0_ACTIVE_SCAN_ROOTS = [
+  File.join(ROOT, "skill-contracts", "known-skills"),
+  File.join(ROOT, "metadata", "capabilities")
+].freeze
+
+E0_SCAN_EXTENSIONS = %w[.md .json .yaml .yml].freeze
+
+# Also scan all SKILL.md files (active skill definitions), but NOT their
+# references/ subdirectories — those are covered by per-skill E-gate
+# cleanup stages, not the E0 active-contract preflight.
+E0_SKILL_MD_FILES = Dir.glob(File.join(ROOT, "skills", "sdlc-*", "SKILL.md")).freeze
+
+def e0_archive_exempt?(text)
+  header = text.lines.first(30).join
+  return true if GLOBAL_ARCHIVE_BANNERS.any? { |banner| header.include?(banner) }
+
+  in_archive_section = false
+  in_archive_from_here = false
+  text.lines.each do |line|
+    if line.match?(/^>\s/) && line.include?("[HISTORICAL — pre-C03-B]")
+      in_archive_from_here = true
+      next
+    end
+    next if in_archive_from_here
+
+    if line.match?(/^##+\s/)
+      in_archive_section = LINE_ARCHIVE_MARKERS.any? { |marker| line.include?(marker) }
+      next
+    end
+    return false unless in_archive_section
+  end
+  true
+end
+
+E0_ACTIVE_SCAN_FILES = (
+  E0_ACTIVE_SCAN_ROOTS.flat_map do |root|
+    next [] unless File.directory?(root)
+    Dir.glob(File.join(root, "**", "*")).select do |path|
+      File.file?(path) && E0_SCAN_EXTENSIONS.include?(File.extname(path))
+    end
+  end + E0_SKILL_MD_FILES
+).uniq.sort.freeze
+
+E0_ACTIVE_SCAN_FILES.each do |path|
+  # Skip this validator itself and the retired-IDs constant definition.
+  next if path == __FILE__
+  # Skip archive directories.
+  next if path.include?("docs/reports/archive/")
+  next if path.include?("/archive/")
+
+  text = File.read(path)
+
+  # Global archive exemption: only square-bracket banners in first 30 lines.
+  header = text.lines.first(30).join
+  next if GLOBAL_ARCHIVE_BANNERS.any? { |banner| header.include?(banner) }
+
+  # Section-level exemption (matching the retired-ID scan above):
+  # `## ` heading with any LINE_ARCHIVE_MARKERS exempts the section until
+  # next heading. Non-heading line with a marker exempts ONLY that line.
+  # Document-level archive start: a standalone blockquote line containing
+  # [HISTORICAL — pre-C03-B] marks everything after it.
+  in_archive_section = false
+  in_archive_from_here = false
+  text.lines.each_with_index do |line, idx|
+    if line.match?(/^>\s/) && line.include?("[HISTORICAL — pre-C03-B]")
+      in_archive_from_here = true
+      next
+    end
+    next if in_archive_from_here
+
+    if line.match?(/^##+\s/)
+      in_archive_section = LINE_ARCHIVE_MARKERS.any? { |marker| line.include?(marker) }
+      next
+    end
+    # Non-sticky line-level exemption: this line only.
+    line_exempt = LINE_ARCHIVE_MARKERS.any? { |marker| line.include?(marker) }
+    next if in_archive_section || line_exempt
+
+    RETIRED_PATH_TERMS.each do |term|
+      if line.include?(term)
+        errors << "E0.4 closure: #{relative(path)}:#{idx + 1} contains retired path-decision term #{term.inspect} in active context"
+      end
+    end
+  end
+end
+
 if errors.empty?
   puts "skill contract validation ok"
 else

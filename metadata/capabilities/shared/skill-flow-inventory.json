@@ -1,8 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "source_report": "docs/reports/archive/capabilities/SKILL_FLOW_INVENTORY_REPORT.md",
   "model": "single_track_7_plus_1_topology",
-  "updated_for": "C03-C runtime consumption-face cutover (7+1 topology, Decision-044 single-track, Decision-045 absorption mapping)",
+  "updated_for": "C03-E E0 active contract preflight (single-track 7+1 cleanup, Decision-044 single-track, Decision-045 absorption mapping)",
   "global_entry_skill": "sdlc-requirement-intake",
   "skills": [
     {
@@ -42,8 +42,7 @@
       ],
       "runtimeInvoked": false,
       "absorbs": [
-        "sdlc-specification-writer",
-        "sdlc-speckit-plan"
+        "sdlc-specification-writer"
       ],
       "confidence": "high"
     },
@@ -57,11 +56,10 @@
       ],
       "primaryOutputArtifacts": [
         "library/{id}/02-方案审核/",
-        "Development Path Decision"
+        "Gate Result (PASS / FAIL / PASS_WITH_RISK)"
       ],
       "downstreamConsumers": [
-        "sdlc-task-planning",
-        "DIRECT_IMPLEMENTATION (fork)"
+        "sdlc-task-planning"
       ],
       "runtimeInvoked": false,
       "absorbs": [
@@ -69,7 +67,7 @@
         "sdlc-solution-challenger",
         "sdlc-gate-runner"
       ],
-      "notes": "Gate adjudication authority belongs to LOOP runtime (INV1). Both gate roles resolve to the same Agent binding.",
+      "notes": "Gate adjudication authority belongs to LOOP runtime (INV1). Both gate roles resolve to the same Agent binding. Gate Result is PASS / FAIL / PASS_WITH_RISK; no separate path decision.",
       "confidence": "high"
     },
     {
@@ -88,9 +86,7 @@
         "sdlc-implementation"
       ],
       "runtimeInvoked": false,
-      "absorbs": [
-        "sdlc-speckit-tasks"
-      ],
+      "absorbs": [],
       "confidence": "high"
     },
     {
@@ -112,9 +108,9 @@
       ],
       "runtimeInvoked": false,
       "absorbs": [
-        "sdlc-implementation-recorder",
-        "sdlc-speckit-implement"
+        "sdlc-implementation-recorder"
       ],
+      "notes": "Implementation is skillless agent execution within the single-track flow.",
       "confidence": "high"
     },
     {
@@ -155,8 +151,6 @@
       "downstreamConsumers": [],
       "runtimeInvoked": false,
       "absorbs": [
-        "sdlc-speckit-sync",
-        "sdlc-speckit-code-doc-reconcile",
         "sdlc-test-feedback-sync"
       ],
       "confidence": "high"
@@ -185,9 +179,9 @@
   ],
   "flows": [
     {
-      "id": "main_docflow",
-      "name": "Main DocFlow Path",
-      "type": "main_docflow",
+      "id": "single_track_main",
+      "name": "Single-Track Main Flow (7 nodes)",
+      "type": "single_track",
       "entrySkill": "sdlc-requirement-intake",
       "trigger": "External requirement received",
       "stages": [
@@ -195,7 +189,9 @@
         "01-技术方案 (design)",
         "02-方案审核 (gate)",
         "Task Planning",
-        "Fork: DIRECT_IMPLEMENTATION"
+        "03-实现记录 (implementation)",
+        "04-代码审核 (code-review)",
+        "Knowledge Sync"
       ],
       "edges": [
         {
@@ -213,35 +209,13 @@
         {
           "from": "sdlc-solution-gate",
           "to": "sdlc-task-planning",
-          "condition": "PROCEED (gate pass)",
+          "condition": "PROCEED (gate PASS or PASS_WITH_RISK with acceptance)",
           "confidence": "high"
         },
         {
           "from": "sdlc-task-planning",
           "to": "sdlc-implementation",
           "artifactHandoff": "Task breakdown",
-          "confidence": "high"
-        }
-      ],
-      "notes": "Single-track main docflow. 4 nodes: intake → design → gate → task-planning. Gate forks to direct implementation path."
-    },
-    {
-      "id": "direct_implementation_path",
-      "name": "Direct Implementation Path",
-      "type": "direct_implementation_path",
-      "entrySkill": null,
-      "trigger": "sdlc-solution-gate returns DIRECT_IMPLEMENTATION or task-planning completes",
-      "stages": [
-        "DIRECT_IMPLEMENTATION_AGENT_EXECUTION (skillless)",
-        "03-实现记录 (implementation)",
-        "04-代码审核 (code-review)",
-        "Knowledge Sync"
-      ],
-      "edges": [
-        {
-          "from": "DIRECT_IMPLEMENTATION_AGENT_EXECUTION",
-          "to": "sdlc-implementation",
-          "artifactHandoff": "implementation evidence",
           "confidence": "high"
         },
         {
@@ -257,26 +231,26 @@
           "confidence": "high"
         }
       ],
-      "notes": "Direct implementation is skillless agent execution. 3 nodes: implementation → code-review → knowledge-sync. Absorbs code_review_subflow and test_feedback_subflow (Decision-044 single-track)."
+      "notes": "Single-track 7-node flow: intake → design → gate → task-planning → implementation → code-review → knowledge-sync. No separate path decision or fork. Gate Result (PASS/FAIL/PASS_WITH_RISK) controls continuation."
     }
   ],
   "retired_flows": [
     {
-      "id": "speckit_pipeline",
+      "id": "dual_track_legacy",
       "retired_by": "Decision-044 (single-track)",
-      "absorbed_into": "main_docflow + direct_implementation_path",
-      "notes": "Speckit independent track cancelled. 10 speckit sub-skills absorbed into 7+1 topology per Decision-045."
+      "absorbed_into": "single_track_main",
+      "notes": "Legacy dual-track topology retired. All sub-skills absorbed into 7+1 single-track topology per Decision-045."
     },
     {
       "id": "code_review_subflow",
       "retired_by": "Decision-044 (single-track)",
-      "absorbed_into": "sdlc-code-review (direct_implementation_path)",
+      "absorbed_into": "sdlc-code-review (single_track_main)",
       "notes": "code-review-excellence + code-review-normalizer merged into sdlc-code-review."
     },
     {
       "id": "test_feedback_subflow",
       "retired_by": "Decision-044 (single-track)",
-      "absorbed_into": "sdlc-knowledge-sync (direct_implementation_path)",
+      "absorbed_into": "sdlc-knowledge-sync (single_track_main)",
       "notes": "test-feedback-classifier absorbed into requirement-intake; test-feedback-sync absorbed into knowledge-sync."
     }
   ],
@@ -343,8 +317,8 @@
     "active_skill_count": 8,
     "flow_node_count": 7,
     "cross_cutting_utility_count": 1,
-    "active_flow_count": 2,
+    "active_flow_count": 1,
     "retired_flow_count": 3,
-    "topology": "7+1 single-track (main_docflow 4 nodes + direct_implementation_path 3 nodes + docflow-writer utility)"
+    "topology": "7+1 single-track (single_track_main 7 nodes: intake → design → gate → task-planning → implementation → code-review → knowledge-sync; + docflow-writer cross-cutting utility)"
   }
 }

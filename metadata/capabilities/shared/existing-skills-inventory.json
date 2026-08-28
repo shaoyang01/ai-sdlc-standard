@@ -262,6 +262,6 @@
     "flow_node_count": 7,
     "cross_cutting_utility_count": 1,
     "runtime_entrypoint_count": 3,
-    "topology": "7+1 (main_docflow 4 nodes + direct_implementation_path 3 nodes + docflow-writer utility)"
+    "topology": "7+1 (single_track_main 7 nodes + docflow-writer utility)"
   }
 }

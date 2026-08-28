@@ -10,7 +10,7 @@ The expected upstream flow is:
 sdlc-requirement-normalizer
   -> sdlc-specification-writer
   -> sdlc-solution-reviewer
-  -> DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION
+  -> PASS / FAIL / PASS_WITH_RISK (Gate Result)
 ```
 
 ## Step 1: Input Resolution
@@ -37,12 +37,12 @@ Read optional context only when needed:
 
 - `00-需求资料` for requirement intent.
 - `manifest.md` for current stage, old Gate result, stale or replaced artifacts, and Re-Gate records.
-- `specs/**` only when the user says the requirement already entered Speckit or references a specific spec path.
+- `specs/**` only when the user references a specific spec path.
 - Code files only when the technical specification depends on actual code behavior.
 
 Do not treat chat history as a stable source unless the user explicitly confirms it as requirement input.
 
-For Requirement Supplement or Specification Missing reviews, read the technical specification's Change Event, Parent Requirement ID, Same Requirement Decision, Current Change Scope / Delta Scope, Aggregate Requirement Scope, Original Implemented / Approved Scope, Out of Delta Scope, Earliest Affected Node, Ignored Aggregate Triggers, Aggregate Complexity: reference only, and Re-Gate Records before judging complexity.
+For Requirement Supplement or Specification Missing reviews, read the technical specification's Change Event, Parent Requirement ID, Same Requirement Decision, Current Change Scope / Delta Scope, Aggregate Requirement Scope, Original Implemented / Approved Scope, Out of Delta Scope, Earliest Affected Node, and Re-Gate Records before judging.
 
 ## Step 3: Build Goal/Scope and Global Model
 
@@ -98,7 +98,7 @@ Check whether the specification answers:
 - 是否改变原事务边界。
 - 是否改变原日志、MQ、缓存、DB 写入。
 
-If the implementation would require guessing any of these answers, mark Critical and recommend `BLOCKED_NEEDS_REVISION`.
+If the implementation would require guessing any of these answers, mark Critical and recommend `FAIL` with return to `01-技术方案`.
 
 ## Step 6: Risk and Test Review
 
@@ -113,9 +113,9 @@ Check:
 
 Testing gaps that prevent validating the core requirement are Critical or High.
 
-## Step 7: Gate and Path Decision
+## Step 7: Gate Decision and Re-Gate
 
-Before the Gate / Development Path / Tail decision, complete the current-goal global/material scan and run the completion check:
+Before the Gate / Tail decision, complete the current-goal global/material scan and run the completion check:
 
 - Every applicable frozen surface from the global model (step 3) has been scanned; each is closed or explicitly `NOT_APPLICABLE`.
 - Direct impacts (caller/callee or dependency, consumer, state/data, failure/compatibility, verification) are closed per the shared reference; root causes are consolidated.
@@ -123,15 +123,14 @@ Before the Gate / Development Path / Tail decision, complete the current-goal gl
 
 After issue classification:
 
-1. Decide Gate Result.
+1. Decide Gate Result: `PASS` / `FAIL` / `PASS_WITH_RISK`.
 2. Decide Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`.
-3. If Decision Scope = `DELTA_CHANGE`, decide Delta Complexity from Current Change Scope / Delta Scope and keep Aggregate Complexity as reference only.
-4. Decide Development Path Decision, following the canonical standard `ai-sdlc/development-path-governance.md`: the path is decided only by the complexity of the Current Implementation Scope or Delta Scope itself; business_domain_sync need、knowledge sync need、entry coverage need 或 Shared Tail 工作本身都不是 Speckit 触发因素。
-5. Record the Decision evidence: Development Path Decision Source（`sdlc-solution-reviewer`）、Development Path Decision Artifact（response-only 时为 `not_persisted`）、Development Path Decision Artifact Status（`current` / `stale` / `not_persisted`）。
-6. Give the initial Shared Documentation Governance Tail recommendation: Tail Required、Tail Scope（来自 Current Implementation Scope 或 Delta Scope）、Tail Status（`planned` / `blocked` / `not_required`）。Solution Reviewer 不作 Tail Completion 判断，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile。
-7. Explain why.
-8. List required fixes before the next stage.
-9. Recommend manifest updates.
+3. If Decision Scope = `DELTA_CHANGE`, record Current Change Scope / Delta Scope and keep Aggregate Scope as reference only.
+4. Identify Re-Gate Source and Earliest Affected Node for any finding that requires re-gating.
+5. Give the initial Shared Documentation Governance Tail recommendation: Tail Required、Tail Scope、Tail Status（`planned` / `blocked` / `not_required`）。Solution Reviewer 不作 Tail Completion 判断，不生成 `03-实现记录`、`04-代码审核`、`05-测试验收`，不执行 Sync 或 Reconcile。
+6. Explain why.
+7. List required fixes before the next stage.
+8. Recommend manifest updates.
 
-Never recommend direct implementation when Critical or unaccepted High issues exist.
-Do not route by aggregate complexity for requirement supplements; Development Path Decision must be based on Delta Scope.
+Never recommend continuation when Critical or unaccepted High issues exist.
+Do not route by aggregate scope for requirement supplements; Delta Scope must be based on Current Change Scope.
