@@ -529,7 +529,15 @@ export class LoopGitWorkspaceManager {
       // destroyed. Without the flag a rename is reported as delete+add, which is
       // the same conservative direction statusPaths already takes for unstaged
       // renames (it counts the original path too: those bytes were touched).
-      const committed = (await this._gitR(wsPath,
+      //
+      // Gated on `allowedPaths`: `changedPaths` is only ever read by the
+      // out-of-bounds check, and that check itself is gated on `allowedPaths`
+      // (see classifyWorkspaceCleanup). Running the diff unconditionally cost
+      // every legacy caller one extra git subprocess for a value nobody read,
+      // and — because _gitR turns any timeout, signal, truncation or non-zero
+      // exit into GIT_COMMAND_FAILED — it added a failure surface to a cleanup
+      // path that previously could not fail there.
+      const committed = allowedPaths === null ? "" : (await this._gitR(wsPath,
         ["diff", "--name-only", "-z", "--no-renames", `${identity.expectedBaseSha}...HEAD`], [0])).stdout;
       const changedPaths = [...new Set([
         ...committed.split("\0").filter(Boolean),

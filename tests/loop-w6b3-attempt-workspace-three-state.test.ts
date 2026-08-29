@@ -13,6 +13,7 @@
 //  - route `failed` through the promote path → T2 goes red;
 //  - feed only `status` to the classifier and drop the committed diff → T4 red;
 //  - drop --no-renames from the committed diff → T9a red, T9b/T9c stay green.
+//  - fetch the committed diff unconditionally again → T10a red, T10b stays green.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -344,6 +345,61 @@ async function main() {
         }),
         "CLEANUP_BLOCKED", "T9c: a committed out-of-bounds deletion blocks",
       );
+    } finally { rmSync(e.tr, { recursive: true, force: true }); }
+  }
+
+  // ─── T10: the committed diff is only fetched when it can be used ────
+  // The diff feeds nothing but the out-of-bounds check, and that check needs
+  // `allowedPaths`. Running it anyway charged every legacy caller one extra
+  // git subprocess and one extra GIT_COMMAND_FAILED surface. These two cases
+  // pin both directions, so neither an eager fetch nor an over-eager gate
+  // (dropping the diff when it IS needed) can slip through.
+  {
+    const e = setupRepo();
+    try {
+      const real = mkRunner(e);
+      const seen: string[][] = [];
+      const spy: Pick<LoopPosixProcessRunner, "run"> = {
+        run: async (req) => { seen.push([...(req.args ?? [])]); return real.run(req); },
+      };
+      const mgr = new LoopGitWorkspaceManager({ runner: spy, gitExecutableId: "git" });
+      const id = mkId(e, "codex/w6b3-t10a");
+      const snap = await mgr.prepare(id);
+      commitIn(snap.workspacePath, "src/a.ts", "export const a = 1;");
+      const res = await mgr.cleanup(id, {
+        expectedTaskHeadSha: commitHead(snap.workspacePath),
+        outcome: "succeeded",
+      });
+      ok(res.decision === "promote", "T10a: a legacy cleanup call (no allowedPaths) still promotes");
+      // `--name-only` distinguishes the committed-path scan from the two
+      // source-wip `git diff --binary` digest reads that bracket every call.
+      const namedDiffs = seen.filter((a) => a[0] === "diff" && a.includes("--name-only"));
+      ok(namedDiffs.length === 0,
+        `T10a: no committed-path diff runs when allowedPaths is absent (saw ${namedDiffs.length})`);
+    } finally { rmSync(e.tr, { recursive: true, force: true }); }
+  }
+
+  {
+    const e = setupRepo();
+    try {
+      const real = mkRunner(e);
+      const seen: string[][] = [];
+      const spy: Pick<LoopPosixProcessRunner, "run"> = {
+        run: async (req) => { seen.push([...(req.args ?? [])]); return real.run(req); },
+      };
+      const mgr = new LoopGitWorkspaceManager({ runner: spy, gitExecutableId: "git" });
+      const id = mkId(e, "codex/w6b3-t10b");
+      const snap = await mgr.prepare(id);
+      commitIn(snap.workspacePath, "src/a.ts", "export const a = 1;");
+      const res = await mgr.cleanup(id, {
+        expectedTaskHeadSha: commitHead(snap.workspacePath),
+        outcome: "succeeded",
+        allowedPaths: ["src"],
+      });
+      ok(res.decision === "promote", "T10b: a gated cleanup call still promotes");
+      const namedDiffs = seen.filter((a) => a[0] === "diff" && a.includes("--name-only"));
+      ok(namedDiffs.length === 1,
+        `T10b: the committed-path diff still runs exactly once when allowedPaths is present (saw ${namedDiffs.length})`);
     } finally { rmSync(e.tr, { recursive: true, force: true }); }
   }
 
