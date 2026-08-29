@@ -1,6 +1,21 @@
 # C03-E E1～E4 Runtime 实施 — 集成层交接（HANDOFF）
 
-> 最后更新：2026-08-28（EDT）。供中断后新会话/新 Agent 无缝续作。只读事实 + 明确下一步，勿凭印象改。
+> 最后更新：2026-08-29（UTC）。供中断后新会话/新 Agent 无缝续作。只读事实 + 明确下一步，勿凭印象改。
+
+## ★ 当前快照（W6a，最新，与下文冲突时以本节为准）
+
+- **分支已 push 且有上游**：`feature/c03-e1-e4-runtime-implementation`（主干仍是 `loop-runtime-v1`，未碰）。续作先 `git fetch && git pull`。
+- **HEAD = `5b1855a`（W6a = E4-T1 + E4-T2，已实现、待外部独立复审）**。施工序 W1～W6a 已全部落库：
+  - W1=E2-T8 Q1 绑定（PASS `a698808`）｜W2=E2-T6 gateway 开关默认 deterministic（PASS `b94a382`，B1 闭合）｜W3=E1-T3/T4 loop-run+production 门/preflight（PASS `598cc72`）｜W4=E2-T7/D-073 路径 A 冻结+spawn 引用图+B-7（PASS `f10aef1`）｜W5=E3-T2 九类无效输出不推进 e2e（PASS `eac94c9`，31 断言）｜**W6a=E4-T1+T2（本次 `5b1855a`，68 断言，待复审）**。
+  - 权威 W↔E 任务映射与每步状态见 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md`（台账，比本 handoff 更细，先读它）。
+- **W6a 做了什么**：① E4-T1 10 个 nullable 进程证据字段（invocation/exit/signal/duration/truncated、staging 对、promotion 对、humanActionRef）进 v7 事件+journal 列+canonical hash，validator 与 store 写门双层 fail-closed，确定性 shadow 全 null；② E4-T2 纯函数 `classifyCapabilityRecovery` 五分类（SAFE_RETRY/VERIFY_STAGED/HUMAN_INPUT_REQUIRED/CLEANUP_REQUIRED/TERMINAL_FAILED_BLOCKED +null）投影到 `RunRecoveryContext.recoveryClassification`，仅真进程失败无 staging 才 CLEANUP。生产仅 4 文件，**real 路径仍按 D-071 休眠、未激活**。
+- **外部独立复审 prompt**：`docs/reports/c03-e-w6a-independent-review-prompt.md`（整段交给另一个 agent；本 agent/子 agent 自审不算数）。复审 PASS 后才出 W6a pass-state 并进入 W6b。
+- **下一步 W6b = E4-T3/T4/T5**：resume lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口；`human_action_required` 机器可读 artifact 且 reason 限 6 个合法码（SWITCH_AGENT_REQUIRED/SHADOW_FALLBACK_REQUIRED 非法）；attempt workspace 三态（成功提升/失败隔离/未知副作用保留证据并阻塞）。之后 W7=C-T1 全量只读复审 → C-T2 Current User 收口。**E5 真实 CLI canary / 让默认路径真 spawn 三 Agent 仍未授权，须另行裁决。**
+- **v24 验证基线（HEAD 实测）**：全套件 **143 文件 / 1767 断言 / 0 断言失败**；`loop-codex-implementation-adapter` 等并行文件级 FAILED 是既有 sqlite runner 竞争偶发，隔离单跑即绿（3/3），非缺陷。tsc 干净；3 个 ruby validator exit=0。
+- **治理同步状态**：CP（ai-project-control-plane）main 已合 PR #21，`projects/ai-sdlc/STATE.yaml` 的 product_commit=`5b1855a`、route 为 implemented awaiting review。PKB（personal-knowledge-base）当前 IDLE 正确——W6a 属实现中、未收口，按 Exchange-only 入站边界**不在此阶段写 PKB**；Exchange→PKB publication 留到 C-T2 收口。
+
+---
+
 
 ## 0. ⚠️ 开工第一坑：Node 版本（不读会误判全仓飘红）
 
@@ -10,15 +25,15 @@
   ```bash
   export PATH="$HOME/.nvm/versions/node/v24.12.0/bin:$PATH"   # node -v 应为 v24.12.0
   ```
-- v24 下事实基线：**全套件 137 文件 / 1767 断言 / 0 failed**（elapsed ~248s）。tsc 与 Node 版本无关。
+- v24 下事实基线：**全套件 143 文件 / 1767 断言 / 0 断言失败**（W6a，2026-08-29；文件数随新增测试增长，以顶部快照为准）。tsc 与 Node 版本无关。
 
 ## 1. 当前位置
 
 - 分支：`feature/c03-e1-e4-runtime-implementation`
 - 远端：`origin` = github.com/shaoyang01/ai-sdlc-standard（HTTPS）
-- **该分支尚未 push、无上游**；续作先 `git fetch` 确认远端是否已建分支。
+- 远端：`origin` = github.com/shaoyang01/ai-sdlc-standard（HTTPS），**分支已 push、有上游**（下列"尚未 push"为 c3abf17 时点历史，已被顶部快照取代）。
 - 主干是 `loop-runtime-v1`（不是 main）。
-- HEAD = `c3abf17`。提交链（新→旧）：
+- **当前 HEAD 见顶部快照（W6a `5b1855a`）；以下提交链为 c3abf17 时点的早期历史，仅作背景。**
   - `c3abf17` E1/E2 **real capability gateway**（复用基类 tracing + E3/prompt role 感知）
   - `eb8b5c5` E1 canonical prompt builder
   - `f3586de` 本交接文档初版（可忽略历史）
@@ -78,7 +93,7 @@ for t in agent-cli-profile real-capability-adapter loop-posix-runner-timeout-bou
          real-capability-gateway loop-posix-process-runner; do
   ./node_modules/.bin/tsx tests/$t.test.ts
 done
-npm test                                   # v24 下应 137 文件 / 0 failed
+npm test                                   # v24 下应 143 文件 / 0 断言失败（并行偶发文件级 FAILED 隔离单跑即绿）
 ruby scripts/validate-skill-contracts.rb
 ruby scripts/validate-capability-metadata-chain.rb
 ```
