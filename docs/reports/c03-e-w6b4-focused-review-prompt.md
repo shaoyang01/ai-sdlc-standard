@@ -31,7 +31,7 @@
 a) **数据流核验**：指认 `changedPaths` 的全部消费点，确认它只进 `classifyWorkspaceCleanup`，而该函数里的越界分支要求 `input.allowedPaths !== null`（`:300`）。若你找到任何在 `allowedPaths === null` 时仍读取 `changedPaths` 的路径，那本门控就是错的——请给出行号。
 b) **行为等价性**：对 `allowedPaths === null` 的调用方，门控前后 `cleanup()` 的返回值、抛出行为、副作用必须逐字段一致。请指认是否还存在任何可观测差异（不仅限于返回值——包括日志、时序、以及 `_gitR` 抛错时机）。
 c) **`committed = ""` 的取值**：空串进 `committed.split("\0").filter(Boolean)` 得空数组，与"跳过"等价。请确认这与"压根不调用"在 `changedPaths` 上完全等价，不存在空串被当成一条路径的情况。
-d) **是否过度收紧**：`allowedPaths` 传了但为空数组 `[]` 时，门控应仍然跑 diff（`[] !== null`），越界检查在 `:300` 还会再判 `changedPaths.length > 0`。请实测 `allowedPaths: []` 的行为在门控前后一致。
+d) **是否过度收紧**：`allowedPaths` 传了但为空数组 `[]` 时，门控应仍然跑 diff（`[] !== null`），越界检查在 `:300` 还会再判 `changedPaths.length > 0`。实现方已实测对照（临时探针，跑完已还原，`git status --porcelain` 已核对为空）：门控前 `allowedPaths: []` → `code=CLEANUP_BLOCKED / namedDiffs=1`；门控后 → `code=CLEANUP_BLOCKED / namedDiffs=1`，**逐字一致**。请独立复算；若你认为实现方的对照口径有问题，请指认。
 e) **`allowedPaths` 的校验顺序**：`allowedPaths` 在 `:459-463` 解析校验，门控在 `:540`。请确认不存在「解析失败应当早于门控生效」的语义依赖（例如 `allowedPaths` 非法时是否本应先 `fail("INVALID_INPUT")` 而不该因门控短路掉任何校验）。
 
 二、回归矩阵（逐项实测并给出首挂断言名）
@@ -43,7 +43,7 @@ e) **`allowedPaths` 的校验顺序**：`allowedPaths` 在 `:459-463` 解析校�
 
 三、反向探针（必须亲自改代码制造红，再还原）
 - **P6（本轮关键）**：把 `:540` 的门控去掉（还原成无条件 `await this._gitR(...)`）→ **T10a 必红**（实现方实测：`✗ T10a: no committed-path diff runs when allowedPaths is absent (saw 1)`，`44 passed, 1 FAILED`），且 **T10b 必须仍绿**。若 T10b 也红，说明新断言描述的是别的东西，请指认。
-- **P7（可选但推荐）**：反向验证「过度收紧」——把门控条件改成 `allowedPaths === null || allowedPaths.length === 0` → T10b 应转红（因为 `allowedPaths: ["src"]` 走的是 length>0，应仍绿；请实测判定哪种才是对的，并说明你对 d) 的结论是否因此改变）。
+- **P7（可选但推荐）**：反向验证「过度收紧」——把门控条件改成 `allowedPaths === null || allowedPaths.length === 0` → T10b 应转红（请实测判定，并说明你的结论是否因此改变对一.d) 的判定）。
 - **P8（可选）**：把断言里的 `--name-only` 区分条件去掉（改成只判 `args[0]==="diff"`）→ T10a/T10b 应因 source-wip 的两处 `git diff --binary` 而转红，证明该区分条件是承重而非装饰。
 - 探针后 `git status --porcelain` 必须为空（允许既有的 `?? .workbuddy/`）。
 
@@ -73,4 +73,5 @@ e) 本轮**未**采纳任何新的泛化加固建议。若你提出合同外建�
 - 提交 `1605a84`，父提交 `7cd403e`（docs）→ 代码父 `05d12d2`（W6b3 B1 修复）。
 - 聚焦实测：`tests/loop-w6b3-attempt-workspace-three-state.test.ts` **45 passed**；`tests/loop-git-workspace.test.ts` **110 passed**；`tests/loop-codex-implementation-adapter.test.ts` **354/354**；`npx tsc --noEmit` 干净。
 - 反向探针 P6 实测：去掉门控 → T10a 转红（`saw 1`，`44 passed, 1 FAILED`），T10b 仍绿；还原后 45 passed。
+- `allowedPaths: []` 对照实测（临时探针，已还原）：门控前 `CLEANUP_BLOCKED / namedDiffs=1`；门控后 `CLEANUP_BLOCKED / namedDiffs=1`。
 - 全套件（实现方，`1605a84`）：**实跑中，结果待回填**。上一轮 `e92eea3` 的结果为 146 文件 / `1767 passed, 0 failed`（断言级）/ `failed_file_count=3` / 3539.2s。本轮**请以你的实测为准**。
