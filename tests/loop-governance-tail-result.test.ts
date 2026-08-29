@@ -936,9 +936,10 @@ function sectionD01D08Regression(store: LoopArtifactStore): void {
     "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
     "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
   ] as const;
+  // C03-E W6b2 (E4-T4): +1 for human_action_required.
   check(
-    LOOP_ARTIFACT_KINDS.length === 17,
-    "kind list has 12 historical + 2 WP-4B + 3 v2 node kinds",
+    LOOP_ARTIFACT_KINDS.length === 18,
+    "kind list has 12 historical + 2 WP-4B + 3 v2 node kinds + 1 human boundary kind",
   );
   check(
     originalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),

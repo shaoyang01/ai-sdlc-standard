@@ -1124,7 +1124,8 @@ async function main(): Promise<void> {
         "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
         "requirement_summary", "technical_design", "solution_review", "executor_input", "orchestration_result",
       ] as const;
-      assert(LOOP_ARTIFACT_KINDS.length === 17, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds");
+      // C03-E W6b2 (E4-T4): +1 for human_action_required.
+      assert(LOOP_ARTIFACT_KINDS.length === 18, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds + 1 human boundary kind");
       assert(
         d09a1OriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
         "original ten D01-D08 kinds keep their exact positions",
@@ -1173,7 +1174,8 @@ async function main(): Promise<void> {
         "governance_tail_result",
       ] as const;
       const kindFailuresBefore = failed;
-      assert(LOOP_ARTIFACT_KINDS.length === 17, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds");
+      // C03-E W6b2 (E4-T4): +1 for human_action_required.
+      assert(LOOP_ARTIFACT_KINDS.length === 18, "kind list includes 12 historical + 2 WP-4B + 3 v2 node kinds + 1 human boundary kind");
       assert(
         d10aOriginalKinds.every((kind, index) => LOOP_ARTIFACT_KINDS[index] === kind),
         "original eleven D01-D09 kinds keep their exact names and order",

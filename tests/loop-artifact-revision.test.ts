@@ -445,7 +445,8 @@ console.log("artifact revision: schema constants and canonical tokens");
     LOOP_ARTIFACT_GATE_CAPABILITIES.join(",") === "solution-gate",
     "exactly one Gate capability",
   );
-  assert(LOOP_ARTIFACT_REVISION_KINDS.length === 17, "seventeen canonical artifact kinds");
+  // C03-E W6b2 (E4-T4): +1 for human_action_required.
+  assert(LOOP_ARTIFACT_REVISION_KINDS.length === 18, "eighteen canonical artifact kinds");
   assert(
     LOOP_ARTIFACT_INDEX_STATUSES.join(",") === "draft,active,stale,replaced",
     "four canonical manifest artifact statuses",

@@ -61,6 +61,11 @@ export const LOOP_ARTIFACT_REVISION_KINDS = [
   "task_plan",
   "implementation_record",
   "knowledge_sync_result",
+  // C03-E W6b2 (E4-T4): the human boundary artifact. It is not a node product
+  // and therefore has no entry in LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION; it is
+  // listed here because this array doubles as the canonical-kind registry that
+  // the compile-time drift check below and loop-finding-lifecycle.ts consult.
+  "human_action_required",
 ] as const;
 type ArtifactKindDrift = Exclude<LoopArtifactKind, (typeof LOOP_ARTIFACT_REVISION_KINDS)[number]>;
 const _artifactKindListComplete: [ArtifactKindDrift] extends [never] ? true : never = true;

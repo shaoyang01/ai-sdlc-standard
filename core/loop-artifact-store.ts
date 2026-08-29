@@ -29,7 +29,10 @@ export type LoopArtifactKind =
   // v2 node artifact kinds (C02-WP3.5, A4)
   | "task_plan"
   | "implementation_record"
-  | "knowledge_sync_result";
+  | "knowledge_sync_result"
+  // C03-E W6b2 (E4-T4): the machine-readable human boundary. Contract, reason
+  // codes and read/write helpers live in core/loop-human-action-artifact.ts.
+  | "human_action_required";
 
 const LOOP_ARTIFACT_KINDS: readonly LoopArtifactKind[] = [
   "code_patch", "test_summary", "review_summary", "delivery_result", "workspace_metadata",
@@ -37,6 +40,7 @@ const LOOP_ARTIFACT_KINDS: readonly LoopArtifactKind[] = [
   "governance_tail_result", "delivery_checkpoint",
   "capability_output", "capability_findings",
   "task_plan", "implementation_record", "knowledge_sync_result",
+  "human_action_required",
 ];
 
 export type LoopStoredArtifact = Readonly<{ artifactRef: string; kind: LoopArtifactKind; digest: string; sizeBytes: number }>;
