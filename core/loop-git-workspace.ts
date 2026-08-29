@@ -522,8 +522,15 @@ export class LoopGitWorkspaceManager {
       // whatever is still uncommitted or untracked. Plan :443-444 — the
       // workspace diff must contain only task-permitted paths, and a committed
       // out-of-bounds file is exactly as out of bounds as an uncommitted one.
+      //
+      // --no-renames: git otherwise collapses `git mv secret/b.ts src/b.ts` into
+      // a single destination record, so a move out of an out-of-bounds path
+      // prints only `src/b.ts` and the attempt gets promoted with its evidence
+      // destroyed. Without the flag a rename is reported as delete+add, which is
+      // the same conservative direction statusPaths already takes for unstaged
+      // renames (it counts the original path too: those bytes were touched).
       const committed = (await this._gitR(wsPath,
-        ["diff", "--name-only", "-z", `${identity.expectedBaseSha}...HEAD`], [0])).stdout;
+        ["diff", "--name-only", "-z", "--no-renames", `${identity.expectedBaseSha}...HEAD`], [0])).stdout;
       const changedPaths = [...new Set([
         ...committed.split("\0").filter(Boolean),
         ...statusPaths(status),

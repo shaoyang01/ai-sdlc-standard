@@ -11,7 +11,8 @@
 //  - drop the out-of-bounds check in classifyWorkspaceCleanup → T4/T8 go red;
 //  - widen isWithinAllowed to a raw startsWith → the T5 prefix case goes red;
 //  - route `failed` through the promote path → T2 goes red;
-//  - feed only `status` to the classifier and drop the committed diff → T4 red.
+//  - feed only `status` to the classifier and drop the committed diff → T4 red;
+//  - drop --no-renames from the committed diff → T9a red, T9b/T9c stay green.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -48,7 +49,9 @@ interface Env { tr: string; rp: string; cr: string; baseSha: string; home: strin
 
 // A source repo with one commit on `feat/loop-runtime-v1`, mirrored into
 // refs/remotes/origin so the manager's base check has something to read.
-function setupRepo(): Env {
+// `pre` seeds extra files into the base commit — needed for the rename cases,
+// where the out-of-bounds path has to exist before the attempt touches it.
+function setupRepo(pre: ReadonlyArray<readonly [string, string]> = []): Env {
   const tr = realpathSync(mkdtempSync(join(tmpdir(), "l03w6b3-")));
   const rp = join(tr, "repo"), cr = join(tr, "ctrl");
   mkdirSync(rp, { recursive: true }); mkdirSync(cr, { recursive: true });
@@ -56,7 +59,12 @@ function setupRepo(): Env {
   execFileSync(GP, ["config", "user.name", "t"], { cwd: rp });
   execFileSync(GP, ["config", "user.email", "t@t"], { cwd: rp });
   writeFileSync(join(rp, "f.txt"), "x");
-  execFileSync(GP, ["add", "f.txt"], { cwd: rp });
+  for (const [rel, body] of pre) {
+    const abs = join(rp, rel);
+    mkdirSync(join(abs, ".."), { recursive: true });
+    writeFileSync(abs, body);
+  }
+  execFileSync(GP, ["add", "-A"], { cwd: rp });
   execFileSync(GP, ["commit", "-m", "init"], { cwd: rp });
   const baseSha = execFileSync(GP, ["rev-parse", "HEAD"], { cwd: rp, encoding: "utf8" }).trim();
   execFileSync(GP, ["update-ref", "refs/remotes/origin/feat/loop-runtime-v1", baseSha], { cwd: rp });
@@ -262,6 +270,80 @@ async function main() {
       ok(branchAlive, "T8: the task branch is still registered after a block");
       const listed = execFileSync(GP, ["worktree", "list", "--porcelain"], { cwd: e.rp, encoding: "utf8" });
       ok(listed.includes(snap.workspacePath), "T8: the worktree is still registered after a block");
+    } finally { rmSync(e.tr, { recursive: true, force: true }); }
+  }
+
+  // ─── T9: a committed rename cannot launder an out-of-bounds path ─
+  // git reports `git mv secret/b.ts src/b.ts` as one destination record when
+  // rename detection is on, so the deleted source path never reaches the
+  // classifier: an attempt could move bytes out of an out-of-bounds path,
+  // claim success, and have its evidence destroyed by a promote. The committed
+  // diff is taken with --no-renames so a rename is reported as delete+add, the
+  // same conservative direction statusPaths already takes for unstaged ones.
+  {
+    // ① out-of-bounds source, permitted destination → block
+    const e = setupRepo([["secret/b.ts", "// pre-existing out-of-bounds file\n"]]);
+    try {
+      const mgr = new LoopGitWorkspaceManager({ runner: mkRunner(e), gitExecutableId: "git" });
+      const id = mkId(e, "codex/w6b3-t9a");
+      const snap = await mgr.prepare(id);
+      mkdirSync(join(snap.workspacePath, "src"), { recursive: true });
+      execFileSync(GP, ["mv", "secret/b.ts", "src/b.ts"], { cwd: snap.workspacePath });
+      execFileSync(GP, ["commit", "-m", "attempt moves bytes out of an out-of-bounds path"],
+        { cwd: snap.workspacePath });
+      await assertCode(
+        () => mgr.cleanup(id, {
+          expectedTaskHeadSha: commitHead(snap.workspacePath),
+          outcome: "succeeded",
+          allowedPaths: ["src"],
+        }),
+        "CLEANUP_BLOCKED", "T9a: a committed rename out of an out-of-bounds path blocks",
+      );
+      ok(existsSync(join(snap.workspacePath, "src", "b.ts")),
+        "T9a: the moved evidence is still readable");
+      ok(!existsSync(join(snap.workspacePath, "secret", "b.ts")),
+        "T9a: the out-of-bounds source is gone from the tree, as the attempt left it");
+    } finally { rmSync(e.tr, { recursive: true, force: true }); }
+  }
+
+  {
+    // ② a rename wholly inside the permitted set still promotes
+    const e = setupRepo([["src/a.ts", "export const a = 1;\n"]]);
+    try {
+      const mgr = new LoopGitWorkspaceManager({ runner: mkRunner(e), gitExecutableId: "git" });
+      const id = mkId(e, "codex/w6b3-t9b");
+      const snap = await mgr.prepare(id);
+      execFileSync(GP, ["mv", "src/a.ts", "src/b.ts"], { cwd: snap.workspacePath });
+      execFileSync(GP, ["commit", "-m", "attempt renames inside the permitted set"],
+        { cwd: snap.workspacePath });
+      const res = await mgr.cleanup(id, {
+        expectedTaskHeadSha: commitHead(snap.workspacePath),
+        outcome: "succeeded",
+        allowedPaths: ["src"],
+      });
+      ok(res.decision === "promote", "T9b: a rename inside the permitted set still promotes");
+      ok(!existsSync(snap.workspacePath), "T9b: and the worktree is reclaimed");
+    } finally { rmSync(e.tr, { recursive: true, force: true }); }
+  }
+
+  {
+    // ③ an out-of-bounds plain deletion is detected with no rename involved
+    const e = setupRepo([["secret/c.ts", "// pre-existing out-of-bounds file\n"]]);
+    try {
+      const mgr = new LoopGitWorkspaceManager({ runner: mkRunner(e), gitExecutableId: "git" });
+      const id = mkId(e, "codex/w6b3-t9c");
+      const snap = await mgr.prepare(id);
+      execFileSync(GP, ["rm", "secret/c.ts"], { cwd: snap.workspacePath });
+      execFileSync(GP, ["commit", "-m", "attempt deletes an out-of-bounds path"],
+        { cwd: snap.workspacePath });
+      await assertCode(
+        () => mgr.cleanup(id, {
+          expectedTaskHeadSha: commitHead(snap.workspacePath),
+          outcome: "succeeded",
+          allowedPaths: ["src"],
+        }),
+        "CLEANUP_BLOCKED", "T9c: a committed out-of-bounds deletion blocks",
+      );
     } finally { rmSync(e.tr, { recursive: true, force: true }); }
   }
 
