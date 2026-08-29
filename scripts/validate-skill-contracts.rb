@@ -1022,6 +1022,33 @@ W4_NEW_ASSEMBLY.each do |rel|
   end
 end
 
+# ── B-8: C03-E W6b1 dispatch-window firewall assembly lock (E4-T3) ──
+# W6b1 turned "the recovery -> claim -> spawn -> terminal/promotion window runs
+# under the journal resume lease" from an incidental property of `run()` into an
+# enforced one. Review probe P2 proved the whole suite stays green when the
+# runtime assembly line is deleted, so only this check can catch a production
+# path that silently loses the firewall. Locked here:
+#   (a) runtime.ts assembles the guard on the LoopCapabilityEntry it builds;
+#   (b) the guard and withResumeLease use the SAME journal path variable
+#       (a second variable would check a lease nobody holds, or vice versa);
+#   (c) the entry still fails closed through isResumeLeaseHeld.
+W6B1_RUNTIME = "runtime.ts"
+W6B1_ENTRY = "core/loop-capability-entry.ts"
+w6b1_runtime_text = File.exist?(File.join(ROOT, W6B1_RUNTIME)) ? File.read(File.join(ROOT, W6B1_RUNTIME)) : ""
+w6b1_entry_text = File.exist?(File.join(ROOT, W6B1_ENTRY)) ? File.read(File.join(ROOT, W6B1_ENTRY)) : ""
+w6b1_guard_vars = w6b1_runtime_text.scan(/requireResumeLeaseJournal:\s*([A-Za-z_][A-Za-z0-9_]*)/).flatten.uniq
+w6b1_lease_vars = w6b1_runtime_text.scan(/withResumeLease\(\s*([A-Za-z_][A-Za-z0-9_]*)/).flatten.uniq
+if w6b1_guard_vars.empty?
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_RUNTIME} must assemble requireResumeLeaseJournal on the LoopCapabilityEntry (without it the dispatch window is unguarded)"
+elsif w6b1_lease_vars.empty?
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_RUNTIME} must hold the resume lease via withResumeLease"
+elsif (w6b1_guard_vars & w6b1_lease_vars).empty?
+  errors << "B-8 W6b1 dispatch-window firewall: requireResumeLeaseJournal #{w6b1_guard_vars.inspect} and withResumeLease #{w6b1_lease_vars.inspect} must use the same journal path variable"
+end
+unless w6b1_entry_text.match?(/isResumeLeaseHeld\(\s*this\.options\.requireResumeLeaseJournal\s*\)/)
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_ENTRY} must fail closed with isResumeLeaseHeld(this.options.requireResumeLeaseJournal)"
+end
+
 # ── C03-B R2 closure validation (H1-d / H1-e) ──
 # H1-d: category-guide ↔ known-skills contract exact consistency.
 # Round 2 found 3/8 category mismatches that the validator did not catch.

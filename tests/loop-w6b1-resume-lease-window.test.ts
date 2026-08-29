@@ -247,14 +247,20 @@ async function main(): Promise<void> {
 {
   const f = fixture("loop-w6b1-t6-");
   try {
-    for (const bad of ["", "   "]) {
+    // 空串/空白串之外，非字符串也必须被拒：`as any` 能骗过 tsc，运行时必须拦住
+    // （复审建议 S2：原 T6 只覆盖字符串分支）。
+    const badValues: readonly unknown[] = ["", "   ", 123, {}, null, true, []];
+    for (const bad of badValues) {
       let threw = false;
       try {
-        entry(f, gateway(f, { count: 0 }), { requireResumeLeaseJournal: bad });
+        entry(f, gateway(f, { count: 0 }), { requireResumeLeaseJournal: bad as string });
       } catch (error) {
         threw = error instanceof LoopRunJournalError && error.code === "INVALID_INPUT";
       }
-      ok(threw, `T6: requireResumeLeaseJournal=${JSON.stringify(bad)} is rejected at construction`);
+      ok(
+        threw,
+        `T6: requireResumeLeaseJournal=${JSON.stringify(bad)} is rejected at construction`,
+      );
     }
   } finally {
     f.artifactStore.close();

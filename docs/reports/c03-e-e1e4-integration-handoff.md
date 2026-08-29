@@ -5,19 +5,21 @@
 ## ★ 当前快照（W6b1，最新，与下文冲突时以本节为准）
 
 - **分支已 push 且有上游**：`feature/c03-e1-e4-runtime-implementation`（主干仍是 `loop-runtime-v1`，未碰）。续作先 `git fetch && git pull`。
-- **HEAD = `d4ee31e`（台账裁决提交）＋ 未提交工作区改动（W6b1 = E4-T3，已实现、待外部独立复审）**。
-  - 已落库：W1～W5 全部 PASS；**W6a=E4-T1+T2（`5b1855a`，68 断言，独立复审 PASS 零阻塞，CP PR #22 已合 main `16cc5e6`）**；`d4ee31e` 是 W6b 三条裁决的台账提交。
-  - 工作区（未提交）：**W6b1 = E4-T3 resume lease 窗口防火墙**，生产 3 文件 +82/-8（`core/loop-resume-lock.ts` 新增 `isResumeLeaseHeld`、`core/loop-capability-entry.ts` 新增 `requireResumeLeaseJournal` 选项与进入窗口时的 fail-closed 断言、`runtime.ts` 构造 entry 时装配该选项），新测试 `tests/loop-w6b1-resume-lease-window.test.ts` **22 断言全绿**。
+- **HEAD = `ab5f78c`（W6b1 prompt 提交）＋ 未提交改动：复审建议 S1/S2 的补强（Current User 裁决"现在补"）**。
+  - 已落库：W1～W5 全部 PASS；**W6a=E4-T1+T2（`5b1855a`，68 断言，复审 PASS 零阻塞，CP PR #22 已合 main `16cc5e6`）**；`d4ee31e` 台账裁决提交；**`5f2bcd8` = W6b1（E4-T3）实施**（生产 3 文件：`loop-resume-lock.ts` +32/-0、`loop-capability-entry.ts` +39/-0、`runtime.ts` **+11/-8**）；`ab5f78c` = W6b1 复审 prompt。
+  - **W6b1 独立复审已 PASS、零阻塞**。复审实测更正：`runtime.ts` 是 **+11/-8**（提交信息写的 +19/-8 是把 19 行总改动误记为新增行，本 handoff 早期版本也沿用了错口径，已改正）。
+  - 工作区（未提交）：**S1 + S2 补强**。S1 = `scripts/validate-skill-contracts.rb` 新增 **B-8 装配机械锁定**（断言 `runtime.ts` 存在 `requireResumeLeaseJournal:` 装配、且与 `withResumeLease(` 用**同一变量**、entry 内仍有 `isResumeLeaseHeld(this.options.requireResumeLeaseJournal)`）；S2 = T6 扩展覆盖非字符串（`123 / {} / null / true / []` 经 `as any`）。测试 **27 断言全绿**。
   - 权威 W↔E 任务映射与每步状态见 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md`（台账，比本 handoff 更细，先读它）。
 - **W6b1 做了什么（一句话）**：把「lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口」从**结构性巧合**变成**可强制、可证明的防火墙**。
   - 取证事实：`runProduction`（`runtime.ts:961`）委托给 `run()`（`:1033`），而 `run()` 整体包在 `withResumeLease`（`:394`）里，所以窗口**确实**被覆盖；但没有任何机制阻止未来入口在无 lease 时进入同一 claim/spawn 路径——`claimNextCapabilityExecution` 只保证 claim 原子性，不保证 lease。
   - 因此新增：`isResumeLeaseHeld(journalPath)`（lease 身份按 `leasePathFor` 重算，不同拼写/不同 journal 不算持有）；`LoopCapabilityEntry` 新增可选 `requireResumeLeaseJournal`，在 `execute()` 读 recovery **之前**（第一次持久化 claim 之前）断言持有该 journal 的 lease，否则 `STORE_BUSY` fail-closed；`runtime.ts` 装配该选项。
-  - **可选而非无条件**：避免 8 个既有用例（直接构造 entry 的单元测试）被迫改写入 lease；生产入口是唯一装配点，且 T1/T4 双向证明守卫有效。这是有意权衡，请复审裁决是否要升级为无条件。
+- **复审裁决（二.d，重点）**：可选守卫判为**建议项不阻塞**——合同原文（规划 §6 E4）只要求"lease 覆盖窗口 + S12 至多一个 spawn"，未要求无条件守卫；生产路径无旁路（`runtime.ts:386` 是唯一装配点且必装）。但复审 **P2 实证：删掉装配行后全套件（含 run-production、c03d wiring）全绿，没有任何测试能捕获"生产路径静默失去防火墙"**——这条缺口已由 B-8 补上。
+- **取证复核结论（复审）**：委托链无缝、无旁路——`runProduction` 无条件委托 `run()`，`withResumeLease` 闭包 `:397–:917`，两个 `entry.execute`（`:532`/`:723`）均在闭包内；`claimNextCapabilityExecution` 生产调用点仅 `gateway.ts:332`/`:978`，只能由 `entry.execute` 到达；`scripts/codex-real-dispatch-smoke.ts:184` 裸调但无 capabilityTracing、不 claim 不写 journal（W4 既有工具）。
 - **外部独立复审 prompt**：`docs/reports/c03-e-w6b1-independent-review-prompt.md`（整段交给另一个 agent；本 agent/子 agent 自审不算数）。复审 PASS 后才出 W6b1 pass-state 并进入 W6b2。
 - **下一步 W6b2 = E4-T4 / W6b3 = E4-T5**（三个子波分别复审，Current User 2026-08-29 裁决）：W6b2 新增 `human_action_required` artifact kind（六合法码，`SWITCH_AGENT_REQUIRED`/`SHADOW_FALLBACK_REQUIRED` 非法，改 `loop-artifact-store.ts` 联合类型与 KINDS 数组**两处**）；W6b3 attempt workspace 三态（成功提升/失败隔离/未知副作用保留证据并阻塞），**本轮就接 wip digest 越界检测**。之后 W7=C-T1 全量只读复审 → C-T2 Current User 收口。**E5 真实 CLI canary / 让默认路径真 spawn 三 Agent 仍未授权，须另行裁决。**
-- **v24 验证基线（W6b1 工作区实测）**：新测试单跑 **22 passed**；全套件 **144 文件 / failed_file_count=0 / exit=0**（注意：`Results: 1767 passed` 是**最后一个测试文件的内部计数**，不是全套件断言总数——runner 只按文件 exit code 判定，见观察项）；tsc `--noEmit` 干净；3 个 ruby validator exit=0；`git diff --check` 无空白问题。
-- **本波自测反向探针（已实跑并还原）**：把 `loop-capability-entry.ts` 里的 `!isResumeLeaseHeld(...)` 改成 `false` → T1 立刻 `AssertionError` 转红；还原后 22 断言复绿。探针后 `git diff` 仅剩预期三文件。
-- **给复审的提醒**：`runtime.ts` 本波有改动（+19/-8），与台账 §3.1「冻结生产文件零改动」的**历史批次**陈述不冲突（该陈述针对 `b842b18` 相对 merge-base），但复审时请单独确认这一处装配。
+- **v24 验证基线（W6b1 + S1/S2 实测）**：新测试单跑 **27 passed**；全套件 **144 文件 / failed_file_count=0 / exit=0**（注意：`Results: 1767 passed` 是**最后一个测试文件的内部计数**，不是全套件断言总数——runner 只按文件 exit code 判定）；tsc `--noEmit` 干净；3 个 ruby validator exit=0；`git diff --check` 无空白问题。
+- **反向探针（已实跑并还原）**：① 守卫条件改 `false` → T1 红；② 守卫下移到 bootstrap 之后 → T1「零持久化写入」断言红；③ `isResumeLeaseHeld` 恒 `true` → T1 红；④ 身份弱化为目录级 → T4 红；⑤ **删 `runtime.ts` 装配行 → B-8 校验器 exit=1**（此前全套件不捕获，S1 正是为此）；⑥ 装配改成别的变量 → B-8「must use the same journal path variable」exit=1；⑦ `busy_timeout=0→5000` → 测试仍绿但耗时 0.63s→6.13s，loser 的 BEGIN 在 SQLite C 层同步阻塞并**冻结事件循环（连持锁者的 JS 一起冻）**——真实执行者（子进程 I/O、计时器）下会退化为近死锁，故 `busy_timeout=0` 必须保持。探针后 `git diff` 仅剩预期改动。
+- **范围外记录（复审判定，非缺陷）**：detached 子进程父崩溃后的副作用生命周期归 E4-T5/W6b3（"进程组脱离 ≠ 决策窗口脱离"成立）；守卫升级为无条件无合同条款支持。
 - **治理同步状态**：CP（ai-project-control-plane）main 已合 PR #21，`projects/ai-sdlc/STATE.yaml` 的 product_commit=`5b1855a`、route 为 implemented awaiting review。PKB（personal-knowledge-base）当前 IDLE 正确——W6a 属实现中、未收口，按 Exchange-only 入站边界**不在此阶段写 PKB**；Exchange→PKB publication 留到 C-T2 收口。
 
 ---
