@@ -78,4 +78,7 @@ d) 本轮**未**采纳任何新的泛化加固建议。若你提出合同外建�
 - 提交 `05d12d2`，父提交 `952d9da`（docs）→ 代码父 `02b642a`。
 - 聚焦实测：`tests/loop-w6b3-attempt-workspace-three-state.test.ts` 41 passed；`tests/loop-git-workspace.test.ts` 110 passed；`tests/loop-w6b2-human-action-artifact.test.ts` 83 passed；`tests/loop-finding-lifecycle.test.ts` 350 passed；`tests/loop-single-rail-contract.test.ts` 55/55；`npx tsc --noEmit` 干净；三个 ruby validator exit=0。
 - 反向探针 P1 实测：去掉 `--no-renames` → `T9a: ... (no throw)` 与 `T9a: the moved evidence is still readable` 两条转红，`39 passed, 2 FAILED`，T9b/T9c 全绿；还原后 41 passed。
-- 全套件（实现方，`05d12d2`）：**实跑中，结果待回填**。上一轮基线 `952d9da`（W6b3 文档 pin，146 文件）的 `failed_file_count=2`，即第五节 a) 的两个已知环境缺口文件，非本波缺陷。本轮**请以你的实测为准**；若实现方回填结果与你的结果不一致，请列出差异并判定归因。
+- 全套件（实现方，`e92eea3` / 代码 `05d12d2`，146 文件，3539.2s）：**1767 passed, 0 failed（断言级）**；**文件级 `failed_file_count=3`**。
+  - 已回填。与上一轮基线 `952d9da`（`failed_file_count=2`）的差异是**多出** `tests/loop-codex-implementation-adapter.test.ts` 一个文件，其余两个是第五节 a) 的已知环境缺口文件。
+  - 多出这一个的定性（实现方自测，供对照）：隔离单跑 `354/354 passed`；同一文件 **3 路并行 3/3 通过**、**8 路并行 8/8 通过**；该文件调用 `cleanup()` 时**未传** `outcome`/`allowedPaths`（`:982`，且包在 try/catch 里），走的是 W6b3 之前的既有分支。判定为**本机负载/环境型偶发**，非 W6b3 回归；但未做 8 路混合文件复现，故保留为「实现方环境观察项」。
+  - **复审方环境 `failed=0` 为准**（见复审结论）。实现方本机结果不用于判定本波。
