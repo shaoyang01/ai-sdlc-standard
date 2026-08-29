@@ -1,12 +1,12 @@
 # C03-E W6b2 独立复审 Prompt（交付外部 Agent）
 
 > 用途：把下方分隔线之间的**整段**复制给另一个独立 agent 做只读复审。实现方自审 / 子 agent / 对抗视角都不算数。
-> 复审基线：产品库 `feature/c03-e1-e4-runtime-implementation`，范围 `<W6B2 实施提交>`（单提交，见文末基线），Node **v24.12.0**。
+> 复审基线：产品库 `feature/c03-e1-e4-runtime-implementation`，范围 **`d9a7517..99c9df3`**（单提交，HEAD 实测须为 `99c9df3`），Node **v24.12.0**。
 > 复审结论回来后：零阻塞 → 出 W6b2 pass-state（CP）并进入 W6b3（E4-T5）；有阻塞 → 按报告一次性修复后复审。
 
 ---
 
-对 C03-E W6b2（E4-T4 `human_action_required` machine-readable artifact 与六合法码）做一次全量、只读、根因合并式独立复审。主审范围为 W6b2 实施提交（单提交，工作树干净、与 `origin/feature/c03-e1-e4-runtime-implementation` 同步）；允许对全仓抽查。验证环境必须 Node v24.12.0（`export PATH="$HOME/.nvm/versions/node/v24.12.0/bin:$PATH"`），所有测试/探针亲自实跑，不采信实现方口径。以 C03-E 已冻结授权合同为边界——规划 `docs/LOOP-CORE-C03-E-PLAN.md` §6 E4 候选目标面（`:452-469`）与验收、Decision-071（real 休眠 D-071）/072/073、W1～W6b1 已 PASS 冻结面、台账 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md` E4 段——逐项完成，不改代码、不提交、不推送、不使用 DocFlow。
+对 C03-E W6b2（E4-T4 `human_action_required` machine-readable artifact 与六合法码）做一次全量、只读、根因合并式独立复审。主审范围为 `d9a7517..99c9df3`（单提交，HEAD 实测须为 `99c9df3`，工作树干净、与 `origin/feature/c03-e1-e4-runtime-implementation` 同步）；允许对全仓抽查。验证环境必须 Node v24.12.0（`export PATH="$HOME/.nvm/versions/node/v24.12.0/bin:$PATH"`），所有测试/探针亲自实跑，不采信实现方口径。以 C03-E 已冻结授权合同为边界——规划 `docs/LOOP-CORE-C03-E-PLAN.md` §6 E4 候选目标面（`:452-469`）与验收、Decision-071（real 休眠 D-071）/072/073、W1～W6b1 已 PASS 冻结面、台账 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md` E4 段——逐项完成，不改代码、不提交、不推送、不使用 DocFlow。
 
 **本波的形态**：E4-T4 是**先立契约**而不是先接活。取证事实：当前生产代码中**没有任何一处给 `humanActionRef` 赋非 null 值**（`execution/gateway.ts` 五处写入点全部硬编码 null），唯一的消费者是 `classifyCapabilityRecovery`（`core/loop-recovery.ts:101`）把非 null 映射为 `HUMAN_INPUT_REQUIRED`。这与 real 路径按 D-071 休眠一致。因此本波交付的是 artifact 契约、六个合法码的 allowlist、以及写入/读回的校验；**没有接生产者**。请判定这是合同内的正确形态，还是必须在本次就接上生产者。
 
@@ -41,6 +41,6 @@ b) 确认本波**没有**修改 `core/loop-capability-execution.ts` 中 `humanAc
 
 以下为有意为之或已知事实，不得作为缺陷上报：① 本波**没有接生产者**（real 休眠，见开篇取证）；② ref kind 强制只放在读回路径而非事件层（见二.a，按裁决项处理）；③ `capability`/`executionRole` 用 `string | null` 而非强类型枚举；④ `human_action_required` 进入 REVISION_KINDS 但非节点产物（见一.h）；⑤ 3 个既有测试的注册表规模断言 17→18 是新增 kind 的机械后果；⑥ `Results: 1767 passed` 是最后一个测试文件的内部计数，不是全套件断言总数；⑦ 并行 runner 竞争偶发（隔离即绿）为既有环境项；⑧ W6b3（E4-T5 attempt workspace 三态与 wip digest 越界检测）、E5 真实 canary、路径 A 物理删除、真实 Agent/Git/发布副作用、C-T1/C-T2 收口与 Exchange/PKB publication 均**不在本轮范围**。不要把合同外的泛化加固建议升格为阻塞；若认为必须纳入，先指明是哪条合同要求使其成为范围内问题。
 
-证据基线（实现方口径，须独立复跑不轻信）：`npx tsc --noEmit` 干净；`scripts/validate-skill-contracts.rb`、`validate-capability-metadata-chain.rb` 均 exit=0；新增 `tests/loop-w6b2-human-action-artifact.test.ts` 82 断言全绿；全套件 145 文件 / `failed_file_count=0` / `exit=0`；自测探针 P1、P4 已实跑并还原。
+证据基线（实现方口径，须独立复跑不轻信）：HEAD `99c9df3`，范围 `d9a7517..99c9df3`；`npx tsc --noEmit` 干净；`scripts/validate-skill-contracts.rb`、`validate-capability-metadata-chain.rb` 均 exit=0；新增 `tests/loop-w6b2-human-action-artifact.test.ts` 82 断言全绿；全套件 145 文件 / `failed_file_count=0` / `exit=0`；自测探针 P1、P4 已实跑并还原。
 
 输出要求：先给两份清单，再统一输出所有发现（同一根因的变体合并，W1～W6b1 已判定事项不得重复上报）；每个阻塞项给出可复现证据、影响路径、一次性修复边界与回归矩阵。最后明确分列：阻塞项 / 建议项 / 不属 W6b2 范围。若零阻塞，明确给出 **W6b2 PASS** 判定并声明可进入 W6b3（E4-T5）；同时说明 PASS 仅代表实现可进入下一步，不等于激活真实 Agent（仍需 E5 另行授权）。
