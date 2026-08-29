@@ -5,6 +5,23 @@
 > 本轮**只审 B1 修复及其回归影响**。上一轮 W6b3 复审的其余结论（契约 a)–h) 除 B1 外全部 CLOSED、F1/S2 处置正确、两项形态裁决）已PASS，不在本轮重开；但允许全仓抽查，若发现**本轮新引入**的问题请照报。
 > 复审结论回来后：零阻塞 → 出 W6b3 pass-state（CP）并进入 W7（C-T1 全量只读复审 → C-T2 Current User 收口）；有阻塞 → 按报告一次性修复后再复审。
 
+## 复审结论（已回收）：**CLOSED（零阻塞）**，可出 W6b3 pass-state 并进入 W7
+
+复审方环境与本机独立复算，逐条与实现方口径吻合：
+
+- **B1 复现对照**：同一探针（真 `LoopGitWorkspaceManager` + 真 git）在 `02b642a`（修复前）实测 `decision=promote / worktreeRemoved=true / 证据销毁`；在 `05d12d2`（修复后）抛 `CLEANUP_BLOCKED`，worktree 与 `src/b.ts` 证据保留。与 B1 报告逐字吻合。
+- **修复形态**：`core/loop-git-workspace.ts:533` 加 `--no-renames` 单 flag + 7 行注释，`git show 05d12d2` 恰为两个文件，无夹带、无顺手加固。复审方核验了备选写法（`-M0` / `--diff-filter` / `diff-tree -r`），确认单 flag 是**最小且正确**手段；并逐条排除新漏判（chmod / 二进制 / 子模块 / copy / 空目录），`--no-renames` 严格扩大报告集合。
+- **回归矩阵**：T9a（越界 rename → block，3 断言）、T9b（允许集合内 rename 仍 promote，未过度收紧）、T9c（越界纯删除 block）**全部真实承载**。`loop-w6b3` 41 / `loop-git-workspace` 110 / `loop-w6b2` 83 全绿。
+- **探针**：P1 去掉 flag → 恰 `39 passed, 2 FAILED`（T9a 两条红、T9b/T9c 绿），与实现方口径逐字一致；P2 复现已知边界（attempt 自建再 mv 走仍 promote）并判定**划为范围外成立**——那是「中间提交痕迹不出现在最终 diff」的更宽问题，需逐提交遍历的新机制，不属 B1；P3 证明 `pre` 参数真实承载。
+- **全套件（复审方环境）**：`npm test` **146 文件 / failed=0 / exit=0 / 278.8s**；两个已知环境缺口文件在复审方环境**隔离单跑全绿**（266 / 268），证实实现方本机失败确为 broker 拦截 `link`(2) 的环境能力缺口，**非本波回归**。
+- `tsc --noEmit` 干净，三个 ruby validator exit=0。
+
+**建议项（1 条，非阻塞）**：若未来合同要求「中间提交的越界痕迹」也可判定，需**逐提交 diff-tree 遍历**的新机制，应按**新波次**立项（不属 B1，不属本波）。
+
+**范围外维持上轮裁决**：cleanup 零生产调用方、`promote` 无 merge/push。
+
+**PASS ≠ 激活真实 Agent**：E5 真实 canary / 真 spawn 仍需另行授权。
+
 ---
 
 对 C03-E W6b3 的唯一阻塞项 B1 做一次聚焦、只读、根因级独立复审。
