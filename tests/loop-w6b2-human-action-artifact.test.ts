@@ -12,7 +12,9 @@
 //  - make the reasonCode check case-insensitive → T3 goes red;
 //  - drop the kind pin in putHumanActionRequiredArtifact (store under another
 //    kind) → T7 goes red;
-//  - drop the exact-field check in parse → T5 goes red.
+//  - drop the exact-field check in parse → T5 goes red;
+//  - drop the ref-kind guard in readHumanActionRequiredArtifact → T7 goes red
+//    (only true since F1: the foreign fixture now holds valid content).
 
 import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
@@ -237,7 +239,19 @@ async function main(): Promise<void> {
         (LOOP_ARTIFACT_KINDS as readonly string[]).includes(HUMAN_ACTION_ARTIFACT_KIND),
         "T7: human_action_required is a registered canonical kind",
       );
-      const foreign = f.store.put("review_summary", "some other artifact body");
+      // F1 (review finding, fixed in W6b3): the foreign fixture holds VALID
+      // human-action content. With a non-JSON body the parse layer rejected the
+      // read first, so the ref-kind guard was never the thing that refused it
+      // and probe P4 could not turn red.
+      const built = buildHumanActionRequiredArtifact(fixtureInput());
+      ok(
+        !isHumanActionArtifactFailure(built),
+        "T7: the foreign fixture builds a real artifact",
+      );
+      const foreign = f.store.put(
+        "review_summary",
+        isHumanActionArtifactFailure(built) ? "" : built.content,
+      );
       ok(
         !isHumanActionRequiredRef(foreign.artifactRef),
         "T7: a review_summary ref is not a human_action_required ref",

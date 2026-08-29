@@ -18,7 +18,7 @@
 
 import { types as utilTypes } from "node:util";
 
-import { LOOP_ARTIFACT_REVISION_KINDS } from "./loop-artifact-revision";
+import { LOOP_ARTIFACT_CANONICAL_KINDS } from "./loop-artifact-revision";
 import { LoopRunJournalError } from "./loop-executor-types";
 import { readPlainDataRecord, validateRequirementId } from "./loop-run-state";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
@@ -343,7 +343,7 @@ function evidenceReference(refValue: unknown, digestValue: unknown, label: strin
   const ref = text(refValue, `${label} ref`);
   const refMatch = EVIDENCE_REF_RE.exec(ref);
   if (refMatch === null) invalid(`${label} ref must be a canonical content-addressed artifact reference`);
-  if (!(LOOP_ARTIFACT_REVISION_KINDS as readonly string[]).includes(refMatch[1]!)) {
+  if (!(LOOP_ARTIFACT_CANONICAL_KINDS as readonly string[]).includes(refMatch[1]!)) {
     invalid(`${label} ref kind must be a canonical artifact kind`);
   }
   if (refMatch[2] !== digest(digestValue, `${label} digest`)) {

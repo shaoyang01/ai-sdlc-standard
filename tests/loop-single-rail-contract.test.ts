@@ -33,9 +33,9 @@ import {
   LOOP_FINDING_SCHEMA_VERSION,
 } from "../core/loop-finding-lifecycle";
 import {
+  LOOP_ARTIFACT_CANONICAL_KINDS,
   LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES,
   LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION,
-  LOOP_ARTIFACT_REVISION_KINDS,
   LOOP_ARTIFACT_REVISION_SCHEMA_VERSION,
 } from "../core/loop-artifact-revision";
 import { LoopRunStore } from "../core/loop-run-store";
@@ -128,7 +128,7 @@ function main(): void {
     );
   }
   for (const kind of ["task_plan", "implementation_record", "knowledge_sync_result"]) {
-    ok((LOOP_ARTIFACT_REVISION_KINDS as readonly string[]).includes(kind), `artifact kind ${kind} exists`);
+    ok((LOOP_ARTIFACT_CANONICAL_KINDS as readonly string[]).includes(kind), `artifact kind ${kind} exists`);
   }
 
   console.log("single rail: the journal supports exactly format v7");

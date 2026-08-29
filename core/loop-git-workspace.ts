@@ -85,9 +85,29 @@ export type LoopGitWorkspaceSnapshot = Readonly<{
   sourceWipDigestSha256: string;
 }>;
 
+// ═══════════════════════════════════════ Attempt outcome (E4-T5)
+
+// How the attempt that owned this workspace ended, as reported by the caller.
+// `unknown` means side effects could not be attributed — it must never be
+// silently treated as success or failure.
+export type LoopGitWorkspaceAttemptOutcome = "succeeded" | "failed" | "unknown";
+
+// promote  = attempt succeeded, its output is already committed on the task
+//            branch, so the isolated workspace can be reclaimed.
+//            NOTE: promote never touches the base branch — no merge, no push.
+//            Real promotion against a production repository requires E5.
+// isolate  = attempt failed, keep the workspace and branch as evidence.
+// block    = unknown or out-of-bounds side effects: keep the evidence and
+//            refuse to clean up or promote.
+export type LoopGitWorkspaceCleanupDecision = "promote" | "isolate" | "block";
+
 export type LoopGitWorkspaceCleanupOptions = Readonly<{
   expectedTaskHeadSha: string;
   deleteTaskBranch?: boolean;
+  outcome?: LoopGitWorkspaceAttemptOutcome;
+  // Task-permitted paths. When present, any changed path outside this set
+  // forces `block` regardless of `outcome`. Relative, no traversal.
+  allowedPaths?: readonly string[];
 }>;
 
 export type LoopGitWorkspaceCleanupResult = Readonly<{
@@ -96,6 +116,9 @@ export type LoopGitWorkspaceCleanupResult = Readonly<{
   taskBranchDeleted: boolean;
   taskBranchRetained: boolean;
   alreadyAbsent: boolean;
+  decision: LoopGitWorkspaceCleanupDecision;
+  outOfBoundsPaths: readonly string[];
+  evidenceRetained: boolean;
 }>;
 
 // ═══════════════════════════════════════ Constants
@@ -109,7 +132,9 @@ const DEF_WIP = 16777216;
 const ORIGIN_RE =
   /^(?:https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$|git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$|ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$)/;
 const MGR_KEYS = ["runner", "gitExecutableId", "gitTimeoutMs", "maxGitOutputBytes", "maxSourceWipBytes"];
-const CLN_KEYS = ["expectedTaskHeadSha", "deleteTaskBranch"];
+const CLN_KEYS = ["expectedTaskHeadSha", "deleteTaskBranch", "outcome", "allowedPaths"];
+const EMPTY_PATHS: readonly string[] = Object.freeze([]);
+const OUTCOMES: readonly string[] = ["succeeded", "failed", "unknown"];
 
 // Full worktree record model
 type WtRec = {
@@ -217,6 +242,71 @@ function validateIdentity(id: LoopRunIdentity): void {
   } catch {
     fail("INVALID_INPUT", "identity invalid");
   }
+}
+
+// ═══════════════════════════════════════ E4-T5: attempt outcome helpers
+
+// Normalized relative path for the task-permitted path allowlist. Rejects
+// anything that could escape the worktree — fail-closed, a malformed allowlist
+// entry is an input error, never a silent pass.
+function vRelPath(v: unknown, nm: string): string {
+  if (typeof v !== "string") fail("INVALID_INPUT", `${nm} must be string`);
+  if (NON_CTL.test(v)) fail("INVALID_INPUT", `${nm} control char`);
+  const n = v.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (n.startsWith("/")) fail("INVALID_INPUT", `${nm} absolute`);
+  const parts = n.split("/").filter((s) => s.length > 0);
+  if (parts.length === 0) fail("INVALID_INPUT", `${nm} empty`);
+  if (parts.some((s) => s === "." || s === "..")) fail("INVALID_INPUT", `${nm} traversal`);
+  return parts.join("/");
+}
+
+// Paths from `git status --porcelain=v1 -z`. Each record is `XY <path>\0`;
+// a rename/copy is followed by a bare original-path record, which also counts
+// as changed — those bytes were touched too.
+function statusPaths(statusOut: string): string[] {
+  const out: string[] = [];
+  let expectOrig = false;
+  for (const rec of statusOut.split("\0")) {
+    if (rec.length === 0) continue;
+    if (expectOrig) { expectOrig = false; out.push(rec); continue; }
+    if (rec.length < 4 || rec[2] !== " ") continue;
+    const body = rec.slice(3);
+    if (body.length > 0) out.push(body);
+    const xy = rec.slice(0, 2);
+    if (xy.includes("R") || xy.includes("C")) expectOrig = true;
+  }
+  return out;
+}
+
+function isWithinAllowed(p: string, allowed: readonly string[]): boolean {
+  const n = p.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  for (const a of allowed) if (n === a || n.startsWith(a + "/")) return true;
+  return false;
+}
+
+export type LoopGitWorkspaceCleanupClassification = Readonly<{
+  decision: LoopGitWorkspaceCleanupDecision;
+  outOfBoundsPaths: readonly string[];
+}>;
+
+// Pure three-state decision for an attempt workspace. Exported so the caller
+// can pre-judge without catching, and so the rule is testable without git.
+export function classifyWorkspaceCleanup(input: Readonly<{
+  outcome: LoopGitWorkspaceAttemptOutcome;
+  changedPaths: readonly string[];
+  allowedPaths: readonly string[] | null;
+}>): LoopGitWorkspaceCleanupClassification {
+  let outOfBounds: readonly string[] = EMPTY_PATHS;
+  if (input.allowedPaths !== null && input.changedPaths.length > 0) {
+    const bad = input.changedPaths.filter((p) => !isWithinAllowed(p, input.allowedPaths!));
+    if (bad.length > 0) outOfBounds = Object.freeze(bad.slice());
+  }
+  // Out-of-bounds and unknown both outrank a reported success: unattributable
+  // side effects are never promotable and never safe to discard.
+  if (outOfBounds.length > 0) return freeze({ decision: "block", outOfBoundsPaths: outOfBounds });
+  if (input.outcome === "unknown") return freeze({ decision: "block", outOfBoundsPaths: EMPTY_PATHS });
+  if (input.outcome === "failed") return freeze({ decision: "isolate", outOfBoundsPaths: EMPTY_PATHS });
+  return freeze({ decision: "promote", outOfBoundsPaths: EMPTY_PATHS });
 }
 
 // ═══════════════════════════════════════ Manager
@@ -359,6 +449,20 @@ export class LoopGitWorkspaceManager {
       const o = scanPlain(opts, CLN_KEYS, "cleanup");
       const expHead = vSha(vS(o.expectedTaskHeadSha, "expectedTaskHeadSha"), "expectedTaskHeadSha");
       const delBr = o.deleteTaskBranch === true;
+      // E4-T5: attempt outcome and the task-permitted path set
+      let outcome: LoopGitWorkspaceAttemptOutcome = "succeeded";
+      if (o.outcome !== undefined) {
+        if (typeof o.outcome !== "string" || !OUTCOMES.includes(o.outcome))
+          fail("INVALID_INPUT", "outcome invalid");
+        outcome = o.outcome as LoopGitWorkspaceAttemptOutcome;
+      }
+      let allowedPaths: readonly string[] | null = null;
+      if (o.allowedPaths !== undefined) {
+        if (!Array.isArray(o.allowedPaths)) fail("INVALID_INPUT", "allowedPaths must be array");
+        allowedPaths = Object.freeze(
+          (o.allowedPaths as unknown[]).map((p) => vRelPath(p, "allowedPaths entry")),
+        );
+      }
       const wsPath = this.workspacePathFor(identity);
       const wts = await this._wtList(identity.repositoryPath);
       const cls = this._classify(wts, identity.taskBranch, wsPath);
@@ -390,16 +494,19 @@ export class LoopGitWorkspaceManager {
         if (!brExists) return freeze({
           workspacePath: wsPath, worktreeRemoved: false,
           taskBranchDeleted: false, taskBranchRetained: false, alreadyAbsent: true,
+          decision: "promote", outOfBoundsPaths: EMPTY_PATHS, evidenceRetained: false,
         });
         if (!delBr) return freeze({
           workspacePath: wsPath, worktreeRemoved: false,
           taskBranchDeleted: false, taskBranchRetained: true, alreadyAbsent: false,
+          decision: "promote", outOfBoundsPaths: EMPTY_PATHS, evidenceRetained: false,
         });
         // Use unified safe delete for branch-only path
         const deleted = await this._safeDeleteBranch(identity.repositoryPath, identity.taskBranch);
         return freeze({
           workspacePath: wsPath, worktreeRemoved: false,
           taskBranchDeleted: deleted, taskBranchRetained: false, alreadyAbsent: false,
+          decision: "promote", outOfBoundsPaths: EMPTY_PATHS, evidenceRetained: false,
         });
       }
 
@@ -411,6 +518,33 @@ export class LoopGitWorkspaceManager {
 
       const status = (await this._gitR(wsPath,
         ["status", "--porcelain=v1", "-z", "--untracked-files=all"], [0])).stdout;
+      // Every path the attempt touched: what it committed against the base plus
+      // whatever is still uncommitted or untracked. Plan :443-444 — the
+      // workspace diff must contain only task-permitted paths, and a committed
+      // out-of-bounds file is exactly as out of bounds as an uncommitted one.
+      const committed = (await this._gitR(wsPath,
+        ["diff", "--name-only", "-z", `${identity.expectedBaseSha}...HEAD`], [0])).stdout;
+      const changedPaths = [...new Set([
+        ...committed.split("\0").filter(Boolean),
+        ...statusPaths(status),
+      ])];
+      // E4-T5 three-state decision. block → fail closed (nothing removed,
+      // nothing promoted); isolate → keep the worktree and branch as evidence
+      // and report it instead of throwing; promote → the existing reclamation
+      // path, which still requires a clean tree.
+      const verdict = classifyWorkspaceCleanup({
+        outcome, changedPaths, allowedPaths,
+      });
+      if (verdict.decision === "block")
+        fail("CLEANUP_BLOCKED", verdict.outOfBoundsPaths.length > 0
+          ? `out-of-bounds paths: ${verdict.outOfBoundsPaths.length}`
+          : "unknown side effects");
+      if (verdict.decision === "isolate") return freeze({
+        workspacePath: wsPath, worktreeRemoved: false,
+        taskBranchDeleted: false, taskBranchRetained: true, alreadyAbsent: false,
+        decision: "isolate", outOfBoundsPaths: verdict.outOfBoundsPaths,
+        evidenceRetained: true,
+      });
       if (status.length > 0) fail("WORKSPACE_DIRTY", "workspace dirty");
 
       await this._git(identity.repositoryPath, ["worktree", "remove", wsPath]);
@@ -462,6 +596,7 @@ export class LoopGitWorkspaceManager {
       return freeze({
         workspacePath: wsPath, worktreeRemoved: true,
         taskBranchDeleted: bDel, taskBranchRetained: bRet, alreadyAbsent: false,
+        decision: "promote", outOfBoundsPaths: EMPTY_PATHS, evidenceRetained: false,
       });
     } finally {
       let fpA = fpB, fpFailed = false;

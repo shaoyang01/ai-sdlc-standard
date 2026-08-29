@@ -39,10 +39,16 @@ export type LoopArtifactRevisionValidity = (typeof LOOP_ARTIFACT_REVISION_VALIDI
 // role and records NOT_APPLICABLE.
 export const LOOP_ARTIFACT_GATE_CAPABILITIES = ["solution-gate"] as const;
 
-// The revision artifact kinds are exactly the canonical LoopArtifactKind
-// values. The list is restated here so this model stays import-pure (the
-// artifact store module owns filesystem code); the compile-time check below
-// fails closed if the canonical union ever drifts.
+// Revision-allowed artifact kinds. The list is restated here so this model
+// stays import-pure (the artifact store module owns filesystem code); the
+// compile-time check below fails closed if the canonical union ever drifts.
+//
+// S2 (W6b3): one array, two different questions — "is this a canonical kind at
+// all?" (finding evidence refs) and "may this kind carry a revision?" (below).
+// Non-revision consumers must read it through LOOP_ARTIFACT_CANONICAL_KINDS so
+// the call site says which question it is asking; the two are deliberately NOT
+// copy-pasted into separate literals, because a second copy can drift. Split
+// them the day the revision subset actually narrows.
 export const LOOP_ARTIFACT_REVISION_KINDS = [
   "code_patch",
   "test_summary",
@@ -70,6 +76,11 @@ export const LOOP_ARTIFACT_REVISION_KINDS = [
 type ArtifactKindDrift = Exclude<LoopArtifactKind, (typeof LOOP_ARTIFACT_REVISION_KINDS)[number]>;
 const _artifactKindListComplete: [ArtifactKindDrift] extends [never] ? true : never = true;
 void _artifactKindListComplete;
+
+// The canonical-kind reading of the same set (S2): same object, so it cannot
+// drift from the revision allowlist. Used by consumers that only need to know
+// whether a kind is canonical — see loop-finding-lifecycle.ts.
+export const LOOP_ARTIFACT_CANONICAL_KINDS = LOOP_ARTIFACT_REVISION_KINDS;
 
 // The unique canonical node product projection (v2 contract §2, A4): each
 // canonical node has exactly one product artifact kind and one stable-path
