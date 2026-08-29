@@ -47,6 +47,7 @@ import {
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
+import { isResumeLeaseHeld } from "./loop-resume-lock";
 import { isLoopRunStoreBoundToArtifactStore, LoopRunStore } from "./loop-run-store";
 
 export interface LoopCapabilityEntryOptions {
@@ -66,6 +67,18 @@ export interface LoopCapabilityEntryOptions {
    * disjoint stores.
    */
   gateway: Pick<ExecutionGateway, "execute">;
+  /**
+   * E4-T3 dispatch-window firewall. When present, this journal path's resume
+   * lease MUST be held by the calling async context for the whole
+   * recovery→claim→spawn→terminal/promotion window; the entry fails closed
+   * with STORE_BUSY before it reads or writes anything otherwise.
+   *
+   * Optional rather than unconditional so that unit tests which exercise the
+   * entry in isolation keep testing what they were written to test. The
+   * production entry sets it, and `tests/loop-w6b1-resume-lease-window.test.ts`
+   * proves both directions of the guard.
+   */
+  requireResumeLeaseJournal?: string;
   now?: () => string;
 }
 
@@ -133,6 +146,19 @@ export class LoopCapabilityEntry {
         "capability entry requires the gateway tracing the same run store and artifact store instances",
       );
     }
+    // E4-T3: the firewall path is validated at construction so a caller cannot
+    // arm the guard with a value the check can never match (empty string, or
+    // non-string that would silently compare false forever).
+    if (
+      options.requireResumeLeaseJournal !== undefined &&
+      (typeof options.requireResumeLeaseJournal !== "string" ||
+        options.requireResumeLeaseJournal.trim().length === 0)
+    ) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "requireResumeLeaseJournal must be a non-empty journal path when provided",
+      );
+    }
     // C02-WP5 (clause 0.1.6): snapshot and freeze the dependency configuration
     // so post-construction mutation of the caller's options object cannot swap
     // the gateway or the artifact store this entry uses.
@@ -177,6 +203,19 @@ export class LoopCapabilityEntry {
         throw new LoopRunJournalError("INVALID_INPUT", "run identity must not be a Proxy");
       }
       validateLoopRunIdentity(request.identity);
+    }
+    // E4-T3: the dispatch window opens here and stays open through the terminal
+    // /promotion decision below. When the caller armed the firewall, entering it
+    // without the journal's resume lease is refused BEFORE the first recovery
+    // read, so an unguarded window can neither claim nor spawn.
+    if (
+      this.options.requireResumeLeaseJournal !== undefined &&
+      !isResumeLeaseHeld(this.options.requireResumeLeaseJournal)
+    ) {
+      throw new LoopRunJournalError(
+        "STORE_BUSY",
+        "capability dispatch window requires the journal resume lease",
+      );
     }
     const now = this.readNow();
     let recovery = recoverRunContext(this.options.runStore, request.requirementId);

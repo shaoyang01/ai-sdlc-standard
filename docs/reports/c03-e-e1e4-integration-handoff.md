@@ -2,16 +2,22 @@
 
 > 最后更新：2026-08-29（UTC）。供中断后新会话/新 Agent 无缝续作。只读事实 + 明确下一步，勿凭印象改。
 
-## ★ 当前快照（W6a，最新，与下文冲突时以本节为准）
+## ★ 当前快照（W6b1，最新，与下文冲突时以本节为准）
 
 - **分支已 push 且有上游**：`feature/c03-e1-e4-runtime-implementation`（主干仍是 `loop-runtime-v1`，未碰）。续作先 `git fetch && git pull`。
-- **HEAD = `5b1855a`（W6a = E4-T1 + E4-T2，已实现、待外部独立复审）**。施工序 W1～W6a 已全部落库：
-  - W1=E2-T8 Q1 绑定（PASS `a698808`）｜W2=E2-T6 gateway 开关默认 deterministic（PASS `b94a382`，B1 闭合）｜W3=E1-T3/T4 loop-run+production 门/preflight（PASS `598cc72`）｜W4=E2-T7/D-073 路径 A 冻结+spawn 引用图+B-7（PASS `f10aef1`）｜W5=E3-T2 九类无效输出不推进 e2e（PASS `eac94c9`，31 断言）｜**W6a=E4-T1+T2（本次 `5b1855a`，68 断言，待复审）**。
+- **HEAD = `d4ee31e`（台账裁决提交）＋ 未提交工作区改动（W6b1 = E4-T3，已实现、待外部独立复审）**。
+  - 已落库：W1～W5 全部 PASS；**W6a=E4-T1+T2（`5b1855a`，68 断言，独立复审 PASS 零阻塞，CP PR #22 已合 main `16cc5e6`）**；`d4ee31e` 是 W6b 三条裁决的台账提交。
+  - 工作区（未提交）：**W6b1 = E4-T3 resume lease 窗口防火墙**，生产 3 文件 +82/-8（`core/loop-resume-lock.ts` 新增 `isResumeLeaseHeld`、`core/loop-capability-entry.ts` 新增 `requireResumeLeaseJournal` 选项与进入窗口时的 fail-closed 断言、`runtime.ts` 构造 entry 时装配该选项），新测试 `tests/loop-w6b1-resume-lease-window.test.ts` **22 断言全绿**。
   - 权威 W↔E 任务映射与每步状态见 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md`（台账，比本 handoff 更细，先读它）。
-- **W6a 做了什么**：① E4-T1 10 个 nullable 进程证据字段（invocation/exit/signal/duration/truncated、staging 对、promotion 对、humanActionRef）进 v7 事件+journal 列+canonical hash，validator 与 store 写门双层 fail-closed，确定性 shadow 全 null；② E4-T2 纯函数 `classifyCapabilityRecovery` 五分类（SAFE_RETRY/VERIFY_STAGED/HUMAN_INPUT_REQUIRED/CLEANUP_REQUIRED/TERMINAL_FAILED_BLOCKED +null）投影到 `RunRecoveryContext.recoveryClassification`，仅真进程失败无 staging 才 CLEANUP。生产仅 4 文件，**real 路径仍按 D-071 休眠、未激活**。
-- **外部独立复审 prompt**：`docs/reports/c03-e-w6a-independent-review-prompt.md`（整段交给另一个 agent；本 agent/子 agent 自审不算数）。复审 PASS 后才出 W6a pass-state 并进入 W6b。
-- **下一步 W6b = E4-T3/T4/T5**：resume lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口；`human_action_required` 机器可读 artifact 且 reason 限 6 个合法码（SWITCH_AGENT_REQUIRED/SHADOW_FALLBACK_REQUIRED 非法）；attempt workspace 三态（成功提升/失败隔离/未知副作用保留证据并阻塞）。之后 W7=C-T1 全量只读复审 → C-T2 Current User 收口。**E5 真实 CLI canary / 让默认路径真 spawn 三 Agent 仍未授权，须另行裁决。**
-- **v24 验证基线（HEAD 实测）**：全套件 **143 文件 / 1767 断言 / 0 断言失败**；`loop-codex-implementation-adapter` 等并行文件级 FAILED 是既有 sqlite runner 竞争偶发，隔离单跑即绿（3/3），非缺陷。tsc 干净；3 个 ruby validator exit=0。
+- **W6b1 做了什么（一句话）**：把「lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口」从**结构性巧合**变成**可强制、可证明的防火墙**。
+  - 取证事实：`runProduction`（`runtime.ts:961`）委托给 `run()`（`:1033`），而 `run()` 整体包在 `withResumeLease`（`:394`）里，所以窗口**确实**被覆盖；但没有任何机制阻止未来入口在无 lease 时进入同一 claim/spawn 路径——`claimNextCapabilityExecution` 只保证 claim 原子性，不保证 lease。
+  - 因此新增：`isResumeLeaseHeld(journalPath)`（lease 身份按 `leasePathFor` 重算，不同拼写/不同 journal 不算持有）；`LoopCapabilityEntry` 新增可选 `requireResumeLeaseJournal`，在 `execute()` 读 recovery **之前**（第一次持久化 claim 之前）断言持有该 journal 的 lease，否则 `STORE_BUSY` fail-closed；`runtime.ts` 装配该选项。
+  - **可选而非无条件**：避免 8 个既有用例（直接构造 entry 的单元测试）被迫改写入 lease；生产入口是唯一装配点，且 T1/T4 双向证明守卫有效。这是有意权衡，请复审裁决是否要升级为无条件。
+- **外部独立复审 prompt**：`docs/reports/c03-e-w6b1-independent-review-prompt.md`（整段交给另一个 agent；本 agent/子 agent 自审不算数）。复审 PASS 后才出 W6b1 pass-state 并进入 W6b2。
+- **下一步 W6b2 = E4-T4 / W6b3 = E4-T5**（三个子波分别复审，Current User 2026-08-29 裁决）：W6b2 新增 `human_action_required` artifact kind（六合法码，`SWITCH_AGENT_REQUIRED`/`SHADOW_FALLBACK_REQUIRED` 非法，改 `loop-artifact-store.ts` 联合类型与 KINDS 数组**两处**）；W6b3 attempt workspace 三态（成功提升/失败隔离/未知副作用保留证据并阻塞），**本轮就接 wip digest 越界检测**。之后 W7=C-T1 全量只读复审 → C-T2 Current User 收口。**E5 真实 CLI canary / 让默认路径真 spawn 三 Agent 仍未授权，须另行裁决。**
+- **v24 验证基线（W6b1 工作区实测）**：新测试单跑 **22 passed**；全套件 **144 文件 / failed_file_count=0 / exit=0**（注意：`Results: 1767 passed` 是**最后一个测试文件的内部计数**，不是全套件断言总数——runner 只按文件 exit code 判定，见观察项）；tsc `--noEmit` 干净；3 个 ruby validator exit=0；`git diff --check` 无空白问题。
+- **本波自测反向探针（已实跑并还原）**：把 `loop-capability-entry.ts` 里的 `!isResumeLeaseHeld(...)` 改成 `false` → T1 立刻 `AssertionError` 转红；还原后 22 断言复绿。探针后 `git diff` 仅剩预期三文件。
+- **给复审的提醒**：`runtime.ts` 本波有改动（+19/-8），与台账 §3.1「冻结生产文件零改动」的**历史批次**陈述不冲突（该陈述针对 `b842b18` 相对 merge-base），但复审时请单独确认这一处装配。
 - **治理同步状态**：CP（ai-project-control-plane）main 已合 PR #21，`projects/ai-sdlc/STATE.yaml` 的 product_commit=`5b1855a`、route 为 implemented awaiting review。PKB（personal-knowledge-base）当前 IDLE 正确——W6a 属实现中、未收口，按 Exchange-only 入站边界**不在此阶段写 PKB**；Exchange→PKB publication 留到 C-T2 收口。
 
 ---

@@ -375,14 +375,6 @@ export async function run(
       now,
       realDeps: options.realGatewayDeps,
     });
-  const entry = new LoopCapabilityEntry({
-    runStore,
-    artifactStore,
-    bindingRegistry,
-    gateway,
-    now,
-  });
-
   // C02-WP5 B1-1: cross-process resume lease — exactly one executor may run
   // the recovery→claim→external-execution→terminal cycle for this journal at
   // any time. Same-process nested invocations (F2 window barriers) reuse the
@@ -391,6 +383,17 @@ export async function run(
   const resumeJournalPath = options.runStore !== undefined
     ? options.runStore.databaseFilePath
     : join(workspaceRoot, "journal.db");
+  const entry = new LoopCapabilityEntry({
+    runStore,
+    artifactStore,
+    bindingRegistry,
+    gateway,
+    now,
+    // E4-T3: the runtime entry owns the lease, so it arms the dispatch-window
+    // firewall. Any future path that reaches this entry without holding the
+    // lease now fails closed instead of claiming and spawning unguarded.
+    requireResumeLeaseJournal: resumeJournalPath,
+  });
   return withResumeLease(resumeJournalPath, async (): Promise<RuntimeResult> => {
     const localIdentity: LoopRunIdentity = Object.freeze({
       runId: `run-${requirementId}-${Date.now()}`,

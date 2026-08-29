@@ -186,3 +186,35 @@ export async function withResumeLease<T>(
     db.close();
   }
 }
+
+/**
+ * E4-T3: reports whether the calling async context currently holds this
+ * journal's resume lease.
+ *
+ * This is the observation half of the dispatch-window firewall: `withResumeLease`
+ * only ever *grants* the lease, so an entry point that reaches the
+ * recovery→claim→spawn→terminal/promotion window without going through it is
+ * silently legal unless something asks. Callers use this to fail closed instead
+ * of opening the window unguarded.
+ *
+ * The lease identity is recomputed from `journalPath` exactly as the grant path
+ * computes it, so a caller cannot satisfy the check with a different spelling of
+ * the same journal. Path resolution failures mean "no lease can be held here",
+ * not "unknown": a missing parent directory is reported as not-held.
+ */
+export function isResumeLeaseHeld(journalPath: string): boolean {
+  const held = HELD_LEASES.getStore();
+  if (held === undefined) {
+    return false;
+  }
+  let lockPath: string;
+  try {
+    lockPath = leasePathFor(journalPath);
+  } catch (error) {
+    if ((error as { code?: unknown }).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+  return held.lockPath === lockPath;
+}
