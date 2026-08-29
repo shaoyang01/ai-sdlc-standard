@@ -82,8 +82,8 @@
 
 | ID | 动作 | 依赖 | 状态 |
 | --- | --- | --- | --- |
-| C-T1 | 集成层独立全量只读复审（Node v24） | E1-T3/T4、E2-T6/T7/T8、E3-T2、E4 全部 | PENDING |
-| C-T2 | Current User 收口裁决 → 产品 Decision → CP lifecycle=CLOSED → Exchange/PKB → publication=COMPLETED | C-T1 PASS | PENDING |
+| C-T1 | 集成层独立全量只读复审（Node v24） | E1-T3/T4、E2-T6/T7/T8、E3-T2、E4 全部 | **✅ PASS：独立复审 CLOSED（零阻塞，基线 `cebbecd`，node@24 v24.18.0）。a) 146 文件 1767 passed exit=0（两个 broker 缺口文件 + 两个偶发文件在该环境隔离全绿 266/268/47/354）；b) tsc + 三个 ruby validator 干净；c) 合同符合性全过（含 resume lease 机械锁 `validate-skill-contracts.rb:1025-1049`、B-7 tripwire）、「集成即接线」判定成立（RealCapabilityGateway extends ExecutionGateway 仅 override executePrimary，唯一工厂 + 唯一装配点 `runtime.ts:368-376`）；d) 58 个非 docs/tests 改动文件全部落账 11 波次、退役词活动扫描面零命中且 E0.4 门禁探针实证承重；e) 五个 spawn 文件 PATH A FROZEN + B-7 锁定、生产零 real 实例化、`runProduction` 硬拒 real；f) 11 波次逐笔 `--stat` 无夹带、31 个 docs 提交逐一验证。非阻塞建议 P1（六合法码 5 个无字面钉，补六个字面量等值断言）/ P2（「全仓零残留」口径改「活动扫描面」或清 legacy 模块）/ P3（E0.4 段级豁免粒度，远期行级）。过程发现 D1：handoff 文件复审中被外部动作截断 206 字节，实施方已核实无在途工作并从 `cebbecd` 还原（reflog 留证）** |
+| C-T2 | Current User 收口裁决 → 产品 Decision → CP lifecycle=CLOSED → Exchange/PKB → publication=COMPLETED | C-T1 PASS | **READY（前置全满足）：待 Current User 显式授权**（Exchange Issue/标签为 owner-only，PKB push 需授权；裁决口径 = C-T2 一次性收口 run，须声明覆盖 W1–W6b5 全部波次并指向本台账作补偿证据；handoff 正文归档至 PKB `10-projects/ai-sdlc-standard/handoffs/`） |
 
 **关键路径**：E2-T6（接线开关）→ E1-T3/T4 + E2-T7/T8 + E3-T2 → E4 全部 → C-T1。
 E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本任务集，须另行授权。
@@ -92,7 +92,7 @@ E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本�
 > `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
 > **W1=E2-T8（Q1 绑定，✅ PASS，独立复审 R2 `a698808`）** → **W2=E2-T6（gateway 开关，✅ PASS `b94a382`，默认
 > deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，✅ PASS `f10aef1`）** → **W5=E3-T2（九类无效输出不推进 e2e，✅ PASS `eac94c9`，31 断言）** → **W6a=E4-T1+T2（process evidence 固定字段 + recovery 五分类，✅ PASS 独立复审零阻塞，68 断言，CP pass-state PR #22）** → **W6b1=E4-T3（resume lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口，✅ PASS 独立复审零阻塞，`5f2bcd8`+`d9a7517`，27 断言，CP pass-state PR #23）** → **W6b2=E4-T4（human_action_required 六合法码 + 新增 artifact kind，✅ PASS 独立复审零阻塞，`99c9df3`，82 断言，CP pass-state PR #24）** → **W6b3=E4-T5（attempt workspace 三态 + wip digest 越界检测，`02b642a` 实现 35 断言 → 独立复审 NOT_CLOSED 1 项阻塞 B1（已提交 rename 逃逸越界检测）→ `05d12d2` 修复 41 断言 → **B1 聚焦复审 CLOSED 零阻塞 → ✅ PASS，CP pass-state PR #25 已合并 main `2d2ff53`）** → **W6b4=E4-T5 收口（committed diff 门控：未传 `allowedPaths` 时不跑 `git diff`，消掉 W6b3 给既有 30+ 调用方新增的多余子进程与 `GIT_COMMAND_FAILED` 失败面；`1605a84`，45 断言 → **聚焦复审 CLOSED 零阻塞 → ✅ PASS，CP pass-state PR #26 已合并 main `b9ccd25`）** → **W6b5=T10c 微波（P7 落地：`allowedPaths: []` 显式空权限集下已提交越界文件仍 block 且 named diff 恰跑一次；`4b8ccb0`，45→47 断言，生产代码零改动 → **聚焦复审 CLOSED 零阻塞 → ✅ PASS，CP pass-state PR #27 已合并 main `f8ab56b`；复审 P10（非阻塞）：block 断言为主承重，双钉保留）** →
-> W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
+> W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）→ **W7a=C-T1（✅ PASS：独立复审 CLOSED 零阻塞，基线 `cebbecd`；结论见 C-T1 行；非阻塞 P1–P3；过程发现 D1 已由实施方还原处置）**。
 > 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工
 > （E2-T8 无依赖且是激活前 blocker，E2-T6 总开关最后装），二者不矛盾。
 >
@@ -138,7 +138,7 @@ production factory 仍只选 deterministic shadow（装配点 `runtime.ts:325`
 - **B2（本文件，已关闭）**：Task Gate 事前记录缺失，经本文件事后重建；Current User
   已在 **Decision-072 事后追认 Task Gate PASS**，B2 关闭。事后追认不改变"事前 Task
   Gate 记录缺失"这一历史事实，仅以重建+追认闭合。
-- **B3（阻断收口）**：E4（E4-T1～T5）未开始；C-T1 复审前必须完成。
+- **B3（阻断收口）— ✅ 已解除**：E4（E4-T1～T5）经 W6a–W6b5 全部 PASS 独立复审收口；C-T1 全量复审 CLOSED 零阻塞。
 
 ### 3.5 未接受风险 / stale artifact
 
