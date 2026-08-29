@@ -2,10 +2,16 @@
 
 > 最后更新：2026-08-29（UTC）。供中断后新会话/新 Agent 无缝续作。只读事实 + 明确下一步，勿凭印象改。
 
-## ★ 当前快照（W6b3 ✅ PASS，最新，与下文冲突时以本节为准）
+## ★ 当前快照（W6b4 实施完成、聚焦复审待回；W6b3 ✅ PASS，与下文冲突时以本节为准）
 
 - **W6b3 = E4-T5：✅ PASS（B1 聚焦复审 CLOSED 零阻塞，2026-08-29）**。路径：实现 `02b642a`（35 断言）→ 独立复审 NOT_CLOSED（1 项阻塞 B1）→ B1 修复 `05d12d2`（41 断言）→ **B1 聚焦复审 CLOSED 零阻塞 → 出 W6b3 pass-state（CP PR #25）→ 进 W7**。
-  - 已落库：W1～W5 全部 PASS；W6a（`5b1855a`，68）；W6b1（`5f2bcd8`+`d9a7517`，27）；W6b2（`99c9df3`，82）；**W6b3（`02b642a` 35 → `05d12d2` 41，✅ PASS）**。CP：PR #23 已合 main `26d53ba`；**PR #24（W6b2 pass-state）待合并；PR #25（W6b3 pass-state）待合并**。
+  - 已落库：W1～W5 全部 PASS；W6a（`5b1855a`，68）；W6b1（`5f2bcd8`+`d9a7517`，27）；W6b2（`99c9df3`，82）；**W6b3（`02b642a` 35 → `05d12d2` 41，✅ PASS）**。CP：**PR #24 已合 main `c3a31f4`；PR #25 已合 main `2d2ff53`**。
+- **W6b4 = E4-T5 收口：committed diff 门控（实现方在 W6b3 PASS 之后自查发现，非复审方提出）**。`1605a84`，45 断言，聚焦复审待回（`docs/reports/c03-e-w6b4-focused-review-prompt.md`）。
+  - **问题**：`cleanup()` 的 committed diff（`git diff --name-only -z --no-renames <base>...HEAD`）是**无条件执行**的，但它唯一消费点是 `classifyWorkspaceCleanup` 里的越界检查（`:300`），而该检查又被 `allowedPaths !== null` 门控。于是① 未传 `allowedPaths` 的既有 30+ 调用方每次 cleanup 多跑一个 git 子进程、拿到一个没人读过的值；② 因为 `_gitR(...,[0])` 对 timeout／signal／截断／非零退出一律抛 `GIT_COMMAND_FAILED`（`:626-641`），它给这条此前不可能在此失败的路径**新增了一个失败面**。
+  - **修复**：`:540` 改为 `allowedPaths === null ? "" : (await this._gitR(...))`。对既有调用方行为完全等价；T9 三例都传 `allowedPaths`，不受影响。
+  - **触发场景（如实记录，未当作归因证据）**：实现方本机全套件（146 文件 / 3539.2s，比复审方 278.8s 慢约 12.7 倍）出现文件级失败 `tests/loop-codex-implementation-adapter.test.ts`——该文件正是「导入 `LoopGitWorkspaceManager`、`cleanup()` 不传 `outcome`/`allowedPaths`」的既有调用方。隔离单跑 354/354、3 路并行 3/3、8 路并行 8/8 **均未复现**，故只作为「需要收口的面」的动机，未作为因果证据。
+  - **回归矩阵 T10（41→45 断言）**：用 `Pick<LoopPosixProcessRunner,"run">` spy 记录每次 git 调用的 args。T10a 未传 `allowedPaths` → `args[0]==="diff" && args.includes("--name-only")` 计数为 **0**；T10b 传了 → 计数为 **1**；两条都断言 `decision === "promote"`（门控不改变任何判定）。用 `--name-only` 区分是因为仓库另有两处 source-wip 的 `git diff --binary`（`:1101`/`:1104`）。
+  - **反向探针 P6（已实跑并还原）**：把门控去掉 → **T10a 恰转红**（`saw 1`，`44 passed, 1 FAILED`），**T10b 仍绿** → 证明新断言真实承载且未过度收紧。
   - **B1 聚焦复审核心证据**：复现对照与实现方逐字吻合（`02b642a` `decision=promote / worktreeRemoved=true / 证据销毁`；`05d12d2` 抛 `CLEANUP_BLOCKED`、worktree 与 `src/b.ts` 证据保留）；`git show 05d12d2` 恰为两文件、无夹带无顺手加固；复审方核验备选写法（`-M0`／`--diff-filter`／`diff-tree -r`）后确认**单 flag 是最小且正确手段**，并逐条排除新漏判（chmod／二进制／子模块／copy／空目录）；T9a／T9b／T9c 全部真实承载；探针 P1 恰 `39 passed, 2 FAILED`（T9a 两红、T9b/T9c 绿）、P2 复现已知边界并**判定划为范围外成立**、P3 证明 `pre` 参数真实承载；**复审方环境全套件 146 文件 / failed=0 / exit=0 / 278.8s**，两个已知环境缺口文件在其环境隔离单跑**全绿**（266／268）→ 实证实现方本机失败确为 broker 拦截 `link`(2) 的环境能力缺口、非本波回归。
   - **建议项（1 条，非阻塞，须新波次立项）**：若未来合同要求「中间提交的越界痕迹」也可判定，需**逐提交 diff-tree 遍历**的新机制。
   - **PASS ≠ 激活真实 Agent**：E5 真实 canary／真 spawn 仍需另行授权。
@@ -20,7 +26,7 @@
   - **W6b3 验证基线**：新测试 **41** 断言全绿（原 35 + B1 回归矩阵 T9 6 条）；`loop-git-workspace.test.ts` 110；`loop-w6b2-human-action-artifact.test.ts` 83；`loop-finding-lifecycle.test.ts` 350；`loop-single-rail-contract.test.ts` 55；tsc 干净；3 个 ruby validator exit=0。
   - **已知环境能力缺口（非本波缺陷，已写进复审 prompt）**：`tests/loop-artifact-store.test.ts`（6 条）与 `tests/loop-delivery-checkpoint-store.test.ts`（3 条）在**本机**确定性失败，全部集中在**跨进程并发**段落。根因：本机 `link`(2) 硬链接在目标**已存在**时返回合成错误 `CODEBUDDY_BROKER_DENY` 而非内核的 `EEXIST`，导致 `loop-artifact-store.ts:359-363` 并发 put 的落败者进不了 EEXIST 赢家赛分支、被兜底为 `ARTIFACT_IO_FAILURE`。三进程探针 3/3 稳定 1 成功/2 失败、失败码恒定（沙箱与非沙箱一致）。**基线对照**：在 `99c9df3`（不含本波任何改动）独立 worktree 实跑，两个文件失败集合与本机分支**逐字一致** → 先于本波存在，不是 W6b3/F1/S2 回归；本波未改这两个模块的任何生产代码。换一台无该 broker 拦截的机器应全绿。
 - **分支已 push 且有上游**：`feature/c03-e1-e4-runtime-implementation`（主干仍是 `loop-runtime-v1`，未碰）。续作先 `git fetch && git pull`。
-- **HEAD = `05d12d2`（W6b3 = E4-T5 三态清理/保留，B1 已修，B1 聚焦复审 CLOSED → W6b3 ✅ PASS）**。前序：`d9a7517`（W6b1 S1/S2 补强）→ `99c9df3`（W6b2）→ `f82cc5a`（docs-only pin）→ `4f9eaad`（台账收口 W6b2）→ `02b642a`（W6b3 代码）→ `952d9da`（W6b3 文档 pin）→ `05d12d2`（B1 修复）→ `5c5b18d`（B1 聚焦复审 prompt）→ 本文档提交。
+- **HEAD = `1605a84`（W6b4 = E4-T5 收口：committed diff 门控；聚焦复审待回）**。前序：`d9a7517`（W6b1 S1/S2 补强）→ `99c9df3`（W6b2）→ `f82cc5a`（docs-only pin）→ `4f9eaad`（台账收口 W6b2）→ `02b642a`（W6b3 代码）→ `952d9da`（W6b3 文档 pin）→ `05d12d2`（B1 修复）→ `5c5b18d`（B1 聚焦复审 prompt）→ `e92eea3`（W6b3 PASS 文档）→ `7cd403e`（回填本机全套件）→ `1605a84`（W6b4 门控）→ 本文档提交。
   - 已落库：W1～W5 全部 PASS；**W6a（`5b1855a`，68 断言，复审 PASS，CP PR #22 已合 main `16cc5e6`）**；`d4ee31e` 台账裁决；**W6b1（`5f2bcd8` + `d9a7517` 补强，27 断言，复审 PASS 零阻塞，CP PR #23 待合并）**。
   - 工作区（未提交）：**W6b2 实施** —— 新增 `core/loop-human-action-artifact.ts`（六合法码 allowlist + 构造/序列化/读回校验 + put/read 封装）；`core/loop-artifact-store.ts`（kind 两处：`:14` 联合类型 + `:34` KINDS 数组）；`core/loop-artifact-revision.ts`（`LOOP_ARTIFACT_REVISION_KINDS` 同步，否则 `:65-67` 编译期漂移检查报错）；新测试 `tests/loop-w6b2-human-action-artifact.test.ts` **82 断言全绿**；复审 prompt `docs/reports/c03-e-w6b2-independent-review-prompt.md`。
   - 权威 W↔E 任务映射与每步状态见 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md`（台账，比本 handoff 更细，先读它）。
