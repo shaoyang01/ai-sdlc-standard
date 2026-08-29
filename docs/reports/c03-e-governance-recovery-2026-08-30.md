@@ -137,6 +137,13 @@ publication:
 
 ---
 
+### 6.3 第二批裁决：handoff 归属 + 复审 prompt 交付方式（2026-08-30）
+
+1. **handoff 不再落产品仓**（Current User 裁决）。定位修正：handoff 是**过程性交接材料**，归 PKB 长期归档链（C-T2 时写入 `10-projects/ai-sdlc-standard/handoffs/`），不是产品仓的实施事实。产品仓的**台账**（`c03-e-e1e4-task-set-and-gate-audit.md`）才是实施事实权威，逐波状态、波次链、复审证据都在台账行内维护。
+   - 会话中断恢复 = 台账 + CP `condition_ref` + 波次链，**不依赖 handoff 文件**。
+   - **已提交的 handoff / 复审 prompt 文件保留不删**（历史事实，且无 CP 指针依赖，删除只产生噪音）；自 W6b5 收口起**不再新增**。
+2. **聚焦复审 prompt 会话内直接输出**（Current User 裁决，见 §七附注）。prompt 是一次性内容，交由 Current User 复制给外部 agent；不再写 `docs/reports/`、不 commit。W6b5 的 prompt 文件是最后一个。
+
 ## 七、纪律修正（本轮教训）
 
 1. **反向探针不得在主工作树进行**。本轮残留的 T-probe 块与去门控形态，正是此前为「抢答复审问题」而在主工作树连续跑两个探针留下的。复审方被迫先 `git checkout --` 还原才能切基线。今后：探针 → `git worktree add /tmp/xxx` → 跑 → `git status --porcelain` 留证 → `worktree remove --force`。
@@ -184,4 +191,4 @@ W1–W6b3 阶段是**单链**：实现 → 复审 → 治理收口 → 下一节
 
 ## 九、当前状态一句话
 
-W1 → **W6b4 全部 PASS**（CP PR #26 待合并）。四条裁决已回填（逐波不发 / P7 单开微波 / W7 先不开 / PKB 用 `feature/knowledge-base-v1`），G4 经 Exchange Policy 核实后**撤回**。归档链 B 按规则**冻结至 C-T2**，不再提前提问。队列已塌缩为单链：下一步只有 **W6b5 = T10c 微波**。
+W1 → **W6b5 全部 PASS**（CP PR #26 → main `b9ccd25`；PR #27 → main `f8ab56b`）。裁决已回填：逐波不发（C-T2 一次性收口 run）/ P7 单开微波（**W6b5 已落地 PASS**）/ W7 先不开 / PKB 用 `feature/knowledge-base-v1` / **handoff 不再落产品仓、复审 prompt 会话内输出**。归档链 B 按规则**冻结至 C-T2**。下一步只有 **W7 = C-T1 全量只读复审**，冻结中，等 Current User 裁决范围。
