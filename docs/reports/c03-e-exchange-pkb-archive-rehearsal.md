@@ -35,15 +35,34 @@
 
 > 更正：本文作者此前口头判断过"C03-E 从未发布过"，**该判断错误**。C03-E 一直在 topic06 发布，断更发生在执行阶段（W1 之后），不是从没发过。
 
-### 问题 2（未建链路）：PKB 归档目录从未建立
+### 问题 2（结论已推翻，2026-08-30 更正）：PKB 归档目录**存在**，只是不在 `main` 分支
 
-- PKB 的 `10-projects/` 下**只有 `.gitkeep`**，`10-projects/ai-sdlc-standard/` 不存在。
-- 但 Exchange 已有 42 个 run —— **传送在跑，归档一步没做**。
-- PKB 是 Obsidian 受管理笔记体系：`AGENTS.md` 要求 AI 创建的笔记 `status: draft`，
-  必填 8 个属性，改完必须跑 `90-system/scripts/validate_notes.py`，
-  且**未经授权不得 `git push`**。
-- `manifest-v1` 里有 `personal_kb_repository` / `personal_kb_commit` 两个锚点字段 ——
-  这是 Exchange → PKB 的正式挂钩，此前从未填过。
+> **更正**：本节原标题为「PKB 归档目录从未建立」，**该结论错误**。当时只查了 PKB 的 `main` 分支（确实只有 `.gitkeep`），没有查其他分支。2026-08-30 的治理恢复推翻了它。
+
+- PKB 的归档主线是 **`feature/knowledge-base-v1`**——CP `projects/personal-knowledge-base/STATE.yaml` 的 `source_refs.fact_branch` 明确记为该分支。该分支上 `10-projects/ai-sdlc-standard/` **完整存在**（64 个文件：`README.md`、`audits/`、`current.md`、`handoffs/`）。
+- `main` 分支停在 2026-07-13 的初始化提交（`chore: initialize personal knowledge base`）。此后 7 条分支从它分出、**从未合回**：
+
+  | 分支 | ahead | 最后提交 |
+  | --- | --- | --- |
+  | `feature/knowledge-base-v1` | 578 | 2026-08-28 22:14（= CP 锚定的 `c3cb15ac`） |
+  | `feature/governance-state-convergence-r2` | 570 | 2026-08-28 02:03 |
+  | `feature/governance-state-convergence` | 566 | 2026-08-28 01:05 |
+  | `codex/pkb-m5-e1-activation-control-state-alignment` | 350 | 2026-08-11 |
+  | `codex/m5-e1-pce-policy-zero-delta-profile` | 345 | 2026-08-09 23:22 |
+  | `codex/m5-e1-stage-a-source-scope-correction` | 345 | 2026-08-09 18:54 |
+  | `feature/m4-e4-kimi-legacy-retirement` | 340 | 2026-08-08 |
+
+  PKB **无 PR 流程**（`gh pr list --state open` 为空），全部直接 push。因此「归档内容不在 main」是**既有实践**，不是故障。
+
+- **真实缺口不是「没建」，而是「断更」**：归档止于 `2026-08-28` 的 `path-b-sole-production-path-a-frozen`（commit `c3cb15ac`），W1–W6b4 这 8 个波次无归档。
+- PKB 是 Obsidian 受管理笔记体系：`AGENTS.md` 要求 AI 创建的笔记 `status: draft`、必填 8 个属性，改完必须跑 `90-system/scripts/validate_notes.py`，且**未经授权不得 `git push`**。
+- `manifest-v1` 里的 `personal_kb_repository` / `personal_kb_commit` 两个锚点字段（Exchange → PKB 的正式挂钩）**均为可选**，`20260828T141247Z` 这个 run 的 manifest 未填。属「锚点未用」，不算缺陷。
+
+### 问题 2b（2026-08-30 新查出）：CP 与 Exchange 的发布状态口径不一致
+
+- CP `projects/ai-sdlc/STATE.yaml`：`publication.status: COMPLETED`，锚定 `target_archive.commit: c3cb15ac...`。
+- Exchange `current.yaml`（topic06，同一 run）：`publication_status: not_published`、`authorization_status: pending`、`review_status: proposed`、`execution_status: running`。
+- 按 `GOVERNANCE.md` §15.5 的顺序链，`publication=COMPLETED` 应置于「PKB Handoff + current.md」之后。两侧口径是否等同（CP 记「已归档到 PKB」vs Exchange 记「该 run 未授权发布」）需 Current User 澄清，若非同义则应修正其一。
 
 ### 问题 3（约束，非缺陷）：topic 允许列表只有 3 个
 
