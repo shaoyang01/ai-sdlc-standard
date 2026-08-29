@@ -2,7 +2,8 @@
 // closed END-TO-END through the real LoopCapabilityEntry -> gateway -> store
 // chain: no effective artifact, no promotion, no advance to the next point,
 // and a stable decidable code. This is NOT a unit re-test of the validators;
-// every case dispatches a real execute() and asserts the "no advance" surface.
+// every case except C9 dispatches a real execute() (C9 is rejected at registry
+// validation, before any executable entry can exist) and asserts the "no advance" surface.
 //
 // Nine classes (plan §6 E3 acceptance):
 //   C1 invalid output ............ non-verdict node returns a Gate result / bad outcome
@@ -223,6 +224,9 @@ async function main(): Promise<void> {
       inputDigest: tech.digest, outputArtifactVersion: "1.0.0",
       input: { requirementSummaryRef: tech.ref },
     }), "INVALID_INPUT", "C3 a wrong input generation/version is rejected before dispatch");
+    eq(h.runStore.listCapabilityExecutions(h.id.runId)
+      .filter((e) => e.capability === "solution-design").length, 0,
+      "C3 a wrong generation dispatches zero downstream executions");
   }
 
   // ── C4 forged digest: well-formed but wrong SHA-256 for the claimed ref ──

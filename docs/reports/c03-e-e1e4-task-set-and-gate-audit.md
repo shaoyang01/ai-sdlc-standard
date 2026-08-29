@@ -59,7 +59,7 @@
 | ID | 动作 | 目标面 | 依赖 | Source trace | 状态/证据 | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
 | E3-T1 | node output envelope：哨兵 `<!--@loop-output-begin/end-->` 唯一 I/O 契约；role 感知——仅 formal_verdict 可出 verdict，adversarial_scan 强制 NOT_APPLICABLE 但必留 findings ledger | `core/node-output-envelope.ts`（230 行） | — | Decision A；规划 §6 E3 | DONE `494e5de`+`c3abf17` | `tests/node-output-envelope.test.ts` 24 断言 |
-| E3-T2 | 节点输出校验/自动推进/Re-Gate 随 gateway 接线固化（invalid/旧 input/错 generation/伪造 digest/错 Agent/双 Gate role/越界写一律不推进） | gateway + coordinator | E2-T6 | 规划 §6 E3 验收 | **W5 IMPLEMENTED（待独立复审）**：新增 `tests/loop-w5-invalid-output-no-advance.test.ts`，九类（invalid output／旧 input／错 generation／伪造 digest／错 Agent／同 Agent 双 Gate role／stale revision／未闭合 finding／越界写）逐类经真实 entry→gateway→store 链证明「四不」（不成功、无 effective artifact、不前进到下一节点、落稳定可判定码），30 断言；纯新增测试、零生产改动 | 九类无效输出负向 e2e（30 断言全绿） |
+| E3-T2 | 节点输出校验/自动推进/Re-Gate 随 gateway 接线固化（invalid/旧 input/错 generation/伪造 digest/错 Agent/双 Gate role/越界写一律不推进） | gateway + coordinator | E2-T6 | 规划 §6 E3 验收 | **W5 ✅ PASS（独立复审零阻塞，`eac94c9`；R2 两观察项已清，31 断言）**：`tests/loop-w5-invalid-output-no-advance.test.ts`，九类（invalid output／旧 input／错 generation／伪造 digest／错 Agent／同 Agent 双 Gate role／stale revision／未闭合 finding／越界写）逐类经真实 entry→gateway→store 链证明「四不」（不成功、无 effective artifact、不前进到下一节点、落稳定可判定码）；纯新增测试、零生产改动，四向反向探针验证 | 九类无效输出负向 e2e（31 断言全绿、复审 PASS） |
 
 ### E4 — Durable Recovery and Human Boundary（规划 §6 E4）
 
@@ -84,7 +84,7 @@ E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本�
 > **施工序 W1～W7 ↔ 正式任务映射**（实施顺序，非新任务；权威定义见
 > `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
 > **W1=E2-T8（Q1 绑定，✅ PASS，独立复审 R2 `a698808`）** → **W2=E2-T6（gateway 开关，✅ PASS `b94a382`，默认
-> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，✅ PASS `f10aef1`）** → **W5=E3-T2（九类无效输出不推进 e2e，已实现、待独立复审）** → W6=E4-T1～T5 →
+> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，✅ PASS `f10aef1`）** → **W5=E3-T2（九类无效输出不推进 e2e，✅ PASS `eac94c9`，31 断言）** → W6=E4-T1～T5 →
 > W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
 > 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工
 > （E2-T8 无依赖且是激活前 blocker，E2-T6 总开关最后装），二者不矛盾。
