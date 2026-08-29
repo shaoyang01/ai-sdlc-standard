@@ -383,6 +383,16 @@ type CapabilityExecutionRow = {
   error_code: string | null;
   retryable: number | null;
   reason_code: string | null;
+  process_invocation_digest: string | null;
+  process_exit_code: number | null;
+  process_signal: string | null;
+  process_duration_ms: number | null;
+  process_truncated: number | null;
+  staging_ref: string | null;
+  staging_digest: string | null;
+  promotion_ref: string | null;
+  promotion_digest: string | null;
+  human_action_ref: string | null;
   canonical_sha256: string;
 };
 
@@ -596,6 +606,16 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     errorCode: row.error_code,
     retryable: asPersistedRetryable(row.retryable),
     reasonCode: row.reason_code,
+    processInvocationDigest: row.process_invocation_digest,
+    processExitCode: row.process_exit_code === null ? null : asPersistedSafeInteger(row.process_exit_code),
+    processSignal: row.process_signal as LoopCapabilityExecutionEvent["processSignal"],
+    processDurationMs: row.process_duration_ms === null ? null : asPersistedSafeInteger(row.process_duration_ms),
+    processTruncated: row.process_truncated === null ? null : row.process_truncated === 1,
+    stagingRef: row.staging_ref,
+    stagingDigest: row.staging_digest,
+    promotionRef: row.promotion_ref,
+    promotionDigest: row.promotion_digest,
+    humanActionRef: row.human_action_ref,
   });
 }
 
@@ -636,6 +656,16 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     error_code: event.errorCode,
     retryable: event.retryable === null ? null : event.retryable ? 1 : 0,
     reason_code: event.reasonCode,
+    process_invocation_digest: event.processInvocationDigest,
+    process_exit_code: event.processExitCode,
+    process_signal: event.processSignal,
+    process_duration_ms: event.processDurationMs,
+    process_truncated: event.processTruncated === null ? null : event.processTruncated ? 1 : 0,
+    staging_ref: event.stagingRef,
+    staging_digest: event.stagingDigest,
+    promotion_ref: event.promotionRef,
+    promotion_digest: event.promotionDigest,
+    human_action_ref: event.humanActionRef,
     canonical_sha256: sha256Hex(canonicalizeLoopCapabilityExecutionEvent(event)),
   };
 }
@@ -1273,6 +1303,16 @@ export class LoopRunStore {
               error_code TEXT,
               retryable INTEGER CHECK (retryable IS NULL OR retryable IN (0, 1)),
               reason_code TEXT,
+              process_invocation_digest TEXT,
+              process_exit_code INTEGER,
+              process_signal TEXT,
+              process_duration_ms INTEGER,
+              process_truncated INTEGER CHECK (process_truncated IS NULL OR process_truncated IN (0, 1)),
+              staging_ref TEXT,
+              staging_digest TEXT,
+              promotion_ref TEXT,
+              promotion_digest TEXT,
+              human_action_ref TEXT,
               canonical_sha256 TEXT NOT NULL,
               UNIQUE (run_id, sequence),
               FOREIGN KEY (run_id) REFERENCES loop_runs(run_id) ON DELETE CASCADE
@@ -3954,8 +3994,15 @@ export class LoopRunStore {
         decision_depth, decision_scope_id, decision_delta_ref,
         decision_delta_digest,
         next_step_eligibility, error_code, retryable, reason_code,
+        process_invocation_digest, process_exit_code, process_signal,
+        process_duration_ms, process_truncated, staging_ref, staging_digest,
+        promotion_ref, promotion_digest, human_action_ref,
         canonical_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?
+      )`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
       row.capability, row.execution_role, row.node_id, row.attempt, row.status,
@@ -3968,7 +4015,11 @@ export class LoopRunStore {
       row.consumed_findings_digest, row.decision_depth,
       row.decision_scope_id, row.decision_delta_ref,
       row.decision_delta_digest, row.next_step_eligibility, row.error_code,
-      row.retryable, row.reason_code, row.canonical_sha256,
+      row.retryable, row.reason_code, row.process_invocation_digest,
+      row.process_exit_code, row.process_signal, row.process_duration_ms,
+      row.process_truncated, row.staging_ref, row.staging_digest,
+      row.promotion_ref, row.promotion_digest, row.human_action_ref,
+      row.canonical_sha256,
     );
   }
 
@@ -4752,6 +4803,11 @@ export class LoopRunStore {
       ["decision_delta_ref", "TEXT", 0, 0], ["decision_delta_digest", "TEXT", 0, 0],
       ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
       ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
+      ["process_invocation_digest", "TEXT", 0, 0], ["process_exit_code", "INTEGER", 0, 0],
+      ["process_signal", "TEXT", 0, 0], ["process_duration_ms", "INTEGER", 0, 0],
+      ["process_truncated", "INTEGER", 0, 0], ["staging_ref", "TEXT", 0, 0],
+      ["staging_digest", "TEXT", 0, 0], ["promotion_ref", "TEXT", 0, 0],
+      ["promotion_digest", "TEXT", 0, 0], ["human_action_ref", "TEXT", 0, 0],
       ["canonical_sha256", "TEXT", 1, 0],
     ];
     const actual = db.prepare("PRAGMA table_info(loop_capability_executions)").all() as Array<{
@@ -4796,6 +4852,12 @@ export class LoopRunStore {
       !tableSql.sql.includes("CHECK (retryable IS NULL OR retryable IN (0, 1))")
     ) {
       corrupt("capability execution retryable constraint is missing");
+    }
+    if (
+      typeof tableSql?.sql !== "string" ||
+      !tableSql.sql.includes("CHECK (process_truncated IS NULL OR process_truncated IN (0, 1))")
+    ) {
+      corrupt("capability execution process_truncated constraint is missing");
     }
   }
 

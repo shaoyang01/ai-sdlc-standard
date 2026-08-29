@@ -315,6 +315,16 @@ export class ExecutionGateway {
       errorCode: null,
       retryable: null,
       reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
     });
     // C02-WP5 F1: the started append is an ATOMIC CLAIM — the store derives
     // the unique dispatch command from a single-transaction recovery
@@ -503,6 +513,16 @@ export class ExecutionGateway {
       errorCode: null,
       retryable: null,
       reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
     });
     tracing.runStore.appendCapabilityExecution(succeeded);
     // Round 3 review F2: hand the caller the EXACT terminal event this
@@ -517,7 +537,10 @@ export class ExecutionGateway {
     base: Omit<LoopCapabilityExecutionEvent,
       "executionEventId" | "sequence" | "status" | "createdAt" | "outputArtifactRef" |
       "outputArtifactVersion" | "outputDigest" | "gateResult" | "unresolvedFindingsRef" |
-      "unresolvedFindingsDigest" | "nextStepEligibility" | "errorCode" | "retryable" | "reasonCode">,
+      "unresolvedFindingsDigest" | "nextStepEligibility" | "errorCode" | "retryable" | "reasonCode" |
+      "processInvocationDigest" | "processExitCode" | "processSignal" | "processDurationMs" |
+      "processTruncated" | "stagingRef" | "stagingDigest" | "promotionRef" | "promotionDigest" |
+      "humanActionRef">,
     sequence: number,
     createdAt: string,
     errorCode: string,
@@ -539,6 +562,16 @@ export class ExecutionGateway {
       errorCode,
       retryable,
       reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
     }));
   }
 
@@ -958,6 +991,16 @@ export function createDeterministicCapabilityGateway(options: {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
       }));
       if (!claim.appended) {
         return Object.freeze({
@@ -1007,6 +1050,16 @@ export function createDeterministicCapabilityGateway(options: {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
       }));
       return Object.freeze({
         success: true,

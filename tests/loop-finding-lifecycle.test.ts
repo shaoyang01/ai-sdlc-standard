@@ -213,6 +213,16 @@ function makeCapabilityDriver(
       errorCode: null,
       retryable: null,
       reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
       ...overrides,
     });
   }

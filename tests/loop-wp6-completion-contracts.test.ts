@@ -359,6 +359,10 @@ async function main(): Promise<void> {
                 consumedFindingsRef: typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
                 consumedFindingsDigest: typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
                 decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+                processInvocationDigest: null, processExitCode: null, processSignal: null,
+                processDurationMs: null, processTruncated: null,
+                stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+                humanActionRef: null,
               };
               runStore.appendCapabilityExecution(Object.freeze({ ...base,
                 executionEventId: `${runId}:capability:${sequence}:started`,
@@ -442,6 +446,10 @@ async function main(): Promise<void> {
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
+        processInvocationDigest: null, processExitCode: null, processSignal: null,
+        processDurationMs: null, processTruncated: null,
+        stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.parse(tailTs) + 5).toISOString(),
       }));
       const resumed = await run("CONTRADICTORY-RESUME-TEXT", RUN_OPTIONS(env, { requirementId }));
@@ -487,6 +495,10 @@ async function main(): Promise<void> {
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
+        processInvocationDigest: null, processExitCode: null, processSignal: null,
+        processDurationMs: null, processTruncated: null,
+        stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.parse(tailTs) + 5).toISOString(),
       }));
       await Promise.all([

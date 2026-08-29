@@ -55,6 +55,64 @@ export interface NodeExecutionRecord {
   outputDigest?: string | null;
 }
 
+/**
+ * E4-T2 durable recovery classification. A fresh operator (or a resuming
+ * entry) decides the next move from the journal alone; this is the single
+ * machine-readable answer to "what kind of recovery does the interrupted
+ * attempt require". Null only when there is nothing to recover (a completed
+ * chain or a run that has not dispatched a capability yet).
+ */
+export type RecoveryClassification =
+  | "SAFE_RETRY"
+  | "VERIFY_STAGED"
+  | "HUMAN_INPUT_REQUIRED"
+  | "CLEANUP_REQUIRED"
+  | "TERMINAL_FAILED_BLOCKED";
+
+export const RECOVERY_CLASSIFICATIONS: readonly RecoveryClassification[] = Object.freeze([
+  "SAFE_RETRY",
+  "VERIFY_STAGED",
+  "HUMAN_INPUT_REQUIRED",
+  "CLEANUP_REQUIRED",
+  "TERMINAL_FAILED_BLOCKED",
+]);
+
+/**
+ * Pure classifier (unit-tested directly). The ordering is the precedence:
+ * an explicit human request and a staged-but-unpromoted result outrank a
+ * generic cleanup, and only a REAL process (non-null invocation digest) that
+ * failed without staging anything implies a possibly-dirty attempt workspace
+ * that must be isolated/cleaned rather than blindly retried. A deterministic
+ * shadow failure carries no process evidence and is therefore SAFE_RETRY
+ * when retryable — the pre-E4 "no side effects ⇒ retry" assumption stays
+ * valid ONLY while no real process ran.
+ */
+export function classifyCapabilityRecovery(input: {
+  chainStatus: RunRecoveryContext["capabilityChainStatus"];
+  last: LoopCapabilityExecutionEvent | null;
+  hasPendingRevisionMaterialization: boolean;
+}): RecoveryClassification | null {
+  const { chainStatus, last, hasPendingRevisionMaterialization } = input;
+  if (chainStatus === "COMPLETED") return null;
+  // An open terminal→revision window is closed by replaying materialization
+  // from journal facts (no re-dispatch, no external side effect): safe.
+  if (hasPendingRevisionMaterialization) return "SAFE_RETRY";
+  if (last === null) return null;
+  if (last.humanActionRef !== null) return "HUMAN_INPUT_REQUIRED";
+  if (last.status === "failed" && last.stagingRef !== null && last.promotionRef === null) {
+    return "VERIFY_STAGED";
+  }
+  if (last.status === "failed" && last.processInvocationDigest !== null && last.stagingRef === null) {
+    return "CLEANUP_REQUIRED";
+  }
+  if (last.status === "started") return "SAFE_RETRY";
+  if (last.status === "failed" && last.retryable === true) return "SAFE_RETRY";
+  if (last.status === "failed") return "TERMINAL_FAILED_BLOCKED";
+  // A succeeded tail whose forward pointer was cut (e.g. BLOCKED gate /
+  // depth decision) cannot self-advance: terminal-blocked, needs adjudication.
+  return "TERMINAL_FAILED_BLOCKED";
+}
+
 export interface RunRecoveryContext {
   snapshot: LoopRunSnapshot;
   currentStage: string | null;
@@ -85,6 +143,11 @@ export interface RunRecoveryContext {
   /** Point-wise recovery states of the eight v2 execution points. */
   executionPointStates: readonly ExecutionPointRecoveryState[];
   lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
+  /**
+   * E4-T2: the single machine-readable recovery class of the interrupted
+   * attempt, or null when nothing needs recovery (COMPLETED / not started).
+   */
+  recoveryClassification: RecoveryClassification | null;
   /**
    * WP4: durable convergence projection — the v2 finding gate over ALL
    * open/closed findings and current validity. COMPLETED chains with a
@@ -677,6 +740,13 @@ function recoverRunContextInTransaction(
             ? "BLOCKED"
             : "READY";
   const nextCapability = nextExecutionPoint?.capability ?? null;
+  // E4-T2: derive the single recovery class from the already-finalized chain
+  // status, last event and pending-revision window.
+  const recoveryClassification = classifyCapabilityRecovery({
+    chainStatus: capabilityChainStatus,
+    last: lastCapabilityExecution,
+    hasPendingRevisionMaterialization: pendingRevisionProducer !== null,
+  });
   // C02-WP5 (G6): surface the full recovery facts — generation authority,
   // latest change record, per-node current revision identity map, open
   // findings, invalidated revisions and the Re-Gate plan projection — so a
@@ -743,6 +813,7 @@ function recoverRunContextInTransaction(
     nextExecutionPoint: nextExecutionPoint === null ? null : Object.freeze(nextExecutionPoint),
     executionPointStates: Object.freeze(executionPointStates),
     lastCapabilityExecution,
+    recoveryClassification,
     findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
     solutionGateDecision,
     pendingRevisionMaterialization: pendingRevisionProducer === null

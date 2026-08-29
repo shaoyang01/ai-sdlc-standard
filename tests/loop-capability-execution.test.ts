@@ -118,6 +118,16 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     errorCode: null,
     retryable: null,
     reasonCode: null,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
     ...overrides,
   });
 }
@@ -720,6 +730,16 @@ async function main(): Promise<void> {
             typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
           consumedFindingsDigest:
             typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
+          processInvocationDigest: null,
+          processExitCode: null,
+          processSignal: null,
+          processDurationMs: null,
+          processTruncated: null,
+          stagingRef: null,
+          stagingDigest: null,
+          promotionRef: null,
+          promotionDigest: null,
+          humanActionRef: null,
         };
         chainStore.appendCapabilityExecution(Object.freeze({
           ...base,

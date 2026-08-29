@@ -83,7 +83,32 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   errorCode: string | null;
   retryable: boolean | null;
   reasonCode: string | null;
+  // E4-T1 durable process evidence. Every field is nullable; a deterministic
+  // shadow event carries ALL of them null. Only a real process attempt
+  // populates them, and they are part of the canonical hash (no fork): a
+  // persisted invocation/process/staging/promotion fact cannot be rewritten
+  // without hash drift. No dynamic argv CONTENT is stored — invocationDigest
+  // is the sha256 of the normalized invocation shape only.
+  processInvocationDigest: string | null;
+  processExitCode: number | null;
+  processSignal: ProcessSignal | null;
+  processDurationMs: number | null;
+  processTruncated: boolean | null;
+  stagingRef: string | null;
+  stagingDigest: string | null;
+  promotionRef: string | null;
+  promotionDigest: string | null;
+  /** Anchor for the E4-T4 machine-readable human_action_required artifact. */
+  humanActionRef: string | null;
 }>;
+
+// E4-T1: closed allowlist of the process signals a real runner may record as
+// the terminating signal. Arbitrary strings are rejected.
+export const PROCESS_SIGNALS = [
+  "SIGHUP", "SIGINT", "SIGQUIT", "SIGABRT", "SIGKILL", "SIGALRM", "SIGTERM",
+  "SIGPIPE",
+] as const;
+export type ProcessSignal = (typeof PROCESS_SIGNALS)[number];
 
 const EVENT_FIELDS = [
   "schemaVersion", "executionEventId", "runId", "sequence", "capability", "executionRole", "nodeId",
@@ -94,6 +119,9 @@ const EVENT_FIELDS = [
   "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
   "decisionDepth", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
   "nextStepEligibility", "errorCode", "retryable", "reasonCode",
+  "processInvocationDigest", "processExitCode", "processSignal", "processDurationMs",
+  "processTruncated", "stagingRef", "stagingDigest", "promotionRef", "promotionDigest",
+  "humanActionRef",
 ] as const;
 
 const AGENTS: readonly AgentName[] = ["kimi", "codex", "hermes"];
@@ -303,6 +331,53 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   const errorCode = nullableText(event.errorCode, "errorCode");
   const reasonCode = nullableText(event.reasonCode, "reasonCode");
   if (event.retryable !== null && typeof event.retryable !== "boolean") invalid("retryable must be boolean or null");
+  // E4-T1 durable process evidence (all nullable, fail-closed). A deterministic
+  // shadow event leaves every one of these null.
+  const invocationDigest = nullableDigest(event.processInvocationDigest, "processInvocationDigest");
+  const exitRaw = event.processExitCode;
+  if (
+    exitRaw !== null &&
+    (typeof exitRaw !== "number" || !Number.isSafeInteger(exitRaw) || exitRaw < 0 || exitRaw > 255)
+  ) {
+    invalid("processExitCode must be an integer in 0..255 or null");
+  }
+  const signalRaw = event.processSignal;
+  if (
+    signalRaw !== null &&
+    (typeof signalRaw !== "string" || !PROCESS_SIGNALS.includes(signalRaw as ProcessSignal))
+  ) {
+    invalid("processSignal must be a canonical signal or null");
+  }
+  if (exitRaw !== null && signalRaw !== null) {
+    invalid("a process terminates by exit code OR signal, never both");
+  }
+  const durationRaw = event.processDurationMs;
+  if (
+    durationRaw !== null &&
+    (typeof durationRaw !== "number" || !Number.isSafeInteger(durationRaw) || durationRaw < 1)
+  ) {
+    invalid("processDurationMs must be a positive safe integer or null");
+  }
+  if (event.processTruncated !== null && typeof event.processTruncated !== "boolean") {
+    invalid("processTruncated must be boolean or null");
+  }
+  const stagingRef = nullableArtifactRef(event.stagingRef, "stagingRef");
+  const stagingDigestField = nullableDigest(event.stagingDigest, "stagingDigest");
+  const promotionRef = nullableArtifactRef(event.promotionRef, "promotionRef");
+  const promotionDigestField = nullableDigest(event.promotionDigest, "promotionDigest");
+  if ((stagingRef === null) !== (stagingDigestField === null)) invalid("staging ref and digest must appear together");
+  if (stagingRef !== null && stagingRef.digest !== stagingDigestField) invalid("staging reference and digest must match");
+  if ((promotionRef === null) !== (promotionDigestField === null)) invalid("promotion ref and digest must appear together");
+  if (promotionRef !== null && promotionRef.digest !== promotionDigestField) invalid("promotion reference and digest must match");
+  if (promotionRef !== null && stagingRef === null) invalid("a promotion requires its staging evidence");
+  const humanActionRefText = nullableText(event.humanActionRef, "humanActionRef");
+  const hasProcessEvidence = invocationDigest !== null || exitRaw !== null ||
+    signalRaw !== null || durationRaw !== null || event.processTruncated !== null;
+  // Any process fact implies a real invocation: evidence is either absent
+  // (shadow) or complete (an invocation digest anchors it).
+  if (hasProcessEvidence && invocationDigest === null) {
+    invalid("real process evidence requires a process invocation digest");
+  }
   if (event.executionEventId !== `${runId}:capability:${sequence}:${event.status}`) {
     invalid("executionEventId must match run, sequence and status");
   }
@@ -311,9 +386,12 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (
       outputRef !== null || outputVersion !== null || outputDigest !== null || event.gateResult !== null ||
       findingRef !== null || event.nextStepEligibility !== null || errorCode !== null ||
-      event.retryable !== null || reasonCode !== null
+      event.retryable !== null || reasonCode !== null ||
+      invocationDigest !== null || event.processExitCode !== null || event.processSignal !== null ||
+      event.processDurationMs !== null || event.processTruncated !== null ||
+      stagingRef !== null || promotionRef !== null || humanActionRefText !== null
     ) {
-      invalid("started capability execution must not contain result fields");
+      invalid("started capability execution must not contain result or process-evidence fields");
     }
     // The consumed-ledger claim is part of the dispatch claim itself so a
     // recovered verdict cannot swap ledgers between start and terminal.
@@ -321,6 +399,9 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   } else if (event.status === "succeeded") {
     if (outputRef === null || outputVersion === null || outputDigest === null) {
       invalid("succeeded capability execution requires output ref, version and digest");
+    }
+    if (hasProcessEvidence && (exitRaw !== 0 || signalRaw !== null)) {
+      invalid("a succeeded real process must exit 0 with no terminating signal");
     }
     if (event.gateResult === null || event.nextStepEligibility === null) {
       invalid("succeeded capability execution requires Gate and next-step eligibility");
@@ -354,6 +435,7 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (outputRef !== null || outputVersion !== null || outputDigest !== null || event.gateResult !== null || findingRef !== null) {
       invalid("failed capability execution must not contain successful result fields");
     }
+    if (promotionRef !== null) invalid("a failed execution must not carry promotion evidence");
     if (errorCode === null && reasonCode === null) invalid("failed capability execution requires an error or reason code");
     if (event.nextStepEligibility !== "BLOCKED") invalid("failed capability execution must block the next step");
     if (typeof event.retryable !== "boolean") invalid("failed capability execution requires retryable");
@@ -402,6 +484,19 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     errorCode: event.errorCode,
     retryable: event.retryable,
     reasonCode: event.reasonCode,
+    // E4-T1: process evidence is part of the canonical hash — a persisted
+    // invocation/process/staging/promotion fact cannot be rewritten without
+    // hash-drift detection.
+    processInvocationDigest: event.processInvocationDigest,
+    processExitCode: event.processExitCode,
+    processSignal: event.processSignal,
+    processDurationMs: event.processDurationMs,
+    processTruncated: event.processTruncated,
+    stagingRef: event.stagingRef,
+    stagingDigest: event.stagingDigest,
+    promotionRef: event.promotionRef,
+    promotionDigest: event.promotionDigest,
+    humanActionRef: event.humanActionRef,
   });
 }
 

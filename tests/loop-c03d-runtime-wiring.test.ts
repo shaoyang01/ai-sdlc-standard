@@ -136,6 +136,16 @@ function verdictGateway(
         decisionScopeId: null as string | null,
         decisionDeltaRef: null as string | null,
         decisionDeltaDigest: null as string | null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
       };
       // started event
       runStore.appendCapabilityExecution(Object.freeze({

@@ -65,8 +65,8 @@
 
 | ID | 动作 | 目标面 | 依赖 | Source trace | 状态 | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
-| E4-T1 | process evidence artifact：invocation/process/staging/promotion/human-action 固定字段，append/readback 校验 | `core/loop-run-store.ts` 扩展 | E2-T6 | 规划 §6 E4 | PENDING | 事务/读回测试 |
-| E4-T2 | recovery 分类：safe retry / verify staged / cleanup required / human input / terminal failed-blocked | recovery context | E4-T1 | 规划 §6 E4 | PENDING | 五类分类测试 |
+| E4-T1 | process evidence artifact：invocation/process/staging/promotion/human-action 固定字段，append/readback 校验 | `core/loop-capability-execution.ts`（schema 字段+校验）、`core/loop-run-store.ts`（列/读写/canonical hash）、`core/loop-recovery.ts`、gateway | E2-T6 | 规划 §6 E4 | **W6a 实现完成、待独立复审**：10 个 nullable 字段（processInvocationDigest/processExitCode/processSignal/processDurationMs/processTruncated、staging pair、promotion pair、humanActionRef）进 v7 事件、journal 列与 canonical hash；validator 与 store 写门双层 fail-closed（exit 0..255、signal 封闭枚举、exit/signal 互斥、duration 正整数、ref/digest 成对且匹配、promotion 需先 staging、started 零证据、succeeded 真进程必 exit 0、failed 无 promotion）；确定性 shadow 事件全 null | `tests/loop-w6a-process-evidence-recovery.test.ts` round-trip/12 类非法双层拒绝/hash 防分叉 |
+| E4-T2 | recovery 分类：safe retry / verify staged / cleanup required / human input / terminal failed-blocked | `core/loop-recovery.ts`（纯函数 `classifyCapabilityRecovery` + `RunRecoveryContext.recoveryClassification`） | E4-T1 | 规划 §6 E4 | **W6a 实现完成、待独立复审**：五分类 + null（COMPLETED/未派发）单一机器可读出口；优先级 human＞verify-staged＞cleanup＞safe-retry＞terminal；仅当真进程跑过（invocation 非 null）且无 staging 才 CLEANUP_REQUIRED，确定性 shadow retryable 失败仍 SAFE_RETRY（旧"无副作用即可重试"仅在无真进程时成立）；pending revision 窗口归 SAFE_RETRY | 同文件纯函数 10 例 + recoverRunContext 端到端 3 例 |
 | E4-T3 | resume lease 覆盖 recovery→claim→spawn→terminal/promotion 窗口 | 既有 `withResumeLease` 扩展 | E4-T1 | 规划 §6 E4 | PENDING | 并发 claim 测试 |
 | E4-T4 | `human_action_required` 机器可读 artifact，reason 仅限 6 个合法码；`SWITCH_AGENT_REQUIRED`/`SHADOW_FALLBACK_REQUIRED` 非法 | 新增 | E4-T1 | 规划 §6 E4 | PENDING | allowlist/负向测试 |
 | E4-T5 | attempt workspace 清理/保留：成功提升、失败隔离、未知副作用保留证据并阻塞 | `core/loop-git-workspace.ts` | E4-T1 | 规划 §6 E4 | PENDING | 三态测试 |
@@ -84,7 +84,7 @@ E5 真实 CLI canary 与"默认路径真 spawn 三 Agent"的激活均不在本�
 > **施工序 W1～W7 ↔ 正式任务映射**（实施顺序，非新任务；权威定义见
 > `docs/reports/c03-e-e1e4-wiring-design.md` §10）：
 > **W1=E2-T8（Q1 绑定，✅ PASS，独立复审 R2 `a698808`）** → **W2=E2-T6（gateway 开关，✅ PASS `b94a382`，默认
-> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，✅ PASS `f10aef1`）** → **W5=E3-T2（九类无效输出不推进 e2e，✅ PASS `eac94c9`，31 断言）** → W6=E4-T1～T5 →
+> deterministic）** → **W3=E1-T3/T4（loop-run + production identity/preflight，✅ PASS `598cc72`，S1/S2 已清）** → **W4=E2-T7/D-073（A 链冻结标注 + spawn 引用图 + B-7 零引用锁定，✅ PASS `f10aef1`）** → **W5=E3-T2（九类无效输出不推进 e2e，✅ PASS `eac94c9`，31 断言）** → **W6a=E4-T1+T2（process evidence 固定字段 + recovery 五分类，实现完成待独立复审，68 断言）** → W6b=E4-T3/T4/T5（resume lease 窗口、human_action_required 合法码、attempt workspace 三态）→
 > W7=C-T1/C-T2（Node v24 独立全量只读复审 → Current User 收口）。
 > 注：T 编号是台账登记顺序，W 编号是安全激活顺序，故 W1=E2-T8 先于 W2=E2-T6 施工
 > （E2-T8 无依赖且是激活前 blocker，E2-T6 总开关最后装），二者不矛盾。

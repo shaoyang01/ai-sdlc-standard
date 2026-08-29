@@ -141,6 +141,16 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     errorCode: o.status === "failed" ? o.errorCode ?? "EXEC_FAILED" : null,
     retryable: o.status === "failed" ? o.retryable ?? true : null,
     reasonCode: o.status === "failed" ? o.reasonCode ?? "AGENT_FAILURE" : null,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
   }) as unknown as LoopCapabilityExecutionEvent;
 }
 

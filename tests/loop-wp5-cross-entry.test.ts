@@ -903,6 +903,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.now() + 20000).toISOString(),
       });
       // …then the facts move UNDER it: a causal regression invalidates the
@@ -1154,6 +1164,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: claimTs,
       });
       envB.runStore.claimNextCapabilityExecution(designStarted);
@@ -1238,6 +1258,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: claimTs,
       }));
       const dispatchesBefore = pointDispatchCounts(env.runStore, runId);
@@ -1490,6 +1520,10 @@ async function main(): Promise<void> {
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
+        processInvocationDigest: null, processExitCode: null, processSignal: null,
+        processDurationMs: null, processTruncated: null,
+        stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.parse(tailTs) + 5).toISOString(),
       }));
       const aliasArtifacts = new LoopArtifactStore({

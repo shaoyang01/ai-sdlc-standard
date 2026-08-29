@@ -155,6 +155,16 @@ function appendVerdict(
     inputDigest: scan.outputDigest!,
     consumedFindingsRef: scan.unresolvedFindingsRef,
     consumedFindingsDigest: scan.unresolvedFindingsDigest,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
   };
   env.runStore.appendCapabilityExecution(Object.freeze({
     ...base,
