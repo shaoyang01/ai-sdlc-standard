@@ -2,11 +2,17 @@
 
 > 最后更新：2026-08-29（UTC）。供中断后新会话/新 Agent 无缝续作。只读事实 + 明确下一步，勿凭印象改。
 
-## ★ 当前快照（**W6b4 ✅ PASS**；W6b3 ✅ PASS，与下文冲突时以本节为准）
+## ★ 当前快照（**W6b5 ✅ PASS**；W6b4/W6b3 ✅ PASS，与下文冲突时以本节为准）
 
-- **W6b3 = E4-T5：✅ PASS（B1 聚焦复审 CLOSED 零阻塞，2026-08-29）**。路径：实现 `02b642a`（35 断言）→ 独立复审 NOT_CLOSED（1 项阻塞 B1）→ B1 修复 `05d12d2`（41 断言）→ **B1 聚焦复审 CLOSED 零阻塞 → 出 W6b3 pass-state（CP PR #25）→ 进 W7**。
-  - 已落库：W1～W5 全部 PASS；W6a（`5b1855a`，68）；W6b1（`5f2bcd8`+`d9a7517`，27）；W6b2（`99c9df3`，82）；**W6b3（`02b642a` 35 → `05d12d2` 41，✅ PASS）**。CP：**PR #24 已合 main `c3a31f4`；PR #25 已合 main `2d2ff53`**。
-- **W6b4 = E4-T5 收口：committed diff 门控（实现方在 W6b3 PASS 之后自查发现，非复审方提出）**。`1605a84`，45 断言 → **独立聚焦复审 CLOSED（零阻塞）→ ✅ PASS（2026-08-30）→ 出 W6b4 pass-state（CP PR #26 待合并）**。复审 prompt：`docs/reports/c03-e-w6b4-focused-review-prompt.md`。
+- **W6b5 = T10c 微波（P7 落地，Current User 裁决单开）：✅ PASS（聚焦复审 CLOSED 零阻塞，2026-08-30）**。`4b8ccb0`（恰一文件，测试 +34/-0 纯新增，45→47 断言，**生产代码零改动**）→ CP pass-state **PR #27 已合并（main `f8ab56b`）**。
+  - **T10c**：`allowedPaths: []` + 已提交越界文件 → 必须 `CLEANUP_BLOCKED` 且 named diff 恰跑一次（spy 断言 `args[0]==="diff" && args.includes("--name-only")` 计数 = 1）。空数组是**显式空权限集**，不是「无门控」。
+  - **反向探针 P9（临时 worktree，已清理）**：把门控误写成过度收紧（`|| allowedPaths.length === 0`，即空数组不跑 diff）→ 恰 T10c 两条红（越界提交被**静默 promote**，正是 P7 担心的事故方向），T10a/T10b 保持绿。
+  - **复审核心证据**：T10c 语义链完整——`:540` 门控确为 `allowedPaths === null`（`[]` 走 diff）→ `:300-302` 空权限集下对任何已提交路径判越界 → block → `:553-556` 抛 `CLEANUP_BLOCKED`；回归矩阵 `w6b3 47` / `git-workspace 110` / `adapter 354/354` / `w6b2 83` / tsc 干净；spy 区分可靠（全仓 `--name-only` 仅 `:541` 一处，计数不失真）。
+  - **P10 口径修正（复审方实测，非阻塞，如实记录）**：对 P7 这个误写方向，**block 断言单独就足以抓红**（删掉 diff 计数断言后仍 1 FAILED）；两条断言并非「缺一不可」——block 断言是主承重，diff 计数断言钉的是更窄一类误写（如对 `[]` 跑两次 diff）。双钉保留合理，但 W6b5 任务书「只留任一另一条就漏网」的表述过强。
+  - **本机环境坑（如实记录，非回归）**：托管 Node 22.22.2（ABI 127）与 `better-sqlite3` 原生模块（按 ABI 137 = Node 24 编译）不匹配 → 全套件 33 文件假红（`STORE_FAILURE`）；改用 Homebrew **node@24** 重跑即对应环境。**本项目全套件必须用 node@24**。
+  - 复审 prompt：`docs/reports/c03-e-w6b5-focused-review-prompt.md`（基线 `4b8ccb0`，范围 `c47d031..4b8ccb0`）。**自本波起复审 prompt 不再落文件**（Current User 裁决：一次性内容会话内输出即可），本文件为最后一个已提交的 prompt。
+- **W6b3 = E4-T5：✅ PASS（B1 聚焦复审 CLOSED 零阻塞，2026-08-29；CP PR #25 已合 main `2d2ff53`）**。实现 `02b642a`（35 断言）→ 复审 NOT_CLOSED（B1）→ `05d12d2`（41 断言）→ B1 聚焦复审 CLOSED → PASS。详见下文 W6b3 各节。
+- **W6b4 = E4-T5 收口：committed diff 门控（实现方在 W6b3 PASS 之后自查发现，非复审方提出）**。`1605a84`，45 断言 → **独立聚焦复审 CLOSED（零阻塞）→ ✅ PASS（2026-08-30）→ CP pass-state PR #26 已合并（main `b9ccd25`）**。复审 prompt：`docs/reports/c03-e-w6b4-focused-review-prompt.md`。
   - **问题**：`cleanup()` 的 committed diff（`git diff --name-only -z --no-renames <base>...HEAD`）是**无条件执行**的，但它唯一消费点是 `classifyWorkspaceCleanup` 里的越界检查（`:300`），而该检查又被 `allowedPaths !== null` 门控。于是① 未传 `allowedPaths` 的既有 30+ 调用方每次 cleanup 多跑一个 git 子进程、拿到一个没人读过的值；② 因为 `_gitR(...,[0])` 对 timeout／signal／截断／非零退出一律抛 `GIT_COMMAND_FAILED`（`:626-641`），它给这条此前不可能在此失败的路径**新增了一个失败面**。
   - **修复**：`:540` 改为 `allowedPaths === null ? "" : (await this._gitR(...))`。对既有调用方行为完全等价；T9 三例都传 `allowedPaths`，不受影响。
   - **触发场景（如实记录，未当作归因证据）**：实现方本机全套件（146 文件 / 3539.2s，比复审方 278.8s 慢约 12.7 倍）出现文件级失败 `tests/loop-codex-implementation-adapter.test.ts`——该文件正是「导入 `LoopGitWorkspaceManager`、`cleanup()` 不传 `outcome`/`allowedPaths`」的既有调用方。隔离单跑 354/354、3 路并行 3/3、8 路并行 8/8 **均未复现**，故只作为「需要收口的面」的动机，未作为因果证据。
@@ -29,8 +35,8 @@
   - **W6b3 验证基线**：新测试 **41** 断言全绿（原 35 + B1 回归矩阵 T9 6 条）；`loop-git-workspace.test.ts` 110；`loop-w6b2-human-action-artifact.test.ts` 83；`loop-finding-lifecycle.test.ts` 350；`loop-single-rail-contract.test.ts` 55；tsc 干净；3 个 ruby validator exit=0。
   - **已知环境能力缺口（非本波缺陷，已写进复审 prompt）**：`tests/loop-artifact-store.test.ts`（6 条）与 `tests/loop-delivery-checkpoint-store.test.ts`（3 条）在**本机**确定性失败，全部集中在**跨进程并发**段落。根因：本机 `link`(2) 硬链接在目标**已存在**时返回合成错误 `CODEBUDDY_BROKER_DENY` 而非内核的 `EEXIST`，导致 `loop-artifact-store.ts:359-363` 并发 put 的落败者进不了 EEXIST 赢家赛分支、被兜底为 `ARTIFACT_IO_FAILURE`。三进程探针 3/3 稳定 1 成功/2 失败、失败码恒定（沙箱与非沙箱一致）。**基线对照**：在 `99c9df3`（不含本波任何改动）独立 worktree 实跑，两个文件失败集合与本机分支**逐字一致** → 先于本波存在，不是 W6b3/F1/S2 回归；本波未改这两个模块的任何生产代码。换一台无该 broker 拦截的机器应全绿。
 - **分支已 push 且有上游**：`feature/c03-e1-e4-runtime-implementation`（主干仍是 `loop-runtime-v1`，未碰）。续作先 `git fetch && git pull`。
-- **HEAD = `1605a84`（W6b4 = E4-T5 收口：committed diff 门控；**聚焦复审 CLOSED 零阻塞 → ✅ PASS**）**。前序：`d9a7517`（W6b1 S1/S2 补强）→ `99c9df3`（W6b2）→ `f82cc5a`（docs-only pin）→ `4f9eaad`（台账收口 W6b2）→ `02b642a`（W6b3 代码）→ `952d9da`（W6b3 文档 pin）→ `05d12d2`（B1 修复）→ `5c5b18d`（B1 聚焦复审 prompt）→ `e92eea3`（W6b3 PASS 文档）→ `7cd403e`（回填本机全套件）→ `1605a84`（W6b4 门控）→ `e8e86ce`（W6b4 prompt/台账/handoff）→ `c11a641`（补 `allowedPaths=[]` 实测）→ `0c0c458`（Exchange/PKB 归档链离线预演）→ 本文档提交。
-  - **CP 侧**：PR #22（W6a）、#23（W6b1）、#24（W6b2）、#25（W6b3）均已合并；**PR #26（W6b4 pass-state，分支 `docs/c03e-w6b4-pass-w7`，提交 `bc06c42`，`validate_state.rb` PASS v2）待合并**。
+- **HEAD = `4b8ccb0`（W6b5 = T10c 微波；**聚焦复审 CLOSED 零阻塞 → ✅ PASS**；其后 `7e0bb15` 为 W6b5 prompt docs-only）**。前序：`d9a7517`（W6b1 S1/S2 补强）→ `99c9df3`（W6b2）→ `f82cc5a`（docs-only pin）→ `4f9eaad`（台账收口 W6b2）→ `02b642a`（W6b3 代码）→ `952d9da`（W6b3 文档 pin）→ `05d12d2`（B1 修复）→ `5c5b18d`（B1 聚焦复审 prompt）→ `e92eea3`（W6b3 PASS 文档）→ `7cd403e`（回填本机全套件）→ `1605a84`（W6b4 门控）→ `e8e86ce`（W6b4 prompt/台账/handoff）→ `c11a641`（补 `allowedPaths=[]` 实测）→ `0c0c458`（Exchange/PKB 归档链离线预演）→ `c47d031`（治理恢复四裁决 + G4 撤回 + 单链规则）→ `4b8ccb0`（W6b5 T10c）→ `7e0bb15`（W6b5 prompt）→ 本文档提交。
+  - **CP 侧**：PR #22（W6a）、#23（W6b1）、#24（W6b2）、#25（W6b3）、#26（W6b4）均已合并；**PR #27（W6b5 pass-state，main `f8ab56b`）已合并**。Current User 常设授权：pass-state PR 由实施方直接合并。
   - 已落库：W1～W5 全部 PASS；**W6a（`5b1855a`，68 断言，复审 PASS，CP PR #22 已合 main `16cc5e6`）**；`d4ee31e` 台账裁决；**W6b1（`5f2bcd8` + `d9a7517` 补强，27 断言，复审 PASS 零阻塞，CP PR #23 待合并）**。
   - 工作区（未提交）：**W6b2 实施** —— 新增 `core/loop-human-action-artifact.ts`（六合法码 allowlist + 构造/序列化/读回校验 + put/read 封装）；`core/loop-artifact-store.ts`（kind 两处：`:14` 联合类型 + `:34` KINDS 数组）；`core/loop-artifact-revision.ts`（`LOOP_ARTIFACT_REVISION_KINDS` 同步，否则 `:65-67` 编译期漂移检查报错）；新测试 `tests/loop-w6b2-human-action-artifact.test.ts` **82 断言全绿**；复审 prompt `docs/reports/c03-e-w6b2-independent-review-prompt.md`。
   - 权威 W↔E 任务映射与每步状态见 `docs/reports/c03-e-e1e4-task-set-and-gate-audit.md`（台账，比本 handoff 更细，先读它）。
