@@ -41,8 +41,26 @@
 | --- | --- |
 | 2026-08-30 | 「可以开始搞E5了」→ Decision-075 授权成立，分层推进（L1 立即；L2/L3 真实 CLI 触发前再确认） |
 | 2026-08-30 | 「修吧」→ E5-G1 缺口修复 + E5-G2 口径修订全部立项为 W1 同批（含 G-P1 并入确认；L2 仍冻结待触发前确认） |
+| 2026-08-30 | 「A 这种完全就没必要了……开发阶段没有上生产的紧迫性，直接选最优方案……如果你觉得C是最优解，那就应该直接搞C」→ **取消临时方案 A/B**；G-E5L2-1（prompt transport）由「参数放宽容忍」升级为**架构级改造（方案 C：workspace 文件指针）**，与 G-E5L2-2/3 合并为 W3 一波 |
 
-## 4.1 W2 立项（E2 回流修复——L2 canary 三 FAIL，2026-08-30；⏸️ 待 Current User 授权，本节为立项草案）
+## 4.1 W2 立项（2026-08-30）——❌ 已由 W3 取代，本节留档不再执行
+
+> 原 W2 三项（G-E5L2-1/2/3，含方案 A「argv 末位 + 上调 `MAX_ARG_B`」与方案 B「探测 `-` 惯用法」）已被上述裁决推翻：A 被判定为无必要的临时方案（手动切换 agent 已能跑通，无上生产紧迫性），B 属 A 的探路步骤一并取消。**G-E5L2-1 移至 W3 以方案 C 实施；G-E5L2-2/3 并入 W3 同批。** 本波无代码改动留痕（截止 `ae63358`，工作树干净）。
+
+## 4.2 W3 立项（E2 prompt transport 架构改造——方案 C：workspace 文件指针；⏸️ 待 Current User 授权，本节为立项草案）
+
+| 项 | 内容 | 来源证据 |
+| --- | --- | --- |
+| **G-E5L2-1★** | **prompt transport 架构改造（方案 C）**：prompt = **固定指令壳**（数百字节静态模板）+ **workspace 内文件指针**（相对路径）；大内容（需求文档、上游节点产物）落 workspace 文件，由目标 CLI 自带的文件读取能力自读。argv 只承载壳与已守卫的短路径，**不承载大内容** → 天然规避 runner 单参数 4096B 上限，且解决链式产物滚雪球（实测真实需求 37,266B；需求摘要→技术方案→实现记录逐节点传递会持续增长，任何 argv 上限都撑不住） | §5-③ + 真实样本 `/Users/eric/meicai/projects/wms-monitor/library/20260724-task-center/00-需求资料/20260724-task-center_需求摘要.md`（37,266B） |
+| 不变式 | ① 壳由 **canonical prompt builder** 生成，外部自由文本不得直接进入 argv；② 指针路径必须在 workspace 目录内 + charset 白名单（禁 `../`、shell 元字符、绝对路径逃逸）；③ 壳超长 fail-closed（明确错误码，不静默截断）；④ **`MAX_ARG_B`（内核安全策略 4096B）不上调**；⑤ 无 final message / 非预期输出仍 fail-closed | 内核安全属性（W1 已验收） |
+| 待验证前提 | 三家 CLI 在「指令壳 + 文件指针」模式下能正确读文件并完成任务。**实施内第一步**用零副作用探针验证（临时 fixture，退出即删）；若某家不支持 → 该家 fail-closed 挂起并如实回报，**不做降级 hack**（不再回到 A/B） | — |
+| G-E5L2-2 | **codex JSONL final-message 形状漂移**（并入本波）：`real-capability-adapter.ts` `readFinalMessage` 不认 codex 0.147.0 嵌套形状 `{"type":"item.completed","item":{"type":"agent_message","text":…}}`，正常输出被误判 MALFORMED_OUTPUT。修复 = 增补该形状，保持 fail-closed（非 JSON 行仍拒、无 final message 仍拒） | §5-③ codex FAIL |
+| G-E5L2-3 | **pinned 版本事实过期**（并入本波）：profile 钉 0.38.0 / codex-cli 0.150.1 / hermes 0.20.5，本机实际 0.39.1 / codex-cli 0.147.0 / hermes 0.20.6。重定基线，integrity check 同步；E2-P 历史记录保留原观察值不重写 | §5-②/§5-③ |
+| 开放决策 D1 | **证据口径（触及 W1 已验收契约，须 Current User 拍板）**：`invocationDigest` 目前仅覆盖六字段调用形状、不含动态内容。文件指针引入动态相对路径 → 提案：**路径归一化后计入 invocationDigest**（属调用形状，由 builder 生成、非自由输入，注入风险可控）；**文件内容另算 content digest**，若需记入 journal 则涉及 schema 扩展——**不在本波夹带，停波回报** | W1 G-S09(b) |
+| 开放决策 D2 | **合并 vs 分批**：推荐合并为一波（两次 canary 真实调用成本 + 两轮复审开销；且 codex 解析 bug 不修，C 架构无法被 canary 证明） | — |
+
+- **验收标准**：① tsc 干净；② 新测试全绿（壳构造、路径守卫含 `../`/元字符反例、超长 fail-closed、digest 稳定性、JSONL 四种形状 + fail-closed 反例）；③ node@24 全套件 0 failed（环境漂移项按 W1 口径处理）；④ 三家 canary 重跑全 PASS；⑤ **规模验证**：用真实需求文件（37,266B）跑一次端到端，证明 37KB 级输入不再受传输上限约束（只读，零写入）。
+- **边界**：仅动 `execution/agent-cli-profile.ts`、`execution/real-capability-adapter.ts`、新增 prompt builder（execution/ 下）与新测试；**不动** `core/loop-posix-process-runner.ts` 的 `MAX_ARG_B`、**不动** journal schema（如需动则停波回报）；零业务仓写入；canary 真实调用前在会话内预告。
 
 | 项 | 内容 | 来源证据 |
 | --- | --- | --- |
