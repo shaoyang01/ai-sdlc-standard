@@ -35,6 +35,10 @@ function build(capability: NodeCapabilityId, role: "primary" | "adversarial_scan
     inputText: extra?.inputText ?? "upstream product text",
   });
 }
+
+const DIGEST = "a".repeat(64);
+const DIGEST2 = "b".repeat(64);
+const base = { requirementId: "REQ-1", node: "implementation", capability: "implementation" as NodeCapabilityId, executionRole: "primary" as const };
 async function expectReject(fn: () => string, m: string): Promise<void> {
   try {
     fn();
@@ -97,6 +101,55 @@ function main(): void {
   {
     const okMax = build("implementation", "primary", { inputText: "x".repeat(MAX_PROMPT_INPUT_CHARS) });
     ok(okMax.length > MAX_PROMPT_INPUT_CHARS, "at-limit input accepted (prompt adds instructions)");
+  }
+
+  console.log("prompt: stdin transport (three-way exclusive)");
+  {
+    // Canonical stdin-mode shell: declares bytes+digest, forbids file reads,
+    // and never carries the task content itself (content is not an input here).
+    const s = buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: DIGEST, bytes: 37266 } });
+    ok(s.includes("piped on stdin"), "stdin: declares stdin transport");
+    ok(s.includes("- Bytes: 37266") && s.includes(`- SHA-256: ${DIGEST}`), "stdin: bytes + digest proof present");
+    ok(s.includes("Do not read any file"), "stdin: forbids file reads");
+    ok(s.includes("Never ask for the content to be pasted"), "stdin: forbids paste-asking");
+    ok(s.includes("37266") === true && s.includes("upstream product text") === false, "stdin: no pointer path, no inline content");
+    const s2 = buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: DIGEST, bytes: 37266 } });
+    ok(s === s2, "stdin: deterministic");
+
+    // Three-way exclusivity: zero or 2+ modes must fail closed.
+    expectReject(() => buildNodeCapabilityPrompt({ ...base }), "stdin: zero input modes rejected");
+    expectReject(
+      () => buildNodeCapabilityPrompt({ ...base, inputText: "x", inputStdin: { digest: DIGEST, bytes: 1 } }),
+      "stdin: inline+stdin rejected",
+    );
+    expectReject(
+      () => buildNodeCapabilityPrompt({ ...base, inputText: "x", inputPointer: { path: "a.md", digest: DIGEST2, bytes: 1 } }),
+      "stdin: inline+pointer rejected",
+    );
+    expectReject(
+      () => buildNodeCapabilityPrompt({ ...base, inputPointer: { path: "a.md", digest: DIGEST2, bytes: 1 }, inputStdin: { digest: DIGEST, bytes: 1 } }),
+      "stdin: pointer+stdin rejected",
+    );
+    expectReject(
+      () =>
+        buildNodeCapabilityPrompt({
+          ...base,
+          inputText: "x",
+          inputPointer: { path: "a.md", digest: DIGEST2, bytes: 1 },
+          inputStdin: { digest: DIGEST, bytes: 1 },
+        }),
+      "stdin: all three rejected",
+    );
+
+    // stdin ref validation: digest shape, positive safe-integer bytes.
+    expectReject(() => buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: "nothex", bytes: 1 } }), "stdin: bad digest rejected");
+    expectReject(() => buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: DIGEST, bytes: 0 } }), "stdin: zero bytes rejected");
+    expectReject(() => buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: DIGEST, bytes: -5 } }), "stdin: negative bytes rejected");
+    expectReject(() => buildNodeCapabilityPrompt({ ...base, inputStdin: { digest: DIGEST, bytes: 1.5 } }), "stdin: non-integer bytes rejected");
+
+    // Pointer mode still intact alongside the new third mode.
+    const p1 = buildNodeCapabilityPrompt({ ...base, inputPointer: { path: "workspace/prompt-input/a.md", digest: DIGEST2, bytes: 9 } });
+    ok(p1.includes("workspace/prompt-input/a.md") && p1.includes("Read that file"), "pointer mode unchanged");
   }
 
   console.log(`\nResults: ${p} passed, ${f} failed`);

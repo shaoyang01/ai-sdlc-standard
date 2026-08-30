@@ -12,7 +12,7 @@
 | E5-L1 | 第 1 层 | 自动负向矩阵映射：五类机制要求 + §7 S1–S18 + 六 crash window 盘点，产出映射报告与缺口清单 | `docs/reports/c03-e5-l1-negative-matrix-mapping.md` | Decision-075 | ✅ **MAPPING DONE WITH GAPS（2026-08-30）**：五类机制（fail-closed/恢复/Re-Gate/并发/Git 边界）全部有已复审自动化证据；S1–S18 中 13 项 ✅、S17/S18 纪律/预检级已闭、2 项中等级缺口（G-S05 重试预算缺失、G-S09 截断证据链断裂）+ 2 项低级口径项（G-S08 码名漂移、G-WINDOW 三窗口 dispatch 级泛化覆盖）+ 承接 G-P1（C-T1 P1 六合法码字面钉） | 映射报告 §1–§4；关键零命中结论经双次独立检索 |
 | E5-G1 | 缺口修复 | **W1（2026-08-30 立项并完成，Current User「修吧」授权）**：① G-S05 受控重试预算——`ExecutionPointRecoveryState.controlledFailuresSinceSuccess`（上次成功后的受控业务失败数，ATTEMPT_INTERRUPTED 不计入）+ `deriveDispatchCommand` 预算门（≥2 即 ILLEGAL_TRANSITION 拒派，零 journal 副作用）；② G-S09(b) process 证据映射——`CapabilityProcessEvidence`/`CapabilityProcessEvidenceError`/`ExecutionResult.processEvidence`（types.ts）+ adapter 计算 `invocationDigest`（sha256 归一化调用形状，无动态内容）并产出成功/失败证据 + real gateway 转译带证据失败 + tracing gateway 两路终态映射（shadow/确定性路径保持全 null）；③ G-P1 六合法码字面量等值钉（W6b2 测试全序比较）。验证：新测试 `loop-s05-retry-budget` 12 断言 + `loop-process-evidence-mapping` 27 断言 + W6b2 84 断言全绿；tsc 干净；node@24 全套件 **1767 passed / 0 failed**（148 文件；2 个文件级失败=artifact-store/delivery-checkpoint-store 并发用例，**stash 对照实证基线代码失败特征完全相同**——本会话环境漂移，非本波回归） | `core/loop-recovery.ts` / `execution/gateway.ts` / `execution/types.ts` / `execution/real-capability-adapter.ts` / `execution/real-capability-gateway.ts` + 2 个新测试文件 | E5-L1 | ✅ **DONE（2026-08-30）** | ✅ 独立复审 **APPROVE**（2026-08-30，基线 `8d18193`，五项全 PASS，0 阻塞；见 §5-①） |
 | E5-G2 | 口径修订 | **随 W1 同批完成（同授权）**：规划 §7 S08 码名对齐实现（CLEANUP_BLOCKED）+ E4 验收补三窗口 dispatch 级泛化覆盖口径注记；**映射报告 S09 更正**（(a) runner 截断测试实际存在 `tests/loop-posix-process-runner.test.ts:127/346`、(c) 泄密扫描已实现且有测试 `tests/real-capability-adapter.test.ts:201`——L1 首轮检索 `\|` 交替语法缺陷误报零命中，唯一真缺口为 (b)，已在报告 §2/§4/§6 显式更正留痕） | `LOOP-CORE-C03-E-PLAN.md` §7/E4 + `c03-e5-l1-negative-matrix-mapping.md` §2/§4/§6 | E5-L1 | ✅ **DONE（2026-08-30）** | ✅ 随 W1 同批复审 **APPROVE**（§5-① 第 4 项 PASS） |
-| E5-L2 | 第 2 层 | 真实 Adapter canary：Kimi/Codex/Hermes 经 production gateway 在隔离 fixture 执行最小 canonical capability，记录 executable/profile/version、started/terminal、output/validation/promotion digest | production gateway + real adapter + 三 provider CLI | E5-G1 闭合 | ❌ **首轮 FAIL（2026-08-30，3/3，见 §5-③）**：kimi/hermes prompt transport 缺陷（stdin vs argv）、codex JSONL 形状漂移——回流 E2 修复，须新波次授权；机制面（fail-closed、证据落账、链校验）全部正确 | `scripts/e5l2-real-adapter-canary.ts` + §5-③ journal 证据 |
+| E5-L2 | 第 2 层 | 真实 Adapter canary：Kimi/Codex/Hermes 经 production gateway 在隔离 fixture 执行最小 canonical capability，记录 executable/profile/version、started/terminal、output/validation/promotion digest | production gateway + real adapter + 三 provider CLI | E5-G1 闭合 | ✅ **W3 修复后重跑全 PASS（2026-08-30，见 §4.2 验收结果 ④⑤；首轮 FAIL 见 §5-③，修复过程见 §4.2 实施要点；独立复审待门 5）** | `scripts/e5l2-real-adapter-canary.ts` + §5-③ journal 证据 |
 | E5-L3 | 第 3 层 | 真实自主 fixture run：一次入口启动、完整八 execution point、`manual_agent_switch_count=0`、≥1 次受控 Re-Gate/恢复、只出人工 Git handoff | 同上 | E5-L2 PASS | ⏸️ **冻结：触发前须 Current User 再次确认** | 自主 run 证据面（待产） |
 | E5-C | 收口 | E5 复审 + Current User 验收裁决 → Decision → CP → Exchange/PKB 归档；`live_authorizations` 的 `E5_AUTONOMOUS_ACCEPTANCE` 整条移出 | — | E5-L3 PASS | ⏸️ 未开工 | CP/Exchange/PKB 回执 |
 
@@ -34,6 +34,8 @@
 | G-S08 | 码名漂移（S08 `WORKSPACE_BOUNDARY_VIOLATION` vs 实现 `CLEANUP_BLOCKED`，语义等价） | 低 | ✅ W1（E5-G2 同批，规划对齐） |
 | G-WINDOW | spawn/result/validation 三 crash window 无逐点专用注入（dispatch 级泛化覆盖，恢复语义无损） | 低 | ✅ W1（E5-G2 同批，口径注记） |
 | G-P1 | C-T1 P1：六合法码 5 个无字面钉 | 低 | ✅ W1-③（六码全序字面钉） |
+| G-STORE-1 | `loop-artifact-store` concurrent put 段失败（node@24 下稳定复现；stash 对照证实 W3 改动前基线同挂——**既有并发缺陷**，非本波回归；node@22 时代未暴露） | 中 | ⚖️ **改判（2026-08-30 深夜诊断，实锤）：非本仓缺陷**——WorkBuddy 会话向所有 node 进程注入 `NODE_OPTIONS=--require node-language-shim`（fs 走中央 broker），并发 link 的 EEXIST 竞态被 broker 包装为 `CODEBUDDY_BROKER_DENY`（errno 丢失）→ store `:362` 按设计 fail-closed。实证：①并发 link 探针 3/3 轮 loser 均得 `CODEBUDDY_BROKER_DENY`（msg 内含 EEXIST、code 非 EEXIST）；②`env -u NODE_OPTIONS` 下本文件 **266 passed / 0 failed**（多轮稳定）；③store 数据不变式（单 blob/temp 清理/idempotent）全程正确。**本仓零代码改动**；回归须以 `env -u NODE_OPTIONS` 运行；broker errno 丢失属平台缺陷，另行上报 | 
+| G-STORE-2 | `loop-delivery-checkpoint-store` 双 worker CAS 段失败（同上：基线复现实证既有缺陷，与 G-STORE-1 同族） | 中 | ⚖️ **同上改判**：`env -u NODE_OPTIONS` 下 **268 passed / 0 failed**（多轮稳定），同根因（fs broker 干扰），非本仓缺陷，零代码改动 |
 
 ## 4. Current User 裁决记录
 
@@ -47,7 +49,9 @@
 
 > 原 W2 三项（G-E5L2-1/2/3，含方案 A「argv 末位 + 上调 `MAX_ARG_B`」与方案 B「探测 `-` 惯用法」）已被上述裁决推翻：A 被判定为无必要的临时方案（手动切换 agent 已能跑通，无上生产紧迫性），B 属 A 的探路步骤一并取消。**G-E5L2-1 移至 W3 以方案 C 实施；G-E5L2-2/3 并入 W3 同批。** 本波无代码改动留痕（截止 `ae63358`，工作树干净）。
 
-## 4.2 W3 立项（E2 prompt transport 架构改造——方案 C：workspace 文件指针；⏸️ 待 Current User 授权，本节为立项草案）
+## 4.2 W3 立项（E2 prompt transport 架构改造——方案 C：workspace 文件指针；✅ 已完成，2026-08-30）
+
+> 状态更新：本节立项经 Current User 授权（「完全可以直接选最优方案直接搞…直接搞C」+ D1/D2 裁决）实施完毕，验收五项全 PASS（见下）。
 
 | 项 | 内容 | 来源证据 |
 | --- | --- | --- |
@@ -60,6 +64,13 @@
 | 开放决策 D2 | **合并 vs 分批**：推荐合并为一波（两次 canary 真实调用成本 + 两轮复审开销；且 codex 解析 bug 不修，C 架构无法被 canary 证明） | — |
 
 - **验收标准**：① tsc 干净；② 新测试全绿（壳构造、路径守卫含 `../`/元字符反例、超长 fail-closed、digest 稳定性、JSONL 四种形状 + fail-closed 反例）；③ node@24 全套件 0 failed（环境漂移项按 W1 口径处理）；④ 三家 canary 重跑全 PASS；⑤ **规模验证**：用真实需求文件（37,266B）跑一次端到端，证明 37KB 级输入不再受传输上限约束（只读，零写入）。
+- **验收结果（2026-08-30，全 PASS）**：
+  - ① tsc 干净（`tsc --noEmit` exit 0）。
+  - ② 新测试全绿：`agent-cli-profile` 65/0（含「integrity holds regardless of CLI version drift」防回归钉）、`capability-prompt-builder` 49/0（新增 stdin 三选一互斥/digest·bytes 校验/壳不含内容 16 项）、`real-capability-adapter` 45/0（stdin fail-closed + 内容不入 argv）、`real-capability-gateway` 24/0（成功路径 processEvidence 透传）、`e5-w3-file-pointer-transport` 50/0（hermes argv 精确顺序钉）。
+  - ③ node@24 全套件 **1767 passed / 0 failed / 149 文件**（5m11s）——须以 `env -u NODE_OPTIONS` 运行（见 §3 G-STORE 改判：WorkBuddy fs shim 在并发 link EEXIST 时丢弃 errno，非本仓缺陷）。
+  - ④ 三家 canary 全 PASS（同环境同日）：kimi REAL requirement-intake/primary exit 0 / 57.1s；hermes REAL solution-gate/formal_verdict exit 0 / 24.8s；codex REAL solution-gate/adversarial_scan exit 0 / 16.8s（**stdin 传输 + `--sandbox read-only` 生产档首次通过**，官方嵌套宿主方案实测成立）；三者 processEvidence（invocationDigest/exitCode/durationMs/truncated）全部落账，observed = pinned（0.39.1 / 0.20.6 / 0.151.0）。
+  - ⑤ 规模验证 37,266B 真实需求端到端 PASS（落盘文件与源逐字节一致；wms-monitor 零写入，需求文件 mtime 不变）。
+- **实施要点**（相对本节原案的演进，均经 Current User 裁决或官方确认）：① codex 传输由 workspace-file 改为 **stdin**（官方确认嵌套 Seatbelt fail-closed BY DESIGN 无开关可绕；`--ephemeral` + `-c features.shell_tool=false` + read-only 保留防线；staged 文件仍落盘作证据锚点，1MiB stdin 上限记录为能力边界）；② `promptTransport` 更名 **`contentTransport`**（"workspace-file" | "stdin"，修正「描述 shell 位置」的语义错位——正是首轮 kimi/hermes FAIL 根源）；③ 版本漂移降级为证据（删除 pinned-vs-observed 硬 fail，CLI 例行升级不再阻断流程；版本基线更新 0.151.0）；④ canary resolver 探活（`which -a` + 逐候选 `--version`，nvm 下坏 codex 不再产生假 FAIL）；⑤ hermes argv 顺序修复（`-z/--oneshot` 为带值参数，shell 紧随 staticArgs）。提交链：`3646c68` → `7d24039`（8 文件）→ 台账更新。
 - **边界**：仅动 `execution/agent-cli-profile.ts`、`execution/real-capability-adapter.ts`、新增 prompt builder（execution/ 下）与新测试；**不动** `core/loop-posix-process-runner.ts` 的 `MAX_ARG_B`、**不动** journal schema（如需动则停波回报）；零业务仓写入；canary 真实调用前在会话内预告。
 
 #### 前提验证结果（2026-08-30，三轮零副作用探针；fixture 临时、退出即删）
