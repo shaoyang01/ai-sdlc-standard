@@ -62,6 +62,20 @@
 - **验收标准**：① tsc 干净；② 新测试全绿（壳构造、路径守卫含 `../`/元字符反例、超长 fail-closed、digest 稳定性、JSONL 四种形状 + fail-closed 反例）；③ node@24 全套件 0 failed（环境漂移项按 W1 口径处理）；④ 三家 canary 重跑全 PASS；⑤ **规模验证**：用真实需求文件（37,266B）跑一次端到端，证明 37KB 级输入不再受传输上限约束（只读，零写入）。
 - **边界**：仅动 `execution/agent-cli-profile.ts`、`execution/real-capability-adapter.ts`、新增 prompt builder（execution/ 下）与新测试；**不动** `core/loop-posix-process-runner.ts` 的 `MAX_ARG_B`、**不动** journal schema（如需动则停波回报）；零业务仓写入；canary 真实调用前在会话内预告。
 
+#### 前提验证结果（2026-08-30，三轮零副作用探针；fixture 临时、退出即删）
+
+三家各以「短指令壳 + 文件指针」真实调用，要求读出文件内的随机标记值：
+
+| CLI | 相对路径指针 | 绝对路径指针 | 结论 |
+| --- | --- | --- | --- |
+| kimi 0.39.1 | **PASS**（14.3s，标记命中） | 未测（相对路径已通） | 文件指针模式可用；stdout 前 1363B 为本机 `UserPromptSubmit` hook 噪声（ponytail 技能文本），标记在其后 —— 产品路径靠 E3 sentinel envelope 解析，噪声在 envelope 外被忽略，**不影响正确性**（仅记录在案） |
+| hermes 0.20.6 | **FAIL**（"当前目录及整个仓库都没有该文件"） | **PASS**（12.8s，干净返回标记值） | 不按进程 cwd 解析相对路径；`--in DIR` 与 `--no-restore-cwd` 均无效（它 restore 到自身配置的工作目录 `/Users/eric/hermes-pkb-readonly-…`）。**必须传绝对路径** |
+| codex 0.147.0 | **FAIL**（`--sandbox read-only`） | **PASS**（`--sandbox danger-full-access`，20.4s） | 失败原因经隔离验证为**执行环境**而非 CLI：手工直调 `/usr/bin/sandbox-exec` 同样 `Operation not permitted`（exit 71），即本会话进程本身处于 seatbelt 内、无法嵌套沙箱。danger-full-access 下 codex 正确读文件并返回标记值 → **C 架构对 codex 成立** |
+
+- **幻觉反例（本轮意外收获，强化 fail-closed 必要性）**：codex 在文件不可读时并未报错，而是从 prompt 里的路径字符串中"猜"出答案 `Y97o1W`——那正是 fixture 目录名 `e5l3c-r3-Y97o1W` 的片段。即：若适配器不以结构化证据 fail-closed，一次"看起来成功"的调用实际是编造。这与 W1 G-S09(b) 的设计前提一致。
+- **证据缺口**：codex 在 `--sandbox read-only` 档位下的文件指针路径**本环境无法验证**（seatbelt 不可用）。逻辑上 read-only 允许读、禁写，生产环境应无碍，但**未实证**。
+- **由此产生两个超出本波台账范围的决策点（见下）**，实施暂停待 Current User 裁决。
+
 | 项 | 内容 | 来源证据 |
 | --- | --- | --- |
 | G-E5L2-1 | **prompt transport 缺陷（kimi/hermes）**：`agent-cli-profile.ts` 将 kimi/hermes 的 promptTransport 钉为 stdin，但真实 CLI 要求 prompt 作 argv 参数（kimi `-p <prompt>`、hermes `-z <prompt>`；直接探针实证）。待定方案：A. argv 末位传输（`"argv-final"`，prompt 为唯一动态末位参数；受 runner 内核单参数 4096B 上限约束——真实生产 prompt 可超限，须评估是否上调 `MAX_ARG_B`，属内核策略变更）；B. 探测 `-` 惯用法（argv 传 `-`、prompt 走 stdin；首轮探针无有效输出，结论未定） | §5-③ kimi/hermes FAIL |
