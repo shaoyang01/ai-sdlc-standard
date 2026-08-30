@@ -117,15 +117,17 @@ async function main(): Promise<void> {
     );
     ok(out.success && out.agent === "hermes", "hermes text-final success");
     const hermesArgv = runner.last?.args ?? [];
-    ok(
-      JSON.stringify(hermesArgv.slice(0, -1)) ===
-        JSON.stringify(["-z", "--usage-file", ".usage-code-review-primary-2.json"]),
-      "hermes static argv + workspace usage file named from closed enums",
+    // hermes' -z/--oneshot TAKES A VALUE: the shell must directly follow it.
+    // Putting --usage-file between -z and the shell makes argparse exit 2 with
+    // "argument -z/--oneshot: expected one argument" (E5-W3 canary finding).
+    eq(
+      hermesArgv,
+      ["-z", "please design the solution", "--usage-file", ".usage-code-review-primary-2.json"],
+      "hermes argv is -z <shell> then the workspace usage file",
     );
-    eq(hermesArgv[hermesArgv.length - 1], "please design the solution", "shell is the final argv entry");
-    ok(hermesArgv.slice(0, -1).join(" ").includes("run-9") === false, "usage file name does NOT embed runId (B1)");
+    ok(hermesArgv.join(" ").includes("run-9") === false, "usage file name does NOT embed runId (B1)");
     ok(
-      hermesArgv.slice(0, -1).every((a) => !a.includes("/") && !a.includes("..")),
+      hermesArgv.filter((a) => a !== "please design the solution").every((a) => !a.includes("/") && !a.includes("..")),
       "every argv entry except the shell has no path separator/traversal (B1)",
     );
   }
@@ -146,10 +148,11 @@ async function main(): Promise<void> {
     );
     ok(out.success, "adapter completes with traversal-shaped runId");
     const argv = runner.last?.args ?? [];
-    ok(argv.slice(0, -1).some((a) => a.includes("..") || a.includes("/") || a.includes("escape")) === false, "traversal runId never reaches argv");
-    ok(
-      JSON.stringify(argv.slice(0, -1)) === JSON.stringify(["-z", "--usage-file", ".usage-solution-gate-formal_verdict-1.json"]),
-      "usage file named from capability/role/attempt only",
+    ok(argv.some((a) => a.includes("..") || a.includes("/") || a.includes("escape")) === false, "traversal runId never reaches argv");
+    eq(
+      argv,
+      ["-z", "please design the solution", "--usage-file", ".usage-solution-gate-formal_verdict-1.json"],
+      "usage file named from capability/role/attempt only, shell right after -z",
     );
   }
 

@@ -192,6 +192,16 @@ async function main(): Promise<void> {
     ok(argv1.some((a) => a.includes("/ws1/")), "the real argv still carries the absolute pointer");
     ok(normalizeWorkspacePaths(argv1.join(" "), "/ws1").includes("/ws1/") === false, "after normalization the argv keeps no workspace path");
 
+    // hermes' -z/--oneshot TAKES A VALUE (usage: `[-z PROMPT] [--usage-file PATH]`),
+    // so the shell must directly follow -z. The E5-W3 canary hit exit 2 with
+    // "argument -z/--oneshot: expected one argument" when --usage-file sat
+    // between the flag and the shell — the "shell is always last" invariant was
+    // simply wrong for the one provider whose prompt flag takes a value.
+    eq(argv1[0], "-z", "hermes argv opens with the -z prompt flag");
+    eq(argv1[1], hermesShellA, "the shell directly follows -z: it is -z's VALUE");
+    eq(argv1[2], "--usage-file", "--usage-file is placed after the shell, not before it");
+    ok(argv1[3]?.startsWith(".usage-solution-gate-formal_verdict-") === true, "usage file named from closed enums only");
+
     const h3 = new FakeRunner(fakeResult(KIMI_ENV));
     const r3 = await new RealCapabilityAdapter(h3).execute(hermesReq("/ws1", "read /ws1/prompt-input/OTHER.md and answer"));
     const d3 = (r3.processEvidence as { invocationDigest: string }).invocationDigest;

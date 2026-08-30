@@ -286,12 +286,18 @@ export class RealCapabilityAdapter {
     // B1: a runId carrying "/" or ".." previously reached argv here).
     const usageFileName = `.usage-${req.capability}-${req.executionRole}-${req.attempt}.json`;
     const args: string[] = [...profile.staticArgs];
-    if (profile.usageFileArg !== null) {
-      args.push(...profile.usageFileArg, usageFileName);
-    }
-    // Plan C: the shell is the single dynamic argv entry, always last.
+    // Plan C: the shell is the single dynamic argv entry, and it must directly
+    // follow the provider's prompt flag. hermes' -z/--oneshot TAKES A VALUE
+    // (usage: `[-z PROMPT] [--usage-file PATH]`), so appending the shell after
+    // --usage-file makes argparse refuse the invocation with exit 2:
+    //   "argument -z/--oneshot: expected one argument"
+    // kimi `-p <shell>` and codex' trailing positional are unaffected by this
+    // order — neither has a trailing option that would separate flag + value.
     if (profile.promptTransport === "argv-final") {
       args.push(prompt);
+    }
+    if (profile.usageFileArg !== null) {
+      args.push(...profile.usageFileArg, usageFileName);
     }
 
     const processReq: LoopPosixProcessRequest = Object.freeze({

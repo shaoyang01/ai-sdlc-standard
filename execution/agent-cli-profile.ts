@@ -42,8 +42,11 @@ export const AGENT_CLI_PROVIDER_IDS: readonly AgentCliProviderId[] = Object.free
 
 /**
  * How the instruction shell reaches the CLI.
- *  - "argv-final": the shell is appended as the LAST argv entry (kimi `-p <s>`,
- *    codex `exec … <s>`, hermes `-z <s>` — all three probed at E5-W3).
+ *  - "argv-final": the shell is an argv entry placed directly after the
+ *    provider's prompt flag (kimi `-p <s>`, codex `exec … <s>`, hermes `-z <s>`
+ *    — all three probed at E5-W3). It is NOT necessarily the LAST entry:
+ *    hermes' -z takes a value, so its `--usage-file <path>` must come after
+ *    the shell, otherwise argparse rejects the invocation with exit 2.
  *  - "stdin": the shell is written to stdin (retained for callers that still
  *    transport content inline; no profile uses it in production today).
  */
