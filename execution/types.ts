@@ -90,6 +90,38 @@ export type ExecutionArtifactType =
 
 export type ExecutionArtifact = Artifact;
 
+/**
+ * E5-W1 (G-S09b): bounded, non-sensitive process evidence for ONE real CLI
+ * invocation, mapped by the tracing gateway into the terminal journal event.
+ * `signal` is a canonical PROCESS_SIGNALS name or null; `invocationDigest` is
+ * the sha256 of the normalized invocation shape only (no dynamic content —
+ * the prompt travels on stdin). The journal validator requires the digest
+ * whenever any process fact is persisted, so it is always present here.
+ */
+export interface CapabilityProcessEvidence {
+  readonly invocationDigest: string;
+  readonly exitCode: number | null;
+  readonly signal: string | null;
+  readonly durationMs: number | null;
+  readonly truncated: boolean;
+}
+
+/**
+ * E5-W1 (G-S09b): raised by the real chain when a dispatch FAILS but the
+ * process ran far enough to leave bounded evidence. The tracing gateway
+ * persists this evidence on the failed terminal event; every other failure
+ * keeps the all-null shadow shape. Evidence-carrying errors must never embed
+ * raw process output in `message` (INV-E13).
+ */
+export class CapabilityProcessEvidenceError extends Error {
+  readonly processEvidence: CapabilityProcessEvidence | null;
+  constructor(message: string, processEvidence: CapabilityProcessEvidence | null) {
+    super(message);
+    this.name = "CapabilityProcessEvidenceError";
+    this.processEvidence = processEvidence;
+  }
+}
+
 export type ExecutionResult = Readonly<{
   success: boolean;
   node: string;
@@ -98,6 +130,13 @@ export type ExecutionResult = Readonly<{
   artifacts: ReadonlyArray<ExecutionArtifact>;
   error?: string;
   hermes_gateway_real_dispatch?: HermesGatewayRealDispatchResult | HermesPhase2ShadowEnablementSidecar;
+  /**
+   * E5-W1 (G-S09b): present ONLY on real process results. Deterministic /
+   * shadow results omit it, keeping the terminal journal event all-null.
+   * A succeeded result must carry exitCode 0 and no signal (journal
+   * validator enforces this on the event).
+   */
+  processEvidence?: CapabilityProcessEvidence;
   /**
    * Round 3 review F2: on the loop capability-tracing path, the exact
    * succeeded terminal journal event THIS dispatch committed. Callers binding

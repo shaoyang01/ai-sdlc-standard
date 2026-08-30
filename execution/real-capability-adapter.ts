@@ -25,8 +25,9 @@
 // Evidence boundary (INV-E13): with a FAKE runner this proves adapter logic
 // only. Real-CLI canary is the separately authorized E5.
 
+import { createHash } from "node:crypto";
 import type { CapabilityExecutionPoint, CapabilityExecutionRole, NodeCapabilityId } from "../loop/types";
-import type { ExecutionResult } from "./types";
+import type { CapabilityProcessEvidence, ExecutionResult } from "./types";
 import {
   AGENT_CLI_BOUNDS,
   AgentCliProfileError,
@@ -91,6 +92,8 @@ export interface RealCapabilityFailureEvidence {
   readonly stderrTruncated: boolean;
   readonly termSignalSent: boolean;
   readonly killSignalSent: boolean;
+  /** E5-W1 (G-S09b): sha256 of the normalized invocation shape (no dynamic content). */
+  readonly invocationDigest: string;
 }
 
 export class RealCapabilityAdapterError extends Error {
@@ -261,6 +264,20 @@ export class RealCapabilityAdapter {
       maxStderrBytes: AGENT_CLI_BOUNDS.maxStderrBytes,
     });
 
+    // E5-W1 (G-S09b): sha256 over the NORMALIZED invocation shape only —
+    // static argv, bounded streams, no dynamic content (the prompt travels on
+    // stdin and is never hashed here). The journal validator requires this
+    // digest on any terminal event that persists process evidence, so the
+    // same digest anchors both the success result and failure evidence.
+    const invocationDigest = createHash("sha256").update(JSON.stringify({
+      executableId: processReq.executableId,
+      args: processReq.args,
+      cwd: processReq.cwd,
+      timeoutMs: processReq.timeoutMs,
+      maxStdoutBytes: processReq.maxStdoutBytes,
+      maxStderrBytes: processReq.maxStderrBytes,
+    })).digest("hex");
+
     // ── run ──
     let res: LoopPosixProcessResult;
     try {
@@ -298,6 +315,7 @@ export class RealCapabilityAdapter {
       stderrTruncated: res.stderrTruncated,
       termSignalSent: res.termSignalSent,
       killSignalSent: res.killSignalSent,
+      invocationDigest,
     });
 
     const fail = (
@@ -348,6 +366,18 @@ export class RealCapabilityAdapter {
       fail("REAL_ADAPTER_SECRET_LEAK", "final text matches a credential pattern", false);
     }
 
+    // E5-W1 (G-S09b): durable process evidence for the journal terminal. By
+    // this point the fail-closed classification above guarantees exit 0, no
+    // terminating signal and no truncation (a truncated stream fails earlier
+    // and carries its evidence on the FAILED event instead).
+    const processEvidence: CapabilityProcessEvidence = Object.freeze({
+      invocationDigest,
+      exitCode: 0,
+      signal: null,
+      durationMs: res.durationMs >= 1 ? res.durationMs : null,
+      truncated: false,
+    });
+
     const result: ExecutionResult = Object.freeze({
       success: true,
       node,
@@ -364,6 +394,7 @@ export class RealCapabilityAdapter {
         promptTransport: "stdin",
       }) as Record<string, unknown>,
       artifacts: [],
+      processEvidence,
     });
     return result;
   }

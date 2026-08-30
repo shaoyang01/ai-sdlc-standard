@@ -19,7 +19,8 @@
 
 import { ExecutionGateway, type ExecutionGatewayOptions } from "./gateway";
 import type { ExecutionRequest, ExecutionResult } from "./types";
-import { RealCapabilityAdapter } from "./real-capability-adapter";
+import { CapabilityProcessEvidenceError } from "./types";
+import { RealCapabilityAdapter, RealCapabilityAdapterError } from "./real-capability-adapter";
 import type { AgentCliProviderId } from "./agent-cli-profile";
 import {
   parseNodeOutputEnvelope,
@@ -151,18 +152,42 @@ export class RealCapabilityGateway extends ExecutionGateway {
     });
     const cwd = this.realDeps.attemptWorkspace(enriched);
 
-    const cliResult = await this.realDeps.adapter.execute({
-      providerId,
-      runId,
-      invocationId: `${runId}:${nodeCapability}:${role}:${attempt}`,
-      requirementId: enriched.requirementId,
-      node: enriched.node,
-      capability: nodeCapability,
-      executionRole: role,
-      attempt,
-      prompt,
-      cwd,
-    });
+    // E5-W1 (G-S09b): a failure AFTER the process ran carries bounded
+    // evidence on the error; re-raise it as a CapabilityProcessEvidenceError
+    // so the tracing gateway can persist the evidence on the FAILED terminal
+    // event. Pre-process failures keep their original error (all-null event).
+    let cliResult: ExecutionResult;
+    try {
+      cliResult = await this.realDeps.adapter.execute({
+        providerId,
+        runId,
+        invocationId: `${runId}:${nodeCapability}:${role}:${attempt}`,
+        requirementId: enriched.requirementId,
+        node: enriched.node,
+        capability: nodeCapability,
+        executionRole: role,
+        attempt,
+        prompt,
+        cwd,
+      });
+    } catch (error) {
+      if (error instanceof RealCapabilityAdapterError && error.evidence !== null) {
+        const ev = error.evidence;
+        throw new CapabilityProcessEvidenceError(error.message, Object.freeze({
+          invocationDigest: ev.invocationDigest,
+          // A process terminates by exit code OR signal, never both; the
+          // journal validator enforces the 0..255 exit range.
+          signal: ev.signal ?? null,
+          exitCode:
+            ev.signal === null && ev.exitCode !== null && ev.exitCode >= 0 && ev.exitCode <= 255
+              ? ev.exitCode
+              : null,
+          durationMs: ev.durationMs >= 1 ? ev.durationMs : null,
+          truncated: ev.stdoutTruncated || ev.stderrTruncated,
+        }));
+      }
+      throw error;
+    }
 
     const cliText = (cliResult.output as Readonly<Record<string, unknown>> | undefined)?.["text"];
     if (typeof cliText !== "string" || cliText.trim().length === 0) {

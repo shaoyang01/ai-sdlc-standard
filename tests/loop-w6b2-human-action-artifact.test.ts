@@ -77,6 +77,21 @@ async function main(): Promise<void> {
         HUMAN_ACTION_REASON_CODES.length === 6,
         "T1: exactly six legal human-action reason codes",
       );
+      // E5-W1 (G-P1, from C-T1 P1): literal pin — the closed set must equal
+      // these six literals exactly, in order. A rename, reorder, addition or
+      // removal anywhere upstream turns this red instead of silently
+      // widening the closed set.
+      ok(
+        JSON.stringify(HUMAN_ACTION_REASON_CODES) === JSON.stringify([
+          "MISSING_BUSINESS_FACT",
+          "SOURCE_CONFLICT",
+          "RISK_ACCEPTANCE_REQUIRED",
+          "PERMISSION_REQUIRED",
+          "EXTERNAL_SIDE_EFFECT_AUTHORIZATION_REQUIRED",
+          "MANUAL_GIT_HANDOFF_REQUIRED",
+        ]),
+        "T1: the six legal reason codes are pinned literally, in canonical order",
+      );
       for (const reasonCode of HUMAN_ACTION_REASON_CODES) {
         const built = buildHumanActionRequiredArtifact(fixtureInput({ reasonCode }));
         ok(built.ok, `T1: ${reasonCode} is accepted by the builder`);

@@ -6,7 +6,7 @@
 // Routes code_review and bugfix to their dedicated adapters.
 // Skill metadata is preserved but does not affect dispatch.
 
-import { ExecutionRequest, ExecutionResult } from "./types";
+import { ExecutionRequest, ExecutionResult, CapabilityProcessEvidenceError, type CapabilityProcessEvidence } from "./types";
 import { executeShadowAgent } from "./shadow-agent-adapter";
 import { executeCodeReview } from "./code-review-adapter";
 import { executeBugfix } from "./bugfix-adapter";
@@ -63,8 +63,10 @@ import type { LoopRunStore } from "../core/loop-run-store";
 import type { LoopArtifactKind, LoopArtifactStore } from "../core/loop-artifact-store";
 import {
   LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+  PROCESS_SIGNALS,
   type LoopCapabilityExecutionEvent,
   type LoopCapabilityGateResult,
+  type ProcessSignal,
 } from "../core/loop-capability-execution";
 import { LoopRunJournalError } from "../core/loop-executor-types";
 import { readPlainDataRecord } from "../core/loop-run-state";
@@ -77,6 +79,41 @@ class CapabilityExecutionTimeoutError extends Error {
     super("capability execution exceeded the binding timeout");
     this.name = "CapabilityExecutionTimeoutError";
   }
+}
+
+/**
+ * E5-W1 (G-S09b): map adapter process evidence to journal-safe terminal
+ * event fields. A process terminates by exit code OR signal (never both);
+ * signals must be canonical PROCESS_SIGNALS names. Deterministic / shadow
+ * results carry no evidence → all-null event fields, exactly as before.
+ * The invocation digest is always present on evidence — the journal
+ * validator requires it whenever any process fact is persisted.
+ */
+function processEventFields(
+  evidence: CapabilityProcessEvidence | null | undefined,
+): Pick<
+  LoopCapabilityExecutionEvent,
+  "processInvocationDigest" | "processExitCode" | "processSignal" | "processDurationMs" | "processTruncated"
+> {
+  if (!evidence) {
+    return {
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+    };
+  }
+  const signal = evidence.signal !== null && PROCESS_SIGNALS.includes(evidence.signal as ProcessSignal)
+    ? (evidence.signal as ProcessSignal)
+    : null;
+  return {
+    processInvocationDigest: evidence.invocationDigest,
+    processSignal: signal,
+    processExitCode: signal === null && evidence.exitCode !== null ? evidence.exitCode : null,
+    processDurationMs: evidence.durationMs,
+    processTruncated: evidence.truncated,
+  };
 }
 
 export interface CodexGatewayRealDispatchConfig {
@@ -349,6 +386,11 @@ export class ExecutionGateway {
       }, binding.timeoutMs);
     } catch (error) {
       const timedOut = error instanceof CapabilityExecutionTimeoutError;
+      // E5-W1 (G-S09b): the real chain attaches bounded process evidence to
+      // post-process failures; persist it on the failed terminal event.
+      const evidence = error instanceof CapabilityProcessEvidenceError
+        ? error.processEvidence
+        : null;
       this.appendCapabilityFailure(
         tracing,
         base,
@@ -356,6 +398,7 @@ export class ExecutionGateway {
         now(),
         timedOut ? "EXECUTOR_TIMEOUT" : "EXECUTOR_EXCEPTION",
         binding.failurePolicy === "retry_other_binding",
+        evidence,
       );
       return Object.freeze({
         success: false,
@@ -400,7 +443,17 @@ export class ExecutionGateway {
       expectedArtifacts[0]?.requirementId !== request.requirementId || expectedArtifacts[0]?.node !== request.node ||
       expectedArtifacts[0]?.metadata.agent !== binding.agent || expectedArtifacts[0]?.metadata.source !== "execution_gateway"
     ) {
-      this.appendCapabilityFailure(tracing, base, startedSequence + 1, now(), "OUTPUT_CONTRACT_VIOLATION", binding.failurePolicy === "retry_other_binding");
+      // E5-W1 (G-S09b): the process DID run when the output contract fails on
+      // the real path — persist its evidence on the failed terminal.
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "OUTPUT_CONTRACT_VIOLATION",
+        binding.failurePolicy === "retry_other_binding",
+        result.processEvidence,
+      );
       return Object.freeze({
         ...result,
         success: false,
@@ -424,6 +477,7 @@ export class ExecutionGateway {
         now(),
         "OUTPUT_CONTRACT_VIOLATION",
         binding.failurePolicy === "retry_other_binding",
+        result.processEvidence,
       );
       return Object.freeze({
         ...result,
@@ -464,6 +518,7 @@ export class ExecutionGateway {
         now(),
         "OUTPUT_RECORDING_FAILED",
         binding.failurePolicy === "retry_other_binding",
+        result.processEvidence,
       );
       return Object.freeze({
         ...result,
@@ -513,11 +568,7 @@ export class ExecutionGateway {
       errorCode: null,
       retryable: null,
       reasonCode: null,
-      processInvocationDigest: null,
-      processExitCode: null,
-      processSignal: null,
-      processDurationMs: null,
-      processTruncated: null,
+      ...processEventFields(result.processEvidence),
       stagingRef: null,
       stagingDigest: null,
       promotionRef: null,
@@ -545,6 +596,7 @@ export class ExecutionGateway {
     createdAt: string,
     errorCode: string,
     retryable: boolean,
+    evidence?: CapabilityProcessEvidence | null,
   ): void {
     tracing.runStore.appendCapabilityExecution(Object.freeze({
       ...base,
@@ -562,11 +614,7 @@ export class ExecutionGateway {
       errorCode,
       retryable,
       reasonCode: null,
-      processInvocationDigest: null,
-      processExitCode: null,
-      processSignal: null,
-      processDurationMs: null,
-      processTruncated: null,
+      ...processEventFields(evidence),
       stagingRef: null,
       stagingDigest: null,
       promotionRef: null,

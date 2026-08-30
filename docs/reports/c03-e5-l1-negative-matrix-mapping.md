@@ -72,7 +72,7 @@
 | S06 timeout 且 worktree 有变化 | 保留隔离 attempt，进 recovery verification | ✅ | runner `timed_out`（`loop-posix-runner-timeout-bound` 5 断言）+ W6b3 isolate + VERIFY_STAGED/CLEANUP_REQUIRED |
 | S07 exit 0 缺 digest | invalid；不 promotion 不推进 | ✅ | W5 invalid output 类 |
 | S08 result 指向 allowed path 外 | `WORKSPACE_BOUNDARY_VIOLATION`，run blocked | ⚠️ **码名漂移 G-S08** | 语义已实现且复审 PASS：`classifyWorkspaceCleanup` → block 抛 **`CLEANUP_BLOCKED`**（W6b3/4/5，47 断言）。规划文本的码名与实现不一致——语义等价（run blocked + 证据保留），建议规划修订为实际码名，非代码改动 |
-| S09 stdout 超限/疑似 token 回显 | 截断/泄密失败证据；原文不落 journal | ⚠️ **缺口 G-S09** | runner 层有 `stdoutTruncated/stderrTruncated/字节计数` 机制（`loop-posix-process-runner.ts:27,188`）但 **(a) 全测试面零覆盖，(b) real 链路（real-capability-gateway/adapter）未把 truncation 映射进 `processTruncated` 证据（现恒 null），(c) 泄密/token 回显扫描未见实现** |
+| S09 stdout 超限/疑似 token 回显 | 截断/泄密失败证据；原文不落 journal | ⚠️ **缺口 G-S09（范围更正）** | runner 层有 `stdoutTruncated/stderrTruncated/字节计数` 机制（`loop-posix-process-runner.ts:27,188`）；**E5-W1 复核更正**：(a) 截断机制有测试（`tests/loop-posix-process-runner.test.ts:127/346`），(c) 泄密扫描已实现且有测试（`execution/real-capability-adapter.ts:347` + `tests/real-capability-adapter.test.ts:201`）——L1 首轮检索因工具交替语法缺陷误报零命中；**唯一真缺口 = (b)**：gateway 终态事件（succeeded/failed 两路）process 字段硬编码 null，real 链路的调用摘要/退出/截断证据未映射进 journal（E5-W1-② 修复） |
 | S10 result 已写、terminal append 前崩溃 | resume 重验 staging 幂等提交，不再调 Agent | ✅ | `loop-capability-execution.test.ts:1066` terminal-write loss |
 | S11 terminal 成功、revision 未写崩溃 | pending materialization 幂等补写 | ✅ | `loop-regate-dispatch-window` + W6a T2-A4 |
 | S12 并发 resume | lease + claim CAS 至多一个 spawn | ✅ | W6b1 T7 + `loop-run-concurrency` |
@@ -104,7 +104,7 @@ crash window 做 fault injection」。
 | ID | 内容 | 严重度 | 处置建议 |
 | --- | --- | --- | --- |
 | **G-S05** | 受控重试预算缺失：S05 要求「同 binding 最多一次受控重试」，实现只有「同输入 + retryable」门控，无计数上限、无测试 | 中 | 新波次实现 retry 计数上限（journal 层同输入计数即可），逐波复审 |
-| **G-S09** | 截断证据链断裂：runner 有 truncation 机制但零测试覆盖，real 链路未映射进 `processTruncated`，泄密扫描未实现 | 中 | 新波次：(a) runner truncation 测试；(b) real adapter→gateway 映射 `processTruncated`；(c) 泄密扫描按规划口径补或规划修订 |
+| **G-S09** | 截断证据链断裂：~~runner 有 truncation 机制但零测试覆盖~~（更正：有测试）~~泄密扫描未实现~~（更正：adapter 已实现且有测试）；**真缺口 = real 链路未映射 process 证据进 journal 终态事件**（succeeded/failed 两路硬编码 null，且无 invocationDigest 生产者） | 中 | E5-W1-② 修复：adapter 计算调用摘要 + 产出 processEvidence；real gateway 转发带证据失败；tracing gateway 映射进两路终态事件 |
 | **G-S08** | 码名漂移：规划 S08 `WORKSPACE_BOUNDARY_VIOLATION` vs 实现 `CLEANUP_BLOCKED` | 低 | 仅规划文本修订（语义已实现且 PASS），随下次规划维护批次处理 |
 | **G-WINDOW** | spawn/result/validation 三 crash window 无逐点专用注入（dispatch 级泛化覆盖） | 低 | 判口径差异；二选一：微波补注入，或规划口径修订 |
 | **G-P1**（承接 C-T1 P1） | 六合法码 5 个无字面钉，缺六个字面量等值断言 | 低 | 与 G-S05/G-S09 波次同批或单开，须 Current User 确认（Decision-075 决策 5） |
@@ -120,7 +120,11 @@ crash window 做 fault injection」。
 ## 6. 复核方式说明
 
 - 证据计数取自台账（已逐波独立复审确认）与本报告当日 grep 实测（分支
-  `d0a3f0e`）；关键零命中结论（`ATTEMPT_BUDGET`/`maxAttempts` 全仓无生产
+  `d0a3f0e`）；~~关键零命中结论（`ATTEMPT_BUDGET`/`maxAttempts` 全仓无生产
   逻辑、`stdoutTruncated` 全测试面零引用、`real-capability-gateway.ts` 无
-  truncated 映射）均经两次独立检索确认。
+  truncated 映射）均经两次独立检索确认~~ **E5-W1 更正**：首轮检索的
+  `\|` 交替语法在本环境 grep 中失效，导致 runner 截断测试与 adapter 泄密
+  扫描被误报为零命中（已于 W1-② 落档前复核推翻）；`ATTEMPT_BUDGET`/
+  `maxAttempts` 无生产逻辑与 gateway 终态 process 字段恒 null 两项经复核
+  仍然成立。
 - 后续波次复审时，复审方可按 §4 缺口清单逐条复现。

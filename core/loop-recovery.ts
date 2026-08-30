@@ -335,6 +335,15 @@ export interface ExecutionPointRecoveryState {
   /** v3 (Round 1): the persisted Finding Ledger of a scan round. */
   unresolvedFindingsRef: string | null;
   unresolvedFindingsDigest: string | null;
+  /**
+   * E5-W1 (S05 controlled retry budget): number of CONTROLLED business
+   * failures at this point since its last succeeded attempt — failed
+   * terminals with `retryable === true` and `errorCode !==
+   * "ATTEMPT_INTERRUPTED"`. Crash-recovery interruptions never count: the
+   * budget bounds failure-driven re-dispatches only (plan §7 S05 "同 binding
+   * 最多一次受控重试"), enforced by deriveDispatchCommand.
+   */
+  controlledFailuresSinceSuccess: number;
 }
 
 const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
@@ -480,6 +489,18 @@ function recoverRunContextInTransaction(
         (event) => event.capability === capability && event.executionRole === executionRole,
       );
       const { last, lastSucceeded } = stateForEvents(events);
+      // E5-W1 (S05): controlled business failures since the point's last
+      // succeeded attempt — the suffix after lastSucceeded (all events when
+      // the point never succeeded). Crash interruptions (ATTEMPT_INTERRUPTED)
+      // are excluded: they are recovery re-drives, not controlled retries.
+      const lastSucceededSequence = lastSucceeded?.sequence ?? -1;
+      const controlledFailuresSinceSuccess = events.filter(
+        (event) =>
+          event.sequence > lastSucceededSequence &&
+          event.status === "failed" &&
+          event.retryable === true &&
+          event.errorCode !== "ATTEMPT_INTERRUPTED",
+      ).length;
       return Object.freeze({
         capability,
         executionRole,
@@ -496,6 +517,7 @@ function recoverRunContextInTransaction(
         retryable: last?.retryable ?? null,
         unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
         unresolvedFindingsDigest: lastSucceeded?.unresolvedFindingsDigest ?? null,
+        controlledFailuresSinceSuccess,
       });
     },
   );
@@ -926,6 +948,23 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
   );
   if (pointIndex < 0) {
     throw new LoopRunJournalError("STORE_CORRUPT", "recovery context holds a non-canonical execution point");
+  }
+  // E5-W1 (S05 controlled retry budget): a point whose tail is a controlled
+  // business failure may be re-dispatched ONCE. A second controlled failure
+  // exhausts the budget — any further dispatch of this point is refused
+  // fail-closed (the tail event itself is the LAST allowed retry target).
+  // Crash-recovery interruptions are not counted (see
+  // controlledFailuresSinceSuccess) and remain unbounded by S05.
+  const nextState = recovery.executionPointStates[pointIndex]!;
+  if (
+    nextState.status === "failed" &&
+    nextState.retryable === true &&
+    nextState.controlledFailuresSinceSuccess >= 2
+  ) {
+    throw new LoopRunJournalError(
+      "ILLEGAL_TRANSITION",
+      `controlled retry budget exhausted (S05): execution point ${next.capability}/${next.executionRole} already consumed its single controlled retry`,
+    );
   }
   if (pointIndex === 0) {
     // C02-WP5 F2: a recovered run pins the intake dispatch to the ORIGINAL
