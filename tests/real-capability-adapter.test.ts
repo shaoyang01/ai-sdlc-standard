@@ -24,6 +24,9 @@ function ok(c: boolean, m: string): void {
     console.error(`  ✗ ${m}`);
   }
 }
+function eq(actual: unknown, expected: unknown, m: string): void {
+  ok(JSON.stringify(actual) === JSON.stringify(expected), `${m} (got ${JSON.stringify(actual)})`);
+}
 
 function result(p: Partial<LoopPosixProcessResult>): LoopPosixProcessResult {
   return Object.freeze({
@@ -93,9 +96,11 @@ async function main(): Promise<void> {
     const out = await new RealCapabilityAdapter(runner).execute(baseReq({}));
     ok(out.success === true && out.agent === "kimi" && out.node === "solution-design", "kimi text-final success");
     ok((out.output as any).text === "design answer", "kimi final text mapped");
-    ok(runner.last?.stdin === "please design the solution", "prompt sent on stdin");
-    ok(JSON.stringify(runner.last?.args) === JSON.stringify(["-p"]), "kimi argv fully static (-p)");
-    ok((runner.last?.args ?? []).includes("please design the solution") === false, "prompt NOT in argv");
+    // W3 plan C: the shell is the ONE dynamic argv entry (last), stdin is unused.
+    ok(runner.last?.stdin === undefined, "nothing is sent on stdin");
+    const kimiArgv = runner.last?.args ?? [];
+    eq(kimiArgv.slice(0, -1), ["-p"], "kimi static argv precedes the shell");
+    eq(kimiArgv[kimiArgv.length - 1], "please design the solution", "shell is the final argv entry");
   }
 
   // hermes text-final + --usage-file
@@ -111,13 +116,18 @@ async function main(): Promise<void> {
       }),
     );
     ok(out.success && out.agent === "hermes", "hermes text-final success");
+    const hermesArgv = runner.last?.args ?? [];
     ok(
-      JSON.stringify(runner.last?.args) ===
+      JSON.stringify(hermesArgv.slice(0, -1)) ===
         JSON.stringify(["-z", "--usage-file", ".usage-code-review-primary-2.json"]),
       "hermes static argv + workspace usage file named from closed enums",
     );
-    ok((runner.last?.args ?? []).join(" ").includes("run-9") === false, "usage file name does NOT embed runId (B1)");
-    ok((runner.last?.args ?? []).some((a) => a.includes("/") || a.includes("..")) === false, "argv has no path separator/traversal (B1)");
+    eq(hermesArgv[hermesArgv.length - 1], "please design the solution", "shell is the final argv entry");
+    ok(hermesArgv.slice(0, -1).join(" ").includes("run-9") === false, "usage file name does NOT embed runId (B1)");
+    ok(
+      hermesArgv.slice(0, -1).every((a) => !a.includes("/") && !a.includes("..")),
+      "every argv entry except the shell has no path separator/traversal (B1)",
+    );
   }
 
   // B1 regression: even if a caller supplies a traversal runId, it must never
@@ -136,9 +146,9 @@ async function main(): Promise<void> {
     );
     ok(out.success, "adapter completes with traversal-shaped runId");
     const argv = runner.last?.args ?? [];
-    ok(argv.some((a) => a.includes("..") || a.includes("/") || a.includes("escape")) === false, "traversal runId never reaches argv");
+    ok(argv.slice(0, -1).some((a) => a.includes("..") || a.includes("/") || a.includes("escape")) === false, "traversal runId never reaches argv");
     ok(
-      JSON.stringify(argv) === JSON.stringify(["-z", "--usage-file", ".usage-solution-gate-formal_verdict-1.json"]),
+      JSON.stringify(argv.slice(0, -1)) === JSON.stringify(["-z", "--usage-file", ".usage-solution-gate-formal_verdict-1.json"]),
       "usage file named from capability/role/attempt only",
     );
   }
@@ -154,11 +164,13 @@ async function main(): Promise<void> {
     );
     ok(out.success && out.agent === "codex", "codex jsonl-final success");
     ok((out.output as any).text === "impl complete", "codex last assistant message extracted");
+    const codexArgv = runner.last?.args ?? [];
     ok(
-      JSON.stringify(runner.last?.args) ===
+      JSON.stringify(codexArgv.slice(0, -1)) ===
         JSON.stringify(["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"]),
-      "codex static argv",
+      "codex static argv (read-only sandbox preserved)",
     );
+    eq(codexArgv[codexArgv.length - 1], "please design the solution", "shell is the final argv entry");
   }
 
   console.log("real-adapter: bounds + timeout by capability class");
@@ -260,13 +272,16 @@ async function main(): Promise<void> {
     () => new RealCapabilityAdapter(new FakeRunner(() => result({ stdout: "x" }))).execute(baseReq({ attempt: 0 })),
     "attempt must be >=1",
   );
+  // W3 plan C: the shell lives in one argv entry, so the ceiling that matters
+  // is the 4096 B per-argument cap — and it is a distinct, explicit error, not
+  // a silent truncation. (1 MiB of text is simply the wrong transport now.)
   await expectCode(
-    "REAL_ADAPTER_INVALID_INPUT",
+    "REAL_ADAPTER_PROMPT_TOO_LARGE",
     () =>
       new RealCapabilityAdapter(new FakeRunner(() => result({ stdout: "x" }))).execute(
-        baseReq({ prompt: "x".repeat(1024 * 1024 + 1) }),
+        baseReq({ prompt: "x".repeat(4097) }),
       ),
-    "prompt over 1MiB rejected",
+    "shell over the 4096 B argv ceiling is rejected, not truncated",
   );
   await expectCode(
     "REAL_ADAPTER_INVALID_INPUT",

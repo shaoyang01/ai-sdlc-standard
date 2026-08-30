@@ -21,7 +21,8 @@ import { ExecutionGateway, type ExecutionGatewayOptions } from "./gateway";
 import type { ExecutionRequest, ExecutionResult } from "./types";
 import { CapabilityProcessEvidenceError } from "./types";
 import { RealCapabilityAdapter, RealCapabilityAdapterError } from "./real-capability-adapter";
-import type { AgentCliProviderId } from "./agent-cli-profile";
+import { getAgentCliProfile, type AgentCliProviderId } from "./agent-cli-profile";
+import { stagePromptInput } from "./prompt-workspace";
 import {
   parseNodeOutputEnvelope,
   type ParsedNodeOutputEnvelope,
@@ -143,14 +144,30 @@ export class RealCapabilityGateway extends ExecutionGateway {
     const providerId = enriched.agent as AgentCliProviderId;
 
     const inputText = extractInputText(enriched.input);
+    const cwd = this.realDeps.attemptWorkspace(enriched);
+
+    // ── E5-W3 plan C: stage the task input, hand the CLI a pointer ──
+    // The upstream artifact (requirement → design → implementation record)
+    // grows at every hop, so it must not travel through argv (4096 B per
+    // argument) or stdin (1 MiB). Writing it into the attempt workspace and
+    // naming the file keeps the instruction shell small and constant.
+    const profile = getAgentCliProfile(providerId);
+    const staged = stagePromptInput({
+      workspaceDir: cwd,
+      content: inputText,
+      capability: nodeCapability,
+      executionRole: role,
+      attempt,
+    });
+    const pointerPath = profile.pointerPathMode === "absolute" ? staged.absolutePath : staged.relativePath;
+
     const prompt = buildNodeCapabilityPrompt({
       requirementId: enriched.requirementId,
       node: enriched.node,
       capability: nodeCapability,
       executionRole: role,
-      inputText,
+      inputPointer: { path: pointerPath, digest: staged.digest, bytes: staged.bytes },
     });
-    const cwd = this.realDeps.attemptWorkspace(enriched);
 
     // E5-W1 (G-S09b): a failure AFTER the process ran carries bounded
     // evidence on the error; re-raise it as a CapabilityProcessEvidenceError
@@ -168,6 +185,7 @@ export class RealCapabilityGateway extends ExecutionGateway {
         executionRole: role,
         attempt,
         prompt,
+        promptPointers: [staged],
         cwd,
       });
     } catch (error) {

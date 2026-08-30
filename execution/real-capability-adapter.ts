@@ -30,11 +30,13 @@ import type { CapabilityExecutionPoint, CapabilityExecutionRole, NodeCapabilityI
 import type { CapabilityProcessEvidence, ExecutionResult } from "./types";
 import {
   AGENT_CLI_BOUNDS,
+  MAX_ARGV_PROMPT_BYTES,
   AgentCliProfileError,
   getAgentCliProfile,
   bindingProviderForPoint,
   type AgentCliProviderId,
 } from "./agent-cli-profile";
+import { normalizeWorkspacePaths, type PromptInputPointer } from "./prompt-workspace";
 import type {
   LoopPosixProcessRequest,
   LoopPosixProcessResult,
@@ -56,8 +58,18 @@ export interface RealCapabilityAdapterRequest {
   readonly capability: NodeCapabilityId;
   readonly executionRole: CapabilityExecutionRole;
   readonly attempt: number;
-  /** Dynamic requirement text — stdin only. */
+  /**
+   * The bounded INSTRUCTION SHELL (plan C). Task content is NOT inlined here —
+   * it is staged in the attempt workspace and referenced by a pointer, so the
+   * agent reads it itself. Capped by MAX_ARGV_PROMPT_BYTES (one argv entry).
+   */
   readonly prompt: string;
+  /**
+   * The staged task-input files this shell points at. Carried as EVIDENCE
+   * (path + sha256 + size) so the journal can prove what the agent was fed
+   * without storing the content itself. Never part of argv on its own.
+   */
+  readonly promptPointers?: readonly PromptInputPointer[];
   /** Attempt workspace dir; must already be an allowed cwd root of the runner. */
   readonly cwd: string;
   /**
@@ -78,6 +90,7 @@ export type RealCapabilityAdapterFailureCode =
   | "REAL_ADAPTER_OUTPUT_TRUNCATED"
   | "REAL_ADAPTER_SECRET_LEAK"
   | "REAL_ADAPTER_MALFORMED_OUTPUT"
+  | "REAL_ADAPTER_PROMPT_TOO_LARGE"
   | "REAL_ADAPTER_CLEANUP_FAILED";
 
 /** Bounded, non-sensitive evidence about one failed attempt. */
@@ -176,6 +189,16 @@ function readFinalMessage(rec: unknown): string | null {
   const r = rec as Record<string, unknown>;
   // Common codex JSONL shapes: {type:"message",role:"assistant",content:[{type:"output_text",text}]}
   // or a terminal record {last_message|final|text:"..."}.
+  // codex 0.147.0 emits the final answer NESTED instead (W3, G-E5L2-2):
+  //   {"type":"item.completed","item":{"type":"agent_message","text":"…"}}
+  // Without this branch a perfectly good run was classified MALFORMED_OUTPUT.
+  const item = r.item;
+  if (item !== null && typeof item === "object") {
+    const it = item as Record<string, unknown>;
+    if (typeof it.text === "string" && it.text.trim().length > 0 && it.type === "agent_message") {
+      return it.text;
+    }
+  }
   const content = r.content;
   if (Array.isArray(content)) {
     for (const part of content) {
@@ -217,7 +240,20 @@ export class RealCapabilityAdapter {
       }
       throw e;
     }
-    if (Buffer.byteLength(prompt, "utf8") > profile.bounds.maxStdinBytes) {
+    const promptBytes = Buffer.byteLength(prompt, "utf8");
+    if (profile.promptTransport === "argv-final") {
+      // Plan C invariant: the shell must fit in ONE argv entry. Content that
+      // does not fit is not a truncation candidate — it must be staged as a
+      // workspace pointer instead. Fail-closed, never silently trimmed.
+      if (promptBytes > MAX_ARGV_PROMPT_BYTES) {
+        throw new RealCapabilityAdapterError(
+          "REAL_ADAPTER_PROMPT_TOO_LARGE",
+          `instruction shell is ${promptBytes} bytes, over the ${MAX_ARGV_PROMPT_BYTES}-byte argv ceiling; stage the content as a workspace pointer`,
+          null,
+          false,
+        );
+      }
+    } else if (promptBytes > profile.bounds.maxStdinBytes) {
       throw new RealCapabilityAdapterError("REAL_ADAPTER_INVALID_INPUT", "prompt exceeds stdin bound", null, false);
     }
 
@@ -253,25 +289,38 @@ export class RealCapabilityAdapter {
     if (profile.usageFileArg !== null) {
       args.push(...profile.usageFileArg, usageFileName);
     }
+    // Plan C: the shell is the single dynamic argv entry, always last.
+    if (profile.promptTransport === "argv-final") {
+      args.push(prompt);
+    }
 
     const processReq: LoopPosixProcessRequest = Object.freeze({
       executableId: req.executableId ?? providerId,
       args,
       cwd,
-      stdin: prompt,
+      stdin: profile.promptTransport === "stdin" ? prompt : undefined,
       timeoutMs,
       maxStdoutBytes: AGENT_CLI_BOUNDS.maxStdoutBytes,
       maxStderrBytes: AGENT_CLI_BOUNDS.maxStderrBytes,
     });
 
-    // E5-W1 (G-S09b): sha256 over the NORMALIZED invocation shape only —
-    // static argv, bounded streams, no dynamic content (the prompt travels on
-    // stdin and is never hashed here). The journal validator requires this
-    // digest on any terminal event that persists process evidence, so the
-    // same digest anchors both the success result and failure evidence.
+    // E5-W1 (G-S09b) + E5-W3 (D1): sha256 over the NORMALIZED invocation shape.
+    // D1 scoped the normalization to the FILE POINTER PATHS that plan C put in
+    // argv (hermes needs an absolute one, which would otherwise bake a temp
+    // directory into the digest) and to the shell itself, which is replaced by
+    // its own sha256 so the digest never carries raw prompt text but still
+    // moves whenever the shell — including the pointer it names — changes.
+    // cwd stays verbatim: it is one of the six shape fields W1 pinned, and
+    // "different workspace → different digest" remains true.
+    const shellDigest = createHash("sha256")
+      .update(normalizeWorkspacePaths(prompt, cwd), "utf8")
+      .digest("hex");
+    const digestArgs = args.map((a) =>
+      a === prompt ? `<shell:${shellDigest}>` : normalizeWorkspacePaths(a, cwd),
+    );
     const invocationDigest = createHash("sha256").update(JSON.stringify({
       executableId: processReq.executableId,
-      args: processReq.args,
+      args: digestArgs,
       cwd: processReq.cwd,
       timeoutMs: processReq.timeoutMs,
       maxStdoutBytes: processReq.maxStdoutBytes,
@@ -391,7 +440,13 @@ export class RealCapabilityAdapter {
         durationMs: res.durationMs,
         stdoutBytes: res.stdoutBytesReceived,
         outputDialect: profile.outputDialect,
-        promptTransport: "stdin",
+        promptTransport: profile.promptTransport,
+        // D1: what the agent was fed, as evidence — the staged file's workspace
+        // relative path, its sha256 and its size. The content itself is never
+        // copied into the result.
+        promptPointers: (req.promptPointers ?? []).map((p) =>
+          Object.freeze({ path: p.relativePath, digest: p.digest, bytes: p.bytes }),
+        ),
       }) as Record<string, unknown>,
       artifacts: [],
       processEvidence,

@@ -45,7 +45,11 @@ function envelope(obj: Record<string, unknown>): string {
 function harness() {
   const root = mkdtempSync(join(tmpdir(), "rg-"));
   const repo = join(root, "repo");
+  // W3 plan C stages the task input inside the attempt workspace, so the
+  // workspace must be a real directory — "." would write into the repo.
+  const workspace = join(root, "workspace");
   mkdirSync(repo, { recursive: true });
+  mkdirSync(workspace, { recursive: true });
   const id = Object.freeze({
     runId: "run-rg-001",
     requirementId: "REQ-RG-001",
@@ -65,10 +69,10 @@ function harness() {
   // externally pre-created run must land run_started before a node claim
   runStore.ensureRunStarted(id.runId);
   const input = artifactStore.put("requirement_summary", "upstream requirement body");
-  return { identity: id, runStore, artifactStore, inputRef: input.artifactRef, inputDigest: input.digest };
+  return { identity: id, runStore, artifactStore, workspace, inputRef: input.artifactRef, inputDigest: input.digest };
 }
 
-function gatewayWith(runStore: LoopRunStore, artifactStore: LoopArtifactStore, text: string): RealCapabilityGateway {
+function gatewayWith(runStore: LoopRunStore, artifactStore: LoopArtifactStore, text: string, workspace: string): RealCapabilityGateway {
   const fakeAdapter: RealGatewayAdapter = {
     async execute(req) {
       return { success: true, node: req.node, agent: req.providerId, output: { text }, artifacts: [] };
@@ -84,7 +88,7 @@ function gatewayWith(runStore: LoopRunStore, artifactStore: LoopArtifactStore, t
         now: () => TS,
       },
     },
-    { adapter: fakeAdapter, attemptWorkspace: () => "." },
+    { adapter: fakeAdapter, attemptWorkspace: () => workspace },
   );
 }
 
@@ -117,7 +121,7 @@ async function main(): Promise<void> {
   {
     const h = harness();
     const text = envelope({ summary: "intake done", body: "## Requirement\nsummarized" });
-    const gw = gatewayWith(h.runStore, h.artifactStore, text);
+    const gw = gatewayWith(h.runStore, h.artifactStore, text, h.workspace);
     const result = await gw.execute(intakeRequest(h.identity, h.inputRef, h.inputDigest));
     check("intake dispatch succeeds", result.success === true);
     check("intake hands back terminal event id", typeof result.capabilityTerminalEventId === "string");
@@ -135,7 +139,7 @@ async function main(): Promise<void> {
   // ── A2. malformed envelope on the first node never upgrades to success ──
   {
     const h = harness();
-    const gw = gatewayWith(h.runStore, h.artifactStore, "no sentinels here at all");
+    const gw = gatewayWith(h.runStore, h.artifactStore, "no sentinels here at all", h.workspace);
     const result = await gw.execute(intakeRequest(h.identity, h.inputRef, h.inputDigest));
     check("malformed dispatch fails", result.success === false);
     const events = h.runStore.listCapabilityExecutions(h.identity.runId);

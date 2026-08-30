@@ -5,6 +5,8 @@ import {
   AGENT_CLI_PROFILES,
   AGENT_CLI_PROVIDER_IDS,
   E2_P_REACHABILITY_FACTS,
+  E5_OBSERVED_CLI_VERSIONS,
+  MAX_ARGV_PROMPT_BYTES,
   AgentCliProfileError,
   assertAgentCliProfileIntegrity,
   bindingProviderForPoint,
@@ -68,17 +70,31 @@ async function main(): Promise<void> {
   const verdict = bindingProviderForPoint({ capability: "solution-gate", executionRole: "formal_verdict" });
   ok(scan !== verdict, "scan and verdict are different providers");
 
-  console.log("agent-cli-profile: E2-P version pins + reachability-only evidence");
+  console.log("agent-cli-profile: version pins (E2-P provenance kept, E5 baseline pins the live value)");
   eq(AGENT_CLI_PROVIDER_IDS, ["kimi", "codex", "hermes"], "three providers");
   for (const id of AGENT_CLI_PROVIDER_IDS) {
     const prof = getAgentCliProfile(id);
     const fact = E2_P_REACHABILITY_FACTS[id];
-    eq(prof.pinnedCliVersion, fact.observedCliVersion, `${id} version pinned to E2-P fact`);
+    // E2-P stays on record as reachability-time provenance and is never rewritten.
     eq(fact.evidenceClass, "PROVIDER_REACHABILITY_ONLY", `${id} evidence is reachability-only`);
     eq(fact.exitCode, 0, `${id} E2-P exit 0`);
-    ok(prof.promptTransport === "stdin", `${id} prompt over stdin`);
+    ok(fact.recordRef.includes("e2p-provider-reachability-record"), `${id} E2-P record ref kept`);
+    // G-E5L2-3: the live pinned baseline is the E5 observation.
+    eq(prof.pinnedCliVersion, E5_OBSERVED_CLI_VERSIONS[id], `${id} version pinned to the E5 observed baseline`);
+    // W3 plan C: the instruction shell is the single dynamic argv entry.
+    eq(prof.promptTransport, "argv-final", `${id} instruction shell over argv-final`);
+    ok(
+      prof.pointerPathMode === "relative" || prof.pointerPathMode === "absolute",
+      `${id} pointer path mode is a known value`,
+    );
     ok(prof.staticArgs.every((a) => !a.includes("$") && !a.includes("`") && !a.includes(";")), `${id} static args have no shell metachars`);
   }
+  // W3 probe: only hermes ignores the process cwd, so only hermes needs an
+  // absolute pointer. These two lines are the machine-checked form of that fact.
+  eq(getAgentCliProfile("hermes").pointerPathMode, "absolute", "hermes needs an absolute pointer");
+  eq(getAgentCliProfile("kimi").pointerPathMode, "relative", "kimi resolves a relative pointer");
+  eq(getAgentCliProfile("codex").pointerPathMode, "relative", "codex resolves a relative pointer");
+  eq(MAX_ARGV_PROMPT_BYTES, 4096, "instruction shell ceiling mirrors the runner per-argument cap");
   eq(getAgentCliProfile("codex").staticArgs, ["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"], "codex read-only static argv");
   ok(getAgentCliProfile("codex").staticArgs.includes("read-only"), "codex sandbox read-only (no write)");
   eq(getAgentCliProfile("hermes").usageFileArg, ["--usage-file"], "hermes usage-file arg");
@@ -118,7 +134,7 @@ async function main(): Promise<void> {
   } catch {
     /* strict mode throws */
   }
-  if (prof.pinnedCliVersion === "0.38.0" && prof.staticArgs.length === 1) froze = true;
+  if (prof.pinnedCliVersion === E5_OBSERVED_CLI_VERSIONS.kimi && prof.staticArgs.length === 1) froze = true;
   else froze = false;
   ok(froze, "profiles are frozen");
   ok(Object.isFrozen(AGENT_CLI_BOUNDS), "bounds frozen");

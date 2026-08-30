@@ -38,13 +38,29 @@ function fail(code: CapabilityPromptErrorCode, message: string): never {
   throw new CapabilityPromptError(code, message);
 }
 
+/** A staged task input (plan C) — path plus content proof, never the content. */
+export interface PromptInputPointerRef {
+  /** Workspace-relative or absolute, per the provider's pointerPathMode. */
+  readonly path: string;
+  /** sha256 of the staged bytes. */
+  readonly digest: string;
+  readonly bytes: number;
+}
+
 export interface NodeCapabilityPromptInput {
   readonly requirementId: string;
   readonly node: string;
   readonly capability: NodeCapabilityId;
   readonly executionRole: CapabilityExecutionRole;
-  /** Already safety-checked upstream product / requirement text. */
-  readonly inputText: string;
+  /**
+   * Inline task input. Mutually exclusive with `inputPointer` — plan C stages
+   * content in the workspace and passes a pointer, because neither argv
+   * (4096 B/entry) nor stdin (1 MiB) survives the chain: requirement → design →
+   * implementation record grows at every hop.
+   */
+  readonly inputText?: string;
+  /** Staged task input (plan C). Mutually exclusive with `inputText`. */
+  readonly inputPointer?: PromptInputPointerRef;
 }
 
 const FINDINGS_CAPABILITIES: ReadonlySet<string> = new Set(["solution-gate", "code-review"]);
@@ -64,7 +80,31 @@ function nonEmpty(value: unknown, label: string): string {
 export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): string {
   const requirementId = nonEmpty(input.requirementId, "requirementId");
   const node = nonEmpty(input.node, "node");
-  const inputText = nonEmpty(input.inputText, "inputText");
+
+  const hasInline = typeof input.inputText === "string";
+  const hasPointer = input.inputPointer !== undefined && input.inputPointer !== null;
+  if (hasInline === hasPointer) {
+    fail("CAPABILITY_PROMPT_INVALID_INPUT", "provide exactly one of inputText or inputPointer");
+  }
+  let inputText = "";
+  let pointer: PromptInputPointerRef | null = null;
+  if (hasInline) {
+    inputText = nonEmpty(input.inputText, "inputText");
+    if (inputText.length > MAX_PROMPT_INPUT_CHARS) {
+      fail("CAPABILITY_PROMPT_INPUT_TOO_LARGE", `inputText exceeds ${MAX_PROMPT_INPUT_CHARS} chars`);
+    }
+  } else {
+    pointer = input.inputPointer as PromptInputPointerRef;
+    if (typeof pointer.path !== "string" || pointer.path.trim().length === 0) {
+      fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputPointer.path must be a non-empty string");
+    }
+    if (!/^[0-9a-f]{64}$/.test(pointer.digest)) {
+      fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputPointer.digest must be a sha256 hex string");
+    }
+    if (!Number.isSafeInteger(pointer.bytes) || pointer.bytes < 1) {
+      fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputPointer.bytes must be a positive safe integer");
+    }
+  }
   if (
     typeof input.capability !== "string" ||
     !(NODE_CAPABILITY_IDS as readonly string[]).includes(input.capability)
@@ -72,21 +112,28 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     fail("CAPABILITY_PROMPT_INVALID_INPUT", "capability must be a canonical NodeCapabilityId");
   }
   const capability = input.capability;
-  if (inputText.length > MAX_PROMPT_INPUT_CHARS) {
-    fail("CAPABILITY_PROMPT_INPUT_TOO_LARGE", `inputText exceeds ${MAX_PROMPT_INPUT_CHARS} chars`);
-  }
 
   const isVerdict = capability === "solution-gate" && input.executionRole === "formal_verdict";
   const isScan = capability === "solution-gate" && input.executionRole === "adversarial_scan";
   const wantsFindings = FINDINGS_CAPABILITIES.has(capability);
+
+  const taskInputSection: string[] = pointer === null
+    ? ["## Task input", inputText]
+    : [
+        "## Task input",
+        "The task input is staged in the workspace. Read that file with your file-reading tool BEFORE answering.",
+        `- Path: ${pointer.path}`,
+        `- Bytes: ${pointer.bytes}`,
+        `- SHA-256: ${pointer.digest}`,
+        "Never ask for the content to be pasted into the conversation — read the file.",
+      ];
 
   const lines: string[] = [
     `You are the ${input.executionRole} executor for the "${capability}" node of an SDLC loop.`,
     `Requirement ID: ${requirementId}`,
     `Node: ${node}`,
     "",
-    "## Task input",
-    inputText,
+    ...taskInputSection,
     "",
     "## How to return your result",
     "You may write working notes, but your structured result must appear EXACTLY ONCE,",
