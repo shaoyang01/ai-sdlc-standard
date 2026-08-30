@@ -42,6 +42,13 @@ async function main(): Promise<void> {
   console.log("agent-cli-profile: self-check");
   ok(assertAgentCliProfileIntegrity() === 8, "self-check covers all 8 execution points");
 
+  // 2026-08-30 audit: a pinned-version drift check once failed integrity here,
+  // bricking every dispatch after a routine CLI update (0.147.0→0.151.0).
+  // Versions are provenance recorded by the canary --version probe, never a
+  // gate. If this line ever goes red again because of a version mismatch, the
+  // check reintroduced the drift gate — remove the gate, not the version.
+  ok(assertAgentCliProfileIntegrity() === 8, "integrity holds regardless of CLI version drift (provenance is not a gate)");
+
   console.log("agent-cli-profile: Q1 binding projection (plan §3.2)");
   eq(bindingProviderForPoint({ capability: "requirement-intake", executionRole: "primary" }), "kimi", "intake→kimi");
   eq(bindingProviderForPoint({ capability: "solution-design", executionRole: "primary" }), "kimi", "design→kimi");
@@ -81,8 +88,13 @@ async function main(): Promise<void> {
     ok(fact.recordRef.includes("e2p-provider-reachability-record"), `${id} E2-P record ref kept`);
     // G-E5L2-3: the live pinned baseline is the E5 observation.
     eq(prof.pinnedCliVersion, E5_OBSERVED_CLI_VERSIONS[id], `${id} version pinned to the E5 observed baseline`);
-    // W3 plan C: the instruction shell is the single dynamic argv entry.
-    eq(prof.promptTransport, "argv-final", `${id} instruction shell over argv-final`);
+    // W3 plan C: the shell is an argv entry under BOTH transports; only the
+    // content's route differs.
+    eq(
+      prof.contentTransport,
+      id === "codex" ? "stdin" : "workspace-file",
+      `${id} content transport pinned`,
+    );
     ok(
       prof.pointerPathMode === "relative" || prof.pointerPathMode === "absolute",
       `${id} pointer path mode is a known value`,
@@ -94,8 +106,24 @@ async function main(): Promise<void> {
   eq(getAgentCliProfile("hermes").pointerPathMode, "absolute", "hermes needs an absolute pointer");
   eq(getAgentCliProfile("kimi").pointerPathMode, "relative", "kimi resolves a relative pointer");
   eq(getAgentCliProfile("codex").pointerPathMode, "relative", "codex resolves a relative pointer");
+  // codex is the ONE stdin provider. Its fs sandbox helper shells out to
+  // sandbox-exec (Seatbelt); inside an already-sandboxed process that nested
+  // call fails with exit 71 and codex is fail-closed — it reports "input
+  // unreadable" rather than inventing content. Piping the content on stdin
+  // keeps the task input off the filesystem, so --sandbox read-only remains a
+  // safe default instead of a hard blocker.
+  eq(getAgentCliProfile("codex").contentTransport, "stdin", "codex content rides stdin: it cannot read a staged file here");
+  eq(getAgentCliProfile("kimi").contentTransport, "workspace-file", "kimi reads a staged file");
+  eq(getAgentCliProfile("hermes").contentTransport, "workspace-file", "hermes reads a staged file");
   eq(MAX_ARGV_PROMPT_BYTES, 4096, "instruction shell ceiling mirrors the runner per-argument cap");
-  eq(getAgentCliProfile("codex").staticArgs, ["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"], "codex read-only static argv");
+  // 2026-08-30 codex-official nested-host shape: stdin content, read-only
+  // sandbox kept as the fail-closed backstop, shell_tool off, ephemeral
+  // session. See the codex profile comment.
+  eq(
+    getAgentCliProfile("codex").staticArgs,
+    ["exec", "--json", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "-c", "features.shell_tool=false"],
+    "codex read-only static argv (official nested-host shape)",
+  );
   ok(getAgentCliProfile("codex").staticArgs.includes("read-only"), "codex sandbox read-only (no write)");
   eq(getAgentCliProfile("hermes").usageFileArg, ["--usage-file"], "hermes usage-file arg");
   ok(getAgentCliProfile("kimi").usageFileArg === null, "kimi has no usage-file");

@@ -85,18 +85,29 @@ function die(message: string): never {
 
 function resolveProvider(provider: AgentCliProviderId): { id: string; executablePath: string } {
   const basename = AGENT_CLI_PROFILES[provider].executableBasename;
-  const which = spawnSync("/usr/bin/which", [basename], { encoding: "utf8" });
+  // -a: a PATH hit is not proof of a working CLI. Under the managed node
+  // runtime, ~/.nvm/**/bin/codex shadows the real one and dies instantly
+  // (vendored binary missing: exit 1, ~40ms, 0 bytes of output) — a silent
+  // PATH pick produced phantom FAILs in W3. Enumerate every candidate and
+  // promote the first one that actually runs `--version`.
+  const which = spawnSync("/usr/bin/which", ["-a", basename], { encoding: "utf8" });
   if (which.status !== 0 || !which.stdout.trim()) {
     die(`executable not found on PATH: ${basename}`);
   }
-  const raw = which.stdout.trim();
-  let resolved: string;
-  try {
-    resolved = realpathSync(raw);
-  } catch {
-    die(`cannot realpath ${raw}`);
+  const candidates = [...new Set(which.stdout.trim().split("\n").map((l) => l.trim()).filter(Boolean))];
+  let lastError = "no candidates";
+  for (const raw of candidates) {
+    let resolved: string;
+    try {
+      resolved = realpathSync(raw);
+    } catch {
+      continue;
+    }
+    const probe = spawnSync(resolved, ["--version"], { encoding: "utf8", timeout: 15_000 });
+    if (probe.status === 0) return { id: provider, executablePath: resolved };
+    lastError = `${resolved} exits ${probe.status} on --version`;
   }
-  return { id: provider, executablePath: resolved };
+  die(`no runnable ${basename} on PATH (last: ${lastError})`);
 }
 
 function lastEventFor(

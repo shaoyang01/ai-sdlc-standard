@@ -146,11 +146,15 @@ export class RealCapabilityGateway extends ExecutionGateway {
     const inputText = extractInputText(enriched.input);
     const cwd = this.realDeps.attemptWorkspace(enriched);
 
-    // ── E5-W3 plan C: stage the task input, hand the CLI a pointer ──
+    // ── E5-W3 plan C: keep the instruction shell small and constant ──
     // The upstream artifact (requirement → design → implementation record)
-    // grows at every hop, so it must not travel through argv (4096 B per
-    // argument) or stdin (1 MiB). Writing it into the attempt workspace and
-    // naming the file keeps the instruction shell small and constant.
+    // grows at every hop, so content must not ride the shell (4096 B per argv
+    // entry). Two routes: the shell names a staged workspace file and the agent
+    // reads it ("workspace-file"), or the content is piped on stdin ("stdin",
+    // for providers that cannot read a staged file — codex's fs sandbox helper
+    // fails inside a nested sandbox). The file is staged under BOTH routes: it
+    // is the journal's evidence anchor for what the agent was fed, and the
+    // fallback once content outgrows stdin's 1 MiB ceiling.
     const profile = getAgentCliProfile(providerId);
     const staged = stagePromptInput({
       workspaceDir: cwd,
@@ -159,15 +163,24 @@ export class RealCapabilityGateway extends ExecutionGateway {
       executionRole: role,
       attempt,
     });
+    const useStdin = profile.contentTransport === "stdin";
     const pointerPath = profile.pointerPathMode === "absolute" ? staged.absolutePath : staged.relativePath;
 
-    const prompt = buildNodeCapabilityPrompt({
-      requirementId: enriched.requirementId,
-      node: enriched.node,
-      capability: nodeCapability,
-      executionRole: role,
-      inputPointer: { path: pointerPath, digest: staged.digest, bytes: staged.bytes },
-    });
+    const prompt = useStdin
+      ? buildNodeCapabilityPrompt({
+          requirementId: enriched.requirementId,
+          node: enriched.node,
+          capability: nodeCapability,
+          executionRole: role,
+          inputStdin: { digest: staged.digest, bytes: staged.bytes },
+        })
+      : buildNodeCapabilityPrompt({
+          requirementId: enriched.requirementId,
+          node: enriched.node,
+          capability: nodeCapability,
+          executionRole: role,
+          inputPointer: { path: pointerPath, digest: staged.digest, bytes: staged.bytes },
+        });
 
     // E5-W1 (G-S09b): a failure AFTER the process ran carries bounded
     // evidence on the error; re-raise it as a CapabilityProcessEvidenceError
@@ -185,6 +198,7 @@ export class RealCapabilityGateway extends ExecutionGateway {
         executionRole: role,
         attempt,
         prompt,
+        stdinContent: useStdin ? inputText : undefined,
         promptPointers: [staged],
         cwd,
       });
@@ -241,6 +255,15 @@ export class RealCapabilityGateway extends ExecutionGateway {
       agent: enriched.agent,
       output: Object.freeze(output),
       artifacts: Object.freeze([artifact]),
+      // E5-W3 finding: the adapter already builds bounded process evidence for
+      // the success path (real-capability-adapter.ts:428-434 — exit 0, no
+      // signal, untruncated, durationMs floor-checked) and returns it. The
+      // tracing gateway spreads `processEventFields(result.processEvidence)`
+      // onto the SUCCEEDED terminal (gateway.ts:571), so omitting this
+      // pass-through made every successful real dispatch journal an all-null
+      // process-evidence block. The failure path carries its own evidence via
+      // CapabilityProcessEvidenceError above.
+      processEvidence: cliResult.processEvidence ?? null,
     });
   }
 }

@@ -41,16 +41,32 @@ export const AGENT_CLI_PROVIDER_IDS: readonly AgentCliProviderId[] = Object.free
 ]);
 
 /**
- * How the instruction shell reaches the CLI.
- *  - "argv-final": the shell is an argv entry placed directly after the
- *    provider's prompt flag (kimi `-p <s>`, codex `exec … <s>`, hermes `-z <s>`
- *    — all three probed at E5-W3). It is NOT necessarily the LAST entry:
- *    hermes' -z takes a value, so its `--usage-file <path>` must come after
- *    the shell, otherwise argparse rejects the invocation with exit 2.
- *  - "stdin": the shell is written to stdin (retained for callers that still
- *    transport content inline; no profile uses it in production today).
+ * How the TASK CONTENT reaches the CLI. The instruction shell is always an
+ * argv entry in BOTH modes — only the content's route differs.
+ *
+ *  - "workspace-file": the content is staged in the attempt workspace and the
+ *    shell carries a pointer (path + bytes + sha256) that the agent resolves by
+ *    reading the file. No transport ceiling: content size is bounded by disk.
+ *  - "stdin": the content is piped on stdin and the shell says so, so the agent
+ *    never touches the filesystem for the task input.
+ *
+ * Why codex needs "stdin": codex reads staged files through an fs sandbox
+ * helper that shells out to `sandbox-exec` (Seatbelt). Inside an
+ * already-sandboxed process that nested call fails with
+ * `sandbox_apply: Operation not permitted` (exit 71), and codex is fail-closed
+ * BY DESIGN — upstream explicitly declines to offer a "helper off, read-only
+ * still on" switch, and the sanctioned nested-host shape is: content on stdin,
+ * `--sandbox read-only` kept as the backstop, `-c features.shell_tool=false`
+ * (see the codex profile comment). The staged file stays on disk as an
+ * evidence anchor only — for codex it is NEVER a content route.
+ *
+ * Known ceiling: stdin reintroduces the runner's 1 MiB stdin ceiling that plan
+ * C set out to escape (37 KB today; chain products grow at every hop). For
+ * codex there is no file fallback by design; if content ever outgrows the
+ * ceiling the dispatch fails closed at the runner and the wave ledger records
+ * a real capability boundary — not a bug to route around.
  */
-export type AgentCliPromptTransport = "argv-final" | "stdin";
+export type AgentCliContentTransport = "workspace-file" | "stdin";
 
 /**
  * Whether a staged task-input pointer must be absolute.
@@ -83,7 +99,11 @@ export interface AgentCliProfile {
   readonly executableBasename: string;
   /** Fully static argv (no prompt, no user string). */
   readonly staticArgs: readonly string[];
-  readonly promptTransport: AgentCliPromptTransport;
+  /**
+   * How the task content reaches the CLI. The instruction shell is always an
+   * argv entry; see AgentCliContentTransport.
+   */
+  readonly contentTransport: AgentCliContentTransport;
   /** Absolute vs workspace-relative staged task-input pointers. */
   readonly pointerPathMode: AgentCliPointerPathMode;
   readonly outputDialect: AgentCliOutputDialect;
@@ -170,14 +190,15 @@ export const E2_P_REACHABILITY_FACTS: Readonly<Record<AgentCliProviderId, E2pRea
   });
 
 // ── E5 observed baseline (W3, G-E5L2-3) ───────────────────────────────────
-// The E2-P versions above are historical provenance and are NOT rewritten. The
-// live baseline is what the CLIs actually report on this machine (E5-L2
-// pre-trigger recheck + canary `--version`), and `pinnedCliVersion` below must
-// match THIS table. A drift between the two tables is an observed fact, not an
-// error — the E2-P record stays as the reachability-time observation.
+// The E2-P versions above are historical provenance and are NOT rewritten. This
+// table records what the CLIs last reported on this machine (canary `--version`
+// probe); it is a FACT LEDGER, not an enforcement baseline. `pinnedCliVersion`
+// in the profiles below is the version the profile was last probed against.
+// The two drifting apart is an observation to log (and a signal to re-run the
+// contract canary), never an integrity failure — see assertAgentCliProfileIntegrity.
 export const E5_OBSERVED_CLI_VERSIONS: Readonly<Record<AgentCliProviderId, string>> = Object.freeze({
   kimi: "0.39.1",
-  codex: "codex-cli 0.147.0",
+  codex: "codex-cli 0.151.0", // 2026-08-30 `--version` probe (user updated; W3 saw 0.147.0)
   hermes: "0.20.6",
 });
 
@@ -201,7 +222,7 @@ export const AGENT_CLI_PROFILES: Readonly<Record<AgentCliProviderId, AgentCliPro
       // -p / --print: non-interactive run-then-exit. The instruction shell is
       // the -p argument; task content is staged in the workspace (plan C).
       staticArgs: ["-p"],
-      promptTransport: "argv-final",
+      contentTransport: "workspace-file",
       // W3 probe: kimi resolves a workspace-relative pointer correctly.
       pointerPathMode: "relative",
       outputDialect: "text-final",
@@ -211,13 +232,37 @@ export const AGENT_CLI_PROFILES: Readonly<Record<AgentCliProviderId, AgentCliPro
     }),
     codex: profile({
       providerId: "codex",
-      pinnedCliVersion: "codex-cli 0.147.0",
+      // 2026-08-30 canary/PROBE-OK observation (W3 baseline was 0.147.0).
+      pinnedCliVersion: "codex-cli 0.151.0",
       executableBasename: "codex",
       // exec = non-interactive headless; --json JSONL; read-only sandbox;
       // never rely on a git repo being present in the attempt workspace.
       // The instruction shell is the trailing positional argument.
-      staticArgs: ["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"],
-      promptTransport: "argv-final",
+      // 2026-08-30 codex-official guidance for nested-sandbox hosts (WorkBuddy):
+      // there is NO way to keep read-only file access without Seatbelt, and
+      // nested Seatbelt fails `sandbox_apply: Operation not permitted` by
+      // DESIGN (fail-closed). The sanctioned shape is therefore: content on
+      // stdin, `--sandbox read-only` kept as the fail-closed backstop, and
+      // `-c features.shell_tool=false` so the model never needs the fs at all.
+      // `--ephemeral` avoids session persistence for our stateless one-shots.
+      // (0.151.0 exec has no --ask-for-approval; exec is always never.)
+      staticArgs: [
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--sandbox",
+        "read-only",
+        "--skip-git-repo-check",
+        "-c",
+        "features.shell_tool=false",
+      ],
+      // E5-W3: codex cannot read a staged file here — its fs sandbox helper
+      // shells out to sandbox-exec, which fails (exit 71) inside an
+      // already-sandboxed process, and upstream refuses to add an escape hatch.
+      // The content rides stdin instead; the shell stays on argv. The staged
+      // file remains on disk ONLY as an evidence anchor — it is NOT a codex
+      // fallback route (see the transport comment above).
+      contentTransport: "stdin",
       // W3 probe: codex resolves a workspace-relative pointer correctly.
       pointerPathMode: "relative",
       outputDialect: "jsonl-final",
@@ -231,7 +276,7 @@ export const AGENT_CLI_PROFILES: Readonly<Record<AgentCliProviderId, AgentCliPro
       executableBasename: "hermes",
       // -z: emit final text only. Usage/cost JSON goes to a workspace file.
       staticArgs: ["-z"],
-      promptTransport: "argv-final",
+      contentTransport: "workspace-file",
       // W3 probe: hermes ignores the process cwd (and --in / --no-restore-cwd),
       // so its pointer MUST be absolute.
       pointerPathMode: "absolute",
@@ -336,11 +381,15 @@ export function assertAgentCliProfileIntegrity(): number {
     if (fact === undefined || fact.recordRef !== E2_P_REACHABILITY_RECORD_REF) {
       fail("AGENT_CLI_PROFILE_INVALID_INPUT", `${providerId} lost its E2-P provenance`);
     }
-    if (profile.pinnedCliVersion !== E5_OBSERVED_CLI_VERSIONS[providerId]) {
-      fail("AGENT_CLI_PROFILE_INVALID_INPUT", `${providerId} pinned version drifts from the E5 observed baseline`);
-    }
-    if (profile.promptTransport !== "argv-final" && profile.promptTransport !== "stdin") {
-      fail("AGENT_CLI_PROFILE_INVALID_INPUT", `${providerId} has an unknown prompt transport`);
+    // Deliberately NOT comparing pinnedCliVersion against E5_OBSERVED_CLI_VERSIONS
+    // here: the CLI version is PROVENANCE, not a gate. A minor-version bump does
+    // not change how the CLI is invoked (argv shape / transport / output dialect
+    // are what the profiles pin); pinning the number turned every routine CLI
+    // update into an integrity failure (W3 audit). Version observations are
+    // recorded by the canary harness `--version` probe and updated in the
+    // E5_OBSERVED_CLI_VERSIONS table as facts, never enforced as errors.
+    if (profile.contentTransport !== "workspace-file" && profile.contentTransport !== "stdin") {
+      fail("AGENT_CLI_PROFILE_INVALID_INPUT", `${providerId} has an unknown content transport`);
     }
     if (profile.pointerPathMode !== "relative" && profile.pointerPathMode !== "absolute") {
       fail("AGENT_CLI_PROFILE_INVALID_INPUT", `${providerId} has an unknown pointer path mode`);

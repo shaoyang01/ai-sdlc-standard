@@ -47,6 +47,16 @@ export interface PromptInputPointerRef {
   readonly bytes: number;
 }
 
+/**
+ * Task content piped on stdin — content proof only, never the content. The
+ * agent is told not to touch the filesystem for it.
+ */
+export interface PromptInputStdinRef {
+  /** sha256 of the piped bytes. */
+  readonly digest: string;
+  readonly bytes: number;
+}
+
 export interface NodeCapabilityPromptInput {
   readonly requirementId: string;
   readonly node: string;
@@ -61,6 +71,12 @@ export interface NodeCapabilityPromptInput {
   readonly inputText?: string;
   /** Staged task input (plan C). Mutually exclusive with `inputText`. */
   readonly inputPointer?: PromptInputPointerRef;
+  /**
+   * Task content piped on stdin. Mutually exclusive with the other two. Used
+   * by providers that cannot read a staged file (codex: its fs sandbox helper
+   * shells out to sandbox-exec, which fails inside a nested sandbox).
+   */
+  readonly inputStdin?: PromptInputStdinRef;
 }
 
 const FINDINGS_CAPABILITIES: ReadonlySet<string> = new Set(["solution-gate", "code-review"]);
@@ -83,17 +99,20 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
 
   const hasInline = typeof input.inputText === "string";
   const hasPointer = input.inputPointer !== undefined && input.inputPointer !== null;
-  if (hasInline === hasPointer) {
-    fail("CAPABILITY_PROMPT_INVALID_INPUT", "provide exactly one of inputText or inputPointer");
+  const hasStdin = input.inputStdin !== undefined && input.inputStdin !== null;
+  const modeCount = (hasInline ? 1 : 0) + (hasPointer ? 1 : 0) + (hasStdin ? 1 : 0);
+  if (modeCount !== 1) {
+    fail("CAPABILITY_PROMPT_INVALID_INPUT", "provide exactly one of inputText, inputPointer or inputStdin");
   }
   let inputText = "";
   let pointer: PromptInputPointerRef | null = null;
+  let stdinRef: PromptInputStdinRef | null = null;
   if (hasInline) {
     inputText = nonEmpty(input.inputText, "inputText");
     if (inputText.length > MAX_PROMPT_INPUT_CHARS) {
       fail("CAPABILITY_PROMPT_INPUT_TOO_LARGE", `inputText exceeds ${MAX_PROMPT_INPUT_CHARS} chars`);
     }
-  } else {
+  } else if (hasPointer) {
     pointer = input.inputPointer as PromptInputPointerRef;
     if (typeof pointer.path !== "string" || pointer.path.trim().length === 0) {
       fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputPointer.path must be a non-empty string");
@@ -103,6 +122,14 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     }
     if (!Number.isSafeInteger(pointer.bytes) || pointer.bytes < 1) {
       fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputPointer.bytes must be a positive safe integer");
+    }
+  } else {
+    stdinRef = input.inputStdin as PromptInputStdinRef;
+    if (!/^[0-9a-f]{64}$/.test(stdinRef.digest)) {
+      fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputStdin.digest must be a sha256 hex string");
+    }
+    if (!Number.isSafeInteger(stdinRef.bytes) || stdinRef.bytes < 1) {
+      fail("CAPABILITY_PROMPT_INVALID_INPUT", "inputStdin.bytes must be a positive safe integer");
     }
   }
   if (
@@ -117,16 +144,25 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
   const isScan = capability === "solution-gate" && input.executionRole === "adversarial_scan";
   const wantsFindings = FINDINGS_CAPABILITIES.has(capability);
 
-  const taskInputSection: string[] = pointer === null
-    ? ["## Task input", inputText]
-    : [
+  const taskInputSection: string[] = pointer !== null
+    ? [
         "## Task input",
         "The task input is staged in the workspace. Read that file with your file-reading tool BEFORE answering.",
         `- Path: ${pointer.path}`,
         `- Bytes: ${pointer.bytes}`,
         `- SHA-256: ${pointer.digest}`,
         "Never ask for the content to be pasted into the conversation — read the file.",
-      ];
+      ]
+    : stdinRef !== null
+      ? [
+          "## Task input",
+          "The task input is piped on stdin. Do not read any file and do not run shell commands to fetch it.",
+          `- Bytes: ${stdinRef.bytes}`,
+          `- SHA-256: ${stdinRef.digest}`,
+          "Use the stdin content as the task input.",
+          "Never ask for the content to be pasted into the conversation — it is already on stdin.",
+        ]
+      : ["## Task input", inputText];
 
   const lines: string[] = [
     `You are the ${input.executionRole} executor for the "${capability}" node of an SDLC loop.`,

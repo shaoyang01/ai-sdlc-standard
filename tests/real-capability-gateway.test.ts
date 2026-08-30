@@ -75,7 +75,22 @@ function harness() {
 function gatewayWith(runStore: LoopRunStore, artifactStore: LoopArtifactStore, text: string, workspace: string): RealCapabilityGateway {
   const fakeAdapter: RealGatewayAdapter = {
     async execute(req) {
-      return { success: true, node: req.node, agent: req.providerId, output: { text }, artifacts: [] };
+      return {
+        success: true,
+        node: req.node,
+        agent: req.providerId,
+        output: { text },
+        artifacts: [],
+        // Mirrors RealCapabilityAdapter, which returns bounded evidence on the
+        // success path (adapter.ts:428-434).
+        processEvidence: Object.freeze({
+          invocationDigest: "d".repeat(64),
+          exitCode: 0,
+          signal: null,
+          durationMs: 1234,
+          truncated: false,
+        }),
+      };
     },
   };
   return new RealCapabilityGateway(
@@ -134,6 +149,21 @@ async function main(): Promise<void> {
       result.artifacts.length === 1 &&
       result.artifacts[0]!.type === CAPABILITY_ARTIFACT_TYPES["requirement-intake"]);
     check("intake output carries no gateResult", result.output["gateResult"] === undefined);
+    // E5-W3: the success path must hand the adapter's process evidence up.
+    // Without it the tracing gateway spreads processEventFields(undefined)
+    // (gateway.ts:571) and journals an all-null evidence block — which is
+    // exactly what the first-ever successful real canary (kimi) produced.
+    const ev = result.processEvidence as
+      | { invocationDigest: string; exitCode: number | null; durationMs: number | null }
+      | null
+      | undefined;
+    check("success path passes the adapter's process evidence through", ev !== null && ev !== undefined);
+    check("passed-through evidence keeps the invocation digest", ev?.invocationDigest === "d".repeat(64));
+    check("passed-through evidence keeps the exit code", ev?.exitCode === 0);
+    check("succeeded terminal carries the process invocation digest",
+      succeeded.processInvocationDigest === "d".repeat(64));
+    check("succeeded terminal carries the process exit code", succeeded.processExitCode === 0);
+    check("succeeded terminal carries the process duration", succeeded.processDurationMs === 1234);
   }
 
   // ── A2. malformed envelope on the first node never upgrades to success ──

@@ -60,14 +60,23 @@ export interface RealCapabilityAdapterRequest {
   readonly attempt: number;
   /**
    * The bounded INSTRUCTION SHELL (plan C). Task content is NOT inlined here —
-   * it is staged in the attempt workspace and referenced by a pointer, so the
-   * agent reads it itself. Capped by MAX_ARGV_PROMPT_BYTES (one argv entry).
+   * it reaches the agent either as a workspace pointer named by this shell
+   * ("workspace-file") or piped on stdin ("stdin"). Capped by
+   * MAX_ARGV_PROMPT_BYTES: the shell is one argv entry under both transports.
    */
   readonly prompt: string;
+  /**
+   * The task content, piped on stdin when the provider's contentTransport is
+   * "stdin". Absent (and ignored) under "workspace-file".
+   */
+  readonly stdinContent?: string;
   /**
    * The staged task-input files this shell points at. Carried as EVIDENCE
    * (path + sha256 + size) so the journal can prove what the agent was fed
    * without storing the content itself. Never part of argv on its own.
+   * Written under BOTH transports: for "stdin" the file is the evidence anchor
+   * only — codex has NO file fallback route by design (nested Seatbelt is
+   * fail-closed; see the profile transport comment).
    */
   readonly promptPointers?: readonly PromptInputPointer[];
   /** Attempt workspace dir; must already be an allowed cwd root of the runner. */
@@ -241,10 +250,11 @@ export class RealCapabilityAdapter {
       throw e;
     }
     const promptBytes = Buffer.byteLength(prompt, "utf8");
-    if (profile.promptTransport === "argv-final") {
-      // Plan C invariant: the shell must fit in ONE argv entry. Content that
-      // does not fit is not a truncation candidate — it must be staged as a
-      // workspace pointer instead. Fail-closed, never silently trimmed.
+    {
+      // Plan C invariant: the shell is ONE argv entry under BOTH transports
+      // (workspace-file and stdin), so it must fit the runner's per-argument
+      // ceiling. Content that does not fit is not a truncation candidate — it
+      // must not ride the shell at all. Fail-closed, never silently trimmed.
       if (promptBytes > MAX_ARGV_PROMPT_BYTES) {
         throw new RealCapabilityAdapterError(
           "REAL_ADAPTER_PROMPT_TOO_LARGE",
@@ -253,8 +263,24 @@ export class RealCapabilityAdapter {
           false,
         );
       }
-    } else if (promptBytes > profile.bounds.maxStdinBytes) {
-      throw new RealCapabilityAdapterError("REAL_ADAPTER_INVALID_INPUT", "prompt exceeds stdin bound", null, false);
+    }
+    // Content bound (stdin transport only). The runner caps stdin, so content
+    // that outgrows it must fail closed rather than be silently truncated —
+    // the staged file keeps the evidence of what we tried to send. There is no
+    // workspace-pointer fallback for codex by design (nested Seatbelt is
+    // fail-closed upstream); exceeding the bound is a recorded capability
+    // boundary, not a routing problem.
+    if (
+      profile.contentTransport === "stdin" &&
+      typeof req.stdinContent === "string" &&
+      Buffer.byteLength(req.stdinContent, "utf8") > profile.bounds.maxStdinBytes
+    ) {
+      throw new RealCapabilityAdapterError(
+        "REAL_ADAPTER_PROMPT_TOO_LARGE",
+        "task content exceeds the stdin bound",
+        null,
+        false,
+      );
     }
 
     // ── enforce Q1 binding: this provider IS the bound one for this point ──
@@ -286,25 +312,38 @@ export class RealCapabilityAdapter {
     // B1: a runId carrying "/" or ".." previously reached argv here).
     const usageFileName = `.usage-${req.capability}-${req.executionRole}-${req.attempt}.json`;
     const args: string[] = [...profile.staticArgs];
-    // Plan C: the shell is the single dynamic argv entry, and it must directly
-    // follow the provider's prompt flag. hermes' -z/--oneshot TAKES A VALUE
-    // (usage: `[-z PROMPT] [--usage-file PATH]`), so appending the shell after
-    // --usage-file makes argparse refuse the invocation with exit 2:
-    //   "argument -z/--oneshot: expected one argument"
+    // Plan C: the shell is the single dynamic argv entry under BOTH transports,
+    // and it must directly follow the provider's prompt flag. hermes'
+    // -z/--oneshot TAKES A VALUE (usage: `[-z PROMPT] [--usage-file PATH]`), so
+    // appending the shell after --usage-file makes argparse refuse the
+    // invocation with exit 2: "argument -z/--oneshot: expected one argument".
     // kimi `-p <shell>` and codex' trailing positional are unaffected by this
     // order — neither has a trailing option that would separate flag + value.
-    if (profile.promptTransport === "argv-final") {
-      args.push(prompt);
-    }
+    args.push(prompt);
     if (profile.usageFileArg !== null) {
       args.push(...profile.usageFileArg, usageFileName);
+    }
+
+    // Content route. Under "stdin" the content is piped and the shell tells the
+    // agent not to touch the filesystem; under "workspace-file" the shell
+    // already carries the pointer and stdin stays empty.
+    const stdinContent = profile.contentTransport === "stdin" ? req.stdinContent : undefined;
+    if (profile.contentTransport === "stdin" && typeof stdinContent !== "string") {
+      // Fail-closed: an empty stdin would hand the agent a shell that promises
+      // content it never received, and codex would answer from nothing.
+      throw new RealCapabilityAdapterError(
+        "REAL_ADAPTER_INVALID_INPUT",
+        "contentTransport \"stdin\" requires stdinContent on the request",
+        null,
+        false,
+      );
     }
 
     const processReq: LoopPosixProcessRequest = Object.freeze({
       executableId: req.executableId ?? providerId,
       args,
       cwd,
-      stdin: profile.promptTransport === "stdin" ? prompt : undefined,
+      stdin: stdinContent,
       timeoutMs,
       maxStdoutBytes: AGENT_CLI_BOUNDS.maxStdoutBytes,
       maxStderrBytes: AGENT_CLI_BOUNDS.maxStderrBytes,
@@ -446,7 +485,7 @@ export class RealCapabilityAdapter {
         durationMs: res.durationMs,
         stdoutBytes: res.stdoutBytesReceived,
         outputDialect: profile.outputDialect,
-        promptTransport: profile.promptTransport,
+        contentTransport: profile.contentTransport,
         // D1: what the agent was fed, as evidence — the staged file's workspace
         // relative path, its sha256 and its size. The content itself is never
         // copied into the result.

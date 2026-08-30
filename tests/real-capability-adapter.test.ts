@@ -156,24 +156,59 @@ async function main(): Promise<void> {
     );
   }
 
-  // codex jsonl-final
+  // codex jsonl-final — the content rides stdin, because codex cannot read a
+  // staged file here: its fs sandbox helper shells out to sandbox-exec, which
+  // fails (exit 71) inside an already-sandboxed process.
   {
+    const CONTENT = "the staged task content";
     const jsonl =
       '{"type":"thread.started"}\n' +
       '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"impl complete"}]}\n';
     const runner = new FakeRunner(() => result({ stdout: jsonl }));
     const out = await new RealCapabilityAdapter(runner).execute(
-      baseReq({ providerId: "codex", node: "implementation", capability: "implementation" }),
+      baseReq({
+        providerId: "codex",
+        node: "implementation",
+        capability: "implementation",
+        stdinContent: CONTENT,
+      }),
     );
     ok(out.success && out.agent === "codex", "codex jsonl-final success");
     ok((out.output as any).text === "impl complete", "codex last assistant message extracted");
     const codexArgv = runner.last?.args ?? [];
     ok(
       JSON.stringify(codexArgv.slice(0, -1)) ===
-        JSON.stringify(["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"]),
-      "codex static argv (read-only sandbox preserved)",
+        JSON.stringify([
+          "exec",
+          "--json",
+          "--ephemeral",
+          "--sandbox",
+          "read-only",
+          "--skip-git-repo-check",
+          "-c",
+          "features.shell_tool=false",
+        ]),
+      "codex static argv (official nested-host shape; read-only sandbox preserved)",
     );
     eq(codexArgv[codexArgv.length - 1], "please design the solution", "shell is the final argv entry");
+    // The content's route is stdin — never argv, which is capped at 4096 B.
+    eq(runner.last?.stdin, CONTENT, "codex content rides stdin");
+    ok(codexArgv.includes(CONTENT) === false, "content is NOT in argv");
+  }
+
+  // stdin transport with no content must fail closed: an empty stdin would hand
+  // codex a shell that promises content it never received.
+  {
+    const runner = new FakeRunner(() => result({ stdout: "{}" }));
+    await expectCode(
+      "REAL_ADAPTER_INVALID_INPUT",
+      () =>
+        new RealCapabilityAdapter(runner).execute(
+          baseReq({ providerId: "codex", node: "implementation", capability: "implementation" }),
+        ),
+      "stdin transport without stdinContent fails closed",
+    );
+    eq(runner.last, null, "no process spawned when the content is missing");
   }
 
   console.log("real-adapter: bounds + timeout by capability class");
@@ -186,7 +221,9 @@ async function main(): Promise<void> {
   {
     const runner = new FakeRunner(() => result({ stdout: '{"text":"x"}' }));
     await new RealCapabilityAdapter(runner).execute(
-      baseReq({ providerId: "codex", capability: "implementation", node: "implementation" }),
+      // codex rides stdin (plan C / official nested-host shape), so the
+      // implementation-class probe must carry stdinContent like a real call.
+      baseReq({ providerId: "codex", capability: "implementation", node: "implementation", stdinContent: "implementation task content" }),
     );
     ok(runner.last?.timeoutMs === 30 * 60 * 1000, "implementation timeout 30min");
   }
@@ -221,7 +258,7 @@ async function main(): Promise<void> {
     "REAL_ADAPTER_MALFORMED_OUTPUT",
     () =>
       new RealCapabilityAdapter(new FakeRunner(() => result({ stdout: "this is not jsonl" }))).execute(
-        baseReq({ providerId: "codex", capability: "implementation", node: "implementation" }),
+        baseReq({ providerId: "codex", capability: "implementation", node: "implementation", stdinContent: "task content" }),
       ),
     "codex non-jsonl -> MALFORMED",
   );
@@ -229,7 +266,7 @@ async function main(): Promise<void> {
     "REAL_ADAPTER_MALFORMED_OUTPUT",
     () =>
       new RealCapabilityAdapter(new FakeRunner(() => result({ stdout: '{"type":"ping"}\n' }))).execute(
-        baseReq({ providerId: "codex", capability: "implementation", node: "implementation" }),
+        baseReq({ providerId: "codex", capability: "implementation", node: "implementation", stdinContent: "task content" }),
       ),
     "codex jsonl without final message -> MALFORMED",
   );
