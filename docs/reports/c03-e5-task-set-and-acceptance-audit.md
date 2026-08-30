@@ -42,6 +42,18 @@
 | 2026-08-30 | 「可以开始搞E5了」→ Decision-075 授权成立，分层推进（L1 立即；L2/L3 真实 CLI 触发前再确认） |
 | 2026-08-30 | 「修吧」→ E5-G1 缺口修复 + E5-G2 口径修订全部立项为 W1 同批（含 G-P1 并入确认；L2 仍冻结待触发前确认） |
 
+## 4.1 W2 立项（E2 回流修复——L2 canary 三 FAIL，2026-08-30；⏸️ 待 Current User 授权，本节为立项草案）
+
+| 项 | 内容 | 来源证据 |
+| --- | --- | --- |
+| G-E5L2-1 | **prompt transport 缺陷（kimi/hermes）**：`agent-cli-profile.ts` 将 kimi/hermes 的 promptTransport 钉为 stdin，但真实 CLI 要求 prompt 作 argv 参数（kimi `-p <prompt>`、hermes `-z <prompt>`；直接探针实证）。待定方案：A. argv 末位传输（`"argv-final"`，prompt 为唯一动态末位参数；受 runner 内核单参数 4096B 上限约束——真实生产 prompt 可超限，须评估是否上调 `MAX_ARG_B`，属内核策略变更）；B. 探测 `-` 惯用法（argv 传 `-`、prompt 走 stdin；首轮探针无有效输出，结论未定） | §5-③ kimi/hermes FAIL |
+| G-E5L2-2 | **codex JSONL final-message 形状漂移**：`real-capability-adapter.ts` `readFinalMessage` 不认 codex 0.147.0 的嵌套形状 `{"type":"item.completed","item":{"type":"agent_message","text":…}}`，正常输出被误判 MALFORMED_OUTPUT。修复 = 增补该形状（保持 fail-closed：非 JSON 行仍拒、无 final message 仍拒） | §5-③ codex FAIL |
+| G-E5L2-3 | **pinned 版本事实过期**：profile 钉 0.38.0 / codex-cli 0.150.1 / hermes 0.20.5，本机实际 0.39.1 / codex-cli 0.147.0 / hermes 0.20.6。修复 = 重定基线（integrity check 同步调整；E2-P 历史记录保留原观察值不重写） | §5-②/§5-③ |
+| 回归保护 | `extractCodexFinalText` 形状增补不破坏旧形状（新测试钉四种形状 + fail-closed 反例）；transport 改动以 scripted runner 测试钉「argv-final 不发 stdin / stdin 不发 prompt argv」+ invocationDigest 仍不含动态内容 | W2 验收 |
+
+- **验收标准**：tsc 干净；新测试全绿；node@24 全套件 0 failed（环境漂移项按 W1 口径处理）；三家 canary 重跑（真实调用，成本同首轮）全 PASS 或给出新的非 E2 根因。
+- **边界**：仅动 `agent-cli-profile.ts` / `real-capability-adapter.ts`（及其完整性自检）/ 新测试；若方案 A 需上调 runner `MAX_ARG_B` 属内核策略变更，须在本节内单独标注后再动；零业务仓写入；canary 重跑前不需要再次授权门（本波授权即覆盖），但执行前会在会话内预告。
+
 ## 5. 独立复审记录
 
 ### ① W1 复审（2026-08-30，外部 agent，只读）
