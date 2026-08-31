@@ -50,6 +50,8 @@
 
 | [Decision-076](Decision-076-c03-loop-gw-material-and-rhythm-authorized.md) | 2026-08-31 | Accepted / C03-LOOP-GW authorized, ladder rhythm | 立项 C03-LOOP-GW：验收材料 = 本机 spruce_logistics_gateway @ feature/dev_20260831_loop_test（cc06c605，只读审查报告入库），三级节奏（①冒烟三项已授权 ②主测 P0-2 endsWith 绕过 ③批量正确性，逐级停等放行）；排除 P0-1/3/4 与 37 拷贝收敛（验收口径无法仓内自洽）；PKB 写入经 Exchange 派生；E5-L3 冻结不变，LOOP 真实 CLI 路径不在范围。 |
 
+| [Decision-077](Decision-077-c03-loop-gw-smoke-real-run-fail-closed-and-wiring-gap-recorded.md) | 2026-09-01 | Accepted / smoke FAIL-CLOSED recorded, fix pending | 记录冒烟真实 run 结果：口径改定为「冒烟=测 LOOP 本体、三项缺陷为需求输入」；run2 于 requirement-intake/primary fail-closed（REAL_GATEWAY_NO_INPUT：run() 只传 inputArtifactRef vs extractInputText 只认自由文本键，kimi 探针实证）；确认 E5-L2 canary 未覆盖 run()+real 端到端（不追溯改判 E5）；缺口修复另行立项待授权；E5-T1 超时张力销项；脚本暂不入库；②③不推进。 |
+
 ## 新增流程
 
 1. 取本索引中的最大编号加一；不得复用或填补编号。
