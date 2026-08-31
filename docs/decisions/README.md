@@ -48,6 +48,8 @@
 | [Decision-074](Decision-074-c03e-ct2-closure-implementation-complete.md) | 2026-08-30 | Accepted / E1～E4 CLOSED, C-T2 executed | 接受 C-T1 全量只读复审结论（CLOSED 零阻塞，基线 cebbecd，146 文件 1767 passed）；授权 C-T2 一次性收口：Exchange 收口 run（Issue #91，覆盖 W1–W6b5 全部 11 波 + C-T1，不得解读为逐波发布，补偿证据=台账）+ PKB 归档（handoffs/2026-08-30-c03-e-ct2-closure.md，分支 feature/knowledge-base-v1，d59008c/ba84d02）；CP lifecycle→CLOSED、route_state→C03_E_E1_E4_CLOSED_AWAITING_NEXT_DIRECTION、publication 回执更新；E5 真实激活/下一 Requirement 仍待单独裁决。 |
 | [Decision-075](Decision-075-c03e-e5-autonomous-acceptance-authorized.md) | 2026-08-30 | Accepted / E5 authorized, layered | 授权 E5 自主运行验收（规划 §6 三层证据：自动负向矩阵 / 真实 Adapter canary / 真实自主 fixture run），分层推进：L1 负向矩阵映射立即执行（零 CLI、零生产改动，产出映射报告+缺口清单，缺口逐波立项独立复审）；L2/L3 真实 CLI 触发前须再次向 Current User 确认；全程零业务仓写入/远程 Git 副作用，失败不得 shadow/自述降级放行（S16/S18）；E5 PASS 前不请求 C05；事实分支 feature/c03-e5-autonomous-acceptance（自 c7a2e01 切出）；C-T1 P1–P3 不自动并入。 |
 
+| [Decision-076](Decision-076-c03-loop-gw-material-and-rhythm-authorized.md) | 2026-08-31 | Accepted / C03-LOOP-GW authorized, ladder rhythm | 立项 C03-LOOP-GW：验收材料 = 本机 spruce_logistics_gateway @ feature/dev_20260831_loop_test（cc06c605，只读审查报告入库），三级节奏（①冒烟三项已授权 ②主测 P0-2 endsWith 绕过 ③批量正确性，逐级停等放行）；排除 P0-1/3/4 与 37 拷贝收敛（验收口径无法仓内自洽）；PKB 写入经 Exchange 派生；E5-L3 冻结不变，LOOP 真实 CLI 路径不在范围。 |
+
 ## 新增流程
 
 1. 取本索引中的最大编号加一；不得复用或填补编号。
