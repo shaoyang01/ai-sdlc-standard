@@ -141,3 +141,15 @@ JUnit5 单测不存在，无从运行。
   本地过 schema 预检重发成功。该行系照抄 #91 模板的冗余页脚，勿再复制。
 - 2026-09-01：W-GW-SMOKE 真实 run 结果回填 §3（本 commit）；Exchange/PKB/CP
   传播与缺口修复立项均待 Current User 指示。
+- 2026-09-01 治理回执（Decision-077 记录传播）：Decision-077 + 决策索引 commit
+  `e48ad3f`（与 §3 回填 `0b03780` 一并 push）；Exchange issue #93
+  （REQ-20260831T160944Z-C03-LOOP-GW-SMOKE-FAILCLOSED，label
+  `exchange-publish`）PUBLISHED，run `5b232bf` / pointer `7e23477` / handoff
+  sha256 `39a524de…b511`；PKB 派生归档 commit `0eeb366`
+  （feature/knowledge-base-v1，handoff 2026-08-31-c03-loop-gw-smoke-fail-closed
+  + current.md 指针）；CP PR #35 合 main（`aafc518`，validator PASS v2：
+  active_work C03-LOOP-GW-SMOKE BLOCKED、open blocker
+  C03_LOOP_GW_SMOKE_WIRING_GAP、C03_LOOP_GW_SMOKE 授权已消费移出 live 列表、
+  product_commit=`e48ad3f`、next_transition=
+  C03_LOOP_GW_SMOKE_WIRING_FIX_AUTHORIZATION_PENDING）。当前停驻：接线缺口修复
+  立项待 Current User 授权，②③不推进。
