@@ -71,3 +71,12 @@ SALT/CORS/盐迁 ACM（安全语义取舍，验收口径定不清）；P0-4 @Tra
   STATE 更新（branch `docs/c03-loop-gw-smoke-state` PR 合 main，常设授权）；PKB
   `current.md` 指针更新（`feature/knowledge-base-v1`）。均为 Current User「先做
   项目治理……都记录下来」显式要求授权。
+- 2026-08-31 治理回执（跨机核对用）：产品仓本链落档 commit `b8696c7`；Exchange
+  issue #92（REQ-20260831T115317Z-C03-LOOP-GW-GOV）PUBLISHED，run `efc6b31` /
+  pointer `771150a` / handoff sha256 `05a73a88…10aa`；PKB 派生归档 commit
+  `b66145a`（feature/knowledge-base-v1，handoff + current.md）；CP PR #34 合
+  main（route_state=`C03_LOOP_GW_ACCEPTANCE_IN_PROGRESS`，active_work=
+  `C03-LOOP-GW-SMOKE` RUNNING，product_commit=`b8696c7`）。
+- 2026-08-31 备注：Exchange 首次请求因 REQUEST 块尾部混入裸
+  `publication_request_id=` 行被发布器拒（INVALID_REQUEST_YAML），删除该行后
+  本地过 schema 预检重发成功。该行系照抄 #91 模板的冗余页脚，勿再复制。
