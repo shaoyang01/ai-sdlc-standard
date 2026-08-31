@@ -16,6 +16,14 @@
 | E5-L3 | 第 3 层 | 真实自主 fixture run：一次入口启动、完整八 execution point、`manual_agent_switch_count=0`、≥1 次受控 Re-Gate/恢复、只出人工 Git handoff | 同上 | E5-L2 PASS | ⏸️ **冻结：触发前须 Current User 再次确认。触发前另须评估（复审 §5-④ 非阻塞建议）：binding `timeoutMs=120_000`（`core/agent-capability-bindings.ts:63`）小于 kimi 处理 37KB 真实需求的实际时延，不评估则 L3 会遇 EXECUTOR_TIMEOUT 假失败** | 自主 run 证据面（待产） |
 | E5-C | 收口 | E5 复审 + Current User 验收裁决 → Decision → CP → Exchange/PKB 归档；`live_authorizations` 的 `E5_AUTONOMOUS_ACCEPTANCE` 整条移出 | — | E5-L3 PASS | ⏸️ 未开工 | CP/Exchange/PKB 回执 |
 
+> **挂起项收口波次（2026-08-31 立项，Current User 裁决：三个独立波 + 顺序 S3→S1→S2）**：下列三项原为散落备注（§3 平台缺陷、§5-④-① kimi flaky 开放项、§5-① 复审建议 1/2），此前**无台账条目 = 波次不存在**。现按「独立波、互不夹带、各自复审」立项，执行顺序由 Current User 排序：**E5-S3 → E5-S1 → E5-S2**。三者均不解除 E5-L3 冻结。
+
+| ID | 层 | 动作 | 目标面 | 依赖 | 状态 | Verification |
+| --- | --- | --- | --- | --- | --- | --- |
+| E5-S3 | 文档小改 | **挂起项③（文档小改，PENDING 授权）**：① 点明 S05 预算语义差——实现按**执行点**计数（`ExecutionPointRecoveryState.controlledFailuresSinceSuccess`：上次成功后的受控业务失败数，ATTEMPT_INTERRUPTED 不计入，`deriveDispatchCommand` 预算门 ≥2 即拒派），与规划 `LOOP-CORE-C03-E-PLAN.md` §7 S05 原文「同 binding 最多一次」的语义差需在文档点明（方向更严、fail-closed，可接受）；② 映射报告 `docs/reports/c03-e5-l1-negative-matrix-mapping.md` 泄密扫描引用行号过期 `:347` → 实际 `:365` 修正 | 两处文档与代码事实一致性 | W1 复审建议 §5-①-1/2 | ⏸️ **PENDING 授权（2026-08-31 立项）** | 文档逐条可复核、与代码事实一致；**不改代码、不改规划原文**（只补注记） |
+| E5-S1 | 根因调查 | **挂起项①（kimi canary flaky 根因，PENDING 授权）**：定位 kimi CLI canary flaky 的根因（既有线索：kimi 为原生 Mach-O 二进制，**与 WorkBuddy fs shim 无关**——已排除 G-STORE-1/2 同族根因）；产出可复核结论并登记台账；**若结论指向代码/配置修复 → 另立微波，本波不夹带任何产品代码改动** | kimi canary / 规模验证段（37KB）稳定性 | E5-L2 PASS 可复现基线 + E2-P 探活 PASS（2026-08-31） | ⏸️ **PENDING 授权（2026-08-31 立项）** | 复现/排除法取证链 + 台账结论行；本波零产品代码改动 |
+| E5-S2 | 外部上报 | **挂起项②（WorkBuddy 平台缺陷上报，PENDING 授权）**：依据 §3 G-STORE-1/2 改判取证（并发 link 的 EEXIST 竞态被 broker 包装为 `CODEBUDDY_BROKER_DENY`、**errno 丢失**；并发 link 探针 3/3 轮 loser 一致；`env -u NODE_OPTIONS` 下 266/268 passed 0 failed 多轮稳定）整理平台缺陷上报稿 + 最小复现步骤；**上报动作本身需 Current User 单独授权**（外部发布，未获授权不发送） | 上报稿 + §3 证据包 | §3 改判取证完备 | ⏸️ **PENDING 授权（2026-08-31 立项）** | 上报稿事实与 §3 逐条一致、附复现脚本与探针结果；**未获授权不对外发送** |
+
 ## 2. 边界（Decision-075 全程有效）
 
 - 全程零业务仓写入、零远程 Git 副作用、零 merge/push/发布；attempt 隔离 staging。
