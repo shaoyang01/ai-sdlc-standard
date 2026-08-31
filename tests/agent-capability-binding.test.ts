@@ -25,6 +25,7 @@ import { isSupportedCodexRequestType } from "../execution/codex-real-dispatch-ru
 import { createCodexFakeRunner } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
 import { createCodexRealDispatchRunner } from "../execution/codex-real-dispatch-real-runner";
+import { AGENT_CLI_PROFILES } from "../execution/agent-cli-profile";
 import type { ExecutionRequest, ExecutionRequestType } from "../execution/types";
 
 let passed = 0;
@@ -611,6 +612,33 @@ console.log("binding: C03-E W1 Q1 slot→agent matrix (Decision-073)");
   const verdict = getEnabledBinding(INITIAL_BINDING_REGISTRY, "solution-gate", "formal_verdict");
   assert(scan.agent === "codex" && verdict.agent === "hermes", "solution-gate scan=codex verdict=hermes");
   assert(scan.agent !== verdict.agent, "solution-gate scan and verdict use different agents");
+}
+
+console.log("binding: per-class wall clock mirrors profile budgets (E5-T1 drift guard)");
+{
+  // E5-T1: the binding timer is the effective ceiling of a real dispatch, so
+  // every binding's timeoutMs must equal the profile budget of its capability
+  // class. If these sources drift apart, one layer silently truncates the
+  // other again (the former flat 120 s binding wall made every profile
+  // budget unreachable — see E5 ledger §5-⑨).
+  assert(
+    AGENT_CLI_PROFILES.kimi.timeoutMsByCapabilityClass["non-implementation"] === 45 * 60 * 1000,
+    "profile non-implementation budget is 45 min (Current User ruling)",
+  );
+  assert(
+    AGENT_CLI_PROFILES.kimi.timeoutMsByCapabilityClass.implementation === 60 * 60 * 1000,
+    "profile implementation budget is 60 min (Current User ruling)",
+  );
+  const budgetFor = (capability: string): number =>
+    capability === "implementation"
+      ? AGENT_CLI_PROFILES.kimi.timeoutMsByCapabilityClass.implementation
+      : AGENT_CLI_PROFILES.kimi.timeoutMsByCapabilityClass["non-implementation"];
+  for (const binding of INITIAL_BINDING_REGISTRY.bindings) {
+    assert(
+      binding.timeoutMs === budgetFor(binding.capability),
+      `${binding.bindingId}: timeoutMs ${binding.timeoutMs}ms mirrors its class budget`,
+    );
+  }
 }
 
 console.log(`Results: ${passed} passed, ${failed} failed`);

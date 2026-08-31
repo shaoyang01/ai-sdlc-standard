@@ -138,8 +138,10 @@ async function main(): Promise<void> {
   eq(AGENT_CLI_BOUNDS.runForegroundBudgetMs, 2 * 60 * 60 * 1000, "run budget 2h");
   for (const id of AGENT_CLI_PROVIDER_IDS) {
     const t = getAgentCliProfile(id).timeoutMsByCapabilityClass;
-    eq(t["non-implementation"], 10 * 60 * 1000, `${id} non-impl timeout 10min`);
-    eq(t.implementation, 30 * 60 * 1000, `${id} impl timeout 30min`);
+    // E5-T1 (2026-08-31 Current User ruling): 45 min non-implementation /
+    // 60 min implementation, mirrored by the per-class binding wall clocks.
+    eq(t["non-implementation"], 45 * 60 * 1000, `${id} non-impl timeout 45min`);
+    eq(t.implementation, 60 * 60 * 1000, `${id} impl timeout 60min`);
   }
 
   console.log("agent-cli-profile: fail-closed lookups");

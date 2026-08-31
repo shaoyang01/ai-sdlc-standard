@@ -60,7 +60,16 @@ const ADAPTER_BY_AGENT: Record<AgentName, string> = {
 };
 
 const BINDING_VERSION = "2.0.0";
-const BINDING_TIMEOUT_MS = 120_000;
+// Per-class binding wall clock (E5-T1, 2026-08-31 Current User ruling:
+// non-implementation 45 min / implementation 60 min). The binding timer arms
+// before the profile's per-attempt process budget, so it is the effective
+// ceiling of a real dispatch and must mirror the profile budgets in
+// execution/agent-cli-profile.ts (TIMEOUT_BY_CLASS); the drift-guard test in
+// tests/agent-capability-binding.test.ts pins the two sources equal. The
+// former flat 120_000 truncated every profile budget in the real chain
+// (E5 ledger §5-⑨).
+const BINDING_TIMEOUT_NON_IMPL_MS = 45 * 60 * 1000;
+const BINDING_TIMEOUT_IMPL_MS = 60 * 60 * 1000;
 const REGISTRY_VERSION = "1";
 const LOOP_AGENTS: readonly AgentName[] = ["codex", "kimi", "hermes"];
 const BINDING_FIELDS = [
@@ -302,7 +311,10 @@ function buildBindings(): AgentCapabilityBinding[] {
         outputContract: "node-output-contract:v2",
         validator: "node-output-contract:v2",
         allowedSideEffects: ["workspace-local-write", "run-journal-write"],
-        timeoutMs: BINDING_TIMEOUT_MS,
+        // Same class derivation as the real adapter's capabilityClass.
+        timeoutMs: point.capability === "implementation"
+          ? BINDING_TIMEOUT_IMPL_MS
+          : BINDING_TIMEOUT_NON_IMPL_MS,
         failurePolicy: "retry_other_binding",
         enabled: agent === q1SlotAgent(point.capability, point.executionRole),
       });

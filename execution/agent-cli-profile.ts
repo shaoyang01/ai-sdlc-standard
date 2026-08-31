@@ -141,11 +141,14 @@ export const AGENT_CLI_BOUNDS: AgentCliBounds = Object.freeze({
   runForegroundBudgetMs: 2 * 60 * 60 * 1000, // 2 h; stays resumable, never faked
 });
 
-// Per-attempt timeouts (§9). The LoopPosixProcessRunner ceiling was raised to
-// MAX_TO=1800000 (a135a36) to accept the 30 min implementation attempt while
-// its conservative default stays 120 s; non-implementation stays at 10 min.
-const NON_IMPL_TIMEOUT_MS = 10 * 60 * 1000;
-const IMPL_TIMEOUT_MS = 30 * 60 * 1000;
+// Per-attempt timeouts (§9). The LoopPosixProcessRunner ceiling tracks the
+// largest per-attempt budget (raised to MAX_TO=1800000 by a135a36 for the
+// 30 min implementation attempt; raised to 3600000 by E5-T1). E5-T1
+// (2026-08-31, Current User ruling) re-scaled both classes together with the
+// binding wall clocks — the former flat 120 s binding default truncated these
+// budgets in the real chain (E5 ledger §5-⑨).
+const NON_IMPL_TIMEOUT_MS = 45 * 60 * 1000;
+const IMPL_TIMEOUT_MS = 60 * 60 * 1000;
 
 const TIMEOUT_BY_CLASS: Readonly<Record<CapabilityClass, number>> = Object.freeze({
   "non-implementation": NON_IMPL_TIMEOUT_MS,

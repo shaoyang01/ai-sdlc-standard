@@ -1,8 +1,10 @@
 // LOOP POSIX Runner — C03-E E2 per-attempt timeout ceiling (plan §9, Q4)
 // ========================================================
-// The implementation-attempt bound is 30 min (1800000 ms). The runner must
-// accept it at construction and reject anything above, while its conservative
-// default is unchanged. No long wait is performed — only option validation.
+// The implementation-attempt bound is 60 min (3600000 ms, E5-T1 2026-08-31 —
+// raised from 1800000 together with the re-scaled profile budgets and binding
+// wall clocks). The runner must accept it at construction and reject anything
+// above, while its conservative default is unchanged. No long wait is
+// performed — only option validation.
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import {
@@ -31,33 +33,34 @@ function makeRunner(defaultTimeoutMs: number | undefined): void {
 }
 
 function main(): void {
-  // 1800000 (30 min implementation attempt) is accepted.
+  // 3600000 (60 min implementation attempt, E5-T1) is accepted.
   let accepted = true;
   try {
-    makeRunner(1800000);
+    makeRunner(3600000);
   } catch (e) {
     accepted = false;
     console.error(String(e));
   }
-  ok(accepted, "defaultTimeoutMs=1800000 (30min) accepted");
+  ok(accepted, "defaultTimeoutMs=3600000 (60min) accepted");
 
-  // 600000 (old ceiling) still accepted.
-  let oldOk = true;
+  // 1800000 (E2-era ceiling, a135a36) and 600000 (old ceiling) still accepted.
+  let prevOk = true;
   try {
+    makeRunner(1800000);
     makeRunner(600000);
   } catch {
-    oldOk = false;
+    prevOk = false;
   }
-  ok(oldOk, "defaultTimeoutMs=600000 still accepted");
+  ok(prevOk, "defaultTimeoutMs=1800000/600000 still accepted");
 
-  // Anything above 30 min is rejected fail-closed at construction.
+  // Anything above 60 min is rejected fail-closed at construction.
   let code = "NONE";
   try {
-    makeRunner(1800001);
+    makeRunner(3600001);
   } catch (e) {
     code = e instanceof LoopPosixProcessRunnerError ? e.code : "OTHER";
   }
-  ok(code === "INVALID_INPUT", `defaultTimeoutMs=1800001 rejected (got ${code})`);
+  ok(code === "INVALID_INPUT", `defaultTimeoutMs=3600001 rejected (got ${code})`);
 
   // Below minimum rejected.
   let lowCode = "NONE";

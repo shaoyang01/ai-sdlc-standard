@@ -215,7 +215,8 @@ async function main(): Promise<void> {
   {
     const runner = new FakeRunner(() => result({ stdout: "x" }));
     await new RealCapabilityAdapter(runner).execute(baseReq({ capability: "solution-design" }));
-    ok(runner.last?.timeoutMs === 10 * 60 * 1000, "non-implementation timeout 10min");
+    // E5-T1 (2026-08-31 Current User ruling): 45/60 min profile budgets.
+    ok(runner.last?.timeoutMs === 45 * 60 * 1000, "non-implementation timeout 45min");
     ok(runner.last?.maxStdoutBytes === 256 * 1024 && runner.last?.maxStderrBytes === 64 * 1024, "stream bounds 256KiB/64KiB");
   }
   {
@@ -225,7 +226,7 @@ async function main(): Promise<void> {
       // implementation-class probe must carry stdinContent like a real call.
       baseReq({ providerId: "codex", capability: "implementation", node: "implementation", stdinContent: "implementation task content" }),
     );
-    ok(runner.last?.timeoutMs === 30 * 60 * 1000, "implementation timeout 30min");
+    ok(runner.last?.timeoutMs === 60 * 60 * 1000, "implementation timeout 60min");
   }
 
   console.log("real-adapter: fail-closed process-state matrix");

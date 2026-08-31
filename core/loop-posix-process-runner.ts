@@ -31,11 +31,15 @@ export type LoopPosixProcessRunnerErrorCode = "INVALID_INPUT"|"UNSUPPORTED_PLATF
 const MAX_MSG=256, EXEC_RE=/^[a-z][a-z0-9_-]{0,63}$/, ENV_KEY_RE=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const DANGER_KEYS=["LD_PRELOAD","LD_LIBRARY_PATH","DYLD_INSERT_LIBRARIES","DYLD_LIBRARY_PATH","NODE_OPTIONS","BASH_ENV","ENV"];
 const MAX_ARGS=128,MAX_ARG_B=4096,MAX_ARGS_TOTAL=32768,MAX_ENV=128,MAX_ENV_VAL=4096,MAX_ENV_TOTAL=32768,MAX_ALLOWED_KEYS=128;
-// C03-E E2 (plan §9, Q4): per-attempt ceiling is 30 min so an implementation
-// attempt bound (1800000 ms) is accepted. The conservative DEFAULT stays 120 s;
-// only an explicit profile/request raises it. This is a resource ceiling, not
-// a cancellation policy — TERM→KILL cleanup is unchanged.
-const DEF_TO=120000,DEF_GRACE=2000,DEF_SO=1048576,DEF_SE=262144,DEF_SI=1048576,MAX_SI=16777216,MAX_OUT=16777216,MIN_TO=100,MAX_TO=1800000,MIN_GR=10,MAX_GR=10000;
+// C03-E E2 (plan §9, Q4): per-attempt ceiling tracks the largest profile
+// budget. a135a36 raised it to 1800000 ms for the 30 min implementation
+// attempt; E5-T1 (2026-08-31) raises it to 3600000 ms so the re-scaled
+// profile budgets (45 min non-implementation / 60 min implementation,
+// Current User ruling) remain accepted — an out-of-range timeoutMs fails
+// INVALID_INPUT. The conservative DEFAULT stays 120 s; only an explicit
+// profile/request raises it. This is a resource ceiling, not a cancellation
+// policy — TERM→KILL cleanup is unchanged.
+const DEF_TO=120000,DEF_GRACE=2000,DEF_SO=1048576,DEF_SE=262144,DEF_SI=1048576,MAX_SI=16777216,MAX_OUT=16777216,MIN_TO=100,MAX_TO=3600000,MIN_GR=10,MAX_GR=10000;
 
 function sn(msg:string):string{return msg.replace(/[\x00-\x1f\x7f-\x9f]/g," ").slice(0,MAX_MSG)}
 export class LoopPosixProcessRunnerError extends Error{readonly code:LoopPosixProcessRunnerErrorCode;constructor(code:LoopPosixProcessRunnerErrorCode,msg:string){super(sn(msg));this.name="LoopPosixProcessRunnerError";this.code=code}}
