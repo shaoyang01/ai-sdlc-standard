@@ -32,7 +32,7 @@
 
 | 级 | 内容 | 能力类 | 状态 |
 |----|------|--------|------|
-| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | **RUNNING** |
+| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | **FAIL-CLOSED（runtime 接线缺口待裁决，见 §3-W-GW-SMOKE 回填）** |
 | ② 主测 | P0-2：6 filter `endsWith(getURI())` query-string 绕过修复 + 单测（`?x=.js` 不再放行） | 实现类 | PENDING 放行 |
 | ③ 批量 | NPE 判空（`GatewayConfigCacheServiceImpl:161`）+ 缓存字段 volatile + Dict 空列表守卫 | 非实现类 | PENDING 放行 |
 
@@ -50,8 +50,67 @@ SALT/CORS/盐迁 ACM（安全语义取舍，验收口径定不清）；P0-4 @Tra
 - **范围**：上述 ① 三项，范围严格限定，不夹带其他缺陷。
 - **执行环境**：本机会话 agent（Current User 在场）；LOOP-runtime 真实 CLI run
   不在本波范围。
-- **状态**：RUNNING（治理落档后立即实施）。
-- **回填**：待实施完成后补（commit 链、验证输出、停驻点）。
+- **状态**：FAIL-CLOSED——真实 run 在 requirement-intake/primary 即刹车，三项
+  缺陷修复未产出；根因为 runtime 仓真实接线缺口，修复待 Current User 裁决。
+- **回填**：见下方 2026-09-01 回填块（证据、根因、审计、停驻点）。
+
+#### W-GW-SMOKE 回填（2026-09-01，冒烟真实 run 结果）
+
+**口径变更（Current User 裁决，本块如实记录）**：冒烟定位改为「测试 LOOP
+runtime 本体」——三项 spruce 缺陷是喂给 LOOP 的需求输入，由 LOOP 自主解决，
+会话 agent 不得手改代码；真实 CLI run 经 Current User 显式放行（原登记
+「执行者=本会话 agent；真实 CLI run 不在本波范围」按当时口径保留不改写，以本
+块为准）。执行方式：Current User 将本会话产出的冒烟 brief 交 kimi 会话执行，
+kimi 只负责装配入口脚本、执行、验收、报告，不亲手改 Java 代码。
+
+**冒烟脚本**：`scripts/loop-gw-smoke-real.ts`（新增未跟踪文件，入库与否待
+裁决）。按旧脚本 `codex-runtime-real-smoke.ts` 的 Q1 STALE 头注重写为三 agent
+形态：`LoopPosixProcessRunner`（kimi/codex/hermes 经 which -a + --version 解析）
++ `RealCapabilityAdapter` + `run(requirement, { capabilitySource: "real",
+realGatewayDeps: { adapter, attemptWorkspace } })`；六个 SDLC_* 环境确认变量由
+脚本自检并设置；`tsc --noEmit` 全绿。旧脚本未改动。
+
+**执行记录**：
+- run1：立即失败——better-sqlite3 为 Node 24（NODE_MODULE_VERSION 137）编译，
+  默认 node v22.23.0 ABI 不符；切 `~/.nvm/versions/node/v24.12.0` 后重跑。
+  环境问题，非链路问题。
+- run2（正式）：runId `run-REQ-LOOP-GW-mthexwux-1788191319709`，退出码 2
+  （fail-closed）。trace 断点：`requirement-intake/primary : kimi : started →
+  failed (EXECUTOR_EXCEPTION, 4ms, 无进程证据)`；其余六节点未到达；
+  `final_status=failed`，`chain_status=READY`，next_execution_point=
+  `requirement-intake/primary`。journal：
+  `/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/loop-gw-smoke-9FYbkw/journal.db`
+  （注入 stores 时 `journal_path` 返回 null，实际路径为 fixtureRoot/journal.db
+  ——观测小瑕疵，不阻塞；诊断探针在同 journal 追加过 seq 3–4 attempt-2 记录，
+  与正式 run seq 1–2 可区分，同因）。
+
+**根因（kimi 直击探针实证，非推测）**：`run()` 派发时 input 仅含
+`{ inputArtifactRef }`（runtime.ts:737-740），而
+`RealCapabilityGateway.extractInputText` 只认 inputText/text/prompt/requirement
+自由文本键（real-capability-gateway.ts:68-77）→ 预进程阶段抛
+`REAL_GATEWAY_NO_INPUT`，tracing 层按设计把消息抹成 EXECUTOR_EXCEPTION 落账。
+E5-L2 canary 走手工构造 entry 请求（自带文本）故从未暴露；`run()` + real 端到
+端在 HEAD `9d84f30` 上系首次真实驱动，缺口即在此处暴露。**结论：E5 验收未覆
+盖 run()+real 生产端到端路径，本冒烟首次驱动即补上该盲区。**
+
+**冒烟判定**：合法冒烟证据，fail-closed 刹车性能通过——无假 PASS、退出码干净、
+无半成品污染。三项缺陷修复未产出，主链推进被阻断。
+
+**改动审计**：spruce 仓 `git diff --stat` 为空、status 干净（失败点在 prompt
+staging 之前，无 prompt-input 残留）；runtime 仓仅新增未跟踪
+`scripts/loop-gw-smoke-real.ts`。无任何 commit/push。
+
+**编译与单测**：无可验代码改动。基线 `mvn -o -q compile` 全绿（exit 0）；新增
+JUnit5 单测不存在，无从运行。
+
+**超时张力销项**：brief 中「120s/次」旋钮属已退役的 codexRealDispatchConfig
+路径；HEAD 上 Q1 adapter 超时由 profile 权威决定（E5-T1，2026-08-31：非实现类
+45min、实现类 60min，runner 上限 3600000ms）——E5 复审遗留的 timeout 张力在上
+游已重定标，本台账不再挂该项。本次运行未到达任何 CLI spawn，无超时现象。
+
+**停驻点**：接线缺口修复（`run()` 与 `RealCapabilityGateway` 的 input 接线，
+属 runtime 仓改动 + 最小回归测试）超出本波授权，待 Current User 裁决是否立项
+修复；修复前冒烟无法推进。
 
 ## 4. 跨机续作指南（回家机）
 
@@ -80,3 +139,5 @@ SALT/CORS/盐迁 ACM（安全语义取舍，验收口径定不清）；P0-4 @Tra
 - 2026-08-31 备注：Exchange 首次请求因 REQUEST 块尾部混入裸
   `publication_request_id=` 行被发布器拒（INVALID_REQUEST_YAML），删除该行后
   本地过 schema 预检重发成功。该行系照抄 #91 模板的冗余页脚，勿再复制。
+- 2026-09-01：W-GW-SMOKE 真实 run 结果回填 §3（本 commit）；Exchange/PKB/CP
+  传播与缺口修复立项均待 Current User 指示。
