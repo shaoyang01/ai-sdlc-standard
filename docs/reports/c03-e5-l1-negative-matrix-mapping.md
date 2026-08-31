@@ -68,11 +68,11 @@
 | S02 blocking findings 回流 | ledger 持久化、下游失效重走 | ✅ | `loop-finding-lifecycle` 350 + `loop-wp4-regate` |
 | S03 verdict 未绑定本轮 ledger | `OUTPUT_CONTRACT_VIOLATION` | ✅ | W5（错 Agent / 双 Gate role 类）+ `execution/gateway.ts` 实现码 |
 | S04 CLI 不存在 | `EXECUTOR_UNAVAILABLE`，无 shadow fallback | ✅（机制级） | W2 三条件 fail-closed 不回落 + `loop-validation-guards`；真实 CLI 行为 → L2 |
-| S05 非零退出无工作区变化 | failed event；**同 binding 最多一次受控重试** | ⚠️ **缺口 G-S05** | failed event + SAFE_RETRY + 同输入门控已有；**「至多一次」预算无实现无测试**（全仓无 `attemptBudget`/`maxAttempts` 生产逻辑，`MAX_ATTEMPT` 仅 adapter 内 1e6 解析上限） |
+| S05 非零退出无工作区变化 | failed event；**同 binding 最多一次受控重试** | ⚠️ **缺口 G-S05** | failed event + SAFE_RETRY + 同输入门控已有；**「至多一次」预算无实现无测试**（全仓无 `attemptBudget`/`maxAttempts` 生产逻辑，`MAX_ATTEMPT` 仅 adapter 内 1e6 解析上限）→ **E5-W1-① 已修复**；**实现口径与规划原文的语义差见 G-S05 行（E5-S3 点明）** |
 | S06 timeout 且 worktree 有变化 | 保留隔离 attempt，进 recovery verification | ✅ | runner `timed_out`（`loop-posix-runner-timeout-bound` 5 断言）+ W6b3 isolate + VERIFY_STAGED/CLEANUP_REQUIRED |
 | S07 exit 0 缺 digest | invalid；不 promotion 不推进 | ✅ | W5 invalid output 类 |
 | S08 result 指向 allowed path 外 | `WORKSPACE_BOUNDARY_VIOLATION`，run blocked | ⚠️ **码名漂移 G-S08** | 语义已实现且复审 PASS：`classifyWorkspaceCleanup` → block 抛 **`CLEANUP_BLOCKED`**（W6b3/4/5，47 断言）。规划文本的码名与实现不一致——语义等价（run blocked + 证据保留），建议规划修订为实际码名，非代码改动 |
-| S09 stdout 超限/疑似 token 回显 | 截断/泄密失败证据；原文不落 journal | ⚠️ **缺口 G-S09（范围更正）** | runner 层有 `stdoutTruncated/stderrTruncated/字节计数` 机制（`loop-posix-process-runner.ts:27,188`）；**E5-W1 复核更正**：(a) 截断机制有测试（`tests/loop-posix-process-runner.test.ts:127/346`），(c) 泄密扫描已实现且有测试（`execution/real-capability-adapter.ts:347` + `tests/real-capability-adapter.test.ts:201`）——L1 首轮检索因工具交替语法缺陷误报零命中；**唯一真缺口 = (b)**：gateway 终态事件（succeeded/failed 两路）process 字段硬编码 null，real 链路的调用摘要/退出/截断证据未映射进 journal（E5-W1-② 修复） |
+| S09 stdout 超限/疑似 token 回显 | 截断/泄密失败证据；原文不落 journal | ⚠️ **缺口 G-S09（范围更正）** | runner 层有 `stdoutTruncated/stderrTruncated/字节计数` 机制（`loop-posix-process-runner.ts:27,188`）；**E5-W1 复核更正**：(a) 截断机制有测试（`tests/loop-posix-process-runner.test.ts:127/346`），(c) 泄密扫描已实现且有测试（`execution/real-capability-adapter.ts:142`（`SECRET_PATTERNS`）/ `:149-151`（`looksLikeSecret`）、调用点 `:460`；测试 `tests/real-capability-adapter.test.ts:253`）——**E5-S3 行号订正**：原引 `:347`（现为 `timeoutMs` 字段）与测试 `:201`（现为空块起始）系 E5-W3 改动后漂移；复审建议的替换值 `:365` 经本机逐行复核**同样不指向泄密扫描**（现为 `);`），未采用，改按实测行号订正——L1 首轮检索因工具交替语法缺陷误报零命中；**唯一真缺口 = (b)**：gateway 终态事件（succeeded/failed 两路）process 字段硬编码 null，real 链路的调用摘要/退出/截断证据未映射进 journal（E5-W1-② 修复） |
 | S10 result 已写、terminal append 前崩溃 | resume 重验 staging 幂等提交，不再调 Agent | ✅ | `loop-capability-execution.test.ts:1066` terminal-write loss |
 | S11 terminal 成功、revision 未写崩溃 | pending materialization 幂等补写 | ✅ | `loop-regate-dispatch-window` + W6a T2-A4 |
 | S12 并发 resume | lease + claim CAS 至多一个 spawn | ✅ | W6b1 T7 + `loop-run-concurrency` |
@@ -103,7 +103,7 @@ crash window 做 fault injection」。
 
 | ID | 内容 | 严重度 | 处置建议 |
 | --- | --- | --- | --- |
-| **G-S05** | 受控重试预算缺失：S05 要求「同 binding 最多一次受控重试」，实现只有「同输入 + retryable」门控，无计数上限、无测试 | 中 | 新波次实现 retry 计数上限（journal 层同输入计数即可），逐波复审 |
+| **G-S05** | 受控重试预算缺失：S05 要求「同 binding 最多一次受控重试」，实现只有「同输入 + retryable」门控，无计数上限、无测试 | 中 | **E5-W1-① 实现**：计数 `core/loop-recovery.ts:497-503`（上次成功后的受控业务失败数，`ATTEMPT_INTERRUPTED` 不计入）；预算门 `core/loop-recovery.ts:962`（`controlledFailuresSinceSuccess >= 2` → `ILLEGAL_TRANSITION` 拒派，零 journal 副作用）；测试 `loop-s05-retry-budget` 12 断言。**E5-S3（2026-08-31）语义差点明**：实现按**执行点**计数，而规划 `docs/LOOP-CORE-C03-E-PLAN.md:502` S05 原文为「同 binding 最多一次受控重试」——**按执行点比按 binding 更严（fail-closed）**，W1 复审判定「方向更严、可接受」。**规划原文不改，仅在此点明语义差** |
 | **G-S09** | 截断证据链断裂：~~runner 有 truncation 机制但零测试覆盖~~（更正：有测试）~~泄密扫描未实现~~（更正：adapter 已实现且有测试）；**真缺口 = real 链路未映射 process 证据进 journal 终态事件**（succeeded/failed 两路硬编码 null，且无 invocationDigest 生产者） | 中 | E5-W1-② 修复：adapter 计算调用摘要 + 产出 processEvidence；real gateway 转发带证据失败；tracing gateway 映射进两路终态事件 |
 | **G-S08** | 码名漂移：规划 S08 `WORKSPACE_BOUNDARY_VIOLATION` vs 实现 `CLEANUP_BLOCKED` | 低 | 仅规划文本修订（语义已实现且 PASS），随下次规划维护批次处理 |
 | **G-WINDOW** | spawn/result/validation 三 crash window 无逐点专用注入（dispatch 级泛化覆盖） | 低 | 判口径差异；二选一：微波补注入，或规划口径修订 |
