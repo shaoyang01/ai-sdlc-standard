@@ -287,9 +287,11 @@ JUnit5 单测不存在，无从运行。
 
 ## 4. 跨机续作指南（回家机）
 
-1. 拉取三仓：产品仓 `shaoyang01/ai-sdlc-standard`（fact branch
+1. 拉取四仓：产品仓 `shaoyang01/ai-sdlc-standard`（fact branch
    `feature/c03-e5-autonomous-acceptance`，本台账所在）；CP `main`；PKB
-   `feature/knowledge-base-v1`。
+   `feature/knowledge-base-v1`；Exchange `main`（只读——恢复上下文读最新
+   handoff，即 issue #96 的 `…-run4-parked-rework-deferred/handoff.md`，与
+   PKB handoff 逐字节一致；Exchange 单写者归 Publisher，会话不得直写）。
 2. 被验仓本机路径 `/Users/eric_shaoooo/meicai/projects/spruce_logistics_gateway`，
    分支 `feature/dev_20260831_loop_test`（远程已存在，直接 checkout）。
 3. 构建：Java 21（Zulu）+ Maven 3.9.3 已验证可用；冒烟验证命令 =
