@@ -63,15 +63,39 @@ export interface RealCapabilityGatewayDeps {
   readonly adapter: RealGatewayAdapter;
   /** Resolve the attempt workspace cwd for a request (production injects it). */
   readonly attemptWorkspace: (request: ExecutionRequest) => string;
+  /**
+   * Resolve a loop input artifact ref to its text. Bound to the run's OWN
+   * artifact store by createCapabilityGateway (the single assembly point):
+   * canonical run() dispatch carries only { inputArtifactRef }, and the
+   * store is not reachable from here. A directly-constructed gateway without
+   * this resolver keeps failing closed on artifact-ref-only requests.
+   */
+  readonly artifactText?: (artifactRef: string) => string;
 }
 
 const INPUT_TEXT_KEYS = ["inputText", "text", "prompt", "requirement"] as const;
 
-function extractInputText(input: Record<string, unknown> | undefined): string {
+function extractInputText(
+  input: Record<string, unknown> | undefined,
+  artifactText?: (artifactRef: string) => string,
+): string {
   if (input === undefined) fail("REAL_GATEWAY_NO_INPUT", "node request has no input");
   for (const key of INPUT_TEXT_KEYS) {
     const value = input[key];
     if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  // W-GW-FIX (Decision-078): the canonical run() dispatch hands each node its
+  // input as { inputArtifactRef } — resolve the loop's own artifact instead of
+  // dying pre-staging. Free-text keys above keep precedence (hand-built entry
+  // requests from the canary/tests are unchanged).
+  const ref = input["inputArtifactRef"];
+  if (typeof ref === "string" && ref.trim().length > 0) {
+    if (artifactText === undefined) {
+      fail("REAL_GATEWAY_NO_INPUT", "node request carries only inputArtifactRef but no artifactText resolver is wired");
+    }
+    const resolved = artifactText(ref);
+    if (typeof resolved === "string" && resolved.trim().length > 0) return resolved;
+    fail("REAL_GATEWAY_NO_INPUT", `input artifact resolved to empty text for ref ${ref}`);
   }
   fail("REAL_GATEWAY_NO_INPUT", "node request carries no non-empty input text");
 }
@@ -143,7 +167,7 @@ export class RealCapabilityGateway extends ExecutionGateway {
     const role = executionRole as CapabilityExecutionRole;
     const providerId = enriched.agent as AgentCliProviderId;
 
-    const inputText = extractInputText(enriched.input);
+    const inputText = extractInputText(enriched.input, this.realDeps.artifactText);
     const cwd = this.realDeps.attemptWorkspace(enriched);
 
     // ── E5-W3 plan C: keep the instruction shell small and constant ──

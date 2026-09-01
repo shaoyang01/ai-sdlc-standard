@@ -90,7 +90,15 @@ export function createCapabilityGateway(options: CapabilityGatewayFactoryOptions
           now,
         },
       },
-      realDeps,
+      {
+        ...realDeps,
+        // W-GW-FIX (Decision-078): the loop's input artifacts live in THIS
+        // factory's artifact store, and run() dispatches only
+        // { inputArtifactRef } — so the text resolver is bound here, the one
+        // place both sides meet. Callers (smoke script, future production
+        // door) get the wiring without per-caller assembly.
+        artifactText: (artifactRef: string) => artifactStore.read(artifactRef).toString("utf8"),
+      },
     );
   }
 
