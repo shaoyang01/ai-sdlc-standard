@@ -35,7 +35,7 @@
 | W-GW-FIX（前置波） | REAL_GATEWAY_NO_INPUT 接线缺口修复 + run()+real 最小回归 + 冒烟重跑 | runtime 仓 | 修复+回归完成（`69f72cd`）；重跑已执行并真实推进至 gate 后合法停等（PASS_WITH_RISK，待 Current User 决策卡裁决） |
 | W-GW-DIAG（问题修复波 1） | P-E 最小释放门（--release + 审计证据 + 合法矩阵）+ P-A 后进程证据包装 + P-I journal_path | runtime 仓 | **IMPLEMENTED**（Decision-079 波 1，`a6e1ece`；新增 33 checks） |
 | W-GW-PREP（问题修复波 2） | P-B C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect | runtime 仓 | **IMPLEMENTED**（Decision-079 波 2，`31c63eb`；新增 7 checks 含真实 git 仓 e2e） |
-| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | 重发冒烟已发起（run4，修复波落地后全新 run） |
+| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | run4 推进至 gate 后停等：正式裁决 **FAIL**（ADV-004/005，需方案返工重进门禁），待 Current User 决策卡 |
 | ② 主测 | P0-2：6 filter `endsWith(getURI())` query-string 绕过修复 + 单测（`?x=.js` 不再放行） | 实现类 | PENDING 放行 |
 | ③ 批量 | NPE 判空（`GatewayConfigCacheServiceImpl:161`）+ 缓存字段 volatile + Dict 空列表守卫 | 非实现类 | PENDING 放行 |
 
@@ -160,6 +160,34 @@ git 仓上无钩子 fresh run 仍 `WORKSPACE_NOT_FOUND`（钉住缺口）、有�
 
 两波 tsc clean；全量 155 测试文件 22 个失败均为既有 hermes-guardrail 项
 （P-G 同源），无新增失败。
+
+### run4 重发冒烟回填（2026-09-01，修复波落地后全新 run）
+
+**runId** `run-REQ-LOOP-GW-mtijjrbl-1788259523604`（fixture
+`…/loop-gw-smoke-NCpMNL`，易失目录；关键事实引述如下）：
+- 首段：intake kimi 174s ✓ → design kimi 479s ✓（一次过）→ gate scan codex
+  135s ✓ → **formal_verdict attempt 1 failed `REAL_GATEWAY_ENVELOPE_INVALID`**
+  （hermes 53s，exit 0，输出未过信封校验）——**P-A 修复直接生效**：失败原因与
+  进程证据（exit/duration）首次无需考古即可从 journal 读出；链 READY 可续跑；
+- resume（attempt 2）：formal_verdict succeeded，**`gate_result = FAIL`**
+  （decisionDepth=STANDARD，scope 绑定，exit 0）→ 链于 gate 后合法停等
+  （BLOCKED，无 next point）。scan 本轮未产出 findings（空 ledger），FAIL 纯
+  粹来自裁决文本；
+- **裁决内容（hermes，实证级）**：ADV-004 [HIGH]——方案声称「null byte[] 继
+  续抛 IllegalArgumentException + 零行为变化 + 测试全绿」三者矛盾，hermes 在
+  OpenJDK 21.0.4 实测 `MessageDigest.getInstance("MD5").update((byte[])null)`
+  实抛 **NullPointerException**，要求修订契约表述或显式声明行为变更；
+  ADV-005 [MEDIUM]——`mvn -pl … -am` 不构建下游模块，方案 §4/§6 的确定性断
+  言无法闭环消费者边界，要求全仓 test-compile / `-amd` / 依赖图证明三选一；
+  裁决明确「不允许携带风险放行」，退出条件四条写入裁决正文；
+- P-I 补全（5 处 journal_path 全部回填）在 run4 期间落账，run4 日志仍为 null
+  属时序正常；
+- 停驻点：FAIL ≠ 可释放状态（释放门仅适用于 PWR/预算阻塞，矩阵 fail-closed
+  拒绝），出路为方案返工重进门禁（Re-Gate 语义），待 Current User 决策卡。
+
+**观察**：两次冒烟（run3/run4）+ resume 共 9 次真实节点派发，P-F（信封合规
+概率）累计 2 次不合规 / 9 次；P-A 落地后每次均有完整证据。门禁连续两轮产出
+实质对抗结论（run3 PWR、run4 FAIL），LOOP 验收链的核心价值得到真实验证。
 
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 
