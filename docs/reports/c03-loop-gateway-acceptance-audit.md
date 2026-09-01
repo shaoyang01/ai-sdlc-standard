@@ -33,7 +33,9 @@
 | 级 | 内容 | 能力类 | 状态 |
 |----|------|--------|------|
 | W-GW-FIX（前置波） | REAL_GATEWAY_NO_INPUT 接线缺口修复 + run()+real 最小回归 + 冒烟重跑 | runtime 仓 | 修复+回归完成（`69f72cd`）；重跑已执行并真实推进至 gate 后合法停等（PASS_WITH_RISK，待 Current User 决策卡裁决） |
-| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | 重跑真实推进至 solution-gate 后停等（三项缺陷未产出；旧 4ms 死点已由 W-GW-FIX 消除） |
+| W-GW-DIAG（问题修复波 1） | P-E 最小释放门（--release + 审计证据 + 合法矩阵）+ P-A 后进程证据包装 + P-I journal_path | runtime 仓 | **IMPLEMENTED**（Decision-079 波 1，`a6e1ece`；新增 33 checks） |
+| W-GW-PREP（问题修复波 2） | P-B C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect | runtime 仓 | **IMPLEMENTED**（Decision-079 波 2，`31c63eb`；新增 7 checks 含真实 git 仓 e2e） |
+| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | 重发冒烟已发起（run4，修复波落地后全新 run） |
 | ② 主测 | P0-2：6 filter `endsWith(getURI())` query-string 绕过修复 + 单测（`?x=.js` 不再放行） | 实现类 | PENDING 放行 |
 | ③ 批量 | NPE 判空（`GatewayConfigCacheServiceImpl:161`）+ 缓存字段 volatile + Dict 空列表守卫 | 非实现类 | PENDING 放行 |
 
@@ -127,6 +129,37 @@ started→succeeded，Q1 槽位映射正确）。
 冒烟本链去向：**run3 停驻不收口**；波 1、波 2 落地验证后**重发全新冒烟 run**
 （预期 gate 停等 → 决策卡 → 经新释放门放行 → 全链首次端到端）。处置与波次
 授权见 Decision-079；本清单不另行预写结论。
+
+### W-GW-DIAG / W-GW-PREP 实施回填（2026-09-01，Decision-079 波 1、波 2）
+
+**波 1 W-GW-DIAG**（commit `a6e1ece`）：
+- P-E 最小释放门：`loop-run --resume <runId> --release
+  <RISK_ACCEPTED|SCOPE_RESET> --release-by <who> --release-note <text>`（closed
+  旗标增量）；合法矩阵 fail-closed——journal blocked 且
+  `REGATE_ROUND_BUDGET_EXHAUSTED` → 两种码走 store 既有 release 事件；gate
+  `PASS_WITH_RISK` 停等 → 仅 RISK_ACCEPTED，把每条 OPEN blocking finding 经
+  `acceptFindingRisk` 绑定到 verdict 的 decisionScopeId，并落
+  `human_action_required` 证据 artifact（who+note+findingIds，哈希校验）；
+  CRITICAL 拒绝、SCOPE_RESET 在 gate 停等拒绝（返工走 Re-Gate 机制）、其余状态
+  一律 NOT_RELEASABLE；测试 21 checks（argv 6 + 矩阵/审计 15）；
+- P-A：executePrimary 的后进程段（空最终文本 / E3 信封解析 / 产物构造）统一
+  以 `CapabilityProcessEvidenceError` 携带 adapter 已有 processEvidence 重抛，
+  并经 tracing 层落真实 cause code（`REAL_GATEWAY_BAD_ADAPTER_RESULT` /
+  `REAL_GATEWAY_ENVELOPE_INVALID`，additive：无码时维持 EXECUTOR_EXCEPTION /
+  EXECUTOR_TIMEOUT 原映射）；测试 12 checks；
+- P-I：注入 stores 时 `RuntimeResult.journal_path` 回填
+  `runStore.databaseFilePath`。
+
+**波 2 W-GW-PREP**（commit `31c63eb`）：`ProductionRunDeps` 增可选
+`prepareWorkspace`（C1）——提供时内核先 prepare 后 inspect（缺省保持只读，
+注入 stub 的既有测试零变化；无 inspect 而单独给 prepare → fail-closed）；
+loop-run 接线真 manager 的 prepare，loop-run 头注释的 W3 只读边界随本裁决
+改写（worktree 创建=本地 git 操作，人工 Git 边界不变）。测试 7 checks：真实
+git 仓上无钩子 fresh run 仍 `WORKSPACE_NOT_FOUND`（钉住缺口）、有钩子 fresh
+生产运行全链 deterministic COMPLETED、二次 inspect 稳定无漂移。
+
+两波 tsc clean；全量 155 测试文件 22 个失败均为既有 hermes-guardrail 项
+（P-G 同源），无新增失败。
 
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 
