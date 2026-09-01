@@ -47,10 +47,16 @@ tsx scripts/loop-run.ts --from-intake <...> [--capability-source deterministic|r
 3. **触发（建议两段式）**：先 `--prepare-only`，把 `LOOP_RUN_PREPARED` 回执
    （含冻结请求路径与解析出的 base SHA）给 Current User 过目；确认后再去掉
    `--prepare-only` 真跑。
-4. **汇报**：原样转述 closed 输出（`LOOP_RUN_RESULT` 行 + journal 路径）；
-   `chain_status:"BLOCKED"` 或退出码非 0 时，报 `blocking_reason_code` +
-   `next_execution_point` 后**停等**，不自主重试循环；续跑仅经 Current User
-   指示用 `--resume <runId>`。
+4. **汇报 + 决策卡（硬义务）**：原样转述 closed 输出（`LOOP_RUN_RESULT` 行 +
+   journal 路径）。`chain_status:"BLOCKED"` 或退出码非 0 时，agent **必须当场
+   把停点渲染成可回答的决策卡**——停点事实（blocking_reason_code /
+   next_execution_point / `human_action_required` artifact 内容，如 gate 裁决
+   PASS_WITH_RISK + findings 摘要）+ 合法选项（放行所需的风险接受 / 返工回流
+   / 其他合法 reason code）——并在触发会话内交给 Current User；**不得只丢一
+   行状态码等用户自己查日志**。无人值守的后台 run 必须配置通知钩子
+   （IM/webhook），BLOCKED 即推送决策卡。续跑仅经 Current User 对决策卡的明
+   示选择、经 `--resume <runId>`（释放入口挂账：CLI 尚无 `--release` 面）执
+   行；agent 不自主重试循环。
 5. **边界**：agent 不直接改目标仓代码（实现由 LOOP 的 implementation 节点在
    attempt worktree 内完成）、不 commit/push/PR、不解析或转述 Agent 原始
    stdout；`manual_git_handoff` 保留人工决策。
