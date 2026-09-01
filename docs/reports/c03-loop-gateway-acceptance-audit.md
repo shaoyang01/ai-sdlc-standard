@@ -189,6 +189,26 @@ git 仓上无钩子 fresh run 仍 `WORKSPACE_NOT_FOUND`（钉住缺口）、有�
 概率）累计 2 次不合规 / 9 次；P-A 落地后每次均有完整证据。门禁连续两轮产出
 实质对抗结论（run3 PWR、run4 FAIL），LOOP 验收链的核心价值得到真实验证。
 
+**Current User 裁决（2026-09-01）：返工**。执行口径：将裁决正文的修订要求
+（ADV-004/005）登记为绑定 verdict scope 的 OPEN finding（source=solution-gate
+verdict revision，earliestAffected=solution-design），走 runtime 既有的
+finding 驱动 Re-Gate 回流——solution-design 重做方案后重进门禁。
+**新发现 P-J（记账）**：无结构化 findings 的 FAIL 裁决在 recovery 中无回流
+路由（nextExecutionPoint=null，普通 resume 不派发）——E3 verdict 契约未强制
+FAIL 携带阻塞原因 findings，路由完全依赖 scan/verdict 的 ledger；处置待裁决
+（prompt 契约强化 vs 接受层拒绝无 findings 的 FAIL vs 人工触发入口），本波
+以「治理侧按裁决登记 finding」的最小合法方式执行返工，不改 runtime。
+**执行状态：未执行（Current User 指示今日收工，留待下次会话直接继续）**。
+续作入口（本机）：① finding 登记/续跑脚本要点已验证——finding 形态
+（source=solution-gate :1 revision、category=SOLUTION、earliestAffected=
+solution-design、evidence=human_action_required blob）在
+`tests/loop-run-release.test.ts` 的 store 级 fixture 中等价验证过 append 路径；
+② fixture 已持久化：`~/loop-gw-fixtures/run4/`（journal.db + control，
+2026-09-01 自 /tmp 抢救，268K）；③ 续作 = 登记 finding → `run()` resume
+（requirementId `REQ-LOOP-GW-mtijjrbl`）→ solution-design attempt 2 重做方案
+→ 重进门禁。若 fixture 丢失（跨机），fallback = 重新发起全新冒烟（run5），
+返工裁决并入新 run 的预期流程。
+
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 
 - **范围**：上述 ① 三项，范围严格限定，不夹带其他缺陷。
@@ -265,8 +285,15 @@ JUnit5 单测不存在，无从运行。
    分支 `feature/dev_20260831_loop_test`（远程已存在，直接 checkout）。
 3. 构建：Java 21（Zulu）+ Maven 3.9.3 已验证可用；冒烟验证命令 =
    `mvn -q compile` + `mvn -q test -pl business-gateway-utils -Dtest=GatewayMD5UtilTest`。
-4. 续作入口：本台账 §3 波次账 + CP `next_transition.condition_ref`；下一级放行
-   须 Current User 显式确认。
+   Node：默认 v24.12.0（2026-09-01 起 nvm default，冒烟脚本依赖 better-sqlite3
+   的 Node 24 ABI）。
+4. **run4 续作（2026-09-01 停驻点）**：fixture 持久副本
+   `~/loop-gw-fixtures/run4/`（journal.db + control，仅存在于本机家目录）。
+   本机续作 = 按 §3 run4 块「续作入口」登记返工 finding 后 resume。**跨机**
+   则 fixture 不可达 → fallback：重新发起全新冒烟（run5），返工裁决并入新 run
+   预期流程（run4 以台账引述为持久证据收档）。
+5. 续作入口：本台账 §3 波次账 + CP `next_transition.condition_ref`；下一级
+   （②主测）放行须 Current User 显式确认。
 
 ## 5. 治理落档记录
 
