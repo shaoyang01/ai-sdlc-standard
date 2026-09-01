@@ -610,6 +610,11 @@ async function main(argv: readonly string[]): Promise<number> {
   const result = await runProduction(parsed, requirementText, {
     capabilitySource: args.capabilitySource,
     inspectWorkspace: (identity) => workspaceManager.inspect(identity),
+    // W-GW-PREP (P-B C1, Decision-079): the entry prepares the task worktree
+    // (LOCAL `git worktree` under controlRoot — no commit/push/PR, the human
+    // Git boundary is untouched). Without it a fresh requirement could never
+    // pass inspect's exact-ok check.
+    prepareWorkspace: (identity) => workspaceManager.prepare(identity),
   });
 
   // Closed result set — trace summary only, never raw Agent stdout / env.

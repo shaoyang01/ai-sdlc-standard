@@ -955,6 +955,15 @@ export interface ProductionRunDeps {
    * must NEVER create a worktree. Omit only in tests that isolate the kernel.
    */
   inspectWorkspace?: (identity: LoopRunIdentity) => Promise<ProductionPreflightSnapshot>;
+  /**
+   * W-GW-PREP (P-B, Decision-079): optional worktree preparation, wired by the
+   * production entry (LoopGitWorkspaceManager.prepare). When provided, the
+   * kernel prepares BEFORE inspecting — a fresh requirement has no task
+   * worktree yet, and inspect alone would refuse it forever. Requires
+   * inspectWorkspace; preparation is a LOCAL git worktree operation and never
+   * touches remote Git state.
+   */
+  prepareWorkspace?: (identity: LoopRunIdentity) => Promise<unknown>;
   /** W3: only "deterministic" (default); "real" is refused pending E5 grant. */
   capabilitySource?: CapabilitySource;
   /** Inject both or neither; when omitted, real stores are built under controlRoot. */
@@ -999,11 +1008,23 @@ export async function runProduction(
     );
   }
   const source: CapabilitySource = deps.capabilitySource ?? DEFAULT_CAPABILITY_SOURCE;
+  if (deps.prepareWorkspace !== undefined && deps.inspectWorkspace === undefined) {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      "prepareWorkspace requires inspectWorkspace (preparation is always verified before dispatch)",
+    );
+  }
 
   // (2) Read-only preflight BEFORE any dispatch. Duplicate runId is rejected by
   // the store's createRun uniqueness and concurrent resume by withResumeLease
   // (STORE_BUSY); base drift / dirty source are checked here.
   if (deps.inspectWorkspace !== undefined) {
+    // W-GW-PREP (P-B C1): prepare-then-inspect when the entry wires worktree
+    // preparation — a fresh requirement has no task worktree yet. Without the
+    // hook the preflight stays strictly read-only (injected-stub tests).
+    if (deps.prepareWorkspace !== undefined) {
+      await deps.prepareWorkspace(identity);
+    }
     const snapshot = await deps.inspectWorkspace(identity);
     if (snapshot.baseDrifted) {
       throw new ProductionRunError(
