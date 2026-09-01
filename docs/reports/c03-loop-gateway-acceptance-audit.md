@@ -170,3 +170,15 @@ JUnit5 单测不存在，无从运行。
   product_commit=`e48ad3f`、next_transition=
   C03_LOOP_GW_SMOKE_WIRING_FIX_AUTHORIZATION_PENDING）。当前停驻：接线缺口修复
   立项待 Current User 授权，②③不推进。
+- 2026-09-01 治理回执（Decision-078 记录传播）：产品仓落档 commit `a371d01`
+  （Decision-078 + 决策索引 + 设计文档 Accepted 翻转 + 台账 §2/§3 W-GW-FIX 行，
+  已 push）；Exchange issue #94（REQ-20260901T061716Z-DECISION-078-ENTRY-TRIGGER-D1-D3，
+  label `exchange-publish`）PUBLISHED，run `38f5398` / pointer `8e379de` /
+  handoff sha256 `29cd9cc4…ddee`；PKB 派生归档 commit `23521db`
+  （feature/knowledge-base-v1，handoff 2026-09-01-decision-078-entry-trigger-d1-d3
+  + current.md 指针刷新至 a371d01）；CP PR #36 合 main（`52ddadd`，validator
+  PASS v2：route_state=`C03_LOOP_GW_FIX_IN_PROGRESS`、active_work=
+  `C03-LOOP-GW-FIX` NOT_STARTED、live 授权 +GW_WIRING_FIX/+ENTRY_TRIGGER_D3_
+  DETERMINISTIC 且 E5 残留条目移除、product_commit=`a371d01`、next_transition=
+  C03_LOOP_GW_FIX_IMPLEMENTATION_AND_SMOKE_RERUN）。当前停驻：W-GW-FIX 待开工
+  （修复方向按证据定）+ D3-deterministic 待开工；②③继续停等至冒烟重跑 PASS。
