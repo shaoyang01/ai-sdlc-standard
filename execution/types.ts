@@ -115,10 +115,17 @@ export interface CapabilityProcessEvidence {
  */
 export class CapabilityProcessEvidenceError extends Error {
   readonly processEvidence: CapabilityProcessEvidence | null;
-  constructor(message: string, processEvidence: CapabilityProcessEvidence | null) {
+  /**
+   * W-GW-DIAG P-A: when present, the tracing gateway journals this instead of
+   * the generic EXECUTOR_EXCEPTION — post-process output-contract failures
+   * keep their real cause code next to the persisted process evidence.
+   */
+  readonly capabilityErrorCode: string | null;
+  constructor(message: string, processEvidence: CapabilityProcessEvidence | null, capabilityErrorCode?: string) {
     super(message);
     this.name = "CapabilityProcessEvidenceError";
     this.processEvidence = processEvidence;
+    this.capabilityErrorCode = capabilityErrorCode ?? null;
   }
 }
 

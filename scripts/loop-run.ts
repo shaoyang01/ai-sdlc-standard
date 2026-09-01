@@ -41,6 +41,8 @@ import {
 import { BINDING_REGISTRY_VERSION } from "../core/agent-capability-bindings";
 import { LoopPosixProcessRunner, LoopPosixProcessRunnerError } from "../core/loop-posix-process-runner";
 import { LoopGitWorkspaceManager, LoopGitWorkspaceError } from "../core/loop-git-workspace";
+import { LoopArtifactStore } from "../core/loop-artifact-store";
+import { LoopRunStore } from "../core/loop-run-store";
 import { isCapabilitySource, type CapabilitySource } from "../execution/capability-gateway-source";
 import { runProduction, ProductionRunError } from "../runtime";
 import { LoopRunJournalError } from "../core/loop-executor-types";
@@ -51,8 +53,14 @@ const VALUE_FLAGS = Object.freeze({
   "--from-intake": "fromIntake",
   "--resume": "resumeRunId",
   "--capability-source": "capabilitySource",
+  "--release": "release",
+  "--release-by": "releaseBy",
+  "--release-note": "releaseNote",
 } as const);
 const BOOLEAN_FLAGS = Object.freeze(new Set<string>(["--prepare-only", "--help"]));
+
+const RELEASE_CODES = Object.freeze(["RISK_ACCEPTED", "SCOPE_RESET"] as const);
+type ReleaseCode = (typeof RELEASE_CODES)[number];
 
 export interface ParsedLoopRunArgs {
   readonly help: boolean;
@@ -61,6 +69,9 @@ export interface ParsedLoopRunArgs {
   readonly prepareOnly: boolean;
   readonly resumeRunId: string | null;
   readonly capabilitySource: CapabilitySource;
+  readonly release: ReleaseCode | null;
+  readonly releaseBy: string | null;
+  readonly releaseNote: string | null;
 }
 
 export class LoopRunCliError extends Error {
@@ -77,7 +88,14 @@ export class LoopRunCliError extends Error {
       | "REQUEST_HAS_NO_SOURCE"
       | "MANIFEST_READ_FAILED"
       | "INTAKE_NOT_CONFIRMED"
-      | "BASE_SHA_RESOLVE_FAILED",
+      | "BASE_SHA_RESOLVE_FAILED"
+      | "INVALID_RELEASE_CODE"
+      | "RELEASE_REQUIRES_RESUME"
+      | "RELEASE_METADATA_REQUIRED"
+      | "RELEASE_FLAG_WITHOUT_RELEASE"
+      | "RELEASE_TARGET_NOT_RELEASABLE"
+      | "RELEASE_CODE_NOT_APPLICABLE"
+      | "RELEASE_CRITICAL_FINDING",
     message: string,
   ) {
     super(message);
@@ -97,6 +115,9 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
   let prepareOnly = false;
   let resumeRunId: string | null = null;
   let capabilitySource: CapabilitySource = "deterministic";
+  let release: ReleaseCode | null = null;
+  let releaseBy: string | null = null;
+  let releaseNote: string | null = null;
   const seen = new Set<string>();
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -113,7 +134,7 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
     }
     const field = VALUE_FLAGS[token as keyof typeof VALUE_FLAGS];
     if (field === undefined) {
-      throw new LoopRunCliError("UNKNOWN_FLAG", `unknown flag "${token}"; the closed flag set is --request-file/--from-intake/--resume/--capability-source/--prepare-only/--help`);
+      throw new LoopRunCliError("UNKNOWN_FLAG", `unknown flag "${token}"; the closed flag set is --request-file/--from-intake/--resume/--capability-source/--prepare-only/--release/--release-by/--release-note/--help`);
     }
     if (seen.has(token)) throw new LoopRunCliError("DUPLICATE_FLAG", `flag ${token} given twice`);
     seen.add(token);
@@ -131,7 +152,13 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
         throw new LoopRunCliError("INVALID_CAPABILITY_SOURCE", `--capability-source must be deterministic|real, got "${value}"`);
       }
       capabilitySource = value;
-    }
+    } else if (field === "release") {
+      if (!(RELEASE_CODES as readonly string[]).includes(value)) {
+        throw new LoopRunCliError("INVALID_RELEASE_CODE", `--release must be one of ${RELEASE_CODES.join(" | ")}, got "${value}"`);
+      }
+      release = value as ReleaseCode;
+    } else if (field === "releaseBy") releaseBy = value;
+    else if (field === "releaseNote") releaseNote = value;
   }
 
   if (requestFile !== null && fromIntake !== null) {
@@ -140,10 +167,25 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
   if (prepareOnly && fromIntake === null) {
     throw new LoopRunCliError("PREPARE_ONLY_WITHOUT_INTAKE", "--prepare-only requires --from-intake");
   }
+  if (release !== null) {
+    // W-GW-DIAG P-E: a release always targets an EXISTING run via its frozen
+    // request identity — never a fresh run, never an intake dir.
+    if (fromIntake !== null || prepareOnly) {
+      throw new LoopRunCliError("FLAG_CONFLICT", "--release combines only with --request-file + --resume");
+    }
+    if (resumeRunId === null) {
+      throw new LoopRunCliError("RELEASE_REQUIRES_RESUME", "--release requires --resume <runId>: a release targets an existing run");
+    }
+    if (releaseBy === null || releaseBy.trim().length === 0 || releaseNote === null || releaseNote.trim().length === 0) {
+      throw new LoopRunCliError("RELEASE_METADATA_REQUIRED", "--release requires non-empty --release-by and --release-note (audit fields)");
+    }
+  } else if (releaseBy !== null || releaseNote !== null) {
+    throw new LoopRunCliError("RELEASE_FLAG_WITHOUT_RELEASE", "--release-by/--release-note are only valid together with --release");
+  }
   if (!help && requestFile === null && fromIntake === null) {
     throw new LoopRunCliError("MISSING_REQUEST_FILE", "--request-file <abs path> or --from-intake <abs path> is required (or use --help)");
   }
-  return Object.freeze({ help, requestFile, fromIntake, prepareOnly, resumeRunId, capabilitySource });
+  return Object.freeze({ help, requestFile, fromIntake, prepareOnly, resumeRunId, capabilitySource, release, releaseBy, releaseNote });
 }
 
 // ── Helpers (no shell, no dynamic command) ─────────────────────────────
@@ -191,6 +233,8 @@ const HELP_TEXT = [
   "--from-intake: requires a status:\"confirmed\" intake.manifest.json;",
   "  resolves expectedBaseSha itself, freezes the entry request as an audit",
   "  artifact, then --prepare-only stops or the run proceeds.",
+  "--release (with --request-file + --resume <runId>): human decision closing",
+  "  a blocked stop; requires --release-by and --release-note (audit).",
 ].join("\n");
 
 // ── Entry trigger: intake manifest → frozen production request ─────────
@@ -286,10 +330,186 @@ function freezeIntakeRequest(
   return { rawRequest, requestPath };
 }
 
+// ── Release mode (W-GW-DIAG P-E): close a blocked stop by human decision ──
+//
+// Legal matrix (fail-closed; Decision-079):
+//   - journal "blocked" with REGATE_ROUND_BUDGET_EXHAUSTED:
+//       RISK_ACCEPTED | SCOPE_RESET → the store's own release event.
+//   - gate PASS_WITH_RISK stop (no durable block; recovery yields no next
+//       point): RISK_ACCEPTED only → every OPEN blocking finding becomes
+//       ACCEPTED_RISK bound to the verdict's decisionScopeId, each carrying a
+//       hash-verified human_action_required evidence artifact (who + note).
+//       SCOPE_RESET is refused here: rework flows through the Re-Gate
+//       machinery, not a release. Any other state is not releasable.
+interface ReleaseReceipt {
+  readonly run_id: string;
+  readonly release: ReleaseCode;
+  readonly released_by: string;
+  readonly decision_scope_id: string | null;
+  readonly findings_accepted: readonly string[];
+  readonly evidence_ref: string | null;
+}
+
+function runReleaseProcedure(
+  identity: { readonly controlRoot: string; readonly repositoryPath: string; readonly requirementId: string },
+  runId: string,
+  release: ReleaseCode,
+  releasedBy: string,
+  releaseNote: string,
+): ReleaseReceipt {
+  return runReleaseProcedureWithStores(
+    (): { runStore: LoopRunStore; artifactStore: LoopArtifactStore } => {
+      const artifactStore = new LoopArtifactStore({
+        controlRoot: identity.controlRoot,
+        repositoryPath: identity.repositoryPath,
+      });
+      const runStore = new LoopRunStore(join(identity.controlRoot, "journal.db"), { artifactStore });
+      runStore.init();
+      artifactStore.init();
+      return { runStore, artifactStore };
+    },
+    identity.requirementId,
+    runId,
+    release,
+    releasedBy,
+    releaseNote,
+  );
+}
+
+/** Store-injection seam (exported for direct testing); the CLI binds real paths. */
+export function runReleaseProcedureWithStores(
+  buildStores: () => { runStore: LoopRunStore; artifactStore: LoopArtifactStore },
+  requirementId: string,
+  runId: string,
+  release: ReleaseCode,
+  releasedBy: string,
+  releaseNote: string,
+): ReleaseReceipt {
+  const { runStore, artifactStore } = buildStores();
+
+  const snapshot = runStore.getSnapshot(runId);
+  if (snapshot === undefined) {
+    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", `no run ${runId} found in the run's journal`);
+  }
+  if (snapshot.state.identity.requirementId !== requirementId) {
+    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", "run's requirement does not match the request identity");
+  }
+  const state = snapshot.state;
+  if (state.status === "blocked") {
+    if (state.blockingReasonCode !== "REGATE_ROUND_BUDGET_EXHAUSTED") {
+      throw new LoopRunCliError(
+        "RELEASE_CODE_NOT_APPLICABLE",
+        `blocked run carries ${state.blockingReasonCode}; no release code applies to it`,
+      );
+    }
+    runStore.releaseRunRegateBlock(runId, { kind: release });
+    return {
+      run_id: runId,
+      release,
+      released_by: releasedBy,
+      decision_scope_id: null,
+      findings_accepted: [],
+      evidence_ref: null,
+    };
+  }
+
+  const execs = runStore.listCapabilityExecutions(runId);
+  const verdicts = execs.filter(
+    (e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict" && e.status === "succeeded",
+  );
+  const last = verdicts.at(-1);
+  if (last === undefined || last.gateResult !== "PASS_WITH_RISK" || last.decisionScopeId === null) {
+    throw new LoopRunCliError(
+      "RELEASE_TARGET_NOT_RELEASABLE",
+      "run is not at a releasable stop (no PASS_WITH_RISK verdict with a decision scope)",
+    );
+  }
+  if (release !== "RISK_ACCEPTED") {
+    throw new LoopRunCliError(
+      "RELEASE_CODE_NOT_APPLICABLE",
+      "a gate PASS_WITH_RISK stop only accepts RISK_ACCEPTED; rework flows through the Re-Gate machinery, not a release",
+    );
+  }
+  const gate = runStore.computeFindingGate(runId);
+  if (gate.blockingFindings.length === 0) {
+    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", "no blocking findings to release");
+  }
+  const findings = runStore.listFindings(runId);
+  const byId = new Map(findings.map((f) => [f.findingId, f]));
+  const targets: string[] = [];
+  for (const id of gate.blockingFindings) {
+    const finding = byId.get(id);
+    if (finding === undefined) {
+      throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", `blocking finding ${id} not found in journal`);
+    }
+    if (finding.status !== "OPEN") continue;
+    if (finding.severity === "CRITICAL") {
+      throw new LoopRunCliError(
+        "RELEASE_CRITICAL_FINDING",
+        `finding ${id} is CRITICAL; risk acceptance is not available for critical findings`,
+      );
+    }
+    targets.push(id);
+  }
+  if (targets.length === 0) {
+    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", "all blocking findings are already closed");
+  }
+  const evidence = artifactStore.put("human_action_required", `${JSON.stringify({
+    schema: "loop-release-evidence:v1",
+    run_id: runId,
+    release,
+    released_by: releasedBy,
+    note: releaseNote,
+    finding_ids: targets,
+    decision_scope_id: last.decisionScopeId,
+    released_at: new Date().toISOString(),
+  }, null, 2)}\n`);
+  for (const findingId of targets) {
+    runStore.acceptFindingRisk(runId, findingId, {
+      riskAcceptedBy: releasedBy,
+      riskAcceptanceEvidenceRef: evidence.artifactRef,
+      riskAcceptanceEvidenceDigest: evidence.digest,
+      decisionScopeId: last.decisionScopeId,
+    });
+  }
+  return {
+    run_id: runId,
+    release,
+    released_by: releasedBy,
+    decision_scope_id: last.decisionScopeId,
+    findings_accepted: targets,
+    evidence_ref: evidence.artifactRef,
+  };
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const args = parseLoopRunArgs(argv);
   if (args.help) {
     process.stdout.write(`${HELP_TEXT}\n`);
+    return 0;
+  }
+
+  // ── Release mode: human decision closes a blocked stop, then exit. The
+  // chain itself is (re)started separately via --resume. ──
+  if (args.release !== null) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(args.requestFile as string, "utf8"));
+    } catch (error) {
+      process.stderr.write(`LOOP_RUN_ERROR BAD_REQUEST_FILE: ${(error as Error).message}\n`);
+      return 1;
+    }
+    const now = (): string => new Date().toISOString();
+    const runId = args.resumeRunId as string;
+    const parsed = parseProductionEntryRequest(raw, { now, runId });
+    const receipt = runReleaseProcedure(
+      parsed.identity,
+      runId,
+      args.release,
+      args.releaseBy as string,
+      args.releaseNote as string,
+    );
+    process.stdout.write(`LOOP_RUN_RELEASED ${JSON.stringify(receipt)}\n`);
     return 0;
   }
 

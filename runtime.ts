@@ -713,7 +713,11 @@ export async function run(
             ),
             next_execution_point: null,
             workspace_root: workspaceRoot,
-            journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+            // W-GW-DIAG P-I: an injected store still owns a real journal file —
+            // surface its path so operators don't lose the diagnostic anchor.
+            journal_path: options.runStore === undefined
+              ? join(workspaceRoot, "journal.db")
+              : options.runStore.databaseFilePath,
             completed_at: now(),
           });
         }

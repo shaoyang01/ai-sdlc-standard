@@ -391,12 +391,18 @@ export class ExecutionGateway {
       const evidence = error instanceof CapabilityProcessEvidenceError
         ? error.processEvidence
         : null;
+      // W-GW-DIAG P-A: a carrier with an explicit capability error code keeps
+      // its real cause on the journal (closed at the tracing site, additive
+      // only) instead of the generic EXECUTOR_EXCEPTION bucket.
+      const errorCode = error instanceof CapabilityProcessEvidenceError && error.capabilityErrorCode !== null
+        ? error.capabilityErrorCode
+        : timedOut ? "EXECUTOR_TIMEOUT" : "EXECUTOR_EXCEPTION";
       this.appendCapabilityFailure(
         tracing,
         base,
         startedSequence + 1,
         now(),
-        timedOut ? "EXECUTOR_TIMEOUT" : "EXECUTOR_EXCEPTION",
+        errorCode,
         binding.failurePolicy === "retry_other_binding",
         evidence,
       );

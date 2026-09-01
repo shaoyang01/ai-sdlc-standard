@@ -25,6 +25,7 @@ import { getAgentCliProfile, type AgentCliProviderId } from "./agent-cli-profile
 import { stagePromptInput } from "./prompt-workspace";
 import {
   parseNodeOutputEnvelope,
+  NodeOutputEnvelopeError,
   type ParsedNodeOutputEnvelope,
   type NodeOutputFinding,
   type NodeGateVerdict,
@@ -245,12 +246,44 @@ export class RealCapabilityGateway extends ExecutionGateway {
       throw error;
     }
 
+    // W-GW-DIAG P-A: everything AFTER a successful adapter return is a
+    // POST-PROCESS failure — the process ran (evidence is in hand) but its
+    // output was empty or failed the E3 output contract. These used to escape
+    // as bare errors and journal as evidence-free EXECUTOR_EXCEPTION, hiding
+    // "the agent worked for minutes" behind "nothing happened". Wrap them so
+    // the FAILED terminal keeps the real cause code AND the process evidence.
+    const postEvidence = cliResult.processEvidence ?? null;
+    const verdictRole = isVerdictRole(nodeCapability, role);
+    try {
+      return this.buildNodeOutcomeFromCliResult(enriched, nodeCapability, role, verdictRole, cliResult);
+    } catch (error) {
+      if (error instanceof CapabilityProcessEvidenceError) throw error;
+      const cause = error instanceof RealCapabilityGatewayError
+        ? error.code
+        : error instanceof NodeOutputEnvelopeError
+          ? "REAL_GATEWAY_ENVELOPE_INVALID"
+          : "REAL_GATEWAY_OUTPUT_CONTRACT";
+      throw new CapabilityProcessEvidenceError(
+        `${cause}: ${(error as Error).message}`,
+        postEvidence,
+        cause,
+      );
+    }
+  }
+
+  /** Post-process section of executePrimary, extracted for the P-A evidence wrap. */
+  private buildNodeOutcomeFromCliResult(
+    enriched: ExecutionRequest,
+    nodeCapability: NodeCapabilityId,
+    role: CapabilityExecutionRole,
+    verdictRole: boolean,
+    cliResult: ExecutionResult,
+  ): ExecutionResult {
     const cliText = (cliResult.output as Readonly<Record<string, unknown>> | undefined)?.["text"];
     if (typeof cliText !== "string" || cliText.trim().length === 0) {
       fail("REAL_GATEWAY_BAD_ADAPTER_RESULT", "adapter returned no final text");
     }
 
-    const verdictRole = isVerdictRole(nodeCapability, role);
     // E3 envelope, role-aware: only formal_verdict may carry a verdict.
     const envelope = parseNodeOutputEnvelope(cliText, nodeCapability, { isVerdict: verdictRole });
 
