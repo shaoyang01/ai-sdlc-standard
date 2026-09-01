@@ -110,22 +110,23 @@ manifest 封闭 schema + 校验（18 checks，`d3ea311`）；`loop-run
 硬义务 `0fa3cf8`）；deterministic 端到端演练 COMPLETED（七节点 16 事件全部
 started→succeeded，Q1 槽位映射正确）。
 
-### 发现问题清单（冒烟重跑 2026-09-01，全部「发现待裁决」，无处置承诺）
+### 发现问题清单（冒烟重跑 2026-09-01，处置已裁决 → Decision-079）
 
-| # | 问题 | 证据锚点 | 定性 |
-|---|------|----------|------|
-| P-A | 后进程输出不合格丢失全部进程证据（信封解析在 adapter try/catch 之外） | design attempt 1（~408s，journal 全空） | runtime 诊断性缺口 |
-| P-B | 生产门 fresh-prepare 缺口：inspect 只认已存在 exact-ok 工作树，无人调 prepare；工作树路径含运行时 runId 摘要无法预建 | deterministic 演练（E1 生产测试全为注入 stub 故未暴露） | 生产门硬阻断 |
-| P-C | delivery-tail 物化器缺失：stable_path 仅元数据，canonical 产物不落目标仓；链尾仅产 checklist | 02-方案审核只在 artifact store；spruce 内 00/01 系 kimi 自写 | 交付形态缺口 |
-| P-D | agent 自写文件与 canonical revision 无一致性校验 | 同上（00/01 仓内文件 vs 信封正文可漂移） | 一致性缺口 |
-| P-E | BLOCKED 无主动询问：无通知通道、无决策卡渲染、CLI 无 `--release RISK_ACCEPTED/SCOPE_RESET` 面（释放语义仅在 journal 层） | gate 后停等仅可经查日志发现 | 人机交互缺口 |
-| P-F | E3 信封输出合规为概率行为（design 尝试 1/2 不合规） | attempt 1 失败/attempt 2 成功 | 观察，retry 已按设计吸收 |
-| P-G | 冒烟脚本 TARGET_REPO 硬编码他机路径 | 已修（`3b0b874`） | harness，已闭环 |
-| P-H | 默认 node 22 遮蔽 + `~/.local/bin/codex` 损坏 | 已按 Current User 指示切 node 24；codex 用 nvm 下可用安装 | 环境，已闭环 |
-| P-I | 注入 stores 时 RuntimeResult.journal_path=null（上次遗留） | run3 summary `journalPath: null` | 观测瑕疵，未修 |
+| # | 问题 | 证据锚点 | 定性 | 处置（Decision-079） |
+|---|------|----------|------|----------------------|
+| P-A | 后进程输出不合格丢失全部进程证据（信封解析在 adapter try/catch 之外） | design attempt 1（~408s，journal 全空） | runtime 诊断性缺口 | **波 1 W-GW-DIAG**：证据包装延伸到后进程段，真实错误码保留 |
+| P-B | 生产门 fresh-prepare 缺口：inspect 只认已存在 exact-ok 工作树，无人调 prepare；工作树路径含运行时 runId 摘要无法预建 | deterministic 演练（E1 生产测试全为注入 stub 故未暴露） | 生产门硬阻断 | **波 2 W-GW-PREP**：C1（ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect），独立小波 |
+| P-C | delivery-tail 物化器缺失：stable_path 仅元数据，canonical 产物不落目标仓；链尾仅产 checklist | 02-方案审核只在 artifact store；spruce 内 00/01 系 kimi 自写 | 交付形态缺口 | 方向认可（链尾单点物化 + canonical 覆盖 + 漂移报告）；**时机缓**，随交付尾波立项 |
+| P-D | agent 自写文件与 canonical revision 无一致性校验 | 同上（00/01 仓内文件 vs 信封正文可漂移） | 一致性缺口 | 并入 P-C（漂移报告即校验产出），同缓 |
+| P-E | BLOCKED 无主动询问：无通知通道、无决策卡渲染、CLI 无 `--release RISK_ACCEPTED/SCOPE_RESET` 面（释放语义仅在 journal 层） | gate 后停等仅可经查日志发现 | 人机交互缺口 | **波 1 W-GW-DIAG**：方案 1 最小释放门（closed 旗标 + 释放事件含审计 + 合法矩阵）；通知钩子/渲染另立，agent 义务已由协议 step 4 承载 |
+| P-F | E3 信封输出合规为概率行为（design 尝试 1/2 不合规） | attempt 1 失败/attempt 2 成功 | 观察，retry 已按设计吸收 | 观察不立项；P-A 落地后积累证据再议 |
+| P-G | 冒烟脚本 TARGET_REPO 硬编码他机路径 | 已修（`3b0b874`） | harness，已闭环 | 已闭环 |
+| P-H | 默认 node 22 遮蔽 + `~/.local/bin/codex` 损坏 | 已按 Current User 指示切 node 24；codex 用 nvm 下可用安装 | 环境，已闭环 | 已闭环 |
+| P-I | 注入 stores 时 RuntimeResult.journal_path=null（上次遗留） | run3 summary `journalPath: null` | 观测瑕疵，未修 | **波 1 W-GW-DIAG** 顺手修（回填 databaseFilePath） |
 
-处置去向（哪些立项、与 D2/物化器如何分波排序、冒烟是否继续）**待 Current
-User 裁决后另立 Decision**，本清单不预写结论。
+冒烟本链去向：**run3 停驻不收口**；波 1、波 2 落地验证后**重发全新冒烟 run**
+（预期 gate 停等 → 决策卡 → 经新释放门放行 → 全链首次端到端）。处置与波次
+授权见 Decision-079；本清单不另行预写结论。
 
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 

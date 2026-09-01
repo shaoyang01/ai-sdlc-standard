@@ -54,6 +54,8 @@
 
 | [Decision-078](Decision-078-entry-trigger-design-accepted-d1-authorized-d3-chartered.md) | 2026-09-01 | Accepted / entry trigger design accepted, D1 authorized, D3-deterministic chartered | 认可入口触发层接线设计（intake manifest 已确认标记 + loop-run --from-intake/--prepare-only + agent 触发六步协议，设计文档转 Accepted）；授权 D1 接线缺口修复波 W-GW-FIX（REAL_GATEWAY_NO_INPUT 二选一方向 + run()+real 最小回归 + W-GW-SMOKE 冒烟重跑，重跑 PASS 后②提请放行）；立项 D3-deterministic 段（real 接入不在本波）；D2 生产门 real 通道继续挂账；E5-L3 冻结、②③PENDING、零业务仓写入不变。 |
 
+| [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
+
 ## 新增流程
 
 1. 取本索引中的最大编号加一；不得复用或填补编号。
