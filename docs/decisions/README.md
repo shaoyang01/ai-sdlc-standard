@@ -52,6 +52,8 @@
 
 | [Decision-077](Decision-077-c03-loop-gw-smoke-real-run-fail-closed-and-wiring-gap-recorded.md) | 2026-09-01 | Accepted / smoke FAIL-CLOSED recorded, fix pending | 记录冒烟真实 run 结果：口径改定为「冒烟=测 LOOP 本体、三项缺陷为需求输入」；run2 于 requirement-intake/primary fail-closed（REAL_GATEWAY_NO_INPUT：run() 只传 inputArtifactRef vs extractInputText 只认自由文本键，kimi 探针实证）；确认 E5-L2 canary 未覆盖 run()+real 端到端（不追溯改判 E5）；缺口修复另行立项待授权；E5-T1 超时张力销项；脚本暂不入库；②③不推进。 |
 
+| [Decision-078](Decision-078-entry-trigger-design-accepted-d1-authorized-d3-chartered.md) | 2026-09-01 | Accepted / entry trigger design accepted, D1 authorized, D3-deterministic chartered | 认可入口触发层接线设计（intake manifest 已确认标记 + loop-run --from-intake/--prepare-only + agent 触发六步协议，设计文档转 Accepted）；授权 D1 接线缺口修复波 W-GW-FIX（REAL_GATEWAY_NO_INPUT 二选一方向 + run()+real 最小回归 + W-GW-SMOKE 冒烟重跑，重跑 PASS 后②提请放行）；立项 D3-deterministic 段（real 接入不在本波）；D2 生产门 real 通道继续挂账；E5-L3 冻结、②③PENDING、零业务仓写入不变。 |
+
 ## 新增流程
 
 1. 取本索引中的最大编号加一；不得复用或填补编号。

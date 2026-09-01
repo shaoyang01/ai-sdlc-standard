@@ -32,7 +32,8 @@
 
 | 级 | 内容 | 能力类 | 状态 |
 |----|------|--------|------|
-| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | **FAIL-CLOSED（runtime 接线缺口待裁决，见 §3-W-GW-SMOKE 回填）** |
+| W-GW-FIX（前置波） | REAL_GATEWAY_NO_INPUT 接线缺口修复 + run()+real 最小回归 + 冒烟重跑 | runtime 仓 | **AUTHORIZED（Decision-078），待开工** |
+| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | **FAIL-CLOSED（缺口修复已授权 W-GW-FIX，重跑待其完成）** |
 | ② 主测 | P0-2：6 filter `endsWith(getURI())` query-string 绕过修复 + 单测（`?x=.js` 不再放行） | 实现类 | PENDING 放行 |
 | ③ 批量 | NPE 判空（`GatewayConfigCacheServiceImpl:161`）+ 缓存字段 volatile + Dict 空列表守卫 | 非实现类 | PENDING 放行 |
 
@@ -44,6 +45,22 @@ SALT/CORS/盐迁 ACM（安全语义取舍，验收口径定不清）；P0-4 @Tra
 汇报并停等 Current User 放行下一级。
 
 ## 3. 波次账
+
+### W-GW-FIX（runtime 接线缺口修复，2026-09-01 授权）
+
+- **授权**：Decision-078（Current User 2026-09-01 范围裁决：入口触发层设计认可
+  + D1 授权 + D3-deterministic 立项；**D2 生产门 real 通道继续挂账**）。
+- **范围**：`REAL_GATEWAY_NO_INPUT` 缺口修复——方向二选一（`run()` 派发把
+  requirement 文本带给 real gateway，或 `extractInputText` 支持
+  `inputArtifactRef` 解析），实施时按证据定，不夹带；最小回归测试补
+  run()+real 端到端盲区（至少到达 CLI spawn、不再死在 staging 前，
+  Decision-077 §决策.3）。
+- **完成口径**：修复合入 + 回归绿 + **W-GW-SMOKE 冒烟重跑**
+  （`scripts/loop-gw-smoke-real.ts`）出真实结果并回填 §3；重跑 PASS → ② 主测
+  提请 Current User 放行（逐级停等不变）。
+- **边界**：不解除 D2（`runProduction` real 门）；不动 E5-L3 冻结；spruce 零
+  写入。
+- **状态**：AUTHORIZED，待开工。
 
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 
