@@ -71,6 +71,8 @@ const BINDING_VERSION = "2.0.0";
 const BINDING_TIMEOUT_NON_IMPL_MS = 45 * 60 * 1000;
 const BINDING_TIMEOUT_IMPL_MS = 60 * 60 * 1000;
 const REGISTRY_VERSION = "1";
+/** Stamped by entry layers (loop-run --from-intake) into production requests. */
+export const BINDING_REGISTRY_VERSION = REGISTRY_VERSION;
 const LOOP_AGENTS: readonly AgentName[] = ["codex", "kimi", "hermes"];
 const BINDING_FIELDS = [
   "bindingId", "capability", "executionRole", "agent", "adapter", "bindingVersion", "inputFormat",

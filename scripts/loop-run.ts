@@ -1,4 +1,4 @@
-// LOOP production entry CLI — C03-E W3 (E1-T3, wiring §4)
+// LOOP production entry CLI — C03-E W3 (E1-T3, wiring §4) + entry trigger (D3)
 // ============================================================================
 // The SINGLE command-line door into the v2 production chain. It carries NO
 // token / command / argv-template / environment surface: argv is a closed
@@ -7,20 +7,38 @@
 //
 //   tsx scripts/loop-run.ts --request-file <abs path>
 //     [--resume <runId>] [--capability-source deterministic|real] [--help]
+//   tsx scripts/loop-run.ts --from-intake <00-需求资料 dir or intake.manifest.json>
+//     [--prepare-only] [--resume <runId>] [--capability-source deterministic|real]
+//
+// Entry trigger (Decision-078, design §4): --from-intake reads the intake
+// manifest (closed schema loop-intake-manifest:v1), refuses anything but
+// status:"confirmed" (the human confirmation gate), resolves expectedBaseSha
+// itself via the read-only git runner (chat agents never hand-craft SHAs),
+// freezes the production entry request to
+// <controlRoot>/loop-runs/<requirementId>/entry-<ts>.json as the audit
+// artifact, and either stops (--prepare-only) or runs it through the exact
+// same path as --request-file.
 //
 // W3 boundary: the capability source DEFAULTS to deterministic; --capability-
 // source real is refused at runProduction (PRODUCTION_REAL_NOT_AUTHORIZED)
-// until the separate E5 real canary grant. This command runs only the READ-ONLY
-// git preflight (workspaceManager.inspect); it never creates a worktree and
+// until separately granted (D2). This command runs only the READ-ONLY git
+// preflight (workspaceManager.inspect); it never creates a worktree and
 // never spawns an Agent CLI.
 
-import { readFileSync, lstatSync } from "node:fs";
-import { join, delimiter } from "node:path";
+import { readFileSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, delimiter, isAbsolute } from "node:path";
 
 import {
   parseProductionEntryRequest,
   ProductionEntryError,
+  PRODUCTION_ENTRY_SCHEMA,
 } from "../core/loop-production-entry";
+import {
+  parseIntakeManifest,
+  IntakeManifestError,
+  INTAKE_MANIFEST_SCHEMA,
+} from "../core/loop-intake-manifest";
+import { BINDING_REGISTRY_VERSION } from "../core/agent-capability-bindings";
 import { LoopPosixProcessRunner, LoopPosixProcessRunnerError } from "../core/loop-posix-process-runner";
 import { LoopGitWorkspaceManager, LoopGitWorkspaceError } from "../core/loop-git-workspace";
 import { isCapabilitySource, type CapabilitySource } from "../execution/capability-gateway-source";
@@ -30,14 +48,17 @@ import { LoopRunJournalError } from "../core/loop-executor-types";
 // ── Closed argv contract ──────────────────────────────────────────────
 const VALUE_FLAGS = Object.freeze({
   "--request-file": "requestFile",
+  "--from-intake": "fromIntake",
   "--resume": "resumeRunId",
   "--capability-source": "capabilitySource",
 } as const);
-const BOOLEAN_FLAGS = Object.freeze(new Set<string>(["--help"]));
+const BOOLEAN_FLAGS = Object.freeze(new Set<string>(["--prepare-only", "--help"]));
 
 export interface ParsedLoopRunArgs {
   readonly help: boolean;
   readonly requestFile: string | null;
+  readonly fromIntake: string | null;
+  readonly prepareOnly: boolean;
   readonly resumeRunId: string | null;
   readonly capabilitySource: CapabilitySource;
 }
@@ -50,8 +71,13 @@ export class LoopRunCliError extends Error {
       | "MISSING_VALUE"
       | "DUPLICATE_FLAG"
       | "MISSING_REQUEST_FILE"
+      | "FLAG_CONFLICT"
+      | "PREPARE_ONLY_WITHOUT_INTAKE"
       | "INVALID_CAPABILITY_SOURCE"
-      | "REQUEST_HAS_NO_SOURCE",
+      | "REQUEST_HAS_NO_SOURCE"
+      | "MANIFEST_READ_FAILED"
+      | "INTAKE_NOT_CONFIRMED"
+      | "BASE_SHA_RESOLVE_FAILED",
     message: string,
   ) {
     super(message);
@@ -67,6 +93,8 @@ export class LoopRunCliError extends Error {
 export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
   let help = false;
   let requestFile: string | null = null;
+  let fromIntake: string | null = null;
+  let prepareOnly = false;
   let resumeRunId: string | null = null;
   let capabilitySource: CapabilitySource = "deterministic";
   const seen = new Set<string>();
@@ -79,12 +107,13 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
     if (BOOLEAN_FLAGS.has(token)) {
       if (seen.has(token)) throw new LoopRunCliError("DUPLICATE_FLAG", `flag ${token} given twice`);
       seen.add(token);
-      help = true;
+      if (token === "--prepare-only") prepareOnly = true;
+      else help = true;
       continue;
     }
     const field = VALUE_FLAGS[token as keyof typeof VALUE_FLAGS];
     if (field === undefined) {
-      throw new LoopRunCliError("UNKNOWN_FLAG", `unknown flag "${token}"; the closed flag set is --request-file/--resume/--capability-source/--help`);
+      throw new LoopRunCliError("UNKNOWN_FLAG", `unknown flag "${token}"; the closed flag set is --request-file/--from-intake/--resume/--capability-source/--prepare-only/--help`);
     }
     if (seen.has(token)) throw new LoopRunCliError("DUPLICATE_FLAG", `flag ${token} given twice`);
     seen.add(token);
@@ -95,6 +124,7 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
     i += 1;
 
     if (field === "requestFile") requestFile = value;
+    else if (field === "fromIntake") fromIntake = value;
     else if (field === "resumeRunId") resumeRunId = value;
     else if (field === "capabilitySource") {
       if (!isCapabilitySource(value)) {
@@ -104,10 +134,16 @@ export function parseLoopRunArgs(argv: readonly string[]): ParsedLoopRunArgs {
     }
   }
 
-  if (!help && requestFile === null) {
-    throw new LoopRunCliError("MISSING_REQUEST_FILE", "--request-file <abs path> is required (or use --help)");
+  if (requestFile !== null && fromIntake !== null) {
+    throw new LoopRunCliError("FLAG_CONFLICT", "--request-file and --from-intake are two request sources; give exactly one");
   }
-  return Object.freeze({ help, requestFile, resumeRunId, capabilitySource });
+  if (prepareOnly && fromIntake === null) {
+    throw new LoopRunCliError("PREPARE_ONLY_WITHOUT_INTAKE", "--prepare-only requires --from-intake");
+  }
+  if (!help && requestFile === null && fromIntake === null) {
+    throw new LoopRunCliError("MISSING_REQUEST_FILE", "--request-file <abs path> or --from-intake <abs path> is required (or use --help)");
+  }
+  return Object.freeze({ help, requestFile, fromIntake, prepareOnly, resumeRunId, capabilitySource });
 }
 
 // ── Helpers (no shell, no dynamic command) ─────────────────────────────
@@ -144,12 +180,111 @@ function readRequirementText(sourceFiles: readonly string[]): string {
 }
 
 const HELP_TEXT = [
-  "loop-run — v2 production chain entry (C03-E W3)",
+  "loop-run — v2 production chain entry (C03-E W3 + entry trigger D3)",
   "Usage: tsx scripts/loop-run.ts --request-file <abs path>",
   "         [--resume <runId>] [--capability-source deterministic|real]",
   "         [--help]",
-  "Defaults: --capability-source deterministic. real is dormant (E5 grant).",
+  "       tsx scripts/loop-run.ts --from-intake <00-需求资料 dir or manifest>",
+  "         [--prepare-only] [--resume <runId>]",
+  "         [--capability-source deterministic|real]",
+  "Defaults: --capability-source deterministic. real is dormant (D2 grant).",
+  "--from-intake: requires a status:\"confirmed\" intake.manifest.json;",
+  "  resolves expectedBaseSha itself, freezes the entry request as an audit",
+  "  artifact, then --prepare-only stops or the run proceeds.",
 ].join("\n");
+
+// ── Entry trigger: intake manifest → frozen production request ─────────
+const MANIFEST_FILENAME = "intake.manifest.json";
+/** Mirrors the versions stamped by existing hand-built request files. */
+const EXECUTION_PROFILE_VERSION = "1.0.0";
+const SHA40_RE = /^[0-9a-f]{40}$/;
+
+interface PreparedIntake {
+  readonly rawRequest: Record<string, unknown>;
+  readonly requestPath: string;
+  readonly expectedBaseSha: string;
+  readonly requirementId: string;
+  readonly sourceFilesCount: number;
+}
+
+function readConfirmedManifest(intakePath: string): ReturnType<typeof parseIntakeManifest> {
+  if (!isAbsolute(intakePath)) {
+    throw new LoopRunCliError("MANIFEST_READ_FAILED", "--from-intake requires an absolute path");
+  }
+  let manifestPath = intakePath;
+  try {
+    if (lstatSync(intakePath).isDirectory()) manifestPath = join(intakePath, MANIFEST_FILENAME);
+  } catch {
+    throw new LoopRunCliError("MANIFEST_READ_FAILED", `--from-intake path does not exist: ${intakePath}`);
+  }
+  let rawManifest: unknown;
+  try {
+    rawManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch (error) {
+    throw new LoopRunCliError("MANIFEST_READ_FAILED", `cannot read intake manifest at ${manifestPath}: ${(error as Error).message}`);
+  }
+  const manifest = parseIntakeManifest(rawManifest);
+  // The human confirmation gate: only a confirmed manifest may start a run.
+  if (manifest.status !== "confirmed") {
+    throw new LoopRunCliError("INTAKE_NOT_CONFIRMED", `intake manifest status is "${manifest.status}"; only status:"confirmed" may start a run (human gate, design §3)`);
+  }
+  return manifest;
+}
+
+async function resolveBaseSha(runner: LoopPosixProcessRunner, cwd: string): Promise<string> {
+  let stdout = "";
+  try {
+    const r = await runner.run({
+      executableId: "git",
+      cwd,
+      args: Object.freeze(["rev-parse", "HEAD"]),
+      timeoutMs: 15000,
+      maxStdoutBytes: 4096,
+      maxStderrBytes: 4096,
+    });
+    if (r.status !== "exited" || r.exitCode !== 0 || r.signal !== null || r.stdoutTruncated) {
+      throw new Error(`git rev-parse HEAD did not exit cleanly (status=${r.status}, exit=${r.exitCode})`);
+    }
+    stdout = r.stdout;
+  } catch (error) {
+    if (error instanceof LoopPosixProcessRunnerError) {
+      throw new LoopRunCliError("BASE_SHA_RESOLVE_FAILED", `git probe failed on repositoryPath: ${error.code}`);
+    }
+    throw new LoopRunCliError("BASE_SHA_RESOLVE_FAILED", `cannot resolve repositoryPath HEAD: ${(error as Error).message}`);
+  }
+  const sha = stdout.trim();
+  if (!SHA40_RE.test(sha)) {
+    throw new LoopRunCliError("BASE_SHA_RESOLVE_FAILED", `git rev-parse HEAD is not a 40-char SHA`);
+  }
+  return sha;
+}
+
+function freezeIntakeRequest(
+  manifest: ReturnType<typeof parseIntakeManifest>,
+  expectedBaseSha: string,
+): { rawRequest: Record<string, unknown>; requestPath: string } {
+  const rawRequest: Record<string, unknown> = {
+    schema: PRODUCTION_ENTRY_SCHEMA,
+    requirementId: manifest.requirementId,
+    repository: manifest.repository,
+    repositoryPath: manifest.repositoryPath,
+    baseBranch: manifest.baseBranch,
+    expectedBaseSha,
+    taskBranch: manifest.taskBranch,
+    controlRoot: manifest.controlRoot,
+    sourceFiles: [...manifest.sourceFiles],
+    bindingRegistryVersion: BINDING_REGISTRY_VERSION,
+    executionProfileVersion: EXECUTION_PROFILE_VERSION,
+    mode: "real",
+  };
+  // Audit artifact (design §4): the frozen request lands under controlRoot so
+  // a resume/audit can always reconstruct exactly what was launched.
+  const runDir = join(manifest.controlRoot, "loop-runs", manifest.requirementId);
+  mkdirSync(runDir, { recursive: true });
+  const requestPath = join(runDir, `entry-${Date.now().toString(36)}.json`);
+  writeFileSync(requestPath, `${JSON.stringify(rawRequest, null, 2)}\n`);
+  return { rawRequest, requestPath };
+}
 
 async function main(argv: readonly string[]): Promise<number> {
   const args = parseLoopRunArgs(argv);
@@ -158,13 +293,65 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  // Closed request file → closed-schema parse → identity.
+  // ── Request acquisition: closed request file OR confirmed intake manifest ──
   let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(args.requestFile as string, "utf8"));
-  } catch (error) {
-    process.stderr.write(`LOOP_RUN_ERROR BAD_REQUEST_FILE: ${(error as Error).message}\n`);
-    return 1;
+  let intakeRunner: LoopPosixProcessRunner | undefined;
+  let prepared: PreparedIntake | null = null;
+  if (args.fromIntake !== null) {
+    const manifest = readConfirmedManifest(args.fromIntake as string);
+    // Both the runner construction (cwd-root validation) and the HEAD probe
+    // fail closed under one code: the repository named by the manifest is
+    // unusable as a run base.
+    try {
+      const gitPath = findGit();
+      intakeRunner = new LoopPosixProcessRunner({
+        executables: [{ id: "git", executablePath: gitPath, allowDynamicArgs: true, stdinMode: "optional" }],
+        allowedCwdRoots: [manifest.repositoryPath, manifest.controlRoot],
+        fixedEnv: {
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+          PATH: join(gitPath, ".."),
+          LC_ALL: "C",
+          LANG: "C",
+        },
+        allowedRequestEnvKeys: [],
+        defaultTimeoutMs: 15000,
+      });
+    } catch (error) {
+      if (error instanceof LoopPosixProcessRunnerError) {
+        throw new LoopRunCliError("BASE_SHA_RESOLVE_FAILED", `repositoryPath/controlRoot unusable for git probing: ${error.code}`);
+      }
+      throw error;
+    }
+    const expectedBaseSha = await resolveBaseSha(intakeRunner, manifest.repositoryPath);
+    const { rawRequest, requestPath } = freezeIntakeRequest(manifest, expectedBaseSha);
+    prepared = {
+      rawRequest,
+      requestPath,
+      expectedBaseSha,
+      requirementId: manifest.requirementId,
+      sourceFilesCount: manifest.sourceFiles.length,
+    };
+    raw = rawRequest;
+    if (args.prepareOnly) {
+      // Closed prepared set — no manifest echo, no environment, no stdout of git.
+      process.stdout.write(`LOOP_RUN_PREPARED ${JSON.stringify({
+        request_path: prepared.requestPath,
+        requirement_id: prepared.requirementId,
+        expected_base_sha: prepared.expectedBaseSha,
+        source_files_count: prepared.sourceFilesCount,
+      })}\n`);
+      return 0;
+    }
+  } else {
+    // Closed request file → closed-schema parse → identity.
+    try {
+      raw = JSON.parse(readFileSync(args.requestFile as string, "utf8"));
+    } catch (error) {
+      process.stderr.write(`LOOP_RUN_ERROR BAD_REQUEST_FILE: ${(error as Error).message}\n`);
+      return 1;
+    }
   }
 
   const now = (): string => new Date().toISOString();
@@ -175,22 +362,29 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const requirementText = readRequirementText(parsed.request.sourceFiles);
 
-  // Read-only git preflight runner (inspect only; no worktree is created).
-  const gitPath = findGit();
-  const runner = new LoopPosixProcessRunner({
-    executables: [{ id: "git", executablePath: gitPath, allowDynamicArgs: true, stdinMode: "optional" }],
-    allowedCwdRoots: [parsed.identity.repositoryPath, parsed.identity.controlRoot],
-    fixedEnv: {
-      GIT_TERMINAL_PROMPT: "0",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_NOSYSTEM: "1",
-      PATH: join(gitPath, ".."),
-      LC_ALL: "C",
-      LANG: "C",
-    },
-    allowedRequestEnvKeys: [],
-    defaultTimeoutMs: 15000,
-  });
+  // Read-only git preflight runner (inspect only; no worktree is created). The
+  // intake path already built one scoped to the manifest's own
+  // repositoryPath/controlRoot — the same paths as the parsed identity.
+  let runner: LoopPosixProcessRunner;
+  if (intakeRunner !== undefined) {
+    runner = intakeRunner;
+  } else {
+    const gitPath = findGit();
+    runner = new LoopPosixProcessRunner({
+      executables: [{ id: "git", executablePath: gitPath, allowDynamicArgs: true, stdinMode: "optional" }],
+      allowedCwdRoots: [parsed.identity.repositoryPath, parsed.identity.controlRoot],
+      fixedEnv: {
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        PATH: join(gitPath, ".."),
+        LC_ALL: "C",
+        LANG: "C",
+      },
+      allowedRequestEnvKeys: [],
+      defaultTimeoutMs: 15000,
+    });
+  }
   const workspaceManager = new LoopGitWorkspaceManager({ runner, gitExecutableId: "git" });
 
   const result = await runProduction(parsed, requirementText, {
@@ -229,14 +423,15 @@ if (isMain) {
     })
     .catch((error: unknown) => {
       // Closed error reporting: code + safe message only, no stdout/env leakage.
-      if (
-        error instanceof LoopRunCliError ||
-        error instanceof ProductionEntryError ||
-        error instanceof ProductionRunError ||
-        error instanceof LoopRunJournalError ||
-        error instanceof LoopGitWorkspaceError ||
-        error instanceof LoopPosixProcessRunnerError
-      ) {
+          if (
+            error instanceof LoopRunCliError ||
+            error instanceof ProductionEntryError ||
+            error instanceof ProductionRunError ||
+            error instanceof IntakeManifestError ||
+            error instanceof LoopRunJournalError ||
+            error instanceof LoopGitWorkspaceError ||
+            error instanceof LoopPosixProcessRunnerError
+          ) {
         // Known, classifiable failure (incl. read-only preflight infrastructure):
         // report the real code at exit=1, never the generic UNEXPECTED bucket.
         process.stderr.write(`LOOP_RUN_ERROR ${error.code ?? error.name}: ${error.message}\n`);
