@@ -253,3 +253,15 @@ JUnit5 单测不存在，无从运行。
   `d3ea311`/`d1f53b0`/`0fa3cf8`/`3b0b874` 已推 origin。Exchange/PKB/CP 传播与
   问题清单处置**均待 Current User 裁决后**随完整治理一次执行。当前停驻：链
   BLOCKED 于 gate 后（PASS_WITH_RISK 待风险裁决），②③不推进。
+- 2026-09-01 治理回执（Decision-079 记录传播）：Decision-079 + 索引 + 台账处置
+  列 commit `a958d83`（与事实回填 `0716e82` 一并 push）；Exchange issue #95
+  （REQ-20260901T091609Z-DECISION-079-SMOKE-PARKED-DIAG-PREP，label
+  `exchange-publish`）PUBLISHED，run `af96785` / pointer `159e2a3` / handoff
+  sha256 `ebeab734…dd55`；PKB 派生归档 commit `c6071ab`
+  （feature/knowledge-base-v1，handoff 2026-09-01-decision-079-smoke-parked-
+  diag-prep + current.md 指针刷新至 a958d83）；CP PR #37 合 main（`3ae6e93`，
+  validator PASS v2：route_state=`C03_LOOP_GW_DIAG_WAVE_IN_PROGRESS`、
+  active_work=`C03-LOOP-GW-DIAG` NOT_STARTED、live 授权 +GW_DIAG_WAVE/
+  +GW_PREP_WAVE 且前两条消费移出、**blocker C03_LOOP_GW_SMOKE_WIRING_GAP 关闭
+  移出**、product_commit=`a958d83`、next_transition=DIAG→PREP→重发冒烟）。
+  当前停驻：波 1 W-GW-DIAG 待开工（授权已生效），波 2 随后，之后重发冒烟。
