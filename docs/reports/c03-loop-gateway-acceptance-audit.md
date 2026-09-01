@@ -199,6 +199,15 @@ FAIL 携带阻塞原因 findings，路由完全依赖 scan/verdict 的 ledger；
 （prompt 契约强化 vs 接受层拒绝无 findings 的 FAIL vs 人工触发入口），本波
 以「治理侧按裁决登记 finding」的最小合法方式执行返工，不改 runtime。
 **执行状态：未执行（Current User 指示今日收工，留待下次会话直接继续）**。
+治理收口（2026-09-01 晚）：本块 + P-J + 跨机指南 commit `dc5dbf7`；Exchange
+issue #96（REQ-20260901T113309Z-RUN4-PARKED-REWORK-DEFERRED）PUBLISHED，run
+`106845b` / pointer `91ddeb2` / handoff sha256 `6739dbeb…ff8c`；PKB 派生归档
+commit `d2d83cc`（handoff 2026-09-01-run4-parked-rework-deferred + current.md
+指针刷新至 dc5dbf7）；CP PR #38 合 main（`47a65f8`，validator PASS v2：
+route_state=`C03_LOOP_GW_SMOKE_REWORK_PENDING`、active_work=
+`C03-LOOP-GW-SMOKE-REWORK` PAUSED（pause 带 resume_authority）、live 授权
++GW_SMOKE_REWORK_EXECUTION 且 DIAG/PREP 两授权消费移出、product_commit=
+`dc5dbf7`、next_transition=REWORK_EXECUTION_NEXT_SESSION）。
 续作入口（本机）：① finding 登记/续跑脚本要点已验证——finding 形态
 （source=solution-gate :1 revision、category=SOLUTION、earliestAffected=
 solution-design、evidence=human_action_required blob）在
