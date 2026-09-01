@@ -32,8 +32,8 @@
 
 | 级 | 内容 | 能力类 | 状态 |
 |----|------|--------|------|
-| W-GW-FIX（前置波） | REAL_GATEWAY_NO_INPUT 接线缺口修复 + run()+real 最小回归 + 冒烟重跑 | runtime 仓 | **AUTHORIZED（Decision-078），待开工** |
-| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | **FAIL-CLOSED（缺口修复已授权 W-GW-FIX，重跑待其完成）** |
+| W-GW-FIX（前置波） | REAL_GATEWAY_NO_INPUT 接线缺口修复 + run()+real 最小回归 + 冒烟重跑 | runtime 仓 | 修复+回归完成（`69f72cd`）；重跑已执行并真实推进至 gate 后合法停等（PASS_WITH_RISK，待 Current User 决策卡裁决） |
+| ① 冒烟 | MD5Util `System.exit(-1)`→抛异常+离线单测；`GatewayDubboSyncInvoker:36` logger 类名笔误；`GatewayInvokeServiceImpl.invokeTest` 死代码整段删除（含接口声明） | 非实现类 | 重跑真实推进至 solution-gate 后停等（三项缺陷未产出；旧 4ms 死点已由 W-GW-FIX 消除） |
 | ② 主测 | P0-2：6 filter `endsWith(getURI())` query-string 绕过修复 + 单测（`?x=.js` 不再放行） | 实现类 | PENDING 放行 |
 | ③ 批量 | NPE 判空（`GatewayConfigCacheServiceImpl:161`）+ 缓存字段 volatile + Dict 空列表守卫 | 非实现类 | PENDING 放行 |
 
@@ -61,6 +61,71 @@ SALT/CORS/盐迁 ACM（安全语义取舍，验收口径定不清）；P0-4 @Tra
 - **边界**：不解除 D2（`runProduction` real 门）；不动 E5-L3 冻结；spruce 零
   写入。
 - **状态**：AUTHORIZED，待开工。
+
+#### W-GW-FIX 实施与冒烟重跑回填（2026-09-01，事实记录）
+
+**修复实施**（commit `69f72cd`）：方向按证据定为 **`extractInputText` 支持
+`inputArtifactRef` 解析**——resolver（`artifactText`）由唯一装配点
+`createCapabilityGateway` 用其自持的 artifactStore 注入（execution/
+real-capability-gateway.ts、execution/capability-gateway-source.ts）；自由文本
+键保持优先（canary/测试的手工请求零改动）；无 resolver/解析为空仍 fail-closed。
+最小回归 `tests/loop-gw-fix-run-real-reaches-spawn.test.ts` 12 checks：run()+real
+端到端到达 adapter（spawn 点）且 staged 内容=需求原文、越过 intake、fail-closed
+负向 3 例。tsc clean；全量测试基线 23 个失败文件 → 修复后 22（无新增失败；
+该 22 个全部系 `93f4a5c` 冒烟脚本的 SDLC_HERMES_* 环境标记触发 hermes
+phase-2 guardrail 套件的**既有失败**，根因抽样三件确认一致，本波不夹带处理）。
+
+**harness 修正**（commit `3b0b874`）：冒烟脚本 TARGET_REPO 由 kimi 会话主机的
+`/Users/eric/...` 修正为本机 `/Users/eric_shaoooo/...`。环境：默认 node 切至
+v24.12.0（Current User 指示；nvm alias + `.zshrc` PATH 前置）；codex 使用
+nvm node24 下既有可用安装 codex-cli 0.150.1（`~/.local/bin/codex` 缺平台依赖，
+未重装）。
+
+**重跑 run3**（runId `run-REQ-LOOP-GW-mtic6mh6-1788247153486`，fixture
+`/private/var/folders/1c/…/loop-gw-smoke-WxQix2`，临时目录易失，本块引述的
+digest/文本为持久记录）：
+- `requirement-intake/primary : kimi : started → succeeded`（324s，exit 0）
+  ——**旧 4ms 死点确认消除，W-GW-FIX 在真实链生效**；
+- `solution-design/primary : kimi : attempt 1 started → failed
+  （EXECUTOR_EXCEPTION，无进程证据，~408s）`。根因（kimi 会话日志实证）：
+  kimi 正常完成 turn（8 次 LLM 调用，并将技术方案写入 spruce
+  `library/REQ-LOOP-GW-mtic6mh6/01-技术方案/`），但 stdout 未带可解析 E3
+  信封——**后进程输出不合格类失败在 gateway 的 adapter try/catch 之外抛出，
+  被抹成无证据 EXECUTOR_EXCEPTION**（发现问题清单 P-A）；
+- resume（同一 fixture，attempt 2）：design succeeded（365s）→ gate
+  adversarial_scan codex succeeded（177s）→ formal_verdict hermes succeeded
+  （231s）→ **`gate_result = PASS_WITH_RISK`**，unresolved findings：
+  ADV-001 [LOW]（原 HIGH 判定经代码核实不成立）、ADV-002 [MEDIUM]（删
+  `GatewayInvokeService.invokeTest` 公开接口方法属二进制不兼容变更，webflux
+  配内部 Nexus 发布）、ADV-003 [MEDIUM]（实施计划验证列缺确定性静态 oracle，
+  compile 查不出三类残留）。按合同 PASS_WITH_RISK 须风险接受记录、未决
+  findings 阻塞推进 → **链于 gate 后合法停等（BLOCKED，无 next point）**，
+  等待 Current User 决策卡裁决（放行/返工/收口）。三项 spruce 缺陷修复未产出
+  （implementation 未到达）。
+
+**同波 D3-deterministic 交付**（Decision-078 §决策.3，事实记录）：intake
+manifest 封闭 schema + 校验（18 checks，`d3ea311`）；`loop-run
+--from-intake/--prepare-only`（CLI 解析 expectedBaseSha + 冻结请求落盘审计，
+19 checks 含真实临时 git 仓）；agent 触发协议文档（`d1f53b0`；step 4 决策卡
+硬义务 `0fa3cf8`）；deterministic 端到端演练 COMPLETED（七节点 16 事件全部
+started→succeeded，Q1 槽位映射正确）。
+
+### 发现问题清单（冒烟重跑 2026-09-01，全部「发现待裁决」，无处置承诺）
+
+| # | 问题 | 证据锚点 | 定性 |
+|---|------|----------|------|
+| P-A | 后进程输出不合格丢失全部进程证据（信封解析在 adapter try/catch 之外） | design attempt 1（~408s，journal 全空） | runtime 诊断性缺口 |
+| P-B | 生产门 fresh-prepare 缺口：inspect 只认已存在 exact-ok 工作树，无人调 prepare；工作树路径含运行时 runId 摘要无法预建 | deterministic 演练（E1 生产测试全为注入 stub 故未暴露） | 生产门硬阻断 |
+| P-C | delivery-tail 物化器缺失：stable_path 仅元数据，canonical 产物不落目标仓；链尾仅产 checklist | 02-方案审核只在 artifact store；spruce 内 00/01 系 kimi 自写 | 交付形态缺口 |
+| P-D | agent 自写文件与 canonical revision 无一致性校验 | 同上（00/01 仓内文件 vs 信封正文可漂移） | 一致性缺口 |
+| P-E | BLOCKED 无主动询问：无通知通道、无决策卡渲染、CLI 无 `--release RISK_ACCEPTED/SCOPE_RESET` 面（释放语义仅在 journal 层） | gate 后停等仅可经查日志发现 | 人机交互缺口 |
+| P-F | E3 信封输出合规为概率行为（design 尝试 1/2 不合规） | attempt 1 失败/attempt 2 成功 | 观察，retry 已按设计吸收 |
+| P-G | 冒烟脚本 TARGET_REPO 硬编码他机路径 | 已修（`3b0b874`） | harness，已闭环 |
+| P-H | 默认 node 22 遮蔽 + `~/.local/bin/codex` 损坏 | 已按 Current User 指示切 node 24；codex 用 nvm 下可用安装 | 环境，已闭环 |
+| P-I | 注入 stores 时 RuntimeResult.journal_path=null（上次遗留） | run3 summary `journalPath: null` | 观测瑕疵，未修 |
+
+处置去向（哪些立项、与 D2/物化器如何分波排序、冒烟是否继续）**待 Current
+User 裁决后另立 Decision**，本清单不预写结论。
 
 ### W-GW-SMOKE（冒烟级，2026-08-31 立项即实施）
 
@@ -182,3 +247,8 @@ JUnit5 单测不存在，无从运行。
   DETERMINISTIC 且 E5 残留条目移除、product_commit=`a371d01`、next_transition=
   C03_LOOP_GW_FIX_IMPLEMENTATION_AND_SMOKE_RERUN）。当前停驻：W-GW-FIX 待开工
   （修复方向按证据定）+ D3-deterministic 待开工；②③继续停等至冒烟重跑 PASS。
+- 2026-09-01：W-GW-FIX 实施 + 冒烟重跑结果 + 发现问题清单 P-A～P-I 回填（本
+  commit，仅事实无处置结论）；W-GW-FIX/D3 代码与文档 commits `69f72cd`/
+  `d3ea311`/`d1f53b0`/`0fa3cf8`/`3b0b874` 已推 origin。Exchange/PKB/CP 传播与
+  问题清单处置**均待 Current User 裁决后**随完整治理一次执行。当前停驻：链
+  BLOCKED 于 gate 后（PASS_WITH_RISK 待风险裁决），②③不推进。
