@@ -522,7 +522,9 @@ export async function run(
           execution_trace: Object.freeze([]),
           next_execution_point: null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -572,7 +574,9 @@ export async function run(
           ),
           next_execution_point: recovery?.nextExecutionPoint ?? null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -604,7 +608,9 @@ export async function run(
           execution_trace: Object.freeze([]),
           next_execution_point: null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -912,7 +918,7 @@ export async function run(
       }))),
       next_execution_point: recovery?.nextExecutionPoint ?? null,
       workspace_root: workspaceRoot,
-      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : options.runStore.databaseFilePath,
       completed_at: now(),
       manual_handoff_status: manualHandoffStatus,
       manual_handoff_reason: manualHandoffReason,
