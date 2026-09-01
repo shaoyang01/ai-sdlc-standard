@@ -46,7 +46,10 @@ import { RealCapabilityAdapter } from "../execution/real-capability-adapter";
 import { AGENT_CLI_PROFILES, type AgentCliProviderId } from "../execution/agent-cli-profile";
 import { createRuntimeBindingRegistry, run } from "../runtime";
 
-const TARGET_REPO = "/Users/eric/meicai/projects/spruce_logistics_gateway";
+// Target-repo root is machine-specific: the original kimi-session host used
+// /Users/eric/..., this machine uses /Users/eric_shaoooo/... (W-GW-FIX re-run
+// harness correction, recorded in the C03-LOOP-GW ledger).
+const TARGET_REPO = "/Users/eric_shaoooo/meicai/projects/spruce_logistics_gateway";
 
 const REQUIREMENT = [
   "spruce_logistics_gateway 三项缺陷修复：",
