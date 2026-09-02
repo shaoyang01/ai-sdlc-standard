@@ -320,8 +320,18 @@ export class LoopCapabilityEntry {
           event.capability === previousPoint.capability &&
           event.executionRole === previousPoint.executionRole,
       );
+      // W-GW-DIAG P-K (Decision-080): a PASS_WITH_RISK verdict whose risks
+      // were accepted (same decisionScopeId) is admitted forward even though
+      // its journaled nextStepEligibility stays BLOCKED — the acceptance is
+      // the rederivation. Fail-closed without that proof.
+      const pwrAdmitted =
+        previousSucceeded !== undefined &&
+        previousSucceeded.gateResult === "PASS_WITH_RISK" &&
+        previousSucceeded.decisionScopeId !== null &&
+        recovery.acceptedRiskScopes.includes(previousSucceeded.decisionScopeId);
       if (
-        previousSucceeded === undefined || previousSucceeded.nextStepEligibility !== "ELIGIBLE" ||
+        previousSucceeded === undefined ||
+        (previousSucceeded.nextStepEligibility !== "ELIGIBLE" && !pwrAdmitted) ||
         previousSucceeded.outputArtifactRef !== request.inputArtifactRef ||
         previousSucceeded.outputArtifactVersion !== request.inputArtifactVersion ||
         previousSucceeded.outputDigest !== request.inputDigest
