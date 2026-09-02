@@ -62,6 +62,8 @@
 
 | [Decision-083](Decision-083-risk-accepted-event-chartered.md) | 2026-09-02 | Accepted / risk_accepted event chartered (H1 admission) | plan C 实施暴露第五道门 = H1 本身（store 链校验器 isCanonicalNext：verdict BLOCKED eligibility → task-planning started 非 canonical）。授权方案②：新增一等 run 级事件 `risk_accepted`（acceptFindingRisk 同事务追加，scope 绑定经 finding proof 行），投影为记录型，链校验器经 acceptedRiskScopes 放行 PWR verdict 后恰一次 canonical forward；H1 字面规则不变。测试矩阵授权；run4 续跑授权至全链完成。D2/E5-L3/②③边界不变。 |
 
+| [Decision-084](Decision-084-node-template-closure-wave.md) | 2026-09-02 | Accepted / P-L node-template closure wave (urgent) | sdlc-* skills 为现役手动驱动主干，模板缺口升级为紧急生产漏洞：P-L 收口波立项。templates/ 新增四份 canonical 文档模板（task-plan / implementation-record / knowledge-sync / finding-ledger），各节点 SKILL.md 增补引用，旧 specs/** 迁移模板废弃标注，00-需求资料 模板适用性评估。验证口径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/E3/H1。P-K-d 现场冻结保留。 |
+
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
 
 ## 新增流程

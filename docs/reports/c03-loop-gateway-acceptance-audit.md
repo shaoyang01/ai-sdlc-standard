@@ -488,3 +488,9 @@ JUnit5 单测不存在，无从运行。
   - **Current User 倾向（待正式立项确认）**：按统一标准一次收口四类模板
     （03-任务规划/04-实现记录/06-知识同步/adversarial_scan ledger 模板），
     不单独补 task-planning；与 P-C/P-D 交付尾波合并设计。处置立项待裁决。
+- **2026-09-02（续五）：Current User 裁决紧急立项（Decision-084）**。sdlc-*
+  skills 为现役手动驱动主干，模板缺口升级为紧急生产漏洞，P-L 从「随交付尾
+  波缓行」提升为独立收口波：templates/ 新增四份 canonical 文档模板 + 各节点
+  SKILL.md 引用 + 旧 specs/** 模板废弃标注 + 00-需求资料 适用性评估。验证口
+  径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/
+  E3/H1。P-K-d 现场冻结保留。实施随即开工。
