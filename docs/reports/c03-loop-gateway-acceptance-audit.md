@@ -223,7 +223,14 @@ finding 驱动 Re-Gate 回流——solution-design 重做方案后重进门禁�
 FAIL 携带阻塞原因 findings，路由完全依赖 scan/verdict 的 ledger；处置待裁决
 （prompt 契约强化 vs 接受层拒绝无 findings 的 FAIL vs 人工触发入口），本波
 以「治理侧按裁决登记 finding」的最小合法方式执行返工，不改 runtime。
-**执行状态：未执行（Current User 指示今日收工，留待下次会话直接继续）**。
+**执行状态（2026-09-02 更新）：返工 finding 已登记（`:finding:1` OPEN HIGH，
+source=solution-design:1，evidence=human_action_required blob 绑 decision:2）
+→ design attempt 2 重做 → 重扫描 → 重裁决 PWR（decision:3）。Current User
+选择「接受 ADV-006/007 放行进实现」，`acceptFindingRisk` 已执行（finding →
+ACCEPTED_RISK 绑 decision:3，证据 `7db299c6…`）。发现 **P-K**：recovery 线性
+推进信任 verdict 事件不可变 `nextStepEligibility=BLOCKED`，验收不参与推导，
+gateDecision=DECIDED 而 next=null → 授权最小修复（Decision-080），修复后
+resume 进 task-planning → implementation。
 治理收口（2026-09-01 晚）：本块 + P-J + 跨机指南 commit `dc5dbf7`；Exchange
 issue #96（REQ-20260901T113309Z-RUN4-PARKED-REWORK-DEFERRED）PUBLISHED，run
 `106845b` / pointer `91ddeb2` / handoff sha256 `6739dbeb…ff8c`；PKB 派生归档
