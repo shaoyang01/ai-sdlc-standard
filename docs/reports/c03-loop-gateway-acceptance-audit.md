@@ -433,6 +433,16 @@ JUnit5 单测不存在，无从运行。
   next_transition=`C03_LOOP_GW_PARKED_PENDING_PK_DESIGN_RULING`）。当前停
   驻：P-K-d 设计议题待未来波次立项（候选①H1 修订/②验收授权标记），梯子
   ①②③与 D2/E5-L3 维持既定状态。
+- **2026-09-02 治理回执（Decision-082 记录传播）**：Decision-082 + 索引 +
+  台账回填 commit `b8c1c4d`；Exchange issue #99
+  （REQ-20260902T063800Z-DECISION-082-PKD-PLAN-C）PUBLISHED，run `04ac15d` /
+  pointer `37cc0d1` / handoff sha256 `b3a33e78…a21b8`；PKB 派生归档 commit
+  `5e2033e`（handoff 2026-09-02-decision-082-pkd-plan-c，front matter schema
+  + current.md 指针刷新至 b8c1c4d）；CP PR #41 合 main（`e28f04e`，validator
+  PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、active_work
+  IN_PROGRESS（pause 解除）、授权 +GW_PKD_PLAN_C_IMPLEMENTATION、
+  product_commit=`b8c1c4d`、next_transition=REWORK_COMPLETION）。实施随即
+  开工，完成后 resume run4 至全链完成。
 - **2026-09-02（续）：P-K-d 立项（Decision-082）**。Current User 讨论后选定
   方案 C 并授权：`nextStepEligibility` 字段口径定为 agent 裁判（PWR→
   ELIGIBLE，FAIL→BLOCKED，「等人验收」移至派发闸门表达）；验收闸门 scope 级
