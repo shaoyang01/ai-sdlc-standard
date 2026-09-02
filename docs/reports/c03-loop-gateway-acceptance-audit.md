@@ -433,6 +433,15 @@ JUnit5 单测不存在，无从运行。
   next_transition=`C03_LOOP_GW_PARKED_PENDING_PK_DESIGN_RULING`）。当前停
   驻：P-K-d 设计议题待未来波次立项（候选①H1 修订/②验收授权标记），梯子
   ①②③与 D2/E5-L3 维持既定状态。
+- **2026-09-02 治理回执（P-L 波收口传播）**：Exchange issue #102 因 base
+  drift（#101 pointer 先落）被发布器拒发，修正 base 后重发为 issue #103
+  （REQ-20260902T091500Z-P-L-WAVE-COMPLETED）PUBLISHED，run `43d82bb` /
+  pointer `481cf92` / handoff sha256 `6d728bf4…0060`（#102 已关闭注明替代）；
+  PKB 派生归档 commit `aac759f`（handoff 2026-09-02-pl-wave-completed，front
+  matter schema + current.md 指针刷新至 13eddda）；CP STATE PR 合 main
+  （validator PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、
+  product_commit=`13eddda`、next_transition=P-K-d 实施完成→run4 resume）。
+  P-L 波至此四仓闭环。
 - **2026-09-02 治理回执（Decision-082 记录传播）**：Decision-082 + 索引 +
   台账回填 commit `b8c1c4d`；Exchange issue #99
   （REQ-20260902T063800Z-DECISION-082-PKD-PLAN-C）PUBLISHED，run `04ac15d` /
