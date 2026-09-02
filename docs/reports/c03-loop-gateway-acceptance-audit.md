@@ -189,6 +189,31 @@ git 仓上无钩子 fresh run 仍 `WORKSPACE_NOT_FOUND`（钉住缺口）、有�
 概率）累计 2 次不合规 / 9 次；P-A 落地后每次均有完整证据。门禁连续两轮产出
 实质对抗结论（run3 PWR、run4 FAIL），LOOP 验收链的核心价值得到真实验证。
 
+### 返工轮回填（2026-09-02，run4 续作）
+
+- **返工 finding 登记**：`:finding:1`（OPEN，HIGH，source=solution-design:1
+  revision——run4 真实链的 verdict 未物化 revision（real gateway 不回
+  terminal event id，P-J 附注），故 source 绑定被返工的 design
+  revision；evidence=`human_action_required` blob 载返工令与 ADV-004/005 修
+  订要求，绑定 verdict scope decision:2）。登记即触发 invalidation：design
+  current → STALE（失效语义正确）。
+- **首轮 resume 尝试失败（harness 环境）**：hermes 夜间自动更新窗口内探测
+  瞬时失败（`no runnable hermes on PATH`），重跑即过——非链路问题。
+- **返工轮全链**：design attempt 2 succeeded（rev 2.0.0，按 ADV-004/005 修
+  订要求重写）→ scan attempt 2/3 ✓ → verdict attempt 3 succeeded →
+  **`gate_result = PASS_WITH_RISK`（decision:3，depth STANDARD，无
+  CRITICAL/HIGH/MEDIUM）**。裁决逐条复核 ADV-001/002/004/005 闭环；新接受风
+  险两项 LOW：ADV-006（MD5 固定 oracle 未冻结，关闭条件=任务规划冻结期望值）、
+  ADV-007（扫描命令未排除 target/回归口径，关闭条件=干净编译闭环）。裁决采
+  纳 scan 建议将深度档位降为 LIGHT（正文），envelope 字段仍记 STANDARD——
+  记 P-F 观察一次。
+- **停驻点**：PWR-DECIDED 需要一条 `ACCEPTED_RISK` finding 绑定 decision:3；
+  本轮 scan ledger 含 ADV-006/007 但 runtime 未将其物化为 finding 行（仅
+  ledger artifact），故待 Current User 对「接受两项 LOW 风险进入实现」裁决
+  后，经 `acceptFindingRisk(:finding:1, scope=decision:3, evidence=verdict)`
+  一次动作同时完成返工单关闭与 PWR 证明。②级实质内容（三项缺陷的实现）随后
+  在 task-planning → implementation 展开。
+
 **Current User 裁决（2026-09-01）：返工**。执行口径：将裁决正文的修订要求
 （ADV-004/005）登记为绑定 verdict scope 的 OPEN finding（source=solution-gate
 verdict revision，earliestAffected=solution-design），走 runtime 既有的
