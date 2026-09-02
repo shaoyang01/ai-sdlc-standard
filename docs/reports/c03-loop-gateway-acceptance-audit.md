@@ -494,3 +494,13 @@ JUnit5 单测不存在，无从运行。
   SKILL.md 引用 + 旧 specs/** 模板废弃标注 + 00-需求资料 适用性评估。验证口
   径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/
   E3/H1。P-K-d 现场冻结保留。实施随即开工。
+- **2026-09-02 P-L 收口实施回填（commit `ec9caaf`）**：四份 canonical 模板落
+  地（templates/task-plan-template.md、implementation-record-template.md、
+  knowledge-sync-template.md、finding-ledger-template.md——均含 Metadata 契约
+  块 + artifact-flow 必备章节 + Gate 随行风险/ADV 关闭对照）；四个节点
+  SKILL.md 增补 Canonical 模板引用行；sdlc-speckit-tasks/output-and-manifest.md
+  加废弃标注（specs/** 目标 v1 路径，仅迁移参考）。00-需求资料 评估结论：
+  requirement-intake 的 output-artifact.md 通用 Metadata 契约 + intake-workflow
+  已 v2 对齐（library/{requirement_id}/ 稳定路径、无 specs/** 残留），**无需新
+  增模板**——该节点「部分具备」的缺口实为文档组织问题而非模板缺失，结论记
+  录在案。验证：typecheck 干净（模板为纯文档，无代码路径）。
