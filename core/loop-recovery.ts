@@ -330,6 +330,8 @@ export interface ExecutionPointRecoveryState {
   effectiveOutputArtifactVersion: string | null;
   effectiveOutputDigest: string | null;
   gateResult: LoopCapabilityGateResult | null;
+  /** W-GW-DIAG P-K: the verdict round's materialized decision scope. */
+  decisionScopeId: string | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   retryable: boolean | null;
   /** v3 (Round 1): the persisted Finding Ledger of a scan round. */
@@ -513,6 +515,7 @@ function recoverRunContextInTransaction(
         effectiveOutputArtifactVersion: lastSucceeded?.outputArtifactVersion ?? null,
         effectiveOutputDigest: lastSucceeded?.outputDigest ?? null,
         gateResult: lastSucceeded?.gateResult ?? null,
+        decisionScopeId: last?.decisionScopeId ?? null,
         nextStepEligibility: last?.nextStepEligibility ?? null,
         retryable: last?.retryable ?? null,
         unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
@@ -521,6 +524,9 @@ function recoverRunContextInTransaction(
       });
     },
   );
+  const findings = capabilityExecutions.length > 0
+    ? store.listFindings(state.identity.runId)
+    : [];
   let nextExecutionPoint: RunRecoveryContext["nextExecutionPoint"] = null;
   let linearStopIdx: number | null = null;
   const pointIndexOf = (point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }): number =>
@@ -547,15 +553,33 @@ function recoverRunContextInTransaction(
       break;
     }
     if (pointState.nextStepEligibility !== "ELIGIBLE") {
+      // W-GW-DIAG P-K (Decision-080): a PASS_WITH_RISK verdict that judged
+      // itself BLOCKED pending risk admission is admitted forward once the
+      // human decision exists — an ACCEPTED_RISK finding bound to the SAME
+      // decisionScopeId (the identical proof the PWR-DECIDED rule below
+      // requires). The event field stays immutable; eligibility is rederived
+      // from accepted facts. Without that proof: fail-closed as before.
+      const pwrVerdictAwaitingAdmission =
+        pointState.status === "succeeded" &&
+        pointState.capability === "solution-gate" &&
+        pointState.executionRole === "formal_verdict" &&
+        pointState.gateResult === "PASS_WITH_RISK" &&
+        pointState.decisionScopeId !== null;
+      if (pwrVerdictAwaitingAdmission) {
+        const admitted = findings.some(
+          (finding) =>
+            finding.status === "ACCEPTED_RISK" &&
+            finding.riskAcceptedScopeId !== null &&
+            finding.riskAcceptedScopeId === pointState.decisionScopeId,
+        );
+        if (admitted) continue;
+      }
       nextExecutionPoint = null;
       break;
     }
   }
   let regateTargetIndex: number | null = null;
   let regateOverrideApplied = false;
-  const findings = capabilityExecutions.length > 0
-    ? store.listFindings(state.identity.runId)
-    : [];
   // Round 3 review F2: derive the pending revision materialization from the
   // same verified reads the rest of this context consumes — a succeeded
   // producer without its node revision keeps the terminal→revision window

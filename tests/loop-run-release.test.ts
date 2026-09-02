@@ -28,6 +28,7 @@ import type { LoopRunEvent, LoopRunIdentity } from "../core/loop-executor-types"
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
 import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
+import { recoverRunContext } from "../core/loop-recovery";
 import {
   LoopRunCliError,
   parseLoopRunArgs,
@@ -151,7 +152,7 @@ function findingDraft(o: {
   };
 }
 
-function seedGatePwrStop(fx: Fixture, severity: "MEDIUM" | "CRITICAL" = "MEDIUM"): { decisionScopeId: string; openFindingId: string } {
+function seedGatePwrStop(fx: Fixture, severity: "MEDIUM" | "CRITICAL" = "MEDIUM"): { decisionScopeId: string; openFindingId: string; verdictEventId: string; verdictArtifactRef: string; verdictDigest: string } {
   const runId = fx.identity.runId;
   let sequence = fx.runStore.listCapabilityExecutions(runId).length;
   let predecessor = {
@@ -317,7 +318,7 @@ function seedGatePwrStop(fx: Fixture, severity: "MEDIUM" | "CRITICAL" = "MEDIUM"
     severity,
     evidence: findingEvidence,
   }))).record;
-  return { decisionScopeId: verdictSucceeded.decisionScopeId!, openFindingId: finding.findingId };
+  return { decisionScopeId: verdictSucceeded.decisionScopeId!, openFindingId: finding.findingId, verdictEventId: verdictSucceeded.executionEventId, verdictArtifactRef: verdictSucceeded.outputArtifactRef!, verdictDigest: verdictSucceeded.outputDigest! };
 }
 
 function procedureCode(fn: () => unknown): string {
@@ -416,6 +417,156 @@ async function main(): Promise<void> {
         (): { runStore: LoopRunStore; artifactStore: LoopArtifactStore } => ({ runStore: fx.runStore, artifactStore: fx.artifactStore }),
         "req-004", "run-404", "RISK_ACCEPTED", "current-user", "n",
       )) === "RELEASE_TARGET_NOT_RELEASABLE");
+  }
+
+  // ── P-K: PWR stop + acceptance rederives verdict eligibility (recovery) ──
+  {
+    const fx = makeFixture("run-005", "req-005");
+    const seed = seedGatePwrStop(fx);
+    const { decisionScopeId, openFindingId } = seed;
+
+    const before = recoverRunContext(fx.runStore, "req-005");
+    check("without acceptance: gate decision BLOCKED_UNKNOWN",
+      before.solutionGateDecision?.status === "BLOCKED_UNKNOWN");
+    check("without acceptance: the OPEN finding routes a rework restart at solution-design",
+      before.nextExecutionPoint?.capability === "solution-design");
+
+    // Rework round: regenerate the design (attempt 2) and re-adjudicate
+    // (scan attempt 2, verdict attempt 3) — mirrors the real run4 rework
+    // chain, with a NEW verdict scope (decision:2) and fresh revisions.
+    const runId = fx.identity.runId;
+    let seq = fx.runStore.listCapabilityExecutions(runId).length;
+    let attemptOf = (cap: string, role: string): number =>
+      Math.max(0, ...fx.runStore.listCapabilityExecutions(runId)
+        .filter((e) => e.capability === cap && e.executionRole === role)
+        .map((e) => e.attempt)) + 1;
+    const ev = (
+      capability: NodeCapabilityId,
+      executionRole: "primary" | "adversarial_scan" | "formal_verdict",
+      status: "started" | "succeeded",
+      o: Partial<LoopCapabilityExecutionEvent> = {},
+    ): LoopCapabilityExecutionEvent => {
+      seq += 1;
+      const attempt = o.attempt ?? attemptOf(capability, executionRole);
+      const isSucceededVerdict = status === "succeeded" && executionRole === "formal_verdict";
+      const delta = isSucceededVerdict ? fx.artifactStore.put("solution_review", `delta ${nextTs()}`) : null;
+      const agent = executionRole === "primary" ? "kimi" : executionRole === "adversarial_scan" ? "codex" : "hermes";
+      return Object.freeze({
+        schemaVersion: 4,
+        executionEventId: `${runId}:capability:${seq}:${status}`,
+        runId, sequence: seq, capability, executionRole, nodeId: capability,
+        attempt, status, createdAt: nextTs(),
+        bindingId: `binding-${agent}-${capability}-${executionRole}`,
+        bindingVersion: "2.0.0", bindingRegistryVersion: "1",
+        executorAgent: agent, executorAdapter: agent === "codex" ? "codex-real-dispatch" : `${agent}-cli`,
+        executorVersion: "1.0.0",
+        inputArtifactRef: o.inputArtifactRef ?? `loop-artifact:v1:requirement_summary:sha256:${dg("b")}`,
+        inputArtifactVersion: o.inputArtifactVersion ?? "1.0.0", inputDigest: o.inputDigest ?? dg("b"),
+        outputArtifactRef: o.outputArtifactRef ?? null,
+        outputArtifactVersion: o.outputArtifactVersion ?? null,
+        outputDigest: o.outputDigest ?? null,
+        gateResult: o.gateResult ?? (status === "succeeded" ? ("NOT_APPLICABLE" as const) : null),
+        unresolvedFindingsRef: o.unresolvedFindingsRef ?? null,
+        unresolvedFindingsDigest: o.unresolvedFindingsDigest ?? null,
+        consumedFindingsRef: o.consumedFindingsRef ?? null,
+        consumedFindingsDigest: o.consumedFindingsDigest ?? null,
+        decisionDepth: isSucceededVerdict ? ("LIGHT" as const) : null,
+        decisionScopeId: isSucceededVerdict ? `${runId}:decision:2` : null,
+        decisionDeltaRef: delta?.artifactRef ?? null,
+        decisionDeltaDigest: delta?.digest ?? null,
+        nextStepEligibility: o.nextStepEligibility ?? (status === "succeeded" ? ("ELIGIBLE" as const) : null),
+        errorCode: null, retryable: null, reasonCode: null,
+        processInvocationDigest: null, processExitCode: null, processSignal: null,
+        processDurationMs: null, processTruncated: null,
+        stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+        humanActionRef: null,
+      });
+    };
+    const tailOutput = (): { ref: string; version: string; digest: string } => {
+      const last = [...fx.runStore.listCapabilityExecutions(runId)]
+        .reverse().find((e) => e.status === "succeeded");
+      return last === undefined
+        ? { ref: `loop-artifact:v1:requirement_summary:sha256:${dg("b")}`, version: "1.0.0", digest: dg("b") }
+        : { ref: last.outputArtifactRef!, version: last.outputArtifactVersion!, digest: last.outputDigest! };
+    };
+    // design attempt 2
+    // regate restart at solution-design consumes the REUSED upstream output
+    // (requirement-intake's actual succeeded output), not the journal tail.
+    const intakeSucceeded = fx.runStore.listCapabilityExecutions(runId)
+      .find((e) => e.capability === "requirement-intake" && e.status === "succeeded")!;
+    const t0 = {
+      ref: intakeSucceeded.outputArtifactRef!,
+      version: intakeSucceeded.outputArtifactVersion!,
+      digest: intakeSucceeded.outputDigest!,
+    };
+    const d2s = ev("solution-design", "primary", "started", { attempt: 2, inputArtifactRef: t0.ref, inputArtifactVersion: t0.version, inputDigest: t0.digest });
+    fx.runStore.appendCapabilityExecution(d2s);
+    const design2 = fx.artifactStore.put("technical_design", `reworked design ${nextTs()}`);
+    const d2 = ev("solution-design", "primary", "succeeded", {
+      attempt: 2, inputArtifactRef: t0.ref, inputArtifactVersion: t0.version, inputDigest: t0.digest,
+      outputArtifactRef: design2.artifactRef, outputArtifactVersion: "2.0.0", outputDigest: design2.digest,
+    });
+    fx.runStore.appendCapabilityExecution(d2);
+    fx.runStore.appendArtifactRevision(createLoopArtifactRevision({
+      producerExecutionRole: "primary", runId, requirementId: "req-005",
+      nodeId: "solution-design", sequence: 2, generation: 1,
+      stablePath: `library/req-005/01-技术方案/req-005_solution-design.md`,
+      artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION["solution-design"].artifactKind,
+      semver: "2.0.0", artifactRef: design2.artifactRef, digest: design2.digest,
+      producerExecutionId: d2.executionEventId, gateResult: "NOT_APPLICABLE",
+      upstreamRevisionIds: [`${runId}:revision:requirement-intake:1`], createdAt: nextTs(),
+    })).record;
+    // scan attempt 2 + verdict attempt 3 (new scope decision:2)
+    const scanLedger2 = fx.artifactStore.put("capability_findings", JSON.stringify({ findings: [] }));
+    const s2t = tailOutput();
+    const s2started = ev("solution-gate", "adversarial_scan", "started", { attempt: 2, inputArtifactRef: s2t.ref, inputArtifactVersion: s2t.version, inputDigest: s2t.digest });
+    fx.runStore.appendCapabilityExecution(s2started);
+    const scanBlob2 = fx.artifactStore.put("solution_review", `rework scan ${nextTs()}`);
+    const s2 = ev("solution-gate", "adversarial_scan", "succeeded", {
+      attempt: 2, inputArtifactRef: s2t.ref, inputArtifactVersion: s2t.version, inputDigest: s2t.digest,
+      outputArtifactRef: scanBlob2.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: scanBlob2.digest,
+      unresolvedFindingsRef: scanLedger2.artifactRef, unresolvedFindingsDigest: scanLedger2.digest,
+    });
+    fx.runStore.appendCapabilityExecution(s2);
+    const v3t = tailOutput();
+    const v3started = ev("solution-gate", "formal_verdict", "started", {
+      attempt: 2, inputArtifactRef: v3t.ref, inputArtifactVersion: v3t.version, inputDigest: v3t.digest,
+      consumedFindingsRef: scanLedger2.artifactRef, consumedFindingsDigest: scanLedger2.digest,
+    });
+    fx.runStore.appendCapabilityExecution(v3started);
+    const verdictBlob2 = fx.artifactStore.put("solution_review", `rework verdict ${nextTs()}`);
+    const v3 = ev("solution-gate", "formal_verdict", "succeeded", {
+      attempt: 2, inputArtifactRef: v3t.ref, inputArtifactVersion: v3t.version, inputDigest: v3t.digest,
+      outputArtifactRef: verdictBlob2.artifactRef, outputArtifactVersion: "2.0.0", outputDigest: verdictBlob2.digest,
+      gateResult: "PASS_WITH_RISK" as const,
+      nextStepEligibility: "BLOCKED" as const,
+      consumedFindingsRef: scanLedger2.artifactRef, consumedFindingsDigest: scanLedger2.digest,
+    });
+    fx.runStore.appendCapabilityExecution(v3);
+    fx.runStore.appendArtifactRevision(createLoopArtifactRevision({
+      producerExecutionRole: "formal_verdict", runId, requirementId: "req-005",
+      nodeId: "solution-gate", sequence: 2, generation: 1,
+      stablePath: `library/req-005/02-方案审核/req-005_solution-gate.md`,
+      artifactKind: LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION["solution-gate"].artifactKind,
+      semver: "2.0.0", artifactRef: verdictBlob2.artifactRef, digest: verdictBlob2.digest,
+      producerExecutionId: v3.executionEventId, gateResult: "PASS_WITH_RISK",
+      upstreamRevisionIds: [`${runId}:revision:solution-design:2`], createdAt: nextTs(),
+    })).record;
+    // acceptance binds the NEW scope (decision:2)
+    const acceptance = fx.artifactStore.put("human_action_required", `accept ADV-006/007 ${nextTs()}`);
+    fx.runStore.acceptFindingRisk(fx.identity.runId, openFindingId, {
+      riskAcceptedBy: "current-user",
+      riskAcceptanceEvidenceRef: acceptance.artifactRef,
+      riskAcceptanceEvidenceDigest: acceptance.digest,
+      decisionScopeId: `${runId}:decision:2`,
+    });
+    for (const f of fx.runStore.listFindings("run-005")) {
+    }
+    const after = recoverRunContext(fx.runStore, "req-005");
+        check("with same-scope acceptance: gateDecision DECIDED (new scope decision:2)",
+      after.solutionGateDecision?.status === "DECIDED");
+    check("with same-scope acceptance: verdict eligibility rederived, chain advances to task-planning",
+      after.nextExecutionPoint?.capability === "task-planning");
   }
 
   console.log(`\nResults: ${passed} passed, 0 failed`);
