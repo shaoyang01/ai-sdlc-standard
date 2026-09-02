@@ -8,6 +8,7 @@ version: 0.1.0
 # Task Planning
 
 **定位**：任务规划器：把已过门的方案分解为可执行任务，并对任务集做实现前一致性审计。
+**Canonical 模板**：`templates/task-plan-template.md`（本节点的 library/ 产物（03-任务规划）必须遵循此结构；Decision-084）。
 
 ## Core Rules
 

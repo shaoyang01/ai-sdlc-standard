@@ -8,6 +8,7 @@ version: 0.1.0
 # Implementation
 
 **定位**：受约束实现器与证据记录器：按已过门禁的任务实现代码，并落盘实现事实与验证证据。
+**Canonical 模板**：`templates/implementation-record-template.md`（本节点的 library/ 产物（04-实现记录）必须遵循此结构；Decision-084）。
 
 ## Core Rules
 
