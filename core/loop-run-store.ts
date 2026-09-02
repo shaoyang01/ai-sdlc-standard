@@ -2160,7 +2160,6 @@ export class LoopRunStore {
       });
     } catch (error) {
       if (error instanceof LoopRunJournalError) {
-        process.stderr.write(`DBG-APPEND ${error.code}: ${error.message}\n`);
         throw new LoopRunJournalError("ILLEGAL_TRANSITION", "capability execution transition is invalid");
       }
       throw error;
