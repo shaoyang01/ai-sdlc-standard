@@ -467,3 +467,24 @@ JUnit5 单测不存在，无从运行。
   PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、授权
   +GW_RISK_ACCEPTED_EVENT（PLAN_C 实施授权随之覆盖）、product_commit=
   `9e02a54`、next_transition=REWORK_COMPLETION）。实施随即开工。
+- **2026-09-02（续四）：新发现 P-L——sdlc-* skill 合并后节点文档模板缺口（只读核验，未改任何文件）**。Current User 审计并经本会话独立核验：
+  - **已具备 canonical 模板**：solution-design（ess/specification-schema.md +
+    templates/technical-specification-template.md）、code-review（ess/
+    code-review-schema.md）、formal_verdict（templates/gate-result-template.md，
+    artifact-flow 强制）。
+  - **缺口（有内容合同、无 v2 对齐的 canonical 文档模板）**：task-planning
+    （仅稳定路径 node-capability-contract 4.4 + 任务字段/artifact-flow 要求；
+    旧迁移模板 sdlc-speckit-tasks/output-and-manifest.md 仍指向已废弃的
+    specs/{feature}/tasks.md 目标）；implementation（仅 04-实现记录 路径 +
+    证据要求）；knowledge-sync（仅必备内容要求）；solution-gate/
+    adversarial_scan（仅字段合同，Finding Ledger 无文档模板；scan 只产出
+    ledger 属设计内）。
+  - **边界澄清**：E3 envelope 层（runtime 校验的 summary/body/gateResult/
+    findings）完整且不受影响；缺口在**人读文档模板层**——即 agent 产出的
+    library/ 文档的格式权威。
+  - **影响**：跨 agent/跨 run 的 library/ 人读产物格式漂移（无 canonical 权
+    威）；与 P-C/P-D 强相关——物化器（P-C）落盘文档时必须引用统一模板，否则
+    两套格式权威并存。P-L 是 P-C/P-D 的前置设计输入。
+  - **Current User 倾向（待正式立项确认）**：按统一标准一次收口四类模板
+    （03-任务规划/04-实现记录/06-知识同步/adversarial_scan ledger 模板），
+    不单独补 task-planning；与 P-C/P-D 交付尾波合并设计。处置立项待裁决。
