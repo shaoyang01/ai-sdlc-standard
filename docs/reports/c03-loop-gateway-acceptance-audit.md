@@ -527,6 +527,10 @@ JUnit5 单测不存在，无从运行。
   已 v2 对齐（library/{requirement_id}/ 稳定路径、无 specs/** 残留），**无需新
   增模板**——该节点「部分具备」的缺口实为文档组织问题而非模板缺失，结论记
   录在案。验证：typecheck 干净（模板为纯文档，无代码路径）。
+- **2026-09-02（续八）：skill 同步副本运维规则执行确认**。sync-skills.sh 已
+  运行并刷新 kimi/hermes 共 10 个目录至与仓库一致；四处 SKILL.md 引用路径
+  已切换为 `${AI_SDLC_STANDARD_HOME}/templates/…`。后续每次 skills/ 变更后
+  必须重跑 `scripts/sync-skills.sh`。
 - **2026-09-02（续六）：skill 安装副本同步机制（P-L 收口的运维补全）**。三个
   agent 的已安装 skill 副本（~/.kimi-code/skills、~/.hermes/skills，8/27 手
   动安装）全部滞后于仓库——手动唤醒主干用的就是这些副本。处置：
