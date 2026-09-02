@@ -451,3 +451,9 @@ JUnit5 单测不存在，无从运行。
   失效 design current 致返工死循环，随 P-C/P-D 交付尾波设计）；部件 4 再推
   导保留兼容 run4 存量 journal。H1 与 schema 不动。实施随即开工，完成后
   resume run4 至全链完成。
+- **2026-09-02（续三）：Current User 裁决方案②（Decision-083）**。新增一等
+  run 级事件 kind `risk_accepted`：acceptFindingRisk 同事务追加（scope 绑定
+  经 finding proof 行），投影为记录型事件，链校验器经 regateContext 增派
+  acceptedRiskScopes 放行 PWR verdict 后恰一次 canonical forward——H1 字面
+  规则不变（closed finding 仍不授权，授权事实由新事件承载）。测试矩阵 +
+  run4 续跑授权至全链完成。实施随即开工。
