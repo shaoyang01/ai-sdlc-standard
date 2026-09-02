@@ -58,6 +58,8 @@
 
 | [Decision-081](Decision-081-run4-closed-pk-deadlock-to-design.md) | 2026-09-02 | Accepted / run4 closed, P-K deadlock to design | run4 以 PWR 停等收口（返工闭环 + 重裁决 decision:3 + ADV-006/007 接受均为完整证据）；P-K 死锁（PWR-DECIDED vs Round 2 H1 组合必然死锁）转设计议题，候选方案①H1 修订②验收授权标记已记录，立项另行裁决；C03-LOOP-GW 阶段性停驻，重启前置 = P-K-d 设计裁决+实施；D2 挂账、E5-L3 冻结、零远程 Git 副作用不变。 |
 
+| [Decision-082](Decision-082-pkd-plan-c-eligibility-contract-and-dispatch-gate.md) | 2026-09-02 | Accepted / P-K-d chartered per plan C | P-K-d 立项采用方案 C：nextStepEligibility 字段口径定为 agent 裁判（PASS/PWR→ELIGIBLE，FAIL→BLOCKED），人闸门移至派发命令推导（PWR scope 无 ACCEPTED_RISK 行 → RISK_ACCEPTANCE_PENDING 停等）；ledger 行物化缓行（scope 级验收替代，避免 SOLUTION finding 失效死循环）；H1/schema 不动；部件 4 再推导保留兼容 run4；测试三分支授权。D2/E5-L3/②③边界不变。 |
+
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
 
 ## 新增流程

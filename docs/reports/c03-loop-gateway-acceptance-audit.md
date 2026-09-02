@@ -433,3 +433,11 @@ JUnit5 单测不存在，无从运行。
   next_transition=`C03_LOOP_GW_PARKED_PENDING_PK_DESIGN_RULING`）。当前停
   驻：P-K-d 设计议题待未来波次立项（候选①H1 修订/②验收授权标记），梯子
   ①②③与 D2/E5-L3 维持既定状态。
+- **2026-09-02（续）：P-K-d 立项（Decision-082）**。Current User 讨论后选定
+  方案 C 并授权：`nextStepEligibility` 字段口径定为 agent 裁判（PWR→
+  ELIGIBLE，FAIL→BLOCKED，「等人验收」移至派发闸门表达）；验收闸门 scope 级
+  （verdict scope 存在 ACCEPTED_RISK 行方可派发 task-planning，否则
+  `RISK_ACCEPTANCE_PENDING` 停等）；ledger 行物化缓行（SOLUTION finding 会
+  失效 design current 致返工死循环，随 P-C/P-D 交付尾波设计）；部件 4 再推
+  导保留兼容 run4 存量 journal。H1 与 schema 不动。实施随即开工，完成后
+  resume run4 至全链完成。
