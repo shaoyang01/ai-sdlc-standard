@@ -504,3 +504,13 @@ JUnit5 单测不存在，无从运行。
   已 v2 对齐（library/{requirement_id}/ 稳定路径、无 specs/** 残留），**无需新
   增模板**——该节点「部分具备」的缺口实为文档组织问题而非模板缺失，结论记
   录在案。验证：typecheck 干净（模板为纯文档，无代码路径）。
+- **2026-09-02（续六）：skill 安装副本同步机制（P-L 收口的运维补全）**。三个
+  agent 的已安装 skill 副本（~/.kimi-code/skills、~/.hermes/skills，8/27 手
+  动安装）全部滞后于仓库——手动唤醒主干用的就是这些副本。处置：
+  ① 四处 SKILL.md 的 canonical 模板引用统一改为
+  `${AI_SDLC_STANDARD_HOME}/templates/…`（kimi skill 既有惯例，跨机可移植，
+  模板落在标准包内由 env 解析）；② 新增 `scripts/sync-skills.sh`（kimi/
+  hermes 安装/刷新 + --check 漂移检查，bash 3.2 兼容），已执行同步：10 个
+  漂移目录全部刷新，复查 in sync（kimi/hermes 各 5 节点）。**运维规则**：
+  skills/ 变更后必须重跑 sync-skills.sh（或 --check 先查），否则手动主干使
+  用的仍是旧副本。
