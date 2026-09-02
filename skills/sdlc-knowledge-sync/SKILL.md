@@ -8,7 +8,7 @@ version: 0.1.0
 # Knowledge Sync
 
 **定位**：知识同步器：把稳定可复用事实写入长期知识目标，并对代码/文档/知识做一致性对账。
-**Canonical 模板**：`templates/knowledge-sync-template.md`（本节点的 library/ 产物（06-知识同步）必须遵循此结构；Decision-084）。
+**Canonical 模板**：`${AI_SDLC_STANDARD_HOME}/templates/knowledge-sync-template.md`（本节点的 library/ 产物（06-知识同步）必须遵循此结构；Decision-084）。
 
 ## Core Rules
 

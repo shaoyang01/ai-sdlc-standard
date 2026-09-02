@@ -8,7 +8,7 @@ version: 0.1.0
 # Solution Gate
 
 **定位**：方案门禁：adversarial_scan 角色产出 Finding Ledger 式对抗扫描；formal_verdict 角色做出 PASS/FAIL/PASS_WITH_RISK 与深度档位裁决。两角色必须由不同 Agent binding 承载。
-**Canonical 模板**：`templates/finding-ledger-template.md`（本节点的 library/ 产物（Finding Ledger（adversarial_scan））必须遵循此结构；Decision-084）。
+**Canonical 模板**：`${AI_SDLC_STANDARD_HOME}/templates/finding-ledger-template.md`（本节点的 library/ 产物（Finding Ledger（adversarial_scan））必须遵循此结构；Decision-084）。
 
 ## Core Rules
 
