@@ -337,6 +337,11 @@ JUnit5 单测不存在，无从运行。
    预期流程（run4 以台账引述为持久证据收档）。
 5. 续作入口：本台账 §3 波次账 + CP `next_transition.condition_ref`；下一级
    （②主测）放行须 Current User 显式确认。
+6. **PKB 归档派生规则（2026-09-02 补）**：Exchange handoff 写入 PKB 时必须套
+   PKB front matter schema（type: source / status: active / created / updated /
+   tags / sources / related，模板见 8/27 `ec33af5` 修复）；body 与 Exchange
+   逐字节一致。缺 front matter 会被 PKB 助手校验拒绝（本轮 5 件补齐于
+   PKB `d635108`）。
 
 ## 5. 治理落档记录
 
