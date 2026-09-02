@@ -457,3 +457,13 @@ JUnit5 单测不存在，无从运行。
   acceptedRiskScopes 放行 PWR verdict 后恰一次 canonical forward——H1 字面
   规则不变（closed finding 仍不授权，授权事实由新事件承载）。测试矩阵 +
   run4 续跑授权至全链完成。实施随即开工。
+- **2026-09-02 治理回执（Decision-083 记录传播）**：Decision-083 + 索引 +
+  台账续三 commit `9e02a54`；Exchange issue #100
+  （REQ-20260902T074500Z-DECISION-083-RISK-ACCEPTED-EVENT）PUBLISHED，run
+  `3895182` / pointer `35c5755`（全 …d78d7）/ handoff sha256 `b5b1b495…2e25`；
+  PKB 派生归档 commit `2a16e97`（feature/knowledge-base-v1，handoff
+  2026-09-02-decision-083-risk-accepted-event，front matter schema +
+  current.md 指针刷新至 9e02a54）；CP PR #42 合 main（`9b43b0a`，validator
+  PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、授权
+  +GW_RISK_ACCEPTED_EVENT（PLAN_C 实施授权随之覆盖）、product_commit=
+  `9e02a54`、next_transition=REWORK_COMPLETION）。实施随即开工。
