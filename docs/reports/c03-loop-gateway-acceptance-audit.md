@@ -508,6 +508,15 @@ JUnit5 单测不存在，无从运行。
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
   真实派发后与 implementation 合同矛盾）。裁决：codex sandbox 改为
   `workspace-write` + 启用 Shell，kimi/hermes 不动。实施随即执行。
+- **2026-09-02 治理回执（Decision-085 记录传播）**：Decision-085 + 索引 +
+  台账 commit `77cf853`；Exchange issue #104
+  （REQ-20260902T102500Z-DECISION-085-CODEX-SANDBOX-FIX）PUBLISHED，run
+  `6495df2` / pointer `ea7eb4` / handoff sha256 `df52b1cc…9482`；PKB 派生归
+  档 commit `2130290`（handoff 2026-09-02-decision-085-codex-sandbox-fix +
+  current.md 指针刷新至 77cf853）；CP PR #45 合 main（`10cc025`，validator
+  PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、授权
+  +GW_CODEX_SANDBOX_FIX、product_commit=`77cf853`）。codex sandbox 修正已
+  推送，run4 可 resume。
 - **2026-09-02 P-L 收口实施回填（commit `ec9caaf`）**：四份 canonical 模板落
   地（templates/task-plan-template.md、implementation-record-template.md、
   knowledge-sync-template.md、finding-ledger-template.md——均含 Metadata 契约
