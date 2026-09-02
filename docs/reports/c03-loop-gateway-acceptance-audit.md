@@ -503,6 +503,11 @@ JUnit5 单测不存在，无从运行。
   SKILL.md 引用 + 旧 specs/** 模板废弃标注 + 00-需求资料 适用性评估。验证口
   径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/
   E3/H1。P-K-d 现场冻结保留。实施随即开工。
+- **2026-09-02（续七）：codex sandbox 修正立项（Decision-085）**。codex 自
+  身诊断确认 implementation 零改动的根因 = LOOP profile 硬编码
+  `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
+  真实派发后与 implementation 合同矛盾）。裁决：codex sandbox 改为
+  `workspace-write` + 启用 Shell，kimi/hermes 不动。实施随即执行。
 - **2026-09-02 P-L 收口实施回填（commit `ec9caaf`）**：四份 canonical 模板落
   地（templates/task-plan-template.md、implementation-record-template.md、
   knowledge-sync-template.md、finding-ledger-template.md——均含 Metadata 契约
