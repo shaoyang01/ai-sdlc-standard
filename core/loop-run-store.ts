@@ -2154,6 +2154,7 @@ export class LoopRunStore {
       // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
       // live pending target derived above in this transaction.
       validateLoopCapabilityExecutionChain([...current, event], event.runId, {
+        acceptedRiskScopes: regateContext.acceptedRiskScopes,
         allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
         historicalFindings: regateContext.historicalFindings,
         feedbackChange: regateContext.feedbackChange,
@@ -3797,6 +3798,32 @@ export class LoopRunStore {
         );
         return Object.freeze({ record: accepted });
       }).immediate() as FindingTransitionResult;
+      // W-GW-DIAG P-K-d (Decision-083): mark the decision in the run event
+      // stream — the first-class fact the chain validator admits canonical
+      // forward on (reasonCode = the verdict decisionScopeId; scope binding
+      // and hash-verified acceptance evidence live in the finding proof rows
+      // persisted above).
+      const snapshot = this.getSnapshot(runId);
+      if (snapshot !== undefined) {
+        this.appendEvent(Object.freeze({
+          eventId: `${runId}:${snapshot.state.lastSequence + 1}:risk_accepted`,
+          runId,
+          sequence: snapshot.state.lastSequence + 1,
+          kind: "risk_accepted",
+          stage: null,
+          attempt: 0,
+          createdAt: new Date().toISOString(),
+          inputDigest: null,
+          outputArtifactRef: null,
+          outputDigest: null,
+          errorCode: null,
+          retryable: null,
+          reasonCode: valid.decisionScopeId,
+          bindingId: null,
+          bindingVersion: null,
+          inputArtifactRef: null,
+        }));
+      }
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
       if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -4058,7 +4085,16 @@ export class LoopRunStore {
     allowedRestartTargetIndex: number | null;
     historicalFindings: RegateFindingFacts[];
     feedbackChange: { previousGeneration: number } | null;
+    acceptedRiskScopes?: readonly string[];
   } {
+    // W-GW-DIAG P-K-d (Decision-083): decision scopes carrying a human
+    // ACCEPTED_RISK decision, derived from the finding rows (raw, in the
+    // same recursion-safe reduced-facts discipline as above).
+    const acceptedScopeRows = db.prepare(
+      `SELECT DISTINCT risk_accepted_scope_id AS scope FROM loop_findings
+       WHERE run_id = ? AND status = 'ACCEPTED_RISK' AND risk_accepted_scope_id IS NOT NULL`,
+    ).all(runId) as ReadonlyArray<{ scope: string }>;
+    const acceptedRiskScopes = acceptedScopeRows.map((row) => row.scope);
     // NOTE: deliberately avoids the validating readers (readFindings… /
     // readRunSnapshot… / readArtifactRevisions…) — findings reading pulls
     // artifact revisions, revisions reading validates the capability chain,
@@ -4069,7 +4105,7 @@ export class LoopRunStore {
       "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
     ).get(runId) as { requirement_id?: string } | undefined;
     if (runRow === undefined) {
-      return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null };
+      return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null, acceptedRiskScopes: [] };
     }
     const findingRows = db.prepare(
       `SELECT f.finding_id AS finding_id, f.severity AS severity, f.status AS status,
@@ -4168,6 +4204,7 @@ export class LoopRunStore {
     try {
       const regateContext = this.regateChainContextInTransaction(db, runId);
       validateLoopCapabilityExecutionChain(events, runId, {
+        acceptedRiskScopes: regateContext.acceptedRiskScopes,
         historicalFindings: regateContext.historicalFindings,
         historicalReplayMode: true,
         feedbackChange: regateContext.feedbackChange,

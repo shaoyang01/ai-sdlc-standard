@@ -545,6 +545,13 @@ export interface LoopCapabilityChainValidationContext {
    */
   allowedRestartTargetIndex?: number | null;
   /**
+   * W-GW-DIAG P-K-d (Decision-083): decision scopes carrying a human
+   * ACCEPTED_RISK decision. A PASS_WITH_RISK verdict bound to one of these
+   * scopes is admitted forward (the canonical next step) even though its
+   * event nextStepEligibility stays BLOCKED.
+   */
+  acceptedRiskScopes?: readonly string[];
+  /**
    * Reduced findings enabling historical restart re-validation of
    * already-recorded jumps (see historicalRestartAuthorized).
    */
@@ -619,8 +626,23 @@ export function validateLoopCapabilityExecutionChain(
             point.capability === event.capability &&
             point.executionRole === event.executionRole,
         );
+        // W-GW-DIAG P-K-d (Decision-083): a PASS_WITH_RISK verdict whose
+        // risks carry a human ACCEPTED_RISK decision (same decisionScopeId,
+        // recorded as a risk_accepted event in the run stream) is admitted
+        // forward — the event field stays BLOCKED (immutable), the admission
+        // rederives eligibility from the accepted fact. Fail-closed without
+        // the risk_accepted event.
+        const acceptedScopes = (context?.acceptedRiskScopes ?? []) as readonly string[];
+        const pwrAdmitted =
+          previous.status === "succeeded" &&
+          previous.capability === "solution-gate" &&
+          previous.executionRole === "formal_verdict" &&
+          previous.gateResult === "PASS_WITH_RISK" &&
+          previous.decisionScopeId !== null &&
+          acceptedScopes.includes(previous.decisionScopeId);
         const isCanonicalNext =
-          previous.nextStepEligibility === "ELIGIBLE" && nextPoint !== undefined &&
+          (previous.nextStepEligibility === "ELIGIBLE" || pwrAdmitted) &&
+          nextPoint !== undefined &&
           event.capability === nextPoint.capability &&
           event.executionRole === nextPoint.executionRole;
         // WP4: a backward jump is a generation restart and is legal only at

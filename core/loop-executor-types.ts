@@ -55,7 +55,12 @@ export type LoopRunEventKind =
   | "run_blocked"
   | "run_failed"
   | "run_completed"
-  | "run_cancelled";
+  | "run_cancelled"
+  // W-GW-DIAG P-K-d (Decision-083): first-class record of the human risk
+  // acceptance for a PASS_WITH_RISK verdict round. reasonCode carries the
+  // verdict decisionScopeId; scope binding lives in the finding proof rows
+  // persisted in the same transaction.
+  | "risk_accepted";
 
 export const LOOP_RUN_EVENT_KINDS: readonly LoopRunEventKind[] = [
   "run_created",
@@ -69,6 +74,7 @@ export const LOOP_RUN_EVENT_KINDS: readonly LoopRunEventKind[] = [
   "run_failed",
   "run_completed",
   "run_cancelled",
+  "risk_accepted",
 ] as const;
 
 export type LoopRunIdentity = Readonly<{
