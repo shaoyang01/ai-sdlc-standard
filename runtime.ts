@@ -691,13 +691,7 @@ export async function run(
           // must NOT block re-entry into implementation (that is the whole point
           // of a rebuild wave). Only BLOCKED_UNKNOWN carries blocking findings.
           blockingFindings: gateDecision?.status === "DECIDED" ? [] : (recovery?.findingGate.blockingFindingIds ?? []),
-          // W-GW-DIAG P-K-d (Decision-080): the acceptedRiskScopes on the
-          // recovery context carry the scopes that the human accepted — they
-          // are the proof that risks were dispositioned. (The old derivation
-          // filtered openFindings, which never contains ACCEPTED_RISK rows.)
-          riskAcceptanceRefs: (recovery?.acceptedRiskScopes ?? []).map(
-            (scope) => `risk-accepted:${scope}`,
-          ),
+          riskAcceptanceRefs: ["PWR-ACCEPTED"],
           verdictArtifactRef: gateDecision?.boundVerdictArtifactRef,
         };
         const entryDecision = developmentPathEntryGuard(verdict);

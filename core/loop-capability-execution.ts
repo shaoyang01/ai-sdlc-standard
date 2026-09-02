@@ -676,6 +676,7 @@ export function validateLoopCapabilityExecutionChain(
           thisIndex < previousIndex + 1 &&
           (liveExact || historicalOk || historicalFeedbackOk);
         if (!isCanonicalNext && !isAuthorizedRestart) {
+
           invalid("capability execution must follow the canonical eligible chain");
         }
         if (!isCanonicalNext) {

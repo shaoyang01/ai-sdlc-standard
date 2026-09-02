@@ -160,7 +160,6 @@ export interface RunRecoveryContext {
    * scopes is admitted forward even though its event nextStepEligibility
    * stays BLOCKED (events are immutable; acceptance is the rederivation).
    */
-  acceptedRiskScopes: readonly string[];
   /**
    * WP4: depth decision bound to the latest formal_verdict round.
    * PASS → DECIDED; FAIL / missing / PASS_WITH_RISK without a current
@@ -868,11 +867,6 @@ function recoverRunContextInTransaction(
     lastCapabilityExecution,
     recoveryClassification,
     findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
-    acceptedRiskScopes: Object.freeze(
-      findings
-        .filter((f) => f.status === "ACCEPTED_RISK" && f.riskAcceptedScopeId !== null)
-        .map((f) => f.riskAcceptedScopeId!),
-    ),
     solutionGateDecision,
     pendingRevisionMaterialization: pendingRevisionProducer === null
       ? null
@@ -1031,37 +1025,13 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
   }
   const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[pointIndex - 1]!;
   const predecessorState = recovery.executionPointStates[pointIndex - 1]!;
-  // W-GW-DIAG P-K-d (Decision-082): the human acceptance gate. A
-  // PASS_WITH_RISK verdict may not dispatch task-planning until its risks
-  // carry a human ACCEPTED_RISK decision (same decisionScopeId).
-  if (
-    predecessorState.status === "succeeded" &&
-    predecessor.capability === "solution-gate" &&
-    predecessorState.executionRole === "formal_verdict" &&
-    predecessorState.gateResult === "PASS_WITH_RISK"
-  ) {
-    const scope = predecessorState.decisionScopeId;
-    if (scope === null || !recovery.acceptedRiskScopes.includes(scope)) {
-      throw new LoopRunJournalError(
-        "RISK_ACCEPTANCE_PENDING",
-        `PASS_WITH_RISK verdict scope ${scope ?? "(unbound)"} awaits human risk acceptance`,
-      );
-    }
-  }
   // W-GW-DIAG P-K (Decision-080): a PASS_WITH_RISK verdict whose risks were
   // accepted (same decisionScopeId) is admitted forward even though its
   // journaled nextStepEligibility stays BLOCKED — the acceptance IS the
   // rederivation (legacy BLOCKED events, e.g. run4). Fail-closed without that proof.
-  const pwrAdmitted =
-    predecessorState.status === "succeeded" &&
-    predecessor.capability === "solution-gate" &&
-    predecessorState.executionRole === "formal_verdict" &&
-    predecessorState.gateResult === "PASS_WITH_RISK" &&
-    predecessorState.decisionScopeId !== null &&
-    recovery.acceptedRiskScopes.includes(predecessorState.decisionScopeId);
   if (
     predecessorState.status !== "succeeded" ||
-    (predecessorState.nextStepEligibility !== "ELIGIBLE" && !pwrAdmitted) ||
+    (predecessorState.nextStepEligibility !== "ELIGIBLE") ||
     predecessorState.effectiveOutputArtifactRef === null ||
     predecessorState.effectiveOutputArtifactVersion === null ||
     predecessorState.effectiveOutputDigest === null

@@ -4161,6 +4161,7 @@ export class LoopRunStore {
       feedbackChange,
     );
     return {
+      acceptedRiskScopes,
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,
       feedbackChange,
