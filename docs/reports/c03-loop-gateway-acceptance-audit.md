@@ -213,6 +213,20 @@ git 仓上无钩子 fresh run 仍 `WORKSPACE_NOT_FOUND`（钉住缺口）、有�
   后，经 `acceptFindingRisk(:finding:1, scope=decision:3, evidence=verdict)`
   一次动作同时完成返工单关闭与 PWR 证明。②级实质内容（三项缺陷的实现）随后
   在 task-planning → implementation 展开。
+- **接受执行与 P-K 实施现状（2026-09-02）**：Current User 选择接受
+  ADV-006/007；`acceptFindingRisk` 已执行（finding → ACCEPTED_RISK 绑
+  decision:3，证据 `7db299c6…`），recovery `gateDecision = DECIDED`。P-K 修复
+  已实施三处准入（recovery 线性走查 / deriveDispatchCommand / capability
+  entry，commits `040a1f9`+`88db2fd`）。**但 resume 仍止步于第四道门**：链校
+  验器的 Round 2 H1 规则——「resolved 或 risk-accepted findings 永不授权新写
+  入」——把 PWR verdict 之后的 canonical forward（task-planning started）判为
+  未授权跳转。**设计级矛盾**：PWR-DECIDED 三条件说"验收后可进 task-planning"，
+  H1 说"risk-accepted 不授权写入"，二者合成 = PWR 波次验收后必然死锁。
+  runtime 代码未再动（chain validator 是刻意的反伪造规则，不由本波擅自修
+  改）；run4 journal 无半成品写入，安全停驻。**待 Current User 设计级裁决**：
+  ① 修订 H1——同 scope ACCEPTED_RISK 证明允许 PWR verdict 之后的一次
+  canonical forward（chain validator 增设该准入 + 测试）；② 或引入新机制
+  （验收后 runtime 签发授权标记事件）；③ 或收口。台账本条即权威记录。
 
 **Current User 裁决（2026-09-01）：返工**。执行口径：将裁决正文的修订要求
 （ADV-004/005）登记为绑定 verdict scope 的 OPEN finding（source=solution-gate
