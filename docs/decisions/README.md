@@ -60,6 +60,8 @@
 
 | [Decision-082](Decision-082-pkd-plan-c-eligibility-contract-and-dispatch-gate.md) | 2026-09-02 | Accepted / P-K-d chartered per plan C | P-K-d 立项采用方案 C：nextStepEligibility 字段口径定为 agent 裁判（PASS/PWR→ELIGIBLE，FAIL→BLOCKED），人闸门移至派发命令推导（PWR scope 无 ACCEPTED_RISK 行 → RISK_ACCEPTANCE_PENDING 停等）；ledger 行物化缓行（scope 级验收替代，避免 SOLUTION finding 失效死循环）；H1/schema 不动；部件 4 再推导保留兼容 run4；测试三分支授权。D2/E5-L3/②③边界不变。 |
 
+| [Decision-083](Decision-083-risk-accepted-event-chartered.md) | 2026-09-02 | Accepted / risk_accepted event chartered (H1 admission) | plan C 实施暴露第五道门 = H1 本身（store 链校验器 isCanonicalNext：verdict BLOCKED eligibility → task-planning started 非 canonical）。授权方案②：新增一等 run 级事件 `risk_accepted`（acceptFindingRisk 同事务追加，scope 绑定经 finding proof 行），投影为记录型，链校验器经 acceptedRiskScopes 放行 PWR verdict 后恰一次 canonical forward；H1 字面规则不变。测试矩阵授权；run4 续跑授权至全链完成。D2/E5-L3/②③边界不变。 |
+
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
 
 ## 新增流程
