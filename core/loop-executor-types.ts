@@ -133,6 +133,9 @@ export type LoopRunJournalErrorCode =
   | "EVENT_ID_CONFLICT"
   | "EVENT_SEQUENCE_CONFLICT"
   | "TERMINAL_RUN"
+  // W-GW-DIAG P-K-d (Decision-082): a PASS_WITH_RISK verdict awaits the
+  // human risk acceptance before task-planning may be dispatched.
+  | "RISK_ACCEPTANCE_PENDING"
   | "STORE_CLOSED"
   | "STORE_BUSY"
   | "STORE_FAILURE"

@@ -566,9 +566,16 @@ export class ExecutionGateway {
       decisionScopeId,
       decisionDeltaRef: deltaDescriptor?.artifactRef ?? null,
       decisionDeltaDigest: deltaDescriptor?.digest ?? null,
+      // W-GW-DIAG P-K-d (Decision-082): a PASS_WITH_RISK verdict records
+      // ELIGIBLE — the gate PASSED and its risks live as findings. The human
+      // acceptance gate is enforced at deriveDispatchCommand (task-planning
+      // dispatch), not by this event field. Findings on any other node (and
+      // FAIL verdicts) keep BLOCKED, driving the Re-Gate machinery.
       nextStepEligibility:
         gateResult === "FAIL" ||
-        (findings.length > 0 && !(capability === "solution-gate" && executionRole === "adversarial_scan"))
+        (findings.length > 0 &&
+          !(capability === "solution-gate" && executionRole === "adversarial_scan") &&
+          !(capability === "solution-gate" && executionRole === "formal_verdict" && gateResult === "PASS_WITH_RISK"))
           ? "BLOCKED"
           : "ELIGIBLE",
       errorCode: null,
