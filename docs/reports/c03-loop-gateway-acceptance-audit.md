@@ -415,3 +415,21 @@ JUnit5 单测不存在，无从运行。
   +GW_PREP_WAVE 且前两条消费移出、**blocker C03_LOOP_GW_SMOKE_WIRING_GAP 关闭
   移出**、product_commit=`a958d83`、next_transition=DIAG→PREP→重发冒烟）。
   当前停驻：波 1 W-GW-DIAG 待开工（授权已生效），波 2 随后，之后重发冒烟。
+- 2026-09-01/02：波 1 波 2 实施回填（`a6e1ece`/`31c63eb`）；run4 重发与返工
+  轮全链回填（`72a0ddc`/`0166ca3`）；Decision-080（P-K 修复授权）`5143aa7`；
+  P-K 修复实施 `040a1f9`/`88db2fd`/`95c0e08`；run4 收口裁决（Decision-081）
+  `f445b2c`。
+- 2026-09-02 治理回执（Decision-080/081 记录传播）：Exchange issue #97
+  （Decision-080）run `5b8dd7b` / pointer `b69d188`（全 …baa4c44ef249a322
+  ba3db1562）/ sha `05c23321…702b8`；issue #98（Decision-081
+  REQ-20260902T055500Z-DECISION-081-RUN4-CLOSED-PK-DESIGN）PUBLISHED，run
+  `9ace1d9` / pointer `a55ff55…b65a` / handoff sha256 `7672d442…ae80`；PKB
+  派生归档 commit `8216a24`（feature/knowledge-base-v1，handoff
+  2026-09-02-decision-081-run4-closed-pk-design，已套 front matter schema，
+  另 5 件历史 handoff front matter 补齐于 `d635108`）；CP PR #40 合 main
+  （`a659aa3`，validator PASS v2：route_state=
+  `C03_LOOP_GW_PARKED_PENDING_PK_DESIGN`、active_work=`C03-LOOP-GW-SMOKE`
+  PAUSED（P-K-d 设计裁决前置）、REWORK 授权消费、product_commit=`f445b2c`、
+  next_transition=`C03_LOOP_GW_PARKED_PENDING_PK_DESIGN_RULING`）。当前停
+  驻：P-K-d 设计议题待未来波次立项（候选①H1 修订/②验收授权标记），梯子
+  ①②③与 D2/E5-L3 维持既定状态。
