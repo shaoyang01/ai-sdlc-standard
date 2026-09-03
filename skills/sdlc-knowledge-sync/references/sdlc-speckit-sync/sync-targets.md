@@ -2,7 +2,7 @@
 
 ## Primary Targets
 
-`.specify/business_domain/**` is a shared long-term knowledge base governed by both `legacy_speckit` and `new_rail_sdlc` rails. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` for the full governance protocol.
+`.specify/business_domain/**` is the single-rail long-term knowledge base of `sdlc-knowledge-sync` (Decision-044/088; there are no competing rails or source modes). Resolve it deterministically before any sync: read `.specify/business_domain/knowledge-target.yaml` (created by `scripts/bootstrap-knowledge-target.sh`). Missing declaration → BLOCKED with initialization guidance; `routable: false` → proposals only. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` for the full governance protocol.
 
 Common targets include:
 
@@ -18,12 +18,11 @@ For `.specify/business_domain/**`, explicit approval for creation means create-i
 
 ## Library-Driven Target Resolution
 
-When `specs/{feature}/**` does not exist (library_driven mode):
+Library-driven resolution is the only resolution path (single rail); it never depends on run-level working materials:
 
 - Resolve Business Domain Targets from `library/{requirement_id}/01-技术方案/*` or manifest.
 - Resolve Sync Targets from `library/{requirement_id}/00-需求资料/*` or explicit user confirmation.
 - If targets cannot be resolved from library artifacts, generate a sync proposal or ask the user.
-- Do not automatically block library_driven sync because specs are missing.
 - If target L1/L2/L4 is ambiguous, generate a proposal only; do not guess.
 
 ## Shared Governance Rules
@@ -80,8 +79,8 @@ Without authorization, output a sync proposal only.
 
 Use this flow when a stable fact belongs in `.specify/business_domain/**` but the L4 document is missing:
 
-1. Resolve L1/L2/L4 target from `specs/{feature}/route.md` when available, `specs/{feature}/spec.md` `Business Domain Targets`, `Sync Targets`, the existing `01DomainCatalog.md`, and current business-domain documents.
-2. Verify L1/L2 are confirmed long-term domain folders, not `99PendingConfirmation`.
+1. Resolve L1/L2/L4 target from `.specify/business_domain/knowledge-target.yaml` (routable check), the existing `01DomainCatalog.md`, `library/{requirement_id}/01-技术方案/*`, and current business-domain documents.
+2. Verify L1/L2 are confirmed long-term domain folders; unconfirmed pending buckets are never sync targets.
 3. Detect project canonical naming pattern from sibling L4 documents, `01DomainCatalog.md`, L2 main document index, governance profile, or user confirmation. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
 4. Detect project shape profile from sibling L4 documents under the same L2, or other L2 directories in the same project. See the same reference.
 5. Determine shape confidence (`high`, `medium`, `low`, `unknown`).

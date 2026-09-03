@@ -4,6 +4,12 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
+DEPRECATED (Decision-088 / D-088-01): for sdlc-knowledge-sync knowledge-target
+initialization use scripts/bootstrap-knowledge-target.sh instead. This legacy
+script is kept only for historical callers; it generates retired
+pending-confirmation structures and legacy rail vocabulary and must not be used
+for new projects.
+
 Usage:
   scripts/bootstrap-business-domain.sh <target-project-path> [options]
 
