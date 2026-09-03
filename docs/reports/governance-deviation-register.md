@@ -26,7 +26,7 @@
 
 ### C. 尚未关闭的事项（防止后续会话误判"全绿"）
 
-1. **权威路线图文档未随 D-087 修订**：`docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` 停在 08-28（`11e5c90`）。路线图重设计目前只存在于 `docs/reports/decision-087-vertical-rebuild-plan.md`（Draft）。按 C02 惯例，路线图版本重登记在里程碑关闭时执行（重建验收通过后的 ledger 关闭 + 四仓传播）。
+1. **【已关闭 2026-09-03】权威路线图未随 D-087 修订**：Current User 指令「路线图应出现在路线图文件中」后已提前重登记——Roadmap v2.4.0 @ `d410977`（LOOP-CORE-03 continuity 登记纵向重建路线 + Decision-086 语义；Revision Record 2.4.0）。传播：Exchange issue #110（run `6ea8e001` / pointer `afa8a598`，sha256 `7fd27382`）、PKB `38c6d96`、CP PR #50（`bd2482d`，validator PASS v2）。里程碑收口时仍复核版本。
 2. **实现冻结**：D-087-01..05 五个包一行实现代码未动，等 Current User 发话（其指令原话"先不要实现"）。
 3. Exchange 本地克隆落后远端 46 commits（transport-only，无实质影响）。
 4. 挂起项：D2 pending、E5-L3 frozen、ladder 2/3 pending、不动 C05。

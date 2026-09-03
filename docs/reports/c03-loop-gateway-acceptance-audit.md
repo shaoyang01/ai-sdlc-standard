@@ -532,6 +532,17 @@ JUnit5 单测不存在，无从运行。
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
   真实派发后与 implementation 合同矛盾）。裁决：codex sandbox 改为
   `workspace-write` + 启用 Shell，kimi/hermes 不动。实施随即执行。
+- **2026-09-03 治理回执（路线图 v2.4.0 修订传播）**：Current User 指令「路线图应出现在路线图文件中，而不是只在 decision 文件里」——权威路线图
+  `docs/AI-SDLC-Autonomous-Delivery-Roadmap.md` 重登记 @ `d410977`（v2.4.0
+  User-directed route amendment：LOOP-CORE-03 continuity 登记纵向重建路线
+  D-087-01..05 + 离线矩阵/run8 门 + Decision-086 PWR 自动放行语义；
+  Revision Record 增 2.4.0；纠正文件头版本滞留 2.3.5）；Exchange issue
+  #110（REQ-20260903T133600Z-ROADMAP-V240）PUBLISHED，run `6ea8e001` /
+  pointer `afa8a598`（handoff sha256 `7fd27382` 校验一致）；PKB 派生归档
+  commit `38c6d96`（handoff 2026-09-03-roadmap-v2-4-0 + current.md 刷新至
+  d410977）；CP PR #50 合 main（`bd2482d`，validator PASS v2：
+  product_commit=`d410977`，publication 指向新 run）。治理偏差登记册 C1
+  项同步关闭。
 - **2026-09-03 治理回执（D-087 重建计划传播）**：重建计划 commit `d7f714b`
   （docs/reports/decision-087-vertical-rebuild-plan.md，四 Phase / 五需求包
   D-087-01..05 + 依赖图 + 风险表）；Exchange issue #109
