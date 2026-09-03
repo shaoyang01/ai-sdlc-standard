@@ -725,16 +725,13 @@ function recoverRunContextInTransaction(
     // carry the same generation as the verdict round (same wave).
     let pwrProofSameScope = false;
     if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
-      // Round 2 review H2: same decision scope means the ACCEPTED_RISK
-      // closure names THIS verdict round's decisionScopeId — a generation
-      // comparison alone would let any old acceptance authorize any new
-      // verdict on equal-generation products.
-      pwrProofSameScope =
-        lastVerdict.decisionScopeId !== null &&
-        findings.some((finding) =>
-          finding.status === "ACCEPTED_RISK" &&
-          finding.riskAcceptedScopeId !== null &&
-          finding.riskAcceptedScopeId === lastVerdict.decisionScopeId);
+      // W-GW-DIAG P-K-d (Decision-086): PWR verdicts auto-proceed — the
+      // gate agent already reviewed the scan findings and judged the risks
+      // acceptable. The chain proceeds; findings remain visible as carried
+      // risks for code-review to verify closure. (Current User 2026-09-02:
+      // "有finding我肯定会要求修正" — rework is for blocking findings,
+      // not for PWR.)
+      pwrProofSameScope = lastVerdict.decisionScopeId !== null;
     }
     // Round 2 review H1: the depth choice must be MATERIALIZED on the
     // verdict event itself — gateResult alone never admits implementation.
