@@ -1,6 +1,6 @@
 # AI-SDLC LOOP Core Roadmap
 
-> Version: 2.3.5
+> Version: 2.4.0
 > Planning baseline: [LOOP Core Contract](LOOP_CORE_CONTRACT.md)
 > Authority: 这是 `ai-sdlc` 的稳定 Roadmap planning surface。当前执行指针、Gate、授权、live finding、PR/CI/HEAD 和执行尝试只记录在 `ai-project-control-plane` 的 STATE 及执行证据中。
 
@@ -117,7 +117,7 @@ Project: ai-sdlc
 - **scope**：C03-A～D 已交付的单轨 Skill、注册切换、Delivery Tail 与 runtime 接线；C03-E Real Multi-Agent Autonomous Dispatch，覆盖真实 Kimi/Codex/Hermes CLI adapter、受控进程调用、输出校验、durable journal、自动推进、失败恢复和 Re-Gate；清理活动 Skill reference 中已退役的 Direct/Speckit 路径语义；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill，且不用于治理 LOOP；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
 - **out_of_scope**：业务仓 commit、push、Draft PR、Ready、merge、发布；Personal-KB 项目产物发布；scheduler、daemon、UI、服务端控制平面或新增 Provider；以未验证测试、shadow executor、Markdown 自述或历史 CI 替代真实执行证据；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill或 Direct/Speckit 路径分流；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
 - **completion_contract**：C03-A～E 均完成；生产入口默认不再使用 deterministic shadow；每个节点由 runtime 真实调用所选 binding 并记录不可伪造的 started/terminal event、adapter/版本、输入输出 digest 与尝试结果；正常路径无需用户切换 Agent，失败或不合格输出可恢复；无 blocking finding 时只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生业务仓远程 Git 副作用。
-- **continuity**：C03-E 当前 Accepted 合同为 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.4.0、Decision-063 与 Decision-064；A1 已将 Q6 修订为 E0 合同收口包 → 单独授权 E2-P 三 Agent `PROVIDER_REACHABILITY_ONLY` 预检 → E1～E4 runtime 实施包 → E5 正式验收 → 下一 C05 分段授权。Roadmap 只保存稳定顺序与依赖，不保存当前授权；每次恢复必须从 Decision index 与 Control Plane STATE 解析当前 live authorization、是否已启动、暂停和下一转换，不能从方案 Accepted 或本段文字推断授权。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把 direct CLI 可达性、人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
+- **continuity**：C03-E 当前 Accepted 合同为 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.4.0、Decision-063 与 Decision-064；A1 已将 Q6 修订为 E0 合同收口包 → 单独授权 E2-P 三 Agent `PROVIDER_REACHABILITY_ONLY` 预检 → E1～E4 runtime 实施包 → E5 验收 → 下一 C05 分段授权。E5 验收路线已按 Decision-087 修订为**纵向主干重建**：原 production adapter canary + 完整自主 run 的横向 run 路线经六轮冒烟实证证伪后废止，改为按三条 seam 组织——result model、finding materialization、production entry——实施包顺序为 D-087-01 production assembly factory（先行，其余依赖它）→ D-087-02 node status field → D-087-03 finding materialization → D-087-04 code-review auto-reroute → D-087-05 SKILL path fix（可与 01–04 并行）；验收门 = 离线六场景矩阵全过 → 真实 CLI 冒烟 run8 → ledger 关闭 + 四仓传播。PWR 判定按 Decision-086 自动放行，不设人工风险验收仪式；findings 是恢复上下文而非重启门槛（H1 死锁已设计性消除）。路线设计与任务拆解见 [Decision-087 路线图设计与需求拆分](reports/decision-087-vertical-rebuild-plan.md)。Roadmap 只保存稳定顺序与依赖，不保存当前授权；每次恢复必须从 Decision index 与 Control Plane STATE 解析当前 live authorization、是否已启动、暂停和下一转换，不能从方案 Accepted 或本段文字推断授权。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把 direct CLI 可达性、人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
 
 ### LOOP-CORE-04 — Speckit Projection and SDD Integration（已取消）
 
@@ -278,6 +278,7 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.4.0 | 2026-09-03 | User-directed route amendment | 按 Current User 指令将 Decision-086/087 的路线修订登记进权威路线图（此前只存在于 decision 与 Draft 计划文档）：E5 验收路线由横向 run 路线（production adapter canary + 完整自主 run，经六轮冒烟实证证伪）改为纵向主干重建（三条 seam：result model / finding materialization / production entry；包 D-087-01..05，01 先行，05 可并行）；Decision-086 取消 PWR 人工风险验收仪式，findings 为恢复上下文而非门槛；验收门 = 离线六场景矩阵全过 → 真实 CLI 冒烟 run8 → ledger 关闭 + 四仓传播。同时纠正文件头版本号滞留 2.3.5 与 Revision Record 不一致的问题。实施授权与进度仍以 Decision index + Control Plane STATE 为准。 |
 | 2.3.6 | 2026-08-28 | User-directed advanced addition | 新增 `LOOP-ADVANCED-05` Configurable Binding Console and Agent Scoring：远期以 ai-sdlc×PKB 工作台做版本化节点→Agent 绑定配置与 Agent 打分；C03-E 首版仍用内置 Q1 固定分工，配置化与动态路由不提前为 E1～E4 需求，solution-gate 双角色不同 binding 的防火墙在任何配置下保持 fail-closed。未授权实施。 |
 | 2.3.5 | 2026-08-27 | Accepted amendment pointer | Decision-064 接受 C03-E v0.4.0 A1：拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间增加独立授权的 E2-P 三 Agent direct CLI 可达性预检；E5 production adapter canary 与完整自主 run 不变。下一控制门为 E0 授权，不产生任务规划、CLI 或实施授权。 |
 | 2.3.4 | 2026-08-27 | Amendment draft pointer | Decision-064 授权起草 C03-E v0.4.0-draft：拟拆分 E0 合同收口包与 E1～E4 runtime 实施包，在两者之间增加独立授权的 E2-P 三 Agent direct CLI 可达性预检，并保持 E5 production adapter canary 与完整自主 run 不变；A1 尚未接受，不产生任务规划、CLI 或实施授权。 |
