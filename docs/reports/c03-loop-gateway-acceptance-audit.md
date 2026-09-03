@@ -532,6 +532,14 @@ JUnit5 单测不存在，无从运行。
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
   真实派发后与 implementation 合同矛盾）。裁决：codex sandbox 改为
   `workspace-write` + 启用 Shell，kimi/hermes 不动。实施随即执行。
+- **2026-09-03 治理回执（Decision-087 记录传播）**：Decision-087 + 索引 +
+  台账 commit `f4c5a87`；Exchange issue #108
+  （REQ-20260903T115000Z-DECISION-087-VERTICAL-REBUILD）PUBLISHED，run
+  `2b42a39` / pointer `5acb859`；PKB 派生归档 commit `b5da952`（handoff
+  2026-09-03-decision-087-vertical-rebuild + current.md 指针刷新至 f4c5a87）；
+  CP PR #48 合 main（`272d3fc`，validator PASS v2：route_state=
+  `C03_LOOP_GW_VERTICAL_REBUILD_IN_PROGRESS`、product_commit=`f4c5a87`）。
+  实施随即开工。
 - **2026-09-02 治理回执（Decision-085 记录传播）**：Decision-085 + 索引 +
   台账 commit `77cf853`；Exchange issue #104
   （REQ-20260902T102500Z-DECISION-085-CODEX-SANDBOX-FIX）PUBLISHED，run
