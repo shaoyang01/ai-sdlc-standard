@@ -1,4 +1,4 @@
-# 知识目标初始化器只读分析（Decision-088 / W-KT-INIT 立项依据）
+# 知识目标初始化器只读分析（Decision-088 / D-088-01 立项依据）
 
 > 日期：2026-09-03
 > 性质：只读分析，零代码/仓库修改
@@ -99,4 +99,4 @@ active skill references 内部残留（prompt 未覆盖的新发现）：
 ## 10. 待 Current User 裁决
 
 1. 两台机器（`/Users/eric` vs `/Users/eric_shaoooo`）业务仓状态哪个权威，尤其 wms-portal project-context（本机不存在且本机 wms-portal 有 1 个未提交变更）。
-2. W-KT-INIT 实施授权（见 Decision-088 决策 5）。
+2. D-088-01 实施授权（见 Decision-088 决策 5）。
