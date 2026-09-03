@@ -511,6 +511,14 @@ JUnit5 单测不存在，无从运行。
   SKILL.md 引用 + 旧 specs/** 模板废弃标注 + 00-需求资料 适用性评估。验证口
   径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/
   E3/H1。P-K-d 现场冻结保留。实施随即开工。
+- **2026-09-02 治理回执（Decision-086 记录传播）**：Decision-086 + 索引 +
+  台账 commit `8d759e1`；Exchange issue #107
+  （REQ-20260902T121541Z-DECISION-086-PWR-AUTO-PROCEED）PUBLISHED，run
+  `d9758f3` / pointer `371da2c` / handoff sha256 `54a4a347…5622`；PKB 派生归
+  档 commit `ef3c119`（handoff 2026-09-02-decision-086-pwr-auto-proceed +
+  current.md 指针刷新至 8d759e1）；CP PR #47 合 main（`c699374`，validator
+  PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、product_
+  commit=`8d759e1`、next_transition=REWORK_COMPLETION）。实施随即开工。
 - **2026-09-02（续九）：Decision-086 立项（PWR 自动推进 + finding gate 简化）**。Current User 确认设计原则：「有风险要暴露，有风险不暴露反而有问题；一旦做了决定，就不应该再有任何阻碍；我说不接受就返工，说接受就直接往前推」。Code-review findings 路由规则确认：earliestAffectedNodeId=implementation → 直接重跑 implementation（不重走 gate）；earliestAffectedNodeId=solution-design → 回流 solution-design 重走完整链。授权：PWR verdict 的 gateDecision 判为 DECIDED（`pwrProofSameScope = decisionScopeId !== null`），gateway 派生 PWR→ELIGIBLE 保留；回滚 Decision-082/083 的验收闸门/事件/管道。`computeFindingGate` 的 OPEN blocking 暂不修改（影响 knowledge-sync eligibility，随 P-C/P-D 调）。实施随即执行，resume run4 至全链完成。
 - **2026-09-02（续七）：codex sandbox 修正立项（Decision-085）**。codex 自
   身诊断确认 implementation 零改动的根因 = LOOP profile 硬编码
