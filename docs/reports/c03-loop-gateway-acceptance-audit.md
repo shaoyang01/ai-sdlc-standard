@@ -532,6 +532,16 @@ JUnit5 单测不存在，无从运行。
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
   真实派发后与 implementation 合同矛盾）。裁决：codex sandbox 改为
   `workspace-write` + 启用 Shell，kimi/hermes 不动。实施随即执行。
+- **2026-09-03 治理回执（D-087 重建计划传播）**：重建计划 commit `d7f714b`
+  （docs/reports/decision-087-vertical-rebuild-plan.md，四 Phase / 五需求包
+  D-087-01..05 + 依赖图 + 风险表）；Exchange issue #109
+  （REQ-20260903T124500Z-D087-REBUILD-PLAN）PUBLISHED，run `9501011` /
+  pointer `372c32f`（handoff sha256 `4c47ec22` 校验一致）；PKB 派生归档
+  commit `54dfbe2`（handoff 2026-09-03-d087-rebuild-plan + 补齐 087 handoff
+  front matter + current.md 指针刷新至 d7f714b）；CP PR #49 合 main
+  （`d8ead5c`，validator PASS v2：product_commit=`d7f714b`，
+  next_transition 重写为 D-087-01..05 实施顺序 + 离线矩阵/run8 门）。四仓
+  传播闭环，实施随即开工（D-087-01 先行）。
 - **2026-09-03 治理回执（Decision-087 记录传播）**：Decision-087 + 索引 +
   台账 commit `f4c5a87`；Exchange issue #108
   （REQ-20260903T115000Z-DECISION-087-VERTICAL-REBUILD）PUBLISHED，run
