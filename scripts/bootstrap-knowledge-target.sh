@@ -144,11 +144,20 @@ if [[ -f "${DECLARATION}" ]]; then
 fi
 
 detect_profile_hint() {
-  if [[ -f "${TARGET_PATH}/package.json" ]]; then
-    printf 'frontend-application\n'
-  else
-    printf 'backend-business-service\n'
+  local hints=()
+  # strong backend signal wins over a stray package.json (e.g. multi-module maven repo)
+  if [[ -f "${TARGET_PATH}/pom.xml" ]] || [[ -d "${TARGET_PATH}/src/main/java" ]] \
+     || ls "${TARGET_PATH}"/*/pom.xml >/dev/null 2>&1 \
+     || ls -d "${TARGET_PATH}"/*/src/main/java >/dev/null 2>&1; then
+    hints+=("backend-business-service")
   fi
+  if [[ -f "${TARGET_PATH}/package.json" ]]; then
+    hints+=("frontend-application")
+  fi
+  if [[ "${#hints[@]}" -eq 0 ]]; then
+    hints+=("backend-business-service")
+  fi
+  printf '%s\n' "${hints[@]}" | awk '!seen[$0]++'
 }
 
 if [[ -n "${PROFILE_OVERRIDE}" ]]; then
@@ -156,7 +165,7 @@ if [[ -n "${PROFILE_OVERRIDE}" ]]; then
 elif [[ -n "${existing_declaration_profiles}" ]]; then
   PROJECT_TYPE_PROFILES="${existing_declaration_profiles}"
 else
-  PROJECT_TYPE_PROFILES="$(detect_profile_hint)"
+  PROJECT_TYPE_PROFILES="$(detect_profile_hint | paste -sd, -)"
 fi
 L4_TEMPLATE_PROFILE="${PROJECT_TYPE_PROFILES%%,*}"
 case "${L4_TEMPLATE_PROFILE}" in
