@@ -64,6 +64,8 @@
 
 | [Decision-085](Decision-085-codex-sandbox-workspace-write.md) | 2026-09-02 | Accepted / codex sandbox workspace-write + shell enabled | implementation 节点 codex profile 从 `--sandbox read-only` + `features.shell_tool=false` 改为 `workspace-write` + Shell 启用，使 codex 能真实读写 spruce 代码并运行 mvn。kimi/hermes 不动。人工 Git 边界不变（不 commit/push/PR）。E5-L3 冻结、D2 挂账不变。 |
 
+| [Decision-086](Decision-086-pwr-auto-proceed-and-finding-gate-simplification.md) | 2026-09-02 | Accepted / PWR auto-proceed, finding gate simplified | PWR verdict 自动推进：`pwrProofSameScope` 简化为 `decisionScopeId !== null`（verdict 自身判断即验收），不再要求 ACCEPTED_RISK finding proof；gateway 派生 PWR→ELIGIBLE（已实施保留）；链校验器 isCanonicalNext 对 PWR+ELIGIBLE 自然通过；回滚 Decision-082/083 的验收闸门/停等码/risk_accepted 事件/acceptedRiskScopes 管道；`computeFindingGate` 的 OPEN blocking 暂不修改（影响 knowledge-sync eligibility，随 P-C/P-D 调）。D2/E5-L3/②③边界不变。 |
+
 | [Decision-084](Decision-084-node-template-closure-wave.md) | 2026-09-02 | Accepted / P-L node-template closure wave (urgent) | sdlc-* skills 为现役手动驱动主干，模板缺口升级为紧急生产漏洞：P-L 收口波立项。templates/ 新增四份 canonical 文档模板（task-plan / implementation-record / knowledge-sync / finding-ledger），各节点 SKILL.md 增补引用，旧 specs/** 迁移模板废弃标注，00-需求资料 模板适用性评估。验证口径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/E3/H1。P-K-d 现场冻结保留。 |
 
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |

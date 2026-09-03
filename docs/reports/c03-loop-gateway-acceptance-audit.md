@@ -511,6 +511,7 @@ JUnit5 单测不存在，无从运行。
   SKILL.md 引用 + 旧 specs/** 模板废弃标注 + 00-需求资料 适用性评估。验证口
   径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/
   E3/H1。P-K-d 现场冻结保留。实施随即开工。
+- **2026-09-02（续九）：Decision-086 立项（PWR 自动推进 + finding gate 简化）**。Current User 确认设计原则：「有风险要暴露，有风险不暴露反而有问题；一旦做了决定，就不应该再有任何阻碍；我说不接受就返工，说接受就直接往前推」。Code-review findings 路由规则确认：earliestAffectedNodeId=implementation → 直接重跑 implementation（不重走 gate）；earliestAffectedNodeId=solution-design → 回流 solution-design 重走完整链。授权：PWR verdict 的 gateDecision 判为 DECIDED（`pwrProofSameScope = decisionScopeId !== null`），gateway 派生 PWR→ELIGIBLE 保留；回滚 Decision-082/083 的验收闸门/事件/管道。`computeFindingGate` 的 OPEN blocking 暂不修改（影响 knowledge-sync eligibility，随 P-C/P-D 调）。实施随即执行，resume run4 至全链完成。
 - **2026-09-02（续七）：codex sandbox 修正立项（Decision-085）**。codex 自
   身诊断确认 implementation 零改动的根因 = LOOP profile 硬编码
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
