@@ -520,6 +520,13 @@ JUnit5 单测不存在，无从运行。
   PASS v2：route_state=`C03_LOOP_GW_SMOKE_REWORK_IN_PROGRESS`、product_
   commit=`8d759e1`、next_transition=REWORK_COMPLETION）。实施随即开工。
 - **2026-09-02（续九）：Decision-086 立项（PWR 自动推进 + finding gate 简化）**。Current User 确认设计原则：「有风险要暴露，有风险不暴露反而有问题；一旦做了决定，就不应该再有任何阻碍；我说不接受就返工，说接受就直接往前推」。Code-review findings 路由规则确认：earliestAffectedNodeId=implementation → 直接重跑 implementation（不重走 gate）；earliestAffectedNodeId=solution-design → 回流 solution-design 重走完整链。授权：PWR verdict 的 gateDecision 判为 DECIDED（`pwrProofSameScope = decisionScopeId !== null`），gateway 派生 PWR→ELIGIBLE 保留；回滚 Decision-082/083 的验收闸门/事件/管道。`computeFindingGate` 的 OPEN blocking 暂不修改（影响 knowledge-sync eligibility，随 P-C/P-D 调）。实施随即执行，resume run4 至全链完成。
+- **2026-09-03：codex 独立评审 + Decision-087 立项（纵向主干重建）**。codex
+  独立评审确认五个根因：①E3 信封缺节点状态字段 ②finding 生命周期两套事实
+  系统 ③冒烟绕过生产入口 ④Decision-086 半回滚 ⑤Control Plane STATE 过期。
+  Current User 确认方向：「不做补丁叠补丁，要做就做彻底」。立项纵向主干重
+  建（Decision-087）：接缝1 节点结果模型 + 接缝2 Finding 物化路由 + 接缝3
+  唯一生产装配入口 + 离线测试矩阵。回滚冲突代码。离线测试全部通过前不发
+  真实 CLI 冒烟。实施随即开工。
 - **2026-09-02（续七）：codex sandbox 修正立项（Decision-085）**。codex 自
   身诊断确认 implementation 零改动的根因 = LOOP profile 硬编码
   `--sandbox read-only` + `features.shell_tool=false`（E1-E4 时期安全基线，
