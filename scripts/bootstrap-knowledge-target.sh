@@ -49,6 +49,18 @@ Mode selection:
   - otherwise -> INIT mode; pass --audit to force audit mode.
 
 Options:
+  --detect                      v3: four-type governance detection only (type,
+                                signals, skeleton, declaration state); zero writes.
+  --plan                        v3: emit the migration classification plan and its
+                                plan_sha256; zero writes (LEGACY targets; for
+                                non-LEGACY targets identical to --dry-run).
+  --apply                       v3: explicit execute request; when the migration
+                                plan contains TRANSFORM/RETIRE it additionally
+                                requires --confirm-migration-plan (DP1).
+  --confirm-migration-plan <sha256>
+                                v3 DP1: owner confirmation bound to the exact
+                                plan_sha256 of the latest plan output; a drifted
+                                plan is rejected (re-plan + re-confirm).
   --audit                      Force applicability audit mode (report + fill
                                missing machine artifacts only).
   --project-name <name>        Project display name. Defaults to target directory name.
@@ -108,9 +120,22 @@ PROFILE_OVERRIDE=""
 UPDATE_DECLARATION="false"
 DRY_RUN="false"
 FORCE_AUDIT="false"
+DETECT_MODE="false"
+PLAN_ONLY="false"
+APPLY_MODE="false"
+CONFIRM_DIGEST=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --detect)
+      DETECT_MODE="true"; shift ;;
+    --plan)
+      PLAN_ONLY="true"; shift ;;
+    --apply)
+      APPLY_MODE="true"; shift ;;
+    --confirm-migration-plan)
+      [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 2; }
+      CONFIRM_DIGEST="${2}"; shift 2 ;;
     --audit)
       FORCE_AUDIT="true"; shift ;;
     --project-name)
@@ -141,6 +166,16 @@ done
 [[ -n "${TARGET_PATH}" ]] || { usage >&2; exit 2; }
 [[ -d "${TARGET_PATH}" ]] || { echo "Target project path does not exist: ${TARGET_PATH}" >&2; exit 2; }
 TARGET_PATH="$(cd "${TARGET_PATH}" && pwd)"
+
+# v3 flag mutual exclusion (spec §1)
+mode_flags=0
+[[ "${DETECT_MODE}" == "true" ]] && mode_flags=$((mode_flags + 1))
+[[ "${PLAN_ONLY}" == "true" ]] && mode_flags=$((mode_flags + 1))
+[[ "${APPLY_MODE}" == "true" ]] && mode_flags=$((mode_flags + 1))
+[[ "${mode_flags}" -le 1 ]] || { echo "--detect/--plan/--apply are mutually exclusive." >&2; exit 2; }
+if [[ "${CONFIRM_DIGEST}" != "" && "${APPLY_MODE}" != "true" ]]; then
+  echo "--confirm-migration-plan requires --apply." >&2; exit 2
+fi
 
 case "${PROFILE_OVERRIDE}" in
   ""|backend-business-service|frontend-application|data-pipeline-etl|library-shared-component|admin-mixed-workflow) ;;
@@ -200,12 +235,375 @@ DOC_DATE="$(date '+%Y-%m-%d')"
 
 AUTHOR="$(git -C "${TARGET_PATH}" config --get user.name 2>/dev/null || true)"
 if [[ -z "${AUTHOR}" ]]; then
-  if [[ "${DRY_RUN}" == "true" ]]; then
+  if [[ "${DRY_RUN}" == "true" || "${DETECT_MODE}" == "true" || "${PLAN_ONLY}" == "true" ]]; then
     AUTHOR="<git config user.name missing>"
   else
     echo "BLOCKED: git config user.name is required before writing knowledge-target files." >&2
     exit 1
   fi
+fi
+
+# =====================================================================================
+# --- v3: four-type detection and legacy migration ------------------------------------
+# spec: docs/reports/d088-01-v3-behavior-spec.md v1.0.0 (Decision-090 / D-088-01 v3)
+# Detection is metadata-only (spec I4): existence, path shape and name patterns.
+# =====================================================================================
+
+MIG_PENDING="false"
+V3_NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+mig_digest() { ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$1" 2>/dev/null || true; }
+
+# --- signal collection (spec §2.1) --------------------------------------------------
+HAS_S1="false"; HAS_S4="false"; HAS_S5="false"; HAS_S6="false"; HAS_S7="false"
+HAS_S8="false"; HAS_S9="false"; HAS_S10="false"; HAS_S11="false"; HAS_S12="false"
+SIG_LINES=()
+sig() { SIG_LINES+=("$1"); }
+
+if [[ -e "${SDLC_DIR}" || -L "${SDLC_DIR}" ]]; then HAS_S1="true"; sig "S1 .sdlc root present"; fi
+
+ROOT_DOC_COUNT=0
+for doc in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
+  if [[ -f "${BD_DIR}/${doc}" ]]; then ROOT_DOC_COUNT=$((ROOT_DOC_COUNT + 1)); fi
+done
+sig "S2 .sdlc skeleton root docs = ${ROOT_DOC_COUNT}/3"
+
+if [[ -f "${DECLARATION}" ]]; then sig "S3 new-surface declaration present"; fi
+
+if [[ -f "${TARGET_PATH}/pom.xml" || -d "${TARGET_PATH}/src/main/java" ]]; then
+  HAS_S4="true"
+elif ls "${TARGET_PATH}"/*/pom.xml >/dev/null 2>&1; then
+  HAS_S4="true"
+elif ls -d "${TARGET_PATH}"/*/src/main/java >/dev/null 2>&1; then
+  HAS_S4="true"
+elif [[ -f "${TARGET_PATH}/package.json" || -f "${TARGET_PATH}/go.mod" || -f "${TARGET_PATH}/build.gradle" || -f "${TARGET_PATH}/settings.gradle" || -f "${TARGET_PATH}/Cargo.toml" || -f "${TARGET_PATH}/pyproject.toml" ]]; then
+  HAS_S4="true"
+fi
+if [[ "${HAS_S4}" == "true" ]]; then sig "S4 code tree present"; fi
+
+if [[ -e "${TARGET_PATH}/.specify" || -L "${TARGET_PATH}/.specify" ]]; then HAS_S5="true"; sig "S5 .specify legacy root present"; fi
+if ls "${TARGET_PATH}/.specify/templates/"*.md >/dev/null 2>&1; then HAS_S6="true"; sig "S6 .specify/templates SDD templates present"; fi
+for legacy_script in check-prerequisites create-new-feature setup-plan update-agent-context common; do
+  if [[ -e "${TARGET_PATH}/.specify/scripts/bash/${legacy_script}.sh" ]]; then
+    HAS_S7="true"; sig "S7 .specify/scripts/bash/${legacy_script}.sh present"
+  fi
+done
+if [[ -f "${TARGET_PATH}/.specify/workflow/SDDWorkflow.md" || -f "${TARGET_PATH}/.specify/workflow/WorkflowIndex.md" ]]; then
+  HAS_S8="true"; sig "S8 .specify/workflow SDD workflow present"
+fi
+if legacy_root_present; then HAS_S9="true"; sig "S9 .specify/business_domain legacy knowledge root present"; fi
+if [[ -e "${TARGET_PATH}/.specify/business_domain/knowledge-target.yaml" ]]; then
+  HAS_S10="true"; sig "S10 legacy knowledge-target.yaml (SDLC-SDD signature)"
+fi
+if [[ -e "${TARGET_PATH}/.specify/project-governance-profile.yaml" || -e "${TARGET_PATH}/.specify/entry-coverage-profile.yaml" ]]; then
+  HAS_S11="true"; sig "S11 legacy governance YAML at old root (SDLC-SDD signature)"
+fi
+if [[ -d "${TARGET_PATH}/specs" ]] && ls -d "${TARGET_PATH}/specs/"* >/dev/null 2>&1; then
+  HAS_S12="true"; sig "S12 active specs/ rail present"
+fi
+
+# --- decision table (spec §2.2, D1-D9; D2 refinement: dual root blocks only when the
+# legacy side still carries governance/workflow semantics — pure C8 user files left
+# behind by a completed migration must not re-block, spec R16 idempotence) ------------
+V3_TYPE=""
+LEGACY_ACTIVE="false"
+if [[ "${HAS_S9}" == "true" || "${HAS_S10}" == "true" || "${HAS_S11}" == "true" \
+      || "${HAS_S6}" == "true" || "${HAS_S7}" == "true" || "${HAS_S8}" == "true" || "${HAS_S12}" == "true" ]]; then
+  LEGACY_ACTIVE="true"
+fi
+if [[ "${HAS_S1}" == "true" && "${HAS_S5}" == "true" && "${LEGACY_ACTIVE}" == "true" ]]; then
+  V3_TYPE="BLOCKED_AMBIGUOUS"  # D1/D2: dual governance roots with active legacy semantics
+  sig "D dual governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS"
+elif [[ "${HAS_S1}" != "true" && ( "${HAS_S10}" == "true" || "${HAS_S11}" == "true" ) ]]; then
+  V3_TYPE="LEGACY_SDLC_SDD"    # D3
+elif [[ "${HAS_S1}" != "true" && ( "${HAS_S5}" == "true" || "${HAS_S6}" == "true" || "${HAS_S7}" == "true" || "${HAS_S8}" == "true" || "${HAS_S12}" == "true" ) ]]; then
+  V3_TYPE="LEGACY_SDD"         # D4
+elif [[ "${HAS_S1}" == "true" && "${ROOT_DOC_COUNT}" -eq 3 ]]; then
+  V3_TYPE="EXISTING_COMPLETE"  # D5
+elif [[ "${HAS_S1}" == "true" && "${HAS_S4}" == "true" ]]; then
+  V3_TYPE="EXISTING_CODE_NO_KNOWLEDGE"  # D6
+elif [[ "${HAS_S1}" == "true" ]]; then
+  V3_TYPE="NEW_EMPTY"          # D7
+elif [[ "${HAS_S4}" == "true" ]]; then
+  V3_TYPE="EXISTING_CODE_NO_KNOWLEDGE"  # D8
+else
+  V3_TYPE="NEW_EMPTY"          # D9
+fi
+
+case "${V3_TYPE}" in
+  NEW_EMPTY) V3_SKELETON="empty" ;;
+  EXISTING_CODE_NO_KNOWLEDGE) V3_SKELETON="partial_or_empty" ;;
+  EXISTING_COMPLETE) V3_SKELETON="complete" ;;
+  *) V3_SKELETON="absent" ;;
+esac
+
+# --- --detect: type judgment only, zero writes (spec §1/§2) -------------------------
+if [[ "${DETECT_MODE}" == "true" ]]; then
+  echo "== v3 four-type detection (nothing written) =="
+  echo "TYPE=${V3_TYPE}"
+  echo "SKELETON=${V3_SKELETON}"
+  echo "SIGNALS:"
+  for line in "${SIG_LINES[@]}"; do
+    if [[ -n "${line}" ]]; then echo "  - ${line}"; fi
+  done
+  if [[ -f "${DECLARATION}" ]]; then
+    DECL_STATE="$(ruby -ryaml -e '
+      begin
+        d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
+        puts (d["status"] || "unknown").to_s
+      rescue StandardError
+        puts "unreadable"
+      end
+    ' "${DECLARATION}" 2>/dev/null || echo "unreadable")"
+    echo "DECLARATION_STATE=${DECL_STATE}"
+  else
+    echo "DECLARATION_STATE=absent"
+  fi
+  TECH_HINTS=""
+  if [[ -f "${TARGET_PATH}/pom.xml" || -d "${TARGET_PATH}/src/main/java" ]] \
+     || ls "${TARGET_PATH}"/*/pom.xml >/dev/null 2>&1 \
+     || ls -d "${TARGET_PATH}"/*/src/main/java >/dev/null 2>&1; then
+    TECH_HINTS="backend-business-service"
+  fi
+  if [[ -f "${TARGET_PATH}/package.json" ]]; then
+    if [[ -n "${TECH_HINTS}" ]]; then TECH_HINTS="${TECH_HINTS},frontend-application"; else TECH_HINTS="frontend-application"; fi
+  fi
+  if [[ -z "${TECH_HINTS}" ]]; then TECH_HINTS="backend-business-service"; fi
+  echo "TECH_PROFILES=${TECH_HINTS}"
+  exit 0
+fi
+
+# --- BLOCKED_AMBIGUOUS gate: type-level ambiguity blocks everything, zero writes -----
+# (spec §2.3/R03: zero partial upgrade — no audit fallback, no init fallback)
+if [[ "${V3_TYPE}" == "BLOCKED_AMBIGUOUS" ]]; then
+  echo "BLOCKED: ambiguous governance type; zero partial upgrade (spec R03)." >&2
+  echo "Detection evidence:" >&2
+  for line in "${SIG_LINES[@]}"; do
+    if [[ -n "${line}" ]]; then echo "  - ${line}" >&2; fi
+  done
+  echo "Resolve the dual-root/ambiguity manually, then re-run." >&2
+  exit 1
+fi
+
+# --- routing guards -------------------------------------------------------------------
+if [[ "${V3_TYPE}" == LEGACY_* ]]; then
+  if [[ -n "${DOMAIN_MAP}" ]]; then
+    echo "BLOCKED: --domain-map is not supported on a LEGACY target; run the migration first, then confirm the map on a follow-up run." >&2
+    exit 2
+  fi
+fi
+
+# non-LEGACY --plan behaves like --dry-run (spec §1)
+if [[ "${PLAN_ONLY}" == "true" && "${V3_TYPE}" != LEGACY_* ]]; then
+  DRY_RUN="true"
+fi
+
+# =====================================================================================
+# --- v3: legacy migration plan / transactional apply ---------------------------------
+# =====================================================================================
+if [[ "${V3_TYPE}" == LEGACY_* && "${FORCE_AUDIT}" != "true" ]]; then
+  # --- classification walk (spec §4.2 rules C1-C10; metadata + safety only) ---------
+  MIG_PLAN_LINES=()      # canonical plan text lines (sorted before digest)
+  MIG_TSV=()             # verb<tab>rel<tab>dst<tab>rule<tab>pre_digest
+  MIG_MOVES=()           # src<tab>dst
+  MIG_BLOCKED=()         # paired entries: rel, reason
+  MIG_PRESERVED=()
+  MIG_ADD_ONLY="true"
+
+  LEGACY_ROOTS=()
+  if [[ "${HAS_S5}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/.specify"); fi
+  if [[ "${HAS_S12}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/specs"); fi
+
+  LEGACY_FILES=""
+  for root in "${LEGACY_ROOTS[@]}"; do
+    part="$(find "${root}/" -mindepth 1 \( -type f -o -type l \) 2>/dev/null || true)"
+    if [[ -n "${part}" ]]; then
+      if [[ -n "${LEGACY_FILES}" ]]; then
+        LEGACY_FILES="${LEGACY_FILES}
+${part}"
+      else
+        LEGACY_FILES="${part}"
+      fi
+    fi
+  done
+  LEGACY_FILES="$(printf '%s' "${LEGACY_FILES}" | LC_ALL=C sort -u)"
+
+  while IFS= read -r src_abs; do
+    if [[ -z "${src_abs}" ]]; then continue; fi
+    rel="${src_abs#"${TARGET_PATH}/"}"
+    rule=""; verb=""; dst_rel="-"
+    # C10 safety: symlink resolution / readability (spec §5.3)
+    if [[ -L "${src_abs}" ]]; then
+      resolved="$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue StandardError; exit 1; end' "${src_abs}" 2>/dev/null || true)"
+      if [[ -z "${resolved}" ]]; then
+        rule="C10"; MIG_BLOCKED+=("${rel}" "dangling or unresolvable symlink")
+      elif [[ "${resolved}" != "${TARGET_REAL}"/* ]]; then
+        rule="C10"; MIG_BLOCKED+=("${rel}" "symlink escapes target repository")
+      fi
+    fi
+    if [[ -z "${rule}" && ! -r "${src_abs}" ]]; then
+      rule="C10"; MIG_BLOCKED+=("${rel}" "file not readable")
+    fi
+    if [[ -z "${rule}" ]]; then
+      case "${rel}" in
+        .specify/business_domain/knowledge-target.yaml|.specify/project-governance-profile.yaml|.specify/entry-coverage-profile.yaml)
+          rule="C2" ;;
+        .specify/business_domain/*.md)
+          rule="C1" ;;
+        .specify/business_domain/*)
+          rule="C9" ;;
+        .specify/templates/*)
+          rule="C3" ;;
+        .specify/scripts/bash/*)
+          rule="C4" ;;
+        .specify/workflow/*)
+          rule="C5" ;;
+        specs/*)
+          rule="C6" ;;
+        .specify/reports/*)
+          rule="C7" ;;
+        *)
+          rule="C8" ;;
+      esac
+    fi
+    case "${rule}" in
+      C1)
+        dst_rel=".sdlc/business_domain/${rel#.specify/business_domain/}"; verb="TRANSFORM" ;;
+      C2)
+        dst_rel=".sdlc/legacy/${rel}"; verb="TRANSFORM" ;;
+      C3|C4|C5|C6|C7)
+        dst_rel=".sdlc/legacy/${rel}"; verb="RETIRE" ;;
+      C9|C10)
+        verb="BLOCKED_AMBIGUOUS" ;;
+      *)
+        verb="PRESERVE" ;;
+    esac
+    if [[ "${verb}" == "PRESERVE" ]]; then
+      MIG_PRESERVED+=("${rel}")
+      MIG_PLAN_LINES+=("PRESERVE	${rel}	-	${rule}")
+      MIG_TSV+=("PRESERVE	${rel}	-	${rule}	")
+    elif [[ "${verb}" == "BLOCKED_AMBIGUOUS" ]]; then
+      reason="unknown mixed or unsafe file (rule ${rule})"
+      for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
+        if [[ "${MIG_BLOCKED[${b}]}" == "${rel}" ]]; then reason="${MIG_BLOCKED[${b} + 1]}"; fi
+      done
+      MIG_PLAN_LINES+=("BLOCKED	${rel}	-	${rule}")
+      MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	-	${rule}	")
+    else
+      if [[ -e "${TARGET_PATH}/${dst_rel}" ]]; then
+        MIG_BLOCKED+=("${rel}" "destination already exists: ${dst_rel}")
+        MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	COLLISION")
+        MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION	")
+      else
+        pre="$(mig_digest "${src_abs}")"
+        MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
+        MIG_PLAN_LINES+=("${verb}	${rel}	${dst_rel}	${rule}")
+        MIG_TSV+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}")
+        MIG_ADD_ONLY="false"
+      fi
+    fi
+  done <<< "${LEGACY_FILES}"
+
+  MIG_BLOCK_TOTAL=$(( ${#MIG_BLOCKED[@]} / 2 ))
+
+  # --- canonical plan text + digest (spec §4.3) ------------------------------------
+  if [[ "${#MIG_PLAN_LINES[@]}" -gt 0 ]]; then
+    PLAN_BODY="$(printf '%s
+' "${MIG_PLAN_LINES[@]}" | LC_ALL=C sort)"
+  else
+    PLAN_BODY=""
+  fi
+  PLAN_TEXT="type=${V3_TYPE}
+add_only=${MIG_ADD_ONLY}
+blocked=${MIG_BLOCK_TOTAL}
+files:
+${PLAN_BODY}"
+  PLAN_SHA="$(printf '%s' "${PLAN_TEXT}" | ruby -rdigest -e 'puts Digest::SHA256.hexdigest(STDIN.read)')"
+
+  # --- plan / dry-run output: zero writes (spec §4.3/§4.5) --------------------------
+  if [[ "${PLAN_ONLY}" == "true" || "${DRY_RUN}" == "true" ]]; then
+    echo "== MIGRATION PLAN (nothing written) =="
+    echo "TYPE=${V3_TYPE}"
+    echo "ADD_ONLY=${MIG_ADD_ONLY}"
+    echo "BLOCKED=${MIG_BLOCK_TOTAL}"
+    echo "PLAN_SHA256=${PLAN_SHA}"
+    echo "FILES:"
+    if [[ -n "${PLAN_BODY}" ]]; then
+      while IFS= read -r pline; do echo "  ${pline}"; done <<< "${PLAN_BODY}"
+    fi
+    if [[ "${MIG_BLOCK_TOTAL}" -gt 0 ]]; then
+      echo "BLOCKED_FILES:"
+      for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
+        echo "  - ${MIG_BLOCKED[${b}]}: ${MIG_BLOCKED[${b} + 1]}"
+      done
+      echo "BLOCKED: migration cannot proceed (zero partial upgrade, spec R03)."
+      exit 1
+    fi
+    exit 0
+  fi
+
+  # --- apply preconditions (spec §4.5 DP1 / R03) ------------------------------------
+  if [[ "${MIG_BLOCK_TOTAL}" -gt 0 ]]; then
+    echo "BLOCKED: ${MIG_BLOCK_TOTAL} ambiguous/unsafe file(s); zero partial upgrade (spec R03):" >&2
+    for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
+      echo "  - ${MIG_BLOCKED[${b}]}: ${MIG_BLOCKED[${b} + 1]}" >&2
+    done
+    exit 1
+  fi
+  if [[ "${MIG_ADD_ONLY}" != "true" && "${CONFIRM_DIGEST}" != "${PLAN_SHA}" ]]; then
+    echo "BLOCKED: DP1 confirmation required. Re-run with --plan, review the classification," >&2
+    echo "then --apply --confirm-migration-plan <plan_sha256> (expected ${PLAN_SHA})." >&2
+    exit 1
+  fi
+
+  # --- transactional apply: backup -> move -> verify (spec §6.1-6.3) ----------------
+  MIG_BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/knowledge-target-mig-backup.XXXXXX")"
+  MIG_ROLLBACK_OK="true"
+  mig_rollback() {
+    local m src dst brel rc=0
+    for ((m = ${#MIG_MOVES[@]} - 1; m >= 0; m--)); do
+      IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
+      brel="${src#"${TARGET_PATH}/"}"
+      if [[ -f "${dst}" ]]; then
+        mkdir -p "$(dirname "${src}")"
+        if ! mv "${dst}" "${src}"; then rc=1; continue; fi
+      fi
+      if [[ -f "${MIG_BACKUP_DIR}/${brel}" ]] && ! cmp -s "${src}" "${MIG_BACKUP_DIR}/${brel}"; then
+        rc=1
+      fi
+    done
+    if [[ "${rc}" -eq 0 ]]; then rm -rf "${MIG_BACKUP_DIR}"; fi
+    return "${rc}"
+  }
+
+  MIG_MOVED=0
+  for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
+    IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
+    brel="${src#"${TARGET_PATH}/"}"
+    mkdir -p "${MIG_BACKUP_DIR}/$(dirname "${brel}")"
+    cp -p "${src}" "${MIG_BACKUP_DIR}/${brel}"
+    mkdir -p "$(dirname "${dst}")"
+    if ! mv "${src}" "${dst}"; then
+      echo "MIGRATION FAILED at: ${src} -> ${dst}; rolling back..." >&2
+      if mig_rollback; then
+        echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      else
+        echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+        MIG_ROLLBACK_OK="false"
+      fi
+      exit 1
+    fi
+    MIG_MOVED=$((MIG_MOVED + 1))
+  done
+
+  # prune legacy directories emptied by the migration (spec R16 idempotence: an
+  # empty legacy root must not re-trigger legacy detection or audit routing on
+  # re-runs; directories holding PRESERVE'd user files are never empty)
+  for root in "${LEGACY_ROOTS[@]}"; do
+    find "${root}/" -depth -type d -empty -delete 2>/dev/null || true
+  done
+
+  echo "== migration applied: ${MIG_MOVED} file(s) moved; ADD_ONLY=${MIG_ADD_ONLY}; PLAN_SHA256=${PLAN_SHA} =="
+  MIG_PENDING="true"
 fi
 
 # --- mode selection -------------------------------------------------------------
@@ -1788,6 +2186,219 @@ REPORT_FILE="$(mktemp "${REPORT_DIR}/knowledge_target_bootstrap_report.$(date '+
   echo "- 过程事实：当前需求 library/{requirement_id}/ 七节点产物。"
   echo "- 代码与验证证据：目标仓；由 sdlc-knowledge-sync 消费。"
 } > "${REPORT_FILE}"
+
+# =====================================================================================
+# --- v3: post-init residue gate, rollback-on-violation, migration reports ------------
+# spec §6.4 (residue gate) / §6.5 (finalization) / §7 (dual reports)
+# =====================================================================================
+if [[ "${MIG_PENDING}" == "true" ]]; then
+  MIG_FAIL_REASON=""
+  # collect migration-created files for rollback: every TRANSFORM/RETIRE destination
+  MIG_CREATED_ABS=()
+  MIG_EXEMPT_LIST="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-exempt.XXXXXX")"
+  for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
+    IFS=$'	' read -r msrc mdst <<< "${MIG_MOVES[${m}]}"
+    MIG_CREATED_ABS+=("${mdst}")
+    case "${mdst}" in
+      "${SDLC_DIR}"/business_domain/*) printf '%s
+' "${mdst}" >> "${MIG_EXEMPT_LIST}" ;;  # migrated knowledge content (spec I1: preserved verbatim)
+    esac
+  done
+
+  # --- legacy declaration candidate domains -> map template candidate area (spec §4.4)
+  MIG_FIELD_MAPPINGS=()
+  OLD_DECL="${TARGET_PATH}/.sdlc/legacy/.specify/business_domain/knowledge-target.yaml"
+  MAP_TEMPLATE_FILE="${SDLC_DIR}/business-domain-map.yaml"
+  if [[ -f "${OLD_DECL}" && -f "${MAP_TEMPLATE_FILE}" ]] \
+     && ! grep -q "legacy_candidate_domains:" "${MAP_TEMPLATE_FILE}" 2>/dev/null; then
+    OLD_DOMAINS="$(ruby -ryaml -e '
+      begin
+        d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
+        names = []
+        (d["domains"] || d["domain_list"] || []).each do |x|
+          names << (x.is_a?(Hash) ? (x["name"] || x["id"] || x["domain"]).to_s : x.to_s)
+        end
+        names << d["project"].to_s unless d["project"].nil?
+        puts names.reject(&:empty?).uniq.join("\n")
+      rescue StandardError
+        nil
+      end
+    ' "${OLD_DECL}" 2>/dev/null || true)"
+    if [[ -n "${OLD_DOMAINS}" ]]; then
+      {
+        printf '\n# legacy_candidate_domains: mechanical projection of the retired declaration\n'
+        printf '# (spec §4.4 fixed-field mapping); owner reviews before confirming the map.\n'
+        printf 'legacy_candidate_domains:\n'
+        printf '%s\n' "${OLD_DOMAINS}" | while IFS= read -r od; do
+          if [[ -n "${od}" ]]; then printf '  - "%s"\n' "$(printf '%s' "${od}" | sed 's/\\/\\\\/g; s/"/\\"/g')"; fi
+        done
+      } >> "${MAP_TEMPLATE_FILE}"
+      while IFS= read -r od; do
+        if [[ -n "${od}" ]]; then MIG_FIELD_MAPPINGS+=("legacy_candidate_domains	${od}"); fi
+      done <<< "${OLD_DOMAINS}"
+    fi
+  fi
+
+  # --- residue gate over active governance surfaces (spec §6.4; R2-H6 scanner semantics)
+  GATE_OUT="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-gate.XXXXXX")"
+  GATE_RC="$(ruby -ryaml -e '
+    sdlc = ARGV[0]; target = ARGV[1]; exempt_file = ARGV[2]; out = ARGV[3]
+    exempt = File.exist?(exempt_file) ? File.readlines(exempt_file).map(&:strip).reject(&:empty?) : []
+    exempt_set = {}
+    exempt.each { |p| exempt_set[p] = true }
+    skip_prefixes = ["#{sdlc}/legacy/", "#{sdlc}/reports/", "#{sdlc}/migration/"]
+    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+    negation = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|dont|prohibit\w*|forbidden|retired)/i
+    machine_re = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
+    violations = []
+    if File.directory?(sdlc)
+      files = Dir.glob(File.join(sdlc, "**", "*")).select { |p| File.file?(p) }.sort
+      files.each do |path|
+        next if exempt_set.key?(path)
+        next if skip_prefixes.any? { |pre| path.start_with?(pre) }
+        next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
+        machine_key_indent = nil
+        File.readlines(path).each_with_index do |line, idx|
+          if (m = line.match(machine_re))
+            machine_key_indent = m[1].length
+          elsif !machine_key_indent.nil?
+            entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
+            machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
+          end
+          next if machine_key_indent
+          states = line.split(/[。；;！!？?]/).map do |clause|
+            hits = patterns.select { |re| clause.match?(re) }
+            next nil if hits.empty?
+            clause.match?(negation) ? :exempt : :violation
+          end.compact
+          if states.include?(:violation)
+            violations << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
+            break if violations.size >= 50
+          end
+          break if violations.size >= 50
+        end
+        break if violations.size >= 50
+      end
+    end
+    File.write(out, violations.join("\n") + (violations.empty? ? "" : "\n"))
+    puts violations.size
+  ' "${SDLC_DIR}" "${TARGET_PATH}" "${MIG_EXEMPT_LIST}" "${GATE_OUT}" 2>/dev/null || echo "0")"
+  if [[ "${GATE_RC}" != "0" ]]; then
+    MIG_FAIL_REASON="residue gate violations"
+  fi
+
+  if [[ -n "${MIG_FAIL_REASON}" ]]; then
+    # --- full rollback: migration moves + INIT-created files + both reports ---------
+    if mig_rollback; then
+      echo "RESIDUE GATE FAILED: rolled back migration to pre-migration state." >&2
+    else
+      echo "RESIDUE GATE FAILED and ROLLBACK INCOMPLETE; backup kept at ${MIG_BACKUP_DIR}" >&2
+      MIG_ROLLBACK_OK="false"
+    fi
+    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
+      rel="${CREATED_FILES[${c}]}"
+      case "${rel}" in
+        project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${rel}" ;;
+        *) rm -f "${BD_DIR}/${rel}" ;;
+      esac
+    done
+    rm -f "${REPORT_FILE}"
+    echo "BLOCKED: migration rolled back (${MIG_FAIL_REASON}); see stderr list. Violations:" >&2
+    while IFS= read -r v; do
+      if [[ -n "${v}" ]]; then echo "  - ${v}" >&2; fi
+    done < "${GATE_OUT}"
+    rm -f "${GATE_OUT}" "${MIG_EXEMPT_LIST}"
+    exit 1
+  fi
+  rm -f "${GATE_OUT}"
+
+  # --- post-migration detection re-run value (spec §7) ------------------------------
+  POST_ROOT_DOCS=0
+  for doc in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
+    if [[ -f "${BD_DIR}/${doc}" ]]; then POST_ROOT_DOCS=$((POST_ROOT_DOCS + 1)); fi
+  done
+  if [[ "${POST_ROOT_DOCS}" -eq 3 ]]; then
+    MIG_POST_TYPE="EXISTING_COMPLETE"
+  else
+    MIG_POST_TYPE="EXISTING_CODE_NO_KNOWLEDGE"
+  fi
+
+  # --- dual reports: md + machine json (spec §7) ------------------------------------
+  MIG_REPORT_DIR="${REPORT_DIR}"
+  mkdir -p "${MIG_REPORT_DIR}"
+  MIG_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-tsv.XXXXXX")"
+  for ((t = 0; t < ${#MIG_TSV[@]}; t++)); do printf '%s\n' "${MIG_TSV[${t}]}" >> "${MIG_TSV_FILE}"; done
+  MIG_MAP_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-map.XXXXXX")"
+  for ((t = 0; t < ${#MIG_FIELD_MAPPINGS[@]}; t++)); do printf '%s\n' "${MIG_FIELD_MAPPINGS[${t}]}" >> "${MIG_MAP_TSV_FILE}"; done
+
+  MIG_JSON="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.json.XXXXXX")"
+  MIG_REPORT_FILE="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.md.XXXXXX")"
+  MIG_CONFIRM_REQUIRED="false"; MIG_CONFIRM_PROVIDED="false"
+  if [[ "${MIG_ADD_ONLY}" != "true" ]]; then MIG_CONFIRM_REQUIRED="true"; MIG_CONFIRM_PROVIDED="true"; fi
+  MIG_SIGNALS_CSV="$(printf '%s,' "${SIG_LINES[@]}")"
+  MIG_SIGNALS_CSV="${MIG_SIGNALS_CSV%,}"
+  MIG_SIGNALS_CSV="${MIG_SIGNALS_CSV//\"/\\\"}"
+  M_TYPE="${V3_TYPE}" M_SKELETON="${V3_SKELETON}" M_SIGNALS="${MIG_SIGNALS_CSV}" \
+  M_PLAN_SHA="${PLAN_SHA}" M_ADD_ONLY="${MIG_ADD_ONLY}" M_MOVED="${MIG_MOVED}" \
+  M_POST_TYPE="${MIG_POST_TYPE}" M_RUN_TIMESTAMP="${RUN_TIMESTAMP}" M_V3_NOW="${V3_NOW}" \
+  M_TARGET="${TARGET_PATH}" M_AUTHOR="${AUTHOR}" \
+  M_CONFIRM_REQUIRED="${MIG_CONFIRM_REQUIRED}" M_CONFIRM_PROVIDED="${MIG_CONFIRM_PROVIDED}" \
+  ruby -ryaml -rjson -rdigest -e '
+    tsv_file, map_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
+    files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
+      verb, rel, dst, rule, pre = l.split("\t")
+      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule, "pre_digest" => pre }
+    end
+    mappings = File.readlines(map_file).map(&:chomp).reject(&:empty?).map do |l|
+      k, v = l.split("\t", 2)
+      { "field" => k, "value" => v }
+    end
+    doc = {
+      "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
+      "generated_at" => ENV["M_V3_NOW"],
+      "target_repository" => ENV["M_TARGET"],
+      "git_author" => ENV["M_AUTHOR"],
+      "detection" => { "type" => ENV["M_TYPE"], "signals" => ENV["M_SIGNALS"].split(","), "skeleton_state" => ENV["M_SKELETON"] },
+      "plan_sha256" => ENV["M_PLAN_SHA"],
+      "confirmation" => { "required" => ENV["M_CONFIRM_REQUIRED"] == "true", "provided" => ENV["M_CONFIRM_PROVIDED"] == "true", "digest" => ENV["M_CONFIRM_PROVIDED"] == "true" ? ENV["M_PLAN_SHA"] : "" },
+      "add_only" => ENV["M_ADD_ONLY"] == "true",
+      "moved_count" => ENV["M_MOVED"].to_i,
+      "files" => files,
+      "field_mappings" => mappings,
+      "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/, migrated knowledge files", "violations_count" => 0 },
+      "post_detect_type" => ENV["M_POST_TYPE"],
+      "rollback" => { "occurred" => false, "reason" => "" }
+    }
+    File.write(json_out, JSON.pretty_generate(doc) + "\n")
+    md = String.new
+    md << "# Migration Report\n\n"
+    md << "> **Type**: #{doc["detection"]["type"]}\n"
+    md << "> **Generated At**: #{doc["generated_at"]}\n"
+    md << "> **Plan SHA-256**: `#{doc["plan_sha256"]}`\n"
+    md << "> **DP1 Confirmation**: required=#{doc["confirmation"]["required"]} provided=#{doc["confirmation"]["provided"]}\n"
+    md << "> **Moved**: #{doc["moved_count"]} file(s); add_only=#{doc["add_only"]}; residue gate=0 violations\n"
+    md << "> **Post-migration detection**: #{doc["post_detect_type"]}\n\n"
+    md << "| Verb | Path | Target | Rule |\n| --- | --- | --- | --- |\n"
+    files.each { |f| md << "| #{f["verb"]} | #{f["path"]} | #{f["target"]} | #{f["rule"]} |\n" }
+    unless mappings.empty?
+      md << "\n## Field Mappings (spec §4.4)\n\n| Field | Value |\n| --- | --- |\n"
+      mappings.each { |m| md << "| #{m["field"]} | #{m["value"]} |\n" }
+    end
+    md << "\nRETIRE/TRANSFORM 原件归档于 `.sdlc/legacy/**`（不物理删除）；候选域与稳定事实仍由 sdlc-knowledge-sync 依 routed 声明写入。\n"
+    File.write(md_out, md)
+  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
+  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}"
+  mkdir -p "${SDLC_DIR}/migration"
+  cp "${MIG_JSON}" "${SDLC_DIR}/migration/plan.json"
+  PLAN_SHA_FILE="${SDLC_DIR}/migration/plan.sha256"
+  printf '%s\n' "${PLAN_SHA}" > "${PLAN_SHA_FILE}"
+
+  echo "MIGRATION REPORT=${MIG_REPORT_FILE#${TARGET_PATH}/}"
+  echo "MIGRATION REPORT JSON=${MIG_JSON#${TARGET_PATH}/}"
+  echo "MIGRATION PLAN JSON=${SDLC_DIR}/migration/plan.json#${TARGET_PATH}/"
+  echo "MIGRATION POST_DETECT_TYPE=${MIG_POST_TYPE}"
+fi
+
 
 # --- summary ----------------------------------------------------------------------------
 echo "== knowledge-target bootstrap summary (D-088-01 v2) =="

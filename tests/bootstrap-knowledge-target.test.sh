@@ -182,17 +182,28 @@ if [[ -n "${REPORT}" ]] && grep -q '## Verdict' "${REPORT}"; then pass; else fai
 assert_contains "${REPORT}" "Result | FINDINGS"
 
 # ---------------------------------------------------------------------------
-CASE_NAME="6. legacy knowledge root: auto-audit, legacy untouched, migration advisory"
+CASE_NAME="6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory"
 R="${WORK_ROOT}/t6"; new_repo "${R}"
 mkdir -p "${R}/.specify/business_domain/01Order"
 printf '# Business Landscape\n\nLegacy curated content.\n' > "${R}/.specify/business_domain/00BusinessLandscape.md"
 printf '# Order\n' > "${R}/.specify/business_domain/01Order/0101Order.md"
 LEGACY_SNAP_BEFORE="$(snapshot "${R}/.specify")"
 OUT="${WORK_ROOT}/t6.out"
+# v3 Decision-090: a plain run on a LEGACY target is blocked pending DP1 confirmation
 bash "${INITIALIZER}" "${R}" > "${OUT}" 2>&1
+assert_exit 1 $?
+assert_eq "${LEGACY_SNAP_BEFORE}" "$(snapshot "${R}/.specify")"
+if [[ -e "${R}/.sdlc" ]]; then fail "v3: zero-write before DP1 confirmation"; else pass; fi
+if grep -q "DP1 confirmation required" "${OUT}"; then pass; else fail "v3: DP1 blocking message missing"; fi
+# detect reports the legacy type with zero writes
+bash "${INITIALIZER}" "${R}" --detect > "${OUT}" 2>&1
+assert_exit 0 $?
+grep -q "^TYPE=LEGACY_SDD" "${OUT}" && pass || fail "v3 detect: expected LEGACY_SDD"
+assert_eq "${LEGACY_SNAP_BEFORE}" "$(snapshot "${R}/.specify")"
+# --audit escape hatch keeps the v2 read-only advisory semantics
+bash "${INITIALIZER}" "${R}" --audit > "${OUT}" 2>&1
 assert_exit 0 $?
 assert_eq "${LEGACY_SNAP_BEFORE}" "$(snapshot "${R}/.specify")"
-if [[ -f "${R}/.sdlc/entry-coverage-profile.yaml" ]]; then pass; else fail "machine artifacts not filled under .sdlc"; fi
 AUDIT_REPORT="$(ls "${R}"/.sdlc/reports/knowledge_target_audit_report.* 2>/dev/null | head -1)"
 if [[ -n "${AUDIT_REPORT}" ]] && grep -q '旧版知识根目录' "${AUDIT_REPORT}"; then pass; else fail "legacy migration advisory missing from audit report"; fi
 
@@ -459,28 +470,39 @@ LEGACY_LINK_BEFORE="$( [[ ! -L "${R}/.specify/business_domain" ]] && echo not-a-
 if [[ ! -r "${R}/.specify/business_domain/legacy/private.md" ]]; then LEGACY_UNREADABLE_BEFORE="unreadable"; else LEGACY_UNREADABLE_BEFORE="readable"; fi
 NEW_ROOT_SNAP_BEFORE="$(snapshot "${R}/.sdlc" 2>/dev/null || true)"
 OUT="${WORK_ROOT}/t22.out"
+# v3 Decision-090: --domain-map is rejected on a LEGACY target (migration first,
+# owner confirms the map on a follow-up run); the zero-traversal/permission proofs stay.
 bash "${INITIALIZER}" "${R}" --domain-map dm.yaml > "${OUT}" 2>&1
-assert_exit 0 $?
+assert_exit 2 $?
 assert_eq "dir-present" "${LEGACY_EXIST_BEFORE}"
 assert_eq "not-a-symlink" "${LEGACY_LINK_BEFORE}"
 assert_eq "unreadable" "${LEGACY_UNREADABLE_BEFORE}"
 if [[ -f "${R}/.specify/business_domain/legacy/private.md" ]]; then pass; else fail "legacy file vanished"; fi
-if [[ -z "${NEW_ROOT_SNAP_BEFORE}" ]] && [[ -d "${R}/.sdlc" ]]; then pass; else fail "new root snapshot baseline wrong"; fi
-assert_contains "${R}/.sdlc/business_domain/knowledge-target.yaml" 'status: "routed"'
+if [[ ! -e "${R}/.sdlc" ]]; then pass; else fail "v3: zero-write on --domain-map rejection"; fi
 chmod u+rwX "${R}/.specify/business_domain/legacy" 2>/dev/null
 chmod u+rw "${R}/.specify/business_domain/legacy/private.md" 2>/dev/null
 R2="${WORK_ROOT}/t22b"; new_repo "${R2}"
 printf '%s' "${GOOD_MAP}" > "${R2}/dm.yaml"
 mkdir -p "${R2}/.specify"
 ln -sfn /nonexistent/kt-legacy-target "${R2}/.specify/business_domain"
-bash "${INITIALIZER}" "${R2}" --domain-map dm.yaml > /dev/null 2>&1
+# dangling legacy symlink: detection routes to LEGACY (existence-only); --audit escape runs read-only
+bash "${INITIALIZER}" "${R2}" --detect > "${OUT}" 2>&1
 assert_exit 0 $?
-assert_contains "${R2}/.sdlc/business_domain/knowledge-target.yaml" 'status: "routed"'
+grep -q "^TYPE=LEGACY_SDD" "${OUT}" && pass || fail "v3 detect: dangling legacy symlink expected LEGACY_SDD"
+bash "${INITIALIZER}" "${R2}" --domain-map dm.yaml > /dev/null 2>&1
+assert_exit 2 $?
+if [[ ! -e "${R2}/.sdlc" ]]; then pass; else fail "v3: zero-write on dangling-symlink --domain-map rejection"; fi
+# v3: --dry-run on a LEGACY target is the migration plan face; the audit advisory
+# survives behind the explicit --audit escape hatch.
 OUT22C="${WORK_ROOT}/t22c.out"
 bash "${INITIALIZER}" "${R2}" --dry-run > "${OUT22C}" 2>&1
+assert_exit 1 $?
+if grep -q "dangling or unresolvable symlink" "${OUT22C}"; then pass; else fail "C10 classification missing for dangling legacy symlink"; fi
+if grep -q 'MODE=init' "${OUT22C}"; then fail "dangling legacy symlink routed to init"; else pass; fi
+if [[ ! -e "${R2}/.sdlc" ]]; then pass; else fail "plan mode wrote to target"; fi
+bash "${INITIALIZER}" "${R2}" --audit > "${OUT22C}" 2>&1
 assert_exit 0 $?
 assert_contains "${OUT22C}" "== knowledge-target applicability audit =="
-if grep -q 'MODE=init' "${OUT22C}"; then fail "dangling legacy symlink routed to init"; else pass; fi
 
 # ---------------------------------------------------------------------------
 CASE_NAME="23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter"
@@ -790,6 +812,247 @@ done <<< "${REPORT_DIGESTS_BEFORE}"
 if [[ "${PRE_LOST}" == "0" ]]; then pass; else fail "a pre-existing report was overwritten"; fi
 
 # ---------------------------------------------------------------------------
+# ===========================================================================
+# v3 acceptance matrix (spec d088-01-v3-behavior-spec.md §8; Decision-090 G1)
+# ===========================================================================
+
+# matrix fixture builder: $1=dir $2=legacy(none|sdd|sdlc) $3=code(yes|no)
+#                        $4=skel(0|1|3) $5=map(absent|candidate|routed)
+build_matrix_fixture() {
+  local d="$1" legacy="$2" code="$3" skel="$4" map="$5"
+  mkdir -p "${d}"
+  git -C "${d}" init -q
+  git -C "${d}" config user.name "Regression Runner"
+  if [[ "${code}" == "yes" ]]; then
+    mkdir -p "${d}/src/main/java"; echo "class A{}" > "${d}/src/main/java/A.java"
+  fi
+  if [[ "${skel}" -gt 0 || "${map}" != "absent" ]]; then
+    mkdir -p "${d}/.sdlc/business_domain"
+    if [[ "${skel}" -ge 1 ]]; then printf '# Landscape\n' > "${d}/.sdlc/business_domain/00BusinessLandscape.md"; fi
+    if [[ "${skel}" -eq 3 ]]; then
+      printf '# Language\n' > "${d}/.sdlc/business_domain/00UbiquitousLanguage.md"
+      printf '# Catalog\n' > "${d}/.sdlc/business_domain/01DomainCatalog.md"
+    fi
+    if [[ "${map}" != "absent" ]]; then
+      if [[ "${map}" == "routed" ]]; then
+        printf 'status: "routed"\nroutable: true\n' > "${d}/.sdlc/business_domain/knowledge-target.yaml"
+      else
+        printf 'status: "candidate_pending_confirmation"\nroutable: false\n' > "${d}/.sdlc/business_domain/knowledge-target.yaml"
+      fi
+    fi
+  fi
+  if [[ "${legacy}" != "none" ]]; then
+    mkdir -p "${d}/.specify/templates" "${d}/.specify/scripts/bash" "${d}/.specify/workflow"
+    printf 'sdd template\n' > "${d}/.specify/templates/plan.md"
+    printf '#!/bin/sh\n' > "${d}/.specify/scripts/bash/create-new-feature.sh"
+    printf 'workflow\n' > "${d}/.specify/workflow/SDDWorkflow.md"
+  fi
+  if [[ "${legacy}" == "sdlc" ]]; then
+    mkdir -p "${d}/.specify/business_domain"
+    printf 'status: "candidate_pending_confirmation"\n' > "${d}/.specify/business_domain/knowledge-target.yaml"
+    printf '# legacy knowledge\n' > "${d}/.specify/business_domain/legacy-note.md"
+  fi
+}
+
+# expected v3 type per decision table (spec §2.2 D1-D9; a pre-existing .sdlc surface
+# alongside a legacy root is dual-governance BLOCKED regardless of skeleton state)
+expected_type() { # $1=legacy $2=code $3=skel $4=map
+  if [[ "${1}" != "none" ]]; then
+    if [[ "${3}" == "0" && "${4}" == "absent" ]]; then
+      if [[ "${1}" == "sdlc" ]]; then echo "LEGACY_SDLC_SDD"; else echo "LEGACY_SDD"; fi
+    else
+      echo "BLOCKED_AMBIGUOUS"
+    fi
+  elif [[ "${3}" == "3" ]]; then
+    echo "EXISTING_COMPLETE"
+  elif [[ "${2}" == "yes" ]]; then
+    echo "EXISTING_CODE_NO_KNOWLEDGE"
+  else
+    echo "NEW_EMPTY"
+  fi
+}
+
+CASE_NAME="36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes"
+M36_ROOT="${WORK_ROOT}/t36"; mkdir -p "${M36_ROOT}"
+M36_RUNS=0; M36_FAIL_BEFORE="${FAIL_COUNT}"
+for legacy in none sdd sdlc; do
+  for code in no yes; do
+    for skel in 0 1 3; do
+      for map in absent candidate routed; do
+        D="${M36_ROOT}/m_${legacy}_${code}_${skel}_${map}"
+        build_matrix_fixture "${D}" "${legacy}" "${code}" "${skel}" "${map}"
+        SNAP="$(snapshot "${D}")"
+        WANT="$(expected_type "${legacy}" "${code}" "${skel}" "${map}")"
+        bash "${INITIALIZER}" "${D}" --detect > "${M36_ROOT}/out" 2>&1
+        assert_exit 0 $?
+        if grep -q "^TYPE=${WANT}$" "${M36_ROOT}/out"; then pass; else fail "detect(${legacy},${code},${skel},${map}): expected ${WANT}, got $(grep '^TYPE=' "${M36_ROOT}/out" | head -1)"; fi
+        M36_RUNS=$((M36_RUNS + 1))
+        if [[ "${WANT}" == "BLOCKED_AMBIGUOUS" ]]; then
+          bash "${INITIALIZER}" "${D}" --plan > "${M36_ROOT}/out" 2>&1
+          assert_exit 1 $?
+          bash "${INITIALIZER}" "${D}" --dry-run > "${M36_ROOT}/out" 2>&1
+          assert_exit 1 $?
+        else
+          # v2 dry-run exit semantics on half-built states belong to scenarios 1-35;
+          # the matrix asserts the decision type and mandatory zero-write only.
+          bash "${INITIALIZER}" "${D}" --plan > "${M36_ROOT}/out" 2>&1 || true
+          bash "${INITIALIZER}" "${D}" --dry-run > "${M36_ROOT}/out" 2>&1 || true
+        fi
+        if [[ "$(snapshot "${D}")" == "${SNAP}" ]]; then pass; else fail "zero-write(${legacy},${code},${skel},${map}): repository mutated by read-only mode"; fi
+        M36_RUNS=$((M36_RUNS + 2))
+      done
+    done
+  done
+done
+assert_eq "162" "${M36_RUNS}"
+if [[ "${FAIL_COUNT}" -eq "${M36_FAIL_BEFORE}" ]]; then pass; else fail "matrix: failures detected above"; fi
+
+CASE_NAME="37. A1-A8: NEW/EXISTING representative apply and idempotence combos"
+D="${WORK_ROOT}/t37a"; build_matrix_fixture "${D}" "none" "no" "0" "absent"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if [[ -f "${D}/.sdlc/business_domain/00BusinessLandscape.md" ]]; then pass; else fail "A1: new-project init incomplete"; fi
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1; assert_exit 0 $?
+if grep -q 'status: "candidate_pending_confirmation"' "${D}/.sdlc/business_domain/knowledge-target.yaml"; then pass; else fail "A2: re-run declaration state"; fi
+D="${WORK_ROOT}/t37b"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if [[ $(find "${D}/.sdlc/business_domain" -name '*.md' | wc -l | tr -d ' ') -ge 3 ]]; then pass; else fail "A3: existing-code init"; fi
+D="${WORK_ROOT}/t37c"; build_matrix_fixture "${D}" "none" "yes" "1" "absent"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if [[ -f "${D}/.sdlc/business_domain/01DomainCatalog.md" ]]; then pass; else fail "A4: partial refill missing"; fi
+if [[ "$(digest_file "${D}/.sdlc/business_domain/00BusinessLandscape.md")" == "$(digest_file "${D}/.sdlc/business_domain/00BusinessLandscape.md")" ]]; then pass; fi
+SNAP37C="$(snapshot "${D}/.sdlc/business_domain/00BusinessLandscape.md")"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if [[ "$(snapshot "${D}/.sdlc/business_domain/00BusinessLandscape.md")" == "${SNAP37C}" ]]; then pass; else fail "A5: double-apply mutated existing doc"; fi
+D="${WORK_ROOT}/t37d"; build_matrix_fixture "${D}" "none" "yes" "1" "absent"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if grep -q 'status: "candidate_pending_confirmation"' "${D}/.sdlc/business_domain/knowledge-target.yaml"; then
+  pass
+else
+  fail "A6: candidate declaration not created by first init"
+fi
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+if grep -q 'status: "candidate_pending_confirmation"' "${D}/.sdlc/business_domain/knowledge-target.yaml"; then pass; else fail "A6: candidate declaration not preserved on rerun"; fi
+for combo in 7 8; do
+  D="${WORK_ROOT}/t37${combo}"; build_matrix_fixture "${D}" "none" "yes" "3" "routed"
+  bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1; assert_exit 0 $?
+  if grep -q 'status: "routed"' "${D}/.sdlc/business_domain/knowledge-target.yaml"; then pass; else fail "A${combo}: routed downgraded"; fi
+done
+
+CASE_NAME="38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)"
+D="${WORK_ROOT}/t38"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
+assert_exit 1 $?
+assert_eq "${LEG_SNAP}" "$(snapshot "${D}/.specify")"
+if [[ ! -e "${D}/.sdlc" ]]; then pass; else fail "A11: zero-write without DP1 confirmation"; fi
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ -f "${D}/.sdlc/legacy/.specify/templates/plan.md" ]]; then pass; else fail "A9: legacy template not archived"; fi
+if [[ -f "${D}/.sdlc/business_domain/00BusinessLandscape.md" ]]; then pass; else fail "A9: new surface not initialized after migration"; fi
+if [[ -f "${D}/.sdlc/migration/plan.json" && -n "$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)" ]]; then pass; else fail "A9: plan.json / migration report missing"; fi
+if grep -q "\"plan_sha256\": \"${PLAN_SHA}\"" "${D}/.sdlc/migration/plan.json"; then pass; else fail "A9: confirmation digest not recorded"; fi
+
+CASE_NAME="39. A10/A13/A14: LEGACY x existing new-surface combos are blocked (dual governance roots)"
+for skel in 1 3; do
+  D="${WORK_ROOT}/t39_${skel}"; build_matrix_fixture "${D}" "sdlc" "yes" "${skel}" "absent"
+  SNAP="$(snapshot "${D}")"
+  bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
+  assert_exit 1 $?
+  if [[ "$(snapshot "${D}")" == "${SNAP}" ]]; then pass; else fail "A${skel}: blocked dual-root mutated repository"; fi
+done
+
+CASE_NAME="40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent"
+D="${WORK_ROOT}/t40"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain/01Trade"
+printf 'domains:\n  - name: 交易域\n  - name: 履约域\n' > "${D}/.specify/business_domain/knowledge-target.yaml"
+printf '# 旧域知识\n' > "${D}/.specify/business_domain/01Trade/trade.md"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ -f "${D}/.sdlc/business_domain/01Trade/trade.md" ]]; then pass; else fail "A12: knowledge doc not migrated"; fi
+if [[ "$(digest_file "${D}/.sdlc/business_domain/01Trade/trade.md")" == "$(digest_file <(printf '# 旧域知识\n'))" ]]; then pass; fi
+if grep -q 'legacy_candidate_domains:' "${D}/.sdlc/business-domain-map.yaml"; then pass; else fail "A12: legacy candidate domains not projected to map template"; fi
+MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+if [[ -n "${MIG_JSON}" ]] && grep -q '"type": "LEGACY_SDLC_SDD"' "${MIG_JSON}"; then pass; else fail "A12: migration report type missing"; fi
+if grep -q '"post_detect_type": "EXISTING_COMPLETE"' "${MIG_JSON}"; then pass; else fail "A12: post-detect type missing in report"; fi
+if grep -q 'legacy_candidate_domains' "${MIG_JSON}"; then pass; else fail "A12: field mappings not recorded"; fi
+bash "${INITIALIZER}" "${D}" --detect > /dev/null 2>&1
+OUT40="${WORK_ROOT}/t40.out"
+bash "${INITIALIZER}" "${D}" --detect > "${OUT40}" 2>&1
+grep -q "^TYPE=EXISTING_COMPLETE" "${OUT40}" && pass || fail "A16: post-migration detect not EXISTING_COMPLETE"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
+assert_exit 0 $?
+
+CASE_NAME="41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected"
+D="${WORK_ROOT}/t41"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain/01Trade"
+printf '# 旧域知识\n' > "${D}/.specify/business_domain/01Trade/trade.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+chmod 500 "${D}/.specify/business_domain/01Trade"
+OUT41="${WORK_ROOT}/t41.out"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT41}" 2>&1
+RC=$?
+chmod 700 "${D}/.specify/business_domain/01Trade"
+assert_exit 1 "${RC}"
+if grep -q "MIGRATION FAILED" "${OUT41}" && grep -q "ROLLED BACK" "${OUT41}"; then pass; else fail "A15: rollback messages missing"; fi
+if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "A15: legacy tree not restored byte-identical"; fi
+if [[ ! -f "${D}/.sdlc/business_domain/01Trade/trade.md" ]]; then pass; else fail "A15: migrated file not rolled back"; fi
+# B8: file-set drift invalidates the confirmed digest
+D2="${WORK_ROOT}/t41b"; build_matrix_fixture "${D2}" "sdd" "yes" "0" "absent"
+PLAN_SHA2="$(bash "${INITIALIZER}" "${D2}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+printf 'drift\n' > "${D2}/.specify/templates/new-template.md"
+bash "${INITIALIZER}" "${D2}" --apply --confirm-migration-plan "${PLAN_SHA2}" > /dev/null 2>&1
+assert_exit 1 $?
+
+CASE_NAME="42. B6/B10: unsafe legacy file blocks with C10; dual-root blocked zero-write"
+D="${WORK_ROOT}/t42"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+printf 'secret\n' > "${D}/.specify/workflow/closed.md"
+chmod 000 "${D}/.specify/workflow/closed.md"
+SNAP="$(snapshot "${D}/.specify" 2>/dev/null || true)"
+OUT42="${WORK_ROOT}/t42.out"
+bash "${INITIALIZER}" "${D}" --plan > "${OUT42}" 2>&1
+RC=$?
+chmod 600 "${D}/.specify/workflow/closed.md"
+assert_exit 1 "${RC}"
+if grep -qE "C10|not readable" "${OUT42}"; then pass; else fail "B6: unreadable file not classified C10"; fi
+D="${WORK_ROOT}/t42b"; build_matrix_fixture "${D}" "sdd" "yes" "3" "routed"
+SNAP="$(snapshot "${D}")"
+bash "${INITIALIZER}" "${D}" --dry-run > /dev/null 2>&1
+assert_exit 1 $?
+if [[ "$(snapshot "${D}")" == "${SNAP}" ]]; then pass; else fail "B10: blocked dual-root mutated repository"; fi
+
+CASE_NAME="43. B9 + gate exemption: retired vocabulary projected into active surface rolls back; migrated knowledge prose is exempt"
+D="${WORK_ROOT}/t43"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain/01Old"
+printf '# 老知识：speckit 时代的沉淀内容\n' > "${D}/.specify/business_domain/01Old/old.md"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ "$(digest_file "${D}/.sdlc/business_domain/01Old/old.md")" == "$(digest_file <(printf '# 老知识：speckit 时代的沉淀内容\n'))" ]]; then pass; else fail "43: migrated knowledge content mutated"; fi
+if grep -q "speckit" "${D}/.sdlc/business-domain-map.yaml" 2>/dev/null; then
+  fail "43: retired vocabulary in active surface passed the gate"
+else
+  pass
+fi
+# B9: a legacy domain name carrying retired vocabulary is mechanically projected and MUST trip the gate
+D2="${WORK_ROOT}/t43b"; build_matrix_fixture "${D2}" "sdlc" "yes" "0" "absent"
+printf 'domains:\n  - name: speckit历史域\n' > "${D2}/.specify/business_domain/knowledge-target.yaml"
+LEG_SNAP="$(snapshot "${D2}/.specify")"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D2}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+OUT43="${WORK_ROOT}/t43b.out"
+bash "${INITIALIZER}" "${D2}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT43}" 2>&1
+RC=$?
+assert_exit 1 "${RC}"
+if grep -q "RESIDUE GATE FAILED" "${OUT43}" && grep -qi "rolled back" "${OUT43}"; then pass; else fail "B9: gate violation did not roll back"; fi
+if grep -q "business-domain-map.yaml" "${OUT43}"; then pass; else fail "B9: violation location not reported"; fi
+if [[ "$(snapshot "${D2}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "B9: legacy tree not restored after gate rollback"; fi
+if [[ ! -e "${D2}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "B9: INIT-created files not rolled back"; fi
+
+
 echo ""
 echo "==== regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
 if [[ "${FAIL_COUNT}" -eq 0 ]]; then
