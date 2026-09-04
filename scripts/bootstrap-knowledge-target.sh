@@ -1,15 +1,40 @@
 #!/usr/bin/env bash
-# D-088-01: knowledge-target initializer for sdlc-knowledge-sync.
+# D-088-01 v2: dual-mode knowledge-target initializer for sdlc-knowledge-sync
+# (Decision-089: .sdlc root, code-driven fill, one-stop init + audit).
 #
-# Creates the long-term knowledge TARGET (.specify/business_domain/**) that
-# sdlc-knowledge-sync resolves deterministically. This script:
+# Mode 1 INIT (no business_domain skeleton, or partial skeleton):
+#   - scans target code for business entries (mechanical path heuristics only),
+#     clusters them into candidate L1/L2 domains and fills candidate documents
+#     (L2 main doc + xx99 EntryCoverage) with code-verifiable facts only;
+#   - creates the machine artifact set create-if-missing: knowledge-target.yaml,
+#     project-governance-profile.yaml, entry-coverage-profile.yaml (minimal legal
+#     skeleton), business-domain-map.yaml template, audit wrapper;
+#   - --domain-map <confirmed map> switches the declaration to routed and
+#     generates routable L1/L2/L4 + xx99 documents from the confirmed map.
+# Mode 2 AUDIT (existing skeleton detected, or --audit):
+#   - read-only applicability report (root docs, numbering, machine artifacts,
+#     route resolvability, gate availability, retired-vocabulary residue,
+#     shape differences vs the mature baseline); the ONLY writes are the
+#     missing machine artifacts (create-if-missing);
+#   - a legacy knowledge root (.specify/business_domain) routes to audit mode
+#     and is reported as a migration suggestion, never read or rewritten.
+#
+# Invariants (inherited from v1, Decision-088):
 #   - only creates MISSING files; existing knowledge files are never modified;
 #   - owns exactly one machine-readable file, knowledge-target.yaml; an
 #     unexpected difference there is a conflict unless --update-declaration;
-#   - never invents business facts; stable facts are written exclusively by
+#   - never invents business facts: candidate documents carry code anchors and
+#     pending-deposit markers only; stable facts are written exclusively by
 #     sdlc-knowledge-sync from library/{requirement_id}/ artifacts, code and
 #     verification evidence;
-#   - produces no pending-confirmation buckets and no temporary feature dirs.
+#   - declaration state machine: absent -> candidate_pending_confirmation
+#     (routable:false) -> routed (owner-confirmed domain map);
+#   - repeat execution is a no-op; --dry-run writes nothing; formal runs
+#     require git config user.name; single-repository scope.
+#
+# Generated INIT content must not reference the retired roots/vocabulary
+# (checked by the regression matrix). The AUDIT report is exempt: quoting
+# residue findings (file:line) is its purpose.
 
 set -euo pipefail
 
@@ -18,42 +43,58 @@ usage() {
 Usage:
   scripts/bootstrap-knowledge-target.sh <target-project-path> [options]
 
+Mode selection:
+  - existing skeleton (all three root documents) or a legacy knowledge root
+    -> AUDIT mode;
+  - otherwise -> INIT mode; pass --audit to force audit mode.
+
 Options:
+  --audit                      Force applicability audit mode (report + fill
+                               missing machine artifacts only).
   --project-name <name>        Project display name. Defaults to target directory name.
-  --domain-map <path>          Confirmed domain map YAML. Switches to routed mode and
-                               generates routable L1/L2/L4 + entry coverage skeletons.
+  --domain-map <path>          Confirmed domain map YAML (INIT only). Switches to
+                               routed mode and generates routable L1/L2/L4 + xx99
+                               documents. The canonical home is
+                               .sdlc/business-domain-map.yaml (owner-confirmed).
   --project-type-profile <p>   backend-business-service | frontend-application |
                                data-pipeline-etl | library-shared-component |
                                admin-mixed-workflow. Default: existing declaration
-                               value, else frontend-application when package.json
-                               exists, else backend-business-service (hint only).
+                               value, else code hint.
   --update-declaration         Controlled override: replace an existing
                                knowledge-target.yaml that differs from both the
-                               awaiting and routed declaration for this run.
+                               candidate and routed declaration for this run.
   --dry-run                    Print the action plan and file previews; write nothing.
   -h, --help                   Show this help.
 
-Created files (create-if-missing only):
-  .specify/business_domain/knowledge-target.yaml      (initializer-owned declaration)
-  .specify/business_domain/00BusinessLandscape.md
-  .specify/business_domain/00UbiquitousLanguage.md
-  .specify/business_domain/01DomainCatalog.md
-  routed mode: L1/L2/L4 documents and entry coverage documents from the confirmed map
-  .specify/reports/knowledge_target_bootstrap_report.md (timestamped history; never overwrites)
+Layout created under .sdlc/ (create-if-missing only):
+  business_domain/knowledge-target.yaml        (initializer-owned declaration)
+  business_domain/00BusinessLandscape.md
+  business_domain/00UbiquitousLanguage.md
+  business_domain/01DomainCatalog.md
+  business_domain/{L1}/{L2}/...                (candidate or routed domain docs, xx99 entry coverage)
+  project-governance-profile.yaml
+  entry-coverage-profile.yaml                  (minimal legal skeleton; detailed scan:
+                                                scripts/bootstrap-entry-coverage-profile.sh)
+  business-domain-map.yaml                     (template; owner-confirmed map enables routed)
+  scripts/bash/audit-entry-coverage.sh         (gate wrapper to the standard audit)
+  reports/knowledge_target_bootstrap_report.<ts>.md   (INIT; timestamped, never overwrites)
+  reports/knowledge_target_audit_report.<ts>.md       (AUDIT; timestamped, never overwrites)
 
 Conflict policy:
-  - knowledge files (root/domain/entry documents): missing -> created; existing ->
-    preserved untouched (bootstrap never rewrites knowledge content).
-  - a generated root skeleton is replaced by its routed version only when it is
-    byte-identical to the awaiting skeleton (i.e. still pristine bootstrap output).
-  - knowledge-target.yaml: identical -> no-op; awaiting->routed progression or
-    pristine awaiting skeleton match -> updated; anything else -> blocked unless
+  - knowledge documents: missing -> created; existing -> preserved untouched.
+  - a pristine candidate skeleton (byte-identical to this run's candidate
+    staging) is replaced by its routed version on a confirmed-map run.
+  - knowledge-target.yaml: identical -> no-op; candidate->routed progression or
+    pristine candidate match -> updated; anything else -> blocked unless
     --update-declaration.
+  - machine artifacts (other YAMLs + wrapper): missing -> created; existing ->
+    preserved and reported (never rewritten).
 
-Exit codes: 0 ok/no-op, 1 blocked or missing git identity, 2 usage/validation error.
+Exit codes: 0 ok/no-op/audit-findings, 1 blocked or missing git identity,
+2 usage/validation error.
 
-This initializer serves sdlc-knowledge-sync only. It does not read or write any
-other repository, and it generates no run-level working materials.
+This initializer serves sdlc-knowledge-sync only. It reads and writes the
+target repository only, and generates no run-level working materials.
 USAGE
 }
 
@@ -66,9 +107,12 @@ DOMAIN_MAP=""
 PROFILE_OVERRIDE=""
 UPDATE_DECLARATION="false"
 DRY_RUN="false"
+FORCE_AUDIT="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --audit)
+      FORCE_AUDIT="true"; shift ;;
     --project-name)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 2; }
       PROJECT_NAME="${2}"; shift 2 ;;
@@ -112,10 +156,15 @@ if [[ -n "${DOMAIN_MAP}" && ! -f "${DOMAIN_MAP}" ]]; then
 fi
 
 PROJECT_NAME="${PROJECT_NAME:-$(basename "${TARGET_PATH}")}"
-SPECIFY_DIR="${TARGET_PATH}/.specify"
-BD_DIR="${SPECIFY_DIR}/business_domain"
-REPORT_DIR="${SPECIFY_DIR}/reports"
+SDLC_DIR="${TARGET_PATH}/.sdlc"
+BD_DIR="${SDLC_DIR}/business_domain"
+REPORT_DIR="${SDLC_DIR}/reports"
 DECLARATION="${BD_DIR}/knowledge-target.yaml"
+GOV_PROFILE="${SDLC_DIR}/project-governance-profile.yaml"
+ECP_PROFILE="${SDLC_DIR}/entry-coverage-profile.yaml"
+MAP_TEMPLATE="${SDLC_DIR}/business-domain-map.yaml"
+AUDIT_WRAPPER="${SDLC_DIR}/scripts/bash/audit-entry-coverage.sh"
+LEGACY_BD_ROOT="${TARGET_PATH}/.specify/business_domain"
 STANDARD_PACKAGE="${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE_DEFAULT}}"
 RUN_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 DOC_DATE="$(date '+%Y-%m-%d')"
@@ -130,13 +179,27 @@ if [[ -z "${AUTHOR}" ]]; then
   fi
 fi
 
-# --- profile resolution -------------------------------------------------------
+# --- mode selection -------------------------------------------------------------
+root_doc_count=0
+for doc in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
+  [[ -f "${BD_DIR}/${doc}" ]] && root_doc_count=$((root_doc_count + 1))
+done
+MODE="init"
+if [[ "${FORCE_AUDIT}" == "true" ]]; then
+  MODE="audit"
+elif [[ -z "${DOMAIN_MAP}" ]] && { [[ "${root_doc_count}" -eq 3 ]] || [[ -d "${LEGACY_BD_ROOT}" ]]; }; then
+  MODE="audit"
+fi
+
+# --- profile resolution ----------------------------------------------------------
 existing_declaration_profiles=""
 if [[ -f "${DECLARATION}" ]]; then
   existing_declaration_profiles="$(ruby -ryaml -e '
     begin
       d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
-      puts Array(d["project_type_profiles"]).map(&:to_s).reject(&:empty?).join(",")
+      profiles = d["project_type_profiles"]
+      profiles = Array(profiles.is_a?(Hash) ? profiles["selected"] : profiles)
+      puts profiles.map(&:to_s).reject(&:empty?).join(",")
     rescue StandardError
       nil
     end
@@ -173,7 +236,7 @@ case "${L4_TEMPLATE_PROFILE}" in
   *) L4_TEMPLATE_PROFILE="backend-business-service" ;;
 esac
 
-# --- staging ------------------------------------------------------------------
+# --- staging ---------------------------------------------------------------------
 STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/knowledge-target-staging.XXXXXX")"
 trap 'rm -rf "${STAGING_DIR}"' EXIT
 
@@ -190,145 +253,741 @@ write_staging_file() {
 generate_declaration() {
   local status="$1" routable="$2" map_ref="$3"
   cat <<EOF
-schema_version: "1.0"
+schema_version: "2.0"
 governed_by: sdlc-knowledge-sync
-target_root: .specify/business_domain
+target_root: .sdlc/business_domain
 status: "${status}"
 routable: ${routable}
+fill_mode: code_driven_scan
 project_type_profiles:
 $(printf '%s' "${PROJECT_TYPE_PROFILES}" | tr ',' '\n' | sed 's/^/  - "/; s/$/"/')
 fact_sources:
   process_evidence: "current requirement library/{requirement_id}/ seven-node artifacts (00-需求资料 .. 06-知识同步)"
   code: "target repository code state"
   verification: "verified test and review evidence"
+  governance_rules: "AGENTS.md + standard package skill contracts"
 initializer: "scripts/bootstrap-knowledge-target.sh"
 domain_map: ${map_ref}
 EOF
 }
 
-generate_landscape() {
-  local routed_rows="$1"
+generate_declaration_candidate() {
+  generate_declaration "candidate_pending_confirmation" "false" "null"
+}
+
+generate_governance_profile() {
   cat <<EOF
-# Business Landscape
-
-> **Metadata**
-> - **Version**: 0.1.0
-> - **Date**: ${DOC_DATE}
-> - **Author**: ${AUTHOR}
-> - **Status**: Draft
-> - **Summary**: ${PROJECT_NAME} long-term business-domain landscape skeleton.
-
-## Purpose
-
-This document is the long-term business-domain entry for \`${PROJECT_NAME}\`.
-It is the knowledge target resolved by \`sdlc-knowledge-sync\` (see
-\`knowledge-target.yaml\` next to this document).
-
-## Fact Source Layering
-
-| Layer | Role | Source |
-| --- | --- | --- |
-| Standard shared rules | Workflow, gate, artifact and sync governance. | \`${STANDARD_PACKAGE}\` |
-| Process facts (per requirement) | Seven-node artifacts of the current requirement. | \`library/{requirement_id}/\` |
-| Long-term stable facts | Verified reusable business knowledge. | \`.specify/business_domain/**\` |
-
-\`sdlc-knowledge-sync\` writes only verified stable facts into this directory,
-sourced from \`library/{requirement_id}/\` artifacts, code state and verification
-evidence. Bootstrap creates structure only and never invents business facts.
-
-## Business Domains
-| L1 | Chinese Name | Status | Owner confirmation |
-| --- | --- | --- | --- |
-${routed_rows}
-## Routing Principle
-
-New requirements route through \`01DomainCatalog.md\` once a confirmed domain map
-exists. Until then this target is \`routable: false\` and sync produces proposals only.
-
-## Revision History
-
-| Version | Date | Author | Changes |
-| --- | --- | --- | --- |
-| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial knowledge-target skeleton. |
+schema_version: "1.0"
+generated_by: "scripts/bootstrap-knowledge-target.sh (D-088-01 v2)"
+project:
+  name: "${PROJECT_NAME}"
+  project_type_profiles:
+$(printf '%s' "${PROJECT_TYPE_PROFILES}" | tr ',' '\n' | sed 's/^/    - "/; s/$/"/')
+standard_package:
+  source: "\${AI_SDLC_STANDARD_HOME}"
+note: >-
+  create-if-missing skeleton owned by the knowledge-target initializer;
+  run scripts/bootstrap-entry-coverage-profile.sh for the detailed
+  entry-coverage profile scan before enforcing gate checks.
 EOF
+}
+
+generate_entry_coverage_profile() {
+  cat <<EOF
+version: "0.1.0"
+schema_version: "0.1.0"
+generated_by: "scripts/bootstrap-knowledge-target.sh (D-088-01 v2)"
+profile_status: "minimal_skeleton_pending_detailed_scan"
+project_type_profiles:
+  selected:
+$(printf '%s' "${PROJECT_TYPE_PROFILES}" | tr ',' '\n' | sed 's/^/    - "/; s/$/"/')
+  source: "initializer-skeleton"
+  pending_confirmation: true
+scope:
+  source_roots:
+    - "."
+  include_file_patterns:
+    - "**/*"
+  document_scope: ".sdlc/business_domain"
+  report_dir: ".sdlc/reports/entry_coverage"
+domain_matching:
+  l4_document_pattern: ".sdlc/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md"
+  entry_match_rule: "entry class, method, path, route, topic, job, function, SQL, connector, or sink appears in an L4 evidence table"
+  allow_entry_in_multiple_l2_domains: false
+strict_outputs:
+  entry_inventory: "entry_inventory.tsv"
+  service_inventory: "service_inventory.tsv"
+  entry_chain_evidence: "entry_chain_evidence.md"
+  unarchived_entries: "unarchived_entries.md"
+  unarchived_services: "unarchived_services.md"
+  cross_domain_conflicts: "cross_domain_conflicts.md"
+  summary_report: "entry_coverage_report.md"
+detailed_scan: "scripts/bootstrap-entry-coverage-profile.sh"
+EOF
+}
+
+generate_map_template() {
+  cat <<'EOF'
+# business-domain-map（确认域映射）模板 — D-088-01 v2
+#
+# 用途：Owner 逐域确认候选域后填写 confirmed_domains 并把 status 置为 confirmed，
+# 然后运行：
+#   scripts/bootstrap-knowledge-target.sh <target-path> --domain-map .sdlc/business-domain-map.yaml
+# 确认完成前本文件只是模板；candidate 状态下 sdlc-knowledge-sync 只产 PROPOSAL，
+# 不写 confirmed 领域事实。
+#
+# 字段约定：L4 编号 6 位（L1 两位 + L2 两位 + L4 两位）；入口覆盖文档固定为
+# xx99（L1 两位 + L2 两位 + 99）命名；入口类唯一归属一个 L2。
+schema_version: "1.0"
+status: "template"
+confirmed_domains: []
+# 确认后示例（取消注释并替换为 Owner 确认值）：
+# confirmed_domains:
+#   - l1_id: "01"
+#     l1_name_en: "Order"
+#     l1_name_cn: "<L1 中文名>"
+#     l2:
+#       - l2_id: "01"
+#         l2_name_en: "SaleOrder"
+#         l2_name_cn: "<L2 中文名>"
+#         owner: "<owner>"
+#         l4:
+#           - l4_id: "0001"
+#             l4_name_en: "OrderEntry"
+#             l4_name_cn: "<L4 中文名>"
+#             owner: "<owner>"
+EOF
+}
+
+generate_audit_wrapper() {
+  cat <<EOF
+#!/usr/bin/env bash
+# Gate thin wrapper (D-088-01 v2): adapter to the standard entry coverage audit.
+# Standard package root: \${AI_SDLC_STANDARD_HOME} env override, else the path
+# recorded at generation time. Default target is this repository root.
+set -euo pipefail
+SDLC_HOME="\${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE}}"
+REPO_ROOT="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/../../.." && pwd)"
+if [[ "\${#}" -eq 0 ]]; then
+  set -- "\${REPO_ROOT}"
+elif [[ ! -d "\${1}" ]]; then
+  set -- "\${REPO_ROOT}" "\${@}"
+fi
+exec ruby "\${SDLC_HOME}/scripts/audit-entry-coverage.rb" "\${@}"
+EOF
+}
+
+generate_landscape() {
+  local domain_rows="$1" fill_section="$2"
+  cat <<EOF
+# 业务全景图（Business Landscape）
+
+> **元数据**
+> - **版本**: 0.1.0
+> - **日期**: ${DOC_DATE}
+> - **作者**: ${AUTHOR}
+> - **状态**: ${DOC_STATUS}
+> - **摘要**: ${PROJECT_NAME} 长期业务域知识目标入口（知识沉淀治理初始化产物）。
+
+## 用途
+
+本文档是 \`${PROJECT_NAME}\` 的长期业务域入口，是 \`sdlc-knowledge-sync\`
+的确定性知识目标（见同目录 \`knowledge-target.yaml\` 声明）。
+
+## 事实源分层
+
+| 层 | 职责 | 来源 |
+| --- | --- | --- |
+| 标准共享规则 | 工作流、门禁、产物与同步治理。 | \`\${AI_SDLC_STANDARD_HOME}\`（AGENTS.md + 标准包 skill 合同） |
+| 过程事实（按需求） | 当前需求七节点过程产物。 | \`library/{requirement_id}/\` |
+| 长期稳定事实 | 已验证可复用的业务知识。 | \`.sdlc/business_domain/**\` |
+
+\`sdlc-knowledge-sync\` 只把已验证的稳定事实写入本目录，事实来源为
+\`library/{requirement_id}/\` 过程产物、代码状态与验证证据；初始化器只建结构，
+不发明业务事实。
+
+## 业务域地图
+
+| L1 | 中文名 | 状态 | Owner 确认 |
+| --- | --- | --- | --- |
+${domain_rows}
+${fill_section}
+## 路由原则
+
+- 新需求在存在已确认域映射（\`business-domain-map.yaml\` 状态 confirmed）后，
+  经 \`01DomainCatalog.md\` 按业务单据维度优先路由。
+- 候选状态（\`candidate_pending_confirmation\`，\`routable: false\`）下，
+  同步只产 PROPOSAL，不写 confirmed 领域事实。
+
+## 门禁说明
+
+- 同步前先跑入口覆盖对账：\`.sdlc/scripts/bash/audit-entry-coverage.sh\`
+  （即标准包 \`scripts/audit-entry-coverage.rb\` 的薄包装），strict 模式
+  BLOCKED 或 PENDING 时不得最终化同步。
+- L4 编号规则：6 位（L1 两位 + L2 两位 + L4 两位）；入口覆盖文档固定为
+  xx99 命名；入口类唯一归属一个 L2；主域/协同域在 L2 主文档标记。
+
+## 修订记录
+
+| 版本 | 日期 | 作者 | 变更 |
+| --- | --- | --- | --- |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | 知识目标初始化（候选态骨架）。 |
+EOF
+}
+
+generate_landscape_fill_section() {
+  local l1_count="$1" l2_count="$2" entry_count="$3"
+  if [[ "${l1_count}" -eq 0 ]]; then
+    cat <<'EOF'
+### 候选域说明
+
+代码扫描未发现业务入口（空仓或纯基础设施仓），未生成候选域；
+候选域在真实业务入口出现后重新运行初始化器补齐。
+
+EOF
+  else
+    cat <<EOF
+### 候选域说明
+
+以下候选域由代码扫描机械聚类产生（入口数 ${entry_count}，候选 L1 ${l1_count} 个、
+候选 L2 ${l2_count} 个）：仅含代码可验证事实（入口类/代码路径/模块结构），
+业务规则与术语语义一律待沉淀；全部为 Candidate 状态，Owner 确认
+（填写并确认 \`business-domain-map.yaml\`）后才可路由。
+
+EOF
+  fi
 }
 
 generate_language() {
   cat <<EOF
-# Ubiquitous Language
+# 统一语言表（Ubiquitous Language）
 
-> **Metadata**
-> - **Version**: 0.1.0
-> - **Date**: ${DOC_DATE}
-> - **Author**: ${AUTHOR}
-> - **Status**: Draft
-> - **Summary**: ${PROJECT_NAME} long-term glossary skeleton.
+> **元数据**
+> - **版本**: 0.1.0
+> - **日期**: ${DOC_DATE}
+> - **作者**: ${AUTHOR}
+> - **状态**: Candidate
+> - **摘要**: ${PROJECT_NAME} 长期术语表骨架（业务语义待沉淀）。
 
-## Terms
+## 术语表
 
-| Term | Meaning | Status | Source |
+| 术语 | 含义 | 状态 | 来源 |
 | --- | --- | --- | --- |
 
-## Wording Rules
+## 用词规则
 
-- Add only stable, owner-confirmed business terms here.
-- Do not promote package names, class names, table names or route names into
-  business vocabulary without confirmation.
-- Terms are synced by \`sdlc-knowledge-sync\` from \`library/{requirement_id}/\`
-  artifacts and verification evidence, never invented by bootstrap.
+- 只沉淀 Owner 确认的稳定业务术语。
+- 包名、类名、表名、路由名未经确认不得提升为业务词汇。
+- 术语由 \`sdlc-knowledge-sync\` 从 \`library/{requirement_id}/\` 过程产物与
+  验证证据同步，初始化器不发明。
 
-## Revision History
+## 修订记录
 
-| Version | Date | Author | Changes |
+| 版本 | 日期 | 作者 | 变更 |
 | --- | --- | --- | --- |
-| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial glossary skeleton. |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | 术语表骨架（待沉淀）。 |
 EOF
 }
 
 generate_catalog() {
   local l1l2_rows="$1" l4_rows="$2"
   cat <<EOF
-# Domain Catalog
+# 域目录（Domain Catalog）
 
-> **Metadata**
-> - **Version**: 0.1.0
-> - **Date**: ${DOC_DATE}
-> - **Author**: ${AUTHOR}
-> - **Status**: Draft
-> - **Summary**: ${PROJECT_NAME} routing index for long-term business-domain documents.
+> **元数据**
+> - **版本**: 0.1.0
+> - **日期**: ${DOC_DATE}
+> - **作者**: ${AUTHOR}
+> - **状态**: ${DOC_STATUS}
+> - **摘要**: ${PROJECT_NAME} 长期业务域文档路由索引。
 
-## L1/L2 Index
-| L1 | L2 | Main Document | Status | Owner |
+## L1/L2 索引
+
+| L1 | L2 | 主文档 | 状态 | Owner |
 | --- | --- | --- | --- | --- |
 ${l1l2_rows}
-## L4 Index
-| L4 | Document | Business Name | Status |
+## L4 索引
+
+| L4 | 文档 | 业务名 | 状态 |
 | --- | --- | --- | --- |
 ${l4_rows}
-## Routing Notes
+## 编号与门禁规则
 
-- No routable domain rows exist until a confirmed domain map is bootstrapped;
-  this target then reports \`routable: false\` and sync produces proposals only.
-- New L4 documents are created only through create-if-missing authorization
-  after owner confirmation.
+- L4 文档编号 6 位：L1 两位 + L2 两位 + L4 两位；新 L4 文档只在 Owner 确认
+  后经 create-if-missing 授权创建。
+- 入口覆盖文档固定为 xx99 命名（L1 两位 + L2 两位 + 99），是入口唯一归属的
+  对账文档；一个入口类只归属一个 L2。
+- 候选状态下本目录不可路由（\`routable: false\`），同步只产 PROPOSAL；
+  Owner 确认域映射后才启用正式路由。
+- 命名约定不明确时只产同步提案。
 
-## Revision History
+## 修订记录
 
-| Version | Date | Author | Changes |
+| 版本 | 日期 | 作者 | 变更 |
 | --- | --- | --- | --- |
-| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | Initial domain catalog skeleton. |
+| 0.1.0 | ${DOC_DATE} | ${AUTHOR} | 域目录骨架（候选态）。 |
 EOF
 }
 
+# --- INIT: candidate fill (code-driven scan + mechanical clustering) --------------
+scan_and_stage_candidates() { # $1 = destination staging dir (defaults to main business_domain staging)
+  # Ruby scans entries, clusters candidates, and stages candidate documents.
+  local dest="${1:-${STAGING_DIR}/business_domain}"
+  ruby - "${TARGET_PATH}" "${dest}" "${PROJECT_NAME}" "${AUTHOR}" "${DOC_DATE}" <<'RUBY'
+require "fileutils"
+
+target, staging, project_name, author, doc_date = ARGV
+FileUtils.mkdir_p(staging)
+
+ENTRY_RULES = [
+  ["controller", ["**/*Controller.java"]],
+  ["rpc",        ["**/rpc/**/*.java", "**/*Provider.java", "**/*Facade.java", "**/*RPCService.java"]],
+  ["processor",  ["**/process/**/*Processor.java", "**/*Processor.java"]],
+  ["mq",         ["**/*Listener.java", "**/*Consumer.java", "**/*Mcq*.java", "**/*MCQ*.java", "**/*mcq*/**/*.java"]],
+  ["schedule",   ["**/*Schedule.java", "**/*Job.java", "**/*Task.java", "**/*Worker.java"]],
+  ["fe_page",    ["**/pages/**/*", "**/views/**/*"]],
+  ["fe_api",     ["**/api/**/*"]]
+].freeze
+
+SKIP_SEGMENTS = %w[src main java test tests resources pages views api webapp business biz modules module].freeze
+TLD_SEGMENTS  = %w[com cn net org io me].freeze
+SRC_ROOTS     = %w[src app web lib packages frontend webapp].freeze
+EXCLUDED_PATHS = [
+  %r{\A\.git(/|\z)}, %r{\A\.sdlc(/|\z)}, %r{\A\.specify(/|\z)},
+  %r{(^|/)(node_modules|target|build|dist|vendor|coverage|generated|\.idea|\.gradle|\.mvn)(/|\z)},
+  %r{(^|/)(examples|samples|mock-data|mock_data|fixtures?|test-fixtures|test_fixtures|__snapshots__|snapshots)(/|\z)},
+  %r{(^|/)src/test(/|\z)}
+].freeze
+
+def excluded?(rel) = EXCLUDED_PATHS.any? { |re| rel.match?(re) }
+
+def sanitize_name(segment)
+  cleaned = segment.to_s.gsub(/[^A-Za-z0-9]+/, " ").strip.split(/[[:space:]]+/).map(&:capitalize).join
+  cleaned.empty? ? "Module" : cleaned
+end
+
+entries = []
+seen_files = {}
+ENTRY_RULES.each do |(type, patterns)|
+  patterns.each do |pattern|
+    Dir.glob("#{target}/#{pattern}").sort.each do |abs|
+      next unless File.file?(abs)
+      rel = abs.delete_prefix("#{target}/")
+      next if excluded?(rel)
+      next if seen_files[rel] # first matching rule wins (fixed order, deterministic)
+      seen_files[rel] = true
+      entries << { type: type, class: File.basename(rel, File.extname(rel)), path: rel }
+    end
+  end
+end
+
+# mechanical clustering: module segment -> candidate L1, next meaningful
+# path segment -> candidate L2. Pure path heuristics, no semantic inference.
+def cluster_keys(entry, project_name)
+  segs = entry[:path].split("/")
+  segs.pop # file name
+  if segs.empty? || SRC_ROOTS.include?(segs.first)
+    l1_key = project_name # single-module repo (repo-root src layout)
+  else
+    l1_key = segs.shift   # module directory (e.g. maven module)
+  end
+  segs.shift while segs.first == "src"
+  %w[main java].each { |s| break if segs.first != s; segs.shift }
+  segs.shift while TLD_SEGMENTS.include?(segs.first) && segs.size > 1
+  segs.shift if segs.size > 1 # organization segment right after the reversed-domain prefix
+  segs.shift while SKIP_SEGMENTS.include?(segs.first) && segs.size > 1
+  l2_key = segs.first || l1_key
+  [l1_key, l2_key]
+end
+
+clusters = Hash.new { |h, k| h[k] = Hash.new { |hh, kk| hh[kk] = [] } }
+entries.each do |entry|
+  l1_key, l2_key = cluster_keys(entry, project_name)
+  clusters[l1_key][l2_key] << entry
+end
+
+l1_ids = clusters.keys.sort.each_with_index.to_h { |k, i| [k, format("%02d", i + 1)] }
+metadata = ->(title, summary) do
+  <<~MD
+    # #{title}
+
+    > **元数据**
+    > - **版本**: 0.1.0
+    > - **日期**: #{doc_date}
+    > - **作者**: #{author}
+    > - **状态**: Candidate
+    > - **摘要**: #{summary}
+
+  MD
+end
+
+l1l2_rows = []
+landscape_rows = []
+entry_total = 0
+
+clusters.keys.sort.each_with_index do |l1_key, l1_idx|
+  l1_id = l1_ids[l1_key]
+  l1_name = sanitize_name(l1_key)
+  l1_dir = "#{l1_id}#{l1_name}"
+  landscape_rows << "| #{l1_dir} | 待沉淀 | Candidate | 待确认 |"
+  clusters[l1_key].keys.sort.each_with_index do |l2_key, l2_idx|
+    l2_id = format("%02d", l2_idx + 1)
+    l2_full = "#{l1_id}#{l2_id}"
+    l2_name = sanitize_name(l2_key)
+    l2_dir = "#{l2_full}#{l2_name}"
+    group = clusters[l1_key][l2_key]
+    entry_total += group.size
+
+    entry_rows = group.map { |e| "| #{e[:type]} | #{e[:class]} | `#{e[:path]}` | Candidate |" }
+    FileUtils.mkdir_p(File.join(staging, l1_dir, l2_dir))
+
+    File.write(File.join(staging, l1_dir, l2_dir, "#{l2_full}99EntryCoverage.md"),
+      metadata.("#{l2_full}99EntryCoverage（入口覆盖，待沉淀）",
+                "#{l2_name} 候选域入口唯一归属对账（代码扫描候选，Owner 确认前不可路由）。") + <<~MD)
+      ## 入口清单
+
+      | 入口类型 | 类名/符号 | 代码路径 | 归属状态 |
+      | --- | --- | --- | --- |
+      #{entry_rows.join("\n")}
+
+      ## 说明
+
+      - 入口清单是代码扫描的机械结果，只含代码可验证事实；入口类唯一归属本 L2，
+        跨域冲突在同步对账时报告。
+      - 业务语义（入口的业务含义、单据维度路由）待 Owner 沉淀后由
+        sdlc-knowledge-sync 写入。
+
+      ## 修订记录
+
+      | 版本 | 日期 | 作者 | 变更 |
+      | --- | --- | --- | --- |
+      | 0.1.0 | #{doc_date} | #{author} | 代码扫描候选入口清单。 |
+    MD
+
+    File.write(File.join(staging, l1_dir, l2_dir, "#{l2_full}#{l2_name}.md"),
+      metadata.("#{l2_full}#{l2_name}（候选 L2，待沉淀）",
+                "#{l2_name} 候选域主文档：业务锚点为真实入口链，L4 路由草案待确认。") + <<~MD)
+      ## 范围
+
+      | 字段 | 值 |
+      | --- | --- |
+      | L1 | #{l1_dir}（中文名待沉淀） |
+      | L2 | #{l2_full}#{l2_name}（中文名待沉淀） |
+      | Owner | 待确认 |
+      | 状态 | Candidate |
+
+      ## 业务锚点（真实入口链）
+
+      | 入口类型 | 类名/符号 | 代码路径 |
+      | --- | --- | --- |
+      #{group.map { |e| "| #{e[:type]} | #{e[:class]} | `#{e[:path]}` |" }.join("\n")}
+
+      ## L4 路由草案
+
+      | L4（预留） | 业务名 | 代码锚点 | 状态 |
+      | --- | --- | --- | --- |
+      | 待确认编号 | 待沉淀 | 见入口清单 | Draft |
+
+      ## 规则沉淀区
+
+      （待沉淀：Owner 确认后由 sdlc-knowledge-sync 写入已验证业务规则；
+      初始化器不填业务语义。）
+
+      ## 修订记录
+
+      | 版本 | 日期 | 作者 | 变更 |
+      | --- | --- | --- | --- |
+      | 0.1.0 | #{doc_date} | #{author} | 代码扫描候选 L2 主文档。 |
+    MD
+
+    l1l2_rows << "| #{l1_dir} | #{l2_full}#{l2_name} | [#{l2_full}#{l2_name}.md](<#{l1_dir}/#{l2_dir}/#{l2_full}#{l2_name}.md>) | Candidate | 待确认 |"
+  end
+end
+
+File.write(File.join(staging, ".fill-summary.tsv"),
+  [clusters.keys.size, clusters.values.sum(&:size), entry_total].join("\t"))
+File.write(File.join(staging, ".landscape-rows.md"), landscape_rows.join("\n") + "\n")
+File.write(File.join(staging, ".catalog-l1l2-rows.md"), l1l2_rows.join("\n") + "\n")
+RUBY
+}
+
+stage_rel_paths() {
+  ( cd "${STAGING_DIR}/business_domain" && find . -type f ! -name '.*' | sed 's#^\./##' | sort )
+}
+
+# --- plan actions (create / update / preserve / blocked) ---------------------------
+CREATED_FILES=()
+UPDATED_FILES=()
+PRESERVED_FILES=()
+BLOCKED_REASONS=()
+NOTICE_LINES=()
+PLAN_OK="true"
+
+declare_plan_line() {
+  local rel="$1" action="$2"
+  case "${action}" in
+    create)   CREATED_FILES+=("${rel}") ;;
+    update)   UPDATED_FILES+=("${rel}") ;;
+    preserve) PRESERVED_FILES+=("${rel}") ;;
+  esac
+}
+
+plan_file() { # $1 = rel path under business_domain (or machine artifact rel under .sdlc), $2 = absolute target, $3 = staged
+  if [[ ! -e "$2" ]]; then
+    declare_plan_line "$1" "create"
+  elif cmp -s "$2" "$3"; then
+    declare_plan_line "$1" "preserve"
+  else
+    declare_plan_line "$1" "preserve"
+    NOTICE_LINES+=("existing file preserved (create-if-missing, never rewritten): $1")
+  fi
+}
+
+if [[ "${MODE}" == "audit" ]]; then
+  # --- MODE 2: applicability audit ------------------------------------------------
+  echo "== knowledge-target applicability audit =="
+  [[ "${DRY_RUN}" == "true" ]] && echo "MODE=dry-run (nothing will be written)"
+
+  # 1) fill missing machine artifacts (the ONLY writes in audit mode)
+  AUDIT_FILLED=()
+  fill_audit_artifact() { # $1 = rel under .sdlc, $2 = generator function name.
+    # The generator is invoked inside this function (no pipeline) so the
+    # AUDIT_FILLED mutation survives: a pipeline's last element runs in a subshell.
+    local rel="$1"
+    local generator="$2"
+    local target_file="${SDLC_DIR}/${rel}"
+    local tmp_content
+    tmp_content="$(mktemp "${TMPDIR:-/tmp}/kt-fill.XXXXXX")"
+    "${generator}" > "${tmp_content}"
+    if [[ ! -e "${target_file}" ]]; then
+      AUDIT_FILLED+=("${rel}")
+      if [[ "${DRY_RUN}" != "true" ]]; then
+        mkdir -p "$(dirname "${target_file}")"
+        cp "${tmp_content}" "${target_file}"
+        if [[ "${rel}" == scripts/* ]]; then
+          chmod +x "${target_file}"
+        fi
+      fi
+    fi
+    rm -f "${tmp_content}"
+    return 0
+  }
+  if [[ ! -e "${DECLARATION}" ]]; then
+    fill_audit_artifact "business_domain/knowledge-target.yaml" generate_declaration_candidate
+  fi
+  fill_audit_artifact "project-governance-profile.yaml" generate_governance_profile
+  fill_audit_artifact "entry-coverage-profile.yaml" generate_entry_coverage_profile
+  fill_audit_artifact "business-domain-map.yaml" generate_map_template
+  fill_audit_artifact "scripts/bash/audit-entry-coverage.sh" generate_audit_wrapper
+
+  # 2) read-only checks
+  AUDIT_REPORT="$(mktemp "${TMPDIR:-/tmp}/kt-audit.XXXXXX")"
+  ruby - "${TARGET_PATH}" "${AUDIT_REPORT}" "${PROJECT_NAME}" <<'RUBY'
+require "yaml"
+
+target, report_path, project_name = ARGV
+bd = File.join(target, ".sdlc", "business_domain")
+sdlc = File.join(target, ".sdlc")
+legacy_bd = File.join(target, ".specify", "business_domain")
+
+findings = [] # [section, severity, message]
+section = ->(s, severity, msg) { findings << [s, severity, msg] }
+
+root_docs = {
+  "00BusinessLandscape.md" => ["## 事实源分层", "## 业务域地图", "## 路由原则", "## 门禁说明", "## 修订记录"],
+  "00UbiquitousLanguage.md" => ["## 术语表", "## 用词规则", "## 修订记录"],
+  "01DomainCatalog.md" => ["## L1/L2 索引", "## L4 索引", "## 编号与门禁规则", "## 修订记录"]
+}
+
+# A. root docs & canonical sections
+root_docs.each do |doc, sections|
+  path = File.join(bd, doc)
+  if File.file?(path)
+    text = File.read(path)
+    sections.each do |s|
+      section.("A", "DIFF", "#{doc} 缺少标准章节 #{s}") unless text.include?(s)
+    end
+  else
+    section.("A", "MISSING", "缺少根文档 #{doc}")
+  end
+end
+
+# B. numbering consistency (6-digit L4, xx99 entry coverage)
+all_md = Dir.glob(File.join(bd, "**", "*.md")).sort
+all_md.each do |path|
+  rel = path.delete_prefix("#{bd}/")
+  base = File.basename(rel)
+  in_l2_dir = rel.count("/") >= 2
+  next unless in_l2_dir
+  if base.match?(/\A\d{6}/) && !base.match?(/\A\d{4}99/)
+    unless base.match?(/\A\d{6}[A-Za-z0-9\u4e00-\u9fff()（）]*\.(md|MD)\z/)
+      section.("B", "DIFF", "L4 命名不符合 6 位编号规则: #{rel}")
+    end
+  elsif base.match?(/EntryCoverage/i) && !base.match?(/\A\d{4}99/)
+    section.("B", "DIFF", "入口覆盖文档应为 xx99 命名: #{rel}")
+  end
+end
+
+# C. machine artifacts + route resolvability
+decl_path = File.join(bd, "knowledge-target.yaml")
+unless File.file?(decl_path)
+  section.("C", "MISSING", "缺少声明 knowledge-target.yaml")
+else
+  begin
+    decl = YAML.safe_load(File.read(decl_path), permitted_classes: [], aliases: false) || {}
+    status = decl["status"].to_s
+    routable = decl["routable"]
+    unless %w[candidate_pending_confirmation routed].include?(status)
+      section.("C", "DIFF", "声明 status 非法: #{status}（应为 candidate_pending_confirmation 或 routed）")
+    end
+    if status == "candidate_pending_confirmation" && routable != false
+      section.("C", "DIFF", "candidate_pending_confirmation 状态必须 routable: false")
+    end
+    if status == "routed" && routable != true
+      section.("C", "DIFF", "routed 状态必须 routable: true")
+    end
+  rescue Psych::Exception => e
+    section.("C", "DIFF", "knowledge-target.yaml 解析失败: #{e.message.lines.first.to_s.strip}")
+  end
+end
+
+%w[project-governance-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml].each do |f|
+  section.("C", "MISSING", "缺少机器件 #{f}") unless File.file?(File.join(sdlc, f))
+end
+wrapper = File.join(sdlc, "scripts", "bash", "audit-entry-coverage.sh")
+section.("C", "MISSING", "缺少门禁包装 scripts/bash/audit-entry-coverage.sh") unless File.file?(wrapper)
+
+catalog_path = File.join(bd, "01DomainCatalog.md")
+if File.file?(catalog_path)
+  File.read(catalog_path).scan(%r{\[([^\]]+)\]\(<([^>]+)>\)}).each do |(_, link)|
+    doc_path = File.join(bd, link)
+    section.("C", "DIFF", "目录路由不可解析: #{link}") unless File.file?(doc_path)
+  end
+end
+
+# D. gate availability
+ecp = File.join(sdlc, "entry-coverage-profile.yaml")
+if File.file?(ecp)
+  begin
+    profile = YAML.safe_load(File.read(ecp), permitted_classes: [], aliases: false) || {}
+    doc_scope = profile.dig("scope", "document_scope").to_s
+    section.("D", "DIFF", "entry-coverage-profile document_scope 指向 #{doc_scope}（应为 .sdlc/business_domain）") if doc_scope != ".sdlc/business_domain"
+  rescue Psych::Exception => e
+    section.("D", "DIFF", "entry-coverage-profile.yaml 解析失败: #{e.message.lines.first.to_s.strip}")
+  end
+else
+  section.("D", "MISSING", "缺少 entry-coverage-profile.yaml（sync 前 strict 门禁不可用）")
+end
+
+# E. retired-vocabulary residue (file:line; report only, never rewritten).
+# Generated reports are excluded: quoting residue is their purpose.
+RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+residue_lines = []
+scan_root = File.directory?(bd) ? bd : sdlc
+if File.directory?(scan_root)
+  files_to_scan = Dir.glob(File.join(scan_root, "**", "*"))
+                    .select { |p| File.file?(p) && !p.start_with?("#{sdlc}/reports/") }
+                    .sort
+  files_to_scan.each do |path|
+    next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
+    File.readlines(path).each_with_index do |line, idx|
+      if RESIDUE_PATTERNS.any? { |re| line.match?(re) }
+        residue_lines << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
+        break if residue_lines.size >= 50
+      end
+      break if residue_lines.size >= 50
+    end
+    break if residue_lines.size >= 50
+  end
+end
+residue_lines.each { |l| section.("E", "RESIDUE", "退役词汇/旧根路径残留: #{l}") }
+section.("E", "RESIDUE", "残留超过 50 处，仅列前 50 行") if residue_lines.size >= 50
+section.("E", "LEGACY", "检测到旧版知识根目录（历史遗留），迁移需单独授权；本工具不读取不改动") if File.directory?(legacy_bd)
+
+# F. shape differences vs the mature baseline
+l2_dirs = Dir.glob(File.join(bd, "*", "*")).select { |p| File.directory?(p) }.sort
+l2_dirs.each do |l2_dir|
+  rel = l2_dir.delete_prefix("#{bd}/")
+  files = Dir.children(l2_dir)
+  # L2 main doc starts with exactly the 4-digit L1+L2 prefix (no 99, no 6-digit L4 id)
+  main = files.find { |f| f.match?(/\A\d{4}(?!\d)/) && f.end_with?(".md") }
+  xx99 = files.find { |f| f.match?(/\A\d{4}99/) }
+  section.("F", "DIFF", "L2 缺主文档: #{rel}") unless main
+  section.("F", "DIFF", "L2 缺 xx99 入口覆盖文档: #{rel}") unless xx99
+  if main && File.file?(File.join(l2_dir, main))
+    section.("F", "DIFF", "L2 主文档缺业务锚点章节: #{rel}/#{main}") unless File.read(File.join(l2_dir, main)).include?("业务锚点")
+  end
+end
+
+missing = findings.count { |(_, sev, _)| sev == "MISSING" }
+diffs = findings.count { |(_, sev, _)| sev == "DIFF" }
+residues = findings.count { |(_, sev, _)| %w[RESIDUE LEGACY].include?(sev) }
+verdict = findings.empty? ? "CLEAN" : "FINDINGS"
+
+File.write(report_path, <<~MD)
+  # Knowledge Target Applicability Audit Report
+
+  > **Project**: #{project_name}
+  > **Generated At**: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}
+  > **Generated By**: scripts/bootstrap-knowledge-target.sh --audit (D-088-01 v2)
+  > **Target Repository**: #{target}
+
+  ## Verdict
+
+  | Item | Value |
+  | --- | --- |
+  | Result | #{verdict} |
+  | Missing machine/docs findings | #{missing} |
+  | Shape/consistency differences | #{diffs} |
+  | Residue findings (file:line, capped 50) | #{residues} |
+
+  ## Findings
+
+  | # | Section | Severity | Finding |
+  | --- | --- | --- | --- |
+  #{findings.each_with_index.map { |finding, i| "| #{i + 1} | #{finding[0]} | #{finding[1]} | #{finding[2]} |" }.join("\n")}
+
+  ## Sections
+
+  - A 根文档完整性与章节齐备性
+  - B 编号规则一致性（6 位 L4 / xx99 入口覆盖）
+  - C 机器件存在性与路由可解析性
+  - D 门禁可用性
+  - E 退役词汇与旧根路径残留（file:line；只报告，绝不自动改写）
+  - F 与成熟基准架构的形态差异
+
+  ## Write Boundary
+
+  本次体检唯一允许的写入 = 补缺失机器件（create-if-missing）。
+  知识文档与既有文件一律不改写。
+MD
+
+puts "AUDIT_RESULT=#{verdict} missing=#{missing} diffs=#{diffs} residue=#{residues}"
+RUBY
+  AUDIT_EXIT=$?
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    rm -f "${AUDIT_REPORT}"
+  else
+    mkdir -p "${REPORT_DIR}"
+    FINAL_AUDIT_REPORT="${REPORT_DIR}/knowledge_target_audit_report.${RUN_TIMESTAMP}.md"
+    mv "${AUDIT_REPORT}" "${FINAL_AUDIT_REPORT}"
+    echo "AUDIT_FILLED: ${AUDIT_FILLED[*]:-}"
+    echo "REPORT=${FINAL_AUDIT_REPORT#${TARGET_PATH}/}"
+  fi
+  exit "${AUDIT_EXIT}"
+fi
+
+# --- MODE 1: init ------------------------------------------------------------------
 ROUTED_L1L2_ROWS=""
 ROUTED_L4_ROWS=""
 ROUTED_LANDSCAPE_ROWS=""
 
 if [[ -n "${DOMAIN_MAP}" ]]; then
-  # Routed mode: validate the confirmed map fail-closed and stage L1/L2/L4 docs.
+  # Routed mode: validate the confirmed map fail-closed and stage L1/L2/L4 + xx99 docs.
   L4_TEMPLATE_DIR="${STANDARD_PACKAGE}/templates/business-domain-l4"
   DOMAIN_MAP_REF="'$(yaml_escape "${DOMAIN_MAP#${TARGET_PATH}/}")'"
-  if ! ruby -ryaml -rfileutils -rerb - "${DOMAIN_MAP}" "${STAGING_DIR}/business_domain" \
+  if ! ruby -ryaml -rfileutils - "${DOMAIN_MAP}" "${STAGING_DIR}/business_domain" \
        "${PROJECT_NAME}" "${AUTHOR}" "${DOC_DATE}" "${L4_TEMPLATE_DIR}" \
        "${L4_TEMPLATE_PROFILE}" "${PROJECT_TYPE_PROFILES}" <<'RUBY'
 domain_map_path, staging_dir, project_name, author, doc_date, template_dir, template_profile, profiles_csv = ARGV
@@ -340,10 +999,13 @@ rescue Psych::Exception => e
   exit 2
 end
 map ||= {}
+if map["status"].to_s == "template" || Array(map["confirmed_domains"]).empty?
+  warn "Invalid confirmed domain map: not owner-confirmed (status=template or confirmed_domains empty)"
+  exit 2
+end
 domains = map["confirmed_domains"]
 
 fail_map = ->(msg) { warn "Invalid confirmed domain map: #{msg}"; exit 2 }
-
 fail_map.call("confirmed_domains must be a non-empty array") unless domains.is_a?(Array) && !domains.empty?
 
 req = ->(hash, key, ctx) do
@@ -372,12 +1034,12 @@ metadata = ->(title, status, summary) do
   <<~MD
     # #{title}
 
-    > **Metadata**
-    > - **Version**: 0.1.0
-    > - **Date**: #{doc_date}
-    > - **Author**: #{author}
-    > - **Status**: #{status}
-    > - **Summary**: #{summary}
+    > **元数据**
+    > - **版本**: 0.1.0
+    > - **日期**: #{doc_date}
+    > - **作者**: #{author}
+    > - **状态**: #{status}
+    > - **摘要**: #{summary}
 
   MD
 end
@@ -400,7 +1062,7 @@ domains.each_with_index do |l1, i|
   l1_dir = "#{l1_id}#{l1_name_en}"
   l2_list = l1["l2"]
   fail_map.call("#{ctx}.l2 must be a non-empty array") unless l2_list.is_a?(Array) && !l2_list.empty?
-  landscape_rows << "| #{l1_dir} | #{l1_name_cn} | Confirmed | user-confirmed domain map |"
+  landscape_rows << "| #{l1_dir} | #{l1_name_cn} | Routed | owner-confirmed domain map |"
 
   l2_list.each_with_index do |l2, j|
     l2c = "#{ctx}.l2[#{j}]"
@@ -414,7 +1076,7 @@ domains.each_with_index do |l1, i|
     seen_l2[l2_full] = true
     l2_dir = File.join(l1_dir, "#{l2_full}#{l2_name_en}")
     l2_doc = "#{l2_full}#{l2_name_en}(#{l2_name_cn}).md"
-    entry_doc = "#{l2_full}#{l2_name_en}EntryCoverage(#{l2_name_cn}入口覆盖).md"
+    entry_doc = "#{l2_full}99EntryCoverage(#{l2_name_cn}).md"
     l4_list = l2["l4"]
     fail_map.call("#{l2c}.l4 must be a non-empty array") unless l4_list.is_a?(Array) && !l4_list.empty?
 
@@ -435,12 +1097,12 @@ domains.each_with_index do |l1, i|
       l4_rel = File.join(l2_dir, l4_doc)
       evidence = Array(l4["evidence"]).map(&:to_s).map(&:strip).reject(&:empty?)
 
-      l2_l4_rows << "| #{l4f} | [#{l4_doc}](<#{l4_doc}>) | #{l4_name_cn} | Confirmed |"
-      catalog_l4 << "| #{l4f} | [#{l4_rel}](<#{l4_rel}>) | #{l4_name_cn} | Confirmed |"
+      l2_l4_rows << "| #{l4f} | [#{l4_doc}](<#{l4_doc}>) | #{l4_name_cn} | Routed |"
+      catalog_l4 << "| #{l4f} | [#{l4_rel}](<#{l4_rel}>) | #{l4_name_cn} | Routed |"
       if evidence.empty?
-        entry_rows << "| #{l4f} | #{l4_name_en} | pending-code-anchor | Confirmed domain; code evidence pending. |"
+        entry_rows << "| #{l4f} | #{l4_name_en} | pending-code-anchor | Routed; code evidence pending. |"
       else
-        evidence.each { |e| entry_rows << "| #{l4f} | #{l4_name_en} | `#{e}` | user-confirmed evidence |" }
+        evidence.each { |e| entry_rows << "| #{l4f} | #{l4_name_en} | `#{e}` | owner-confirmed evidence |" }
       end
 
       template_path = File.join(template_dir, "#{template_profile}.md")
@@ -467,56 +1129,66 @@ domains.each_with_index do |l1, i|
     end
 
     write_rel.(File.join(l2_dir, l2_doc),
-      metadata.("#{l2_name_en}(#{l2_name_cn})", "Confirmed", "Confirmed L2 skeleton for #{l2_name_cn}.") + <<~MD
-        ## Scope
+      metadata.("#{l2_full}#{l2_name_en}(#{l2_name_cn})", "Routed", "Owner-confirmed L2 skeleton for #{l2_name_cn}.") + <<~MD
+        ## 范围
 
-        | Field | Value |
+        | 字段 | 值 |
         | --- | --- |
         | L1 | #{l1_id}#{l1_name_en}(#{l1_name_cn}) |
         | L2 | #{l2_full}#{l2_name_en}(#{l2_name_cn}) |
         | Owner | #{l2_owner} |
 
-        ## Included L4 Documents
+        ## 业务锚点（真实入口链）
 
-        | L4 | Document | Business Name | Status |
+        | 入口类型 | 类名/符号 | 代码路径 |
+        | --- | --- | --- |
+        | 待沉淀 | 待沉淀 | 见 xx99 入口清单 |
+
+        ## 已含 L4 文档
+
+        | L4 | 文档 | 业务名 | 状态 |
         | --- | --- | --- | --- |
         #{l2_l4_rows.join("\n")}
 
-        ## Routing Rule
+        ## 路由规则
 
-        Route requirements here only when their business behavior belongs to #{l2_name_cn}
-        and the target L4 is listed above or explicitly reserved.
+        仅当新需求的业务行为属于 #{l2_name_cn} 且目标 L4 已在上表列出或显式预留时路由到此；
+        按业务单据维度优先路由。
 
-        ## Revision History
+        ## 规则沉淀区
 
-        | Version | Date | Author | Changes |
+        （待沉淀：由 sdlc-knowledge-sync 写入已验证业务规则。）
+
+        ## 修订记录
+
+        | 版本 | 日期 | 作者 | 变更 |
         | --- | --- | --- | --- |
-        | 0.1.0 | #{doc_date} | #{author} | Initial confirmed L2 skeleton. |
+        | 0.1.0 | #{doc_date} | #{author} | Owner 确认域映射生成的 Routed L2 骨架。 |
       MD
     )
 
     write_rel.(File.join(l2_dir, entry_doc),
-      metadata.("#{l2_name_en} Entry Coverage(#{l2_name_cn}入口覆盖)", "Confirmed", "Entry coverage skeleton for #{l2_name_cn}.") + <<~MD
-        ## Entry Coverage
+      metadata.("#{l2_full}99EntryCoverage(#{l2_name_cn})", "Routed", "Entry coverage for #{l2_name_cn}（入口唯一归属对账）.") + <<~MD
+        ## 入口清单
 
-        | L4 | Entry Name | Code Anchor | Evidence |
+        | L4 | 入口名 | 代码锚点 | 证据 |
         | --- | --- | --- | --- |
         #{entry_rows.join("\n")}
 
-        ## Note
+        ## 说明
 
-        Code anchors are filled and audited by sdlc-knowledge-sync from verified
-        implementation evidence, never invented by bootstrap.
+        代码锚点由 sdlc-knowledge-sync 从已验证实现证据填写与对账，初始化器不发明；
+        一个入口类唯一归属一个 L2。
 
-        ## Revision History
+        ## 修订记录
 
-        | Version | Date | Author | Changes |
+        | 版本 | 日期 | 作者 | 变更 |
         | --- | --- | --- | --- |
-        | 0.1.0 | #{doc_date} | #{author} | Initial entry coverage skeleton. |
+        | 0.1.0 | #{doc_date} | #{author} | Owner 确认域映射生成的入口覆盖骨架。 |
       MD
     )
 
-    catalog_l1l2 << "| #{l1_dir} | #{l2_full}#{l2_name_en} | [#{l2_doc}](<#{l2_dir}/#{l2_doc}>) | Confirmed | #{l2_owner} |"
+    catalog_l1l2 << "| #{l1_dir} | #{l2_full}#{l2_name_en} | [#{l2_doc}](<#{l2_dir}/#{l2_doc}>) | Routed | #{l2_owner} |"
   end
 end
 
@@ -536,50 +1208,86 @@ RUBY
         "${STAGING_DIR}/business_domain/.routed-rows-landscape"
 else
   DOMAIN_MAP_REF="null"
-  ROUTED_L1L2_ROWS=""
-  ROUTED_L4_ROWS=""
-  ROUTED_LANDSCAPE_ROWS=""
+  if ! scan_and_stage_candidates; then
+    echo "Candidate scan failed; nothing written." >&2
+    exit 2
+  fi
 fi
 
-# --- stage declaration + root skeletons --------------------------------------
-if [[ -n "${DOMAIN_MAP}" ]]; then
-  STATUS="routed"; ROUTABLE="true"
+if [[ -z "${DOMAIN_MAP}" ]]; then
+  FILL_SUMMARY="$(cat "${STAGING_DIR}/business_domain/.fill-summary.tsv" 2>/dev/null || printf '0\t0\t0')"
+  FILL_L1="${FILL_SUMMARY%%$'\t'*}"
+  FILL_REST="${FILL_SUMMARY#*$'\t'}"
+  FILL_L2="${FILL_REST%%$'\t'*}"
+  FILL_ENTRIES="${FILL_REST#*$'\t'}"
+  LANDSCAPE_ROWS="$(cat "${STAGING_DIR}/business_domain/.landscape-rows.md" 2>/dev/null || true)"
+  CATALOG_L1L2_ROWS="$(cat "${STAGING_DIR}/business_domain/.catalog-l1l2-rows.md" 2>/dev/null || true)"
+  rm -f "${STAGING_DIR}/business_domain/.fill-summary.tsv" \
+        "${STAGING_DIR}/business_domain/.landscape-rows.md" \
+        "${STAGING_DIR}/business_domain/.catalog-l1l2-rows.md"
+  FILL_SECTION="$(generate_landscape_fill_section "${FILL_L1}" "${FILL_L2}" "${FILL_ENTRIES}")"
 else
-  STATUS="awaiting_domain_map"; ROUTABLE="false"
+  FILL_L1="0"; FILL_L2="0"; FILL_ENTRIES="0"
+  FILL_SECTION=""
+  LANDSCAPE_ROWS="${ROUTED_LANDSCAPE_ROWS}"
+  CATALOG_L1L2_ROWS="${ROUTED_L1L2_ROWS}"
+fi
+
+if [[ -n "${DOMAIN_MAP}" ]]; then
+  STATUS="routed"; ROUTABLE="true"; DOC_STATUS="Routed"
+else
+  STATUS="candidate_pending_confirmation"; ROUTABLE="false"; DOC_STATUS="Candidate"
 fi
 
 generate_declaration "${STATUS}" "${ROUTABLE}" "${DOMAIN_MAP_REF}" \
   | write_staging_file "business_domain/knowledge-target.yaml"
 
-# Stage the awaiting declaration + root skeletons for pristine/progression checks.
-generate_declaration "awaiting_domain_map" "false" "null" \
-  | write_staging_file ".awaiting/knowledge-target.yaml"
+# stage the candidate declaration + root skeletons for pristine/progression checks
+generate_declaration "candidate_pending_confirmation" "false" "null" \
+  | write_staging_file ".candidate/knowledge-target.yaml"
 
-generate_landscape "${ROUTED_LANDSCAPE_ROWS}" \
+generate_landscape "${LANDSCAPE_ROWS}" "${FILL_SECTION}" \
   | write_staging_file "business_domain/00BusinessLandscape.md"
 generate_language | write_staging_file "business_domain/00UbiquitousLanguage.md"
-
-if [[ -n "${DOMAIN_MAP}" ]]; then
-  generate_landscape "" | write_staging_file ".awaiting/00BusinessLandscape.md"
-  generate_catalog "" "" | write_staging_file ".awaiting/01DomainCatalog.md"
-  cp "${STAGING_DIR}/business_domain/00UbiquitousLanguage.md" \
-     "${STAGING_DIR}/.awaiting/00UbiquitousLanguage.md"
-fi
-
-generate_catalog "${ROUTED_L1L2_ROWS}" "${ROUTED_L4_ROWS}" \
+generate_catalog "${CATALOG_L1L2_ROWS}" "${ROUTED_L4_ROWS}" \
   | write_staging_file "business_domain/01DomainCatalog.md"
 
-# --- plan actions (create / update / preserve / blocked) ---------------------
+if [[ -n "${DOMAIN_MAP}" ]]; then
+  # Pristine candidate root docs for progression comparison: regenerate the exact
+  # candidate-init output for this repo by scanning into a reference dir.
+  CAND_REF_DIR="${STAGING_DIR}/.candref/business_domain"
+  if scan_and_stage_candidates "${CAND_REF_DIR}"; then
+    CAND_SUMMARY="$(cat "${CAND_REF_DIR}/.fill-summary.tsv" 2>/dev/null || printf '0\t0\t0')"
+    CAND_L1="${CAND_SUMMARY%%$'\t'*}"
+    CAND_REST="${CAND_SUMMARY#*$'\t'}"
+    CAND_L2="${CAND_REST%%$'\t'*}"
+    CAND_ENTRIES="${CAND_REST#*$'\t'}"
+    DOC_STATUS="Candidate"
+    generate_landscape "$(cat "${CAND_REF_DIR}/.landscape-rows.md" 2>/dev/null)" \
+      "$(generate_landscape_fill_section "${CAND_L1}" "${CAND_L2}" "${CAND_ENTRIES}")" \
+      | write_staging_file ".candidate/00BusinessLandscape.md"
+    generate_catalog "$(cat "${CAND_REF_DIR}/.catalog-l1l2-rows.md" 2>/dev/null)" "" \
+      | write_staging_file ".candidate/01DomainCatalog.md"
+    DOC_STATUS="Routed"
+  fi
+  cp "${STAGING_DIR}/business_domain/00UbiquitousLanguage.md" \
+     "${STAGING_DIR}/.candidate/00UbiquitousLanguage.md"
+  rm -rf "${STAGING_DIR}/.candref"
+fi
+
+generate_governance_profile | write_staging_file "project-governance-profile.yaml"
+generate_entry_coverage_profile | write_staging_file "entry-coverage-profile.yaml"
+generate_map_template | write_staging_file "business-domain-map.yaml"
+generate_audit_wrapper | write_staging_file "scripts/bash/audit-entry-coverage.sh"
+chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
+
+# --- plan actions -------------------------------------------------------------------
 CREATED_FILES=()
 UPDATED_FILES=()
 PRESERVED_FILES=()
 BLOCKED_REASONS=()
 NOTICE_LINES=()
 PLAN_OK="true"
-
-stage_rel_paths() {
-  ( cd "${STAGING_DIR}/business_domain" && find . -type f | sed 's#^\./##' | sort )
-}
 
 declare_plan_line() {
   local rel="$1" action="$2"
@@ -605,11 +1313,11 @@ if [[ ! -e "${TARGET_FILE}" ]]; then
   declare_plan_line "${REL}" "create"
 elif cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
   : # identical declaration -> no-op
-elif [[ -n "${DOMAIN_MAP}" && "${EXISTING_DECL_STATUS}" == "awaiting_domain_map" ]] \
-     && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.awaiting/knowledge-target.yaml"; then
-  declare_plan_line "${REL}" "update"   # pristine awaiting -> routed progression
+elif [[ -n "${DOMAIN_MAP}" && "${EXISTING_DECL_STATUS}" == "candidate_pending_confirmation" ]] \
+     && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.candidate/knowledge-target.yaml"; then
+  declare_plan_line "${REL}" "update"   # pristine candidate -> routed progression
 elif [[ "${EXISTING_DECL_STATUS}" == "routed" && -z "${DOMAIN_MAP}" ]]; then
-  NOTICE_LINES+=("target already routed; declaration preserved (no downgrade to awaiting)")
+  NOTICE_LINES+=("target already routed; declaration preserved (no downgrade)")
 elif [[ "${UPDATE_DECLARATION}" == "true" ]]; then
   declare_plan_line "${REL}" "update"
 else
@@ -623,45 +1331,64 @@ for REL in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
   if [[ ! -e "${TARGET_FILE}" ]]; then
     declare_plan_line "${REL}" "create"
   elif cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
-    declare_plan_line "${REL}" "preserve"   # exists and untouched -> no-op
-  elif [[ -n "${DOMAIN_MAP}" && -f "${STAGING_DIR}/.awaiting/${REL}" ]] \
-       && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.awaiting/${REL}"; then
-    declare_plan_line "${REL}" "update"     # pristine awaiting skeleton -> routed version
+    declare_plan_line "${REL}" "preserve"
+  elif [[ -n "${DOMAIN_MAP}" && -f "${STAGING_DIR}/.candidate/${REL}" ]] \
+       && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.candidate/${REL}"; then
+    declare_plan_line "${REL}" "update"   # pristine candidate skeleton -> routed version
   else
     declare_plan_line "${REL}" "preserve"
   fi
 done
 
-# routed domain documents (from map): create missing; block on conflicting content
-if [[ -n "${DOMAIN_MAP}" ]]; then
-  while IFS= read -r REL; do
-    [[ -z "${REL}" ]] && continue
-    TARGET_FILE="${BD_DIR}/${REL}"
-    if [[ -e "${TARGET_FILE}" ]]; then
-      if cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
-        : # identical -> no-op
-      else
-        BLOCKED_REASONS+=("existing document differs from the confirmed-map skeleton: ${REL}")
-        PLAN_OK="false"
-      fi
+# domain documents (candidate fill or routed map): create missing; block on conflicting content
+while IFS= read -r REL; do
+  [[ -z "${REL}" ]] && continue
+  case "${REL}" in
+    knowledge-target.yaml|00BusinessLandscape.md|00UbiquitousLanguage.md|01DomainCatalog.md) continue ;;
+  esac
+  TARGET_FILE="${BD_DIR}/${REL}"
+  if [[ -e "${TARGET_FILE}" ]]; then
+    if cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
+      : # identical -> no-op
     else
-      declare_plan_line "${REL}" "create"
+      BLOCKED_REASONS+=("existing document differs from the generated skeleton: ${REL}")
+      PLAN_OK="false"
     fi
-  done < <( stage_rel_paths | grep -v '^knowledge-target.yaml$' \
-            | grep -v '^00BusinessLandscape.md$' | grep -v '^00UbiquitousLanguage.md$' \
-            | grep -v '^01DomainCatalog.md$' )
+  else
+    declare_plan_line "${REL}" "create"
+  fi
+done < <( stage_rel_paths )
+
+# machine artifacts (create-if-missing; existing differences preserved with a notice)
+for PAIR in \
+  "project-governance-profile.yaml:${SDLC_DIR}/project-governance-profile.yaml" \
+  "entry-coverage-profile.yaml:${SDLC_DIR}/entry-coverage-profile.yaml" \
+  "business-domain-map.yaml:${SDLC_DIR}/business-domain-map.yaml" \
+  "scripts/bash/audit-entry-coverage.sh:${AUDIT_WRAPPER}"; do
+  REL="${PAIR%%:*}"
+  TARGET_FILE="${PAIR#*:}"
+  STAGED="${STAGING_DIR}/${REL}"
+  if [[ ! -e "${TARGET_FILE}" ]]; then
+    declare_plan_line "${REL}" "create"
+  elif cmp -s "${TARGET_FILE}" "${STAGED}"; then
+    declare_plan_line "${REL}" "preserve"
+  else
+    declare_plan_line "${REL}" "preserve"
+    NOTICE_LINES+=("machine artifact exists with different content; preserved (create-if-missing): ${REL}")
+  fi
+done
+
+# retired-root presence advisory (generic wording; migration is separately authorized)
+LEGACY_ROOT_COUNT=0
+if [[ -d "${LEGACY_BD_ROOT}" ]]; then
+  LEGACY_ROOT_COUNT="$(find "${LEGACY_BD_ROOT}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  NOTICE_LINES+=("legacy knowledge root detected (${LEGACY_ROOT_COUNT} files); migration requires separate authorization; this tool never reads or rewrites it")
 fi
 
-# legacy vocabulary advisory (bounded; file names only, never quoting markers)
-LEGACY_MARKER_FILES=""
-if [[ -d "${BD_DIR}" ]]; then
-  LEGACY_MARKER_FILES="$(grep -ril -e 'speckit' -e '99pendingconfirmation' \
-      -e 'dual rail' -e 'legacy rail' -- "${BD_DIR}" 2>/dev/null | sed "s#^${TARGET_PATH}/##" || true)"
-fi
-
-# --- dry-run preview ----------------------------------------------------------
+# --- dry-run preview ------------------------------------------------------------------
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo "== DRY RUN (nothing written) =="
+  echo "MODE=init STATE=${STATUS} ROUTABLE=${ROUTABLE}"
   echo "Planned actions:"
   if [[ "${#CREATED_FILES[@]}" -gt 0 ]]; then printf '  create   %s\n' "${CREATED_FILES[@]}"; fi
   if [[ "${#UPDATED_FILES[@]}" -gt 0 ]]; then printf '  update   %s\n' "${UPDATED_FILES[@]}"; fi
@@ -684,19 +1411,23 @@ if [[ "${PLAN_OK}" != "true" ]]; then
   exit 1
 fi
 
-# --- execute -------------------------------------------------------------------
-if [[ "${#CREATED_FILES[@]}" -gt 0 ]]; then
-  for REL in "${CREATED_FILES[@]}"; do
-    mkdir -p "$(dirname "${BD_DIR}/${REL}")"
-    cp "${STAGING_DIR}/business_domain/${REL}" "${BD_DIR}/${REL}"
-  done
-fi
-if [[ "${#UPDATED_FILES[@]}" -gt 0 ]]; then
-  for REL in "${UPDATED_FILES[@]}"; do
-    mkdir -p "$(dirname "${BD_DIR}/${REL}")"
-    cp "${STAGING_DIR}/business_domain/${REL}" "${BD_DIR}/${REL}"
-  done
-fi
+# --- execute ---------------------------------------------------------------------------
+for REL in "${CREATED_FILES[@]:-}" "${UPDATED_FILES[@]:-}"; do
+  [[ -z "${REL}" ]] && continue
+  case "${REL}" in
+    project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh)
+      SRC="${STAGING_DIR}/${REL}"
+      DEST="${SDLC_DIR}/${REL}" ;;
+    *)
+      SRC="${STAGING_DIR}/business_domain/${REL}"
+      DEST="${BD_DIR}/${REL}" ;;
+  esac
+  mkdir -p "$(dirname "${DEST}")"
+  cp "${SRC}" "${DEST}"
+  if [[ "${REL}" == "scripts/bash/audit-entry-coverage.sh" ]]; then
+    chmod +x "${DEST}"
+  fi
+done
 
 mkdir -p "${REPORT_DIR}"
 REPORT_FILE="${REPORT_DIR}/knowledge_target_bootstrap_report.${RUN_TIMESTAMP}.md"
@@ -705,17 +1436,20 @@ REPORT_FILE="${REPORT_DIR}/knowledge_target_bootstrap_report.${RUN_TIMESTAMP}.md
   echo ""
   echo "> **Project**: ${PROJECT_NAME}"
   echo "> **Generated At**: $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "> **Generated By**: scripts/bootstrap-knowledge-target.sh (D-088-01)"
+  echo "> **Generated By**: scripts/bootstrap-knowledge-target.sh (D-088-01 v2)"
   echo "> **Target Repository**: ${TARGET_PATH}"
   echo ""
   echo "| Item | Value |"
   echo "| --- | --- |"
-  echo "| Knowledge target | .specify/business_domain |"
-  echo "| Declaration | .specify/business_domain/knowledge-target.yaml |"
+  echo "| Knowledge target | .sdlc/business_domain |"
+  echo "| Declaration | .sdlc/business_domain/knowledge-target.yaml |"
   echo "| Mode | ${STATUS} |"
   echo "| Routable | ${ROUTABLE} |"
   echo "| Domain map | ${DOMAIN_MAP:-<not used>} |"
   echo "| Git author | ${AUTHOR} |"
+  if [[ -z "${DOMAIN_MAP}" ]]; then
+    echo "| Code-driven fill | entries=${FILL_ENTRIES}, candidate L1=${FILL_L1}, candidate L2=${FILL_L2} |"
+  fi
   echo ""
   echo "## Created"
   if [[ "${#CREATED_FILES[@]}" -gt 0 ]]; then printf -- '- %s\n' "${CREATED_FILES[@]}"; else echo "- <none>"; fi
@@ -723,24 +1457,21 @@ REPORT_FILE="${REPORT_DIR}/knowledge_target_bootstrap_report.${RUN_TIMESTAMP}.md
   if [[ "${#UPDATED_FILES[@]}" -gt 0 ]]; then printf -- '- %s\n' "${UPDATED_FILES[@]}"; else echo "- <none>"; fi
   echo "## Preserved (never modified)"
   if [[ "${#PRESERVED_FILES[@]}" -gt 0 ]]; then printf -- '- %s\n' "${PRESERVED_FILES[@]}"; else echo "- <none>"; fi
+  echo "## Notices"
+  if [[ "${#NOTICE_LINES[@]}" -gt 0 ]]; then printf -- '- %s\n' "${NOTICE_LINES[@]}"; else echo "- <none>"; fi
   echo "## Remaining Confirmation"
   if [[ "${ROUTABLE}" == "false" ]]; then
-    echo "- No confirmed domain map yet: target stays routable:false; sync produces proposals only."
-    echo "- Provide a confirmed domain map and re-run with --domain-map to become routable."
-  fi
-  if [[ -n "${LEGACY_MARKER_FILES}" ]]; then
-    echo "- Retired vocabulary detected in existing files (bounded migration advisory;"
-    echo "  migrate through sdlc-knowledge-sync entries, do not rewrite wholesale):"
-    printf -- '  - %s\n' ${LEGACY_MARKER_FILES}
+    echo "- 候选状态：Owner 逐域确认候选文档后，填写并确认 .sdlc/business-domain-map.yaml，"
+    echo "  再以 --domain-map 重跑以进入 routed（此前同步只产 PROPOSAL）。"
   fi
   echo ""
   echo "## Source Evidence"
-  echo "- Process facts: current requirement library/{requirement_id}/ seven-node artifacts."
-  echo "- Code and verification evidence: target repository; consumed by sdlc-knowledge-sync."
+  echo "- 过程事实：当前需求 library/{requirement_id}/ 七节点产物。"
+  echo "- 代码与验证证据：目标仓；由 sdlc-knowledge-sync 消费。"
 } > "${REPORT_FILE}"
 
-# --- summary -------------------------------------------------------------------
-echo "== knowledge-target bootstrap summary =="
+# --- summary ----------------------------------------------------------------------------
+echo "== knowledge-target bootstrap summary (D-088-01 v2) =="
 if [[ "${EXISTING_DECL_STATUS}" == "routed" && -z "${DOMAIN_MAP}" ]]; then
   echo "STATE=routed (existing declaration preserved; this run had no confirmed map)"
   echo "ROUTABLE=true"
@@ -748,20 +1479,25 @@ else
   echo "STATE=${STATUS}"
   echo "ROUTABLE=${ROUTABLE}"
 fi
-echo "KNOWLEDGE_TARGET=.specify/business_domain"
-echo "DECLARATION=.specify/business_domain/knowledge-target.yaml"
+echo "KNOWLEDGE_TARGET=.sdlc/business_domain"
+echo "DECLARATION=.sdlc/business_domain/knowledge-target.yaml"
+if [[ -z "${DOMAIN_MAP}" ]]; then
+  echo "FILL: entries=${FILL_ENTRIES} candidate_l1=${FILL_L1} candidate_l2=${FILL_L2}"
+fi
 echo "CREATED: ${CREATED_FILES[*]:-}"
 echo "UPDATED: ${UPDATED_FILES[*]:-}"
 echo "PRESERVED: ${PRESERVED_FILES[*]:-}"
+if [[ "${#NOTICE_LINES[@]}" -gt 0 ]]; then
+  echo "NOTICES:"
+  printf '  - %s\n' "${NOTICE_LINES[@]}"
+fi
 if [[ "${#BLOCKED_REASONS[@]}" -gt 0 ]]; then
   echo "BLOCKED: ${BLOCKED_REASONS[*]}"
 fi
-echo "LEGACY_MARKERS: $([[ -n "${LEGACY_MARKER_FILES}" ]] && printf '%s' "${LEGACY_MARKER_FILES}" | wc -l | tr -d ' ' || echo 0) file(s); bounded migration advisory recorded in the report"
 echo "REPORT=${REPORT_FILE#${TARGET_PATH}/}"
-echo "REMAINING_CONFIRMATION: $([[ "${ROUTABLE}" == "false" ]] && echo 'confirmed domain map required before routing' || echo 'none')"
+echo "REMAINING_CONFIRMATION: $([[ "${ROUTABLE}" == "false" ]] && echo 'owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed' || echo 'none')"
 echo ""
 echo "NOTES:"
-echo "- This initializer creates the knowledge TARGET structure only; it never invents business facts."
-echo "- Stable facts are written exclusively by sdlc-knowledge-sync into .specify/business_domain/**,"
-echo "  sourced from the current requirement library/{requirement_id}/ artifacts, code and verification evidence."
+echo "- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync"
+echo "  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。"
 exit 0
