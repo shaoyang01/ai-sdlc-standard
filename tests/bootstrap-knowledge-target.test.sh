@@ -657,6 +657,42 @@ for sub in "fake-routed" "wrong-root" "managed-drift"; do
 done
 
 # ---------------------------------------------------------------------------
+CASE_NAME="32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact"
+R="${WORK_ROOT}/t32"; new_repo "${R}"
+ECP_BIN="${SCRIPT_DIR}/../scripts/bootstrap-entry-coverage-profile.sh"
+AUDIT_BIN="${SCRIPT_DIR}/../scripts/audit-entry-coverage.rb"
+mkdir -p "${R}/svc/src/main/java/com/acme/order/controller"
+echo 'class AController {}' > "${R}/svc/src/main/java/com/acme/order/controller/AController.java"
+
+gate_check() { # $1 = profile artifact path, $2 = label
+  if grep -qE '&[0-9]+|\*[0-9]+' "$1"; then fail "$2: YAML alias present in artifact"; else pass; fi
+  ruby "${AUDIT_BIN}" "${R}" --profile "$1" --strict > "${WORK_ROOT}/t32-gate.out" 2>&1
+  local gate_exit=$?
+  if [[ "${gate_exit}" == "0" || "${gate_exit}" == "1" ]]; then pass; else fail "$2: gate crashed exit ${gate_exit}"; fi
+  if grep -q 'Psych::' "${WORK_ROOT}/t32-gate.out"; then fail "$2: exception stack in gate output"; else pass; fi
+  local rep="${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md"
+  if [[ -f "${rep}" ]]; then pass; else fail "$2: gate report missing"; return; fi
+  local st
+  st="$(grep -oE '\| (PENDING|PASS|BLOCKED) \|' "${rep}" | head -1 | tr -d '| ')"
+  if [[ "${st}" == "PASS" && "${gate_exit}" == "0" ]] || [[ "${st}" != "PASS" && "${gate_exit}" == "1" ]]; then
+    pass
+  else
+    fail "$2: status/exit inconsistent (status=${st} exit=${gate_exit})"
+  fi
+}
+
+ruby "${ECP_BIN}" "${R}" --force > /dev/null 2>&1
+gate_check "${R}/.sdlc/entry-coverage-profile.yaml" "stable"
+ruby "${ECP_BIN}" "${R}" > /dev/null 2>&1
+gate_check "${R}/.sdlc/entry-coverage-profile.candidate.yaml" "candidate"
+ruby "${ECP_BIN}" "${R}" --force-entry-coverage-profile > /dev/null 2>&1
+gate_check "${R}/.sdlc/entry-coverage-profile.yaml" "force"
+ruby "${ECP_BIN}" "${R}" --scan-timeout 0 > /dev/null 2>&1
+gate_check "${R}/.sdlc/entry-coverage-profile.candidate.yaml" "partial"
+ruby "${ECP_BIN}" "${R}" --scan-timeout 0 --force-entry-coverage-profile > /dev/null 2>&1
+gate_check "${R}/.sdlc/entry-coverage-profile.yaml" "timeout-force"
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "==== regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
 if [[ "${FAIL_COUNT}" -eq 0 ]]; then

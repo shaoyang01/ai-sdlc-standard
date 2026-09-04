@@ -257,7 +257,7 @@ def build_file_inventory(options)
     "scan_roots" => display_scan_roots,
     "include_roots" => options[:include_roots].map { |root| normalize_rel(root) },
     "effective_scan_roots" => scan_roots.map { |root| root.fetch("relative") },
-    "exclude_patterns" => EXCLUDE_FILE_PATTERNS,
+    "exclude_patterns" => EXCLUDE_FILE_PATTERNS.dup,
     "max_samples" => options[:max_samples],
     "scan_timeout_seconds" => options[:scan_timeout_seconds],
     "affected_outputs" => timeout_occurred ? [
@@ -460,7 +460,7 @@ def profile_hash(profiles, files, source_roots, pending_confirmation, profile_so
     "scope" => {
       "source_roots" => source_roots,
       "include_file_patterns" => ["**/*"],
-      "exclude_file_patterns" => EXCLUDE_FILE_PATTERNS,
+      "exclude_file_patterns" => EXCLUDE_FILE_PATTERNS.dup,
       "document_scope" => ".sdlc/business_domain",
       "report_dir" => ".sdlc/reports/entry_coverage"
     },
