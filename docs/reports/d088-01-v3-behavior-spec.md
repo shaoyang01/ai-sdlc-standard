@@ -1,7 +1,7 @@
 # D-088-01 v3 行为规格：四类项目一站式初始化与迁移
 
-> Version: 0.1.0 (PROPOSED)
-> Status: 待 Current User 只读审查接受；接受后冻结为 G1 实施与验收基线（冻结计划 §4/G1）
+> Version: 1.0.0
+> Status: ACCEPTED（2026-09-05，Current User 只读审查接受并授权 F1–F7 实施；本规格冻结为 G1 实施与验收基线）
 > 上游: Decision-090 决策 3 · [冻结执行计划](decision-090-c03e-prerun-governance-plan.md) §3/§4/G1 · [需求拆分](decision-090-c03e-prerun-requirement-decomposition.md) §3（R01–R27）
 > 候选基线: 产品仓 `a626335`（v2 双模式实现 + R1/R2 修复，35 测试场景）
 > 授权声明: 本规格不授权任何代码修改；实施需 Current User 显式授权。
