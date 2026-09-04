@@ -257,30 +257,48 @@ GATE_REVIEW_NAME_PATTERN = /
 /ix.freeze
 
 def unsafe_legacy_source_references(text)
-  lines = text.lines
   unsafe = []
-
-  lines.each_with_index do |line, index|
+  text.lines.each_with_index do |line, index|
     next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
-
-    context = [
-      lines[index - 4],
-      lines[index - 3],
-      lines[index - 2],
-      lines[index - 1],
-      line,
-      lines[index + 1],
-      lines[index + 2]
-    ].compact.join(" ")
-
-    next if context.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
-    next unless context.match?(LEGACY_SOURCE_DANGER_PATTERN)
-
+    # D088-R1-H7: the negation guard binds to the SAME line only — an adjacent
+    # line's "do not" must never release a different semantic statement.
+    next if line.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
+    next unless line.match?(LEGACY_SOURCE_DANGER_PATTERN)
     unsafe << [index + 1, line.strip]
   end
-
   unsafe
 end
+
+# D088-R1-H7: detect NORMATIVE dual-rail sync-mode declarations (mode enums,
+# mode switches, mode-conditional requirements), not the bare characters.
+# Historical notes, negative rules, and same-line negations are exempt; a
+# negation never travels across lines.
+DUAL_RAIL_DECLARATION_PATTERN = /\b(speckit_driven|library_driven|hybrid)\b/i
+DUAL_RAIL_NORMATIVE_RE = /\b(modes?|switch|classify|classification|select(?:ion|s)?|supports?|supported|requires?|required|explicit|enum|source_of_truth|decides?|priority)\b/i
+DUAL_RAIL_NEGATION_RE = /(no\s+(competing|source\s+modes?|mode\s+switch)|no\s+longer|not\s+(?:use|used|support|a)|do\s+not|don't|must\s+not|never|there\s+are\s+no|retired|historical|单轨|已退役)/i
+
+def unsafe_dual_rail_declarations(text)
+  unsafe = []
+  text.lines.each_with_index do |line, index|
+    next unless line.match?(DUAL_RAIL_DECLARATION_PATTERN)
+    next if line.match?(DUAL_RAIL_NEGATION_RE)
+    next unless line.match?(DUAL_RAIL_NORMATIVE_RE)
+    unsafe << [index + 1, line.strip]
+  end
+  unsafe
+end
+
+DUAL_RAIL_SELF_TEST = {
+  # normative declarations -> must be flagged
+  "Reconcile supports three source modes: speckit_driven, library_driven, hybrid." => true,
+  "- `library_driven`: Specs are not required; library artifacts are primary." => true,
+  "Classify the sync mode (speckit_driven | library_driven | hybrid) before writing." => true,
+  # negative rules / historical notes / non-sync prose -> must NOT be flagged
+  "Single rail: there are no source modes such as speckit_driven or library_driven (Decision-044)." => false,
+  "The retired manifest field last_sync_source_mode=library_driven is historical only." => false,
+  "Do not use speckit_driven mode; it was retired." => false,
+  "Plain prose about hybrid vehicles has no sync semantics here." => false
+}.freeze
 
 def unsafe_filename_version_references(text)
   lines = text.lines
@@ -503,6 +521,16 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
 
   unsafe_legacy_source_references(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} treats legacy .specify source as normal sdlc input: #{line}"
+  end
+
+  # D088-R1-H7 boundary: the normative dual-rail check protects the contract this
+  # wave actually cleaned (skills/sdlc-knowledge-sync/**). Other packages still
+  # carry dual-rail wording (e.g. sdlc-solution-design planning-scope.md) and
+  # stay flagged for the follow-up wave, like the remaining .specify subpaths.
+  if File.basename(File.dirname(path)) == "sdlc-knowledge-sync" || path.include?(File.join(SKILL_DIR, "sdlc-knowledge-sync"))
+    unsafe_dual_rail_declarations(text).each do |line_number, line|
+      errors << "#{relative(path)}:#{line_number} declares retired dual-rail sync modes as normative: #{line}"
+    end
   end
 
   unsafe_legacy_process_runtime_outputs(text).each do |line_number, line|
@@ -899,6 +927,19 @@ begin
   puts "CANONICAL_AUTHORITY_DETECTOR_SELF_TEST_VERIFIED true"
 rescue StandardError => e
   errors << "C03-A canonical topology: #{e.message}"
+end
+
+# Self-test for the normative dual-rail declaration detector (table-driven
+# red/green; D088-R1-H7 — same-line negation exemption, no cross-line release).
+begin
+  dual_rail_failures = DUAL_RAIL_SELF_TEST.filter_map do |sample, expected_flag|
+    actual_flag = !unsafe_dual_rail_declarations(sample).empty?
+    sample if actual_flag != expected_flag
+  end
+  raise "self-test mismatches: #{dual_rail_failures.join(' | ')}" if dual_rail_failures.any?
+  puts "DUAL_RAIL_DECLARATION_DETECTOR_SELF_TEST_VERIFIED true"
+rescue StandardError => e
+  errors << "dual-rail declaration detector: #{e.message}"
 end
 
 canonical_errors << "non-node utility sdlc-docflow-writer missing non-node boundary declaration" unless

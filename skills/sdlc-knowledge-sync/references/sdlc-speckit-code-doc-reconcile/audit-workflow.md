@@ -5,7 +5,7 @@
 Define the exact scope before comparing:
 
 - Requirement ID.
-- Feature directory under `specs/**` (may be absent in library_driven mode).
+- Legacy feature directory under `specs/**` (not a single-rail input; may be absent).
 - Code modules, files, commits, or diff range.
 - DocFlow directories (`library/{requirement_id}/**`).
 - Process product paths:
@@ -15,16 +15,16 @@ Define the exact scope before comparing:
   `specs/{feature}/observability.md`.
 - Knowledge target paths (`.sdlc/business_domain/**`).
 - Whether the audit is full lifecycle or focused on one suspected drift.
-- Sync source mode: `speckit_driven`, `library_driven`, or `hybrid`.
+- Sync provenance: `library/{requirement_id}/` artifacts + code state + verification evidence (single rail).
 
-### Library-Driven Reconcile
+### Single-Rail Reconcile
 
-When the requirement did not go through Speckit pipeline (no `specs/{feature}/**`):
+When the requirement has no legacy `specs/{feature}/**`:
 
-- Do not block because specs are missing.
+- Do not block because specs are missing; specs are not single-rail inputs.
 - Use `library/{requirement_id}/**` as the primary document evidence source.
 - Compare code ↔ library artifacts ↔ business_domain.
-- Missing specs is not a drift; it is expected in library_driven mode.
+- Missing specs is not a drift; absence of legacy specs paths is expected on the single rail.
 - Check manifest `business_domain_sync` status for prior sync attempts.
 
 ## 2. Build Artifact Inventory
@@ -135,12 +135,11 @@ Route eligible missing facts to `sdlc-speckit-sync`.
 
 Read manifest `business_domain_sync` section when present:
 
-- Verify `duplicate_sync_guard`: if `pipeline_sync_executed=true` and `library_sync_executed=true`, flag potential duplicate sync.
-- Verify `result`: if `synced`, check that business_domain facts can be traced to specs or library source artifacts.
+- Verify `duplicate_sync_guard`: if the record already shows `result: synced` for the same facts, flag potential duplicate sync.
+- Verify `result`: if `synced`, check that business_domain facts can be traced to library source artifacts or verification evidence.
 - Verify `result`: if `not_required`, confirm the reason is still valid.
-- If `mode=library_driven` and library artifacts exist but business_domain facts are missing, flag as missing sync.
-- If `mode=speckit_driven` and specs exist but business_domain facts are missing, flag as missing sync.
-- If `mode=hybrid` and both sources exist but disagree, flag as conflict.
+- If library artifacts exist but business_domain facts are missing, flag as missing sync.
+- If library evidence and code state disagree, flag as conflict.
 
 ## 8. Decide Result
 
@@ -180,4 +179,4 @@ Flag as drift:
 - Detect conflicting facts and classify conflict type (semantic_conflict, code_drift, doc_drift, stale_fact, scope_conflict, duplicate_fact, source_priority_conflict).
 - Verify revision record includes rail/source/update section/evidence.
 - Verify update proposal / reconcile proposal was generated when direct update was unsafe.
-- In library_driven mode, trace business_domain facts to approved/current library evidence when specs are absent.
+- Trace business_domain facts to approved/current library evidence; legacy specs paths are not single-rail inputs.

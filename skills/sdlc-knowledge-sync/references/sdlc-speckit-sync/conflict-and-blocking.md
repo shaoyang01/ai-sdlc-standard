@@ -21,11 +21,9 @@ Stop when:
 - Proposed fact depends on unresolved review or test feedback.
 - Sync would require modifying production code, spec, plan, or tasks.
 - Standard entry coverage audit is `BLOCKED` when the sync target is `.sdlc/business_domain/**`.
-- Duplicate sync risk: pipeline sync already executed for the same facts.
-- Duplicate sync risk: library sync already executed for the same facts.
+- Duplicate sync risk: a previous sync already recorded the same facts (manifest sync record / duplicate sync guard).
 - Same stable fact already synced to the target document.
-- Unknown rail (rail not identifiable from context or user confirmation).
-- Unknown sync source mode (mode not `speckit_driven`, `library_driven`, or `hybrid`).
+- Unknown sync provenance (facts not traceable to `library/{requirement_id}/` artifacts, code state, or verification evidence).
 - Unknown business_domain naming pattern (cannot determine target document naming convention).
 - Target L4 ambiguous (multiple candidate L4 documents or none identifiable).
 - Target shape unknown (existing document structure not understood).
@@ -59,13 +57,11 @@ Stop when:
 - missing implementation evidence for direct update
 - missing verification evidence for direct update
 - duplicate sync guard unresolved
-- pipeline_sync_executed=true and result=synced without supplemental authorization
-- implementation evidence missing in library_driven mode
-- verification evidence missing in library_driven mode
+- manifest sync record already shows `result: synced` without supplemental authorization
 - 02-方案审核 missing / failed / blocked
 - manifest source freshness conflict
 - library artifact current effective version unknown
-- source_of_truth unclear in library_driven mode
+- sync provenance unclear (library, code and verification sources conflict or are untraceable)
 
 ## Entry Coverage Blocking
 
