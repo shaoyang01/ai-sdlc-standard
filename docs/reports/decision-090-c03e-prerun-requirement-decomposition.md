@@ -1,6 +1,6 @@
 # C03-E-PRE-RUN 需求拆分设计
 
-> Version: 0.1.0 (DRAFT)
+> Version: 0.2.0 (DRAFT)
 > Status: PROPOSED — 待 Current User 接受后成为 G1 启动输入与各包需求冻结基线
 > 上游权威: [Decision-090](../decisions/Decision-090-c03e-prerun-governance-readiness-replan.md) · [冻结执行计划](decision-090-c03e-prerun-governance-plan.md)
 > Date: 2026-09-04
@@ -109,7 +109,7 @@
 
 1. **合同权威落位**：新建 `ai-sdlc/manual-runtime-semantic-contract.md`，同步 `node-capability-contract.md`、`artifact-flow.md` 及 schema/模板引用；流程定义从 Skill prompt / runtime code / 业务产物中收敛到单一权威。
 2. **节点 IO 与稳定路径域**：七节点及 solution-gate 双角色的输入、输出、stable path。
-3. **深度语义域**：`initialDepthBasis` / `decisionDepth` / `decisionStatus` / 升档回流；显式深度 `user_requested`、未指定 `PROVISIONAL_STANDARD`、正式深度仅由 `formal_verdict` 输出；含【裁决点③】升档回流是否要求"深度覆盖差距记录 + 增量补强"而非整篇重写（建议是，理由见 §10）。
+3. **深度语义域**：`initialDepthBasis` / `decisionDepth` / `decisionStatus` / 升档回流。【裁决点③】讨论中（2026-09-05 Current User 质疑"正式深度默认在 Gate 裁决"的前提，提出归一定深度方向）：已提出折中方案 (c′)——归一按枚举判定表输出 `proposedDepthBasis` 作为设计的约束性下限（用户显式深度 `user_requested` 仍最高优先；无法判定时退 `PROVISIONAL_STANDARD` 兜底），`formal_verdict` 保留确认/升档两个动作（升档走增量补强），`decisionDepth` 正式输出权不变。待 Current User 裁决后在 §10 定稿，G2 冻结时落实为合同字段。
 4. **Finding/Ledger/Gate 生命周期域**：Finding identity；`{id}_FindingLedger.md` 与 `{id}_方案审核.md` 两个稳定路径；轮次/版本/current/stale/superseded 表达规则。
 5. **manifest 三对象域**：`intake.manifest.json`（触发）/ `manifest.md`（生命周期投影，intake 创建 + 确定性 publisher 更新 + reconcile 重建）/ `knowledge-target.yaml`（项目级路由）；互不替代。
 6. **journal↔manifest 投影域**：交叉绑定 digest、失败码、回流节点、下游准入；不一致 STOP。
@@ -119,7 +119,7 @@
 
 ## 5. G3 — D-090-02 手动主路径修复（需求域级）
 
-六个需求域对应冻结计划六子任务：① solution-design 深度前置解耦，接入 `initialDepthBasis`；② Ledger/Gate 两稳定路径与角色边界落地；③ intake 创建 requirement manifest + 后续节点原子更新；④ Re-Gate 的 current/stale/superseded 标记；⑤ Decision-086 已取消的 risk proof 残留清除；⑥ 存量 `library` 缺 manifest 的 fail-closed reconcile（含【裁决点④】批量重建授权口径，见 §10）。
+六个需求域对应冻结计划六子任务：① solution-design 深度前置解耦，接入 `initialDepthBasis`；② Ledger/Gate 两稳定路径与角色边界落地；③ intake 创建 requirement manifest + 后续节点原子更新；④ Re-Gate 的 current/stale/superseded 标记；⑤ Decision-086 已取消的 risk proof 残留清除；⑥ 存量 `library` 无 manifest 处置规则（2026-09-05 Current User 裁决【裁决点④】撤销，相对冻结计划子任务 6 收窄）：存量无 manifest 的 requirement 视为只读归档知识源——knowledge-sync 仍可消费其知识内容，但不进入新生命周期管理；新流程 requirement 一律由 intake 创建 manifest；新流程试图复用无 manifest 的存量目录 → `BLOCKED`；corrupt manifest 中途 → STOP。不做任何存量重建/恢复。
 
 完成门 `MANUAL_OPERATIONAL`（继承）：隔离 fixture 从 intake 到 knowledge-sync 全链无人工补文件/改状态；至少一个真实业务需求只读重放证明相同准入结果。
 
@@ -137,7 +137,7 @@
 
 ## 8. G6 — D-090-04 离线 parity 验收（矩阵级）
 
-需求域：① parity 矩阵（轴：四类项目初始化 × 三档深度 × PASS/FAIL/PWR/BLOCKED_UNKNOWN × 首轮/升档/Re-Gate × manifest new/reconcile/corrupt × crash/resume）；② 比较对象集（节点序列、双 Gate 角色、stable artifact paths、版本/current/stale、Finding identity、decisionDepth、next eligibility、earliest reroute、最终 handoff 状态）；③ 完成门（全场景通过、无 shadow executor，通过后才能申请真实 CLI run8）。
+需求域：① parity 矩阵（轴：四类项目初始化 × 三档深度 × PASS/FAIL/PWR/BLOCKED_UNKNOWN × 首轮/升档/Re-Gate × manifest new/corrupt × crash/resume；reconcile 轴随【裁决点④】撤销移除）；② 比较对象集（节点序列、双 Gate 角色、stable artifact paths、版本/current/stale、Finding identity、decisionDepth、next eligibility、earliest reroute、最终 handoff 状态）；③ 完成门（全场景通过、无 shadow executor，通过后才能申请真实 CLI run8）。
 
 ## 9. 依赖、授权与 STATE 传播
 
@@ -145,15 +145,20 @@
 2. 需求冻结 ≠ 实施授权：本文 §3 条目被接受后，G1 阶段 A（规格冻结 + 只读差距审查）即为合法下一步，无需额外授权；阶段 B（改代码）必须停等。
 3. 恢复入口不变：STATE → Decision-090 → 冻结计划 → 本文（G1 启动后）→ 对应包授权/证据。本文被接受后，冻结计划的 §7 恢复动作第 3 步由"重新冻结 v3 行为规格"细化为"按 §3 条目 R01–R22 冻结规格"。
 
-## 10. 待 Current User 裁决点
+## 10. Current User 裁决记录
 
-| # | 裁决点 | 选项 | 本文建议 |
-| --- | --- | --- | --- |
-| ① | D-088-01-R10：LEGACY 首次 APPLY 前分类计划是否需 owner 显式确认 | (a) 需确认；(b) dry-run 报告即确认依据 | (a)。存量迁移不可逆风险高，首次确认后同类 re-run 可免 |
-| ② | D-088-01-R25：验收矩阵剪枝 | (a) dry-run 全组合 + apply 代表组合；(b) 全层全组合 | (a)。全层全组合约 4×3×3×3=108 组 × 边界，成本失衡；行为断言借 table-driven 全覆盖 |
-| ③ | G2 域 3：`PROVISIONAL_STANDARD` 升档回流是否要求增量审计（记深度覆盖差距、只补差距） | (a) 增量补强；(b) 整篇重写 | (a)。DEEP 场景整篇重写会让手动路径体验与成本不可接受 |
-| ④ | G3 域 6：存量 library 缺 manifest 的 reconcile 是否允许一次性批量重建授权 | (a) 逐仓 fail-closed；(b) 单独"批量重建"授权一次 | (b)。逐仓 fail-closed 会把同一机械动作重复阻塞 N 次；批量授权仍以歧义 STOP 为界 |
-| ⑤ | G4：`GW_VERTICAL_REBUILD` 沿用裁决形式 | (a) delta assessment 后一次裁决；(b) 五包逐包裁决 | (a)。delta assessment 的目的就是判断原授权边界是否仍覆盖调整后内容 |
+| # | 裁决点 | 结论（2026-09-05 Current User） |
+| --- | --- | --- |
+| ① | D-088-01-R10：LEGACY 分类计划确认点 | **已裁决：采纳建议 (a)**——含 `TRANSFORM`/`RETIRE` 的场景（两类 LEGACY）首次 APPLY 前 owner 显式确认；`NEW_EMPTY`/`EXISTING_CODE_NO_KNOWLEDGE` 只 ADD 不改不删，无需确认；确认后幂等 re-run 免重复确认 |
+| ② | D-088-01-R25：验收矩阵剪枝 | **已裁决：采纳建议 (a)**——dry-run 层全组合（4×3×3×3=108），apply/re-run 层代表组合（每轴值至少出现一次 + 高交互风险组合点名，约 15–20 个 apply 场景），边界矩阵独立用例；代表组合的具体清单随 v3 规格冻结列明，不得酌情选取 |
+| ③ | G2 域 3：深度默认与升档回流 | **讨论中**——Current User 质疑"正式深度默认在 Gate 裁决"的前提，提出可在需求归一时定深度；已提出折中方案 (c′)：归一按枚举判定表输出 `proposedDepthBasis` 作为设计约束性下限（`user_requested` 最高优先，无法判定退 `PROVISIONAL_STANDARD` 兜底），`formal_verdict` 保留确认/升档权威（升档走增量补强），`decisionDepth` 正式输出权不变。待裁决 |
+| ④ | G3 域 6：存量 manifest 处置 | **已裁决：撤销该裁决点**——不做存量 library 重建/恢复（恢复的不是存量 library，是后续流程正确性）；存量无 manifest requirement = 只读归档知识源，不进新生命周期；新流程由 intake 建 manifest，复用无 manifest 存量目录 → `BLOCKED`；知识沉淀内容优先，中间产物不追溯。G3 域 ⑥ 与 G6 矩阵轴已相应收窄 |
+| ⑤ | G4：`GW_VERTICAL_REBUILD` 裁决形式 | **已裁决：采纳建议 (a)**——delta assessment 后一次裁决；超出已评估 delta 边界的发现仍需单独授权 |
+
+## 变更记录
+
+- 0.2.0（2026-09-05）：记录裁决点①②④⑤（④撤销，G3 域 ⑥ 与 G6 矩阵轴相应收窄）；裁决点③转入讨论并记录折中方案 (c′)。
+- 0.1.0（2026-09-04）：初稿。
 
 ## 11. 与冻结计划的追溯
 
