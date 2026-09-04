@@ -10,20 +10,18 @@ require "time"
 require "yaml"
 
 SCRIPT_NAME = "scripts/bootstrap-entry-coverage-profile.sh"
-DEFAULT_PROFILE_PATH = ".specify/entry-coverage-profile.yaml"
-DEFAULT_CANDIDATE_PROFILE_PATH = ".specify/entry-coverage-profile.candidate.yaml"
-DEFAULT_REPORT_PATH = ".specify/reports/entry_coverage_profile_bootstrap_report.md"
+DEFAULT_PROFILE_PATH = ".sdlc/entry-coverage-profile.yaml"
+DEFAULT_CANDIDATE_PROFILE_PATH = ".sdlc/entry-coverage-profile.candidate.yaml"
+DEFAULT_REPORT_PATH = ".sdlc/reports/entry_coverage_profile_bootstrap_report.md"
 STANDARD_PACKAGE = File.expand_path("..", __dir__)
 DEFAULT_SCAN_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_SAMPLES = 30
 
 FORBIDDEN_WRITE_PATHS = [
-  ".specify/business_domain/**",
+  ".sdlc/business_domain/**",
   "specs/**",
   "library/**",
-  ".specify/memory/**",
-  ".specify/workflow/**",
-  ".specify/coding_guide/**"
+  ".specify/**"
 ].freeze
 
 LEGACY_RUNTIME_INPUTS = [
@@ -39,6 +37,8 @@ EXCLUDE_FILE_PATTERNS = [
   "**/ios/build/**",
   "**/dist/**",
   "**/.git/**",
+  ".sdlc/**",
+  "**/.sdlc/**",
   ".specify/**",
   "**/.specify/**",
   "**/node_modules/**",
@@ -108,7 +108,7 @@ parser = OptionParser.new do |opts|
   opts.on("--project-type-profile PROFILE", "Add project type profile. Repeatable.") do |value|
     options[:project_type_profiles] << value
   end
-  opts.on("--force-entry-coverage-profile", "Overwrite .specify/entry-coverage-profile.yaml when it exists.") do
+  opts.on("--force-entry-coverage-profile", "Overwrite .sdlc/entry-coverage-profile.yaml when it exists.") do
     options[:force] = true
   end
   opts.on("--dry-run", "Print generated profile and report without writing files.") { options[:dry_run] = true }
@@ -261,9 +261,9 @@ def build_file_inventory(options)
     "max_samples" => options[:max_samples],
     "scan_timeout_seconds" => options[:scan_timeout_seconds],
     "affected_outputs" => timeout_occurred ? [
-      ".specify/entry-coverage-profile.yaml project_type_profiles",
-      ".specify/entry-coverage-profile.yaml scope.source_roots",
-      ".specify/entry-coverage-profile.yaml entry_types evidence hints"
+      ".sdlc/entry-coverage-profile.yaml project_type_profiles",
+      ".sdlc/entry-coverage-profile.yaml scope.source_roots",
+      ".sdlc/entry-coverage-profile.yaml entry_types evidence hints"
     ] : [],
     "recommended_action" => timeout_occurred ? "Re-run with narrower --scan-root / --include-root or a larger --scan-timeout before confirming the stable profile." : "Review and confirm generated profile before Analyze Gate enforcement.",
     "files" => files,
@@ -290,7 +290,7 @@ def source_roots(files)
 end
 
 def detect_profile_from_governance
-  path = File.join(TARGET_ROOT, ".specify/project-governance-profile.yaml")
+  path = File.join(TARGET_ROOT, ".sdlc/project-governance-profile.yaml")
   return [] unless File.file?(path)
 
   yaml = YAML.safe_load(File.read(path), permitted_classes: [Date, Time], aliases: true) || {}
@@ -461,8 +461,8 @@ def profile_hash(profiles, files, source_roots, pending_confirmation, profile_so
       "source_roots" => source_roots,
       "include_file_patterns" => ["**/*"],
       "exclude_file_patterns" => EXCLUDE_FILE_PATTERNS,
-      "document_scope" => ".specify/business_domain",
-      "report_dir" => ".specify/reports/entry_coverage"
+      "document_scope" => ".sdlc/business_domain",
+      "report_dir" => ".sdlc/reports/entry_coverage"
     },
     "entry_types" => entry_types_for(profiles).map do |entry|
       {
@@ -496,7 +496,7 @@ def profile_hash(profiles, files, source_roots, pending_confirmation, profile_so
       "consumer_contract_chain" => { "required_layers" => %w[public_api consumer_contract], "recommended_layers" => %w[compatibility_rule migration_or_deprecation_note test_evidence], "allow_missing_layers_with_reason" => true }
     },
     "domain_matching" => {
-      "l4_document_pattern" => ".specify/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md",
+      "l4_document_pattern" => ".sdlc/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md",
       "entry_match_rule" => "entry class, method, path, route, topic, job, function, SQL, connector, or sink appears in an L4 evidence table",
       "allow_entry_in_multiple_l2_domains" => false
     },
@@ -580,9 +580,9 @@ def report_text(profile_path, report_path, profile_hash, existing_profile, force
     This bootstrap may write only:
 
     ```text
-    .specify/entry-coverage-profile.yaml
-    .specify/entry-coverage-profile.candidate.yaml
-    .specify/reports/entry_coverage_profile_bootstrap_report.md
+    .sdlc/entry-coverage-profile.yaml
+    .sdlc/entry-coverage-profile.candidate.yaml
+    .sdlc/reports/entry_coverage_profile_bootstrap_report.md
     ```
 
     It must not write:

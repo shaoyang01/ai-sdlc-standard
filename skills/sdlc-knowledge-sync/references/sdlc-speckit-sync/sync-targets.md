@@ -2,19 +2,19 @@
 
 ## Primary Targets
 
-`.specify/business_domain/**` is the single-rail long-term knowledge base of `sdlc-knowledge-sync` (Decision-044/088; there are no competing rails or source modes). Resolve it deterministically before any sync: read `.specify/business_domain/knowledge-target.yaml` (created by `scripts/bootstrap-knowledge-target.sh`). Missing declaration → BLOCKED with initialization guidance; `routable: false` → proposals only. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` for the full governance protocol.
+`.sdlc/business_domain/**` is the single-rail long-term knowledge base of `sdlc-knowledge-sync` (Decision-044/088/089; there are no competing rails or source modes). Resolve it deterministically before any sync: read `.sdlc/business_domain/knowledge-target.yaml` (created by the dual-mode `scripts/bootstrap-knowledge-target.sh`). Missing declaration → BLOCKED with initialization guidance; `status: candidate_pending_confirmation` (`routable: false`) → proposals only; `status: routed` → catalog routing. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/shared-business-domain-governance.md` for the full governance protocol.
 
 Common targets include:
 
-- `.specify/business_domain/00BusinessLandscape.md`
-- `.specify/business_domain/00UbiquitousLanguage.md`
-- `.specify/business_domain/**` domain, workflow, capability, or integration documents
+- `.sdlc/business_domain/00BusinessLandscape.md`
+- `.sdlc/business_domain/00UbiquitousLanguage.md`
+- `.sdlc/business_domain/**` domain, workflow, capability, or integration documents
 - Project checklist files
-- Standard package checklist/schema/process-guide proposals (never target project `.specify/workflow/**` or `.specify/coding_guide/**`)
+- Standard package checklist/schema/process-guide proposals (never target retired legacy files under the old project root)
 
 Use only targets that exist or are explicitly approved for creation.
 
-For `.specify/business_domain/**`, explicit approval for creation means create-if-missing authorization, not a generic write approval.
+For `.sdlc/business_domain/**`, explicit approval for creation means create-if-missing authorization, not a generic write approval.
 
 ## Library-Driven Target Resolution
 
@@ -27,7 +27,7 @@ Library-driven resolution is the only resolution path (single rail); it never de
 
 ## Shared Governance Rules
 
-When writing to `.specify/business_domain/**`:
+When writing to `.sdlc/business_domain/**`:
 
 - Target L4 exists → update existing document; do not create parallel L4.
 - Target L4 does not exist → create-if-missing with authorization.
@@ -35,11 +35,11 @@ When writing to `.specify/business_domain/**`:
 - Do not create duplicate L4 for the same domain concept.
 - Record rail/source in revision record.
 - When naming convention is unclear → sync proposal only.
-- New-Rail must not read or write `.specify/memory/**`, `.specify/workflow/**`, `.specify/coding_guide/**`.
+- Must not read or write the retired legacy root `.specify` (its old `memory`/`workflow`/`coding_guide` directories are not sdlc inputs or targets in any mode).
 
 ## Target Selection Rules
 
-Select `.specify/business_domain/**` when the fact is:
+Select `.sdlc/business_domain/**` when the fact is:
 
 - Stable business domain knowledge.
 - Reusable across future requirements.
@@ -65,21 +65,21 @@ Select no target when the fact is:
 Before applying updates:
 
 - Identify exact target path.
-- Identify L1 path, L2 path, L4 id, L4 document name, and owner for every `.specify/business_domain/**` target.
+- Identify L1 path, L2 path, L4 id, L4 document name, and owner for every `.sdlc/business_domain/**` target.
 - Explain source evidence.
 - Explain update scope.
 - Confirm the target is writable and in scope.
 - Confirm user authorization for write.
 - Confirm create-if-missing authorization when the L4 document does not exist.
-- Confirm whether the final change must update the L2 main document index and `.specify/business_domain/01DomainCatalog.md`.
+- Confirm whether the final change must update the L2 main document index and `.sdlc/business_domain/01DomainCatalog.md`.
 
 Without authorization, output a sync proposal only.
 
 ## Business-Domain Create-If-Missing Flow
 
-Use this flow when a stable fact belongs in `.specify/business_domain/**` but the L4 document is missing:
+Use this flow when a stable fact belongs in `.sdlc/business_domain/**` but the L4 document is missing:
 
-1. Resolve L1/L2/L4 target from `.specify/business_domain/knowledge-target.yaml` (routable check), the existing `01DomainCatalog.md`, `library/{requirement_id}/01-技术方案/*`, and current business-domain documents.
+1. Resolve L1/L2/L4 target from `.sdlc/business_domain/knowledge-target.yaml` (routable check), the existing `01DomainCatalog.md`, `library/{requirement_id}/01-技术方案/*`, and current business-domain documents.
 2. Verify L1/L2 are confirmed long-term domain folders; unconfirmed pending buckets are never sync targets.
 3. Detect project canonical naming pattern from sibling L4 documents, `01DomainCatalog.md`, L2 main document index, governance profile, or user confirmation. See `${AI_SDLC_STANDARD_HOME}/ai-sdlc/business-domain-naming-and-shape.md`.
 4. Detect project shape profile from sibling L4 documents under the same L2, or other L2 directories in the same project. See the same reference.

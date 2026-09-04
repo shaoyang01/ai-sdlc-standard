@@ -61,7 +61,7 @@ Use when long-term knowledge targets miss verified reusable facts or contain fac
 
 Examples:
 
-- `.specify/business_domain/**` lacks a stable rule proven by implementation and tests.
+- `.sdlc/business_domain/**` lacks a stable rule proven by implementation and tests.
 - Knowledge document still describes obsolete behavior after an accepted change.
 - Sync proposal exists but has not been applied or recorded.
 

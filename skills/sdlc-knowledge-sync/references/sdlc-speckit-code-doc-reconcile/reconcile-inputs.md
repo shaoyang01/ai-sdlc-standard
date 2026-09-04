@@ -27,7 +27,7 @@ Reconcile supports three source modes per `${AI_SDLC_STANDARD_HOME}/ai-sdlc/busi
 - Implementation evidence when auditing implemented behavior.
 - Verification evidence when auditing sync completeness.
 - `manifest.md` when available.
-- `.specify/business_domain/**` or declared knowledge target when auditing knowledge sync.
+- `.sdlc/business_domain/**` or declared knowledge target when auditing knowledge sync.
 
 In library_driven mode, absence of specs is not a blocker.
 
@@ -49,7 +49,7 @@ Use these when present:
 - `library/{requirement_id}/04-代码审核/*`.
 - `library/{requirement_id}/05-测试验收/*`.
 - Sync result from `sdlc-speckit-sync`.
-- Current `.specify/business_domain/**` or other declared knowledge target.
+- Current `.sdlc/business_domain/**` or other declared knowledge target.
 - Re-Gate Records and Replaced Artifact Paths.
 - Accepted risk records.
 

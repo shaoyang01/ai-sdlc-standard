@@ -42,7 +42,13 @@ def relative(path)
   path.sub("#{ROOT}/", "")
 end
 
-LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:memory|workflow|coding_guide)(?:/|\b)}.freeze
+# Decision-089: `.sdlc/**` is the only legitimate knowledge/governance root for
+# the paths this wave switched (business_domain, memory, workflow, coding_guide);
+# those legacy `.specify/` locations must never appear as normal sdlc inputs.
+# The remaining `.specify/` subpaths (entry-coverage-profile, project-governance-
+# profile, reports, project-context) still have consumers outside the authorized
+# D-088-01 v2 switch surface and are flagged for a follow-up wave.
+LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:business_domain|memory|workflow|coding_guide)(?:/|\b)}.freeze
 LEGACY_SOURCE_DANGER_PATTERN = /
   required\s+inputs?|
   input_artifacts?|

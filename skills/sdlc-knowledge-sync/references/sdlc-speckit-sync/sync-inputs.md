@@ -9,7 +9,7 @@ source modes, no mode switch, and no run-level working-materials input; the
 absence of such materials never blocks sync evaluation.
 
 The knowledge target is resolved deterministically from
-`.specify/business_domain/knowledge-target.yaml` (created by
+`.sdlc/business_domain/knowledge-target.yaml` (created by
 `scripts/bootstrap-knowledge-target.sh`); see `sync-targets.md`.
 
 ## Required Inputs
@@ -38,7 +38,7 @@ Source candidates / recommended:
 - Accepted risk records
 - Re-Gate Records
 - Existing target knowledge documents
-- `.specify/entry-coverage-profile.yaml`
+- `.sdlc/entry-coverage-profile.yaml`
 
 Sync evaluation may run with incomplete evidence, but incomplete evidence can
 only produce `proposal`, `not_required`, or `blocked` — not direct confirmed

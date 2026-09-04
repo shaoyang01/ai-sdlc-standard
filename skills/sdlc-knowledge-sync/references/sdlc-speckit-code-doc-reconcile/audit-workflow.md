@@ -13,7 +13,7 @@ Define the exact scope before comparing:
   `specs/{feature}/workflow-status.md`,
   `specs/{feature}/debug-guide.md`, and
   `specs/{feature}/observability.md`.
-- Knowledge target paths (`.specify/business_domain/**`).
+- Knowledge target paths (`.sdlc/business_domain/**`).
 - Whether the audit is full lifecycle or focused on one suspected drift.
 - Sync source mode: `speckit_driven`, `library_driven`, or `hybrid`.
 
@@ -40,7 +40,7 @@ Create an inventory with:
 
 Mark missing artifacts as gaps. Do not infer absent artifacts from chat.
 
-When `.specify/entry-coverage-profile.yaml` exists, run or reuse the standard entry coverage audit:
+When `.sdlc/entry-coverage-profile.yaml` exists, run or reuse the standard entry coverage audit:
 
 ```bash
 ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
@@ -48,13 +48,13 @@ ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path>
 
 Include these generated files in the artifact inventory:
 
-- `.specify/reports/entry_coverage/entry_inventory.tsv`
-- `.specify/reports/entry_coverage/service_inventory.tsv`
-- `.specify/reports/entry_coverage/entry_chain_evidence.md`
-- `.specify/reports/entry_coverage/unarchived_entries.md`
-- `.specify/reports/entry_coverage/unarchived_services.md`
-- `.specify/reports/entry_coverage/cross_domain_conflicts.md`
-- `.specify/reports/entry_coverage/entry_coverage_report.md`
+- `.sdlc/reports/entry_coverage/entry_inventory.tsv`
+- `.sdlc/reports/entry_coverage/service_inventory.tsv`
+- `.sdlc/reports/entry_coverage/entry_chain_evidence.md`
+- `.sdlc/reports/entry_coverage/unarchived_entries.md`
+- `.sdlc/reports/entry_coverage/unarchived_services.md`
+- `.sdlc/reports/entry_coverage/cross_domain_conflicts.md`
+- `.sdlc/reports/entry_coverage/entry_coverage_report.md`
 
 ## 3. Compare By Behavior
 
