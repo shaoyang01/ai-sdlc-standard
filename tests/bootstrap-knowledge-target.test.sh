@@ -445,18 +445,27 @@ assert_eq "${CTX_BEFORE}" "$(digest_file "${R}/.sdlc/project-context/profile.yam
 if [[ -f "${R}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "knowledge target missing"; fi
 
 # ---------------------------------------------------------------------------
-CASE_NAME="22. H1 legacy root: zero read with confirmed map (content / mode-000 file / dangling symlink)"
+CASE_NAME="22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run"
 R="${WORK_ROOT}/t22"; new_repo "${R}"
 printf '%s' "${GOOD_MAP}" > "${R}/dm.yaml"
 mkdir -p "${R}/.specify/business_domain/legacy"
 printf 'legacy curated content\n' > "${R}/.specify/business_domain/00BusinessLandscape.md"
 printf 'x\n' > "${R}/.specify/business_domain/legacy/private.md"
 chmod 000 "${R}/.specify/business_domain/legacy/private.md"
-LEGACY_SNAP="$(find "${R}/.specify" | sort | shasum -a 256)"
+# Zero-content-read proof: only existence + link identity + permission + a new-root
+# snapshot; the test itself never traverses the legacy tree (D088-R2 review note).
+LEGACY_EXIST_BEFORE="$( [[ -d "${R}/.specify/business_domain/legacy" ]] && echo dir-present )"
+LEGACY_LINK_BEFORE="$( [[ ! -L "${R}/.specify/business_domain" ]] && echo not-a-symlink )"
+if [[ ! -r "${R}/.specify/business_domain/legacy/private.md" ]]; then LEGACY_UNREADABLE_BEFORE="unreadable"; else LEGACY_UNREADABLE_BEFORE="readable"; fi
+NEW_ROOT_SNAP_BEFORE="$(snapshot "${R}/.sdlc" 2>/dev/null || true)"
 OUT="${WORK_ROOT}/t22.out"
 bash "${INITIALIZER}" "${R}" --domain-map dm.yaml > "${OUT}" 2>&1
 assert_exit 0 $?
-assert_eq "${LEGACY_SNAP}" "$(find "${R}/.specify" | sort | shasum -a 256)"
+assert_eq "dir-present" "${LEGACY_EXIST_BEFORE}"
+assert_eq "not-a-symlink" "${LEGACY_LINK_BEFORE}"
+assert_eq "unreadable" "${LEGACY_UNREADABLE_BEFORE}"
+if [[ -f "${R}/.specify/business_domain/legacy/private.md" ]]; then pass; else fail "legacy file vanished"; fi
+if [[ -z "${NEW_ROOT_SNAP_BEFORE}" ]] && [[ -d "${R}/.sdlc" ]]; then pass; else fail "new root snapshot baseline wrong"; fi
 assert_contains "${R}/.sdlc/business_domain/knowledge-target.yaml" 'status: "routed"'
 chmod u+rwX "${R}/.specify/business_domain/legacy" 2>/dev/null
 chmod u+rw "${R}/.specify/business_domain/legacy/private.md" 2>/dev/null
@@ -467,6 +476,11 @@ ln -sfn /nonexistent/kt-legacy-target "${R2}/.specify/business_domain"
 bash "${INITIALIZER}" "${R2}" --domain-map dm.yaml > /dev/null 2>&1
 assert_exit 0 $?
 assert_contains "${R2}/.sdlc/business_domain/knowledge-target.yaml" 'status: "routed"'
+OUT22C="${WORK_ROOT}/t22c.out"
+bash "${INITIALIZER}" "${R2}" --dry-run > "${OUT22C}" 2>&1
+assert_exit 0 $?
+assert_contains "${OUT22C}" "== knowledge-target applicability audit =="
+if grep -q 'MODE=init' "${OUT22C}"; then fail "dangling legacy symlink routed to init"; else pass; fi
 
 # ---------------------------------------------------------------------------
 CASE_NAME="23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter"
@@ -482,6 +496,8 @@ echo 'class OrderController {}' > "${R}/svc/src/main/java/order/controller/Order
 echo 'class HiddenJob {}' > "${R}/svc/src/test/java/order/HiddenJob.java"
 echo '<template>x</template>' > "${R}/web/src/pages/order/List.vue"
 echo 'readme' > "${R}/web/src/pages/order/README.md"
+mkdir -p "${R}/svc/src/main/java/com/acme/order/rpc"
+echo 'class OrderRpcController {}' > "${R}/svc/src/main/java/com/acme/order/rpc/OrderRpcController.java"
 OUT="${WORK_ROOT}/t23.out"
 bash "${INITIALIZER}" "${R}" > "${OUT}" 2>&1
 assert_exit 0 $?
@@ -490,6 +506,10 @@ if grep -rq 'FakeController' "${BD23}"; then fail "tests/ entry leaked into cand
 if grep -rq 'ImageProcessor' "${BD23}"; then fail "non-process Processor leaked into candidates"; else pass; fi
 if grep -rq 'HiddenJob' "${BD23}"; then fail "nested src/test entry leaked"; else pass; fi
 if grep -rq 'README' "${BD23}"; then fail "frontend non-source file leaked"; else pass; fi
+# first-rule dedup: OrderRpcController.java matches both the controller rule and
+# the rpc path rule; its xx99 entry-coverage docs must contain exactly one row
+DEDUP_COUNT="$(grep -rh 'OrderRpcController' "${BD23}" --include='*99EntryCoverage.md' 2>/dev/null | wc -l | tr -d ' ')"
+if [[ "${DEDUP_COUNT}" == "1" ]]; then pass; else fail "first-rule dedup failed: entry rows counted ${DEDUP_COUNT} times"; fi
 ORDER_L2="$(find "${BD23}" -type d -name '*Order' | grep -E '/[0-9]{4}Order$' | head -1)"
 EC_WITH_CONTROLLER="$(grep -rl 'OrderController' "${BD23}" --include='*99EntryCoverage.md' 2>/dev/null | head -1)"
 EC_WITH_FE="$(grep -rl 'fe_page' "${BD23}" --include='*99EntryCoverage.md' 2>/dev/null | head -1)"
@@ -691,6 +711,83 @@ ruby "${ECP_BIN}" "${R}" --scan-timeout 0 > /dev/null 2>&1
 gate_check "${R}/.sdlc/entry-coverage-profile.candidate.yaml" "partial"
 ruby "${ECP_BIN}" "${R}" --scan-timeout 0 --force-entry-coverage-profile > /dev/null 2>&1
 gate_check "${R}/.sdlc/entry-coverage-profile.yaml" "timeout-force"
+
+# ---------------------------------------------------------------------------
+CASE_NAME="33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4"
+R="${WORK_ROOT}/t33"; new_repo "${R}"
+printf '%s' "${GOOD_MAP}" > "${WORK_ROOT}/t33-outside.yaml"
+mkdir -p "${R}/esc"
+ln -sf "${WORK_ROOT}/t33-outside.yaml" "${R}/esc/map-link.yaml"
+bash "${INITIALIZER}" "${R}" --domain-map "../t33-outside.yaml" > /dev/null 2>&1
+assert_exit 2 $?
+bash "${INITIALIZER}" "${R}" --domain-map "esc/map-link.yaml" > /dev/null 2>&1
+assert_exit 2 $?
+if [[ -e "${R}/.sdlc/business_domain/knowledge-target.yaml" ]]; then
+  fail "declaration written despite escaping map path"
+else
+  pass
+fi
+# forged routed declaration pointing outside the repo must be audited as DIFF
+printf '%s' "${GOOD_MAP}" > "${R}/dm.yaml"
+bash "${INITIALIZER}" "${R}" --domain-map dm.yaml > /dev/null 2>&1
+perl -pi -e "s|domain_map: 'dm.yaml'|domain_map: '../t33-outside.yaml'|" "${R}/.sdlc/business_domain/knowledge-target.yaml"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
+assert_exit 0 $?
+AUDIT_REPORT="$(ls "${R}"/.sdlc/reports/knowledge_target_audit_report.* 2>/dev/null | head -1)"
+assert_contains "${AUDIT_REPORT}" "逃逸目标仓"
+# template example must satisfy the generator's own two-digit rule
+if grep -q 'l4_id: "0001"' "${R}/.sdlc/business-domain-map.yaml"; then
+  fail "map template still demonstrates a 4-digit l4_id"
+else
+  pass
+fi
+
+# ---------------------------------------------------------------------------
+CASE_NAME="34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance"
+R="${WORK_ROOT}/t34"; new_repo "${R}"
+printf '%s' "${GOOD_MAP}" > "${R}/dm.yaml"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
+bash "${INITIALIZER}" "${R}" --domain-map dm.yaml > /dev/null 2>&1
+SNAP_ROUTED="$(find "${R}/.sdlc" -type f -not -path '*/reports/*' | sort | while IFS= read -r f; do printf '%s  %s\n' "$(digest_file "$f")" "${f#"${R}"/}"; done)"
+# same path, modified content
+printf '%s' "${GOOD_MAP}" | sed 's/OrderEntry/OrderEntryX/' > "${R}/dm.yaml"
+OUT34="${WORK_ROOT}/t34.out"
+bash "${INITIALIZER}" "${R}" --domain-map dm.yaml --update-declaration > "${OUT34}" 2>&1
+assert_exit 1 $?
+assert_contains "${OUT34}" "unsupported in this wave"
+# different path, same content
+printf '%s' "${GOOD_MAP}" > "${R}/dm2.yaml"
+bash "${INITIALIZER}" "${R}" --domain-map dm2.yaml > /dev/null 2>&1
+assert_exit 1 $?
+SNAP_AFTER="$(find "${R}/.sdlc" -type f -not -path '*/reports/*' | sort | while IFS= read -r f; do printf '%s  %s\n' "$(digest_file "$f")" "${f#"${R}"/}"; done)"
+assert_eq "${SNAP_ROUTED}" "${SNAP_AFTER}"
+# audit flags a mutated map (declared sha no longer matches file content)
+printf '%s' "${GOOD_MAP}" | sed 's/OrderEntry/OrderEntryX/' > "${R}/dm.yaml"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
+AUDIT_REPORT="$(ls "${R}"/.sdlc/reports/knowledge_target_audit_report.* 2>/dev/null | head -1)"
+assert_contains "${AUDIT_REPORT}" "sha256 与当前 map 文件不一致"
+
+# ---------------------------------------------------------------------------
+CASE_NAME="35. R2-H6 report finalization: repeated and concurrent audits never overwrite"
+R="${WORK_ROOT}/t35"; new_repo "${R}"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
+AUDIT_COUNT_BEFORE="$(find "${R}/.sdlc/reports" -name 'knowledge_target_audit_report.*' | wc -l | tr -d ' ')"
+REPORT_DIGESTS_BEFORE="$(find "${R}/.sdlc/reports" -type f | sort | while IFS= read -r f; do printf '%s  %s\n' "$(digest_file "$f")" "${f#"${R}"/}"; done)"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1 &
+P1=$!
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1 &
+P2=$!
+wait "${P1}" "${P2}"
+AUDIT_COUNT_AFTER="$(find "${R}/.sdlc/reports" -name 'knowledge_target_audit_report.*' | wc -l | tr -d ' ')"
+if [[ "$((AUDIT_COUNT_AFTER - AUDIT_COUNT_BEFORE))" -ge 2 ]]; then pass; else fail "concurrent audits lost a report (${AUDIT_COUNT_BEFORE} -> ${AUDIT_COUNT_AFTER})"; fi
+# every pre-existing report must survive byte-identical (never overwritten)
+PRE_LOST=0
+while IFS= read -r entry; do
+  rel="${entry#*  }"
+  dig="${entry%%  *}"
+  if [[ ! -f "${R}/${rel}" ]] || [[ "$(digest_file "${R}/${rel}")" != "${dig}" ]]; then PRE_LOST=1; fi
+done <<< "${REPORT_DIGESTS_BEFORE}"
+if [[ "${PRE_LOST}" == "0" ]]; then pass; else fail "a pre-existing report was overwritten"; fi
 
 # ---------------------------------------------------------------------------
 echo ""
