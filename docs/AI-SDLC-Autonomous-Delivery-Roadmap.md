@@ -1,6 +1,6 @@
 # AI-SDLC LOOP Core Roadmap
 
-> Version: 2.4.1
+> Version: 2.5.0
 > Planning baseline: [LOOP Core Contract](LOOP_CORE_CONTRACT.md)
 > Authority: 这是 `ai-sdlc` 的稳定 Roadmap planning surface。当前执行指针、Gate、授权、live finding、PR/CI/HEAD 和执行尝试只记录在 `ai-project-control-plane` 的 STATE 及执行证据中。
 
@@ -117,7 +117,17 @@ Project: ai-sdlc
 - **scope**：C03-A～D 已交付的单轨 Skill、注册切换、Delivery Tail 与 runtime 接线；C03-E Real Multi-Agent Autonomous Dispatch，覆盖真实 Kimi/Codex/Hermes CLI adapter、受控进程调用、输出校验、durable journal、自动推进、失败恢复和 Re-Gate；清理活动 Skill reference 中已退役的 Direct/Speckit 路径语义；保留 `sdlc-docflow-writer` 作为非节点通用文档 Skill，且不用于治理 LOOP；**Delivery Tail 保留**（delivery checkpoint 的 generation/CAS 机器底座与 `READY_FOR_MANUAL_GIT_HANDOFF` 语义不变）。
 - **out_of_scope**：业务仓 commit、push、Draft PR、Ready、merge、发布；Personal-KB 项目产物发布；scheduler、daemon、UI、服务端控制平面或新增 Provider；以未验证测试、shadow executor、Markdown 自述或历史 CI 替代真实执行证据；恢复 Speckit pipeline、`sdlc-gate-runner` 独立 Skill或 Direct/Speckit 路径分流；把 `sdlc-docflow-writer` 注册为 LOOP 节点、授予 Gate 裁决权或流程推进权。
 - **completion_contract**：C03-A～E 均完成；生产入口默认不再使用 deterministic shadow；每个节点由 runtime 真实调用所选 binding 并记录不可伪造的 started/terminal event、adapter/版本、输入输出 digest 与尝试结果；正常路径无需用户切换 Agent，失败或不合格输出可恢复；无 blocking finding 时只输出 `READY_FOR_MANUAL_GIT_HANDOFF`，不产生业务仓远程 Git 副作用。
-- **continuity**：C03-E 当前 Accepted 合同为 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.4.0、Decision-063 与 Decision-064；A1 已将 Q6 修订为 E0 合同收口包 → 单独授权 E2-P 三 Agent `PROVIDER_REACHABILITY_ONLY` 预检 → E1～E4 runtime 实施包 → E5 验收 → 下一 C05 分段授权。E5 验收路线已按 Decision-087 修订为**纵向主干重建**：原 production adapter canary + 完整自主 run 的横向 run 路线经六轮冒烟实证证伪后废止，改为按三条 seam 组织——result model、finding materialization、production entry——实施包顺序为 D-087-01 production assembly factory（先行，其余依赖它）→ D-087-02 node status field → D-087-03 finding materialization → D-087-04 code-review auto-reroute → D-087-05 SKILL path fix（可与 01–04 并行）。按 Decision-088（v2.4.1 登记），run8 之前插入实施包 D-088-01 知识目标初始化器——修复 sdlc-knowledge-sync 长期知识目标初始化能力缺口（产品仓 skills/scripts 范围，业务仓零接触），完成门 = 其离线回归矩阵全过；D-087-01..05 顺序与依赖不变。验收门 = 离线六场景矩阵全过 → 真实 CLI 冒烟 run8（需 D-088-01 先收口）→ ledger 关闭 + 四仓传播。PWR 判定按 Decision-086 自动放行，不设人工风险验收仪式；findings 是恢复上下文而非重启门槛（H1 死锁已设计性消除）。路线设计与任务拆解见 [Decision-087 路线图设计与需求拆分](reports/decision-087-vertical-rebuild-plan.md)。Roadmap 只保存稳定顺序与依赖，不保存当前授权；每次恢复必须从 Decision index 与 Control Plane STATE 解析当前 live authorization、是否已启动、暂停和下一转换，不能从方案 Accepted 或本段文字推断授权。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把 direct CLI 可达性、人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
+- **continuity**：C03-E 当前 Accepted 合同为 [LOOP-CORE-C03-E 规划](LOOP-CORE-C03-E-PLAN.md) v0.4.0、Decision-063 与 Decision-064；A1 已将 Q6 修订为 E0 合同收口包 → 单独授权 E2-P 三 Agent `PROVIDER_REACHABILITY_ONLY` 预检 → E1～E4 runtime 实施包 → E5 验收 → 下一 C05 分段授权。Decision-090（v2.5.0）在继续 D-087-* 和真实 CLI run8 前新增受控前置节点 `C03-E-PRE-RUN`，稳定顺序改为：D-088-01 四类项目初始化/迁移重基线与收口 → D-090-01 手动/runtime 共同语义合同 → D-090-02 手动主路径修复并达到 `MANUAL_OPERATIONAL` → 按共同合同恢复/调整 D-087-01..05 → D-090-03 runtime manifest 投影与双路径对齐 → D-090-04 离线 parity 验收 → 真实 CLI run8 → ledger 关闭 + 四仓传播。Decision-087 的 result model、finding materialization、production entry 三条 seam 保留；既有 `GW_VERTICAL_REBUILD` 授权保持未消费并暂停使用，达到手动可运行里程碑后重新核对 delta。PWR 判定继续按 Decision-086 自动放行，不恢复人工风险验收仪式。冻结工作包、文件面、测试矩阵、完成门和恢复步骤见 [Decision-090 C03-E-PRE-RUN 执行计划](reports/decision-090-c03e-prerun-governance-plan.md)。Roadmap 只保存稳定顺序与依赖，不保存当前授权；每次恢复必须从 Decision index 与 Control Plane STATE 解析当前 live authorization、是否已启动、暂停和下一转换，不能从方案 Accepted 或本段文字推断授权。若代码审核改变已批准行为、架构或验收事实，必须回流 C02；不得把 direct CLI 可达性、人工 Agent 切换、shadow executor 或执行者自述当作自主闭环通过。
+
+#### C03-E-PRE-RUN — Project Governance Readiness and Dual-Path Contract Closure
+
+- **type**：C03-E controlled prerequisite node；不是独立 Requirement/Sub-requirement。
+- **objective**：先使任意新/旧/SDD/SDLC-SDD 项目可初始化到当前 `.sdlc` 单轨治理结构，并使现役手动 Skill 与 LOOP runtime 共享同一深度、Gate/Ledger、manifest、失效和回流语义。
+- **depends_on**：C03-E 已交付底座与 Decision-084/086/087/088/089；D-088-01 当前候选实现事实。
+- **work_packages**：D-088-01、D-090-01、D-090-02、调整后的 D-087-01..05、D-090-03、D-090-04。
+- **completion_contract**：`MANUAL_OPERATIONAL` 已证明；四类项目初始化矩阵通过；manual/runtime 离线 parity 全绿；D-087 三条 seam 按共同合同闭环；随后才能申请真实 CLI run8。
+- **out_of_scope**：本节点自身不授权业务仓迁移、真实 Agent CLI、远程业务 Git、副本发布、C05 收口或 Advanced 能力。
+- **continuity**：权威细节见 Decision-090 与其冻结执行计划；不得把旧 D088 review round 或聊天 Prompt 当作恢复入口。
 
 ### LOOP-CORE-04 — Speckit Projection and SDD Integration（已取消）
 
@@ -278,6 +288,7 @@ Project: ai-sdlc
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.5.0 | 2026-09-04 | User-directed controlled replan | 新增 `C03-E-PRE-RUN` 受控前置节点：D-088-01 按新项目/既有代码/原版 SDD/原版 SDLC-SDD 四类输入重基线；冻结手动/runtime 共同语义合同，先修手动主路径达到 `MANUAL_OPERATIONAL`，再恢复并调整 D-087-*、接入 runtime manifest 投影和 parity 验收，最后才申请 run8。Decision-087 三条 seam 与 Decision-086 PWR 口径保留；`GW_VERTICAL_REBUILD` 授权未消费且暂停。完整计划、文件面、矩阵、完成门和恢复动作由 Decision-090 及其 plan 固化。 |
 | 2.4.1 | 2026-09-03 | User-directed priority insertion | 按 Current User 指令（Decision-088）在 E5 顺序中插入实施包 **D-088-01 知识目标初始化器**，先于真实 CLI 冒烟 run8：修复 sdlc-knowledge-sync 长期知识目标初始化能力缺口（`bootstrap-business-domain.sh` 残留 speckit/dual-rail/99PendingConfirmation 语义、`.candidate` 垃圾机制、无确定性目标发现），范围 = 产品仓 skills/scripts + fixture 回归矩阵，业务仓零接触；完成门 = 离线回归矩阵全过。D-087-01..05 顺序与依赖、六场景矩阵、验收门定义均不变；工作包编号统一规则 = `D-<立项决策号>-<序号>`。实施授权与进度仍以 Decision index + Control Plane STATE 为准。 |
 | 2.4.0 | 2026-09-03 | User-directed route amendment | 按 Current User 指令将 Decision-086/087 的路线修订登记进权威路线图（此前只存在于 decision 与 Draft 计划文档）：E5 验收路线由横向 run 路线（production adapter canary + 完整自主 run，经六轮冒烟实证证伪）改为纵向主干重建（三条 seam：result model / finding materialization / production entry；包 D-087-01..05，01 先行，05 可并行）；Decision-086 取消 PWR 人工风险验收仪式，findings 为恢复上下文而非门槛；验收门 = 离线六场景矩阵全过 → 真实 CLI 冒烟 run8 → ledger 关闭 + 四仓传播。同时纠正文件头版本号滞留 2.3.5 与 Revision Record 不一致的问题。实施授权与进度仍以 Decision index + Control Plane STATE 为准。 |
 | 2.3.6 | 2026-08-28 | User-directed advanced addition | 新增 `LOOP-ADVANCED-05` Configurable Binding Console and Agent Scoring：远期以 ai-sdlc×PKB 工作台做版本化节点→Agent 绑定配置与 Agent 打分；C03-E 首版仍用内置 Q1 固定分工，配置化与动态路由不提前为 E1～E4 需求，solution-gate 双角色不同 binding 的防火墙在任何配置下保持 fail-closed。未授权实施。 |
