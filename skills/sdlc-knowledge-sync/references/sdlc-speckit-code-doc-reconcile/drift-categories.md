@@ -67,7 +67,7 @@ Examples:
 
 Routing:
 
-- Return to `sdlc-speckit-sync` for authorized sync.
+- Return to `sdlc-knowledge-sync` for authorized sync.
 - Stop if the target owner or path is unclear.
 
 ## `MANIFEST_DRIFT`

@@ -82,5 +82,5 @@ Use one:
 - `Update code review checklist`
 - `Update specification checklist/schema`
 - `Apply change-control`
-- `Run sdlc-speckit-sync after Gate passes`
+- `Run sdlc-knowledge-sync after Gate passes`
 - `No sync required`

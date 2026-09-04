@@ -40,7 +40,7 @@ Do not modify `.sdlc/business_domain/**` or other knowledge targets unless:
 - Evidence is verified.
 - The user authorizes writing.
 
-Otherwise route to `sdlc-speckit-sync` with a proposed target and evidence list.
+Otherwise route to `sdlc-knowledge-sync` with a proposed target and evidence list.
 
 ## Manifest Boundary
 

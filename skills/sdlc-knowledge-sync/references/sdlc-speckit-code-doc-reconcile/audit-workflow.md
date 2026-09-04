@@ -129,7 +129,7 @@ For each changed or missing knowledge fact:
 - Confirm target ownership and authorization.
 - Confirm no conflicting knowledge remains.
 
-Route eligible missing facts to `sdlc-speckit-sync`.
+Route eligible missing facts to `sdlc-knowledge-sync`.
 
 ## 7. Check Business-Domain Sync Status
 

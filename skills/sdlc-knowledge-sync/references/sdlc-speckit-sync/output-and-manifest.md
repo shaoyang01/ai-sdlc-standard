@@ -114,7 +114,7 @@ Recommend updates for the `Speckit Sync` section:
 
 Also recommend Activity Log:
 
-- Actor / Skill: `sdlc-speckit-sync`
+- Actor / Skill: `sdlc-knowledge-sync`
 - Action: knowledge sync or sync proposal
 - Result: `SYNCED`, `PROPOSED`, `PARTIAL`, or `BLOCKED`
 

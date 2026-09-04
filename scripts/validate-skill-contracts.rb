@@ -256,36 +256,77 @@ GATE_REVIEW_NAME_PATTERN = /
   reconcile
 /ix.freeze
 
-def unsafe_legacy_source_references(text)
+# D088-R2-H4: per-hit negation binding shared by both scanners. A hit is
+# exempt only when a negation occurs BEFORE it inside the SAME sentence clause
+# with no adversative boundary (but/但/however/不过/yet) in between; commas in
+# a coordinated list do not cut the verb's negation scope. Fail-closed: any
+# hit whose negation cannot be reliably proven stays flagged. Fenced code
+# blocks are flagged unless their opening fence is explicitly marked as a
+# negative/historical example.
+SENTENCE_SPLIT_RE = /[。；;！!？]/
+ADVERSATIVE_RE = /(?:^|[,\s，、(（])+(but|但|however|不过|yet)(?:[,\s，:：]|$)/i
+NEGATION_WORD_RE = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|don't|does\s+not|not\s+use|prohibit\w*|forbidden|retired|historical|no\s+longer|there\s+are\s+no|单轨|已退役)/i
+CODE_FENCE_RE = /\A\s*(```|~~~)/
+CODE_EXAMPLE_MARKER_RE = /(negative|反例|historical|历史|example|示例|anti[-\s]?pattern|bad)/i
+
+def hit_negated?(clause, hit_offset)
+  prefix = clause[0...hit_offset].to_s
+  neg = prefix.match(NEGATION_WORD_RE)
+  return false unless neg
+  between = prefix[neg.begin(0)..-1].to_s
+  !between.match?(ADVERSATIVE_RE)
+end
+
+def unsafe_hits(text, hit_pattern, require_normative: nil)
   unsafe = []
+  in_code_block = false
+  code_block_marked = false
   text.lines.each_with_index do |line, index|
-    next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
-    # D088-R1-H7: the negation guard binds to the SAME line only — an adjacent
-    # line's "do not" must never release a different semantic statement.
-    next if line.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
-    next unless line.match?(LEGACY_SOURCE_DANGER_PATTERN)
-    unsafe << [index + 1, line.strip]
+    if line.match?(CODE_FENCE_RE)
+      in_code_block = !in_code_block
+      code_block_marked = in_code_block && line.match?(CODE_EXAMPLE_MARKER_RE) ? true : false
+      next
+    end
+    matches = line.to_enum(:scan, hit_pattern).map { Regexp.last_match }
+    next if matches.empty?
+    if in_code_block
+      # unlabeled normative code block -> flagged; a block whose opening fence
+      # is explicitly marked negative/historical/example is exempt
+      unsafe << [index + 1, line.strip] unless code_block_marked
+      next
+    end
+    violates = matches.any? do |m|
+      scope = line[0...m.begin(0)].to_s
+      clause = scope.split(SENTENCE_SPLIT_RE).last.to_s
+      clause_offset = scope.length - clause.length
+      # the hit sits at the end of its prefix scope, so its offset inside the
+      # clause is the clause length
+      hit_offset_in_clause = scope.length - clause_offset
+      # normative context is a whole-line property (mode enums/requirements may
+      # trail the token); negation binding stays scoped to the hit's clause
+      if require_normative && !line.match?(require_normative)
+        false
+      else
+        !hit_negated?(clause, hit_offset_in_clause)
+      end
+    end
+    unsafe << [index + 1, line.strip] if violates
   end
   unsafe
 end
 
-# D088-R1-H7: detect NORMATIVE dual-rail sync-mode declarations (mode enums,
-# mode switches, mode-conditional requirements), not the bare characters.
-# Historical notes, negative rules, and same-line negations are exempt; a
-# negation never travels across lines.
+def unsafe_legacy_source_references(text)
+  unsafe_hits(text, LEGACY_SOURCE_PATH_PATTERN, require_normative: LEGACY_SOURCE_DANGER_PATTERN)
+end
+
+# D088-R1-H7 / D088-R2-H4: detect NORMATIVE dual-rail sync-mode declarations
+# (mode enums, mode switches, mode-conditional requirements), not the bare
+# characters; per-hit negation, never released by a sibling clause.
 DUAL_RAIL_DECLARATION_PATTERN = /\b(speckit_driven|library_driven|hybrid)\b/i
 DUAL_RAIL_NORMATIVE_RE = /\b(modes?|switch|classify|classification|select(?:ion|s)?|supports?|supported|requires?|required|explicit|enum|source_of_truth|decides?|priority)\b/i
-DUAL_RAIL_NEGATION_RE = /(no\s+(competing|source\s+modes?|mode\s+switch)|no\s+longer|not\s+(?:use|used|support|a)|do\s+not|don't|must\s+not|never|there\s+are\s+no|retired|historical|单轨|已退役)/i
 
 def unsafe_dual_rail_declarations(text)
-  unsafe = []
-  text.lines.each_with_index do |line, index|
-    next unless line.match?(DUAL_RAIL_DECLARATION_PATTERN)
-    next if line.match?(DUAL_RAIL_NEGATION_RE)
-    next unless line.match?(DUAL_RAIL_NORMATIVE_RE)
-    unsafe << [index + 1, line.strip]
-  end
-  unsafe
+  unsafe_hits(text, DUAL_RAIL_DECLARATION_PATTERN, require_normative: DUAL_RAIL_NORMATIVE_RE)
 end
 
 DUAL_RAIL_SELF_TEST = {
@@ -293,11 +334,32 @@ DUAL_RAIL_SELF_TEST = {
   "Reconcile supports three source modes: speckit_driven, library_driven, hybrid." => true,
   "- `library_driven`: Specs are not required; library artifacts are primary." => true,
   "Classify the sync mode (speckit_driven | library_driven | hybrid) before writing." => true,
+  # D088-R2-H4 per-hit red cases
+  "Do not use speckit_driven, but hybrid is required." => true,
   # negative rules / historical notes / non-sync prose -> must NOT be flagged
   "Single rail: there are no source modes such as speckit_driven or library_driven (Decision-044)." => false,
   "The retired manifest field last_sync_source_mode=library_driven is historical only." => false,
   "Do not use speckit_driven mode; it was retired." => false,
-  "Plain prose about hybrid vehicles has no sync semantics here." => false
+  "Do not use speckit_driven or hybrid." => false,
+  "Plain prose about hybrid vehicles has no sync semantics here." => false,
+  # fenced code blocks: unlabeled normative -> flagged; explicitly marked -> exempt
+  "```\nspeckit_driven sync writes confirmed facts.\n```\n" => true,
+  "```negative example\nspeckit_driven sync writes confirmed facts.\n```\n" => false
+}.freeze
+
+LEGACY_SOURCE_SELF_TEST = {
+  # adjacent-line negation must NOT release an active legacy input (R1 repro)
+  "Do not alter unrelated generated examples.\nRequired input: read .specify/business_domain/** as authoritative." => true,
+  # same-sentence sibling clause: negation of one action never covers the other
+  "Never overwrite reports; Required inputs: .specify/business_domain/**." => true,
+  "Do not write .specify/business_domain/** but read .specify/business_domain/** as required input." => true,
+  # a coordinated prohibition list keeps the verb's negation scope
+  "Do not modify production code, specs/**, or .specify/business_domain/**." => false,
+  # same-clause negation before the hit -> exempt
+  "Do not read .specify/memory/** under any circumstance." => false,
+  # fenced code blocks: unlabeled active read -> flagged; marked example -> exempt
+  "```\nread .specify/business_domain/knowledge-target.yaml\n```\n" => true,
+  "```historical example\nread .specify/business_domain/knowledge-target.yaml\n```\n" => false
 }.freeze
 
 def unsafe_filename_version_references(text)
@@ -929,17 +991,31 @@ rescue StandardError => e
   errors << "C03-A canonical topology: #{e.message}"
 end
 
-# Self-test for the normative dual-rail declaration detector (table-driven
-# red/green; D088-R1-H7 — same-line negation exemption, no cross-line release).
+# Self-tests for the per-hit negation detectors (table-driven red/green;
+# D088-R1-H7 / D088-R2-H4 / D088-R2-H5 — Ruby 2.6 compatible, no filter_map).
 begin
-  dual_rail_failures = DUAL_RAIL_SELF_TEST.filter_map do |sample, expected_flag|
-    actual_flag = !unsafe_dual_rail_declarations(sample).empty?
-    sample if actual_flag != expected_flag
+  %w[DUAL_RAIL LEGACY_SOURCE].each do |table_name|
+    table = Object.const_get("#{table_name}_SELF_TEST")
+    detector = table_name == "DUAL_RAIL" ? method(:unsafe_dual_rail_declarations) : method(:unsafe_legacy_source_references)
+    failures = []
+    table.each do |sample, expected_flag|
+      actual_flag = !detector.call(sample).empty?
+      failures << sample if actual_flag != expected_flag
+    end
+    raise "self-test mismatches: #{failures.join(' | ')}" if failures.any?
+    puts "#{table_name}_DETECTOR_SELF_TEST_VERIFIED true"
   end
-  raise "self-test mismatches: #{dual_rail_failures.join(' | ')}" if dual_rail_failures.any?
-  puts "DUAL_RAIL_DECLARATION_DETECTOR_SELF_TEST_VERIFIED true"
 rescue StandardError => e
-  errors << "dual-rail declaration detector: #{e.message}"
+  errors << "per-hit negation detectors: #{e.message}"
+end
+
+# D088-R2-H4: retired-owner active actions must not survive in the knowledge-sync
+# references (the SKILL.md capability provenance table is exempt by scope).
+Dir[File.join(SKILL_DIR, "sdlc-knowledge-sync", "references", "**", "*.md")].sort.each do |path|
+  File.readlines(path).each_with_index do |line, index|
+    next unless line.include?("sdlc-speckit-sync")
+    errors << "#{relative(path)}:#{index + 1} routes an active action to the retired owner sdlc-speckit-sync: #{line.strip}"
+  end
 end
 
 canonical_errors << "non-node utility sdlc-docflow-writer missing non-node boundary declaration" unless
