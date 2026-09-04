@@ -1,7 +1,7 @@
 # C03-E-PRE-RUN 需求拆分设计
 
-> Version: 0.2.0 (DRAFT)
-> Status: PROPOSED — 待 Current User 接受后成为 G1 启动输入与各包需求冻结基线
+> Version: 1.0.0
+> Status: ACCEPTED（2026-09-05，Current User 逐条裁决①–⑤后接受；本文成为 G1 启动输入与各包需求冻结基线）
 > 上游权威: [Decision-090](../decisions/Decision-090-c03e-prerun-governance-readiness-replan.md) · [冻结执行计划](decision-090-c03e-prerun-governance-plan.md)
 > Date: 2026-09-04
 > 授权声明: 本文是规划文档，不授权任何代码修改、Skill/runtime 实施或业务仓操作；每包实施仍按冻结计划 §6 节奏单独申请授权。恢复入口仍是 Control Plane STATE。
@@ -109,7 +109,7 @@
 
 1. **合同权威落位**：新建 `ai-sdlc/manual-runtime-semantic-contract.md`，同步 `node-capability-contract.md`、`artifact-flow.md` 及 schema/模板引用；流程定义从 Skill prompt / runtime code / 业务产物中收敛到单一权威。
 2. **节点 IO 与稳定路径域**：七节点及 solution-gate 双角色的输入、输出、stable path。
-3. **深度语义域**：`initialDepthBasis` / `decisionDepth` / `decisionStatus` / 升档回流。【裁决点③】讨论中（2026-09-05 Current User 质疑"正式深度默认在 Gate 裁决"的前提，提出归一定深度方向）：已提出折中方案 (c′)——归一按枚举判定表输出 `proposedDepthBasis` 作为设计的约束性下限（用户显式深度 `user_requested` 仍最高优先；无法判定时退 `PROVISIONAL_STANDARD` 兜底），`formal_verdict` 保留确认/升档两个动作（升档走增量补强），`decisionDepth` 正式输出权不变。待 Current User 裁决后在 §10 定稿，G2 冻结时落实为合同字段。
+3. **深度语义域**：`initialDepthBasis` / `decisionDepth` / `decisionStatus` / 升档回流。深度起点规则（【裁决点③】2026-09-05 Current User 确认折中方案 (c′)）：用户显式指定 → `user_requested` 最高优先；未指定 → 归一按枚举判定表输出 `proposedDepthBasis`（含理由）作为设计的**约束性下限**；判定表无法分类 → `PROVISIONAL_STANDARD` 兜底。`formal_verdict` 保留确认/升档两个动作（升档走深度覆盖台账的增量补强），`decisionDepth` 正式输出权仅在 `formal_verdict`；降档为无害超集，只记录不回流。判定表随 G2 冻结，须枚举可测试以满足 runtime parity。本域构成对 Decision-090 决策 4 默认行为的修订，G2/D-090-01 冻结合同时正式记录。
 4. **Finding/Ledger/Gate 生命周期域**：Finding identity；`{id}_FindingLedger.md` 与 `{id}_方案审核.md` 两个稳定路径；轮次/版本/current/stale/superseded 表达规则。
 5. **manifest 三对象域**：`intake.manifest.json`（触发）/ `manifest.md`（生命周期投影，intake 创建 + 确定性 publisher 更新 + reconcile 重建）/ `knowledge-target.yaml`（项目级路由）；互不替代。
 6. **journal↔manifest 投影域**：交叉绑定 digest、失败码、回流节点、下游准入；不一致 STOP。
@@ -151,12 +151,13 @@
 | --- | --- | --- |
 | ① | D-088-01-R10：LEGACY 分类计划确认点 | **已裁决：采纳建议 (a)**——含 `TRANSFORM`/`RETIRE` 的场景（两类 LEGACY）首次 APPLY 前 owner 显式确认；`NEW_EMPTY`/`EXISTING_CODE_NO_KNOWLEDGE` 只 ADD 不改不删，无需确认；确认后幂等 re-run 免重复确认 |
 | ② | D-088-01-R25：验收矩阵剪枝 | **已裁决：采纳建议 (a)**——dry-run 层全组合（4×3×3×3=108），apply/re-run 层代表组合（每轴值至少出现一次 + 高交互风险组合点名，约 15–20 个 apply 场景），边界矩阵独立用例；代表组合的具体清单随 v3 规格冻结列明，不得酌情选取 |
-| ③ | G2 域 3：深度默认与升档回流 | **讨论中**——Current User 质疑"正式深度默认在 Gate 裁决"的前提，提出可在需求归一时定深度；已提出折中方案 (c′)：归一按枚举判定表输出 `proposedDepthBasis` 作为设计约束性下限（`user_requested` 最高优先，无法判定退 `PROVISIONAL_STANDARD` 兜底），`formal_verdict` 保留确认/升档权威（升档走增量补强），`decisionDepth` 正式输出权不变。待裁决 |
+| ③ | G2 域 3：深度默认与升档回流 | **已裁决：确认折中方案 (c′)**——归一定起点：枚举判定表输出 `proposedDepthBasis` 作为设计约束性下限（`user_requested` 最高优先；判定表失能退 `PROVISIONAL_STANDARD` 兜底）；Gate 留终审：`formal_verdict` 确认为主、升档为例外（走深度覆盖台账增量补强），`decisionDepth` 正式输出权不变；降档为无害超集不回流。对 Decision-090 决策 4 的修订随 G2/D-090-01 合同冻结正式记录 |
 | ④ | G3 域 6：存量 manifest 处置 | **已裁决：撤销该裁决点**——不做存量 library 重建/恢复（恢复的不是存量 library，是后续流程正确性）；存量无 manifest requirement = 只读归档知识源，不进新生命周期；新流程由 intake 建 manifest，复用无 manifest 存量目录 → `BLOCKED`；知识沉淀内容优先，中间产物不追溯。G3 域 ⑥ 与 G6 矩阵轴已相应收窄 |
 | ⑤ | G4：`GW_VERTICAL_REBUILD` 裁决形式 | **已裁决：采纳建议 (a)**——delta assessment 后一次裁决；超出已评估 delta 边界的发现仍需单独授权 |
 
 ## 变更记录
 
+- 1.0.0（2026-09-05）：裁决点③确认折中方案 (c′)，五点全部收口；Current User 接受本文，状态 PROPOSED → ACCEPTED，成为 G1 启动输入。
 - 0.2.0（2026-09-05）：记录裁决点①②④⑤（④撤销，G3 域 ⑥ 与 G6 矩阵轴相应收窄）；裁决点③转入讨论并记录折中方案 (c′)。
 - 0.1.0（2026-09-04）：初稿。
 
