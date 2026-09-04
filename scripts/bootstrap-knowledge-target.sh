@@ -154,6 +154,12 @@ if [[ -n "${DOMAIN_MAP}" && ! -f "${DOMAIN_MAP}" ]]; then
   echo "Confirmed domain map not found: ${DOMAIN_MAP}" >&2
   exit 2
 fi
+# The declaration records a repo-relative map path; a map outside the target
+# repository would write a temp/absolute path into the long-lived declaration.
+if [[ -n "${DOMAIN_MAP}" && "${DOMAIN_MAP}" != "${TARGET_PATH}/"* ]]; then
+  echo "Confirmed domain map must live inside the target repository (got: ${DOMAIN_MAP})." >&2
+  exit 2
+fi
 
 PROJECT_NAME="${PROJECT_NAME:-$(basename "${TARGET_PATH}")}"
 SDLC_DIR="${TARGET_PATH}/.sdlc"
@@ -251,7 +257,7 @@ write_staging_file() {
 }
 
 generate_declaration() {
-  local status="$1" routable="$2" map_ref="$3"
+  local status="$1" routable="$2" map_ref="$3" managed_block="${4:-}"
   cat <<EOF
 schema_version: "2.0"
 governed_by: sdlc-knowledge-sync
@@ -268,11 +274,13 @@ fact_sources:
   governance_rules: "AGENTS.md + standard package skill contracts"
 initializer: "scripts/bootstrap-knowledge-target.sh"
 domain_map: ${map_ref}
+${managed_block:+managed_root_docs:
+${managed_block}}
 EOF
 }
 
 generate_declaration_candidate() {
-  generate_declaration "candidate_pending_confirmation" "false" "null"
+  generate_declaration "candidate_pending_confirmation" "false" "null" ""
 }
 
 generate_governance_profile() {
@@ -466,7 +474,7 @@ generate_language() {
 > - **版本**: 0.1.0
 > - **日期**: ${DOC_DATE}
 > - **作者**: ${AUTHOR}
-> - **状态**: Candidate
+> - **状态**: ${DOC_STATUS}
 > - **摘要**: ${PROJECT_NAME} 长期术语表骨架（业务语义待沉淀）。
 
 ## 术语表
@@ -539,14 +547,17 @@ require "fileutils"
 target, staging, project_name, author, doc_date = ARGV
 FileUtils.mkdir_p(staging)
 
+# Frontend entries count only behavioral source files, not assets/docs (D088-R1-H2).
+FE_SOURCE_EXTS = %w[.vue .js .ts .jsx .tsx .html .htm .jsp .ftl .vm .svelte].freeze
+
 ENTRY_RULES = [
-  ["controller", ["**/*Controller.java"]],
-  ["rpc",        ["**/rpc/**/*.java", "**/*Provider.java", "**/*Facade.java", "**/*RPCService.java"]],
-  ["processor",  ["**/process/**/*Processor.java", "**/*Processor.java"]],
-  ["mq",         ["**/*Listener.java", "**/*Consumer.java", "**/*Mcq*.java", "**/*MCQ*.java", "**/*mcq*/**/*.java"]],
-  ["schedule",   ["**/*Schedule.java", "**/*Job.java", "**/*Task.java", "**/*Worker.java"]],
-  ["fe_page",    ["**/pages/**/*", "**/views/**/*"]],
-  ["fe_api",     ["**/api/**/*"]]
+  ["controller", ["**/*Controller.java"], nil],
+  ["rpc",        ["**/rpc/**/*.java", "**/*Provider.java", "**/*Facade.java", "**/*RPCService.java"], nil],
+  ["processor",  ["**/process/**/*Processor.java"], nil],
+  ["mq",         ["**/*Listener.java", "**/*Consumer.java", "**/*Mcq*.java", "**/*MCQ*.java", "**/*mcq*/**/*.java"], nil],
+  ["schedule",   ["**/*Schedule.java", "**/*Job.java", "**/*Task.java", "**/*Worker.java"], nil],
+  ["fe_page",    ["**/pages/**/*", "**/views/**/*"], FE_SOURCE_EXTS],
+  ["fe_api",     ["**/api/**/*"], FE_SOURCE_EXTS]
 ].freeze
 
 SKIP_SEGMENTS = %w[src main java test tests resources pages views api webapp business biz modules module].freeze
@@ -556,10 +567,12 @@ EXCLUDED_PATHS = [
   %r{\A\.git(/|\z)}, %r{\A\.sdlc(/|\z)}, %r{\A\.specify(/|\z)},
   %r{(^|/)(node_modules|target|build|dist|vendor|coverage|generated|\.idea|\.gradle|\.mvn)(/|\z)},
   %r{(^|/)(examples|samples|mock-data|mock_data|fixtures?|test-fixtures|test_fixtures|__snapshots__|snapshots)(/|\z)},
-  %r{(^|/)src/test(/|\z)}
+  %r{(^|/)(test|tests)(/|\z)}
 ].freeze
 
-def excluded?(rel) = EXCLUDED_PATHS.any? { |re| rel.match?(re) }
+def excluded?(rel)
+  EXCLUDED_PATHS.any? { |re| rel.match?(re) }
+end
 
 def sanitize_name(segment)
   cleaned = segment.to_s.gsub(/[^A-Za-z0-9]+/, " ").strip.split(/[[:space:]]+/).map(&:capitalize).join
@@ -568,12 +581,13 @@ end
 
 entries = []
 seen_files = {}
-ENTRY_RULES.each do |(type, patterns)|
+ENTRY_RULES.each do |(type, patterns, exts)|
   patterns.each do |pattern|
     Dir.glob("#{target}/#{pattern}").sort.each do |abs|
       next unless File.file?(abs)
       rel = abs.delete_prefix("#{target}/")
       next if excluded?(rel)
+      next if exts && !exts.include?(File.extname(rel).downcase)
       next if seen_files[rel] # first matching rule wins (fixed order, deterministic)
       seen_files[rel] = true
       entries << { type: type, class: File.basename(rel, File.extname(rel)), path: rel }
@@ -593,8 +607,15 @@ def cluster_keys(entry, project_name)
   end
   segs.shift while segs.first == "src"
   %w[main java].each { |s| break if segs.first != s; segs.shift }
-  segs.shift while TLD_SEGMENTS.include?(segs.first) && segs.size > 1
-  segs.shift if segs.size > 1 # organization segment right after the reversed-domain prefix
+  # Strip the reversed-domain prefix and the organization segment ONLY when a
+  # TLD prefix is actually present; without one, the first remaining segment is
+  # a business package segment and must stay the candidate L2 key (D088-R1-H2).
+  stripped_tld = false
+  while TLD_SEGMENTS.include?(segs.first) && segs.size > 1
+    segs.shift
+    stripped_tld = true
+  end
+  segs.shift if stripped_tld && segs.size > 1
   segs.shift while SKIP_SEGMENTS.include?(segs.first) && segs.size > 1
   l2_key = segs.first || l1_key
   [l1_key, l2_key]
@@ -784,6 +805,7 @@ if [[ "${MODE}" == "audit" ]]; then
   AUDIT_REPORT="$(mktemp "${TMPDIR:-/tmp}/kt-audit.XXXXXX")"
   ruby - "${TARGET_PATH}" "${AUDIT_REPORT}" "${PROJECT_NAME}" <<'RUBY'
 require "yaml"
+require "digest"
 
 target, report_path, project_name = ARGV
 bd = File.join(target, ".sdlc", "business_domain")
@@ -792,6 +814,25 @@ legacy_bd = File.join(target, ".specify", "business_domain")
 
 findings = [] # [section, severity, message]
 section = ->(s, severity, msg) { findings << [s, severity, msg] }
+
+# Exact numbering validator (D088-R1-H3). Same semantics as the initializer's
+# confirmed-map generation: L1/L2/L4 local ids exactly two digits each, the
+# final L4 id exactly six digits, entry coverage exactly xx99 (4 digits + 99).
+# Frozen positive/negative semantics: 4-digit stem -> L2 main doc; 6-digit stem
+# ending 99 -> entry doc; other 6-digit stem -> L4 doc; any other digit-run
+# length (5/7/8...) -> invalid.
+def stem_numbering_kind(stem)
+  m = stem.match(/\A(\d+)/)
+  return :none unless m
+  id = m[1]
+  rest = stem[id.length..-1].to_s
+  return :invalid unless rest.match?(/\A[A-Za-z]/)
+  return :invalid unless rest.match?(/\A[A-Za-z0-9\u4e00-\u9fff()（）]*\z/)
+  return :entry if id.length == 6 && id.match?(/\A\d{4}99\z/)
+  return :l4 if id.length == 6
+  return :l2 if id.length == 4
+  :invalid
+end
 
 root_docs = {
   "00BusinessLandscape.md" => ["## 事实源分层", "## 业务域地图", "## 路由原则", "## 门禁说明", "## 修订记录"],
@@ -812,23 +853,17 @@ root_docs.each do |doc, sections|
   end
 end
 
-# B. numbering consistency (6-digit L4, xx99 entry coverage)
-all_md = Dir.glob(File.join(bd, "**", "*.md")).sort
-all_md.each do |path|
+# B. numbering consistency: exact 6-digit L4 / xx99 entry coverage
+Dir.glob(File.join(bd, "**", "*.md")).sort.each do |path|
   rel = path.delete_prefix("#{bd}/")
-  base = File.basename(rel)
-  in_l2_dir = rel.count("/") >= 2
-  next unless in_l2_dir
-  if base.match?(/\A\d{6}/) && !base.match?(/\A\d{4}99/)
-    unless base.match?(/\A\d{6}[A-Za-z0-9\u4e00-\u9fff()（）]*\.(md|MD)\z/)
-      section.("B", "DIFF", "L4 命名不符合 6 位编号规则: #{rel}")
-    end
-  elsif base.match?(/EntryCoverage/i) && !base.match?(/\A\d{4}99/)
-    section.("B", "DIFF", "入口覆盖文档应为 xx99 命名: #{rel}")
+  next unless rel.count("/") >= 2
+  stem = File.basename(rel).sub(/\.(md|MD)\z/, "")
+  if stem_numbering_kind(stem) == :invalid
+    section.("B", "DIFF", "编号不符合 6 位 L4 / xx99 精确规则: #{rel}")
   end
 end
 
-# C. machine artifacts + route resolvability
+# C. machine artifacts + frozen declaration state matrix (D088-R1-H6)
 decl_path = File.join(bd, "knowledge-target.yaml")
 unless File.file?(decl_path)
   section.("C", "MISSING", "缺少声明 knowledge-target.yaml")
@@ -840,11 +875,51 @@ else
     unless %w[candidate_pending_confirmation routed].include?(status)
       section.("C", "DIFF", "声明 status 非法: #{status}（应为 candidate_pending_confirmation 或 routed）")
     end
-    if status == "candidate_pending_confirmation" && routable != false
-      section.("C", "DIFF", "candidate_pending_confirmation 状态必须 routable: false")
+    section.("C", "DIFF", "声明 schema_version 必须为 2.0") unless decl["schema_version"].to_s == "2.0"
+    section.("C", "DIFF", "声明 target_root 必须为 .sdlc/business_domain（#{decl["target_root"].inspect}）") unless decl["target_root"].to_s == ".sdlc/business_domain"
+    section.("C", "DIFF", "声明 fill_mode 必须为 code_driven_scan") unless decl["fill_mode"].to_s == "code_driven_scan"
+    if status == "candidate_pending_confirmation"
+      section.("C", "DIFF", "candidate_pending_confirmation 状态必须 routable: false") unless routable == false
+      section.("C", "DIFF", "candidate_pending_confirmation 状态不得携带有效 domain_map") unless decl["domain_map"].nil?
     end
-    if status == "routed" && routable != true
-      section.("C", "DIFF", "routed 状态必须 routable: true")
+    if status == "routed"
+      section.("C", "DIFF", "routed 状态必须 routable: true") unless routable == true
+      map_ref = decl["domain_map"].to_s
+      if map_ref.empty?
+        section.("C", "DIFF", "routed 状态缺少 domain_map 引用")
+      else
+        if map_ref.start_with?("/")
+          section.("C", "DIFF", "domain_map 引用必须为仓内相对路径（#{map_ref}）")
+        end
+        map_path = File.expand_path(map_ref, target)
+        if File.file?(map_path)
+          begin
+            dm = YAML.safe_load(File.read(map_path), permitted_classes: [], aliases: false) || {}
+            section.("C", "DIFF", "domain_map status 必须精确为 confirmed（#{dm["status"].inspect}）") unless dm["status"] == "confirmed"
+            section.("C", "DIFF", "domain_map confirmed_domains 为空") unless Array(dm["confirmed_domains"]).any?
+          rescue Psych::Exception => e
+            section.("C", "DIFF", "domain_map 解析失败: #{e.message.lines.first.to_s.strip}")
+          end
+        else
+          section.("C", "DIFF", "domain_map 引用不可解析: #{map_ref}")
+        end
+      end
+    end
+    managed = decl["managed_root_docs"].is_a?(Hash) ? decl["managed_root_docs"] : {}
+    managed.each do |doc, info|
+      unless info.is_a?(Hash) && info["sha256"].to_s.match?(/\A[0-9a-f]{64}\z/) && %w[initializer preserved].include?(info["origin"].to_s)
+        section.("C", "DIFF", "managed_root_docs.#{doc} 结构非法（需 sha256 + origin=initializer|preserved）")
+        next
+      end
+      doc_path = File.join(bd, doc)
+      if File.file?(doc_path)
+        cur = Digest::SHA256.file(doc_path).hexdigest
+        if info["origin"] == "initializer" && cur != info["sha256"].to_s
+          section.("C", "DIFF", "受管根文档与基线不一致（疑似人工修改，升级将被阻断）: #{doc}")
+        end
+      else
+        section.("C", "DIFF", "受管根文档缺失: #{doc}")
+      end
     end
   rescue Psych::Exception => e
     section.("C", "DIFF", "knowledge-target.yaml 解析失败: #{e.message.lines.first.to_s.strip}")
@@ -879,19 +954,38 @@ else
   section.("D", "MISSING", "缺少 entry-coverage-profile.yaml（sync 前 strict 门禁不可用）")
 end
 
-# E. retired-vocabulary residue (file:line; report only, never rewritten).
-# Generated reports are excluded: quoting residue is their purpose.
+# E. retired-vocabulary residue over the WHOLE .sdlc face (reports excluded —
+# quoting residue is their purpose). Exemptions (D088-R1-H6):
+#   - machine negative-declaration fields: values under forbidden_write_paths /
+#     legacy_runtime_inputs may name retired paths;
+#   - semantic-clause binding: only the clause containing the hit may exempt it
+#     (its own clause must carry a negation); a negation in a sibling clause of
+#     the same line or in an adjacent line never releases another hit.
 RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+NEGATION_RE = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|don't|prohibit\w*|forbidden|retired)/i
+MACHINE_FIELD_RE = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
 residue_lines = []
-scan_root = File.directory?(bd) ? bd : sdlc
-if File.directory?(scan_root)
-  files_to_scan = Dir.glob(File.join(scan_root, "**", "*"))
+if File.directory?(sdlc)
+  files_to_scan = Dir.glob(File.join(sdlc, "**", "*"))
                     .select { |p| File.file?(p) && !p.start_with?("#{sdlc}/reports/") }
                     .sort
   files_to_scan.each do |path|
     next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
+    machine_key_indent = nil
     File.readlines(path).each_with_index do |line, idx|
-      if RESIDUE_PATTERNS.any? { |re| line.match?(re) }
+      if (m = line.match(MACHINE_FIELD_RE))
+        machine_key_indent = m[1].length
+      elsif !machine_key_indent.nil?
+        entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
+        machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
+      end
+      next if machine_key_indent # inside a machine negative-declaration field
+      clause_states = line.split(/[。；;！!？?]/).map do |clause|
+        hits = RESIDUE_PATTERNS.select { |re| clause.match?(re) }
+        next nil if hits.empty?
+        clause.match?(NEGATION_RE) ? :exempt : :violation
+      end.compact
+      if clause_states.include?(:violation)
         residue_lines << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
         break if residue_lines.size >= 50
       end
@@ -902,7 +996,9 @@ if File.directory?(scan_root)
 end
 residue_lines.each { |l| section.("E", "RESIDUE", "退役词汇/旧根路径残留: #{l}") }
 section.("E", "RESIDUE", "残留超过 50 处，仅列前 50 行") if residue_lines.size >= 50
-section.("E", "LEGACY", "检测到旧版知识根目录（历史遗留），迁移需单独授权；本工具不读取不改动") if File.directory?(legacy_bd)
+if File.directory?(legacy_bd) || File.symlink?(legacy_bd)
+  section.("E", "LEGACY", "检测到旧版知识根目录（历史遗留），迁移需单独授权；本工具不读取不遍历不改动")
+end
 
 # F. shape differences vs the mature baseline
 l2_dirs = Dir.glob(File.join(bd, "*", "*")).select { |p| File.directory?(p) }.sort
@@ -950,10 +1046,10 @@ File.write(report_path, <<~MD)
   ## Sections
 
   - A 根文档完整性与章节齐备性
-  - B 编号规则一致性（6 位 L4 / xx99 入口覆盖）
-  - C 机器件存在性与路由可解析性
+  - B 编号规则一致性（6 位 L4 / xx99 入口覆盖，精确匹配）
+  - C 机器件存在性、路由可解析性与声明状态矩阵（含受管根文档基线漂移）
   - D 门禁可用性
-  - E 退役词汇与旧根路径残留（file:line；只报告，绝不自动改写）
+  - E 退役词汇与旧根路径残留（file:line；语义子句豁免与机器字段放行；只报告，绝不自动改写）
   - F 与成熟基准架构的形态差异
 
   ## Write Boundary
@@ -999,8 +1095,8 @@ rescue Psych::Exception => e
   exit 2
 end
 map ||= {}
-if map["status"].to_s == "template" || Array(map["confirmed_domains"]).empty?
-  warn "Invalid confirmed domain map: not owner-confirmed (status=template or confirmed_domains empty)"
+unless map["status"] == "confirmed"
+  warn "Invalid confirmed domain map: status must be exactly 'confirmed' (got: #{map["status"].inspect})"
   exit 2
 end
 domains = map["confirmed_domains"]
@@ -1018,6 +1114,14 @@ safe_name = ->(v, ctx) do
   t = v.to_s.strip
   fail_map.call("#{ctx} must not contain path separators") if t.include?("/") || t.include?("\\")
   fail_map.call("#{ctx} must not contain '..'") if t.include?("..")
+  t
+end
+
+# Local domain ids are exactly two digits each; the composed L4 id is exactly
+# six digits (L1+L2+L4). Same semantics as the audit numbering validator.
+two_digit_id = ->(v, ctx) do
+  t = safe_name.(v, ctx)
+  fail_map.call("#{ctx} must be exactly two digits (got: #{t.inspect})") unless t.match?(/\A\d{2}\z/)
   t
 end
 
@@ -1054,7 +1158,7 @@ landscape_rows = []
 domains.each_with_index do |l1, i|
   ctx = "confirmed_domains[#{i}]"
   fail_map.call("#{ctx} must be a map") unless l1.is_a?(Hash)
-  l1_id      = safe_name.(req.(l1, "l1_id", ctx), "#{ctx}.l1_id")
+  l1_id      = two_digit_id.(req.(l1, "l1_id", ctx), "#{ctx}.l1_id")
   l1_name_en = safe_name.(req.(l1, "l1_name_en", ctx), "#{ctx}.l1_name_en")
   l1_name_cn = safe_name.(req.(l1, "l1_name_cn", ctx), "#{ctx}.l1_name_cn")
   fail_map.call("duplicate l1_id #{l1_id}") if seen_l1[l1_id]
@@ -1067,7 +1171,7 @@ domains.each_with_index do |l1, i|
   l2_list.each_with_index do |l2, j|
     l2c = "#{ctx}.l2[#{j}]"
     fail_map.call("#{l2c} must be a map") unless l2.is_a?(Hash)
-    l2_id      = safe_name.(req.(l2, "l2_id", l2c), "#{l2c}.l2_id")
+    l2_id      = two_digit_id.(req.(l2, "l2_id", l2c), "#{l2c}.l2_id")
     l2_name_en = safe_name.(req.(l2, "l2_name_en", l2c), "#{l2c}.l2_name_en")
     l2_name_cn = safe_name.(req.(l2, "l2_name_cn", l2c), "#{l2c}.l2_name_cn")
     l2_owner   = req.(l2, "owner", l2c)
@@ -1086,11 +1190,12 @@ domains.each_with_index do |l1, i|
     l4_list.each_with_index do |l4, k|
       l4c = "#{l2c}.l4[#{k}]"
       fail_map.call("#{l4c} must be a map") unless l4.is_a?(Hash)
-      l4_id      = safe_name.(req.(l4, "l4_id", l4c), "#{l4c}.l4_id")
+      l4_id      = two_digit_id.(req.(l4, "l4_id", l4c), "#{l4c}.l4_id")
       l4_name_en = safe_name.(req.(l4, "l4_name_en", l4c), "#{l4c}.l4_name_en")
       l4_name_cn = safe_name.(req.(l4, "l4_name_cn", l4c), "#{l4c}.l4_name_cn")
       l4_owner   = req.(l4, "owner", l4c)
       l4f        = l4_full.(l1_id, l2_full, l4_id)
+      fail_map.call("final L4 id must be exactly six digits (got: #{l4f})") unless l4f.match?(/\A\d{6}\z/)
       fail_map.call("duplicate l4_id #{l4f}") if seen_l4[l4f]
       seen_l4[l4f] = true
       l4_doc = "#{l4f}#{l4_name_en}(#{l4_name_cn}).md"
@@ -1239,41 +1344,15 @@ else
   STATUS="candidate_pending_confirmation"; ROUTABLE="false"; DOC_STATUS="Candidate"
 fi
 
-generate_declaration "${STATUS}" "${ROUTABLE}" "${DOMAIN_MAP_REF}" \
-  | write_staging_file "business_domain/knowledge-target.yaml"
-
-# stage the candidate declaration + root skeletons for pristine/progression checks
-generate_declaration "candidate_pending_confirmation" "false" "null" \
-  | write_staging_file ".candidate/knowledge-target.yaml"
-
 generate_landscape "${LANDSCAPE_ROWS}" "${FILL_SECTION}" \
   | write_staging_file "business_domain/00BusinessLandscape.md"
 generate_language | write_staging_file "business_domain/00UbiquitousLanguage.md"
 generate_catalog "${CATALOG_L1L2_ROWS}" "${ROUTED_L4_ROWS}" \
   | write_staging_file "business_domain/01DomainCatalog.md"
 
-if [[ -n "${DOMAIN_MAP}" ]]; then
-  # Pristine candidate root docs for progression comparison: regenerate the exact
-  # candidate-init output for this repo by scanning into a reference dir.
-  CAND_REF_DIR="${STAGING_DIR}/.candref/business_domain"
-  if scan_and_stage_candidates "${CAND_REF_DIR}"; then
-    CAND_SUMMARY="$(cat "${CAND_REF_DIR}/.fill-summary.tsv" 2>/dev/null || printf '0\t0\t0')"
-    CAND_L1="${CAND_SUMMARY%%$'\t'*}"
-    CAND_REST="${CAND_SUMMARY#*$'\t'}"
-    CAND_L2="${CAND_REST%%$'\t'*}"
-    CAND_ENTRIES="${CAND_REST#*$'\t'}"
-    DOC_STATUS="Candidate"
-    generate_landscape "$(cat "${CAND_REF_DIR}/.landscape-rows.md" 2>/dev/null)" \
-      "$(generate_landscape_fill_section "${CAND_L1}" "${CAND_L2}" "${CAND_ENTRIES}")" \
-      | write_staging_file ".candidate/00BusinessLandscape.md"
-    generate_catalog "$(cat "${CAND_REF_DIR}/.catalog-l1l2-rows.md" 2>/dev/null)" "" \
-      | write_staging_file ".candidate/01DomainCatalog.md"
-    DOC_STATUS="Routed"
-  fi
-  cp "${STAGING_DIR}/business_domain/00UbiquitousLanguage.md" \
-     "${STAGING_DIR}/.candidate/00UbiquitousLanguage.md"
-  rm -rf "${STAGING_DIR}/.candref"
-fi
+# D088-R1-H4: the candidate->routed upgrade decision is digest-baseline based
+# (recorded at first generation), never regeneration-and-byte-compare; the old
+# .candidate reference staging is retired.
 
 generate_governance_profile | write_staging_file "project-governance-profile.yaml"
 generate_entry_coverage_profile | write_staging_file "entry-coverage-profile.yaml"
@@ -1281,63 +1360,180 @@ generate_map_template | write_staging_file "business-domain-map.yaml"
 generate_audit_wrapper | write_staging_file "scripts/bash/audit-entry-coverage.sh"
 chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
 
-# --- plan actions -------------------------------------------------------------------
-CREATED_FILES=()
-UPDATED_FILES=()
-PRESERVED_FILES=()
-BLOCKED_REASONS=()
-NOTICE_LINES=()
-PLAN_OK="true"
+# --- managed root-doc provenance and upgrade decision (D088-R1-H4) ----------------
+ROOT_DOCS=(00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md)
 
-declare_plan_line() {
-  local rel="$1" action="$2"
-  case "${action}" in
-    create)   CREATED_FILES+=("${rel}") ;;
-    update)   UPDATED_FILES+=("${rel}") ;;
-    preserve) PRESERVED_FILES+=("${rel}") ;;
-  esac
+file_digest() {
+  ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$1"
 }
+
+# Existing declaration facts: first data line = status, then "doc sha256 origin".
+EXISTING_DECL_STATUS="absent"
+EXISTING_DECL_DATA=""
+if [[ -f "${DECLARATION}" ]]; then
+  EXISTING_DECL_DATA="$(ruby -ryaml -e '
+    begin
+      d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
+      puts d["status"].to_s
+      h = d["managed_root_docs"].is_a?(Hash) ? d["managed_root_docs"] : {}
+      h.each do |k, v|
+        next unless v.is_a?(Hash)
+        puts "#{k} #{v["sha256"].to_s} #{v["origin"].to_s}"
+      end
+    rescue StandardError
+      puts "unreadable"
+    end
+  ' "${DECLARATION}" 2>/dev/null || true)"
+  EXISTING_DECL_STATUS="$(printf '%s\n' "${EXISTING_DECL_DATA}" | head -1)"
+fi
+recorded_digest_for() {
+  printf '%s\n' "${EXISTING_DECL_DATA}" | awk -v d="$1" '$1 == d && NF >= 3 {print $2}'
+}
+recorded_origin_for() {
+  printf '%s\n' "${EXISTING_DECL_DATA}" | awk -v d="$1" '$1 == d && NF >= 3 {print $3}'
+}
+
+# Per-doc decision. Upgrade requires origin=initializer AND current digest equal
+# to the recorded baseline; docs without such provenance are owner-managed and
+# are never auto-upgraded (blocked on a confirmed-map run).
+DOC_ACTIONS=()
+DOC_POST_DIGESTS=()
+UPGRADE_BLOCKED_DOCS=()
+i=0
+for doc in "${ROOT_DOCS[@]}"; do
+  tgt="${BD_DIR}/${doc}"
+  stg="${STAGING_DIR}/business_domain/${doc}"
+  if [[ ! -f "${tgt}" ]]; then
+    DOC_ACTIONS[i]="create"
+    DOC_POST_DIGESTS[i]="$(file_digest "${stg}")"
+  else
+    cur="$(file_digest "${tgt}")"
+    staged_digest="$(file_digest "${stg}")"
+    recorded="$(recorded_digest_for "${doc}")"
+    recorded_origin="$(recorded_origin_for "${doc}")"
+    if [[ -n "${DOMAIN_MAP}" ]]; then
+      if [[ "${EXISTING_DECL_STATUS}" == "candidate_pending_confirmation" \
+            && "${recorded_origin}" == "initializer" && -n "${recorded}" && "${cur}" == "${recorded}" ]]; then
+        DOC_ACTIONS[i]="upgrade"
+        DOC_POST_DIGESTS[i]="${staged_digest}"
+      elif [[ "${EXISTING_DECL_STATUS}" == "routed" && -n "${recorded}" && "${cur}" == "${recorded}" ]]; then
+        DOC_ACTIONS[i]="idempotent"
+        DOC_POST_DIGESTS[i]="${cur}"
+      elif [[ "${cur}" == "${staged_digest}" ]]; then
+        DOC_ACTIONS[i]="idempotent"
+        DOC_POST_DIGESTS[i]="${cur}"
+      else
+        DOC_ACTIONS[i]="blocked"
+        DOC_POST_DIGESTS[i]="${cur}"
+        UPGRADE_BLOCKED_DOCS+=("${doc}")
+      fi
+    else
+      DOC_ACTIONS[i]="preserve"
+      DOC_POST_DIGESTS[i]="${cur}"
+    fi
+  fi
+  i=$((i + 1))
+done
+
+UPGRADE_OK="true"
+if [[ -n "${DOMAIN_MAP}" && "${#UPGRADE_BLOCKED_DOCS[@]}" -gt 0 ]]; then
+  UPGRADE_OK="false"
+  PLAN_OK="false"
+  BLOCKED_REASONS+=("candidate->routed transition blocked for: ${UPGRADE_BLOCKED_DOCS[*]} (content differs from the recorded candidate baseline or has no initializer provenance; the transition is atomic and nothing was partially updated)")
+fi
+
+# Declaration target for this run: a blocked transition never writes a routed
+# declaration while root docs stay candidate (no state split).
+DECL_TARGET_STATUS="${STATUS}"
+if [[ -n "${DOMAIN_MAP}" && "${UPGRADE_OK}" != "true" ]]; then
+  DECL_TARGET_STATUS="candidate_pending_confirmation"
+  DECL_TARGET_ROUTABLE="false"
+else
+  DECL_TARGET_ROUTABLE="${ROUTABLE}"
+fi
+
+# managed_root_docs: recorded entries are preserved verbatim (origin included);
+# fresh digests only for docs this run creates or upgrades. --update-declaration
+# never re-baselines an existing doc.
+MANAGED_BLOCK=""
+i=0
+for doc in "${ROOT_DOCS[@]}"; do
+  recorded="$(recorded_digest_for "${doc}")"
+  recorded_origin="$(recorded_origin_for "${doc}")"
+  case "${DOC_ACTIONS[i]}" in
+    create|upgrade)
+      managed_origin="initializer"
+      digest="${DOC_POST_DIGESTS[i]}" ;;
+    blocked)
+      managed_origin="${recorded_origin}"
+      digest="${recorded}" ;;
+    *)
+      if [[ -n "${recorded}" ]]; then
+        managed_origin="${recorded_origin}"
+        digest="${recorded}"
+      else
+        managed_origin="preserved"
+        digest="${DOC_POST_DIGESTS[i]}"
+      fi ;;
+  esac
+  if [[ -n "${digest}" ]]; then
+    MANAGED_BLOCK+="  ${doc}:
+    sha256: \"${digest}\"
+    origin: \"${managed_origin}\""$'\n'
+  fi
+  i=$((i + 1))
+done
+MANAGED_BLOCK="${MANAGED_BLOCK%$'\n'}"
+
+generate_declaration "${DECL_TARGET_STATUS}" "${DECL_TARGET_ROUTABLE}" "${DOMAIN_MAP_REF}" "${MANAGED_BLOCK}" \
+  | write_staging_file "business_domain/knowledge-target.yaml"
+
+# --- plan actions (arrays were initialized before the provenance/decision section
+# so transition-blocked reasons recorded there survive into the plan) -------------
 
 # knowledge-target.yaml (initializer-owned machine declaration)
 REL="knowledge-target.yaml"
 TARGET_FILE="${BD_DIR}/${REL}"
-EXISTING_DECL_STATUS="$(ruby -ryaml -e '
-  begin
-    d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
-    puts d["status"].to_s
-  rescue StandardError
-    puts "unreadable"
-  end
-' "${DECLARATION}" 2>/dev/null || echo "unreadable")"
 if [[ ! -e "${TARGET_FILE}" ]]; then
   declare_plan_line "${REL}" "create"
 elif cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
   : # identical declaration -> no-op
-elif [[ -n "${DOMAIN_MAP}" && "${EXISTING_DECL_STATUS}" == "candidate_pending_confirmation" ]] \
-     && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.candidate/knowledge-target.yaml"; then
-  declare_plan_line "${REL}" "update"   # pristine candidate -> routed progression
+elif [[ -n "${DOMAIN_MAP}" && "${UPGRADE_OK}" == "true" \
+     && "${EXISTING_DECL_STATUS}" == "candidate_pending_confirmation" ]]; then
+  declare_plan_line "${REL}" "update"   # candidate -> routed, atomic with the root docs
+elif [[ -z "${DOMAIN_MAP}" && "${EXISTING_DECL_STATUS}" == "candidate_pending_confirmation" ]] \
+     && [[ "$(ruby -ryaml -e '
+        a = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
+        b = YAML.safe_load(File.read(ARGV[1]), permitted_classes: [], aliases: false) || {}
+        a.delete("managed_root_docs")
+        b.delete("managed_root_docs")
+        puts a == b ? "same" : "diff"
+      ' "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}" 2>/dev/null)" == "same" ]]; then
+  declare_plan_line "${REL}" "update"   # controlled managed-digest refresh after refilling a missing managed doc
 elif [[ "${EXISTING_DECL_STATUS}" == "routed" && -z "${DOMAIN_MAP}" ]]; then
   NOTICE_LINES+=("target already routed; declaration preserved (no downgrade)")
 elif [[ "${UPDATE_DECLARATION}" == "true" ]]; then
-  declare_plan_line "${REL}" "update"
+  declare_plan_line "${REL}" "update"   # declaration replacement only; never re-baselines docs
 else
   BLOCKED_REASONS+=("knowledge-target.yaml exists and differs from the staged declaration for this run; pass --update-declaration to replace it deliberately")
   PLAN_OK="false"
 fi
 
-# root documents
-for REL in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
-  TARGET_FILE="${BD_DIR}/${REL}"
-  if [[ ! -e "${TARGET_FILE}" ]]; then
-    declare_plan_line "${REL}" "create"
-  elif cmp -s "${TARGET_FILE}" "${STAGING_DIR}/business_domain/${REL}"; then
-    declare_plan_line "${REL}" "preserve"
-  elif [[ -n "${DOMAIN_MAP}" && -f "${STAGING_DIR}/.candidate/${REL}" ]] \
-       && cmp -s "${TARGET_FILE}" "${STAGING_DIR}/.candidate/${REL}"; then
-    declare_plan_line "${REL}" "update"   # pristine candidate skeleton -> routed version
-  else
-    declare_plan_line "${REL}" "preserve"
-  fi
+# root documents: actions come from the digest-baseline decision above; a
+# blocked transition never plans partial updates.
+i=0
+for REL in "${ROOT_DOCS[@]}"; do
+  case "${DOC_ACTIONS[i]}" in
+    create) declare_plan_line "${REL}" "create" ;;
+    upgrade)
+      if [[ "${UPGRADE_OK}" == "true" ]]; then
+        declare_plan_line "${REL}" "update"
+      else
+        declare_plan_line "${REL}" "preserve"
+      fi ;;
+    *)      declare_plan_line "${REL}" "preserve" ;;
+  esac
+  i=$((i + 1))
 done
 
 # domain documents (candidate fill or routed map): create missing; block on conflicting content
@@ -1378,11 +1574,13 @@ for PAIR in \
   fi
 done
 
-# retired-root presence advisory (generic wording; migration is separately authorized)
-LEGACY_ROOT_COUNT=0
-if [[ -d "${LEGACY_BD_ROOT}" ]]; then
-  LEGACY_ROOT_COUNT="$(find "${LEGACY_BD_ROOT}" -type f 2>/dev/null | wc -l | tr -d ' ')"
-  NOTICE_LINES+=("legacy knowledge root detected (${LEGACY_ROOT_COUNT} files); migration requires separate authorization; this tool never reads or rewrites it")
+# retired-root presence advisory (D088-R1-H1: existence check only — the legacy
+# root is never read, traversed or counted; symlinks are detected via -L without
+# following them). Migration is separately authorized.
+LEGACY_ROOT_PRESENT="false"
+if [[ -d "${LEGACY_BD_ROOT}" || -L "${LEGACY_BD_ROOT}" ]]; then
+  LEGACY_ROOT_PRESENT="true"
+  NOTICE_LINES+=("legacy knowledge root detected; migration requires separate authorization; this tool never reads, traverses or rewrites it")
 fi
 
 # --- dry-run preview ------------------------------------------------------------------
