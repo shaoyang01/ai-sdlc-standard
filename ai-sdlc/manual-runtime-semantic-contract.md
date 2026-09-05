@@ -1,7 +1,7 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 0.10.0 (PROPOSED)
-> Status: 待独立只读复审 + Current User 裁决冻结；冻结后为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
+> Version: 1.0.0
+> Status: ACCEPTED（2026-09-05，独立复审 R13 轮最终建议 FREEZE @ v0.13.0 工作区字节，Current User 裁决冻结；本版并入非阻塞引用更正与保证 B 裁决记录，语义与 v0.13.0 无变化）——冻结为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
 > 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
 
@@ -102,14 +102,15 @@
 1. **发现记录**：发现节点在其**产出产物的 finding 段**登记它发现的 finding——作为该节点输出内容的组成部分（in-band），随产物 revision 一次成形（引用现役类别×来源矩阵，`ai-sdlc/loop-finding-lifecycle.md`：类别×来源的合法组合以该矩阵为准，本合同不另造分类体系）。发现记录是**历史事实**，登记后随产物内容不可变。
 2. **生命周期记录（status 的唯一权威承载）**：finding 的状态迁移**不写入任何产物文件**——runtime 面由现役 finding store 持久操作提交（`appendFinding`/`resolveFinding`/`acceptFindingRisk`，含 durable 证明记录 `loop_finding_proofs`，`loop-finding-lifecycle.md` §4/§5——**不需要**新 capability 执行、新事件系统或产物文件编辑）；手动面由 **manifest `findingIndex` 本身**作为权威记录（经 publisher 写入，§6.2）。
 3. 因此：产物文件的 finding 段只含发现时点的事实（digest 随该产物 revision 固定）；关闭复验等状态迁移**不触碰产物字节**——产物 digest 不因 finding 状态迁移改变（消除"追加行改字节 vs entry 保持 D0"的矛盾；旧版"来源 finding 段追加状态行"的表述废止）。
-4. `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，发现登记即占用，**不可变**。状态迁移的**当前状态表示**按各面现役持久原语：runtime = finding 行 status 字段的 guarded UPDATE + 证明记录追加（`loop-finding-lifecycle.md` §5，审计史 = durable 证明记录）；手动 = findingIndex 行 status 由 publisher 更新（审计史 = 业务仓 git 历史中的 manifest 旧版 + 行内证据字段）。
-5. 每条 finding 携带：`{finding_id, discoveredAt(发现节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status, fixedBy?}`。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
+4. `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，发现登记即占用，**不可变**。状态迁移的**当前状态表示**按各面现役持久原语：runtime = finding 行 status 字段的 guarded UPDATE + 证明记录追加（`loop-finding-lifecycle.md` §5，审计史 = durable 证明记录）；手动 = findingIndex 行 status 由 publisher 更新（行内携带关闭/接受依据与责任主体字段，见上条——**可追溯保证**：发现事实、修复/接受依据、责任主体、绑定 revision 均可核验）。
+5. 每条 finding 携带：`{finding_id, discoveredAt(发现节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status, fixedBy?}`；状态迁移后在生命周期记录中追加绑定字段：`closedBy?`（关闭复验者，或 scan 来源 ACCEPTED 时的 formal_verdict）、`closureEvidenceRef?/closureEvidenceDigest?`（修复或风险接受依据的引用与 digest）、`closureBoundRevisionId?`（**按状态双语义**：RESOLVED=修复依据对应的 revision，runtime 即 `resolveFinding` 的 `resolvedByRevisionId`；ACCEPTED=已有 formal_verdict PWR 裁决/接受依据对应的 revision——不是解决 revision，不要求新增修复 revision 或节点运行）。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
 6. `earliestAffectedNodeId` 值域 = 七节点全集，回流映射枚举闭合（§7.3）。
 7. 生命周期记录（runtime=store、手动=findingIndex）经 publisher 汇入 **manifest `findingIndex`**——下游只消费该索引。
+8. **手动面审计保证的边界（G2-R11-M1）**：手动面 findingIndex 保存**当前生命周期状态及其关闭/接受依据**（行内字段：`closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`——覆盖发现事实引用、修复或风险接受依据、关闭复验者或 formal_verdict 裁决主体、依据绑定的 revision）；不可变发现记录保存**发现时点的事实**（产物 finding 段 + `sourceRevision`/`evidenceRef`）。业务仓 Git 历史仅提供**用户实际提交过的** manifest 版本，不保证覆盖每次 publisher 更新；publisher 不执行 commit，Git 提交不是状态生效或下游准入的前置条件。**2026-09-05 Current User 裁决：接受本边界——保证 A 为手动面审计保证的最终口径，保证 B（每次发布的完整快照留存）不纳入冻结要求；如未来需要完整发布历史，另行立项与授权。**
 
 ### 5.2 修复者、关闭验证者与状态处置（G2-R4-H2）
 
-- `status ∈ OPEN → RESOLVED | ACCEPTED`；当前状态承载于生命周期记录（runtime=finding 行 status 字段，经现役 guarded UPDATE 原语迁移 + 证明记录追加；手动=findingIndex 行 status，经 publisher 更新，审计史=业务仓 git 历史）。**不采用**"同 ID 追加状态行"表示——现役 `resolveFinding`/`acceptFindingRisk` 即既有持久原语，不另造追加协议。
+- `status ∈ OPEN → RESOLVED | ACCEPTED`；当前状态承载于生命周期记录（runtime=finding 行 status 字段，经现役 guarded UPDATE 原语迁移 + 证明记录追加；手动=findingIndex 行 status，经 publisher 更新，行内证据字段承载可追溯依据——**业务仓 Git 历史仅提供用户实际提交过的 manifest 版本，不保证覆盖每次 publisher 更新；publisher 不执行 commit，Git 提交不是状态生效或下游准入的前置条件**）。**不采用**"同 ID 追加状态行"表示——现役 `resolveFinding`/`acceptFindingRisk` 即既有持久原语，不另造追加协议。
 - **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
 - **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在**生命周期记录**登记 RESOLVED（runtime=`resolveFinding`，`resolvedByRevisionId` 绑定 `earliestAffectedNodeId` 或下游节点当前 ACTIVE revision 并携带 resolution 证据 ref/digest——现役 §5 语义；手动=findingIndex 行）。"实现类 finding 由 code-review 复验关闭"仅指 discoveredAt=code-review 的来源；其他发现节点（如 knowledge-sync）按本通则自行复验。
 - **关闭复验是 finding 生命周期管理动作，不是一次节点运行**：验证者直接对照 finding 的 `evidenceRef`/验收基准与修复者产出的修复证据（digest 绑定）复核——**不依赖 §7.3 的下游准入谓词**（准入谓词管制的是"节点产出新周期产物进入下游"，不管制 finding 生命周期管理），因此不会出现"OPEN finding 阻断了自己的关闭复验"的死锁。独立验证责任保留：修复者不得自行登记 RESOLVED。
@@ -152,12 +153,19 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
      (a) **journal 前缀**：对 `≤ projectedThrough` 的已投影前缀逐事件按 §6.2.4 映射推导条目并与 manifest entries 比对——不一致即分叉（finding 状态迁移不经过 journal 执行事件、不影响 entries，故前缀推导为纯执行映射——G2-R9-H2 闭合）。
      (b) **findingIndex 权威交叉验证（有序互斥判别；对权威生命周期记录；G2-R10-H2）**——对每行按以下顺序判定，首个命中的分支决定结果：
      - **第 1 步 身份字段**：不可变身份/来源/证据字段（`finding_id`、`discoveredAt`、`rootCauseCategory`、`earliestAffectedNodeId`、`sourceRevision`、`evidenceRef`）必须与权威记录逐字段一致——不一致 → `JOURNAL_MANIFEST_MISMATCH_STOP`（身份漂移不可用"领先"解释）。
-     - **第 2 步 状态一致**：`status` 与权威记录一致 → 该行通过。
-     - **第 3 步 合法状态前进**：status 不一致时，仅当 (i) 索引 status 为合法前驱（OPEN）且权威 status 为合法后继（RESOLVED，runtime 面须有 durable 证明记录；手动面须为已发布的生命周期动作），(ii) 其余字段全部一致 → 判定**合法落后**，列入第 3 级追平输入。任何其他不一致（含索引 status 超前于权威、无证明的后继、身份字段漂移）→ `JOURNAL_MANIFEST_MISMATCH_STOP`。
-     - 比较对象 = **findingIndex 的当前状态行**（每 finding 恰一行，当前 status）；历史不在索引中（runtime 审计史=证明记录；手动审计史=业务仓 git 历史）。
-     - runtime 权威 = **finding store 当前状态**（`loop_findings` 行 + durable 证明，由既有 `appendFinding`/`resolveFinding`/`acceptFindingRisk` 提交，非新事件系统）；手动面：findingIndex **本身即权威记录**（§5.1）——第 2 级(b) 退化为自洽校验：每行字段完备、状态迁移合法（OPEN→RESOLVED）、非 scan 来源无 ACCEPTED 行；手动生命周期动作提交给 publisher、原子发布后持久生效（无预写步骤）。
-   - **第 3 级 待投影**：输入 = journal 尾段事件 **+ 权威生命周期记录相对 findingIndex 的差量**（runtime=finding store 当前状态中的未投影迁移，含关闭复验的 RESOLVED；手动=生命周期管理动作，§5.2）→ publisher 按序追平（幂等）。**无尾段且 findingIndex 无差量 → no-op，原样退出**；任一存在 → 发布（仅差量时 `projectedThrough`/`publishSeq` 不推进，findingIndex 与 `manifestDigest` 更新，entries 不动——§6.2.3）。
-   - 手动面：第 2 级(a)跳过（无 journal），(b)照常执行；第 3 级输入为完成声明 + finding 段差量。
+     - **第 2 步 状态一致（投影字段整行交叉绑定；G2-R12-H1）**：`status` 与权威记录一致时，**该行仍须通过投影字段交叉绑定**——runtime 面先经现役已验证读接口取得该 finding 的当前记录及其证明绑定，按**固定字段映射**生成期望索引行并逐字段比对：
+       - RESOLVED 行：`closedBy`←关闭复验者、`closureEvidenceRef`/`closureEvidenceDigest`←resolution 证据 ref/digest、`closureBoundRevisionId`←`resolvedByRevisionId`；
+       - ACCEPTED 行（runtime 映射）：`closedBy`←`riskAcceptedBy`、`closureEvidenceRef`/`closureEvidenceDigest`←风险接受证据 ref/digest（runtime 接受路径无 `resolvedByRevisionId` 对应字段，该项不参与 runtime 映射；手动面该字段的语义见 §5.2 手动生命周期动作规则）。
+       索引行中该状态适用的任一投影字段（责任主体、依据 ref/digest、绑定 revision）与期望行漂移 → `JOURNAL_MANIFEST_MISMATCH_STOP`。store 内部证明与不变量验证继续复用现役机制（`loop-finding-lifecycle.md` §8 读回验证），publisher 仅执行投影交叉绑定、不重复实现 store 内部不变量。手动面自洽校验：状态迁移后的行**携带** `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId` 字段，各状态适用的字段语义按 §5.1 第 5 条状态双语义（`closureBoundRevisionId`：RESOLVED 绑定修复依据 revision；ACCEPTED 绑定 formal_verdict PWR 裁决依据 revision），status 一致不豁免证据字段完备性；动作校验机制见本项手动生命周期动作规则。
+     - **第 3 步 合法状态前进**：status 不一致时，仅当 (i) 索引 status 为合法前驱（OPEN）且权威 status 为合法后继，(ii) 后继的持久依据有效，(iii) 不可变身份/来源字段与生命周期新增的关闭/接受依据字段（`closedBy`/`resolutionEvidence`/`riskAcceptedBy` 等——这些是合法迁移**新增**的字段，不要求在 OPEN 前态中存在）之外无其他漂移 → 判定**合法落后**，列入第 3 级追平输入。合法后继与依据要求：
+       - **OPEN → RESOLVED**：runtime 面须有 `resolveFinding` durable 证明记录；手动面须为符合独立关闭复验规则（§5.2）的已发布生命周期动作。
+       - **OPEN → ACCEPTED**：仅限 scan 来源 + formal_verdict 合法 PASS_WITH_RISK 裁决；runtime 面须有 `acceptFindingRisk` durable 证明（含 `riskAcceptedBy` 与依据 ref/digest）；手动面须为符合上述条件的已发布生命周期动作。
+     - **投影关系**：现役 finding store 机器枚举 `ACCEPTED_RISK` 投影为本合同的 `ACCEPTED`（映射不改现役枚举；未知权威状态值不得当作合法后继，一律 STOP）。
+     - 任何其他不一致（含索引 status 超前于权威、无有效依据的后继、身份字段漂移）→ `JOURNAL_MANIFEST_MISMATCH_STOP`。
+     - 比较对象 = **findingIndex 的当前状态行**（每 finding 恰一行，当前 status）；历史不在索引中（runtime 审计史=证明记录；手动面=findingIndex 行内证据字段承载可追溯依据，Git 历史仅提供用户实际提交过的 manifest 版本、不构成每次发布的快照保证）。
+     - runtime 权威 = **finding store 当前状态**（`loop_findings` 行 + durable 证明，由既有 `appendFinding`/`resolveFinding`/`acceptFindingRisk` 提交，非新事件系统）；手动面：findingIndex **本身即权威记录**（§5.1）——第 2 级(b) 退化为自洽校验：每行字段完备（含状态迁移后的 `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`，`closureBoundRevisionId` 按 §5.1 第 5 条状态双语义：RESOLVED=修复依据 revision、ACCEPTED=PWR 裁决依据 revision）、状态迁移合法（OPEN→RESOLVED 按独立关闭复验规则；OPEN→ACCEPTED 仅允许 scan 来源且满足 formal_verdict PWR 条件的动作）、非 scan 来源无 ACCEPTED 行。**手动生命周期动作语义（G2-R11-H1-C）**：动作以结构化形式提交给 publisher；publisher 校验身份字段、允许的状态转换、责任主体（关闭复验者 / formal_verdict 裁决）及依据完整性后纳入发布——**原子发布后持久生效**，无预写 findingIndex、无先发布后验证；相同已生效动作重放不重复迁移（幂等），与已生效记录不一致的动作不得以幂等名义接受（拒绝）。
+   - **第 3 级 待投影**：输入 = journal 尾段事件 **+ 权威生命周期记录相对 findingIndex 的差量**（runtime=finding store 当前状态中的未投影迁移，含关闭复验的 RESOLVED 与 PWR 接受的 ACCEPTED；手动=生命周期管理动作，§5.2）→ publisher 按序追平（幂等）。**无尾段且 findingIndex 无差量 → no-op，原样退出**；任一存在 → 发布。**混合输入（V9）**：journal 尾段与生命周期差量并存时，两类更新合入**同一次原子发布**——entries 按尾段执行映射更新（checkpoint 正常推进），findingIndex 按权威生命周期记录对齐；任一分支的独立表述（如"entries 不变"）仅适用于该输入**单独**出现的发布，不得在混合发布中丢弃另一类更新。
+   - 手动面：第 2 级(a)跳过（无 journal），(b)照常执行（自洽校验，见上）；第 3 级输入为完成声明 + 生命周期记录差量/生命周期管理动作（runtime 输入来自已验证 finding store；两者都不得从不可变产物的 finding 段读取当前状态作为权威）。
 3. **追平发布（幂等纯函数；三类输入的进度与绑定规则，G2-R7-H2）**：输入 = (校验通过的当前 manifest, journal 尾段事件, 权威生命周期记录差量, 新完成声明)。
    - **runtime 尾段**：entries/findingIndex 按事件映射生成；`publishSeq`/`projectedThrough` 推进到已处理末事件；`updated_at` = 最后已投影事件时间戳。
    - **手动新完成声明**：按声明生成/更新条目；`publishSeq` 推进到声明 seq，**`projectedThrough` 保持 `MANUAL`**；`updated_at` = 声明确认时刻。
@@ -172,7 +180,7 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
 
 ### 7.1 PWR
 
-PWR 自动推进：verdict 的 scope 级判断即验收；被接受风险在**其来源 finding 记录**标 `ACCEPTED`（scan 来源=Gate Ledger；处置者=formal_verdict——非 scan 来源无 ACCEPTED 路径，见 §5.2），经 manifest finding 索引以 risk refs 随行下游；envelope 不得强制 `riskAcceptanceRefs` 非空；无 acceptance 仪式产物。
+PWR 自动推进：formal_verdict 的 PASS_WITH_RISK scope 级判断即风险接受裁决。被接受的 scan 来源 finding，其当前状态记录于**生命周期记录**：runtime 通过既有 `acceptFindingRisk` 持久操作提交状态及对应依据（durable 证明）；手动面由 publisher 更新 findingIndex。Gate Ledger 只保留不可变发现事实与引用，不回写后续状态。接受状态与风险引用经 publisher 随行至下游，不要求额外人工接受、审批或仪式产物。非 scan 来源无 ACCEPTED 路径（见 §5.2）；envelope 不得强制 `riskAcceptanceRefs` 非空。
 
 ### 7.2 失败码
 
@@ -230,8 +238,8 @@ PWR 自动推进：verdict 的 scope 级判断即验收；被接受风险在**�
 | N3 | scan 与 verdict 异 binding；同 binding 拒绝 | 同 binding 双角色执行 fixture | 去除 binding 比较 | 拒绝断言（执行记录实际两次 binding） | G3 执行记录 + G5 binding 校验 |
 | N4 | 首轮无 Gate 输入仍可产出待审方案 | 无 verdict 历史的新需求 fixture | 恢复深度前置条款/准入 | 时序断言 + prompt 条款扫描 | G3 harness + G5 节点准入 |
 | N5 | Agent 自由文本不落 manifest；无 manifest 存量目录复用被拒 | 直写尝试 + 复用尝试 fixture | publisher 绕过 / 移除 DP4 前置阻断 | 拒绝断言（两个独立变异各自变红） | G3 publisher + intake |
-| N6 | PWR 无 riskAcceptanceRefs 非空强制、无仪式产物 | PWR fixture | 恢复 envelope 强制 | envelope 断言 + 下游准入场景 | G5 envelope 测试 + G3/G5 准入 |
-| N7 | 三态可区分：自洽待投影（追平）/ 真分叉（STOP）/ 损坏（STOP）；两种 STOP 码不得互换 | journal 领先 fixture / journal 分叉 fixture / self-digest 破坏 fixture | 分别移除 projectedThrough 比对、分叉比对、self-digest 校验 | 三种独立变异各自变红为对应码 | G5 projector/recovery 注入测试 |
+| N6 | PWR 无 riskAcceptanceRefs 非空强制、无仪式产物；**ACCEPTED 经生命周期记录投影随行（V2）：Gate Ledger 不回写、非 scan 来源拒绝 ACCEPTED（V4）；手动合法 PWR 动作（携带 PWR 裁决依据绑定的 closureBoundRevisionId）首次发布成功、原样重放 no-op，缺失/错误绑定拒绝** | PWR fixture + scan finding OPEN + `acceptFindingRisk` 已提交；非 scan ACCEPTED 尝试 fixture；手动 PWR 动作 fixture（含缺失/错误绑定变体） | 恢复 envelope 强制；恢复 ACCEPTED 回写 Gate Ledger（§7.1 旧语义）；删除 §6.2.2(b) 第 3 步 ACCEPTED 后继；删除手动 `closureBoundRevisionId` 要求 | envelope 断言 + 下游准入场景 + 逐字段凭据校验拦截 + 手动行完备性校验 | G5 envelope 测试 + G3/G5 准入 |
+| N7 | 三态可区分：自洽待投影（追平）/ 真分叉（STOP）/ 损坏（STOP）；两种 STOP 码不得互换；**有序判别分支承重（V5 反向状态 STOP、V7 无效依据 STOP、V6 非键字段篡改 STOP、V6′ 同状态关闭依据篡改 STOP）** | journal 领先 fixture / journal 分叉 fixture / self-digest 破坏 fixture / 反向状态 fixture / 无证明后继 fixture / 已关闭且 status 不变、仅改 closureEvidenceRef 并重算 self-digest 的 fixture | 分别移除 projectedThrough 比对、分叉比对、self-digest 校验、身份字段校验、合法状态前进的证明校验、第 2 步投影字段交叉绑定 | 各独立变异变红为对应码；V5/V7 在缺证明/反向分支上 STOP；V6′ 由第 2 步投影交叉绑定拦截 | G5 projector/recovery 注入测试 + G3 publisher 校验 |
 | N8 | 升档回流=台账缺口补齐：漏补必需项、删除已确认内容分别变红 | 升档 fixture（要求清单 + 已确认内容清单） | 漏补 / 删除受保护内容 | 台账覆盖断言 + 受保护内容 diff 断言 | G3/G5 升档 fixture |
 | N9 | 第三份 Gate 权威文件被拒；历史 evidence 引用不误杀 | 第三权威文件 + 历史 evidence fixture | 引入第三文件 / 误杀历史引用 | 稳定路径表比对 + evidence 排除断言 | G3 路径 validator + G5 投影 |
 
@@ -265,6 +273,10 @@ FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与
 
 ## 11. Revision Record
 
+- 1.0.0（2026-09-05）：**冻结**。Current User 依据 R13 轮 FREEZE 建议（绑定 v0.13.0 字节）裁决 G2 合同冻结；本版仅并入两项非语义变更：①G2-R14-L1 引用更正（字段双语义引用 §5.1 第 5 条、动作机制引用手动生命周期动作规则、职责仍引 §5.2）；②保证 B 裁决入案（§5.1 第 8 条：接受保证 A 为手动面审计最终口径）。修订史 R1–R13 见下。
+- 0.13.0（2026-09-05）：按 G2-R13-H1 修订——撤销 v0.12.0 将 runtime"ACCEPTED 不要求 closureBoundRevisionId"误扩展为手动面"不携带"的规则：手动 ACCEPTED 行**携带**该字段，语义按状态区分（RESOLVED=修复依据 revision；ACCEPTED=formal_verdict PWR 裁决依据 revision，非 resolvedByRevisionId、不要求新增修复 revision）；runtime 映射条款改为仅声明 runtime 接受路径无该对应字段、手动语义见 §5.2；手动自洽校验与 §5.2 引用同一字段规则（不再维护两份清单）；保证 A 的"依据绑定 revision 可追溯"承载恢复；N6 增手动合法 PWR 正例（首次发布成功/重放 no-op/缺失错误绑定拒绝）。
+- 0.12.0（2026-09-05）：按 G2-R12-H1 修订——第 2 步（状态一致）重写为**投影字段整行交叉绑定**：runtime 经现役已验证读接口取得 finding 当前记录及证明绑定，按固定字段映射生成期望索引行（RESOLVED：closedBy/closureEvidence*/resolvedByRevisionId；ACCEPTED：closedBy←riskAcceptedBy/closureEvidence*，不要求 closureBoundRevisionId）并逐字段比对，任一适用投影字段漂移 → MISMATCH_STOP（堵住"status 一致、仅篡改 closureEvidenceRef 并重算 self-digest"的反例）；store 内部不变量验证仍归现役读回机制，publisher 仅做投影交叉绑定；N7 增 V6′ 承重变体。
+- 0.11.0（2026-09-05）：按 G2-R11-H1/M1 修订——H1 PWR ACCEPTED 路径端到端闭合：§7.1 与 §5.2 写入语义统一（ACCEPTED 录生命周期记录：runtime=`acceptFindingRisk`+durable 证明；手动=publisher；Gate Ledger 仅不可变发现事实，不回写）；§6.2.2(b) 第 3 步补 OPEN→ACCEPTED 合法后继（限 scan 来源 + formal_verdict PWR 裁决 + 有效依据；现役 `ACCEPTED_RISK`→`ACCEPTED` 投影映射，未知值一律 STOP）；区分不可变字段与生命周期新增依据字段（不误杀从空到有的关闭依据）；手动面动作校验语义（提交 publisher、校验后原子发布生效、无预写、重放幂等/不一致拒绝）；L160 残留称谓统一为生命周期记录差量/生命周期管理动作；N6/N7 扩充 V2/V4/V5/V6/V7 承重案例；第 2 级判别补混合发布显式规则（两类输入合入同一次原子发布、互不覆盖）与第 2 步证据绑定说明（runtime 由 store 事务不变量保证、手动要求行内依据字段完备）。M1 手动审计保证边界（G2-R11-M1）：区分两类保证——findingIndex 行内字段保证发现事实/关闭/接受依据/责任主体/绑定 revision 可追溯（保证 A）；业务仓 Git 历史仅提供用户实际提交过的 manifest 版本、不保证每次发布的完整快照（不承诺保证 B）；publisher 不执行 commit、Git 提交非状态生效或准入前置条件；§5.1 字段表扩展 `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`。
 - 0.10.0（2026-09-05）：按 G2-R10-H1/H2 修订——H1 承载切换贯穿全部写入条款：ACCEPTED 改录生命周期记录（runtime=`acceptFindingRisk`+durable 证明，不写 Gate Ledger；Gate Ledger 仅保留 scan 发现事实）；状态表示按各面现役原语（runtime=guarded UPDATE 状态字段+证明追加；手动=publisher 更新 findingIndex 行，审计史=业务仓 git 历史），删除无差别的"同 ID 追加状态行"表述；§6.2.3 输入称谓同步。H2 第 2 级(b) 改为**有序互斥判别**（身份字段一致→状态一致→合法状态前进（OPEN→后继+证明）→其余 STOP），比较对象=索引当前状态行；手动生命周期动作=提交 publisher、原子发布后生效、无预写。
 - 0.9.0（2026-09-05）：按 G2-R9-H1/H2 修订——**两类记录承载分离**（G2-R9-H1）：发现记录=产物 finding 段（in-band，随 revision 固定）；生命周期记录=产物之外的权威（runtime=finding store 经既有 `resolveFinding`/`appendFinding` 持久操作 + durable 证明，手动=manifest findingIndex 本身）；状态迁移零触碰产物字节，产物 digest 持续成立。`findingIndexRev` **删除**（G2-R9-H2）：交叉验证改为对权威记录的方向性整行比对（runtime=store 当前状态；手动=自洽校验），落后=追平/一致=no-op/无凭据=STOP 三态由内容寻址与方向性比对区分，无需自证计数。合成前缀推导撤销（迁移不经 journal 执行事件，前缀推导回归纯执行映射）。悬空 §5.5' 引用清除。C14/C15/C18 适配更新。
 - 0.8.0（2026-09-05）：按 G2-R8-H1/M1 修订——finding 状态迁移重定义为生命周期元数据（**不产生产物新修订**：无内容变更即无新 revision，规避现役四项绑定的成功执行要求；entry version/digest 不动，完整性对原 digest 成立）；`findingIndexRev` 独立投影计数（单调校验入第 2 级(b)）；第 2 级(a) 前缀推导改为"journal 推导 + 已发布 finding 迁移"合成（关闭发布后下一次发布不误判分叉）；L150 残句清除；C14/C15/C18 适配落实。0.7.0 的"状态迁移=产物新修订"设计撤销。
