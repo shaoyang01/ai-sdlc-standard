@@ -172,7 +172,7 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 | Delta Scope | Delta Depth | 裁决 | 说明 |
 | --- | --- | --- | --- |
 | 遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件、局部兼容规则，且 01/02 已覆盖 | `LIGHT` / `STANDARD` | `CONFIRMED` | 原需求深度只作为 context。 |
-| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、跨模块、状态机或其他强触发因素 | `DEEP` | `CONFIRMED`（或 `ESCALATED` 升档） | 理由必须来自 Delta Depth Triggers；Delta 自身的知识同步需求不单独构成触发因素。 |
+| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、状态机或其他强触发因素（T1，F1–F9）；跨模块**伴随**强触发同样 DEEP | `DEEP` | `CONFIRMED`（或 `ESCALATED` 升档） | 理由必须来自 Delta Depth Triggers；纯跨模块协作拆分无强触发 → 按 §4.2 T2 提案 STANDARD；Delta 自身的知识同步需求不单独构成触发因素。 |
 | Delta 影响行为但技术方案未更新 | `BLOCKED_UNKNOWN` | `BLOCKED_UNKNOWN` | Earliest Affected Node = `01-技术方案`。 |
 | Delta 已写入方案但方案门禁未覆盖 | `BLOCKED_UNKNOWN` | `BLOCKED_UNKNOWN` | Required Re-Gate = `02-方案审核`。 |
 
