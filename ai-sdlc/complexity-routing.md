@@ -18,7 +18,7 @@ Decision-044 Q2 起不再存在 `DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQU
 - `DEEP`：跨模块状态变更或高风险；方案强制包含状态机/DB/MQ/事务/回滚/代表数据/边界场景章节，任务规划承担实现前一致性审计。
 - `BLOCKED_UNKNOWN`（对应 `decision_status = BLOCKED_UNKNOWN`）：缺少关键事实，不能可靠分级；必须回到需求/方案补齐事实，不能靠猜测。
 
-`solution-gate` 是**唯一深度裁决点**；`decision_status` 只取 `DECIDED` / `BLOCKED_UNKNOWN`；`BLOCKED_UNKNOWN` 不进入实现。
+`solution-gate` 是**唯一正式深度裁决点**（`requirement-intake` 的 `proposedDepthBasis` 是提案输入，不是裁决）；`decision_status` 取 `CONFIRMED` / `ESCALATED` / `BLOCKED_UNKNOWN`；后两者不进入实现。深度提案、`requiredDepth` 与覆盖台账的结构化定义见 [Manual/Runtime Semantic Contract](manual-runtime-semantic-contract.md) §4（本文件的档位判据是其 §4.4 规范来源）。
 
 ## Decision Scope
 
