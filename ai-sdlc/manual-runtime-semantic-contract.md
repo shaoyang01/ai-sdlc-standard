@@ -1,222 +1,187 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 0.2.0 (PROPOSED)
+> Version: 0.3.0 (PROPOSED)
 > Status: 待独立只读复审 + Current User 裁决冻结；冻结后为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
-> 修订: v0.2.0 按 G2-R1-H1..H4/M1/L1 全量修订——深度状态机封闭（H1）、统一生命周期与准入表（H2）、manifest 发布协议（H3）、现役合同同步清单与 canonical 文件名（H4）、N2 检查对象修正与逐条承重绑定（M1）、交叉引用更正（L1）。
+> 修订: v0.3.0 按 G2-R2-H1/H2/H3/L1 全量修订——深度规范权威分层并全面重写 complexity-routing（H1）；finding 生命周期推广为全链、回流枚举闭合、Ledger-设计版本绑定（H2）；manifest 改为**自证格式**并重定义发布/崩溃/修复协议（H3）；新增 §4.4 并更正全部交叉引用（L1）。
 
 ## 1. 定位与权威关系
 
 1. 本合同是**七节点流程语义的唯一权威**：节点顺序、输入输出、稳定路径、深度语义、Finding/Ledger/Gate 生命周期、manifest 职责、发布协议、失败码、回流与准入。手动 Skill prompt 与 LOOP runtime 代码消费同一份合同；实现机制可以不同，**语义必须等价**。
 2. 冲突时本合同优先于：各 `skills/sdlc-*/SKILL.md` 的流程性条款、`execution/gateway.ts` 等运行时代码、以及 §10 同步清单中标注"替代"的既有合同条款。未标注替代的内容性条款（如 artifact-flow 的产物内容要求、Skill 的领域指令）继续有效。
 3. 本合同**只定义语义，不授权实现**：G3（手动面落地）与 G5（runtime 落地）分别按冻结计划 §6 申请授权；§8 变更清单即其范围依据。
-4. 变更控制：语义修订走 Revision Record；已冻结字段（§3–§7）的修改须同步更新 §9 负向矩阵与 §10 同步清单。
+4. 变更控制：语义修订走 Revision Record；已冻结字段（§3–§7）的修改须同步更新 §8.2 负向矩阵与 §10 同步清单。
 
 ## 2. 冻结不变量
 
 - I-A 单轨 7+1：`requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync`；`docflow-writer` 提供模板职能，不是流程节点。
 - I-B solution-gate 双 binding 隔离：`adversarial_scan` 与 `formal_verdict` 不得由同一 Agent binding 执行。
 - I-C 人工 Git 边界：任何执行面不产生业务仓 commit/push/PR。
-- I-D PWR 自动推进（Decision-086）：verdict 的 scope 级判断即风险验收，无 risk acceptance proof 仪式。
+- I-D PWR 自动推进（Decision-086）：verdict 的 scope 级判断即风险验收，无 risk acceptance proof 仪式；**code-review 实现类 finding 直接返工 implementation，不重走 Gate**。
 - I-E 失败封闭：类型不清/证据不足 → BLOCKED，零部分推进。
-- I-F 知识保护：节点不得无证据覆盖既有确认知识；**受控知识维护**（有验证证据的更新）按 `ai-sdlc/business-domain-compatible-update.md` 执行，不属于本条禁止范围。
+- I-F 知识保护：节点不得无证据覆盖既有确认知识；受控知识维护（有验证证据的更新）按 `ai-sdlc/business-domain-compatible-update.md` 执行。
 - I-G 单一生命周期权威：runtime 运行状态以 journal 为机器权威；`manifest.md` 为唯一人工投影（§6）；不存在第三份生命周期权威。
 
-## 3. 域一：节点输入/输出与稳定路径（冻结表；文件名维持既有 canonical 形态）
+## 3. 域一：节点输入/输出与稳定路径（冻结表；canonical 文件名）
 
 产物根为 `library/{requirement_id}/`。下表为唯一合法稳定路径集合；版本与生命周期状态由文件头元数据 + `manifest.md` 表达（§5），禁止以 `-R1/-R2`、`_R1` 等轮次后缀派生新文件名。
 
-| 节点 | 输入（当前版本） | 输出稳定路径 | 准入谓词（进入本节点的条件，§7.3） |
+| 节点 | 输入（当前版本） | 输出稳定路径 | 准入谓词（§7.3） |
 | --- | --- | --- | --- |
 | requirement-intake | 用户原始输入 | `00-需求资料/{id}_需求摘要.md`；`00-需求资料/intake.manifest.json`（§6.1 对象一）；`library/{id}/manifest.md`（**本节点创建**） | 归一化事实完备；深度提案产出（§4） |
-| solution-design | `{id}_需求摘要.md`（当前）；`requiredDepth` + 深度提案（§4） | `01-技术方案/{id}_技术方案.md`（含 `depthCoverageLedger`） | 摘要 current；**不等待 Gate** |
+| solution-design | `{id}_需求摘要.md`（current）；`requiredDepth` + 深度提案（§4） | `01-技术方案/{id}_技术方案.md`（含 `depthCoverageLedger`） | 摘要 current；**不等待 Gate** |
 | solution-gate / adversarial_scan | 技术方案 current | `02-方案审核/{id}_FindingLedger.md`（行式追加，§5） | 方案 current；异 binding |
-| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current；异 binding |
+| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current 且 `scannedDesignVersion` 匹配（§5.6）；异 binding |
 | task-planning | Gate Result（current）+ 技术方案（current） | `03-任务规划/{id}_任务计划.md` | A1（§7.3） |
 | implementation | 任务计划（current） | `04-实现记录/{id}_实现记录.md` + 生产代码变更 | A2（§7.3） |
 | code-review | 实现记录（current）+ 代码变更证据（§5.5） | `05-代码审核/{id}_代码审核.md` | A3（§7.3） |
 | knowledge-sync | 代码与验证证据 + routed 声明 | `06-知识同步/{id}_知识同步结果.md` + `.sdlc/business_domain/**`（受 G1 规格约束） | A4（§7.3） |
 
-**代码变更证据绑定**：implementation 在实现记录中固定 `{baseRevision, reviewedRevision, changeDigest}`（content-addressed，复用既有 artifact 证据机制）；code-review 消费同一 `{reviewedRevision, changeDigest}` 并在审核结果中回写——两执行面审的是同一份变更。
+**代码变更证据绑定**：implementation 在实现记录中固定 `{baseRevision, reviewedRevision, changeDigest}`（content-addressed）；code-review 消费同一标识并回写审核结果——两执行面审的是同一份变更。
 
-## 4. 域二：深度语义（封闭状态机，G2-R1-H1）
+## 4. 域二：深度语义（封闭状态机）
 
-### 4.1 字段（结构化，全部可机器承载）
+### 4.1 字段
 
 | 字段 | 取值 | 产生者 | 语义 |
 | --- | --- | --- | --- |
-| `decisionScope` | FULL_REQUIREMENT \| DELTA_CHANGE | requirement-intake | 沿用 `complexity-routing.md` 的 Decision Scope |
-| `requestedDepth` | LIGHT \| STANDARD \| DEEP | requirement-intake | 首轮要求档位的**实际值**（§4.2 判定表或用户显式指定） |
-| `initialDepthBasis` | `user_requested` \| `normalized_proposal` \| `PROVISIONAL_STANDARD` | requirement-intake | `requestedDepth` 的**来源标签**，与档位值成对记录 |
-| `requiredDepth` | LIGHT \| STANDARD \| DEEP | 初值=requestedDepth；仅 formal_verdict 可上调 | 当前生效要求档位（升档改写它，不改写 requestedDepth） |
-| `depthCoverageLedger` | 三档要求清单 × 已覆盖/未覆盖 | solution-design | §4.4 冻结清单逐项标注；未覆盖项必须显式列出 |
+| `decisionScope` | FULL_REQUIREMENT \| DELTA_CHANGE | requirement-intake | 沿用 complexity-routing 的 Decision Scope |
+| `requestedDepth` | LIGHT \| STANDARD \| DEEP | requirement-intake | 首轮要求档位**实际值**（§4.2 判定表或用户显式指定） |
+| `initialDepthBasis` | `user_requested` \| `normalized_proposal` \| `PROVISIONAL_STANDARD` | requirement-intake | `requestedDepth` 的来源标签，与档位值成对记录 |
+| `requiredDepth` | LIGHT \| STANDARD \| DEEP | 初值=requestedDepth；仅 formal_verdict 可上调 | 当前生效要求档位 |
+| `depthCoverageLedger` | §4.4 清单 × 已覆盖/未覆盖 | solution-design | 未覆盖项必须显式列出 |
 | `decisionDepth` | LIGHT \| STANDARD \| DEEP \| null | **仅** formal_verdict | 最终持守档位；null 仅与 BLOCKED_UNKNOWN 组合 |
 | `decisionStatus` | CONFIRMED \| ESCALATED \| BLOCKED_UNKNOWN | **仅** formal_verdict | 见 §4.3 |
 
-### 4.2 归一深度判定表（枚举；手动与 runtime 共用；用户显式指定永远最高优先）
+### 4.2 归一深度判定表（intake 提案权威；用户显式指定永远最高优先）
 
-判定输入限**归一化产物中当前可判定的事实**（范围、触达的模块/数据/接口），禁止依赖设计期结论（如路线数）。`decisionScope` 一并记录：
+判定输入限**归一化产物中当前可判定的事实**。`decisionScope` 一并记录：
 
 | 序 | 条件 | `requestedDepth` |
 | --- | --- | --- |
-| T1 | 存在任一强触发：状态机变更；DB/schema 变更；MQ/异步链路；事务/幂等/回滚要求；数据迁移；跨系统接口；不可逆操作 | DEEP |
-| T2 | 跨模块/跨服务变更（≥2 模块或服务），无 T1 强触发 | STANDARD |
+| T1 | 存在任一强触发：状态机/状态流转/单据生命周期变更；DB schema/关键数据写入/迁移/回填/一致性变化；MQ 生产/消费/重试/幂等/顺序/补偿变化；事务/幂等/补偿/回滚边界复杂；定时任务/监听器/异步/批处理/流程编排变化；跨系统接口；不可逆操作；权限/资金/库存/履约/计费/结算等高影响域 | DEEP |
+| T2 | 多模块/多服务/跨仓协作，**但无任何 T1 强触发**（纯协作拆分） | STANDARD |
 | T3 | 单模块内展示或逻辑变更，边界明确，无 T1 因子 | LIGHT |
-| T4 | 以上均无法判定 | `PROVISIONAL_STANDARD`（来源标签，附"判定不足"理由；档位按 STANDARD 准备） |
+| T4 | 以上均无法判定 | `PROVISIONAL_STANDARD`（来源标签；档位按 STANDARD 准备，附"判定不足"理由） |
 
-**档位内容要求清单（`depthCoverageLedger` 的规范来源）**：引用 `ai-sdlc/complexity-routing.md` §档位定义——LIGHT 精简主干；STANDARD 覆盖架构、接口、数据、异常、兼容性与验证；DEEP 强制状态机/DB/MQ/事务/回滚/代表数据/边界场景章节。该文件按 §10 同步清单于 G2 收口修订。
+**分层权威**：本表是 **intake 提案权威**；formal_verdict 仍是**唯一正式裁决点**，可依方案揭示的风险上调（ESCALATED）。`complexity-routing.md` 的 DEEP 触发清单已按 T1 重写（§10 C1）；其判据内容与 T1 因子一一对应，无第二套档位规则。
 
-### 4.3 状态机（唯一合法转换；S1/S2 走查的唯一结果集）
+### 4.3 状态机（唯一合法转换）
 
 1. **首轮**：solution-design 按 `requiredDepth` 立即产出方案 + 覆盖台账；不等待 Gate。
-2. **verdict 求值**：formal_verdict 对照 `requiredDepth` 档位要求清单与 Ledger 判定，输出且仅输出以下组合之一：
-   - `CONFIRMED` + `decisionDepth=requiredDepth`：方案满足当前要求 → 可进入下游（§7.3）；
-   - `ESCALATED` + `decisionDepth=requiredDepth'`（requiredDepth'>requiredDepth）：要求上调至 requiredDepth'，回流 solution-design；
-   - `CONFIRMED` + `decisionDepth < requiredDepth`：方案为超集，verdict 判定低档已足够——无害降持，记录即可，不回流；
-   - `BLOCKED_UNKNOWN` + `decisionDepth=null`：关键事实缺失，无法分级 → 回流补事实（按 finding 指向 intake 或 solution-design），不可进入下游。
-3. **升档回流**：ESCALATED 即时使旧方案/旧 Gate/全部下游产物 stale（§5.4）；solution-design 只生产新旧 `requiredDepth` 要求清单的**缺口增量**并更新台账；Re-Gate 时 verdict 对照**上调后的 requiredDepth** 判定 → 可 CONFIRMED（消除对 initial 值的比较，杜绝反复升档）。
-4. **合法组合表**：`(decisionStatus, decisionDepth, 下游准入)` 仅有：`(CONFIRMED, LIGHT/STANDARD/DEEP, 准入)`、`(ESCALATED, LIGHT/STANDARD/DEEP, 禁止)`、`(BLOCKED_UNKNOWN, null, 禁止)`。除此之外不存在合法状态。
+2. **verdict 求值**：输出且仅输出以下组合之一：
+   - `CONFIRMED` + `decisionDepth=requiredDepth`：满足当前要求 → 可进入下游；
+   - `CONFIRMED` + `decisionDepth < requiredDepth`：方案为超集，verdict 判定低档已足够——无害降持，记录即可；
+   - `ESCALATED` + `decisionDepth=requiredDepth'`（>requiredDepth）：要求上调，回流 solution-design；
+   - `BLOCKED_UNKNOWN` + `decisionDepth=null`：关键事实缺失 → 按 finding 指向回流（intake 或 solution-design），不可进入下游。
+3. **升档回流**：ESCALATED 即时使旧方案/旧 Gate/全部下游 stale（§5.4）；solution-design 只生产新旧 `requiredDepth` 清单的**缺口增量**并更新台账；Re-Gate 对照**上调后的 requiredDepth** 判定 → 可 CONFIRMED（无反复升档）。
+4. **合法组合表**：`(CONFIRMED, LIGHT/STANDARD/DEEP, 准入)`、`(ESCALATED, LIGHT/STANDARD/DEEP, 禁止)`、`(BLOCKED_UNKNOWN, null, 禁止)`。无其他合法状态。
 
-## 5. 域三：Finding / Ledger / Gate 生命周期（G2-R1-H2）
+### 4.4 档位内容要求清单（`depthCoverageLedger` 规范来源）
 
-### 5.1 Finding identity 与状态
+引用 `ai-sdlc/complexity-routing.md` 档位定义（§10 C1 修订版）：LIGHT 精简主干；STANDARD 覆盖架构、接口、数据、异常、兼容性与验证；DEEP 强制状态机/DB/MQ/事务/回滚/代表数据/边界场景章节。该清单是台账逐项标注的唯一规范来源；修订即本合同修订。
 
-- `finding_id = {requirement_id}-F{两位序号}`，由 adversarial_scan 在首次登记时分配，**不可变**；后续轮次引用同一 ID。
-- Ledger 行：`{finding_id, round, cause, severity, earliestAffectedNodeId, sourceRevision, evidenceRef, status}`。
-- `status ∈ OPEN → RESOLVED | ACCEPTED`：登记者=adversarial_scan；**处置者=formal_verdict**（RESOLVED=已修复并验证；ACCEPTED=PWR scope 级接受，无独立证明仪式）；手动与 runtime 同此。
-- finding 一经登记行不可改写，状态迁移以新行追加（保留审计面）。
+## 5. 域三：Finding 全链生命周期（G2-R2-H2：适用于所有 finding 来源，不限 Gate）
+
+### 5.1 登记与处置（按来源定义；全链闭合）
+
+| finding 来源 | 登记者 | 登记位置 | 处置者 | 处置 |
+| --- | --- | --- | --- | --- |
+| 方案类（design 阶段） | adversarial_scan | `{id}_FindingLedger.md` | formal_verdict | RESOLVED（已修复并验证）/ ACCEPTED（PWR scope 接受）/ 维持 OPEN |
+| 实现类（code-review/implementation 阶段） | code-review | `{id}_代码审核.md`（finding 段） | code-review（返工修复后复验） | RESOLVED（direct rework 后验证，**不重走 Gate**，I-D）/ 维持 OPEN |
+| 知识类（knowledge-sync 阶段） | knowledge-sync | `{id}_知识同步结果.md`（finding 段） | knowledge-sync | RESOLVED / 维持 OPEN |
+| 深度/事实类（verdict 阶段） | formal_verdict | `{id}_方案审核.md` + Ledger | formal_verdict | BLOCKED_UNKNOWN 回流后由复验关闭 |
+
+- `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，任一来源登记即占用，**不可变**；状态迁移以新行追加。
+- `earliestAffectedNodeId` 的合法值域 = 七节点全集（含 `code-review`、`knowledge-sync`）。
+- OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断其 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
 
 ### 5.2 版本绑定
 
-Gate Result 头部必须绑定：`{designVersion, ledgerDigest, verdictBinding, decisionDepth, decisionStatus, gateVersion}`；manifest 记录各产物 current 版本与 digest（§6）。
+Gate Result 头部绑定 `{designVersion, ledgerDigest, scannedDesignVersion, verdictBinding, decisionDepth, decisionStatus, gateVersion}`；**准入要求 `scannedDesignVersion == designVersion`**（Ledger 所审方案与 Gate 所裁方案为同一修订，否则 verdict 不得产出，须重扫）。
 
 ### 5.3 轮次
 
-每轮 Re-Gate 产生 Gate Result 新版本（version 递增）；旧版本标 superseded 并保留（审计面，§10 与 artifact-versioning 的历史保存映射）。轮次信息只存在于版本元数据，不进入文件名。
+每轮 Re-Gate 产生 Gate Result 新版本（version 递增）；旧版本标 superseded 并**保留正文**（§10 C12 历史保存规则）。轮次只存在于版本元数据，不进入文件名。
 
 ### 5.4 失效传播与发布时点
 
-verdict 输出 `ESCALATED` 或 `FAIL` 的**同一发布事务**内（§6.2 协议）：旧 Gate Result 与技术方案标 stale，全部下游产物标 stale，回流目标节点标 actionable。stale 产物不可作为任何下游准入输入（§7.3 谓词包含 current 条件）。回流目标节点自身在完成新产出前保持 `actionable` 状态（无中间"半失效"态）。
+verdict 输出 `ESCALATED` 或 `FAIL` 时，旧 Gate/方案/下游 stale 标记与新 Gate 条目在**同一 manifest 修订**（§6.2 单次原子写入）中生效——"同事务"即单文件原子性，不依赖跨记录协议。stale 产物不可作为下游准入输入；回流目标节点完成新产出前保持 `actionable`。
 
 ### 5.5 证据身份
 
 implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevision, changeDigest}`（content-addressed）；不新增固定 diff 文件。
 
-## 6. 域四/五：manifest 三对象与发布协议（G2-R1-H3）
+## 6. 域四/五：manifest 三对象与自证发布协议（G2-R2-H3）
 
 ### 6.1 三个对象，互不替代
 
 | 对象 | 唯一职责 | 创建者 | 更新者 |
 | --- | --- | --- | --- |
-| `00-需求资料/intake.manifest.json` | runtime 入口确认与触发（封闭 schema `loop-intake-manifest:v1`） | requirement-intake | 不随流程演进 |
-| `library/{id}/manifest.md` | 七节点生命周期人工投影：`{node, status, artifactPath, version, digest, updatedAt}` 每节点一条 + finding/深度字段引用 + 修复记录 | requirement-intake（**创建职责唯一**） | **publisher**（§6.2） |
-| `.sdlc/business_domain/knowledge-target.yaml` | 项目级长期知识路由（G1 规格） | 初始化器 | 状态机 absent → candidate_pending_confirmation → routed |
+| `00-需求资料/intake.manifest.json` | runtime 入口确认与触发（`loop-intake-manifest:v1`） | requirement-intake | 不随流程演进 |
+| `library/{id}/manifest.md` | 七节点生命周期人工投影（§6.2 格式） | requirement-intake（创建职责唯一） | **publisher**（§6.2） |
+| `.sdlc/business_domain/knowledge-target.yaml` | 项目级长期知识路由（G1 规格） | 初始化器 | absent → candidate_pending_confirmation → routed |
 
-### 6.2 发布协议（手动与 runtime 共用同一协议与同一 manifest 格式）
+### 6.2 自证发布协议（手动与 runtime 共用）
 
-1. **输入**：手动面 = 节点完成的结构化声明（Skill 产出）；runtime = journal terminal 事件。二者是各自执行面的事实来源，产出同一格式的 manifest 变更。
-2. **步骤**：读当前 manifest → 校验文件实际 digest == 上次发布记录的 digest（不等 → CORRUPT，见 4）→ 确定性生成新全文（固定键序）→ 写 `.tmp` → 原子 rename 覆盖 → 在完成声明/journal 事件中记录新 digest。
-3. **崩溃语义**：原子 rename 保证 manifest 只有旧或新两种状态；孤儿 `.tmp` 为垃圾、忽略。**不存在"未完成投影"中间态**。
-4. **runtime 投影**：journal 为机器权威；projector 从 journal 事件确定性推导 manifest 变更（字段映射：terminal 事件 kind/depth/status/finding refs → manifest 条目）；Agent 自由文本不得直写。
-5. **CORRUPT（解析失败或 digest 不符）→ `MANIFEST_CORRUPT_STOP`**：不静默修复、不重建（DP4）。
-6. **人工修复**：人工编辑 manifest 后，追加显式修复记录 `{repairSeq, who, when, reason, correctedEntries}`；下一次发布以**schema 校验 + 按实际产物重算 digest** 重建基线（不比对旧 digest），修复记录保留于文件。
-7. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`（原因：无 manifest 存量目录不可复用）。
+1. **格式（自证）**：manifest = `head`（schema_version/requirement_id/updated_at/publishSeq）+ `entries`（每节点 `{node, status, artifactPath, version, digest, updatedAt}` + finding 索引 + 深度字段引用 + 修复记录）+ **`manifestDigest = sha256(规范化的 head+entries)`**。digest 内嵌于文件——文件自带完整性证据，**不存在 manifest 之外的 digest 记录**，因此不存在跨记录崩溃窗口。
+2. **发布步骤**：读 manifest → 重算 `manifestDigest` 比对（不符 → CORRUPT，见 5）→ 确定性生成新 `head+entries`（含本次全部变更：新节点条目、stale 标记、§5.4 同事务语义）→ 计算新 `manifestDigest` → 原子 rename 写入 → 完成。**发布是幂等的**：崩溃后文件为旧或新，两者均自洽，重跑发布得到同一结果。
+3. **runtime 投影**：journal 为机器权威；projector 从 journal 事件确定性推导 entries。发布前交叉校验：由 journal 推导的当前条目必须与 manifest entries 在最后已知事件之后一致——不一致（超出发بو事件范围的分叉）→ `JOURNAL_MANIFEST_MISMATCH_STOP`。手动面无 journal，其完成声明即事实来源（两执行面同格式同协议，语义 parity）。
+4. **CORRUPT**：self-digest 不符或解析失败 → `MANIFEST_CORRUPT_STOP`，不静默修复、不重建（DP4）。
+5. **人工修复**：人工修正 entries → **重算并写入新 `manifestDigest`** → 追加修复记录（who/when/reason/correctedEntries，属 entries 一部分、进入新 digest）。信任重建 = self-digest 自洽 + 各 entry 的产物 digest 与实际文件核验 + runtime 面 journal 交叉校验；三者通过，下一次发布正常进行。修复记录永久保留于文件。
+6. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`。
 
-## 7. 域五/六：失败码、回流映射与统一准入（G2-R1-H2）
+## 7. 域六：PWR、失败码、回流映射与统一准入
 
 ### 7.1 PWR
 
-PWR 按 Decision-086 自动推进：verdict 的 scope 级判断即验收；被接受风险在 Ledger 中标 `ACCEPTED`（处置者=formal_verdict），以 risk refs 随行下游；envelope 不得强制 `riskAcceptanceRefs` 非空；无任何 acceptance 仪式产物。
+PWR 自动推进：verdict 的 scope 级判断即验收；被接受风险在 Ledger 标 `ACCEPTED`（处置者=formal_verdict），以 risk refs 随行下游；envelope 不得强制 `riskAcceptanceRefs` 非空；无 acceptance 仪式产物。
 
-### 7.2 失败码（全执行面统一）
+### 7.2 失败码
 
-`GATE_FAIL` / `BLOCKED_UNKNOWN` / `BLOCKED_AMBIGUOUS` / `MANIFEST_CORRUPT_STOP` / `JOURNAL_MANIFEST_MISMATCH_STOP` / `ADMISSION_DENIED`。三处 BLOCKED 语义区分：`BLOCKED_UNKNOWN` 仅指 verdict 无法分级/判定；`BLOCKED_AMBIGUOUS` 指结构歧义（双根、无 manifest 复用等）；其余终止态用 `MANIFEST_CORRUPT_STOP`/`JOURNAL_MANIFEST_MISMATCH_STOP`。
+`GATE_FAIL` / `BLOCKED_UNKNOWN` / `BLOCKED_AMBIGUOUS` / `MANIFEST_CORRUPT_STOP` / `JOURNAL_MANIFEST_MISMATCH_STOP` / `ADMISSION_DENIED`。区分：`BLOCKED_UNKNOWN` 仅指 verdict 无法分级/判定；`BLOCKED_AMBIGUOUS` 指结构歧义（双根、无 manifest 复用）；文件级终止用 `MANIFEST_CORRUPT_STOP`/`JOURNAL_MANIFEST_MISMATCH_STOP`；下游准入拒绝用 `ADMISSION_DENIED`。
 
-### 7.3 回流映射与统一准入表
+### 7.3 回流映射与统一准入
 
-**回流映射**（finding 的 `earliestAffectedNodeId` 直接命名回流节点，枚举闭合）：`requirement-intake`（需求事实/范围修订类）→ intake；`solution-design`（方案类）→ solution-design 重走 gate；`task-planning` → task-planning；`implementation` → implementation 重跑。不存在"solution-design 之前泛指"——需求修订**必须回 intake**。
+**回流映射（枚举闭合 = 七节点全集）**：`earliestAffectedNodeId` 直接命名回流节点——requirement-intake（需求事实/范围）、solution-design（方案）、solution-gate（裁决过程缺陷 → 重跑 gate）、task-planning（计划）、implementation（实现返工，code-review finding 的直达返工不重走 Gate，I-D）、code-review（审核缺陷 → 重跑 code-review）、knowledge-sync（知识条目）。
 
-**统一准入表**（下游准入谓词；`current` 均指 manifest 中 current 且 digest 一致）：
+**统一准入表**（`current` = manifest 中 current 且 digest 一致）：
 
 | 准入 | 谓词 A（裁决面） | 谓词 B（产物面） |
 | --- | --- | --- |
-| A1 task-planning | Gate Result current ∧ `decisionStatus=CONFIRMED` ∧ gateResult ∈ {PASS, PASS_WITH_RISK} ∧ Ledger 无 OPEN blocking | 技术方案 current |
+| A1 task-planning | Gate Result current ∧ `decisionStatus=CONFIRMED` ∧ gateResult ∈ {PASS, PASS_WITH_RISK} ∧ 无 OPEN blocking（§5.1 阻断范围） | 技术方案 current |
 | A2 implementation | 任务计划 current ∧ PWR 风险 refs 随行 | — |
 | A3 code-review | 实现记录 current | 证据绑定（§5.5）完整 |
-| A4 knowledge-sync | code-review current ∧ Ledger 无 OPEN blocking（ACCEPTED 不阻断） | routed 声明；非 routed → PROPOSAL_ONLY |
+| A4 knowledge-sync | code-review current ∧ 无 OPEN blocking（ACCEPTED 不阻断） | routed 声明；非 routed → PROPOSAL_ONLY |
 
-`decisionStatus=ESCALATED` 或 `BLOCKED_UNKNOWN` 的 Gate Result **不满足 A1**——即使 gateResult 字面为 PASS/PWR（堵住 S2 的提前准入解释）。**旧准入条款**（phase-gates 的 OPEN-blocking+ACCEPTED_RISK proof、project-type-matrix 的 DECIDED/accepted-risk evidence）按 §10 同步清单废止。
+`ESCALATED`/`BLOCKED_UNKNOWN` 的 Gate Result 不满足 A1（即使字面 PASS/PWR）。旧准入条款（phase-gates、project-type-matrix 等）按 §10 废止。
 
 ## 8. 变更清单与负向矩阵
 
-### 8.1 变更清单（G3/G5 授权范围依据 + G2 收口同步项）
+### 8.1 变更清单
 
-| # | 文件 | 变更 | 落点 |
-| --- | --- | --- | --- |
-| C1 | `ai-sdlc/complexity-routing.md` | decision_status 改 CONFIRMED/ESCALATED/BLOCKED_UNKNOWN；intake 提案输入；档位判据保留为本合同 §4.4 规范来源 | **G2 收口（本修订随附）** |
-| C2 | `skills/sdlc-requirement-intake/SKILL.md` | manifest 创建 + §4.2 判定表 + `requestedDepth/initialDepthBasis/decisionScope` 输出；**移除 runtime recovery context 依赖** | G3 |
-| C3 | `skills/sdlc-solution-design/SKILL.md` | Core Rule 10 → §4.3 首轮解耦 + 覆盖台账 | G3 |
-| C4 | `skills/sdlc-solution-gate/SKILL.md` | 稳定路径 + CONFIRMED/ESCALATED/BLOCKED_UNKNOWN 组合 + 移除 runtime 推进权依赖 | G3 |
-| C5 | `skills/sdlc-task-planning/SKILL.md` | A1 准入引用 + 移除 runtime 依赖 | G3 |
-| C6 | `skills/sdlc-code-review/SKILL.md` | 清除 PWR 接受者/证据残留 + A3 引用 | G3 |
-| C7 | `skills/sdlc-docflow-writer/SKILL.md` | manifest 直写 → publisher 调用 | G3 |
-| C8 | 其余 `skills/sdlc-*/SKILL.md` | publisher 更新条款 + §7.3 准入引用 | G3 |
-| C9 | `templates/**` | Ledger/Gate 头部元数据（version/current/supersededBy/绑定字段）+ 覆盖台账模板 | G3 |
-| C10 | manifest publisher 工具 | §6.2 协议实现（含 schema 校验/修复基线重建） | G3 |
-| C11 | `ai-sdlc/artifact-flow.md` | 逐条标注：路径保留；DECIDED/深度前置/准入条款替代 | G3 |
-| C12 | `ai-sdlc/artifact-versioning.md` / `artifact-storage.md` | superseded 保留映射（归档目录）；manifest 必需性对齐 intake 全创建；旧深度状态清理 | G3 |
-| C13 | `ai-sdlc/development-path-governance.md` / `lifecycle.md` / `phase-gates.md` / `project-type-contract-artifact-matrix.md` | DECIDED→新状态映射；knowledge-sync 准入对齐 A4；accepted-risk evidence 移除 | G3 |
-| C14 | `ai-sdlc/loop-finding-lifecycle.md` | finding id/状态迁移映射至 §5 | G5 |
-| C15 | `ai-sdlc/loop-artifact-revision.md` / `loop-recovery-protocol.md` | STALE 吸收态复用声明 + 深度结构映射 | G5 |
-| C16 | `execution/gateway.ts` | 移除 `decisionDepth:"STANDARD"` 硬编码（549/565），消费 verdict 真实深度 | G5 |
-| C17 | `core/node-output-envelope.ts` | 移除 riskAcceptanceRefs 非空强制 | G5 |
-| C18 | journal→manifest projector + recovery | §6.2.4 确定性投影 + mismatch STOP_AND_REPORT；formal_verdict 重复 Finding 来源处理 | G5 |
-| C19 | `ai-sdlc/shared-business-domain-governance.md` / `standard-package-resolution.md` | G1 根语义引用同步（旧 `.specify` 活动根/profile 解析条款） | G3 |
-| C20 | tests/validator 承重点 | §9 表"落点"列逐项落地（G3/G5 各自波次） | G3/G5 |
+同 v0.2.0 §8.1（C1–C20），并按 G2-R2 修订：C1 扩展为 complexity-routing **全段重写**（触发清单按 T1/T2 分层、全部 DECIDED 替换、决策字段对齐 §4.1）；C8 明确含 `skills/sdlc-implementation/SKILL.md:15` runtime 依赖移除；C20 落点表随 §9 更新。
 
-### 8.2 负向矩阵（每条绑定：规范输入 / 违规变异 / 判定结果 / 承重落点）
+### 8.2 负向矩阵
 
-| # | 断言 | 规范输入 | 违规变异（应变红） | 判定 | 承重落点 |
-| --- | --- | --- | --- | --- | --- |
-| N1 | 无硬编码 `decisionDepth:"STANDARD"`；非 STANDARD verdict 输入产出对应深度 | 非 STANDARD verdict 事件 fixture | 恢复 549/565 硬编码 | 输出深度断言 + 字面扫描 | G5 gateway 测试 |
-| N2 | 产物目录无轮次后缀派生文件（模式 `[-_]R[0-9]+`） | 多轮 Re-Gate fixture | 生成 `_R1` Gate 文件 | 稳定路径 validator/fixture 文件名断言 | G3 路径 validator + fixture |
-| N3 | scan 与 verdict 异 binding；同 binding 拒绝 | 同 binding 双角色执行 fixture | 去除 binding 比较 | 拒绝断言（执行记录实际两次 binding） | G3 执行记录 + G5 binding 校验 |
-| N4 | 首轮无 Gate 输入仍可产出待审方案 | 无 verdict 历史的新需求 fixture | 恢复深度前置条款/准入 | 时序断言（design 产物先于任何 verdict）+ prompt 条款扫描 | G3 harness + G5 节点准入 |
-| N5 | Agent 自由文本不落 manifest；无 manifest 存量目录复用被拒 | 直写尝试 + 复用尝试 fixture | publisher 绕过 / 移除 DP4 前置阻断 | 拒绝断言（两个独立变异各自变红） | G3 publisher + intake |
-| N6 | PWR 无 riskAcceptanceRefs 非空强制、无仪式产物 | PWR fixture | 恢复 envelope 强制 | envelope 断言 + 下游准入场景 | G5 envelope 测试 + G3/G5 准入 |
-| N7 | journal/manifest digest 不一致 → STOP_AND_REPORT | 注入不一致 fixture（区分合法发布中间态与真损坏） | 移除 mismatch 检查 | STOP 断言 | G5 projector/recovery 注入测试 |
-| N8 | 升档回流=台账缺口补齐：漏补必需项、删除已确认内容分别变红 | 升档 fixture（要求清单 + 已确认内容清单） | 漏补 / 删除受保护内容 | 台账覆盖断言 + 受保护内容 diff 断言 | G3/G5 升档 fixture |
-| N9 | 第三份 Gate 权威文件被拒；历史 evidence 引用不误杀 | 第三权威文件 + 历史 evidence fixture | 引入第三文件 / 误杀历史引用 | 稳定路径表比对 + evidence 排除断言 | G3 路径 validator + G5 投影 |
+同 v0.2.0 §8.2（N1–N9，含 N2 `[-_]R[0-9]+` 与逐条承重落点），并修订：**N7 判定依据更新**——"合法发布中间态"不存在（§6.2 自证格式下崩溃后文件必自洽），注入变异为"破坏 self-digest"或"journal 分叉"，预期分别变红为 `MANIFEST_CORRUPT_STOP` / `JOURNAL_MANIFEST_MISMATCH_STOP`。
 
-## 9. 与既有合同的关系
+## 9. 复审裁决的落地注记（不构成本轮授权）
 
-- `ai-sdlc/node-capability-contract.md`：§4.2/§4.3 深度条款与输出路径按 §10 同步清单修订；§3 文件名维持 canonical（本合同 §3 已对齐，无第二套路径）。
-- `ai-sdlc/complexity-routing.md`：C1（G2 收口随附修订）；档位判据内容保留为 §4.4 规范来源。
-- `ai-sdlc/artifact-flow.md`：路径与内容性要求保留；DECIDED/深度前置/准入条款由 C11 替代。
-- 其余见 §10 同步清单（每个冲突条款一行处置，不留给实施者自行选择）。
+FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式（含修复基线重建）；C18 projector 的 mismatch 判定按 §6.2.3 交叉校验；C2/C4 的深度字段输出按 §4.1 结构化承载；N 系列承重落点见 §8.2 表。
 
-## 10. 现役合同同步清单（G2-R1-H4；处置=替代/保留/修订 + 落点）
+## 10. 现役合同同步清单
 
-| 文件:条款 | 冲突 | 处置 | 落点 |
-| --- | --- | --- | --- |
-| `complexity-routing.md:19-21` | DECIDED/BLOCKED_UNKNOWN；"gate 唯一裁决点" | 替换状态枚举（CONFIRMED/ESCALATED/BLOCKED_UNKNOWN）；"唯一正式裁决点"保留（intake 为提案非裁决） | C1 @ G2 |
-| `complexity-routing.md:36-42,95-111` | 强触发/档位覆盖判据 | 保留并并入 §4.2/§4.4 规范来源 | C1 @ G2 |
-| `node-capability-contract.md:52,130,193` | 自称规范源；任务/知识文件名 | 修订深度条款引用本合同；文件名 canonical 已一致（`_任务计划.md`/`_知识同步结果.md`，草案 v0.1 曾误改，已回退） | C1 同族 @ G3 |
-| `artifact-flow.md:29,78,86` | DECIDED；按已裁决深度生成 | 路径保留；状态/前置条款替代 | C11 @ G3 |
-| `artifact-versioning.md:29,107,135` | 旧文件名/旧状态；旧正文不保留 | 历史保存映射：superseded 版本正文保留于产物目录、仅标 superseded（修正"不保留"） | C12 @ G3 |
-| `artifact-storage.md:85,101,262` | manifest 可 not_applicable | 对齐 intake 全创建；旧状态/风险准入清理 | C12 @ G3 |
-| `development-path-governance.md:34` / `lifecycle.md:54` | 依赖 DECIDED | CONFIRMED/ESCALATED 映射 | C13 @ G3 |
-| `phase-gates.md:132` | OPEN blocking + ACCEPTED_RISK proof | 废止，对齐 A4 | C13 @ G3 |
-| `loop-finding-lifecycle.md:29,33,87` | 风险证明；固定 earliest 映射 | 映射至 §5（RESOLVED/ACCEPTED 无仪式；回流枚举闭合） | C14 @ G5 |
-| `loop-artifact-revision.md:63,74` / `loop-recovery-protocol.md:47` | STALE 吸收态 | 声明复用；深度结构映射 | C15 @ G5 |
-| `project-type-contract-artifact-matrix.md:88` | DECIDED + accepted-risk evidence | 移除，对齐 §7 | C13 @ G3 |
-| `change-control.md:111,246` | 需求问题回 intake（与 §7.3 一致，保留）；manifest 临时小节写入 | 回流保留；写入改为 publisher 输入 | C10/C13 @ G3 |
-| `skills/sdlc-requirement-intake/SKILL.md:18` 等四处 | runtime recovery context 依赖 | 移除，手动主链自足 | C2/C4/C5 @ G3 |
-| `skills/sdlc-code-review/SKILL.md:26` | PWR 接受者/证据 | 清除 | C6 @ G3 |
-| `skills/sdlc-docflow-writer/SKILL.md:92,157` | manifest 直写 | 改 publisher 调用 | C7 @ G3 |
-| `shared-business-domain-governance.md:8` / `standard-package-resolution.md:22` | 旧 `.specify` 活动根/profile 解析 | G1 根语义引用同步（不重开旧根路由） | C19 @ G3 |
+同 v0.2.0 §10 全表（16 行处置），并按 G2-R2 修订/精确化：
+
+- C1 行扩展：complexity-routing 全段重写——触发清单按 T1/T2 分层（"多模块/多服务"从 DEEP 默认触发改为"纯协作拆分 → T2 提案 STANDARD、verdict 可依风险升档"）；第 95–111 行 DEEP 触发清单中与 T1 重叠项保留、纯协作项移入 T2；**第 138、153–155、176–177、188 行全部 DECIDED 替换**；"决策字段"节对齐 §4.1 七字段。@ **G2 收口（本修订随附，已完成）**
+- `node-capability-contract.md:52` 规范源声明：限定为"节点合同模板与准入引用的规范源；流程语义与深度状态机以 manual-runtime-semantic-contract.md 为权威"。@ G3（C1 同族）
+- `skills/sdlc-implementation/SKILL.md:15` runtime 依赖移除：**单列 C8-a**，不再由"其余 Skills"吸收。@ G3
+- `skills/sdlc-solution-design/SKILL.md:24` 首轮循环：C3 承载，补入 §10。@ G3
+- 其余各行（artifact-flow/artifact-versioning/artifact-storage/development-path/lifecycle/phase-gates/loop-finding-lifecycle/loop-artifact-revision/loop-recovery-protocol/project-type-matrix/change-control/code-review/docflow-writer/shared-knowledge/package-resolution）处置不变，见 v0.2.0 §10。
 
 ## 11. Revision Record
 
-- 0.2.0（2026-09-05）：按 G2-R1-H1..H4/M1/L1 全量修订——深度状态机封闭（requestedDepth/requiredDepth 分离、四种合法组合、Re-Gate 对照 requiredDepth）；统一准入表 A1–A4 与 ESCALATED 阻断；finding_id/状态迁移/版本绑定/发布时点；manifest 发布协议（原子发布、CORRUPT/修复基线、DP4 保留）；canonical 文件名回退；§10 同步清单全量收口；N2 修正 `[-_]R[0-9]+` 并逐条绑定承重落点；交叉引用更正。
-- 0.1.0（2026-09-05）：初稿 PROPOSED（G2-R1 复审 FAIL，见复审结论）。
+- 0.3.0（2026-09-05）：按 G2-R2-H1/H2/H3/L1 修订——深度规范权威分层 + complexity-routing 全段重写随附（H1）；finding 生命周期推广为全链七节点枚举、按来源定登记/处置者、Ledger `scannedDesignVersion` 绑定、Decision-086 直返工保留（H2）；manifest 自证格式（manifestDigest 内嵌，消除跨记录崩溃窗口）+ 幂等发布 + CORRUPT/修复基线重定义（H3）；新增 §4.4、更正交叉引用（L1）。N7 判定依据同步更新。
+- 0.2.0（2026-09-05）：按 G2-R1 全量修订（G2-R2 复审：H1 规范同步、H3 发布协议、H4 清单完整性仍有缺口；字段拆分/A1 拒绝/canonical 文件名/矩阵补齐被确认成立并保留）。
+- 0.1.0（2026-09-05）：初稿 PROPOSED（G2-R1 复审 FAIL）。
