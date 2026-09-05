@@ -1,7 +1,7 @@
 # D-088-01 v3 行为规格：四类项目一站式初始化与迁移
 
-> Version: 1.0.0
-> Status: ACCEPTED（2026-09-05，Current User 只读审查接受并授权 F1–F7 实施；本规格冻结为 G1 实施与验收基线）
+> Version: 1.1.0
+> Status: ACCEPTED（2026-09-05 接受并冻结为 G1 验收基线；同日 v1.1.0 勘误：A10/A13/A14 经 Current User 裁决改注为双根拒绝格，验收语义以 §2.2/§2.3 为准，无行为变更）
 > 上游: Decision-090 决策 3 · [冻结执行计划](decision-090-c03e-prerun-governance-plan.md) §3/§4/G1 · [需求拆分](decision-090-c03e-prerun-requirement-decomposition.md) §3（R01–R27）
 > 候选基线: 产品仓 `a626335`（v2 双模式实现 + R1/R2 修复，35 测试场景）
 > 授权声明: 本规格不授权任何代码修改；实施需 Current User 显式授权。
@@ -181,14 +181,15 @@ Exit codes: 0 ok/no-op/audit-findings；1 blocked（含类型歧义、确认缺�
 | A7 | EXISTING × complete × routed × apply | 降档保护（routed 保持） |
 | A8 | EXISTING × complete × routed × re-run | 跨 run 幂等（同 map fingerprint） |
 | A9 | LEGACY_SDD × empty × absent × plan→confirm→apply | 纯 RETIRE+ADD，DP1 全流程 |
-| A10 | LEGACY_SDD × partial × absent × apply | RETIRE 与补齐叠加 |
+| A10 | LEGACY_SDD × partial × absent × apply | **双根拒绝格（v1.1 勘误）**：partial 意味着 `.sdlc` 已存在，与 LEGACY 根并存 → D1/D2 阻断零写入；"RETIRE 与补齐叠加"不可达 |
 | A11 | LEGACY_SDD × empty × absent × apply（无确认） | DP1 拒绝路径 blocked |
 | A12 | LEGACY_SDLC_SDD × empty × absent × apply | TRANSFORM 治理 YAML 并入 + RETIRE |
-| A13 | LEGACY_SDLC_SDD × partial × candidate × apply | 知识迁位 + 新候选声明共存 |
-| A14 | LEGACY_SDLC_SDD × complete × routed × apply | 最重交互：既有 routed 知识红线 + 迁移（I1 断言） |
+| A13 | LEGACY_SDLC_SDD × partial × candidate × apply | **双根拒绝格（v1.1 勘误）**：D1/D2 阻断零写入；"知识迁位与候选声明共存"不可达 |
+| A14 | LEGACY_SDLC_SDD × complete × routed × apply | **双根拒绝格（v1.1 勘误）**：D1/D2 阻断零写入；"迁入已 routed 表面"不可达 |
 | A15 | LEGACY_* 任一 × apply 中途注入失败 | 回滚到 pre-digest 基线（R17） |
 | A16 | LEGACY_* 迁移后 × `--detect` 重判 | 迁移后类型/幂等（§6.5） |
 
+- **A10/A13/A14 勘误（2026-09-05 Current User 裁决）**：三格描述的"向已有 `.sdlc` 表面迁移"在决策表 D1/D2 下不可达——partial/complete/candidate 均意味着 `.sdlc` 已存在，与 LEGACY 根并存即双治理根，按 §2.3 阻断零写入（场景 39 承载该拒绝语义的验收）。维持阻断语义不变；若未来真实业务仓频繁出现该状态且人工处置成本显著，再做针对性规格修订（需明确冲突优先级、知识保留与 routed 声明处理）。
 - **边界用例（独立，不进直积）**：B1 dangling legacy symlink（已有）；B2 map `../` 越界（已有）；B3 仓内 symlink 越界（已有）；B4 人工改写根文档原子阻断（已有）；B5 两位 L4 模板拒绝（已有）；B6 不可读文件 → C10 阻断；B7 重复/并发报告不覆盖（已有）；B8 plan digest 漂移拒绝；B9 迁移后残留命中 → 回滚；B10 双根并存 BLOCKED_AMBIGUOUS 零写入。
 
 ### 8.3 旧 findings 重归因（R26）与差距审查（R27）
@@ -200,3 +201,8 @@ R1/R2 全部 findings（R1 H1–H8、R2 H1–H6）按本规格重新归因；候
 - `sdlc-knowledge-sync`：仅消费 routed 声明；迁移场景中旧根声明（S10）自迁移起不再可路由；single-rail 契约（R1-H7）不变。
 - `validate-skill-contracts.rb`：新增迁移动词、plan schema、确认语义的负向矩阵校验（Ruby 2.6 兼容延续）。
 - `bootstrap-entry-coverage-profile.sh`：角色不变（最小骨架 + 详细扫描）。
+
+## 变更记录
+
+- 1.1.0（2026-09-05）：Current User 裁决维持 D1/D2 双根阻断语义，A10/A13/A14 改注为双根拒绝格（验收=阻断零写入，场景 39）；向已治理表面迁移的支持推迟至真实需求出现时做针对性修订。无实现行为变更。
+- 1.0.0（2026-09-05）：Current User 审查接受，冻结为 G1 实施与验收基线。
