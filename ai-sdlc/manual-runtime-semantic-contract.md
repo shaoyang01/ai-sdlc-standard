@@ -31,7 +31,7 @@
 | requirement-intake | 用户原始输入 | `00-需求资料/{id}_需求摘要.md`；`00-需求资料/intake.manifest.json`（§6.1 对象一）；`library/{id}/manifest.md`（**本节点创建**） | 归一化事实完备；深度提案产出（§4） |
 | solution-design | `{id}_需求摘要.md`（current）；`requiredDepth` + 深度提案（§4） | `01-技术方案/{id}_技术方案.md`（含 `depthCoverageLedger`） | 摘要 current；**不等待 Gate** |
 | solution-gate / adversarial_scan | 技术方案 current | `02-方案审核/{id}_FindingLedger.md`（行式追加，§5） | 方案 current；异 binding |
-| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current 且 `scannedDesignVersion` 匹配（§5.6）；异 binding |
+| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current 且 `scannedDesignVersion` 匹配（§5.4）；异 binding |
 | task-planning | Gate Result（current）+ 技术方案（current） | `03-任务规划/{id}_任务计划.md` | A1（§7.3） |
 | implementation | 任务计划（current） | `04-实现记录/{id}_实现记录.md` + 生产代码变更 | A2（§7.3） |
 | code-review | 实现记录（current）+ 代码变更证据（§5.5） | `05-代码审核/{id}_代码审核.md` | A3（§7.3） |
@@ -99,18 +99,21 @@
 
 - **任何节点**在其产出产物的 finding 段登记它发现的 finding（引用现役类别×来源矩阵，`ai-sdlc/loop-finding-lifecycle.md`：类别×来源的合法组合以该矩阵为准，本合同不另造分类体系）。
 - `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，任一来源登记即占用，**不可变**；状态迁移以新行追加。
-- 每条 finding 携带：`{finding_id, discoveredAt(节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status}`。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
+- 每条 finding 携带：`{finding_id, discoveredAt(发现节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status, fixedBy?}`。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
 - `earliestAffectedNodeId` 值域 = 七节点全集，回流映射枚举闭合（§7.3）。
+- 全部来源的 finding 经 publisher 汇入 **manifest finding 索引**（§6.2）——单一索引，状态迁移同步投影。
 
-### 5.2 状态与处置
+### 5.2 修复者、关闭验证者与状态处置（G2-R4-H2）
 
 - `status ∈ OPEN → RESOLVED | ACCEPTED`；状态迁移以新行追加，原行不改写。
-- **处置者 = 回流目标节点**：返工/修订完成后由该节点复验并登记 RESOLVED；**唯一例外**：design 类 finding 的 ACCEPTED 仅由 formal_verdict 的 PWR scope 判断作出（I-D，无独立仪式）。
+- **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
+- **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在其 finding 段登记 RESOLVED——实现类 finding 由 code-review 复验关闭（Decision-086 的实现证据与 code-review closure verification 衔接保留；implementation **不自行关闭** finding）。
+- **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于 Gate Ledger 并投影至 manifest finding 索引。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
 - OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
 
 ### 5.3 Gate Ledger 的专属边界
 
-`{id}_FindingLedger.md` 是 **solution-gate 的设计阶段台账**：只承载 adversarial_scan 登记的方案类 finding。其他来源的 finding 登记在发现节点自己的产物 finding 段（§5.1），不经由 Gate Ledger——代码返工 therefore 不产生任何 Gate 仪式（I-D）。
+`{id}_FindingLedger.md` 是 **solution-gate 的设计阶段台账**：只承载 adversarial_scan 登记的方案类 finding。其他来源的 finding 登记在发现节点自己的产物 finding 段（§5.1），不经由 Gate Ledger——代码返工 therefore 不产生任何 Gate 仪式（I-D）。所有来源的 finding 统一汇入 manifest finding 索引（§6.2），下游消费索引而非逐文件扫描。
 
 ### 5.4 版本绑定、失效传播与发布时点
 
@@ -142,7 +145,7 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
    - **真分叉**：`projectedThrough` 范围内的 journal 事件推导条目 ≠ manifest entries → `JOURNAL_MANIFEST_MISMATCH_STOP`；
    - **损坏**：self-digest 不符或解析失败 → `MANIFEST_CORRUPT_STOP`。
 3. **发布步骤（幂等，纯函数）**：读 manifest → self-digest 校验（失败 → CORRUPT STOP）→ 读 journal `projectedThrough` 之后的事件 → 确定性推导新 entries（固定键序；`publishSeq = projectedThrough 新值`；`updated_at` = 最后已投影事件的 journal 时间戳，**非墙钟**）→ self-digest 重算 → 原子 rename → 完成。**同输入重放产出逐字节同一 manifest**；崩溃后文件为旧或新，均自洽，重跑即追平——崩溃点恢复结果逐点唯一。
-4. **runtime 投影字段映射**：journal terminal 事件 → entries：`{node ← event.node, status ← event.outcome, artifactPath/version ← event.artifactRef, digest ← event.artifactDigest, sourceEventRef ← event.id}`；finding/深度字段 ← verdict 事件载荷。Agent 自由文本不得直写。
+4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**findingIndex 投影自全部来源的 finding 段**（Gate Ledger + 各产物 finding 段，§5.1/§5.2），状态迁移随之投影——不限于 verdict 载荷。Agent 自由文本不得直写。
 5. **手动面**：无 journal，`projectedThrough=MANUAL`，`sourceEventRef` 记录完成声明的结构化标识（Skill + 时间 + 产物 digest）；其余协议相同（同格式同语义，parity）。
 6. **CORRUPT**（self-digest 不符/解析失败）→ `MANIFEST_CORRUPT_STOP`：不静默修复、不重建（DP4）。
 7. **人工修复**：修正 entries → 重算 `manifestDigest` → 追加修复记录（who/when/reason/correctedEntries，属 entries、进入新 digest）。信任重建 = self-digest 自洽 + entry 产物 digest 与实际文件核验 + runtime 面 journal 交叉校验（projectedThrough 按当前 journal 重设并记录）；三者通过后发布正常继续。修复记录永久保留。
@@ -152,7 +155,7 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
 
 ### 7.1 PWR
 
-PWR 自动推进：verdict 的 scope 级判断即验收；被接受风险在 Ledger 标 `ACCEPTED`（处置者=formal_verdict），以 risk refs 随行下游；envelope 不得强制 `riskAcceptanceRefs` 非空；无 acceptance 仪式产物。
+PWR 自动推进：verdict 的 scope 级判断即验收；被接受风险在**其来源 finding 记录**标 `ACCEPTED`（scan 来源=Gate Ledger；处置者=formal_verdict——非 scan 来源无 ACCEPTED 路径，见 §5.2），经 manifest finding 索引以 risk refs 随行下游；envelope 不得强制 `riskAcceptanceRefs` 非空；无 acceptance 仪式产物。
 
 ### 7.2 失败码
 
