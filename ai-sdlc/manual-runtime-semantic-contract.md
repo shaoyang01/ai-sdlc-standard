@@ -1,6 +1,6 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 0.6.0 (PROPOSED)
+> Version: 0.7.0 (PROPOSED)
 > Status: 待独立只读复审 + Current User 裁决冻结；冻结后为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
 > 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
@@ -109,7 +109,7 @@
 - **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
 - **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在其 finding 段登记 RESOLVED。"实现类 finding 由 code-review 复验关闭"仅指 discoveredAt=code-review 的来源；其他发现节点（如 knowledge-sync）按本通则自行复验。
 - **关闭复验是 finding 生命周期管理动作，不是一次节点运行**：验证者直接对照 finding 的 `evidenceRef`/验收基准与修复者产出的修复证据（digest 绑定）复核——**不依赖 §7.3 的下游准入谓词**（准入谓词管制的是"节点产出新周期产物进入下游"，不管制 finding 生命周期管理），因此不会出现"OPEN finding 阻断了自己的关闭复验"的死锁。独立验证责任保留：修复者不得自行登记 RESOLVED。
-- **关闭复验动作的三步收尾（G2-R6-H1）**：①复验通过后在**来源 finding 段**登记 RESOLVED 行（持久化）；②触发 publisher 发布（§6.2 第 2/3 级判别会把该差量并入 manifest `findingIndex`——仅此差量时为 findingIndex-only 发布，`projectedThrough` 不推进）；③此后 §7.3 准入谓词读到 RESOLVED，阻断解除。复验动作未触发发布前，阻断持续（关闭事实以 manifest findingIndex 为准）。
+- **关闭复验动作的三步收尾（G2-R6-H1；v0.7.0 按 G2-R7-H1 修订）**：①复验通过后在**来源 finding 段**登记 RESOLVED 行——**该追加使来源产物构成新修订**（新 version、新 digest，沿用现役 revision 机制 `loop-artifact-revision.md`），旧修订标 superseded；②触发 publisher 发布（§6.2）：差量并入 manifest `findingIndex`，**同时更新该来源条目的 `version`/`digest` 为新修订值**（finding 状态迁移是产物修订的一部分，findingIndex-only 不豁免产物完整性绑定；`projectedThrough` 不推进）；③此后 §7.3 准入谓词读到 RESOLVED 且 entry digest 与实际产物一致——阻断解除且产物完整性校验同时成立。复验动作未触发发布前，阻断持续（关闭事实以 manifest findingIndex 为准）。
 - **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于 Gate Ledger 并投影至 manifest finding 索引。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
 - OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
 
@@ -146,13 +146,17 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
    - **第 1 级 损坏**：self-digest 校验失败或解析失败 → `MANIFEST_CORRUPT_STOP`（不静默修复、不重建，DP4）。
    - **第 2 级 真分叉**（两项校验，任一不通过 → `JOURNAL_MANIFEST_MISMATCH_STOP`，不得进入第 3 级）：
      (a) **journal 前缀**：对 `≤ projectedThrough` 的已投影前缀逐事件按 §6.2.4 映射推导条目并与 manifest entries 比对——不一致即分叉；
-     (b) **findingIndex 权威交叉验证（方向性）**：findingIndex 每行必须在某来源 finding 段（Gate Ledger 或对应产物 finding 段，§5.1）中存在同 `finding_id`、同 `status` 的凭据行——存在**索引有而来源段无凭据**的行 → `JOURNAL_MANIFEST_MISMATCH_STOP`（堵住"entries 正确而 findingIndex 被改/过期"的旁路）。**来源段领先于索引的行不是分叉**——它们是第 3 级的合法追平输入（含关闭复验登记的 RESOLVED 行）。
+     (b) **findingIndex 权威交叉验证（方向性，整行绑定）**：findingIndex 每行的**全部字段**（`finding_id`、`status`、`evidenceRef`、`earliestAffectedNodeId` 等）必须在某来源 finding 段（Gate Ledger 或对应产物 finding 段，§5.1）中存在逐字段一致的凭据行——存在索引有而来源段无逐字段凭据的行 → `JOURNAL_MANIFEST_MISMATCH_STOP`（堵住"仅篡改 evidenceRef 等非键字段再重算 digest"的旁路，并明确服从本方向性规则而非全等检查）。**来源段领先于索引的行不是分叉**——它们是第 3 级的合法追平输入（含关闭复验登记的 RESOLVED 行）。
    - **第 3 级 待投影**：输入 = journal 尾段事件 **+ 来源 finding 段相对 findingIndex 的差量**（含关闭复验登记的 RESOLVED 行，§5.2）→ publisher 按序追平（幂等）。**无尾段且 findingIndex 无差量 → no-op，原样退出**；任一存在 → 发布（仅差量时 `projectedThrough`/`publishSeq` 不推进，仅 findingIndex 与 `manifestDigest` 更新）。
    - 手动面：第 2 级(a)跳过（无 journal），(b)照常执行；第 3 级输入为完成声明 + finding 段差量。
-3. **追平发布（幂等纯函数）**：输入 = (前缀与 findingIndex 校验通过的当前 manifest, 尾段 journal 事件, 来源 finding 段差量, 新完成声明)；entries/findingIndex 确定性生成；有 journal 尾段时 `publishSeq`/`projectedThrough` 推进到已处理末尾，否则保持不变；`updated_at` = runtime 取最后已投影事件时间戳 / 手动取声明确认时刻；self-digest 重算；**原子 rename**。同输入重放产出**逐字节同一 manifest**（含仅 findingIndex 差量的发布）；崩溃后文件为旧或新，均自洽，重跑即追平——每个崩溃点的恢复结果唯一（rename 前崩溃 = 旧自洽 manifest + 待投影状态不变；rename 后崩溃 = 新 manifest 已发布，无尾段时后续发布 no-op）。
-4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**状态映射**：执行事件 status（SUCCEEDED/FAILED/BLOCKED…）是执行事实，映射为 entry 的完成/失败事实；entry 的生命周期状态（current/stale/actionable，§5.4）由 revision 状态（ACTIVE/STALE/SUPERSEDED）映射——ACTIVE→current，STALE/SUPERSEDED→stale；两枚举不混用，映射表冻结于本条。**findingIndex 投影自全部来源的 finding 段**（Gate Ledger + 各产物 finding 段，§5.1/§5.2），状态迁移随之投影——不限于 verdict 载荷；findingIndex 的权威交叉验证见 §6.2.2(b)（索引与任一来源段不一致即 `JOURNAL_MANIFEST_MISMATCH_STOP`）。Agent 自由文本不得直写。
+3. **追平发布（幂等纯函数；三类输入的进度与绑定规则，G2-R7-H2）**：输入 = (校验通过的当前 manifest, journal 尾段事件, 来源 finding 段差量, 新完成声明)。
+   - **runtime 尾段**：entries/findingIndex 按事件映射生成；`publishSeq`/`projectedThrough` 推进到已处理末事件；`updated_at` = 最后已投影事件时间戳。
+   - **手动新完成声明**：按声明生成/更新条目；`publishSeq` 推进到声明 seq，**`projectedThrough` 保持 `MANUAL`**；`updated_at` = 声明确认时刻。
+   - **纯 finding 差量**：findingIndex 更新（按 §6.2.2(b) 凭据），**同时更新差量所涉来源条目的 `version`/`digest` 为新修订值**（§5.2①）；`publishSeq`/`projectedThrough` 均不推进；`updated_at` 不变。
+   - self-digest 重算；**原子 rename**。同输入重放产出**逐字节同一 manifest**；崩溃后文件为旧或新，均自洽，重跑即追平——每个崩溃点的恢复结果唯一。
+4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**状态映射**：执行事件 status（SUCCEEDED/FAILED/BLOCKED…）是执行事实，映射为 entry 的完成/失败事实；entry 的生命周期状态（current/stale/actionable，§5.4）由 revision 状态（ACTIVE/STALE/SUPERSEDED）映射——ACTIVE→current，STALE/SUPERSEDED→stale；两枚举不混用，映射表冻结于本条。**findingIndex 投影自全部来源的 finding 段**（Gate Ledger + 各产物 finding 段，§5.1/§5.2），状态迁移随之投影——不限于 verdict 载荷；状态迁移行同时携带其所在产物的新修订 version/digest（§5.2①），发布时一并更新对应 entry（§6.2.3）。findingIndex 的权威交叉验证见 §6.2.2(b)（整行绑定 + 方向性规则；索引与任一来源段不一致即 `JOURNAL_MANIFEST_MISMATCH_STOP`）。Agent 自由文本不得直写。
 5. **修复记录的唯一位置与重放处理（G2-R6-M1）**：修复记录**唯一存放于顶层 `repairRecords[]`**（不写入 entries）。修复记录仅在人工修复动作时写入 `repairRecords` 并计入其后所有 `manifestDigest`；发布追平/重放**不追加、不改动**修复记录——重放对含修复记录的 manifest 同样逐字节确定。
-6. **人工修复后的可信基线重建（G2-R6-M1，恢复被删减的规则）**：人工修复 = ①修正 `entries`/`findingIndex`；②按实际产物重算各 entry 的 artifact digest；③runtime 面将 `projectedThrough` 重设为当前 journal 末尾并把该重设记入 `repairRecords`（修复基线以当前权威事实重新建立）；④重算 `manifestDigest`；⑤修复记录（who/when/reason/correctedEntries）写入 `repairRecords`。**信任重建判据**：self-digest 自洽 + 全部 entry digest 与实际产物核验通过 + runtime 面 journal 交叉校验通过——三者全过，下一次发布按正常协议进行。人工修复后**不做**普通前缀校验（修复基线已重设）。
+6. **人工修复后的可信基线重建（G2-R7-M1：hash 收尾——先写完 repairRecords 再算 digest）**：人工修复 = ①修正 `entries`/`findingIndex`；②按实际产物重算各 entry 的 artifact digest；③runtime 面将 `projectedThrough` 重设为当前 journal 末尾；④**写入**修复记录（who/when/reason/correctedEntries + ②③的基线重设事实）至顶层 `repairRecords[]`；⑤**最后**重算 `manifestDigest`（覆盖 head/entries/findingIndex/repairRecords 全部内容）并原子 rename 发布。**信任重建判据**：self-digest 自洽（⑤后必然成立，因 repairRecords 先于 digest 写入）+ 全部 entry digest 与实际产物核验通过 + runtime 面 journal 交叉校验通过——三者全过，下一次发布按正常协议进行。人工修复后**不做**普通前缀校验（修复基线已重设）。修复记录写入后、digest 计算前不得再追加任何内容。
 7. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`。
 
 ## 7. 域六：PWR、失败码、回流映射与统一准入
@@ -252,6 +256,7 @@ FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与
 
 ## 11. Revision Record
 
+- 0.7.0（2026-09-05）：按 G2-R7-H1/H2/M1 修订——finding 状态迁移=来源产物新修订（findingIndex 发布同步更新 entry version/digest，完整性绑定不豁免）；§6.2.2(b) 凭据校验扩展为整行绑定（堵非键字段篡改）；发布三向进度规则（runtime 尾段/手动声明/纯 finding 差量分别定义 publishSeq/projectedThrough 行为，手动冲突消除）；人工修复 hash 收尾（repairRecords 先于 digest 写入）。
 - 0.6.0（2026-09-05）：按 G2-R6-H1/M1 修订——发布判别第 2 级扩展 findingIndex 权威交叉验证、第 3 级输入扩展 finding 段差量（含关闭复验 RESOLVED）、no-op 条件收紧；关闭复验三步收尾（登记→发布→阻断解除）；repairRecords 统一顶层唯一位置并恢复人工修复基线重建规则；发布重放确定性保留。
 - 0.5.0（2026-09-05）：按 G2-R5-H1/H2/L1 修订——§6.2 重写为三级有序判别（损坏→前缀分叉→待投影追平，含已追平 no-op 与逐崩溃点恢复结果）+ 手动面适配（MANUAL/声明序列号/声明确认时刻）+ 修复记录重放确定性 + 现役状态映射表；§5.2 关闭复验定义为 finding 生命周期管理动作（准入豁免、独立验证责任保留）；第 34 行引用更正 §5.4。
 - 0.4.0（2026-09-05）：按 G2-R3-H1/H2/H3/M1 修订——H1 深度触发枚举单一化（T1 唯一清单 F1–F9，complexity-routing 引用不自维护；纯协作限定传播至 Delta 表）；H2 finding 登记与发现节点解耦（复用现役类别×来源矩阵，全组合合法，处置者=回流目标节点，Gate Ledger 限定为设计阶段台账）；H3 manifest 增加 `projectedThrough` 投影基线 + 三态判别（自洽待投影/真分叉/损坏）+ 幂等重放规则（publishSeq=projectedThrough、时间取事件时间戳）+ runtime 准入投影覆盖校验；M1 恢复完整 C1–C20/N1–N9 表、N7 三态化、C8-a 单列、残留引用更正。
