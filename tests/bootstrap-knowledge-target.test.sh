@@ -864,7 +864,7 @@ expected_type() { # $1=legacy $2=code $3=skel $4=map
       echo "BLOCKED_AMBIGUOUS"
     fi
   elif [[ "${3}" == "3" ]]; then
-    echo "EXISTING_COMPLETE"
+    echo "EXISTING"
   elif [[ "${2}" == "yes" ]]; then
     echo "EXISTING_CODE_NO_KNOWLEDGE"
   else
@@ -897,6 +897,16 @@ for legacy in none sdd sdlc; do
           # the matrix asserts the decision type and mandatory zero-write only.
           bash "${INITIALIZER}" "${D}" --plan > "${M36_ROOT}/out" 2>&1 || true
           bash "${INITIALIZER}" "${D}" --dry-run > "${M36_ROOT}/out" 2>&1 || true
+        fi
+        # H7: legacy migration cells additionally assert PLAN content — digest line
+        # present and every move row bound to a 64-hex pre-digest (G1-R1-H2 net).
+        if [[ "${WANT}" == "LEGACY_SDD" || "${WANT}" == "LEGACY_SDLC_SDD" ]]; then
+          if grep -q "^PLAN_SHA256=[0-9a-f]\{64\}$" "${M36_ROOT}/out"; then pass; else fail "matrix plan digest(${legacy},${code},${skel},${map}): missing content-bound digest"; fi
+          if grep -E "^  (RETIRE|TRANSFORM)	" "${M36_ROOT}/out" | grep -qvE "	[0-9a-f]{64}(	|$)"; then
+            fail "matrix plan rows(${legacy},${code},${skel},${map}): move row without pre-digest"
+          else
+            pass
+          fi
         fi
         if [[ "$(snapshot "${D}")" == "${SNAP}" ]]; then pass; else fail "zero-write(${legacy},${code},${skel},${map}): repository mutated by read-only mode"; fi
         M36_RUNS=$((M36_RUNS + 2))
@@ -976,12 +986,12 @@ if [[ "$(digest_file "${D}/.sdlc/business_domain/01Trade/trade.md")" == "$(diges
 if grep -q 'legacy_candidate_domains:' "${D}/.sdlc/business-domain-map.yaml"; then pass; else fail "A12: legacy candidate domains not projected to map template"; fi
 MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
 if [[ -n "${MIG_JSON}" ]] && grep -q '"type": "LEGACY_SDLC_SDD"' "${MIG_JSON}"; then pass; else fail "A12: migration report type missing"; fi
-if grep -q '"post_detect_type": "EXISTING_COMPLETE"' "${MIG_JSON}"; then pass; else fail "A12: post-detect type missing in report"; fi
+if grep -q '"post_detect_type": "EXISTING"' "${MIG_JSON}"; then pass; else fail "A12: post-detect type missing in report"; fi
 if grep -q 'legacy_candidate_domains' "${MIG_JSON}"; then pass; else fail "A12: field mappings not recorded"; fi
 bash "${INITIALIZER}" "${D}" --detect > /dev/null 2>&1
 OUT40="${WORK_ROOT}/t40.out"
 bash "${INITIALIZER}" "${D}" --detect > "${OUT40}" 2>&1
-grep -q "^TYPE=EXISTING_COMPLETE" "${OUT40}" && pass || fail "A16: post-migration detect not EXISTING_COMPLETE"
+grep -q "^TYPE=EXISTING$" "${OUT40}" && pass || fail "A16: post-migration detect not EXISTING"
 bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
 assert_exit 0 $?
 
@@ -1024,33 +1034,94 @@ bash "${INITIALIZER}" "${D}" --dry-run > /dev/null 2>&1
 assert_exit 1 $?
 if [[ "$(snapshot "${D}")" == "${SNAP}" ]]; then pass; else fail "B10: blocked dual-root mutated repository"; fi
 
-CASE_NAME="43. B9 + gate exemption: retired vocabulary projected into active surface rolls back; migrated knowledge prose is exempt"
+CASE_NAME="43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass"
 D="${WORK_ROOT}/t43"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
 mkdir -p "${D}/.specify/business_domain/01Old"
-printf '# 老知识：speckit 时代的沉淀内容\n' > "${D}/.specify/business_domain/01Old/old.md"
+printf '# 老知识：本域沿用 speckit 工具链沉淀\n' > "${D}/.specify/business_domain/01Old/old.md"
 LEG_SNAP="$(snapshot "${D}/.specify")"
 PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
-bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
-assert_exit 0 $?
-if [[ "$(digest_file "${D}/.sdlc/business_domain/01Old/old.md")" == "$(digest_file <(printf '# 老知识：speckit 时代的沉淀内容\n'))" ]]; then pass; else fail "43: migrated knowledge content mutated"; fi
-if grep -q "speckit" "${D}/.sdlc/business-domain-map.yaml" 2>/dev/null; then
-  fail "43: retired vocabulary in active surface passed the gate"
-else
-  pass
-fi
-# B9: a legacy domain name carrying retired vocabulary is mechanically projected and MUST trip the gate
-D2="${WORK_ROOT}/t43b"; build_matrix_fixture "${D2}" "sdlc" "yes" "0" "absent"
-printf 'domains:\n  - name: speckit历史域\n' > "${D2}/.specify/business_domain/knowledge-target.yaml"
-LEG_SNAP="$(snapshot "${D2}/.specify")"
-PLAN_SHA="$(bash "${INITIALIZER}" "${D2}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
-OUT43="${WORK_ROOT}/t43b.out"
-bash "${INITIALIZER}" "${D2}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT43}" 2>&1
+OUT43="${WORK_ROOT}/t43.out"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT43}" 2>&1
 RC=$?
 assert_exit 1 "${RC}"
 if grep -q "RESIDUE GATE FAILED" "${OUT43}" && grep -qi "rolled back" "${OUT43}"; then pass; else fail "B9: gate violation did not roll back"; fi
-if grep -q "business-domain-map.yaml" "${OUT43}"; then pass; else fail "B9: violation location not reported"; fi
-if [[ "$(snapshot "${D2}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "B9: legacy tree not restored after gate rollback"; fi
-if [[ ! -e "${D2}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "B9: INIT-created files not rolled back"; fi
+if grep -q "01Old/old.md" "${OUT43}"; then pass; else fail "B9: violation location not reported"; fi
+if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "B9: legacy tree not restored after gate rollback"; fi
+if [[ ! -e "${D}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "B9: INIT-created files not rolled back"; fi
+if ls "${D}"/.sdlc/reports/migration_report.*.json* >/dev/null 2>&1; then
+  if grep -q "FAILED_ROLLED_BACK" "${D}"/.sdlc/reports/migration_report.*.json*; then pass; else fail "B9: failure report missing FAILED_ROLLED_BACK status"; fi
+else
+  fail "B9: failure migration report not written"
+fi
+# negation parity: a migrated knowledge doc whose only retired-vocabulary clause is
+# explicitly negated must pass the gate (parity with the R2-H6 audit scanner)
+D="${WORK_ROOT}/t43n"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain/01Old"
+printf '# 老知识：本域不得引用 speckit 工具链，历史遗留仅作背景。\n' > "${D}/.specify/business_domain/01Old/old.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ -f "${D}/.sdlc/business_domain/01Old/old.md" ]]; then pass; else fail "43n: negated clause wrongly blocked migration"; fi
+
+CASE_NAME="44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked"
+D="${WORK_ROOT}/t46"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+EXT="${WORK_ROOT}/t46-external"; mkdir -p "${EXT}"
+printf 'sdd template\n' > "${EXT}/plan.md"
+mkdir -p "${D}/.specify"
+ln -sfn "${EXT}" "${D}/.specify/templates"
+EXT_SNAP="$(snapshot "${EXT}")"
+SNAP="$(snapshot "${D}")"
+OUT46="${WORK_ROOT}/t46.out"
+bash "${INITIALIZER}" "${D}" --plan > "${OUT46}" 2>&1
+assert_exit 1 $?
+if grep -qE "escapes target repository" "${OUT46}"; then pass; else fail "H1: out-of-repo symlink not classified"; fi
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
+assert_exit 1 $?
+if [[ "$(snapshot "${EXT}")" == "${EXT_SNAP}" ]]; then pass; else fail "H1: external tree touched"; fi
+if [[ ! -e "${D}/.sdlc/business_domain" && ! -e "${D}/.sdlc/legacy" ]]; then pass; else fail "H1: zero-write violated on containment block"; fi
+
+CASE_NAME="45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms"
+D="${WORK_ROOT}/t45"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain/01Trade"
+printf '# 旧域知识 v1\n' > "${D}/.specify/business_domain/01Trade/trade.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+printf '# 旧域知识 v2 changed bytes\n' > "${D}/.specify/business_domain/01Trade/trade.md"
+OUT45="${WORK_ROOT}/t45.out"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT45}" 2>&1
+assert_exit 1 $?
+if grep -q "DP1 confirmation required" "${OUT45}"; then pass; else fail "H2: drifted content accepted an old plan digest"; fi
+PLAN_SHA2="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+if [[ "${PLAN_SHA}" != "${PLAN_SHA2}" ]]; then pass; else fail "H2: re-plan digest did not change after content drift"; fi
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA2}" > /dev/null 2>&1
+assert_exit 0 $?
+if grep -q "旧域知识 v2 changed bytes" "${D}/.sdlc/business_domain/01Trade/trade.md"; then pass; else fail "H2: migrated content is not the current bytes"; fi
+
+CASE_NAME="46. G1-R1-H4: fixed-field merges land in the new machine artifacts"
+D="${WORK_ROOT}/t47"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+printf 'project_type_profiles:\n  - data-pipeline-etl\nproject: 旧仓名\n' > "${D}/.specify/project-governance-profile.yaml"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+ruby -ryaml -e '
+  d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false)
+  profiles = d.dig("project", "project_type_profiles") || []
+  exit(1) unless profiles.include?("backend-business-service") && profiles.include?("data-pipeline-etl")
+' "${D}/.sdlc/project-governance-profile.yaml" && pass || fail "H4: legacy tech profile not unioned into new profile"
+MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+if [[ -n "${MIG_JSON}" ]] && grep -q "merged-union (added: data-pipeline-etl)" "${MIG_JSON}"; then pass; else fail "H4: union merge outcome not recorded"; fi
+
+CASE_NAME="47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING"
+D="${WORK_ROOT}/t44"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+printf 'team notes unrelated to any workflow\n' > "${D}/.specify/README.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ -f "${D}/.specify/README.md" ]]; then pass; else fail "47: PRESERVE user file not preserved in place"; fi
+OUT44="${WORK_ROOT}/t44.out"
+bash "${INITIALIZER}" "${D}" --detect > "${OUT44}" 2>&1
+grep -q "^TYPE=EXISTING$" "${OUT44}" && pass || fail "47: post-migration detect with C8 residue not EXISTING (P4 sentinel)"
+bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
+assert_exit 0 $?
 
 
 echo ""
