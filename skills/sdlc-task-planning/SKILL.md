@@ -2,7 +2,7 @@
 name: sdlc-task-planning
 description: |
   任务规划器：把已过门的方案分解为可执行任务，并对任务集做实现前一致性审计。
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Task Planning
@@ -12,7 +12,7 @@ version: 0.1.0
 
 ## Core Rules
 
-1. Consume only the current approved solution-design outputs provided by the LOOP runtime recovery context.
+1. 准入（A1，manual-runtime-semantic-contract §7.3）：仅当 Gate Result current 且 `decisionStatus=CONFIRMED` 且 gateResult ∈ {PASS, PASS_WITH_RISK} 且无 OPEN blocking 时消费 current 的技术方案；`ESCALATED`/`BLOCKED_UNKNOWN` 即使字面 PASS 也不准入。
 2. Preserve approved Scope, behavior, technical plan, risks, and acceptance criteria.
 3. Generate implementation tasks with stable ID, executable action, target file/module/artifact, dependency, source trace, and verification method.
 4. Run a bounded consistency audit over tasks vs approved artifacts: inconsistency, missing traceability, stale artifacts, unaccepted risk, readiness blockers are material blockers.

@@ -89,7 +89,7 @@ library/{requirement_id}/{node_directory}/{requirement_id}_{artifact_type}.{ext}
 For Lark/Feishu output:
 
 1. Create or update the online document through `lark-cli`.
-2. Record the online document URL in `library/{requirement_id}/manifest.md` when local filesystem access is available.
+2. Record the online document URL via `scripts/publish-requirement-manifest.sh`（publisher 唯一写入；禁止直接编辑 `library/{requirement_id}/manifest.md`）。
 3. If the user requests local backup, also write Markdown or HTML to the standard node directory.
 
 ### 4. Dry-Run Before Output
@@ -154,7 +154,7 @@ Allowed:
 
 - Create directories under `library/{requirement_id}/`
 - Write Markdown or HTML files
-- Update `manifest.md`
+- Submit manifest updates through `scripts/publish-requirement-manifest.sh`（禁止直接编辑 manifest.md）
 - Create or update Lark/Feishu documents through `lark-cli`
 
 Not allowed:

@@ -2,7 +2,7 @@
 name: sdlc-solution-gate
 description: |
   方案门禁：adversarial_scan 角色产出 Finding Ledger 式对抗扫描；formal_verdict 角色做出 PASS/FAIL/PASS_WITH_RISK 与深度档位裁决。两角色必须由不同 Agent binding 承载。
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Solution Gate
@@ -17,11 +17,11 @@ version: 0.1.0
 3. Do not introduce new business goals, user scenarios, product capabilities, or platform initiatives.
 4. Every BLOCKING **or REQUIRED** finding must cite a scope basis; search the full specification for an existing or equivalent mechanism before raising BLOCKING or REQUIRED（行为等价即可满足，机制名缺失不构成 BLOCKING 或 REQUIRED）。严重度阶梯与三条闭合析取支见 `references/sdlc-solution-challenger/finding-classification.md`。
 5. adversarial_scan role：只产出对抗扫描发现（Finding Ledger 内容），不做裁决。
-6. formal_verdict role：只消费本轮 scan 的 Ledger 做裁决并输出深度档位（LIGHT/STANDARD/DEEP）；两角色由不同 Agent binding 承载，禁止同一执行者合并执行。
+6. formal_verdict role：只消费本轮 scan 的 Ledger 做裁决并输出组合之一（manual-runtime-semantic-contract §4.3）：`CONFIRMED`+`decisionDepth=requiredDepth`（零回流）/ `ESCALATED`+上调档位（回流 solution-design 增量补强）/ `BLOCKED_UNKNOWN`（回流补事实，不可进入下游）；`scannedDesignVersion == designVersion` 为裁决前置（Ledger 所审方案与所裁方案同一修订）。两角色由不同 Agent binding 承载，禁止同一执行者合并执行。
 7. Do not write or rewrite the specification; do not modify production code.
 8. Treat `library/{requirement_id}/01-技术方案/` as the primary input; write under `library/{requirement_id}/02-方案审核/`。
 9. Residual clarification 只能追溯到已批准 DocFlow 产物或显式用户确认；触及 Scope/state/data/failure/compatibility/acceptance 时停止并回流 solution-design。
-10. Gate 推进与 generation 权威属于 LOOP runtime；本 Skill 不推进任何流程。
+10. 裁决产出经 `scripts/publish-requirement-manifest.sh` 写入 requirement manifest（entry-update 含 `gate-result`/`decision-depth`/`decision-status`；ESCALATED/FAIL 时同一次发布将方案/Gate/下游标记 stale——§5.4 同一 manifest 修订语义）；不依赖 LOOP runtime 推进。
 
 ## 能力来源对照表
 

@@ -2,7 +2,7 @@
 name: sdlc-knowledge-sync
 description: |
   知识同步器：把稳定可复用事实写入长期知识目标，并对代码/文档/知识做一致性对账。
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Knowledge Sync
@@ -12,12 +12,12 @@ version: 0.1.0
 
 ## Core Rules
 
-1. Consume current code state, approved artifacts, implementation evidence, classified feedback, and declared knowledge targets.
+1. 准入（A4）：code-review current 且无 OPEN blocking（ACCEPTED 不阻断）时消费 current 代码状态、已批准产物、实现证据、已分类反馈与已声明知识目标；同步结论经 `scripts/publish-requirement-manifest.sh entry-update` 写入 requirement manifest，发现经 `finding-register` 登记。
 2. Single-rail reconciliation baseline: library 工件 + LOOP artifact revision 为唯一对账基准（单轨模式，无多源模式开关）。
 3. Sync only stable reusable facts; never sync raw chat, temp debugging notes, speculative design, unverified findings, or unresolved risks.
 4. Require explicit target path and sync authorization before modifying `.sdlc/business_domain/**`。
 5. Preserve existing knowledge structure, terminology, ownership; uncertain items stay `待确认同步项`。
-6. Classify inconsistencies before recommending changes; route violations to earliest affected node via runtime Re-Gate, verified-but-missing facts to sync.
+6. Classify inconsistencies before recommending changes; violations 经 finding 登记（生命周期记录，`finding-register`/`finding-action`）按 §7.3 回流映射路由到 earliest affected node（不含 runtime Re-Gate 依赖），verified-but-missing facts to sync.
 7. Default read-only audit; do not modify production code.
 8. Do not overwrite classified feedback results; use `ai-sdlc/change-control.md` for Specification Missing / Review Missing / Requirement Change.
 

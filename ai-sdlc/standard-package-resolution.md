@@ -4,7 +4,7 @@
 
 This guide defines how an installed Skill or agent locates the local AI SDLC Standard package.
 
-Shared standard documents must live in the local standard package. Target repositories should not copy shared `ai-sdlc/**`, `ess/**`, `checklists/**`, `templates/**`, or `skill-contracts/**` files into their own `.specify` directory.
+Shared standard documents must live in the local standard package. Target repositories should not copy shared `ai-sdlc/**`, `ess/**`, `checklists/**`, `templates/**`, or `skill-contracts/**` files into their own repository (standard files are referenced in place via `${AI_SDLC_STANDARD_HOME}`; the retired `.specify` root is never a resolution target — Decision-089 / D-088-01 v3).
 
 ## Resolution Order
 
@@ -19,12 +19,12 @@ The initializer writes `AI_SDLC_STANDARD_HOME` into the user's shell profile thr
 When a Skill needs shared standard files, resolve `AI_SDLC_STANDARD_HOME` in this order:
 
 1. Use environment variable `AI_SDLC_STANDARD_HOME` when it is set and points to a directory containing `manifest.yaml`.
-2. Use `.specify/project-governance-profile.yaml` from the target repository when `standard_package.source.location` points to a local directory containing `manifest.yaml`.
+2. Use `.sdlc/project-governance-profile.yaml` from the target repository when `standard_package.source.location` points to a local directory containing `manifest.yaml`.
 3. Use the current repository root when it contains `manifest.yaml` and `ai-sdlc/`.
 4. Use the installed Skill's bundled development fallback only when the Skill is still inside this standard repository.
 5. Stop and ask the user to configure `AI_SDLC_STANDARD_HOME` when no valid package root can be found.
 
-Do not infer the standard package root from target repository `.specify/memory/**` or `.specify/workflow/**`.
+Do not infer the standard package root from target repository `.sdlc/memory/**` or `.sdlc/workflow/**`（retired `.specify` roots are never resolution targets）.
 
 ## Required Validation
 
@@ -58,8 +58,8 @@ Examples:
 ```text
 library/{requirement_id}/manifest.md
 specs/{feature}/spec.md
-.specify/project-governance-profile.yaml
-.specify/business_domain/00BusinessLandscape.md
+.sdlc/project-governance-profile.yaml
+.sdlc/business_domain/00BusinessLandscape.md
 ```
 
 ## Project Profile Contract
@@ -84,5 +84,5 @@ Stop when:
 - `AI_SDLC_STANDARD_HOME` cannot be resolved.
 - `manifest.yaml` is missing.
 - The resolved package does not contain required standard files.
-- The target project attempts to treat shared `.specify/memory/**` or `.specify/workflow/**` as the standard source.
+- The target project attempts to treat shared `.sdlc/memory/**` or `.sdlc/workflow/**` as the standard source.
 - A Skill would need to copy shared standard documents into the target repository.

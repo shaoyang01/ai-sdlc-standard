@@ -737,6 +737,78 @@ else
   errors << "missing scripts/bootstrap-knowledge-target.sh"
 end
 
+# G3 / D-090-02 anchors (manual-runtime-semantic-contract v1.0.0 §8.1): the manual
+# main chain Skills must carry the frozen semantics; negative matrix N4/N5/N6 anchors.
+G3_SKILL_ANCHORS = {
+  "skills/sdlc-requirement-intake/SKILL.md" => [
+    ["publish-requirement-manifest.sh", "intake manifest creation via publisher (C2)"],
+    ["requestedDepth", "depth proposal fields (C2/DP3)"],
+    ["不依赖 LOOP runtime recovery context", "runtime dependency removed (C2)"]
+  ],
+  "skills/sdlc-solution-design/SKILL.md" => [
+    ["depthCoverageLedger", "coverage ledger (C3)"],
+    ["立即**产出可审核方案，不等待 Gate", "first-round decoupling (N4/C3)"],
+    ["缺口增量", "escalation incremental rework (C3)"]
+  ],
+  "skills/sdlc-solution-gate/SKILL.md" => [
+    ["scannedDesignVersion", "same-revision binding (C4/§5.4)"],
+    ["CONFIRMED", "legal combo enum (C4)"],
+    ["ESCALATED", "escalation path (C4)"],
+    ["publish-requirement-manifest.sh", "manifest write via publisher (C4)"]
+  ],
+  "skills/sdlc-task-planning/SKILL.md" => [
+    ["decisionStatus=CONFIRMED", "A1 admission predicate (C5)"]
+  ],
+  "skills/sdlc-implementation/SKILL.md" => [
+    ["baseRevision, reviewedRevision, changeDigest", "evidence binding (C8-a/§5.5)"],
+    ["不依赖 LOOP runtime recovery context", "runtime dependency removed (C8-a)"]
+  ],
+  "skills/sdlc-code-review/SKILL.md" => [
+    ["finding-register", "full-chain finding registration (C6)"],
+    ["不重走 solution-gate", "direct rework preserved (C6/Decision-086)"]
+  ],
+  "skills/sdlc-knowledge-sync/SKILL.md" => [
+    ["ACCEPTED 不阻断", "A4 admission (C8-b)"],
+    ["entry-update", "publisher update duty (C8-b)"]
+  ],
+  "skills/sdlc-docflow-writer/SKILL.md" => [
+    ["publish-requirement-manifest.sh", "manifest writes via publisher only (C7)"]
+  ]
+}.freeze
+G3_SKILL_ANCHORS.each do |path, terms|
+  full = File.join(ROOT, path)
+  unless File.exist?(full)
+    errors << "missing #{path}"
+    next
+  end
+  text = File.read(full)
+  terms.each do |term, why|
+    errors << "#{path} missing #{why}" unless text.include?(term)
+  end
+end
+# N4 negative: solution-design must NOT keep the depth-precondition clause
+sd_path = File.join(ROOT, "skills/sdlc-solution-design/SKILL.md")
+if File.exist?(sd_path)
+  sd = File.read(sd_path)
+  errors << "solution-design keeps the depth-precondition clause (N4)" if sd.include?("档位未裁决前不产出")
+end
+# N6 negative: code-review must NOT keep the risk-acceptance ritual
+cr_path = File.join(ROOT, "skills/sdlc-code-review/SKILL.md")
+if File.exist?(cr_path)
+  cr = File.read(cr_path)
+  errors << "code-review keeps the risk-acceptance ritual (N6)" if cr.include?("PASS_WITH_RISK（须列明风险接受字段）")
+end
+# C10: publisher tool exists and implements the self-attesting protocol
+pub_path = File.join(ROOT, "scripts/publish-requirement-manifest.sh")
+if File.exist?(pub_path)
+  pub = File.read(pub_path)
+  errors << "publisher missing self-digest verification (C10)" unless pub.include?("self-digest mismatch")
+  errors << "publisher missing atomic publish" unless pub.include?("mv ")
+  errors << "publisher missing finding lifecycle actions" unless pub.include?("finding-action")
+else
+  errors << "missing scripts/publish-requirement-manifest.sh"
+end
+
 bootstrap_context_paths = {
   "templates/project-governance-profile-template.yaml" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(4),
   "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2)
@@ -871,8 +943,9 @@ else
     "Gate Name:", "Gate Type:", "Manifest Path:", "Gate Basis:",
     "Result: PASS / FAIL / PASS_WITH_RISK", "Can Continue: yes/no",
     "## Design Depth Decision", "## Finding Ledger Reference",
-    "Depth: LIGHT / STANDARD / DEEP", "Decision Status: DECIDED / BLOCKED_UNKNOWN",
-    "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
+    "Depth: LIGHT / STANDARD / DEEP", "decisionStatus: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN",
+    "requiredDepth:", "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
+    "Scanned Design Version:", "Ledger Digest:", "## Depth Coverage Ledger",
     "adversarial_scan", "formal_verdict", "Earliest Affected Node",
     "Current / Stale:", "Finding Ledger Artifact:", "Scan Executor Binding",
     "Verdict Executor Binding", "## Re-Gate Check", "## Risk Acceptance",

@@ -56,3 +56,12 @@
 ## Evidence Digest
 
 （引用的 evidence digest 清单：代码 / 测试 / journal 事件）
+
+## Findings（本节点登记）
+
+<!-- manual-runtime-semantic-contract §5.1：发现节点在本段登记 finding（行式追加，原行不改写）；
+     状态迁移经 publisher 写入生命周期记录（runtime=finding store / 手动=findingIndex），
+     本段保留发现时点事实。closedBy/closureEvidence 字段由生命周期记录承载，不回写本产物。 -->
+
+| finding_id | rootCauseCategory | earliestAffectedNodeId | sourceRevision | evidenceRef | status(发现时点) |
+| --- | --- | --- | --- | --- | --- |

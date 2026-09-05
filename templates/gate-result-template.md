@@ -14,6 +14,8 @@
 - Updated At:
 - Reviewed Artifact:
 - Reviewed Artifact Version:
+- Scanned Design Version:（adversarial_scan 所审方案修订；必须等于 Reviewed Artifact Version——manual-runtime-semantic-contract §5.4 同修订前置）
+- Ledger Digest:
 - Gate Artifact Version:
 - Gate Name:
 - Gate Type: solution_gate / other
@@ -22,7 +24,7 @@
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
 
-本模板只用于产出结论性 Gate；只有 solution-gate 的 `formal_verdict` 输出结论性 Gate（PASS / FAIL / PASS_WITH_RISK），`adversarial_scan` 角色产出的 Finding Ledger 不给正式 Gate。其他节点的确定性准入由 LOOP runtime 执行（generation、current revision、Gate、设计深度裁决、finding 状态），不产出本模板；`sdlc-gate-runner` 已退役。[RETIRED — C03-B]
+本模板只用于产出结论性 Gate；只有 solution-gate 的 `formal_verdict` 输出结论性 Gate（PASS / FAIL / PASS_WITH_RISK），`adversarial_scan` 角色产出的 Finding Ledger 不给正式 Gate。其他节点的确定性准入按 manual-runtime-semantic-contract §7.3 统一准入表（A1–A4）执行，不产出本模板；`sdlc-gate-runner` 已退役。[RETIRED — C03-B]
 
 ## Conclusion
 
@@ -34,14 +36,25 @@
 
 ## Design Depth Decision（solution-gate 正式裁决必填）
 
-- Depth: LIGHT / STANDARD / DEEP
-- Decision Status: DECIDED / BLOCKED_UNKNOWN
+- decisionDepth: LIGHT / STANDARD / DEEP（BLOCKED_UNKNOWN 时为空）
+- decisionStatus: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN
+- requiredDepth:（当前生效要求档位；ESCALATED 时为新上调值）
 - Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 - Decision Artifact:
 - Current / Stale:
 - Stale Condition:
 
-`BLOCKED_UNKNOWN` 不进入实现；必须回到需求/方案补齐事实后重新正式裁决。深度档位或 decision_status 变化必须重新过 solution-gate，不得沿用旧裁决。
+合法组合（manual-runtime-semantic-contract §4.3）：`CONFIRMED`+`decisionDepth=requiredDepth` 可进入下游（A1）；`CONFIRMED`+低档=无害超集；`ESCALATED` 一律回流 solution-design（增量补强，同一 manifest 修订内下游标 stale）；`BLOCKED_UNKNOWN` 一律回流补事实。旧 `DECIDED` 枚举废止。
+
+## Depth Coverage Ledger（solution-gate 专用节）
+
+对照 manual-runtime-semantic-contract §4.4 档位内容要求清单逐项核验方案覆盖：
+
+| 档位要求项 | 方案覆盖 | 缺口/备注 |
+| --- | --- | --- |
+| （按 requiredDepth 档位要求逐项列出） | 已覆盖 / 未覆盖 | 未覆盖项必须显式说明 |
+
+（CONFIRMED 前提：requiredDepth 档位要求全部覆盖或 verdict 认定低档充分；ESCALATED 时本表即升档回流 solution-design 的缺口清单。）
 
 ## Finding Ledger Reference（solution-gate 正式裁决必填）
 
