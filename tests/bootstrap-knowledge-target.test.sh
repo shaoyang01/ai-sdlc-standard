@@ -1217,6 +1217,7 @@ ruby -ryaml -e '
 ' "${D}/.sdlc/project-governance-profile.yaml" "${D}/.sdlc/entry-coverage-profile.yaml" && pass || fail "50: AUDIT-path migration lost legacy profile facts (G1-R3-H2)"
 MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
 if [[ -n "${MIG_JSON}" ]] && grep -q "merged-union (added: data-pipeline-etl)" "${MIG_JSON}"; then pass; else fail "50: AUDIT-path merge outcome not recorded"; fi
+if [[ -n "${MIG_JSON}" ]] && grep -q "document_scope" "${MIG_JSON}"; then pass; else fail "50: document_scope disposition not recorded (G1-R5-M1)"; fi
 
 
 CASE_NAME="51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports"
