@@ -1113,7 +1113,7 @@ if grep -q "旧域知识 v2 changed bytes" "${D}/.sdlc/business_domain/01Trade/t
 CASE_NAME="46. G1-R1-H4: fixed-field merges land in the new machine artifacts"
 D="${WORK_ROOT}/t47"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
 printf 'project_type_profiles:\n  - data-pipeline-etl\nproject: 旧仓名\n' > "${D}/.specify/project-governance-profile.yaml"
-printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\nentry_types:\n  - name: rpc\n' > "${D}/.specify/entry-coverage-profile.yaml"
+printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\n  document_scope: .specify/business_domain\nentry_types:\n  - name: rpc\n' > "${D}/.specify/entry-coverage-profile.yaml"
 PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
 bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
 assert_exit 0 $?
@@ -1131,6 +1131,7 @@ ruby -ryaml -e '
   exit(1) unless sel.include?("data-pipeline-etl") && roots.include?("svc")
 ' "${D}/.sdlc/entry-coverage-profile.yaml" && pass || fail "H4: entry-profile gate facts not merged (selected/source_roots)"
 if grep -q "entry_types" "${MIG_JSON}"; then pass; else fail "H4: entry_types disposition not recorded"; fi
+if grep -q "document_scope" "${MIG_JSON}"; then pass; else fail "M1: document_scope disposition not recorded"; fi
 
 CASE_NAME="47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING"
 D="${WORK_ROOT}/t44"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
@@ -1198,7 +1199,7 @@ CASE_NAME="50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges"
 D="${WORK_ROOT}/t50"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
 mkdir -p "${D}/.specify/business_domain"
 printf 'project_type_profiles:\n  - data-pipeline-etl\n' > "${D}/.specify/project-governance-profile.yaml"
-printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\n' > "${D}/.specify/entry-coverage-profile.yaml"
+printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\n  document_scope: .specify/business_domain\n' > "${D}/.specify/entry-coverage-profile.yaml"
 printf '# Landscape\n' > "${D}/.specify/business_domain/00BusinessLandscape.md"
 printf '# Language\n' > "${D}/.specify/business_domain/00UbiquitousLanguage.md"
 printf '# Catalog\n' > "${D}/.specify/business_domain/01DomainCatalog.md"
@@ -1216,6 +1217,29 @@ ruby -ryaml -e '
 ' "${D}/.sdlc/project-governance-profile.yaml" "${D}/.sdlc/entry-coverage-profile.yaml" && pass || fail "50: AUDIT-path migration lost legacy profile facts (G1-R3-H2)"
 MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
 if [[ -n "${MIG_JSON}" ]] && grep -q "merged-union (added: data-pipeline-etl)" "${MIG_JSON}"; then pass; else fail "50: AUDIT-path merge outcome not recorded"; fi
+
+
+CASE_NAME="51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports"
+D="${WORK_ROOT}/t51"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain"
+printf '# Landscape\n' > "${D}/.specify/business_domain/00BusinessLandscape.md"
+printf '# Language with speckit mention and invalid bytes: \xff\xfebroken\n' > "${D}/.specify/business_domain/00UbiquitousLanguage.md"
+printf '# Catalog\n' > "${D}/.specify/business_domain/01DomainCatalog.md"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+OUT51="${WORK_ROOT}/t51.out"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT51}" 2>&1
+RC=$?
+assert_exit 1 "${RC}"
+if grep -q "RESIDUE GATE FAILED" "${OUT51}"; then pass; else fail "51: scanner error did not reach the shared gate"; fi
+if grep -q "scanner error" "${OUT51}"; then pass; else fail "51: file-level scanner error missing from stderr"; fi
+if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "51: legacy tree not restored"; fi
+MIG51="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+if [[ -n "${MIG51}" ]]; then
+  if grep -q "scanner error" "${MIG51}" && grep -q "FAILED_" "${MIG51}"; then pass; else fail "51: failure report lacks real scanner-error violations"; fi
+else
+  fail "51: failure migration report not written"
+fi
 
 
 echo ""

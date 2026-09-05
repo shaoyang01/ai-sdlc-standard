@@ -440,6 +440,14 @@ mig_finalize() {
       puts(et.nil? ? "old-absent" : "#{et.size} item(s); no corresponding key in the v0.1 skeleton")
     ' "${OLD_ECP}" 2>/dev/null || echo "old-absent")"
     MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/entry_types	not merged: ${mig_et}")
+    mig_ds="$(ruby -ryaml -e '
+      d = begin; YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      ds = d.nil? ? nil : d.dig("scope", "document_scope")
+      puts(ds.nil? ? "old-absent" : ds.to_s)
+    ' "${OLD_ECP}" 2>/dev/null || echo "old-absent")"
+    if [[ "${mig_ds}" != "old-absent" ]]; then
+      MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/document_scope	not merged: old-root scope is retired semantics (R18); authoritative new value kept (old: ${mig_ds})")
+    fi
   fi
   # --- residue gate over ALL active surfaces (spec §6.4; G1-R1-H5: migrated knowledge
   # files are scanned like every other active file — un-negated retired vocabulary in
@@ -2037,25 +2045,31 @@ if File.directory?(sdlc)
                     .sort
   files_to_scan.each do |path|
     next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
-    machine_key_indent = nil
-    File.readlines(path).each_with_index do |line, idx|
-      if (m = line.match(MACHINE_FIELD_RE))
-        machine_key_indent = m[1].length
-      elsif !machine_key_indent.nil?
-        entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
-        machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
-      end
-      next if machine_key_indent # inside a machine negative-declaration field
-      clause_states = line.split(/[。；;！!？?]/).map do |clause|
-        hits = RESIDUE_PATTERNS.select { |re| clause.match?(re) }
-        next nil if hits.empty?
-        clause.match?(NEGATION_RE) ? :exempt : :violation
-      end.compact
-      if clause_states.include?(:violation)
-        residue_lines << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
+    begin
+      machine_key_indent = nil
+      File.readlines(path).each_with_index do |line, idx|
+        if (m = line.match(MACHINE_FIELD_RE))
+          machine_key_indent = m[1].length
+        elsif !machine_key_indent.nil?
+          entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
+          machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
+        end
+        next if machine_key_indent # inside a machine negative-declaration field
+        clause_states = line.split(/[。；;！!？?]/).map do |clause|
+          hits = RESIDUE_PATTERNS.select { |re| clause.match?(re) }
+          next nil if hits.empty?
+          clause.match?(NEGATION_RE) ? :exempt : :violation
+        end.compact
+        if clause_states.include?(:violation)
+          residue_lines << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
+          break if residue_lines.size >= 50
+        end
         break if residue_lines.size >= 50
       end
-      break if residue_lines.size >= 50
+    rescue StandardError => e
+      # G1-R4-H1: scan errors are file-level findings (fail-closed), never a crash
+      # that bypasses the migration gate and finalization.
+      residue_lines << "#{path.delete_prefix("#{target}/")}: scanner error (#{e.class})"
     end
     break if residue_lines.size >= 50
   end
