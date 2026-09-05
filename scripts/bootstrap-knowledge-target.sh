@@ -259,6 +259,40 @@ CREATED_FILES=(); UPDATED_FILES=(); PRESERVED_FILES=(); BLOCKED_REASONS=(); NOTI
 MIG_AUDIT_CREATED=()
 PLAN_OK="true"
 
+# G1-R3-H1: ONE EXIT guard for the whole script — transaction rollback (when the
+# migration window is armed) plus the v2 staging cleanup. Installing any second
+# EXIT trap would replace this one, so none may be added elsewhere.
+script_exit_guard() {
+  local rc=$?
+  if [[ "${MIG_TX_ACTIVE:-}" == "true" ]]; then
+    MIG_TX_ACTIVE="false"
+    echo "UNEXPECTED EXIT in transaction window; rolling back migration..." >&2
+    if mig_rollback; then
+      echo "ROLLED BACK: repository restored to pre-migration state." >&2
+    else
+      echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR:-}" >&2
+      MIG_ROLLBACK_OK="false"
+    fi
+    local c crel
+    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
+      crel="${CREATED_FILES[${c}]}"
+      case "${crel}" in
+        project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${crel}" ;;
+        *) rm -f "${BD_DIR}/${crel}" ;;
+      esac
+    done
+    for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
+      rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
+    done
+    rm -f "${REPORT_FILE:-}"
+    mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    mig_write_failure_report "unexpected exit in transaction window" "${mig_rb}"
+  fi
+  rm -rf "${STAGING_DIR:-}" 2>/dev/null || true
+  exit "${rc}"
+}
+trap script_exit_guard EXIT
+
 mig_finalize() {
   if [[ "${MIG_PENDING}" != "true" ]]; then return 0; fi
   MIG_FAIL_REASON=""
@@ -273,10 +307,13 @@ mig_finalize() {
   OLD_ECP="${TARGET_PATH}/.sdlc/legacy/.specify/entry-coverage-profile.yaml"
   MAP_TEMPLATE_FILE="${SDLC_DIR}/business-domain-map.yaml"
 
-  was_created_this_run() { # $1 = rel path as recorded in CREATED_FILES
+  was_created_this_run() { # $1 = rel path; G1-R3-H2: INIT and AUDIT creations both qualify
     local c
     for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
       if [[ "${CREATED_FILES[${c}]}" == "$1" ]]; then return 0; fi
+    done
+    for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
+      if [[ "${MIG_AUDIT_CREATED[${c}]}" == "$1" ]]; then return 0; fi
     done
     return 1
   }
@@ -404,12 +441,6 @@ mig_finalize() {
     ' "${OLD_ECP}" 2>/dev/null || echo "old-absent")"
     MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/entry_types	not merged: ${mig_et}")
   fi
-  if [[ -f "${OLD_ECP}" ]] && was_created_this_run "entry-coverage-profile.yaml"; then
-    mig_outcome="$(merge_yaml_key_if_absent "${OLD_ECP}" "${ECP_PROFILE}" "project")"
-    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/project	${mig_outcome}")
-    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/document_scope	not merged: old-root scope is retired semantics (R18); authoritative new value kept")
-  fi
-
   # --- residue gate over ALL active surfaces (spec §6.4; G1-R1-H5: migrated knowledge
   # files are scanned like every other active file — un-negated retired vocabulary in
   # a migrated knowledge doc blocks and rolls back, preserving originals for human
@@ -1121,39 +1152,10 @@ ${PLAN_BODY}"
   }
 
 
-  # ERR trap guards the transaction window: any unhandled failure between the first
-  # move and the finalized success reports rolls the repository back (H3).
-  mig_tx_guard() {
-    local rc=$?
-    if [[ "${MIG_TX_ACTIVE:-}" != "true" ]]; then exit "${rc}"; fi
-    MIG_TX_ACTIVE="false"
-    echo "UNEXPECTED FAILURE in transaction window; rolling back migration..." >&2
-    if mig_rollback; then
-      echo "ROLLED BACK: repository restored to pre-migration state." >&2
-    else
-      echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-      MIG_ROLLBACK_OK="false"
-    fi
-    local c crel
-    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
-      crel="${CREATED_FILES[${c}]}"
-      case "${crel}" in
-        project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${crel}" ;;
-        *) rm -f "${BD_DIR}/${crel}" ;;
-      esac
-    done
-    for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
-      rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
-    done
-    rm -f "${REPORT_FILE:-}"
-    mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-    mig_write_failure_report "unexpected failure in transaction window (exit ${rc})" "${mig_rb}"
-    exit 1
-  }
-  # G1-R2-H1: EXIT trap (not ERR) so explicit exits are covered too; the guard
-  # passes the exit code through unchanged when the transaction is disarmed.
-  trap mig_tx_guard EXIT
-
+  # G1-R3-H1: the transaction window is guarded by the single top-level EXIT trap
+  # (script_exit_guard), which combines transaction rollback with the v2 staging
+  # cleanup — bash replaces (not stacks) same-signal traps, so there must be exactly
+  # one EXIT guard for the whole script.
   # phase 1: full backup of every planned move BEFORE any move happens (H3)
   for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
     IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
@@ -1260,7 +1262,6 @@ esac
 
 # --- staging ---------------------------------------------------------------------
 STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/knowledge-target-staging.XXXXXX")"
-trap 'rm -rf "${STAGING_DIR}"' EXIT
 
 yaml_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
@@ -1805,6 +1806,7 @@ if [[ "${MODE}" == "audit" ]]; then
     if [[ ! -e "${target_file}" ]]; then
       AUDIT_FILLED+=("${rel}")
       if [[ "${DRY_RUN}" != "true" ]]; then
+        if [[ "${MIG_PENDING}" == "true" ]]; then MIG_AUDIT_CREATED+=("${rel}"); fi
         mkdir -p "$(dirname "${target_file}")"
         cp "${tmp_content}" "${target_file}"
         if [[ "${rel}" == scripts/* ]]; then
@@ -2147,10 +2149,7 @@ RUBY
   # G1-R2-H1: on a migration run the audit branch must NOT bypass the shared
   # residue gate / migration finalization; fold its writes into the transaction
   # and run the shared finalizer right here.
-  mig_af=""
-  for mig_af in "${AUDIT_FILLED[@]:-}"; do
-    if [[ -n "${mig_af}" ]]; then MIG_AUDIT_CREATED+=("${mig_af}"); fi
-  done
+  # (AUDIT writes were registered into MIG_AUDIT_CREATED at creation time.)
   if [[ -n "${FINAL_AUDIT_REPORT:-}" ]]; then REPORT_FILE="${FINAL_AUDIT_REPORT}"; fi
   mig_finalize
   exit 0
@@ -2397,6 +2396,12 @@ RUBY
 else
   DOMAIN_MAP_REF="null"
   MAP_SHA256="null"
+  # test-only fault injection (G1-R3-H1 acceptance): deterministic explicit exit
+  # inside the migration transaction window.
+  if [[ "${KT_FAULT_SCAN_FAILURE:-}" == "1" ]]; then
+    echo "Candidate scan failed (injected); nothing written." >&2
+    exit 2
+  fi
   if ! scan_and_stage_candidates; then
     echo "Candidate scan failed; nothing written." >&2
     exit 2

@@ -1175,6 +1175,49 @@ if [[ -f "${D}/.sdlc/business_domain/00BusinessLandscape.md" ]]; then pass; else
 if grep -q '"status": "COMPLETED"' "${D}/.sdlc/migration/plan.json" 2>/dev/null || [[ -f "${D}/.sdlc/migration/plan.json" ]]; then pass; else fail "48b: plan.json missing on audit-path migration"; fi
 
 
+CASE_NAME="49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports"
+D="${WORK_ROOT}/t49"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
+printf 'domains:\n  - name: 交易域\n' > "${D}/.specify/business_domain/knowledge-target.yaml"
+printf '# 先行知识\n' > "${D}/.specify/business_domain/00old.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+OUT49="${WORK_ROOT}/t49.out"
+KT_FAULT_SCAN_FAILURE=1 bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT49}" 2>&1
+RC=$?
+assert_exit 2 "${RC}"
+if grep -qi "ROLLED BACK" "${OUT49}"; then pass; else fail "49: explicit exit did not trigger transaction rollback"; fi
+if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "49: legacy tree not restored on explicit exit"; fi
+if [[ ! -e "${D}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "49: INIT-created files not cleaned on explicit exit"; fi
+if ls "${D}"/.sdlc/reports/migration_report.*.json* >/dev/null 2>&1; then
+  if grep -q "FAILED_" "${D}"/.sdlc/reports/migration_report.*.json*; then pass; else fail "49: failure report missing on explicit exit"; fi
+else
+  fail "49: failure migration report not written on explicit exit"
+fi
+
+CASE_NAME="50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges"
+D="${WORK_ROOT}/t50"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain"
+printf 'project_type_profiles:\n  - data-pipeline-etl\n' > "${D}/.specify/project-governance-profile.yaml"
+printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\n' > "${D}/.specify/entry-coverage-profile.yaml"
+printf '# Landscape\n' > "${D}/.specify/business_domain/00BusinessLandscape.md"
+printf '# Language\n' > "${D}/.specify/business_domain/00UbiquitousLanguage.md"
+printf '# Catalog\n' > "${D}/.specify/business_domain/01DomainCatalog.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+ruby -ryaml -e '
+  g = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false)
+  gp = g.dig("project", "project_type_profiles") || []
+  exit(1) unless gp.include?("backend-business-service") && gp.include?("data-pipeline-etl")
+  e = YAML.safe_load(File.read(ARGV[1]), permitted_classes: [], aliases: false)
+  sel = e.dig("project_type_profiles", "selected") || []
+  roots = e.dig("scope", "source_roots") || []
+  exit(1) unless sel.include?("data-pipeline-etl") && roots.include?("svc")
+' "${D}/.sdlc/project-governance-profile.yaml" "${D}/.sdlc/entry-coverage-profile.yaml" && pass || fail "50: AUDIT-path migration lost legacy profile facts (G1-R3-H2)"
+MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+if [[ -n "${MIG_JSON}" ]] && grep -q "merged-union (added: data-pipeline-etl)" "${MIG_JSON}"; then pass; else fail "50: AUDIT-path merge outcome not recorded"; fi
+
+
 echo ""
 echo "==== regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
 if [[ "${FAIL_COUNT}" -eq 0 ]]; then
