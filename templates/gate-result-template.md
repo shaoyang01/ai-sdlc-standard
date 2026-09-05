@@ -92,19 +92,15 @@
 
 ## Required Actions
 
-## Risk Acceptance
+## Risk Refs（PASS_WITH_RISK 专用节；Decision-086）
 
-仅当 Result 为 PASS_WITH_RISK 时填写：
+仅当 Result 为 PASS_WITH_RISK 时填写——verdict 的 scope 级判断即风险验收（自动推进，无独立接受仪式）：
 
-- Accepted Risk:
-- Accepted By:
-- Accepted At:
-- Accepted Reason:
-- Accepted Scope:
+- Risk Ref:（随行下游的风险引用列表，指向 Finding Ledger 行）
 - Follow-up Required: yes/no
 - Follow-up Owner:
 
-`PASS_WITH_RISK` 只消费 current `ACCEPTED_RISK` proof；Critical 与未接受 High 始终阻塞。
+`PASS_WITH_RISK` 按 Decision-086 自动推进：verdict scope 级裁决即验收；无 `ACCEPTED_RISK proof` 消费要求、无独立接受者/审批字段（旧仪式废止，manual-runtime-semantic-contract §7.1）。
 
 ## Re-Gate Check
 
