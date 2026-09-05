@@ -695,6 +695,31 @@ else
   errors << "missing scripts/bootstrap-entry-coverage-profile.sh"
 end
 
+# D-088-01 v3 (Decision-090 / spec d088-01-v3-behavior-spec.md §9): the
+# knowledge-target initializer's migration face must keep its contract markers;
+# the negative matrix forbids whole-target/whole-root deletion (RETIRE is an
+# archive move into .sdlc/legacy/**, never a physical delete).
+kt_bootstrap_path = File.join(ROOT, "scripts", "bootstrap-knowledge-target.sh")
+if File.exist?(kt_bootstrap_path)
+  kt_bootstrap = File.read(kt_bootstrap_path)
+  KT_V3_REQUIRED_TERMS = {
+    "--confirm-migration-plan" => "DP1 confirmation flag (spec §4.5)",
+    "BLOCKED_AMBIGUOUS" => "type-level ambiguity gate (spec R03)",
+    ".sdlc/legacy/" => "legacy archive root (spec §4.1)",
+    "PLAN_SHA256" => "plan digest output (spec §4.3)",
+    "RESIDUE" => "post-migration residue gate (spec §6.4)",
+    "migration/plan.json" => "plan artifact path (spec §4.3)"
+  }.freeze
+  KT_V3_REQUIRED_TERMS.each do |term, why|
+    errors << "knowledge-target bootstrap missing #{why}" unless kt_bootstrap.include?(term)
+  end
+  errors << "knowledge-target bootstrap must not delete the target root (zero-touch)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}"')
+  errors << "knowledge-target bootstrap must not delete the legacy root wholesale (RETIRE = archive move)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}/.specify"')
+  errors << "knowledge-target bootstrap must not delete the specs rail wholesale (RETIRE = archive move)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}/specs"')
+else
+  errors << "missing scripts/bootstrap-knowledge-target.sh"
+end
+
 bootstrap_context_paths = {
   "templates/project-governance-profile-template.yaml" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(4),
   "docs/SPECKIT_BOOTSTRAP.md" => BOOTSTRAP_PRIVATE_CONTEXT_REQUIRED_TERMS.first(2)

@@ -25,7 +25,7 @@ version: 0.1.0
 10. entry coverage 审计：同步完成后核对知识条目对实现事实的覆盖面，漏项记为 `待补同步项`。
 11. duplicate sync guard：同一事实已有等价条目时拒绝重复写入（幂等守卫）。
 12. 原始反馈仍从 requirement-intake 重入——本包只消费已分类反馈，绝不替代 intake 分类职能（Decision-045 固定边界）。
-13. 确定性目标解析：同步前先读目标仓 `.sdlc/business_domain/knowledge-target.yaml`（由 `scripts/bootstrap-knowledge-target.sh` 双模式初始化器创建，Decision-088/089）：声明缺失 → BLOCKED 并提示先初始化；`status: candidate_pending_confirmation`（`routable: false`，候选域未经 Owner 确认）→ 只产 PROPOSAL，不写 confirmed 领域事实；`status: routed`（`routable: true`）→ 从 `01DomainCatalog.md` 与已确认 L1/L2/L4 文档解析目标。声明状态机：`absent → candidate_pending_confirmation → routed`。
+13. 确定性目标解析：同步前先读目标仓 `.sdlc/business_domain/knowledge-target.yaml`（由 `scripts/bootstrap-knowledge-target.sh` 双模式初始化器创建，Decision-088/089）：声明缺失 → BLOCKED 并提示先初始化；`status: candidate_pending_confirmation`（`routable: false`，候选域未经 Owner 确认）→ 只产 PROPOSAL，不写 confirmed 领域事实；`status: routed`（`routable: true`）→ 从 `01DomainCatalog.md` 与已确认 L1/L2/L4 文档解析目标。声明状态机：`absent → candidate_pending_confirmation → routed`。旧根声明（`.specify/business_domain/knowledge-target.yaml`，D-088-01 v3 存量迁移前的历史形态）**永不路由**：只有 `.sdlc` 面的声明参与目标解析；存量迁移由初始化器按 v3 规格完成（原件归档于 `.sdlc/legacy/**`），旧根自迁移起不再是权威（Decision-090 / DP4：无 manifest 的存量 requirement 同为只读归档知识源，不进新生命周期）。
 
 ## 能力来源对照表
 
