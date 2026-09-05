@@ -720,10 +720,11 @@ if File.exist?(kt_bootstrap_path)
   # a behavioral mutation that removes them must fail validation.
   KT_V3_BEHAVIOR_ANCHORS = {
     '"${CONFIRM_DIGEST}" != "${PLAN_SHA}"' => "DP1 plan-digest comparison (spec §4.5)",
-    '"${MIG_MOVED} - 1"' => "moved-only rollback boundary (spec §6.3)",
-    "cmp -s" => "byte-identity verification on rollback (spec §6.3)",
+    "MIG_MOVED - 1" => "moved-only rollback boundary (spec §6.3)",
+    'cmp -s "${src}" "${MIG_BACKUP_DIR}/${brel}"' => "byte-identity verification on rollback (spec §6.3)",
     "RESIDUE GATE FAILED" => "residue-gate failure path (spec §6.4)",
-    "signals=${MIG_SIG_CSV}" => "plan digest bound to detection signals (spec §4.3)"
+    "signals=${MIG_SIG_CSV}" => "plan digest bound to detection signals (spec §4.3)",
+    "trap mig_tx_guard EXIT" => "transaction window covers explicit exits (G1-R2-H1)"
   }.freeze
   KT_V3_BEHAVIOR_ANCHORS.each do |term, why|
     errors << "knowledge-target bootstrap missing behavior anchor: #{why}" unless kt_bootstrap.include?(term)

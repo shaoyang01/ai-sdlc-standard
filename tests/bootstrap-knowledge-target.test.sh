@@ -998,6 +998,7 @@ assert_exit 0 $?
 CASE_NAME="41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected"
 D="${WORK_ROOT}/t41"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
 mkdir -p "${D}/.specify/business_domain/01Trade"
+printf '# 先行文件：排序在 trade.md 之前，保证失败前已有成功移动（G1-R2-H5）\n' > "${D}/.specify/business_domain/00old.md"
 printf '# 旧域知识\n' > "${D}/.specify/business_domain/01Trade/trade.md"
 PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
 LEG_SNAP="$(snapshot "${D}/.specify")"
@@ -1008,8 +1009,21 @@ RC=$?
 chmod 700 "${D}/.specify/business_domain/01Trade"
 assert_exit 1 "${RC}"
 if grep -q "MIGRATION FAILED" "${OUT41}" && grep -q "ROLLED BACK" "${OUT41}"; then pass; else fail "A15: rollback messages missing"; fi
+if [[ "$(snapshot "${D}/.sdlc/business_domain/00old.md")" == "$(snapshot "${D}/.specify/business_domain/00old.md")" ]]; then
+  fail "A15: first moved file not rolled back to legacy source"
+fi
+if [[ ! -f "${D}/.specify/business_domain/00old.md" ]] || [[ -f "${D}/.sdlc/business_domain/00old.md" ]]; then
+  fail "A15: moved prefix not restored (rollback not load-bearing at MIG_MOVED>0)"
+else
+  pass
+fi
 if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "A15: legacy tree not restored byte-identical"; fi
 if [[ ! -f "${D}/.sdlc/business_domain/01Trade/trade.md" ]]; then pass; else fail "A15: migrated file not rolled back"; fi
+if ls "${D}"/.sdlc/reports/migration_report.*.json* >/dev/null 2>&1; then
+  if grep -q "FAILED_" "${D}"/.sdlc/reports/migration_report.*.json*; then pass; else fail "A15: failure report missing"; fi
+else
+  fail "A15: failure migration report not written"
+fi
 # B8: file-set drift invalidates the confirmed digest
 D2="${WORK_ROOT}/t41b"; build_matrix_fixture "${D2}" "sdd" "yes" "0" "absent"
 PLAN_SHA2="$(bash "${INITIALIZER}" "${D2}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
@@ -1099,6 +1113,7 @@ if grep -q "旧域知识 v2 changed bytes" "${D}/.sdlc/business_domain/01Trade/t
 CASE_NAME="46. G1-R1-H4: fixed-field merges land in the new machine artifacts"
 D="${WORK_ROOT}/t47"; build_matrix_fixture "${D}" "sdlc" "yes" "0" "absent"
 printf 'project_type_profiles:\n  - data-pipeline-etl\nproject: 旧仓名\n' > "${D}/.specify/project-governance-profile.yaml"
+printf 'project_type_profiles:\n  selected:\n    - data-pipeline-etl\nscope:\n  source_roots:\n    - svc\nentry_types:\n  - name: rpc\n' > "${D}/.specify/entry-coverage-profile.yaml"
 PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
 bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
 assert_exit 0 $?
@@ -1109,6 +1124,13 @@ ruby -ryaml -e '
 ' "${D}/.sdlc/project-governance-profile.yaml" && pass || fail "H4: legacy tech profile not unioned into new profile"
 MIG_JSON="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
 if [[ -n "${MIG_JSON}" ]] && grep -q "merged-union (added: data-pipeline-etl)" "${MIG_JSON}"; then pass; else fail "H4: union merge outcome not recorded"; fi
+ruby -ryaml -e '
+  e = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false)
+  sel = e.dig("project_type_profiles", "selected") || []
+  roots = e.dig("scope", "source_roots") || []
+  exit(1) unless sel.include?("data-pipeline-etl") && roots.include?("svc")
+' "${D}/.sdlc/entry-coverage-profile.yaml" && pass || fail "H4: entry-profile gate facts not merged (selected/source_roots)"
+if grep -q "entry_types" "${MIG_JSON}"; then pass; else fail "H4: entry_types disposition not recorded"; fi
 
 CASE_NAME="47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING"
 D="${WORK_ROOT}/t44"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
@@ -1122,6 +1144,35 @@ bash "${INITIALIZER}" "${D}" --detect > "${OUT44}" 2>&1
 grep -q "^TYPE=EXISTING$" "${OUT44}" && pass || fail "47: post-migration detect with C8 residue not EXISTING (P4 sentinel)"
 bash "${INITIALIZER}" "${D}" --apply > /dev/null 2>&1
 assert_exit 0 $?
+
+
+CASE_NAME="48. G1-R2-H1: migration through the AUDIT path still passes the residue gate"
+D="${WORK_ROOT}/t48"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain"
+printf '# Business Landscape（遗留）\n' > "${D}/.specify/business_domain/00BusinessLandscape.md"
+printf '# Ubiquitous Language（遗留，提及 speckit 工具链）\n' > "${D}/.specify/business_domain/00UbiquitousLanguage.md"
+printf '# Domain Catalog\n' > "${D}/.specify/business_domain/01DomainCatalog.md"
+LEG_SNAP="$(snapshot "${D}/.specify")"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+OUT48="${WORK_ROOT}/t48.out"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > "${OUT48}" 2>&1
+RC=$?
+assert_exit 1 "${RC}"
+if grep -q "RESIDUE GATE FAILED" "${OUT48}"; then pass; else fail "48: audit-path migration bypassed the residue gate"; fi
+if grep -q "00UbiquitousLanguage" "${OUT48}"; then pass; else fail "48: violation not located in migrated root doc"; fi
+if [[ "$(snapshot "${D}/.specify")" == "${LEG_SNAP}" ]]; then pass; else fail "48: legacy tree not restored"; fi
+if [[ ! -e "${D}/.sdlc/business_domain/knowledge-target.yaml" ]]; then pass; else fail "48: INIT/audit-created files not rolled back"; fi
+# clean variant: same three-root legacy knowledge WITHOUT retired words completes via the audit path
+D="${WORK_ROOT}/t48b"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+mkdir -p "${D}/.specify/business_domain"
+printf '# Business Landscape\n' > "${D}/.specify/business_domain/00BusinessLandscape.md"
+printf '# Ubiquitous Language\n' > "${D}/.specify/business_domain/00UbiquitousLanguage.md"
+printf '# Domain Catalog\n' > "${D}/.specify/business_domain/01DomainCatalog.md"
+PLAN_SHA="$(bash "${INITIALIZER}" "${D}" --plan | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN_SHA}" > /dev/null 2>&1
+assert_exit 0 $?
+if [[ -f "${D}/.sdlc/business_domain/00BusinessLandscape.md" ]]; then pass; else fail "48b: clean three-root migration failed"; fi
+if grep -q '"status": "COMPLETED"' "${D}/.sdlc/migration/plan.json" 2>/dev/null || [[ -f "${D}/.sdlc/migration/plan.json" ]]; then pass; else fail "48b: plan.json missing on audit-path migration"; fi
 
 
 echo ""

@@ -252,6 +252,387 @@ fi
 # =====================================================================================
 
 MIG_PENDING="false"
+MIG_TX_ACTIVE="false"
+# initialized before the migration transaction so the EXIT-guard can always
+# read them (G1-R2-H1: early failures must not hit unbound-variable errors)
+CREATED_FILES=(); UPDATED_FILES=(); PRESERVED_FILES=(); BLOCKED_REASONS=(); NOTICE_LINES=()
+MIG_AUDIT_CREATED=()
+PLAN_OK="true"
+
+mig_finalize() {
+  if [[ "${MIG_PENDING}" != "true" ]]; then return 0; fi
+  MIG_FAIL_REASON=""
+
+  # --- §4.4 fixed-field merges: retired declaration/profile facts are projected into
+  # the new machine artifacts (pristine-only, fill-if-absent); every merge decision
+  # is recorded in the report. Retired-root values (e.g. an old document_scope) are
+  # recorded but NEVER merged — they are retired semantics (R18). --------------------
+  MIG_FIELD_MAPPINGS=()
+  OLD_DECL="${TARGET_PATH}/.sdlc/legacy/.specify/business_domain/knowledge-target.yaml"
+  OLD_GOVP="${TARGET_PATH}/.sdlc/legacy/.specify/project-governance-profile.yaml"
+  OLD_ECP="${TARGET_PATH}/.sdlc/legacy/.specify/entry-coverage-profile.yaml"
+  MAP_TEMPLATE_FILE="${SDLC_DIR}/business-domain-map.yaml"
+
+  was_created_this_run() { # $1 = rel path as recorded in CREATED_FILES
+    local c
+    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
+      if [[ "${CREATED_FILES[${c}]}" == "$1" ]]; then return 0; fi
+    done
+    return 1
+  }
+
+  # merge outcomes carry the old value (truncated) so the report is a real
+  # field-mapping table, not just a status list (G1-R1-H4).
+  merge_yaml_key_if_absent() { # $1=old $2=new $3=key ; stdout: outcome (old value appended when relevant)
+    ruby -ryaml -e '
+      old_f, new_f, key = ARGV[0], ARGV[1], ARGV[2]
+      fmt = ->(v) { v = v.join("|") if v.is_a?(Array); v.to_s[0, 80] }
+      return puts("new-absent") unless File.file?(new_f)
+      old = begin; YAML.safe_load(File.read(old_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      return puts("old-absent") if old.nil? || old[key].nil?
+      old_disp = fmt.call(old[key])
+      new = begin; YAML.safe_load(File.read(new_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      return puts("new-unreadable") if new.nil?
+      if new[key].nil?
+        new[key] = old[key]
+        File.write(new_f, YAML.dump(new))
+        puts("merged (old: #{old_disp})")
+      else
+        puts("already-present (old: #{old_disp})")
+      end
+    ' "$1" "$2" "$3" 2>/dev/null || echo "error"
+  }
+
+  # list-union merge for enumerated profile facts: the initializer always emits
+  # project_type_profiles (nested), so fill-if-absent would silently drop the legacy
+  # stack choice (G1-R1-H4); union keeps both, new values first. Old and new layouts
+  # differ (old top-level vs new nested), so each side gets its own dotted path.
+  merge_yaml_key_union() { # $1=old $2=new $3=old.dotted.path $4=new.dotted.path ; stdout: outcome
+    ruby -ryaml -e '
+      old_f, new_f, old_path, new_path = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
+      return puts("new-absent") unless File.file?(new_f)
+      old = begin; YAML.safe_load(File.read(old_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      old_v = old; old_path.split(".").each { |k| old_v = old_v.nil? ? nil : old_v[k] }
+      return puts("old-absent") if old.nil? || old_v.nil?
+      old_list = old_v.is_a?(Array) ? old_v.map(&:to_s) : [old_v.to_s]
+      new = begin; YAML.safe_load(File.read(new_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      return puts("new-unreadable") if new.nil?
+      nparts = new_path.split(".")
+      holder = new; nparts[0..-2].each do |k|
+        holder[k] = {} unless holder[k].is_a?(Hash)
+        holder = holder[k]
+      end
+      leaf = nparts[-1]
+      cur = holder[leaf]
+      new_list = cur.is_a?(Array) ? cur.map(&:to_s) : (cur.nil? ? [] : [cur.to_s])
+      added = old_list.reject { |v| new_list.include?(v) || v.empty? }
+      if added.empty?
+        puts("already-present")
+      else
+        holder[leaf] = new_list + added
+        File.write(new_f, YAML.dump(new))
+        puts("merged-union (added: #{added.join("|")})")
+      end
+    ' "$1" "$2" "$3" "$4" 2>/dev/null || echo "error"
+  }
+
+  if [[ -f "${OLD_DECL}" && -f "${MAP_TEMPLATE_FILE}" ]] \
+     && ! grep -q "legacy_candidate_domains:" "${MAP_TEMPLATE_FILE}" 2>/dev/null; then
+    OLD_DOMAINS="$(ruby -ryaml -e '
+      begin
+        d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
+        names = []
+        (d["domains"] || d["domain_list"] || []).each do |x|
+          names << (x.is_a?(Hash) ? (x["name"] || x["id"] || x["domain"]).to_s : x.to_s)
+        end
+        names << d["project"].to_s unless d["project"].nil?
+        puts names.reject(&:empty?).uniq.join("\n")
+      rescue StandardError
+        nil
+      end
+    ' "${OLD_DECL}" 2>/dev/null || true)"
+    if [[ -n "${OLD_DOMAINS}" ]]; then
+      {
+        printf '\n# legacy_candidate_domains: mechanical projection of the retired declaration\n'
+        printf '# (spec §4.4 fixed-field mapping); owner reviews before confirming the map.\n'
+        printf 'legacy_candidate_domains:\n'
+        printf '%s\n' "${OLD_DOMAINS}" | while IFS= read -r od; do
+          if [[ -n "${od}" ]]; then printf '  - "%s"\n' "$(printf '%s' "${od}" | sed 's/\\/\\\\/g; s/"/\\"/g')"; fi
+        done
+      } >> "${MAP_TEMPLATE_FILE}"
+      while IFS= read -r od; do
+        if [[ -n "${od}" ]]; then MIG_FIELD_MAPPINGS+=("business-domain-map.yaml/legacy_candidate_domains	${od}"); fi
+      done <<< "${OLD_DOMAINS}"
+    fi
+  fi
+
+  old_has_path() { # $1=file $2=dotted.path -> exit 0 when present
+    ruby -ryaml -e '
+      d = begin; YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      v = d; ARGV[1].split(".").each { |k| v = v.nil? ? nil : v[k] }
+      exit(v.nil? ? 1 : 0)
+    ' "$1" "$2" 2>/dev/null
+  }
+  if [[ -f "${OLD_GOVP}" ]] && was_created_this_run "project-governance-profile.yaml"; then
+    # G1-R2-H2: the old layout varies (top-level or nested under project) — probe both.
+    mig_old_path=""
+    for cand in "project_type_profiles" "project.project_type_profiles"; do
+      if old_has_path "${OLD_GOVP}" "${cand}"; then mig_old_path="${cand}"; break; fi
+    done
+    if [[ -n "${mig_old_path}" ]]; then
+      mig_outcome="$(merge_yaml_key_union "${OLD_GOVP}" "${GOV_PROFILE}" "${mig_old_path}" "project.project_type_profiles")"
+    else
+      mig_outcome="old-absent"
+    fi
+    MIG_FIELD_MAPPINGS+=("project-governance-profile.yaml/project_type_profiles	${mig_outcome}")
+    mig_outcome="$(merge_yaml_key_if_absent "${OLD_GOVP}" "${GOV_PROFILE}" "project")"
+    MIG_FIELD_MAPPINGS+=("project-governance-profile.yaml/project	${mig_outcome}")
+  fi
+  if [[ -f "${OLD_ECP}" ]] && was_created_this_run "entry-coverage-profile.yaml"; then
+    # G1-R2-H2: entry-profile gate facts survive the migration (old layout:
+    # project_type_profiles.selected / scope.source_roots / entry_types).
+    mig_outcome="$(merge_yaml_key_union "${OLD_ECP}" "${ECP_PROFILE}" "project_type_profiles.selected" "project_type_profiles.selected")"
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/project_type_profiles.selected	${mig_outcome}")
+    mig_outcome="$(merge_yaml_key_union "${OLD_ECP}" "${ECP_PROFILE}" "scope.source_roots" "scope.source_roots")"
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/scope.source_roots	${mig_outcome}")
+    mig_outcome="$(merge_yaml_key_if_absent "${OLD_ECP}" "${ECP_PROFILE}" "project")"
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/project	${mig_outcome}")
+    mig_et="$(ruby -ryaml -e '
+      d = begin; YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
+      et = d.nil? ? nil : d["entry_types"]
+      puts(et.nil? ? "old-absent" : "#{et.size} item(s); no corresponding key in the v0.1 skeleton")
+    ' "${OLD_ECP}" 2>/dev/null || echo "old-absent")"
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/entry_types	not merged: ${mig_et}")
+  fi
+  if [[ -f "${OLD_ECP}" ]] && was_created_this_run "entry-coverage-profile.yaml"; then
+    mig_outcome="$(merge_yaml_key_if_absent "${OLD_ECP}" "${ECP_PROFILE}" "project")"
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/project	${mig_outcome}")
+    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/document_scope	not merged: old-root scope is retired semantics (R18); authoritative new value kept")
+  fi
+
+  # --- residue gate over ALL active surfaces (spec §6.4; G1-R1-H5: migrated knowledge
+  # files are scanned like every other active file — un-negated retired vocabulary in
+  # a migrated knowledge doc blocks and rolls back, preserving originals for human
+  # adjudication; negation word table kept at parity with the R2-H6 audit scanner) ----
+  GATE_OUT="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-gate.XXXXXX")"
+  GATE_OUT="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-gate.XXXXXX")"
+  # G1-R2-H3: the scanner never reports failure as success — per-file read errors
+  # (e.g. invalid UTF-8) become violations (fail-closed) and a hard crash emits the
+  # SCAN_ERROR sentinel, which the caller treats like violations.
+  GATE_RC="$(ruby -e '
+    sdlc = ARGV[0]; target = ARGV[1]; out = ARGV[2]
+    skip_prefixes = ["#{sdlc}/legacy/", "#{sdlc}/reports/", "#{sdlc}/migration/"]
+    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+    apos = 39.chr
+    negation = Regexp.new("(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\\s+not|do\\s+not|don" + apos + "t|prohibit\\w*|forbidden|retired)", Regexp::IGNORECASE)
+    machine_re = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
+    violations = []
+    if File.directory?(sdlc)
+      files = Dir.glob(File.join(sdlc, "**", "*")).select { |p| File.file?(p) }.sort
+      files.each do |path|
+        next if skip_prefixes.any? { |pre| path.start_with?(pre) }
+        next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
+        begin
+          machine_key_indent = nil
+          File.readlines(path).each_with_index do |line, idx|
+            if (m = line.match(machine_re))
+              machine_key_indent = m[1].length
+            elsif !machine_key_indent.nil?
+              entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
+              machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
+            end
+            next if machine_key_indent
+            states = line.split(/[。；;！!？?]/).map do |clause|
+              hits = patterns.select { |re| clause.match?(re) }
+              next nil if hits.empty?
+              clause.match?(negation) ? :exempt : :violation
+            end.compact
+            if states.include?(:violation)
+              violations << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
+              break if violations.size >= 50
+            end
+            break if violations.size >= 50
+          end
+        rescue StandardError => e
+          violations << "#{path.delete_prefix("#{target}/")}: scanner error (#{e.class})"
+        end
+        break if violations.size >= 50
+      end
+    end
+    File.write(out, violations.join("\n") + (violations.empty? ? "" : "\n"))
+    puts violations.size
+  ' "${SDLC_DIR}" "${TARGET_PATH}" "${GATE_OUT}" 2>/dev/null)"
+  GATE_STATUS=$?
+  if [[ "${GATE_STATUS}" -ne 0 || "${GATE_RC}" == "SCAN_ERROR" ]]; then
+    MIG_FAIL_REASON="residue gate scan error"
+  elif [[ "${GATE_RC}" != "0" ]]; then
+    MIG_FAIL_REASON="residue gate violations"
+  fi
+
+  if [[ -n "${MIG_FAIL_REASON}" ]]; then
+    # --- full rollback: migration moves + INIT-created files + both reports ---------
+    MIG_TX_ACTIVE="false"
+    if mig_rollback; then
+      echo "RESIDUE GATE FAILED: rolled back migration to pre-migration state." >&2
+    else
+      echo "RESIDUE GATE FAILED and ROLLBACK INCOMPLETE; backup kept at ${MIG_BACKUP_DIR}" >&2
+      MIG_ROLLBACK_OK="false"
+    fi
+    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
+      rel="${CREATED_FILES[${c}]}"
+      case "${rel}" in
+        project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${rel}" ;;
+        *) rm -f "${BD_DIR}/${rel}" ;;
+      esac
+    done
+    for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
+      rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
+    done
+    rm -f "${REPORT_FILE}"
+    echo "BLOCKED: migration rolled back (${MIG_FAIL_REASON}); see stderr list. Violations:" >&2
+    while IFS= read -r v; do
+      if [[ -n "${v}" ]]; then echo "  - ${v}" >&2; fi
+    done < "${GATE_OUT}"
+    mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    mig_write_failure_report "residue gate violation" "${mig_rb}" "${GATE_OUT}"
+    rm -f "${GATE_OUT}"
+    exit 1
+  fi
+  rm -f "${GATE_OUT}"
+
+  # --- post-migration detection re-run value (spec §7) ------------------------------
+  POST_ROOT_DOCS=0
+  for doc in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
+    if [[ -f "${BD_DIR}/${doc}" ]]; then POST_ROOT_DOCS=$((POST_ROOT_DOCS + 1)); fi
+  done
+  if [[ "${POST_ROOT_DOCS}" -eq 3 ]]; then
+    MIG_POST_TYPE="EXISTING"
+  else
+    MIG_POST_TYPE="EXISTING_CODE_NO_KNOWLEDGE"
+  fi
+
+  # --- finalization: independent plan artifact + dual reports (spec §4.3/§7; H6) ----
+  MIG_REPORT_DIR="${REPORT_DIR}"
+  mkdir -p "${MIG_REPORT_DIR}" "${SDLC_DIR}/migration"
+  MIG_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-tsv.XXXXXX")"
+  for ((t = 0; t < ${#MIG_TSV[@]}; t++)); do printf '%s\n' "${MIG_TSV[${t}]}" >> "${MIG_TSV_FILE}"; done
+  MIG_MAP_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-map.XXXXXX")"
+  for ((t = 0; t < ${#MIG_FIELD_MAPPINGS[@]}; t++)); do printf '%s\n' "${MIG_FIELD_MAPPINGS[${t}]}" >> "${MIG_MAP_TSV_FILE}"; done
+  MIG_BLOCK_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-blocked.XXXXXX")"
+  for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
+    printf '%s\t%s\n' "${MIG_BLOCKED[${b}]}" "${MIG_BLOCKED[${b} + 1]}" >> "${MIG_BLOCK_TSV_FILE}"
+  done
+
+  MIG_CONFIRM_REQUIRED="false"; MIG_CONFIRM_PROVIDED="false"
+  if [[ "${MIG_ADD_ONLY}" != "true" ]]; then MIG_CONFIRM_REQUIRED="true"; MIG_CONFIRM_PROVIDED="true"; fi
+
+  # independent plan artifact: the confirmed classification document (H6)
+  PLAN_JSON="${SDLC_DIR}/migration/plan.json"
+  M_SIGNALS_CSV="$(printf '%s; ' "${SIG_LINES[@]}")"
+  M_SIGNALS_CSV="${M_SIGNALS_CSV%; }"
+  M_TYPE="${V3_TYPE}" M_SKELETON="${V3_SKELETON}" M_SIGNALS="${M_SIGNALS_CSV}" \
+  M_PLAN_SHA="${PLAN_SHA}" M_ADD_ONLY="${MIG_ADD_ONLY}" \
+  M_RUN_TIMESTAMP="${RUN_TIMESTAMP}" M_V3_NOW="${V3_NOW}" \
+  ruby -rjson -e '
+    tsv_file, block_file, out = ARGV[0], ARGV[1], ARGV[2]
+    files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
+      verb, rel, dst, rule, pre, rationale = l.split("\t")
+      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
+        "pre_digest" => pre, "rationale" => rationale }
+    end
+    blocked = File.readlines(block_file).map(&:chomp).reject(&:empty?).map do |l|
+      pth, reason = l.split("\t", 2)
+      { "path" => pth, "reason" => reason }
+    end
+    doc = {
+      "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
+      "generated_at" => ENV["M_V3_NOW"],
+      "type" => ENV["M_TYPE"],
+      "signals" => ENV["M_SIGNALS"].split("; ").map(&:strip).reject(&:empty?),
+      "skeleton_state" => ENV["M_SKELETON"],
+      "add_only" => ENV["M_ADD_ONLY"] == "true",
+      "blocked_total" => blocked.size,
+      "blocked_files" => blocked,
+      "files" => files,
+      "plan_sha256" => ENV["M_PLAN_SHA"]
+    }
+    File.write(out, JSON.pretty_generate(doc) + "\n")
+  ' "${MIG_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}" "${PLAN_JSON}"
+  printf '%s\n' "${PLAN_SHA}" > "${SDLC_DIR}/migration/plan.sha256"
+
+  # migration report: execution outcome keyed to the confirmed plan (H6)
+  MIG_JSON="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.json.XXXXXX")"
+  MIG_REPORT_FILE="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.md.XXXXXX")"
+  MIG_FINISHED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  M_TARGET="${TARGET_PATH}" M_AUTHOR="${AUTHOR}" M_TYPE="${V3_TYPE}" M_SKELETON="${V3_SKELETON}" \
+  M_POST_TYPE="${MIG_POST_TYPE}" M_RUN_TIMESTAMP="${RUN_TIMESTAMP}" M_V3_NOW="${V3_NOW}" \
+  M_FINISHED_AT="${MIG_FINISHED_AT}" \
+  M_MOVED="${MIG_MOVED}" M_PLAN_SHA="${PLAN_SHA}" M_SIGNALS="${M_SIGNALS_CSV}" \
+  M_ADD_ONLY="${MIG_ADD_ONLY}" M_CONFIRM_REQUIRED="${MIG_CONFIRM_REQUIRED}" M_CONFIRM_PROVIDED="${MIG_CONFIRM_PROVIDED}" \
+  ruby -rjson -rdigest -e '
+    tsv_file, map_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
+    target = ENV["M_TARGET"]
+    files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
+      verb, rel, dst, rule, pre, rationale = l.split("\t")
+      post = nil
+      if dst != "-" && File.file?(File.join(target, dst))
+        post = Digest::SHA256.file(File.join(target, dst)).hexdigest
+      end
+      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
+        "pre_digest" => pre, "post_digest" => post, "rationale" => rationale }
+    end
+    mappings = File.readlines(map_file).map(&:chomp).reject(&:empty?).map do |l|
+      k, v = l.split("\t", 2)
+      { "field" => k, "value" => v }
+    end
+    doc = {
+      "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
+      "generated_at" => ENV["M_V3_NOW"],
+      "migration_completed_at" => ENV["M_FINISHED_AT"],
+      "status" => "COMPLETED",
+      "target_repository" => target,
+      "git_author" => ENV["M_AUTHOR"],
+      "detection" => { "type" => ENV["M_TYPE"], "signals" => ENV.fetch("M_SIGNALS", "").split("; ").map(&:strip).reject(&:empty?), "skeleton_state" => ENV.fetch("M_SKELETON", "") },
+      "plan_sha256" => ENV["M_PLAN_SHA"],
+      "confirmation" => { "required" => ENV["M_CONFIRM_REQUIRED"] == "true", "provided" => ENV["M_CONFIRM_PROVIDED"] == "true", "digest" => ENV["M_PLAN_SHA"] },
+      "add_only" => ENV["M_ADD_ONLY"] == "true",
+      "moved_count" => ENV["M_MOVED"].to_i,
+      "files" => files,
+      "field_mappings" => mappings,
+      "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/", "violations_count" => 0 },
+      "post_detect_type" => ENV["M_POST_TYPE"],
+      "rollback" => { "occurred" => false, "reason" => "" }
+    }
+    File.write(json_out, JSON.pretty_generate(doc) + "\n")
+    md = String.new
+    md << "# Migration Report\n\n"
+    md << "> **Type**: #{doc["detection"]["type"]}\n"
+    md << "> **Generated At**: #{doc["generated_at"]}\n"
+    md << "> **Completed At**: #{doc["migration_completed_at"]}\n"
+    md << "> **Plan SHA-256**: `#{doc["plan_sha256"]}`\n"
+    md << "> **DP1 Confirmation**: required=#{doc["confirmation"]["required"]} provided=#{doc["confirmation"]["provided"]}\n"
+    md << "> **Moved**: #{doc["moved_count"]} file(s); add_only=#{doc["add_only"]}; residue gate=0 violations\n"
+    md << "> **Post-migration detection**: #{doc["post_detect_type"]}\n\n"
+    md << "| Verb | Path | Target | Rule | Pre Digest | Post Digest |\n| --- | --- | --- | --- | --- | --- |\n"
+    files.each { |f| md << "| #{f["verb"]} | #{f["path"]} | #{f["target"]} | #{f["rule"]} | #{f["pre_digest"]} | #{f["post_digest"]} |\n" }
+    unless mappings.empty?
+      md << "\n## Field Mappings (spec §4.4)\n\n| Field | Outcome/Value |\n| --- | --- |\n"
+      mappings.each { |m| md << "| #{m["field"]} | #{m["value"]} |\n" }
+    end
+    md << "\nRETIRE/TRANSFORM 原件归档于 `.sdlc/legacy/**`（不物理删除）；候选域与稳定事实仍由 sdlc-knowledge-sync 依 routed 声明写入。\n"
+    File.write(md_out, md)
+  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
+  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}"
+
+  # transaction complete: reports finalized, disarm the EXIT guard (H3)
+  trap - EXIT
+  MIG_TX_ACTIVE="false"
+
+  echo "MIGRATION REPORT=${MIG_REPORT_FILE#${TARGET_PATH}/}"
+  echo "MIGRATION REPORT JSON=${MIG_JSON#${TARGET_PATH}/}"
+  echo "MIGRATION PLAN JSON=${PLAN_JSON#${TARGET_PATH}/}"
+  echo "MIGRATION POST_DETECT_TYPE=${MIG_POST_TYPE}"
+}
 V3_NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 mig_digest() { ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$1" 2>/dev/null || true; }
 
@@ -486,6 +867,14 @@ if [[ "${V3_TYPE}" == LEGACY_* && "${FORCE_AUDIT}" != "true" ]]; then
     fi
   done
 
+  if [[ -n "${MIG_ROOT_BLOCKED}" ]]; then
+    # G1-R2-M1: a dangerous root is a plan-level blocked row, so --plan exits 1 and
+    # names the escape instead of silently returning a clean plan.
+    MIG_BLOCKED+=("<legacy-root>" "${MIG_ROOT_BLOCKED}")
+    MIG_PLAN_LINES+=("BLOCKED	<legacy-root>	-	C10	${MIG_ROOT_BLOCKED}")
+    MIG_TSV+=("BLOCKED_AMBIGUOUS	<legacy-root>	-	C10		${MIG_ROOT_BLOCKED}")
+  fi
+
   LEGACY_FILES=""
   for root in "${LEGACY_WALK_ROOTS[@]:-}"; do
     [[ -n "${root}" ]] || continue
@@ -683,15 +1072,25 @@ ${PLAN_BODY}"
   }
 
   # H6/I8b: every failure path emits a machine-checkable migration failure report.
-  mig_write_failure_report() {
-    local reason="$1"
+  # G1-R2-H4: failure reports bind EXECUTION facts — rollback outcome, real residue
+  # violations — instead of hardcoded success-rollback assertions.
+  mig_write_failure_report() { # $1=reason $2=ROLLED_BACK|INCOMPLETE $3=violations file (optional)
+    local reason="$1" rb_status="${2:-INCOMPLETE}" viol_file="${3:-}"
     local fjson fmd
     mkdir -p "${REPORT_DIR}"
     fjson="$(mktemp "${REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.json.XXXXXX" 2>/dev/null)" || return 0
     fmd="$(mktemp "${REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.md.XXXXXX" 2>/dev/null)" || return 0
-    M_FAIL_REASON="${reason}" M_PLAN_SHA="${PLAN_SHA:-}" M_MOVED="${MIG_MOVED}" \
-    M_TYPE="${V3_TYPE}" M_TS="${RUN_TIMESTAMP}" M_NOW="${V3_NOW}" M_TARGET="${TARGET_PATH}" \
+    if [[ "${rb_status}" != "ROLLED_BACK" && "${rb_status}" != "INCOMPLETE" ]]; then rb_status="INCOMPLETE"; fi
+    M_FAIL_REASON="${reason}" M_RB_STATUS="${rb_status}" M_VIOL_FILE="${viol_file}" \
+    M_PLAN_SHA="${PLAN_SHA:-}" M_MOVED="${MIG_MOVED}" \
+    M_TYPE="${V3_TYPE}" M_TS="${RUN_TIMESTAMP}" M_NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" M_TARGET="${TARGET_PATH}" \
     ruby -rjson -e '
+      rolled_back = ENV["M_RB_STATUS"] == "ROLLED_BACK"
+      violations = []
+      if ENV["M_VIOL_FILE"] != "" && File.file?(ENV["M_VIOL_FILE"])
+        violations = File.readlines(ENV["M_VIOL_FILE"]).map(&:strip).reject(&:empty?).first(50)
+      end
+      status = rolled_back ? "FAILED_ROLLED_BACK" : "FAILED_ROLLBACK_INCOMPLETE"
       doc = {
         "run_timestamp" => ENV["M_TS"], "generated_at" => ENV["M_NOW"],
         "target_repository" => ENV["M_TARGET"], "git_author" => "<failed run>",
@@ -700,20 +1099,27 @@ ${PLAN_BODY}"
         "confirmation" => { "required" => true, "provided" => true, "digest" => ENV["M_PLAN_SHA"] },
         "add_only" => false, "moved_count" => ENV["M_MOVED"].to_i, "files" => [],
         "field_mappings" => [],
-        "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/", "violations_count" => 0 },
+        "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/",
+                            "violations_count" => violations.size, "violations" => violations },
         "post_detect_type" => "",
-        "rollback" => { "occurred" => true, "reason" => ENV["M_FAIL_REASON"] },
-        "status" => "FAILED_ROLLED_BACK",
+        "rollback" => { "occurred" => rolled_back, "status" => ENV["M_RB_STATUS"], "reason" => ENV["M_FAIL_REASON"] },
+        "status" => status,
         "migration_completed_at" => nil
       }
       File.write(ARGV[0], JSON.pretty_generate(doc) + "\n")
       md = String.new
-      md << "# Migration Report (FAILED, ROLLED BACK)\n\n"
-      md << "> **Reason**: #{ENV["M_FAIL_REASON"]}\n> **Moved before failure**: #{ENV["M_MOVED"]} (all restored)\n> **Plan SHA-256**: `#{ENV["M_PLAN_SHA"]}`\n"
+      md << "# Migration Report (FAILED, #{ENV["M_RB_STATUS"]})\n\n"
+      md << "> **Reason**: #{ENV["M_FAIL_REASON"]}\n> **Moved before failure**: #{ENV["M_MOVED"]}\n> **Rolled back**: #{rolled_back}\n"
+      md << "> **Plan SHA-256**: `#{ENV["M_PLAN_SHA"]}`\n"
+      unless violations.empty?
+        md << "\n## Residue Violations\n\n"
+        violations.each { |v| md << "- #{v}\n" }
+      end
       File.write(ARGV[1], md)
     ' "${fjson}" "${fmd}" 2>/dev/null || true
     echo "MIGRATION FAILURE REPORT=${fjson#${TARGET_PATH}/}"
   }
+
 
   # ERR trap guards the transaction window: any unhandled failure between the first
   # move and the finalized success reports rolls the repository back (H3).
@@ -736,11 +1142,17 @@ ${PLAN_BODY}"
         *) rm -f "${BD_DIR}/${crel}" ;;
       esac
     done
+    for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
+      rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
+    done
     rm -f "${REPORT_FILE:-}"
-    mig_write_failure_report "unexpected failure in transaction window (exit ${rc})"
+    mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    mig_write_failure_report "unexpected failure in transaction window (exit ${rc})" "${mig_rb}"
     exit 1
   }
-  trap mig_tx_guard ERR
+  # G1-R2-H1: EXIT trap (not ERR) so explicit exits are covered too; the guard
+  # passes the exit code through unchanged when the transaction is disarmed.
+  trap mig_tx_guard EXIT
 
   # phase 1: full backup of every planned move BEFORE any move happens (H3)
   for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
@@ -770,7 +1182,8 @@ ${PLAN_BODY}"
         echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
         MIG_ROLLBACK_OK="false"
       fi
-      mig_write_failure_report "${MIG_FAIL_REASON}"
+      mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+      mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
       exit 1
     fi
     MIG_MOVED=$((MIG_MOVED + 1))
@@ -1728,7 +2141,19 @@ RUBY
     echo "AUDIT_FILLED: ${AUDIT_FILLED[*]:-}"
     echo "REPORT=${FINAL_AUDIT_REPORT#${TARGET_PATH}/}"
   fi
-  exit "${AUDIT_EXIT}"
+  if [[ "${MIG_PENDING}" != "true" ]]; then
+    exit "${AUDIT_EXIT}"
+  fi
+  # G1-R2-H1: on a migration run the audit branch must NOT bypass the shared
+  # residue gate / migration finalization; fold its writes into the transaction
+  # and run the shared finalizer right here.
+  mig_af=""
+  for mig_af in "${AUDIT_FILLED[@]:-}"; do
+    if [[ -n "${mig_af}" ]]; then MIG_AUDIT_CREATED+=("${mig_af}"); fi
+  done
+  if [[ -n "${FINAL_AUDIT_REPORT:-}" ]]; then REPORT_FILE="${FINAL_AUDIT_REPORT}"; fi
+  mig_finalize
+  exit 0
 fi
 
 # --- MODE 1: init ------------------------------------------------------------------
@@ -2373,329 +2798,10 @@ REPORT_FILE="$(mktemp "${REPORT_DIR}/knowledge_target_bootstrap_report.$(date '+
 # --- v3: post-init residue gate, rollback-on-violation, migration reports ------------
 # spec §6.4 (residue gate) / §6.5 (finalization) / §7 (dual reports)
 # =====================================================================================
-if [[ "${MIG_PENDING}" == "true" ]]; then
-  MIG_FAIL_REASON=""
 
-  # --- §4.4 fixed-field merges: retired declaration/profile facts are projected into
-  # the new machine artifacts (pristine-only, fill-if-absent); every merge decision
-  # is recorded in the report. Retired-root values (e.g. an old document_scope) are
-  # recorded but NEVER merged — they are retired semantics (R18). --------------------
-  MIG_FIELD_MAPPINGS=()
-  OLD_DECL="${TARGET_PATH}/.sdlc/legacy/.specify/business_domain/knowledge-target.yaml"
-  OLD_GOVP="${TARGET_PATH}/.sdlc/legacy/.specify/project-governance-profile.yaml"
-  OLD_ECP="${TARGET_PATH}/.sdlc/legacy/.specify/entry-coverage-profile.yaml"
-  MAP_TEMPLATE_FILE="${SDLC_DIR}/business-domain-map.yaml"
-
-  was_created_this_run() { # $1 = rel path as recorded in CREATED_FILES
-    local c
-    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
-      if [[ "${CREATED_FILES[${c}]}" == "$1" ]]; then return 0; fi
-    done
-    return 1
-  }
-
-  # merge outcomes carry the old value (truncated) so the report is a real
-  # field-mapping table, not just a status list (G1-R1-H4).
-  merge_yaml_key_if_absent() { # $1=old $2=new $3=key ; stdout: outcome (old value appended when relevant)
-    ruby -ryaml -e '
-      old_f, new_f, key = ARGV[0], ARGV[1], ARGV[2]
-      fmt = ->(v) { v = v.join("|") if v.is_a?(Array); v.to_s[0, 80] }
-      return puts("new-absent") unless File.file?(new_f)
-      old = begin; YAML.safe_load(File.read(old_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
-      return puts("old-absent") if old.nil? || old[key].nil?
-      old_disp = fmt.call(old[key])
-      new = begin; YAML.safe_load(File.read(new_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
-      return puts("new-unreadable") if new.nil?
-      if new[key].nil?
-        new[key] = old[key]
-        File.write(new_f, YAML.dump(new))
-        puts("merged (old: #{old_disp})")
-      else
-        puts("already-present (old: #{old_disp})")
-      end
-    ' "$1" "$2" "$3" 2>/dev/null || echo "error"
-  }
-
-  # list-union merge for enumerated profile facts: the initializer always emits
-  # project_type_profiles (nested), so fill-if-absent would silently drop the legacy
-  # stack choice (G1-R1-H4); union keeps both, new values first. Old and new layouts
-  # differ (old top-level vs new nested), so each side gets its own dotted path.
-  merge_yaml_key_union() { # $1=old $2=new $3=old.dotted.path $4=new.dotted.path ; stdout: outcome
-    ruby -ryaml -e '
-      old_f, new_f, old_path, new_path = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
-      return puts("new-absent") unless File.file?(new_f)
-      old = begin; YAML.safe_load(File.read(old_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
-      old_v = old; old_path.split(".").each { |k| old_v = old_v.nil? ? nil : old_v[k] }
-      return puts("old-absent") if old.nil? || old_v.nil?
-      old_list = old_v.is_a?(Array) ? old_v.map(&:to_s) : [old_v.to_s]
-      new = begin; YAML.safe_load(File.read(new_f), permitted_classes: [], aliases: false) || {}; rescue StandardError; nil; end
-      return puts("new-unreadable") if new.nil?
-      nparts = new_path.split(".")
-      holder = new; nparts[0..-2].each do |k|
-        holder[k] = {} unless holder[k].is_a?(Hash)
-        holder = holder[k]
-      end
-      leaf = nparts[-1]
-      cur = holder[leaf]
-      new_list = cur.is_a?(Array) ? cur.map(&:to_s) : (cur.nil? ? [] : [cur.to_s])
-      added = old_list.reject { |v| new_list.include?(v) || v.empty? }
-      if added.empty?
-        puts("already-present")
-      else
-        holder[leaf] = new_list + added
-        File.write(new_f, YAML.dump(new))
-        puts("merged-union (added: #{added.join("|")})")
-      end
-    ' "$1" "$2" "$3" "$4" 2>/dev/null || echo "error"
-  }
-
-  if [[ -f "${OLD_DECL}" && -f "${MAP_TEMPLATE_FILE}" ]] \
-     && ! grep -q "legacy_candidate_domains:" "${MAP_TEMPLATE_FILE}" 2>/dev/null; then
-    OLD_DOMAINS="$(ruby -ryaml -e '
-      begin
-        d = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false) || {}
-        names = []
-        (d["domains"] || d["domain_list"] || []).each do |x|
-          names << (x.is_a?(Hash) ? (x["name"] || x["id"] || x["domain"]).to_s : x.to_s)
-        end
-        names << d["project"].to_s unless d["project"].nil?
-        puts names.reject(&:empty?).uniq.join("\n")
-      rescue StandardError
-        nil
-      end
-    ' "${OLD_DECL}" 2>/dev/null || true)"
-    if [[ -n "${OLD_DOMAINS}" ]]; then
-      {
-        printf '\n# legacy_candidate_domains: mechanical projection of the retired declaration\n'
-        printf '# (spec §4.4 fixed-field mapping); owner reviews before confirming the map.\n'
-        printf 'legacy_candidate_domains:\n'
-        printf '%s\n' "${OLD_DOMAINS}" | while IFS= read -r od; do
-          if [[ -n "${od}" ]]; then printf '  - "%s"\n' "$(printf '%s' "${od}" | sed 's/\\/\\\\/g; s/"/\\"/g')"; fi
-        done
-      } >> "${MAP_TEMPLATE_FILE}"
-      while IFS= read -r od; do
-        if [[ -n "${od}" ]]; then MIG_FIELD_MAPPINGS+=("business-domain-map.yaml/legacy_candidate_domains	${od}"); fi
-      done <<< "${OLD_DOMAINS}"
-    fi
-  fi
-
-  if [[ -f "${OLD_GOVP}" ]] && was_created_this_run "project-governance-profile.yaml"; then
-    mig_outcome="$(merge_yaml_key_union "${OLD_GOVP}" "${GOV_PROFILE}" "project_type_profiles" "project.project_type_profiles")"
-    MIG_FIELD_MAPPINGS+=("project-governance-profile.yaml/project_type_profiles	${mig_outcome}")
-    mig_outcome="$(merge_yaml_key_if_absent "${OLD_GOVP}" "${GOV_PROFILE}" "project")"
-    MIG_FIELD_MAPPINGS+=("project-governance-profile.yaml/project	${mig_outcome}")
-  fi
-  if [[ -f "${OLD_ECP}" ]] && was_created_this_run "entry-coverage-profile.yaml"; then
-    mig_outcome="$(merge_yaml_key_if_absent "${OLD_ECP}" "${ECP_PROFILE}" "project")"
-    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/project	${mig_outcome}")
-    MIG_FIELD_MAPPINGS+=("entry-coverage-profile.yaml/document_scope	not merged: old-root scope is retired semantics (R18); authoritative new value kept")
-  fi
-
-  # --- residue gate over ALL active surfaces (spec §6.4; G1-R1-H5: migrated knowledge
-  # files are scanned like every other active file — un-negated retired vocabulary in
-  # a migrated knowledge doc blocks and rolls back, preserving originals for human
-  # adjudication; negation word table kept at parity with the R2-H6 audit scanner) ----
-  GATE_OUT="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-gate.XXXXXX")"
-  GATE_RC="$(ruby -e '
-    sdlc = ARGV[0]; target = ARGV[1]; out = ARGV[2]
-    skip_prefixes = ["#{sdlc}/legacy/", "#{sdlc}/reports/", "#{sdlc}/migration/"]
-    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
-    apos = 39.chr
-    negation = Regexp.new("(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\\s+not|do\\s+not|don" + apos + "t|prohibit\\w*|forbidden|retired)", Regexp::IGNORECASE)
-    machine_re = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
-    violations = []
-    if File.directory?(sdlc)
-      files = Dir.glob(File.join(sdlc, "**", "*")).select { |p| File.file?(p) }.sort
-      files.each do |path|
-        next if skip_prefixes.any? { |pre| path.start_with?(pre) }
-        next unless path.match?(/\.(md|markdown|txt|yaml|yml|sh|rb)\z/i)
-        machine_key_indent = nil
-        File.readlines(path).each_with_index do |line, idx|
-          if (m = line.match(machine_re))
-            machine_key_indent = m[1].length
-          elsif !machine_key_indent.nil?
-            entry_indent = line.match(/\A(\s*)\S/) ? Regexp.last_match(1).length : nil
-            machine_key_indent = nil if entry_indent.nil? || entry_indent <= machine_key_indent
-          end
-          next if machine_key_indent
-          states = line.split(/[。；;！!？?]/).map do |clause|
-            hits = patterns.select { |re| clause.match?(re) }
-            next nil if hits.empty?
-            clause.match?(negation) ? :exempt : :violation
-          end.compact
-          if states.include?(:violation)
-            violations << "#{path.delete_prefix("#{target}/")}:#{idx + 1}"
-            break if violations.size >= 50
-          end
-          break if violations.size >= 50
-        end
-        break if violations.size >= 50
-      end
-    end
-    File.write(out, violations.join("\n") + (violations.empty? ? "" : "\n"))
-    puts violations.size
-  ' "${SDLC_DIR}" "${TARGET_PATH}" "${GATE_OUT}" 2>/dev/null || echo "0")"
-  if [[ "${GATE_RC}" != "0" ]]; then
-    MIG_FAIL_REASON="residue gate violations"
-  fi
-
-  if [[ -n "${MIG_FAIL_REASON}" ]]; then
-    # --- full rollback: migration moves + INIT-created files + both reports ---------
-    if mig_rollback; then
-      echo "RESIDUE GATE FAILED: rolled back migration to pre-migration state." >&2
-    else
-      echo "RESIDUE GATE FAILED and ROLLBACK INCOMPLETE; backup kept at ${MIG_BACKUP_DIR}" >&2
-      MIG_ROLLBACK_OK="false"
-    fi
-    for ((c = 0; c < ${#CREATED_FILES[@]}; c++)); do
-      rel="${CREATED_FILES[${c}]}"
-      case "${rel}" in
-        project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${rel}" ;;
-        *) rm -f "${BD_DIR}/${rel}" ;;
-      esac
-    done
-    rm -f "${REPORT_FILE}"
-    echo "BLOCKED: migration rolled back (${MIG_FAIL_REASON}); see stderr list. Violations:" >&2
-    while IFS= read -r v; do
-      if [[ -n "${v}" ]]; then echo "  - ${v}" >&2; fi
-    done < "${GATE_OUT}"
-    mig_write_failure_report "residue gate violation at $(head -n 1 "${GATE_OUT}" 2>/dev/null || echo 'unknown')"
-    rm -f "${GATE_OUT}"
-    exit 1
-  fi
-  rm -f "${GATE_OUT}"
-
-  # --- post-migration detection re-run value (spec §7) ------------------------------
-  POST_ROOT_DOCS=0
-  for doc in 00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md; do
-    if [[ -f "${BD_DIR}/${doc}" ]]; then POST_ROOT_DOCS=$((POST_ROOT_DOCS + 1)); fi
-  done
-  if [[ "${POST_ROOT_DOCS}" -eq 3 ]]; then
-    MIG_POST_TYPE="EXISTING"
-  else
-    MIG_POST_TYPE="EXISTING_CODE_NO_KNOWLEDGE"
-  fi
-
-  # --- finalization: independent plan artifact + dual reports (spec §4.3/§7; H6) ----
-  MIG_REPORT_DIR="${REPORT_DIR}"
-  mkdir -p "${MIG_REPORT_DIR}" "${SDLC_DIR}/migration"
-  MIG_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-tsv.XXXXXX")"
-  for ((t = 0; t < ${#MIG_TSV[@]}; t++)); do printf '%s\n' "${MIG_TSV[${t}]}" >> "${MIG_TSV_FILE}"; done
-  MIG_MAP_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-map.XXXXXX")"
-  for ((t = 0; t < ${#MIG_FIELD_MAPPINGS[@]}; t++)); do printf '%s\n' "${MIG_FIELD_MAPPINGS[${t}]}" >> "${MIG_MAP_TSV_FILE}"; done
-  MIG_BLOCK_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-mig-blocked.XXXXXX")"
-  for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
-    printf '%s\t%s\n' "${MIG_BLOCKED[${b}]}" "${MIG_BLOCKED[${b} + 1]}" >> "${MIG_BLOCK_TSV_FILE}"
-  done
-
-  MIG_CONFIRM_REQUIRED="false"; MIG_CONFIRM_PROVIDED="false"
-  if [[ "${MIG_ADD_ONLY}" != "true" ]]; then MIG_CONFIRM_REQUIRED="true"; MIG_CONFIRM_PROVIDED="true"; fi
-
-  # independent plan artifact: the confirmed classification document (H6)
-  PLAN_JSON="${SDLC_DIR}/migration/plan.json"
-  M_SIGNALS_CSV="$(printf '%s; ' "${SIG_LINES[@]}")"
-  M_SIGNALS_CSV="${M_SIGNALS_CSV%; }"
-  M_TYPE="${V3_TYPE}" M_SKELETON="${V3_SKELETON}" M_SIGNALS="${M_SIGNALS_CSV}" \
-  M_PLAN_SHA="${PLAN_SHA}" M_ADD_ONLY="${MIG_ADD_ONLY}" \
-  M_RUN_TIMESTAMP="${RUN_TIMESTAMP}" M_V3_NOW="${V3_NOW}" \
-  ruby -rjson -e '
-    tsv_file, block_file, out = ARGV[0], ARGV[1], ARGV[2]
-    files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
-      verb, rel, dst, rule, pre, rationale = l.split("\t")
-      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
-        "pre_digest" => pre, "rationale" => rationale }
-    end
-    blocked = File.readlines(block_file).map(&:chomp).reject(&:empty?).map do |l|
-      pth, reason = l.split("\t", 2)
-      { "path" => pth, "reason" => reason }
-    end
-    doc = {
-      "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
-      "generated_at" => ENV["M_V3_NOW"],
-      "type" => ENV["M_TYPE"],
-      "signals" => ENV["M_SIGNALS"].split("; ").map(&:strip).reject(&:empty?),
-      "skeleton_state" => ENV["M_SKELETON"],
-      "add_only" => ENV["M_ADD_ONLY"] == "true",
-      "blocked_total" => blocked.size,
-      "blocked_files" => blocked,
-      "files" => files,
-      "plan_sha256" => ENV["M_PLAN_SHA"]
-    }
-    File.write(out, JSON.pretty_generate(doc) + "\n")
-  ' "${MIG_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}" "${PLAN_JSON}"
-  printf '%s\n' "${PLAN_SHA}" > "${SDLC_DIR}/migration/plan.sha256"
-
-  # migration report: execution outcome keyed to the confirmed plan (H6)
-  MIG_JSON="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.json.XXXXXX")"
-  MIG_REPORT_FILE="$(mktemp "${MIG_REPORT_DIR}/migration_report.${RUN_TIMESTAMP}.${$}.md.XXXXXX")"
-  M_TARGET="${TARGET_PATH}" M_AUTHOR="${AUTHOR}" M_TYPE="${V3_TYPE}" M_SKELETON="${V3_SKELETON}" \
-  M_POST_TYPE="${MIG_POST_TYPE}" M_RUN_TIMESTAMP="${RUN_TIMESTAMP}" M_V3_NOW="${V3_NOW}" \
-  M_MOVED="${MIG_MOVED}" M_PLAN_SHA="${PLAN_SHA}" M_SIGNALS="${M_SIGNALS_CSV}" \
-  M_ADD_ONLY="${MIG_ADD_ONLY}" M_CONFIRM_REQUIRED="${MIG_CONFIRM_REQUIRED}" M_CONFIRM_PROVIDED="${MIG_CONFIRM_PROVIDED}" \
-  ruby -rjson -rdigest -e '
-    tsv_file, map_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
-    target = ENV["M_TARGET"]
-    files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
-      verb, rel, dst, rule, pre, rationale = l.split("\t")
-      post = nil
-      if dst != "-" && File.file?(File.join(target, dst))
-        post = Digest::SHA256.file(File.join(target, dst)).hexdigest
-      end
-      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
-        "pre_digest" => pre, "post_digest" => post, "rationale" => rationale }
-    end
-    mappings = File.readlines(map_file).map(&:chomp).reject(&:empty?).map do |l|
-      k, v = l.split("\t", 2)
-      { "field" => k, "value" => v }
-    end
-    doc = {
-      "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
-      "generated_at" => ENV["M_V3_NOW"],
-      "migration_completed_at" => ENV["M_V3_NOW"],
-      "status" => "COMPLETED",
-      "target_repository" => target,
-      "git_author" => ENV["M_AUTHOR"],
-      "detection" => { "type" => ENV["M_TYPE"], "signals" => ENV.fetch("M_SIGNALS", "").split("; ").map(&:strip).reject(&:empty?), "skeleton_state" => ENV.fetch("M_SKELETON", "") },
-      "plan_sha256" => ENV["M_PLAN_SHA"],
-      "confirmation" => { "required" => ENV["M_CONFIRM_REQUIRED"] == "true", "provided" => ENV["M_CONFIRM_PROVIDED"] == "true", "digest" => ENV["M_PLAN_SHA"] },
-      "add_only" => ENV["M_ADD_ONLY"] == "true",
-      "moved_count" => ENV["M_MOVED"].to_i,
-      "files" => files,
-      "field_mappings" => mappings,
-      "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/", "violations_count" => 0 },
-      "post_detect_type" => ENV["M_POST_TYPE"],
-      "rollback" => { "occurred" => false, "reason" => "" }
-    }
-    File.write(json_out, JSON.pretty_generate(doc) + "\n")
-    md = String.new
-    md << "# Migration Report\n\n"
-    md << "> **Type**: #{doc["detection"]["type"]}\n"
-    md << "> **Generated At**: #{doc["generated_at"]}\n"
-    md << "> **Completed At**: #{doc["migration_completed_at"]}\n"
-    md << "> **Plan SHA-256**: `#{doc["plan_sha256"]}`\n"
-    md << "> **DP1 Confirmation**: required=#{doc["confirmation"]["required"]} provided=#{doc["confirmation"]["provided"]}\n"
-    md << "> **Moved**: #{doc["moved_count"]} file(s); add_only=#{doc["add_only"]}; residue gate=0 violations\n"
-    md << "> **Post-migration detection**: #{doc["post_detect_type"]}\n\n"
-    md << "| Verb | Path | Target | Rule | Pre Digest | Post Digest |\n| --- | --- | --- | --- | --- | --- |\n"
-    files.each { |f| md << "| #{f["verb"]} | #{f["path"]} | #{f["target"]} | #{f["rule"]} | #{f["pre_digest"]} | #{f["post_digest"]} |\n" }
-    unless mappings.empty?
-      md << "\n## Field Mappings (spec §4.4)\n\n| Field | Outcome/Value |\n| --- | --- |\n"
-      mappings.each { |m| md << "| #{m["field"]} | #{m["value"]} |\n" }
-    end
-    md << "\nRETIRE/TRANSFORM 原件归档于 `.sdlc/legacy/**`（不物理删除）；候选域与稳定事实仍由 sdlc-knowledge-sync 依 routed 声明写入。\n"
-    File.write(md_out, md)
-  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
-  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}"
-
-  # transaction complete: reports finalized, disarm the ERR guard (H3)
-  trap - ERR
-  MIG_TX_ACTIVE="false"
-
-  echo "MIGRATION REPORT=${MIG_REPORT_FILE#${TARGET_PATH}/}"
-  echo "MIGRATION REPORT JSON=${MIG_JSON#${TARGET_PATH}/}"
-  echo "MIGRATION PLAN JSON=${PLAN_JSON#${TARGET_PATH}/}"
-  echo "MIGRATION POST_DETECT_TYPE=${MIG_POST_TYPE}"
-fi
+# shared migration finalization (G1-R2-H1): residue gate + reports,
+# called from both the INIT and AUDIT completion paths
+mig_finalize
 
 
 
