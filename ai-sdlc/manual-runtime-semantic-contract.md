@@ -1,6 +1,6 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 0.4.0 (PROPOSED)
+> Version: 0.5.0 (PROPOSED)
 > Status: 待独立只读复审 + Current User 裁决冻结；冻结后为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
 > 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
@@ -107,7 +107,8 @@
 
 - `status ∈ OPEN → RESOLVED | ACCEPTED`；状态迁移以新行追加，原行不改写。
 - **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
-- **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在其 finding 段登记 RESOLVED——实现类 finding 由 code-review 复验关闭（Decision-086 的实现证据与 code-review closure verification 衔接保留；implementation **不自行关闭** finding）。
+- **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在其 finding 段登记 RESOLVED。"实现类 finding 由 code-review 复验关闭"仅指 discoveredAt=code-review 的来源；其他发现节点（如 knowledge-sync）按本通则自行复验。
+- **关闭复验是 finding 生命周期管理动作，不是一次节点运行**：验证者直接对照 finding 的 `evidenceRef`/验收基准与修复者产出的修复证据（digest 绑定）复核，RESOLVED 行经 **findingIndex 发布**（§6.2）生效——**不依赖 §7.3 的下游准入谓词**（准入谓词管制的是"节点产出新周期产物进入下游"，不管制 finding 生命周期管理），因此不会出现"OPEN finding 阻断了自己的关闭复验"的死锁。独立验证责任保留：修复者不得自行登记 RESOLVED。
 - **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于 Gate Ledger 并投影至 manifest finding 索引。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
 - OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
 
@@ -135,21 +136,20 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
 | `library/{id}/manifest.md` | 七节点生命周期人工投影（§6.2 格式） | requirement-intake（创建职责唯一） | **publisher**（§6.2） |
 | `.sdlc/business_domain/knowledge-target.yaml` | 项目级长期知识路由（G1 规格） | 初始化器 | absent → candidate_pending_confirmation → routed |
 
-### 6.2 自证投影协议（手动与 runtime 共用格式；投影基线显式）
+### 6.2 自证投影协议（手动与 runtime 共用格式；三级有序判别；按执行面适配；重放确定）
 
-1. **格式（自证 + 投影基线）**：manifest = `head`（schema_version/requirement_id/publishSeq/`projectedThrough`/updated_at）+ `entries`（每节点 `{node, status, artifactPath, version, digest, updatedAt, sourceEventRef}` + finding 索引 + 深度字段引用 + 修复记录）+ **`manifestDigest = sha256(规范化 head+entries)`**。digest 内嵌——文件自带完整性证据。
-   - `projectedThrough`：runtime 面已投影的**最后一个 journal 事件标识**（事件序号/ID）；手动面为 `MANUAL`（无 journal）。
-   - `sourceEventRef`：runtime 面每个条目记录其来源 journal 事件标识。
-2. **三种可区分状态**（消除"合法滞后 vs 损坏"歧义）：
-   - **自洽待投影**：self-digest 校验通过 ∧ journal 存在 `projectedThrough` 之后的事件 → 合法滞后，publisher 应追平（幂等）；
-   - **真分叉**：`projectedThrough` 范围内的 journal 事件推导条目 ≠ manifest entries → `JOURNAL_MANIFEST_MISMATCH_STOP`；
-   - **损坏**：self-digest 不符或解析失败 → `MANIFEST_CORRUPT_STOP`。
-3. **发布步骤（幂等，纯函数）**：读 manifest → self-digest 校验（失败 → CORRUPT STOP）→ 读 journal `projectedThrough` 之后的事件 → 确定性推导新 entries（固定键序；`publishSeq = projectedThrough 新值`；`updated_at` = 最后已投影事件的 journal 时间戳，**非墙钟**）→ self-digest 重算 → 原子 rename → 完成。**同输入重放产出逐字节同一 manifest**；崩溃后文件为旧或新，均自洽，重跑即追平——崩溃点恢复结果逐点唯一。
-4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**findingIndex 投影自全部来源的 finding 段**（Gate Ledger + 各产物 finding 段，§5.1/§5.2），状态迁移随之投影——不限于 verdict 载荷。Agent 自由文本不得直写。
-5. **手动面**：无 journal，`projectedThrough=MANUAL`，`sourceEventRef` 记录完成声明的结构化标识（Skill + 时间 + 产物 digest）；其余协议相同（同格式同语义，parity）。
-6. **CORRUPT**（self-digest 不符/解析失败）→ `MANIFEST_CORRUPT_STOP`：不静默修复、不重建（DP4）。
-7. **人工修复**：修正 entries → 重算 `manifestDigest` → 追加修复记录（who/when/reason/correctedEntries，属 entries、进入新 digest）。信任重建 = self-digest 自洽 + entry 产物 digest 与实际文件核验 + runtime 面 journal 交叉校验（projectedThrough 按当前 journal 重设并记录）；三者通过后发布正常继续。修复记录永久保留。
-8. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`。
+1. **格式（自证 + 投影基线）**：manifest = `head`（schema_version/requirement_id/publishSeq/`projectedThrough`/updated_at）+ `entries`（每节点 `{node, status, artifactPath, version, digest, updatedAt, sourceEventRef}`）+ **`findingIndex`**（§5 全来源 finding 及状态，§5.2）+ `repairRecords[]` + **`manifestDigest = sha256(规范化 head+entries+findingIndex+repairRecords)`**。digest 内嵌——文件自带完整性证据，不存在 manifest 之外的 digest 记录。
+   - runtime 面：`projectedThrough` = 已投影的最后一个 journal 事件序号；`sourceEventRef` = 事件标识。
+   - 手动面：`projectedThrough = MANUAL`；`publishSeq` = 手动完成声明的**单调递增序列号**（每个结构化完成声明携带 seq）；`updated_at` = 该声明确认时刻。手动面不读 journal——协议中涉及 journal 的步骤对手动面跳过，追平输入改为"自上次 publishSeq 以来的完成声明"。
+2. **三级有序判别（顺序固定，互斥；每次发布前执行）**：
+   - **第 1 级 损坏**：self-digest 校验失败或解析失败 → `MANIFEST_CORRUPT_STOP`（不静默修复、不重建，DP4）。
+   - **第 2 级 真分叉**：对 `≤ projectedThrough` 的**已投影前缀**逐事件按 §6.2.4 映射推导条目并与 manifest entries 比对——不一致 → `JOURNAL_MANIFEST_MISMATCH_STOP`。**前缀校验通过，才允许进入第 3 级**（"自洽但旧前缀已分叉且有新尾段"的输入在第 2 级即停下，不会被当作待投影）。
+   - **第 3 级 待投影**：`> projectedThrough` 的尾段事件 → publisher 按序追平（幂等）。**已追平（无尾段）→ no-op，原样退出**。
+   - 手动面：第 2 级跳过（无 journal），第 3 级输入为完成声明。
+3. **追平发布（幂等纯函数）**：输入 = (前缀校验通过的当前 manifest, 尾段事件 / 新完成声明)；entries/findingIndex 确定性生成；`publishSeq`/`projectedThrough` 推进到已处理末尾；`updated_at` = runtime 取最后已投影事件时间戳 / 手动取声明确认时刻；self-digest 重算；**原子 rename**。同输入重放产出**逐字节同一 manifest**；崩溃后文件为旧或新，均自洽，重跑即追平——每个崩溃点的恢复结果唯一（rename 前崩溃 = 旧自洽 manifest + 待投影状态不变；rename 后崩溃 = 新 manifest 已发布，无尾段时后续发布 no-op）。
+4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**状态映射**：执行事件 status（SUCCEEDED/FAILED/BLOCKED…）是执行事实，映射为 entry 的完成/失败事实；entry 的生命周期状态（current/stale/actionable，§5.4）由 revision 状态（ACTIVE/STALE/SUPERSEDED）映射——ACTIVE→current，STALE/SUPERSEDED→stale；两枚举不混用，映射表冻结于本条。**findingIndex 投影自全部来源的 finding 段**（Gate Ledger + 各产物 finding 段，§5.1/§5.2），状态迁移随之投影——不限于 verdict 载荷。Agent 自由文本不得直写。
+5. **修复记录的重放处理**：修复记录仅在人工修复动作时写入 entries 并计入其后所有 digest；发布追平/重放**不追加、不改动**修复记录——重放对含修复记录的 manifest 同样逐字节确定。
+6. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`。
 
 ## 7. 域六：PWR、失败码、回流映射与统一准入
 
@@ -248,6 +248,7 @@ FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与
 
 ## 11. Revision Record
 
+- 0.5.0（2026-09-05）：按 G2-R5-H1/H2/L1 修订——§6.2 重写为三级有序判别（损坏→前缀分叉→待投影追平，含已追平 no-op 与逐崩溃点恢复结果）+ 手动面适配（MANUAL/声明序列号/声明确认时刻）+ 修复记录重放确定性 + 现役状态映射表；§5.2 关闭复验定义为 finding 生命周期管理动作（准入豁免、独立验证责任保留）；第 34 行引用更正 §5.4。
 - 0.4.0（2026-09-05）：按 G2-R3-H1/H2/H3/M1 修订——H1 深度触发枚举单一化（T1 唯一清单 F1–F9，complexity-routing 引用不自维护；纯协作限定传播至 Delta 表）；H2 finding 登记与发现节点解耦（复用现役类别×来源矩阵，全组合合法，处置者=回流目标节点，Gate Ledger 限定为设计阶段台账）；H3 manifest 增加 `projectedThrough` 投影基线 + 三态判别（自洽待投影/真分叉/损坏）+ 幂等重放规则（publishSeq=projectedThrough、时间取事件时间戳）+ runtime 准入投影覆盖校验；M1 恢复完整 C1–C20/N1–N9 表、N7 三态化、C8-a 单列、残留引用更正。
 - 0.3.0（2026-09-05）：按 G2-R2 修订（G2-R3 复审：深度规范同步、全链 finding、投影恢复仍不闭合；字段拆分/A1 拒绝/自证 digest 方向被确认成立并保留）。
 - 0.2.0（2026-09-05）：按 G2-R1 全量修订。
