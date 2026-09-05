@@ -1,6 +1,6 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 0.9.0 (PROPOSED)
+> Version: 0.10.0 (PROPOSED)
 > Status: 待独立只读复审 + Current User 裁决冻结；冻结后为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
 > 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
@@ -102,19 +102,19 @@
 1. **发现记录**：发现节点在其**产出产物的 finding 段**登记它发现的 finding——作为该节点输出内容的组成部分（in-band），随产物 revision 一次成形（引用现役类别×来源矩阵，`ai-sdlc/loop-finding-lifecycle.md`：类别×来源的合法组合以该矩阵为准，本合同不另造分类体系）。发现记录是**历史事实**，登记后随产物内容不可变。
 2. **生命周期记录（status 的唯一权威承载）**：finding 的状态迁移**不写入任何产物文件**——runtime 面由现役 finding store 持久操作提交（`appendFinding`/`resolveFinding`/`acceptFindingRisk`，含 durable 证明记录 `loop_finding_proofs`，`loop-finding-lifecycle.md` §4/§5——**不需要**新 capability 执行、新事件系统或产物文件编辑）；手动面由 **manifest `findingIndex` 本身**作为权威记录（经 publisher 写入，§6.2）。
 3. 因此：产物文件的 finding 段只含发现时点的事实（digest 随该产物 revision 固定）；关闭复验等状态迁移**不触碰产物字节**——产物 digest 不因 finding 状态迁移改变（消除"追加行改字节 vs entry 保持 D0"的矛盾；旧版"来源 finding 段追加状态行"的表述废止）。
-4. `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，发现登记即占用，**不可变**；状态迁移以新行追加于生命周期记录。
+4. `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，发现登记即占用，**不可变**。状态迁移的**当前状态表示**按各面现役持久原语：runtime = finding 行 status 字段的 guarded UPDATE + 证明记录追加（`loop-finding-lifecycle.md` §5，审计史 = durable 证明记录）；手动 = findingIndex 行 status 由 publisher 更新（审计史 = 业务仓 git 历史中的 manifest 旧版 + 行内证据字段）。
 5. 每条 finding 携带：`{finding_id, discoveredAt(发现节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status, fixedBy?}`。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
 6. `earliestAffectedNodeId` 值域 = 七节点全集，回流映射枚举闭合（§7.3）。
 7. 生命周期记录（runtime=store、手动=findingIndex）经 publisher 汇入 **manifest `findingIndex`**——下游只消费该索引。
 
 ### 5.2 修复者、关闭验证者与状态处置（G2-R4-H2）
 
-- `status ∈ OPEN → RESOLVED | ACCEPTED`；状态迁移以新行追加，原行不改写。
+- `status ∈ OPEN → RESOLVED | ACCEPTED`；当前状态承载于生命周期记录（runtime=finding 行 status 字段，经现役 guarded UPDATE 原语迁移 + 证明记录追加；手动=findingIndex 行 status，经 publisher 更新，审计史=业务仓 git 历史）。**不采用**"同 ID 追加状态行"表示——现役 `resolveFinding`/`acceptFindingRisk` 即既有持久原语，不另造追加协议。
 - **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
 - **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在**生命周期记录**登记 RESOLVED（runtime=`resolveFinding`，`resolvedByRevisionId` 绑定 `earliestAffectedNodeId` 或下游节点当前 ACTIVE revision 并携带 resolution 证据 ref/digest——现役 §5 语义；手动=findingIndex 行）。"实现类 finding 由 code-review 复验关闭"仅指 discoveredAt=code-review 的来源；其他发现节点（如 knowledge-sync）按本通则自行复验。
 - **关闭复验是 finding 生命周期管理动作，不是一次节点运行**：验证者直接对照 finding 的 `evidenceRef`/验收基准与修复者产出的修复证据（digest 绑定）复核——**不依赖 §7.3 的下游准入谓词**（准入谓词管制的是"节点产出新周期产物进入下游"，不管制 finding 生命周期管理），因此不会出现"OPEN finding 阻断了自己的关闭复验"的死锁。独立验证责任保留：修复者不得自行登记 RESOLVED。
 - **关闭复验动作的三步收尾（G2-R6-H1；v0.9.0 按 G2-R9-H1 修订——状态迁移持久于生命周期记录，产物零触碰）**：①复验通过后在**生命周期记录**登记 RESOLVED（runtime=`resolveFinding` 持久操作 + durable 证明，现役模型、无新执行；手动=findingIndex 行）；②触发 publisher 发布（§6.2）：findingIndex 与生命周期记录对齐（runtime 面为 store 差量追平；`projectedThrough`/entries 均不变——产物与 journal 执行面零参与）；③此后 §7.3 准入谓词读到 RESOLVED，阻断解除；产物完整性校验对原 digest 持续成立。复验动作未触发发布前，阻断持续（关闭事实以 manifest findingIndex 为准）。
-- **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于 Gate Ledger 并投影至 manifest finding 索引。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
+- **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于**生命周期记录**（runtime=`acceptFindingRisk` store 操作 + durable 证明——不写 Gate Ledger；手动=findingIndex 行经 publisher）并投影至 manifest finding 索引。Gate Ledger 只保留 scan 的**发现事实**与必要引用，不承载后续状态改写。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
 - OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
 
 ### 5.3 Gate Ledger 的专属边界
@@ -150,13 +150,15 @@ implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevis
    - **第 1 级 损坏**：self-digest 校验失败或解析失败 → `MANIFEST_CORRUPT_STOP`（不静默修复、不重建，DP4）。
    - **第 2 级 真分叉**（两项校验，任一不通过 → `JOURNAL_MANIFEST_MISMATCH_STOP`，不得进入第 3 级）：
      (a) **journal 前缀**：对 `≤ projectedThrough` 的已投影前缀逐事件按 §6.2.4 映射推导条目并与 manifest entries 比对——不一致即分叉（finding 状态迁移不经过 journal 执行事件、不影响 entries，故前缀推导为纯执行映射——G2-R9-H2 闭合）。
-     (b) **findingIndex 权威交叉验证（方向性，整行绑定；对权威生命周期记录）**：
-     - runtime 面：权威 = **finding store 当前状态**（`loop_findings` 行 + durable 证明，`loop-finding-lifecycle.md` §4/§5——由既有 `appendFinding`/`resolveFinding`/`acceptFindingRisk` 持久操作提交，非新事件系统）。findingIndex 每行必须与 store 中同 `finding_id` 行**逐字段一致**（`status`/`evidenceRef`/`earliestAffectedNodeId` 等）；索引有而 store 无凭据（或字段不一致）→ `JOURNAL_MANIFEST_MISMATCH_STOP`（堵住篡改/过期旁路）。**store 领先于索引（如关闭复验后 store 已 RESOLVED）不是分叉**——是第 3 级的合法追平输入。
-     - 手动面：findingIndex **本身即权威记录**（§5.1），无外部权威可比对——第 2 级(b) 退化为自洽校验：每行字段完备、状态迁移合法（OPEN→RESOLVED）、非 scan 来源无 ACCEPTED 行。
-     - 独立修订计数（`findingIndexRev`）**删除**（G2-R9-H2）：索引与权威记录的方向性比对 + 内容寻址 self-digest 已足以区分"落后（追平）/一致（no-op）/分叉（STOP）"，不需要自证历史的计数。
+     (b) **findingIndex 权威交叉验证（有序互斥判别；对权威生命周期记录；G2-R10-H2）**——对每行按以下顺序判定，首个命中的分支决定结果：
+     - **第 1 步 身份字段**：不可变身份/来源/证据字段（`finding_id`、`discoveredAt`、`rootCauseCategory`、`earliestAffectedNodeId`、`sourceRevision`、`evidenceRef`）必须与权威记录逐字段一致——不一致 → `JOURNAL_MANIFEST_MISMATCH_STOP`（身份漂移不可用"领先"解释）。
+     - **第 2 步 状态一致**：`status` 与权威记录一致 → 该行通过。
+     - **第 3 步 合法状态前进**：status 不一致时，仅当 (i) 索引 status 为合法前驱（OPEN）且权威 status 为合法后继（RESOLVED，runtime 面须有 durable 证明记录；手动面须为已发布的生命周期动作），(ii) 其余字段全部一致 → 判定**合法落后**，列入第 3 级追平输入。任何其他不一致（含索引 status 超前于权威、无证明的后继、身份字段漂移）→ `JOURNAL_MANIFEST_MISMATCH_STOP`。
+     - 比较对象 = **findingIndex 的当前状态行**（每 finding 恰一行，当前 status）；历史不在索引中（runtime 审计史=证明记录；手动审计史=业务仓 git 历史）。
+     - runtime 权威 = **finding store 当前状态**（`loop_findings` 行 + durable 证明，由既有 `appendFinding`/`resolveFinding`/`acceptFindingRisk` 提交，非新事件系统）；手动面：findingIndex **本身即权威记录**（§5.1）——第 2 级(b) 退化为自洽校验：每行字段完备、状态迁移合法（OPEN→RESOLVED）、非 scan 来源无 ACCEPTED 行；手动生命周期动作提交给 publisher、原子发布后持久生效（无预写步骤）。
    - **第 3 级 待投影**：输入 = journal 尾段事件 **+ 权威生命周期记录相对 findingIndex 的差量**（runtime=finding store 当前状态中的未投影迁移，含关闭复验的 RESOLVED；手动=生命周期管理动作，§5.2）→ publisher 按序追平（幂等）。**无尾段且 findingIndex 无差量 → no-op，原样退出**；任一存在 → 发布（仅差量时 `projectedThrough`/`publishSeq` 不推进，findingIndex 与 `manifestDigest` 更新，entries 不动——§6.2.3）。
    - 手动面：第 2 级(a)跳过（无 journal），(b)照常执行；第 3 级输入为完成声明 + finding 段差量。
-3. **追平发布（幂等纯函数；三类输入的进度与绑定规则，G2-R7-H2）**：输入 = (校验通过的当前 manifest, journal 尾段事件, 来源 finding 段差量, 新完成声明)。
+3. **追平发布（幂等纯函数；三类输入的进度与绑定规则，G2-R7-H2）**：输入 = (校验通过的当前 manifest, journal 尾段事件, 权威生命周期记录差量, 新完成声明)。
    - **runtime 尾段**：entries/findingIndex 按事件映射生成；`publishSeq`/`projectedThrough` 推进到已处理末事件；`updated_at` = 最后已投影事件时间戳。
    - **手动新完成声明**：按声明生成/更新条目；`publishSeq` 推进到声明 seq，**`projectedThrough` 保持 `MANUAL`**；`updated_at` = 声明确认时刻。
    - **finding 生命周期差量**（runtime：finding store 与索引的差；手动：生命周期管理动作）：findingIndex 对齐权威记录（§6.2.2(b) 方向性比对）；**`entries` 全部不变**（状态迁移不触碰产物文件，entry version/digest 不动，产物完整性对原 digest 持续成立）；`publishSeq`/`projectedThrough` 均不推进；`updated_at` 不变。同输入重放产出逐字节同一 manifest（幂等无需独立计数）。
@@ -263,6 +265,7 @@ FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与
 
 ## 11. Revision Record
 
+- 0.10.0（2026-09-05）：按 G2-R10-H1/H2 修订——H1 承载切换贯穿全部写入条款：ACCEPTED 改录生命周期记录（runtime=`acceptFindingRisk`+durable 证明，不写 Gate Ledger；Gate Ledger 仅保留 scan 发现事实）；状态表示按各面现役原语（runtime=guarded UPDATE 状态字段+证明追加；手动=publisher 更新 findingIndex 行，审计史=业务仓 git 历史），删除无差别的"同 ID 追加状态行"表述；§6.2.3 输入称谓同步。H2 第 2 级(b) 改为**有序互斥判别**（身份字段一致→状态一致→合法状态前进（OPEN→后继+证明）→其余 STOP），比较对象=索引当前状态行；手动生命周期动作=提交 publisher、原子发布后生效、无预写。
 - 0.9.0（2026-09-05）：按 G2-R9-H1/H2 修订——**两类记录承载分离**（G2-R9-H1）：发现记录=产物 finding 段（in-band，随 revision 固定）；生命周期记录=产物之外的权威（runtime=finding store 经既有 `resolveFinding`/`appendFinding` 持久操作 + durable 证明，手动=manifest findingIndex 本身）；状态迁移零触碰产物字节，产物 digest 持续成立。`findingIndexRev` **删除**（G2-R9-H2）：交叉验证改为对权威记录的方向性整行比对（runtime=store 当前状态；手动=自洽校验），落后=追平/一致=no-op/无凭据=STOP 三态由内容寻址与方向性比对区分，无需自证计数。合成前缀推导撤销（迁移不经 journal 执行事件，前缀推导回归纯执行映射）。悬空 §5.5' 引用清除。C14/C15/C18 适配更新。
 - 0.8.0（2026-09-05）：按 G2-R8-H1/M1 修订——finding 状态迁移重定义为生命周期元数据（**不产生产物新修订**：无内容变更即无新 revision，规避现役四项绑定的成功执行要求；entry version/digest 不动，完整性对原 digest 成立）；`findingIndexRev` 独立投影计数（单调校验入第 2 级(b)）；第 2 级(a) 前缀推导改为"journal 推导 + 已发布 finding 迁移"合成（关闭发布后下一次发布不误判分叉）；L150 残句清除；C14/C15/C18 适配落实。0.7.0 的"状态迁移=产物新修订"设计撤销。
 - 0.7.0（2026-09-05）：按 G2-R7-H1/H2/M1 修订——finding 状态迁移=来源产物新修订（findingIndex 发布同步更新 entry version/digest，完整性绑定不豁免）；§6.2.2(b) 凭据校验扩展为整行绑定（堵非键字段篡改）；发布三向进度规则（runtime 尾段/手动声明/纯 finding 差量分别定义 publishSeq/projectedThrough 行为，手动冲突消除）；人工修复 hash 收尾（repairRecords 先于 digest 写入）。
