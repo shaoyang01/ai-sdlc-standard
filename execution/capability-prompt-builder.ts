@@ -185,6 +185,7 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
   if (isVerdict) {
     lines.push(
       '- "gateResult": one of "PASS", "FAIL", "PASS_WITH_RISK" (you may NOT use NOT_APPLICABLE).',
+      '- "decisionDepth": one of "LIGHT", "STANDARD", "DEEP", or null (when decisionStatus is BLOCKED_UNKNOWN). Required for formal_verdict.',
       '- "riskAcceptanceRefs": string array; optional — include relevant risk finding refs when gateResult is PASS_WITH_RISK, otherwise omit or [].',
     );
   } else if (isScan) {

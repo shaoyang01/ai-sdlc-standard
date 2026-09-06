@@ -132,7 +132,7 @@ Gate 是阶段准入条件，不是建议。
 - 当前 generation 七节点 current revisions 有效；无未关闭 blocking finding。
 - 输入不得包含 stale revision、未关闭 blocking finding、旧 specs-run 或历史 sync 结果。
 - 原始测试/线上反馈不得直接进入 knowledge-sync，必须先经 requirement-intake。
-- `PASS_WITH_RISK` 只消费具有当前证据的 `ACCEPTED_RISK`；Critical 与未接受 High 始终阻塞。
+- `PASS_WITH_RISK` 按 Decision-086 自动推进：verdict scope 级裁决即验收；OPEN blocking finding 按 §5.2 canonical order 阻断下游；实现类 finding 经 direct rework + code-review 复验关闭。Critical 与未关闭 High 始终阻塞。
 
 ## 非 Gate 阶段总结
 
